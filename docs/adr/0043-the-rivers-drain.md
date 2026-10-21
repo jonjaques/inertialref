@@ -1,10 +1,11 @@
 # ADR-0043: The rivers drain — a per-body graph the field cuts to
 
 Status: accepted · 18 Sep 2026 · amended 20 Oct 2026: the graph is one
-storage buffer read through an offset table, with one gate. Supersedes the
-valley strip of
-[ADR-0026](0026-the-liquid.md) and its sea drawn at one datum wherever the
-ground is under it; keeps that ADR's sheet, coast, families and levers.
+storage buffer read through an offset table, with one gate, and a sample
+within reach of two bodies of standing water reads one body's level.
+Supersedes the valley strip of [ADR-0026](0026-the-liquid.md) and its sea
+drawn at one datum wherever the ground is under it; keeps that ADR's sheet,
+coast, families and levers.
 
 ## Context
 
@@ -103,11 +104,19 @@ where it reaches, a lake at its spill, a river at its surface.**
   cells was 2.3, and folded.
 - **Standing water is a level per vertex, and the sea is a lake at the datum
   on the nodes it reaches.** A node under its spill puts its level into the
-  sample as a kernel-weighted mean over the lake nodes within 1.2 cells, so
-  one lake is one level exactly, and a fill spanning fewer than three
-  adjacent nodes is a flat rather than a lake — one node's crater filled to
-  its spill painted every hollow within a cell at that level, which is the
-  flooded-crater field the graph exists to end. The heightfield carries the
+  sample through a kernel over the lake nodes within 1.2 cells, so one lake
+  is one level exactly, and a fill spanning fewer than three adjacent nodes
+  is a flat rather than a lake — one node's crater filled to its spill
+  painted every hollow within a cell at that level, which is the
+  flooded-crater field the graph exists to end. Where two bodies are in
+  reach — two lakes at different spills, or a lake and the sea — the sample
+  reads the one whose nodes carry the most of the kernel's weight, and the
+  two blend only where neither's share leads the other's by a tenth: a mean
+  over both read a level belonging to neither across the whole overlap, and
+  the leader alone is a step where the lead changes hands that the lattice
+  cannot put where the ground stands above both levels. A ring node's
+  weight fades to zero over the half of the sample's cell away from it, so
+  it never leaves the ring with weight. The heightfield carries the
   level beside the cover, the worker task is version 7 for it, and
   `buildPatch` builds the sheet at each vertex's own level with no datum
   handed beside it. The canonical clamp reads the same level: a ship stands
@@ -122,7 +131,7 @@ where it reaches, a lake at its spill, a river at its surface.**
   `terrainKernel.gpu.test.ts` counts the kernel's bindings against the
   baseline's eight. The buffer keeps the last wet body's graph through a dry
   one, since clearing it is 4.4 MB of writes a body switch, so every reader
-  of it tests one gate, `WORD.DRAINAGE_CELLS`. The lake mean, the warp, the
+  of it tests one gate, `WORD.DRAINAGE_CELLS`. The lake level, the warp, the
   cell and the walk are the CPU's, and `terrainBands.gpu.test.ts` holds the
   drainage band alone to `2.5 × 10⁻⁵` of the budget plus half a meter; the
   whole field holds at its existing bound on every body at every level.

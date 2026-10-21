@@ -13,11 +13,12 @@ import {
 } from './bands.ts'
 import { bareGround, type StageContext, stageOn } from './bandStack.ts'
 import { ladderField, softLimit } from './craters.ts'
-import { type TerrainSketch, terrainSketch } from './sketch.ts'
+import { plateWeight, type TerrainSketch, terrainSketch } from './sketch.ts'
 import { surfaceIdentity } from './surfaceIdentity.ts'
 import type { SurfaceParameters } from './system.ts'
 import {
   coastWidth,
+  directionToFace,
   drainageDatum,
   regionDirection,
   regionForDirection,
@@ -138,6 +139,19 @@ export const DRAINAGE_SHAPE = {
   /** How far a lake node's level reaches, in cells. */
   lakeReach: 1.2,
   /**
+   * How far a body's share of the kernel's weight may fall behind the
+   * leading body's and still have a say in the level, as a fraction of the
+   * weight in reach. A sample within reach of two bodies of standing water
+   * reads the level of the one whose nodes carry the most weight, and the
+   * two blend only where neither leads by this much: a tenth puts the blend
+   * on a few percent of the overlap. Zero would read the leader alone, and
+   * that is a step wherever the lead changes hands — wherever the weights
+   * tie, with the ground under it at whatever height the lattice did not
+   * sample, so the sheet and the clamp both show it, and the CPU and the
+   * GPU, each comparing its own float, can name different bodies there.
+   */
+  lakeMargin: 0.1,
+  /**
    * The fewest nodes a fill may span and be a lake. A crater under one
    * node fills to its spill like any pit, and a level read over a cell
    * around one node paints every hollow within reach at that level — which
@@ -241,7 +255,12 @@ interface Topology {
 
 const TOPOLOGIES = new Map<number, Topology>()
 
-const OFFSETS: readonly (readonly [number, number])[] = [
+/**
+ * The ring's steps, `[di, dj]` per neighbor slot in the order `neighbors`
+ * lists them. Exported because the kernel's lake block fades a neighbor by
+ * which side of the sample's cell it lies on, and reads the side from here.
+ */
+export const NEIGHBOR_OFFSETS: readonly (readonly [number, number])[] = [
   [-1, -1],
   [0, -1],
   [1, -1],
@@ -272,7 +291,7 @@ function topology(cells: number): Topology {
           extent[(node * MARKS + k) * 3 + 2] = direction.z
         })
         for (let k = 0; k < 8; k += 1) {
-          const [di, dj] = OFFSETS[k] as readonly [number, number]
+          const [di, dj] = NEIGHBOR_OFFSETS[k] as readonly [number, number]
           const other = regionNeighbor(region, di, dj)
           const index = (other.face * cells + other.i) * cells + other.j
           if (index === node) continue
@@ -1332,9 +1351,8 @@ export function bedShape(d: number, halfWidth: number): number {
  * a cone that thins downstream faster than the trunk's floor drops.
  *
  * The water is the floor over the bed, or the lake or sea that drowns the
- * reach where that stands higher, and a lake's spill level over its floor,
- * read as a kernel-weighted mean over the lake nodes within reach so one
- * lake is one level exactly.
+ * reach where that stands higher, and the standing water `lakeLevelAt`
+ * reads over the sample.
  */
 export function carveDrainage(
   graph: DrainageGraph,
@@ -1415,16 +1433,70 @@ export function carveDrainage(
   return { ground: landform - cut + fill - notch, water, channel, corridor }
 }
 
-/**
- * The lake level over a sample, or NaN: a kernel-weighted mean over the
- * lake nodes within `lakeReach` of it, the cell's own and its ring.
+/*
+ * Scratch for `lakeLevelAt`: the level and weight of each of the nine nodes
+ * it reads, and the weight of the body each belongs to. The field is
+ * synchronous and samples one direction at a time, so one set is enough.
  */
-function lakeLevelAt(graph: DrainageGraph, cell: number, lookup: Vec3): number {
+const LAKE_LEVELS = new Float64Array(9)
+const LAKE_WEIGHTS = new Float64Array(9)
+const LAKE_BODIES = new Float64Array(9)
+
+/** Where a sample sits across its lattice cell along one face axis, 0..1. */
+function cellFraction(coordinate: number, cells: number): number {
+  const t = ((coordinate + 1) / 2) * cells
+  return t - Math.min(cells - 1, Math.max(0, Math.floor(t)))
+}
+
+/**
+ * The standing water over a sample, or NaN: the level of one body — the
+ * lake, or the sea at its datum — read off the lake nodes within
+ * `lakeReach` of it, the cell's own and its ring.
+ *
+ * **A lake is one level exactly.** Each node in reach weighs
+ * `(1 − (d/reach)²)²`, the weights of the nodes at one level sum to that
+ * body's, and a sample in reach of one body reads its level whatever the
+ * weights are. Adjacent lake nodes share a level by the flood's
+ * construction, so two bodies at different levels are never neighbors and
+ * the level a sample reads is a choice between bodies, not between nodes.
+ *
+ * **Between two bodies it reads the heavier one.** A mean over both is a
+ * level belonging to neither across the whole overlap — 2.4 cells wide
+ * at most, 156 km a cell on Earth — so the sheet tilted across the gap
+ * and the clamp followed it. Read off the leader alone, it is a step where
+ * the lead changes hands, and that is where the weights tie, not where the
+ * ground stands above both levels: the lattice samples the landform once a
+ * cell and the field's ground between two nodes is hundreds of meters from
+ * it, so no ranking of nodes puts the step where neither sheet shows it.
+ * So rule 11's margin: each body's say is `plateWeight` of how far its
+ * share of the weight trails the leader's, which is the leader's level
+ * exactly wherever it leads by `lakeMargin` and a continuous blend over the
+ * sliver where it does not.
+ *
+ * **A node's weight reaches zero before it leaves the ring.** The ring is
+ * the cell's eight neighbors, and a node two cells over can be inside the
+ * reach — a cell near a face's edge is half the angle of one at its center
+ * — so the sample crossing into the next cell would gain or lose it with
+ * weight, and between two bodies that is a step of the levels' difference
+ * times its share: 47 m on Earth, where the sea met a lake at a face edge.
+ * A neighbor's weight fades to zero over the half of the sample's cell
+ * away from it, which is the edge it leaves the ring across, and the cell
+ * decision is safe for the reason it is for the segments: the two cells a
+ * boundary sample could name read the same weights there.
+ */
+export function lakeLevelAt(
+  graph: DrainageGraph,
+  cell: number,
+  lookup: Vec3,
+): number {
   const neighbors = graph.neighbors
   const reach = (DRAINAGE_SHAPE.lakeReach * Math.PI) / 2 / graph.cells
+  const { u, v } = directionToFace(lookup)
+  const across = cellFraction(u, graph.cells)
+  const along = cellFraction(v, graph.cells)
+  let count = 0
   let total = 0
-  let weight = 0
-  const consider = (n: number): void => {
+  const consider = (n: number, di: number, dj: number): void => {
     const level = graph.lake[n] as number
     if (Number.isNaN(level)) return
     const dx = (graph.positions[n * 3] as number) - lookup.x
@@ -1432,14 +1504,48 @@ function lakeLevelAt(graph: DrainageGraph, cell: number, lookup: Vec3): number {
     const dz = (graph.positions[n * 3 + 2] as number) - lookup.z
     const d = Math.sqrt(dx * dx + dy * dy + dz * dz) / reach
     if (d >= 1) return
-    const w = (1 - d * d) ** 2
-    total += w * level
-    weight += w
+    const fade =
+      (di === 0 ? 1 : smoothstep(0, 0.5, di > 0 ? across : 1 - across)) *
+      (dj === 0 ? 1 : smoothstep(0, 0.5, dj > 0 ? along : 1 - along))
+    const w = (1 - d * d) ** 2 * fade
+    if (w <= 0) return
+    LAKE_LEVELS[count] = level
+    LAKE_WEIGHTS[count] = w
+    count += 1
+    total += w
   }
-  consider(cell)
+  consider(cell, 0, 0)
   for (let k = 0; k < 8; k += 1) {
     const n = neighbors[cell * 8 + k] as number
-    if (n >= 0) consider(n)
+    const [di, dj] = NEIGHBOR_OFFSETS[k] as readonly [number, number]
+    if (n >= 0) consider(n, di, dj)
   }
-  return weight > 0 ? total / weight : Number.NaN
+  if (count === 0) return Number.NaN
+  let best = 0
+  for (let i = 0; i < count; i += 1) {
+    let body = 0
+    for (let j = 0; j < count; j += 1) {
+      if (LAKE_LEVELS[j] === LAKE_LEVELS[i]) body += LAKE_WEIGHTS[j] as number
+    }
+    LAKE_BODIES[i] = body
+    if (body > best) best = body
+  }
+  // Each body once, at its first node; the sum is symmetric in the bodies,
+  // so the order the ring lists them in cannot move it.
+  let sum = 0
+  let weight = 0
+  for (let i = 0; i < count; i += 1) {
+    let first = true
+    for (let j = 0; j < i; j += 1) {
+      if (LAKE_LEVELS[j] === LAKE_LEVELS[i]) first = false
+    }
+    if (!first) continue
+    const say = plateWeight(
+      (best - (LAKE_BODIES[i] as number)) / total,
+      DRAINAGE_SHAPE.lakeMargin,
+    )
+    sum += say * (LAKE_LEVELS[i] as number)
+    weight += say
+  }
+  return sum / weight
 }

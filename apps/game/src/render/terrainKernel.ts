@@ -80,6 +80,7 @@ import {
   LEVELS_AT,
   MARE_CYCLES,
   MINERAL_CYCLES,
+  NEIGHBOR_OFFSETS,
   NO_KERNEL_WATER,
   packCover,
   PLATE_MARGIN,
@@ -683,6 +684,33 @@ const drainageCellCode = wgslFn(`
   }
 `)
 
+const drainageFractionCode = wgslFn(`
+  fn drainageFraction(d: vec3<f32>, cells: u32) -> vec2<f32> {
+    // drainage.ts \`cellFraction\` on both face axes: where the sample sits
+    // across the cell \`drainageCell\` names, by the same projection.
+    let a = abs(d);
+    var u = 0.0;
+    var v = 0.0;
+    if (a.x >= a.y && a.x >= a.z) {
+      if (d.x > 0.0) { u = -d.z / a.x; v = d.y / a.x; }
+      else { u = d.z / a.x; v = d.y / a.x; }
+    } else if (a.y >= a.z) {
+      if (d.y > 0.0) { u = d.x / a.y; v = -d.z / a.y; }
+      else { u = d.x / a.y; v = d.z / a.y; }
+    } else {
+      if (d.z > 0.0) { u = d.x / a.z; v = d.y / a.z; }
+      else { u = -d.x / a.z; v = d.y / a.z; }
+    }
+    let n = f32(cells);
+    let s = (u + 1.0) * 0.5 * n;
+    let t = (v + 1.0) * 0.5 * n;
+    return vec2<f32>(
+      s - clamp(floor(s), 0.0, n - 1.0),
+      t - clamp(floor(t), 0.0, n - 1.0),
+    );
+  }
+`)
+
 const valleyShapeCode = wgslFn(
   `
   fn valleyShape(d: f32, halfWidth: f32, plain: f32, reach: f32) -> f32 {
@@ -757,6 +785,7 @@ const biotaWindowCode = wgslFn(
 type F = Node<'float'>
 type U = Node<'uint'>
 type I = Node<'int'>
+type V2 = Node<'vec2'>
 type V3 = Node<'vec3'>
 type V4 = Node<'vec4'>
 type Bool = Node<'bool'>
@@ -764,6 +793,7 @@ type Bool = Node<'bool'>
 const asF = (node: unknown): F => node as F
 const asU = (node: unknown): U => node as U
 const asI = (node: unknown): I => node as I
+const asV2 = (node: unknown): V2 => node as V2
 const asV3 = (node: unknown): V3 => node as V3
 const asV4 = (node: unknown): V4 => node as V4
 const asBool = (node: unknown): Bool => node as Bool
@@ -1071,6 +1101,8 @@ export function createTerrainKernel(
     asF(softLimitCode({ value, limit }))
   const drainageCell = (p: V3, cells: U): U =>
     asU(drainageCellCode({ d: p, cells }))
+  const drainageFraction = (p: V3, cells: U): V2 =>
+    asV2(drainageFractionCode({ d: p, cells }))
   const valleyShape = (d: F, halfWidth: F, plain: F, reach: F): F =>
     asF(valleyShapeCode({ d, halfWidth, plain, reach }))
   const bedShape = (d: F, halfWidth: F): F =>
@@ -1928,36 +1960,96 @@ export function createTerrainKernel(
             },
           )
           /*
-           * `lakeLevelAt`: a kernel-weighted mean over the lake nodes within
-           * reach — the cell's own and its eight neighbors, read off the
-           * packed table where the CPU reads the lattice's.
+           * `lakeLevelAt`: the level of the body whose nodes in reach carry
+           * the most weight, blended with another only within `lakeMargin`
+           * of a tie, each neighbor faded to zero over the half of the cell
+           * away from it. The nine nodes are unrolled — the cell's own and
+           * its ring, read off the packed table where the CPU reads the
+           * lattice's — and a node's body is every node at its level.
            */
           const lakeReach = float((DRAINAGE_SHAPE.lakeReach * Math.PI) / 2).div(
             float(cells),
           )
-          const lakeTotal = float(0).toVar()
-          const lakeWeight = float(0).toVar()
-          const consider = (n: U): void => {
+          const fraction = drainageFraction(lookup, cells)
+          const levels: F[] = []
+          const weights: F[] = []
+          const candidate = (n: U, di: number, dj: number): void => {
+            const level = float(NO_KERNEL_WATER).toVar()
+            const weight = float(0).toVar()
             const node = drainageNode(n)
             const lake = asF(node.w)
             If(lake.greaterThan(NO_KERNEL_WATER / 2), () => {
               const away = length(asV3(node.xyz).sub(lookup)).div(lakeReach)
               If(away.lessThan(1), () => {
-                const weight = square(float(1).sub(square(away)))
-                lakeTotal.addAssign(weight.mul(lake))
-                lakeWeight.addAssign(weight)
+                let fade: F = float(1)
+                if (di !== 0) {
+                  const x = di > 0 ? fraction.x : float(1).sub(fraction.x)
+                  fade = fade.mul(smoothstepf(0, 0.5, asF(x)))
+                }
+                if (dj !== 0) {
+                  const y = dj > 0 ? fraction.y : float(1).sub(fraction.y)
+                  fade = fade.mul(smoothstepf(0, 0.5, asF(y)))
+                }
+                level.assign(lake)
+                weight.assign(square(float(1).sub(square(away))).mul(fade))
               })
             })
+            levels.push(level)
+            weights.push(weight)
           }
-          consider(cell)
+          candidate(cell, 0, 0)
           const ring = cell.mul(uint(8)).add(uint(DRAINAGE_NEIGHBORS_AT))
           for (let k = 0; k < 8; k += 1) {
             const m = drainageWord(ring.add(uint(k)))
-            If(m.notEqual(uint(0xffff_ffff)), () => consider(m))
+            const [di, dj] = NEIGHBOR_OFFSETS[k] as readonly [number, number]
+            // A cube corner's missing diagonal reads the cell's own node at
+            // no weight, rather than an index past the table.
+            const present = m.notEqual(uint(0xffff_ffff))
+            const before = weights.length
+            candidate(present.select(m, cell), di, dj)
+            const weight = weights[before] as F
+            If(present.not(), () => {
+              weight.assign(0)
+            })
           }
-          const lake = lakeWeight
+          const lakeTotal = weights.reduce((sum, w) => sum.add(w), float(0))
+          const bodies = levels.map((level, i) =>
+            weights
+              .reduce<F>(
+                (sum, w, j) =>
+                  sum.add((levels[j] as F).equal(level).select(w, float(0))),
+                float(0),
+              )
+              .toVar(`lakeBody${i}`),
+          )
+          const best = bodies.reduce<F>(
+            (most, body) => max(most, body),
+            float(0),
+          )
+          const lakeSum = float(0).toVar()
+          const lakeSay = float(0).toVar()
+          levels.forEach((level, i) => {
+            let first = (weights[i] as F).greaterThan(0)
+            for (let j = 0; j < i; j += 1) {
+              first = first.and(
+                (weights[j] as F)
+                  .greaterThan(0)
+                  .and((levels[j] as F).equal(level))
+                  .not(),
+              )
+            }
+            If(first, () => {
+              const say = plateWeight(
+                best.sub(bodies[i] as F).div(lakeTotal),
+                float(DRAINAGE_SHAPE.lakeMargin),
+              )
+              lakeSum.addAssign(say.mul(level))
+              lakeSay.addAssign(say)
+            })
+          })
+          const lake = lakeSay
             .greaterThan(0)
-            .select(lakeTotal.div(lakeWeight), float(NO_KERNEL_WATER))
+            .select(lakeSum.div(lakeSay), float(NO_KERNEL_WATER))
           elevation.assign(elevation.sub(cut).add(fill).sub(notch))
           level.assign(max(river, lake))
           aboveDatum.assign(elevation.sub(scalar(SCALAR.DRAINAGE_DATUM)))
