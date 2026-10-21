@@ -1,12 +1,6 @@
 import type { Meters } from '@inertialref/shared'
 import { invariant } from '@inertialref/shared'
-import {
-  formatSeed,
-  noise3,
-  pcg4d,
-  smoothstep,
-  toUnit,
-} from '@inertialref/procedural'
+import { noise3, pcg4d, smoothstep, toUnit } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
 import { regionAddress } from './address.ts'
 import {
@@ -20,6 +14,7 @@ import {
 import { bareGround, type StageContext, stageOn } from './bandStack.ts'
 import { ladderField, softLimit } from './craters.ts'
 import { type TerrainSketch, terrainSketch } from './sketch.ts'
+import { surfaceIdentity } from './surfaceIdentity.ts'
 import type { SurfaceParameters } from './system.ts'
 import {
   coastWidth,
@@ -1126,23 +1121,15 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
 /*
  * Memoized twice over, as the sketch is and for the same two reasons: the
  * string cache because a worker rebuilds `SurfaceParameters` per task, the
- * `WeakMap` because the field resolves the graph per sample. The key is
- * everything the build reads, and the grammar goes in whole for the reason
- * `surveySites` gives — the build reads most of it.
+ * `WeakMap` because the field resolves the graph per sample. The string key
+ * is the surface's whole identity (`surfaceIdentity`) rather than the fields
+ * the build reads, because the build reads most of the grammar and a list of
+ * them goes stale without a sound.
  */
 const BY_SURFACE = new WeakMap<SurfaceParameters, DrainageGraph | null>()
 const CACHE = new Map<string, DrainageGraph | null>()
 /** Graphs kept by the string cache. A few megabytes each, so few. */
 export const DRAINAGE_CACHE_LIMIT = 12
-
-const cacheKey = (surface: SurfaceParameters): string =>
-  [
-    formatSeed(surface.seed),
-    surface.maxElevation,
-    surface.roughness,
-    surface.seaLevel ?? 'dry',
-    JSON.stringify(surface.grammar),
-  ].join('|')
 
 /** Graphs this thread has built, as against looked up or been handed. */
 let builds = 0
@@ -1153,7 +1140,7 @@ export function drainageGraph(
 ): DrainageGraph | null {
   const known = BY_SURFACE.get(surface)
   if (known !== undefined) return known
-  const key = cacheKey(surface)
+  const key = surfaceIdentity(surface)
   const hit = CACHE.get(key)
   if (hit !== undefined) {
     BY_SURFACE.set(surface, hit)
@@ -1182,7 +1169,7 @@ export function seedDrainageGraph(
   graph: DrainageGraph | null,
 ): void {
   if (BY_SURFACE.has(surface)) return
-  const key = cacheKey(surface)
+  const key = surfaceIdentity(surface)
   const held = CACHE.get(key)
   if (held !== undefined) BY_SURFACE.set(surface, held)
   else keep(surface, key, graph)
