@@ -756,7 +756,7 @@ like everything else here.
 
 **Every frame-rate figure is a function of the surface levers as well, so
 state them.** `engine.surfaceQuality` is the field the frame loop reads — the
-refinement threshold, the ground's octaves, the sea's refraction and waves,
+refinement threshold, the ground's octaves, the sea's frame read and waves,
 the rocks — and a driving script can set it between two `--cast`s to measure
 one term: `render/quality.ts` names what each step spends. The materials
 compare before they write, so flipping a lever costs the next frame nothing

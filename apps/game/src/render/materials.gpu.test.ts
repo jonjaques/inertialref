@@ -431,30 +431,31 @@ function sheetMesh(material: Mesh['material']): Mesh {
 }
 
 describe('the sea', () => {
-  it('compiles over a sheet, and reads the depth and the morph in the vertex stage', async () => {
-    /*
-     * Built without the frame read. `viewportSharedTexture` copies the
-     * framebuffer before the first sheet of a frame is drawn — ending the
-     * render pass and beginning it again — and the harness has neither a swap
-     * chain to copy nor a pass that survives being re-begun around its single
-     * draw, so the production graph cannot be drawn here. What can is
-     * everything else in it: the sheet's own attributes, the morph, the
-     * waves, the Fresnel split. The copy is exercised where it runs, in the
-     * browser, and `WaterBuild` says why the option exists.
-     */
-    const sea = sheetMesh(createWaterMaterial({ refraction: false }).material)
-    const scene = staged(sea)
-    gpu.warnings()
-    await gpu.compile(sea, camera, scene)
-    const missing = gpu
-      .warnings()
-      .filter((entry) => /not found on geometry/.test(entry.message))
-    expect(missing).toEqual([])
-    const { vertexShader } = await gpu.shader(sea, camera, scene)
-    for (const name of ['terrainMorph', 'waterDepth', 'waterMorphDepth']) {
-      expect(vertexShader).toMatch(new RegExp(`\\b${name}\\b`))
-    }
-  })
+  /*
+   * Both materials the sea lever selects: the one that reads the frame and
+   * its depth, and the one built without. Compiled here; drawn — the frame
+   * copy, the split and the search — in `seaReflection.gpu.test.ts`, which
+   * draws them the way the scene pass does.
+   */
+  it.each(['full', 'plain'] as const)(
+    'the %s sea compiles over a sheet, and reads the depth and the morph in the vertex stage',
+    async (detail) => {
+      const water = createWaterMaterial()
+      water.setQuality({ frame: detail === 'full', waveOctaves: 2 })
+      const sea = sheetMesh(water.material)
+      const scene = staged(sea)
+      gpu.warnings()
+      await gpu.compile(sea, camera, scene)
+      const missing = gpu
+        .warnings()
+        .filter((entry) => /not found on geometry/.test(entry.message))
+      expect(missing).toEqual([])
+      const { vertexShader } = await gpu.shader(sea, camera, scene)
+      for (const name of ['terrainMorph', 'waterDepth', 'waterMorphDepth']) {
+        expect(vertexShader).toMatch(new RegExp(`\\b${name}\\b`))
+      }
+    },
+  )
 })
 
 describe('a patch mesh supplies every attribute its material reads', () => {

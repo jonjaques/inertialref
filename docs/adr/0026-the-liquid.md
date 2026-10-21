@@ -1,7 +1,9 @@
 # ADR-0026: The liquid — a sea is a sheet, a valley is a strip, and a world is drawn in families
 
 Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
-carries relief, so a generated sphere shades its mountains
+carries relief, so a generated sphere shades its mountains · amended 20 Oct
+2026: the frame read is a material of its own, and the full sea mirrors the
+land ([ADR-0052](0052-the-sea-mirrors-the-land.md))
 
 ## Context
 
@@ -75,8 +77,9 @@ and what reflects off it; the seabed read from the frame the opaque pass
 just drew, displaced by the wave slope and attenuated by
 `e^(−absorption · path)` along the refracted ray, so a shelf is turquoise
 and the deep is the liquid's own color; the sky and a two-lobe sun in the
-reflection; a swell and a chop; foam where the sea is shallower than a wave
-is high. Magma is the same graph with a glow. A river is painted on its bed
+reflection, and the land where a search of the frame finds it
+([ADR-0052](0052-the-sea-mirrors-the-land.md)); a swell and a chop; foam where
+the sea is shallower than a wave is high, running in at the swell's period. Magma is the same graph with a glow. A river is painted on its bed
 rather than drawn as a sheet, because a sheet per valley is a mesh per
 valley.
 
@@ -132,7 +135,7 @@ solid body's disk exceeds a hundredth of a radian, ready a few frames later,
 kept four deep.
 
 **The surface has four levers, and they are named costs.** `render/quality.ts`
-carries the refinement threshold, the ground's octaves, the sea's refraction
+carries the refinement threshold, the ground's octaves, the sea's frame read
 and waves, and the rocks, as one persisted record the frame loop reads and a
 driving script can set. Not a ladder: each is one measured term, so a frame
 rate can be reported against the setting it was taken at.
@@ -227,12 +230,11 @@ them, in the frame the tiles arrive: a bake is a hitch of a few tens of
 milliseconds once per body. Spreading the build across frames is the plain
 next step if the hitch is felt.
 
-**The harness cannot draw the sea.** `viewportSharedTexture` copies the
-framebuffer once a frame, ending the render pass and beginning it again, and
-the harness has neither a swap chain to copy nor a pass that survives being
-re-begun around its single draw. The frame read is a build option;
-`materials.gpu.test.ts` compiles the graph without it, and the copy is
-exercised where it runs.
+**The harness draws the sea the way the scene pass does**, into a
+four-sample target with a float depth: the frame read copies the frame and
+ends the pass and begins it again, so `water.gpu.test.ts` holds the full sea
+to one split, the plain one to none, and the full one's search to the land
+it should find ([ADR-0052](0052-the-sea-mirrors-the-land.md)).
 
 **The rocks are worth twelve milliseconds at a two-meter stance**, drawn with
 `frustumCulled` off at the field's whole population. They have a lever;

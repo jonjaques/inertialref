@@ -185,10 +185,10 @@ it.each(['ground', 'water', 'foam'] as const)(
       appearance: { ...bennu.appearance, texture: null },
     })
     const terrain = createTerrainMaterial()
-    const water = createWaterMaterial({ refraction: false })
+    const water = createWaterMaterial()
     terrain.setPalette(palette, RADIUS)
     water.setPalette(palette)
-    water.setQuality({ refraction: false, waveOctaves: 0 })
+    water.setQuality({ frame: false, waveOctaves: 0 })
     const material = kind === 'ground' ? terrain : water
     material.sunDirection.value.set(0.1, 0, -1).normalize()
     const mesh =
