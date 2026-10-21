@@ -113,11 +113,12 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  *   archive key. The drainage memo, the survey and the archive read one
  *   complete text where two of them listed fields and stringified the
  *   grammar, which spells NaN and both infinities `null`.
- * - **The weakening is the sea a world drew, not the sea it kept**
- *   (`hadOcean`). A world whose ground boiled or froze its sea keeps the
- *   plates the water gave it: 64 plate counts move in the 2,201 bodies within
- *   25 ly, Proxima Centauri II's twenty among them, and eleven more grammars
- *   move their hotspots and band shares under the plate threshold.
+ * - **The weakening is the sea a world had, not the sea it kept**
+ *   (`hadOcean`). A world whose ground boiled its sea keeps the plates the
+ *   water gave it; one whose ground froze its sea never held a liquid, and
+ *   gains none. 51 plate counts move in the 2,201 bodies within 25 ly,
+ *   Proxima Centauri II's twenty among them, and nine more grammars move
+ *   their hotspots and band shares under the plate threshold.
  * - **One water body per sample.** A sample within reach of two lakes, or of
  *   a lake and the sea, takes one body's level rather than a blend of both,
  *   so the sheet and the ground clamp stop tilting across the gap. Only a
@@ -125,7 +126,7 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  * - **Enceladus's tiger stripes take a south-polar extent**, about 130 km
  *   long, where a stripe axis was a whole great circle drawn pole to pole.
  *
- * A body that drew no sea its ground refuses, has no drainage graph and
+ * A body that drew no sea its ground boiled, has no drainage graph and
  * carries no stripe term is untouched to the last bit: in Sol, everything but
  * Earth and Titan, whose graphs are read, and the icy moons with stripes.
  * `SYSTEM_ALGORITHM` stays: the weakening reads a draw already taken, and

@@ -22,7 +22,9 @@ import {
   craterDepth,
   CRUST_STRENGTH,
   type GrammarFacts,
+  liquidKind,
   MAX_RELIEF,
+  readDrawnSea,
   reliefLimit,
   surfaceGrammar,
   surfaceTemperature,
@@ -168,14 +170,49 @@ describe('the surface grammar', () => {
      * Proxima Centauri II drew a sea, and its ground stands at 491 K — between
      * the water window and the basalt solidus, where nothing the generator
      * knows is liquid — so the datum is read as dry and the world has no sea.
-     * The water that weakened its lithosphere into plates is the draw's, not
-     * the standing sea's, and reading the weakening off the standing sea took
-     * all twenty of them: the fixture's plate world was a stagnant lid.
+     * The water that weakened its lithosphere into plates is the sea it had
+     * before its ground boiled it, not the sea standing now, and reading the
+     * weakening off the standing sea took all twenty of them: the fixture's
+     * plate world was a stagnant lid.
      */
     const proxima = generated('Proxima Centauri II')
     expect(proxima.surface.seaLevel).toBeNull()
     expect(proxima.surface.grammar.liquidKind).toBeNull()
     expect(proxima.surface.grammar.plateCount).toBe(20)
+  })
+
+  it('counts a sea the ground boiled as one the world had, and never one it froze', () => {
+    /*
+     * A star brightens as it ages, so a world's ground has only ever warmed:
+     * one too hot for any liquid passed through the window while its star was
+     * young, and one too cold was colder still and never held a liquid at
+     * all. The frozen side is everything short of the water band's boiling
+     * edge — the gap above the hydrocarbons included, where water is ice —
+     * and the standing and boiled sides are Titan's lakes, Earth, Proxima
+     * Centauri II at 491 K, Venus and a lava sea.
+     */
+    const drawn = 0.4
+    for (const kelvin of [40, 150, 200, 240]) {
+      expect(`${kelvin} K: ${readDrawnSea(drawn, kelvin).hadOcean}`).toBe(
+        `${kelvin} K: false`,
+      )
+    }
+    for (const kelvin of [94, 288, 491, 739, 1_500]) {
+      expect(`${kelvin} K: ${readDrawnSea(drawn, kelvin).hadOcean}`).toBe(
+        `${kelvin} K: true`,
+      )
+    }
+    // No draw is no history, at any temperature.
+    expect(readDrawnSea(null, 288)).toEqual({ seaLevel: null, hadOcean: false })
+    // And a sea that stands is a sea the world had: `hasOcean` implies
+    // `hadOcean` at every temperature, so neither can read the other's half.
+    fc.assert(
+      fc.property(fc.double({ min: 0, max: 5_000, noNaN: true }), (kelvin) => {
+        const sea = readDrawnSea(drawn, kelvin)
+        expect(sea.seaLevel === null || sea.hadOcean).toBe(true)
+        expect(sea.seaLevel === null).toBe(liquidKind(kelvin) === null)
+      }),
+    )
   })
 
   it('relaxes old ice, and only where it is warm enough to flow', () => {

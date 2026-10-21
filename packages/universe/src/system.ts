@@ -25,7 +25,7 @@ import type { UniverseVector } from '@inertialref/spatial'
 import { tidalProxyOf } from './archetype.ts'
 import {
   equilibriumTemperature,
-  liquidKind,
+  readDrawnSea,
   type SurfaceGrammar,
   surfaceGrammar,
   surfaceTemperature,
@@ -530,19 +530,20 @@ function makeSurface(
    *
    * The draw is also the world's history, and the grammar reads it as that
    * (`hadOcean`): the water that weakened the lithosphere into plates is in
-   * the rock whether or not the sea survived the ground's temperature. Only
-   * what stands on the surface — the liquid and the life — reads the sea
-   * that is left (`hasOcean`).
+   * the rock whether or not the sea survived. A sea the ground boiled away
+   * stood first, while the young star was fainter; a sea it froze never
+   * stood, because the ground was colder still then. Only what stands on the
+   * surface — the liquid and the life — reads the sea that is left
+   * (`hasOcean`). `readDrawnSea` takes both readings off the same windows.
    */
   const airMass =
     facts.atmosphere === null
       ? 0
       : facts.atmosphere.surfaceDensity * facts.atmosphere.scaleHeight
-  const seaLevel =
-    drawnSea !== null &&
-    liquidKind(surfaceTemperature(facts.temperature, airMass)) !== null
-      ? drawnSea
-      : null
+  const { seaLevel, hadOcean } = readDrawnSea(
+    drawnSea,
+    surfaceTemperature(facts.temperature, airMass),
+  )
   const grammar = surfaceGrammar(seed, {
     mass: facts.mass,
     meanRadius: facts.radius,
@@ -550,7 +551,7 @@ function makeSurface(
     temperature: facts.temperature,
     tidalProxy: facts.tidalProxy,
     hasOcean: seaLevel !== null,
-    hadOcean: drawnSea !== null,
+    hadOcean,
     reliefSpent: spent,
     publishedRelief: null,
   })

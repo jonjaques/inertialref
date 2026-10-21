@@ -286,11 +286,12 @@ Every driving verb took an address and nothing produced one.
 
 - **One fact read for two histories.** `hasOcean` was both the sea standing on
   a world and the water that weakened its rock, so reading the sea against
-  the ground temperature took the plates of every world whose ground refused
-  its sea — Proxima Centauri II from 20 to 1, 64 plate counts within 25 ly.
-  `hadOcean` is the draw and `hasOcean` the sea that is left;
-  `geology.test.ts` holds Proxima at 20 with no sea, and the pure-function
-  test holds that each moves only its own half of the grammar.
+  the ground temperature took the plates of every world whose ground boiled
+  its sea — Proxima Centauri II from 20 to 1, 51 plate counts within 25 ly.
+  `hadOcean` is a sea that stood, now or before the ground boiled it, and
+  `hasOcean` the sea that is left; `geology.test.ts` holds Proxima at 20 with
+  no sea, holds that a frozen sea is never one the world had, and holds that
+  each fact moves only its own half of the grammar.
 - **A cache keyed without the body, cleared without the queue.** `regionKey` is
   packed arithmetic over the region alone, so after a retarget a job still out
   for the discarded world names the same key the new body's roots do — and
@@ -11582,9 +11583,18 @@ when they are `Object.is` equal. With numbers through `JSON.stringify` it finds
 `[surface.seed.a, 0, -0]` in 296 runs; with only the non-finite ones through
 it, `[surface.seed.a, -Infinity, null]` in 38.
 
-**The weakening.** `GrammarFacts` carries `hadOcean` beside `hasOcean`.
-`makeSurface` sets it from the draw (`drawnSea !== null`), and mobility reads
-it; the liquid window and the biota keep `hasOcean`. The biota was the other
+**The weakening.** `GrammarFacts` carries `hadOcean` beside `hasOcean`, and
+mobility reads it; the liquid window and the biota keep `hasOcean`.
+`makeSurface` takes both from the draw through `readDrawnSea`, one reading of
+the windows: a sea stood if it stands now or if the ground is past the water
+band's boiling edge, and never if the ground is on the cold side. The two
+sides differ because a star brightens as it ages. A world too hot for any
+liquid passed through the window while its star was young — Venus, with an
+ocean's worth of water in its past — so its sea soaked the rock before it
+boiled; a world too cold was colder still then, and its drawn datum never
+held a liquid. Setting `hadOcean` from the draw alone was the first cut, and
+it gave thirteen frozen worlds within 25 ly plates (46–239 K) for a sea that
+never stood; it was reversed on that argument. The biota was the other
 read to decide: an ocean is where a world's volatile inventory lives, and a sea
 that froze or boiled holds none, so it reads the sea standing now. Sol sets
 `hadOcean` from the published facts, which is Earth alone: the weakening
@@ -11600,12 +11610,12 @@ search would now find Sirius I at 25. No draw moved: a scratch dump of every
 generated value, split into the grammar and everything else, over every system
 and body within 50 ly of Sol in the packed catalog and every `TEST_CATALOG`
 system — 26,094 rows — has no value outside a grammar that differs before and
-after. Within 25 ly, 75 of 2,201 grammars move and 64 plate counts with them:
-56 projected bodies and 8 observed exoplanets whose ground is generated
-(Barnard's Star b, c and d among them); 56 go from a lid to plates and 8
-plated worlds gain more, up to the cap of 30. Within 50 ly it is 666 plate
-counts in 24,393 bodies. Thirteen of the 64 drew a sea that froze rather than
-boiled (46–239 K), and they take plates too, because the reading is the draw.
+after, the terrain stamp in each system's manifest aside. Within 25 ly, 60 of
+2,201 grammars move and 51 plate counts with them: 43 projected bodies and 8
+observed exoplanets whose ground is generated (Barnard's Star b, c and d among
+them), every one on ground between 390 and 1,211 K; 45 go from a lid to plates
+and 6 plated worlds gain more, up to the cap of 30. Within 50 ly it is 495
+plate counts and 583 grammars in 24,393 bodies, on ground from 383 to 1,241 K.
 
 **What the bump costs.** Every archive key moves (`6-cpu@7`). The slow suite
 from an empty archive, on the shared M5 with the heavy lock held: 40.6 s wall

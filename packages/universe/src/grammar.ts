@@ -111,7 +111,9 @@ export interface GrammarFacts {
   readonly hasOcean: boolean
   /**
    * Whether water ever soaked the lithosphere: a world that had a sea, whether
-   * or not its ground lets one stand today.
+   * or not its ground lets one stand today — a sea standing now, or one the
+   * ground boiled away, but never one it froze (`belowLiquidWindow` says why
+   * the two sides differ).
    *
    * It is here for one reason and it is not decoration: water is the leading
    * explanation for why Earth has plate tectonics and Venus, the same size and
@@ -119,11 +121,12 @@ export interface GrammarFacts {
    * this decides the plate count, and a dry Venus-sized world comes out with a
    * stagnant lid and two enormous shields on it.
    *
-   * It is not `hasOcean`, because the two part company wherever the ground
-   * admits no liquid: a world that drew a sea and stands at 491 K has none the
-   * generator knows, and reading the weakening off the standing sea strips a
-   * plate world to a lid — Proxima Centauri II, twenty plates to one. Every
-   * world with a sea had one, so `hasOcean` implies this and never the reverse.
+   * It is not `hasOcean`, because the two part company on a world whose
+   * ground boiled its sea: one that drew a sea and stands at 491 K has no
+   * liquid the generator knows, and reading the weakening off the standing sea
+   * strips a plate world to a lid — Proxima Centauri II, twenty plates to one.
+   * Every world with a sea had one, so `hasOcean` implies this and never the
+   * reverse.
    */
   readonly hadOcean: boolean
   /**
@@ -284,6 +287,18 @@ export interface SurfaceGrammar {
 export type LiquidKind = 'water' | 'hydrocarbon' | 'magma'
 
 /**
+ * The water band of `liquidWindow`, in kelvin: ice below the cold ramp, a
+ * boiling sea above the hot one. Named because `belowLiquidWindow` reads which
+ * side of it a dry world is on.
+ */
+const WATER_WINDOW = {
+  coldOff: 238,
+  coldOn: 262,
+  hotOn: 368,
+  hotOff: 395,
+} as const
+
+/**
  * How stable a running liquid is at a ground temperature, 0..1, over the two
  * windows that flow: water and hydrocarbons. Magma is `magmaWindow`.
  *
@@ -293,8 +308,8 @@ export type LiquidKind = 'water' | 'hydrocarbon' | 'magma'
  */
 export function liquidWindow(groundTemperature: Kelvin): number {
   const water =
-    smoothstep(238, 262, groundTemperature) *
-    (1 - smoothstep(368, 395, groundTemperature))
+    smoothstep(WATER_WINDOW.coldOff, WATER_WINDOW.coldOn, groundTemperature) *
+    (1 - smoothstep(WATER_WINDOW.hotOn, WATER_WINDOW.hotOff, groundTemperature))
   const hydrocarbon =
     smoothstep(64, 82, groundTemperature) *
     (1 - smoothstep(118, 136, groundTemperature))
@@ -310,6 +325,42 @@ export function liquidKind(groundTemperature: Kelvin): LiquidKind | null {
   if (magmaWindow(groundTemperature) > 0.5) return 'magma'
   if (liquidWindow(groundTemperature) <= 0.5) return null
   return groundTemperature < 180 ? 'hydrocarbon' : 'water'
+}
+
+/**
+ * Whether dry ground is on the cold side of the liquid window: no liquid
+ * stands on it (`liquidKind`), and it is short of the water band's boiling
+ * edge rather than past it. A world between the hydrocarbon and water bands
+ * counts as cold, its water ice.
+ *
+ * It is the difference between a sea that froze and one that boiled, and the
+ * two are not mirror images because a star brightens as it ages. A world's
+ * ground has only ever warmed, so one too hot for any liquid is read as
+ * having passed through the window while its star was young — Venus, with an
+ * ocean's worth of water in its past — with a sea that stood long enough to
+ * soak the rock before it went. One too cold was colder still then: its drawn
+ * datum never held a liquid, and never weakened anything.
+ */
+const belowLiquidWindow = (groundTemperature: Kelvin): boolean =>
+  liquidKind(groundTemperature) === null &&
+  groundTemperature < WATER_WINDOW.hotOn
+
+/**
+ * What a drawn sea datum leaves on ground at this temperature: the sea that
+ * stands now, null where the ground admits no liquid, and whether one ever
+ * stood — the two facts a grammar reads as `hasOcean` and `hadOcean`. One
+ * reading of the windows for both, so a sea standing now is always a sea the
+ * world had.
+ */
+export function readDrawnSea(
+  drawnSea: number | null,
+  groundTemperature: Kelvin,
+): { readonly seaLevel: number | null; readonly hadOcean: boolean } {
+  if (drawnSea === null) return { seaLevel: null, hadOcean: false }
+  return {
+    seaLevel: liquidKind(groundTemperature) === null ? null : drawnSea,
+    hadOcean: !belowLiquidWindow(groundTemperature),
+  }
 }
 
 /**

@@ -2,8 +2,8 @@
 
 Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
 carries relief, so a generated sphere shades its mountains · amended 20 Oct
-2026: the sea a world drew weakens its lithosphere whether or not its ground
-keeps the sea
+2026: a sea the ground boiled away still weakened the lithosphere, and one it
+froze never did
 
 ## Context
 
@@ -210,12 +210,15 @@ this table is about two frames a second.
 
 **A hot world's sea goes and its plates stay.** Proxima Centauri II drew a sea
 on ground at 491 K; read against its temperature the sea goes. The ocean that
-weakens a lithosphere into plates is the draw's, not the standing sea's — the
-grammar's facts carry it as `hadOcean` beside `hasOcean`, set from the draw —
-so the world keeps its twenty plates and `geology.test.ts` names it as the
-fixture's plate world. Read off the standing sea instead, the weakening took
-the plates of every world whose ground admits no liquid: 64 of the 2,201
-bodies within 25 ly, at terrain v5.
+weakens a lithosphere into plates is the one the world had, not the one
+standing — the grammar's facts carry it as `hadOcean` beside `hasOcean`, both
+read off the same windows by `readDrawnSea` — so the world keeps its twenty
+plates and `geology.test.ts` names it as the fixture's plate world. A sea the
+ground froze does not count: a star brightens as it ages, so a world too hot
+for any liquid passed through the window while its star was young, and one
+too cold was colder still and never held a liquid at all. Read off the
+standing sea instead, the weakening took the plates of every world whose
+ground boiled its sea: 51 of the 2,201 bodies within 25 ly, at terrain v5.
 
 **A generated world is itself from orbit.** Measured against the streamed
 ground either side of the relief gate, at 650 and 1,100 km over Gliese
