@@ -1265,7 +1265,13 @@ export class GameEngine {
    */
   terrain(): TerrainReport | null {
     const { bodyAddress, ...rest } = this.#terrain.summary()
-    return { body: bodyAddress, ...rest }
+    const surface = this.#terrain.surface
+    return {
+      body: bodyAddress,
+      ...rest,
+      depositsPending:
+        surface !== null && this.#preparation.slopesPending(surface),
+    }
   }
 
   /**

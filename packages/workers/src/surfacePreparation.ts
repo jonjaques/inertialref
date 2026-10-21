@@ -94,6 +94,8 @@ export class SurfacePreparation {
     }
   >()
   readonly #slopesFailed = new WeakSet<SurfaceParameters>()
+  // Asked for through `slopes`, the material's ask, for `slopesPending`.
+  readonly #slopesAsked = new WeakSet<SurfaceParameters>()
 
   constructor(
     pool: WorkerPool | null,
@@ -117,8 +119,26 @@ export class SurfacePreparation {
   slopes(surface: SurfaceParameters): DepositSlopeTable | null {
     const held = this.#slopes.get(surface)
     if (held !== undefined) return held
+    this.#slopesAsked.add(surface)
     if (this.#pool !== null && this.#pool.queued === 0) this.#measure(surface)
     return null
+  }
+
+  /**
+   * Whether a table `slopes` has been asked for is still to come: asked, not
+   * yet measured, not failed, and a pool to measure it. A readout, so it
+   * starts nothing — for a capture, which has to wait for the ground's last
+   * change of tone the way it waits for the ground's last tile.
+   */
+  slopesPending(surface: SurfaceParameters): boolean {
+    const pool = this.#pool
+    return (
+      pool !== null &&
+      !pool.terminated &&
+      this.#slopesAsked.has(surface) &&
+      !this.#slopes.has(surface) &&
+      !this.#slopesFailed.has(surface)
+    )
   }
 
   /**
