@@ -148,7 +148,6 @@ export const SCALAR = {
   WARP_AMOUNT: 31,
   DUNE_CYCLES: 32,
   CHAOS_CELLS: 33,
-  DRAINAGE: 34,
   LIQUID: 35,
   BIOTA: 36,
   DRAINAGE_DATUM: 37,
@@ -157,7 +156,10 @@ export const SCALAR = {
   DRAINAGE_REACH: 39,
 } as const
 
-/** `vec4` slots the scalar block occupies. Forty-eight floats; forty are spent. */
+/**
+ * `vec4` slots the scalar block occupies. Forty-eight floats; thirty-nine are
+ * spent, and index 34 is free.
+ */
 const SCALAR_SLOTS = 12
 
 export const SCALARS_AT = 0
@@ -211,7 +213,11 @@ export const WORD = {
   ERODED: 29,
   SEED_DRAINAGE: 30,
   SEED_RAIN: 31,
-  /** Cells per face edge of the drainage lattice; zero where no graph. */
+  /**
+   * Cells per face edge of the drainage lattice; zero where no graph. The
+   * drainage stage's gate in `BAND_STACK`, and the only one: every reader of
+   * the drainage buffer tests it.
+   */
   DRAINAGE_CELLS: 32,
 } as const
 
@@ -483,12 +489,12 @@ function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
   scalar(SCALAR.DUNE_CYCLES, reliefCycles * DUNE_SHAPE.cycles)
   scalar(SCALAR.CHAOS_CELLS, grammar.meanRadius / CHAOS_SHAPE.blockMeters)
   /*
-   * The drainage gate is the graph's existence, not the grammar's number
-   * alone: `drainageGraph` is null on a bare body and on one the grammar
-   * gives no drainage, and the stage on the CPU does nothing without it.
+   * Null on a bare body and on one the grammar gives no drainage. Its
+   * existence is the drainage stage's gate, and the gate is one word —
+   * `WORD.DRAINAGE_CELLS`, below — because the kernel's drainage buffer
+   * outlives the body that filled it.
    */
   const graph = drainageGraph(surface)
-  scalar(SCALAR.DRAINAGE, graph === null ? 0 : grammar.drainage)
   scalar(SCALAR.DRAINAGE_REACH, graph === null ? 0 : graph.reach)
   scalar(SCALAR.LIQUID, grammar.liquid)
   scalar(SCALAR.BIOTA, grammar.biota)

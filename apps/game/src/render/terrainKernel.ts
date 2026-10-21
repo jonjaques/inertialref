@@ -881,6 +881,16 @@ export interface TerrainKernel {
  * buffer where it has one. One function, because three callers — the
  * producer and the two tolerance tests — each set every attribute, and a
  * buffer added to the record is a buffer one of them forgets.
+ *
+ * **A dry body leaves the last wet body's graph in the drainage buffer.**
+ * Clearing it is 4.4 MB of writes on every switch to a body that never
+ * reads it, and nothing does: every reader — the valleys, the lake level,
+ * the clamp's choice between the sample's level and the datum, the
+ * producer's water readback — tests the drainage stage's gate in
+ * `BAND_STACK`, which is the body's own `WORD.DRAINAGE_CELLS` and zero
+ * wherever this returns early. A read behind any other test carves the
+ * previous planet's rivers into this one; `terrainKernel.gpu.test.ts` draws
+ * a dry body after a wet one against a kernel that never held a graph.
  */
 export function uploadSurface(
   kernel: TerrainKernel,
@@ -2032,7 +2042,9 @@ export function createTerrainKernel(
         If(gate('clamp'), () => {
           // `waterSurface`: the datum on a body with no graph, the sample's
           // own level where there is one — the sea only where the sea reaches.
-          If(word(WORD.DRAINAGE_CELLS).greaterThan(uint(0)), () => {
+          // The drainage stage's own gate, because the level came out of the
+          // drainage buffer and the buffer can hold another body's graph.
+          If(gate('drainage'), () => {
             elevation.assign(max(elevation, level))
           }).Else(() => {
             elevation.assign(max(elevation, scalar(SCALAR.SEA_DATUM)))
