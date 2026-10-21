@@ -14,6 +14,7 @@ import {
   type Lens,
   lensForFov,
   LENS_PRESETS,
+  pixelAngle,
   pixelsPerRadian,
   verticalFov,
 } from './lens.ts'
@@ -39,6 +40,9 @@ import {
   selectTerrain,
   type SelectedPatch,
   terrainPatchKey,
+  VIEW_MARGIN_PIXELS,
+  VIEW_TURN_PIXELS,
+  viewTurned,
 } from './terrainSelect.ts'
 
 /*
@@ -884,6 +888,34 @@ describe('a long lens refines what it can see', () => {
       selectTerrain(eye, { lens, maxLevel: 16, maxPatches: 1_000_000 }),
     )
     expect(flight.outside).toBeGreaterThan(0)
+  })
+
+  it('calls a view stale past a quarter of the margin, and never where it is inert', () => {
+    /*
+     * The memo's half of the view. A turn is counted in the lens's own
+     * pixels, so the same drag goes stale at the same point on any lens
+     * longer than the reference — and at the reference or wider the view is
+     * not an input to the walk, so no turn may cost one.
+     */
+    const viewport = DEFAULT_VIEWPORT
+    const up = { x: 0, y: 0, z: 1 }
+    const forward = aim(up, 0, 0)
+    const turned = (lens: Lens, pixels: number): Vec3 =>
+      aim(up, pixels * pixelAngle(lens, viewport), 0)
+    expect(VIEW_TURN_PIXELS * 4).toBe(VIEW_MARGIN_PIXELS)
+    for (const fov of [20, 11.4, 5]) {
+      const lens = lensForFov(fov)
+      expect(viewTurned(forward, turned(lens, 250), lens, viewport)).toBe(false)
+      expect(viewTurned(forward, turned(lens, 262), lens, viewport)).toBe(true)
+      expect(viewTurned(forward, null, lens, viewport)).toBe(true)
+      expect(viewTurned(null, null, lens, viewport)).toBe(false)
+    }
+    for (const lens of [LENS_PRESETS.flight, lensForFov(110)]) {
+      expect(viewTurned(forward, turned(lens, 4_000), lens, viewport)).toBe(
+        false,
+      )
+      expect(viewTurned(forward, null, lens, viewport)).toBe(false)
+    }
   })
 })
 

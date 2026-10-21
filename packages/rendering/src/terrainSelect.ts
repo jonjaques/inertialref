@@ -278,6 +278,50 @@ export const REFERENCE_LENS: Lens = LENS_PRESETS.flight
  */
 export const VIEW_MARGIN_PIXELS = 1_024
 
+/**
+ * How far the view may turn, in the lens's own display pixels, before a
+ * selection made against it is retaken.
+ *
+ * A quarter of the margin, so a walk taken at the threshold still has three
+ * quarters of it — 768 px — to stream into before the frame's edge reaches
+ * ground refined at the reference. Measured at 11.4° standing at two meters
+ * across Earth, Luna, Miranda, Gliese 908 IV and the far-shore world, a turn
+ * of 256 px asks for at most 33 patches the selection before it did not hold,
+ * which is four frames of the streamer's eight-a-frame build budget; covering
+ * 768 px in four frames is a turn of over 11,000 px a second, and a drag turns
+ * the head one pixel a pixel. Retaking on every frame of a turn instead costs
+ * two walks a frame for nothing the margin does not already cover.
+ */
+export const VIEW_TURN_PIXELS = 256
+
+/**
+ * Whether a selection made looking along `held` is stale looking along `now`.
+ *
+ * False whenever the view changes nothing — at the reference lens and wider,
+ * where `selectTerrain` ignores it — so a caller that memoizes on this re-walks
+ * at the flight lens exactly as often as it did before the view existed.
+ * Forwards in the same axes, as `TerrainView.forward` is; null is a caller with
+ * no view, and a view arriving or leaving is a change.
+ */
+export function viewTurned(
+  held: Vec3 | null,
+  now: Vec3 | null,
+  lens: Lens,
+  viewport: Viewport,
+  reference: Lens = REFERENCE_LENS,
+): boolean {
+  if (pixelsPerRadian(reference, viewport) >= pixelsPerRadian(lens, viewport))
+    return false
+  if (held === null || now === null) return held !== now
+  const cosine =
+    Vec.dot(held, now) /
+    Math.sqrt(Vec.lengthSquared(held) * Vec.lengthSquared(now))
+  return (
+    Math.acos(clamp(cosine, -1, 1)) >
+    VIEW_TURN_PIXELS * pixelAngle(lens, viewport)
+  )
+}
+
 /** A node's extent: the cone of directions it covers. */
 export interface RegionCone {
   /** Unit direction of the node's center. */
