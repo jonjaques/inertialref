@@ -445,6 +445,9 @@ export function createTileProducer(
       elevations,
       cover,
       water,
+      // The kernel does not take the twin yet: a GPU tile hands over to its
+      // parent by the one refined level the two resolve differently.
+      morph: null,
       minElevation: min,
       maxElevation: max,
     }

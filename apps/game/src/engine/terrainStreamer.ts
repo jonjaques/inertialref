@@ -20,6 +20,7 @@ import {
   hasSolidSurface,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
+  type HeightfieldMorph,
   parseAddress,
   type RegionAddress,
   regionChildren,
@@ -371,6 +372,8 @@ interface CachedField {
   readonly cover: Uint8Array
   /** The lake or river level per vertex, unbordered. See `Heightfield.water`. */
   readonly water: Float32Array
+  /** The patch as its parent draws it, or null. See `Heightfield.morph`. */
+  readonly morph: HeightfieldMorph | null
   readonly region: RegionAddress
   readonly border: number
 }
@@ -1415,6 +1418,7 @@ export class TerrainStreamer {
           elevations: field.elevations,
           cover: field.cover,
           bodyRadius: body.radius,
+          morph: field.morph,
           ...sheetInput(water, field.water),
         }),
       )
@@ -1483,6 +1487,7 @@ export class TerrainStreamer {
             elevations: result.elevations,
             cover: result.cover,
             water: result.water,
+            morph: result.morph,
             region,
             border: result.border,
           })

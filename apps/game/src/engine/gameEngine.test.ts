@@ -719,6 +719,7 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
     water: new Float32Array(request.resolution * request.resolution).fill(
       Number.NaN,
     ),
+    morph: null,
     minElevation: 0,
     maxElevation: 0,
   }

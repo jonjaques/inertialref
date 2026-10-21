@@ -3,7 +3,11 @@ import { invariant } from '@inertialref/shared'
 import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
 import {
   COVER_CHANNELS,
+  type HeightfieldMorph,
   heightfieldStride,
+  morphIndex,
+  morphSide,
+  morphVertexSide,
   type RegionAddress,
   regionDirection,
 } from '@inertialref/universe'
@@ -76,6 +80,12 @@ export interface PatchInput {
    * null, the sheet is the sea alone.
    */
   readonly water?: Float32Array | null
+  /**
+   * The patch as its parent draws it at the even samples —
+   * `Heightfield.morph`. Absent or null, the morph target is the patch's own
+   * samples, which is its parent wherever the two draw one field.
+   */
+  readonly morph?: HeightfieldMorph | null
 }
 
 /**
@@ -206,6 +216,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
   const { region, resolution, border, elevations, cover, bodyRadius } = input
   const seaLevel = input.seaLevel ?? null
   const water = input.water ?? null
+  const morph = input.morph ?? null
   invariant(
     border >= 2,
     `A patch needs two rings of border to morph; got ${border}`,
@@ -320,6 +331,31 @@ export function buildPatch(input: PatchInput): RenderPatch {
     }
   }
 
+  /*
+   * The morph target's grid, where the parent draws a field this patch does
+   * not: the twin's elevations at the even samples, the only ones the
+   * morph reads — its positions, and its normals over two cells. Elsewhere
+   * the target is the patch's own grid.
+   */
+  const target = morph === null ? extended : new Float64Array(extended.length)
+  const vertexSide = morphVertexSide(resolution)
+  if (morph !== null) {
+    const side = morphSide({ resolution, border })
+    const first = Math.ceil(-border / 2) * 2
+    for (let row = first; row < resolution + border; row += 2) {
+      for (let col = first; col < resolution + border; col += 2) {
+        const sample = (row + border) * stride + (col + border)
+        const direction = regionDirection(region, col / step, row / step)
+        const radius =
+          bodyRadius +
+          (morph.elevations[morphIndex(side, border, row, col)] ?? 0)
+        target[sample * 3] = direction.x * radius - anchorX
+        target[sample * 3 + 1] = direction.y * radius - anchorY
+        target[sample * 3 + 2] = direction.z * radius - anchorZ
+      }
+    }
+  }
+
   const count = resolution * resolution
   const positions = new Float32Array(count * 3)
   const normals = new Float32Array(count * 3)
@@ -364,20 +400,40 @@ export function buildPatch(input: PatchInput): RenderPatch {
       const evenRow = row & ~1
       const evenCol = col & ~1
       const even = ((evenRow + border) * stride + (evenCol + border)) * 3
-      morphPositions[index * 3] = extended[even] as number
-      morphPositions[index * 3 + 1] = extended[even + 1] as number
-      morphPositions[index * 3 + 2] = extended[even + 2] as number
+      const mx = target[even] as number
+      const my = target[even + 1] as number
+      const mz = target[even + 2] as number
+      morphPositions[index * 3] = mx
+      morphPositions[index * 3 + 1] = my
+      morphPositions[index * 3 + 2] = mz
+      // A twin's target can stand outside the patch's own extremes.
+      if (mx < lowX) lowX = mx
+      if (my < lowY) lowY = my
+      if (mz < lowZ) lowZ = mz
+      if (mx > highX) highX = mx
+      if (my > highY) highY = my
+      if (mz > highZ) highZ = mz
       // The cover is unbordered, so it indexes off the patch's own grid rather
       // than the extended one — the same even vertex, a different stride.
-      const evenCover = (evenRow * resolution + evenCol) * COVER_CHANNELS
-      const target = index * COVER_CHANNELS
-      for (let channel = 0; channel < COVER_CHANNELS; channel += 1) {
-        morphCover[target + channel] = cover[evenCover + channel] as number
+      const into = index * COVER_CHANNELS
+      if (morph === null) {
+        const evenCover = (evenRow * resolution + evenCol) * COVER_CHANNELS
+        for (let channel = 0; channel < COVER_CHANNELS; channel += 1) {
+          morphCover[into + channel] = cover[evenCover + channel] as number
+        }
+      } else {
+        const evenCover =
+          ((evenRow / 2) * vertexSide + evenCol / 2) * COVER_CHANNELS
+        for (let channel = 0; channel < COVER_CHANNELS; channel += 1) {
+          morphCover[into + channel] = morph.cover[
+            evenCover + channel
+          ] as number
+        }
       }
       // Two cells, because that is one of the parent's. Shading has to hand
       // over with the geometry or the switch trades a pop for a shimmer.
       writeNormal(
-        extended,
+        target,
         stride,
         border,
         evenRow,
@@ -410,7 +466,26 @@ export function buildPatch(input: PatchInput): RenderPatch {
     spacing,
     water:
       sheet !== null && levels !== null
-        ? buildWater(sheet, levels, elevations, stride, border, resolution)
+        ? buildWater(
+            sheet,
+            levels,
+            elevations,
+            stride,
+            border,
+            resolution,
+            morph === null
+              ? null
+              : morphSheet(
+                  morph,
+                  region,
+                  resolution,
+                  border,
+                  bodyRadius,
+                  anchor,
+                  seaLevel,
+                  dryDrop,
+                ),
+          )
         : null,
   }
 }
@@ -471,6 +546,7 @@ function buildWater(
   stride: number,
   border: number,
   resolution: number,
+  twin: TwinSheet | null,
 ): WaterPatch {
   const count = resolution * resolution
   const positions = new Float32Array(count * 3)
@@ -507,12 +583,20 @@ function buildWater(
       // The same even-index snap the ground makes; see `buildPatch`.
       const evenRow = row & ~1
       const evenCol = col & ~1
-      const even = (evenRow * resolution + evenCol) * 3
-      morphPositions[index * 3] = sheet[even] as number
-      morphPositions[index * 3 + 1] = sheet[even + 1] as number
-      morphPositions[index * 3 + 2] = sheet[even + 2] as number
       depths[index] = depthAt(row, col)
-      morphDepths[index] = depthAt(evenRow, evenCol)
+      if (twin === null) {
+        const even = (evenRow * resolution + evenCol) * 3
+        morphPositions[index * 3] = sheet[even] as number
+        morphPositions[index * 3 + 1] = sheet[even + 1] as number
+        morphPositions[index * 3 + 2] = sheet[even + 2] as number
+        morphDepths[index] = depthAt(evenRow, evenCol)
+      } else {
+        const vertex = (evenRow / 2) * twin.side + evenCol / 2
+        morphPositions[index * 3] = twin.positions[vertex * 3] as number
+        morphPositions[index * 3 + 1] = twin.positions[vertex * 3 + 1] as number
+        morphPositions[index * 3 + 2] = twin.positions[vertex * 3 + 2] as number
+        morphDepths[index] = twin.depths[vertex] as number
+      }
     }
   }
   return {
@@ -527,6 +611,50 @@ function buildWater(
     },
     boundsRadius: Math.hypot(highX - lowX, highY - lowY, highZ - lowZ) / 2 || 1,
   }
+}
+
+/** The sheet as the parent draws it, at the patch's even vertices. */
+interface TwinSheet {
+  readonly side: number
+  readonly positions: Float64Array
+  readonly depths: Float64Array
+}
+
+/**
+ * The sheet's morph target from the twin: each even vertex at the water the
+ * parent reads there, over the ground the parent draws, the same rule
+ * `waterLevel` makes for the patch's own sheet.
+ */
+function morphSheet(
+  morph: HeightfieldMorph,
+  region: RegionAddress,
+  resolution: number,
+  border: number,
+  bodyRadius: Meters,
+  anchor: Vec3,
+  seaLevel: Meters | null,
+  dryDrop: Meters,
+): TwinSheet {
+  const side = morphVertexSide(resolution)
+  const groundSide = morphSide({ resolution, border })
+  const step = resolution - 1
+  const positions = new Float64Array(side * side * 3)
+  const depths = new Float64Array(side * side)
+  for (let row = 0; row < resolution; row += 2) {
+    for (let col = 0; col < resolution; col += 2) {
+      const vertex = (row / 2) * side + col / 2
+      const ground =
+        morph.elevations[morphIndex(groundSide, border, row, col)] ?? 0
+      const level = waterLevel(seaLevel, morph.water, vertex, ground, dryDrop)
+      const direction = regionDirection(region, col / step, row / step)
+      const radius = bodyRadius + level
+      positions[vertex * 3] = direction.x * radius - anchor.x
+      positions[vertex * 3 + 1] = direction.y * radius - anchor.y
+      positions[vertex * 3 + 2] = direction.z * radius - anchor.z
+      depths[vertex] = Math.max(0, level - ground)
+    }
+  }
+  return { side, positions, depths }
 }
 
 /**

@@ -30,7 +30,7 @@ import { encodeSurface, generateHeightfieldTask } from './tasks.ts'
  */
 
 const PINNED = {
-  version: 7,
+  version: 8,
   /*
    * A canonical terrain bump moves every key already, so it re-pins the
    * tiles without spending a task version; this is how the test tells the two
@@ -41,10 +41,10 @@ const PINNED = {
     'dry/2': '955add4b -3856.736083984375 1290.2174072265625',
     'dry/10': 'e8aef271 -4264.93359375 -4108.31689453125',
     'dry/18': '77a7ec23 -3464.112548828125 -3459.65234375',
-    'wet/2 coast': '1b97d26c -31.58431053161621 1831.0184326171875',
-    'wet/10 land': 'b9383271 1009.2276000976562 1855.302490234375',
+    'wet/2 coast': 'a72a94fc -31.58431053161621 1831.0184326171875',
+    'wet/10 land': '0436fa3f 1009.2276000976562 1855.302490234375',
     'wet/18 lake': 'cdfe838d 908.842529296875 910.2457275390625',
-    'wet/2 seabed': '96a6801d -3651.404296875 679.8135375976562',
+    'wet/2 seabed': '68906e0d -3651.404296875 679.8135375976562',
   } as Record<string, string>,
 }
 
