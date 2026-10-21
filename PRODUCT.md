@@ -299,7 +299,7 @@ a game about looking at things rather than compliance boxes:
   plausible background — which here is a star filling the canopy. That is the
   design case, not a corner case. The dev dock meets it at every text grade:
   with the Sun filling the frame, the panel material composites a ground of
-  0.606–0.660 luminance down to 0.014, and `slate-400` holds 6.0:1 or better
+  0.606–0.660 luminance down to 0.014, and `slate-400` holds 5.9:1 or better
   under a five-fold rise in ground luminance. The crosshair, the one element
   with no panel behind it, measures 11.3:1 over the Sun on its dark strokes.
   None of that transfers to a HUD projected over the subject.

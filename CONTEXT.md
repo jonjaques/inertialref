@@ -8214,7 +8214,8 @@ pre-exposed with the scene and bloomed white under the 2,400 s instrument;
 they now carry `integratedSkyGain` and present at one brightness at every
 exposure, held by `orbitTrace.gpu.test.ts` across 10⁶ of pre-exposure. The
 meter still counts them. The rigs are `.scratch/galaxy-perf/` and the record
-is [ADR-0032](docs/adr/0032-the-stellar-field.md#dust-transport-m5). Every browser figure
+is ADR-0032's [held target](docs/adr/0032-the-stellar-field.md#recorded-m1m6-live-target-measurements)
+and [dust transport](docs/adr/0032-the-stellar-field.md#dust-transport-m5). Every browser figure
 is from a 960×540 rig at the user's request.
 
 ## Orbit dragging was spending the frame on an invisible sky (06 Sep 2026)
@@ -8259,8 +8260,8 @@ The browser's face-on instrument remains active at 640×360, with the pinned
 and galaxy captures are retained beside the profiles.
 
 The profiles and comparison script are in `.scratch/orbit-perf/`. Visible
-galaxy draws retain their measured cost; angular caching and the other
-remaining work stay in [the performance plan](design/plans/perf.md#the-galaxy).
+galaxy draws retain their measured cost; the cube cache that followed, and what
+it costs, are in [ADR-0038's measured operating points](docs/adr/0038-the-stars-and-the-diffuse-sky.md#measured-operating-points).
 
 ## A preset keeps the instant, and Cinema keeps the Enterprise (6 Sep 2026)
 

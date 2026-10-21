@@ -454,7 +454,7 @@ The M1–M6 direct live-target baseline measured 0.17 ms a frame at 960×540 for
 a held backdrop and 10.8 to 17 ms for a moving 240×135 target with filtered
 dust. That moving baseline exceeds the plan's 2 ms target for 1080p and does
 not establish the current cache's cost. `CONTEXT.md` and
-[ADR-0038](0038-the-stars-and-the-diffuse-sky.md#measured-operating-points)
+[Recorded M1–M6 live-target measurements](#recorded-m1m6-live-target-measurements)
 record the conditions and results. Three.js r185 also rebuilds one first-use integral
 pipeline as its cached function ordering changes, then reuses it on
 subsequent submissions.

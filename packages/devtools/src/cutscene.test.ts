@@ -613,9 +613,8 @@ describe('tng-intro flight dynamics', () => {
      *    frame's width between f2065 and f2075 (0.483 → 0.357) where the refit
      *    splices the box channel to the Bussard-cap channel. No straight line
      *    contains that, and the heading swings 82.0° off the nose at f2068.
-     *    That is `design/plans/tng-intro.md` §2's late-descent refit, not a
-     *    property failure — when it lands, widen this window to f2080 and the
-     *    bound should hold.
+     *    That is the refit's channel splice, not a property failure; a refit
+     *    of the late descent that removes it lets this window widen to f2080.
      */
     const DESCENT_FRAME_DEG = 30
     /*
@@ -683,10 +682,10 @@ describe('tng-intro flight dynamics', () => {
 
   it('reproduces the measured tracks it was fitted to', () => {
     /*
-     * The measured beats stay in the
-     * script as the specification, and the fits are held to them by projecting
-     * a rail back to the screen. The residuals are each pass's own, and each
-     * is a number about the *material* rather than about the fit:
+     * The measured beats stay in the script as the specification, and the
+     * fits are held to them by projecting a rail back to the screen. The
+     * residuals are each pass's own, and each is a number about the
+     * *material* rather than about the fit:
      *
      *  - **The wipe, 0.011.** 36 km of approach with a straight-line residual
      *    of 19 m. It is the clean case in the piece and the only one that can
