@@ -10,6 +10,7 @@ import {
   levelForSize,
   regionDirection,
   seaDatumElevation,
+  standingWaterIsSampled,
 } from './terrain.ts'
 
 /*
@@ -262,6 +263,10 @@ export function regionScatter(
       (region.face * 31 + region.level * 131)) |
     0
   const cover = new Uint8Array(COVER_CHANNELS)
+  // The level of any water over the sample, NaN where none stands; read only
+  // on a body whose standing water is sampled rather than one datum.
+  const level = new Float32Array(1)
+  const sampled = standingWaterIsSampled(surface)
   const rocks: ScatterRock[] = []
   for (let index = first; index < last; index += 1) {
     const draw = pcg4d(region.i ^ seed, region.j, index, seed)
@@ -275,11 +280,20 @@ export function regionScatter(
       Math.floor(index / SCATTER_SIDE) / SCATTER_SIDE +
       toUnit(draw.z) / SCATTER_SIDE
     const direction = regionDirection(region, s, t)
-    const elevation = groundCoverAt(surface, direction, cover, 0)
-    // Nothing lies on the sea floor that anyone can see, and the sea surface is
-    // flat by definition — `groundCoverAt` has already clamped the height, so
-    // this is the one place that can tell the two apart.
-    if (sea !== null && elevation <= sea + 0.01) continue
+    const elevation = groundCoverAt(surface, direction, cover, 0, false, level)
+    /*
+     * Nothing lies under standing water that anyone can see, and its surface
+     * is flat by definition — `groundCoverAt` has already clamped the height
+     * up to it, so this is the one place that can tell the two apart.
+     *
+     * The water is the clamp's own: on a body with a drainage graph it is
+     * the sample's level — a lake's spill, a river's surface, the sea only
+     * where the sea reaches — and a datum test there let every rock on a lake
+     * bed through, dotting the sheet wherever a rock stood taller than the
+     * water; on one without, it is the sea's datum.
+     */
+    const water = sampled ? (level[0] as number) : sea
+    if (water !== null && elevation <= water + 0.01) continue
     const here = unpackCover(cover, 0)
     // Nor in a riverbed. The ground paints its channels from `wet`, and a rock
     // wears `wet: 0` on the promise that it never stands in one — a dry block

@@ -20,13 +20,19 @@ import {
   SCATTER_SLOTS,
   scatterLevel,
 } from './scatter.ts'
+import { geodeticDirection } from './frames.ts'
 import { SKETCH_CACHE_LIMIT, terrainSketch } from './sketch.ts'
+import { surveySites } from './surveySites.ts'
 import { type Body, generateSystem, walkBodies } from './system.ts'
 import {
   drawnElevation,
+  drawnGroundElevation,
   regionForDirection,
+  regionNeighbor,
   regionSize,
   seaDatumElevation,
+  standingWaterIsSampled,
+  waterLevelAt,
 } from './terrain.ts'
 
 const ROOT = rootSeed('inertialref')
@@ -172,11 +178,13 @@ describe('what a rock is', () => {
   })
 
   /*
-   * A sea surface is flat by definition and nothing coarse is lying on it.
-   * `groundCoverAt` has already clamped a submarine sample *up* to the datum, so
-   * "is this under water" is only answerable by comparing against the datum
-   * itself — which is why the generator holds `seaDatumElevation` rather than
-   * asking the cover.
+   * A water surface is flat by definition and nothing coarse is lying on it.
+   * `groundCoverAt` has already clamped a submerged sample *up* to the water,
+   * so "is this under water" is only answerable by comparing against the
+   * water itself. On a body with a drainage graph that is the sample's own
+   * level, the sea included where the sea reaches — so a basin under the
+   * datum that the sea never reached is dry ground and keeps its rocks, and
+   * the datum is not the test.
    */
   it('puts nothing on the water', () => {
     const wet = [...walkBodies(SOL)].find(
@@ -186,9 +194,52 @@ describe('what a rock is', () => {
     const sea = seaDatumElevation(wet.surface) as number
     for (const region of regions(wet, 24)) {
       for (const rock of regionScatter(wet.surface, region)) {
-        expect(rock.elevation).toBeGreaterThan(sea)
+        const level = standingWaterIsSampled(wet.surface)
+          ? waterLevelAt(wet.surface, rock.direction)
+          : sea
+        if (!Number.isNaN(level)) expect(rock.elevation).toBeGreaterThan(level)
       }
     }
+  })
+
+  /*
+   * And nothing under a lake or a river. On a body with a drainage graph the
+   * water over a sample is its own level — a lake's spill, a river's surface —
+   * and the sea's datum is only where the sea reaches, so a datum test lets
+   * every rock on a lake bed through and the sheet is dotted with them
+   * wherever a rock is taller than the water. Earth's largest lake is the
+   * fixture: 608 of the 849 rocks in the 5×5 regions around it stood under
+   * its level.
+   */
+  it('puts nothing under a lake or a river', () => {
+    const earth = find('Earth')
+    const lake = surveySites(earth).find((site) => site.id === 'lake')
+    expect(lake).toBeDefined()
+    if (lake === undefined) return
+    const home = regionForDirection(
+      geodeticDirection(lake.latitude, lake.longitude),
+      scatterLevel(earth.radius),
+    )
+    let ashore = 0
+    for (let di = -2; di <= 2; di += 1) {
+      for (let dj = -2; dj <= 2; dj += 1) {
+        for (const rock of regionScatter(
+          earth.surface,
+          regionNeighbor(home, di, dj),
+        )) {
+          const level = waterLevelAt(earth.surface, rock.direction)
+          if (!Number.isNaN(level)) {
+            expect(
+              drawnGroundElevation(earth.surface, rock.direction),
+            ).toBeGreaterThan(level)
+          }
+          ashore += 1
+        }
+      }
+    }
+    // The shore is still strewn: the test is about the water, not about an
+    // empty neighborhood passing it.
+    expect(ashore).toBeGreaterThan(0)
   })
 })
 
