@@ -113,9 +113,9 @@ describe('regenerable heightfield cache', () => {
    *
    * The values are weighted to the ones a serializer collapses:
    * `JSON.stringify` writes `null` for NaN and both infinities and `0` for −0,
-   * and an absent field and `undefined` are the same hole. Two of those at
-   * one leaf sharing a key is a lookup answered with a tile generated from
-   * different arithmetic.
+   * and drops a field set to `undefined` altogether. Two of those at one leaf
+   * sharing a key is a lookup answered with a tile generated from different
+   * arithmetic.
    */
   it('moves the key exactly when a field of the surface or the request moves', () => {
     // `seabed` spelled out, so the one optional request member is a leaf too.

@@ -284,6 +284,13 @@ Every driving verb took an address and nothing produced one.
   restores the renderer afterward. The GPU regression counted a second
   pipeline before the fix and none afterward.
 
+- **One fact read for two histories.** `hasOcean` was both the sea standing on
+  a world and the water that weakened its rock, so reading the sea against
+  the ground temperature took the plates of every world whose ground refused
+  its sea — Proxima Centauri II from 20 to 1, 64 plate counts within 25 ly.
+  `hadOcean` is the draw and `hasOcean` the sea that is left;
+  `geology.test.ts` holds Proxima at 20 with no sea, and the pure-function
+  test holds that each moves only its own half of the grammar.
 - **A cache keyed without the body, cleared without the queue.** `regionKey` is
   packed arithmetic over the region alone, so after a retarget a job still out
   for the discarded world names the same key the new body's roots do — and
@@ -11547,6 +11554,67 @@ A dry body also reads no water back. The copy the producer skipped is
 1.2 MB counted sixty-four tiles of bordered samples — and skipping it and
 its sentinel scan is about a millisecond of a fourteen-millisecond batch on
 Luna and Mars, under load.
+
+## Terrain v6: a surface is one identity, and a boiled sea leaves its plates (20 Oct 2026)
+
+`TERRAIN_ALGORITHM` is 6, spent once for the four changes erosion § 6
+batched: the surface's identity (arch-review B), the weakening read from the
+sea a world drew (erosion defect 3), one water body per sample (defect 6) and
+Enceladus's stripes taking a south-polar extent (terrain § 2). The first two
+are `feat/terrain-v6-identity-and-weakening`, the other two
+`feat/terrain-v6-water-and-stripes`; `versions.ts` names all four at the
+constant.
+
+**The identity.** The drainage memo and the survey keyed on five hand-listed
+`SurfaceParameters` fields plus `JSON.stringify(grammar)`, which writes NaN and
+both infinities as `null` and −0 as `0`; the archive had a complete
+serializer, `stable()`, in `packages/workers`, which the two keys below it
+could not reach by layer. `surfaceIdentity` in `packages/universe` is the whole
+surface through `identityText` — keys sorted, every number spelled, −0
+included — memoized per object: 993 characters for Earth and about 5 µs to
+format, measured on the shared machine. The archive's request goes through the
+same `identityText`, so `packages/workers` keeps no serializer of its own. The
+sketch keeps its narrower key, because it shares one derivation between
+surfaces that differ only in fields it does not read. One fast-check property
+in `heightfieldCache.test.ts` replaces the hand-written cases: over every leaf
+of the surface and the request, two values at one leaf share the key exactly
+when they are `Object.is` equal. With numbers through `JSON.stringify` it finds
+`[surface.seed.a, 0, -0]` in 296 runs; with only the non-finite ones through
+it, `[surface.seed.a, -Infinity, null]` in 38.
+
+**The weakening.** `GrammarFacts` carries `hadOcean` beside `hasOcean`.
+`makeSurface` sets it from the draw (`drawnSea !== null`), and mobility reads
+it; the liquid window and the biota keep `hasOcean`. The biota was the other
+read to decide: an ocean is where a world's volatile inventory lives, and a sea
+that froze or boiled holds none, so it reads the sea standing now. Sol sets
+`hadOcean` from the published facts, which is Earth alone: the weakening
+stands for plates, and Venus and Mars have none whatever seas they once held.
+So Sol is untouched to the last bit. An optional `hadOcean` defaulting to
+`hasOcean` was the smaller diff and was not taken: a producer that forgets the
+field would get defect 3 back without a sound, and every hand-built
+`GrammarFacts` in the tests states it instead.
+
+Proxima Centauri II (the `TEST_CATALOG` system, 491 K ground, no sea) is back
+at 20 plates from 1, and `geology.test.ts` names it again; the most-plated
+search would now find Sirius I at 25. No draw moved: a scratch dump of every
+generated value, split into the grammar and everything else, over every system
+and body within 50 ly of Sol in the packed catalog and every `TEST_CATALOG`
+system — 26,094 rows — has no value outside a grammar that differs before and
+after. Within 25 ly, 75 of 2,201 grammars move and 64 plate counts with them:
+56 projected bodies and 8 observed exoplanets whose ground is generated
+(Barnard's Star b, c and d among them); 56 go from a lid to plates and 8
+plated worlds gain more, up to the cap of 30. Within 50 ly it is 666 plate
+counts in 24,393 bodies. Thirteen of the 64 drew a sea that froze rather than
+boiled (46–239 K), and they take plates too, because the reading is the draw.
+
+**What the bump costs.** Every archive key moves (`6-cpu@7`). The slow suite
+from an empty archive, on the shared M5 with the heavy lock held: 40.6 s wall
+and 209 s of CPU, writing the descent's 1,246 tiles (89 MB). The descent's
+hook allows 600 s, twice the 284 s the last cold CI run took before the
+descent moved to threads, so CI's first run on the batch is slow rather than
+failed. `heightfieldFingerprint.test.ts` re-pins `terrain: 6` with its seven
+tiles unchanged, since both changes here leave a hand-built surface's ground
+where it was.
 
 ## Known gaps
 
