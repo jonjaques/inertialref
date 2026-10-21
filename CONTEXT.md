@@ -11497,6 +11497,42 @@ needs a workstation. `presets:compare` stays local. It needs Chrome to present
 the app, and runner-images #14840 records WebGL2 stalling in Metal resource
 creation on the same image.
 
+## The sea mirrors the land, and its waves moved once a minute (20 Oct 2026)
+
+The sea's wave clock was the presentation instant handed to the shader whole.
+Simulation time is seconds after J2000 — 8.2 × 10⁸ of them for a session set
+in 2026 — and float32 holds that to the nearest 64 s, so the swell and the
+chop moved once a minute; a preset held near J2000, where every sea plate
+was taken, hid it. `render/water.ts` reduces the clock by 6,400 s on the CPU,
+a period over which every drift returns to its own field, and
+`water.gpu.test.ts` draws a sheet a second apart at a 2026 instant, which
+moves it by a tenth of its brightest pixel and moved it by nothing before.
+The foam's crests run in on the same clock, at the 12 m swell's deep-water
+period of 2.77 s.
+
+`sea: plain` set a uniform that multiplied the refraction out. The frame
+read is a binding, and its copy splits the scene pass whether the sample is
+used or not: on 09b4aaf2, 2 km over the Gliese 908 IV shore at 1920×1200 and
+DPR 2, `plain` bought 1.6 ms. It is now a material built without the read,
+and buys 14.1 ms at 2 km and 17.1 at 3 m — figures taken with other agents'
+suites on the machine, so differences within one boot rather than frame
+times. [ADR-0052](docs/adr/0052-the-sea-mirrors-the-land.md) has the search
+the full sea runs instead, and two findings from it that must not come back:
+a depth copy whose sample count is not tied to its target makes the warm-up
+build a single-sampled layout and the first frame a second pipeline, and a
+march jittered per pixel cost 26.4 ms where twelve aligned steps cost 7.6.
+
+The erosion plan's first defect asked for the waves' fades to move without
+a visible change. At 2 km, fading every octave at its Nyquist limit — a
+quarter to a half of its own wavelength a pixel — cut the frame by 9.7 ms;
+ending the fades at a wavelength and a half, 8.2; at two, 6.5; the chop
+alone, 1.3, inside the noise. Every one that moved the figure took two
+things with it: the grain of the middle distance from 2 km, and the low
+sun's glitter path on the far-shore preset, which went from facets to a
+smooth streak and moved 5,593 pixels of its plate. The noise past the limit
+is the picture, so the fades stay; the lever that buys the frame at
+altitude is `plain`.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

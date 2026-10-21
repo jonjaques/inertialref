@@ -198,13 +198,16 @@ const SURF_SPACING = 0.45
 /*
  * Where each wave octave fades, as fractions of its own wavelength of pixel
  * footprint. The baked noise carries four texels a wavelength, so a quarter
- * of one is a texel a pixel and a half is two — the field's Nyquist limit.
- * Past it the octave is per-pixel noise that crawls and the sun-glint's wide
- * lobe is what reads as sea; it is also where every fetch is minified, and a
- * minified fetch of an unmipped 3D texture misses its cache on every pixel,
- * which is the whole cost of the waves at altitude. Each octave has its own
- * fade and its own branch, so the swell's second octave stops at its own
- * limit rather than its parent's.
+ * of one is a texel a pixel and a half is two — the field's Nyquist limit —
+ * and every octave runs past it, to two and a half wavelengths a pixel and
+ * more. Past it an octave is per-pixel noise, and that noise is the picture:
+ * a low sun's glitter path is the chop's facets catching it, and the
+ * middle distance from 2 km is the swell's grain. Faded at the limit, they
+ * go to a smooth streak and a glassy sea — for a frame at 2 km a fifth
+ * shorter, because past the limit every fetch is minified, and a minified
+ * fetch of an unmipped 3D texture misses its cache on every pixel. Each
+ * octave has its own branch on its own fade, so the swell's second octave
+ * stops at its own limit rather than its parent's.
  */
 const SWELL_FADE: readonly [number, number] = [0.4, 3]
 const SWELL_DETAIL_FADE: readonly [number, number] = [0.8, 6]
