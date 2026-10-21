@@ -11497,6 +11497,54 @@ needs a workstation. `presets:compare` stays local. It needs Chrome to present
 the app, and runner-images #14840 records WebGL2 stalling in Metal resource
 creation on the same image.
 
+## A long lens refines only its frame, and the slider reaches Earthrise (20 Oct 2026)
+
+`FOV_MIN` is 11.4°, down from 20°, because the terrain selection now reads where
+the picture looks: past the flight lens it refines at the lens only where the
+frame can reach and at the flight lens everywhere else
+([ADR-0055](docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md)).
+Earthrise takes the 11.53° it solves at the preset's instant rather than the
+clamp.
+
+**Measured headlessly** with `apps/headless/.scratch/lensDemand.ts` over the
+sixty survey sites of Earth, Luna, the four zoo bodies, Gliese 908 IV and the
+far-shore world, standing at two meters, and a 32-step descent onto each basin,
+1920×1080 display pixels, 16 px a cell, cap 1,280. A whole disk at 11.4° wants
+2,063–12,330 patches standing and cuts 8 of 60 eyes at the loosest rung, every
+one short of the floor underfoot; with the view, looking at the horizon, 929–3,491
+and none cut, descents peaking at 1,221–1,946 and none cut. Looking straight
+down, three cut — all the `corner` site, at most 12% over — at 11.4°, six at
+10° and fourteen at 8°; at 8° five of 240 horizon eyes cut as well. On a
+3200×1800 window the horizon at 11.4° cuts 26 of 240, 20 at corners, never short
+underfoot, where 20° over the whole disk cut 8 of 60 standing, all short. At
+11.4° with the zoom racked to 8× the frame alone wants 3,003–17,760 and cuts on
+nearly every eye; the zoom channel stays uncovered.
+
+**Two things that must not come back.** A bounding sphere about each node for
+the in-view test: its radius cannot be under the relief, so on Earth every node
+within 9.9 km is in view, behind the camera too — 3,289 patches on the basin at
+11.4° against the capsule's 1,756. And a cap checked only during the walk: two
+regimes grade across the frame's edges in the balance pass, and a Luna descent
+at 11.4° whose every walk fitted came back over the cap on 22 of 32 steps. Both
+regression tests in `terrainSelect.test.ts` were watched failing with their
+defect back.
+
+**The ship arm's camera is not the frame owner's pose.** `owner.pose` on the
+ship arm is the hull's attitude; the camera is `flightCameraPose`, which
+`CameraRig` computed after the engine step. `GameEngine.cameraPose()` now
+computes it once for both readers.
+
+**A turn is cheap.** At 11.4° a turn of 256 px asks for at most 33 patches the
+previous selection did not hold, 1,024 px at most 102 and two frame widths at
+most 357, so the memo retakes the walk every 256 px and the 1,024 px margin
+leaves 768 px to stream into.
+
+**Rejected:** a 10° floor, which frames Earthrise at its solved angle all month
+but doubles the nadir cuts and puts 117 scatter regions on Luna against a
+ceiling of 96; a finer reference lens, which costs patches without a gain since
+the outside count is 2:1 grading rather than the reference's predicate; and no
+margin, which puts the demoted ring of patches at the frame's edges.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

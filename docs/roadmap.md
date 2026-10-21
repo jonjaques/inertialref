@@ -145,8 +145,10 @@ Phase 1.5 landed 28 Aug 2026: the camera has a lens, and the refinement
 predicate reads it instead of assuming 60° over 1080 px.
 [ADR-0017](adr/0017-the-lens.md) is the decision record. It matters here because
 every patch count in the plan is a function of that one number — the flight lens
-is 848 px/rad against the guess's 935, and the telephoto end of the
-field-of-view slider saturates the patch cap on most of a descent's steps.
+is 848 px/rad against the guess's 935. The telephoto end of the field-of-view
+slider is where the patch cap binds, and [ADR-0055](adr/0055-a-long-lens-refines-what-its-frame-can-reach.md) answers it
+by refining at the lens only inside the frame, which takes the long end from
+20° to Earthrise's 11.4°.
 
 Phase 3 landed 29 Aug 2026: the ground has a material.
 [ADR-0020](adr/0020-the-face.md) is the decision record. The cover — four bytes then, eight since the liquid — carries what a shader cannot derive — impact-fresh material, flood basalt, where

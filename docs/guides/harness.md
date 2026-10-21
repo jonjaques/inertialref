@@ -766,10 +766,15 @@ to the field, so a script's write holds until that key next moves and does not
 survive a reload — which is what you want of a measurement.
 
 **Every count here is a function of the lens, so every report states one.** The
-demand climbs steeply with the pixels-per-radian — measured, the telephoto end
-of the slider wants 1.9× to 3.2× what the flight lens does — so a figure taken
-without the optics beside it is one nobody can reproduce or compare with
-yesterday's. `ir.descend` and `ir.terrainBaseline` print the lens and the
+demand climbs steeply with the pixels-per-radian — measured, a whole disk at the
+telephoto end wants 2,063 to 12,330 patches standing where the flight lens wants
+456 to 1,061 — so a figure taken without the optics beside it is one nobody can
+reproduce or compare with yesterday's. The live streamer also knows where the
+picture looks: past the flight lens it refines at the lens only where the frame
+can reach, and `ir.terrain().outside` counts the patches it refined at the
+flight lens instead. `ir.descend` and `ir.terrainBaseline` have no camera to
+aim, so they refine the whole disk at whatever lens they are handed — the
+conservative question, and a different one. `ir.descend` and `ir.terrainBaseline` print the lens and the
 viewport in their headers and carry both in the returned object; `ir.terrain`
 carries the live one. Both probes take a `lens` and a `viewport` to ask the
 question at another setting, and `ir.descend` takes a `maxPatches` — the

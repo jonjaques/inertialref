@@ -80,10 +80,11 @@ ir.drop(20, -30, { seconds: 6 }) // fly down instead of cutting, facing the star
 headless probes measure at the flight lens over 1920×1080 and state both in
 their reports; the live streamer uses whatever the camera panel is set to and
 the display's own pixels, so an `ir.terrain()` taken at another lens is a
-different question rather than a disagreement — the telephoto end of the slider
-measures 1.9× to 3.2× the flight lens's demand. `ir.lens()` is what the picture
-is being taken with, and `ir.descend` takes a `lens` and a `viewport` to ask at
-another one.
+different question rather than a disagreement. Past the flight lens the live
+selection also reads where the camera looks and refines at the lens only inside
+the frame, which `ir.terrain().outside` counts and the headless probes, with no
+camera to aim, do not do. `ir.lens()` is what the picture is being taken with,
+and `ir.descend` takes a `lens` and a `viewport` to ask at another one.
 
 **`ir.visit` cuts and `ir.drop` flies.** Use `visit` for a plate — the frame
 after it returns is the frame asked for — and `drop` when the descent itself is
