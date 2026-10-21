@@ -11626,6 +11626,67 @@ failed. `heightfieldFingerprint.test.ts` re-pins `terrain: 6` with its seven
 tiles unchanged, since both changes here leave a hand-built surface's ground
 where it was.
 
+## Between two bodies of standing water the level is one body's, and the stripes went to the south pole (20 Oct 2026)
+
+Erosion defect 6 and Enceladus's stripe extent, the water-and-stripes half of
+the next terrain version; the version is spent beside them.
+
+**A sample in reach of two water bodies reads the heavier one.**
+`lakeLevelAt` was a kernel mean over every lake node within 1.2 cells, so
+between two lakes at different spills, or a lake and the sea, it read a level
+belonging to neither across the whole overlap: 99.9–100% of the overlap on a
+transect between every such pair on eleven wet bodies, the worst 162.6 m off
+either level on Earth (sea 355.6 m, lake 680.0 m), 11.6 m between two lakes on
+Titan, 874 m on Q0_221_4_1_i III. The plan's fix was to weight one body, by
+nearness or by the body the sample's own receiver drains to. Both were
+measured, and neither puts the step where the ground stands above both
+levels, which is what rule 11 asks of a choice by rank. The lattice samples
+the landform once a cell, and between two nodes the field's ground sits
+hundreds of meters from it — on Earth's worst pair a lake node's lattice
+elevation was 410 m and the field under it ran 340–1,227 m. On a transect
+sweep every ranked rule (nearest node, heaviest body, highest level, lowest,
+the body the cell drains to) left visible steps with a p90 of 1.7–377 m, and
+the CPU and the GPU would each compare their own floats at the tie. So the
+choice is rule 11's margin: the heavier body's level exactly wherever its
+share of the weight leads by `lakeMargin` (a tenth), a `plateWeight` blend in
+the sliver where it does not — 5–6% of the overlap, at most 23 km wide on a
+275 km cell. With the margin at zero the step test fails at 329 m on Earth.
+
+Against a flood fill of the field itself on 60×60 grids around 13–20 lake
+sites a body, the mean, the heaviest body and the margin agree within 1%; the
+lake model's own error dwarfs the rule (a mean of 0.1–142 m off the fill), because
+the kernel floods every hollow within its reach whether the field connects it
+or not. The body the cell drains to, held strictly, is the one rule that fixes
+"wrong across a ridge": the channel walk's worst rise goes from 187 m to 4.6 m
+on P222_1_0_9 V and from 13 m to none on Titan. It also clips every lake at
+each rim cell that drains away from it, and against the fill it was 10–120%
+worse on single lakes, so it was not taken. What the ridge case would take
+instead is a lattice that resolves the rim — the plan's phase 3 — or a
+per-cell flood of the field on the CPU, packed for the kernel.
+
+**The kernel's lake ring was missing nodes inside its own reach.** The level
+reads the cell's own node and its ring, and near a face edge a gnomonic cell is
+half the angle of one at the center, so a node two cells over sat inside the
+1.2-cell reach: a sample crossing into the next cell gained or lost it with
+weight. For one lake that is invisible; between two bodies it was a step of
+their difference times its share, 47 m on Earth where the sea met a lake at a
+face edge and 2.3 cm on Titan. A ring node's weight now fades to zero over the
+half of the sample's cell away from it, the edge it leaves the ring across.
+
+**Enceladus's stripes are a south-polar family.** `StripeAxis` was a whole
+great circle, so a mapless sphere wearing its relief showed four hairlines from
+pole to pole. A stripe now carries an extent, a middle on its circle and a
+half-length, with the profile tapering to zero over the last 30%; the family is
+built at the body-fixed south pole, (0, −1, 0), four stripes 35/252 rad apart
+and 130/252 rad long before their own draws. On Enceladus they are 110.6–134.7
+km long and 34.3–35.0 km apart, within 3.4° of parallel. The stream's first
+draw, the old family axis, is still drawn and not read, so the azimuth, widths
+and offsets after it keep their values; each stripe appends a length, a slide
+and a turn. Twenty-eight Sol bodies draw stripes — Mimas, Dione, Miranda,
+Phobos and Deimos among them — and no generated body within 60 ly does: the
+weight is `young² · icy`, and `young` is a tidal proxy no generated moon
+reaches.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
