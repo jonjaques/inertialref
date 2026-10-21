@@ -223,6 +223,17 @@ function deferred(namespace: string) {
   }
 }
 
+it('asks its source in the caller’s lane on a miss', async () => {
+  // The lane is not part of the key: the bake and the streamer asking for one
+  // region are one tile, and a hit answers either without asking anyone.
+  const f = fixture()
+  await f.cache.submit(surface, request, 'background').result
+  expect(vi.mocked(f.source.submit).mock.calls[0]![2]).toBe('background')
+  await f.archive.flush()
+  await f.cache.submit(surface, request, 'foreground').result
+  expect(f.source.submit).toHaveBeenCalledOnce()
+})
+
 describe('the archive', () => {
   it('retires every producer’s lookups on clear, so none repopulates it', async () => {
     const f = fixture()

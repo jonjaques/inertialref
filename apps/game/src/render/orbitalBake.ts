@@ -270,12 +270,22 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     const { seabed } = patchWater(body)
     const fields = await Promise.all(
       regions.map((region) => {
-        const job = host.heightfields.submit(body.surface, {
-          region,
-          resolution: HEIGHTFIELD_RESOLUTION,
-          border: HEIGHTFIELD_BORDER,
-          seabed,
-        })
+        /*
+         * In the background lane: the producer and the pool both serve the
+         * streamer's ground ahead of these, so a bake that starts on a
+         * descent waits behind the ground the descent needs. Residency stops
+         * a bake thrashing; this is what stops it being in the way.
+         */
+        const job = host.heightfields.submit(
+          body.surface,
+          {
+            region,
+            resolution: HEIGHTFIELD_RESOLUTION,
+            border: HEIGHTFIELD_BORDER,
+            seabed,
+          },
+          'background',
+        )
         if (job === null) return null
         bake.jobs.push(job)
         return job.result

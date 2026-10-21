@@ -72,7 +72,11 @@ it('routes by capability without copying the surface or the request', async () =
   fields.preferred = { ...gpu.source, maxLevel: 1 }
   const job = fields.submit(surface, request)!
   expect(gpu.source.submit).not.toHaveBeenCalled()
-  expect(pool.source.submit).toHaveBeenCalledWith(surface, request)
+  expect(pool.source.submit).toHaveBeenCalledWith(
+    surface,
+    request,
+    'foreground',
+  )
   expect(vi.mocked(pool.source.submit).mock.calls[0]![0] === surface).toBe(true)
   expect(vi.mocked(pool.source.submit).mock.calls[0]![1] === request).toBe(true)
   pool.jobs[0]!.resolve(field)
@@ -100,6 +104,22 @@ it('finishes an in-flight request on the fallback after the preferred adapter re
   gpu.jobs[0]!.reject(new HeightfieldUnavailable())
   await Promise.resolve()
   expect(pool.jobs).toHaveLength(1)
+  pool.jobs[0]!.resolve(field)
+  await expect(job.result).resolves.toBe(field)
+})
+
+it('asks every adapter in the lane the caller named, the fallback included', async () => {
+  // A bake's tile retried on the pool after the producer retires is still a
+  // bake's tile: it goes behind the ground there too.
+  const gpu = delayed('gpu')
+  const pool = delayed('pool')
+  const fields = new Heightfields(pool.source)
+  fields.preferred = gpu.source
+  const job = fields.submit(surface, request, 'background')!
+  expect(vi.mocked(gpu.source.submit).mock.calls[0]![2]).toBe('background')
+  gpu.jobs[0]!.reject(new HeightfieldUnavailable())
+  await Promise.resolve()
+  expect(vi.mocked(pool.source.submit).mock.calls[0]![2]).toBe('background')
   pool.jobs[0]!.resolve(field)
   await expect(job.result).resolves.toBe(field)
 })

@@ -5,7 +5,7 @@ import {
   type HeightfieldRequest,
   type SurfaceParameters,
 } from '@inertialref/universe'
-import type { JobHandle } from './pool.ts'
+import type { JobHandle, JobLane } from './pool.ts'
 import {
   type ArchivedSource,
   encodeSurface,
@@ -322,9 +322,10 @@ class ArchivedHeightfieldSource implements HeightfieldSource {
   submit(
     surface: SurfaceParameters,
     request: HeightfieldRequest,
+    lane?: JobLane,
   ): JobHandle<HeightfieldResponse> {
     const state = this.#state
-    if (state.closed) return this.#source.submit(surface, request)
+    if (state.closed) return this.#source.submit(surface, request, lane)
     const counts = state.counts
     const store = state.store
     const id = this.#nextId++
@@ -365,7 +366,7 @@ class ArchivedHeightfieldSource implements HeightfieldSource {
           if (canceled) return
         }
         counts.misses++
-        active = this.#source.submit(surface, request)
+        active = this.#source.submit(surface, request, lane)
         const field = await active.result
         if (canceled) return
         if (epoch === state.epoch) {

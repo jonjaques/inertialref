@@ -30,6 +30,7 @@ function fixture() {
   const original = session.world.bodyAt(bodyFrameId(parseAddress(ADDRESS)))!
   let body: Body | null = original
   const jobs: {
+    lane: string | undefined
     cancel: ReturnType<typeof vi.fn>
     reject: (reason: Error) => void
     complete(): void
@@ -37,7 +38,7 @@ function fixture() {
   const source: HeightfieldSource = {
     kind: 'delayed',
     available: true,
-    submit(_surface, request) {
+    submit(_surface, request, lane) {
       let resolve!: (field: HeightfieldResponse) => void
       let reject!: (reason: Error) => void
       const result = new Promise<HeightfieldResponse>((done, fail) => {
@@ -46,6 +47,7 @@ function fixture() {
       })
       const cancel = vi.fn(() => reject(new Error('canceled')))
       jobs.push({
+        lane,
         cancel,
         reject,
         complete() {
@@ -115,6 +117,17 @@ describe('the orbital bake lifetime', () => {
     expect(baker.report()).toEqual([
       { address: ADDRESS, ready: false, failed: false },
     ])
+  })
+
+  it('asks for every tile in the background lane, behind the ground', () => {
+    // The streamer's ground and the bake share a producer; a bake that
+    // starts on a descent must not hold the ground the descent needs.
+    const { baker, jobs } = fixture()
+    baker.textureFor(ADDRESS)
+    expect(jobs).toHaveLength(96)
+    expect(new Set(jobs.map((job) => job.lane))).toEqual(
+      new Set(['background']),
+    )
   })
 
   it('does not carry a flat-body verdict across a body replacement', () => {

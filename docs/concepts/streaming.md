@@ -344,6 +344,9 @@ keeping one cancellation handle for the caller. Level and request-shape limits
 are checked before submission. If no adapter can finish, the result is null;
 ordinary request failures propagate. `ir.terrain().producer` names the currently
 preferred available adapter, though a request beyond its limits uses the pool.
+The orbital baker asks in the [background lane](workers.md#two-lanes), so on
+either adapter its ninety-six tiles wait behind the streamer's ground rather
+than ahead of it.
 The GPU tile is held to the CPU tile by `terrainKernel.gpu.test.ts`: within
 3 × 10⁻⁵ of the budget plus eight sample offsets, which is under 4 cm on Earth
 from level 12 down and 1.21 m at level 0, where a sample's own position is held

@@ -20,7 +20,11 @@ import {
   type HeightfieldSource,
 } from '@inertialref/workers'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
-import { createTileProducer, type TileProducer } from './terrainProducer.ts'
+import {
+  createTileProducer,
+  TILES_PER_BATCH,
+  type TileProducer,
+} from './terrainProducer.ts'
 
 /*
  * The producer around the kernel: batching, the body upload, cancellation,
@@ -396,6 +400,38 @@ describe('the tile producer', () => {
     } finally {
       own.dispose()
     }
+  })
+
+  it('serves the ground ahead of a bake queued before it', async () => {
+    /*
+     * The orbital bake asks for ninety-six tiles at once, and the streamer
+     * asks for the ground a descent is about to need. Asked in one queue, a
+     * bake that starts on a descent holds that ground behind every one of its
+     * own batches; in the background lane the next batch after the one on the
+     * GPU is the ground's, and the bake resumes behind it.
+     */
+    const luna = solBody('Luna')
+    const order: string[] = []
+    const bake = regions(2, 48).map((region, i) => {
+      const job = producer.submit(
+        luna.surface,
+        requestFor(region),
+        'background',
+      )
+      void job.result.then(() => order.push(`bake ${i}`))
+      return job
+    })
+    // The first batch is taken on a microtask: this turn sees it dispatched.
+    await Promise.resolve()
+    expect(producer.stats().inFlight).toBe(TILES_PER_BATCH)
+    const [near] = regions(12, 1) as [RegionAddress]
+    const ground = producer.submit(luna.surface, requestFor(near), 'foreground')
+    void ground.result.then(() => order.push('ground'))
+    await Promise.all([ground.result, ...bake.map((job) => job.result)])
+    // Only the batch already on the GPU lands before it.
+    expect(order.indexOf('ground')).toBe(TILES_PER_BATCH)
+    expect(order).toHaveLength(49)
+    expect(producer.stats().queued).toBe(0)
   })
 
   it('refuses a request shaped for another kernel rather than answering it wrong', async () => {

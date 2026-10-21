@@ -11548,6 +11548,37 @@ A dry body also reads no water back. The copy the producer skipped is
 its sentinel scan is about a millisecond of a fourteen-millisecond batch on
 Luna and Mars, under load.
 
+## The orbital bake waits behind the ground, in a lane of its own (20 Oct 2026)
+
+A generated body's bake asks for ninety-six level-2 tiles at once, and the
+streamer and the bake shared one queue on both adapters: the pool was a FIFO
+and the GPU producer took its next batch from the head of one. A bake that
+started on a descent — the disk crossing a hundredth of a radian on the way
+down — put all ninety-six ahead of the ground the descent was about to need.
+Measured in `terrainProducer.gpu.test.ts`: with forty-eight bake tiles queued
+and the first batch on the GPU, a ground tile asked for next was delivered
+49th, behind every one of them; it is delivered 17th now, behind only the
+batch already dispatched. The pool's version of the same test dispatched the
+next bake tile to the free worker instead of the ground.
+
+`JobLane` in `packages/workers/src/pool.ts` is the fix: `foreground` by
+default, `background` for the bake, and a free worker — or the producer's next
+batch — takes a background job only when no foreground job waits. Nothing is
+preempted. The producer draws each batch from one lane rather than topping a
+short ground batch up with bake tiles, because a bake tile in the ground's
+batch is delivered with it rather than after it, and the batch it lengthens
+is the one the descent is waiting on. A bake that starts mid-descent therefore
+waits until the streamer stops asking, which is what it should do: below the
+eight-pixel gate the ground is drawn and the sphere is not.
+
+The lane travels as a third argument to `submit` through `Heightfields`, the
+archive and the surface preparation, and is not a field of the request — the
+request is the archive's key, and a tile the bake and the streamer both ask
+for is one tile. Residency (`RESIDENCY_MS` in `orbitalBake.ts`) stops a bake
+thrashing; the lane is what stops it being in the way. It is scheduling, not
+generation: a task's answer is a function of its payload, so the lane moves
+when an answer arrives and never what it is.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

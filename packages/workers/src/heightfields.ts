@@ -2,7 +2,7 @@ import type {
   HeightfieldRequest,
   SurfaceParameters,
 } from '@inertialref/universe'
-import type { JobHandle } from './pool.ts'
+import type { JobHandle, JobLane } from './pool.ts'
 import type { HeightfieldResponse, HeightfieldSource } from './tasks.ts'
 
 /**
@@ -19,7 +19,9 @@ export class HeightfieldUnavailable extends Error {
 
 /**
  * Heightfields through a preferred adapter and a fallback. Request ordering
- * belongs to the caller; capability checks and retirement belong here.
+ * belongs to the caller, and the lane it asks in reaches whichever adapter
+ * answers — a bake's tile retried on the pool is still a background tile;
+ * capability checks and retirement belong here.
  *
  * A null submission means nobody supports the request. A null result means
  * its producer retired and no fallback could finish it. Cancellation still
@@ -43,6 +45,7 @@ export class Heightfields {
   submit(
     surface: SurfaceParameters,
     request: HeightfieldRequest,
+    lane: JobLane = 'foreground',
   ): JobHandle<HeightfieldResponse | null> | null {
     const supports = (
       source: HeightfieldSource | null,
@@ -85,7 +88,7 @@ export class Heightfields {
           }
         }
         try {
-          active = source.submit(surface, request)
+          active = source.submit(surface, request, lane)
           void active.result.then((field) => {
             if (settled) return
             settled = true
