@@ -1,6 +1,7 @@
 # ADR-0015: Terrain is a restricted, morphing quadtree over a measured detail floor
 
-Status: accepted · 2026-08-27
+Status: accepted · 2026-08-27 · amended by [ADR-0055](0055-a-long-lens-refines-what-its-frame-can-reach.md): past the
+flight lens the disk is refined at the flight lens and the frame at the picture's own
 
 ## Context
 

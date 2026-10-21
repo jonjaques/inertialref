@@ -6,13 +6,16 @@ import {
   COARSEN_STEP,
   DEFAULT_LENS,
   DEFAULT_MAX_PATCHES,
+  lensForFov,
   originForCamera,
+  pixelAngle,
   selectTerrain,
   type RenderBody,
 } from '@inertialref/rendering'
 import {
   UV,
   type UniverseVector,
+  toRenderSpace,
   Vec,
   vec3,
   type RenderOrigin,
@@ -223,6 +226,88 @@ describe('the terrain streamer', () => {
       view.body,
     )
     expect(streamer.summary().selections).toBe(2)
+
+    session.dispose()
+  })
+
+  it('selects against where the picture looks, and re-walks a long lens only once it has turned', () => {
+    /*
+     * The engine hands the camera's forward over in render space; the walks
+     * want it in the body's axes. Looking straight down is the one forward
+     * whose body-fixed answer is known without the arithmetic under test: it
+     * is the eye's own direction, negated.
+     */
+    const session = openSession({ seed: 'inertialref', workers: null })
+    const view = groundView(session)
+    const address = parseAddress(EARTH)
+    const center = session.world.frames.pose(
+      bodyFrameId(address),
+      view.renderTime,
+    ).position
+    const nadir = Vec.normalize(
+      Vec.sub(
+        toRenderSpace(view.origin, center),
+        toRenderSpace(view.origin, view.camera),
+      ),
+    )
+    const streamer = new TerrainStreamer(null)
+    const viewport = { width: 1920, height: 1080 }
+    const lens = lensForFov(11.4)
+    streamer.lensView = { lens, viewport }
+    streamer.forward = nadir
+    const walk = (): void => {
+      streamer.update(
+        session.world,
+        view.renderTime,
+        frame(),
+        view.camera,
+        view.origin,
+        view.body,
+      )
+    }
+    const lastView = () =>
+      vi.mocked(selectTerrain).mock.calls.at(-1)?.[1]?.view ?? null
+
+    vi.mocked(selectTerrain).mockClear()
+    walk()
+    const eye = bodyFixedDirection(
+      session.world.frames.pose(bodyFixedFrameId(address), view.renderTime),
+      view.camera,
+    )
+    expect(Vec.dot(lastView()!.forward, eye)).toBeCloseTo(-1, 9)
+    // The request set's walk, which nothing withholds: with no geometry built
+    // the drawn set is still the roots, and the roots hold the eye.
+    const wanted = vi.mocked(selectTerrain).mock.results.at(-1)?.value
+    expect(wanted?.outside).toBeGreaterThan(0)
+    expect(streamer.summary().selections).toBe(1)
+
+    // Tilted by a hundred of the lens's pixels: inside a quarter of the
+    // margin, so the held selection still covers the frame.
+    const tilt = (pixels: number) => {
+      const side = Vec.normalize(Vec.cross(nadir, vec3(0, 1, 0)))
+      const angle = pixels * pixelAngle(lens, viewport)
+      return Vec.add(
+        Vec.scale(nadir, Math.cos(angle)),
+        Vec.scale(side, Math.sin(angle)),
+      )
+    }
+    streamer.forward = tilt(100)
+    walk()
+    expect(streamer.summary().selections).toBe(1)
+    streamer.forward = tilt(300)
+    walk()
+    expect(streamer.summary().selections).toBe(2)
+
+    // At the flight lens the view is not an input, so no turn costs a walk.
+    streamer.lensView = { lens: DEFAULT_LENS, viewport }
+    walk()
+    const walked = streamer.summary().selections
+    expect(vi.mocked(selectTerrain).mock.results.at(-1)?.value.outside).toBe(0)
+    streamer.forward = tilt(-4_000)
+    walk()
+    streamer.forward = null
+    walk()
+    expect(streamer.summary().selections).toBe(walked)
 
     session.dispose()
   })

@@ -1,10 +1,13 @@
 import type { Meters, Radians } from '@inertialref/shared'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import {
+  aspectRatio,
   BASELINE_VIEWPORT,
   type Lens,
   LENS_PRESETS,
+  pixelAngle,
   pixelsPerRadian,
+  verticalFov,
   type Viewport,
 } from './lens.ts'
 import {
@@ -67,17 +70,18 @@ import {
  *
  * A node refines while `distance < spacing · scale` and `scale` goes as
  * `pixelsPerRadian`, so doubling it is one more level of refinement everywhere
- * on the visible disk. The focal-length control spans 8.1× of it — 378 px/rad
- * at 110° to 3,062 at 20° — which is three levels, and the zoom channel
- * multiplies another 8× for six levels across the two sliders together. The
- * patches do not follow the square of it: refinement runs out of *levels* at
- * `surfaceDetailFloor` before it runs out of budget, so 20° at zoom 1 measures
- * 1.9× to 3.2× the demand rather than the 66× the arithmetic suggests —
- * `DEFAULT_MAX_PATCHES` below carries the counts, including the corner where
- * the floor is reached and the square starts to bite again. That is why the
- * predicate takes the lens the picture is actually composed through rather than
- * a nominal angle: a fixed one is right for exactly one setting of the two
- * controls and wrong by six levels at their ends.
+ * on the visible disk. The focal-length control spans 14.3× of it — 378
+ * px/rad at 110° to 5,410 at 11.4° — which is nearly four levels, and the zoom
+ * channel multiplies another 8× for nearly seven across the two sliders
+ * together. The patches do not follow the square of it: refinement runs out of
+ * *levels* at `surfaceDetailFloor` before it runs out of budget, so a whole
+ * disk at 11.4° standing at two meters asks for 2,063 to 12,330 patches across
+ * the zoo against 456 to 1,061 at the flight lens, rather than the 41 times as
+ * many the arithmetic suggests — `DEFAULT_MAX_PATCHES` below carries the
+ * counts. That is why the predicate takes the lens the picture is actually
+ * composed through rather than a nominal angle, and past the flight lens where
+ * it looks too: a fixed one is right for exactly one setting of the two
+ * controls and wrong by seven levels at their ends.
  *
  * `LENS_PRESETS.flight` over `BASELINE_VIEWPORT` — 65° over 1080 display
  * pixels, which is 848 px/rad. The streamer passes the live lens; this is what
@@ -159,22 +163,24 @@ export const DEFAULT_MAX_LEVEL = 12
  * measured-before-optimized rather than done here.
  *
  * **It binds at the telephoto end and on a retina window, and by how much is
- * measured rather than adjectival.** At 20° the same descents want two to
- * three times the flight lens's count; a 1600×900 window at DPR 2 is 3200×1800
+ * measured rather than adjectival.** Refined over the whole disk, 11.4° asks
+ * for the 2,063 to 12,330 above, which no cap is for. Refined at the lens only
+ * where the frame can reach (`REFERENCE_LENS`), the same eyes looking at the
+ * horizon ask for 929 to 3,491 and their descents peak at 1,221 to 1,946,
+ * which the ladder below fits on every eye. A 1600×900 window at DPR 2 is 3200×1800
  * display pixels, one level deeper everywhere, and the Mars landing's hover
  * wants 1,583 patches there against 874 at DPR 1. What the cap does when it
  * binds is `COARSEN_STEP` below: the tolerance is loosened and the walk
  * retaken, so the disk goes coarse by a stated fraction of a level everywhere
  * the eye is not standing, and the ground underfoot keeps the floor.
  *
- * **The zoom channel goes three levels past that, and no cap covers it.** At 20°
- * with the zoom racked to 8× the picture is a 2.5° field at 24,500 px/rad, and
- * Miranda's basin descent wanted **20,174** patches at the old detail floor —
- * an order of magnitude past any cap, past the loosest tolerance, and
- * `saturated` on every step. That is a telephoto held on a subject rather than
- * a lens anything is flown behind, and the honest answer is the one the cap
- * gives: the disk goes coarse, by a stated amount, rather than the frame going
- * away.
+ * **The zoom channel goes three levels past that, and no cap covers it.** At
+ * the long end with the zoom racked to 8× the picture is a 1.43° field at
+ * 43,281 px/rad. Refined inside the frame, the descents onto the zoo's basins
+ * peak at 4,586 to 8,305 patches and are past the loosest tolerance on 18 to
+ * 25 of 32 steps. That is a telephoto held on a subject rather than a lens anything is flown
+ * behind, and the honest answer is the one the cap gives: the disk goes
+ * coarse, by a stated amount, rather than the frame going away.
  */
 export const DEFAULT_MAX_PATCHES = 1_280
 
@@ -204,7 +210,9 @@ export const DEFAULT_MAX_PATCHES = 1_280
  * unchanged. The step is 1.5 rather than 2 because 2 is a whole level and a
  * whole level arriving in one frame is the pop this exists to remove; three
  * steps reach 3.4×, a level and three quarters, which covers a DPR 2 window at
- * the telephoto end and stops short of pretending a racked zoom fits. The
+ * the telephoto end on all but 26 of 240 eyes at the horizon — 20 of them
+ * beside a cube corner, where `regionSpacing` over-refines, none short of the
+ * floor underfoot — and stops short of pretending a racked zoom fits. The
  * retry is a second walk on the frames it fires — the first walk stops at the
  * overflow and skips the balance pass, so it costs less than a full one — and
  * a caller that hands back `coarsening` pays it on the frame the cap first
@@ -242,6 +250,82 @@ export const COARSEN_STEPS = 3
  */
 export const MORPH_START = 1.25
 export const MORPH_END = 1.8
+
+/**
+ * The lens the ground outside the frame is refined at, when the picture's own
+ * lens is longer.
+ *
+ * A telephoto's pixel angle is a claim about what is inside its frame and
+ * nothing else. Refining the whole disk at it spends the cap on ground behind
+ * the camera, so a selection that knows where the picture looks refines at
+ * the lens only inside the frame and at this lens everywhere else.
+ *
+ * The flight lens, because it is the one the whole disk is already sized for,
+ * and because it makes the claim about a turn of the head exact rather than
+ * approximate: at the flight lens and anything wider nothing changes, and at
+ * any longer lens what a turn streams is the telephoto's increment over ground
+ * already resident at the flight lens's detail — never a hole.
+ */
+export const REFERENCE_LENS: Lens = LENS_PRESETS.flight
+
+/**
+ * How far past the frame's corners the long lens's refinement reaches, in the
+ * lens's own display pixels.
+ *
+ * In pixels rather than an angle because both things it has to cover scale
+ * with the lens. A drag turns the head one pixel angle a pixel (rule 36), so a
+ * turn is a number of pixels whatever the focal length; and a patch near its
+ * own range is `(resolution − 1) · cellPixels` across — 1,024 px at 16 px a
+ * cell — whatever the focal length too. The regime boundary costs the patches
+ * along it their own level, because their morph is taken at the reference
+ * scale to keep the handover crack-free (`selectTerrain` says why), so the
+ * margin is what keeps that ring of patches out of the frame.
+ */
+export const VIEW_MARGIN_PIXELS = 1_024
+
+/**
+ * How far the view may turn, in the lens's own display pixels, before a
+ * selection made against it is retaken.
+ *
+ * A quarter of the margin, so a walk taken at the threshold still has three
+ * quarters of it — 768 px — to stream into before the frame's edge reaches
+ * ground refined at the reference. Measured at 11.4° standing at two meters
+ * across Earth, Luna, Miranda, Gliese 908 IV and the far-shore world, a turn
+ * of 256 px asks for at most 33 patches the selection before it did not hold,
+ * which is four frames of the streamer's eight-a-frame build budget; covering
+ * 768 px in four frames is a turn of over 11,000 px a second, and a drag turns
+ * the head one pixel a pixel. Retaking on every frame of a turn instead costs
+ * two walks a frame for nothing the margin does not already cover.
+ */
+export const VIEW_TURN_PIXELS = 256
+
+/**
+ * Whether a selection made looking along `held` is stale looking along `now`.
+ *
+ * False whenever the view changes nothing — at the reference lens and wider,
+ * where `selectTerrain` ignores it — so a caller that memoizes on this re-walks
+ * at the flight lens exactly as often as it did before the view existed.
+ * Forwards in the same axes, as `TerrainView.forward` is; null is a caller with
+ * no view, and a view arriving or leaving is a change.
+ */
+export function viewTurned(
+  held: Vec3 | null,
+  now: Vec3 | null,
+  lens: Lens,
+  viewport: Viewport,
+  reference: Lens = REFERENCE_LENS,
+): boolean {
+  if (pixelsPerRadian(reference, viewport) >= pixelsPerRadian(lens, viewport))
+    return false
+  if (held === null || now === null) return held !== now
+  const cosine =
+    Vec.dot(held, now) /
+    Math.sqrt(Vec.lengthSquared(held) * Vec.lengthSquared(now))
+  return (
+    Math.acos(clamp(cosine, -1, 1)) >
+    VIEW_TURN_PIXELS * pixelAngle(lens, viewport)
+  )
+}
 
 /** A node's extent: the cone of directions it covers. */
 export interface RegionCone {
@@ -333,11 +417,37 @@ export interface TerrainEye {
   readonly direction: BodyFixedDirection
 }
 
+/**
+ * Where the picture looks, for a selection that may refine a long lens only
+ * inside its frame.
+ */
+export interface TerrainView {
+  /**
+   * The camera's forward: a unit vector in the body's rotating axes, the same
+   * axes `TerrainEye.direction` is in.
+   */
+  readonly forward: Vec3
+}
+
 export interface TerrainSelectOptions {
   readonly maxLevel?: number
   readonly cellPixels?: number
   /** The lens the picture is taken with. Defaults to the flight lens. */
   readonly lens?: Lens
+  /**
+   * Where the picture looks. Omitted, the whole disk is refined at `lens`,
+   * which is the conservative answer for a caller that does not know.
+   *
+   * Given, and with `lens` longer than `reference`, ground the frame cannot
+   * see — outside the frame's cone widened by `viewMarginPixels` — is refined
+   * at `reference` instead. At a lens no longer than `reference` the view
+   * changes nothing.
+   */
+  readonly view?: TerrainView
+  /** The lens ground outside the view is refined at. `REFERENCE_LENS`. */
+  readonly reference?: Lens
+  /** The view's margin past the frame's corners. `VIEW_MARGIN_PIXELS`. */
+  readonly viewMarginPixels?: number
   /**
    * The picture's size in *display* pixels.
    *
@@ -384,6 +494,11 @@ export interface SelectedPatch {
   readonly morphStart: Meters
   /** At this distance it has arrived, and the parent takes over. */
   readonly morphEnd: Meters
+  /**
+   * Refined at the picture's own lens rather than at the reference: the
+   * node's ground can be in the frame. Always true without a view.
+   */
+  readonly inView: boolean
 }
 
 export interface TerrainSelection {
@@ -402,6 +517,12 @@ export interface TerrainSelection {
   readonly visited: number
   /** Nodes dropped beyond the horizon. Most of a planet, most of the time. */
   readonly culled: number
+  /**
+   * Selected patches refined at the reference lens because the frame cannot
+   * reach them. Zero without a view, and at any lens no longer than the
+   * reference.
+   */
+  readonly outside: number
   /**
    * Nodes that stopped short because `ready` said a child was not there.
    *
@@ -495,9 +616,136 @@ interface Node {
   readonly distance: Meters
   /**
    * Distance at which this patch's cells subtend exactly the tolerance —
-   * `cellPixels` times the walk's coarsening.
+   * `cellPixels` times the walk's coarsening — at the scale of the regime the
+   * node is in.
    */
   readonly range: Meters
+  /** Refined at the lens rather than at the reference. */
+  readonly inView: boolean
+}
+
+/** The frame's cone in body-fixed axes: what a node must reach to be refined at the lens. */
+interface Framing {
+  readonly eye: Vec3
+  readonly forward: Vec3
+  /** Half the frame's diagonal plus the margin, radians. */
+  readonly halfAngle: Radians
+  /** `pixelsPerRadian / cellPixels` at the reference lens, before coarsening. */
+  readonly referenceScale: number
+}
+
+/**
+ * The view's cone, or null when the view would change nothing.
+ *
+ * Null without a view, and null when the reference is at least as fine as the
+ * lens: a wide lens's own pixel angle is coarser than the reference's, and
+ * refining the ground behind the camera finer than the frame would be
+ * spending the cap backwards. At those lenses the selection is the whole-disk
+ * one exactly, which is what keeps every figure measured before the view
+ * existed true at the flight lens and wider.
+ */
+function framingFor(
+  eye: TerrainEye,
+  options: TerrainSelectOptions,
+  lens: Lens,
+  viewport: Viewport,
+  cellPixels: number,
+): Framing | null {
+  const view = options.view
+  if (view === undefined) return null
+  const reference = options.reference ?? REFERENCE_LENS
+  const referenceScale = pixelsPerRadian(reference, viewport) / cellPixels
+  if (referenceScale >= pixelsPerRadian(lens, viewport) / cellPixels)
+    return null
+  // The frame's half-diagonal through the projection: the corners are where a
+  // turn first uncovers ground, and the cone has to hold them.
+  const vertical = Math.tan(verticalFov(lens) / 2)
+  const corner = Math.atan(
+    Math.hypot(vertical, vertical * aspectRatio(viewport)),
+  )
+  const margin =
+    (options.viewMarginPixels ?? VIEW_MARGIN_PIXELS) *
+    pixelAngle(lens, viewport)
+  return {
+    eye: Vec.scale(eye.direction, eye.distance),
+    forward: Vec.normalize(view.forward),
+    halfAngle: Math.min(Math.PI, corner + margin),
+    referenceScale,
+  }
+}
+
+/**
+ * Whether any ground a node can hold is inside the frame's cone.
+ *
+ * The ground a node can hold is its cone of directions crossed with the shell
+ * `[radius − relief, radius + relief]`: a column, twice the body's relief tall
+ * and only the node's own width across. It is bounded here by a capsule — the
+ * segment of the node's axis from `(radius − relief)·cos θ` to
+ * `radius + relief`, thickened by the column's widest half-width
+ * `(radius + relief)·sin θ` — and the capsule is tested against the frame's
+ * cone exactly: the nearest direction on the arc the segment sweeps from the
+ * eye, less the angle its thickness subtends.
+ *
+ * **A bounding sphere is the obvious construction and it does not work.** Its
+ * radius cannot be less than the relief, and on Earth that is 9.9 km — so
+ * every node within ten kilometers of the eye, behind it as much as in front,
+ * holds the eye inside its sphere and is in view by definition. Standing on
+ * Earth at 11.4° that put the three finest levels wholly in view, 1,785
+ * patches of a 3,289-patch selection; the capsule takes the same eye to
+ * 1,756, against 5,504 for the whole disk. The relief is a vertical claim — a summit can
+ * rise into the frame, a canyon can fall into it — and the capsule keeps it
+ * vertical: a node behind the camera is out of view however tall its ground
+ * could be.
+ */
+function reaches(framing: Framing, eye: TerrainEye, cone: RegionCone): boolean {
+  const low = Math.max(MIN_DISTANCE, eye.radius - eye.relief)
+  const high = eye.radius + eye.relief
+  const thickness = high * Math.sin(cone.halfAngle)
+  const u = Vec.sub(
+    Vec.scale(cone.axis, low * Math.cos(cone.halfAngle)),
+    framing.eye,
+  )
+  const v = Vec.sub(Vec.scale(cone.axis, high), framing.eye)
+  const nearest = segmentDistance(u, v)
+  if (nearest <= thickness) return true
+  const off = arcAngle(framing.forward, u, v)
+  return off - Math.asin(thickness / nearest) <= framing.halfAngle
+}
+
+/** Distance from the origin to the segment between two points. */
+function segmentDistance(u: Vec3, v: Vec3): number {
+  const along = Vec.sub(v, u)
+  const square = Vec.lengthSquared(along)
+  const t = square > 0 ? clamp(-Vec.dot(u, along) / square, 0, 1) : 0
+  return Vec.length(Vec.add(u, Vec.scale(along, t)))
+}
+
+/**
+ * The least angle between `forward` and any direction from the origin to a
+ * point of the segment `u`–`v`.
+ *
+ * Those directions sweep one great-circle arc, the short one from `û` to `v̂`
+ * in the plane the segment and the origin share. The nearest point of a great
+ * circle to `forward` is `forward` projected into its plane; if that falls
+ * inside the arc it is the answer, and otherwise one end of the arc is.
+ */
+function arcAngle(forward: Vec3, u: Vec3, v: Vec3): Radians {
+  const angle = (a: Vec3, b: Vec3): Radians =>
+    Math.acos(clamp(Vec.dot(a, b) / (Vec.length(a) * Vec.length(b)), -1, 1))
+  const ends = Math.min(angle(forward, u), angle(forward, v))
+  const normal = Vec.cross(u, v)
+  const square = Vec.lengthSquared(normal)
+  // Collinear with the eye: the arc is a point, and its ends are the answer.
+  if (square <= 1e-24 * Vec.lengthSquared(u) * Vec.lengthSquared(v)) return ends
+  const projected = Vec.sub(
+    forward,
+    Vec.scale(normal, Vec.dot(forward, normal) / square),
+  )
+  if (Vec.lengthSquared(projected) <= 1e-24) return Math.PI / 2
+  const inside =
+    Vec.dot(Vec.cross(u, projected), normal) >= 0 &&
+    Vec.dot(Vec.cross(projected, v), normal) >= 0
+  return inside ? Math.min(ends, angle(forward, projected)) : ends
 }
 
 /**
@@ -518,16 +766,20 @@ export function selectTerrain(
   const lens = options.lens ?? DEFAULT_LENS
   const viewport = options.viewport ?? DEFAULT_VIEWPORT
   const optics = pixelsPerRadian(lens, viewport)
+  const framing = framingFor(eye, options, lens, viewport, cellPixels)
   const loosest = COARSEN_STEP ** COARSEN_STEPS
   let coarsening = Math.max(1, options.coarsening ?? 1)
   for (;;) {
     // The loosest tolerance takes the cut tree; every tighter one hands the
     // overflow to the next step instead.
     const last = coarsening * COARSEN_STEP > loosest * (1 + 1e-9)
-    const selection = walk(eye, options, optics / (cellPixels * coarsening), {
-      coarsening,
-      last,
-    })
+    const selection = walk(
+      eye,
+      options,
+      framing,
+      optics / (cellPixels * coarsening),
+      { coarsening, last },
+    )
     if (selection !== null) return selection
     coarsening *= COARSEN_STEP
   }
@@ -541,6 +793,7 @@ export function selectTerrain(
 function walk(
   eye: TerrainEye,
   options: TerrainSelectOptions,
+  framing: Framing | null,
   scale: number,
   attempt: { readonly coarsening: number; readonly last: boolean },
 ): TerrainSelection | null {
@@ -549,13 +802,27 @@ function walk(
   const maxPatches = options.maxPatches ?? DEFAULT_MAX_PATCHES
   const ready = options.ready
   const reach = horizonReach(eye)
+  // The coarsening loosens both regimes together: it is a multiple of the
+  // tolerance, and the tolerance is one number whichever lens it is read at.
+  const outScale =
+    framing === null ? scale : framing.referenceScale / attempt.coarsening
 
   let visited = 0
   let culled = 0
   const starved: RegionAddress[] = []
   let saturated = false
 
-  const consider = (region: RegionAddress): Node | null => {
+  /*
+   * A node is in view only if its parent was, as well as by its own test.
+   * The bounding spheres do not nest — a child's can poke out where its
+   * parent's sphere test said no — and a child finer than its parent's regime
+   * is a scale that rises down the tree, which the handover argument in
+   * `MORPH_END` does not allow for. Carried, the scale never rises.
+   */
+  const consider = (
+    region: RegionAddress,
+    parentInView: boolean,
+  ): Node | null => {
     visited += 1
     const cone = regionCone(region)
     const separation = Math.acos(
@@ -566,18 +833,21 @@ function walk(
       return null
     }
     const spacing = regionSpacing(eye.radius, region, resolution)
+    const inView =
+      framing === null || (parentInView && reaches(framing, eye, cone))
     return {
       region,
       cone,
       spacing,
       distance: nodeDistance(eye, cone),
-      range: spacing * scale,
+      range: spacing * (inView ? scale : outScale),
+      inView,
     }
   }
 
   let frontier: Node[] = []
   for (let face = 0; face < 6; face += 1) {
-    const node = consider(regionAddress(face, 0, 0, 0))
+    const node = consider(regionAddress(face, 0, 0, 0), true)
     if (node !== null) frontier.push(node)
   }
 
@@ -599,7 +869,7 @@ function walk(
       }
       refining.push(node)
       for (const child of children) {
-        const seen = consider(child)
+        const seen = consider(child, node.inView)
         if (seen !== null) next.push(seen)
       }
     }
@@ -628,6 +898,26 @@ function walk(
     starved,
     seen: new Set(starved.map((region) => regionKey(region))),
   })
+  /*
+   * The cap bounds what is drawn, and what is drawn is the balanced tree. A
+   * walk that fits can still balance past the cap, and with two regimes it
+   * routinely does: the 2:1 rings have to grade the level gap between the
+   * frame and the reference across the frame's edges, which is hundreds of
+   * patches the walk's own count never sees — measured at 11.4°, a descent
+   * onto Luna whose every walk fit came back over the cap on 22 of 32 steps.
+   * So the overrun climbs the ladder exactly as an overflow mid-walk does.
+   */
+  if (!attempt.last && balanced.length > maxPatches) return null
+
+  /*
+   * Outside regions, by key, for the one question the morph below asks: does
+   * a patch in view abut coarser ground the view does not reach? Empty, and
+   * never consulted, without a framing.
+   */
+  const outside = new Set<number | string>()
+  if (framing !== null)
+    for (const node of balanced)
+      if (!node.inView) outside.add(regionKey(node.region))
 
   let deepest = 0
   let shallowest = maxLevel
@@ -640,12 +930,32 @@ function walk(
      * has already left the surface tier.
      */
     const root = node.region.level === 0
+    /*
+     * The one place the two regimes meet, and the handover has to hold there.
+     *
+     * `MORPH_END` is crack-free because a coarser neighbor that did not refine
+     * is at least its own range away, and its range is twice this patch's
+     * when both are measured at one scale. Across the regime boundary they
+     * are not: the coarser neighbor stopped at the reference's range, which
+     * is a fraction of this patch's range at the lens, so a band taken at the
+     * lens would still be sliding where the neighbor's edge is — a lit seam.
+     * Taken at the reference scale instead, the band closes before the
+     * neighbor's nearest point exactly as it does within one regime, and what
+     * that costs is this patch's own level: it reads as its parent wherever it
+     * is further than the reference's range. The margin is what keeps that
+     * ring of patches outside the frame.
+     */
+    const range =
+      node.inView && outside.size > 0 && bordersOutside(node.region, outside)
+        ? node.spacing * outScale
+        : node.range
     return {
       region: node.region,
       spacing: node.spacing,
       distance: node.distance,
-      morphStart: root ? NO_MORPH_DISTANCE : node.range * MORPH_START,
-      morphEnd: root ? NO_MORPH_DISTANCE : node.range * MORPH_END,
+      morphStart: root ? NO_MORPH_DISTANCE : range * MORPH_START,
+      morphEnd: root ? NO_MORPH_DISTANCE : range * MORPH_END,
+      inView: node.inView,
     }
   })
 
@@ -655,10 +965,52 @@ function walk(
     shallowestLevel: patches.length === 0 ? 0 : shallowest,
     visited,
     culled,
+    outside: outside.size,
     starved,
     coarsening: attempt.coarsening,
     saturated: saturated || patches.length > maxPatches,
   }
+}
+
+/** The four neighbors that share an edge — the only ones a morph can open a gap against. */
+const EDGES: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+]
+
+/**
+ * Whether a coarser patch outside the view shares an edge with this one.
+ *
+ * Coarser by exactly one level, because the tree is restricted: the patch
+ * covering an edge-neighbor's ground is that neighbor, something finer, or
+ * its parent, and only the parent can be the coarser half of a morph. A
+ * corner-only contact is one vertex, and a corner is an even index, which the
+ * morph never moves.
+ */
+function bordersOutside(
+  region: RegionAddress,
+  outside: ReadonlySet<number | string>,
+): boolean {
+  if (region.level === 0) return false
+  const span = 2 ** region.level
+  for (const [di, dj] of EDGES) {
+    const ni = region.i + di
+    const nj = region.j + dj
+    const beside =
+      ni >= 0 && ni < span && nj >= 0 && nj < span
+        ? { face: region.face, level: region.level, i: ni, j: nj }
+        : regionNeighbor(region, di, dj)
+    const key = packed(
+      beside.face,
+      beside.level - 1,
+      beside.i >> 1,
+      beside.j >> 1,
+    )
+    if (outside.has(key)) return true
+  }
+  return false
 }
 
 /** The eight neighbors a balanced quadtree has to agree with. */
@@ -753,7 +1105,10 @@ function balance(
   context: {
     readonly maxLevel: number
     readonly ready?: (region: RegionAddress) => boolean
-    readonly consider: (region: RegionAddress) => Node | null
+    readonly consider: (
+      region: RegionAddress,
+      parentInView: boolean,
+    ) => Node | null
     readonly starved: RegionAddress[]
     readonly seen: Set<number | string>
   },
@@ -855,7 +1210,7 @@ function balance(
       split = true
       let kept = 0
       for (const child of children) {
-        const seen = context.consider(child)
+        const seen = context.consider(child, node.inView)
         if (seen === null) continue
         kept += 1
         next.push(seen)

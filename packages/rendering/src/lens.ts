@@ -8,15 +8,16 @@ import type { Meters, Radians, Seconds } from '@inertialref/shared'
  * screen-space-error predicate is what makes that expensive rather than untidy:
  * it refines while a patch's grid cell subtends more than `cellPixels`, so the
  * pixels-per-radian decides how much terrain exists. Across the focal-length
- * control alone that number spans 8.1× — 378 px/rad at 110° to 3,062 at 20° —
- * which is three levels of refinement everywhere on the visible disk, and the
- * zoom channel multiplies another 8× on top of it for six levels end to end.
- * The patch demand does not go as the square of it, which is the tempting
- * reading: refinement runs out of *levels* at `surfaceDetailFloor` before it
- * runs out of budget, so 20° at zoom 1 measures 1.9× to 3.2× the patches rather
- * than 66×. Three levels is still the whole disk, and a predicate reading
- * anything but the lens the picture is actually taken with is a guess with all
- * of it riding on it.
+ * control alone that number spans 14.3× — 378 px/rad at 110° to 5,410 at
+ * 11.4° — which is nearly four levels of refinement, and the zoom channel
+ * multiplies another 8× on top of it for nearly seven end to end. The patch
+ * demand does not go as the square of it, which is the tempting reading:
+ * refinement runs out of *levels* at `surfaceDetailFloor` before it runs out of
+ * budget, so a whole disk at 11.4° asks for 2,063 to 12,330 patches standing at
+ * two meters against 456 to 1,061 at the flight lens, rather than 41 times as
+ * many. That is still far past the cap, and a predicate reading anything but
+ * the lens the picture is actually taken with — and where it looks —
+ * is a guess with all of it riding on it.
  *
  * **A lens is a lens, not an angle.** The canonical fields are focal length,
  * sensor gauge, zoom, f-number, focus distance, shutter and gain; the field of
@@ -193,7 +194,7 @@ export const pixelAngle = (lens: Lens, viewport: Viewport): Radians =>
  * One-way because the conversion loses nothing and the reverse loses
  * everything: a focal length carries an aperture, a depth of field and an
  * exposure, and an angle carries none of them. Existing call sites hold
- * angles — 65° for flight, 45° for the cutscene, a slider between 20° and 110°
+ * angles — 65° for flight, 45° for the cutscene, a slider between 11.4° and 110°
  * — and each of them becomes a lens exactly once, here.
  *
  * **The angle is preserved, not rounded.** 24 mm puts the flight lens at
@@ -286,18 +287,21 @@ export const CINEMATIC_FOV = 45
 /**
  * The angles a lens on this build may be set to, degrees.
  *
- * 20° is a telephoto; past 110° everything fisheyes. Stated as angles even
- * though the lens is canonically a focal length, because the *limits* are
+ * 11.4° is Earthrise: Earth from Luna is 1.9° across, and a sixth of the frame
+ * is the photograph's framing. Past 110° everything fisheyes. Stated as angles
+ * even though the lens is canonically a focal length, because the *limits* are
  * perceptual claims about a picture and a focal length is only a claim about a
  * picture once you know the gauge.
  *
  * Here rather than beside the slider that spends them, because two things
  * outside the shell solve against the same range: `riseStance`'s lens, which
- * clamps at the long end and says so, and the terrain predicate, whose
- * saturation at 20° is the reason the long end is where it is
- * (`docs/adr/0017-the-lens.md`).
+ * clamps at the long end and says so, and the terrain predicate, which is what
+ * says how long the long end can be. It holds its patch cap at 11.4° only
+ * because it refines at the lens inside the frame and at the flight lens
+ * outside it; measured past the floor, at 8°, eyes looking at the horizon
+ * start to saturate it too (`docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md`).
  */
-export const FOV_MIN = 20
+export const FOV_MIN = 11.4
 export const FOV_MAX = 110
 
 export const LENS_PRESETS = {
@@ -336,7 +340,7 @@ export const circleOfConfusion = (
 /**
  * Focus here and everything from half this distance to infinity is sharp.
  *
- * 5.37 m at the flight lens over a 1520 px buffer, and 69.9 m at the telephoto
+ * 5.37 m at the flight lens over a 1520 px buffer, and 218 m at the telephoto
  * end of the focal-length slider — which settles a scope question on the spot:
  * **depth of field does not reach terrain at any lens the game is flown
  * behind.** At any planetary distance everything is past hyperfocal and sharp,
@@ -346,8 +350,8 @@ export const circleOfConfusion = (
  * exposure act at every scale.
  *
  * It climbs with the glass, and the zoom channel is where it stops being a
- * near-field number: 68 mm at 8× is 544 mm effective and a hyperfocal of
- * **4.47 km**, so a viewer standing on a moon with the telephoto racked out has
+ * near-field number: 120 mm at 8× is 962 mm effective and a hyperfocal of
+ * **13.9 km**, so a viewer standing on a moon with the telephoto racked out has
  * ground inside the near limit. That corner is what the blur pass owes an answer
  * to when it arrives; it is not a reason to hold the parameters back.
  */

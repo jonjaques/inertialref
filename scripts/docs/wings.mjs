@@ -192,6 +192,10 @@ export const WINGS = [
             'docs/adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md',
             'Accounts are Clerk’s',
           ],
+          [
+            'docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md',
+            'A long lens',
+          ],
         ],
       },
     ],
