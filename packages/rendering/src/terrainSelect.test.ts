@@ -1,6 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { Vec } from '@inertialref/spatial'
+import { Vec, type Vec3 } from '@inertialref/spatial'
 import {
   HEIGHTFIELD_RESOLUTION,
   regionAddress,
@@ -9,19 +9,33 @@ import {
   regionNeighbor,
   regionParent,
 } from '@inertialref/universe'
-import { lensForFov, pixelsPerRadian } from './lens.ts'
 import {
+  aspectRatio,
+  type Lens,
+  lensForFov,
+  LENS_PRESETS,
+  pixelsPerRadian,
+  verticalFov,
+} from './lens.ts'
+import { localTriad } from './surfaceStance.ts'
+import {
+  COARSEN_STEP,
+  COARSEN_STEPS,
   DEFAULT_CELL_PIXELS,
   DEFAULT_LENS,
   DEFAULT_MAX_LEVEL,
+  DEFAULT_MAX_PATCHES,
   DEFAULT_VIEWPORT,
   MORPH_END,
   MORPH_START,
   NO_MORPH_DISTANCE,
   nodeDistance,
+  REFERENCE_LENS,
   regionCone,
   regionSpacing,
   type TerrainEye,
+  type TerrainSelection,
+  type TerrainSelectOptions,
   selectTerrain,
   type SelectedPatch,
   terrainPatchKey,
@@ -556,6 +570,320 @@ describe('the terrain quadtree', () => {
     const ratio = regionCone(middle).halfAngle / regionCone(corner).halfAngle
     expect(ratio).toBeGreaterThan(1.5)
     expect(ratio).toBeLessThan(2.5)
+  })
+})
+
+/*
+ * A long lens refines what it can see.
+ *
+ * The questions a view adds, in the order a reader would doubt them: does it
+ * change anything where it should not, does the frame keep the lens it is
+ * taken through, is the ground behind the camera really let go, and does the
+ * handover still hold where the two regimes meet.
+ */
+
+/** Where a stance at `heading` and `pitch` looks, in the eye's own axes. */
+const aim = (up: Vec3, heading: number, pitch: number): Vec3 => {
+  const triad = localTriad(up)
+  const along = Vec.add(
+    Vec.scale(triad.north, Math.cos(heading)),
+    Vec.scale(triad.east, Math.sin(heading)),
+  )
+  return Vec.normalize(
+    Vec.add(
+      Vec.scale(along, Math.cos(pitch)),
+      Vec.scale(triad.up, Math.sin(pitch)),
+    ),
+  )
+}
+
+/**
+ * Datum points the frame shows: a grid over the sensor, each ray carried to
+ * the datum sphere, sky rays dropped. The datum is inside the shell every
+ * node's ground is bounded by, so a node holding one of these points holds
+ * ground the frame can see.
+ */
+function framedGround(
+  eye: TerrainEye,
+  forward: Vec3,
+  lens: Lens,
+  viewport = DEFAULT_VIEWPORT,
+): Vec3[] {
+  const vertical = Math.tan(verticalFov(lens) / 2)
+  const horizontal = vertical * aspectRatio(viewport)
+  const across = Vec.cross(forward, eye.direction)
+  const right =
+    Vec.length(across) > 1e-9
+      ? Vec.normalize(across)
+      : Vec.normalize(Vec.cross(forward, { x: 1, y: 0, z: 0 }))
+  const up = Vec.cross(right, forward)
+  const origin = Vec.scale(eye.direction, eye.distance)
+  const out: Vec3[] = []
+  for (const x of [-0.98, -0.5, 0, 0.5, 0.98])
+    for (const y of [-0.98, -0.5, 0, 0.5, 0.98]) {
+      const ray = Vec.normalize(
+        Vec.add(
+          forward,
+          Vec.add(
+            Vec.scale(right, x * horizontal),
+            Vec.scale(up, y * vertical),
+          ),
+        ),
+      )
+      const b = Vec.dot(origin, ray)
+      const c = Vec.lengthSquared(origin) - eye.radius * eye.radius
+      const disc = b * b - c
+      if (disc < 0) continue
+      const near = -b - Math.sqrt(disc)
+      const t = near > 0 ? near : -b + Math.sqrt(disc)
+      if (!(t > 0)) continue
+      out.push(Vec.normalize(Vec.add(origin, Vec.scale(ray, t))))
+    }
+  return out
+}
+
+/** The crack-free and 2:1 claims, over a whole selection, whatever made it. */
+function holdsTogether(selection: TerrainSelection): void {
+  const byKey = new Map(
+    selection.patches.map((patch) => [
+      terrainPatchKey('b', patch.region),
+      patch,
+    ]),
+  )
+  for (const patch of selection.patches) {
+    for (const [di, dj] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const beside = regionNeighbor(patch.region, di, dj)
+      // Crack-free: a finer patch has arrived on its grid before the
+      // coarser neighbor's nearest point — across the regime boundary too.
+      const parent = regionParent(beside)
+      const coarse =
+        parent === null ? undefined : byKey.get(terrainPatchKey('b', parent))
+      if (coarse !== undefined && patch.region.level > 0)
+        expect(patch.morphEnd).toBeLessThanOrEqual(coarse.distance * (1 + 1e-9))
+      // 2:1: whatever covers the neighbor's ground is within a level.
+      let cover: ReturnType<typeof regionParent> = beside
+      let held
+      while (
+        cover !== null &&
+        (held = byKey.get(terrainPatchKey('b', cover))) === undefined
+      )
+        cover = regionParent(cover)
+      if (held !== undefined)
+        expect(patch.region.level - held.region.level).toBeLessThanOrEqual(1)
+    }
+  }
+}
+
+describe('a long lens refines what it can see', () => {
+  const EARTH_RELIEF = 9_900
+
+  it('changes nothing without a view, or at a lens no longer than the reference (property)', () => {
+    /*
+     * The view is a strict addition. At the flight lens and wider the
+     * reference is finer than the lens, refining ground behind the camera
+     * finer than the frame would spend the cap backwards, and the selection
+     * is the whole-disk one to the last field — which is what keeps every
+     * figure measured before the view existed true there.
+     */
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1e5, max: 2e7, noNaN: true }),
+        fc.double({ min: 0, max: 20, noNaN: true }),
+        directions,
+        fc.double({ min: 65, max: 110, noNaN: true }),
+        fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+        (radius, exponent, direction, fov, heading) => {
+          const eye = eyeAt(
+            radius,
+            radius * 0.002,
+            Math.max(2, radius * 2 ** -exponent),
+            direction,
+          )
+          const lens = lensForFov(fov)
+          const whole = selectTerrain(eye, { lens })
+          const viewed = selectTerrain(eye, {
+            lens,
+            view: { forward: aim(direction, heading, -0.1) },
+          })
+          expect(viewed).toEqual(whole)
+          expect(whole.outside).toBe(0)
+          expect(whole.patches.every((patch) => patch.inView)).toBe(true)
+        },
+      ),
+      { numRuns: 40 },
+    )
+  })
+
+  it('keeps the frame at its own lens and lets the ground behind the camera go (property)', () => {
+    /*
+     * Every datum point the frame shows lies in a patch refined at the lens:
+     * in view, not refinable further at the lens's own scale, and with its
+     * morph band at that scale — the regime boundary's one-level cost is
+     * outside the frame, which is what the margin is for. Ground the frame
+     * cannot reach stopped at the reference's range. And the two claims the
+     * whole selection rests on, crack-free and 2:1, hold across the boundary.
+     */
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1e5, max: 2e7, noNaN: true }),
+        fc.double({ min: 4, max: 24, noNaN: true }),
+        directions,
+        fc.double({ min: 8, max: 20, noNaN: true }),
+        fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+        fc.double({ min: -1.5, max: 0.05, noNaN: true }),
+        (radius, exponent, direction, fov, heading, pitch) => {
+          const eye = eyeAt(
+            radius,
+            radius * 0.002,
+            Math.max(2, radius * 2 ** -exponent),
+            direction,
+          )
+          const lens = lensForFov(fov)
+          const forward = aim(direction, heading, pitch)
+          const options: TerrainSelectOptions = {
+            lens,
+            view: { forward },
+            maxPatches: 1_000_000,
+          }
+          const selection = selectTerrain(eye, options)
+          expect(selection.coarsening).toBe(1)
+          const atLens =
+            pixelsPerRadian(lens, DEFAULT_VIEWPORT) / DEFAULT_CELL_PIXELS
+          const atReference =
+            pixelsPerRadian(REFERENCE_LENS, DEFAULT_VIEWPORT) /
+            DEFAULT_CELL_PIXELS
+
+          for (const point of framedGround(eye, forward, lens)) {
+            const covering = selection.patches.filter((patch) =>
+              contains(patch, point as TerrainEye['direction']),
+            )
+            expect(covering).toHaveLength(1)
+            const patch = covering[0]!
+            expect(patch.inView).toBe(true)
+            if (patch.region.level < DEFAULT_MAX_LEVEL)
+              expect(patch.distance).toBeGreaterThanOrEqual(
+                patch.spacing * atLens * (1 - 1e-9),
+              )
+            if (patch.region.level > 0)
+              expect(patch.morphEnd / (patch.spacing * atLens)).toBeCloseTo(
+                MORPH_END,
+                6,
+              )
+          }
+          for (const patch of selection.patches)
+            if (!patch.inView && patch.region.level < DEFAULT_MAX_LEVEL)
+              expect(patch.distance).toBeGreaterThanOrEqual(
+                patch.spacing * atReference * (1 - 1e-9),
+              )
+          holdsTogether(selection)
+        },
+      ),
+      // Uncapped at 8° a selection is thousands of patches and the checks
+      // walk all of them; twenty eyes is under the timeout on a loaded machine.
+      { numRuns: 20 },
+    )
+  })
+
+  it('lets the ground behind the camera go however tall the body’s relief', () => {
+    /*
+     * The relief bound is a vertical claim — a summit can rise into the frame
+     * and a canyon fall into it — and a bounding sphere about each node turns
+     * it into an omnidirectional one: Earth's 9.9 km makes every node within
+     * ten kilometers hold the eye inside its sphere, so standing at 11.4° the
+     * three finest levels were in view whole, behind the camera included, and
+     * the selection came to 3,289 patches. The capsule keeps the claim
+     * vertical. A kilometer behind a camera looking at the horizon is out of
+     * view at any height.
+     */
+    const direction = regionDirection(regionAddress(2, 0, 0, 0), 0.4, 0.6)
+    const eye = eyeAt(EARTH, EARTH_RELIEF, 2, direction)
+    const lens = lensForFov(11.4)
+    const forward = aim(direction, 0, 0.033)
+    const selection = selectTerrain(eye, {
+      lens,
+      maxLevel: 16,
+      view: { forward },
+      maxPatches: 1_000_000,
+    })
+    const behind = aim(direction, Math.PI, 0)
+    for (const meters of [300, 1_000, 3_000]) {
+      const point = Vec.normalize(
+        Vec.add(Vec.scale(direction, EARTH), Vec.scale(behind, meters)),
+      ) as TerrainEye['direction']
+      const covering = selection.patches.filter((patch) =>
+        contains(patch, point),
+      )
+      expect(covering).toHaveLength(1)
+      expect(covering[0]!.inView).toBe(false)
+    }
+    const whole = selectTerrain(eye, {
+      lens,
+      maxLevel: 16,
+      maxPatches: 1_000_000,
+    })
+    expect(selection.patches.length).toBeLessThan(whole.patches.length / 2)
+  })
+
+  it('is over the cap only at the top of the ladder (property)', () => {
+    /*
+     * The cap bounds what is drawn, and what is drawn is the balanced tree.
+     * With two regimes the 2:1 rings grade the level gap across the frame's
+     * edges, which the walk's own count never sees — so a walk that fitted
+     * could come back hundreds over, at the lens's own tolerance, with
+     * nothing loosened. The overrun climbs the ladder; only the loosest
+     * tolerance may hand back more than the cap, and then it says so.
+     */
+    const loosest = COARSEN_STEP ** COARSEN_STEPS
+    fc.assert(
+      fc.property(
+        fc.double({ min: 2e5, max: 7e6, noNaN: true }),
+        fc.double({ min: 10, max: 24, noNaN: true }),
+        directions,
+        fc.double({ min: 8, max: 20, noNaN: true }),
+        fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+        (radius, exponent, direction, fov, heading) => {
+          const eye = eyeAt(
+            radius,
+            radius * 0.002,
+            Math.max(2, radius * 2 ** -exponent),
+            direction,
+          )
+          const selection = selectTerrain(eye, {
+            lens: lensForFov(fov),
+            maxLevel: 16,
+            view: { forward: aim(direction, heading, 0.02) },
+          })
+          if (selection.patches.length > DEFAULT_MAX_PATCHES) {
+            expect(selection.saturated).toBe(true)
+            expect(selection.coarsening).toBeCloseTo(loosest, 9)
+          }
+        },
+      ),
+      { numRuns: 20 },
+    )
+  })
+
+  it('reads the reference it is handed, and the flight lens when it is not', () => {
+    const direction = regionDirection(regionAddress(4, 0, 0, 0), 0.3, 0.3)
+    const eye = eyeAt(EARTH, EARTH_RELIEF, 2, direction)
+    const view = { forward: aim(direction, 1, 0.02) }
+    const lens = lensForFov(11.4)
+    expect(REFERENCE_LENS).toEqual(LENS_PRESETS.flight)
+    const base = { lens, view, maxLevel: 16, maxPatches: 1_000_000 }
+    const flight = selectTerrain(eye, base)
+    expect(
+      selectTerrain(eye, { ...base, reference: LENS_PRESETS.flight }),
+    ).toEqual(flight)
+    // A reference as long as the lens is no reference at all.
+    expect(selectTerrain(eye, { ...base, reference: lens })).toEqual(
+      selectTerrain(eye, { lens, maxLevel: 16, maxPatches: 1_000_000 }),
+    )
+    expect(flight.outside).toBeGreaterThan(0)
   })
 })
 
