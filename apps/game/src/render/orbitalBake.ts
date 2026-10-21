@@ -1,13 +1,14 @@
 import {
   BufferAttribute,
+  type Camera,
   CubeCamera,
-  Group,
   HalfFloatType,
   LinearFilter,
   Mesh,
   Scene,
   type Texture,
   CubeRenderTarget,
+  Vector3,
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
@@ -26,9 +27,9 @@ import {
 import {
   buildPatch,
   patchIndices,
-  type RenderPatch,
   patchWater,
   terrainPalette,
+  type TerrainPalette,
 } from '@inertialref/rendering'
 import type { TerrainMaterial } from './terrain.ts'
 import {
@@ -64,6 +65,16 @@ import {
  * in, so a generated disk shades its mountains and keys its ocean color
  * and sun-glint exactly as a photographed one does.
  *
+ * **The work is spread across frames, and the sphere sees none of it until
+ * it is done.** Ninety-six patches built on the main thread and twelve
+ * renders of them — six faces of each record — taken in the frame the tiles
+ * arrive are a hitch of tens of milliseconds, once per body. The tiles
+ * arrive whenever the producer answers; `advance`, called once a frame
+ * before anything draws, builds patches for `BUILD_BUDGET_MS` of a frame and
+ * then draws one face a frame. Until the twelfth face is drawn `textureFor`
+ * answers null and the sphere keeps the flat tint it wore before the bake
+ * was asked for, so no viewer ever sees a target with five faces in it.
+ *
  * A bake is a presentation cache — regenerable from the seed, never saved —
  * and a few are kept: a body that leaves the frame and comes back should not
  * pay for a second one.
@@ -92,6 +103,22 @@ const KEPT = 4
 const RESIDENCY_MS = 500
 
 /**
+ * The main thread a bake may spend building patches in one frame, ms.
+ *
+ * Two, the allowance the streamer takes for the same `buildPatch` while the
+ * ground converges, for the frames a bake takes and nothing once it has. A
+ * time rather than a count, because the build's cost is not one number:
+ * measured under Dawn at 0.9 ms a patch with the cover and its morph twin,
+ * where the streamer's eight-a-frame was sized on 0.25 ms — eight is 7.5 ms
+ * there. The frame stops before the build that would take it past this, and
+ * always builds one, so a bake on a slow machine is slower rather than stuck.
+ */
+const BUILD_BUDGET_MS = 2
+
+/** The draws a bake makes: six faces of the reflectance, then six of the relief. */
+const FACE_DRAWS = 12
+
+/**
  * The relief record's face size.
  *
  * The bake is drawn from level-2 patches, sixty-four cells across a quarter
@@ -118,6 +145,26 @@ export interface OrbitalBakeMaps {
   readonly relief: Texture
 }
 
+/**
+ * A bake between its tiles and its last face: what is built, and what is
+ * drawn. Held on the bake so an eviction mid-way disposes what it built.
+ */
+interface BakeWork {
+  readonly regions: readonly RegionAddress[]
+  readonly fields: readonly HeightfieldResponse[]
+  readonly palette: TerrainPalette
+  /** The patches built so far, each at its anchor. */
+  readonly meshes: Mesh[]
+  /** One scene a face, holding the patches that face's camera looks at. */
+  readonly scenes: readonly Scene[]
+  /** One camera per record, at the body's center, aimed. */
+  readonly cameras: readonly [CubeCamera, CubeCamera]
+  /** Where each face's camera looks, body-fixed. */
+  readonly looks: readonly Vector3[]
+  /** Faces drawn, of `FACE_DRAWS`. */
+  drawn: number
+}
+
 /** One bake's state: the targets it renders into, and whether it has. */
 interface Bake {
   readonly address: string
@@ -128,6 +175,10 @@ interface Bake {
   readonly jobs: JobHandle<HeightfieldResponse | null>[]
   /** When the body last asked, in `performance.now()` ms. */
   asked: number
+  /** When it was asked first, for the log line that says how long it took. */
+  readonly started: number
+  /** Set when the tiles are in hand, cleared when the last face is drawn. */
+  work: BakeWork | null
   ready: boolean
   failed: boolean
 }
@@ -139,6 +190,13 @@ export interface OrbitalBaker {
    * every frame.
    */
   textureFor(address: string): OrbitalBakeMaps | null
+  /**
+   * One frame's share of the bakes in flight: `BUILD_BUDGET_MS` of patch
+   * builds, or one face once every patch is built. Called once a frame, before
+   * anything draws with the ground material — a face draw writes the
+   * material's palette, and the streamed ground writes it back after.
+   */
+  advance(): void
   /** The bakes held, for the harness: which bodies, and whether each is ready. */
   report(): readonly { address: string; ready: boolean; failed: boolean }[]
   /** A held bake's targets, for a readback. Null while none is held. */
@@ -151,17 +209,20 @@ export interface OrbitalBaker {
 /**
  * The producer the bake asks for its tiles, and the material it draws them
  * with — the renderer's own, so the pipeline the boot warmed is the one the
- * six draws use.
+ * twelve draws use.
  */
 export interface OrbitalBakeHost {
   readonly renderer: WebGPURenderer
   readonly terrain: TerrainMaterial
   bodyFor(address: string): Body | null
   readonly heightfields: Heightfields
+  /** The clock the build budget is spent against; `performance.now` by default. */
+  readonly now?: () => number
 }
 
 export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
   const bakes = new Map<string, Bake>()
+  const now = host.now ?? (() => performance.now())
   let disposed = false
   /*
    * The patch's triangle list with every triangle turned over. The camera
@@ -179,11 +240,11 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
 
   function textureFor(address: string): OrbitalBakeMaps | null {
     if (disposed) return null
-    const now = performance.now()
+    const asked = performance.now()
     const body = host.bodyFor(address)
     const held = bakes.get(address)
     if (held !== undefined && held.body === body) {
-      held.asked = now
+      held.asked = asked
       bakes.delete(address)
       bakes.set(address, held)
       return held.ready
@@ -193,7 +254,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     if (held !== undefined) drop(address, held)
     if (body === null || body.surface.maxElevation <= 0) return null
     if (host.heightfields.kind === null) return null
-    if (bakes.size >= KEPT && !evictOne(now)) return null
+    if (bakes.size >= KEPT && !evictOne(asked)) return null
     const target = new CubeRenderTarget(FACE_SIZE, {
       type: HalfFloatType,
       magFilter: LinearFilter,
@@ -214,27 +275,20 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       target,
       reliefTarget,
       jobs: [],
-      asked: now,
+      asked,
+      started: asked,
+      work: null,
       ready: false,
       failed: false,
     }
     bakes.set(address, bake)
-    void run(body, bake)
-      .then(() => {
-        if (bake.ready) {
-          log.info('orbital bake ready', {
-            address,
-            ms: Math.round(performance.now() - now),
-          })
-        }
-      })
-      .catch((error: unknown) => {
-        // Evicted under its tiles: the cancellation is the rejection.
-        if (!stillHeld(bake)) return
-        cancelJobs(bake)
-        bake.failed = true
-        log.warn('orbital bake failed', { address, error: String(error) })
-      })
+    void run(body, bake).catch((error: unknown) => {
+      // Evicted under its tiles: the cancellation is the rejection.
+      if (!stillHeld(bake)) return
+      cancelJobs(bake)
+      bake.failed = true
+      log.warn('orbital bake failed', { address, error: String(error) })
+    })
     return null
   }
 
@@ -255,8 +309,17 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     if (bakes.get(address) !== bake) return
     bakes.delete(address)
     cancelJobs(bake)
+    release(bake)
     bake.target.dispose()
     bake.reliefTarget.dispose()
+  }
+
+  /** Let go of a bake's built patches. Every one holds the shared index. */
+  function release(bake: Bake): void {
+    const work = bake.work
+    bake.work = null
+    if (work === null) return
+    for (const mesh of work.meshes) disposeKeepingSharedIndex(mesh)
   }
 
   function cancelJobs(bake: Bake): void {
@@ -299,20 +362,77 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       drop(bake.address, bake)
       return
     }
-    const patches = completed.map((field, i) =>
-      buildPatch({
-        region: regions[i] as RegionAddress,
-        resolution: HEIGHTFIELD_RESOLUTION,
-        border: field.border,
-        elevations: field.elevations,
-        cover: field.cover,
-        bodyRadius: body.radius,
-        // The bake draws ground only, so no sheet is built for it to drop.
-        seaLevel: null,
-        water: null,
-      }),
-    )
-    render(body, patches, bake)
+    // Nothing is built here: this runs whenever the producer answered, and
+    // `advance` is what spends the frame on it.
+    const near = body.radius * 0.5
+    const far = body.radius * 1.5
+    const cameras = [
+      aimCube(host.renderer, new CubeCamera(near, far, bake.target)),
+      aimCube(host.renderer, new CubeCamera(near, far, bake.reliefTarget)),
+    ] as const
+    bake.work = {
+      regions,
+      fields: completed,
+      palette: terrainPalette(body),
+      meshes: [],
+      scenes: cameras[0].children.map(() => new Scene()),
+      cameras,
+      looks: cameras[0].children.map((camera) =>
+        camera.getWorldDirection(new Vector3()),
+      ),
+      drawn: 0,
+    }
+  }
+
+  function advance(): void {
+    if (disposed) return
+    for (const bake of bakes.values()) {
+      if (bake.work === null || !stillHeld(bake)) continue
+      // One bake's share a frame: a second body arriving in the same frame
+      // waits for the first rather than doubling the frame's cost.
+      try {
+        step(bake, bake.work)
+      } catch (error: unknown) {
+        // A bake is a picture of the ground, not the frame: one that cannot
+        // be drawn leaves the sphere its tint rather than taking the frame
+        // loop with it, and is not asked for again.
+        release(bake)
+        bake.failed = true
+        log.warn('orbital bake failed', {
+          address: bake.address,
+          error: String(error),
+        })
+      }
+      return
+    }
+  }
+
+  /** Build the next patches, or draw the next face; finish after the last. */
+  function step(bake: Bake, work: BakeWork): void {
+    const { body } = bake
+    if (work.meshes.length < work.fields.length) {
+      // One clock read a build: the cost of the last one is the forecast for
+      // the next, and the frame stops before the one that would overrun.
+      const started = now()
+      let previous = started
+      do {
+        buildNext(body, work)
+        const at = now()
+        const cost = at - previous
+        previous = at
+        if (at - started + cost > BUILD_BUDGET_MS) break
+      } while (work.meshes.length < work.fields.length)
+      return
+    }
+    drawFace(body, work)
+    work.drawn += 1
+    if (work.drawn < FACE_DRAWS) return
+    release(bake)
+    bake.ready = true
+    log.info('orbital bake ready', {
+      address: bake.address,
+      ms: Math.round(performance.now() - bake.started),
+    })
   }
 
   function stillHeld(bake: Bake): boolean {
@@ -323,61 +443,68 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     return false
   }
 
-  /**
-   * Six faces from the body's center, at true meters with the body at the
-   * origin: every patch at its anchor, unmorphed, through the ground material
-   * in bake mode with this body's palette on it.
-   *
-   * The material's uniforms are the streaming body's between frames and are
-   * written back by `TerrainPatches` every frame before the frame's own draw,
-   * so the palette this writes is overwritten before anyone sees it; the
-   * bake mode is put back here, because nothing else knows it was set.
-   */
-  function render(
-    body: Body,
-    patches: readonly RenderPatch[],
-    bake: Bake,
-  ): void {
-    const { renderer, terrain } = host
-    const scene = new Scene()
-    const group = new Group()
-    scene.add(group)
-    const built: Mesh[] = []
-    for (const patch of patches) {
-      const mesh = new Mesh(patchGeometry(patch, indices), terrain.material)
-      built.push(mesh)
-      mesh.position.set(patch.anchor.x, patch.anchor.y, patch.anchor.z)
-      mesh.frustumCulled = false
-      // At its anchor and unmorphed: the bake draws every patch at one level.
-      wearGround(mesh, patch.anchor, body.radius)
-      group.add(mesh)
-    }
+  /** The next region's patch, at its anchor in its face's scene. */
+  function buildNext(body: Body, work: BakeWork): void {
+    const i = work.meshes.length
+    const field = work.fields[i] as HeightfieldResponse
+    const patch = buildPatch({
+      region: work.regions[i] as RegionAddress,
+      resolution: HEIGHTFIELD_RESOLUTION,
+      border: field.border,
+      elevations: field.elevations,
+      cover: field.cover,
+      bodyRadius: body.radius,
+      // The bake draws ground only, so no sheet is built for it to drop.
+      seaLevel: null,
+      water: null,
+    })
+    const mesh = new Mesh(patchGeometry(patch, indices), host.terrain.material)
+    mesh.position.set(patch.anchor.x, patch.anchor.y, patch.anchor.z)
+    mesh.frustumCulled = false
+    // At its anchor and unmorphed: the bake draws every patch at one level.
+    wearGround(mesh, patch.anchor, body.radius)
+    work.scenes[faceOf(work.looks, patch.anchor)]?.add(mesh)
+    work.meshes.push(mesh)
+  }
 
-    const palette = terrainPalette(body)
-    terrain.setPalette(palette, body.radius)
+  /**
+   * One face from the body's center, at true meters with the body at the
+   * origin: every patch at its anchor, unmorphed, through the ground material
+   * in bake mode with this body's palette on it. The six reflectance faces
+   * first, then the six of the relief record.
+   *
+   * The material's uniforms are the streaming body's and are written back by
+   * `TerrainPatches` every frame before the frame's own draw — `advance` runs
+   * ahead of it — so the palette this writes is overwritten before anyone
+   * sees it; the bake mode is put back here, because nothing else knows it
+   * was set.
+   */
+  function drawFace(body: Body, work: BakeWork): void {
+    const { renderer, terrain } = host
+    const relief = work.drawn >= 6
+    terrain.setPalette(work.palette, body.radius)
     terrain.setAlbedoMap(null, false)
     terrain.setQuality('lean')
     // A texel is kilometers of ground: every detail octave is faded out by
     // its footprint, which is the anti-aliasing the bake gets.
     terrain.setPixelAngle(Math.PI / 2 / FACE_SIZE)
-    const near = body.radius * 0.5
-    const far = body.radius * 1.5
     try {
-      terrain.setBakeMode(1)
-      new CubeCamera(near, far, bake.target).update(renderer, scene)
-      terrain.setBakeMode(2)
-      new CubeCamera(near, far, bake.reliefTarget).update(renderer, scene)
-      bake.ready = true
+      terrain.setBakeMode(relief ? 2 : 1)
+      const face = work.drawn % 6
+      drawCubeFace(
+        renderer,
+        work.cameras[relief ? 1 : 0],
+        work.scenes[face] as Scene,
+        face,
+      )
     } finally {
       terrain.setBakeMode(0)
-      // Every bake mesh holds the one shared index, so the eviction rule the
-      // streamer's patches use applies here too.
-      for (const mesh of built) disposeKeepingSharedIndex(mesh)
     }
   }
 
   return {
     textureFor,
+    advance,
     report: () =>
       [...bakes.values()].filter(stillHeld).map((bake) => ({
         address: bake.address,
@@ -395,6 +522,79 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       for (const [address, bake] of bakes) drop(address, bake)
     },
   }
+}
+
+/**
+ * `CubeCamera.update`, one face of it.
+ *
+ * Three draws a cube camera's six faces in one call, which is the stall this
+ * module spreads; what it does around each face is reproduced here for one:
+ * the coordinate system its six cameras are aimed in, which is the
+ * renderer's and differs between WebGPU and WebGL; the depth clear a
+ * reversed buffer needs when the renderer is not clearing for itself, which
+ * this one is outside the sensor's own pass; and the target, face and mip
+ * level it found, put back after. The bake's targets carry no mipmaps, so
+ * the mipmap toggle `update` makes around its last face has nothing to do.
+ */
+export function drawCubeFace(
+  renderer: WebGPURenderer,
+  cube: CubeCamera,
+  scene: Scene,
+  face: number,
+): void {
+  aimCube(renderer, cube)
+  const target = renderer.getRenderTarget()
+  const activeFace = renderer.getActiveCubeFace()
+  const activeLevel = renderer.getActiveMipmapLevel()
+  renderer.setRenderTarget(cube.renderTarget, face, cube.activeMipmapLevel)
+  const reversed = (renderer as { readonly reversedDepthBuffer?: boolean })
+    .reversedDepthBuffer
+  if (reversed === true && !renderer.autoClear) renderer.clearDepth()
+  renderer.render(scene, cube.children[face] as Camera)
+  renderer.setRenderTarget(target, activeFace, activeLevel)
+}
+
+/**
+ * A cube camera's six cameras, aimed in the renderer's coordinate system the
+ * way `CubeCamera.update` aims them before its first face. Idempotent.
+ */
+function aimCube(renderer: WebGPURenderer, cube: CubeCamera): CubeCamera {
+  if (cube.coordinateSystem !== renderer.coordinateSystem) {
+    cube.coordinateSystem = renderer.coordinateSystem
+    cube.updateCoordinateSystem()
+  }
+  if (cube.parent === null) cube.updateMatrixWorld()
+  return cube
+}
+
+/**
+ * The face whose camera looks most squarely at `anchor`, which is the face
+ * every point of its patch is seen in.
+ *
+ * A level-2 region is a sixteenth of one cube face, and the cube-sphere is
+ * that face's view pyramid projected onto the sphere: every vertex of the
+ * patch is a direction inside the pyramid or on its edge, and so is every
+ * point of every triangle between them, because the pyramid is convex and a
+ * radius does not change a direction. So a face draws its own sixteen
+ * patches and nothing else, and each patch's buffers upload in the one face
+ * that draws it — where three's frustum culling, which is conservative, also
+ * draws the sixteen beside each edge whose bounding spheres straddle it, and
+ * uploads a third of the body in the first face drawn.
+ */
+function faceOf(
+  looks: readonly Vector3[],
+  anchor: { x: number; y: number; z: number },
+): number {
+  let best = 0
+  let most = -Infinity
+  looks.forEach((look, face) => {
+    const along = look.x * anchor.x + look.y * anchor.y + look.z * anchor.z
+    if (along > most) {
+      most = along
+      best = face
+    }
+  })
+  return best
 }
 
 /** The same triangles, wound the other way. */

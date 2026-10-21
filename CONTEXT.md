@@ -11601,6 +11601,42 @@ nothing stands on it to glow. The nearest seas are `s:Q0_229_6_9_3/b:0` at
 one at −1,061 m with a 3,485 km radius; a search past about 160 ly runs a
 headless session out of heap.
 
+## The orbital bake was a hundred milliseconds in one task, and is now a frame's share (20 Oct 2026)
+
+ADR-0026 called the bake "a hitch of a few tens of milliseconds once per body".
+Measured under Dawn in Node, with the machine shared by other agents' suites
+(under load), the task the last tile arrived in was 118–150 ms of main-thread
+work for Gliese 908 IV, Iapetus and Rhea. Two costs were larger than assumed.
+`buildPatch` with the cover and its morph twin took 0.9–1.9 ms a patch, where
+the streamer's eight-a-frame allowance in `terrainStreamer.ts` is sized on
+0.25 ms. And the first face drawn uploaded a third of the body: three's
+frustum test is a bounding sphere against the face's pyramid, so every patch
+straddling an edge drew too, and face 0 alone took 18 ms warm and 38.7 ms
+cold, the next faces 6.1, 6.0, 2.6, 2.5, 1.1 and 1.1 as the uploads ran out.
+
+`advance` runs once a frame at priority −0.25, ahead of `TerrainPatches`,
+because a face draw writes the shared ground material's palette and the
+streamed body's has to be written back before the frame draws. It builds
+patches for two milliseconds — one clock read a build, stopping before the
+build that would overrun and always building one — then draws one face a
+frame from the sixteen patches of that face alone. `faceOf` picks the face
+whose camera looks most squarely at the patch's anchor; a level-2 region is a
+sixteenth of one face's view pyramid, so that face sees all of it and no other
+face sees any. Each patch then uploads in the face that draws it: the
+reflectance faces take 3.5–8.8 ms and the relief faces 0.5–0.9 ms under Dawn,
+the largest slice of a whole bake is 6–9 ms, and a bake is ready about 105
+frames after its tiles arrive. Drawing all sixteen patches into every face,
+with culling off, is the obvious alternative and the wrong one: it uploads
+the body in face 0.
+
+`drawCubeFace` is `CubeCamera.update` for one face, including the
+reversed-depth clear the renderer does not make outside its own pass;
+`orbitalBake.gpu.test.ts` holds it to `update` texel for texel, and checks
+all six reflectance faces for holes — with the patches withheld from their
+faces the check reads 16,384 empty texels. Until the twelfth face is drawn
+`textureFor` answers null, so the sphere keeps its flat tint and never wears
+a target with five faces in it.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

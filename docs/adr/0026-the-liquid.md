@@ -2,7 +2,8 @@
 
 Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
 carries relief, so a generated sphere shades its mountains · amended 20 Oct
-2026: the sphere emits a magma sea's glow where its bake says sea
+2026: the sphere emits a magma sea's glow where its bake says sea, and the
+bake is built and drawn a frame's share at a time
 
 ## Context
 
@@ -224,11 +225,16 @@ the archive alone, so a generated disk shaded as a smooth sphere — is the
 second pass amending this record: the mesh normal's slopes east and north
 in the archive's own encoding, with the sea mask beside them.
 
-**The bake's twelve draws are one frame's stall.** Ninety-six tiles of the
-producer, ninety-six patches built on the main thread, and twelve renders of
-them, in the frame the tiles arrive: a bake is a hitch of a few tens of
-milliseconds once per body. Spreading the build across frames is the plain
-next step if the hitch is felt.
+**The bake is a frame's share at a time.** Ninety-six tiles of the producer,
+ninety-six patches built on the main thread and twelve renders of them, taken
+in the frame the tiles arrived, were a hitch of tens of milliseconds once per
+body. The 20 Oct 2026 amendment spreads them: `advance`, once a frame ahead
+of every other frame callback, builds patches for two milliseconds and then
+draws one face a frame, each face from the sixteen patches of its own cube
+face so a patch's buffers upload once and in the face that draws it. The
+sphere wears its tint until the twelfth face is drawn and the targets are
+handed over whole. The tiles are asked for in the pool's and the producer's
+background lane, so a bake that starts on a descent waits behind the ground.
 
 **The harness cannot draw the sea.** `viewportSharedTexture` copies the
 framebuffer once a frame, ending the render pass and beginning it again, and
