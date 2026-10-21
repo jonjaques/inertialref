@@ -1,6 +1,8 @@
 # ADR-0043: The rivers drain — a per-body graph the field cuts to
 
-Status: accepted · 18 Sep 2026. Supersedes the valley strip of
+Status: accepted · 18 Sep 2026 · amended 20 Oct 2026: the graph is one
+storage buffer read through an offset table, with one gate. Supersedes the
+valley strip of
 [ADR-0026](0026-the-liquid.md) and its sea drawn at one datum wherever the
 ground is under it; keeps that ADR's sheet, coast, families and levers.
 
@@ -111,13 +113,19 @@ where it reaches, a lake at its spill, a river at its surface.**
   handed beside it. The canonical clamp reads the same level: a ship stands
   on a river or a lake as it stands on the sea, and a below-datum basin the
   sea never reached is dry ground.
-- **The kernel ports the walk.** Two storage buffers — records of nodes and
-  segments, words of neighbors, cell starts and cell lists — because a
-  compute stage may bind eight on the baseline device and the stack's own
-  five plus the water make six. The lake mean, the warp, the cell and the
-  walk are the CPU's, and `terrainBands.gpu.test.ts` holds the drainage band
-  alone to `2.5 × 10⁻⁵` of the budget plus half a meter; the whole field
-  holds at its existing bound on every body at every level.
+- **The kernel ports the walk.** One storage buffer of words read through
+  an offset table — nodes, segments, neighbors, cell starts, cell lists, the
+  floats stored by their bits and read with `bitcast` — because a compute
+  stage may bind eight on the baseline device, nothing requests more, and
+  the stack's own records, words, tiles and three outputs take six. A list
+  the graph grows is a row in the table rather than a binding, and
+  `terrainKernel.gpu.test.ts` counts the kernel's bindings against the
+  baseline's eight. The buffer keeps the last wet body's graph through a dry
+  one, since clearing it is 4.4 MB of writes a body switch, so every reader
+  of it tests one gate, `WORD.DRAINAGE_CELLS`. The lake mean, the warp, the
+  cell and the walk are the CPU's, and `terrainBands.gpu.test.ts` holds the
+  drainage band alone to `2.5 × 10⁻⁵` of the budget plus half a meter; the
+  whole field holds at its existing bound on every body at every level.
 - **The cover reads the bed and the corridor.** `wet` is the channel's own
   width, a thread for a creek and a kilometer for a trunk; `biota` follows
   the floodplain rather than a strip painted the same everywhere.
