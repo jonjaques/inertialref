@@ -64,9 +64,14 @@ export function cellPixelsFor(detail: TerrainDetail): number {
 
 /**
  * The ground material's own reading of the step: how many of its detail
- * bands run, coarsest first. Two is the macro and the micro octaves with the
- * grain; one is the macro octave alone, which is the band that survives to
- * a kilometer; zero is the mesh and the deposits with nothing under a cell.
+ * bands run, coarsest first. Two is everything — the macro band, and under
+ * it the eroded detail: the micro octave and the grain damped by the slope
+ * they lie on, the gullies cut down it, and the talus clamp at the angle of
+ * repose. One is the macro band alone, which is the band that survives to a
+ * kilometer and the one a frame seen from altitude is made of; zero is the
+ * mesh and the deposits with nothing under a cell. The erosion rides with
+ * the near detail because it is near detail — its coarsest gully is fifteen
+ * meters — and `lean` exists to take exactly that off the near ground.
  */
 export function groundBandsFor(detail: GroundDetail): number {
   switch (detail) {

@@ -82,11 +82,12 @@ export function noiseTexture(): Data3DTexture {
   for (let z = 0; z < size; z += 1) {
     for (let y = 0; y < size; y += 1) {
       for (let x = 0; x < size; x += 1) {
-        periodicNoise(
+        gradientNoise(
           x / TEXELS_PER_CELL,
           y / TEXELS_PER_CELL,
           z / TEXELS_PER_CELL,
           sample,
+          NOISE_CELLS,
         )
         // [-1, 1] to a byte in every lane. The graphs undo it with `2x − 1`,
         // and the gradient lanes with `NOISE_GRADIENT_SCALE` on top.
@@ -113,18 +114,21 @@ export function noiseTexture(): Data3DTexture {
 }
 
 /*
- * Gradient noise on a lattice that wraps at `NOISE_CELLS`, in [-1, 1].
+ * Gradient noise on a lattice, in [-1, 1] — wrapped at a period for the
+ * texture, and unbounded for the bands that must not repeat.
  *
  * The same construction as `noise3` in `packages/procedural` — twelve
  * cube-edge gradients picked by a lattice hash, a quintic fade, a trilinear
- * blend — with the one difference that makes it a texture: the lattice
- * coordinate is reduced modulo the period before it is hashed, so texel 127
- * blends toward texel 0 and the sampler's repeat is seamless. It is not
+ * blend. For the texture the lattice coordinate is reduced modulo the period
+ * before it is hashed, so texel 127 blends toward texel 0 and the sampler's
+ * repeat is seamless. Without a period it is the same field on an infinite
+ * lattice, and that is what `latticeNoise` in `render/noiseNodes.ts`
+ * evaluates per pixel for the macro band and the gullies: this function is
+ * the reference `noiseNodes.gpu.test.ts` holds the graph to. It is not
  * `noise3` itself and does not share its seed, because nothing canonical
- * reads this field: it is presentation, and the only thing that has to agree
- * with it is the texture it was baked into.
+ * reads this field: it is presentation.
  */
-const GRADIENTS: readonly (readonly [number, number, number])[] = [
+const LATTICE_GRADIENTS: readonly (readonly [number, number, number])[] = [
   [1, 1, 0],
   [-1, 1, 0],
   [1, -1, 0],
@@ -139,16 +143,30 @@ const GRADIENTS: readonly (readonly [number, number, number])[] = [
   [0, -1, -1],
 ]
 
-function hash(x: number, y: number, z: number): number {
-  // Wrapped first, so the lattice is periodic; then the MurmurHash3
-  // finalizer over a mix of the three, which is what `hash3` does.
-  const a = ((x % NOISE_CELLS) + NOISE_CELLS) % NOISE_CELLS
-  const b = ((y % NOISE_CELLS) + NOISE_CELLS) % NOISE_CELLS
-  const c = ((z % NOISE_CELLS) + NOISE_CELLS) % NOISE_CELLS
+/**
+ * The hash of one lattice point, a `u32`.
+ *
+ * The MurmurHash3 finalizer over a mix of the three coordinates, which is what
+ * `hash3` does. `Math.imul` and `>>> 0` are the WGSL `u32` arithmetic
+ * exactly — a product wraps modulo 2³², a negative coordinate is its two's
+ * complement — so the graph's hash of a negative cell is this one, bit for
+ * bit. `seed` goes into the first term, so a second field on the same
+ * lattice is a different field rather than the same one.
+ */
+export function latticeHash(
+  x: number,
+  y: number,
+  z: number,
+  seed = 0,
+  period?: number,
+): number {
+  const wrap = (k: number): number =>
+    period === undefined ? k : ((k % period) + period) % period
   let h =
-    (Math.imul(a + 1, 0x9e3779b1) ^
-      Math.imul(b + 1, 0x85ebca6b) ^
-      Math.imul(c + 1, 0xc2b2ae35)) >>>
+    (Math.imul(wrap(x) + 1, 0x9e3779b1) ^
+      seed ^
+      Math.imul(wrap(y) + 1, 0x85ebca6b) ^
+      Math.imul(wrap(z) + 1, 0xc2b2ae35)) >>>
     0
   h ^= h >>> 16
   h = Math.imul(h, 0x85ebca6b) >>> 0
@@ -158,7 +176,8 @@ function hash(x: number, y: number, z: number): number {
   return h >>> 0
 }
 
-interface NoiseSample {
+/** A value and its gradient with respect to the lattice coordinate. */
+export interface NoiseSample {
   value: number
   dx: number
   dy: number
@@ -168,25 +187,20 @@ interface NoiseSample {
 const fade = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10)
 const fadeSlope = (t: number): number => 30 * t * t * (t * (t - 2) + 1)
 
-function gradientAt(
-  ix: number,
-  iy: number,
-  iz: number,
-): readonly [number, number, number] {
-  return GRADIENTS[hash(ix, iy, iz) % 12] as readonly [number, number, number]
-}
-
 /**
  * The value and its gradient, in the factored trilinear form `field.ts` in
  * `packages/procedural` uses for `gradientNoise3`: the eight corner
  * products blend through `k1…k7`, and the gradient is the blend of the
  * corner gradients plus the fade slopes against the same coefficients.
+ * `period` wraps the lattice for the texture; left out, the field never
+ * repeats.
  */
-function periodicNoise(
+export function gradientNoise(
   x: number,
   y: number,
   z: number,
   out: NoiseSample,
+  period?: number,
 ): void {
   const ix = Math.floor(x)
   const iy = Math.floor(y)
@@ -200,6 +214,16 @@ function periodicNoise(
   const du = fadeSlope(fx)
   const dv = fadeSlope(fy)
   const dw = fadeSlope(fz)
+  const gradientAt = (
+    jx: number,
+    jy: number,
+    jz: number,
+  ): readonly [number, number, number] =>
+    LATTICE_GRADIENTS[latticeHash(jx, jy, jz, 0, period) % 12] as readonly [
+      number,
+      number,
+      number,
+    ]
   const g000 = gradientAt(ix, iy, iz)
   const g100 = gradientAt(ix + 1, iy, iz)
   const g010 = gradientAt(ix, iy + 1, iz)
