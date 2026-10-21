@@ -235,6 +235,11 @@ face so a patch's buffers upload once and in the face that draws it. The
 sphere wears its tint until the twelfth face is drawn and the targets are
 handed over whole. The tiles are asked for in the pool's and the producer's
 background lane, so a bake that starts on a descent waits behind the ground.
+Measured in Chrome on a shared machine, the frame a bake landed in was
+166–217 ms; spread, the largest slice is the first face of a session's first
+bake, 26–32 ms, because a face is a one-sample target the boot does not warm
+and that face builds its pipeline variant. Every other slice is under 9 ms
+but one build of 15.2, a single `buildPatch` the budget cannot divide.
 
 **The harness cannot draw the sea.** `viewportSharedTexture` copies the
 framebuffer once a frame, ending the render pass and beginning it again, and

@@ -11637,6 +11637,29 @@ faces the check reads 16,384 empty texels. Until the twelfth face is drawn
 `textureFor` answers null, so the sphere keeps its flat tint and never wears
 a target with five faces in it.
 
+In Chrome, at the 1600×900 default and with two other agents' suites running
+(under load), the frame the bake landed in was 166.5 ms on Iapetus and
+216.6 ms on `s:P222_1_0_9/b:4`, the far-shore world, taken against
+`origin/main`. Spread, neither run has a frame over 34.7 ms around the
+handover. The bake is ready 145 and 161 frames after the ask, 2.6 and 3.45 s,
+and the sphere wears its tint for all of them. `buildPatch` took about 2.4 ms
+a patch in Chrome, so every build frame builds one, and one of them took
+15.2 ms, which a budget checked between builds cannot divide. The reflectance
+faces took 3.6–8.8 ms and the relief faces 0.5–1.9, the last 3.9–5.2 with the
+handover in it. One slice is larger: the first face of a session's first bake,
+26.4 ms on the far-shore world and 31.7 on Iapetus, where a second bake in
+the same page, Rhea after Iapetus, drew its first face in 7.7. A face is a
+one-sample half-float target and the boot warms only the scene pass's
+four-sample layout, so the first face builds the bake's variant in its own
+frame. Warming that layout behind the boot cover is the fix if it is felt.
+
+Two larger frames in the same recordings are not the bake's. The frame a
+look starts in is 100–217 ms on both builds, and a second look at a body
+already baked, which asks for nothing, still takes 99.9 ms. The producer's
+batches of sixteen tiles take up to 154 ms of GPU each, and frames while the
+tiles are produced reach 117–132 ms on both builds; the bake's own callback
+is never more than 31.7 ms.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

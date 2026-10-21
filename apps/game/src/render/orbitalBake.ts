@@ -108,10 +108,11 @@ const RESIDENCY_MS = 500
  * Two, the allowance the streamer takes for the same `buildPatch` while the
  * ground converges, for the frames a bake takes and nothing once it has. A
  * time rather than a count, because the build's cost is not one number:
- * measured under Dawn at 0.9 ms a patch with the cover and its morph twin,
- * where the streamer's eight-a-frame was sized on 0.25 ms — eight is 7.5 ms
- * there. The frame stops before the build that would take it past this, and
- * always builds one, so a bake on a slow machine is slower rather than stuck.
+ * measured at 0.9 ms a patch under Dawn and 2.4 ms in Chrome, with the cover
+ * and its morph twin, on a machine running other suites — where the
+ * streamer's eight-a-frame was sized on 0.25 ms. The frame stops before the
+ * build that would take it past this, and always builds one, so a bake on a
+ * slow machine is slower rather than stuck.
  */
 const BUILD_BUDGET_MS = 2
 
@@ -208,8 +209,14 @@ export interface OrbitalBaker {
 
 /**
  * The producer the bake asks for its tiles, and the material it draws them
- * with — the renderer's own, so the pipeline the boot warmed is the one the
- * twelve draws use.
+ * with — the renderer's own, so the program is the ground's.
+ *
+ * The pipeline is not the one the boot warmed. A pipeline is keyed on the
+ * sample count and formats of the target it draws into, and the boot warms
+ * the scene pass's four-sample layout where a face is one sample; so the
+ * first face of a session's first bake builds the bake's variant in its
+ * frame, measured in Chrome at 26–32 ms of `advance` against 7.7 ms for the
+ * first face of a second bake on a machine running other suites.
  */
 export interface OrbitalBakeHost {
   readonly renderer: WebGPURenderer
