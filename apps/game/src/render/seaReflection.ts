@@ -21,7 +21,6 @@ import {
   Fn,
   getScreenPosition,
   If,
-  interleavedGradientNoise,
   Loop,
   max,
   min,
@@ -29,7 +28,6 @@ import {
   nodeObject,
   oneMinus,
   perspectiveDepthToViewZ,
-  screenCoordinate,
   select,
   smoothstep,
   texture,
@@ -74,15 +72,17 @@ import { asVector, type Vector } from './noiseNodes.ts'
 /**
  * Screen-space steps along the reflected ray before the crossing is refined.
  *
- * Uniform in screen space and jittered per pixel, so a long ray spends its
- * samples where they land on screen rather than near its start; twenty find a
- * hillside reliably and a single rock one time in a few, which the jitter
- * turns into a dither instead of a band.
+ * Uniform in screen space, so a long ray spends its samples where they land
+ * on screen rather than near its start, and at the same fractions for every
+ * pixel, so neighboring rays read neighboring texels of the depth. A jitter
+ * per pixel turns a missed rock into a dither rather than a band, and costs
+ * a cache miss a step: at 3840×2400, twenty jittered steps cost three and a
+ * half times what these twelve do.
  */
-const STEPS = 20
+const STEPS = 12
 
 /** Bisection steps between the last sample in front and the first behind. */
-const REFINE = 5
+const REFINE = 4
 
 /**
  * How far the reflected ray may travel, meters. The screen clips it long
@@ -354,13 +354,12 @@ export function landReflection(
     const at = (t: Node<'float'>) => uv0.add(span.mul(t))
     const sceneZ = (uv: Node<'vec2'>) =>
       perspectiveDepthToViewZ(depthNode.sample(uv).x, cameraNear, cameraFar)
-    const jitter = interleavedGradientNoise(screenCoordinate.xy)
 
     const found = float(0).toVar()
     const front = float(0).toVar()
     const behind = float(0).toVar()
     Loop(STEPS, ({ i }) => {
-      const t = float(i).add(jitter).div(STEPS).mul(reach).toVar()
+      const t = float(i).add(0.5).div(STEPS).mul(reach).toVar()
       // A view z is negative, so the ray is behind the surface when its z is
       // the more negative of the two.
       If(rayZ(t).lessThan(sceneZ(at(t))), () => {
