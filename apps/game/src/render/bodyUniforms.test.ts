@@ -206,6 +206,71 @@ describe('a mapped body', () => {
   })
 })
 
+describe('a generated magma world', () => {
+  /*
+   * The sea sheet emits the liquid's glow over the sea and the ground's
+   * painted water over the channels, and the sphere's ocean mask is the
+   * bake's record of exactly that water. Without the glow here a lava world
+   * is red at the gate and dark from orbit on its night side.
+   */
+  const MAGMA = {
+    kind: 'magma',
+    color: { r: 0.12, g: 0.03, b: 0.01 },
+    absorption: { r: 6, g: 6, b: 6 },
+    glow: { r: 2.9, g: 0.61, b: 0.067 },
+  } as const
+  const BLACK = { r: 0, g: 0, b: 0 }
+  const lava = (texture: string | null = null) =>
+    body({
+      hasAtmosphere: false,
+      appearance: {
+        ...body().appearance,
+        texture,
+        clouds: null,
+        haze: null,
+        liquid: MAGMA,
+      } as unknown as RenderBody['appearance'],
+    })
+  const BAKED: BodyMaps = { ...NO_MAPS, bake: true }
+
+  it('glows with its liquid where its bake says sea', () => {
+    const planet = bodyUniforms(lava(), FRAME, BAKED, null).planet!
+    expect(planet.liquidGlow).toEqual(MAGMA.glow)
+    expect(planet.oceanColor).toEqual(MAGMA.color)
+  })
+
+  it('glows nowhere before its bake, because there is no sea to glow from', () => {
+    expect(
+      bodyUniforms(lava(), FRAME, NO_MAPS, null).planet!.liquidGlow,
+    ).toEqual(BLACK)
+  })
+
+  it('does not glow over a photograph, whose sea the ground does not paint', () => {
+    // A mapped body's ground wears its map and paints no generated water, so
+    // its normal map's ocean mask is a sea the ground never lights.
+    const planet = bodyUniforms(
+      lava('earth'),
+      FRAME,
+      { ...NO_MAPS, normal: true },
+      null,
+    ).planet!
+    expect(planet.liquidGlow).toEqual(BLACK)
+  })
+
+  it('leaves a water world dark', () => {
+    const water = body({
+      appearance: {
+        ...body().appearance,
+        texture: null,
+        liquid: { ...MAGMA, kind: 'water', glow: BLACK },
+      } as unknown as RenderBody['appearance'],
+    })
+    expect(bodyUniforms(water, FRAME, BAKED, null).planet!.liquidGlow).toEqual(
+      BLACK,
+    )
+  })
+})
+
 describe('the star as a body', () => {
   const star = {
     system: 'sol',

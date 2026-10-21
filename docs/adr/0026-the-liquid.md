@@ -1,7 +1,8 @@
 # ADR-0026: The liquid — a sea is a sheet, a valley is a strip, and a world is drawn in families
 
 Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
-carries relief, so a generated sphere shades its mountains
+carries relief, so a generated sphere shades its mountains · amended 20 Oct
+2026: the sphere emits a magma sea's glow where its bake says sea
 
 ## Context
 
@@ -125,7 +126,9 @@ the mesh normal's slopes along geographic east and north as `x / 2 + 1/2`
 with the sea mask in the third lane, which is the layout and the encoding the
 sphere already reads the archive's normal map in, so one decode path serves a
 bake and a photograph. The sphere samples both by its unit position and keys
-its ocean color and sun-glint on the mask as it does on a photographed body's.
+its ocean color and sun-glint on the mask as it does on a photographed body's,
+and a magma sea's glow beside them — the sheet's own emission, added before
+the veil — so a lava world is not red at the gate and dark from orbit at night.
 One graph draws the ground and takes its picture, which is how the seam rule
 holds for a bake at all: there is no second deposit stack to keep in step. Asked the first time a mapless
 solid body's disk exceeds a hundredth of a radian, ready a few frames later,

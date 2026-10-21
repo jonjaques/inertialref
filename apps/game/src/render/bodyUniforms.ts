@@ -62,6 +62,8 @@ export interface BodyMaps {
 interface PlanetUniforms {
   readonly baseColor: Rgb
   readonly oceanColor: Rgb
+  /** The liquid's emission where the bake says sea; black without a bake. */
+  readonly liquidGlow: Rgb
   readonly albedoScale: number
   readonly lunarLambert: number
   readonly terminator: number
@@ -298,6 +300,7 @@ export function starAsBody(star: RenderStar, visibility: boolean): RenderBody {
 }
 
 const WHITE: Rgb = { r: 1, g: 1, b: 1 }
+const BLACK: Rgb = { r: 0, g: 0, b: 0 }
 const UP: Vec3 = { x: 0, y: 1, z: 0 }
 
 /**
@@ -365,6 +368,17 @@ export function bodyUniforms(
        * its normal map, and its sea is water.
        */
       oceanColor: appearance.liquid?.color ?? OPEN_OCEAN,
+      /*
+       * And its glow, which the sheet and the ground's painted channels emit
+       * below the gate. Only through a bake: the bake's sea mask is the
+       * ground's own water, where a photograph's mask is a sea the ground
+       * does not paint — a mapped body's ground wears its map and draws no
+       * generated sea to glow — and before the bake there is no mask at all.
+       */
+      liquidGlow:
+        maps.bake && appearance.liquid !== null
+          ? appearance.liquid.glow
+          : BLACK,
       albedoScale: surfaceVisibilityGain(
         appearance.geometricAlbedo,
         placement.angularRadius,

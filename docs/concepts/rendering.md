@@ -429,6 +429,13 @@ stored in, because at forty kilometers a texel the real slope is a few
 hundredths: a byte resolves that to five steps and the relief exaggeration draws
 every step as a facet.
 
+Where the mask says sea, the sphere takes the liquid as the ground draws it:
+its deep color, and — for magma — its glow, emitted before the veil and
+outside the albedo, as the sea sheet and the ground's painted channels emit it
+below the eight-pixel gate. Without the glow a lava world is red at the gate
+and dark on its night side from orbit. A photographed body's mask is a sea the
+ground does not paint, so it keeps the color and never glows.
+
 The baker owns the jobs and both cube targets for each held body. An address
 locates the entry; the loaded body's object identity validates it. Replacing
 the body at the same address retires its old bake, and a late tile completion

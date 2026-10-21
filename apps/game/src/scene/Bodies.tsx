@@ -431,6 +431,7 @@ export function Bodies({
         setVector(planet.center.value, position)
         setColor(planet.baseColor, values.baseColor)
         setColor(planet.oceanColor, values.oceanColor)
+        setColor(planet.liquidGlow, values.liquidGlow)
         setNumber(planet.albedoScale, values.albedoScale)
         setNumber(planet.lunarLambert, values.lunarLambert)
         setNumber(planet.terminator, values.terminator)

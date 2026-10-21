@@ -11579,6 +11579,28 @@ thrashing; the lane is what stops it being in the way. It is scheduling, not
 generation: a task's answer is a function of its payload, so the lane moves
 when an answer arrives and never what it is.
 
+## A lava sea glows from orbit as it does at the gate (20 Oct 2026)
+
+The sheet adds a magma liquid's glow to its color before its veil, and the
+ground adds it over a painted channel; the sphere took only the liquid's
+color through `oceanColor`, so a magma world was red at the gate and dark on
+its night side from orbit. Drawn through the production graphs on the night
+side, the sheet over fifty meters of magma reads 3.116 in the red and the
+sphere over a bake whose mask says sea read 0; with `liquidGlow` on
+`PlanetMaterial`, added where the mask says sea, they agree within 5 × 10⁻⁴.
+`bodyUniforms` passes the glow only through a bake: the bake's mask is the
+ground's own water, and a photographed body's mask is a sea its ground does
+not paint. It is a uniform, so the archetype the boot compiles is the
+pipeline a lava world draws with — `warmup.gpu.test.ts` counts no new
+pipeline after the bake and the glow are bound.
+
+No generated world within sixty light years of Sol has a magma sea. The one
+magma liquid inside that, `s:Q0_223_6_4_b/b:0` at 52 ly, drew no datum, so
+nothing stands on it to glow. The nearest seas are `s:Q0_229_6_9_3/b:0` at
+104 ly, an icy world at −2,357 m, and `s:Q0_227_5_4_c/b:0` at 130 ly, a rocky
+one at −1,061 m with a 3,485 km radius; a search past about 160 ly runs a
+headless session out of heap.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
