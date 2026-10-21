@@ -40,6 +40,7 @@ import {
   terrainSketch,
   volcanicBand,
   walkBodies,
+  WORD,
   writeTileFrame,
 } from '@inertialref/universe'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
@@ -146,7 +147,9 @@ function isolate(body: Body, band: Band): void {
     records[SCALARS_AT * 4 + SCALAR.SHARE_HYPSOMETRY] =
       body.surface.grammar.bands.hypsometry
   }
-  if (band !== 'drainage') zero(SCALAR.DRAINAGE)
+  // The drainage stage's gate is a word, the lattice's size; zeroed, the
+  // stage and everything else that reads the graph are off.
+  if (band !== 'drainage') words[WORD.DRAINAGE_CELLS] = 0
   if (band !== 'coast') zero(SCALAR.COAST_WIDTH)
   if (band !== 'craters') {
     /*

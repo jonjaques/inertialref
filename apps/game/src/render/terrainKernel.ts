@@ -30,8 +30,10 @@ import {
   sqrt,
   storage,
   uint,
+  uintBitsToFloat,
   uniform,
   uvec2,
+  uvec4,
   vec3,
   vec4,
   wgslFn,
@@ -54,7 +56,6 @@ import {
   DRAINAGE_CELL_START_AT,
   DRAINAGE_NEIGHBORS_AT,
   DRAINAGE_NODES_AT,
-  DRAINAGE_RECORDS,
   DRAINAGE_SEGMENT_STRIDE,
   DRAINAGE_SEGMENTS_AT,
   DRAINAGE_SHAPE,
@@ -865,9 +866,11 @@ export interface TerrainKernel {
    * producer turns the sentinel back into NaN.
    */
   readonly water: StorageBufferAttribute
-  /** The drainage graph's two buffers, `KernelDrainage` laid out per `terrainKernel.ts`. */
-  readonly drainageRecords: StorageBufferAttribute
-  readonly drainageWords: StorageBufferAttribute
+  /**
+   * The drainage graph, `KernelDrainage.words` in the offset table
+   * `terrainKernel.ts` lays out. One binding however many lists it holds.
+   */
+  readonly drainage: StorageBufferAttribute
   /** Invocations to run this dispatch: tiles times `samples`. */
   readonly total: { value: number }
   dispose(): void
@@ -875,9 +878,19 @@ export interface TerrainKernel {
 
 /**
  * Upload one packed body: the records, the words, and the drainage graph's
- * buffers where it has one. One function, because three callers — the
- * producer and the two tolerance tests — used to set two attributes each,
- * and a third buffer added to the record is a buffer one of them forgets.
+ * buffer where it has one. One function, because three callers — the
+ * producer and the two tolerance tests — each set every attribute, and a
+ * buffer added to the record is a buffer one of them forgets.
+ *
+ * **A dry body leaves the last wet body's graph in the drainage buffer.**
+ * Clearing it is 4.4 MB of writes on every switch to a body that never
+ * reads it, and nothing does: every reader — the valleys, the lake level,
+ * the clamp's choice between the sample's level and the datum, the
+ * producer's water readback — tests the drainage stage's gate in
+ * `BAND_STACK`, which is the body's own `WORD.DRAINAGE_CELLS` and zero
+ * wherever this returns early. A read behind any other test carves the
+ * previous planet's rivers into this one; `terrainKernel.gpu.test.ts` draws
+ * a dry body after a wet one against a kernel that never held a graph.
  */
 export function uploadSurface(
   kernel: TerrainKernel,
@@ -889,10 +902,8 @@ export function uploadSurface(
   kernel.words.needsUpdate = true
   const graph = packed.drainage
   if (graph === null) return
-  ;(kernel.drainageRecords.array as Float32Array).set(graph.records)
-  ;(kernel.drainageWords.array as Uint32Array).set(graph.words)
-  kernel.drainageRecords.needsUpdate = true
-  kernel.drainageWords.needsUpdate = true
+  ;(kernel.drainage.array as Uint32Array).set(graph.words)
+  kernel.drainage.needsUpdate = true
 }
 
 /**
@@ -940,11 +951,7 @@ export function createTerrainKernel(
     new Float32Array(maxTiles * interior),
     1,
   )
-  const drainageRecordsAttribute = new StorageBufferAttribute(
-    new Float32Array(DRAINAGE_RECORDS * 4),
-    4,
-  )
-  const drainageWordsAttribute = new StorageBufferAttribute(
+  const drainageAttribute = new StorageBufferAttribute(
     new Uint32Array(DRAINAGE_WORDS),
     1,
   )
@@ -963,21 +970,31 @@ export function createTerrainKernel(
     maxTiles * interior * COVER_WORDS,
   )
   const water = storage(waterAttribute, 'float', maxTiles * interior)
-  const drainageRecords = storage(
-    drainageRecordsAttribute,
-    'vec4',
-    DRAINAGE_RECORDS,
-  ).toReadOnly()
-  const drainageWords = storage(
-    drainageWordsAttribute,
+  const drainage = storage(
+    drainageAttribute,
     'uint',
     DRAINAGE_WORDS,
   ).toReadOnly()
+  /** A word of the drainage buffer, at an offset from its table. */
+  const drainageWord = (index: U): U => asU(drainage.element(index))
+  /** Four words from `at`, as the floats the packer wrote by their bits. */
+  const drainageFloats = (at: U): V4 =>
+    asV4(
+      uintBitsToFloat(
+        uvec4(
+          drainageWord(at),
+          drainageWord(at.add(uint(1))),
+          drainageWord(at.add(uint(2))),
+          drainageWord(at.add(uint(3))),
+        ),
+      ),
+    )
+  /** Node `n`: `[x y z lake]`. */
   const drainageNode = (n: U): V4 =>
-    asV4(drainageRecords.element(uint(DRAINAGE_NODES_AT).add(n)))
+    drainageFloats(uint(DRAINAGE_NODES_AT).add(n.mul(uint(4))))
+  /** A segment's `vec4` slot, `DRAINAGE_SEGMENT_STRIDE` to a segment. */
   const drainageSegment = (slot: U): V4 =>
-    asV4(drainageRecords.element(uint(DRAINAGE_SEGMENTS_AT).add(slot)))
-  const drainageWord = (index: U): U => asU(drainageWords.element(index))
+    drainageFloats(uint(DRAINAGE_SEGMENTS_AT).add(slot.mul(uint(4))))
   // A float, compared against `float(instanceIndex)`: exact below 2²⁴, which
   // is 3,500 tiles of 4,761 samples.
   const total = uniform(0)
@@ -2025,7 +2042,9 @@ export function createTerrainKernel(
         If(gate('clamp'), () => {
           // `waterSurface`: the datum on a body with no graph, the sample's
           // own level where there is one — the sea only where the sea reaches.
-          If(word(WORD.DRAINAGE_CELLS).greaterThan(uint(0)), () => {
+          // The drainage stage's own gate, because the level came out of the
+          // drainage buffer and the buffer can hold another body's graph.
+          If(gate('drainage'), () => {
             elevation.assign(max(elevation, level))
           }).Else(() => {
             elevation.assign(max(elevation, scalar(SCALAR.SEA_DATUM)))
@@ -2316,8 +2335,7 @@ export function createTerrainKernel(
     elevations: elevationsAttribute,
     cover: coverAttribute,
     water: waterAttribute,
-    drainageRecords: drainageRecordsAttribute,
-    drainageWords: drainageWordsAttribute,
+    drainage: drainageAttribute,
     total,
     dispose() {
       compute.dispose()

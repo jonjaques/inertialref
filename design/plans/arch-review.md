@@ -111,7 +111,7 @@ request's first run generates every tile of the slow descent (see "Open from
 11–15 and 19").
 
 **Decided: it rides the next terrain version.** That is the batch carrying
-erosion defects 3 and 6 and Enceladus's stripe extent
+erosion defects 2 and 5 and Enceladus's stripe extent
 ([erosion § 6](erosion.md#6-phases)), so the archive is invalidated once for
 all four rather than once each.
 
@@ -361,7 +361,7 @@ carries the argument.
 - [ADR index](../../docs/adr/README.md) — the decisions each pull request sits
   under
 - [Terrain](terrain.md) · [Erosion](erosion.md) — the terrain track's
-  neighbors: the archive's write lock and cross-app import, defects 2 and 14
+  neighbors: the archive's write lock and cross-app import
 - [Perf](perf.md) — the open figures, among them the worker-side graph builds
   16 left
 - [The upscaler](the-upscaler.md) — the velocity-overlay defect 17 makes one
