@@ -114,6 +114,7 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
     elevations: new Float32Array(side * side),
     cover: new Uint8Array(0),
     water: new Float32Array(0),
+    morph: null,
     minElevation: 0,
     maxElevation: 0,
   }

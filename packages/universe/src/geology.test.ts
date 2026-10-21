@@ -18,6 +18,7 @@ import {
   softLimit,
 } from './craters.ts'
 import { TEST_CATALOG } from './catalog/fixture.ts'
+import { drainageGraph } from './drainage.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
 import {
   craterDepth,
@@ -483,6 +484,16 @@ describe('the crater field', () => {
       const at = (t: number): ReturnType<typeof vec3> =>
         Vec.normalize(Vec.lerp(from, to, t))
       /*
+       * At the drainage lattice's own resolution on a world that drains:
+       * this walk holds the craters and the plates, an arc of twenty
+       * thousand samples is twenty thousand isolated ones, and each would
+       * build the refinement's chain for nothing the claim reads. The
+       * refined levels' own step test is in `drainageRefinement.test.ts`.
+       */
+      const finest = drainageGraph(body.surface)?.level ?? Infinity
+      const ground = (d: ReturnType<typeof vec3>): number =>
+        elevationAt(body.surface, d, finest)
+      /*
        * The four largest jumps on the arc, not the largest.
        *
        * A step is not usually the biggest thing on a walk — a crater rim is
@@ -493,9 +504,9 @@ describe('the crater field', () => {
        * sixty samples against the four thousand the scan already spent.
        */
       const candidates: { at: number; jump: number }[] = []
-      let previous = elevationAt(body.surface, at(0))
+      let previous = ground(at(0))
       for (let i = 1; i <= samples; i += 1) {
-        const here = elevationAt(body.surface, at(i / samples))
+        const here = ground(at(i / samples))
         const jump = Math.abs(here - previous)
         previous = here
         if (candidates.length === 4 && jump <= (candidates[3]?.jump ?? 0))
@@ -510,20 +521,14 @@ describe('the crater field', () => {
         // Bisect onto the jump, keeping `lo` on the side the walk started from.
         let lo = candidate.at - 1 / samples
         let hi = candidate.at
-        const atLo = elevationAt(body.surface, at(lo))
+        const atLo = ground(at(lo))
         for (let i = 0; i < 60; i += 1) {
           const mid = (lo + hi) / 2
           if (mid === lo || mid === hi) break
-          if (
-            Math.abs(elevationAt(body.surface, at(mid)) - atLo) <
-            candidate.jump / 2
-          )
-            lo = mid
+          if (Math.abs(ground(at(mid)) - atLo) < candidate.jump / 2) lo = mid
           else hi = mid
         }
-        const gap = Math.abs(
-          elevationAt(body.surface, at(hi)) - elevationAt(body.surface, at(lo)),
-        )
+        const gap = Math.abs(ground(at(hi)) - ground(at(lo)))
         if (gap > survivor) survivor = gap
       }
       return survivor

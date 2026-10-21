@@ -138,7 +138,23 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  * every generated value outside the grammar is identical across the bump,
  * over every system within 50 ly.
  */
-export const TERRAIN_ALGORITHM = algorithm('terrain', 6)
+/*
+ * Bumped to 7 when the drainage went below its lattice.
+ *
+ * Every refined level between the lattice's cell and a cell of a couple of
+ * kilometers adds creeks — a key point per cell joined to the nearest
+ * stream through its parent, its bed cut and filled to a floor that never
+ * rises downstream — so every wet world's land moved, by tens of meters at
+ * the coarsest refined level and by about a meter at the finest. The
+ * lattice's own channels moved with it: the walk measures a segment's
+ * distance to the arc over its chord, where it measured to the chord, which
+ * runs under the ground by hundreds of meters at a long segment's middle. A
+ * dry body is untouched to the last bit, and so is ground no valley reaches,
+ * a wet world's open seabed among it. A patch resolves the refinement to one
+ * level below its own, so the tiles moved with the field. `SYSTEM_ALGORITHM`
+ * stays: nothing `system.ts` generates reads the graph. ADR-0054.
+ */
+export const TERRAIN_ALGORITHM = algorithm('terrain', 7)
 export const GALAXY_ALGORITHM = algorithm('galaxy', 5)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.
