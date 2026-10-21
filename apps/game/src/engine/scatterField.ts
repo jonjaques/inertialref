@@ -405,11 +405,28 @@ export class ScatterField {
          * ground. `sink` is documented as a fraction of the rock, and this is
          * the extent the rock actually has in the direction it sinks.
          */
+        const sunk = rock.sink * rockRise(rock.radius, rock.angularity)
+        /*
+         * Both cuts below are taken on the field first, widened by how far
+         * the drawn ground can stand from it inside the range, so the
+         * triangle — a region lookup per drawn level and a slid-vertex
+         * search in a morph band — is read only for a rock that can
+         * survive them: the wanted regions cover a square three or four
+         * times the range's disk.
+         */
+        const rough = Vec.distance(
+          Vec.scale(rock.direction, bodyRadius + rock.elevation - sunk),
+          eyeLocal,
+        )
+        if (rough > range + GROUND_SLACK) continue
+        if (
+          (2 * rock.radius * perRadian) / (rough + GROUND_SLACK) <
+          ROCK_PIXELS
+        )
+          continue
         const floor =
           ground.radius(rock.direction, eyeLocal) ?? bodyRadius + rock.elevation
-        const radius =
-          floor - rock.sink * rockRise(rock.radius, rock.angularity)
-        const center = Vec.scale(rock.direction, radius)
+        const center = Vec.scale(rock.direction, floor - sunk)
         const distance = Vec.distance(center, eyeLocal)
         if (distance > range) continue
         // `ROCK_PIXELS` of the rock's own width, applied per rock rather than
@@ -469,6 +486,17 @@ const key = (region: RegionAddress): string =>
 const EYE_STEP: Meters = 16
 
 const step = (meters: number): number => Math.round(meters / EYE_STEP)
+
+/**
+ * How far the drawn ground can stand from the field inside the range,
+ * meters, for cutting on the field before the triangle is read.
+ *
+ * The rocks in range stand on the floor's patches and the two levels above
+ * it, whose worst cells across the zoo, Gliese 908 IV and P222_1_0_9 V are
+ * 0.79, 1.01 and 1.86 m off the field. Four is that with room; too small and
+ * a rock at the range's edge is cut that the exact test would keep.
+ */
+const GROUND_SLACK: Meters = 4
 
 /**
  * One rock's transform: stand it up, turn it, lean it, scale it.
