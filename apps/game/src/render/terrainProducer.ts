@@ -16,6 +16,7 @@ import {
   type KernelSurface,
   MAX_TILE_LEVEL,
   NO_KERNEL_WATER,
+  packedStageOn,
   type SurfaceParameters,
   surfaceKernel,
   TILE_STRIDE,
@@ -317,19 +318,30 @@ export function createTileProducer(
       kernel.tiles.needsUpdate = true
       kernel.total.value = taken.length * kernel.samples
       renderer.compute(kernel.compute, taken.length * kernel.samples)
-      // Both copies on the queue before either is waited for: each readback
-      // is its own staging buffer and command buffer, so issued together they
+      /*
+       * A body that drains is the only one whose water is anything but
+       * "none": with the drainage stage's gate closed the kernel writes the
+       * sentinel at every vertex, and the whole buffer — 270 KB at sixteen
+       * tiles of 4,225 vertices, copied, mapped and then scanned a tile at
+       * a time — would come back to be turned into NaN. So a dry body's copy
+       * is never queued, and its tiles get the NaN the scan would have made.
+       * The gate is the one every reader of the drainage buffer tests
+       * (`uploadSurface` says why).
+       */
+      const wet = packedStageOn(packed, 'drainage')
+      // Every copy on the queue before any is waited for: each readback is
+      // its own staging buffer and command buffer, so issued together they
       // share one fence, and issued in turn the cover's copy is not even
       // encoded until the elevations' map has resolved — two round trips
-      // where one covers both.
+      // where one covers all.
       const [elevationBytes, coverBytes, waterBytes] = await Promise.all([
         renderer.getArrayBufferAsync(kernel.elevations),
         renderer.getArrayBufferAsync(kernel.cover),
-        renderer.getArrayBufferAsync(kernel.water),
+        wet ? renderer.getArrayBufferAsync(kernel.water) : null,
       ])
       const elevations = new Float32Array(elevationBytes)
       const cover = new Uint8Array(coverBytes)
-      const water = new Float32Array(waterBytes)
+      const water = waterBytes === null ? null : new Float32Array(waterBytes)
       const finished = performance.now()
       batches += 1
       tiles += taken.length
@@ -364,7 +376,9 @@ export function createTileProducer(
               i * kernel.interior * COVER_CHANNELS,
               (i + 1) * kernel.interior * COVER_CHANNELS,
             ),
-            water.slice(i * kernel.interior, (i + 1) * kernel.interior),
+            water === null
+              ? null
+              : water.slice(i * kernel.interior, (i + 1) * kernel.interior),
           ),
         )
       })
@@ -389,12 +403,16 @@ export function createTileProducer(
    * The extremes are read off the float32 array the mesh will be built from,
    * for the reason `generateHeightfield` gives: a bounding volume sized from
    * a value the mesh does not contain can be a rounding step too small.
+   *
+   * `water` is the kernel's slice, or null for a dry body's tile, whose
+   * slice was not read back: NaN at every vertex, which is what the kernel's
+   * sentinel would have come to.
    */
   function unpack(
     request: HeightfieldRequest,
     elevations: Float32Array,
     cover: Uint8Array,
-    water: Float32Array,
+    slice: Float32Array | null,
   ): HeightfieldResponse {
     const { resolution, border } = kernel.layout
     const stride = heightfieldStride(kernel.layout)
@@ -408,10 +426,17 @@ export function createTileProducer(
         if (elevation > max) max = elevation
       }
     }
-    // The kernel's "no water" is a sentinel below any ground; the field's is
-    // NaN, which WGSL cannot write as a constant. One convention past here.
-    for (let i = 0; i < water.length; i += 1) {
-      if ((water[i] as number) <= NO_KERNEL_WATER / 2) water[i] = Number.NaN
+    let water: Float32Array
+    if (slice === null) {
+      water = new Float32Array(resolution * resolution).fill(Number.NaN)
+    } else {
+      // The kernel's "no water" is a sentinel below any ground; the field's
+      // is NaN, which WGSL cannot write as a constant. One convention past
+      // here.
+      water = slice
+      for (let i = 0; i < water.length; i += 1) {
+        if ((water[i] as number) <= NO_KERNEL_WATER / 2) water[i] = Number.NaN
+      }
     }
     return {
       region: request.region,
