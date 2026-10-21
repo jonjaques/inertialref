@@ -118,6 +118,14 @@ export const DRAINAGE_SHAPE = {
 } as const
 
 /**
+ * Where on the x axis the warp's three noise lookups are read, one per
+ * component of its displacement: far enough apart that the three are
+ * independent. The kernel reads each through a tile frame of its own
+ * (`WARP_FRAMES_AT`), so the offsets are written once.
+ */
+export const DRAINAGE_WARP_OFFSETS = [37.1, 71.3, 113.7] as const
+
+/**
  * The channel's half-width at an upstream area, radians on the unit sphere.
  *
  * `w = a·Q^0.5` with `Q = p·A`: the root of the area times a gain, halved

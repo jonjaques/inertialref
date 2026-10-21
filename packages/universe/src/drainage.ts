@@ -10,6 +10,7 @@ import {
   channelDepth,
   channelHalfWidth,
   DRAINAGE_SHAPE,
+  DRAINAGE_WARP_OFFSETS,
   toArc,
   valleyShape,
 } from './drainageShape.ts'
@@ -1103,21 +1104,22 @@ export function drainageLookup(
   const cycles = DRAINAGE_SHAPE.warpCycles * graph.cells * (2 / Math.PI) * 2
   const amount = (DRAINAGE_SHAPE.warpAmount * Math.PI) / 2 / graph.cells
   const seed = sketch.seeds.drainage
+  const [ox, oy, oz] = DRAINAGE_WARP_OFFSETS
   const wx = noise3(
     seed,
-    direction.x * cycles + 37.1,
+    direction.x * cycles + ox,
     direction.y * cycles,
     direction.z * cycles,
   )
   const wy = noise3(
     seed,
-    direction.x * cycles + 71.3,
+    direction.x * cycles + oy,
     direction.y * cycles,
     direction.z * cycles,
   )
   const wz = noise3(
     seed,
-    direction.x * cycles + 113.7,
+    direction.x * cycles + oz,
     direction.y * cycles,
     direction.z * cycles,
   )
