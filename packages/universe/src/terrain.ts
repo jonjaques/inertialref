@@ -527,7 +527,7 @@ const BEFORE_DRAINAGE = new Float64Array(1)
  * coast's remap, the water, the cover's wet and corridor, the clamp — are
  * taken twice.
  */
-interface MorphTwin {
+export interface MorphTwin {
   readonly finest: number
   /** Out: the twin's elevation, landform then drawn as each reader adds. */
   elevation: Meters
