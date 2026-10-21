@@ -76,7 +76,7 @@ export function LensSection({
          * Three columns on one line is the arrangement every settings page uses
          * and it is the wrong one here. A 19 rem panel minus a 5 rem label and a
          * 7 rem reading leaves the slider about 110 px — a hundred and ten
-         * positions for a logarithmic travel from 8.4 to 68 mm, where one pixel
+         * positions for a logarithmic travel from 8.4 to 120 mm, where one pixel
          * is most of a stop. These are the mode's precise controls; the travel is
          * what wants the width, and a label and its reading are two short strings
          * that read perfectly well at opposite ends of a line.

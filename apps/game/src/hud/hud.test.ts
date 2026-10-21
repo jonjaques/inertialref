@@ -394,7 +394,7 @@ describe('the author’s instruments', () => {
     expect(camera).toContain('aria-valuemin="0"')
     expect(camera).toContain('aria-valuemax="1000"')
     expect(FOCAL_MIN).toBeCloseTo(8.4, 1)
-    expect(FOCAL_MAX).toBeCloseTo(68.06, 1)
+    expect(FOCAL_MAX).toBeCloseTo(120.22, 1)
   })
 
   it('explains unavailable reconstruction choices on WebGL and prints actual pixels', () => {

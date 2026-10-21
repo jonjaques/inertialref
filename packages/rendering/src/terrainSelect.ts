@@ -70,17 +70,18 @@ import {
  *
  * A node refines while `distance < spacing · scale` and `scale` goes as
  * `pixelsPerRadian`, so doubling it is one more level of refinement everywhere
- * on the visible disk. The focal-length control spans 8.1× of it — 378 px/rad
- * at 110° to 3,062 at 20° — which is three levels, and the zoom channel
- * multiplies another 8× for six levels across the two sliders together. The
- * patches do not follow the square of it: refinement runs out of *levels* at
- * `surfaceDetailFloor` before it runs out of budget, so 20° at zoom 1 measures
- * 1.9× to 3.2× the demand rather than the 66× the arithmetic suggests —
- * `DEFAULT_MAX_PATCHES` below carries the counts, including the corner where
- * the floor is reached and the square starts to bite again. That is why the
- * predicate takes the lens the picture is actually composed through rather than
- * a nominal angle: a fixed one is right for exactly one setting of the two
- * controls and wrong by six levels at their ends.
+ * on the visible disk. The focal-length control spans 14.3× of it — 378
+ * px/rad at 110° to 5,410 at 11.4° — which is nearly four levels, and the zoom
+ * channel multiplies another 8× for nearly seven across the two sliders
+ * together. The patches do not follow the square of it: refinement runs out of
+ * *levels* at `surfaceDetailFloor` before it runs out of budget, so a whole
+ * disk at 11.4° standing at two meters asks for 2,063 to 12,330 patches across
+ * the zoo against 456 to 1,061 at the flight lens, rather than the 41 times as
+ * many the arithmetic suggests — `DEFAULT_MAX_PATCHES` below carries the
+ * counts. That is why the predicate takes the lens the picture is actually
+ * composed through rather than a nominal angle, and past the flight lens where
+ * it looks too: a fixed one is right for exactly one setting of the two
+ * controls and wrong by seven levels at their ends.
  *
  * `LENS_PRESETS.flight` over `BASELINE_VIEWPORT` — 65° over 1080 display
  * pixels, which is 848 px/rad. The streamer passes the live lens; this is what
@@ -162,22 +163,24 @@ export const DEFAULT_MAX_LEVEL = 12
  * measured-before-optimized rather than done here.
  *
  * **It binds at the telephoto end and on a retina window, and by how much is
- * measured rather than adjectival.** At 20° the same descents want two to
- * three times the flight lens's count; a 1600×900 window at DPR 2 is 3200×1800
+ * measured rather than adjectival.** Refined over the whole disk, 11.4° asks
+ * for the 2,063 to 12,330 above, which no cap is for. Refined at the lens only
+ * where the frame can reach (`REFERENCE_LENS`), the same eyes looking at the
+ * horizon ask for 929 to 3,491 and their descents peak at 1,221 to 1,946,
+ * which the ladder below fits on every eye. A 1600×900 window at DPR 2 is 3200×1800
  * display pixels, one level deeper everywhere, and the Mars landing's hover
  * wants 1,583 patches there against 874 at DPR 1. What the cap does when it
  * binds is `COARSEN_STEP` below: the tolerance is loosened and the walk
  * retaken, so the disk goes coarse by a stated fraction of a level everywhere
  * the eye is not standing, and the ground underfoot keeps the floor.
  *
- * **The zoom channel goes three levels past that, and no cap covers it.** At 20°
- * with the zoom racked to 8× the picture is a 2.5° field at 24,500 px/rad, and
- * Miranda's basin descent wanted **20,174** patches at the old detail floor —
- * an order of magnitude past any cap, past the loosest tolerance, and
- * `saturated` on every step. That is a telephoto held on a subject rather than
- * a lens anything is flown behind, and the honest answer is the one the cap
- * gives: the disk goes coarse, by a stated amount, rather than the frame going
- * away.
+ * **The zoom channel goes three levels past that, and no cap covers it.** At
+ * the long end with the zoom racked to 8× the picture is a 1.43° field at
+ * 43,281 px/rad. Refined inside the frame, the descents onto the zoo's basins
+ * peak at 4,586 to 8,305 patches and are past the loosest tolerance on 18 to
+ * 25 of 32 steps. That is a telephoto held on a subject rather than a lens anything is flown
+ * behind, and the honest answer is the one the cap gives: the disk goes
+ * coarse, by a stated amount, rather than the frame going away.
  */
 export const DEFAULT_MAX_PATCHES = 1_280
 
@@ -207,7 +210,9 @@ export const DEFAULT_MAX_PATCHES = 1_280
  * unchanged. The step is 1.5 rather than 2 because 2 is a whole level and a
  * whole level arriving in one frame is the pop this exists to remove; three
  * steps reach 3.4×, a level and three quarters, which covers a DPR 2 window at
- * the telephoto end and stops short of pretending a racked zoom fits. The
+ * the telephoto end on all but 26 of 240 eyes at the horizon — 20 of them
+ * beside a cube corner, where `regionSpacing` over-refines, none short of the
+ * floor underfoot — and stops short of pretending a racked zoom fits. The
  * retry is a second walk on the frames it fires — the first walk stops at the
  * overflow and skips the balance pass, so it costs less than a full one — and
  * a caller that hands back `coarsening` pays it on the frame the cap first

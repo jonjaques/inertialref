@@ -49,8 +49,8 @@ export interface LodThresholds {
  *
  * Stated as a fraction of the pixel angle rather than as a constant, because a
  * constant can only be right at one lens: at the flight lens over the baseline
- * this is 1.97e-4 of angular radius, at 20° it is 5.44e-5 — a third of it — and
- * with the zoom channel racked out it is 6.8e-6. The arithmetic is easy to get
+ * this is 1.97e-4 of angular radius, at 11.4° it is 3.08e-5 — under a sixth of
+ * it — and with the zoom channel racked out it is 3.85e-6. The arithmetic is easy to get
  * wrong by an order of magnitude — a pixel at 60° over 1080 px is `atan(1/935)`,
  * 1.07 mrad, not the 0.2 mrad it is tempting to call one.
  */
