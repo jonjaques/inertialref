@@ -230,6 +230,12 @@ export interface PlanetMaterial {
   readonly hazeStrength: { value: number }
   /** What deep water looks like from orbit; the map's bathymetry is not it. */
   readonly oceanColor: { value: Color }
+  /**
+   * The liquid's own light where the ocean mask says sea — a magma sea's
+   * glow, black for every other liquid. The sheet and the ground's painted
+   * channels emit it below the gate; this is the same emission above it.
+   */
+  readonly liquidGlow: { value: Color }
   /** Cloud shell height as a fraction of the body's radius. */
   readonly cloudHeight: { value: number }
   readonly cloudShadow: { value: number }
@@ -310,6 +316,7 @@ export function createPlanetMaterial(): PlanetMaterial {
   const oceanColor = uniform(
     new Color(OPEN_OCEAN.r, OPEN_OCEAN.g, OPEN_OCEAN.b),
   )
+  const liquidGlow = uniform(new Color(0, 0, 0))
   const cloudHeight = uniform(0)
   const cloudShadow = uniform(0)
   const ringInner = uniform(0)
@@ -548,7 +555,18 @@ export function createPlanetMaterial(): PlanetMaterial {
     sunColor.mul(sunIntensity).mul(lightTint),
   )
 
-  const surfaceLight = diffuse.add(sunlight.mul(glint))
+  /*
+   * A magma sea is its own light, emitted where the mask says sea: the same
+   * glow `render/water.ts` adds over the sheet and `render/terrain.ts` adds
+   * over a painted channel, and the mask is the bake's record of exactly
+   * those two. Added before the veil, as both of them add it, and outside
+   * the albedo, because emission is not a reflectance — neither the
+   * visibility gain nor the sun reaches it. A uniform rather than a variant,
+   * so the program the boot warms is the one a lava world draws with.
+   */
+  const surfaceLight = diffuse
+    .add(sunlight.mul(glint))
+    .add(liquidGlow.mul(ocean))
   // 0.68, not higher: at 0.8 the whole disk went milky and the ocean lost
   // its depth — the photographs keep a saturated blue mid-disk under the veil.
   const shadedSurface = mix(surfaceLight, veilColor, veil.mul(0.68))
@@ -594,6 +612,7 @@ export function createPlanetMaterial(): PlanetMaterial {
     hazeLimb,
     hazeStrength,
     oceanColor,
+    liquidGlow,
     cloudHeight,
     cloudShadow,
     ringInner,

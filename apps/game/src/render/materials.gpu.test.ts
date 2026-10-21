@@ -19,12 +19,15 @@ import {
   CubeRenderTarget,
 } from 'three/webgpu'
 import { openSession, type Session } from '@inertialref/devtools'
+import { rng, rootSeed } from '@inertialref/procedural'
 import { buildPatch, terrainPalette } from '@inertialref/rendering'
 import {
   type Body,
   COVER_CHANNELS,
+  liquidAppearance,
   parseAddress,
   regionAddress,
+  SOL,
   walkBodies,
 } from '@inertialref/universe'
 import { scatteringFor } from './atmosphereLuts.ts'
@@ -49,6 +52,7 @@ import {
   MORPH_COVER_ATTRIBUTES,
   patchGeometry,
   placeEye,
+  seaDummy,
   sheetGeometry,
   wearGround,
   wearSea,
@@ -690,5 +694,103 @@ describe('the sphere wearing a bake', () => {
     // The ocean color is a deep blue: darker than the ice, and bluer.
     expect(red).toBeLessThan(dryRed * 0.6)
     expect(blue).toBeGreaterThan(red)
+  })
+})
+
+describe('a magma sea, on the ground and from orbit', () => {
+  /*
+   * The ground and the sphere are one body and a descent crosses the
+   * eight-pixel gate between them, so the liquid's glow has to come out the
+   * same on both sides of it. The sheet emits the glow over the sea; the
+   * sphere emits it where its bake's sea mask says sea. Drawn on the night
+   * side, where nothing else lights either surface, both should be the glow
+   * and nothing else — and a sphere taking only the liquid's color, which is
+   * what it did, is black there.
+   */
+  let session: Session
+  let palette: ReturnType<typeof terrainPalette>
+  const magma = liquidAppearance('magma', rng(rootSeed('a lava sea')))!
+
+  beforeAll(() => {
+    session = openSession({ seed: 'inertialref', workers: null })
+    // An airless body's palette with a magma liquid in it: no veil, no sky,
+    // so the night side holds the glow alone.
+    const luna = [...walkBodies(session.world.loadSystem(SOL))].find(
+      (body) => body.name === 'Luna',
+    )!
+    palette = { ...terrainPalette(luna), liquid: magma }
+  })
+
+  afterAll(() => {
+    session.dispose()
+  })
+
+  /** The sheet over fifty meters of magma, read at its centroid. */
+  async function sheet(): Promise<[number, number, number, number]> {
+    const water = createWaterMaterial({ refraction: false })
+    water.setPalette(palette)
+    water.sunDirection.value.set(0, 0, -1)
+    const mesh = seaDummy(water.material)
+    for (const name of ['waterDepth', 'waterMorphDepth']) {
+      const depth = mesh.geometry.getAttribute(name) as BufferAttribute
+      for (let i = 0; i < depth.count; i += 1) depth.setX(i, 50)
+    }
+    const pixels = await gpu.draw(staged(mesh), camera, {
+      float: true,
+      width: 64,
+      height: 64,
+    })
+    // The dummy triangle's centroid on 64×64, as the bake record reads it.
+    return pixels.at(36, 27)
+  }
+
+  /** The sphere wearing a bake whose relief record is `relief`, read at its center. */
+  async function sphere(
+    relief: readonly [number, number, number],
+  ): Promise<[number, number, number, number]> {
+    const planet = createPlanetMaterial()
+    planet.sunDirection.value.set(0, 0, -1)
+    const mesh = new Mesh(new SphereGeometry(1, 32, 24), planet.material)
+    const scene = staged(mesh)
+    // Compiled over the stand-ins first and bound after, in the boot's
+    // order — see `center` above.
+    const into = new RenderTarget(64, 64, {
+      depthBuffer: false,
+      type: FloatType,
+    })
+    try {
+      await gpu.draw(scene, camera, { into })
+      planet.setBake({
+        albedo: filledCube(0.1, 0.05, 0.03).texture,
+        relief: filledCube(...relief).texture,
+      })
+      planet.oceanColor.value.setRGB(
+        magma.color.r,
+        magma.color.g,
+        magma.color.b,
+      )
+      planet.liquidGlow.value.setRGB(magma.glow.r, magma.glow.g, magma.glow.b)
+      const pixels = await gpu.draw(scene, camera, { into })
+      return pixels.at(32, 32)
+    } finally {
+      into.dispose()
+    }
+  }
+
+  it('glows on the night side of the sphere as it does on the sheet', async () => {
+    const ground = await sheet()
+    const orbit = await sphere([0.5, 0.5, 1])
+    const glow = [magma.glow.r, magma.glow.g, magma.glow.b]
+    for (let channel = 0; channel < 3; channel += 1) {
+      // Both are the glow: the sheet's wave field and foam are faded out at
+      // fifty meters of depth and no sun, and the sphere's night is black.
+      expect(ground[channel]).toBeCloseTo(glow[channel] as number, 3)
+      expect(orbit[channel]).toBeCloseTo(ground[channel] as number, 3)
+    }
+  })
+
+  it('and nowhere the relief record says dry ground', async () => {
+    const [red, green, blue] = await sphere([0.5, 0.5, 0])
+    expect(Math.max(red, green, blue)).toBeLessThan(1e-4)
   })
 })

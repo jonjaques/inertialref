@@ -122,14 +122,16 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
 /** A producer that counts what reaches it. */
 function countingSource() {
   const asked: SurfaceParameters[] = []
+  const lanes: (string | undefined)[] = []
   const source: ArchivedSource & { available: boolean } = {
     kind: 'gpu',
     archive: 'gpu@test',
     available: true,
     maxLevel: 9,
     supports: (request) => request.region.level > 0,
-    submit(surface, request) {
+    submit(surface, request, lane) {
       asked.push(surface)
+      lanes.push(lane)
       return {
         id: asked.length,
         result: Promise.resolve(flatField(request)),
@@ -137,7 +139,7 @@ function countingSource() {
       }
     },
   }
-  return { source, asked }
+  return { source, asked, lanes }
 }
 
 const REQUEST: HeightfieldRequest = {
@@ -377,6 +379,19 @@ describe('a source held for its surface', () => {
     // Answered with no preparation at all: its pack reads a null graph.
     expect(asked).toEqual([surface])
     expect(gate.runs()).toBe(0)
+    gate.pool.terminate()
+  })
+
+  it('asks the producer in the lane it was asked in, held or not', async () => {
+    const gate = gatedPool(() => ({ level: 5, drainage: null }))
+    const preparation = new SurfacePreparation(gate.pool)
+    const { source, lanes } = countingSource()
+    const held = preparation.holding(source)
+    const waiting = held.submit(unseen('Earth'), REQUEST, 'background')
+    await held.submit(unseen(), REQUEST, 'background').result
+    await gate.release()
+    await waiting.result
+    expect(lanes).toEqual(['background', 'background'])
     gate.pool.terminate()
   })
 

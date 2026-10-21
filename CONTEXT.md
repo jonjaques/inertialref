@@ -11548,6 +11548,118 @@ A dry body also reads no water back. The copy the producer skipped is
 its sentinel scan is about a millisecond of a fourteen-millisecond batch on
 Luna and Mars, under load.
 
+## The orbital bake waits behind the ground, in a lane of its own (20 Oct 2026)
+
+A generated body's bake asks for ninety-six level-2 tiles at once, and the
+streamer and the bake shared one queue on both adapters: the pool was a FIFO
+and the GPU producer took its next batch from the head of one. A bake that
+started on a descent — the disk crossing a hundredth of a radian on the way
+down — put all ninety-six ahead of the ground the descent was about to need.
+Measured in `terrainProducer.gpu.test.ts`: with forty-eight bake tiles queued
+and the first batch on the GPU, a ground tile asked for next was delivered
+49th, behind every one of them; it is delivered 17th now, behind only the
+batch already dispatched. The pool's version of the same test dispatched the
+next bake tile to the free worker instead of the ground.
+
+`JobLane` in `packages/workers/src/pool.ts` is the fix: `foreground` by
+default, `background` for the bake, and a free worker — or the producer's next
+batch — takes a background job only when no foreground job waits. Nothing is
+preempted. The producer draws each batch from one lane rather than topping a
+short ground batch up with bake tiles, because a bake tile in the ground's
+batch is delivered with it rather than after it, and the batch it lengthens
+is the one the descent is waiting on. A bake that starts mid-descent therefore
+waits until the streamer stops asking, which is what it should do: below the
+eight-pixel gate the ground is drawn and the sphere is not.
+
+The lane travels as a third argument to `submit` through `Heightfields`, the
+archive and the surface preparation, and is not a field of the request — the
+request is the archive's key, and a tile the bake and the streamer both ask
+for is one tile. Residency (`RESIDENCY_MS` in `orbitalBake.ts`) stops a bake
+thrashing; the lane is what stops it being in the way. It is scheduling, not
+generation: a task's answer is a function of its payload, so the lane moves
+when an answer arrives and never what it is.
+
+## A lava sea glows from orbit as it does at the gate (20 Oct 2026)
+
+The sheet adds a magma liquid's glow to its color before its veil, and the
+ground adds it over a painted channel; the sphere took only the liquid's
+color through `oceanColor`, so a magma world was red at the gate and dark on
+its night side from orbit. Drawn through the production graphs on the night
+side, the sheet over fifty meters of magma reads 3.116 in the red and the
+sphere over a bake whose mask says sea read 0; with `liquidGlow` on
+`PlanetMaterial`, added where the mask says sea, they agree within 5 × 10⁻⁴.
+`bodyUniforms` passes the glow only through a bake: the bake's mask is the
+ground's own water, and a photographed body's mask is a sea its ground does
+not paint. It is a uniform, so the archetype the boot compiles is the
+pipeline a lava world draws with — `warmup.gpu.test.ts` counts no new
+pipeline after the bake and the glow are bound.
+
+No generated world within sixty light years of Sol has a magma sea. The one
+magma liquid inside that, `s:Q0_223_6_4_b/b:0` at 52 ly, drew no datum, so
+nothing stands on it to glow. The nearest seas are `s:Q0_229_6_9_3/b:0` at
+104 ly, an icy world at −2,357 m, and `s:Q0_227_5_4_c/b:0` at 130 ly, a rocky
+one at −1,061 m with a 3,485 km radius; a search past about 160 ly runs a
+headless session out of heap.
+
+## The orbital bake was a hundred milliseconds in one task, and is now a frame's share (20 Oct 2026)
+
+ADR-0026 called the bake "a hitch of a few tens of milliseconds once per body".
+Measured under Dawn in Node, with the machine shared by other agents' suites
+(under load), the task the last tile arrived in was 118–150 ms of main-thread
+work for Gliese 908 IV, Iapetus and Rhea. Two costs were larger than assumed.
+`buildPatch` with the cover and its morph twin took 0.9–1.9 ms a patch, where
+the streamer's eight-a-frame allowance in `terrainStreamer.ts` is sized on
+0.25 ms. And the first face drawn uploaded a third of the body: three's
+frustum test is a bounding sphere against the face's pyramid, so every patch
+straddling an edge drew too, and face 0 alone took 18 ms warm and 38.7 ms
+cold, the next faces 6.1, 6.0, 2.6, 2.5, 1.1 and 1.1 as the uploads ran out.
+
+`advance` runs once a frame at priority −0.25, ahead of `TerrainPatches`,
+because a face draw writes the shared ground material's palette and the
+streamed body's has to be written back before the frame draws. It builds
+patches for two milliseconds — one clock read a build, stopping before the
+build that would overrun and always building one — then draws one face a
+frame from the sixteen patches of that face alone. `faceOf` picks the face
+whose camera looks most squarely at the patch's anchor; a level-2 region is a
+sixteenth of one face's view pyramid, so that face sees all of it and no other
+face sees any. Each patch then uploads in the face that draws it: the
+reflectance faces take 3.5–8.8 ms and the relief faces 0.5–0.9 ms under Dawn,
+the largest slice of a whole bake is 6–9 ms, and a bake is ready about 105
+frames after its tiles arrive. Drawing all sixteen patches into every face,
+with culling off, is the obvious alternative and the wrong one: it uploads
+the body in face 0.
+
+`drawCubeFace` is `CubeCamera.update` for one face, including the
+reversed-depth clear the renderer does not make outside its own pass;
+`orbitalBake.gpu.test.ts` holds it to `update` texel for texel, and checks
+all six reflectance faces for holes — with the patches withheld from their
+faces the check reads 16,384 empty texels. Until the twelfth face is drawn
+`textureFor` answers null, so the sphere keeps its flat tint and never wears
+a target with five faces in it.
+
+In Chrome, at the 1600×900 default and with two other agents' suites running
+(under load), the frame the bake landed in was 166.5 ms on Iapetus and
+216.6 ms on `s:P222_1_0_9/b:4`, the far-shore world, taken against
+`origin/main`. Spread, neither run has a frame over 34.7 ms around the
+handover. The bake is ready 145 and 161 frames after the ask, 2.6 and 3.45 s,
+and the sphere wears its tint for all of them. `buildPatch` took about 2.4 ms
+a patch in Chrome, so every build frame builds one, and one of them took
+15.2 ms, which a budget checked between builds cannot divide. The reflectance
+faces took 3.6–8.8 ms and the relief faces 0.5–1.9, the last 3.9–5.2 with the
+handover in it. One slice is larger: the first face of a session's first bake,
+26.4 ms on the far-shore world and 31.7 on Iapetus, where a second bake in
+the same page, Rhea after Iapetus, drew its first face in 7.7. A face is a
+one-sample half-float target and the boot warms only the scene pass's
+four-sample layout, so the first face builds the bake's variant in its own
+frame. Warming that layout behind the boot cover is the fix if it is felt.
+
+Two larger frames in the same recordings are not the bake's. The frame a
+look starts in is 100–217 ms on both builds, and a second look at a body
+already baked, which asks for nothing, still takes 99.9 ms. The producer's
+batches of sixteen tiles take up to 154 ms of GPU each, and frames while the
+tiles are produced reach 117–132 ms on both builds; the bake's own callback
+is never more than 31.7 ms.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
