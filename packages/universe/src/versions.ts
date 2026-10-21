@@ -119,16 +119,21 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  *   gains none. 51 plate counts move in the 2,201 bodies within 25 ly,
  *   Proxima Centauri II's twenty among them, and nine more grammars move
  *   their hotspots and band shares under the plate threshold.
- * - **One water body per sample.** A sample within reach of two lakes, or of
- *   a lake and the sea, takes one body's level rather than a blend of both,
- *   so the sheet and the ground clamp stop tilting across the gap. Only a
+ * - **One water body per sample** (`lakeLevelAt`). A sample within reach of
+ *   two lakes, or of a lake and the sea, takes the level of the body whose
+ *   nodes carry most of its weight, and blends toward the other only within
+ *   a tenth of a tie (`lakeMargin`), so the sheet and the ground clamp stop
+ *   tilting across the gap and do not step where the bodies meet. Only a
  *   body with a drainage graph moves.
- * - **Enceladus's tiger stripes take a south-polar extent**, about 130 km
- *   long, where a stripe axis was a whole great circle drawn pole to pole.
+ * - **The tiger stripes are a south-polar family** (`STRIPE_FAMILY`): four
+ *   stripes about 130 km long and 35 km apart on Enceladus, tapered at their
+ *   ends, where a stripe axis was a whole great circle drawn pole to pole.
+ *   The sizes are angles, so they scale with a body's radius.
  *
- * A body that drew no sea its ground boiled, has no drainage graph and
- * carries no stripe term is untouched to the last bit: in Sol, everything but
- * Earth and Titan, whose graphs are read, and the icy moons with stripes.
+ * A body that drew no sea its ground boiled, has no drainage graph and draws
+ * no stripes is untouched to the last bit: in Sol, everything but Earth and
+ * Titan, whose graphs are read, and the twenty-eight bodies that draw
+ * stripes, Titan, Mimas and Phobos among them.
  * `SYSTEM_ALGORITHM` stays: the weakening reads a draw already taken, and
  * every generated value outside the grammar is identical across the bump,
  * over every system within 50 ly.

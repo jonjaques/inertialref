@@ -11562,9 +11562,8 @@ Luna and Mars, under load.
 batched: the surface's identity (arch-review B), the weakening read from the
 sea a world drew (erosion defect 3), one water body per sample (defect 6) and
 Enceladus's stripes taking a south-polar extent (terrain § 2). The first two
-are `feat/terrain-v6-identity-and-weakening`, the other two
-`feat/terrain-v6-water-and-stripes`; `versions.ts` names all four at the
-constant.
+are this entry and the other two the next; `versions.ts` names all four at
+the constant.
 
 **The identity.** The drainage memo and the survey keyed on five hand-listed
 `SurfaceParameters` fields plus `JSON.stringify(grammar)`, which writes NaN and
@@ -11623,13 +11622,12 @@ and 209 s of CPU, writing the descent's 1,246 tiles (89 MB). The descent's
 hook allows 600 s, twice the 284 s the last cold CI run took before the
 descent moved to threads, so CI's first run on the batch is slow rather than
 failed. `heightfieldFingerprint.test.ts` re-pins `terrain: 6` with its seven
-tiles unchanged, since both changes here leave a hand-built surface's ground
-where it was.
+tiles unchanged, since none of the four moves the ground under them.
 
 ## Between two bodies of standing water the level is one body's, and the stripes went to the south pole (20 Oct 2026)
 
-Erosion defect 6 and Enceladus's stripe extent, the water-and-stripes half of
-the next terrain version; the version is spent beside them.
+Erosion defect 6 and Enceladus's stripe extent, the other half of terrain v6;
+the entry above spends the version.
 
 **A sample in reach of two water bodies reads the heavier one.**
 `lakeLevelAt` was a kernel mean over every lake node within 1.2 cells, so
