@@ -497,7 +497,11 @@ and `lit` is the verdict a fixture is chosen by. `ir.settled()` is what a
 capture waits for instead of a number of milliseconds: the sky's physical
 cubes publish tile by tile and the streamer fills a ring at a time, and a
 still taken while either is in flight is a still of something still
-arriving. `pnpm drive --settle <ms>` polls it.
+arriving. The ground is also not settled until the body's deposit slope
+table lands (`ir.terrain().depositsPending`), seconds after its tiles,
+because it moves the ground's tone once at every coarse level
+([ADR-0051](../adr/0051-a-rock-stands-on-the-drawn-ground.md)).
+`pnpm drive --settle <ms>` polls it.
 
 **`visit` cuts and `drop` flies**, and the difference is the intent rather than
 the destination. `visit` is what a plate is captured through, so the frame after

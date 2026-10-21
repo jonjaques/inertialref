@@ -636,13 +636,15 @@ export class GameHarness {
    * once. The sky's physical cubes publish tile by tile and the terrain
    * streamer fills in from a worker pool, and a still taken while either is
    * in flight differs from the next by thousands of pixels with the camera
-   * never moving. `ok` is every readout quiet; the rest says which one was
-   * not. Headlessly there is nothing to converge and the answer is yes.
+   * never moving. So does one taken before the body's deposit slope table
+   * lands, which moves the ground's tone once, at every coarse level.
+   * `ok` is every readout quiet; the rest says which one was not. Headlessly
+   * there is nothing to converge and the answer is yes.
    */
   settled(): {
     ok: boolean
     galaxy: { pending: boolean; tiles: string; survey: boolean } | null
-    terrain: { pending: number; patches: number } | null
+    terrain: { pending: number; patches: number; deposits: boolean } | null
   } {
     const galaxy = this.#host.render.galaxyRender()
     const terrain = this.#host.render.terrain()
@@ -660,11 +662,15 @@ export class GameHarness {
     const ground =
       terrain === null
         ? null
-        : { pending: terrain.pending, patches: terrain.patches }
+        : {
+            pending: terrain.pending,
+            patches: terrain.patches,
+            deposits: terrain.depositsPending,
+          }
     return {
       ok:
         (sky === null || (!sky.pending && !sky.survey)) &&
-        (ground === null || ground.pending === 0),
+        (ground === null || (ground.pending === 0 && !ground.deposits)),
       galaxy: sky,
       terrain: ground,
     }

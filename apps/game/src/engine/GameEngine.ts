@@ -49,6 +49,7 @@ import {
 } from '@inertialref/simulation'
 import {
   type Body,
+  type DepositSlopeTable,
   drains,
   type EntityId,
   findBody,
@@ -56,6 +57,7 @@ import {
   MARS_PAD,
   parseAddress,
   type StarCatalog,
+  type SurfaceParameters,
   type SystemId,
 } from '@inertialref/universe'
 import {
@@ -1208,6 +1210,27 @@ export class GameEngine {
   }
 
   /**
+   * The deposit slope table of the body whose ground is streaming, or null
+   * until a worker has measured it — asked every frame by the material's
+   * host, and the asking is what starts it, once the surface is prepared and
+   * no tile waits in the pool's queue. The deposits read the mesh's own slope
+   * until then.
+   */
+  depositSlopeTable(): DepositSlopeTable | null {
+    const surface = this.#terrain.surface
+    return surface === null ? null : this.#preparation.slopes(surface)
+  }
+
+  /**
+   * A surface's deposit slope table once a worker has measured it, through
+   * the one preparation the ground reads it from, so a body is measured
+   * once whichever of the ground and the bake asks first.
+   */
+  depositSlopes(surface: SurfaceParameters): Promise<DepositSlopeTable | null> {
+    return this.#preparation.whenSlopes(surface)
+  }
+
+  /**
    * The body at an address, out of the loaded world, or null.
    *
    * For a reader holding a `RenderBody` — the scene's description, which
@@ -1242,7 +1265,13 @@ export class GameEngine {
    */
   terrain(): TerrainReport | null {
     const { bodyAddress, ...rest } = this.#terrain.summary()
-    return { body: bodyAddress, ...rest }
+    const surface = this.#terrain.surface
+    return {
+      body: bodyAddress,
+      ...rest,
+      depositsPending:
+        surface !== null && this.#preparation.slopesPending(surface),
+    }
   }
 
   /**

@@ -263,6 +263,13 @@ export interface TerrainReport {
    */
   readonly producer: string
   /**
+   * Whether the deposit slope table the material has asked for is still
+   * being measured (ADR-0051). The ground's tone moves once when it lands, so
+   * a capture waits for it as it waits for `pending`. False on a host with no
+   * material, which never asks.
+   */
+  readonly depositsPending: boolean
+  /**
    * The rocks lying on it.
    *
    * Part of the terrain report rather than a verb of its own, because a scatter

@@ -17,7 +17,13 @@ import { COVER_CHANNELS } from '@inertialref/universe'
 import { NO_MORPH_DISTANCE, type RenderPatch } from '@inertialref/rendering'
 import { grainWrap } from './terrain.ts'
 import { waveWrap } from './water.ts'
-import { GROUND_WEAR, type GroundWear, SEA_WEAR, type SeaWear } from './wear.ts'
+import {
+  GROUND_WEAR,
+  type GroundWear,
+  NO_SLOPE_LEVEL,
+  SEA_WEAR,
+  type SeaWear,
+} from './wear.ts'
 
 /*
  * Dressing a mesh as the ground, or as the sea over it.
@@ -236,6 +242,7 @@ export function wearGround(
   object: Object3D,
   anchor: Point,
   datumRadius: number,
+  level: number = NO_SLOPE_LEVEL,
 ): GroundWear {
   const wear: GroundWear = {
     eyeLocal: new Vector3(),
@@ -243,6 +250,7 @@ export function wearGround(
     anchor: new Vector3(),
     anchorAltitude: 0,
     grainOrigin: new Vector3(),
+    level,
   }
   object.userData[GROUND_WEAR] = wear
   anchorGround(object, anchor, datumRadius)

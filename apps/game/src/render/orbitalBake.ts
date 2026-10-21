@@ -18,6 +18,8 @@ import type {
 } from '@inertialref/workers'
 import {
   type Body,
+  type DepositSlopeTable,
+  type SurfaceParameters,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
@@ -158,6 +160,13 @@ export interface OrbitalBakeHost {
   readonly terrain: TerrainMaterial
   bodyFor(address: string): Body | null
   readonly heightfields: Heightfields
+  /**
+   * The body's deposit slope table once a worker has measured it, null where
+   * it never will be. The bake waits for it: the sphere's reflectance is the
+   * ground's at level 2, and drawn without its row the far half of a descent
+   * would wear the uncorrected tone the near half no longer does.
+   */
+  slopesFor(surface: SurfaceParameters): Promise<DepositSlopeTable | null>
 }
 
 export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
@@ -268,6 +277,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
     const regions = bakeRegions()
     // The streamer's request half, so the bake's ground is the streamer's.
     const { seabed } = patchWater(body)
+    const slopes = host.slopesFor(body.surface)
     const fields = await Promise.all(
       regions.map((region) => {
         const job = host.heightfields.submit(body.surface, {
@@ -282,6 +292,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       }),
     )
     bake.jobs.length = 0
+    const table = await slopes
     // Evicted while the tiles were in flight: nothing to draw into.
     if (!stillHeld(bake)) return
     const completed = fields.filter((field) => field !== null)
@@ -302,7 +313,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
         water: null,
       }),
     )
-    render(body, patches, bake)
+    render(body, patches, table, bake)
   }
 
   function stillHeld(bake: Bake): boolean {
@@ -326,6 +337,7 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
   function render(
     body: Body,
     patches: readonly RenderPatch[],
+    slopes: DepositSlopeTable | null,
     bake: Bake,
   ): void {
     const { renderer, terrain } = host
@@ -338,13 +350,15 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
       built.push(mesh)
       mesh.position.set(patch.anchor.x, patch.anchor.y, patch.anchor.z)
       mesh.frustumCulled = false
-      // At its anchor and unmorphed: the bake draws every patch at one level.
-      wearGround(mesh, patch.anchor, body.radius)
+      // At its anchor and unmorphed: the bake draws every patch at one level,
+      // and its deposits read that level's row of the slope table.
+      wearGround(mesh, patch.anchor, body.radius, patch.region.level)
       group.add(mesh)
     }
 
     const palette = terrainPalette(body)
     terrain.setPalette(palette, body.radius)
+    terrain.setSlopeTable(slopes)
     terrain.setAlbedoMap(null, false)
     terrain.setQuality('lean')
     // A texel is kilometers of ground: every detail octave is faded out by

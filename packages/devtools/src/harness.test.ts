@@ -272,9 +272,15 @@ describe('measurement verbs', () => {
       terrain: null,
     })
     let pending = 3
+    let deposits = true
     let sky = true
     const live = session({
-      terrain: () => ({ pending, patches: 40 }) as unknown as TerrainReport,
+      terrain: () =>
+        ({
+          pending,
+          patches: 40,
+          depositsPending: deposits,
+        }) as unknown as TerrainReport,
       galaxyRender: () =>
         ({
           cache: { pending: sky, completedTiles: 12, totalTiles: 1638 },
@@ -283,7 +289,7 @@ describe('measurement verbs', () => {
     })
     const busy = live.harness.settled()
     expect(busy.ok).toBe(false)
-    expect(busy.terrain).toEqual({ pending: 3, patches: 40 })
+    expect(busy.terrain).toEqual({ pending: 3, patches: 40, deposits: true })
     expect(busy.galaxy).toEqual({
       pending: true,
       tiles: '12/1638',
@@ -292,6 +298,9 @@ describe('measurement verbs', () => {
     pending = 0
     expect(live.harness.settled().ok).toBe(false)
     sky = false
+    // The ground is whole and the sky is in, and the deposits' table is not.
+    expect(live.harness.settled().ok).toBe(false)
+    deposits = false
     expect(live.harness.settled().ok).toBe(true)
   })
 
