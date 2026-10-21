@@ -1,7 +1,10 @@
 # ADR-0026: The liquid — a sea is a sheet, a valley is a strip, and a world is drawn in families
 
 Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
-carries relief, so a generated sphere shades its mountains
+carries relief, so a generated sphere shades its mountains · amended by
+[ADR-0053](0053-the-ground-erodes-and-the-macro-band-never-repeats.md):
+the macro band and the gullies are evaluated on a lattice with no period, not
+fetched from the texture
 
 ## Context
 
