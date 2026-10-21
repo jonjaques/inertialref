@@ -523,6 +523,7 @@ describe('the terrain archive, through the engine', () => {
       temperature: 250,
       tidalProxy: 0,
       hasOcean: false,
+      hadOcean: false,
       reliefSpent: 1,
       publishedRelief: 6000,
     }),

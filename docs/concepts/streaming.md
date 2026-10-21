@@ -366,7 +366,8 @@ headless runs use SQLite under `.data/heightfields/`. These stores are separate
 from saves and from the streamer's in-memory geometry and heightfield caches.
 A floating-origin move changes none of their inputs.
 
-Cache identity includes the complete surface and request, including `seabed`,
+Cache identity includes the complete surface — `surfaceIdentity`, the same
+text the drainage memo and the survey key on — and request, including `seabed`,
 plus the canonical terrain version and the namespace the source declares beside
 its own arithmetic: the pool's is its task's version (`POOL_ARCHIVE`), the GPU
 producer's its kernel's revision. CPU and GPU tiles therefore never share an

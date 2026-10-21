@@ -1,16 +1,17 @@
 import {
   COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
+  identityText,
+  surfaceIdentity,
   TERRAIN_ALGORITHM,
   type HeightfieldRequest,
   type SurfaceParameters,
 } from '@inertialref/universe'
 import type { JobHandle } from './pool.ts'
-import {
-  type ArchivedSource,
-  encodeSurface,
-  type HeightfieldResponse,
-  type HeightfieldSource,
+import type {
+  ArchivedSource,
+  HeightfieldResponse,
+  HeightfieldSource,
 } from './tasks.ts'
 
 /*
@@ -56,34 +57,18 @@ export interface HeightfieldStore {
   close?(): void
 }
 
-function stable(value: unknown): string {
-  if (value === undefined) return 'undefined'
-  // `JSON.stringify` writes `null` for NaN and for either infinity, so three
-  // distinct numbers and an absent value would share one key — which is the
-  // one failure this key is built to make impossible. Spell them instead.
-  if (typeof value === 'number' && !Number.isFinite(value)) return String(value)
-  if (value === null || typeof value !== 'object') return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
-  return `{${Object.entries(value)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
-    .join(',')}}`
-}
-
-const surfaceKeys = new WeakMap<SurfaceParameters, string>()
-
-/** Every field travels into the key; adding a surface/request member cannot silently omit it. */
+/**
+ * Every field travels into the key; adding a surface/request member cannot
+ * silently omit it. The surface's half is `surfaceIdentity`, the one the
+ * drainage memo and the survey key on, and the request is spelled by the same
+ * serializer.
+ */
 export function heightfieldCacheKey(
   surface: SurfaceParameters,
   request: HeightfieldRequest,
   namespace: string,
 ): string {
-  let encoded = surfaceKeys.get(surface)
-  if (encoded === undefined) {
-    encoded = stable(encodeSurface(surface))
-    surfaceKeys.set(surface, encoded)
-  }
-  return `${JSON.stringify(heightfieldArchiveVersion(namespace))}:${encoded}:${stable(request)}`
+  return `${JSON.stringify(heightfieldArchiveVersion(namespace))}:${surfaceIdentity(surface)}:${identityText(request)}`
 }
 
 function checksum(field: HeightfieldResponse): number {
@@ -141,7 +126,7 @@ export function validateHeightfieldCacheRecord(
   if (
     field.resolution !== resolution ||
     field.border !== border ||
-    stable(field.region) !== stable(request.region)
+    identityText(field.region) !== identityText(request.region)
   )
     return null
   const count = resolution * resolution

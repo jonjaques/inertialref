@@ -25,7 +25,7 @@ import type { UniverseVector } from '@inertialref/spatial'
 import { tidalProxyOf } from './archetype.ts'
 import {
   equilibriumTemperature,
-  liquidKind,
+  readDrawnSea,
   type SurfaceGrammar,
   surfaceGrammar,
   surfaceTemperature,
@@ -521,23 +521,29 @@ function makeSurface(
       : null
   /*
    * A sea has to be a liquid, and the draw does not know what temperature the
-   * ground is at — so the draw is taken as it always was, in its place in the
-   * stream, and then *read* against the ground temperature. A world at 900 K
-   * with a sea datum drew an ocean of nothing in particular; now it is dry,
-   * and a world at 1,400 K keeps its datum as a magma sea. Gating the draw
-   * rather than its reading would skip an `rng.bool` on every hot world and
-   * move every draw after it, which is a system version rather than a terrain
-   * one.
+   * ground is at — so the draw is taken in its place in the stream and then
+   * *read* against the ground temperature. A world at 900 K with a sea datum
+   * drew an ocean of nothing in particular and is dry; a world at 1,400 K
+   * keeps its datum as a magma sea. Gating the draw rather than its reading
+   * would skip an `rng.bool` on every hot world and move every draw after it,
+   * which is a system version rather than a terrain one.
+   *
+   * The draw is also the world's history, and the grammar reads it as that
+   * (`hadOcean`): the water that weakened the lithosphere into plates is in
+   * the rock whether or not the sea survived. A sea the ground boiled away
+   * stood first, while the young star was fainter; a sea it froze never
+   * stood, because the ground was colder still then. Only what stands on the
+   * surface — the liquid and the life — reads the sea that is left
+   * (`hasOcean`). `readDrawnSea` takes both readings off the same windows.
    */
   const airMass =
     facts.atmosphere === null
       ? 0
       : facts.atmosphere.surfaceDensity * facts.atmosphere.scaleHeight
-  const seaLevel =
-    drawnSea !== null &&
-    liquidKind(surfaceTemperature(facts.temperature, airMass)) !== null
-      ? drawnSea
-      : null
+  const { seaLevel, hadOcean } = readDrawnSea(
+    drawnSea,
+    surfaceTemperature(facts.temperature, airMass),
+  )
   const grammar = surfaceGrammar(seed, {
     mass: facts.mass,
     meanRadius: facts.radius,
@@ -545,6 +551,7 @@ function makeSurface(
     temperature: facts.temperature,
     tidalProxy: facts.tidalProxy,
     hasOcean: seaLevel !== null,
+    hadOcean,
     reliefSpent: spent,
     publishedRelief: null,
   })
@@ -1824,6 +1831,7 @@ function makeSmallBody(
     temperature: equilibriumTemperature(insolationHere),
     tidalProxy: 0,
     hasOcean: false,
+    hadOcean: false,
     reliefSpent: 0,
     publishedRelief: null,
   })
