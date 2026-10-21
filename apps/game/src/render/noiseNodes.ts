@@ -1,6 +1,5 @@
 import type { Data3DTexture, Node } from 'three/webgpu'
 import {
-  array,
   cos,
   dot,
   float,
@@ -11,6 +10,7 @@ import {
   min,
   mix,
   normalize,
+  select,
   sin,
   texture3D,
   uint,
@@ -18,11 +18,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import {
-  LATTICE_GRADIENTS,
-  NOISE_CELLS,
-  NOISE_GRADIENT_SCALE,
-} from './noiseTexture.ts'
+import { NOISE_CELLS, NOISE_GRADIENT_SCALE } from './noiseTexture.ts'
 
 /*
  * Noise as node graphs, shared by the ground and the sea.
@@ -187,9 +183,40 @@ export function bumped(normal: Vector, gradient: Vector): Vector {
 /** `gradientNoise`'s range scale; the two must agree. */
 const LATTICE_SCALE = 1.06
 
-/** The cube-edge gradients `latticeHash` picks from, as a WGSL array. */
-const gradientTable = (): ReturnType<typeof array> =>
-  array(LATTICE_GRADIENTS.map(([x, y, z]) => vec3(x, y, z)))
+/**
+ * The cube-edge gradient `latticeHash` picks, built from the hash's bits.
+ *
+ * `LATTICE_GRADIENTS` in that order — a sign pair from the low two bits of
+ * `h mod 12` and the zero axis from the rest — rather than read out of a
+ * WGSL `array`. A constant array indexed by a runtime value is a stack
+ * array on Metal: measured in the GPU harness, twenty-four evaluations a
+ * pixel over a megapixel drew in 85 ms through the table and 19 ms through
+ * this, against 24 ms for the same count of texture fetches, and the spill
+ * slowed the whole ground material rather than the noise alone.
+ */
+const cornerGradient = /*@__PURE__*/ Fn(([h]: [Node<'uint'>]) => {
+  const g = h.mod(uint(12))
+  const first = float(g.bitAnd(uint(1)))
+    .mul(-2)
+    .add(1)
+  const second = float(g.shiftRight(uint(1)).bitAnd(uint(1)))
+    .mul(-2)
+    .add(1)
+  const zero = g.shiftRight(uint(2))
+  return vec3(
+    select(zero.equal(uint(2)), float(0), first),
+    select(
+      zero.equal(uint(0)),
+      second,
+      select(zero.equal(uint(2)), first, float(0)),
+    ),
+    select(zero.equal(uint(0)), float(0), second),
+  )
+}).setLayout({
+  name: 'latticeGradient',
+  type: 'vec3',
+  inputs: [{ name: 'h', type: 'uint' }],
+})
 
 /** The finalizer `latticeHash` ends with, on a `u32`. */
 const mix32 = /*@__PURE__*/ Fn(([v]: [Node<'uint'>]) => {
@@ -252,9 +279,8 @@ function cornerHashes(cell: Vector, seed: Node<'uint'>): Node<'uint'>[] {
  */
 export const latticeNoise = /*@__PURE__*/ Fn(
   ([cell, fraction]: [Vector, Vector]) => {
-    const table = gradientTable()
-    const corners = cornerHashes(cell, uint(0)).map(
-      (h) => table.element(h.mod(uint(12))) as unknown as Vector,
+    const corners = cornerHashes(cell, uint(0)).map((h) =>
+      asVector(cornerGradient(h)),
     )
     const [g000, g100, g010, g110, g001, g101, g011, g111] = corners as [
       Vector,

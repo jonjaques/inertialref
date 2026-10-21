@@ -128,21 +128,20 @@ export function noiseTexture(): Data3DTexture {
  * `noise3` itself and does not share its seed, because nothing canonical
  * reads this field: it is presentation.
  */
-export const LATTICE_GRADIENTS: readonly (readonly [number, number, number])[] =
-  [
-    [1, 1, 0],
-    [-1, 1, 0],
-    [1, -1, 0],
-    [-1, -1, 0],
-    [1, 0, 1],
-    [-1, 0, 1],
-    [1, 0, -1],
-    [-1, 0, -1],
-    [0, 1, 1],
-    [0, -1, 1],
-    [0, 1, -1],
-    [0, -1, -1],
-  ]
+const LATTICE_GRADIENTS: readonly (readonly [number, number, number])[] = [
+  [1, 1, 0],
+  [-1, 1, 0],
+  [1, -1, 0],
+  [-1, -1, 0],
+  [1, 0, 1],
+  [-1, 0, 1],
+  [1, 0, -1],
+  [-1, 0, -1],
+  [0, 1, 1],
+  [0, -1, 1],
+  [0, 1, -1],
+  [0, -1, -1],
+]
 
 /**
  * The hash of one lattice point, a `u32`.

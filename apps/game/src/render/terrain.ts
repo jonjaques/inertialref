@@ -915,6 +915,13 @@ export function createTerrainMaterial(): TerrainMaterial {
      * hundredths, which on a plain is all the slope there is, and stripes
      * steered by it wander across the flat like a fingerprint.
      */
+    /*
+     * Not under water: neither the painted river nor the seabed under the
+     * sheet. A gully is what running water cuts into a slope it runs over,
+     * and the seabed is drawn in full and then mostly absorbed — at a
+     * two-meter stance over the shore it is two thirds of the frame.
+     */
+    const exposed = dry.mul(oneMinus(submerged))
     const gully = vec4(0).toVar()
     const gullyFades = Array.from({ length: GULLY_OCTAVES }, (_, octave) => {
       const wavelength = GULLY_CELL / 2 ** octave / STRIPES_PER_CELL
@@ -924,7 +931,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     })
     If(
       fineBands
-        .and(dry.greaterThan(0))
+        .and(exposed.greaterThan(0))
         .and(gullyFades[0]!.greaterThan(0))
         .and(length(fall.sub(up.mul(dot(fall, up)))).greaterThan(GULLY_FLOOR)),
       () => {
@@ -958,7 +965,7 @@ export function createTerrainMaterial(): TerrainMaterial {
           const depth = sqrt(
             max(oneMinus(phasor.x).mul(0.5), float(0)).add(0.01),
           )
-          const weight = mask.mul(gullyFades[octave]!).mul(dry)
+          const weight = mask.mul(gullyFades[octave]!).mul(exposed)
           const wall = across.mul(
             phasor.y
               .div(depth.mul(2))
