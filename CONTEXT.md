@@ -11618,8 +11618,12 @@ plate counts and 583 grammars in 24,393 bodies, on ground from 383 to 1,241 K.
 
 **What the bump costs.** Every archive key moves (`6-cpu@7`). The slow suite
 from an empty archive, on the shared M5 with the heavy lock held: 40.6 s wall
-and 209 s of CPU, writing the descent's 1,246 tiles (89 MB). The descent's
-hook allows 600 s, twice the 284 s the last cold CI run took before the
+and 209 s of CPU, writing the descent's 1,246 tiles (89 MB), taken on the
+identity and the weakening alone. The water and the stripes write the same
+1,246 tiles and add nothing measurable to a wet patch: alternated against
+`main` over sixty 65×65 patches at Earth's shore, Titan's lake and
+P222_1_0_9 V's lake, the batch ran 124–288 ms a patch to `main`'s 129–405,
+under load. The descent's hook allows 600 s, twice the 284 s the last cold CI run took before the
 descent moved to threads, so CI's first run on the batch is slow rather than
 failed. `heightfieldFingerprint.test.ts` re-pins `terrain: 6` with its seven
 tiles unchanged, since none of the four moves the ground under them.
