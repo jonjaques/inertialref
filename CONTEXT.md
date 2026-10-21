@@ -6377,7 +6377,7 @@ physical GPU on macOS — SwiftShader has no build there — so the reason
 `drive.mjs` launches a window is `--cast`, not the adapter; its header said the
 other thing and now says this.
 
-[Test speed](design/plans/test-speed.md) records where the root suite's time goes,
+The test-speed plan (since retired) recorded where the root suite's time goes,
 measured on the same idle machine: 102.9 s for `pnpm test`, 10.0 s without
 `gameEngine.test.ts`, whose `beforeAll` streams one landing through the inline
 worker for 101.5 s. Nothing is changed on that page; the four levers it names
@@ -6432,7 +6432,7 @@ What the port found, each on the device rather than in a mirror:
   `CRATER_LIMIT` went to zero instead.
 - **A routing test does not need a field.** The streamer's source-routing
   test took 10.6 s with a real heightfield fixture and takes 104 ms with a
-  flat one; [test-speed](design/plans/test-speed.md) has the rest.
+  flat one.
 
 Left open, named in the ADR: normal tiles and the mesh stay on the main
 thread at 0.25 ms a patch; the kernel's level-0 offset term is the
@@ -8214,7 +8214,8 @@ pre-exposed with the scene and bloomed white under the 2,400 s instrument;
 they now carry `integratedSkyGain` and present at one brightness at every
 exposure, held by `orbitTrace.gpu.test.ts` across 10⁶ of pre-exposure. The
 meter still counts them. The rigs are `.scratch/galaxy-perf/` and the record
-is [perf § The galaxy](design/plans/perf.md#the-galaxy). Every browser figure
+is ADR-0032's [held target](docs/adr/0032-the-stellar-field.md#recorded-m1m6-live-target-measurements)
+and [dust transport](docs/adr/0032-the-stellar-field.md#dust-transport-m5). Every browser figure
 is from a 960×540 rig at the user's request.
 
 ## Orbit dragging was spending the frame on an invisible sky (06 Sep 2026)
@@ -8259,8 +8260,8 @@ The browser's face-on instrument remains active at 640×360, with the pinned
 and galaxy captures are retained beside the profiles.
 
 The profiles and comparison script are in `.scratch/orbit-perf/`. Visible
-galaxy draws retain their measured cost; angular caching and the other
-remaining work stay in [the performance plan](design/plans/perf.md#the-galaxy).
+galaxy draws retain their measured cost; the cube cache that followed, and what
+it costs, are in [ADR-0038's measured operating points](docs/adr/0038-the-stars-and-the-diffuse-sky.md#measured-operating-points).
 
 ## A preset keeps the instant, and Cinema keeps the Enterprise (6 Sep 2026)
 
@@ -8576,8 +8577,8 @@ radians. Product input handling did not change.
 The M7–M11 completion branch is stacked on PR #72 at `2847688`, by Jon's
 explicit choice. [ADR-0038](docs/adr/0038-the-stars-and-the-diffuse-sky.md)
 records the architecture, and
-[the performance plan](design/plans/perf.md#the-galaxy) carries
-the final evidence and quality budgets. The source model is now active
+[its measured operating points](docs/adr/0038-the-stars-and-the-diffuse-sky.md#measured-operating-points)
+carry the final evidence and quality budgets. The source model is now active
 `galaxy@5` / `galaxy-field@5`, with GPU port `galaxy-tsl@8`. Old `P` addresses
 still use the exact legacy generator. New `Q` addresses carry level, cell and
 ordinal; the saved manifest identifies generation drift rather than promising
@@ -9180,7 +9181,7 @@ The production review compares `codex/galaxy` with `origin/main` across 468
 changed files. The full baseline passes 2,218 regular tests, eight slow tests
 and the emitted-site checks. Isolated reviews cover the canonical packages,
 rendering and application shell; the integrated fixes pass 2,241 regular tests.
-The review record is [alpha production review](design/reports/alpha-production-review.md).
+The two device checks it left open are a row in [the roadmap's automation gaps](docs/roadmap.md#automation-gaps).
 
 API content comprises 1,459 of the 1,554 documentation pages. Rendering each
 through the full React shell makes the measured local Astro build emit 1,576
@@ -9869,8 +9870,9 @@ application message, and budget transition with its session and model. It
 redacts credentials and omits SDP and audio bytes. Browser tracing retains the
 latest 200 application messages. Production tracing remains off by default;
 enabling it deliberately includes conversation text. The measured director
-results, fixture corrections, and remaining evaluations live in the
-[evaluation report](design/reports/the-agentic-tour-guide.md).
+results and fixture corrections were an evaluation report under
+`design/reports/`, retired once ADR-0042 superseded the director; the
+evaluations still open are rows in [the roadmap](docs/roadmap.md#the-guide).
 
 ## The route needs room for a story (13 Sep 2026)
 
@@ -11395,7 +11397,7 @@ On a cloud machine — four Xeon vCPUs at 2.10 GHz, so two threads — the cold
 descent is 247.1 s and 237.7 s inline at 100–101% CPU, and 127.1 s and
 129.9 s on threads at 195%, at the same 238–253 s of CPU time; warm, 10.7 s
 inline and 10.9 s threaded, so the threads buy nothing there.
-`design/plans/test-speed.md` § 2 has the table and the boundary measured
+[ADR-0045](docs/adr/0045-generated-terrain-is-a-disposable-cache.md#measured-cpu-descent) has the table and the boundary measured
 from inside: 0.45–5.4 ms of round trip on a 197 ms tile, and 225–230 ms for
 a thread to load its modules.
 

@@ -229,8 +229,8 @@ quarter-resolution alternative at 1080p. These are declared allocations,
 excluding driver overhead and temporary JavaScript generation memory.
 
 The live 2 ms target is not a universal bound.
-[The performance plan](../../design/plans/perf.md#the-galaxy) names the measured
-operating points and the chosen quality budget. Typical retained source replacement fits
+[Measured operating points](#measured-operating-points) names the operating
+points and the chosen quality budget. Typical retained source replacement fits
 5 ms of main-thread preparation; cold entirely new populations and garbage
 collection can exceed it. GPU source updates and diffuse cache refinement are
 bounded separately from worker generation.
@@ -239,3 +239,86 @@ The field still uses illustrative RGB stellar colors and absorption-only dust.
 Scattering, H II line emission, globular clusters and neighboring galaxies are
 separate physical additions. Finite source realizations, angular interpolation,
 and delayed moving-star dust refresh are observable approximation limits.
+
+### Measured operating points
+
+Measured 5–7 September 2026 on an Apple M5 through two rigs: a headless one
+that draws the production volume node on the real GPU across a drained queue,
+and the driver at 960×540, DPR 1, occluded. Active versions are `galaxy@5`,
+`galaxy-field@5` and `galaxy-tsl@8`.
+
+The shared 2048² arm table replaces repeated analytic arm evaluation in both
+sky and live volume. Observer motion projects stable stars on the GPU. Physical
+cubes and temporal history own their validity; a separate disk cache keeps at
+most two completed cubes. The actual resolved threshold and admitted level mask
+partition the calibrated first luminosity moment. Conservation is exact for the
+ensemble, with an explicit finite-realization residual.
+
+The original **2 ms live volume at 1080p** target is deliberately revised.
+The measured uncapped half-resolution, stride-8 inside view costs **6.366 ms**
+at 1920×1080 and **12.693 ms** at 2880×1800. Production caps the target's long
+edge at 960 while preserving half-resolution detail below that cap. This bounds
+Retina target/history growth; it does not make all live views fit 2 ms.
+
+| Physical volume, half resolution / stride 8 / cap 960 |  Face-on |  Edge-on |   Inside | Owned target/history bytes |
+| ----------------------------------------------------- | -------: | -------: | -------: | -------------------------: |
+| 1920×1080 drawing buffer                              | 2.225 ms | 4.501 ms | 6.296 ms |                 29,284,096 |
+| 2880×1800 drawing buffer                              | 2.460 ms | 5.525 ms | 7.399 ms |                 30,673,216 |
+
+Apple M5, WebGPU, 40 moving draws per view with 0.2 pc translation each,
+V8/mask-511 envelope, GPU timestamp instrumentation. The physical targets are
+960×540 and 960×600; the scene and star buffers are unchanged. These are
+isolated volume costs, not complete frame periods. Verified cap commit:
+`434009f`, `.scratch/galaxy-finish/capped-galaxy-summary.json`; uncapped
+comparison: `final-quality-bench.log` in the same directory.
+
+Cached sampling is **0.030–0.047 ms** at the measured 960×540 and 1440×900
+sampling targets. The corrected 512² cube has maximum RGB error **0.629%**
+across 72 arbitrary directions, with 0.086% at 12 texel centers. Its measured
+3.829 s full bake and 36 MiB residency support the 512² tier; the 1024²
+experiment costs 18.256 s and 144 MiB. Field@5 retains the 0.15 pc reuse radius
+within the unchanged 1% radiance budget over 21 tested origins. Source records:
+`cube-quality.log`, `cube-footprint-summary.json` and
+`cache-radius-field5-summary.json`.
+
+At **100,000 stars**, the measured median added GPU draw cost is **0.687 ms**
+(20k: 0.343 ms; 200k: 1.254 ms). This is Apple M5, 1920×1080, 4× MSAA through
+the sensor MRT, with downstream optics bypassed and retained transparent
+extinction. It excludes active dust integration. `starShell-gpu-benchmark.jsonl`
+and `star-benchmark-notes.md` record three paired empty/populated batches of 80
+submissions, including first-batch outliers and concurrent CPU-test caveats.
+
+Replacing 10% of a fixed 28,942-source fixture lowers CPU preparation median
+**9.802 → 3.000 ms**, p95 **11.747 → 4.419 ms**. Broad reordering after the
+change is 4.877 ms median and 8.261 ms p95. These are paired earlier-population
+comparisons at capacity 100,000, excluding GPU execution and driver submission;
+they do not promise every new selection fits five milliseconds. Source records:
+`star-replacement-pair.json` and `star-replacement-pair-reordered.json`.
+
+Field@5's production V8 request is bounded by **100,000 sprites, 1,000,000
+candidates and 2,000 cells**. The actual default-seed operating points are:
+
+| Observer                | Total stars | Candidates / cells | Level mask | Worker median | Host apply median | Observed peak heap |
+| ----------------------- | ----------: | -----------------: | ---------: | ------------: | ----------------: | -----------------: |
+| Sol                     |      29,257 |      213,380 / 544 |        511 |    119.722 ms |         10.443 ms |         139.69 MiB |
+| 1 kpc toward the center |      37,423 |      322,669 / 512 |        511 |    172.355 ms |         17.415 ms |         180.87 MiB |
+| Galactic center         |      16,004 |      287,681 / 576 |          3 |    132.045 ms |          7.892 ms |         158.60 MiB |
+
+The totals split procedural against catalog as 19,243 + 10,014 at Sol,
+36,634 + 789 a kiloparsec toward the center, and 16,001 + 3 at the center:
+the catalog runs out long before the procedural population does, which is what
+the level mask is bounding. All retain V8 without duplicate identities or budget
+violations. The central
+query admits levels 0–1 and leaves omitted levels fully diffuse. Node 26.5 runs
+the production worker and host selection inline for three clean timing repeats;
+a separate memory pass samples their combined heap. These are observed peaks,
+not exact V8 maxima or isolated browser-worker memory. Worker payloads serialize
+to 5.05–11.64 MiB. Generation runs off the main thread in production; it is
+**not a sub-5 ms CPU query**. Host application is per survey, not per frame.
+`field5-operating-summary.json` records counts, thresholds, masks and methods.
+
+Resolved dust updates at most 1,024 sources per GPU cycle. The **WebGL fallback
+updates one CPU source column per submission** and converges progressively;
+the earlier Solar smoke capture still had 18,806 pending columns. That shader
+and backend check does not establish equal convergence time to WebGPU. See
+`webgl-smoke-summary.json`.

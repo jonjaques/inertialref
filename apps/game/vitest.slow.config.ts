@@ -19,8 +19,8 @@ import { defineConfig } from 'vitest/config'
  * It makes the same portability claim the root config does — plain Node, no
  * browser, no GPU — which is what lets it run on CI's Linux runner where the
  * GPU project (`vitest.gpu.config.ts`) cannot. What separates the two suites
- * is cost and nothing else. `design/plans/test-speed.md` has the accounting
- * and what would make the landing itself cheaper.
+ * is cost and nothing else. ADR-0045 § "Measured CPU descent" has the
+ * accounting.
  */
 export default defineConfig({
   // The same `define` and alias the root config carries, for the reasons it

@@ -76,6 +76,12 @@ fixture in two halves, and shipping runs no check because CI runs the graph.**
   a data file, a config under `scripts/`, a lockfile — and a runner that
   guessed would skip against a tree it did not see. The whole-tree key skips
   only what a byte-identical tree already passed.
+- **`isolate: false` for `packages/*`.** Their tests are pure functions over
+  pure inputs, and skipping the per-file module re-evaluation saves import
+  time: 27.8 s of thread time in a 16.8 s root run, against 99.9 s of test
+  time, so two or three seconds of wall clock at most. That does not pay for
+  a class of failure where a test that leaks module state across files fails
+  as another file's bug.
 - **Comparing a live baseline in CI.** A second checkout and install per run
   and no GPU on the runner. The ledger gives CI the half a compositor is not
   needed for, and the plates give the machine with the GPU a reference that

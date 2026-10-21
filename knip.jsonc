@@ -3,7 +3,7 @@
 
   /*
    * The third instrument, beside `fta` and `@vitest/coverage-v8`
-   * (`design/reports/complexity.md`). Those two grade code that exists; knip
+   * (`docs/guides/development.md`). Those two grade code that exists; knip
    * asks whether it needs to. A file nothing imports scores and covers like any
    * other — `fta` ranks it, coverage counts its statements — so neither of them
    * can see the cheapest simplification there is, which is deletion.

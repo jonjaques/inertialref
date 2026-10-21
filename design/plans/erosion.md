@@ -178,8 +178,9 @@ reference: the WebGPU frame is the one the target applies to.
 1. **The sea is half the frame at altitude.** 14 ms of a 28 ms frame at 2 km
    over the shore, 8 ms of it the two wave fields, per § 3's pass table. The
    waves are evaluated per pixel of a sheet that covers most of the frame at
-   that height; a wave field faded with distance, or the chop dropped past a
-   footprint the swell already resolves, is the lever the table points at.
+   that height. Both fields already fade by pixel footprint and branch off past
+   their fades (`render/water.ts`), and the 8 ms was measured with them, so
+   what is left is where the fades start, tuned against that figure.
 2. **The kernel binds eight storage buffers and the baseline device has
    eight.** `records`, `words`, `tiles`, `elevations`, `cover`, `water`,
    `drainageRecords`, `drainageWords` — exactly
@@ -326,7 +327,7 @@ stripe extent ([terrain § 2](terrain.md#2-open-work)) and the surface identity
 ([arch-review B](arch-review.md#b-surface-identity-is-stated-once)), and lands
 before phase 3. Phase 3's carve takes a version of its own when it lands. The
 slow suite's timeout carries the headroom that makes each one a slow first CI
-run rather than a failed one ([arch-review](arch-review.md#open-from-1115-and-19)).
+run rather than a failed one.
 
 ---
 

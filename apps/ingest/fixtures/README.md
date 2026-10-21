@@ -4,6 +4,14 @@ Excerpts small enough to read, for the ingest's parsers and builders to be
 tested against. They live outside `src/` so that `knip.jsonc`'s `project` globs
 do not read them; the tests beside the code read `../fixtures/`.
 
+Every ingest pipeline takes one shape: a source module fetches and caches, a
+pure transform takes text and returns a report, and `main.ts` prints and
+writes. The transform is what is tested, against an excerpt checked in here
+under 20 KB that names its source and the date it was cut; `main.ts` is a
+command-line shell and has no test of its own. Asserting only the committed
+output's shape proves the writer ran once, not that the parser decides
+anything.
+
 ## `hyg.csv` and `exoplanets.csv`
 
 Hand-written on 20 October 2026 in the column layout of the two catalog sources

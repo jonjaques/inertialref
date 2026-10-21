@@ -124,6 +124,31 @@ generator call and with the same canonical state hash. The landing runs can
 advance different numbers of simulation ticks while their streaming converges,
 so their final hashes are not compared to one another.
 
+The slow suite streams the descent through `node:worker_threads`, one thread
+per `poolSize()`, with the frame loop draining the pool between frames. On 18
+October 2026, on four vCPUs of an Intel Xeon at 2.10 GHz (Linux 6.18, Node
+26.12.0, vitest 4.1.10, the descent file alone, nothing else running) —
+`poolSize()` is two threads there, as on CI's four-core runner:
+
+| Descent           | Wall clock |  CPU | CPU time |
+| ----------------- | ---------: | ---: | -------: |
+| Cold, inline      |    247.1 s | 101% |  248.7 s |
+| Cold, inline      |    237.7 s | 100% |  238.5 s |
+| Cold, two threads |    127.1 s | 195% |  248.0 s |
+| Cold, two threads |    129.9 s | 195% |  253.1 s |
+| Warm, inline      |     10.7 s | 118% |   12.7 s |
+| Warm, two threads |     10.9 s | 122% |   13.3 s |
+
+Every cold run generated and wrote 1,246 tiles; every warm run hit 1,246 with
+no misses. The cold descent halves at the same CPU time, which is the whole of
+the thread boundary's cost seen from outside. From inside, a level-8, 65×65
+tile costs 196 to 197 ms on that machine and a thread's round trip adds 0.45 to
+5.4 ms to it; the request's clone is 6 µs and the response's three arrays are
+transferred. A thread takes 225 to 230 ms from construction to `ready`, which
+the warm run pays against ten seconds and buys nothing with. The M5 is not
+measured on threads: its tiles run at 22 to 50 ms, so the boundary is a larger
+share of each, and `poolSize()` gives it eight threads.
+
 ### Measured browser reuse
 
 On the [preset measurement rig](0044-the-sensor-reconstructs-the-display.md#measured-preset-frames), a cold Tau Ceti Dusk visit recorded 1,390 misses and

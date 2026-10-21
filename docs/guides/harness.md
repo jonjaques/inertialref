@@ -903,6 +903,13 @@ Add a method when a sequence is one you keep retyping — that is the signal it 
 part of the vocabulary rather than a one-off. Keep the return JSON-serializable
 and add the line to `help()`, which is what people actually read.
 
+`window.ir` keeps every name it has. Verbs a console types stay flat on the
+harness and instruments are sub-objects (`ir.cutscene`, `ir.observatory`,
+`ir.onFoot`, `ir.timing`); `scripts/drive.mjs`, this page and `help()` are the
+callers a rename breaks. Anything lifted out of the harness or the observatory
+takes `Host` from `host.ts`, or a narrower port declared beside it, and is
+tested through `openSession({ workers: null })` the way `maneuvers.test.ts` is.
+
 If a set-up sequence is shared with the app or the runner, it belongs in
 `openSession` instead, which owns standing a world up — see
 [extending](extending.md#standing-a-world-up-opensession).
