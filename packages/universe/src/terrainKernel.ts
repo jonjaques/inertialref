@@ -18,12 +18,12 @@ import {
 import { COVER_CHANNELS } from './cover.ts'
 import { MAX_RAY_CRATERS, RAY_HARMONICS } from './craters.ts'
 import {
-  DRAINAGE_SHAPE,
   type DrainageGraph,
   drainageGraph,
   NO_STANDING,
   SEGMENT_STRIDE,
 } from './drainage.ts'
+import { DRAINAGE_SHAPE } from './drainageShape.ts'
 import {
   GRIT_OCTAVES,
   gritCycles,

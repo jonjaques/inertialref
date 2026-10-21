@@ -4,9 +4,9 @@ import { rootSeed } from '@inertialref/procedural'
 import { Vec, vec3, type Vec3 } from '@inertialref/spatial'
 import { TEST_CATALOG } from './catalog/fixture.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
+import { DRAINAGE_SHAPE } from './drainageShape.ts'
 import {
   carveDrainage,
-  DRAINAGE_SHAPE,
   type DrainageGraph,
   drainageCell,
   drainageGraph,
@@ -385,6 +385,12 @@ describe('the field that reads it', () => {
      * channel's depth whichever way the landform went. Into a lake or the
      * sea the receiver's surface is the water's; the walk reaches the water
      * at the ria depth below it, which is the point.
+     *
+     * At the lattice's own resolution of the field: this walk holds the
+     * lattice, node to node across the whole body, and every node is an
+     * isolated sample that would otherwise build the refinement's chain
+     * for nothing the claim reads. The refined levels' own walk is in
+     * `drainageRefinement.test.ts`.
      */
     for (const body of [earth, generated]) {
       const graph = graphOf(body)
@@ -392,8 +398,8 @@ describe('the field that reads it', () => {
       const surface = (n: number): number => {
         if (graph.sea[n] === 1) return sea as number
         const at = unwarp(graph, body, nodeDirection(graph, n))
-        const ground = elevationAt(body.surface, at)
-        const water = waterLevelAt(body.surface, at)
+        const ground = elevationAt(body.surface, at, graph.level)
+        const water = waterLevelAt(body.surface, at, graph.level)
         const level = Math.max(
           Number.isNaN(water) ? -Infinity : water,
           sea ?? -Infinity,
@@ -466,6 +472,11 @@ describe('the field that reads it', () => {
      * lookup crossing a lattice cell, a lake node leaving the ring — each is
      * a place a step could hide, and the bound is a meter against a
      * kilometer of carve.
+     *
+     * At the lattice's resolution, for the reason the walk above gives: an
+     * arc across the body is eight thousand isolated samples, and the
+     * refined levels' steps are held at their own scale, across their own
+     * cells and a face edge, by `drainageRefinement.test.ts`.
      */
     const walk = (
       body: Body,
@@ -474,10 +485,11 @@ describe('the field that reads it', () => {
       samples: number,
     ): number => {
       const at = (t: number): Vec3 => Vec.normalize(Vec.lerp(from, to, t))
+      const level = graphOf(body).level
       const candidates: { at: number; jump: number }[] = []
-      let previous = elevationAt(body.surface, at(0))
+      let previous = elevationAt(body.surface, at(0), level)
       for (let i = 1; i <= samples; i += 1) {
-        const here = elevationAt(body.surface, at(i / samples))
+        const here = elevationAt(body.surface, at(i / samples), level)
         const jump = Math.abs(here - previous)
         previous = here
         if (candidates.length === 4 && jump <= (candidates[3]?.jump ?? 0))
@@ -490,19 +502,20 @@ describe('the field that reads it', () => {
       for (const candidate of candidates) {
         let lo = candidate.at - 1 / samples
         let hi = candidate.at
-        const atLo = elevationAt(body.surface, at(lo))
+        const atLo = elevationAt(body.surface, at(lo), level)
         for (let i = 0; i < 60; i += 1) {
           const mid = (lo + hi) / 2
           if (mid === lo || mid === hi) break
           if (
-            Math.abs(elevationAt(body.surface, at(mid)) - atLo) <
+            Math.abs(elevationAt(body.surface, at(mid), level) - atLo) <
             candidate.jump / 2
           )
             lo = mid
           else hi = mid
         }
         const gap = Math.abs(
-          elevationAt(body.surface, at(hi)) - elevationAt(body.surface, at(lo)),
+          elevationAt(body.surface, at(hi), level) -
+            elevationAt(body.surface, at(lo), level),
         )
         if (gap > survivor) survivor = gap
       }

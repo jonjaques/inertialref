@@ -28,6 +28,7 @@ import {
   drainageGraph,
   drainageLookup,
   drains,
+  regionDrainageLevel,
 } from './drainage.ts'
 import { microRelief, microReliefBound } from './micro.ts'
 import { CANONICAL_AMPLITUDE_FLOOR, terrainSketch } from './sketch.ts'
@@ -70,18 +71,39 @@ export * from './regions.ts'
  * folded through a soft ceiling on the way in rather than clamped, because a
  * hard clamp flattens the deepest and most interesting ground into a plateau.
  *
- * **One field, at every level.** Nothing here knows what patch is asking or how
- * closely it is sampling. That is not a missed optimization — it is what makes
- * the CDLOD morph exact, and `sketch.ts`'s `craterLadder` carries the argument.
- * The early-out is in the octave counts, which are a property of the body: a
- * 50 km moon runs out of world before it runs out of octaves, and evaluates
- * four where an Earth-sized planet evaluates twelve.
+ * **One field, at every level — with one exception, the drainage below the
+ * lattice.** The bands and the craters do not know what patch is asking or
+ * how closely it is sampling. That is not a missed optimization — it is what
+ * makes the CDLOD morph exact, and `sketch.ts`'s `craterLadder` carries the
+ * argument. The early-out is in the octave counts, which are a property of
+ * the body: a 50 km moon runs out of world before it runs out of octaves, and
+ * evaluates four where an Earth-sized planet evaluates twelve.
+ *
+ * The drainage refinement is the exception because its cost is a
+ * construction per cell, not an evaluation per sample: a sample alone on the
+ * body builds a chain of fifty to seventy families, floors and lists across
+ * the refined levels, a couple of milliseconds, where a crater walk is ten
+ * microseconds. `finest` stops the refinement at a level. A point reader —
+ * the contact test, the stance, a site — passes nothing and gets every level;
+ * a reader asking what a region at level L looks like passes
+ * `regionDrainageLevel(L)`, which is how `generateHeightfield`, the detail
+ * floor's probes and the survey's cells stay at a patch's cost. ADR-0054.
  */
 export function elevationAt(
   surface: SurfaceParameters,
   direction: Vec3,
+  finest: number = Number.POSITIVE_INFINITY,
 ): Meters {
-  return evaluate(surface, Vec.normalize(direction), null, 0, null, 0, null)
+  return evaluate(
+    surface,
+    Vec.normalize(direction),
+    null,
+    0,
+    null,
+    0,
+    null,
+    finest,
+  )
 }
 
 /**
@@ -114,6 +136,7 @@ function evaluate(
   water: Float32Array | null,
   waterAt: number,
   level: Float64Array | null,
+  finest: number,
 ): Meters {
   const grammar = surface.grammar
   const sketch = terrainSketch(surface)
@@ -178,6 +201,7 @@ function evaluate(
    * the sample comes out of the same walk; the cover reads the bed and the
    * corridor from it rather than evaluating the segments twice.
    */
+  BEFORE_DRAINAGE[0] = elevation
   let drainage: DrainageSample = NO_DRAINAGE
   let standing = Number.NaN
   if (stageOn('drainage', stack)) {
@@ -187,6 +211,7 @@ function evaluate(
         graph,
         drainageLookup(graph, sketch, d),
         elevation,
+        finest,
       )
       elevation = carve.ground
       standing = carve.water
@@ -253,10 +278,20 @@ export function groundCoverAt(
   seabed = false,
   water: Float32Array | null = null,
   waterAt = 0,
+  finest: number = Number.POSITIVE_INFINITY,
 ): Meters {
   const d = Vec.normalize(direction)
   const sea = seaDatumElevation(surface)
-  const landform = evaluate(surface, d, out, at, water, waterAt, SAMPLED)
+  const landform = evaluate(
+    surface,
+    d,
+    out,
+    at,
+    water,
+    waterAt,
+    SAMPLED,
+    finest,
+  )
   const level = SAMPLED[0] as number
   const elevation = landform + tail(surface, d)
   const clamp = stageOn('clamp', {
@@ -320,8 +355,9 @@ export function standingWaterIsSampled(surface: SurfaceParameters): boolean {
 export function drawnGroundElevation(
   surface: SurfaceParameters,
   direction: Vec3,
+  finest: number = Number.POSITIVE_INFINITY,
 ): Meters {
-  return groundCoverAt(surface, direction, null, 0, true)
+  return groundCoverAt(surface, direction, null, 0, true, null, 0, finest)
 }
 
 /**
@@ -343,11 +379,12 @@ export function drawnGroundElevation(
 export function drawnElevation(
   surface: SurfaceParameters,
   direction: Vec3,
+  finest: number = Number.POSITIVE_INFINITY,
 ): Meters {
   // Through `groundCoverAt` with no cover, rather than beside it. The sea clamp
   // has one owner and `groundElevation` records what a second copy of the
   // expression cost; this is the drawn field's half of the same rule.
-  return groundCoverAt(surface, direction, null, 0)
+  return groundCoverAt(surface, direction, null, 0, false, null, 0, finest)
 }
 
 /** The tail, or nothing on a body whose relief budget is zero. */
@@ -391,9 +428,44 @@ export function surfaceCoverAt(
   direction: Vec3,
 ): SurfaceCover {
   const bytes = new Uint8Array(COVER_CHANNELS)
-  evaluate(surface, Vec.normalize(direction), bytes, 0, null, 0, null)
+  evaluate(
+    surface,
+    Vec.normalize(direction),
+    bytes,
+    0,
+    null,
+    0,
+    null,
+    Number.POSITIVE_INFINITY,
+  )
   return unpackCover(bytes, 0)
 }
+
+/**
+ * The ground before the drainage carve: the bands and the craters, which is
+ * what `carveDrainage` is handed. For the readers that measure what a carve
+ * does — the field itself never reads it back.
+ */
+export function landformAt(
+  surface: SurfaceParameters,
+  direction: Vec3,
+): Meters {
+  BEFORE_DRAINAGE[0] = Number.NaN
+  evaluate(
+    surface,
+    Vec.normalize(direction),
+    null,
+    0,
+    null,
+    0,
+    null,
+    Number.POSITIVE_INFINITY,
+  )
+  return BEFORE_DRAINAGE[0] as number
+}
+
+/** `landformAt`'s slot, written by `evaluate` just before the carve. */
+const BEFORE_DRAINAGE = new Float64Array(1)
 
 /**
  * The level of any lake or river over a direction, meters, or NaN where
@@ -402,9 +474,10 @@ export function surfaceCoverAt(
 export function waterLevelAt(
   surface: SurfaceParameters,
   direction: Vec3,
+  finest: number = Number.POSITIVE_INFINITY,
 ): Meters {
   const level = new Float32Array(1)
-  evaluate(surface, Vec.normalize(direction), null, 0, level, 0, null)
+  evaluate(surface, Vec.normalize(direction), null, 0, level, 0, null, finest)
   return level[0] as number
 }
 
@@ -435,6 +508,7 @@ export function groundElevation(
     null,
     0,
     SAMPLED,
+    Number.POSITIVE_INFINITY,
   )
   return Math.max(elevation, waterSurface(surface, sea, SAMPLED[0] as number))
 }
@@ -583,7 +657,11 @@ export function surfaceDetailFloor(
         level,
       )
       const at = (s: number, t: number): number => {
-        const ground = drawnElevation(surface, regionDirection(region, s, t))
+        const ground = drawnElevation(
+          surface,
+          regionDirection(region, s, t),
+          regionDrainageLevel(level),
+        )
         if (sea !== null && ground > sea) ashore = true
         return ground
       }
@@ -810,6 +888,10 @@ export function heightfieldSample(
  * reach costs (`craters.ts`). The result is a Float32Array precisely so it can be
  * transferred rather than copied back to the main thread.
  *
+ * The drainage refinement is resolved to one level below the region's own
+ * (`regionDrainageLevel`), borders included, so a patch pays for the cells
+ * it can draw and not for every creek finer than its samples. ADR-0054.
+ *
  * The border samples run `s` and `t` outside [0,1], which `regionDirection`
  * answers on the neighboring face — so the outer ring of a patch at the edge of
  * a cube face is the first interior row of a patch on a different face, exactly
@@ -832,6 +914,7 @@ export function generateHeightfield(
     `Bad heightfield border ${border}`,
   )
   const stride = resolution + 2 * border
+  const finest = regionDrainageLevel(region.level)
   const elevations = new Float32Array(stride * stride)
   const cover = new Uint8Array(resolution * resolution * COVER_CHANNELS)
   const water = new Float32Array(resolution * resolution)
@@ -850,8 +933,8 @@ export function generateHeightfield(
       // one more — it is a vertex attribute, and the border has no vertices.
       if (row < 0 || col < 0 || row >= resolution || col >= resolution) {
         elevations[index] = seabed
-          ? drawnGroundElevation(surface, direction)
-          : drawnElevation(surface, direction)
+          ? drawnGroundElevation(surface, direction, finest)
+          : drawnElevation(surface, direction, finest)
         continue
       }
       elevations[index] = groundCoverAt(
@@ -862,6 +945,7 @@ export function generateHeightfield(
         seabed,
         water,
         row * resolution + col,
+        finest,
       )
       // Read back rather than kept: the array is Float32 and the extremes have
       // to bound *it*, not the float64 the generator computed. A bounding

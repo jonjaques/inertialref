@@ -5,6 +5,7 @@ import {
   type DrainageGraph,
   drainageGraph,
   drainageLookup,
+  regionDrainageLevel,
 } from './drainage.ts'
 import { directionToGeodetic } from './frames.ts'
 import { terrainSketch } from './sketch.ts'
@@ -116,7 +117,15 @@ interface Cell {
  */
 const centerOf = (body: Body, region: RegionAddress): Cell => {
   const direction = regionDirection(region, 0.5, 0.5)
-  const land = elevationAt(body.surface, direction)
+  // At the cell's own resolution of the drainage, which is what a patch at
+  // its level draws: a coarse cell asked for every creek a hundred meters
+  // across is a creek's construction paid to pick a summit, and the survey
+  // visits two thousand of them. The deepest cells resolve every level.
+  const land = elevationAt(
+    body.surface,
+    direction,
+    regionDrainageLevel(region.level),
+  )
   const sea = seaDatumElevation(body.surface)
   return {
     region,
