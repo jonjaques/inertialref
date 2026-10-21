@@ -55,7 +55,10 @@ It runs once per render call on three's device, between the small scene pass
 and the display-size optical passes. The library compiles the configured
 path's pipelines asynchronously and refuses a dispatch until they exist, so
 the boot's upscaler step awaits them after `configure` names the path, and a
-frame drawn sooner skips the dispatch. Its GPU timer exists only while
+frame drawn sooner skips the dispatch. A picture changed mid-session builds a
+new chain, and the chain on screen keeps drawing under its own layout until the
+new one's pipelines exist (`scene/chainHandover.ts`); swapping at once shows
+the zero-initialized output for as long as the compile takes. The library's GPU timer exists only while
 `gpuTiming` is on: the `full` timing level and a pass timeline's run turn it
 on, and nothing else pays for timestamp queries. Three's native velocity uses the
 unjittered projection. The sensor applies jitter and clears it in `finally`
