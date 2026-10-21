@@ -28,6 +28,7 @@ const surface = {
     temperature: 270,
     tidalProxy: 0,
     hasOcean: true,
+    hadOcean: true,
     reliefSpent: 1,
     publishedRelief: 8000,
   }),

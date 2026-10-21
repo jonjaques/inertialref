@@ -64,6 +64,7 @@ function body(name: string, wet: boolean): SurfaceParameters {
       temperature: wet ? 288 : 250,
       tidalProxy: 0,
       hasOcean: wet,
+      hadOcean: wet,
       reliefSpent: 1,
       publishedRelief: 8000,
     }),

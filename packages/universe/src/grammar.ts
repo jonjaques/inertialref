@@ -102,15 +102,30 @@ export interface GrammarFacts {
    */
   readonly tidalProxy: number
   /**
-   * Whether the world has standing liquid.
+   * Whether the world has standing liquid now, at its ground temperature.
+   *
+   * It decides what stands on the surface — the liquid window a sea widens and
+   * the biosphere a sea holds the volatiles for — and nothing about the rock
+   * under it. That is `hadOcean`.
+   */
+  readonly hasOcean: boolean
+  /**
+   * Whether water ever soaked the lithosphere: a world that had a sea, whether
+   * or not its ground lets one stand today.
    *
    * It is here for one reason and it is not decoration: water is the leading
    * explanation for why Earth has plate tectonics and Venus, the same size and
-   * the same age, does not. A wet lithosphere is weak enough to subduct. So the
-   * ocean decides the plate count, and a dry Venus-sized world comes out with
-   * a stagnant lid and two enormous shields on it.
+   * the same age, does not. A wet lithosphere is weak enough to subduct. So
+   * this decides the plate count, and a dry Venus-sized world comes out with a
+   * stagnant lid and two enormous shields on it.
+   *
+   * It is not `hasOcean`, because the two part company wherever the ground
+   * admits no liquid: a world that drew a sea and stands at 491 K has none the
+   * generator knows, and reading the weakening off the standing sea strips a
+   * plate world to a lid — Proxima Centauri II, twenty plates to one. Every
+   * world with a sea had one, so `hasOcean` implies this and never the reverse.
    */
-  readonly hasOcean: boolean
+  readonly hadOcean: boolean
   /**
    * How much of the strength limit this world has actually spent, 0..1.
    *
@@ -520,14 +535,16 @@ export function surfaceGrammar(
    * Size, because a bigger body holds its internal heat longer. Air, because
    * weathering and sediment lubricate a margin. And an ocean, because water is
    * the leading explanation for why Earth subducts and Venus — the same size,
-   * the same age, dry — does not. Mars comes out at 0.30 and Venus at 0.29,
-   * both stagnant lids with a few enormous shields, which is the Tharsis
-   * pattern and is what those two bodies look like.
+   * the same age, dry — does not. The ocean is the one the world *had*: the
+   * water that weakened the rock is in it whether or not a sea still stands on
+   * top (`hadOcean`). Mars comes out at 0.30 and Venus at 0.29, both stagnant
+   * lids with a few enormous shields, which is the Tharsis pattern and is what
+   * those two bodies look like.
    */
   const mobility = clamp01(
     (meanRadius / 6.371e6) *
       (0.3 + 0.7 * air) *
-      (facts.hasOcean ? 1 : 0.3) *
+      (facts.hadOcean ? 1 : 0.3) *
       (1 + 2 * young),
   )
   const plateCount =
@@ -697,7 +714,8 @@ export function surfaceGrammar(
      * A sea is not a condition — life on a world with rivers and lakes is
      * still life — but it is most of one: an ocean is where the volatile
      * inventory lives, and a world without one has its water tied up in ice
-     * or in the ground.
+     * or in the ground. So it is the sea standing now (`hasOcean`), not the
+     * one the rock remembers: a sea that froze or boiled holds no inventory.
      */
     biota:
       biotaWindow(groundTemperature) *

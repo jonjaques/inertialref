@@ -46,6 +46,21 @@ const find = (name: string): Body => {
   throw new Error(`no ${name} in Sol`)
 }
 
+/** A generated body from one of `TEST_CATALOG`'s other systems, by name. */
+const generated = (name: string): Body => {
+  for (const star of TEST_CATALOG.stars) {
+    if (star.name === 'Sol') continue
+    let system: ReturnType<typeof generateSystem>
+    try {
+      system = generateSystem(ROOT, MILKY_WAY, catalogStub(star))
+    } catch {
+      continue
+    }
+    for (const body of walkBodies(system)) if (body.name === name) return body
+  }
+  throw new Error(`no ${name} in the fixture`)
+}
+
 /** A spread of directions, golden-angle so nothing clusters at a pole. */
 function* sphere(count: number): Generator<ReturnType<typeof vec3>> {
   for (let i = 0; i < count; i += 1) {
@@ -148,6 +163,21 @@ describe('the surface grammar', () => {
     expect(find('Luna').surface.grammar.plateCount).toBe(1)
   })
 
+  it('keeps the plates a sea gave a world whose ground then boiled it', () => {
+    /*
+     * Proxima Centauri II drew a sea, and its ground stands at 491 K — between
+     * the water window and the basalt solidus, where nothing the generator
+     * knows is liquid — so the datum is read as dry and the world has no sea.
+     * The water that weakened its lithosphere into plates is the draw's, not
+     * the standing sea's, and reading the weakening off the standing sea took
+     * all twenty of them: the fixture's plate world was a stagnant lid.
+     */
+    const proxima = generated('Proxima Centauri II')
+    expect(proxima.surface.seaLevel).toBeNull()
+    expect(proxima.surface.grammar.liquidKind).toBeNull()
+    expect(proxima.surface.grammar.plateCount).toBe(20)
+  })
+
   it('relaxes old ice, and only where it is warm enough to flow', () => {
     // Callisto at 134 K is smooth at large scales because its big craters have
     // sagged; Pluto at 40 K stands three-kilometer water-ice mountains with no
@@ -196,22 +226,35 @@ describe('the surface grammar', () => {
     const facts: GrammarFacts = {
       mass: 7.35e22,
       meanRadius: 1.737e6,
-      atmosphere: null,
+      // Air, so that the standing sea has a liquid and a biosphere to move.
+      atmosphere: { surfaceDensity: 1.2, scaleHeight: 8_500, ceiling: 100_000 },
       temperature: 270,
       tidalProxy: 0,
       hasOcean: false,
+      hadOcean: false,
       reliefSpent: 0.8,
       publishedRelief: null,
     }
     const seed: Seed = ROOT
-    expect(surfaceGrammar(seed, facts)).toEqual(surfaceGrammar(seed, facts))
+    const base = surfaceGrammar(seed, facts)
+    expect(surfaceGrammar(seed, facts)).toEqual(base)
     // And every fact moves it, which is what stops one of them being dead.
-    expect(surfaceGrammar(seed, { ...facts, hasOcean: true })).not.toEqual(
-      surfaceGrammar(seed, facts),
-    )
     expect(surfaceGrammar(seed, { ...facts, temperature: 90 })).not.toEqual(
-      surfaceGrammar(seed, facts),
+      base,
     )
+    /*
+     * The two oceans move different things. The sea a world has decides what
+     * stands on it — the liquid and the life — and the sea it had decides
+     * whether its lithosphere moves; neither reaches the other's half.
+     */
+    const standing = surfaceGrammar(seed, { ...facts, hasOcean: true })
+    expect(standing.biota).not.toBe(base.biota)
+    expect(standing.mobility).toBe(base.mobility)
+    expect(standing.plateCount).toBe(base.plateCount)
+    const had = surfaceGrammar(seed, { ...facts, hadOcean: true })
+    expect(had.mobility).not.toBe(base.mobility)
+    expect(had.biota).toBe(base.biota)
+    expect(had.liquid).toBe(base.liquid)
   })
 })
 
@@ -500,39 +543,16 @@ describe('the crater field', () => {
      * which is why it is named individually rather than left to whichever
      * bodies a zoo sweep happens to pick.
      *
-     * The generated subject is the most-plated solid world in `TEST_CATALOG`,
-     * found rather than named. It was Proxima Centauri II, at twenty plates —
-     * the worst case, where a plate boundary stepped 9,433.9 m, 46% of
-     * everything that world has, against 891.2 m on Earth — until its sea was
-     * read against its 491 K ground and went, and with it the ocean that
-     * weakens a lithosphere into plates. A name pins the test to one body's
-     * facts; a search pins it to the claim, which is about any plate world.
+     * The generated subject is Proxima Centauri II, at twenty plates, and it
+     * is named because it is the worst case the ranked-identity rule was
+     * measured on: a plate boundary there stepped 9,433.9 m, 46% of everything
+     * that world has, against 891.2 m on Earth. Its sea does not survive its
+     * 491 K ground and its plates do, which the grammar's own test holds. The
+     * count is held exactly: `> 1` passed on a two-plate body and proved
+     * nothing about the rule the tectonic bands exist to hold.
      */
-    let plated: Body | null = null
-    for (const star of TEST_CATALOG.stars) {
-      if (star.name === 'Sol') continue
-      let system: ReturnType<typeof generateSystem>
-      try {
-        system = generateSystem(ROOT, MILKY_WAY, catalogStub(star))
-      } catch {
-        continue
-      }
-      for (const body of walkBodies(system)) {
-        if (body.surface.maxElevation <= 0 || body.radius < 1e6) continue
-        if (
-          plated === null ||
-          body.surface.grammar.plateCount > plated.surface.grammar.plateCount
-        ) {
-          plated = body
-        }
-      }
-    }
-    /*
-     * The floor is the measured one: Sirius II at nine plates is the most-plated
-     * generated body in the fixture. `> 1` passed on a two-plate body and proved
-     * nothing about the ranked-identity rule the tectonic bands exist to hold.
-     */
-    expect(plated?.surface.grammar.plateCount).toBeGreaterThanOrEqual(9)
+    const plated = generated('Proxima Centauri II')
+    expect(plated.surface.grammar.plateCount).toBe(20)
     expect(find('Earth').surface.grammar.plateCount).toBeGreaterThan(1)
 
     const subjects: readonly Body[] = [
@@ -545,9 +565,7 @@ describe('the crater field', () => {
     }
 
     /*
-     * The generated plate world is held to the same meter as everything else,
-     * and Proxima Centauri II — which held the role while it had a sea — is
-     * the body that had to earn it.
+     * The generated plate world is held to the same meter as everything else.
      *
      * The seam here was never a plate boundary. `plateAt` used to return the
      * second-nearest plate, and which plate that *is* changes discontinuously
@@ -565,7 +583,7 @@ describe('the crater field', () => {
      * happened to miss, while a sweep of twenty-four great circles found
      * 3,081 m of it — reads 1.2e-4.
      */
-    for (const body of [find('Earth'), plated as Body]) {
+    for (const body of [find('Earth'), plated]) {
       expect(`${body.name}: ${sweep(body, 16) < 1}`).toBe(`${body.name}: true`)
     }
   })

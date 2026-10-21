@@ -1,7 +1,9 @@
 # ADR-0026: The liquid — a sea is a sheet, a valley is a strip, and a world is drawn in families
 
 Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
-carries relief, so a generated sphere shades its mountains
+carries relief, so a generated sphere shades its mountains · amended 20 Oct
+2026: the sea a world drew weakens its lithosphere whether or not its ground
+keeps the sea
 
 ## Context
 
@@ -206,10 +208,14 @@ the aerial veil, the sky shell and MSAA at nine million pixels, which a
 timestamp query per pass is the instrument for. Run-to-run variance across
 this table is about two frames a second.
 
-**The fixture's plate world lost its plates.** Proxima Centauri II drew a sea
-on ground at 491 K; read against its temperature the sea goes, and with it
-the ocean that weakens a lithosphere into plates. `geology.test.ts` finds the
-most-plated solid body in the fixture rather than naming one.
+**A hot world's sea goes and its plates stay.** Proxima Centauri II drew a sea
+on ground at 491 K; read against its temperature the sea goes. The ocean that
+weakens a lithosphere into plates is the draw's, not the standing sea's — the
+grammar's facts carry it as `hadOcean` beside `hasOcean`, set from the draw —
+so the world keeps its twenty plates and `geology.test.ts` names it as the
+fixture's plate world. Read off the standing sea instead, the weakening took
+the plates of every world whose ground admits no liquid: 64 of the 2,201
+bodies within 25 ly, at terrain v5.
 
 **A generated world is itself from orbit.** Measured against the streamed
 ground either side of the relief gate, at 650 and 1,100 km over Gliese
