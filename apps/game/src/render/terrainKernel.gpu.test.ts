@@ -15,11 +15,15 @@ import {
   HEIGHTFIELD_RESOLUTION,
   parseAddress,
   type RegionAddress,
+  regionDirection,
   regionForDirection,
   regionSize,
   SOL,
+  STRIPE_SHAPE,
+  stripeProfile,
   surfaceDetailFloor,
   surfaceKernel,
+  terrainSketch,
   TILE_STRIDE,
   walkBodies,
   writeTileFrame,
@@ -481,6 +485,56 @@ describe('the kernel against generateHeightfield', () => {
     expect(failures).toEqual([])
     // The blend is in the tiles, so the comparison above covered it.
     expect(blended).toBeGreaterThan(0)
+  }, 120_000)
+
+  /*
+   * Enceladus's stripes are a south-polar family cut along a stretch of each
+   * circle, and the spread above never reaches a pole. Tiles at the middle of
+   * each stripe and on its taper, at three levels, so the extent and its ends
+   * are compared where they are cut.
+   */
+  it('cuts the tiger stripes as the CPU does, along their extent and its ends', async () => {
+    const body = solBody('Enceladus')
+    const stripes = terrainSketch(body.surface).stripes
+    expect(stripes).toHaveLength(4)
+    const failures: string[] = []
+    let cut = 0
+    for (const level of [3, 6, 9]) {
+      const regions = stripes.flatMap((stripe) => {
+        const run = Vec.normalize(Vec.cross(stripe.pole, stripe.center))
+        const taper = stripe.halfLength * (1 - STRIPE_SHAPE.taper / 2)
+        const onTaper = Vec.add(
+          Vec.scale(stripe.center, Math.cos(taper)),
+          Vec.scale(run, Math.sin(taper)),
+        )
+        return [
+          regionForDirection(stripe.center, level),
+          regionForDirection(onTaper, level),
+        ]
+      })
+      const tiles = await gpuTiles(body, regions)
+      const limit = bound(body, level)
+      regions.forEach((region, i) => {
+        const gap = compare(body, region, tiles[i] as GpuTile)
+        if (gap.elevation >= limit) {
+          failures.push(
+            `Enceladus L${level} ${region.face}/${region.i}/${region.j}: ${gap.elevation} m against ${limit}`,
+          )
+        }
+        for (let s = 0; s <= 8; s += 1) {
+          for (let t = 0; t <= 8; t += 1) {
+            const direction = regionDirection(region, s / 8, t / 8)
+            if (
+              stripes.some((stripe) => stripeProfile(stripe, direction) !== 0)
+            )
+              cut += 1
+          }
+        }
+      })
+    }
+    expect(failures).toEqual([])
+    // The tiles sit on the stripes, so the comparison above covered the cut.
+    expect(cut).toBeGreaterThan(0)
   }, 120_000)
 })
 

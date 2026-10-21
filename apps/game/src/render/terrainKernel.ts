@@ -1835,10 +1835,18 @@ export function createTerrainKernel(
               const first = record(slot)
               const pole = asV3(first.xyz)
               const halfWidth = asF(first.w)
-              const offset = asF(record(slot.add(uint(1))).x)
+              const second = record(slot.add(uint(1)))
+              const offset = asF(second.x)
+              const end = asF(second.y)
+              const taper = asF(second.z)
+              const center = asV3(record(slot.add(uint(2))).xyz)
               const away = dot(d, pole).abs()
               const reach = halfWidth.add(offset.mul(STRIPE_SHAPE.reach))
-              If(away.lessThanEqual(reach), () => {
+              // `stripeProfile`'s extent: the chord from the middle, against
+              // the end's and the taper's, packed in float64 and read here.
+              const along = length(d.sub(center))
+              If(away.lessThanEqual(reach).and(along.lessThan(end)), () => {
+                const extent = float(1).sub(smoothstepf(taper, end, along))
                 const trough = falloff(min(float(1), away.div(halfWidth)))
                 const shoulderCenter = halfWidth.add(offset)
                 const shoulder = falloff(
@@ -1850,7 +1858,7 @@ export function createTerrainKernel(
                       .div(offset.mul(STRIPE_SHAPE.shoulderWidth)),
                   ),
                 ).mul(STRIPE_SHAPE.shoulder)
-                icy.addAssign(stripes.mul(shoulder.sub(trough)))
+                icy.addAssign(stripes.mul(extent).mul(shoulder.sub(trough)))
               })
             },
           )

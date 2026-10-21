@@ -1,6 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { rootSeed, type Seed } from '@inertialref/procedural'
+import { deriveSeed, Rng, rootSeed, type Seed } from '@inertialref/procedural'
 import { Vec, vec3 } from '@inertialref/spatial'
 import { regionAddress } from './address.ts'
 import {
@@ -9,6 +9,7 @@ import {
   HYPSOMETRY_MARGIN,
   hypsometryBand,
   plateContext,
+  stripeProfile,
 } from './bands.ts'
 import {
   craterCountAbove,
@@ -843,5 +844,108 @@ describe('the band stack', () => {
       ),
       { numRuns: 60 },
     )
+  })
+})
+
+describe('the tiger stripes', () => {
+  /*
+   * Enceladus's four sulci are a south-polar family: about 130 km long,
+   * roughly parallel, about 35 km apart, on a 252 km moon. A mapless sphere
+   * wears its relief, so a stripe cut around a whole great circle reads from
+   * orbit as a hairline from pole to pole; the extent is what keeps the
+   * family at the pole, and the taper is what keeps its ends from being a
+   * crease in the canonical field.
+   */
+  const south = vec3(0, -1, 0)
+  const arc = (a: ReturnType<typeof vec3>, b: ReturnType<typeof vec3>) =>
+    Math.acos(Math.min(1, Math.max(-1, Vec.dot(a, b))))
+
+  it('are a south-polar family on Enceladus, 130 km long and 35 km apart', () => {
+    const body = find('Enceladus')
+    const radius = body.surface.grammar.meanRadius
+    const stripes = terrainSketch(body.surface).stripes
+    expect(stripes).toHaveLength(4)
+    for (const stripe of stripes) {
+      // The middle of the extent is on the stripe's own circle, and near the
+      // pole: the family is four stripes 35 km apart, so its outer two sit
+      // about 50 km off it.
+      expect(Math.abs(Vec.dot(stripe.center, stripe.pole))).toBeLessThan(1e-12)
+      expect(arc(stripe.center, south) * radius).toBeLessThan(80_000)
+      const length = 2 * stripe.halfLength * radius
+      expect(length).toBeGreaterThan(100_000)
+      expect(length).toBeLessThan(160_000)
+    }
+    for (let i = 1; i < stripes.length; i += 1) {
+      const here = stripes[i] as (typeof stripes)[number]
+      const before = stripes[i - 1] as (typeof stripes)[number]
+      // Apart: the center's distance from the neighbor's circle.
+      const apart =
+        Math.asin(Math.abs(Vec.dot(here.center, before.pole))) * radius
+      expect(apart).toBeGreaterThan(25_000)
+      expect(apart).toBeLessThan(45_000)
+      // Roughly parallel: the two run within fifteen degrees of each other.
+      const run = (stripe: typeof here) =>
+        Vec.normalize(Vec.cross(stripe.pole, stripe.center))
+      expect(Math.abs(Vec.dot(run(here), run(before)))).toBeGreaterThan(
+        Math.cos((15 * Math.PI) / 180),
+      )
+    }
+  })
+
+  it('cut nothing outside their extent, and taper to nothing at its ends', () => {
+    const stripes = terrainSketch(find('Enceladus').surface).stripes
+    for (const stripe of stripes) {
+      const along = Vec.normalize(Vec.cross(stripe.pole, stripe.center))
+      // A point on the stripe's own circle, `angle` from the middle.
+      const on = (angle: number) =>
+        Vec.add(
+          Vec.scale(stripe.center, Math.cos(angle)),
+          Vec.scale(along, Math.sin(angle)),
+        )
+      // The trough is cut at the middle of the extent.
+      expect(stripeProfile(stripe, stripe.center)).toBeLessThan(-0.2)
+      // And nowhere else on the great circle: the north pole's side of it is
+      // where the hairline was.
+      for (let i = 0; i < 360; i += 1) {
+        const angle = (i / 360) * 2 * Math.PI
+        const off = Math.min(angle, 2 * Math.PI - angle)
+        if (off <= stripe.halfLength) continue
+        expect(stripeProfile(stripe, on(angle))).toBe(0)
+      }
+      // Walked from the middle out past the end, the profile never steps:
+      // the largest change between neighbors is what its slope allows at
+      // that spacing, not a cliff where the extent stops.
+      const samples = 4_000
+      let previous = stripeProfile(stripe, on(0))
+      let jump = 0
+      for (let i = 1; i <= samples; i += 1) {
+        const here = stripeProfile(
+          stripe,
+          on((1.3 * stripe.halfLength * i) / samples),
+        )
+        jump = Math.max(jump, Math.abs(here - previous))
+        previous = here
+      }
+      expect(previous).toBe(0)
+      expect(jump).toBeLessThan(2e-3)
+    }
+  })
+
+  it('draws the widths and offsets it always drew, from the stream they came from', () => {
+    /*
+     * The stripe stream is its own derived seed, so a draw appended to it
+     * moves nothing else — and the draws already on it keep their order, so
+     * every stripe keeps the trough and the shoulders it had.
+     */
+    for (const name of ['Enceladus', 'Miranda']) {
+      const body = find(name)
+      const rng = new Rng(deriveSeed(body.surface.seed, 'stripes'))
+      rng.unitVector()
+      rng.range(0, 2 * Math.PI)
+      for (const stripe of terrainSketch(body.surface).stripes) {
+        expect(stripe.halfWidth).toBe(rng.range(0.004, 0.01))
+        expect(stripe.offset).toBe(rng.range(0.002, 0.006))
+      }
+    }
   })
 })
