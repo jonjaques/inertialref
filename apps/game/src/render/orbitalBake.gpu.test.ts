@@ -61,6 +61,8 @@ it('draws a ready bake, reuses it, and replaces it when the body at its address 
     terrain,
     bodyFor: () => body,
     heightfields,
+    // No table: the bake draws the slope as drawn.
+    slopesFor: () => Promise.resolve(null),
   })
   const dummy = groundDummy(terrain.material)
   const scene = new Scene()

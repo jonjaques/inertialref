@@ -44,7 +44,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import type { LinearRgb } from '@inertialref/universe'
+import type { DepositSlopeTable, LinearRgb } from '@inertialref/universe'
 import {
   OPEN_OCEAN,
   REFLECTANCE_CEILING,
@@ -53,7 +53,8 @@ import {
 } from '@inertialref/rendering'
 import { asVector, bumped, fbmFetch, noiseSampler } from './noiseNodes.ts'
 import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
-import { groundWearOf } from './wear.ts'
+import { createSlopeTable } from './slopeTable.ts'
+import { groundWearOf, NO_SLOPE_LEVEL } from './wear.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   groundBandsFor,
@@ -113,6 +114,12 @@ export interface TerrainMaterial {
    * whatever the manifest says exists.
    */
   setAlbedoMap(map: Texture | null, hasMap: boolean): void
+  /**
+   * The body's deposit slope table, or null for none — the deposits then
+   * read the drawn slope at every level. Compares by identity before it
+   * uploads, so writing it every frame is free.
+   */
+  setSlopeTable(table: DepositSlopeTable | null): void
   /**
    * The ground's slice of the surface-quality lever — the sea's goes to
    * `WaterMaterial`, the rocks' to the scatter. Compares before it writes.
@@ -310,6 +317,13 @@ export function createTerrainMaterial(): TerrainMaterial {
   const morphBand = uniform(new Vector2()).onObjectUpdate(
     ({ object }) => groundWearOf(object).morphBand,
   )
+  // The patch's level, the row of the body's slope table its deposits read
+  // (`slopeTable.ts`) — or `NO_SLOPE_LEVEL` for a rock or a dummy, whose
+  // normal is no level's.
+  const patchLevel = uniform(NO_SLOPE_LEVEL).onObjectUpdate(
+    ({ object }) => groundWearOf(object).level,
+  )
+  const slopeTable = createSlopeTable()
   /*
    * The patch's own anchor, which is what turns an anchor-relative vertex back
    * into a place on the body.
@@ -344,7 +358,7 @@ export function createTerrainMaterial(): TerrainMaterial {
   )
 
   /*
-   * Three varyings, and none of them may take an attribute's name.
+   * The varyings, and none of them may take an attribute's name.
    *
    * `varying` and `attribute` both become identifiers in the generated WGSL, so
    * a varying called `terrainCover` beside the attribute of that name is a
@@ -356,6 +370,9 @@ export function createTerrainMaterial(): TerrainMaterial {
   const localPosition = varying(vec3(), 'terrainLocal')
   const surfaceCover = varying(vec4(), 'terrainDeposit')
   const surfaceCover2 = varying(vec4(), 'terrainDeposit2')
+  // How far this vertex has slid onto its parent's grid, for the row of the
+  // slope table its deposits read between the two levels.
+  const morphFactor = varying(float(), 'terrainMorphFactor')
 
   const material = sensorRadiance(new MeshBasicNodeMaterial())
 
@@ -390,6 +407,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     // that defaults to the raw attribute: a morphed vertex would then report
     // its whole snap as motion every frame and blur the band while parked.
     positionPrevious.assign(moved)
+    morphFactor.assign(k)
     shadedNormal.assign(normalize(mix(normalLocal, targetNormal, k)))
     localPosition.assign(moved)
     surfaceCover.assign(mix(cover, targetCover, k))
@@ -601,15 +619,26 @@ export function createTerrainMaterial(): TerrainMaterial {
      * *about* the angle of repose, and 33° is where loose material stops
      * resting whatever it is made of.
      *
-     * The real fix is for the deposits to read the canonical field rather than
-     * the mesh, which means more channels on the cover and belongs with the
-     * scatter that will want them.
+     * Wide bands do not account for all of it, because the difference is not
+     * noise: a coarse patch's normal is the ground smoothed over its cell, so
+     * a coarser level draws flatter ground on average — 0.4 to 1.4% of the
+     * drawn value at each level boundary on Iapetus and the shore world,
+     * rings of tone at every morph band. So the slope the deposits read is the
+     * drawn one mapped through the body's slope table onto the floor's
+     * distribution (`depositSlope.ts`): rank kept, so a coarse level's
+     * steepest ground is still where its bedrock goes, and the fraction past
+     * any threshold the floor's at every level. Blended between the patch's
+     * row and its parent's by the morph, so a patch that has slid onto its
+     * parent's grid reads its parent's row with its parent's normal.
      */
+    const depositSlope = slopeTable.read(slope, patchLevel, morphFactor)
     const mantled = oneMinus(
-      smoothstep(repose.mul(0.6), repose.mul(2.2), slope),
+      smoothstep(repose.mul(0.6), repose.mul(2.2), depositSlope),
     )
     // A dune sea and a playa need flatter ground than a regolith mantle does.
-    const level = oneMinus(smoothstep(repose.mul(0.05), repose.mul(1), slope))
+    const level = oneMinus(
+      smoothstep(repose.mul(0.05), repose.mul(1), depositSlope),
+    )
 
     /*
      * Water is a different material, not a different color — and it is decided
@@ -1152,6 +1181,9 @@ export function createTerrainMaterial(): TerrainMaterial {
        */
       albedoMap.value = map ?? BLANK
       mapped.value = hasMap ? 1 : 0
+    },
+    setSlopeTable(table) {
+      slopeTable.set(table)
     },
   }
 }

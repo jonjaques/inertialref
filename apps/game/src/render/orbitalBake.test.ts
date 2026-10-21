@@ -76,6 +76,8 @@ function fixture() {
     terrain: {} as TerrainMaterial,
     bodyFor: () => body,
     heightfields,
+    // No table: the bake draws the slope as drawn.
+    slopesFor: () => Promise.resolve(null),
   })
   cleanups.push(() => baker.dispose())
   return {

@@ -49,6 +49,7 @@ import {
 } from '@inertialref/simulation'
 import {
   type Body,
+  type DepositSlopeTable,
   drains,
   type EntityId,
   findBody,
@@ -56,6 +57,7 @@ import {
   MARS_PAD,
   parseAddress,
   type StarCatalog,
+  type SurfaceParameters,
   type SystemId,
 } from '@inertialref/universe'
 import {
@@ -1205,6 +1207,27 @@ export class GameEngine {
   /** Streaming and orbital baking share one heightfield routing policy. */
   get heightfields(): Heightfields {
     return this.#terrain.heightfields
+  }
+
+  /**
+   * The deposit slope table of the body whose ground is streaming, or null
+   * until a worker has measured it — asked every frame by the material's
+   * host, and the asking is what starts it, once the surface is prepared and
+   * no tile waits in the pool's queue. The deposits read the mesh's own slope
+   * until then.
+   */
+  depositSlopeTable(): DepositSlopeTable | null {
+    const surface = this.#terrain.surface
+    return surface === null ? null : this.#preparation.slopes(surface)
+  }
+
+  /**
+   * A surface's deposit slope table once a worker has measured it, through
+   * the one preparation the ground reads it from, so a body is measured
+   * once whichever of the ground and the bake asks first.
+   */
+  depositSlopes(surface: SurfaceParameters): Promise<DepositSlopeTable | null> {
+    return this.#preparation.whenSlopes(surface)
   }
 
   /**

@@ -26,6 +26,7 @@ import {
   regionChildren,
   regionForDirection,
   regionParent,
+  type SurfaceParameters,
 } from '@inertialref/universe'
 import {
   buildPatch,
@@ -545,6 +546,18 @@ export class TerrainStreamer {
     return this.#starved
   }
 
+  /**
+   * The surface the ground is drawn from, or null when nothing streams: for
+   * what the material reads about it that the streamer does not need, the
+   * deposit slope table (`GameEngine.depositSlopeTable`). Asked for by the
+   * material's host rather than here, because a host with no material — the
+   * headless runner, the slow suite — must not spend seconds of a worker on
+   * a table nothing will read.
+   */
+  get surface(): SurfaceParameters | null {
+    return this.#surface
+  }
+
   get saturated(): boolean {
     return this.#saturated
   }
@@ -563,6 +576,7 @@ export class TerrainStreamer {
     eye: Vec3
   } | null = null
   #palette: TerrainPalette | null = null
+  #surface: SurfaceParameters | null = null
   /**
    * The body the kept palette was derived from, and the palette itself.
    *
@@ -965,6 +979,7 @@ export class TerrainStreamer {
     }
 
     const prepared = this.#preparation.prepare(surface.surface)
+    this.#surface = surface.surface
     if (prepared === null) {
       // A worker is preparing the surface. Nothing can be selected against a
       // ceiling that is not known yet, and guessing one would either starve
@@ -1635,6 +1650,7 @@ export class TerrainStreamer {
     // a body this streamer is no longer drawing, and the material would keep
     // wearing the last world's ground.
     this.#palette = null
+    this.#surface = null
     // The lens is a selection mirror like the rest: reporting one beside
     // `patches: 0` claims a selection was made against it, and none was.
     this.#lensView = null
