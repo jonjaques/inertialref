@@ -13,11 +13,13 @@ import {
 } from 'three/webgpu'
 import { vec3, vec4 } from 'three/tsl'
 import { type GpuSession, openGpu, type Pixels } from './gpuHarness.ts'
-import { groundDummy } from './groundWear.ts'
+import { groundDummy, seaDummy } from './groundWear.ts'
 import { createStarMaterial } from './materials.ts'
 import { DEFAULT_PICTURE } from './picture.ts'
 import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 import { warmTargetFor } from './sceneTarget.ts'
+import { sensorMrt } from './sensorMrt.ts'
+import { createWaterMaterial } from './water.ts'
 import { warmCompile, warmRenderer, warmSensorPass } from './warmup.ts'
 
 /** The production picture with its four samples off. */
@@ -309,3 +311,53 @@ it('keeps the stand-in target whole across a picture change mid-queue', async ()
     ;(mesh.material as MeshBasicNodeMaterial).dispose()
   }
 })
+
+it.each(['full', 'plain'] as const)(
+  'warms the %s sea into the scene pass, so its first frame builds nothing',
+  async (detail) => {
+    /*
+     * The sea lever selects a material, so each one is a pipeline the
+     * warm-up owes. Warmed through `warmRenderer` against the production
+     * layout, the frame drawn into a target of that layout, with the pass's
+     * outputs, must build none.
+     */
+    const { renderer } = gpu
+    const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
+    const water = createWaterMaterial()
+    water.setQuality({ frame: detail === 'full', waveOctaves: 2 })
+    const dummy = seaDummy(water.material)
+    const scene = new Scene()
+    scene.add(dummy)
+    scene.updateMatrixWorld(true)
+    const camera = new PerspectiveCamera(60, 1, 0.1, 100)
+    camera.position.z = 4
+    camera.updateMatrixWorld()
+    const from = gpu.reported().length
+    const before = created()
+    await warmCompile(warmRenderer(renderer, layout), {
+      object: dummy,
+      camera,
+      scene,
+    })
+    expect(created()).toBeGreaterThan(before)
+    const warmed = created()
+    const previous = renderer.getRenderTarget()
+    const mrt = renderer.getMRT()
+    try {
+      renderer.setRenderTarget(warmTargetFor(renderer, layout))
+      renderer.setMRT(sensorMrt(layout))
+      renderer.render(scene, camera)
+    } finally {
+      renderer.setRenderTarget(previous)
+      renderer.setMRT(mrt)
+    }
+    expect(created()).toBe(warmed)
+    expect(
+      gpu
+        .reported()
+        .slice(from)
+        .filter((entry) => entry.type === 'error'),
+    ).toEqual([])
+    dummy.geometry.dispose()
+  },
+)

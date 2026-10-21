@@ -16,7 +16,11 @@ import { DEFAULT_CELL_PIXELS } from '@inertialref/rendering'
 export type TerrainDetail = 'fine' | 'balanced' | 'coarse'
 /** Which of the ground's per-pixel octaves are evaluated. */
 export type GroundDetail = 'full' | 'lean' | 'flat'
-/** What the sea sheet does beyond reflecting the sky. */
+/**
+ * What the sea sheet does beyond reflecting the sky: `full` refracts the
+ * seabed and mirrors the land, `plain` reads neither, `flat` is `plain`
+ * without its waves.
+ */
 export type SeaDetail = 'full' | 'plain' | 'flat'
 
 export interface SurfaceQuality {
@@ -86,18 +90,28 @@ export function groundBandsFor(detail: GroundDetail): number {
  */
 export const WAVE_OCTAVES = 2
 
-/** The sea's reading: whether it refracts, and how many wave fields it runs. */
+/**
+ * The sea's reading: whether the sheet reads the frame behind it, and how
+ * many wave fields it runs.
+ *
+ * `frame` is the refracted seabed and the land mirrored in the water, and it
+ * selects a *material*, not a uniform: reading the frame copies it, and the
+ * copy ends the scene pass and begins it again. A uniform that skips the
+ * sampling still pays the copy and the split, so `plain` and `flat` draw with
+ * the material built without the read. The waves stay a uniform; a branch on
+ * them costs nothing once it is off.
+ */
 export function seaQualityFor(detail: SeaDetail): {
-  readonly refraction: boolean
+  readonly frame: boolean
   readonly waveOctaves: number
 } {
   switch (detail) {
     case 'full':
-      return { refraction: true, waveOctaves: WAVE_OCTAVES }
+      return { frame: true, waveOctaves: WAVE_OCTAVES }
     case 'plain':
-      return { refraction: false, waveOctaves: WAVE_OCTAVES }
+      return { frame: false, waveOctaves: WAVE_OCTAVES }
     case 'flat':
-      return { refraction: false, waveOctaves: 0 }
+      return { frame: false, waveOctaves: 0 }
   }
 }
 
