@@ -297,7 +297,9 @@ export function createSensor(
       await upscale?.ready()
     },
     warm: async (target = null) => {
-      await upscale?.ready()
+      // A failed upscaler compile is its own boot step's failure, already
+      // reported. The post and optical pipelines are still worth warming.
+      await upscale?.ready().catch(() => {})
       if (upscale !== null) radiance.value = upscale.outputTexture.value
       await warmPipeline(post, target)
       for (const optical of [defocus, motion, psf]) {

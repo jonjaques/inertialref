@@ -240,6 +240,10 @@ export class UpscaleNode extends TempNode<'vec4'> {
         this.#detach = timeline.attach({
           name: 'upscaler',
           arm: async () => {
+            // Claimed before the await: a timing-level change while the query
+            // sets are confirmed would otherwise dispose the timer this run
+            // is waiting on, and the run would time nothing.
+            this.#collected = []
             kernel.gpuTiming = true
             // A timer allocated just now times nothing until its query sets
             // are confirmed, and a run is a handful of synchronous frames.
@@ -330,7 +334,9 @@ export class UpscaleNode extends TempNode<'vec4'> {
       if (this.#initMs === 0) this.#initMs = performance.now() - this.#started
     })
     this.#ready.catch((cause: unknown) => {
-      log.error('upscaler pipelines failed to prepare', { cause })
+      // Disposal cancels a compile in flight; that is not a failure.
+      if (!this.#disposed)
+        log.error('upscaler pipelines failed to prepare', { cause })
     })
     this.#bytes = bytes
     this.outputTexture.value = this.#kernel.outputTexture
@@ -338,10 +344,16 @@ export class UpscaleNode extends TempNode<'vec4'> {
     this.#resets += 1
   }
 
-  /** Settles once the kernel's pipelines exist; rejects if they cannot. */
+  /**
+   * Settles once the kernel's pipelines exist, or once the node is disposed
+   * — a chain replaced mid-compile cancels it, and its boot step has nothing
+   * left to wait for. Rejects if the pipelines cannot be built.
+   */
   ready(): Promise<void> {
     this.prepare()
-    return this.#ready
+    return this.#ready.catch((cause: unknown) => {
+      if (!this.#disposed) throw cause
+    })
   }
 
   beginFrame(

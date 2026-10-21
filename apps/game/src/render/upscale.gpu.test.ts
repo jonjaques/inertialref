@@ -229,7 +229,7 @@ describe('the upscaler on the physical GPU', () => {
       expect(pixel[3]).toBe(1)
       expect(f.sensor.diagnostics.picture.frames).toBe(20)
       // The library restores the view the camera had, which here is none.
-      expect(f.camera.view?.enabled ?? false).toBe(false)
+      expect(f.camera.view).toBeNull()
       expect(f.sensor.sceneTarget.depthTexture!.type).toBe(FloatType)
       const backend = gpu.renderer.backend as unknown as {
         get(object: object): { texture: GPUTexture }
@@ -253,7 +253,7 @@ describe('the upscaler on the physical GPU', () => {
       expect(() => f.sensor.render(f.target)).toThrow('scene interrupted')
       expect(seenJitter).toBe(true)
       // The library restores the view the camera had, which here is none.
-      expect(f.camera.view?.enabled ?? false).toBe(false)
+      expect(f.camera.view).toBeNull()
       expect(gpu.renderer.toneMapping).toBe(NoToneMapping)
       expect(gpu.renderer.getMRT()).toBe(null)
       expect(gpu.renderer.getRenderTarget()).toBe(f.target)
