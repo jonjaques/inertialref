@@ -114,7 +114,9 @@ describe('where the rocks are addressed', () => {
 })
 
 describe('what a rock is', () => {
-  it('stands on the ground the mesh draws', () => {
+  // The field the mesh is triangulated from; the renderer seats the rock on
+  // the triangle itself (`patchGround.test.ts` in packages/rendering).
+  it('carries the drawn field at its own direction', () => {
     for (const region of regions(LUNA, 6)) {
       for (const rock of regionScatter(LUNA.surface, region)) {
         expect(rock.elevation).toBe(
@@ -148,19 +150,10 @@ describe('what a rock is', () => {
   /*
    * Every rock the generator emits has to be visible, because every one of them
    * costs a field sample, an instance matrix, a place in the nearest-first sort
-   * and a slot against the renderer's own ceiling. A fixed `MESH_SEAT` of twelve
-   * centimeters is taller than the bottom quarter of this population — a 25 cm
-   * rock stands 17 cm above its own center — and put 60% of them entirely under
-   * the ground, which is 24% of the whole budget spent on geometry no camera can
-   * see. The seat is capped by the rock now and the sink is capped by the seat.
-   *
-   * **Either cap alone satisfies this and the pair is not redundant**, which is
-   * worth knowing before one of them is deleted as dead weight: `sink` and
-   * `radius` are correlated through the same `size` draw, so a small rock never
-   * reaches a deep sink and a deeply sunk rock is always large enough for a
-   * twelve-centimeter seat to be a rounding error on it. This test goes red
-   * with both removed and green with either, which is the honest description of
-   * what it guards.
+   * and a slot against the renderer's own ceiling. The renderer stands a rock on
+   * the triangle it draws under it and sinks it by `sink` of its own height and
+   * nothing more, so what stands proud is `1 − sink` of the rock — at least the
+   * 15% the cap leaves, whatever the size.
    */
   it('leaves every rock standing above the ground it is seated in', () => {
     for (const body of [LUNA, MARS, IAPETUS]) {
@@ -168,8 +161,7 @@ describe('what a rock is', () => {
       for (const region of regions(body, 8)) {
         for (const rock of regionScatter(body.surface, region)) {
           const stand = rockRise(rock.radius, rock.angularity)
-          expect(stand * (1 - rock.sink) - rock.seat).toBeGreaterThan(0)
-          expect(rock.seat).toBeLessThanOrEqual(stand)
+          expect(stand * (1 - rock.sink)).toBeGreaterThanOrEqual(stand * 0.15)
           checked += 1
         }
       }
