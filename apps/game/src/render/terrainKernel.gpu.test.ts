@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { ComputeNode } from 'three/webgpu'
 import { openSession, type Session, terrainZoo } from '@inertialref/devtools'
 import { vec3 } from '@inertialref/spatial'
 import {
@@ -228,6 +229,50 @@ const bound = (body: Body, level: number): number =>
  * evaluation differs from float64's at all, which every channel's does.
  */
 const COVER_BOUND = 2
+
+/**
+ * `maxStorageBuffersPerShaderStage` as the WebGPU spec defaults it, which is
+ * what a device runs at unless it asks for more. Nothing asks: not
+ * `createRenderer`, not the producer, not the harness.
+ */
+const BASELINE_STORAGE_BUFFERS = 8
+
+describe('the kernel’s bindings', () => {
+  /*
+   * At the baseline a ninth binding fails pipeline validation. Here that is
+   * a harness error in the tolerance tests below; in the app it is the
+   * producer's `warm()` retiring the GPU for the session with a logged
+   * reason, and the ground arriving at the pool's pace with nothing else to
+   * say why. Both depend on the device having been granted the default — the
+   * adapter on an M5 offers ten — so this counts the bindings in the program
+   * itself against the spec's figure, whatever limits a device was given,
+   * and says which budget a new one spends. A list the drainage graph grows
+   * is a row in its offset table (`DRAINAGE_NODES_AT` and the rest), not a
+   * binding.
+   */
+  it('binds no more storage buffers than the baseline device has', () => {
+    const nodes = (
+      gpu.renderer as unknown as {
+        _nodes: { getForCompute(node: ComputeNode): { computeShader: string } }
+      }
+    )._nodes
+    const wgsl = nodes.getForCompute(kernel.compute).computeShader
+    const bindings = wgsl.match(/var<storage\b/g)?.length ?? 0
+    console.info(
+      `the kernel binds ${bindings} storage buffers of the baseline's ${BASELINE_STORAGE_BUFFERS}`,
+    )
+    expect(bindings).toBeLessThanOrEqual(BASELINE_STORAGE_BUFFERS)
+  })
+
+  it('is held at the baseline by a device granted only the baseline', () => {
+    // The other half of the claim above: the tolerance tests in this file
+    // build the kernel on a device at the default, as the app does.
+    const device = (gpu.renderer.backend as { device?: GPUDevice }).device
+    expect(device?.limits.maxStorageBuffersPerShaderStage).toBe(
+      BASELINE_STORAGE_BUFFERS,
+    )
+  })
+})
 
 describe('the kernel against generateHeightfield', () => {
   it('agrees on every body at every level, within the stated bound', async () => {
