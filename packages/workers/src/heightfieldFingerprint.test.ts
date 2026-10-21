@@ -36,7 +36,7 @@ const PINNED = {
    * tiles without spending a task version; this is how the test tells the two
    * apart.
    */
-  terrain: 5,
+  terrain: 6,
   tiles: {
     'dry/2': '955add4b -3856.736083984375 1290.2174072265625',
     'dry/10': 'e8aef271 -4264.93359375 -4108.31689453125',

@@ -2,8 +2,8 @@
 /*
  * The terrain archive, from outside the process that fills it.
  *
- *     node scripts/terrainArchive.mjs            {"version":"5-cpu@7","entries":1246,"bytes":88486528}
- *     node scripts/terrainArchive.mjs version    5-cpu@7
+ *     node scripts/terrainArchive.mjs            {"version":"6-cpu@7","entries":1246,"bytes":88486528}
+ *     node scripts/terrainArchive.mjs version    6-cpu@7
  *     node scripts/terrainArchive.mjs entries    1246
  *
  * Two readers, and neither can import the store. CI keys its cache of
