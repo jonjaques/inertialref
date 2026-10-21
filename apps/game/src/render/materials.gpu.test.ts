@@ -154,9 +154,14 @@ describe('every production material compiles', () => {
     }
   })
 
-  it('the ground', async () => {
+  it('the ground, with its unbounded lattice and its gullies', async () => {
     const ground = patchMesh(createTerrainMaterial().material)
     await gpu.compile(ground, camera, staged(ground))
+    // The macro band and the gullies are functions of their own; a graph that
+    // dropped a branch would still compile, and would not carry them.
+    const { fragmentShader } = await gpu.shader(ground, camera, staged(ground))
+    expect(fragmentShader).toContain('latticeNoise')
+    expect(fragmentShader).toContain('gullyStripes')
   })
 
   it('the lens flare', async () => {

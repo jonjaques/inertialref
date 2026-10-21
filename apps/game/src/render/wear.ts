@@ -42,6 +42,15 @@ export interface GroundWear {
    * wavelengths: under 64 rather than 2.5 × 10⁶, so float32 resolves microns.
    */
   readonly grainOrigin: Vector3
+  /**
+   * The unrounded anchor split across the macro lattice in float64: the whole
+   * cells in `macroCell`, exact integers, and the meters left over in
+   * `macroOffset`, under `MACRO_METERS`. The bands that may not repeat read
+   * a lattice coordinate from these two and `positionLocal`, never from the
+   * body-fixed position (`render/terrain.ts` § the macro band).
+   */
+  readonly macroCell: Vector3
+  readonly macroOffset: Vector3
 }
 
 /** The sea material's: the same eye, morph and anchor, and the wave field's origin in place of the grain's. */
@@ -67,6 +76,8 @@ export const UNDRESSED_GROUND: GroundWear = Object.freeze({
   anchor: new Vector3(),
   anchorAltitude: 0,
   grainOrigin: new Vector3(),
+  macroCell: new Vector3(),
+  macroOffset: new Vector3(),
 })
 
 export const UNDRESSED_SEA: SeaWear = Object.freeze({
