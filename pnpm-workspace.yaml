@@ -24,13 +24,3 @@ allowBuilds:
   # with a Gatekeeper message, the fix is `xattr -d com.apple.quarantine` on
   # that file, not flipping this to true.
   webgpu: false
-
-# The Cloudflare toolchain moves fast enough to trip the release-age gate: `cf`
-# is a beta, and it refuses a Wrangler older than the one it was built against.
-# Recorded rather than waived globally, so the exception is visible and dated
-# with the lockfile.
-minimumReleaseAgeExclude:
-  - '@astrojs/markdown-satteri@0.4.1'
-  - astro@7.3.2
-  - '@cloudflare/codemods@0.2.1'
-  - cf@1.0.0-beta.5

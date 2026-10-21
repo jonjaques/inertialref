@@ -62,6 +62,7 @@ it.each([
       sceneLayout(TEMPORAL, sceneBackend(gpu.renderer)),
     )
     try {
+      await sensor.warmUpscale()
       sensor.render(target)
       await gpu.read(target)
       const reactive = sensor.sceneTarget.textures.find(
@@ -123,6 +124,7 @@ it('replaces hidden background reactivity and combines translucent coverage', as
     return mask.at(16, 16)[0]
   }
   try {
+    await sensor.warmUpscale()
     expect(await coverage()).toBe(0)
     meshes[2]!.visible = true
     meshes[3]!.visible = true

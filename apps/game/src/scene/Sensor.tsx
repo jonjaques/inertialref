@@ -1,5 +1,5 @@
 import { useThree } from '@react-three/fiber'
-import { useEffect, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
 import { invariant } from '@inertialref/shared'
 import { pictureUpscales, type Picture } from '../render/picture.ts'
@@ -8,6 +8,7 @@ import { sceneBackend, sceneLayout } from '../render/sceneLayout.ts'
 import { createSensor, type Sensor as SensorChain } from '../render/sensor.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 import { warmAtMount } from '../render/warmup.ts'
+import { createHandover } from './chainHandover.ts'
 
 /**
  * The sensor owns the frame.
@@ -22,8 +23,12 @@ import { warmAtMount } from '../render/warmup.ts'
  * The chain is built in an effect rather than in a state initializer, because
  * it holds a render target on the device and StrictMode double-invokes
  * initializers while keeping one of the pair — the leak `render/firstLight.ts`
- * documents. An effect's cleanup disposes what its setup built, so the doubled
+ * documents. An effect's cleanup releases what its setup built, so the doubled
  * mount costs one target that is freed, not one that is lost.
+ *
+ * A picture changed mid-session is a new chain, and the one on screen keeps the
+ * frame until the new one's upscaler can dispatch: `chainHandover.ts` holds
+ * the swap.
  */
 export function Sensor({
   engine,
@@ -37,7 +42,28 @@ export function Sensor({
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   const camera = useThree((state) => state.camera)
-  const chain = useRef<SensorChain | null>(null)
+  // One per mount. Its hooks close over the first render's engine, which is
+  // the session's only one.
+  const [handover] = useState(() =>
+    createHandover<SensorChain>({
+      ready: (chain) => chain.warmUpscale(),
+      dispose: (chain) => chain.dispose(),
+      show: (chain) => {
+        // The measurement rig submits frames through the same chain the loop
+        // does, or its figure is about a path nothing presents.
+        engine.present =
+          chain === null
+            ? null
+            : () => {
+                chain.render()
+                engine.exposure = chain.exposure
+                engine.sensorDiagnostics = chain.diagnostics
+              }
+        engine.exposure = chain?.exposure ?? null
+        engine.sensorDiagnostics = chain?.diagnostics ?? null
+      },
+    }),
+  )
 
   useEffect(() => {
     engine.declareCut()
@@ -88,16 +114,16 @@ export function Sensor({
       }),
       diagnostic,
     )
-    chain.current = built
+    const release = handover.offer(built)
     // The producer is registered once per label, so under StrictMode's
-    // mount–unmount–mount it belongs to the first chain, which is disposed by
-    // the time boot runs it. Warm whichever chain is live instead.
+    // mount–unmount–mount it belongs to the first chain, which is released by
+    // the time boot runs it. Warm the newest chain instead.
     if (pictureUpscales(layout.picture)) {
       warmAtMount({
         label: 'compiling the upscaler',
         units: 1,
         run: async (done) => {
-          chain.current?.warmUpscale()
+          await handover.latest?.warmUpscale()
           done()
         },
       })
@@ -106,34 +132,22 @@ export function Sensor({
       label: 'warming the sensor',
       units: 1,
       run: async (done) => {
-        await chain.current?.warm()
+        await handover.latest?.warm()
         done()
       },
     })
-    // The measurement rig submits frames through the same chain the loop
-    // does, or its figure is about a path nothing presents.
-    engine.present = () => {
-      built.render()
-      engine.exposure = built.exposure
-      engine.sensorDiagnostics = built.diagnostics
-    }
-    return () => {
-      if (engine.present !== null) engine.present = null
-      engine.exposure = null
-      engine.sensorDiagnostics = null
-      chain.current = null
-      built.dispose()
-    }
+    return release
     // `picture` is drawn through the engine's layout and only checked here;
     // it is a dependency because a new picture is a new chain.
-  }, [gl, scene, camera, engine, picture, diagnostic])
+  }, [gl, scene, camera, engine, picture, diagnostic, handover])
 
   useTimedFrame(
     'sensor',
     (_state, delta) => {
-      chain.current?.render(undefined, delta)
-      engine.exposure = chain.current?.exposure ?? null
-      engine.sensorDiagnostics = chain.current?.diagnostics ?? null
+      const chain = handover.shown
+      chain?.render(undefined, delta)
+      engine.exposure = chain?.exposure ?? null
+      engine.sensorDiagnostics = chain?.diagnostics ?? null
     },
     1,
   )

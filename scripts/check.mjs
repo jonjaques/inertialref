@@ -177,9 +177,16 @@ const STAGES = [
     name: `typecheck:${project}`,
     group: 'typecheck',
     why: `tsc -p ${config}`,
-    argv: [join(ROOT, 'node_modules/.bin/tsc'), '-p', config],
+    /*
+     * TypeScript 7's native compiler, by its own path. `typescript` stays 6:
+     * TypeDoc and `astro check` import its JavaScript API, which 7 does not
+     * ship, and both cap their peer range at 6.0. The two packages each
+     * declare a `tsc` bin, so `node_modules/.bin/tsc` is whichever pnpm
+     * linked last — a gate cannot depend on that.
+     */
+    argv: [join(ROOT, 'node_modules/typescript7/bin/tsc'), '-p', config],
     weight: 1,
-    cost: 6,
+    cost: 1,
     timeout: 180_000,
   })),
   {

@@ -36,7 +36,7 @@ beforeAll(async () => {
 })
 afterAll(() => gpu.dispose())
 
-function rig(picture: Picture, frame?: () => SensorFrame) {
+async function rig(picture: Picture, frame?: () => SensorFrame) {
   gpu.renderer.setSize(SIZE, SIZE, false)
   // Production's layout for the picture: the optics' rows are there whether
   // or not a frame drives the optical stages, as they are in the app.
@@ -52,6 +52,8 @@ function rig(picture: Picture, frame?: () => SensorFrame) {
   scene.updateMatrixWorld(true)
   camera.updateMatrixWorld(true)
   const sensor = createSensor(gpu.renderer, scene, camera, layout, frame)
+  // The kernel's pipelines compile asynchronously; the app's boot awaits this.
+  await sensor.warmUpscale()
   const target = new RenderTarget(SIZE, SIZE, {
     type: FloatType,
     depthBuffer: false,
@@ -80,7 +82,7 @@ describe('the upscaler on the physical GPU', () => {
   it.skipIf(!TIMESTAMPS)(
     'samples GPU passes only on request and keeps its query slots bounded',
     async () => {
-      const f = rig(temporal)
+      const f = await rig(temporal)
       try {
         setTimingLevel('off')
         f.sensor.render(f.target)
@@ -133,7 +135,7 @@ describe('the upscaler on the physical GPU', () => {
        * only time the timer writes queries.
        */
       const uninstall = installPassTimeline(gpu.renderer)
-      const f = rig(temporal)
+      const f = await rig(temporal)
       try {
         setTimingLevel('off')
         f.sensor.render(f.target)
@@ -191,7 +193,7 @@ describe('the upscaler on the physical GPU', () => {
   )
 
   it('reconstructs a constant HDR field at display size and runs every call', async () => {
-    const f = rig(spatial)
+    const f = await rig(spatial)
     try {
       f.sensor.render(f.target)
       const first = await gpu.read(f.target)
@@ -217,7 +219,7 @@ describe('the upscaler on the physical GPU', () => {
   })
 
   it('preserves a constant HDR field through temporal accumulation', async () => {
-    const f = rig(temporal)
+    const f = await rig(temporal)
     try {
       for (let i = 0; i < 20; i++) f.sensor.render(f.target, 1 / 60)
       const pixel = (await gpu.read(f.target)).at(32, 32)
@@ -226,7 +228,8 @@ describe('the upscaler on the physical GPU', () => {
       expect(pixel[2]).toBeCloseTo(2, 2)
       expect(pixel[3]).toBe(1)
       expect(f.sensor.diagnostics.picture.frames).toBe(20)
-      expect(f.camera.view?.enabled).toBe(false)
+      // The library restores the view the camera had, which here is none.
+      expect(f.camera.view).toBeNull()
       expect(f.sensor.sceneTarget.depthTexture!.type).toBe(FloatType)
       const backend = gpu.renderer.backend as unknown as {
         get(object: object): { texture: GPUTexture }
@@ -240,7 +243,7 @@ describe('the upscaler on the physical GPU', () => {
   })
 
   it('clears jitter even if the scene throws', async () => {
-    const f = rig(temporal)
+    const f = await rig(temporal)
     let seenJitter = false
     f.slab.onBeforeRender = () => {
       seenJitter = f.camera.view?.enabled === true
@@ -249,7 +252,8 @@ describe('the upscaler on the physical GPU', () => {
     try {
       expect(() => f.sensor.render(f.target)).toThrow('scene interrupted')
       expect(seenJitter).toBe(true)
-      expect(f.camera.view?.enabled).toBe(false)
+      // The library restores the view the camera had, which here is none.
+      expect(f.camera.view).toBeNull()
       expect(gpu.renderer.toneMapping).toBe(NoToneMapping)
       expect(gpu.renderer.getMRT()).toBe(null)
       expect(gpu.renderer.getRenderTarget()).toBe(f.target)
@@ -264,7 +268,7 @@ describe('the upscaler on the physical GPU', () => {
   })
 
   it('resets and reallocates at the exact new display and render dimensions', async () => {
-    const f = rig(temporal)
+    const f = await rig(temporal)
     try {
       f.sensor.render(f.target)
       await gpu.read(f.target)
@@ -286,7 +290,7 @@ describe('the upscaler on the physical GPU', () => {
   })
 
   it('preserves the display lens when render dimensions round independently', async () => {
-    const f = rig(temporal)
+    const f = await rig(temporal)
     try {
       gpu.renderer.setSize(65, 49, false)
       f.camera.aspect = 65 / 49
@@ -307,7 +311,7 @@ describe('the upscaler on the physical GPU', () => {
   })
 
   it('warms the complete temporal attachment layout before the first frame', async () => {
-    const f = rig(temporal)
+    const f = await rig(temporal)
     try {
       const warm = warmTargetFor(gpu.renderer, f.layout)
       expect(
@@ -336,7 +340,7 @@ describe('the upscaler on the physical GPU', () => {
   })
 
   it('writes the material coverage into its independent reactive attachment', async () => {
-    const f = rig(temporal)
+    const f = await rig(temporal)
     f.material.outputNode = Fn(() => {
       reactiveCoverage.assign(0.3)
       return vec4(0.25, 0.5, 2, 1)
@@ -366,7 +370,7 @@ describe('the upscaler on the physical GPU', () => {
       noiseTick: 0,
       pictureEpoch: 1,
     }
-    const original = rig(
+    const original = await rig(
       { aa: 'off', scale: 'native', sharpness: 'off' },
       () => state,
     )
@@ -382,7 +386,7 @@ describe('the upscaler on the physical GPU', () => {
       { ...spatial, aa: 'msaa' as const },
       temporal,
     ]) {
-      const f = rig(picture, () => state)
+      const f = await rig(picture, () => state)
       try {
         for (let i = 0; i < 20; i++) f.sensor.render(f.target)
         const pixel = (await gpu.read(f.target)).at(32, 32)
@@ -403,7 +407,7 @@ describe('the upscaler on the physical GPU', () => {
   it('restarts temporal history on declared cuts and processing-domain changes', async () => {
     let epoch = 3
     let settings = DEFAULT_SENSOR_SETTINGS
-    const f = rig(temporal, () => ({
+    const f = await rig(temporal, () => ({
       lens: LENS_PRESETS.flight,
       settings,
       time: 1,
@@ -436,7 +440,7 @@ describe('the upscaler on the physical GPU', () => {
   })
 
   it('keeps rigid velocity at zero across a render-origin rebase', async () => {
-    const f = rig(temporal)
+    const f = await rig(temporal)
     try {
       f.sensor.render(f.target)
       await gpu.read(f.target)
@@ -466,7 +470,7 @@ describe('the upscaler on the physical GPU', () => {
       f.dispose()
     }
 
-    const moving = rig(temporal)
+    const moving = await rig(temporal)
     try {
       moving.sensor.render(moving.target)
       await gpu.read(moving.target)
@@ -487,7 +491,7 @@ describe('the upscaler on the physical GPU', () => {
   })
 
   it('keeps reversed depth distinguishable at astronomical distances without frag_depth', async () => {
-    const f = rig(spatial)
+    const f = await rig(spatial)
     try {
       const shader = await gpu.shader(f.slab, f.camera, f.scene)
       expect(shader.fragmentShader).not.toContain('@builtin(frag_depth)')

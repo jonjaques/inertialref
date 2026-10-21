@@ -96,6 +96,11 @@ const CONFIG = {
      permits the `<b>` and `<br/>` these diagrams use in their labels. */
   securityLevel: 'strict' as const,
   theme: 'base' as const,
+  /* Mermaid 12 defaults to ELK layout and the `neo` look, which paints `base`
+     theme strokes with a gradient. The palette below was drawn for dagre's
+     layout and flat strokes, so both are named rather than inherited. */
+  layout: 'dagre',
+  look: 'classic' as const,
   fontFamily: "'IBM Plex Sans Variable', ui-sans-serif, system-ui, sans-serif",
   themeVariables: {
     darkMode: true,
