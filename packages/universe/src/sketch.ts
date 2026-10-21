@@ -734,11 +734,11 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
      * across the family from the pole, so the four are parallel where they
      * are cut and meet only on the equator, past every extent.
      *
-     * The stream's first draw is a unit vector the family was once centered
-     * on. The family is the pole's now, and the draw stays where it is so
-     * the azimuth, the widths and the offsets after it keep their values;
-     * what each stripe adds is appended after them, and the stream is its
-     * own derived seed, so appending moves nothing else.
+     * The stream's first draw is a unit vector nothing reads — the family's
+     * place is the pole — and it stays drawn so the azimuth, the widths and
+     * the offsets after it keep their values; what each stripe adds is
+     * appended after them, and the stream is its own derived seed, so
+     * appending moves nothing else.
      */
     stripeRng.unitVector()
     const run = tangentAt(SOUTH_POLE, stripeRng.range(0, 2 * Math.PI))

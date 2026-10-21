@@ -1462,8 +1462,8 @@ function cellFraction(coordinate: number, cells: number): number {
  *
  * **Between two bodies it reads the heavier one.** A mean over both is a
  * level belonging to neither across the whole overlap — 2.4 cells wide
- * at most, 156 km a cell on Earth — so the sheet tilted across the gap
- * and the clamp followed it. Read off the leader alone, it is a step where
+ * at most, 156 km a cell on Earth — so the sheet would tilt across the
+ * gap and the clamp follow it. Read off the leader alone, it is a step where
  * the lead changes hands, and that is where the weights tie, not where the
  * ground stands above both levels: the lattice samples the landform once a
  * cell and the field's ground between two nodes is hundreds of meters from
@@ -1478,7 +1478,7 @@ function cellFraction(coordinate: number, cells: number): number {
  * reach — a cell near a face's edge is half the angle of one at its center
  * — so the sample crossing into the next cell would gain or lose it with
  * weight, and between two bodies that is a step of the levels' difference
- * times its share: 47 m on Earth, where the sea met a lake at a face edge.
+ * times its share: 47 m on Earth, where the sea meets a lake at a face edge.
  * A neighbor's weight fades to zero over the half of the sample's cell
  * away from it, which is the edge it leaves the ring across, and the cell
  * decision is safe for the reason it is for the segments: the two cells a

@@ -112,7 +112,7 @@ where it reaches, a lake at its spill, a river at its surface.**
   reach — two lakes at different spills, or a lake and the sea — the sample
   reads the one whose nodes carry the most of the kernel's weight, and the
   two blend only where neither's share leads the other's by a tenth: a mean
-  over both read a level belonging to neither across the whole overlap, and
+  over both reads a level belonging to neither across the whole overlap, and
   the leader alone is a step where the lead changes hands that the lattice
   cannot put where the ground stands above both levels. A ring node's
   weight fades to zero over the half of the sample's cell away from it, so

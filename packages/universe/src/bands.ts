@@ -634,7 +634,7 @@ export function iceBand(
  * shoulders are a real feature rather than a way of hiding the cut.
  *
  * **It is cut along the stripe's extent and nowhere else.** A mapless sphere
- * wears the relief, so a trough around the whole circle read from orbit as a
+ * wears the relief, so a trough around the whole circle reads from orbit as a
  * hairline from pole to pole. The ends taper over the last `taper` of the
  * half-length, because a profile that stopped there would be a step in the
  * canonical field. The distance along is the chord from the extent's middle,
