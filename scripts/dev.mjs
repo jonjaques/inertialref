@@ -35,8 +35,7 @@ import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
 import { fileURLToPath } from 'node:url'
 
-import { existsSync, readFileSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const ENSURE = process.argv.includes('--ensure')
@@ -209,16 +208,6 @@ if (serverUp && !reuseServer) {
     lsof(SERVER_PORT),
     'Stop it, then run `pnpm dev` again.',
   )
-}
-
-if (
-  !existsSync(
-    fileURLToPath(
-      new URL('../apps/game/public/doc-content/manifest.json', import.meta.url),
-    ),
-  )
-) {
-  execFileSync('pnpm', ['docs:build'], { cwd: ROOT, stdio: 'inherit' })
 }
 
 /** One prefixed writer per stream, holding a partial line between chunks. */
