@@ -11884,6 +11884,21 @@ previous selection did not hold, 1,024 px at most 102 and two frame widths at
 most 357, so the memo retakes the walk every 256 px and the 1,024 px margin
 leaves 768 px to stream into.
 
+**A seam between equals, which must not come back.** A patch in view that
+borders coarser ground outside takes its band at the reference, so that edge
+closes — and its same-level neighbors in view keep the lens's band, so the edge
+between equals opens. The margin argument (a patch near its range is 1,024 px
+across) does not hold at the level floor, where a level-16 patch on Luna is
+over 2,000 px wide at 100 m: on the live streamer at 11.4° on Luna's map seam
+such edges lay in the frame at 4 of 12 headings, open by up to 3.9 cm, 12 px,
+and headlessly reached the frame on 2 of 48 standing eyes on Luna and 6 on
+Mars. None showed in the stills at the predicted positions. The balance pass
+now splits a node outside the view wherever an edge neighbor holds a finer node
+within `VIEW_TURN_PIXELS` of the frame, for 2% more patches; splitting the whole
+boundary costs 13%, widening each patch's in-view test by its own size 21%.
+`holdsTogether` checks same-level neighbors, and a floor-limited standing
+property fails against the old selector in three runs.
+
 **Rejected:** a 10° floor, which frames Earthrise at its solved angle all month
 but doubles the nadir cuts and puts 117 scatter regions on Luna against a
 ceiling of 96; a finer reference lens, which costs patches without a gain since

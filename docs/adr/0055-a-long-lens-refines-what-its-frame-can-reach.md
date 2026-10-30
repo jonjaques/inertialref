@@ -60,9 +60,22 @@ end of the lens is 11.4°.**
   reference scale.** A coarser neighbor outside stopped at the reference's
   range, a fraction of the in-view patch's range at the lens, so a band taken at
   the lens would still be sliding at the neighbor's edge. At the reference scale
-  it has arrived on its parent's grid first, exactly as within one regime. The
-  cost is that patch's own level, which is what the margin keeps out of the
-  frame: a patch near its own range is 1,024 px across at 16 px a cell.
+  it has arrived on its parent's grid first, exactly as within one regime.
+- **No patch within a turn of the frame borders coarser ground outside the
+  view.** A patch banded at the reference has a band its same-level neighbors
+  in view do not share, and two equals sliding their shared odd vertices by
+  different bands open that edge. The margin does not keep such a patch out
+  of the frame: one near its own range is 1,024 px across, but one at the
+  level floor is kept because it may not go deeper — a level-16 patch on Luna
+  is 41 m wide, over 2,000 px at 100 m through 11.4°. Measured on the live
+  streamer at 11.4° standing on Luna's map seam, such edges lay in the frame at
+  4 of 12 headings, open by up to 3.9 cm, 12 px; headlessly they reached the
+  frame on 2 of 48 standing eyes on Luna and 6 on Mars. So the balance pass
+  splits a node outside the view wherever an edge neighbor holds a finer node
+  within `VIEW_TURN_PIXELS` of the frame: that patch meets the outside at its
+  own level and keeps the lens's band, and every same-level edge the two
+  regimes still disagree on is at least 564 px out after a full turn of the
+  held selection, over a thousand without one.
 - **The cap bounds the balanced tree.** Two regimes grade across the frame's
   edges, and the 2:1 rings that do it are hundreds of patches the walk's own
   count never sees: a descent onto Luna at 11.4° whose every walk fitted came
@@ -75,7 +88,9 @@ end of the lens is 11.4°.**
   the rotation its patches are placed with.
 - **A held selection is retaken once the view has turned `VIEW_TURN_PIXELS`**,
   a quarter of the margin, and never at the flight lens or wider, where the
-  view is not an input to the walk.
+  view is not an input to the walk. It is the same distance the boundary's
+  seams are kept from the frame, so no turn a held selection survives brings
+  one into the picture.
 - **`FOV_MIN` is 11.4°.** It is the photograph's framing, and it is where the
   cap holds: every eye looking at the horizon fits, and the only cut trees are
   three of sixty eyes looking straight down beside a cube corner.
@@ -105,6 +120,19 @@ reference's own predicate. The flight lens wins on the other count: nothing
 outside the frame is ever coarser than the flight lens would draw it, so a turn
 streams the telephoto's increment over ground already resident and never a hole.
 
+**Banding at the reference wherever a patch in view borders coarser ground
+outside, and nothing else.** It closes that edge and opens the patch's edges to
+its equals, in the frame wherever the patch is a floor patch near the eye.
+
+**Splitting along the whole boundary rather than within a turn.** It removes
+every disagreement between equals in view, and costs 13% more patches standing
+at two meters across Earth, Luna and Mars at 11.4°, where the turn-wide rule
+costs 2% and keeps every remaining one out of a turn's reach.
+
+**Widening each patch's in-view test by its own angular size.** It brings the
+floor patches near the eye wholly into view, so none of them borders the
+outside in the frame, and costs 21% more patches and 20% higher peaks.
+
 **No margin.** Cheaper — 1,477 patches at no margin, 1,555 at 512 px and 1,756
 at 1,024 on Earth's basin at 11.4° — and it puts the ring of demoted patches in
 the frame's edges, where every one of them draws a level coarse.
@@ -118,9 +146,9 @@ of the streamer's eight-a-frame build budget, with 768 px of margin left.
 **A floor at 10° or 8°.** At 10° Earthrise frames at its solved angle at every
 instant of the month, where 11.4° clamps it for about half the orbit by up to
 5%. It also doubles the cut trees straight down to six of sixty, one of them
-away from any cube corner, with overruns to 21%, and puts 117 scatter regions on Luna
-against a ceiling of 96. At 8° eyes at the horizon start to cut too, 5 of 240,
-and a descent onto Miranda looking down is cut on 16 of 32 steps.
+away from any cube corner, with overruns to 21%, and puts 117 scatter regions on
+Luna against a ceiling of 96. At 10° one of 240 horizon eyes cuts, at 8°
+fourteen, and a descent onto Miranda looking down is cut on 16 of 32 steps.
 
 **Tightening the capsule with each node's own elevation range.** The lever for
 the nadir case: a node's column is the body's whole relief tall, so a camera
@@ -136,18 +164,18 @@ Measured over the same sixty eyes and eight descents, looking at the horizon
 
 | Lens        | Horizon, standing | Cut        | Descent peak | Cut        | Nadir, cut |
 | ----------- | ----------------- | ---------- | ------------ | ---------- | ---------- |
-| 20°         | 669–2,315         | 0 of 240   | 932–1,388    | 0 of 256   | 0 of 60    |
-| **11.4°**   | 929–3,491         | 0 of 240   | 1,221–1,946  | 0 of 256   | 3 of 60    |
-| 10°         | 1,005–3,786       | 0 of 240   | 1,338–2,123  | 0 of 256   | 6 of 60    |
-| 8°          | 1,054–4,487       | 5 of 240   | 1,495–2,492  | 0 of 256   | 14 of 60   |
-| 11.4° at 8× | 3,003–17,760      | 231 of 240 | 4,586–8,305  | 167 of 256 | —          |
+| 20°         | 687–2,318         | 0 of 240   | 961–1,388    | 0 of 256   | 0 of 60    |
+| **11.4°**   | 950–3,494         | 0 of 240   | 1,314–1,946  | 0 of 256   | 3 of 60    |
+| 10°         | 1,031–3,792       | 1 of 240   | 1,410–2,132  | 0 of 256   | 6 of 60    |
+| 8°          | 1,156–4,499       | 14 of 240  | 1,607–2,465  | 0 of 256   | 14 of 60   |
+| 11.4° at 8× | 3,319–17,991      | 240 of 240 | 4,958–7,517  | 164 of 256 | —          |
 
 **The cap holds at the new floor everywhere but beside a cube corner.** The
 three cut trees at 11.4° are all the `corner` site looking straight down, over
 the cap by at most 12%, and none of them is short of the floor underfoot. A
 corner is where `regionSpacing`'s nominal spacing over-refines by up to a level
 (ADR-0015), and a long lens multiplies every ring. On a 1600×900 window at DPR
-2 the horizon cuts 26 of 240 eyes, 20 of them at corners, by up to 26%, still
+2 the horizon cuts 41 of 240 eyes, 26 of them at corners, by up to 49%, still
 none short underfoot; the same window at 20° over the whole disk cut 8 of 60
 standing eyes, every one of them short of the floor.
 
@@ -159,6 +187,12 @@ would at 20°.
 **A turn costs a few frames of detail, never a hole.** Ground swinging into the
 frame was refined at the flight lens and sharpens as the telephoto's increment
 streams. The memo retakes the walk every 256 px of turn.
+
+**Keeping the boundary's seams a turn from the frame costs a little of the
+cap.** The extra splits are 2% of a standing selection, and at the cap that is
+enough to move 15 of 240 horizon eyes one rung up the coarsening ladder, 184
+coarsened where 169 were; an uncapped standing walk costs 1.40 ms where it
+cost 1.16.
 
 **The headless probes ask a different question.** `ir.descend` and
 `ir.terrainBaseline` have no camera to aim, so they refine the whole disk at
