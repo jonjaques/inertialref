@@ -748,34 +748,46 @@ export function zenithSkyRadiance(
  * What this returns is drawn *before* the shell divides it back down, so it
  * is the disk over the column's transmittance, and through the last degree or
  * two above a sea-level horizon that transmittance is 10⁻⁵ and smaller. The
- * scene's target is half-float, whose largest value is 65,504: uncapped, the
- * drawn disk overflows to infinity there, and the shell's extinction cannot
- * bring an infinity back. So the return is capped at `DISK_THROUGH_AIR_CEILING`, and
- * a sun that low dims faster than the law that drew it, in the column's own
- * color, until the ground takes it.
+ * scene's target is half-float, whose largest value is 65,504, and each
+ * channel is clipped to it on the way in: uncapped, the drawn disk is clipped
+ * toward white there before the shell dims it, and the shell's extinction
+ * cannot give back the color the clip took. So the return's brightest
+ * channel is capped at `ceiling` — a deep-red disk's red is four times its
+ * luminance — and a sun that low dims faster than the law that drew it, in
+ * the column's own color, until the ground takes it.
  */
 export function diskThroughAir(
   recipe: AtmosphereRecipe,
   radius: number,
   mu: number,
   compression: number,
+  /**
+   * The cap on the brightest channel: `DISK_THROUGH_AIR_CEILING` at the
+   * calibration, and that over the scene gain when an exposure opened for a
+   * darkening sky (`airAdaptation`) multiplies the disk on its way into the
+   * target.
+   */
+  ceiling = DISK_THROUGH_AIR_CEILING,
 ): [number, number, number] {
   const passed = transmittanceFrom(Math.max(radius, 1), mu, recipe)
   const mean = (passed[0] + passed[1] + passed[2]) / 3
   const luminance = 0.2126 * passed[0] + 0.7152 * passed[1] + 0.0722 * passed[2]
   if (mean <= 1e-12 || luminance <= 1e-12) return [0, 0, 0]
-  const gain = Math.min(
-    luminance ** (compression - 1) / mean,
-    DISK_THROUGH_AIR_CEILING / luminance,
-  )
+  const peak = Math.max(passed[0], passed[1], passed[2])
+  const gain = Math.min(luminance ** (compression - 1) / mean, ceiling / peak)
   return [passed[0] * gain, passed[1] * gain, passed[2] * gain]
 }
 
 /**
- * The most `diskThroughAir` returns, in luminance: 2¹¹. At Enhanced's
- * calibrated eight that is 16,384 in the scene's half-float target, a quarter
- * of its range, which leaves the glare and the bloom summed over the disk room
- * to stay finite. The law holds above a column transmittance of 8·10⁻⁵ —
- * Earth's sun from sea level above about 2°.
+ * The most `diskThroughAir` returns at the calibration, in any channel: 2¹¹.
+ * At Enhanced's calibrated eight that is 16,384 in the scene's half-float
+ * target, a quarter of its range, which leaves the glare and the bloom summed
+ * over the disk room to stay finite. The law holds above a column
+ * transmittance of 8·10⁻⁵ — Earth's sun from sea level above about 2°.
+ *
+ * Every stop an exposure opens doubles what reaches the target, and Enhanced
+ * opens 3.8 for the daylight left under a 1° sun from sea level, where the
+ * disk's red under this cap alone reaches 110,000 — so a caller drawing under
+ * an opened exposure divides the cap by the opening.
  */
 export const DISK_THROUGH_AIR_CEILING = 2048

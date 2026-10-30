@@ -39,11 +39,13 @@ export const stagedLight = enhancedSky
   .select(integratedSkyGain, float(1))
 
 /**
- * The daylight on a level surface where the observer stands, in scene units:
- * the sky overhead and the direct sun, or infinity outside any air. Written
- * once a frame by `Bodies`, read by the sensor for `airAdaptation`.
+ * The daylight where the observer stands, in scene units: the sky overhead
+ * and the direct sun (`daylightOver`), or infinity outside any air. Written
+ * once a frame by `Bodies`, read by the sensor for `airAdaptation`. `depth`
+ * is how far down that air the eye stands, 1 on the ground and 0 at its top,
+ * which `airAdaptation` fades over.
  */
-export const observerDaylight = { value: Number.POSITIVE_INFINITY }
+export const observerDaylight = { value: Number.POSITIVE_INFINITY, depth: 0 }
 
 /**
  * Enhanced's three-percent night-side fill is legibility, not measured light.
@@ -56,6 +58,14 @@ export const observerDaylight = { value: Number.POSITIVE_INFINITY }
  */
 export const visibilityAmbient = enhancedSky.mul(0.03).mul(stagedLight)
 
+/**
+ * `integratedSkyGain` for a sensor exposure `total`: the inverse of what the
+ * sensor multiplies the scene by, one at the calibration. The near field's
+ * lights carry it on the CPU (`CameraRig`), where the uniform cannot reach.
+ */
+export const integratedGainFor = (total: number | null): number =>
+  total === null ? 1 : 1 / (SURFACE_LUMINANCE * total)
+
 export function setSceneExposure(
   renderer: Renderer,
   pre: number | null,
@@ -64,10 +74,7 @@ export function setSceneExposure(
 ): void {
   enhanced.set(renderer, pre !== null && processing === 'enhanced')
   gains.set(renderer, pre === null ? 1 : SURFACE_LUMINANCE * pre)
-  integratedGains.set(
-    renderer,
-    total === null ? 1 : 1 / (SURFACE_LUMINANCE * total),
-  )
+  integratedGains.set(renderer, integratedGainFor(total))
 }
 
 /**

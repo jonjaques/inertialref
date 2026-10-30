@@ -14,7 +14,12 @@ import {
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
 import { Vec, type Vec3 } from '@inertialref/spatial'
-import { diskThroughAir, type RenderBody } from '@inertialref/rendering'
+import {
+  airAdaptation,
+  DISK_THROUGH_AIR_CEILING,
+  diskThroughAir,
+  type RenderBody,
+} from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
@@ -596,6 +601,7 @@ export function Bodies({
                     standing,
                     sun,
                     uniforms.sunColor,
+                    sky,
                   ),
                 }
               overhead = Math.max(overhead, sky)
@@ -608,6 +614,12 @@ export function Bodies({
     }
 
     for (const body of scene.bodies) draw(body.address, body, null)
+    // The stops the sensor opens Enhanced by this frame, from the daylight
+    // written below: each one doubles the disk on its way into the target.
+    const opened =
+      standingAir !== null && engine.cameraPolicy.processing === 'enhanced'
+        ? airAdaptation(standingAir.daylight)
+        : 0
     for (const star of scene.stars) {
       throughAir =
         standingAir === null
@@ -622,12 +634,22 @@ export function Bodies({
                 ),
               ),
               diskCompression(star, visibility),
+              DISK_THROUGH_AIR_CEILING / 2 ** opened,
             )
       draw(starKey(star), starAsBody(star, visibility), star.color)
     }
     throughAir = null
     airLuminance.value = overhead
     observerDaylight.value = standingAir?.daylight ?? Number.POSITIVE_INFINITY
+    // How far down its air the eye stands, in the tables' own units.
+    const top = standingAir?.scattering.recipe.topRatio ?? 1
+    observerDaylight.depth =
+      standingAir === null
+        ? 0
+        : Math.min(
+            Math.max((top - standingAir.standing.radius) / (top - 1), 0),
+            1,
+          )
 
     residency.end()
 

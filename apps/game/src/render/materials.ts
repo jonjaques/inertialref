@@ -184,8 +184,10 @@ export interface AtmosphereMaterial {
   readonly outerRadius: { value: number }
   readonly innerRadius: { value: number }
   /**
-   * Render-space radius of the datum, which the drawn ground is sunk under.
-   * An eye's altitude in the air is measured from here; see `standing`.
+   * Render-space radius of the ground under the eye: the datum, which the
+   * drawn sphere is sunk under, or a giant's spheroid along the eye's
+   * radial. An eye's altitude in the air is measured from here; see
+   * `standing`.
    */
   readonly seaLevel: { value: number }
   /** Unit vector from the body toward its star, in render space. */
@@ -378,12 +380,14 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
      * it. The tables' ground is the drawn sphere, sunk under the datum so the
      * terrain covers it — 9.9 km on Earth — and the stretch lifts an eye at
      * high latitude by up to the 21 km the spherical terrain does not share.
-     * An observer on a beach was marched from 10 to 30 km up: half the air
-     * over their head, a slate-gray zenith, and a setting sun that never
-     * reddened because the column that reddens it was below them. Near the
-     * ground the eye is put at its altitude over sea level instead, along its
-     * own radial; by the top of the air it is back where the shell is, so the
-     * limb an orbit sees does not move. `airOverhead` takes the same eye.
+     * Marched from the geometry, an observer on a beach stands 10 to 30 km
+     * up: half the air over their head, a slate-gray zenith, and a setting
+     * sun that does not redden because the column that reddens it is below
+     * them. Near the ground the eye is put at its altitude over `seaLevel`
+     * instead, along its own radial — a giant's spheroid rather than the
+     * datum, since a giant has no spherical terrain to stand on; by the top of
+     * the air it is back where the shell is, so the limb an orbit sees does
+     * not move. `airOverhead` takes the same eye.
      */
     const altitude = length(eyeRelative).div(seaLevel).sub(1)
     const standing = mix(

@@ -426,6 +426,20 @@ describe('Enhanced in a darkening sky', () => {
     )
   })
 
+  it('fades to the calibration over the top of the air', () => {
+    // Leaving the air must not be a step in the exposure.
+    const dusk = lit(1)
+    expect(airAdaptation(dusk, 0)).toBe(0)
+    expect(airAdaptation(dusk, 0.2)).toBe(airAdaptation(dusk))
+    expect(airAdaptation(dusk, 1)).toBe(airAdaptation(dusk))
+    let previous = 0
+    for (let depth = 0; depth <= 0.2; depth += 0.01) {
+      const stops = airAdaptation(dusk, depth)
+      expect(stops).toBeGreaterThanOrEqual(previous - 1e-12)
+      previous = stops
+    }
+  })
+
   it('opens Enhanced only, and never a pinned exposure', () => {
     const lens = LENS_PRESETS.flight
     const calibrated = exposureForLuminance(SURFACE_LUMINANCE)

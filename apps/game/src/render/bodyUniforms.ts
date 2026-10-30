@@ -117,7 +117,11 @@ interface AtmosphereUniforms {
   readonly scale: Vec3
   readonly outerRadius: number
   readonly innerRadius: number
-  /** The datum's render radius; the drawn sphere is sunk below it. */
+  /**
+   * Render radius of the ground under the eye, along the eye's own radial —
+   * what the shell's `standing` measures an eye's altitude from. The datum
+   * sphere for a body with terrain; the drawn spheroid for a giant.
+   */
   readonly seaLevel: number
   readonly flattening: number
 }
@@ -320,6 +324,31 @@ const BLACK: Rgb = { r: 0, g: 0, b: 0 }
 const UP: Vec3 = { x: 0, y: 1, z: 0 }
 
 /**
+ * The radius of a spheroid of equatorial radius `equatorial` and the given
+ * flattening, along the direction `toward` from its center.
+ *
+ * A giant's ground is its drawn spheroid, not the datum sphere a body with
+ * terrain stands on: the streamed terrain is spherical, which is why the
+ * shell measures a walker's altitude against a sphere, but a giant streams
+ * none. Measured against its equatorial sphere, an eye 5,000 km above
+ * Saturn's polar cloud tops — outside the air, which is 480 km deep — is 900
+ * km under that sphere, and the shell and `standingIn` march it from the
+ * bottom of the air.
+ */
+function spheroidRadiusToward(
+  equatorial: number,
+  toward: Vec3,
+  axis: Vec3,
+  flattening: number,
+): number {
+  const distance = Vec.length(toward)
+  if (distance === 0) return equatorial
+  const along = Vec.dot(toward, axis) / distance
+  const polar = along / Math.max(flattening, 1e-3)
+  return equatorial / Math.sqrt(1 - along * along + polar * polar)
+}
+
+/**
  * One body's uniforms for this frame. `star` is the star's rendered color when
  * the body is a star, and null for everything else.
  */
@@ -515,7 +544,14 @@ export function bodyUniforms(
       scale: oblate(shell),
       outerRadius: shell,
       innerRadius: placement.scale,
-      seaLevel: body.trueRadius * placement.compression,
+      seaLevel: giantKind(body.kind)
+        ? spheroidRadiusToward(
+            placement.scale,
+            Vec.sub(frame.eye, position),
+            spinAxis,
+            shellFlattening,
+          )
+        : body.trueRadius * placement.compression,
       flattening: shellFlattening,
     }
   }

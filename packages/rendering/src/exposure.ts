@@ -149,8 +149,9 @@ export interface CameraPolicy {
  * drew black, where a camera or an eye has opened by some ten stops and sees
  * deep blue over a bright horizon.
  *
- * `daylight` is the light on a level surface in scene units: the sky
- * overhead plus the direct sun. Down to `day` (about 2,000 cd/m² of it, a
+ * `daylight` is the light where the observer stands, in scene units: the sky
+ * overhead plus the direct sun, its incidence taken against the observer's
+ * own horizon — at sea level, a level surface. Down to `day` (about 2,000 cd/m² of it, a
  * sun a few degrees up) nothing moves, so noon and every orbit keep the
  * calibration. Below it the exposure follows the light stop for stop, up to
  * `most`, and then gives the stops back between `full` (about 0.3 cd/m², the
@@ -166,8 +167,16 @@ export const AIR_ADAPTATION = Object.freeze({
   most: 11,
 })
 
-/** Stops Enhanced opens up by for `daylight` scene units on a level surface. */
-export function airAdaptation(daylight: number): number {
+/**
+ * Stops Enhanced opens up by for `daylight` scene units where the eye is,
+ * `depth` down the air it stands in — 1 on the ground, 0 at the air's top.
+ *
+ * Above the air there is nothing to open for, so the top fifth of it fades
+ * the stops to none. Without that, a ship climbing out near the terminator
+ * left an opened exposure for the calibration in one frame: a stop with the
+ * sun 2° up at 100 km, and more as the sun nears the horizon.
+ */
+export function airAdaptation(daylight: number, depth = 1): number {
   const { day, full, night, most } = AIR_ADAPTATION
   if (!(daylight < day)) return 0
   const level = Math.log2(Math.max(daylight, 1e-30))
@@ -175,7 +184,13 @@ export function airAdaptation(daylight: number): number {
     Math.max((level - Math.log2(night)) / Math.log2(full / night), 0),
     1,
   )
-  return Math.min(Math.log2(day) - level, most * t * t * (3 - 2 * t))
+  const inside = Math.min(Math.max(depth / 0.2, 0), 1)
+  return (
+    Math.min(Math.log2(day) - level, most * t * t * (3 - 2 * t)) *
+    inside *
+    inside *
+    (3 - 2 * inside)
+  )
 }
 
 /** Resolve staging once without rewriting the player's selected camera mode. */

@@ -11,8 +11,9 @@ import { exp, float, saturate } from 'three/tsl'
  * dusk still gave the ground a sixth of the day's sky: at a fixed exposure
  * that was a dim floor nobody saw, and once Enhanced opens the exposure for a
  * darkening sky it was a desert lit pale orange under a black zenith.
- * Measured, a clear sky puts about 17 klx on the ground at noon, 3.4 lx at
- * −6° and 0.008 lx at −12°; continuing from the ramp's own sunset value,
+ * Measured, a clear sky puts 10 to 25 klx of skylight on the ground by day,
+ * 3.4 lx at −6° and 0.008 lx at −12°; against the middle of the day's range,
+ * 17 klx, and continuing from the ramp's own sunset value,
  * e^(66·incidence) gives 1.3 times the first and 0.6 times the second, while
  * the angle is small enough to be its own sine.
  */

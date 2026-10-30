@@ -8,6 +8,7 @@ import {
   type Texture,
 } from 'three/webgpu'
 import { getLogger, getTimer } from '@inertialref/shared'
+import { smoothstep } from '@inertialref/procedural'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
@@ -255,11 +256,6 @@ export interface ShellGeometry {
   readonly flattening: number
 }
 
-const smoothstep = (edge: number, x: number): number => {
-  const t = Math.min(Math.max(x / edge, 0), 1)
-  return t * t * (3 - 2 * t)
-}
-
 /**
  * The eye the shell marches from, on the CPU: its altitude over sea level
  * near the ground, the stretched geometry by the top of the air, blended as
@@ -284,7 +280,7 @@ export function standingIn(
   )
   const top = shell.outerRadius / shell.innerRadius
   const altitude = distance / shell.seaLevel - 1
-  const blend = smoothstep(top - 1, altitude)
+  const blend = smoothstep(0, top - 1, altitude)
   const radius =
     (1 + Math.max(altitude, 0)) * (1 - blend) +
     (stretched / shell.innerRadius) * blend
@@ -315,27 +311,38 @@ export function airOverhead(
 }
 
 /**
- * The daylight on a level surface where a standing eye is, in scene units:
- * the sky overhead plus the sun that reaches the ground through the air,
- * each weighted by the sun's color. What `airAdaptation` opens the exposure
- * for, so it counts the direct sun — a high observer under a thin, dark sky
- * is still in full daylight, and opening up for the sky alone would burn out
- * the sunlit world below.
+ * The daylight where a standing eye is, in scene units: the sky overhead —
+ * `sky`, the caller's `airOverhead` — plus the sun that reaches the eye
+ * through the air, each weighted by the sun's color. What `airAdaptation`
+ * opens the exposure for, so it counts the direct sun — a high observer under
+ * a thin, dark sky is still in full daylight, and opening up for the sky
+ * alone would burn out the sunlit world below.
+ *
+ * The sun's incidence is taken against the eye's own horizon rather than the
+ * local horizontal. From altitude the horizon dips — 7.8° at 60 km on Earth —
+ * and a sun between the two lights the hull and the world in view through
+ * an all but clear column, while a level surface at the eye sees none of it:
+ * counted from the horizontal, the sky alone opens Enhanced by 10.8 stops at
+ * 60 km with the sun 2° under it. At sea level the two horizons are one.
  */
 export function daylightOver(
   scattering: AtmosphereScattering,
   standing: Standing,
   sun: Vec3 | null,
   sunColor: Rgb,
+  sky: number,
 ): number {
-  const sky = airOverhead(scattering, standing, sun, sunColor)
   if (sun === null) return sky
   const mu = Vec.dot(standing.up, sun)
-  if (mu <= 0) return sky
+  const horizon = -Math.sqrt(
+    Math.max(0, 1 - 1 / (standing.radius * standing.radius)),
+  )
+  const incidence = mu - horizon
+  if (incidence <= 0) return sky
   const [r, g, b] = transmittanceFrom(standing.radius, mu, scattering.recipe)
   return (
     sky +
-    mu *
+    incidence *
       (0.2126 * r * sunColor.r +
         0.7152 * g * sunColor.g +
         0.0722 * b * sunColor.b)

@@ -7,12 +7,9 @@ import type {
   PointLight,
 } from 'three/webgpu'
 import { Vector3 } from 'three/webgpu'
-import {
-  nearFieldLighting,
-  SURFACE_LUMINANCE,
-  verticalFovDegrees,
-} from '@inertialref/rendering'
+import { nearFieldLighting, verticalFovDegrees } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { integratedGainFor } from '../render/radiance.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /** Reused per frame; a light direction is not worth an allocation at 144 Hz. */
@@ -87,9 +84,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     // frame's reading; the sensor draws after this.
     const reading = engine.exposure
     const staged =
-      reading?.processing === 'enhanced'
-        ? 1 / (SURFACE_LUMINANCE * reading.total)
-        : 1
+      reading?.processing === 'enhanced' ? integratedGainFor(reading.total) : 1
     if (ambient.current !== null)
       ambient.current.intensity = lighting.ambient * staged
     if (fill.current !== null) fill.current.intensity = lighting.fill * staged

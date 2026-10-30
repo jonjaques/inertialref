@@ -107,7 +107,10 @@ export function Sensor({
             : '',
         ].join(':'),
         pinned: engine.pinnedExposure,
-        airAdaptation: airAdaptation(observerDaylight.value),
+        airAdaptation: airAdaptation(
+          observerDaylight.value,
+          observerDaylight.depth,
+        ),
         stagingLook: (engine.cinematic?.effects.calibratedLight ?? 0) > 0,
         headroom: engine.gl?.description.headroom ?? 1,
         motionBlur: engine.presentation.resolved().motionBlur,
