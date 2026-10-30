@@ -151,16 +151,46 @@ export function surfaceColorFor(
 export interface HazeFamily {
   readonly color: LinearRgb
   readonly limb: LinearRgb
+  /**
+   * The aerosol's scale height over the gas's. Three measured shapes, one per
+   * place an aerosol can live: a boundary layer under the air (Earth's is
+   * 1.2 km under 8.5), mixed through the column (Mars's dust, 10–11 km in
+   * 11), or a haze above it (Titan's tholins, 45–75 km over 20). See
+   * ADR-0056.
+   */
+  readonly aerosolScale: number
+  /**
+   * The aerosol's Ångström exponent, by the same three shapes: Earth's fine
+   * boundary-layer aerosol 1.3, dust gray at 0, and a photochemical haze
+   * like Titan's 1.5. See `HazeLayer.aerosolAngstrom`.
+   */
+  readonly angstrom: number
   readonly weight: number
   readonly coldest: Kelvin
   readonly hottest: Kelvin
 }
+
+/** Earth's: Bruneton's 1.2 km aerosol under the 8.5 km air. */
+const BOUNDARY_LAYER = 0.14
+/** Mars's: Viking found the dust mixed with the gas to 50 km. */
+const WELL_MIXED = 1
+/** Titan's: Cassini's ~60 km haze over 20–21 km of gas. */
+const ALOFT = 2.9
+
+/** Ångström's 1.3 ± 0.2 for Earth's aerosol. */
+const FINE = 1.3
+/** Pathfinder's dust: 0.56–0.61 from 443 to 965 nm, which is flat. */
+const GRAY = 0
+/** Huygens's haze: 4.5 at 531 nm against 2 at 939. */
+const PHOTOCHEMICAL = 1.5
 
 const HAZE_FAMILIES: readonly HazeFamily[] = [
   // Rayleigh: a blue sky and an orange limb.
   {
     color: { r: 0.28, g: 0.48, b: 0.95 },
     limb: { r: 0.86, g: 0.45, b: 0.26 },
+    aerosolScale: BOUNDARY_LAYER,
+    angstrom: FINE,
     weight: 3,
     coldest: 0,
     hottest: Infinity,
@@ -169,6 +199,8 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   {
     color: { r: 0.74, g: 0.56, b: 0.36 },
     limb: { r: 0.42, g: 0.58, b: 0.92 },
+    aerosolScale: WELL_MIXED,
+    angstrom: GRAY,
     weight: 1.4,
     coldest: 150,
     hottest: 900,
@@ -177,6 +209,8 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   {
     color: { r: 0.88, g: 0.8, b: 0.5 },
     limb: { r: 0.96, g: 0.72, b: 0.32 },
+    aerosolScale: WELL_MIXED,
+    angstrom: GRAY,
     weight: 1.2,
     coldest: 450,
     hottest: Infinity,
@@ -185,6 +219,8 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   {
     color: { r: 0.82, g: 0.5, b: 0.2 },
     limb: { r: 0.92, g: 0.52, b: 0.24 },
+    aerosolScale: ALOFT,
+    angstrom: PHOTOCHEMICAL,
     weight: 1.4,
     coldest: 0,
     hottest: 170,
@@ -193,6 +229,8 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   {
     color: { r: 0.32, g: 0.7, b: 0.82 },
     limb: { r: 0.72, g: 0.58, b: 0.42 },
+    aerosolScale: WELL_MIXED,
+    angstrom: GRAY,
     weight: 1.0,
     coldest: 0,
     hottest: 230,
@@ -201,6 +239,8 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   {
     color: { r: 0.42, g: 0.36, b: 0.92 },
     limb: { r: 0.9, g: 0.42, b: 0.5 },
+    aerosolScale: ALOFT,
+    angstrom: PHOTOCHEMICAL,
     weight: 0.6,
     coldest: 0,
     hottest: Infinity,
@@ -209,6 +249,8 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
   {
     color: { r: 0.46, g: 0.76, b: 0.6 },
     limb: { r: 0.9, g: 0.62, b: 0.3 },
+    aerosolScale: BOUNDARY_LAYER,
+    angstrom: FINE,
     weight: 0.35,
     coldest: 200,
     hottest: 500,
@@ -218,7 +260,12 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
 export function hazeFor(
   rng: Rng,
   grammar: SurfaceGrammar,
-): { readonly color: LinearRgb; readonly limb: LinearRgb } {
+): {
+  readonly color: LinearRgb
+  readonly limb: LinearRgb
+  readonly aerosolScale: number
+  readonly angstrom: number
+} {
   const temperature = grammar.groundTemperature
   const index = rng.weightedIndex(
     HAZE_FAMILIES.map((family) =>
@@ -228,7 +275,12 @@ export function hazeFor(
     ),
   )
   const family = (HAZE_FAMILIES[index] ?? HAZE_FAMILIES[0]) as HazeFamily
-  return { color: family.color, limb: family.limb }
+  return {
+    color: family.color,
+    limb: family.limb,
+    aerosolScale: family.aerosolScale,
+    angstrom: family.angstrom,
+  }
 }
 
 /*

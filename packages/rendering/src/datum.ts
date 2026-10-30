@@ -59,6 +59,39 @@ export function atmosphereShellRatio(
   return (radius + hazeHeight) / sunkSphereRadius(radius, relief)
 }
 
+/** The air's two scale heights, in radii of the drawn sphere. */
+export interface AirHeights {
+  /** The gas's: Rayleigh scattering. */
+  readonly rayleigh: number
+  /** The aerosol's: the haze that whitens the air and rings the sun. */
+  readonly aerosol: number
+}
+
+/**
+ * Where the scattering tables put the gas and the aerosol, as multiples of
+ * the drawn sphere — the unit they are baked in, and the one that survives
+ * distance compression.
+ *
+ * `scaleHeight` is the atmosphere's own and `aerosolHeight` the haze's, both
+ * in meters. A haze with no atmosphere record under it — none in Sol or the
+ * generator has one — takes 0.22 of its shell as the gas's height, which
+ * leaves e^−4.5 of the density at the ceiling, and mixes its aerosol with it.
+ */
+export function airHeights(
+  radius: number,
+  relief: number,
+  hazeHeight: number,
+  scaleHeight: number,
+  aerosolHeight: number,
+): AirHeights {
+  const sphere = sunkSphereRadius(radius, relief)
+  const gas = scaleHeight > 0 ? scaleHeight : hazeHeight * 0.22
+  return {
+    rayleigh: gas / sphere,
+    aerosol: (aerosolHeight > 0 ? aerosolHeight : gas) / sphere,
+  }
+}
+
 /** Ring radii as they are authored: meters from the body's center. */
 export interface RingSpan {
   readonly innerRadius: number

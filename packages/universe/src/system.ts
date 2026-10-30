@@ -321,6 +321,29 @@ export interface HazeLayer {
    * constant here painted Mars with Earth's white halo.
    */
   readonly thickness: number
+  /**
+   * Scale height of the aerosol, meters: where the particles that whiten the
+   * air and make the glow around the sun live. Not the gas's scale height,
+   * which is `Atmosphere.scaleHeight`, and the two differ by composition —
+   * Earth's aerosol is a boundary layer a seventh as deep as its air, Mars's
+   * dust is mixed through the whole column, and Titan's tholins sit three gas
+   * scale heights deep.
+   */
+  readonly aerosolHeight: Meters
+  /**
+   * The aerosol's Ångström exponent: its optical depth goes as λ^−α. Earth's
+   * fine boundary-layer aerosol is 1.3 and scatters blue over red, which is
+   * part of why a clear zenith is blue rather than white; Martian dust is
+   * large enough to be gray, 0.
+   */
+  readonly aerosolAngstrom: number
+  /**
+   * The ozone column, Dobson units. Earth's is about 300, and it is why the
+   * sky goes blue rather than gray once the sun is down; no other body in the
+   * catalog has one worth drawing, and the generator draws none, because no
+   * world it makes has a composition that says it should.
+   */
+  readonly ozone: number
 }
 
 export interface BodyAppearance {
@@ -1187,7 +1210,7 @@ function proceduralAppearance(
   const palette = new Rng(deriveSeed(surface.seed, 'appearance'))
   const grammar = surface.grammar
   const hue = giant
-    ? (KIND_HAZE[kind] ?? KIND_HAZE.rocky)
+    ? { ...(KIND_HAZE[kind] ?? KIND_HAZE.rocky), aerosolScale: 1, angstrom: 0 }
     : hazeFor(palette.fork('haze'), grammar)
   return {
     texture: null,
@@ -1213,6 +1236,11 @@ function proceduralAppearance(
             // one shows what its sea-level density can scatter. 1.2 kg/m³ is
             // Earth's, which is what "1" means everywhere this is read.
             thickness: giant ? 1 : Math.min(1, atmosphere.surfaceDensity / 1.2),
+            // Read off the family the colors came from, with no draw of its
+            // own; a giant's haze is taken as mixed with its gas, as Sol's are.
+            aerosolHeight: hue.aerosolScale * atmosphere.scaleHeight,
+            aerosolAngstrom: hue.angstrom,
+            ozone: 0,
           },
     color: giant
       ? (KIND_COLOR[kind] ?? KIND_COLOR.rocky)

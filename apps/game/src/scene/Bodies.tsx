@@ -13,14 +13,20 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
-import type { Vec3 } from '@inertialref/spatial'
-import type { RenderBody } from '@inertialref/rendering'
+import { Vec, type Vec3 } from '@inertialref/spatial'
+import {
+  airAdaptation,
+  DISK_THROUGH_AIR_CEILING,
+  diskThroughAir,
+  type RenderBody,
+} from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
   type BodyFrame,
   bodyUniforms,
   type Rgb,
+  diskCompression,
   starAsBody,
   starKey,
   wantsBake,
@@ -42,7 +48,16 @@ import {
   type PlanetMaterial,
   type RingMaterial,
 } from '../render/planet.ts'
-import { scatteringFor, scatteringVia } from '../render/atmosphereLuts.ts'
+import {
+  airOverhead,
+  type AtmosphereScattering,
+  daylightOver,
+  scatteringFor,
+  scatteringVia,
+  type Standing,
+  standingIn,
+} from '../render/atmosphereLuts.ts'
+import { airLuminance, observerDaylight } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -368,6 +383,17 @@ export function Bodies({
       renderTime: engine.snapshot?.renderTime ?? 0,
       eye: scene.camera.position,
     }
+    // The brightest air the eye is inside this frame; see `airLuminance`.
+    let overhead = 0
+    // Written inside `draw`, which control flow cannot see into; the cast
+    // keeps the read after the loop from narrowing to `null`.
+    let standingAir = null as {
+      readonly scattering: AtmosphereScattering
+      readonly standing: Standing
+      readonly daylight: number
+    } | null
+    // What the air does to the star being drawn, set per star below.
+    let throughAir: readonly [number, number, number] | null = null
 
     const draw = (key: string, body: RenderBody, star: Rgb | null): void => {
       const appearance = body.appearance
@@ -416,7 +442,17 @@ export function Bodies({
       visual.mesh.renderOrder = uniforms.renderOrder
 
       if (uniforms.star !== null && visual.star !== null) {
-        setColor(visual.star.color, uniforms.star.color)
+        const color = uniforms.star.color
+        setColor(
+          visual.star.color,
+          throughAir === null
+            ? color
+            : {
+                r: color.r * throughAir[0],
+                g: color.g * throughAir[1],
+                b: color.b * throughAir[2],
+              },
+        )
         setNumber(visual.star.time, uniforms.star.time)
         setNumber(visual.star.exposure, uniforms.star.exposure)
       }
@@ -520,6 +556,7 @@ export function Bodies({
         setVector(air.center.value, position)
         setNumber(air.outerRadius, shell.outerRadius)
         setNumber(air.innerRadius, shell.innerRadius)
+        setNumber(air.seaLevel, shell.seaLevel)
         setVector(air.spinAxis.value, uniforms.spinAxis)
         setNumber(air.flattening, shell.flattening)
         const haze = appearance.haze
@@ -534,14 +571,42 @@ export function Bodies({
           const pool = engine.pool()
           const scattering =
             pool === null
-              ? scatteringFor(haze, body.atmosphereScale)
-              : scatteringVia(pool, haze, body.atmosphereScale)
-          if (scattering !== null)
+              ? scatteringFor(haze, body.atmosphereScale, body.airHeights)
+              : scatteringVia(pool, haze, body.atmosphereScale, body.airHeights)
+          if (scattering !== null) {
             air.setScattering(
               scattering.recipe,
               scattering.transmittance,
               scattering.multiScatter,
             )
+            const standing = standingIn(
+              shell,
+              scene.camera.position,
+              position,
+              uniforms.spinAxis,
+            )
+            if (standing !== null) {
+              const sky = airOverhead(
+                scattering,
+                standing,
+                sun,
+                uniforms.sunColor,
+              )
+              if (standingAir === null || sky >= overhead)
+                standingAir = {
+                  scattering,
+                  standing,
+                  daylight: daylightOver(
+                    scattering,
+                    standing,
+                    sun,
+                    uniforms.sunColor,
+                    sky,
+                  ),
+                }
+              overhead = Math.max(overhead, sky)
+            }
+          }
         }
         setColor(air.sunColor, uniforms.sunColor)
         if (sun !== null) setVector(air.sunDirection.value, sun)
@@ -549,8 +614,42 @@ export function Bodies({
     }
 
     for (const body of scene.bodies) draw(body.address, body, null)
-    for (const star of scene.stars)
+    // The stops the sensor opens Enhanced by this frame, from the daylight
+    // written below: each one doubles the disk on its way into the target.
+    const opened =
+      standingAir !== null && engine.cameraPolicy.processing === 'enhanced'
+        ? airAdaptation(standingAir.daylight)
+        : 0
+    for (const star of scene.stars) {
+      throughAir =
+        standingAir === null
+          ? null
+          : diskThroughAir(
+              standingAir.scattering.recipe,
+              standingAir.standing.radius,
+              Vec.dot(
+                standingAir.standing.up,
+                Vec.normalize(
+                  Vec.sub(star.placement.position, scene.camera.position),
+                ),
+              ),
+              diskCompression(star, visibility),
+              DISK_THROUGH_AIR_CEILING / 2 ** opened,
+            )
       draw(starKey(star), starAsBody(star, visibility), star.color)
+    }
+    throughAir = null
+    airLuminance.value = overhead
+    observerDaylight.value = standingAir?.daylight ?? Number.POSITIVE_INFINITY
+    // How far down its air the eye stands, in the tables' own units.
+    const top = standingAir?.scattering.recipe.topRatio ?? 1
+    observerDaylight.depth =
+      standingAir === null
+        ? 0
+        : Math.min(
+            Math.max((top - standingAir.standing.radius) / (top - 1), 0),
+            1,
+          )
 
     residency.end()
 

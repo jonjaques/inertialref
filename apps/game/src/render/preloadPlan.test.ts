@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rootSeed } from '@inertialref/procedural'
-import { atmosphereShellRatio } from '@inertialref/rendering'
+import { airHeights, atmosphereShellRatio } from '@inertialref/rendering'
 import {
   MILKY_WAY,
   TEST_CATALOG,
@@ -35,7 +35,7 @@ describe('the scattering prebake plan', () => {
   it('covers every atmosphere in the loaded systems, under the key it will be asked for', () => {
     const planned = new Map(
       scatteringBakes([SOL]).map((bake) => [
-        scatteringKey(bake.haze, bake.topRatio),
+        scatteringKey(bake.haze, bake.topRatio, bake.heights),
         bake,
       ]),
     )
@@ -46,13 +46,20 @@ describe('the scattering prebake plan', () => {
       if (haze === null) continue
       asked += 1
       // The key the scene will compute at draw time: `buildScene`'s
-      // `atmosphereScale`, which is this same call.
+      // `atmosphereScale` and `airHeights`, which are these same calls.
       const topRatio = atmosphereShellRatio(
         body.radius,
         body.surface.maxElevation,
         haze.height,
       )
-      expect(planned.has(scatteringKey(haze, topRatio))).toBe(true)
+      const heights = airHeights(
+        body.radius,
+        body.surface.maxElevation,
+        haze.height,
+        body.atmosphere?.scaleHeight ?? 0,
+        haze.aerosolHeight,
+      )
+      expect(planned.has(scatteringKey(haze, topRatio, heights))).toBe(true)
     }
     // Sol alone carries at least Venus, Earth, Mars and the four giants.
     expect(asked).toBeGreaterThanOrEqual(7)
@@ -60,7 +67,9 @@ describe('the scattering prebake plan', () => {
 
   it('dedupes bakes that share a key', () => {
     const bakes = scatteringBakes([SOL])
-    const keys = bakes.map((bake) => scatteringKey(bake.haze, bake.topRatio))
+    const keys = bakes.map((bake) =>
+      scatteringKey(bake.haze, bake.topRatio, bake.heights),
+    )
     expect(new Set(keys).size).toBe(keys.length)
     expect(bakes.length).toBeGreaterThan(0)
   })

@@ -208,6 +208,10 @@ export const WINGS = [
             'docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md',
             'A long lens',
           ],
+          [
+            'docs/adr/0056-the-air-is-measured-and-its-gain-is-pi.md',
+            'The air is measured',
+          ],
         ],
       },
     ],

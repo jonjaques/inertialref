@@ -8,19 +8,25 @@ import {
   type Texture,
 } from 'three/webgpu'
 import { getLogger, getTimer } from '@inertialref/shared'
+import { smoothstep } from '@inertialref/procedural'
+import { Vec, type Vec3 } from '@inertialref/spatial'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import {
+  type AirHeights,
   type AtmosphereRecipe,
   atmosphereRecipe,
   bakeMultipleScattering,
   bakeTransmittance,
   type HazeAuthoring,
   type ScatteringLut,
+  transmittanceFrom,
+  zenithSkyRadiance,
 } from '@inertialref/rendering'
 import type { WorkerPool } from '@inertialref/workers'
 import { bakeAtmosphereTask } from './atmosphereTask.ts'
 import { scatteringKey } from './preloadPlan.ts'
+import type { Rgb } from './bodyUniforms.ts'
 
 /*
  * The scattering tables, as GPU textures, cached per atmosphere.
@@ -48,6 +54,13 @@ export interface AtmosphereScattering {
   readonly recipe: AtmosphereRecipe
   readonly transmittance: Texture
   readonly multiScatter: Texture
+  /**
+   * The multiple-scattering table's own floats — ln Ψ — kept for
+   * `airOverhead`. 8 KB a haze; the transmittance table is 64 times that and
+   * is not kept, because a column straight up is cheaper to march than to
+   * look up.
+   */
+  readonly multiScatterTable: ScatteringLut
 }
 
 const cache = new Map<string, AtmosphereScattering>()
@@ -79,22 +92,24 @@ function toTexture(lut: ScatteringLut): DataTexture {
 export function scatteringFor(
   haze: HazeAuthoring,
   topRatio: number,
+  heights: AirHeights,
 ): AtmosphereScattering {
   const { thickness } = haze
   // The key lives in `preloadPlan.ts` so the boot prebake and this cache
   // cannot disagree about what "the same atmosphere" means.
-  const key = scatteringKey(haze, topRatio)
+  const key = scatteringKey(haze, topRatio, heights)
   const cached = cache.get(key)
   if (cached !== undefined) return cached
 
   const started = performance.now()
-  const recipe = atmosphereRecipe(haze, topRatio)
+  const recipe = atmosphereRecipe(haze, topRatio, heights)
   const transmittance = bakeTransmittance(recipe)
   const multiScatter = bakeMultipleScattering(recipe, transmittance)
   const set: AtmosphereScattering = {
     recipe,
     transmittance: toTexture(transmittance),
     multiScatter: toTexture(multiScatter),
+    multiScatterTable: multiScatter,
   }
   cache.set(key, set)
   const finished = performance.now()
@@ -104,7 +119,8 @@ export function scatteringFor(
    *
    * The label was `bake ${key}`, on the argument that the cache bounds the set.
    * It does not bound it usefully: `scatteringKey` is a colon-joined composite
-   * of six floats, a thickness and `topRatio.toFixed(6)`, the cache is a module
+   * of six floats, a thickness, `topRatio.toFixed(6)` and the two scale
+   * heights, the cache is a module
    * `Map` with no eviction, and Sol alone produces **nine** distinct keys — so
    * the set is every atmosphere the session has ever met, growing as it travels,
    * with each name retained for the life of the page. That is one aggregation
@@ -147,8 +163,9 @@ export function warmScattering(
   pool: WorkerPool,
   haze: HazeAuthoring,
   topRatio: number,
+  heights: AirHeights,
 ): Promise<AtmosphereScattering> {
-  const key = scatteringKey(haze, topRatio)
+  const key = scatteringKey(haze, topRatio, heights)
   const cached = cache.get(key)
   if (cached !== undefined) return Promise.resolve(cached)
   const inFlight = pending.get(key)
@@ -169,7 +186,7 @@ export function warmScattering(
   let job: Promise<AtmosphereScattering>
   try {
     job = pool
-      .submit(bakeAtmosphereTask, { haze, topRatio })
+      .submit(bakeAtmosphereTask, { haze, topRatio, heights })
       .result.then((baked) => {
         const raced = cache.get(key)
         if (raced !== undefined) return raced
@@ -177,6 +194,7 @@ export function warmScattering(
           recipe: baked.recipe,
           transmittance: toTexture(baked.transmittance),
           multiScatter: toTexture(baked.multiScatter),
+          multiScatterTable: baked.multiScatter,
         }
         cache.set(key, set)
         log.info('scattering tables baked on the pool', {
@@ -209,14 +227,124 @@ export function scatteringVia(
   pool: WorkerPool,
   haze: HazeAuthoring,
   topRatio: number,
+  heights: AirHeights,
 ): AtmosphereScattering | null {
-  const cached = cache.get(scatteringKey(haze, topRatio))
+  const cached = cache.get(scatteringKey(haze, topRatio, heights))
   if (cached !== undefined) return cached
-  void warmScattering(pool, haze, topRatio).catch(() => {
+  void warmScattering(pool, haze, topRatio, heights).catch(() => {
     // The one rejection is a pool that has gone away — a dispose during a
     // reload, which `warmScattering` turns into a rejection because `submit`
     // raises it as a throw. The next frame asks again, and a session that
     // ends has no frame to draw the haze in anyway.
   })
   return null
+}
+
+/** Where an eye stands in one body's air, in the tables' own units. */
+export interface Standing {
+  /** Radius from the body's center; the tables' ground is 1. */
+  readonly radius: number
+  /** Unit render-space vector from the center through the eye. */
+  readonly up: Vec3
+}
+
+/** The shell's render-space geometry, as `bodyUniforms` hands it over. */
+export interface ShellGeometry {
+  readonly innerRadius: number
+  readonly outerRadius: number
+  readonly seaLevel: number
+  readonly flattening: number
+}
+
+/**
+ * The eye the shell marches from, on the CPU: its altitude over sea level
+ * near the ground, the stretched geometry by the top of the air, blended as
+ * the shell's `standing` blends them. Null above the air, where there is no
+ * sky overhead and nothing between the eye and a star.
+ */
+export function standingIn(
+  shell: ShellGeometry,
+  eye: Vec3,
+  center: Vec3,
+  spinAxis: Vec3,
+): Standing | null {
+  const relative = Vec.sub(eye, center)
+  const distance = Vec.length(relative)
+  if (distance === 0 || shell.innerRadius <= 0) return null
+  const stretch = 1 / Math.max(shell.flattening, 1e-3) - 1
+  const stretched = Vec.length(
+    Vec.add(
+      relative,
+      Vec.scale(spinAxis, Vec.dot(relative, spinAxis) * stretch),
+    ),
+  )
+  const top = shell.outerRadius / shell.innerRadius
+  const altitude = distance / shell.seaLevel - 1
+  const blend = smoothstep(0, top - 1, altitude)
+  const radius =
+    (1 + Math.max(altitude, 0)) * (1 - blend) +
+    (stretched / shell.innerRadius) * blend
+  if (radius >= top) return null
+  return { radius, up: Vec.scale(relative, 1 / distance) }
+}
+
+/**
+ * The luminance of the sky straight over a standing eye, in scene units.
+ * Positions are render space, as the shell's own uniforms are.
+ */
+export function airOverhead(
+  scattering: AtmosphereScattering,
+  standing: Standing,
+  sun: Vec3 | null,
+  sunColor: Rgb,
+): number {
+  if (sun === null) return 0
+  const [r, g, b] = zenithSkyRadiance(
+    scattering.recipe,
+    scattering.multiScatterTable,
+    standing.radius,
+    Vec.dot(standing.up, sun),
+  )
+  return (
+    0.2126 * r * sunColor.r + 0.7152 * g * sunColor.g + 0.0722 * b * sunColor.b
+  )
+}
+
+/**
+ * The daylight where a standing eye is, in scene units: the sky overhead —
+ * `sky`, the caller's `airOverhead` — plus the sun that reaches the eye
+ * through the air, each weighted by the sun's color. What `airAdaptation`
+ * opens the exposure for, so it counts the direct sun — a high observer under
+ * a thin, dark sky is still in full daylight, and opening up for the sky
+ * alone would burn out the sunlit world below.
+ *
+ * The sun's incidence is taken against the eye's own horizon rather than the
+ * local horizontal. From altitude the horizon dips — 7.8° at 60 km on Earth —
+ * and a sun between the two lights the hull and the world in view through
+ * an all but clear column, while a level surface at the eye sees none of it:
+ * counted from the horizontal, the sky alone opens Enhanced by 10.8 stops at
+ * 60 km with the sun 2° under it. At sea level the two horizons are one.
+ */
+export function daylightOver(
+  scattering: AtmosphereScattering,
+  standing: Standing,
+  sun: Vec3 | null,
+  sunColor: Rgb,
+  sky: number,
+): number {
+  if (sun === null) return sky
+  const mu = Vec.dot(standing.up, sun)
+  const horizon = -Math.sqrt(
+    Math.max(0, 1 - 1 / (standing.radius * standing.radius)),
+  )
+  const incidence = mu - horizon
+  if (incidence <= 0) return sky
+  const [r, g, b] = transmittanceFrom(standing.radius, mu, scattering.recipe)
+  return (
+    sky +
+    incidence *
+      (0.2126 * r * sunColor.r +
+        0.7152 * g * sunColor.g +
+        0.0722 * b * sunColor.b)
+  )
 }

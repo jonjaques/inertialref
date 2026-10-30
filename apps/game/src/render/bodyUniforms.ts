@@ -1,4 +1,5 @@
 import {
+  NO_AIR,
   OPEN_OCEAN,
   SURFACE_LUMINANCE,
   cloudShellAltitude,
@@ -116,6 +117,12 @@ interface AtmosphereUniforms {
   readonly scale: Vec3
   readonly outerRadius: number
   readonly innerRadius: number
+  /**
+   * Render radius of the ground under the eye, along the eye's own radial —
+   * what the shell's `standing` measures an eye's altitude from. The datum
+   * sphere for a body with terrain; the drawn spheroid for a giant.
+   */
+  readonly seaLevel: number
   readonly flattening: number
 }
 
@@ -270,6 +277,18 @@ const STAR_APPEARANCE: RenderBody['appearance'] = {
 export const starKey = (star: RenderStar): string => `star:${star.system}`
 
 /**
+ * The exponent that took a star's physical disk to the drawn one, which the
+ * air in front of the disk then dims it by (`diskThroughAir`): ln 8 over the
+ * log of the physical radiance under Enhanced, one for a photograph. A disk
+ * Enhanced has to lift rather than compress is dimmed physically.
+ */
+export function diskCompression(star: RenderStar, visibility: boolean): number {
+  const physical = star.luminance / SURFACE_LUMINANCE
+  if (!visibility || physical <= CALIBRATED_STAR_RADIANCE) return 1
+  return Math.log(CALIBRATED_STAR_RADIANCE) / Math.log(physical)
+}
+
+/**
  * A star as a body, so it is placed and drawn by the same path as a planet.
  * Its sunlight is the disk's radiance: the calibrated figure under Enhanced
  * staging, its luminance in units of the surface white otherwise.
@@ -288,6 +307,7 @@ export function starAsBody(star: RenderStar, visibility: boolean): RenderBody {
     // A star has no surface and no terminator; the disk is unlit.
     terminator: 0,
     atmosphereScale: 1,
+    airHeights: NO_AIR,
     trueRadius: 1,
     rotationPeriod: 1,
     flattening: 1,
@@ -302,6 +322,31 @@ export function starAsBody(star: RenderStar, visibility: boolean): RenderBody {
 const WHITE: Rgb = { r: 1, g: 1, b: 1 }
 const BLACK: Rgb = { r: 0, g: 0, b: 0 }
 const UP: Vec3 = { x: 0, y: 1, z: 0 }
+
+/**
+ * The radius of a spheroid of equatorial radius `equatorial` and the given
+ * flattening, along the direction `toward` from its center.
+ *
+ * A giant's ground is its drawn spheroid, not the datum sphere a body with
+ * terrain stands on: the streamed terrain is spherical, which is why the
+ * shell measures a walker's altitude against a sphere, but a giant streams
+ * none. Measured against its equatorial sphere, an eye 5,000 km above
+ * Saturn's polar cloud tops — outside the air, which is 480 km deep — is 900
+ * km under that sphere, and the shell and `standingIn` march it from the
+ * bottom of the air.
+ */
+function spheroidRadiusToward(
+  equatorial: number,
+  toward: Vec3,
+  axis: Vec3,
+  flattening: number,
+): number {
+  const distance = Vec.length(toward)
+  if (distance === 0) return equatorial
+  const along = Vec.dot(toward, axis) / distance
+  const polar = along / Math.max(flattening, 1e-3)
+  return equatorial / Math.sqrt(1 - along * along + polar * polar)
+}
 
 /**
  * One body's uniforms for this frame. `star` is the star's rendered color when
@@ -499,6 +544,14 @@ export function bodyUniforms(
       scale: oblate(shell),
       outerRadius: shell,
       innerRadius: placement.scale,
+      seaLevel: giantKind(body.kind)
+        ? spheroidRadiusToward(
+            placement.scale,
+            Vec.sub(frame.eye, position),
+            spinAxis,
+            shellFlattening,
+          )
+        : body.trueRadius * placement.compression,
       flattening: shellFlattening,
     }
   }

@@ -209,7 +209,7 @@ async function warm(
     units: bakes.length,
     run: async (done) => {
       for (const bake of bakes) {
-        const set = scatteringFor(bake.haze, bake.topRatio)
+        const set = scatteringFor(bake.haze, bake.topRatio, bake.heights)
         renderer.initTexture(set.transmittance)
         renderer.initTexture(set.multiScatter)
         done()
@@ -323,7 +323,7 @@ export function watchSystemAtmospheres(engine: GameEngine): () => void {
       return
     }
     queue = queue.slice(1)
-    scatteringFor(next.haze, next.topRatio)
+    scatteringFor(next.haze, next.topRatio, next.heights)
     setTimeout(drain, 0)
   }
 
@@ -338,7 +338,7 @@ export function watchSystemAtmospheres(engine: GameEngine): () => void {
     const pool = engine.pool()
     if (pool !== null) {
       for (const bake of bakes) {
-        void warmScattering(pool, bake.haze, bake.topRatio).catch(
+        void warmScattering(pool, bake.haze, bake.topRatio, bake.heights).catch(
           (cause: unknown) => {
             // A pool that has gone away mid-session is the only rejection;
             // the draw-time ask falls back to the synchronous bake.

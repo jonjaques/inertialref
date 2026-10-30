@@ -23,21 +23,28 @@ import { createGameTaskRegistry } from '../workers/registry.ts'
  * at dispatch, not at import.
  */
 
-// Earth's authored haze, and the shell ratio `buildScene` gives it.
+// Earth's authored haze, and the shell ratio and heights `buildScene` gives it.
 const haze = {
   color: { r: 0.3, g: 0.55, b: 1 },
   limb: { r: 1, g: 0.6, b: 0.3 },
   thickness: 1,
+  aerosolAngstrom: 1.3,
+  ozone: 300,
 }
 const topRatio = 1.0157
+const heights = { rayleigh: 8.5 / 6371, aerosol: 1.2 / 6371 }
 
 describe('render.bakeAtmosphere', () => {
   it('bakes what the main thread bakes', async () => {
-    const recipe = atmosphereRecipe(haze, topRatio)
+    const recipe = atmosphereRecipe(haze, topRatio, heights)
     const transmittance = bakeTransmittance(recipe)
     const multiScatter = bakeMultipleScattering(recipe, transmittance)
 
-    const response = await runInline(bakeAtmosphereTask, { haze, topRatio })
+    const response = await runInline(bakeAtmosphereTask, {
+      haze,
+      topRatio,
+      heights,
+    })
     expect(response.recipe).toEqual(recipe)
     expect(response.transmittance).toEqual(transmittance)
     expect(response.multiScatter).toEqual(multiScatter)
@@ -49,9 +56,16 @@ describe('render.bakeAtmosphere', () => {
       size: 1,
     })
     try {
-      const expected = await runInline(bakeAtmosphereTask, { haze, topRatio })
-      const crossed = await pool.submit(bakeAtmosphereTask, { haze, topRatio })
-        .result
+      const expected = await runInline(bakeAtmosphereTask, {
+        haze,
+        topRatio,
+        heights,
+      })
+      const crossed = await pool.submit(bakeAtmosphereTask, {
+        haze,
+        topRatio,
+        heights,
+      }).result
       expect(crossed.transmittance.width).toBe(expected.transmittance.width)
       expect(crossed.transmittance.height).toBe(expected.transmittance.height)
       expect([...crossed.transmittance.data]).toEqual([

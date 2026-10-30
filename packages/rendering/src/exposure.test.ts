@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import { type Lens, LENS_PRESETS, exposureValue } from './lens.ts'
 import {
+  AIR_ADAPTATION,
+  airAdaptation,
   DEFAULT_SENSOR_SETTINGS,
   ExposureMeter,
   exposureForLuminance,
@@ -383,4 +385,77 @@ it('trims an isolated hot pixel without discarding a resolved bright subject', (
   const actual = meterHistogram(contaminated, 1, 9, automatic)
   expect(actual.ev).toBeCloseTo(expected.ev, 12)
   expect(actual.luminance).toBeCloseTo(expected.luminance, 12)
+})
+
+describe('Enhanced in a darkening sky', () => {
+  /** cd/m² on a level surface, as scene units. */
+  const lit = (candelas: number) => candelas / SURFACE_LUMINANCE
+
+  it('keeps the calibration in daylight and in a vacuum', () => {
+    expect(airAdaptation(lit(20_000))).toBe(0)
+    expect(airAdaptation(lit(2_200))).toBe(0)
+    expect(airAdaptation(Number.POSITIVE_INFINITY)).toBe(0)
+    expect(airAdaptation(Number.NaN)).toBe(0)
+  })
+
+  it('opens about ten stops by the end of civil dusk, and gives them back by night', () => {
+    // Koomen's zenith at −6° is 0.65 cd/m²; a camera that holds the noon
+    // exposure draws that sky black. By astronomical night the composed sky
+    // is presented at the calibration it was composed at.
+    expect(airAdaptation(lit(1))).toBeGreaterThan(10)
+    expect(airAdaptation(lit(1))).toBeLessThanOrEqual(AIR_ADAPTATION.most)
+    expect(airAdaptation(lit(2e-4))).toBe(0)
+    expect(airAdaptation(0)).toBe(0)
+  })
+
+  it('moves continuously with the light, and never past its bound', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: -36, max: 4, noNaN: true }),
+        fc.double({ min: 0, max: 0.05, noNaN: true }),
+        (stops, step) => {
+          const here = airAdaptation(2 ** stops)
+          const near = airAdaptation(2 ** (stops + step))
+          expect(here).toBeGreaterThanOrEqual(0)
+          expect(here).toBeLessThanOrEqual(AIR_ADAPTATION.most)
+          // Steepest where the fall to night is: most · 1.5 / log2(full/night)
+          // stops per stop of light, under 1.7.
+          expect(Math.abs(here - near)).toBeLessThanOrEqual(1.7 * step + 1e-9)
+        },
+      ),
+    )
+  })
+
+  it('fades to the calibration over the top of the air', () => {
+    // Leaving the air must not be a step in the exposure.
+    const dusk = lit(1)
+    expect(airAdaptation(dusk, 0)).toBe(0)
+    expect(airAdaptation(dusk, 0.2)).toBe(airAdaptation(dusk))
+    expect(airAdaptation(dusk, 1)).toBe(airAdaptation(dusk))
+    let previous = 0
+    for (let depth = 0; depth <= 0.2; depth += 0.01) {
+      const stops = airAdaptation(dusk, depth)
+      expect(stops).toBeGreaterThanOrEqual(previous - 1e-12)
+      previous = stops
+    }
+  })
+
+  it('opens Enhanced only, and never a pinned exposure', () => {
+    const lens = LENS_PRESETS.flight
+    const calibrated = exposureForLuminance(SURFACE_LUMINANCE)
+    expect(
+      resolveCameraPolicy(DEFAULT_SENSOR_SETTINGS, lens, null, 6).fixedEV,
+    ).toBe(calibrated - 6)
+    expect(
+      resolveCameraPolicy(DEFAULT_SENSOR_SETTINGS, lens, 0, 6).fixedEV,
+    ).toBe(calibrated)
+    expect(
+      resolveCameraPolicy(
+        { ...DEFAULT_SENSOR_SETTINGS, mode: 'manual' },
+        lens,
+        null,
+        6,
+      ).fixedEV,
+    ).toBe(exposureValue(lens))
+  })
 })
