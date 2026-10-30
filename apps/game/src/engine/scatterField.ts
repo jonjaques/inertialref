@@ -413,17 +413,21 @@ export class ScatterField {
          * search in a morph band — is read only for a rock that can
          * survive them: the wanted regions cover a square three or four
          * times the range's disk.
+         *
+         * Each is widened toward keeping the rock, so the drawn ground can
+         * stand at most `GROUND_SLACK` nearer: the range against the field
+         * distance less the slack, the pixel width against it too, because a
+         * nearer rock is wider. Widened the other way, the pixel cut drops
+         * every rock whose exact distance is inside the slack of its own
+         * limit, and those are the ones the exact test keeps.
          */
         const rough = Vec.distance(
           Vec.scale(rock.direction, bodyRadius + rock.elevation - sunk),
           eyeLocal,
         )
-        if (rough > range + GROUND_SLACK) continue
-        if (
-          (2 * rock.radius * perRadian) / (rough + GROUND_SLACK) <
-          ROCK_PIXELS
-        )
-          continue
+        const nearest = Math.max(rough - GROUND_SLACK, 0)
+        if (nearest > range) continue
+        if (2 * rock.radius * perRadian < ROCK_PIXELS * nearest) continue
         const floor =
           ground.radius(rock.direction, eyeLocal) ?? bodyRadius + rock.elevation
         const center = Vec.scale(rock.direction, floor - sunk)

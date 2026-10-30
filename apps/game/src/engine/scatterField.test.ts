@@ -9,7 +9,12 @@ import {
   TEST_CATALOG,
   walkBodies,
 } from '@inertialref/universe'
-import { DEFAULT_LENS, DEFAULT_VIEWPORT } from '@inertialref/rendering'
+import {
+  DEFAULT_LENS,
+  DEFAULT_VIEWPORT,
+  pixelsPerRadian,
+  ROCK_PIXELS,
+} from '@inertialref/rendering'
 import {
   type DrawnGround,
   ScatterField,
@@ -113,6 +118,55 @@ describe('a rock is seated on the drawn ground', () => {
       settle(new ScatterField(), { epoch: 1, radius: () => null }),
     )
     expect(bare).toEqual(drawn)
+  })
+
+  /*
+   * The cut on the field before the triangle is read only saves work: it
+   * keeps every rock the exact tests keep. A rock is wider on screen the
+   * nearer it is, so its pixel cut has to be widened toward the eye; widened
+   * away, it drops every rock inside the slack of its own limit, and with
+   * the ground on the field no drawn rock comes within 4 m of the distance
+   * where it is two pixels wide. The exact test alone keeps some there: 2 of
+   * 646 at this stance.
+   */
+  it('cuts no rock on the field that the drawn ground would keep', () => {
+    const state = settle(new ScatterField(), fieldGround(0, 1))
+    const anchor = state.anchor as Vec3
+    const perRadian = pixelsPerRadian(LENS.lens, LENS.viewport)
+    let edge = 0
+    let drawn = 0
+    for (const batch of state.batches) {
+      for (let i = 0; i < batch.count; i += 1) {
+        const m = batch.matrices
+        const at = i * 16
+        const center = vec3(
+          anchor.x + (m[at + 12] as number),
+          anchor.y + (m[at + 13] as number),
+          anchor.z + (m[at + 14] as number),
+        )
+        // `writeInstance`'s two widths, r(1 + 0.32w) and r(1 − 0.28w),
+        // solved for the rock's radius.
+        const sx = Math.hypot(
+          m[at] as number,
+          m[at + 1] as number,
+          m[at + 2] as number,
+        )
+        const sz = Math.hypot(
+          m[at + 8] as number,
+          m[at + 9] as number,
+          m[at + 10] as number,
+        )
+        const radius = (0.28 * sx + 0.32 * sz) / 0.6
+        const distance = Vec.distance(center, EYE)
+        const width = (2 * radius * perRadian) / distance
+        // The exact test, held as the layout's floor.
+        expect(width).toBeGreaterThanOrEqual(ROCK_PIXELS * (1 - 1e-5))
+        if ((2 * radius * perRadian) / (distance + 4) < ROCK_PIXELS) edge += 1
+        drawn += 1
+      }
+    }
+    expect(drawn).toBeGreaterThan(0)
+    expect(edge).toBeGreaterThan(0)
   })
 
   /*
