@@ -233,6 +233,13 @@ export interface TerrainReport {
    */
   readonly saturated: boolean
   /**
+   * Of the drawn patches, how many were refined at the flight lens rather
+   * than the picture's own because the frame cannot reach them. Zero at the
+   * flight lens and wider, where the selection is the whole disk;
+   * `terrainSelect.ts` § `REFERENCE_LENS`.
+   */
+  readonly outside: number
+  /**
    * The multiple of the quality step's cell pixels the last ideal selection
    * was made at — 1 while the budget is not binding, 1.5 and its powers
    * while it is. `terrainSelect.ts` § `COARSEN_STEP`.

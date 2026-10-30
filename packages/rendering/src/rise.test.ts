@@ -5,6 +5,7 @@ import { FOV_MAX, FOV_MIN } from './lens.ts'
 import {
   HORIZON_THIRD,
   RISE_CLEARANCE,
+  RISE_FILL,
   riseClearance,
   riseFov,
   riseStance,
@@ -186,9 +187,12 @@ describe('the lens a rise is framed with', () => {
     expect(mars).toBeCloseTo(42.4, 1)
     expect(mars / earth).toBeGreaterThan(20)
 
-    // Earth wants 11.4° of field for a sixth of the frame and gets the 20°
-    // floor; Mars wants far more than the range holds and gets the 110° wall.
-    expect(riseFov(LUNA.parent, LUNA.distance)).toBe(FOV_MIN)
+    // Earth at Luna's mean distance wants 11.40° of field for a sixth of the
+    // frame, which is the long end of the range — the floor is that picture,
+    // to a few thousandths of a degree. Mars wants far more than the range
+    // holds and gets the 110° wall.
+    expect(riseFov(LUNA.parent, LUNA.distance)).toBeCloseTo(11.4, 2)
+    expect(FOV_MIN).toBeCloseTo(earth / RISE_FILL, 1)
     expect(riseFov(PHOBOS.parent, PHOBOS.distance)).toBe(FOV_MAX)
   })
 })

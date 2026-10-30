@@ -7,12 +7,7 @@ import type {
   PointLight,
 } from 'three/webgpu'
 import { Vector3 } from 'three/webgpu'
-import {
-  CHASE_OFFSET,
-  flightCameraPose,
-  nearFieldLighting,
-  verticalFovDegrees,
-} from '@inertialref/rendering'
+import { nearFieldLighting, verticalFovDegrees } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -86,16 +81,6 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     if (fill.current !== null) fill.current.intensity = lighting.fill
     if (scene === null) return
 
-    // The arm `#step` resolved, read rather than re-derived: a frame nobody
-    // owns has no eye to hold, and the ship arm's camera is the chase rig.
-    const owner = engine.owner
-    const override =
-      owner === null || owner.arm === 'ship'
-        ? null
-        : owner.arm === 'cutscene'
-          ? owner.cinematic
-          : owner.view
-
     /*
      * The lens, applied here rather than pushed at the camera from React: the
      * canvas remounts on an HDR change and R3F builds a fresh camera, so the
@@ -141,27 +126,13 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     }
 
     /*
-     * The ship arm's pose comes from `flightCameraPose`: the chase behind the
-     * hull or the orbit beside it, each with the head turned as the flight
-     * camera says, and the ground clearance under both. It was three lines
-     * of vector arithmetic here, which is exactly where a rule goes to become
-     * untestable: nothing in Node could see that pitching up on the pad put
-     * the camera under the crust.
-     *
-     * The offset scales with the modeled hull once one is mounted; the
-     * hand-tuned 6 m default covers the debug cone, whose orbit is measured
-     * against the same length. `engine.hull` rather than anything
-     * module-scoped here — see the field's comment in `GameEngine`.
+     * The pose the engine resolved for the arm that owns the frame — the
+     * script's or the observatory's camera, or the ship arm's chase rig — and
+     * the same one the terrain selection was told the picture looks along.
+     * `GameEngine.cameraPose` says why it is computed there.
      */
-    const pose =
-      override === null
-        ? flightCameraPose(
-            scene,
-            engine.harness.flightCamera.state,
-            engine.hull === null ? 6 : engine.hull.lengthMeters,
-            engine.hull === null ? CHASE_OFFSET : undefined,
-          )
-        : override.camera
+    const pose = engine.cameraPose()
+    if (pose === null) return
     camera.quaternion.set(
       pose.orientation.x,
       pose.orientation.y,

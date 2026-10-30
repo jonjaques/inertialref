@@ -1,6 +1,7 @@
 # ADR-0017: The camera has a lens, and the field of view is derived from it
 
-Status: accepted · 2026-08-28
+Status: accepted · 2026-08-28 · amended by [ADR-0055](0055-a-long-lens-refines-what-its-frame-can-reach.md): the
+selection reads where the picture looks, and the long end of the lens is 11.4°
 
 ## Context
 

@@ -196,6 +196,10 @@ export const WINGS = [
             'docs/adr/0051-a-rock-stands-on-the-drawn-ground.md',
             'The rock and the deposit read the drawn level',
           ],
+          [
+            'docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md',
+            'A long lens',
+          ],
         ],
       },
     ],

@@ -187,16 +187,21 @@ it: the size of the smallest thing a patch can express.
 "What the screen can tell" is a statement about optics, and it reads the lens
 the picture is actually taken with — [ADR-0017](../adr/0017-the-lens.md). A
 fixed angle would be right for exactly one setting of the field-of-view slider
-and three levels wrong across it — six once the zoom channel is counted; the
-patch demand climbs steeply with the pixels-per-radian, so the assumption would
-decide how much terrain exists rather than the picture deciding it. Not as its
-square, which is what the arithmetic suggests: refinement runs out of _levels_ at
-`surfaceDetailFloor` before it runs out of budget, and the telephoto end of the
-slider measures 1.9× to 3.2× the flight lens's demand rather than thirteen times
-it. Racking the zoom out on top of that is the one corner where the floor is
-reached and the square bites again — a telephoto held on a subject wants an order
-of magnitude past any cap, so the disk goes a level coarse on every step and says
-so. The viewport is
+and nearly four levels wrong across it — nearly seven once the zoom channel is
+counted; the patch demand climbs steeply with the pixels-per-radian, so the
+assumption would decide how much terrain exists rather than the picture deciding
+it. Not as its square, which is what the arithmetic suggests: refinement runs
+out of _levels_ at `surfaceDetailFloor` before it runs out of budget, and a whole
+disk at the telephoto end asks for 2,063 to 12,330 patches standing at two
+meters where the flight lens asks for 456 to 1,061, rather than forty-one times
+as many. That is still far past the cap, and a telephoto's pixel angle is a
+claim about its frame and nothing else — so past the flight lens the selection
+refines at the lens only where the frame can reach and at the flight lens
+everywhere else ([ADR-0055](../adr/0055-a-long-lens-refines-what-its-frame-can-reach.md)). The same eyes looking at the
+horizon ask for 929 to 3,491, which the coarsening ladder fits on every one.
+Racking the zoom out on top of that is the one corner where the square bites
+again — a telephoto held on a subject wants several times the cap even inside
+its frame, so the disk goes coarse on most steps and says so. The viewport is
 in **display** pixels with any supersampling divided back out: supersampling raises the
 sample count, not the
 detail a viewer can resolve, and feeding the raw buffer in asks for 6.5× the

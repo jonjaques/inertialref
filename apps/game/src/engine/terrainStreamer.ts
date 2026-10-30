@@ -48,10 +48,12 @@ import {
   selectTerrain,
   type TerrainEye,
   type TerrainPalette,
+  type TerrainView,
   patchWater,
   sheetInput,
   terrainPalette,
   terrainPatchKey,
+  viewTurned,
 } from '@inertialref/rendering'
 import {
   Heightfields,
@@ -523,6 +525,7 @@ export class TerrainStreamer {
   #culled = 0
   #starved = 0
   #saturated = false
+  #outside = 0
   /**
    * The streamer's own four phases, inside the Engine track's one `terrain`.
    *
@@ -657,6 +660,13 @@ export class TerrainStreamer {
      * log, which is the shape `travel.ts` builds `COMPARED` to prevent.
      */
     readonly optics: number
+    /*
+     * Where the picture looked, in body-fixed axes, or null without a view.
+     * Compared through `viewTurned` rather than for equality: at a long lens
+     * a selection holds until the head has turned a quarter of the view's
+     * margin, and at the flight lens it is not an input at all.
+     */
+    readonly forward: Vec3 | null
     readonly requested: readonly RegionAddress[]
   } | null = null
   /**
@@ -728,6 +738,18 @@ export class TerrainStreamer {
    * the two as one quotient and the memo compares that quotient.
    */
   cellPixels: number = DEFAULT_CELL_PIXELS
+  /**
+   * Which way the picture looks: the camera's forward in render space, written
+   * by the engine beside `lensView` from the pose the frame is drawn with, or
+   * null when the engine has none.
+   *
+   * What lets a long lens refine only the ground its frame can reach —
+   * `selectTerrain`'s `view`. Render space because that is where the camera's
+   * pose is, and this frame's origin and spin turn it into the body's axes,
+   * the same pair `#pose` is made from. Null is the whole disk at the lens,
+   * which is the conservative answer for a frame nobody has aimed.
+   */
+  forward: Vec3 | null = null
 
   /**
    * @param preparation - shared with whatever else reads a body's ground on
@@ -772,6 +794,7 @@ export class TerrainStreamer {
     readonly culled: number
     readonly starved: number
     readonly saturated: boolean
+    readonly outside: number
     readonly coarsening: number
     readonly wanted: number
     readonly selections: number
@@ -812,6 +835,7 @@ export class TerrainStreamer {
       culled: this.#culled,
       starved: this.#starved,
       saturated: this.#saturated,
+      outside: this.#outside,
       coarsening: this.#coarsening,
       // What the ideal selection wanted at that tolerance — the count the
       // next rung is predicted from, so a ladder that will not come down can
@@ -995,11 +1019,18 @@ export class TerrainStreamer {
       this.#forget()
       return
     }
+    // The camera's forward in the body's axes: back out of render space
+    // through the rotation `#pose` carries the patches into it with.
+    const forward =
+      this.forward === null
+        ? null
+        : Q.rotate(Q.conjugate(this.#pose.orientation), this.forward)
     const options = {
       maxLevel: prepared.floor,
       lens,
       viewport,
       cellPixels: this.cellPixels,
+      view: forward === null ? undefined : { forward },
     }
 
     /*
@@ -1012,8 +1043,8 @@ export class TerrainStreamer {
      * read: the eye in body-fixed axes, the level floor, the one scalar the
      * selection's optics reduce to (the engine allocates a fresh `LensView`
      * every frame), the resolved body by identity (a reseed under the same
-     * address is a different `Body`), and the cache epoch recorded at walk
-     * time.
+     * address is a different `Body`), the cache epoch recorded at walk
+     * time, and the view to within `VIEW_TURN_PIXELS` of a turn.
      */
     const optics = pixelsPerRadian(lens, viewport) / this.cellPixels
     const held = this.#selection
@@ -1023,7 +1054,9 @@ export class TerrainStreamer {
       held.maxLevel === options.maxLevel &&
       held.cacheEpoch === this.#cacheEpoch &&
       held.optics === optics &&
-      Vec.lengthSquared(Vec.sub(eyeLocal, held.eye)) < SELECTION_EYE_EPSILON_SQ
+      Vec.lengthSquared(Vec.sub(eyeLocal, held.eye)) <
+        SELECTION_EYE_EPSILON_SQ &&
+      !viewTurned(held.forward, forward, lens, viewport)
     ) {
       /*
        * The walk that did not happen, billed where the walk is billed.
@@ -1152,6 +1185,7 @@ export class TerrainStreamer {
       readonly viewport: LensView['viewport']
       readonly cellPixels: number
       readonly maxPatches?: number
+      readonly view?: TerrainView
     },
     /** `pixelsPerRadian(lens, viewport) / cellPixels`, computed by the caller. */
     optics: number,
@@ -1207,6 +1241,7 @@ export class TerrainStreamer {
     this.#culled = drawn.culled
     this.#starved = drawn.starved.length
     this.#saturated = drawn.saturated
+    this.#outside = drawn.outside
 
     // What to ask for: the same walk with nothing withheld, taken from where
     // the eye is going rather than where it is.
@@ -1312,6 +1347,7 @@ export class TerrainStreamer {
       maxLevel: options.maxLevel,
       cacheEpoch,
       optics,
+      forward: options.view?.forward ?? null,
       requested,
     }
     // The held path's top-up compares against this walk's own request, which
@@ -1647,6 +1683,7 @@ export class TerrainStreamer {
     this.#culled = 0
     this.#starved = 0
     this.#saturated = false
+    this.#outside = 0
     // The selection mirrors it summarized are gone with it; a held one would
     // otherwise revive them wholesale on the frame the gate reopens.
     this.#selection = null

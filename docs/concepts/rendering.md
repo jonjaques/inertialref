@@ -193,7 +193,7 @@ of a pixel of diameter — sub-pixel on purpose, because a star is always smalle
 than a pixel and must still draw, so what the threshold decides is when a point
 cloud stops being an honest description, not when something becomes resolvable.
 A constant can only be right at one lens: the boundary at the telephoto end of
-the slider is an eighth of the boundary at the wide end
+the slider is a fourteenth of the boundary at the wide end
 ([ADR-0017](../adr/0017-the-lens.md)), which is why Atlas at 104,146 km draws as
 a point at 110° and as a billboard at 20°. `sphere` and `surface` stay
 constants, because they are claims about _representation_ — a disk with a
