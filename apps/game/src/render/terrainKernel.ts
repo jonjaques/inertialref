@@ -1988,18 +1988,29 @@ export function createTerrainKernel(
            * below is taken against this rather than `lookup`, whose float32
            * rounding is a third of a meter on Earth: a lattice bank moved
            * enough to turn the wet byte, and most of a creek's width.
+           *
+           * `rows`, `origin` and `sample` are variables, assigned here. A bare
+           * expression is assigned where the builder first meets it, which
+           * for these is inside the lattice walk's loop, and the refined walk
+           * after the loop reads them. A sample whose lattice cell lists no
+           * segment never enters that loop and would read `rows` as zero:
+           * its level pairs are then the bits of a node's coordinates, a cell
+           * count of a billion or more, and the dispatch runs until Metal's
+           * watchdog loses the device.
            */
-          const rows = uint(DRAINAGE_REFINED_AT).add(
-            tile.mul(uint(REFINED_TILE_WORDS)),
-          )
-          const origin = asV3(drainageFloats(rows).xyz)
+          const rows = uint(DRAINAGE_REFINED_AT)
+            .add(tile.mul(uint(REFINED_TILE_WORDS)))
+            .toVar()
+          const origin = asV3(drainageFloats(rows).xyz).toVar()
           const residual = asV3(drainageFloats(rows.add(uint(4))).xyz)
           const e = delta.add(vec3(wx, wy, wz).mul(warpAmount))
           const grow = dot(origin, e)
             .mul(2)
             .add(dot(e, e))
             .div(length(origin.add(e)).add(1))
-          const sample = residual.add(e.sub(origin.mul(grow)).div(grow.add(1)))
+          const sample = residual
+            .add(e.sub(origin.mul(grow)).div(grow.add(1)))
+            .toVar()
           /**
            * `toArc` from the origin: the chord's foot lifted onto the sphere,
            * less the origin, from relative terms alone.
@@ -2099,10 +2110,13 @@ export function createTerrainKernel(
               'uint',
               (refinedLevel) => {
                 const at = asU(refinedLevel)
-                const span = uint(1).shiftLeft(at)
+                // Variables, for `rows`' reason: each would be first met
+                // inside a loop below and read after it, and the key would
+                // be recomputed for every entry the search passes.
+                const span = uint(1).shiftLeft(at).toVar()
                 // The cell, from the absolute lookup: a float decision the
                 // rows make safe, as the lattice's lists make theirs.
-                const key = drainageCell(lookup, span)
+                const key = drainageCell(lookup, span).toVar()
                 const pair = rows
                   .add(uint(8))
                   .add(at.sub(refinedFirst).mul(uint(2)))
@@ -2128,9 +2142,9 @@ export function createTerrainKernel(
                     })
                   },
                 )
-                const fine = float((REFINEMENT_SHAPE.reach * Math.PI) / 2).div(
-                  float(span),
-                )
+                const fine = float((REFINEMENT_SHAPE.reach * Math.PI) / 2)
+                  .div(float(span))
+                  .toVar()
                 const record = (r: U): { a: V4; b: V4; c: V4; d: V4 } => {
                   const slot = start.add(r.mul(uint(SEGMENT_STRIDE)))
                   return {
