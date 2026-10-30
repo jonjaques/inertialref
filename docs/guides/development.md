@@ -77,7 +77,7 @@ is easy to read as a broken checkout.
 Two ways out, and which one you want depends on why you are serving:
 
 ```bash
-pnpm docs:build && pnpm dev:client   # Astro only, with its documentation manifest
+pnpm dev:client   # Astro only; builds the documentation manifest if absent
 pnpm build        # once, then `pnpm dev` works for the life of the worktree
 ```
 
@@ -85,8 +85,17 @@ pnpm build        # once, then `pnpm dev` works for the life of the worktree
 once is already fixed. **`pnpm drive` walks into this**: `--serve` is on by
 default and starts `scripts/dev.mjs`, so on a fresh worktree it reports that
 `pnpm dev` exited without serving, a few seconds in, and the reason is in
-`.data/drive/dev.log`. Generate the docs, serve with `pnpm dev:client`, and pass
-`--no-serve`, or build once.
+`.data/drive/dev.log`. Serve with `pnpm dev:client` and pass `--no-serve`, or
+build once.
+
+**Every page of the site reads the documentation manifest**, the game's
+included: the catch-all route lists the documentation routes in
+`getStaticPaths`, and Astro's dev server calls it to match any URL. A checkout
+without `apps/game/public/doc-content/` answers its first page with "Run pnpm
+docs:build before rendering the site.", so the game package's `dev` script —
+which `pnpm dev`, `pnpm dev:client` and the driver all start Astro through —
+builds it first when it is absent (`scripts/docs/ensure.mjs`, fifteen seconds
+once). It does not rebuild a stale one; `pnpm docs:build` does that.
 
 **Astro daemonizes itself when it detects a coding agent.** Astro 7 sniffs the
 environment for Claude Code, Codex, Cursor and the rest, and a detected `astro

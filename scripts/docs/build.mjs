@@ -20,8 +20,9 @@ import { apiPrerenderEnabled, docRedirects } from './prerender.mjs'
  *
  * Seventy markdown files and the whole of `packages/*` go in; a directory of
  * JSON the client fetches at runtime comes out. It runs once, by hand
- * (`pnpm docs:build`) or as the first step of `pnpm build`, and it is deliberately
- * not a watcher: the corpus changes when somebody edits a document, which is
+ * (`pnpm docs:build`), as the first step of `pnpm build`, or from the game
+ * package's `dev` script when the manifest is absent (`ensure.mjs`), and it is
+ * deliberately not a watcher: the corpus changes when somebody edits a document, which is
  * not something a dev server needs to notice within a frame.
  *
  * ## Where the output goes, and why it is not in the bundle

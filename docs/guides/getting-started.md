@@ -14,8 +14,9 @@ pnpm dev          # → http://localhost:5173
 
 One command starts both halves — Astro on 5173 and the Cloudflare Worker on 8787,
 with `/api` and `/ws` proxied to it. `pnpm dev:client` is Astro alone, which is
-how you run solo development without the Worker. After a fresh install, run
-`pnpm docs:build` first. This tests server-independent simulation; it does not
+how you run solo development without the Worker. Either builds the
+documentation manifest on its first start, since every page of the site reads
+it. This tests server-independent simulation; it does not
 exercise the production service worker's offline cache.
 
 From VS Code or Cursor, **Run and Debug → Launch Browser** does the same start
