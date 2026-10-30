@@ -437,7 +437,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
      * densest — the eye, looking up from the ground; the tangent point, on a
      * limb seen from orbit — at the squares of an even spread on each side,
      * as `marchSample` places the CPU's. Twelve spread evenly up a 120 km
-     * column put the first 5 km high and drew a noon zenith at 39% of its
+     * column put the first 5 km high and draw a noon zenith at 39% of its
      * converged light: past e^−4 of Earth's aerosol, the part that makes
      * most of a clear zenith under a high sun. Both branches are evaluated
      * and `right` picks one, so each keeps its denominator off zero.

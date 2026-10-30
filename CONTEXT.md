@@ -264,6 +264,22 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **The ground row of Ψ marched through the planet.** A ray aimed down from
+  r = 1 starts on the sphere, so `distanceToSphere` takes the far root, and the
+  bake integrated a chord of rock at the surface's density as sunlit air. At
+  the shipped 16 steps the error was 7%, which no figure noticed; refined to
+  1,024 steps Ψ at the ground grew sixfold. The convergence property in
+  `atmosphere.test.ts` bakes the table twice and fails on it (30 Oct 2026,
+  below).
+- **A setting sun overflowed the half-float scene.** `diskThroughAir` draws the
+  disk over the column's transmittance so the shell's gray mean can take it
+  back off, and near a sea-level horizon that quotient passed 65,504. The
+  property that held luminance under 1.02 compared against the table's
+  bilinear transmittance, which near the horizon is not the march, and failed
+  only once the column was physical: a scan put the worst at 97,000 times the
+  vacuum disk. The law is now asserted against the exact transmittance, and a
+  second property holds the ceiling (30 Oct 2026, below).
+
 - **A level boundary was closed from one side.** The crack property held the
   finer patch fully morphed wherever a coarser one abutted it and stopped
   there; nothing asked whether the coarser patch was still drawing the grid
@@ -12067,6 +12083,89 @@ opens whole edges rather than one vertex.
 **Caught on the way:** `new Vector4()` is `(0, 0, 0, 1)`. As the default held
 edges it would have frozen every patch's first row; `groundWear.test.ts` read
 the default and failed.
+
+## The air is measured, and dusk ends where a measured one does (30 Oct 2026)
+
+Reported from the ground on Earth: a pale sky at noon, a sun barely
+distinguishable from its own glow, the galaxy through a daylit sky, and stars
+late at dusk. Four commits on `fix/the-noon-sky-is-blue` before this one
+handle the aerosol tint, the veil, the HDR ramp and the eye's altitude; this
+entry is the air itself. The decision and the sources are
+[ADR-0056](docs/adr/0056-the-air-is-measured-and-its-gain-is-pi.md); the raw
+research notes, with every URL, were `.scratch/atmosphere-research.md`
+(git-ignored).
+
+**The anchor and how it is stated.** A scene unit is an albedo-one surface
+under the sun, so a sky in cd/m² is π·L/E⊥ scene units with E⊥ the 133.8 klx
+extraterrestrial normal illuminance Darula and Kittler state the CIE skies
+against. Converting through Enhanced's 30,000 cd/m² instead compares the sky
+with a sun 0.7 times as bright as the one that lit it, a 42% error in the
+anchor. The CIE zenith is
+evaluated at the model's own luminous turbidity, Kittler's Tv from the
+column's vertical depth, which with MACv2's aerosol is 2.3 — where type 12
+puts a standard clear sky.
+
+**What the obvious version measured.** Physical heights (8.5 and 1.2 km) under
+the old marches, Earth at sea level, as a fraction of each measured value:
+
+| Sun  | Shell fractions, gain 24 | Physical heights, gain 24 | Shipped, gain π |
+| ---- | ------------------------ | ------------------------- | --------------- |
+| 60°  | 4.3 (CIE)                | 4.3 (CIE)                 | 1.06 (CIE)      |
+| 10°  | —                        | —                         | 1.6 (CIE)       |
+| −6°  | 75 cd/m² vs 0.65         | 7.5 vs 0.65               | 2.4 (Koomen)    |
+| −12° | 1.6 vs 0.0013            | 0.14 vs 0.0013            | 3.0 (Koomen)    |
+| −15° | —                        | —                         | 1.1 (Koomen)    |
+
+The first two columns are on the 30,000 cd/m² scale the branch measured them
+on; the third is the ratio the tests hold. In the browser at Jon's site the
+zenith publishes 0.086 at 59°, 6.4·10⁻⁵ at −6.0° and 8.4·10⁻⁸ at −12.4°
+(`airLuminance`, which the site's own elevation and the Sun's color lower
+against the sea-level figures).
+
+**Three integration faults, each larger than the calibration.** The shell's
+twelve evenly spaced samples drew the noon zenith at 39% of a 2,000-step march,
+because the first sample sat 5 km up and the aerosol's scale height is 1.2. The
+CPU's 32 drew it at 80%. Ψ's ground row marched through the planet (above).
+Ψ's 32 columns span 11° of sun each, and read linearly through twilight,
+where it falls tenfold every two degrees, the zenith at −12° was nine to
+twenty-eight times Koomen's depending on the direction count. Crowded
+sampling, the ground stop, a logarithmic table and 64 directions fixed all
+three. With them converged, the gain the anchor asked for went from 1.16π to
+0.94π, so the gain is π.
+
+**Tried and rejected.** A gain fitted to the anchor (1.16π, before the marches
+converged — it was their error). More Ψ columns: 128 by 128 at 64 directions
+held twilight and cost 627 ms a bake. The aerosol gray, as it was: a zenith of
+0.77 red over blue, x,y (0.295, 0.309), where Ångström's 1.3 gives 0.55 and
+(0.275, 0.294).
+
+**What the plates show** (`.scratch/sky-plates/`, before and after, SDR,
+1600×900, Earth at Jon's noon site and its dusk at +4.42, +5, +5.5, +6 and +8
+hours; Mars and Titan by `site-sun.mjs` east of the sub-solar point; the
+far-shore preset). The noon sky is blue and dark — right against the ground,
+darker than a photograph, because Enhanced holds its exposure at the surface
+white. Civil dusk is black for the same reason. The 2° sun is an orange disk
+twelve times the sky beside it; far-shore's sun is a disk over its glow. At
+−12.4° the stars and the Milky Way are back: the air there is 8.4·10⁻⁸
+against a bright star cloud's 3·10⁻⁷ in the veil test, so the composition
+lets the field through. Measured twilight hides the Milky Way until about
+−15° to −18°, and whether the field's own radiance or the veil's law is the
+reason is not settled.
+
+**Not changed, and why.** `thickness` scales the gas and the aerosol together
+and the zenith color is read as the Rayleigh spectrum. Mars therefore draws a
+Rayleigh depth 23 times its real one and a dust depth a twentieth of it, and
+its noon sky is dark. Titan draws Earth's column in orange, so its column
+extinguishes red, and its low sun comes through green-white. Composition-aware
+columns are a decision of their own, recorded in ADR-0056 as the next step.
+
+**Found, pre-existing, not this change's.** The drawn sphere is sunk by the
+body's relief, 19.8 km on Earth and 29.4 on Mars, so from sea level its
+horizon dips 4.5° and 7.5° under the true one. Between the two only streamed
+terrain hides what is behind it. Both builds draw the sun's glare through the
+ground at Earth's −6° and Mars's −4° (`before-earth-civil`, `after-mars-dusk`).
+The white dots reported below the horizon at −77.5° did not reproduce in a
+rebuild of that frame, in either build.
 
 ## Known gaps
 

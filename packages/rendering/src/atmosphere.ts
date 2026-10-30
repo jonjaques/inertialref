@@ -110,8 +110,8 @@ const TAU_RAYLEIGH_SUM = 0.38
  * It is also what the anchor asks for. The CIE clear sky's zenith falls by a
  * factor of eight between a 60° and a 10° sun, because at a high sun most of
  * the zenith's light is the aerosol's forward lobe; a cleaner column of 0.05
- * fell by three, and drew a dusk sky as bright as a noon one relative to the
- * sun. At 0.12 the model's luminous turbidity is 2.3, where CIE type 12 puts
+ * falls by three, which makes a low sun's sky as bright as a noon one beside
+ * the sun that lights it. At 0.12 the model's luminous turbidity is 2.3, where CIE type 12 puts
  * a standard clear sky at 2.5.
  */
 const TAU_MIE = 0.12
@@ -154,8 +154,8 @@ const TRANSMITTANCE_STEPS = 48
  * Sixty-four directions, because once the column is in shadow its light
  * arrives from a narrow wedge of sunlit air toward the sun's azimuth, and a
  * sparser sphere either misses that wedge or lands a direction in it by
- * chance: at 16 the zenith at −12° came out nine times the measured sky, and
- * it does not move by more than noise past 64.
+ * chance: at 16 the zenith at −12° is eleven times the measured sky, and it
+ * does not move by more than noise past 64.
  */
 const MS_DIRECTIONS = 64
 const MS_STEPS = 16
@@ -307,9 +307,9 @@ function densities(
  * along the segment and the step the sample stands for.
  *
  * A uniform march does not resolve air that falls off over a kilometer or
- * two. The shell's twelve put the first sample up a 120 km column 5 km high,
- * past e^−4 of Earth's aerosol, and drew a noon zenith at 39% of one marched
- * in 2,000 steps; a uniform 32 drew it at 80%. The samples sit at the squares
+ * two. Twelve spread evenly put the first sample 5 km up a 120 km column,
+ * past e^−4 of Earth's aerosol, and draw a noon zenith at 39% of one marched
+ * in 2,000 steps; an even 32 draw it at 80%. The samples sit at the squares
  * of an even spread on each side of the perigee, in proportion to each
  * side's length, so the steps are fine where the density is and coarse where
  * there is none: 32 come within 0.5% of 2,000, and twelve within 4%.
@@ -474,8 +474,8 @@ function fibonacciSphere(count: number): [number, number, number][] {
  * The table holds the logarithm, and every reader takes `Math.exp` of a
  * bilinear read (`multipleScatteringAt`). Through twilight Ψ falls tenfold
  * every two degrees and a column of this table spans 11°, so blending the
- * values themselves drew each texel as its brighter neighbor: the zenith at
- * −12° came out at three times what the same table says read geometrically.
+ * values themselves draws each texel as its brighter neighbor, and the
+ * zenith at −12° at three times what the same table says read geometrically.
  * Interpolating the logarithm is exact for an exponential falloff.
  */
 export function bakeMultipleScattering(
@@ -508,10 +508,10 @@ export function bakeMultipleScattering(
         /*
          * From the ground row, a ray aimed down is already in the ground.
          * `distanceToSphere` answers its far side instead — the start is on
-         * the sphere, so the near root is zero and not taken — and the march
-         * crossed the planet at the surface's density: a chord of rock lit as
-         * if it were air, which grew Ψ at the ground sixfold as the steps were
-         * refined. Same μ ≥ 0 guard as `transmittanceFrom`, for its rounding.
+         * the sphere, so the near root is zero and not taken — and a march
+         * past this line crosses the planet at the surface's density: a chord
+         * of rock lit as if it were air, which grows Ψ at the ground sixfold
+         * as the steps are refined. Same μ ≥ 0 guard as `transmittanceFrom`, for its rounding.
          */
         if (muRay < 0 && r <= 1) continue
         const ground = muRay < 0 ? distanceToSphere(r, muRay, 1) : Infinity
@@ -665,9 +665,9 @@ export function zenithSkyRadiance(
  * What this returns is drawn *before* the shell divides it back down, so it
  * is the disk over the column's transmittance, and through the last degree or
  * two above a sea-level horizon that transmittance is 10⁻⁵ and smaller. The
- * scene's target is half-float, whose largest value is 65,504: the drawn disk
- * overflowed to infinity there, and the shell's extinction cannot bring an
- * infinity back. So the return is capped at `DISK_THROUGH_AIR_CEILING`, and
+ * scene's target is half-float, whose largest value is 65,504: uncapped, the
+ * drawn disk overflows to infinity there, and the shell's extinction cannot
+ * bring an infinity back. So the return is capped at `DISK_THROUGH_AIR_CEILING`, and
  * a sun that low dims faster than the law that drew it, in the column's own
  * color, until the ground takes it.
  */

@@ -280,7 +280,7 @@ describe('the sky overhead', () => {
       previous = sky
     }
     // Koomen et al. (1952), photopic zenith at sea level, Maryland, converted
-    // from candles per square foot. The model is 1.4 to 2.9 times brighter
+    // from candles per square foot. The model is 1.4 to 3.0 times brighter
     // from the horizon to −12° and 1.1 times at −15°; the bound is a factor
     // of four either way. Read linearly off a 32-column Ψ with 16
     // directions, the model's −12° was 27 times the measured sky.
