@@ -197,6 +197,10 @@ export const WINGS = [
             'The rock and the deposit read the drawn level',
           ],
           [
+            'docs/adr/0052-the-sea-mirrors-the-land.md',
+            'The sea mirrors the land',
+          ],
+          [
             'docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md',
             'A long lens',
           ],

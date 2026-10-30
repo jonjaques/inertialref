@@ -261,7 +261,9 @@ vertex beside the cover, NaN where nothing stands — and a body with no graph
 is handed the sea's datum instead, which is every vertex's level. A vertex
 under nothing sits a cell's width of ground under the ground, so the sheet
 hides rather than fights. `render/water.ts` draws it, and
-[ADR-0026](../adr/0026-the-liquid.md) says how.
+[ADR-0026](../adr/0026-the-liquid.md) says how;
+[ADR-0052](../adr/0052-the-sea-mirrors-the-land.md) says how it mirrors the
+land, through the frame it already reads.
 
 ```mermaid
 sequenceDiagram

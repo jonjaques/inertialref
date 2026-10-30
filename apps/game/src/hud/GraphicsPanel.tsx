@@ -243,7 +243,7 @@ export function GraphicsPanel({
         />
         <SurfaceRow
           label="Sea"
-          detail="full refracts the seabed; plain reflects the sky; flat has no waves"
+          detail="full refracts the seabed and mirrors the land; plain reflects the sky; flat has no waves"
           value={surface.sea}
           values={SEA_DETAILS}
           onChange={(sea) => setSurface((held) => ({ ...held, sea }))}
