@@ -445,14 +445,15 @@ remembered by address. An unchanged body keeps its ready maps across frames.
 
 The bake is built and drawn a frame's share at a time, because ninety-six
 patches and twelve face renders taken in one frame are a hitch on the frame
-the tiles arrive in. `advance` runs once a frame ahead of every other frame
-callback: it builds patches for two milliseconds of the frame, then draws one
-face a frame, each face from the sixteen patches of its own cube face, so a
-patch's buffers upload once and in the face that draws it. Until the twelfth
-face is drawn the sphere keeps the flat tint it wore before the bake was asked
-for; the targets are handed over whole or not at all. The tiles themselves
-are asked for in the [background lane](workers.md#two-lanes), behind the
-streamer's ground.
+the tiles arrive in. `advance` runs once a frame, after the engine's tick and
+the camera and ahead of the ground's own frame callback: it builds patches
+for two milliseconds of the frame, then draws one face a frame, each face
+from the sixteen patches of its own cube face, so a patch's buffers upload
+once and in the face that draws it. Until the twelfth face is drawn the
+sphere keeps the flat tint it wore before the bake was asked for; the
+targets are handed over whole or not at all. The tiles themselves are asked
+for in the [background lane](workers.md#two-lanes), behind the streamer's
+ground.
 
 ### Two shapes, and which one is not a rendering choice
 

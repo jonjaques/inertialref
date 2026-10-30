@@ -131,6 +131,7 @@ function fixture(tick = 1) {
     jobs,
     draws,
     mode: () => mode,
+    bound: () => bound,
     loseDevice: () => {
       lost = true
     },
@@ -237,13 +238,16 @@ describe('the orbital bake lifetime', () => {
   })
 
   it('fails a bake whose face will not draw, and keeps the frame loop', async () => {
-    const { baker, jobs, draws, mode, loseDevice } = fixture()
+    const { baker, jobs, draws, mode, bound, loseDevice } = fixture()
     baker.textureFor(ADDRESS)
     await arrive(jobs)
     for (let frame = 0; frame < 48; frame += 1) baker.advance()
     loseDevice()
     expect(() => baker.advance()).not.toThrow()
     expect(mode()).toBe(0)
+    // The frame it survives into draws where it would have, not into a face
+    // of the failed bake's target.
+    expect(bound()).toBeNull()
     expect(baker.report()).toEqual([
       { address: ADDRESS, ready: false, failed: true },
     ])

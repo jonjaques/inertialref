@@ -540,8 +540,12 @@ export function createOrbitalBaker(host: OrbitalBakeHost): OrbitalBaker {
  * renderer's and differs between WebGPU and WebGL; the depth clear a
  * reversed buffer needs when the renderer is not clearing for itself, which
  * this one is outside the sensor's own pass; and the target, face and mip
- * level it found, put back after. The bake's targets carry no mipmaps, so
- * the mipmap toggle `update` makes around its last face has nothing to do.
+ * level it found, put back after — in a `finally`, where `update` has none,
+ * because a face that throws is a failed bake `advance` survives, and the
+ * frame it survives into must not find the renderer still bound to a face of
+ * the bake's target, which the bake's eviction disposes. The bake's targets
+ * carry no mipmaps, so the mipmap toggle `update` makes around its last face
+ * has nothing to do.
  */
 export function drawCubeFace(
   renderer: WebGPURenderer,
@@ -554,11 +558,14 @@ export function drawCubeFace(
   const activeFace = renderer.getActiveCubeFace()
   const activeLevel = renderer.getActiveMipmapLevel()
   renderer.setRenderTarget(cube.renderTarget, face, cube.activeMipmapLevel)
-  const reversed = (renderer as { readonly reversedDepthBuffer?: boolean })
-    .reversedDepthBuffer
-  if (reversed === true && !renderer.autoClear) renderer.clearDepth()
-  renderer.render(scene, cube.children[face] as Camera)
-  renderer.setRenderTarget(target, activeFace, activeLevel)
+  try {
+    const reversed = (renderer as { readonly reversedDepthBuffer?: boolean })
+      .reversedDepthBuffer
+    if (reversed === true && !renderer.autoClear) renderer.clearDepth()
+    renderer.render(scene, cube.children[face] as Camera)
+  } finally {
+    renderer.setRenderTarget(target, activeFace, activeLevel)
+  }
 }
 
 /**

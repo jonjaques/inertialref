@@ -229,7 +229,7 @@ in the archive's own encoding, with the sea mask beside them.
 ninety-six patches built on the main thread and twelve renders of them, taken
 in the frame the tiles arrived, were a hitch of tens of milliseconds once per
 body. The 20 Oct 2026 amendment spreads them: `advance`, once a frame ahead
-of every other frame callback, builds patches for two milliseconds and then
+of the ground's frame callback, builds patches for two milliseconds and then
 draws one face a frame, each face from the sixteen patches of its own cube
 face so a patch's buffers upload once and in the face that draws it. The
 sphere wears its tint until the twelfth face is drawn and the targets are
