@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  Color,
   ColorManagement,
+  CubeRenderTarget,
+  FloatType,
+  HalfFloatType,
+  LinearFilter,
   NoToneMapping,
   NodeMaterial,
   QuadMesh,
@@ -15,6 +20,7 @@ import { vec3, vec4 } from 'three/tsl'
 import { type GpuSession, openGpu, type Pixels } from './gpuHarness.ts'
 import { groundDummy } from './groundWear.ts'
 import { createStarMaterial } from './materials.ts'
+import { createPlanetMaterial } from './planet.ts'
 import { DEFAULT_PICTURE } from './picture.ts'
 import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 import { warmTargetFor } from './sceneTarget.ts'
@@ -218,6 +224,71 @@ describe('warmCompile', () => {
     expect(created()).toBeGreaterThan(before)
     target.dispose()
   })
+})
+
+it('warms the sphere a lava world draws, its bake and its glow bound after', async () => {
+  /*
+   * The boot compiles one planet archetype over the stand-ins — no bake, a
+   * black glow — and every generated body is then drawn by that pipeline
+   * with its own bake and its own uniforms bound into it. The glow is a
+   * uniform for exactly this reason: had it been a build option or a second
+   * material for a magma world, the first lava world in the frame would
+   * build a pipeline there. Drawn on the night side, so what reaches the
+   * target is the glow alone.
+   */
+  const { renderer } = gpu
+  const planet = createPlanetMaterial()
+  const mesh = new Mesh(new SphereGeometry(1, 16, 12), planet.material)
+  mesh.visible = false
+  const scene = new Scene()
+  scene.add(mesh)
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100)
+  camera.position.z = 4
+  scene.updateMatrixWorld(true)
+  camera.updateMatrixWorld()
+  const target = new RenderTarget(16, 16, { type: FloatType })
+  const cube = (red: number, green: number, blue: number) => {
+    const made = new CubeRenderTarget(4, {
+      type: HalfFloatType,
+      magFilter: LinearFilter,
+      minFilter: LinearFilter,
+      generateMipmaps: false,
+    })
+    renderer.setClearColor(new Color(red, green, blue), 1)
+    for (let face = 0; face < 6; face += 1) {
+      renderer.setRenderTarget(made, face)
+      renderer.clear()
+    }
+    return made
+  }
+  // Made before the census starts: a clear is a pass, not a pipeline, but
+  // the claim is about the draw and nothing else gets to move the count.
+  const albedo = cube(0.1, 0.05, 0.03)
+  const sea = cube(0.5, 0.5, 1)
+  renderer.setClearColor(new Color(0, 0, 0), 1)
+  renderer.setRenderTarget(target)
+  try {
+    const before = created()
+    await warmCompile(renderer, { object: mesh, camera, scene })
+    expect(created()).toBeGreaterThan(before)
+
+    const warmed = created()
+    planet.setBake({ albedo: albedo.texture, relief: sea.texture })
+    planet.sunDirection.value.set(0, 0, -1)
+    planet.liquidGlow.value.setRGB(2.6, 0.55, 0.06)
+    mesh.visible = true
+    const pixels = await gpu.draw(scene, camera, { into: target })
+    expect(created()).toBe(warmed)
+    const [red, green, blue] = pixels.at(8, 8)
+    expect(red).toBeCloseTo(2.6, 2)
+    expect(green).toBeCloseTo(0.55, 2)
+    expect(blue).toBeCloseTo(0.06, 2)
+  } finally {
+    target.dispose()
+    albedo.dispose()
+    sea.dispose()
+    planet.material.dispose()
+  }
 })
 
 it('warms depthless sensor attachments without rebuilding their first draw', async () => {

@@ -429,12 +429,31 @@ stored in, because at forty kilometers a texel the real slope is a few
 hundredths: a byte resolves that to five steps and the relief exaggeration draws
 every step as a facet.
 
+Where the mask says sea, the sphere takes the liquid as the ground draws it:
+its deep color, and — for magma — its glow, emitted before the veil and
+outside the albedo, as the sea sheet and the ground's painted channels emit it
+below the eight-pixel gate. Without the glow a lava world is red at the gate
+and dark on its night side from orbit. A photographed body's mask is a sea the
+ground does not paint, so it keeps the color and never glows.
+
 The baker owns the jobs and both cube targets for each held body. An address
 locates the entry; the loaded body's object identity validates it. Replacing
 the body at the same address retires its old bake, and a late tile completion
 checks that identity before drawing. Eviction and disposal use the same
 retirement path. Flat bodies are checked from the current body rather than
 remembered by address. An unchanged body keeps its ready maps across frames.
+
+The bake is built and drawn a frame's share at a time, because ninety-six
+patches and twelve face renders taken in one frame are a hitch on the frame
+the tiles arrive in. `advance` runs once a frame, after the engine's tick and
+the camera and ahead of the ground's own frame callback: it builds patches
+for two milliseconds of the frame, then draws one face a frame, each face
+from the sixteen patches of its own cube face, so a patch's buffers upload
+once and in the face that draws it. Until the twelfth face is drawn the
+sphere keeps the flat tint it wore before the bake was asked for; the
+targets are handed over whole or not at all. The tiles themselves are asked
+for in the [background lane](workers.md#two-lanes), behind the streamer's
+ground.
 
 ### Two shapes, and which one is not a rendering choice
 

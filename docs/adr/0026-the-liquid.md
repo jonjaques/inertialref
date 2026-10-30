@@ -1,7 +1,9 @@
 # ADR-0026: The liquid — a sea is a sheet, a valley is a strip, and a world is drawn in families
 
 Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
-carries relief, so a generated sphere shades its mountains
+carries relief, so a generated sphere shades its mountains · amended 20 Oct
+2026: the sphere emits a magma sea's glow where its bake says sea, and the
+bake is built and drawn a frame's share at a time
 
 ## Context
 
@@ -125,7 +127,9 @@ the mesh normal's slopes along geographic east and north as `x / 2 + 1/2`
 with the sea mask in the third lane, which is the layout and the encoding the
 sphere already reads the archive's normal map in, so one decode path serves a
 bake and a photograph. The sphere samples both by its unit position and keys
-its ocean color and sun-glint on the mask as it does on a photographed body's.
+its ocean color and sun-glint on the mask as it does on a photographed body's,
+and a magma sea's glow beside them — the sheet's own emission, added before
+the veil — so a lava world is not red at the gate and dark from orbit at night.
 One graph draws the ground and takes its picture, which is how the seam rule
 holds for a bake at all: there is no second deposit stack to keep in step. Asked the first time a mapless
 solid body's disk exceeds a hundredth of a radian, ready a few frames later,
@@ -221,11 +225,21 @@ the archive alone, so a generated disk shaded as a smooth sphere — is the
 second pass amending this record: the mesh normal's slopes east and north
 in the archive's own encoding, with the sea mask beside them.
 
-**The bake's twelve draws are one frame's stall.** Ninety-six tiles of the
-producer, ninety-six patches built on the main thread, and twelve renders of
-them, in the frame the tiles arrive: a bake is a hitch of a few tens of
-milliseconds once per body. Spreading the build across frames is the plain
-next step if the hitch is felt.
+**The bake is a frame's share at a time.** Ninety-six tiles of the producer,
+ninety-six patches built on the main thread and twelve renders of them, taken
+in the frame the tiles arrived, were a hitch of tens of milliseconds once per
+body. The 20 Oct 2026 amendment spreads them: `advance`, once a frame ahead
+of the ground's frame callback, builds patches for two milliseconds and then
+draws one face a frame, each face from the sixteen patches of its own cube
+face so a patch's buffers upload once and in the face that draws it. The
+sphere wears its tint until the twelfth face is drawn and the targets are
+handed over whole. The tiles are asked for in the pool's and the producer's
+background lane, so a bake that starts on a descent waits behind the ground.
+Measured in Chrome on a shared machine, the frame a bake landed in was
+166–217 ms; spread, the largest slice is the first face of a session's first
+bake, 26–32 ms, because a face is a one-sample target the boot does not warm
+and that face builds its pipeline variant. Every other slice is under 9 ms
+but one build of 15.2, a single `buildPatch` the budget cannot divide.
 
 **The harness cannot draw the sea.** `viewportSharedTexture` copies the
 framebuffer once a frame, ending the render pass and beginning it again, and

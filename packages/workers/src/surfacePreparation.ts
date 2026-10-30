@@ -7,7 +7,7 @@ import {
   surfaceDetailFloor,
   type SurfaceParameters,
 } from '@inertialref/universe'
-import type { JobHandle, WorkerPool } from './pool.ts'
+import type { JobHandle, JobLane, WorkerPool } from './pool.ts'
 import {
   type ArchivedSource,
   encodeSurface,
@@ -269,9 +269,10 @@ class HeldHeightfieldSource implements ArchivedSource {
   submit(
     surface: SurfaceParameters,
     request: HeightfieldRequest,
+    lane?: JobLane,
   ): JobHandle<HeightfieldResponse> {
     if (!drains(surface) || this.#preparation.prepare(surface) !== null) {
-      return this.#source.submit(surface, request)
+      return this.#source.submit(surface, request, lane)
     }
     const id = this.#nextId++
     let active: JobHandle<HeightfieldResponse> | null = null
@@ -287,7 +288,7 @@ class HeldHeightfieldSource implements ArchivedSource {
           return
         }
         try {
-          active = this.#source.submit(surface, request)
+          active = this.#source.submit(surface, request, lane)
         } catch (cause) {
           settled = true
           fail(cause)

@@ -32,7 +32,7 @@ import {
   type WorldQuery,
 } from '@inertialref/universe'
 import { UV } from '@inertialref/spatial'
-import type { JobHandle, WorkerPool } from './pool.ts'
+import type { JobHandle, JobLane, WorkerPool } from './pool.ts'
 import { defineTask, TaskRegistry } from './task.ts'
 
 /*
@@ -414,9 +414,16 @@ export interface HeightfieldSource {
   readonly maxLevel?: number
   /** Additional request-shape limits, checked before submitting to this adapter. */
   supports?(request: HeightfieldRequest): boolean
+  /**
+   * `lane` is when the tile is wanted, not what it is: the streamer's ground
+   * is the foreground and the orbital bake the background (`JobLane`). It is
+   * deliberately not a field of the request, which is the archive's key — a
+   * tile asked for by the bake and by the streamer is one tile.
+   */
   submit(
     surface: SurfaceParameters,
     request: HeightfieldRequest,
+    lane?: JobLane,
   ): JobHandle<HeightfieldResponse>
 }
 
@@ -442,11 +449,13 @@ export const poolHeightfieldSource = (pool: WorkerPool): ArchivedSource => ({
   kind: 'pool',
   archive: POOL_ARCHIVE,
   available: true,
-  submit: (surface, request) =>
-    pool.submit(generateHeightfieldTask, {
-      ...request,
-      surface: encodeSurface(surface),
-    }),
+  submit: (surface, request, lane) =>
+    pool.submit(
+      generateHeightfieldTask,
+      { ...request, surface: encodeSurface(surface) },
+      [],
+      lane,
+    ),
 })
 
 /** The surface on the wire, and the patch resolution the floor is measured at. */

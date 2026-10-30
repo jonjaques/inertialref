@@ -26,6 +26,7 @@ import {
   type ArchivedSource,
   HeightfieldUnavailable,
   type HeightfieldResponse,
+  type JobLane,
   POOL_ARCHIVE,
 } from '@inertialref/workers'
 import { timingDetailed } from '../engine/browserTiming.ts'
@@ -56,6 +57,14 @@ import {
  * and a second dispatch into them before the first was read back would race
  * the copy. The wait is a readback's latency, which is a frame or two, and
  * at a batch of sixteen that is still an order of magnitude past the pool.
+ *
+ * **The ground first.** A batch is drawn from the foreground lane while it
+ * holds anything, and from the background lane — the orbital bake's
+ * ninety-six tiles — only when it does not, so a bake that starts on a descent
+ * waits behind the ground the descent needs rather than ahead of it. The lane
+ * picks which waiting tiles the next dispatch takes and nothing else: a
+ * tile's answer is a function of its request, so the order cannot reach a
+ * value (`JobLane` in `packages/workers`).
  *
  * **One body per batch.** The kernel reads one packed body; a batch is cut at
  * the first request for a different surface, and the body is uploaded only
@@ -146,6 +155,7 @@ export interface TileProducer extends ArchivedSource {
 interface Queued {
   readonly surface: SurfaceParameters
   readonly request: HeightfieldRequest
+  readonly lane: JobLane
   readonly resolve: (response: HeightfieldResponse) => void
   readonly reject: (cause: Error) => void
   canceled: boolean
@@ -267,7 +277,11 @@ export function createTileProducer(
     // Drop what was canceled while queued; a batch of nothing is no batch.
     while (queue.length > 0 && (queue[0] as Queued).canceled) queue.shift()
     if (queue.length === 0) return
-    const head = queue[0] as Queued
+    // The oldest foreground job when there is one; the oldest of all when
+    // there is not, which is then a background one. See the header.
+    const head =
+      queue.find((job) => !job.canceled && job.lane === 'foreground') ??
+      (queue[0] as Queued)
     const taken: Queued[] = []
     let cursor = 0
     while (taken.length < batch && cursor < queue.length) {
@@ -276,7 +290,7 @@ export function createTileProducer(
         queue.splice(cursor, 1)
         continue
       }
-      if (!sameBody(job, head)) {
+      if (job.lane !== head.lane || !sameBody(job, head)) {
         cursor += 1
         continue
       }
@@ -460,7 +474,7 @@ export function createTileProducer(
     supports: (request) =>
       request.resolution === kernel.layout.resolution &&
       (request.border ?? HEIGHTFIELD_BORDER) === kernel.layout.border,
-    submit(surface, request) {
+    submit(surface, request, lane = 'foreground') {
       const id = nextId++
       let resolve!: (response: HeightfieldResponse) => void
       let reject!: (cause: Error) => void
@@ -471,6 +485,7 @@ export function createTileProducer(
       const job: Queued = {
         surface,
         request,
+        lane,
         resolve,
         reject,
         canceled: false,
