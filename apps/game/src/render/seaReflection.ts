@@ -11,7 +11,6 @@ import {
   ViewportTextureNode,
 } from 'three/webgpu'
 import {
-  abs,
   Break,
   cameraFar,
   cameraNear,
@@ -331,19 +330,24 @@ export function landReflection(
     const uv0 = getScreenPosition(start, cameraProjectionMatrix).toVar()
     const uv1 = getScreenPosition(end, cameraProjectionMatrix)
     const span = uv1.sub(uv0).toVar()
-    // The fraction of the segment that is on screen.
-    const guard = (v: Node<'float'>) =>
-      select(abs(v).lessThan(1e-7), float(1e-7), v)
-    const exitX = select(
-      span.x.greaterThan(0),
-      oneMinus(uv0.x),
-      uv0.x.negate(),
-    ).div(guard(span.x))
-    const exitY = select(
-      span.y.greaterThan(0),
-      oneMinus(uv0.y),
-      uv0.y.negate(),
-    ).div(guard(span.y))
+    /*
+     * The fraction of the segment that is on screen. The distance to the
+     * edge and the span it is divided by carry the same sign, so the floor
+     * keeps the span's: a span of zero, or a rounding step under it, never
+     * reaches that edge, and a positive floor under it divides the near
+     * edge's negative distance into a reach of millions below zero, which
+     * is a miss. An unrolled level eye over a flat sheet sends every
+     * reflected ray straight down its own column, where the span across is
+     * zero to rounding, of either sign.
+     */
+    const exit = (from: Node<'float'>, along: Node<'float'>) =>
+      select(
+        along.greaterThan(0),
+        oneMinus(from).div(max(along, float(1e-7))),
+        from.negate().div(min(along, float(-1e-7))),
+      )
+    const exitX = exit(uv0.x, span.x)
+    const exitY = exit(uv0.y, span.y)
     const reach = min(float(1), min(exitX, exitY)).toVar()
     // 1/z is linear across the screen, so the ray's own depth at a screen
     // fraction is a reciprocal of a mix rather than a mix.
