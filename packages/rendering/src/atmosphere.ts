@@ -30,9 +30,10 @@
  *
  * Coefficients derive from the authored `HazeLayer`, not from a gas mix: the
  * zenith color *is* the scattering spectrum (a sky's color is β, up to
- * normalization), the limb color tints the aerosol, and `thickness` scales
- * the column. Mars therefore keeps its butterscotch sky and its blue sunset
- * — both are in its authored colors — without this file knowing what CO₂ is.
+ * normalization), the limb color tints the aerosol where the column cannot
+ * make that color itself (`aerosolTint`), and `thickness` scales the column.
+ * Mars therefore keeps its butterscotch sky and its blue sunset — both are in
+ * its authored colors — without this file knowing what CO₂ is.
  */
 
 export interface HazeAuthoring {
@@ -126,18 +127,70 @@ export function atmosphereRecipe(
     ((color.b / colorSum) * tau) / hRayleigh,
   ]
 
-  const limbMean = Math.max((limb.r + limb.g + limb.b) / 3, 1e-6)
   const tauMie = TAU_MIE * thickness
+  const tint = aerosolTint(limb, betaRayleigh, hRayleigh)
   const mieScatter: [number, number, number] = [
-    ((limb.r / limbMean) * tauMie) / hMie,
-    ((limb.g / limbMean) * tauMie) / hMie,
-    ((limb.b / limbMean) * tauMie) / hMie,
+    (tint[0] * tauMie) / hMie,
+    (tint[1] * tauMie) / hMie,
+    (tint[2] * tauMie) / hMie,
   ]
   // Extinction is deliberately gray: a tinted extinction double-counts the
   // color the scattering tint already applied, and drifts white sums.
   const mieExtinction = (tauMie / hMie) * MIE_EXTINCTION_RATIO
 
   return { topRatio, hRayleigh, hMie, betaRayleigh, mieScatter, mieExtinction }
+}
+
+/**
+ * The aerosol's own color: the part of the authored limb the Rayleigh column
+ * does not already make, with a mean of one.
+ *
+ * `limb` is what light that has grazed the air looks like, and the
+ * transmittance table reddens that light by itself. Earth's orange terminator
+ * is its λ⁻⁴ column at a grazing airmass and nothing more, so tinting the
+ * aerosol with the whole limb applies the orange twice — and the second
+ * application is not confined to the limb. The aerosol's forward lobe sits
+ * around the sun at noon, which it painted salmon, and its multiple
+ * scattering laid the tint over the whole day sky: a 59° sun gave a zenith of
+ * 1.00 : 0.73 : 0.91 against an authored 0.29 : 0.51 : 1. Mars is the
+ * opposite case: a 600 Pa column cannot turn anything blue, so its blue limb
+ * is the dust's own forward scattering and has to stay on the aerosol.
+ *
+ * So the split is made in log chroma, where a transmittance is a subtraction.
+ * The horizontal column's reddening comes off the limb, and of what remains
+ * only the part along the limb's own departure from gray is kept, capped at
+ * the limb itself: Earth's remainder points away from its limb and leaves the
+ * aerosol gray, Mars keeps about half its blue, and Titan and Venus, whose
+ * limbs are their own sky color, keep all of it. The horizontal airmass is
+ * Chapman's `√(π/2H)` for a ground observer, in the recipe's own planet
+ * radii.
+ */
+export function aerosolTint(
+  limb: HazeAuthoring['limb'],
+  betaRayleigh: readonly [number, number, number],
+  hRayleigh: number,
+): [number, number, number] {
+  const airmass = Math.sqrt(Math.PI / (2 * Math.max(hRayleigh, 1e-9)))
+  const departure = (values: readonly number[]): number[] => {
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length
+    return values.map((value) => value - mean)
+  }
+  const tinted = departure(
+    [limb.r, limb.g, limb.b].map((value) => Math.log(Math.max(value, 1e-6))),
+  )
+  // A transmittance is e^−τ, so dividing it out of the limb adds τ back.
+  const remainder = departure(
+    betaRayleigh.map((beta) => beta * hRayleigh * airmass),
+  ).map((reddening, c) => (tinted[c] as number) + reddening)
+  const along = tinted.reduce(
+    (sum, value, c) => sum + value * (remainder[c] as number),
+    0,
+  )
+  const length = tinted.reduce((sum, value) => sum + value * value, 0)
+  const kept = length < 1e-12 ? 0 : Math.min(Math.max(along / length, 0), 1)
+  const tint = tinted.map((value) => Math.exp(value * kept))
+  const mean = (tint[0]! + tint[1]! + tint[2]!) / 3
+  return [tint[0]! / mean, tint[1]! / mean, tint[2]! / mean]
 }
 
 /**

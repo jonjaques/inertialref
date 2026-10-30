@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import {
+  aerosolTint,
   atmosphereRecipe,
   bakeMultipleScattering,
   bakeTransmittance,
@@ -145,6 +146,76 @@ describe('the recipe', () => {
     expect(
       (tau[0] as number) + (tau[1] as number) + (tau[2] as number),
     ).toBeCloseTo(0.42, 2)
+  })
+
+  it('leaves the aerosol gray where the column already makes the limb', () => {
+    // Earth's orange terminator is its Rayleigh column at a grazing airmass.
+    // Tinting the aerosol with it as well painted the noon aureole salmon.
+    const [r, g, b] = earthRecipe.mieScatter
+    expect(r).toBeCloseTo(g, 12)
+    expect(g).toBeCloseTo(b, 12)
+  })
+
+  it('keeps a limb the column cannot make on the aerosol', () => {
+    // Mars: 600 Pa cannot turn anything blue, so the blue dusk is the dust's.
+    const mars = atmosphereRecipe(
+      {
+        color: { r: 0.78, g: 0.6, b: 0.48 },
+        limb: { r: 0.62, g: 0.66, b: 0.9 },
+        thickness: 0.15,
+      },
+      1 + 60 / 3396.2,
+    )
+    const [r, , b] = mars.mieScatter
+    expect(b).toBeGreaterThan(r * 1.15)
+    expect(b / r).toBeLessThan(0.9 / 0.62)
+    // Titan: an orange haze whose limb is its own sky keeps the whole tint.
+    const titanLimb = { r: 0.95, g: 0.7, b: 0.35 }
+    const titan = atmosphereRecipe(
+      { color: { r: 0.86, g: 0.6, b: 0.3 }, limb: titanLimb, thickness: 1 },
+      1 + 300 / 2574.7,
+    )
+    expect(titan.mieScatter[0] / titan.mieScatter[2]).toBeCloseTo(
+      titanLimb.r / titanLimb.b,
+      9,
+    )
+  })
+
+  it('tints the aerosol between gray and the limb, at the same column', () => {
+    const channel = fc.double({ min: 0.02, max: 1, noNaN: true })
+    const rgb = fc.record({ r: channel, g: channel, b: channel })
+    fc.assert(
+      fc.property(
+        rgb,
+        fc.tuple(channel, channel, channel),
+        fc.double({ min: 1e-4, max: 0.05, noNaN: true }),
+        (limb, beta, height) => {
+          const tint = aerosolTint(limb, beta, height)
+          // A tint redistributes the column; it does not add or remove any.
+          expect((tint[0] + tint[1] + tint[2]) / 3).toBeCloseTo(1, 9)
+          // Each channel's log departure from the mean is the limb's, scaled
+          // by one common fraction in [0, 1] — never past the limb, never
+          // turned against it.
+          const departure = (values: number[]): number[] => {
+            const mean = (values[0]! + values[1]! + values[2]!) / 3
+            return values.map((value) => value - mean)
+          }
+          const authored = departure([limb.r, limb.g, limb.b].map(Math.log))
+          const kept = departure(tint.map(Math.log))
+          // The fraction is read off the channel that departs furthest, where
+          // it is best conditioned; the other two must agree with it.
+          let widest = 0
+          for (let c = 1; c < 3; c += 1)
+            if (Math.abs(authored[c]!) > Math.abs(authored[widest]!)) widest = c
+          if (Math.abs(authored[widest]!) < 1e-6) return
+          const fraction = kept[widest]! / authored[widest]!
+          expect(fraction).toBeGreaterThanOrEqual(-1e-9)
+          expect(fraction).toBeLessThanOrEqual(1 + 1e-9)
+          for (let c = 0; c < 3; c += 1)
+            expect(kept[c]).toBeCloseTo(fraction * authored[c]!, 6)
+        },
+      ),
+    )
   })
 
   it('scales every coefficient with thickness', () => {
