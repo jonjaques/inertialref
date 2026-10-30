@@ -6,6 +6,7 @@ import {
   beltBand,
   type Body,
   carveDrainage,
+  regionDrainageLevel,
   coastRemap,
   coastWidth,
   craterField,
@@ -41,13 +42,13 @@ import {
   volcanicBand,
   walkBodies,
   WORD,
-  writeTileFrame,
 } from '@inertialref/universe'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import {
   createTerrainKernel,
   type TerrainKernel,
   uploadSurface,
+  writeBatch,
 } from './terrainKernel.ts'
 
 /*
@@ -171,8 +172,9 @@ async function gpuTile(
   region: RegionAddress,
 ): Promise<Float32Array> {
   const packed = surfaceKernel(body.surface)
-  writeTileFrame(packed, region, kernel.tiles.array as Float32Array, 0)
-  kernel.tiles.needsUpdate = true
+  if (!writeBatch(kernel, body.surface, packed, [region])) {
+    throw new Error('the refined rows overran the drainage buffer')
+  }
   kernel.total.value = kernel.samples
   await gpu.compute(kernel.compute)
   return new Float32Array(await gpu.readBuffer(kernel.elevations)).slice(
@@ -188,7 +190,12 @@ async function gpuTile(
  * band behind the same gate both evaluations use rather than a third
  * spelling of it.
  */
-function cpuBand(body: Body, band: Band, direction: ReturnType<typeof vec3>) {
+function cpuBand(
+  body: Body,
+  band: Band,
+  direction: ReturnType<typeof vec3>,
+  level: number,
+) {
   const surface = body.surface
   const grammar = surface.grammar
   const sketch = terrainSketch(surface)
@@ -298,10 +305,12 @@ function cpuBand(body: Body, band: Band, direction: ReturnType<typeof vec3>) {
         budget
       const graph = drainageGraph(surface)
       if (graph === null) return landform
+      // At the tile's own resolution of the refinement, as the kernel reads it.
       return carveDrainage(
         graph,
         drainageLookup(graph, sketch, direction),
         landform,
+        regionDrainageLevel(level),
       ).ground
     }
     case 'coast': {
@@ -347,7 +356,7 @@ async function worstGap(
       col += 1
     ) {
       const direction = regionDirection(region, col / step, row / step)
-      const expected = cpuBand(body, band, direction)
+      const expected = cpuBand(body, band, direction, level)
       const index =
         (row + HEIGHTFIELD_BORDER) * stride + (col + HEIGHTFIELD_BORDER)
       worst = Math.max(worst, Math.abs((got[index] as number) - expected))

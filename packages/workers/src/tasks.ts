@@ -21,6 +21,7 @@ import {
   generateHeightfield,
   generateSystem,
   type Heightfield,
+  type HeightfieldMorph,
   type HeightfieldRequest,
   type RegionAddress,
   regionAddress,
@@ -297,6 +298,8 @@ export interface HeightfieldResponse {
   readonly cover: Uint8Array
   /** The level of any lake or river over each vertex, NaN where none; unbordered. See `Heightfield.water`. */
   readonly water: Float32Array
+  /** The patch as its parent draws it at the even samples, or null. See `Heightfield.morph`. */
+  readonly morph: HeightfieldMorph | null
   readonly minElevation: number
   readonly maxElevation: number
 }
@@ -341,13 +344,18 @@ export const generateHeightfieldTask = defineTask<
    * handed one, so the mismatch is a patch with no lakes rather than an
    * error; the version makes it loud.
    *
+   * 8: the response carries the morph twin — the patch at its parent's
+   * resolution of the drainage refinement, at the even samples — beside the
+   * water. A version 7 worker's answer has none, and the patch would hand
+   * over to a parent by a level of creeks it does not draw.
+   *
    * The version is also the revision of the CPU tile: the heightfield archive
    * keeps the pool's tiles under it (`POOL_ARCHIVE`). A change to the tile's
    * arithmetic that no canonical terrain version covers — the drawn tail,
    * which is not canon — spends a version here, and
    * `heightfieldFingerprint.test.ts` fails until it is spent.
    */
-  version: 7,
+  version: 8,
   run(payload) {
     const { surface, region, ...request } = payload
     const field: Heightfield = generateHeightfield(decodeSurface(surface), {
@@ -363,6 +371,7 @@ export const generateHeightfieldTask = defineTask<
       elevations: field.elevations,
       cover: field.cover,
       water: field.water,
+      morph: field.morph,
       minElevation: field.minElevation,
       maxElevation: field.maxElevation,
     }
@@ -370,11 +379,16 @@ export const generateHeightfieldTask = defineTask<
   transfers(response) {
     // Transferred, not copied: the main thread hands this straight to a
     // BufferAttribute and the worker has no further use for it.
-    return [
+    const buffers: ArrayBufferLike[] = [
       response.elevations.buffer,
       response.cover.buffer,
       response.water.buffer,
     ]
+    const twin = response.morph
+    if (twin !== null) {
+      buffers.push(twin.elevations.buffer, twin.cover.buffer, twin.water.buffer)
+    }
+    return buffers
   },
 })
 

@@ -2,6 +2,9 @@ import {
   COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
   identityText,
+  morphIndex,
+  morphSide,
+  morphVertexSide,
   surfaceIdentity,
   TERRAIN_ALGORITHM,
   type HeightfieldRequest,
@@ -71,9 +74,24 @@ export function heightfieldCacheKey(
   return `${JSON.stringify(heightfieldArchiveVersion(namespace))}:${surfaceIdentity(surface)}:${identityText(request)}`
 }
 
+/** The arrays a record carries, the twin's after the patch's own. */
+const arraysOf = (
+  field: HeightfieldResponse,
+): readonly (Float32Array | Uint8Array)[] =>
+  field.morph === null
+    ? [field.elevations, field.cover, field.water]
+    : [
+        field.elevations,
+        field.cover,
+        field.water,
+        field.morph.elevations,
+        field.morph.cover,
+        field.morph.water,
+      ]
+
 function checksum(field: HeightfieldResponse): number {
   let hash = 2166136261
-  for (const array of [field.elevations, field.cover, field.water]) {
+  for (const array of arraysOf(field)) {
     const bytes = new Uint8Array(
       array.buffer,
       array.byteOffset,
@@ -91,9 +109,7 @@ function checksum(field: HeightfieldResponse): number {
 /** The portable estimate both the record and its validation must agree on. */
 function recordBytes(key: string, field: HeightfieldResponse): number {
   return (
-    field.elevations.byteLength +
-    field.cover.byteLength +
-    field.water.byteLength +
+    arraysOf(field).reduce((sum, array) => sum + array.byteLength, 0) +
     key.length * 2 +
     128
   )
@@ -140,6 +156,20 @@ export function validateHeightfieldCacheRecord(
     field.water.length !== count
   )
     return null
+  const morph = field.morph
+  const side = morphSide({ resolution, border })
+  const vertices = morphVertexSide(resolution) ** 2
+  if (
+    morph !== null &&
+    (typeof morph !== 'object' ||
+      !(morph.elevations instanceof Float32Array) ||
+      morph.elevations.length !== side * side ||
+      !(morph.cover instanceof Uint8Array) ||
+      morph.cover.length !== vertices * COVER_CHANNELS ||
+      !(morph.water instanceof Float32Array) ||
+      morph.water.length !== vertices)
+  )
+    return null
   if (
     !Number.isFinite(field.minElevation) ||
     !Number.isFinite(field.maxElevation) ||
@@ -163,6 +193,17 @@ export function validateHeightfieldCacheRecord(
       max = Math.max(max, elevation)
     }
   }
+  // The extremes hold the morph target too: it is drawn.
+  if (morph !== null) {
+    for (let row = 0; row < resolution; row += 2) {
+      for (let col = 0; col < resolution; col += 2) {
+        const elevation = morph.elevations[morphIndex(side, border, row, col)]!
+        if (!Number.isFinite(elevation)) return null
+        min = Math.min(min, elevation)
+        max = Math.max(max, elevation)
+      }
+    }
+  }
   // CPU extrema are recorded before the float32 store. Permit that rounding only.
   const tolerance = Math.max(1, Math.abs(min), Math.abs(max)) * 2 ** -22
   if (
@@ -171,6 +212,8 @@ export function validateHeightfieldCacheRecord(
   )
     return null
   for (const water of field.water)
+    if (!Number.isFinite(water) && !Number.isNaN(water)) return null
+  for (const water of morph?.water ?? [])
     if (!Number.isFinite(water) && !Number.isNaN(water)) return null
   if (row.checksum !== checksum(field)) return null
   return row.bytes === recordBytes(key, field)

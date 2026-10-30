@@ -19,8 +19,6 @@ import {
   packedStageOn,
   type SurfaceParameters,
   surfaceKernel,
-  TILE_STRIDE,
-  writeTileFrame,
 } from '@inertialref/universe'
 import {
   type ArchivedSource,
@@ -34,6 +32,7 @@ import { QUERY } from '../pages/paths.ts'
 import {
   createTerrainKernel,
   TERRAIN_KERNEL_REVISION,
+  writeBatch,
   type TerrainKernel,
   uploadSurface,
 } from './terrainKernel.ts'
@@ -325,11 +324,21 @@ export function createTileProducer(
         uploadSurface(kernel, packed)
         uploaded = packed
       }
-      const frames = kernel.tiles.array as Float32Array
-      taken.forEach((job, i) => {
-        writeTileFrame(packed, job.request.region, frames, i * TILE_STRIDE * 4)
-      })
-      kernel.tiles.needsUpdate = true
+      if (
+        !writeBatch(
+          kernel,
+          head.surface,
+          packed,
+          taken.map((job) => job.request.region),
+        )
+      ) {
+        // Rows past the buffer: these tiles are the pool's, the next batch
+        // the GPU's.
+        inFlight = 0
+        for (const job of taken) job.reject(new HeightfieldUnavailable())
+        schedule()
+        return
+      }
       kernel.total.value = taken.length * kernel.samples
       renderer.compute(kernel.compute, taken.length * kernel.samples)
       /*
@@ -459,6 +468,9 @@ export function createTileProducer(
       elevations,
       cover,
       water,
+      // The kernel does not take the twin yet: a GPU tile hands over to its
+      // parent by the one refined level the two resolve differently.
+      morph: null,
       minElevation: min,
       maxElevation: max,
     }
