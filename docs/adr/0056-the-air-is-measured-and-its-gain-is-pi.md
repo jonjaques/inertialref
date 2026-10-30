@@ -60,8 +60,24 @@ times π, with nothing fitted.**
 - `ATMOSPHERE_GAIN` is π: a scene unit is an albedo-one surface under the
   sun, which is the irradiance over π. `atmosphere.test.ts` holds the anchor.
   The zenith at a 60° sun is 1.06 of CIE type 12 at the model's luminous
-  turbidity of 2.3, and the twilight zenith stays within a factor of four of
-  Koomen's.
+  turbidity of 2.3, and the twilight zenith is 0.75 to 1.17 of Koomen's
+  from 5° above the horizon to −12° below.
+- Earth's haze carries its ozone column, 300 Dobson units, as a tent from 10
+  to 40 km peaking at 25 km; every other haze carries zero. Ozone absorbs and
+  scatters nothing, and it is what turns a twilight zenith blue: past sunset
+  the light overhead has crossed the stratosphere edgeways. Its cross-sections
+  are Bruneton's 233 K table averaged over each channel's CIE 1931 lobe, not
+  read at 680, 550 and 440 nm. The Chappuis band peaks at 600 nm, between the
+  red and green bands' nominal wavelengths, and read at 680 the red channel
+  escaped it. That drew a −6° zenith at 0.65 : 0.39 : 1, a violet; averaged,
+  it is 0.32 : 0.39 : 1, the blue a civil-dusk photograph records. Without
+  ozone the same zenith was gray, at 1.4 to 3 times Koomen's.
+- The ground's skylight and the sea's reflection of the sky fall past the
+  horizon at the measured rate (`skylightLeft`). A clear sky puts about
+  17 klx on the ground at noon, 3.4 lx at −6° and 0.008 lx at −12°; from
+  the day ramp's own sunset value, e^(66·incidence) gives 1.3 and 0.6 of
+  those. The linear ramp it replaces reached zero only near −14°, and lit a
+  civil-dusk desert at a sixth of the day's sky.
 - `diskThroughAir` is capped at 2,048. The disk it draws is divided by the
   column's transmittance before the shell takes that back off, and within a
   degree or two of a sea-level horizon the measured column overflowed the
@@ -72,29 +88,31 @@ times π, with nothing fitted.**
 The full notes are in the build log (`CONTEXT.md`, 30 Oct 2026). Values the
 model uses are bold.
 
-| Body   | Quantity                   | Value                                                                               | Source                                                                                                                                                                                                                             |
-| ------ | -------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Earth  | Gas scale height           | **8.5 km**                                                                          | [NASA Earth fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)                                                                                                                                            |
-| Earth  | Aerosol scale height       | **1.2 km**                                                                          | [Bruneton & Neyret 2008](https://inria.hal.science/file/index/docid/288758/filename/article.pdf)                                                                                                                                   |
-| Earth  | Rayleigh depth, sea level  | 0.041, 0.097, 0.243 at 680, 550, 440 nm; **sum 0.38**                               | Bodhaine et al. 1999, as [implemented](https://docs.rs/crate/siderust/0.8.0/source/src/atmosphere/rayleigh.rs) and checked against Hansen & Travis to 0.3%                                                                         |
-| Earth  | Aerosol depth, 550 nm      | **0.12** global (MACv2); 0.13–0.19 (MODIS); 0.064–0.151 continental                 | [Kinne 2017](https://pure.mpg.de/rest/items/item_2642364_9/component/file_3148608/content), [Remer 2008](http://jenniferdsmallphd.com/Readings/Week_7_Remer_etal_2008.pdf), [OPAC](https://geisa.aeris-data.fr/opac/)              |
-| Earth  | Aerosol albedo, asymmetry  | **0.94, 0.70**                                                                      | Kinne 2017                                                                                                                                                                                                                         |
-| Earth  | Ångström exponent          | **1.3** ± 0.2                                                                       | [Ångström 1961](https://a.tellusjournals.se/articles/3401/files/656f1b5418dab.pdf)                                                                                                                                                 |
-| Earth  | Clear-sky zenith luminance | CIE type 12: Lz = A·sin γ + 0.7(Tv+1)·sin^4.43 γ / cos^0.74 γ + 0.04·Tv             | [Darula & Kittler 2002](https://publications.ibpsa.org/proceedings/esim/2002/papers/esim2002_o2.pdf); 4,404 cd/m² measured at 38°                                                                                                  |
-| Earth  | Twilight zenith, sea level | 161 (0°), 21.5 (−3°), 0.65 (−6°), 0.016 (−9°), 1.3e-3 (−12°) cd/m²                  | [Koomen et al. 1952](https://opg.optica.org/josa/abstract.cfm?uri=josa-42-5-353); [Patat et al. 2006](http://www.eso.org/~fpatat/science/skybright/twilight.pdf) agrees within 30%                                                 |
-| Mars   | Gas scale height           | **11.1 km** (fact sheet 11.0)                                                       | [NASA Mars fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html)                                                                                                                                              |
-| Mars   | Dust profile               | **mixed with the gas** to ~50 km (Conrath ν = 0.007)                                | [Conrath 1975](<https://doi.org/10.1016/0019-1035(75)90156-6>), [Pathfinder IMP](https://doi.org/10.1029/96je03568)                                                                                                                |
-| Mars   | Dust depth, albedo, g      | τ 0.3–1.0 typical; ϖ 0.75 at 444 nm, 0.93 at 671; g 0.72–0.77; τ flat (**slope 0**) | [Lemmon 2015](https://www-mars.lmd.jussieu.fr/oxford2014/abstracts/lemmon_mer_oxford2014.pdf), [Markiewicz 1999](https://doi.org/10.1029/1998je900033)                                                                             |
-| Mars   | Rayleigh depth             | ~0.002–0.0025 at 550 nm                                                             | [Annis 1987](http://hdl.handle.net/2060/19880003310)                                                                                                                                                                               |
-| Mars   | Diffuse sky                | about equal to the direct beam at a 20° sun                                         | [Pathfinder IMP team, 1999](http://www.iki.rssi.ru/mpfmirror/mgs/sci/fifthconf99/6215.pdf)                                                                                                                                         |
-| Mars   | Twilight                   | glow up to two hours; 20–35 µW m⁻² sr⁻¹ at −14°                                     | [Pathfinder](https://mpf.digitec.net/ops/clouds_sunset.html), [Kalucha 2020](https://iopscience.iop.org/article/10.3847/2515-5172/abc6ae)                                                                                          |
-| Titan  | Gas, haze scale heights    | 20 km; haze 45–75 km, **60 km**                                                     | [Sotin et al.](https://websites.isae-supaero.fr/IMG/pdf/183-ippw9_sotin_al_titanaerosols_04.pdf)                                                                                                                                   |
-| Titan  | Haze depth                 | 4.5 at 531 nm, 2 at 939 nm (**slope 1.5**); 8.6 at 531 in a later fit               | [DISR, DPS 2005](https://aasarchives.blob.core.windows.net/archives/BAAS/v37n3/dps2005/235.htm), [Tomasko 2008](https://atmos.nmsu.edu/data_and_services/atmospheres_data/Cassini/Cassini/1919-3644/27-20080226_CHARM_Tomasko.pdf) |
-| Titan  | Surface light              | about 1/1,000 of Earth's day; 10% of the top-of-atmosphere flux                     | [Cassini final report](https://pds-rings.seti.org/cassini/report/Cassini%20Final%20Report%20-%20Volume%201%20-%20Huygens.pdf)                                                                                                      |
-| Venus  | Gas scale height           | **15.9 km**; haze under the deck taken as mixed, gray                               | [NASA Venus fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html)                                                                                                                                            |
-| Venus  | Clouds, surface light      | τ 20–35 at 45–70 km; 6,900–10,500 lux at the surface, orange                        | [Knollenberg 1982](https://doi.org/10.1038/296018a0), [Venera 9/10](http://hdl.handle.net/2060/19800002742)                                                                                                                        |
-| Giants | Gas scale heights          | **27, 59.5, 27.7, 19.7 km**; upper haze not found, taken as mixed, gray             | NASA fact sheets                                                                                                                                                                                                                   |
-| Triton | Haze                       | τ 0.005 at 470 nm; extinction scale height 7–15 km, **10 km**                       | [Krasnopolsky 1993](https://doi.org/10.1029/93je01459)                                                                                                                                                                             |
+| Body   | Quantity                   | Value                                                                                                  | Source                                                                                                                                                                                                                             |
+| ------ | -------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Earth  | Gas scale height           | **8.5 km**                                                                                             | [NASA Earth fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html)                                                                                                                                            |
+| Earth  | Aerosol scale height       | **1.2 km**                                                                                             | [Bruneton & Neyret 2008](https://inria.hal.science/file/index/docid/288758/filename/article.pdf)                                                                                                                                   |
+| Earth  | Rayleigh depth, sea level  | 0.041, 0.097, 0.243 at 680, 550, 440 nm; **sum 0.38**                                                  | Bodhaine et al. 1999, as [implemented](https://docs.rs/crate/siderust/0.8.0/source/src/atmosphere/rayleigh.rs) and checked against Hansen & Travis to 0.3%                                                                         |
+| Earth  | Aerosol depth, 550 nm      | **0.12** global (MACv2); 0.13–0.19 (MODIS); 0.064–0.151 continental                                    | [Kinne 2017](https://pure.mpg.de/rest/items/item_2642364_9/component/file_3148608/content), [Remer 2008](http://jenniferdsmallphd.com/Readings/Week_7_Remer_etal_2008.pdf), [OPAC](https://geisa.aeris-data.fr/opac/)              |
+| Earth  | Aerosol albedo, asymmetry  | **0.94, 0.70**                                                                                         | Kinne 2017                                                                                                                                                                                                                         |
+| Earth  | Ångström exponent          | **1.3** ± 0.2                                                                                          | [Ångström 1961](https://a.tellusjournals.se/articles/3401/files/656f1b5418dab.pdf)                                                                                                                                                 |
+| Earth  | Clear-sky zenith luminance | CIE type 12: Lz = A·sin γ + 0.7(Tv+1)·sin^4.43 γ / cos^0.74 γ + 0.04·Tv                                | [Darula & Kittler 2002](https://publications.ibpsa.org/proceedings/esim/2002/papers/esim2002_o2.pdf); 4,404 cd/m² measured at 38°                                                                                                  |
+| Earth  | Ozone                      | **300 DU**; tent 10–40 km, peak 25 km; σ averaged over CIE 1931 lobes: **3.98, 3.61, 0.252 ×10⁻²⁵ m²** | [Bruneton 2017](https://github.com/ebruneton/precomputed_atmospheric_scattering/blob/master/atmosphere/demo/demo.cc) (233 K cross-sections, 10 nm bins; profile after the 1976 US standard atmosphere)                             |
+| Earth  | Ground illuminance, clear  | ~17 klx diffuse sky at noon; 3.4 lx at −6°, 0.008 lx at −12°                                           | Standard twilight illuminances; [Patat et al. 2006](http://www.eso.org/~fpatat/science/skybright/twilight.pdf)                                                                                                                     |
+| Earth  | Twilight zenith, sea level | 161 (0°), 21.5 (−3°), 0.65 (−6°), 0.016 (−9°), 1.3e-3 (−12°) cd/m²                                     | [Koomen et al. 1952](https://opg.optica.org/josa/abstract.cfm?uri=josa-42-5-353); [Patat et al. 2006](http://www.eso.org/~fpatat/science/skybright/twilight.pdf) agrees within 30%                                                 |
+| Mars   | Gas scale height           | **11.1 km** (fact sheet 11.0)                                                                          | [NASA Mars fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/marsfact.html)                                                                                                                                              |
+| Mars   | Dust profile               | **mixed with the gas** to ~50 km (Conrath ν = 0.007)                                                   | [Conrath 1975](<https://doi.org/10.1016/0019-1035(75)90156-6>), [Pathfinder IMP](https://doi.org/10.1029/96je03568)                                                                                                                |
+| Mars   | Dust depth, albedo, g      | τ 0.3–1.0 typical; ϖ 0.75 at 444 nm, 0.93 at 671; g 0.72–0.77; τ flat (**slope 0**)                    | [Lemmon 2015](https://www-mars.lmd.jussieu.fr/oxford2014/abstracts/lemmon_mer_oxford2014.pdf), [Markiewicz 1999](https://doi.org/10.1029/1998je900033)                                                                             |
+| Mars   | Rayleigh depth             | ~0.002–0.0025 at 550 nm                                                                                | [Annis 1987](http://hdl.handle.net/2060/19880003310)                                                                                                                                                                               |
+| Mars   | Diffuse sky                | about equal to the direct beam at a 20° sun                                                            | [Pathfinder IMP team, 1999](http://www.iki.rssi.ru/mpfmirror/mgs/sci/fifthconf99/6215.pdf)                                                                                                                                         |
+| Mars   | Twilight                   | glow up to two hours; 20–35 µW m⁻² sr⁻¹ at −14°                                                        | [Pathfinder](https://mpf.digitec.net/ops/clouds_sunset.html), [Kalucha 2020](https://iopscience.iop.org/article/10.3847/2515-5172/abc6ae)                                                                                          |
+| Titan  | Gas, haze scale heights    | 20 km; haze 45–75 km, **60 km**                                                                        | [Sotin et al.](https://websites.isae-supaero.fr/IMG/pdf/183-ippw9_sotin_al_titanaerosols_04.pdf)                                                                                                                                   |
+| Titan  | Haze depth                 | 4.5 at 531 nm, 2 at 939 nm (**slope 1.5**); 8.6 at 531 in a later fit                                  | [DISR, DPS 2005](https://aasarchives.blob.core.windows.net/archives/BAAS/v37n3/dps2005/235.htm), [Tomasko 2008](https://atmos.nmsu.edu/data_and_services/atmospheres_data/Cassini/Cassini/1919-3644/27-20080226_CHARM_Tomasko.pdf) |
+| Titan  | Surface light              | about 1/1,000 of Earth's day; 10% of the top-of-atmosphere flux                                        | [Cassini final report](https://pds-rings.seti.org/cassini/report/Cassini%20Final%20Report%20-%20Volume%201%20-%20Huygens.pdf)                                                                                                      |
+| Venus  | Gas scale height           | **15.9 km**; haze under the deck taken as mixed, gray                                                  | [NASA Venus fact sheet](https://nssdc.gsfc.nasa.gov/planetary/factsheet/venusfact.html)                                                                                                                                            |
+| Venus  | Clouds, surface light      | τ 20–35 at 45–70 km; 6,900–10,500 lux at the surface, orange                                           | [Knollenberg 1982](https://doi.org/10.1038/296018a0), [Venera 9/10](http://hdl.handle.net/2060/19800002742)                                                                                                                        |
+| Giants | Gas scale heights          | **27, 59.5, 27.7, 19.7 km**; upper haze not found, taken as mixed, gray                                | NASA fact sheets                                                                                                                                                                                                                   |
+| Triton | Haze                       | τ 0.005 at 470 nm; extinction scale height 7–15 km, **10 km**                                          | [Krasnopolsky 1993](https://doi.org/10.1029/93je01459)                                                                                                                                                                             |
 
 Above the clouds, nothing in the table gives the giants' or Venus's haze a
 slope or an optical depth, so theirs are not measured. Those rows say so
@@ -129,19 +147,20 @@ its budget.
 
 - The noon zenith sits at its physical ratio to the ground, a sixth to a
   tenth of the surface white. Under [ADR-0037](0037-the-enhanced-camera.md)'s
-  fixed calibration it renders as a dark slate blue: right relative to the
-  sunlit ground, and darker than a photograph, which would expose for the
-  scene. Civil dusk is near black for the same reason. The camera policy
-  decides this, not the air.
+  calibration it renders as a deep slate blue over a bright desert: right
+  relative to the sunlit ground, and darker and grayer than a phone's
+  photograph, which meters for the scene, white-balances the sun to white,
+  and saturates. Through dusk Enhanced opens up for the light that is left
+  (ADR-0037), so civil dusk is the deep blue the measured air and ozone make,
+  rather than black.
 - The sun is the brightest object in every sky. A 2° sun on Earth draws at
   1.7 times the surface white, twelve times the sky beside it, and the dusty
   generated shore's sun is a disk over its glow rather than a spot inside it.
 - Every atmosphere seen from orbit has a thinner, dimmer limb band. Six preset
   plates moved, and the commit that took them names each.
-- Under 20° of sun the zenith runs bright: 1.6 times the CIE sky at 10°, and
-  1.1 to 3.0 times Koomen's from the horizon to −15°. The model has no ozone,
-  which in a real sky absorbs the long grazing path and turns the twilight
-  zenith blue, and no ground bounce.
+- Under 20° of sun the zenith runs bright: 1.6 times the CIE sky at 10°.
+  The model has no ground bounce. By −15° the measured sky is mostly airglow
+  and starlight, which the model does not draw, so there it falls short.
 - **`thickness` still scales the gas and the aerosol together**, and the
   zenith color is still read as the Rayleigh spectrum. That is right for
   Earth and the giants and wrong where the aerosol is the sky. Mars draws a

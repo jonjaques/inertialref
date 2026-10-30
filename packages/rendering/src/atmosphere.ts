@@ -53,6 +53,8 @@ export interface HazeAuthoring {
   readonly thickness: number
   /** The aerosol's Ångström exponent: its optical depth goes as λ^−α. */
   readonly aerosolAngstrom: number
+  /** The ozone column, Dobson units. Earth's is about 300. */
+  readonly ozone: number
 }
 
 export interface AtmosphereRecipe {
@@ -68,6 +70,11 @@ export interface AtmosphereRecipe {
   readonly mieScatter: readonly [number, number, number]
   /** Aerosol extinction per planet radius, RGB — the slope, untinted. */
   readonly mieExtinction: readonly [number, number, number]
+  /** Ozone absorption per planet radius at the layer's peak, RGB. */
+  readonly ozone: readonly [number, number, number]
+  /** Where the ozone layer peaks, and its half-width, planet radii. */
+  readonly ozonePeak: number
+  readonly ozoneHalfWidth: number
 }
 
 export interface ScatteringLut {
@@ -129,6 +136,38 @@ const MIE_EXTINCTION_RATIO = 1 / 0.94
 /** Aerosol asymmetry: 0.70, MACv2's global mean. Pathfinder measured Martian
  * dust at 0.72–0.77 across the visible; one value serves every haze here. */
 export const AEROSOL_ASYMMETRY = 0.7
+
+/**
+ * Ozone's Chappuis-band cross-sections for the three channels, m² a
+ * molecule, and a Dobson unit in molecules per m².
+ *
+ * Ozone scatters nothing and absorbs orange and green, and it is why a
+ * twilight zenith is blue. Once the sun is down, the light overhead has
+ * crossed the stratosphere edgeways to reach the shadowed column, through
+ * thirty or forty times the vertical ozone; without it that light arrives
+ * reddened by the gas and the dusk sky is the gray of a dim sunset. Its
+ * vertical depth on Earth is only 0.03, so the day sky barely moves.
+ *
+ * Each value is the 233 K spectrum Bruneton's reference implementation
+ * (2017) tabulates in 10 nm bins, averaged over the channel's CIE 1931
+ * color-matching lobe rather than read at the band's nominal wavelength. The
+ * band peaks at 600 nm, between the red's 680 and the green's 550: read at
+ * 680 the red channel escaped it, and a −6° zenith came out violet
+ * (0.65 : 0.39 : 1) where the averaged band gives 0.32 : 0.39 : 1, the blue a
+ * civil-dusk photograph records.
+ */
+const OZONE_CROSS_SECTION = [3.98e-25, 3.61e-25, 2.52e-26] as const
+const DOBSON_UNIT = 2.687e20
+
+/**
+ * The ozone layer's shape, in scale heights of its own gas: Earth's tent
+ * rises from 10 km to a 25 km peak and falls to nothing at 40 km (Bruneton
+ * 2017, after the 1976 US standard atmosphere), which over 8.5 km is a peak
+ * at 2.94 and a half-width of 1.76. Earth's is the only ozone column in the
+ * catalog.
+ */
+const OZONE_PEAK_HEIGHTS = 25 / 8.5
+const OZONE_HALF_WIDTH_HEIGHTS = 15 / 8.5
 
 /**
  * Scattered radiance to scene units: π, and nothing else.
@@ -206,7 +245,28 @@ export function atmosphereRecipe(
     (tauMie[2]! / columnMie) * MIE_EXTINCTION_RATIO,
   ]
 
-  return { topRatio, hRayleigh, hMie, betaRayleigh, mieScatter, mieExtinction }
+  // A tent's area is its peak times its half-width, so the peak absorption is
+  // the column's depth over the half-width.
+  const ozonePeak = hRayleigh * OZONE_PEAK_HEIGHTS
+  const ozoneHalfWidth = hRayleigh * OZONE_HALF_WIDTH_HEIGHTS
+  const molecules = haze.ozone * DOBSON_UNIT
+  const ozone: [number, number, number] = [
+    (molecules * OZONE_CROSS_SECTION[0]) / ozoneHalfWidth,
+    (molecules * OZONE_CROSS_SECTION[1]) / ozoneHalfWidth,
+    (molecules * OZONE_CROSS_SECTION[2]) / ozoneHalfWidth,
+  ]
+
+  return {
+    topRatio,
+    hRayleigh,
+    hMie,
+    betaRayleigh,
+    mieScatter,
+    mieExtinction,
+    ozone,
+    ozonePeak,
+    ozoneHalfWidth,
+  }
 }
 
 /**
@@ -286,19 +346,30 @@ export function aerosolTint(
 function densities(
   h: number,
   recipe: AtmosphereRecipe,
-): { rayleigh: number; mie: number } {
+): { rayleigh: number; mie: number; ozone: number } {
   const ceiling = recipe.topRatio - 1
   const fade = Math.max(0, 1 - h / ceiling)
+  const ozone = ozoneDensity(h, recipe)
   if (fade === 0 || h < 0) {
     // Below the ground the air is whatever it is at the ground: a march step
     // that dips fractionally under r = 1 must not read vacuum.
-    if (h < 0) return { rayleigh: fade > 0 ? 1 : 0, mie: fade > 0 ? 1 : 0 }
-    return { rayleigh: 0, mie: 0 }
+    if (h < 0)
+      return { rayleigh: fade > 0 ? 1 : 0, mie: fade > 0 ? 1 : 0, ozone }
+    return { rayleigh: 0, mie: 0, ozone }
   }
   return {
     rayleigh: Math.exp(-h / recipe.hRayleigh) * fade,
     mie: Math.exp(-h / recipe.hMie) * fade,
+    ozone,
   }
+}
+
+/** The ozone tent at height `h`, 1 at its peak; the shader's is the same. */
+function ozoneDensity(h: number, recipe: AtmosphereRecipe): number {
+  return Math.max(
+    0,
+    1 - Math.abs(h - recipe.ozonePeak) / Math.max(recipe.ozoneHalfWidth, 1e-9),
+  )
 }
 
 /**
@@ -373,13 +444,22 @@ export function transmittanceFrom(
   for (let i = 0; i < TRANSMITTANCE_STEPS; i += 1) {
     const [s, step] = marchSample(i, TRANSMITTANCE_STEPS, top, perigee)
     const radius = Math.sqrt(r * r + s * s + 2 * r * s * mu)
-    const { rayleigh, mie } = densities(radius - 1, recipe)
+    const { rayleigh, mie, ozone } = densities(radius - 1, recipe)
     tauR +=
-      (recipe.betaRayleigh[0] * rayleigh + recipe.mieExtinction[0] * mie) * step
+      (recipe.betaRayleigh[0] * rayleigh +
+        recipe.mieExtinction[0] * mie +
+        recipe.ozone[0] * ozone) *
+      step
     tauG +=
-      (recipe.betaRayleigh[1] * rayleigh + recipe.mieExtinction[1] * mie) * step
+      (recipe.betaRayleigh[1] * rayleigh +
+        recipe.mieExtinction[1] * mie +
+        recipe.ozone[1] * ozone) *
+      step
     tauB +=
-      (recipe.betaRayleigh[2] * rayleigh + recipe.mieExtinction[2] * mie) * step
+      (recipe.betaRayleigh[2] * rayleigh +
+        recipe.mieExtinction[2] * mie +
+        recipe.ozone[2] * ozone) *
+      step
   }
   return [Math.exp(-tauR), Math.exp(-tauG), Math.exp(-tauB)]
 }
@@ -528,7 +608,7 @@ export function bakeMultipleScattering(
           const py = direction[1] * s
           const pz = r + direction[2] * s
           const radius = Math.sqrt(px * px + py * py + pz * pz)
-          const { rayleigh, mie } = densities(radius - 1, recipe)
+          const { rayleigh, mie, ozone } = densities(radius - 1, recipe)
           const muSunHere =
             (px * sun[0] + py * sun[1] + pz * sun[2]) / Math.max(radius, 1e-6)
           const sunlight = transmittanceAt(
@@ -543,7 +623,8 @@ export function bakeMultipleScattering(
               (recipe.mieScatter[c] as number) * mie
             const extinction =
               (recipe.betaRayleigh[c] as number) * rayleigh +
-              (recipe.mieExtinction[c] as number) * mie
+              (recipe.mieExtinction[c] as number) * mie +
+              (recipe.ozone[c] as number) * ozone
             const view = Math.exp(
               -((tau[c] as number) + extinction * step * 0.5),
             )
@@ -618,14 +699,16 @@ export function zenithSkyRadiance(
   for (let i = 0; i < ZENITH_STEPS; i += 1) {
     const [offset, step] = marchSample(i, ZENITH_STEPS, column, 0)
     const at = r + offset
-    const { rayleigh, mie } = densities(at - 1, recipe)
+    const { rayleigh, mie, ozone } = densities(at - 1, recipe)
     const sunlight = transmittanceFrom(at, muSun, recipe)
     const psi = multipleScatteringAt(multiScatter, recipe, at, muSun)
     for (let c = 0; c < 3; c += 1) {
       const scatterRayleigh = (recipe.betaRayleigh[c] as number) * rayleigh
       const scatterMie = (recipe.mieScatter[c] as number) * mie
       const extinction =
-        scatterRayleigh + (recipe.mieExtinction[c] as number) * mie
+        scatterRayleigh +
+        (recipe.mieExtinction[c] as number) * mie +
+        (recipe.ozone[c] as number) * ozone
       const view = Math.exp(-((depth[c] as number) + extinction * step * 0.5))
       const single =
         (scatterRayleigh * phaseRayleigh + scatterMie * phaseMie) *

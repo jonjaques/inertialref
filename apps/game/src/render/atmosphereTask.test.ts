@@ -29,6 +29,7 @@ const haze = {
   limb: { r: 1, g: 0.6, b: 0.3 },
   thickness: 1,
   aerosolAngstrom: 1.3,
+  ozone: 300,
 }
 const topRatio = 1.0157
 const heights = { rayleigh: 8.5 / 6371, aerosol: 1.2 / 6371 }

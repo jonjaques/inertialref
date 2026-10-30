@@ -32,6 +32,7 @@ const EARTH_HAZE = {
   limb: { r: 0.92, g: 0.42, b: 0.2 },
   thickness: 1,
   aerosolAngstrom: 1.3,
+  ozone: 300,
 }
 
 /** Earth as `buildScene` draws it: the shell, the sunk sphere, the heights. */
@@ -280,10 +281,12 @@ describe('the sky overhead', () => {
       previous = sky
     }
     // Koomen et al. (1952), photopic zenith at sea level, Maryland, converted
-    // from candles per square foot. The model is 1.4 to 3.0 times brighter
-    // from the horizon to −12° and 1.1 times at −15°; the bound is a factor
-    // of four either way. Read linearly off a 32-column Ψ with 16
-    // directions, the model's −12° was 27 times the measured sky.
+    // from candles per square foot. With Earth's ozone the model is 0.75 to
+    // 1.17 times the measured sky from 5° above the horizon to −12° below;
+    // without it, 1.4 to 3 times, and a gray dusk. The bound is a factor of
+    // two. By −15° the measured sky is mostly airglow and starlight — the
+    // night's own floor of a few 10⁻⁴ cd/m², which the model does not draw —
+    // so there the model may only fall short of it.
     const koomen: readonly (readonly [number, number])[] = [
       [5, 463],
       [0, 161],
@@ -291,13 +294,13 @@ describe('the sky overhead', () => {
       [-6, 0.65],
       [-9, 0.016],
       [-12, 1.3e-3],
-      [-15, 4.3e-4],
     ]
     for (const [sun, candelas] of koomen) {
       const ratio = overhead(1, sun) / toScene(candelas)
-      expect(ratio).toBeGreaterThan(1 / 4)
-      expect(ratio).toBeLessThan(4)
+      expect(ratio).toBeGreaterThan(1 / 2)
+      expect(ratio).toBeLessThan(2)
     }
+    expect(overhead(1, -15)).toBeLessThan(toScene(4.3e-4))
     expect(overhead(1, -25)).toBeLessThan(overhead(1, 60) * 1e-10)
   })
 
@@ -491,6 +494,7 @@ describe('the recipe', () => {
         limb: { r: 0.62, g: 0.66, b: 0.9 },
         thickness: 0.15,
         aerosolAngstrom: 0,
+        ozone: 0,
       },
       1 + 60 / 3396.2,
       { rayleigh: 11.1 / 3396.2, aerosol: 11.1 / 3396.2 },
@@ -506,6 +510,7 @@ describe('the recipe', () => {
         limb: titanLimb,
         thickness: 1,
         aerosolAngstrom: 0,
+        ozone: 0,
       },
       1 + 400 / 2574.7,
       { rayleigh: 21 / 2574.7, aerosol: 60 / 2574.7 },

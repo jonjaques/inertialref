@@ -337,6 +337,13 @@ export interface HazeLayer {
    * large enough to be gray, 0.
    */
   readonly aerosolAngstrom: number
+  /**
+   * The ozone column, Dobson units. Earth's is about 300, and it is why the
+   * sky goes blue rather than gray once the sun is down; no other body in the
+   * catalog has one worth drawing, and the generator draws none, because no
+   * world it makes has a composition that says it should.
+   */
+  readonly ozone: number
 }
 
 export interface BodyAppearance {
@@ -1233,6 +1240,7 @@ function proceduralAppearance(
             // own; a giant's haze is taken as mixed with its gas, as Sol's are.
             aerosolHeight: hue.aerosolScale * atmosphere.scaleHeight,
             aerosolAngstrom: hue.angstrom,
+            ozone: 0,
           },
     color: giant
       ? (KIND_COLOR[kind] ?? KIND_COLOR.rocky)

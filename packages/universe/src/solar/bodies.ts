@@ -85,6 +85,8 @@ export interface SolarHaze {
   readonly aerosolHeight: Meters
   /** The aerosol's Ångström exponent, published. See `HazeLayer`. */
   readonly aerosolAngstrom: number
+  /** The ozone column, Dobson units. See `HazeLayer`. */
+  readonly ozone: number
 }
 
 export interface SolarClouds {
@@ -353,6 +355,7 @@ const SATURNIAN: readonly SolarBody[] = [
       aerosolHeight: 60_000,
       // DISR: 4.5 at 531 nm against 2 at 939.
       aerosolAngstrom: 1.5,
+      ozone: 0,
     },
     // Opaque, and drawn from the tint rather than a map: Titan is a featureless
     // orange ball to anything but radar.
@@ -476,6 +479,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       aerosolHeight: 15_900,
       // Not published for the haze under the deck; gray.
       aerosolAngstrom: 0,
+      ozone: 0,
     },
     relief: 13_800,
     roughness: 0.9,
@@ -521,6 +525,9 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       aerosolHeight: 1_200,
       // Ångström's 1.3 ± 0.2, seldom under 0.5 or over 1.6.
       aerosolAngstrom: 1.3,
+      // The mean global column (WMO); the Chappuis band is what keeps a
+      // twilight zenith blue.
+      ozone: 300,
     },
     // Everest to the Challenger Deep, which is what a topography-and-bathymetry
     // map spans.
@@ -566,6 +573,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       aerosolHeight: 11_100,
       // Pathfinder's τ is 0.56–0.61 from 443 to 965 nm: the dust is gray.
       aerosolAngstrom: 0,
+      ozone: 0,
     },
     // Olympus Mons to Hellas Planitia: 29 km, the largest relief on any
     // terrestrial surface in the system.
@@ -679,6 +687,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       // mixed with the gas and gray, as for every giant here.
       aerosolHeight: 27_000,
       aerosolAngstrom: 0,
+      ozone: 0,
     },
     relief: 0,
     roughness: 1,
@@ -729,6 +738,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       thickness: 0.3,
       aerosolHeight: 59_500,
       aerosolAngstrom: 0,
+      ozone: 0,
     },
     relief: 0,
     roughness: 1,
@@ -781,6 +791,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       thickness: 0.45,
       aerosolHeight: 27_700,
       aerosolAngstrom: 0,
+      ozone: 0,
     },
     relief: 0,
     roughness: 1,
@@ -824,6 +835,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       thickness: 0.45,
       aerosolHeight: 19_700,
       aerosolAngstrom: 0,
+      ozone: 0,
     },
     relief: 0,
     roughness: 1,
@@ -870,6 +882,7 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
           aerosolHeight: 10_000,
           // Not published; gray.
           aerosolAngstrom: 0,
+          ozone: 0,
         },
       }),
       ...NEPTUNIAN_MINOR,

@@ -1,4 +1,5 @@
 import { sensorRadiance, visibilityAmbient } from './radiance.ts'
+import { skylightLeft } from './twilight.ts'
 import {
   Color,
   DataTexture,
@@ -1329,7 +1330,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     const ambient = skyColor
       .mul(diffuse)
       .mul(skyView)
-      .mul(saturate(incidence.add(0.25)))
+      .mul(skylightLeft(incidence, 0.25))
       .mul(sunlight)
       // A crater floor sees half the sky a plain does, including Enhanced's
       // visibility fill. Photographic views retain only the scattered light.

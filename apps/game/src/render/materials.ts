@@ -312,6 +312,9 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   const betaRayleigh = uniform(new Vector3(0, 0, 0))
   const mieScatter = uniform(new Vector3(0, 0, 0))
   const mieExtinction = uniform(new Vector3(0, 0, 0))
+  const ozone = uniform(new Vector3(0, 0, 0))
+  const ozonePeak = uniform(0)
+  const ozoneHalfWidth = uniform(1)
   const hRayleigh = uniform(1)
   const hMie = uniform(1)
   const transmittanceLut = texture(LUT_WHITE)
@@ -475,9 +478,16 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       const densityR = exp(height.div(hRayleigh).negate()).mul(fade)
       const densityM = exp(height.div(hMie).negate()).mul(fade)
 
+      // The ozone tent absorbs and scatters nothing; `densities` holds the
+      // same shape on the CPU.
+      const densityO = max(
+        float(1).sub(abs(height.sub(ozonePeak)).div(max(ozoneHalfWidth, 1e-9))),
+        0,
+      )
       const extinction = betaRayleigh
         .mul(densityR)
         .add(mieExtinction.mul(densityM))
+        .add(ozone.mul(densityO))
       const stepTau = extinction.mul(stepLength)
       // Transmittance to the middle of this step: the half keeps the midpoint
       // rule honest about its own sample's extinction.
@@ -556,6 +566,9 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       betaRayleigh.value.set(...recipe.betaRayleigh)
       mieScatter.value.set(...recipe.mieScatter)
       mieExtinction.value.set(...recipe.mieExtinction)
+      ozone.value.set(...recipe.ozone)
+      ozonePeak.value = recipe.ozonePeak
+      ozoneHalfWidth.value = recipe.ozoneHalfWidth
       hRayleigh.value = recipe.hRayleigh
       hMie.value = recipe.hMie
       transmittanceLut.value = transmittance

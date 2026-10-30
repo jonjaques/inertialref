@@ -33,6 +33,7 @@ export interface HazeLike {
   readonly limb: { readonly r: number; readonly g: number; readonly b: number }
   readonly thickness: number
   readonly aerosolAngstrom: number
+  readonly ozone: number
 }
 
 export interface ScatteringBake {
@@ -51,7 +52,7 @@ export function scatteringKey(
   topRatio: number,
   heights: AirHeights,
 ): string {
-  const { color, limb, thickness, aerosolAngstrom } = haze
+  const { color, limb, thickness, aerosolAngstrom, ozone } = haze
   return [
     color.r,
     color.g,
@@ -61,6 +62,7 @@ export function scatteringKey(
     limb.b,
     thickness,
     aerosolAngstrom,
+    ozone,
     topRatio.toFixed(6),
     heights.rayleigh.toPrecision(6),
     heights.aerosol.toPrecision(6),

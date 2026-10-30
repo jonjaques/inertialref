@@ -297,6 +297,7 @@ describe('a stand-in texture compiles the program the real one draws with', () =
         limb: { r: 1, g: 0.5, b: 0.2 },
         thickness: 1,
         aerosolAngstrom: 1.3,
+        ozone: 300,
       },
       1.02,
       { rayleigh: 0.0013, aerosol: 0.0002 },
