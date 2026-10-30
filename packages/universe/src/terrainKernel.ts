@@ -697,6 +697,12 @@ function packDrainage(graph: DrainageGraph): KernelDrainage {
     graph.nodes <= MAX_KERNEL_DRAINAGE_NODES,
     `${graph.nodes} drainage nodes exceed the kernel's ${MAX_KERNEL_DRAINAGE_NODES}`,
   )
+  // Its own check, not the nodes': the regions share one buffer, so a
+  // segment past its region raises nothing and lands on the neighbor table.
+  invariant(
+    graph.segments.length <= SEGMENT_STRIDE * MAX_KERNEL_DRAINAGE_NODES,
+    `${graph.segmentCount} drainage segments exceed the kernel's ${MAX_KERNEL_DRAINAGE_NODES}`,
+  )
   invariant(
     graph.cellSegments.length <= MAX_KERNEL_DRAINAGE_LISTS,
     `${graph.cellSegments.length} drainage list entries exceed the kernel's ${MAX_KERNEL_DRAINAGE_LISTS}`,

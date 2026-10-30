@@ -125,7 +125,7 @@ function bitsApart(
 ): number {
   const x = new Uint8Array(a.buffer, a.byteOffset, a.byteLength)
   const y = new Uint8Array(b.buffer, b.byteOffset, b.byteLength)
-  if (x.length !== y.length) return Math.max(x.length, y.length)
+  if (a.length !== b.length) return Math.max(a.length, b.length)
   let apart = 0
   const width = a.BYTES_PER_ELEMENT
   for (let i = 0; i < x.length; i += width) {
@@ -286,6 +286,9 @@ describe('the kernel’s bindings', () => {
     console.info(
       `the kernel binds ${bindings} storage buffers of the baseline's ${BASELINE_STORAGE_BUFFERS}`,
     )
+    // A floor as well as a ceiling: the count is a regex over three's WGSL,
+    // and a spelling that stops matching would pass the ceiling at zero.
+    expect(bindings).toBeGreaterThan(0)
     expect(bindings).toBeLessThanOrEqual(BASELINE_STORAGE_BUFFERS)
   })
 
