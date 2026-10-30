@@ -580,8 +580,9 @@ function shieldProfile(hotspot: Hotspot, direction: Vec3): number {
  * different heights, which is a Voronoi field with plateau interiors and sharp
  * walls. Sulci are Ganymede's grooved bands, parallel ridges over tens of
  * kilometers, which is ridged noise with one axis compressed fivefold. Tiger
- * stripes are Enceladus's four parallel fractures — a great-circle trough with
- * a raised ridge on each shoulder, which is what a double ridge is.
+ * stripes are Enceladus's four parallel fractures at its south pole — a trough
+ * along a stretch of a great circle with a raised ridge on each shoulder,
+ * which is what a double ridge is.
  */
 export function iceBand(
   sketch: TerrainSketch,
