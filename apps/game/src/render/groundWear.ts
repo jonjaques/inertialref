@@ -221,6 +221,7 @@ interface Placed {
   readonly eyeLocal: Vector3
   readonly morphBand: Vector2
   readonly morphEdges: Vector4
+  readonly morphCorners: Vector4
 }
 
 /** The ground's record alone: a sea wearer has no grain origin to move. */
@@ -254,6 +255,7 @@ export function wearGround(
     eyeLocal: new Vector3(),
     morphBand: new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE),
     morphEdges: new Vector4(0, 0, 0, 0),
+    morphCorners: new Vector4(0, 0, 0, 0),
     anchor: new Vector3(),
     anchorAltitude: 0,
     grainOrigin: new Vector3(),
@@ -330,6 +332,7 @@ export function wearSea(object: Object3D, anchor: Point): SeaWear {
     eyeLocal: new Vector3(),
     morphBand: new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE),
     morphEdges: new Vector4(0, 0, 0, 0),
+    morphCorners: new Vector4(0, 0, 0, 0),
     anchor: new Vector3(
       Math.fround(anchor.x),
       Math.fround(anchor.y),
@@ -348,11 +351,13 @@ export function wearSea(object: Object3D, anchor: Point): SeaWear {
 /**
  * Where the eye is in the wearer's own frame this frame, in true meters,
  * where its morph to the parent begins and ends — comparable to that eye
- * whatever the placement did to the mesh — and which of its edges hold still,
- * the selection's `finerEdges` (0 for a wearer that is not a patch).
+ * whatever the placement did to the mesh — and which of its edges and corners
+ * hold still, the selection's `finerEdges` (0 for a wearer that is not a
+ * patch).
  *
- * The edges arrive as `PATCH_EDGE` bits and leave as four lanes, one flag
- * each, which the vertex stage multiplies its factor by (`render/morph.ts`).
+ * They arrive as `PATCH_EDGE` bits and leave as two sets of four lanes, one
+ * flag each, which the vertex stage multiplies its factor by
+ * (`render/morph.ts`).
  */
 export function placeEye(
   object: Object3D,
@@ -369,6 +374,12 @@ export function placeEye(
     (finerEdges & PATCH_EDGE.colStart) === 0 ? 0 : 1,
     (finerEdges & PATCH_EDGE.rowEnd) === 0 ? 0 : 1,
     (finerEdges & PATCH_EDGE.rowStart) === 0 ? 0 : 1,
+  )
+  wear.morphCorners.set(
+    (finerEdges & PATCH_EDGE.colEndRowEnd) === 0 ? 0 : 1,
+    (finerEdges & PATCH_EDGE.colStartRowEnd) === 0 ? 0 : 1,
+    (finerEdges & PATCH_EDGE.colEndRowStart) === 0 ? 0 : 1,
+    (finerEdges & PATCH_EDGE.colStartRowStart) === 0 ? 0 : 1,
   )
 }
 

@@ -84,7 +84,9 @@ those edges' vertices still. Measured before the hold, standing two meters up,
 one edge sample in ten along the level boundaries stood open by more than a
 quarter of a pixel — five pixels at 49 m on Luna, 3.9 on a generated airless
 world at 3200×1800 — and none after it at any of six operating points across
-Sol and two generated worlds.
+Sol and two generated worlds. A corner finer ground touches only diagonally is
+held too: where the field resolves by level, the morph twin moves an even
+vertex onto the parent's carve, and the two patches beside that corner hold it.
 
 **An odd index rounds toward the lower body-fixed coordinate.** Either neighbor
 lands a fully morphed patch on its parent exactly, because every quad splits

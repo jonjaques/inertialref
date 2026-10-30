@@ -188,10 +188,10 @@ describe('the ground a patch draws, read along a direction', () => {
    * triangle over a point can be a neighbor stretched across it. The check is
    * the morphed mesh itself: every vertex moved toward its target by the
    * material's factor, and the ray met against the triangles around the
-   * point, keeping the one it passes inside. Two edges are held, as the
-   * selection holds an edge finer ground shares: the band's far end reaches
-   * them, so the strip between a held edge and the slid row inside it is
-   * asked as well.
+   * point, keeping the one it passes inside. Two edges and a corner are
+   * held, as the selection holds the ones finer ground shares: the band's far
+   * end reaches them, so the strip between a held edge and the slid row
+   * inside it, and the cells round a held corner, are asked as well.
    */
   it('is the morphed mesh inside a band', () => {
     const patch = patchOf(PARENT, 65)
@@ -201,7 +201,8 @@ describe('the ground a patch draws, read along a direction', () => {
       eye: vertex(patch, 32, 32),
       start: size * 0.2,
       end: size * 0.45,
-      finerEdges: PATCH_EDGE.colStart | PATCH_EDGE.rowEnd,
+      finerEdges:
+        PATCH_EDGE.colStart | PATCH_EDGE.rowEnd | PATCH_EDGE.colEndRowStart,
     }
     const morphed = (r: number, c: number): Vec3 => {
       const at = (r * 65 + c) * 3

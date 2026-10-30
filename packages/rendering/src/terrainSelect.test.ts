@@ -70,6 +70,14 @@ const EDGE_STEPS: readonly (readonly [number, number])[] = [
   [0, -1],
 ]
 
+/** The four diagonal steps, in `PATCH_EDGE`'s corner bit order. */
+const DIAGONAL_STEPS: readonly (readonly [number, number])[] = [
+  [1, 1],
+  [-1, 1],
+  [1, -1],
+  [-1, -1],
+]
+
 const directions = fc
   .tuple(
     fc.integer({ min: 0, max: 5 }),
@@ -458,16 +466,17 @@ describe('the terrain quadtree', () => {
               expect(facing).toBeGreaterThanOrEqual(0)
               expect(coarse.finerEdges & (1 << facing)).not.toBe(0)
             }
-            // And nothing else is held: an edge a patch shares with its own
-            // level or a coarser one slides with its neighbor's.
-            EDGE_STEPS.forEach(([di, dj], edge) => {
+            // And nothing else is held: an edge or a corner a patch shares
+            // with its own level or a coarser one slides with its neighbor's.
+            // Corners are bits four to seven, the diagonal steps in order.
+            ;[...EDGE_STEPS, ...DIAGONAL_STEPS].forEach(([di, dj], bit) => {
               const beside = regionNeighbor(patch.region, di, dj)
               const finer =
                 patch.region.level < 24 &&
                 regionChildren(beside).some((child) =>
                   byKey.has(terrainPatchKey('b', child)),
                 )
-              expect((patch.finerEdges & (1 << edge)) !== 0).toBe(finer)
+              expect((patch.finerEdges & (1 << bit)) !== 0).toBe(finer)
             })
           }
         },

@@ -12050,6 +12050,20 @@ moves nothing sideways; it costs the bit-exact normal and cover handover the
 collapse has, which become a renormalized average and a rounded byte. Not
 measured against the collapse in a picture.
 
+**The corners, found in review.** A body whose field resolves by level morphs
+onto a twin, the parent's carve, which moves an even vertex vertically. A
+corner finer ground touches only diagonally is held by the two patches beside
+it, on their held edges, and was sliding in the diagonal one: the first cell of
+both shared edges opened. The headless rig found nothing on Earth from 2 m,
+where 443 of 741 patches carry a twin, because a real creek seldom carves a
+corner point differently from the level above. The drawn-ground test's field
+now resolves by level, which carves every point differently, and opens 1.02 m
+there with the corners withheld. `finerEdges` carries four corner bits, and
+the vertex stage holds them as it holds the edges. The long-lens regime
+boundary still bands only by edges (`bordersOutside`): a corner banded at the
+reference would give its patch a band its neighbors in view do not share, which
+opens whole edges rather than one vertex.
+
 **Caught on the way:** `new Vector4()` is `(0, 0, 0, 1)`. As the default held
 edges it would have frozen every patch's first row; `groundWear.test.ts` read
 the default and failed.

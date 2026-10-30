@@ -105,18 +105,20 @@ describe('a mesh that wears the ground', () => {
     // Unmorphed until the frame says where the eye is.
     expect(wear.morphBand.x).toBe(NO_MORPH_DISTANCE)
     expect(wear.morphEdges.toArray()).toEqual([0, 0, 0, 0])
+    expect(wear.morphCorners.toArray()).toEqual([0, 0, 0, 0])
     placeEye(
       mesh,
       { x: 1, y: 2, z: 3 },
       10,
       20,
-      PATCH_EDGE.colStart | PATCH_EDGE.rowEnd,
+      PATCH_EDGE.colStart | PATCH_EDGE.rowEnd | PATCH_EDGE.colEndRowStart,
     )
     expect(wear.eyeLocal.toArray()).toEqual([1, 2, 3])
     expect(wear.morphBand.toArray()).toEqual([10, 20])
     // One lane per edge, in `PATCH_EDGE`'s order: the flags the vertex
     // stage multiplies by.
     expect(wear.morphEdges.toArray()).toEqual([0, 1, 1, 0])
+    expect(wear.morphCorners.toArray()).toEqual([0, 0, 1, 0])
   })
 
   /*

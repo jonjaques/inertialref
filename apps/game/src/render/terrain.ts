@@ -412,6 +412,9 @@ export function createTerrainMaterial(): TerrainMaterial {
   const morphEdges = uniform(new Vector4(0, 0, 0, 0)).onObjectUpdate(
     ({ object }) => groundWearOf(object).morphEdges,
   )
+  const morphCorners = uniform(new Vector4(0, 0, 0, 0)).onObjectUpdate(
+    ({ object }) => groundWearOf(object).morphCorners,
+  )
   // The patch's level, the row of the body's slope table its deposits read
   // (`slopeTable.ts`) — or `NO_SLOPE_LEVEL` for a rock or a dummy, whose
   // normal is no level's.
@@ -505,6 +508,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       eyeLocal,
       morphBand,
       morphEdges,
+      morphCorners,
     )
     const moved = mix(positionLocal, target, k)
     // The sensor's velocity compares this against the previous position, and

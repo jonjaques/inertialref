@@ -347,6 +347,15 @@ factor of zero. That is `render/morph.ts`, one node the ground and the sea
 sheet both take, reading a vertex's row and column off `vertexIndex`;
 `patchGround.ts` is the same rule on the CPU for the rocks.
 
+A corner that finer ground touches only diagonally is held as well. On one
+field at every level an even vertex never moves, so a corner never needs it;
+but a patch whose field resolves by level — the creeks, which a patch carries
+one level below its own — morphs onto its twin, the parent's carve, and that
+moves an even vertex vertically. The two patches beside the corner hold it on
+their held edges, the diagonal one would slide it, and the first cell of both
+shared edges would open: a meter on the drawn-ground test's level-resolved
+field without the corner held, nothing with it.
+
 **The surface cover makes the same journey**, and for the same reason one step
 further out. A fully morphed child sits exactly where its parent sits; if it is
 still wearing its own vertex's cover when it gets there, the frame the parent

@@ -101,6 +101,13 @@ describe('the vertex morph factor', () => {
     ['with nothing held', 0],
     ['with two edges held', PATCH_EDGE.colStart | PATCH_EDGE.rowEnd],
     ['with the other two held', PATCH_EDGE.colEnd | PATCH_EDGE.rowStart],
+    [
+      'with every corner held and no edge',
+      PATCH_EDGE.colEndRowEnd |
+        PATCH_EDGE.colStartRowEnd |
+        PATCH_EDGE.colEndRowStart |
+        PATCH_EDGE.colStartRowStart,
+    ],
   ] as const) {
     it(`is vertexMorph ${label}`, async () => {
       const wearer = new Object3D()
@@ -139,6 +146,7 @@ describe('the vertex morph factor', () => {
         uniform(wear.eyeLocal),
         uniform(new Vector2(band.start, band.end)),
         uniform(wear.morphEdges),
+        uniform(wear.morphCorners),
       )
       const pixels = await gpu.drawGraph(vec4(k, 0, 0, 1), {
         float: true,
@@ -177,7 +185,8 @@ describe('the vertex morph factor', () => {
       // and with edges held, edge vertices the band had reached held still.
       expect(sliding).toBeGreaterThan(5)
       if (edges === 0) expect(held).toBe(0)
-      else expect(held).toBeGreaterThan(4)
+      // Four is the corners alone, all four of them in the draw.
+      else expect(held).toBeGreaterThanOrEqual(4)
     })
   }
 })

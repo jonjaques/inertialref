@@ -33,6 +33,8 @@ export interface GroundWear {
    * `new Vector4()` has a `w` of one, which holds every first row.
    */
   readonly morphEdges: Vector4
+  /** And the corners that hold, in `PATCH_EDGE`'s corner order, the same way. */
+  readonly morphCorners: Vector4
   /**
    * The anchor as the float32 uniform receives it, rounded on this side so the
    * altitude beside it describes the vector the shader actually gets.
@@ -75,6 +77,7 @@ export interface SeaWear {
   readonly eyeLocal: Vector3
   readonly morphBand: Vector2
   readonly morphEdges: Vector4
+  readonly morphCorners: Vector4
   readonly anchor: Vector3
   readonly waveOrigin: Vector3
 }
@@ -92,6 +95,7 @@ export const UNDRESSED_GROUND: GroundWear = Object.freeze({
   eyeLocal: new Vector3(),
   morphBand: new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE),
   morphEdges: new Vector4(0, 0, 0, 0),
+  morphCorners: new Vector4(0, 0, 0, 0),
   anchor: new Vector3(),
   anchorAltitude: 0,
   grainOrigin: new Vector3(),
@@ -104,6 +108,7 @@ export const UNDRESSED_SEA: SeaWear = Object.freeze({
   eyeLocal: new Vector3(),
   morphBand: new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE),
   morphEdges: new Vector4(0, 0, 0, 0),
+  morphCorners: new Vector4(0, 0, 0, 0),
   anchor: new Vector3(),
   waveOrigin: new Vector3(),
 })

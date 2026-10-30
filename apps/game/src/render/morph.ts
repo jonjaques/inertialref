@@ -13,8 +13,9 @@ import { HEIGHTFIELD_RESOLUTION } from '@inertialref/universe'
  * the coarser side of a level boundary: the finer patch arrives on this
  * patch's grid, so this patch has to be drawing it there, and a patch is
  * wider than its band, so the far end of such an edge would otherwise be
- * sliding. A sheet over a patch has the patch's vertices and the same edges,
- * so it holds the same ones.
+ * sliding. A corner finer ground touches only diagonally holds too, because a
+ * morph twin moves an even vertex. A sheet over a patch has the patch's
+ * vertices and the same edges, so it holds the same ones.
  *
  * `patchGround.ts`'s `vertexMorph` is the same rule on the CPU, for the rocks
  * that stand on the drawn ground; `morph.gpu.test.ts` holds this graph to it.
@@ -25,9 +26,11 @@ const LAST = HEIGHTFIELD_RESOLUTION - 1
 /**
  * The morph factor of the vertex at `index` in a patch's row-major grid.
  *
- * `held` is the selection's `finerEdges` as four flags, one per lane in
+ * `held` is the selection's `finerEdges` edges as four flags, one per lane in
  * `PATCH_EDGE`'s order: x the last column, y the first, z the last row, w the
- * first. The index arrives as a float — `vertexIndex` in a material, a test's
+ * first. `corners` is its corners the same way: x where the last column meets
+ * the last row, y the first column and the last row, z the last column and
+ * the first row, w the first of both. The index arrives as a float — `vertexIndex` in a material, a test's
  * own count in a kernel — and the grid is 4,225 vertices, which float32 holds
  * exactly; the half added before the divide keeps the quotient at least
  * 0.5/65 of a row, about 0.008, from an integer on either side, which is
@@ -39,6 +42,7 @@ export function vertexMorphFactor(
   eye: Node<'vec3'>,
   band: Node<'vec2'>,
   held: Node<'vec4'>,
+  corners: Node<'vec4'>,
 ): Node<'float'> {
   const distance = length(position.sub(eye))
   // `max` on the denominator rather than a branch: a patch at level 0 has no
@@ -49,9 +53,20 @@ export function vertexMorphFactor(
   )
   const row = floor(index.add(0.5).div(HEIGHTFIELD_RESOLUTION))
   const col = index.sub(row.mul(HEIGHTFIELD_RESOLUTION))
+  const colEnd = step(LAST - 0.5, col)
+  const colStart = step(col, 0.5)
+  const rowEnd = step(LAST - 0.5, row)
+  const rowStart = step(row, 0.5)
   const onHeldEdge = max(
-    max(step(LAST - 0.5, col).mul(held.x), step(col, 0.5).mul(held.y)),
-    max(step(LAST - 0.5, row).mul(held.z), step(row, 0.5).mul(held.w)),
+    max(colEnd.mul(held.x), colStart.mul(held.y)),
+    max(rowEnd.mul(held.z), rowStart.mul(held.w)),
   )
-  return k.mul(float(1).sub(onHeldEdge))
+  const atHeldCorner = max(
+    max(colEnd.mul(rowEnd).mul(corners.x), colStart.mul(rowEnd).mul(corners.y)),
+    max(
+      colEnd.mul(rowStart).mul(corners.z),
+      colStart.mul(rowStart).mul(corners.w),
+    ),
+  )
+  return k.mul(float(1).sub(max(onHeldEdge, atHeldCorner)))
 }

@@ -257,7 +257,7 @@ assume. And one level is closed only from both sides: the finer patch arrives on
 the coarser grid, and the coarser patch holds the edge they share on that grid
 rather than sliding toward its own parent — which a patch wider than its morph
 band would otherwise be doing at the edge's far end. The selection reports those
-edges as `finerEdges`
+edges, and the corners finer ground touches diagonally, as `finerEdges`
 ([rendering](rendering.md#the-morph-and-why-the-shaders-share-of-it-is-one-mix)).
 
 **What is cached, and why that split:** heightfields are cached and so is the

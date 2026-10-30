@@ -281,6 +281,9 @@ export function createWaterMaterial(): WaterMaterial {
   const morphEdges = uniform(new Vector4(0, 0, 0, 0)).onObjectUpdate(
     ({ object }) => seaWearOf(object).morphEdges,
   )
+  const morphCorners = uniform(new Vector4(0, 0, 0, 0)).onObjectUpdate(
+    ({ object }) => seaWearOf(object).morphCorners,
+  )
   const anchor = uniform(new Vector3()).onObjectUpdate(
     ({ object }) => seaWearOf(object).anchor,
   )
@@ -325,6 +328,7 @@ export function createWaterMaterial(): WaterMaterial {
         eyeLocal,
         morphBand,
         morphEdges,
+        morphCorners,
       )
       const moved = mix(positionLocal, target, k)
       // Both sides of the velocity, for the reason `terrain.ts` gives.

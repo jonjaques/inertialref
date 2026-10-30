@@ -10,6 +10,9 @@ import {
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
   heightfieldStride,
+  morphIndex,
+  morphSide,
+  morphVertexSide,
   type RegionAddress,
   regionAddress,
   regionChildren,
@@ -555,11 +558,13 @@ describe('the drawn ground', () => {
    * The field is synthetic because the claim is about the mesh, and a real
    * one is ten milliseconds a patch. One octave per level the selection
    * reaches, amplitude falling as wavelength^0.8, so every cell carries the
-   * curvature an open edge needs in order to show. It is one field at every
-   * level, so it has no morph twin and an even vertex never moves: a body
-   * whose creeks resolve by level is outside what this asks, and the corner
-   * a held edge shares with a same-level patch diagonal to finer ground is
-   * the case it cannot see.
+   * curvature an open edge needs in order to show — and it resolves by level
+   * the way the creeks do (`regionDrainageLevel`): a patch carries the
+   * octaves its cells can draw, two past its own level, and its morph twin
+   * the ones its parent's can. So an even vertex moves too, vertically onto
+   * the parent's carve, and the corner a held edge shares with a same-level
+   * patch diagonal to finer ground is asked. On one field at every level
+   * that corner never moves and the test could not see it.
    */
   const radius = 400_000
   const RES = HEIGHTFIELD_RESOLUTION
@@ -575,11 +580,14 @@ describe('the drawn ground', () => {
     }
   })
   const relief = octaves.reduce((sum, octave) => sum + octave.amplitude, 0)
-  const elevation = (d: Vec3): number =>
+  /** The field a patch at `level` draws: every octave its cells resolve. */
+  const elevation = (d: Vec3, level: number): number =>
     octaves.reduce(
-      (sum, o) =>
-        sum +
-        o.amplitude * Math.sin(o.frequency * Vec.dot(d, o.axis) + o.phase),
+      (sum, o, n) =>
+        n > level + 2
+          ? sum
+          : sum +
+            o.amplitude * Math.sin(o.frequency * Vec.dot(d, o.axis) + o.phase),
       0,
     )
   const cache = new Map<number | string, RenderPatch>()
@@ -589,11 +597,26 @@ describe('the drawn ground', () => {
     if (held !== undefined) return held
     const border = HEIGHTFIELD_BORDER
     const stride = heightfieldStride({ resolution: RES, border })
+    const at = (row: number, col: number): Vec3 =>
+      regionDirection(region, col / (RES - 1), row / (RES - 1))
     const elevations = new Float32Array(stride * stride)
     for (let row = -border; row < RES + border; row += 1)
       for (let col = -border; col < RES + border; col += 1)
         elevations[(row + border) * stride + col + border] = elevation(
-          regionDirection(region, col / (RES - 1), row / (RES - 1)),
+          at(row, col),
+          region.level,
+        )
+    // The twin: the parent's field at the even samples, border included,
+    // laid out as `generateHeightfield` lays out its own.
+    const side = morphSide({ resolution: RES, border })
+    const vertexSide = morphVertexSide(RES)
+    const twin = new Float32Array(side * side)
+    const first = Math.ceil(-border / 2) * 2
+    for (let row = first; row < RES + border; row += 2)
+      for (let col = first; col < RES + border; col += 2)
+        twin[morphIndex(side, border, row, col)] = elevation(
+          at(row, col),
+          region.level - 1,
         )
     const built = buildPatch({
       region,
@@ -602,6 +625,14 @@ describe('the drawn ground', () => {
       elevations,
       cover: new Uint8Array(RES * RES * COVER_CHANNELS),
       bodyRadius: radius,
+      morph:
+        region.level === 0
+          ? null
+          : {
+              elevations: twin,
+              cover: new Uint8Array(vertexSide * vertexSide * COVER_CHANNELS),
+              water: new Float32Array(vertexSide * vertexSide).fill(Number.NaN),
+            },
     })
     cache.set(key, built)
     return built
@@ -660,7 +691,7 @@ describe('the drawn ground', () => {
 
   /** The widest gap between any two patches' copies of an edge they share. */
   const widestGap = (direction: Vec3, height: number): number => {
-    const distance = radius + elevation(direction) + height
+    const distance = radius + elevation(direction, 14) + height
     const selection = selectTerrain(
       {
         radius,
@@ -695,13 +726,22 @@ describe('the drawn ground', () => {
         const finePatch = patchAt(fine.region)
         const coarsePatch = patchAt(coarse.region)
         const mine = edge(di, dj)
-        // Which of the coarse patch's edges this is, by where the middle of
-        // this one stands: an even vertex, so a vertex of the coarse grid.
-        const middle = vertexOf(finePatch, mine[(RES - 1) / 2] as number)
+        // Which of the coarse patch's edges this is, by the direction the
+        // middle of this one stands in: an even vertex, so a point of the
+        // coarse grid. By direction rather than position, because the two
+        // levels carve the same point to different depths.
+        const middle = Vec.normalize(
+          vertexOf(finePatch, mine[(RES - 1) / 2] as number),
+        )
         const theirs = STEPS.map(([ei, ej]) => edge(ei, ej)).find((indices) =>
           indices.some(
             (index) =>
-              Vec.distance(vertexOf(coarsePatch, index), middle) < 0.05,
+              Vec.distance(
+                Vec.normalize(vertexOf(coarsePatch, index)),
+                middle,
+              ) *
+                radius <
+              0.05,
           ),
         )
         expect(theirs).toBeDefined()
@@ -730,7 +770,7 @@ describe('the drawn ground', () => {
     expect(widestGap(Vec.normalize(vec3(1, -1, 0.01)), 2)).toBeLessThan(CLOSED)
   })
 
-  it('closes at every edge two patches share, on a field with no morph twin (property)', () => {
+  it('closes at every edge two patches share, on a field that resolves by level (property)', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 0, max: 5 }),
