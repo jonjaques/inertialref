@@ -602,16 +602,17 @@ const aim = (up: Vec3, heading: number, pitch: number): Vec3 => {
 }
 
 /**
- * Datum points the frame shows: a grid over the sensor, each ray carried to
- * the datum sphere, sky rays dropped. The datum is inside the shell every
- * node's ground is bounded by, so a node holding one of these points holds
- * ground the frame can see.
+ * Datum points the frame shows: a `steps` × `steps` grid over the sensor, each
+ * ray carried to the datum sphere, sky rays dropped. The datum is inside the
+ * shell every node's ground is bounded by, so a node holding one of these
+ * points holds ground the frame can see.
  */
 function framedGround(
   eye: TerrainEye,
   forward: Vec3,
   lens: Lens,
   viewport = DEFAULT_VIEWPORT,
+  steps = 5,
 ): Vec3[] {
   const vertical = Math.tan(verticalFov(lens) / 2)
   const horizontal = vertical * aspectRatio(viewport)
@@ -623,8 +624,12 @@ function framedGround(
   const up = Vec.cross(right, forward)
   const origin = Vec.scale(eye.direction, eye.distance)
   const out: Vec3[] = []
-  for (const x of [-0.98, -0.5, 0, 0.5, 0.98])
-    for (const y of [-0.98, -0.5, 0, 0.5, 0.98]) {
+  const grid = Array.from(
+    { length: steps },
+    (_, n) => -0.98 + (1.96 * n) / (steps - 1),
+  )
+  for (const x of grid)
+    for (const y of grid) {
       const ray = Vec.normalize(
         Vec.add(
           forward,
@@ -646,14 +651,54 @@ function framedGround(
   return out
 }
 
-/** The crack-free and 2:1 claims, over a whole selection, whatever made it. */
-function holdsTogether(selection: TerrainSelection): void {
+/** Where the picture looked, for the claims that depend on it. */
+interface Looking {
+  readonly eye: TerrainEye
+  readonly forward: Vec3
+  readonly lens: Lens
+}
+
+/** The shared edge's datum points, on `region`'s side `(di, dj)`. */
+const edgePoints = (
+  region: SelectedPatch['region'],
+  di: number,
+  dj: number,
+): Vec3[] =>
+  Array.from({ length: 17 }, (_, n) => {
+    const along = n / 16
+    return di !== 0
+      ? regionDirection(region, di > 0 ? 1 : 0, along)
+      : regionDirection(region, along, dj > 0 ? 1 : 0)
+  })
+
+/**
+ * The crack-free and 2:1 claims, over a whole selection, whatever made it.
+ *
+ * And the claim between equals. Two patches of one level share every vertex
+ * on their common edge, and each slides its odd ones by its own band; where
+ * the bands differ, the factors on that edge differ — by up to the whole
+ * morph — and the edge opens. So same-level neighbors carry one band, except
+ * where the edge lies further from the frame than a turn the held selection
+ * survives (`VIEW_TURN_PIXELS`), which only a selection with a view has.
+ */
+function holdsTogether(selection: TerrainSelection, looking?: Looking): void {
   const byKey = new Map(
     selection.patches.map((patch) => [
       terrainPatchKey('b', patch.region),
       patch,
     ]),
   )
+  const reach =
+    looking === undefined
+      ? 0
+      : Math.atan(
+          Math.hypot(
+            Math.tan(verticalFov(looking.lens) / 2),
+            Math.tan(verticalFov(looking.lens) / 2) *
+              aspectRatio(DEFAULT_VIEWPORT),
+          ),
+        ) +
+        VIEW_TURN_PIXELS * pixelAngle(looking.lens, DEFAULT_VIEWPORT)
   for (const patch of selection.patches) {
     for (const [di, dj] of [
       [1, 0],
@@ -662,6 +707,24 @@ function holdsTogether(selection: TerrainSelection): void {
       [0, -1],
     ] as const) {
       const beside = regionNeighbor(patch.region, di, dj)
+      const equal = byKey.get(terrainPatchKey('b', beside))
+      if (
+        equal !== undefined &&
+        patch.region.level > 0 &&
+        (equal.morphStart !== patch.morphStart ||
+          equal.morphEnd !== patch.morphEnd)
+      ) {
+        expect(looking).toBeDefined()
+        const { eye, forward } = looking!
+        const origin = Vec.scale(eye.direction, eye.distance)
+        for (const point of edgePoints(patch.region, di, dj)) {
+          const toward = Vec.sub(Vec.scale(point, eye.radius), origin)
+          const off = Math.acos(
+            Math.min(1, Vec.dot(toward, forward) / Vec.length(toward)),
+          )
+          expect(off).toBeGreaterThan(reach)
+        }
+      }
       // Crack-free: a finer patch has arrived on its grid before the
       // coarser neighbor's nearest point — across the regime boundary too.
       const parent = regionParent(beside)
@@ -681,6 +744,67 @@ function holdsTogether(selection: TerrainSelection): void {
         expect(patch.region.level - held.region.level).toBeLessThanOrEqual(1)
     }
   }
+}
+
+/**
+ * Every datum point the frame shows lies in one patch, refined at the lens:
+ * in view, not refinable further at the lens's own scale unless the level
+ * floor stopped it, and with its morph band at that scale. Ground the frame
+ * cannot reach stopped at the reference's range. And crack-free, 2:1 and one
+ * band between equals hold across the boundary.
+ */
+function keepsFrame(
+  selection: TerrainSelection,
+  looking: Looking,
+  maxLevel: number,
+  steps = 5,
+): void {
+  const { eye, forward, lens } = looking
+  const atLens = pixelsPerRadian(lens, DEFAULT_VIEWPORT) / DEFAULT_CELL_PIXELS
+  const atReference =
+    pixelsPerRadian(REFERENCE_LENS, DEFAULT_VIEWPORT) / DEFAULT_CELL_PIXELS
+  const byKey = new Map(
+    selection.patches.map((patch) => [
+      terrainPatchKey('b', patch.region),
+      patch,
+    ]),
+  )
+  for (const point of framedGround(
+    eye,
+    forward,
+    lens,
+    DEFAULT_VIEWPORT,
+    steps,
+  )) {
+    const covering: SelectedPatch[] = []
+    for (let level = 0; level <= maxLevel; level += 1) {
+      const patch = byKey.get(
+        terrainPatchKey(
+          'b',
+          regionForDirection(point as TerrainEye['direction'], level),
+        ),
+      )
+      if (patch !== undefined) covering.push(patch)
+    }
+    expect(covering).toHaveLength(1)
+    const patch = covering[0]!
+    expect(patch.inView).toBe(true)
+    if (patch.region.level < maxLevel)
+      expect(patch.distance).toBeGreaterThanOrEqual(
+        patch.spacing * atLens * (1 - 1e-9),
+      )
+    if (patch.region.level > 0)
+      expect(patch.morphEnd / (patch.spacing * atLens)).toBeCloseTo(
+        MORPH_END,
+        6,
+      )
+  }
+  for (const patch of selection.patches)
+    if (!patch.inView && patch.region.level < maxLevel)
+      expect(patch.distance).toBeGreaterThanOrEqual(
+        patch.spacing * atReference * (1 - 1e-9),
+      )
+  holdsTogether(selection, looking)
 }
 
 describe('a long lens refines what it can see', () => {
@@ -717,6 +841,7 @@ describe('a long lens refines what it can see', () => {
           expect(viewed).toEqual(whole)
           expect(whole.outside).toBe(0)
           expect(whole.patches.every((patch) => patch.inView)).toBe(true)
+          holdsTogether(whole)
         },
       ),
       { numRuns: 40 },
@@ -725,12 +850,11 @@ describe('a long lens refines what it can see', () => {
 
   it('keeps the frame at its own lens and lets the ground behind the camera go (property)', () => {
     /*
-     * Every datum point the frame shows lies in a patch refined at the lens:
-     * in view, not refinable further at the lens's own scale, and with its
-     * morph band at that scale — the regime boundary's one-level cost is
-     * outside the frame, which is what the margin is for. Ground the frame
-     * cannot reach stopped at the reference's range. And the two claims the
-     * whole selection rests on, crack-free and 2:1, hold across the boundary.
+     * Every datum point the frame shows lies in a patch refined at the lens,
+     * banded at the lens; ground the frame cannot reach stopped at the
+     * reference's range; and crack-free, 2:1 and one band between equals hold
+     * across the boundary. From orbit to a few meters, where the range rather
+     * than the floor is what stops most of the tree.
      */
     fc.assert(
       fc.property(
@@ -756,40 +880,55 @@ describe('a long lens refines what it can see', () => {
           }
           const selection = selectTerrain(eye, options)
           expect(selection.coarsening).toBe(1)
-          const atLens =
-            pixelsPerRadian(lens, DEFAULT_VIEWPORT) / DEFAULT_CELL_PIXELS
-          const atReference =
-            pixelsPerRadian(REFERENCE_LENS, DEFAULT_VIEWPORT) /
-            DEFAULT_CELL_PIXELS
-
-          for (const point of framedGround(eye, forward, lens)) {
-            const covering = selection.patches.filter((patch) =>
-              contains(patch, point as TerrainEye['direction']),
-            )
-            expect(covering).toHaveLength(1)
-            const patch = covering[0]!
-            expect(patch.inView).toBe(true)
-            if (patch.region.level < DEFAULT_MAX_LEVEL)
-              expect(patch.distance).toBeGreaterThanOrEqual(
-                patch.spacing * atLens * (1 - 1e-9),
-              )
-            if (patch.region.level > 0)
-              expect(patch.morphEnd / (patch.spacing * atLens)).toBeCloseTo(
-                MORPH_END,
-                6,
-              )
-          }
-          for (const patch of selection.patches)
-            if (!patch.inView && patch.region.level < DEFAULT_MAX_LEVEL)
-              expect(patch.distance).toBeGreaterThanOrEqual(
-                patch.spacing * atReference * (1 - 1e-9),
-              )
-          holdsTogether(selection)
+          keepsFrame(selection, { eye, forward, lens }, DEFAULT_MAX_LEVEL)
         },
       ),
       // Uncapped at 8° a selection is thousands of patches and the checks
       // walk all of them; twenty eyes is under the timeout on a loaded machine.
       { numRuns: 20 },
+    )
+  })
+
+  it('keeps a standing eye’s frame on one band where the level floor stops the tree (property)', () => {
+    /*
+     * The regime the margin does not cover. At the floor a patch is kept
+     * because it may not go deeper, not because it reached its range, so one
+     * in view can be far nearer than its range and far wider than the margin:
+     * a level-16 patch on Luna is 41 m across, over 2,000 px at 100 m through
+     * 11.4°. Where such a patch borders coarser ground outside the view, a
+     * band taken at the reference to close that edge is a band its neighbors
+     * in view do not share, and the edge between them opened in the frame —
+     * or one turn away from it, which the held selection does not retake.
+     *
+     * Standing two to twenty meters up, at the long end and the floor the
+     * streamer gives the zoo, with a 21 × 21 grid over the frame.
+     */
+    fc.assert(
+      fc.property(
+        fc.constantFrom({ radius: 1_737_400, relief: 10_800 }, MARS, {
+          radius: EARTH,
+          relief: EARTH_RELIEF,
+        }),
+        fc.double({ min: 2, max: 20, noNaN: true }),
+        directions,
+        fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+        fc.double({ min: -0.1, max: 0.03, noNaN: true }),
+        (body, height, direction, heading, pitch) => {
+          const eye = eyeAt(body.radius, body.relief, height, direction)
+          const lens = lensForFov(11.4)
+          const forward = aim(direction, heading, pitch)
+          const selection = selectTerrain(eye, {
+            lens,
+            view: { forward },
+            maxLevel: 16,
+            maxPatches: 1_000_000,
+          })
+          keepsFrame(selection, { eye, forward, lens }, 16, 21)
+        },
+      ),
+      // A standing selection at the floor is two thousand patches; twenty-four
+      // eyes cover the three bodies with every eye's checks under a second.
+      { numRuns: 24 },
     )
   })
 

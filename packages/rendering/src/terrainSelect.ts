@@ -272,14 +272,23 @@ export const REFERENCE_LENS: Lens = LENS_PRESETS.flight
  * How far past the frame's corners the long lens's refinement reaches, in the
  * lens's own display pixels.
  *
- * In pixels rather than an angle because both things it has to cover scale
- * with the lens. A drag turns the head one pixel angle a pixel (rule 36), so a
- * turn is a number of pixels whatever the focal length; and a patch near its
- * own range is `(resolution − 1) · cellPixels` across — 1,024 px at 16 px a
- * cell — whatever the focal length too. The regime boundary costs the patches
- * along it their own level, because their morph is taken at the reference
- * scale to keep the handover crack-free (`selectTerrain` says why), so the
- * margin is what keeps that ring of patches out of the frame.
+ * In pixels rather than an angle because what it covers is a turn, and a
+ * drag turns the head one pixel angle a pixel (rule 36), so a turn is a
+ * number of pixels whatever the focal length. What it buys is ground already
+ * at the lens's detail when the frame swings onto it.
+ *
+ * **It does not keep the regime boundary's seams out of the frame, and the
+ * obvious argument that it does is wrong.** A patch near its own range is
+ * `(resolution − 1) · cellPixels` across — 1,024 px at 16 px a cell — so a
+ * ring of patches one level coarse along the boundary would sit inside this
+ * margin. But a patch at the level floor is kept because it may not go
+ * deeper, not because it reached its range, and it can be far nearer than
+ * that: a level-16 patch on Luna is 41 m across and over 2,000 px wide at
+ * 100 m through 11.4°. Banding such a patch at the reference gives it a band
+ * its neighbors in view do not share, and measured standing at two meters
+ * that edge opens inside the frame on 2 of 48 eyes on Luna and 6 of 48 on
+ * Mars, and 109 px outside it on Earth. `balance` keeps the boundary a turn
+ * away from the frame instead.
  */
 export const VIEW_MARGIN_PIXELS = 1_024
 
@@ -289,12 +298,14 @@ export const VIEW_MARGIN_PIXELS = 1_024
  *
  * A quarter of the margin, so a walk taken at the threshold still has three
  * quarters of it — 768 px — to stream into before the frame's edge reaches
- * ground refined at the reference. Measured at 11.4° standing at two meters
- * across Earth, Luna, Miranda, Gliese 908 IV and the far-shore world, a turn
- * of 256 px asks for at most 33 patches the selection before it did not hold,
- * which is four frames of the streamer's eight-a-frame build budget; covering
- * 768 px in four frames is a turn of over 11,000 px a second, and a drag turns
- * the head one pixel a pixel. Retaking on every frame of a turn instead costs
+ * ground refined at the reference. It is also how far `balance` keeps the
+ * regime boundary's same-level seams from the frame, so no turn the held
+ * selection survives brings one into the picture. Measured at 11.4° standing
+ * at two meters across Earth, Luna, Miranda, Gliese 908 IV and the far-shore
+ * world, a turn of 256 px asks for at most 33 patches the selection before it
+ * did not hold, which is four frames of the streamer's eight-a-frame build
+ * budget; covering 768 px in four frames is a turn of over 11,000 px a second,
+ * and a drag turns the head one pixel a pixel. Retaking on every frame of a turn instead costs
  * two walks a frame for nothing the margin does not already cover.
  */
 export const VIEW_TURN_PIXELS = 256
@@ -622,6 +633,12 @@ interface Node {
   readonly range: Meters
   /** Refined at the lens rather than at the reference. */
   readonly inView: boolean
+  /**
+   * In view, and within a turn of the frame: its ground can reach the frame's
+   * cone widened by `VIEW_TURN_PIXELS` rather than by the whole margin. Always
+   * true without a framing.
+   */
+  readonly near: boolean
 }
 
 /** The frame's cone in body-fixed axes: what a node must reach to be refined at the lens. */
@@ -630,6 +647,8 @@ interface Framing {
   readonly forward: Vec3
   /** Half the frame's diagonal plus the margin, radians. */
   readonly halfAngle: Radians
+  /** Half the frame's diagonal plus `VIEW_TURN_PIXELS`, radians. */
+  readonly turnHalfAngle: Radians
   /** `pixelsPerRadian / cellPixels` at the reference lens, before coarsening. */
   readonly referenceScale: number
 }
@@ -670,12 +689,18 @@ function framingFor(
     eye: Vec.scale(eye.direction, eye.distance),
     forward: Vec.normalize(view.forward),
     halfAngle: Math.min(Math.PI, corner + margin),
+    turnHalfAngle: Math.min(
+      Math.PI,
+      corner + Math.min(margin, VIEW_TURN_PIXELS * pixelAngle(lens, viewport)),
+    ),
     referenceScale,
   }
 }
 
 /**
- * Whether any ground a node can hold is inside the frame's cone.
+ * The least angle from the view's forward to any ground a node can hold, so
+ * that the ground is inside a cone about the forward exactly when this is no
+ * more than the cone's half-angle — −π when the eye is inside the capsule.
  *
  * The ground a node can hold is its cone of directions crossed with the shell
  * `[radius − relief, radius + relief]`: a column, twice the body's relief tall
@@ -697,7 +722,11 @@ function framingFor(
  * vertical: a node behind the camera is out of view however tall its ground
  * could be.
  */
-function reaches(framing: Framing, eye: TerrainEye, cone: RegionCone): boolean {
+function viewOffset(
+  framing: Framing,
+  eye: TerrainEye,
+  cone: RegionCone,
+): Radians {
   const low = Math.max(MIN_DISTANCE, eye.radius - eye.relief)
   const high = eye.radius + eye.relief
   const thickness = high * Math.sin(cone.halfAngle)
@@ -707,9 +736,8 @@ function reaches(framing: Framing, eye: TerrainEye, cone: RegionCone): boolean {
   )
   const v = Vec.sub(Vec.scale(cone.axis, high), framing.eye)
   const nearest = segmentDistance(u, v)
-  if (nearest <= thickness) return true
-  const off = arcAngle(framing.forward, u, v)
-  return off - Math.asin(thickness / nearest) <= framing.halfAngle
+  if (nearest <= thickness) return -Math.PI
+  return arcAngle(framing.forward, u, v) - Math.asin(thickness / nearest)
 }
 
 /** Distance from the origin to the segment between two points. */
@@ -833,8 +861,13 @@ function walk(
       return null
     }
     const spacing = regionSpacing(eye.radius, region, resolution)
+    // One capsule test answers both cones: it returns the angle, and the
+    // cones differ only in what that angle is compared against.
+    const off =
+      framing === null || !parentInView ? 0 : viewOffset(framing, eye, cone)
     const inView =
-      framing === null || (parentInView && reaches(framing, eye, cone))
+      framing === null || (parentInView && off <= framing.halfAngle)
+    const near = framing === null || (inView && off <= framing.turnHalfAngle)
     return {
       region,
       cone,
@@ -842,6 +875,7 @@ function walk(
       distance: nodeDistance(eye, cone),
       range: spacing * (inView ? scale : outScale),
       inView,
+      near,
     }
   }
 
@@ -897,6 +931,7 @@ function walk(
     consider,
     starved,
     seen: new Set(starved.map((region) => regionKey(region))),
+    framed: framing !== null,
   })
   /*
    * The cap bounds what is drawn, and what is drawn is the balanced tree. A
@@ -940,10 +975,16 @@ function walk(
      * is a fraction of this patch's range at the lens, so a band taken at the
      * lens would still be sliding where the neighbor's edge is — a lit seam.
      * Taken at the reference scale instead, the band closes before the
-     * neighbor's nearest point exactly as it does within one regime, and what
-     * that costs is this patch's own level: it reads as its parent wherever it
-     * is further than the reference's range. The margin is what keeps that
-     * ring of patches outside the frame.
+     * neighbor's nearest point exactly as it does within one regime.
+     *
+     * What that costs is a band this patch's neighbors in view do not share,
+     * and a same-level edge whose two sides slide by different amounts opens
+     * just as surely. So `balance` never lets a patch within a turn of the
+     * frame border coarser ground outside the view, and the patches this
+     * branch bands at the reference are all further from the frame than
+     * `VIEW_TURN_PIXELS` — except while the split that would have kept one
+     * away is starved, which is the same transient seam a starved 2:1 split
+     * is.
      */
     const range =
       node.inView && outside.size > 0 && bordersOutside(node.region, outside)
@@ -1099,6 +1140,20 @@ const packed = (
  * A node that must split but whose children have not arrived stays where it is
  * and is counted as starved — a transient seam beats a hole, and the request
  * set names those children first.
+ *
+ * **With a view there is a second rule: a node outside it splits when an edge
+ * neighbor holds a finer node within a turn of the frame.** The finer node
+ * would otherwise border coarser ground the view does not reach, and closing
+ * that edge takes a band at the reference scale (`selectTerrain` says why) —
+ * a band its neighbors in view do not share, so the same-level edges between
+ * them open, and at the level floor that patch can be thousands of pixels
+ * wide and reach into the frame. Split, the outside node meets it at its own
+ * level, the patch keeps the lens's band, and the one same-level edge left
+ * between the regimes is on ground the view cannot reach — over a thousand
+ * pixels out. Splitting only within a turn rather than along the whole
+ * boundary is what keeps it cheap: the whole boundary costs 13% more patches
+ * standing at two meters at 11.4°, a turn's width 2%, and either keeps every
+ * seam out of reach of the frame before the held selection is retaken.
  */
 function balance(
   nodes: readonly Node[],
@@ -1111,6 +1166,8 @@ function balance(
     ) => Node | null
     readonly starved: RegionAddress[]
     readonly seen: Set<number | string>
+    /** Two regimes are in play, so the boundary rule below applies. */
+    readonly framed: boolean
   },
 ): readonly Node[] {
   let current = nodes
@@ -1143,25 +1200,41 @@ function balance(
    * it changes, and the eyes that reach it are recorded on the guard below.
    */
   let depth = new Map<number | string, number>()
+  /*
+   * The same, counting only nodes within a turn of the frame — the second
+   * rule's map. Empty without a framing, where the rule never asks. It is
+   * carried on the same monotone argument and broken the same way: a near
+   * node whose kept children are all further out leaves an entry claiming
+   * near ground that is no longer there, so that split also rebuilds.
+   */
+  let nearDepth = new Map<number | string, number>()
   let rebuild = true
-  const deepen = (region: RegionAddress): void => {
+  const deepenInto = (
+    map: Map<number | string, number>,
+    region: RegionAddress,
+  ): void => {
     const { face } = region
     let { level, i, j } = region
     const deepest = level
     while (level >= 0) {
       const key = packed(face, level, i, j)
-      const held = depth.get(key)
+      const held = map.get(key)
       if (held !== undefined && held >= deepest) break
-      depth.set(key, deepest)
+      map.set(key, deepest)
       level -= 1
       i >>= 1
       j >>= 1
     }
   }
+  const deepen = (node: Node): void => {
+    deepenInto(depth, node.region)
+    if (context.framed && node.near) deepenInto(nearDepth, node.region)
+  }
   for (let pass = 0; pass <= context.maxLevel; pass += 1) {
     if (rebuild) {
       depth = new Map<number | string, number>()
-      for (const node of current) deepen(node.region)
+      nearDepth = new Map<number | string, number>()
+      for (const node of current) deepen(node)
       rebuild = false
     }
 
@@ -1189,6 +1262,17 @@ function balance(
             mismatched = true
             break
           }
+          // The edges only: a corner contact is one even vertex, which no
+          // morph moves, so it cannot carry a band from one patch to another.
+          if (
+            context.framed &&
+            !node.inView &&
+            (di === 0 || dj === 0) &&
+            (nearDepth.get(key) ?? -1) > level
+          ) {
+            mismatched = true
+            break
+          }
         }
       }
       if (!mismatched) {
@@ -1209,13 +1293,16 @@ function balance(
       }
       split = true
       let kept = 0
+      let keptNear = 0
       for (const child of children) {
-        const seen = context.consider(child, node.inView)
-        if (seen === null) continue
+        const considered = context.consider(child, node.inView)
+        if (considered === null) continue
         kept += 1
-        next.push(seen)
-        deepen(seen.region)
+        if (considered.near) keptNear += 1
+        next.push(considered)
+        deepen(considered)
       }
+      if (context.framed && node.near && keptNear === 0) rebuild = true
       /*
        * Every child beyond the horizon, which is the one way the carried map
        * can lie: nothing is selected under this region any more, so the entry
