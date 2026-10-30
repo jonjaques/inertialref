@@ -198,7 +198,7 @@ as many. That is still far past the cap, and a telephoto's pixel angle is a
 claim about its frame and nothing else — so past the flight lens the selection
 refines at the lens only where the frame can reach and at the flight lens
 everywhere else ([ADR-0055](../adr/0055-a-long-lens-refines-what-its-frame-can-reach.md)). The same eyes looking at the
-horizon ask for 929 to 3,491, which the coarsening ladder fits on every one.
+horizon ask for 950 to 3,494, which the coarsening ladder fits on every one.
 Racking the zoom out on top of that is the one corner where the square bites
 again — a telephoto held on a subject wants several times the cap even inside
 its frame, so the disk goes coarse on most steps and says so. The viewport is
