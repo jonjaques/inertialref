@@ -13,6 +13,7 @@ import {
   luminance,
   mat3,
   max,
+  mix,
   smoothstep,
   sqrt,
   uniform,
@@ -133,8 +134,26 @@ export function installToneCurve(
       .max(1e-10)
     const response = rrtAndOdtFit(vec3(y.div(0.6))).r.clamp()
     const mapped = light.mul(response.div(y))
-    const peak = max(max(mapped.r, mapped.g), mapped.b).max(1)
-    const neutral = mapped.div(peak)
+    /*
+     * Where the display runs out, toward white rather than down. A saturated
+     * light whose luminance the curve has taken to the top still has a
+     * channel past one, and scaling the whole color down until it fits drew
+     * a 2° sun — deep orange at a hundred times the surface white — at a
+     * luminance of 0.55 beside its pale aureole at 0.79: the brightest thing
+     * in the sky as a dark spot in its own glow. A camera clips that disk
+     * toward white. Mixing with the gray of its own luminance keeps the
+     * luminance and the opponent-plane hue angle exactly, takes only as much
+     * saturation as the channel needs, and starts only in the curve's top 5%,
+     * so everything below it, a star's darkened limb included, keeps the color
+     * it was drawn with.
+     */
+    const over = max(max(mapped.r, mapped.g), mapped.b)
+    const bleach = smoothstep(0.95, 1, response).mul(
+      over.sub(1).max(0).div(over.sub(response).max(1e-6)).min(0.97),
+    )
+    const bleached = mix(mapped, vec3(response), bleach)
+    const peak = max(max(bleached.r, bleached.g), bleached.b).max(1)
+    const neutral = bleached.div(peak)
     const calibrated = ACES_OUTPUT.mul(
       rrtAndOdtFit(ACES_INPUT.mul(input.div(0.6))),
     )
@@ -152,20 +171,25 @@ export function installToneCurve(
     const graded = naturalUniform.greaterThan(0.5).select(natural, neutral)
 
     // Lift by luminance, not per channel: scaling the channels independently
-    // would pull a saturated highlight toward white as it brightens, which is
-    // the one thing a star's color must not do — the star is the scene's
-    // reference white and its temperature is data, not art direction.
+    // would shift a saturated highlight's hue as it brightens, and a star's
+    // hue is its temperature, which is data, not art direction. How far the
+    // top of the curve whitens is the bleach above, which keeps the hue.
     //
     // And by the *scene's* luminance, on a log scale that reaches the peak at
     // the star's own radiance, rather than by the graded value. The graded
     // curve is all but flat above three times diffuse white, so a lift keyed
-    // on it handed nearly the whole headroom to everything past that: the
-    // noon aureole three degrees off the sun, at 2.8, drew at 1.67 on a 2×
-    // display against the disk's 1.97 — a sun that was not the brightest
+    // on it hands nearly the whole headroom to everything past that: the
+    // noon aureole three degrees off the sun, at 2.8, draws at 1.67 on a 2×
+    // display against the disk's 1.97 — a sun that is not the brightest
     // thing in its own sky. Below the shoulder nothing moves, so an SDR and
     // an HDR capture still agree on skin, terrain and hull, and the ramp is
     // the same at any headroom, which the curve cannot know.
-    const start = shoulderLuminance(shoulderUniform)
+    //
+    // The shoulder is held under 0.98 for the solve, because it is written
+    // from the console: past about 0.985 its scene luminance passes the
+    // star's own and the ramp runs backward, and past 1.017 the fit never
+    // reaches it: the root is negative and the lift NaN in every pixel.
+    const start = shoulderLuminance(shoulderUniform.min(0.98))
     const reach = log2(y.div(start)).div(
       log2(float(CALIBRATED_STAR_RADIANCE).div(start)),
     )
