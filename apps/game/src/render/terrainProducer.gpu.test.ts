@@ -219,6 +219,58 @@ describe('the tile producer', () => {
     })
   })
 
+  it('reads back no water for a body that does not drain, and hands it the NaN', async () => {
+    /*
+     * With the drainage gate closed the kernel writes "none" at every
+     * vertex, so the producer leaves the water buffer on the device and
+     * gives each tile the NaN the readback would have come to. Counted at
+     * the renderer's readback, which is the one call a copy cannot be issued
+     * without: two for Luna's batch, three for Earth's.
+     */
+    const luna = solBody('Luna')
+    const earth = solBody('Earth')
+    const own = createTileProducer(gpu.renderer)
+    const reads = vi.spyOn(gpu.renderer, 'getArrayBufferAsync')
+    try {
+      const wanted = regions(0, 4)
+      const dry = await Promise.all(
+        wanted.map(
+          (region) => own.submit(luna.surface, requestFor(region)).result,
+        ),
+      )
+      const dryReads = reads.mock.calls.length
+      reads.mockClear()
+      const wet = await Promise.all(
+        wanted.map(
+          (region) => own.submit(earth.surface, requestFor(region)).result,
+        ),
+      )
+      const wetReads = reads.mock.calls.length
+      expect(own.stats().batches).toBe(2)
+      expect({ dryReads, wetReads }).toEqual({ dryReads: 2, wetReads: 3 })
+      // The water a dry tile carries is the CPU tile's, to the bit: a
+      // `Float32Array` of NaN at every vertex.
+      dry.forEach((tile, i) => {
+        const expected = generateHeightfield(
+          luna.surface,
+          requestFor(wanted[i] as RegionAddress),
+        ).water
+        expect(tile.water).toBeInstanceOf(Float32Array)
+        expect(tile.water).toHaveLength(expected.length)
+        expect(new Uint32Array(tile.water.buffer)).toEqual(
+          new Uint32Array(expected.buffer),
+        )
+      })
+      // And the wet body's is still read: at level 0 its sea is on every face.
+      expect(
+        wet.some((tile) => tile.water.some((level) => !Number.isNaN(level))),
+      ).toBe(true)
+    } finally {
+      reads.mockRestore()
+      own.dispose()
+    }
+  })
+
   it('cancels what is still queued and delivers what was already dispatched', async () => {
     const luna = solBody('Luna')
     const handles = regions(10, 40).map((region) =>

@@ -11497,6 +11497,57 @@ needs a workstation. `presets:compare` stays local. It needs Chrome to present
 the app, and runner-images #14840 records WebGL2 stalling in Metal resource
 creation on the same image.
 
+## The drainage graph is one binding, and the stale one answers to one gate (20 Oct 2026)
+
+The terrain kernel bound eight storage buffers, the drainage graph's records
+and words among them, and eight is `maxStorageBuffersPerShaderStage` on any
+device that asks for nothing more. Nothing asks: the M5's adapter offers ten
+through Dawn and the device three requests gets eight. The graph is now one
+`array<u32>` read through an offset table in
+`packages/universe/src/terrainKernel.ts` — nodes, segments, neighbors, cell
+starts, cell lists, every offset in words — with the float records written
+through a `Float32Array` over the same memory and read back with
+`bitcast<vec4<f32>>`. Rejected: a float buffer carrying the words, which
+holds `0xffffffff`, the missing neighbor, as a NaN; packing the graph into a
+buffer the stack already binds, which moves the wall; and requesting the
+adapter's limit, which builds the kernel on one machine and not the next.
+The kernel binds seven, and every tile is bit-identical to the two-buffer
+kernel's over 366 hashes of elevations, cover and water (the zoo, Luna,
+Earth, Mercury, Mars and the far-shore world, both sides of the sea, level 0
+to each floor), so `TERRAIN_KERNEL_REVISION` stays at 1. A batch of sixteen
+on a wet body costs the same within about one percent, 13.80 against 13.93
+ms on Earth at level 6 in one alternation and 13.71 against 13.83 in the
+other, under load.
+
+The erosion plan said a ninth binding fails no test. It fails three GPU
+files at the baseline — the producer's `warm()` returns false in
+`terrainProducer.gpu.test.ts`'s `beforeAll`, and the harness reports "The
+number of storage buffers (9) in the Compute stage exceeds the maximum
+per-stage limit (8)" in the kernel and band tests — and nothing in
+`pnpm check`, which runs no GPU file. All of those depend on the device
+having been granted the default, so `terrainKernel.gpu.test.ts` also counts
+`var<storage` in the kernel's own WGSL against the spec's eight and holds the
+harness device at eight.
+
+**Every reader of the drainage buffer tests one gate.** `uploadSurface`
+leaves the last wet body's graph in the buffer through every dry body,
+because clearing it is 4.4 MB of writes a switch. The stage ran behind
+`SCALAR.DRAINAGE` and the clamp chose its water on `WORD.DRAINAGE_CELLS`;
+both were zero on a dry body, and a future reader behind one and not the
+other would carve the previous planet's rivers into this one. The stage's
+packed gate in `BAND_STACK` is now `WORD.DRAINAGE_CELLS` alone, the clamp and
+the producer read it through the table, and the scalar is gone. The
+regression test draws Mars and Luna after Earth with Earth's graph still in
+the buffer and holds them bit for bit to a kernel that never held one; with
+the stage behind any other gate, every Mars tile's water came back up to all
+4,225 vertices apart, Earth's sea drawn over Mars.
+
+A dry body also reads no water back. The copy the producer skipped is
+270 KB a batch — sixteen tiles of 4,225 unbordered vertices; the plan's
+1.2 MB counted sixty-four tiles of bordered samples — and skipping it and
+its sentinel scan is about a millisecond of a fourteen-millisecond batch on
+Luna and Mars, under load.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

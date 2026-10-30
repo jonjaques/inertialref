@@ -128,11 +128,17 @@ export const BAND_STACK: readonly Stage[] = [
     // river's bed is a datum along the channel, and a crater dug into it
     // afterward is a dam the bed climbs over. Cut last, the river takes the
     // rim down across its floodplain and fills the bowl to its bed.
+    //
+    // Packed, the gate is the lattice's size, which is zero where the body
+    // has no graph — and it is the one gate. The kernel's drainage buffer
+    // keeps the last wet body's graph through a dry one, so everything that
+    // reads it — the valleys, the lake level, the clamp's choice of water,
+    // the producer's water readback — tests this slot and nothing else.
     id: 'drainage',
     kind: 'carve',
     canonical: true,
     on: ({ surface }) => surface.grammar.drainage > 0,
-    packed: { scalar: 'DRAINAGE', above: 0 },
+    packed: { word: 'DRAINAGE_CELLS' },
   },
   {
     // After the craters, so a crater on the shore is a bay; before the tail,

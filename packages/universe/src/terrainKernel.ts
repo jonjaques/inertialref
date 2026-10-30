@@ -148,7 +148,6 @@ export const SCALAR = {
   WARP_AMOUNT: 31,
   DUNE_CYCLES: 32,
   CHAOS_CELLS: 33,
-  DRAINAGE: 34,
   LIQUID: 35,
   BIOTA: 36,
   DRAINAGE_DATUM: 37,
@@ -157,7 +156,10 @@ export const SCALAR = {
   DRAINAGE_REACH: 39,
 } as const
 
-/** `vec4` slots the scalar block occupies. Forty-eight floats; forty are spent. */
+/**
+ * `vec4` slots the scalar block occupies. Forty-eight floats; thirty-nine are
+ * spent, and index 34 is free.
+ */
 const SCALAR_SLOTS = 12
 
 export const SCALARS_AT = 0
@@ -211,20 +213,41 @@ export const WORD = {
   ERODED: 29,
   SEED_DRAINAGE: 30,
   SEED_RAIN: 31,
-  /** Cells per face edge of the drainage lattice; zero where no graph. */
+  /**
+   * Cells per face edge of the drainage lattice; zero where no graph. The
+   * drainage stage's gate in `BAND_STACK`, and the only one: every reader of
+   * the drainage buffer tests it.
+   */
   DRAINAGE_CELLS: 32,
 } as const
 
 /*
- * The drainage graph's two buffers, sized once for the lattice every body
- * uses: one of `vec4` floats, one of words. Two rather than five because a
- * compute stage may bind eight storage buffers on the baseline device and
- * the stack's own five plus the water are six.
+ * The drainage graph, in one buffer of words read through the offset table
+ * below, sized once for the lattice every body uses.
  *
- *   records  [nodes: x y z lake] × MAX_NODES, then [segments] × MAX_NODES
- *            at DRAINAGE_SEGMENT_STRIDE slots each
- *   words    neighbors (eight a node, 0xffffffff where none), then the
- *            cell starts (MAX_NODES + 1), then the cell lists
+ * One buffer rather than one per list, because a compute stage may bind
+ * eight storage buffers on the baseline device and the stack spends six of
+ * them: its records, its words, its tiles and its three outputs. Nothing
+ * requests a raised limit — not the renderer, not the producer, not the Dawn
+ * harness — and a raised one would make the kernel build on one adapter and
+ * not on the next. Packing the graph into a buffer the stack already binds
+ * would only move the wall. So the graph is one binding however many lists
+ * it grows: a list is a row in this table, not a binding in the kernel, and
+ * `terrainKernel.gpu.test.ts` counts the kernel's bindings against the
+ * baseline's eight.
+ *
+ * Words throughout, because a buffer has one element type. The node and
+ * segment records are floats stored by their bits — written through a
+ * `Float32Array` over the same memory, read back with `bitcast` — which is
+ * the value a `vec4<f32>` buffer would have held, to the last bit, and the
+ * graph's words keep their integers exact. The other way round would carry
+ * `0xffffffff`, a neighbor that is not there, as a NaN.
+ *
+ *   nodes        [x y z lake] × MAX_NODES, four words each
+ *   segments     [SEGMENT_STRIDE floats] × MAX_NODES
+ *   neighbors    eight a node, 0xffffffff where none
+ *   cell starts  MAX_NODES + 1
+ *   cell lists   MAX_LISTS
  *
  * A node per cell and at most a segment per node; the cell lists are the
  * rasterizer's, measured at a mean of two to nine entries a cell and a peak
@@ -237,25 +260,22 @@ export const MAX_KERNEL_DRAINAGE_NODES = 6 * DRAINAGE_SHAPE.lattice ** 2
 export const MAX_KERNEL_DRAINAGE_LISTS = 16 * MAX_KERNEL_DRAINAGE_NODES
 /** `vec4` slots per segment: `SEGMENT_STRIDE / 4`. */
 export const DRAINAGE_SEGMENT_STRIDE = SEGMENT_STRIDE / 4
+/** Words, like every offset below. */
 export const DRAINAGE_NODES_AT = 0
-/**
- * An offset, not an alias: it equals `MAX_KERNEL_DRAINAGE_NODES` because the
- * node records come first.
- */
-export const DRAINAGE_SEGMENTS_AT = MAX_KERNEL_DRAINAGE_NODES
-/** `vec4` slots in the drainage records. */
-export const DRAINAGE_RECORDS =
-  DRAINAGE_SEGMENTS_AT + MAX_KERNEL_DRAINAGE_NODES * DRAINAGE_SEGMENT_STRIDE
-export const DRAINAGE_NEIGHBORS_AT = 0
-export const DRAINAGE_CELL_START_AT = 8 * MAX_KERNEL_DRAINAGE_NODES
+export const DRAINAGE_SEGMENTS_AT =
+  DRAINAGE_NODES_AT + 4 * MAX_KERNEL_DRAINAGE_NODES
+export const DRAINAGE_NEIGHBORS_AT =
+  DRAINAGE_SEGMENTS_AT + SEGMENT_STRIDE * MAX_KERNEL_DRAINAGE_NODES
+export const DRAINAGE_CELL_START_AT =
+  DRAINAGE_NEIGHBORS_AT + 8 * MAX_KERNEL_DRAINAGE_NODES
 export const DRAINAGE_CELL_LISTS_AT =
   DRAINAGE_CELL_START_AT + MAX_KERNEL_DRAINAGE_NODES + 1
-/** Words in the drainage words. */
+/** Words in the drainage buffer. */
 export const DRAINAGE_WORDS = DRAINAGE_CELL_LISTS_AT + MAX_KERNEL_DRAINAGE_LISTS
 
 /** The graph as the kernel reads it, in the layout above; packed once per graph. */
 export interface KernelDrainage {
-  readonly records: Float32Array
+  /** The whole buffer: the floats by their bits, the integers as themselves. */
   readonly words: Uint32Array
   readonly segmentCount: number
 }
@@ -469,12 +489,12 @@ function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
   scalar(SCALAR.DUNE_CYCLES, reliefCycles * DUNE_SHAPE.cycles)
   scalar(SCALAR.CHAOS_CELLS, grammar.meanRadius / CHAOS_SHAPE.blockMeters)
   /*
-   * The drainage gate is the graph's existence, not the grammar's number
-   * alone: `drainageGraph` is null on a bare body and on one the grammar
-   * gives no drainage, and the stage on the CPU does nothing without it.
+   * Null on a bare body and on one the grammar gives no drainage. Its
+   * existence is the drainage stage's gate, and the gate is one word —
+   * `WORD.DRAINAGE_CELLS`, below — because the kernel's drainage buffer
+   * outlives the body that filled it.
    */
   const graph = drainageGraph(surface)
-  scalar(SCALAR.DRAINAGE, graph === null ? 0 : grammar.drainage)
   scalar(SCALAR.DRAINAGE_REACH, graph === null ? 0 : graph.reach)
   scalar(SCALAR.LIQUID, grammar.liquid)
   scalar(SCALAR.BIOTA, grammar.biota)
@@ -677,34 +697,36 @@ function packDrainage(graph: DrainageGraph): KernelDrainage {
     graph.nodes <= MAX_KERNEL_DRAINAGE_NODES,
     `${graph.nodes} drainage nodes exceed the kernel's ${MAX_KERNEL_DRAINAGE_NODES}`,
   )
+  // Its own check, not the nodes': the regions share one buffer, so a
+  // segment past its region raises nothing and lands on the neighbor table.
+  invariant(
+    graph.segments.length <= SEGMENT_STRIDE * MAX_KERNEL_DRAINAGE_NODES,
+    `${graph.segmentCount} drainage segments exceed the kernel's ${MAX_KERNEL_DRAINAGE_NODES}`,
+  )
   invariant(
     graph.cellSegments.length <= MAX_KERNEL_DRAINAGE_LISTS,
     `${graph.cellSegments.length} drainage list entries exceed the kernel's ${MAX_KERNEL_DRAINAGE_LISTS}`,
   )
-  const records = new Float32Array(DRAINAGE_RECORDS * 4)
   const words = new Uint32Array(DRAINAGE_WORDS)
+  const floats = new Float32Array(words.buffer)
   for (let n = 0; n < graph.nodes; n += 1) {
-    const at = (DRAINAGE_NODES_AT + n) * 4
-    records[at] = graph.positions[n * 3] as number
-    records[at + 1] = graph.positions[n * 3 + 1] as number
-    records[at + 2] = graph.positions[n * 3 + 2] as number
+    const at = DRAINAGE_NODES_AT + n * 4
+    floats[at] = graph.positions[n * 3] as number
+    floats[at + 1] = graph.positions[n * 3 + 1] as number
+    floats[at + 2] = graph.positions[n * 3 + 2] as number
     // NaN has no literal the kernel can compare against; a lake level below
     // any ground is the same "none" in a `greaterThan`.
     const lake = graph.lake[n] as number
-    records[at + 3] = Number.isNaN(lake) ? NO_KERNEL_WATER : lake
+    floats[at + 3] = Number.isNaN(lake) ? NO_KERNEL_WATER : lake
     for (let k = 0; k < 8; k += 1) {
       const m = graph.neighbors[n * 8 + k] as number
       words[DRAINAGE_NEIGHBORS_AT + n * 8 + k] = m < 0 ? 0xffff_ffff : m
     }
   }
-  records.set(graph.segments, DRAINAGE_SEGMENTS_AT * 4)
+  floats.set(graph.segments, DRAINAGE_SEGMENTS_AT)
   words.set(graph.cellStart, DRAINAGE_CELL_START_AT)
   words.set(graph.cellSegments, DRAINAGE_CELL_LISTS_AT)
-  const built: KernelDrainage = {
-    records,
-    words,
-    segmentCount: graph.segmentCount,
-  }
+  const built: KernelDrainage = { words, segmentCount: graph.segmentCount }
   packedDrainage.set(graph, built)
   return built
 }

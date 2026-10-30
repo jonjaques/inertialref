@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { ComputeNode } from 'three/webgpu'
 import { openSession, type Session, terrainZoo } from '@inertialref/devtools'
 import { vec3 } from '@inertialref/spatial'
 import {
@@ -83,34 +84,59 @@ interface GpuTile {
   readonly water: Float32Array
 }
 
-/** Run one batch of tiles of one body through the kernel and split them out. */
+/**
+ * Run one batch of tiles of one body through a kernel — this file's unless
+ * another is named — and split them out.
+ */
 async function gpuTiles(
   body: Body,
   regions: readonly RegionAddress[],
   seabed = false,
+  on: TerrainKernel = kernel,
 ): Promise<GpuTile[]> {
   if (regions.length > MAX_TILES)
     throw new Error('too many tiles for one batch')
   const packed = surfaceKernel(body.surface, seabed)
-  uploadSurface(kernel, packed)
-  const frames = kernel.tiles.array as Float32Array
+  uploadSurface(on, packed)
+  const frames = on.tiles.array as Float32Array
   regions.forEach((region, i) =>
     writeTileFrame(packed, region, frames, i * TILE_STRIDE * 4),
   )
-  kernel.tiles.needsUpdate = true
-  kernel.total.value = regions.length * kernel.samples
-  await gpu.compute(kernel.compute)
-  const elevations = new Float32Array(await gpu.readBuffer(kernel.elevations))
-  const cover = new Uint8Array(await gpu.readBuffer(kernel.cover))
-  const water = new Float32Array(await gpu.readBuffer(kernel.water))
+  on.tiles.needsUpdate = true
+  on.total.value = regions.length * on.samples
+  await gpu.compute(on.compute)
+  const elevations = new Float32Array(await gpu.readBuffer(on.elevations))
+  const cover = new Uint8Array(await gpu.readBuffer(on.cover))
+  const water = new Float32Array(await gpu.readBuffer(on.water))
   return regions.map((_, i) => ({
-    elevations: elevations.slice(i * kernel.samples, (i + 1) * kernel.samples),
+    elevations: elevations.slice(i * on.samples, (i + 1) * on.samples),
     cover: cover.slice(
-      i * kernel.interior * COVER_CHANNELS,
-      (i + 1) * kernel.interior * COVER_CHANNELS,
+      i * on.interior * COVER_CHANNELS,
+      (i + 1) * on.interior * COVER_CHANNELS,
     ),
-    water: water.slice(i * kernel.interior, (i + 1) * kernel.interior),
+    water: water.slice(i * on.interior, (i + 1) * on.interior),
   }))
+}
+
+/** Elements of two equal-length arrays whose bits differ. */
+function bitsApart(
+  a: Float32Array | Uint8Array | Uint32Array,
+  b: Float32Array | Uint8Array | Uint32Array,
+): number {
+  const x = new Uint8Array(a.buffer, a.byteOffset, a.byteLength)
+  const y = new Uint8Array(b.buffer, b.byteOffset, b.byteLength)
+  if (a.length !== b.length) return Math.max(a.length, b.length)
+  let apart = 0
+  const width = a.BYTES_PER_ELEMENT
+  for (let i = 0; i < x.length; i += width) {
+    for (let k = 0; k < width; k += 1) {
+      if (x[i + k] !== y[i + k]) {
+        apart += 1
+        break
+      }
+    }
+  }
+  return apart
 }
 
 /** A spread of regions over a body at one level: four directions. */
@@ -229,6 +255,53 @@ const bound = (body: Body, level: number): number =>
  */
 const COVER_BOUND = 2
 
+/**
+ * `maxStorageBuffersPerShaderStage` as the WebGPU spec defaults it, which is
+ * what a device runs at unless it asks for more. Nothing asks: not
+ * `createRenderer`, not the producer, not the harness.
+ */
+const BASELINE_STORAGE_BUFFERS = 8
+
+describe('the kernel’s bindings', () => {
+  /*
+   * At the baseline a ninth binding fails pipeline validation. Here that is
+   * a harness error in the tolerance tests below; in the app it is the
+   * producer's `warm()` retiring the GPU for the session with a logged
+   * reason, and the ground arriving at the pool's pace with nothing else to
+   * say why. Both depend on the device having been granted the default — the
+   * adapter on an M5 offers ten — so this counts the bindings in the program
+   * itself against the spec's figure, whatever limits a device was given,
+   * and says which budget a new one spends. A list the drainage graph grows
+   * is a row in its offset table (`DRAINAGE_NODES_AT` and the rest), not a
+   * binding.
+   */
+  it('binds no more storage buffers than the baseline device has', () => {
+    const nodes = (
+      gpu.renderer as unknown as {
+        _nodes: { getForCompute(node: ComputeNode): { computeShader: string } }
+      }
+    )._nodes
+    const wgsl = nodes.getForCompute(kernel.compute).computeShader
+    const bindings = wgsl.match(/var<storage\b/g)?.length ?? 0
+    console.info(
+      `the kernel binds ${bindings} storage buffers of the baseline's ${BASELINE_STORAGE_BUFFERS}`,
+    )
+    // A floor as well as a ceiling: the count is a regex over three's WGSL,
+    // and a spelling that stops matching would pass the ceiling at zero.
+    expect(bindings).toBeGreaterThan(0)
+    expect(bindings).toBeLessThanOrEqual(BASELINE_STORAGE_BUFFERS)
+  })
+
+  it('is held at the baseline by a device granted only the baseline', () => {
+    // The other half of the claim above: the tolerance tests in this file
+    // build the kernel on a device at the default, as the app does.
+    const device = (gpu.renderer.backend as { device?: GPUDevice }).device
+    expect(device?.limits.maxStorageBuffersPerShaderStage).toBe(
+      BASELINE_STORAGE_BUFFERS,
+    )
+  })
+})
+
 describe('the kernel against generateHeightfield', () => {
   it('agrees on every body at every level, within the stated bound', async () => {
     const zoo = terrainZoo(session.world)
@@ -307,5 +380,64 @@ describe('the kernel against generateHeightfield', () => {
     })
     expect(elevation).toBeLessThan(bound(wet, 0))
     expect(submarine).toBeGreaterThan(0)
+  }, 60_000)
+})
+
+describe('a dry body after a wet one', () => {
+  /*
+   * `uploadSurface` uploads nothing into the drainage buffer for a body with
+   * no graph, so after a wet body the buffer still holds that body's nodes,
+   * segments and cell lists. That is the decision — clearing it is megabytes
+   * of writes on every switch — and it is safe only while every reader of
+   * the buffer is behind the drainage stage's one gate, which is zero for
+   * the dry body. A reader behind anything else carves the previous
+   * planet's rivers and lakes into this one.
+   *
+   * So the dry body's tiles, drawn with Earth's graph still in the buffer,
+   * are held bit for bit to the same tiles from a kernel that never held a
+   * graph. Mars and Luna: one with a budget for a stale carve to cut into,
+   * and the cratered body the plan names beside it.
+   */
+  it('draws as it does on a kernel that never held a graph', async () => {
+    const wet = solBody('Earth')
+    const graph = surfaceKernel(wet.surface).drainage
+    if (graph === null) throw new Error('Earth has no drainage graph')
+    const fresh = createTerrainKernel({
+      resolution: HEIGHTFIELD_RESOLUTION,
+      border: HEIGHTFIELD_BORDER,
+      maxTiles: MAX_TILES,
+    })
+    const apart: string[] = []
+    try {
+      for (const dry of [solBody('Mars'), solBody('Luna')]) {
+        expect(surfaceKernel(dry.surface).drainage).toBeNull()
+        for (const level of [0, 6, 12]) {
+          const regions = regionsAt(level)
+          await gpuTiles(wet, regions)
+          const stale = await gpuTiles(dry, regions)
+          // The premise: the wet body's graph is what the buffer holds on
+          // the device while the dry body's tiles are drawn.
+          const held = new Uint32Array(await gpu.readBuffer(kernel.drainage))
+          expect(bitsApart(held, graph.words)).toBe(0)
+          const clean = await gpuTiles(dry, regions, false, fresh)
+          stale.forEach((tile, i) => {
+            const other = clean[i] as GpuTile
+            const counts = [
+              bitsApart(tile.elevations, other.elevations),
+              bitsApart(tile.cover, other.cover),
+              bitsApart(tile.water, other.water),
+            ]
+            if (counts.some((count) => count > 0)) {
+              apart.push(
+                `${dry.name} L${level} tile ${i}: elevations ${counts[0]}, cover ${counts[1]}, water ${counts[2]} apart`,
+              )
+            }
+          })
+        }
+      }
+    } finally {
+      fresh.dispose()
+    }
+    expect(apart).toEqual([])
   }, 60_000)
 })

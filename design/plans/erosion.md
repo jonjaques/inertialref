@@ -117,21 +117,21 @@ longitude, which now stands 117 m up over land with 1,128 patches at level
 16 — is a different picture, and the like-for-like figure at the new shore
 is phase 6.
 
-| Tradeoff                                                    | Bought                                       | Cost                                                                                                                                                                   | Revisit when                                                                                                                                                                |
-| ----------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Octaves cut: macro 3→2, micro 2→1, grain 3→2                | 11.9 → 16.3 fps                              | The micro's second octave was the meter-scale relief in the normal; ground at 3–30 m is smoother than the mesh under it                                                | An authored material set arrives, or the `full` lever re-adds it for a measured machine                                                                                     |
-| The noise is RGBA8 with its gradient baked                  | Normals without screen derivatives; no moiré | 8-bit value and gradient — faceting is possible on flat ground at a grazing sun, unmeasured                                                                            | A plate shows it; the fix is a two-texture split or RG16F for the near octave                                                                                               |
-| One four-channel fetch per octave rather than one-channel   | The gradient                                 | A texel fetch at ~4× the cost of a one-channel one, whatever the texture's size                                                                                        | A gradient-free far octave — screen derivatives are fine past the near ground                                                                                               |
-| The sea refracts the frame through `viewportSharedTexture`  | Refraction, the shallows' color              | A frame copy that splits the scene pass in two — the copy leaves no idle gap of 0.05 ms, and the refraction's sampling is 2.7 ms at 2 km and inside the noise at 3 m   | `sea: plain` does not remove the split — `refraction` is a build option of `createWaterMaterial` and the lever sets a uniform, so the switch is a second material, measured |
-| Sea waves at two swell octaves and one chop                 | A moving surface                             | Static foam, no breaking wave at the shore, no wake                                                                                                                    | Shore waves are a phase; the foam band is the seam                                                                                                                          |
-| The sea reflects the sky, not the land                      | No screen-space search                       | A cliff is not mirrored under itself                                                                                                                                   | Screen-space reflection is a pass of its own; the lever is `sea: full`                                                                                                      |
-| The orbital bake is reflectance at 512 and relief at 256    | The sphere wears the ground and its relief   | A hitch of tens of milliseconds on the arrival frame                                                                                                                   | The bake spreads across frames                                                                                                                                              |
-| Rocks with `frustumCulled` off                              | No per-frame bounds                          | Drawn whether in view or not; on the GPU, inside the 1.5 ms resolution at 3 m and 1.0 ms at 2 km                                                                       | Per-patch instance ranges, or a GPU cull, once a figure says the rocks cost the frame; the `rocks` lever is blunt until then                                                |
-| 1,128 patches at level 17 at a 3 m stance                   | The refinement the lens asks for             | 259 patches behind and below the horizon that `terrain: coarse` removes, at no GPU cost the sweep resolves at either height                                            | A horizon and a back-facing test in the predicate, if the CPU side of a patch is the constraint; `terrain: coarse` is the lever now                                         |
-| The deposit stack, the veil, the sky shell and MSAA at 9 MP | The look                                     | 13.4 ms at 3 m and 14.2 ms at 2 km with every lever off: the scene pass 6.7 and 8.5, the optics and the output 6.6 and 5.6 — the output pass alone 2.5 ms at 3840×2400 | The pass table below splits the frame                                                                                                                                       |
-| The drainage graph at 6 × 64²                               | Rivers that drain, lakes at spill            | 50–110 ms a body on the CPU, once per worker; a walk of two to nine segments a sample                                                                                  | The lattice at 128² is four times both, and the plan's phase 3 measures it beside the refinement                                                                            |
-| The water buffer reads back on every dispatch               | One producer path for wet and dry bodies     | `maxTiles × interior × 4` bytes a batch — ~1.2 MB on 64 tiles of 4,761 samples — plus a linear rescan for the sentinel                                                 | A dry body is known before the dispatch: `WORD.DRAINAGE_CELLS` is zero, and Luna and Mars pay the copy and the scan for a slice that is all sentinel                        |
-| Every cached graph keeps its build scratch                  | The tests and the survey read it             | `elevation`, `filled`, `receiver`, `area`, `order`, `popOrder` — six 24,576-entry arrays a body, ~60 MB over the 12-entry cache, ~120 MB once packing is counted       | The heap becomes the constraint; the split is a build-time record the cache drops, keeping the arrays the field and the survey actually sample                              |
+| Tradeoff                                                            | Bought                                       | Cost                                                                                                                                                                   | Revisit when                                                                                                                                                                |
+| ------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Octaves cut: macro 3→2, micro 2→1, grain 3→2                        | 11.9 → 16.3 fps                              | The micro's second octave was the meter-scale relief in the normal; ground at 3–30 m is smoother than the mesh under it                                                | An authored material set arrives, or the `full` lever re-adds it for a measured machine                                                                                     |
+| The noise is RGBA8 with its gradient baked                          | Normals without screen derivatives; no moiré | 8-bit value and gradient — faceting is possible on flat ground at a grazing sun, unmeasured                                                                            | A plate shows it; the fix is a two-texture split or RG16F for the near octave                                                                                               |
+| One four-channel fetch per octave rather than one-channel           | The gradient                                 | A texel fetch at ~4× the cost of a one-channel one, whatever the texture's size                                                                                        | A gradient-free far octave — screen derivatives are fine past the near ground                                                                                               |
+| The sea refracts the frame through `viewportSharedTexture`          | Refraction, the shallows' color              | A frame copy that splits the scene pass in two — the copy leaves no idle gap of 0.05 ms, and the refraction's sampling is 2.7 ms at 2 km and inside the noise at 3 m   | `sea: plain` does not remove the split — `refraction` is a build option of `createWaterMaterial` and the lever sets a uniform, so the switch is a second material, measured |
+| Sea waves at two swell octaves and one chop                         | A moving surface                             | Static foam, no breaking wave at the shore, no wake                                                                                                                    | Shore waves are a phase; the foam band is the seam                                                                                                                          |
+| The sea reflects the sky, not the land                              | No screen-space search                       | A cliff is not mirrored under itself                                                                                                                                   | Screen-space reflection is a pass of its own; the lever is `sea: full`                                                                                                      |
+| The orbital bake is reflectance at 512 and relief at 256            | The sphere wears the ground and its relief   | A hitch of tens of milliseconds on the arrival frame                                                                                                                   | The bake spreads across frames                                                                                                                                              |
+| Rocks with `frustumCulled` off                                      | No per-frame bounds                          | Drawn whether in view or not; on the GPU, inside the 1.5 ms resolution at 3 m and 1.0 ms at 2 km                                                                       | Per-patch instance ranges, or a GPU cull, once a figure says the rocks cost the frame; the `rocks` lever is blunt until then                                                |
+| 1,128 patches at level 17 at a 3 m stance                           | The refinement the lens asks for             | 259 patches behind and below the horizon that `terrain: coarse` removes, at no GPU cost the sweep resolves at either height                                            | A horizon and a back-facing test in the predicate, if the CPU side of a patch is the constraint; `terrain: coarse` is the lever now                                         |
+| The deposit stack, the veil, the sky shell and MSAA at 9 MP         | The look                                     | 13.4 ms at 3 m and 14.2 ms at 2 km with every lever off: the scene pass 6.7 and 8.5, the optics and the output 6.6 and 5.6 — the output pass alone 2.5 ms at 3840×2400 | The pass table below splits the frame                                                                                                                                       |
+| The drainage graph at 6 × 64²                                       | Rivers that drain, lakes at spill            | 50–110 ms a body on the CPU, once per worker; a walk of two to nine segments a sample                                                                                  | The lattice at 128² is four times both, and the plan's phase 3 measures it beside the refinement                                                                            |
+| The water buffer reads back on every dispatch of a body that drains | One producer path for every wet body         | 270 KB a batch — sixteen tiles of 4,225 vertices — copied, mapped and rescanned for the sentinel; a dry body skips both, about 1 ms of a 14 ms batch on Luna and Mars  | A wet body's batch is the constraint: the kernel can write a per-tile "any water" word and the scan reads only the tiles it names                                           |
+| Every cached graph keeps its build scratch                          | The tests and the survey read it             | `elevation`, `filled`, `receiver`, `area`, `order`, `popOrder` — six 24,576-entry arrays a body, ~60 MB over the 12-entry cache, ~120 MB once packing is counted       | The heap becomes the constraint; the split is a build-time record the cache drops, keeping the arrays the field and the survey actually sample                              |
 
 **The frame by pass, at the shore.** `ir.passes()` over the rig above, with
 the surface levers at their defaults, thirty frames a row. A lever's figure is
@@ -181,37 +181,19 @@ reference: the WebGPU frame is the one the target applies to.
    that height. Both fields already fade by pixel footprint and branch off past
    their fades (`render/water.ts`), and the 8 ms was measured with them, so
    what is left is where the fades start, tuned against that figure.
-2. **The kernel binds eight storage buffers and the baseline device has
-   eight.** `records`, `words`, `tiles`, `elevations`, `cover`, `water`,
-   `drainageRecords`, `drainageWords` — exactly
-   `maxStorageBuffersPerShaderStage`. The two-buffer drainage layout exists
-   because of that limit and has now reached it, so the next binding the
-   kernel owes cannot be a ninth buffer. Phase 4's slope and seat need none:
-   the second cover word carries wet and biota in its low sixteen bits and
-   nothing in its high sixteen. Phase 3's refined segments and phase 5's flow
-   direction do. **Decided: the drainage data goes to one storage buffer read
-   through an offset table**, which frees bindings for good and runs the same
-   on every device; packing into an existing buffer only moves the wall, and a
-   raised limit splits behavior by adapter. The CPU/GPU tolerance tests are
-   re-held across the change. Nothing requests a limit above the
-   default — not `createRenderer`, not the producer, not the Dawn harness — so
-   every device, this one included, runs at eight. A ninth binding fails
-   pipeline validation in the producer's `warm()`, which retires the GPU
-   producer with a logged reason and hands every tile to the worker pool: the
-   ground still arrives, a CPU's pace slower, and no test fails.
-3. **A hot world's sea takes its plates with it.** `makeSurface` reads the sea
+2. **A hot world's sea takes its plates with it.** `makeSurface` reads the sea
    against the ground temperature, and the lithospheric weakening reads the
    sea. Proxima Centauri II lost twenty plates. The weakening wants its own
    draw — a world that _had_ a sea — rather than the drawn sea's presence.
    It lands in the batched terrain version (§ 6).
-4. **The coast has one shape, and the mouth has one.** Shelf and plain from a
+3. **The coast has one shape, and the mouth has one.** Shelf and plain from a
    remap, a ria at every river. The graph gives the mouth a discharge and a
    floor; the delta is § 2's last item.
-5. **The cover's two spare bytes.** Slope and seat from the canonical field,
+4. **The cover's two spare bytes.** Slope and seat from the canonical field,
    which ends the 4% deposit step at a level boundary and the rock seat's
    0.70 m tail. The two bytes travel in the second cover word's high
-   sixteen bits, so defect 2 does not block it.
-6. **A sample within reach of two water bodies gets a level belonging to
+   sixteen bits.
+5. **A sample within reach of two water bodies gets a level belonging to
    neither.** `lakeLevelAt` is a kernel-weighted mean over the lake nodes in
    `lakeReach`, so a sample between two lakes at different spills — or between
    a lake and the sea — reads a smooth interpolation of the two, and the
@@ -221,7 +203,7 @@ reference: the WebGPU frame is the one the target applies to.
    blend. The fix is to weight one body — the nearest by node count, or the
    one the sample's own receiver drains to — rather than to mix them. It
    lands in the batched terrain version (§ 6).
-7. **A sea inlet under two cells wide loses both its sheet and its clamp.**
+6. **A sea inlet under two cells wide loses both its sheet and its clamp.**
    On a body with a graph the sea is applied only where `lakeLevelAt` finds a
    sea node within 1.2 lattice cells, and a cell is 156 km on Earth. A bay or
    fjord whose nodes all sit above the macro datum reads NaN, so
@@ -232,17 +214,17 @@ reference: the WebGPU frame is the one the target applies to.
    visibly dry hole where the field still says the ground is under the datum.
    The lattice at 128² (phase 3) halves the width that vanishes rather than
    ending it.
-8. **The network's sources.** Eight-neighbor steepest descent on a smooth
+7. **The network's sources.** Eight-neighbor steepest descent on a smooth
    landform leaves seven nodes in ten as sources, so `N₁/N₂` sits near seven
    where a mapped network reads four; the tests hold Horton's ratio at 3–9
    and Hack's exponent at 0.45–0.75 for it. The refinement is what fills the
    headwaters in, and the statistic is re-measured when it lands.
-9. **The foam is static and the shore does not break.** A wave band that moves
+8. **The foam is static and the shore does not break.** A wave band that moves
    with the swell's phase is the cheap half; a breaker is a phase.
-10. **Plate worlds carry the liquid with less shoreline variety.** The fixture
-    lost its plate world, and the shore was judged on a stagnant lid. Measure
-    at the most-plated body before believing the coast.
-11. **The macro band tiles.** Every detail octave is one baked texture, and
+9. **Plate worlds carry the liquid with less shoreline variety.** The fixture
+   lost its plate world, and the shore was judged on a stagnant lid. Measure
+   at the most-plated body before believing the coast.
+10. **The macro band tiles.** Every detail octave is one baked texture, and
     the macro band is fetched from it with the others: it repeats every
     `NOISE_CELLS` — 32 — cells, about 20 km of ground, at full strength for
     any footprint under a kilometer a pixel — sixteen identical tiles across
@@ -253,24 +235,15 @@ reference: the WebGPU frame is the one the target applies to.
     macro band goes to an aperiodic evaluation**, taken off the baked texture;
     a period fixed at a real 4 km cell still repeats, only larger. The look
     changes, so the change carries daylight plates either side.
-12. **A lava sea glows on the ground and not on the sphere.** The sheet emits
+11. **A lava sea glows on the ground and not on the sphere.** The sheet emits
     the liquid's glow and the sphere takes only the liquid's color
     (`planet.oceanColor`), so a magma world is red at the gate and dark from
     orbit at night. One uniform, and the boot warm-up graph with it.
-13. **The bake's ninety-six tiles queue ahead of the streamer.** On the pool
+12. **The bake's ninety-six tiles queue ahead of the streamer.** On the pool
     path the source is a FIFO the two share, so a bake starting on a descent
     delays the ground the descent is about to need. A priority lane in the
     producer and the pool is the fix; residency stops the thrash, not the
     ordering.
-14. **A dry body keeps the previous one's drainage buffers.** `uploadSurface`
-    returns early when the new surface has no graph, so `drainageRecords` and
-    `drainageWords` still hold the last wet body's nodes, segments and cell
-    lists with `needsUpdate` false. Nothing reads them because two independent
-    gates are both zero — `SCALAR.DRAINAGE` and `WORD.DRAINAGE_CELLS` — and a
-    future read that checks one gate and not the other carves the previous
-    planet's rivers into this one. Clearing costs 4.4 MB of writes per body
-    switch. **Decided: one gate rather than two**, so every reader tests the
-    same word; the buffers are not cleared.
 
 ---
 
@@ -322,7 +295,7 @@ and its figures are § 3's pass table.
 
 **Versions are spent in batches.** Every change that moves the canonical field
 moves every landed ship and misses every archived tile, so the changes share a
-version where they can. The next one carries defects 3 and 6, Enceladus's
+version where they can. The next one carries defects 2 and 5, Enceladus's
 stripe extent ([terrain § 2](terrain.md#2-open-work)) and the surface identity
 ([arch-review B](arch-review.md#b-surface-identity-is-stated-once)), and lands
 before phase 3. Phase 3's carve takes a version of its own when it lands. The
