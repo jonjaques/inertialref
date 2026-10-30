@@ -1,4 +1,4 @@
-import { type Object3D, Vector2, Vector3 } from 'three/webgpu'
+import { type Object3D, Vector2, Vector3, Vector4 } from 'three/webgpu'
 import { NO_MORPH_DISTANCE } from '@inertialref/rendering'
 
 /*
@@ -26,6 +26,15 @@ export interface GroundWear {
    * `NO_MORPH_DISTANCE` twice for a wearer that never morphs — a rock, a bake.
    */
   readonly morphBand: Vector2
+  /**
+   * The edges whose vertices do not morph, one flag a lane in `PATCH_EDGE`'s
+   * order: the selection's `finerEdges`, which `placeEye` unpacks. Zero for a
+   * wearer that is not a patch — four zeros written out, because a bare
+   * `new Vector4()` has a `w` of one, which holds every first row.
+   */
+  readonly morphEdges: Vector4
+  /** And the corners that hold, in `PATCH_EDGE`'s corner order, the same way. */
+  readonly morphCorners: Vector4
   /**
    * The anchor as the float32 uniform receives it, rounded on this side so the
    * altitude beside it describes the vector the shader actually gets.
@@ -67,6 +76,8 @@ export const NO_SLOPE_LEVEL = -1
 export interface SeaWear {
   readonly eyeLocal: Vector3
   readonly morphBand: Vector2
+  readonly morphEdges: Vector4
+  readonly morphCorners: Vector4
   readonly anchor: Vector3
   readonly waveOrigin: Vector3
 }
@@ -83,6 +94,8 @@ export const SEA_WEAR = 'seaWear'
 export const UNDRESSED_GROUND: GroundWear = Object.freeze({
   eyeLocal: new Vector3(),
   morphBand: new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE),
+  morphEdges: new Vector4(0, 0, 0, 0),
+  morphCorners: new Vector4(0, 0, 0, 0),
   anchor: new Vector3(),
   anchorAltitude: 0,
   grainOrigin: new Vector3(),
@@ -94,6 +107,8 @@ export const UNDRESSED_GROUND: GroundWear = Object.freeze({
 export const UNDRESSED_SEA: SeaWear = Object.freeze({
   eyeLocal: new Vector3(),
   morphBand: new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE),
+  morphEdges: new Vector4(0, 0, 0, 0),
+  morphCorners: new Vector4(0, 0, 0, 0),
   anchor: new Vector3(),
   waveOrigin: new Vector3(),
 })

@@ -1,7 +1,9 @@
 # ADR-0015: Terrain is a restricted, morphing quadtree over a measured detail floor
 
 Status: accepted · 2026-08-27 · amended by [ADR-0055](0055-a-long-lens-refines-what-its-frame-can-reach.md): past the
-flight lens the disk is refined at the flight lens and the frame at the picture's own
+flight lens the disk is refined at the flight lens and the frame at the picture's own ·
+amended 2026-10-30: the coarser side of a level boundary holds the edge, and an odd
+index rounds toward the lower body-fixed coordinate
 
 ## Context
 
@@ -69,6 +71,33 @@ and a two-level gap not at all, because the finer patch arrives on a grid the
 coarser one has no vertex on. Unrestricted, that was 30 of 468 patch edges on
 Miranda with a gap of two or more and a worst case of six, drawn as dashed black
 arcs along every level ring. The tree is restricted.
+
+**A one-level boundary is closed from both sides, and the band closes one.**
+The finer patch's band ends inside the coarser neighbor's nearest point, so it
+has arrived on the coarser grid wherever the two meet. The coarser patch has to
+be drawing that grid there too, and its band cannot promise it: a patch is 64
+cells across against a range of about 49 at the flight lens, so the far end of
+an edge it shares with finer ground stands at up to twice its range, deep in
+its own band, and a patch the balance pass split is past its band everywhere.
+The selection reports each patch's `finerEdges` and the vertex stage holds
+those edges' vertices still. Measured before the hold, standing two meters up,
+one edge sample in ten along the level boundaries stood open by more than a
+quarter of a pixel — five pixels at 49 m on Luna, 3.9 on a generated airless
+world at 3200×1800 — and none after it at any of six operating points across
+Sol and two generated worlds. A corner finer ground touches only diagonally is
+held too: where the field resolves by level, the morph twin moves an even
+vertex onto the parent's carve, and the two patches beside that corner hold it.
+
+**An odd index rounds toward the lower body-fixed coordinate.** Either neighbor
+lands a fully morphed patch on its parent exactly, because every quad splits
+along the same diagonal; the choice is decided by the patch across a cube-face
+edge, which slides a shared vertex by the same factor and has to slide it to
+the same place. On four of the twelve edges the faces count the edge in
+opposite directions, so "the even index below" is the far end of the cell on
+one side and the near end on the other — a gap a cell long, mid-band. The lower
+body-fixed coordinate is a direction both faces agree on, read off
+`faceToDirection` at each face's middle, with no table of rotations to restate
+the convention.
 
 **Terrain is not drawn where the sphere is the honest picture.** A body's relief
 must cover more than eight pixels first. Past that the mesh and the datum sphere

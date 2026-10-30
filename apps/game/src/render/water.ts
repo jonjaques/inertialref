@@ -3,7 +3,13 @@ import {
   sceneRadianceGain,
   visibilityAmbient,
 } from './radiance.ts'
-import { Color, MeshBasicNodeMaterial, Vector2, Vector3 } from 'three/webgpu'
+import {
+  Color,
+  MeshBasicNodeMaterial,
+  Vector2,
+  Vector3,
+  Vector4,
+} from 'three/webgpu'
 import {
   attribute,
   dFdx,
@@ -35,6 +41,7 @@ import {
   vec2,
   vec3,
   vec4,
+  vertexIndex,
 } from 'three/tsl'
 import type { LinearRgb } from '@inertialref/universe'
 import { OPEN_OCEAN, type TerrainPalette } from '@inertialref/rendering'
@@ -49,6 +56,7 @@ import {
 } from './noiseNodes.ts'
 import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import { seaWearOf } from './wear.ts'
+import { vertexMorphFactor } from './morph.ts'
 import { WAVE_OCTAVES } from './quality.ts'
 import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
 import { landReflection, seaFrame, type SeaFrameNode } from './seaReflection.ts'
@@ -270,6 +278,12 @@ export function createWaterMaterial(): WaterMaterial {
   const morphBand = uniform(new Vector2()).onObjectUpdate(
     ({ object }) => seaWearOf(object).morphBand,
   )
+  const morphEdges = uniform(new Vector4(0, 0, 0, 0)).onObjectUpdate(
+    ({ object }) => seaWearOf(object).morphEdges,
+  )
+  const morphCorners = uniform(new Vector4(0, 0, 0, 0)).onObjectUpdate(
+    ({ object }) => seaWearOf(object).morphCorners,
+  )
   const anchor = uniform(new Vector3()).onObjectUpdate(
     ({ object }) => seaWearOf(object).anchor,
   )
@@ -307,11 +321,14 @@ export function createWaterMaterial(): WaterMaterial {
       const target = attribute<'vec3'>('terrainMorph', 'vec3')
       const depth = attribute<'float'>('waterDepth', 'float')
       const targetDepth = attribute<'float'>('waterMorphDepth', 'float')
-      const distance = length(positionLocal.sub(eyeLocal))
-      const k = saturate(
-        distance
-          .sub(morphBand.x)
-          .div(max(morphBand.y.sub(morphBand.x), float(1))),
+      // The sheet has its patch's vertices, so it holds its patch's edges.
+      const k = vertexMorphFactor(
+        float(vertexIndex),
+        positionLocal,
+        eyeLocal,
+        morphBand,
+        morphEdges,
+        morphCorners,
       )
       const moved = mix(positionLocal, target, k)
       // Both sides of the velocity, for the reason `terrain.ts` gives.

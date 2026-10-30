@@ -315,10 +315,46 @@ It is exact rather than approximate, and for a reason worth stating. A child
 covers half its parent's side, 64 quads halved is 32, so **every even index of
 the child lands on a parent grid point** — and the field is a pure function of
 direction, so the elevation there is the same number both patches computed.
-Snapping each vertex to the even index below it therefore lands the whole patch
-on its parent's vertices. The normals morph too, over _two_ cells, which is one
-of the parent's: shading has to hand over with the geometry or the switch trades
-a pop for a shimmer.
+Rounding each odd index to an even neighbor therefore lands the whole patch on
+its parent's vertices. The normals morph too, over _two_ cells, which is one of
+the parent's: shading has to hand over with the geometry or the switch trades a
+pop for a shimmer.
+
+**Which neighbor is not free.** Two patches on one level slide the vertices they
+share by one factor, so each shared vertex has to slide to one place — and on
+four of the twelve cube edges (0–3, 1–2, 2–5, 3–5) the two faces count the
+shared edge in opposite directions, so "the even index below" is one end of the
+cell on one side and the other end on the other: mid-band, a gap a cell long
+down the edge. An odd index rounds toward the lower body-fixed coordinate
+instead, which both faces agree on, read off `faceToDirection`
+(`morphRounding` in `terrainMesh.ts`). Either direction lands a fully morphed
+patch exactly on its parent, because every quad splits along the same
+diagonal.
+
+**And the coarser side of a level boundary holds still.** The band closes the
+finer side: its `morphEnd` sits inside the coarser neighbor's nearest point, so
+the finer patch has arrived on the coarser grid wherever the two meet. The
+coarser patch also has to be drawing that grid there, and no band can say so,
+because a patch is wider than its band — 64 cells against a range of about 49
+at the flight lens — so the far end of an edge it shares with finer ground can
+stand at twice its range, deep in its own band. Sliding there, it leaves the
+finer patch matching a grid it is not drawing, and the gap is a slit of sky:
+standing two meters up, one edge sample in ten along the level rings stands
+open by more than a quarter of a pixel, up to five pixels at 49 m, on Luna and
+on generated worlds alike. The selection reports the edges finer ground shares
+(`SelectedPatch.finerEdges`) and the vertex stage holds their vertices at a
+factor of zero. That is `render/morph.ts`, one node the ground and the sea
+sheet both take, reading a vertex's row and column off `vertexIndex`;
+`patchGround.ts` is the same rule on the CPU for the rocks.
+
+A corner that finer ground touches only diagonally is held as well. On one
+field at every level an even vertex never moves, so a corner never needs it;
+but a patch whose field resolves by level — the creeks, which a patch carries
+one level below its own — morphs onto its twin, the parent's carve, and that
+moves an even vertex vertically. The two patches beside the corner hold it on
+their held edges, the diagonal one would slide it, and the first cell of both
+shared edges would open: a meter on the drawn-ground test's level-resolved
+field without the corner held, nothing with it.
 
 **The surface cover makes the same journey**, and for the same reason one step
 further out. A fully morphed child sits exactly where its parent sits; if it is
@@ -331,9 +367,11 @@ one — the cover carries no border, because the border rows exist to be
 differenced against and nothing differences the cover.
 
 The arithmetic lives here rather than in the shader so that the claim needs no
-GPU: the shader's whole share of it is one `mix` between two attributes, and
-the endpoint is a claim about two `Float32Array`s that `terrainPatch.test.ts`
-checks on any Node. The graph itself is compiled and run on the real GPU by
+GPU: the shader's whole share of it is one `mix` between two attributes, by a
+factor that is zero on a held edge, and the endpoint is a claim about two
+`Float32Array`s that `terrainPatch.test.ts` checks on any Node — as is the
+whole drawn surface, a real selection with every shared edge drawn by both of
+its patches and compared. The graph itself is compiled and run on the real GPU by
 `pnpm test:gpu` ([testing](../guides/testing.md)), which is where the
 attribute set a patch has to supply is held.
 

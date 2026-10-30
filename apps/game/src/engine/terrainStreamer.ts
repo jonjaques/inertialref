@@ -416,6 +416,8 @@ export interface PlacedPatch {
   readonly morphStart: Meters
   /** And where it has arrived. The material interpolates between the two. */
   readonly morphEnd: Meters
+  /** The edges finer ground shares, which hold still; `SelectedPatch.finerEdges`. */
+  readonly finerEdges: number
 }
 
 export interface TerrainState {
@@ -874,6 +876,7 @@ export class TerrainStreamer {
           eyeLocal: Vec.sub(pose.eye, patch.anchor),
           morphStart: selected.morphStart,
           morphEnd: selected.morphEnd,
+          finerEdges: selected.finerEdges,
         })
       }
     }
@@ -1620,7 +1623,8 @@ export class TerrainStreamer {
 
   /**
    * Re-key the drawn set for the rocks, and move the epoch only if it changed
-   * — region and morph band both, since either moves a triangle under a rock.
+   * — region, morph band and held edges, since any of them moves a triangle
+   * under a rock.
    */
   #indexDrawn(patches: readonly SelectedPatch[]): void {
     const index = this.#drawnIndex
@@ -1631,7 +1635,8 @@ export class TerrainStreamer {
         if (
           held === undefined ||
           held.morphStart !== selected.morphStart ||
-          held.morphEnd !== selected.morphEnd
+          held.morphEnd !== selected.morphEnd ||
+          held.finerEdges !== selected.finerEdges
         ) {
           same = false
           break
@@ -1661,6 +1666,7 @@ export class TerrainStreamer {
         eye,
         start: selected.morphStart,
         end: selected.morphEnd,
+        finerEdges: selected.finerEdges,
       })
     }
     return null

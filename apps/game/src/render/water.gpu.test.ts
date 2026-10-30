@@ -76,7 +76,7 @@ function sheet(
   // An anchor straight up +Z on a Luna-sized body, so the datum's normal is
   // +Z across the sheet to a part in a million; the morph is far away.
   wearSea(mesh, { x: 0, y: 0, z: 1_737_400 })
-  placeEye(mesh, eye, 1e6, 2e6)
+  placeEye(mesh, eye, 1e6, 2e6, 0)
   return mesh
 }
 

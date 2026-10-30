@@ -148,7 +148,13 @@ export function WaterPatches({
           placement.orientation.w,
         )
         mesh.scale.setScalar(placement.scale)
-        placeEye(mesh, placed.eyeLocal, placed.morphStart, placed.morphEnd)
+        placeEye(
+          mesh,
+          placed.eyeLocal,
+          placed.morphStart,
+          placed.morphEnd,
+          placed.finerEdges,
+        )
       }
     }
 

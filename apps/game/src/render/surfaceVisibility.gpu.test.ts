@@ -103,7 +103,7 @@ it.each([true, false])(
     terrain.sunDirection.value.set(0, 0, 1)
     const ground = groundDummy(terrain.material)
     anchorGround(ground, { x: 0, y: 0, z: RADIUS }, RADIUS)
-    placeEye(ground, { x: 0, y: 0, z: 4 }, 1, 2)
+    placeEye(ground, { x: 0, y: 0, z: 4 }, 1, 2, 0)
     const groundScene = sceneFor(ground)
     const planet = createPlanetMaterial()
     planet.sunDirection.value.set(0, 0, 1)
@@ -203,7 +203,7 @@ it.each(['ground', 'water', 'foam'] as const)(
     }
     if (kind === 'ground') anchorGround(mesh, { x: 0, y: 0, z: RADIUS }, RADIUS)
     else wearSea(mesh, { x: 0, y: 0, z: RADIUS })
-    placeEye(mesh, { x: 0, y: 0, z: 4 }, 1, 2)
+    placeEye(mesh, { x: 0, y: 0, z: 4 }, 1, 2, 0)
     const scene = sceneFor(mesh)
     try {
       for (const processing of [

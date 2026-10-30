@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import fc from 'fast-check'
 import { Vec, vec3, type Vec3 } from '@inertialref/spatial'
 import { World } from '@inertialref/simulation'
 import {
@@ -6,18 +7,37 @@ import {
   COVER_CHANNELS,
   generateHeightfield,
   geodeticDirection,
+  HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
+  heightfieldStride,
+  morphIndex,
+  morphSide,
+  morphVertexSide,
   type RegionAddress,
   regionAddress,
   regionChildren,
+  regionDirection,
   regionForDirection,
   regionNeighbor,
+  regionParent,
   surveySites,
   systemId,
   TEST_CATALOG,
   walkBodies,
 } from '@inertialref/universe'
-import { buildPatch, patchIndices, type RenderPatch } from './terrainMesh.ts'
+import {
+  buildPatch,
+  morphRounding,
+  patchIndices,
+  type RenderPatch,
+  toParentGrid,
+} from './terrainMesh.ts'
+import { vertexMorph } from './patchGround.ts'
+import {
+  regionKey,
+  type SelectedPatch,
+  selectTerrain,
+} from './terrainSelect.ts'
 
 /*
  * What a patch has to be true about, for the quadtree not to crack or pop.
@@ -29,6 +49,47 @@ import { buildPatch, patchIndices, type RenderPatch } from './terrainMesh.ts'
  */
 
 const RESOLUTION = 33
+
+/** A patch's four edge steps, in `PATCH_EDGE`'s bit order. */
+const STEPS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+]
+
+/** The grid indices along the edge a step crosses, in the patch's own order. */
+const edgeIndices = (resolution: number, di: number, dj: number): number[] =>
+  Array.from({ length: resolution }, (_, k) =>
+    di === 1
+      ? k * resolution + resolution - 1
+      : di === -1
+        ? k * resolution
+        : dj === 1
+          ? (resolution - 1) * resolution + k
+          : k,
+  )
+
+/**
+ * Where the parent keeps a child's vertex once it is fully morphed: the
+ * child's index rounded onto the parent's grid, in the parent's grid.
+ */
+function parentIndexOf(
+  child: RegionAddress,
+  quadrant: number,
+  row: number,
+  col: number,
+  resolution: number,
+): number {
+  const rounding = morphRounding(child.face)
+  const half = (resolution - 1) / 2
+  const qi = quadrant % 2
+  const qj = quadrant < 2 ? 0 : 1
+  return (
+    (half * qj + toParentGrid(row, rounding.row) / 2) * resolution +
+    (half * qi + toParentGrid(col, rounding.col) / 2)
+  )
+}
 
 function solidBody(): Body {
   const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
@@ -83,15 +144,16 @@ function handover(
     parentRegion,
   ).entries()) {
     const child = patchOf(body, childRegion, resolution, twin)
-    const qi = quadrant % 2
-    const qj = quadrant < 2 ? 0 : 1
-    const half = (resolution - 1) / 2
     for (let row = 0; row < resolution; row += 1) {
       for (let col = 0; col < resolution; col += 1) {
         const index = row * resolution + col
-        const parentIndex =
-          (half * qj + (row & ~1) / 2) * resolution +
-          (half * qi + (col & ~1) / 2)
+        const parentIndex = parentIndexOf(
+          childRegion,
+          quadrant,
+          row,
+          col,
+          resolution,
+        )
         const mine = Vec.add(
           child.anchor,
           vec3(
@@ -171,8 +233,8 @@ describe('a terrain patch', () => {
      *
      * It holds because a child covers half its parent's side, 64 quads halved
      * is 32, and every even index of the child therefore lands on a parent grid
-     * point. Snapping each vertex to the even index below it puts all of them
-     * on parent vertices, and the field is a pure function of direction, so the
+     * point. Rounding each odd index to an even neighbor puts every vertex on
+     * a parent vertex, and the field is a pure function of direction, so the
      * elevation there is the same number both patches computed.
      */
     const body = solidBody()
@@ -183,20 +245,21 @@ describe('a terrain patch', () => {
       parentRegion,
     ).entries()) {
       const child = patchOf(body, childRegion)
-      const qi = quadrant % 2
-      const qj = quadrant < 2 ? 0 : 1
-      const half = (RESOLUTION - 1) / 2
 
       let worst = 0
       let worstNormal = 0
       for (let row = 0; row < RESOLUTION; row += 1) {
         for (let col = 0; col < RESOLUTION; col += 1) {
           const index = row * RESOLUTION + col
-          // Where the parent keeps this vertex: the child's own even index,
-          // expressed in the parent's grid.
-          const parentIndex =
-            (half * qj + (row & ~1) / 2) * RESOLUTION +
-            (half * qi + (col & ~1) / 2)
+          // Where the parent keeps this vertex: the child's own index
+          // rounded onto the parent's grid, expressed in the parent's grid.
+          const parentIndex = parentIndexOf(
+            childRegion,
+            quadrant,
+            row,
+            col,
+            RESOLUTION,
+          )
           worst = Math.max(
             worst,
             Vec.distance(
@@ -279,7 +342,7 @@ describe('a terrain patch', () => {
      * viewer rather than as a single switch.
      *
      * **Bit-exact, not close.** The cover is bytes, both patches evaluate the
-     * same pure function of the same direction, and the child's snapped vertex
+     * same pure function of the same direction, and the child's rounded vertex
      * *is* a parent vertex — so there is no rounding for a tolerance to
      * absorb, and any disagreement at all is the two grids having been indexed
      * differently.
@@ -292,16 +355,17 @@ describe('a terrain patch', () => {
       parentRegion,
     ).entries()) {
       const child = patchOf(body, childRegion)
-      const qi = quadrant % 2
-      const qj = quadrant < 2 ? 0 : 1
-      const half = (RESOLUTION - 1) / 2
 
       for (let row = 0; row < RESOLUTION; row += 1) {
         for (let col = 0; col < RESOLUTION; col += 1) {
           const index = row * RESOLUTION + col
-          const parentIndex =
-            (half * qj + (row & ~1) / 2) * RESOLUTION +
-            (half * qi + (col & ~1) / 2)
+          const parentIndex = parentIndexOf(
+            childRegion,
+            quadrant,
+            row,
+            col,
+            RESOLUTION,
+          )
           for (let channel = 0; channel < COVER_CHANNELS; channel += 1) {
             expect(child.morphCover[index * COVER_CHANNELS + channel]).toBe(
               parent.cover[parentIndex * COVER_CHANNELS + channel],
@@ -393,6 +457,57 @@ describe('a terrain patch', () => {
     }
   })
 
+  it('slides the vertices it shares across every cube-face edge where its neighbor does', () => {
+    /*
+     * Two patches on one level slide a shared vertex by one factor, so the
+     * vertex has to slide to one place — and an odd vertex slides a whole cell
+     * along the edge. On four of the twelve edges the faces count the edge in
+     * opposite directions, and rounding down on both sides sends the two copies
+     * to opposite ends of the cell: mid-band, a gap a cell long down the edge.
+     * Every face, every edge, so the flipped four cannot hide among the eight
+     * that agree.
+     */
+    const body = solidBody()
+    const span = 2 ** 8
+    const edge = (di: number, dj: number): number[] =>
+      edgeIndices(RESOLUTION, di, dj)
+    let compared = 0
+    for (let face = 0; face < 6; face += 1) {
+      for (const [di, dj] of STEPS) {
+        const mine = regionAddress(
+          face,
+          8,
+          di === 1 ? span - 1 : di === -1 ? 0 : 120,
+          dj === 1 ? span - 1 : dj === -1 ? 0 : 120,
+        )
+        const theirs = regionNeighbor(mine, di, dj)
+        expect(theirs.face).not.toBe(face)
+        const a = patchOf(body, mine)
+        const b = patchOf(body, theirs)
+        const candidates = STEPS.flatMap(([ei, ej]) => edge(ei, ej))
+        for (const index of edge(di, dj)) {
+          const here = vertexOf(a, index)
+          // The same vertex on the other side, found by where it stands: which
+          // of the neighbor's edges this is, and which way it runs, is what is
+          // under test, so neither is assumed. The float32 bound is the one
+          // the edge test above gives.
+          const twin = candidates.find(
+            (other) => Vec.distance(vertexOf(b, other), here) < 0.05,
+          )
+          expect(twin).toBeDefined()
+          expect(
+            Vec.distance(
+              vertexOf(a, index, 'morphPositions'),
+              vertexOf(b, twin as number, 'morphPositions'),
+            ),
+          ).toBeLessThan(0.05)
+          compared += 1
+        }
+      }
+    }
+    expect(compared).toBe(24 * RESOLUTION)
+  })
+
   it('shares one index buffer across every patch of a resolution', () => {
     /*
      * 24,576 indices is 98 KB, a whole-disk selection is a couple of hundred
@@ -425,5 +540,253 @@ describe('a terrain patch', () => {
         bodyRadius: body.radius,
       }),
     ).toThrow(/two rings/)
+  })
+})
+
+describe('the drawn ground', () => {
+  /*
+   * The whole surface rather than a patch: a real selection, every patch in
+   * it built, every vertex slid exactly as the material slides it, and every
+   * edge two patches share drawn by both of them and compared. That is the
+   * only form of the crack-free claim that sees both halves of a level
+   * boundary — the finer patch has to have arrived on the coarser one's grid,
+   * which the selection's own property holds, and the coarser one has to
+   * still be drawing that grid, which only `finerEdges` holds. Without the
+   * hold, standing two meters up, one edge sample in ten along the level
+   * boundaries stands open by more than a quarter of a pixel.
+   *
+   * The field is synthetic because the claim is about the mesh, and a real
+   * one is ten milliseconds a patch. One octave per level the selection
+   * reaches, amplitude falling as wavelength^0.8, so every cell carries the
+   * curvature an open edge needs in order to show — and it resolves by level
+   * the way the creeks do (`regionDrainageLevel`): a patch carries the
+   * octaves its cells can draw, two past its own level, and its morph twin
+   * the ones its parent's can. So an even vertex moves too, vertically onto
+   * the parent's carve, and the corner a held edge shares with a same-level
+   * patch diagonal to finer ground is asked. On one field at every level
+   * that corner never moves and the test could not see it.
+   */
+  const radius = 400_000
+  const RES = HEIGHTFIELD_RESOLUTION
+  const octaves = Array.from({ length: 16 }, (_, n) => {
+    const angle = n * 2.399963
+    return {
+      axis: Vec.normalize(
+        vec3(Math.cos(angle), Math.sin(angle * 1.7), Math.cos(angle * 0.3)),
+      ),
+      frequency: 7 * 2 ** n,
+      amplitude: 1_400 * 2 ** (-0.8 * n),
+      phase: n * 1.3,
+    }
+  })
+  const relief = octaves.reduce((sum, octave) => sum + octave.amplitude, 0)
+  /** The field a patch at `level` draws: every octave its cells resolve. */
+  const elevation = (d: Vec3, level: number): number =>
+    octaves.reduce(
+      (sum, o, n) =>
+        n > level + 2
+          ? sum
+          : sum +
+            o.amplitude * Math.sin(o.frequency * Vec.dot(d, o.axis) + o.phase),
+      0,
+    )
+  const cache = new Map<number | string, RenderPatch>()
+  const patchAt = (region: RegionAddress): RenderPatch => {
+    const key = regionKey(region)
+    const held = cache.get(key)
+    if (held !== undefined) return held
+    const border = HEIGHTFIELD_BORDER
+    const stride = heightfieldStride({ resolution: RES, border })
+    const at = (row: number, col: number): Vec3 =>
+      regionDirection(region, col / (RES - 1), row / (RES - 1))
+    const elevations = new Float32Array(stride * stride)
+    for (let row = -border; row < RES + border; row += 1)
+      for (let col = -border; col < RES + border; col += 1)
+        elevations[(row + border) * stride + col + border] = elevation(
+          at(row, col),
+          region.level,
+        )
+    // The twin: the parent's field at the even samples, border included,
+    // laid out as `generateHeightfield` lays out its own.
+    const side = morphSide({ resolution: RES, border })
+    const vertexSide = morphVertexSide(RES)
+    const twin = new Float32Array(side * side)
+    const first = Math.ceil(-border / 2) * 2
+    for (let row = first; row < RES + border; row += 2)
+      for (let col = first; col < RES + border; col += 2)
+        twin[morphIndex(side, border, row, col)] = elevation(
+          at(row, col),
+          region.level - 1,
+        )
+    const built = buildPatch({
+      region,
+      resolution: RES,
+      border,
+      elevations,
+      cover: new Uint8Array(RES * RES * COVER_CHANNELS),
+      bodyRadius: radius,
+      morph:
+        region.level === 0
+          ? null
+          : {
+              elevations: twin,
+              cover: new Uint8Array(vertexSide * vertexSide * COVER_CHANNELS),
+              water: new Float32Array(vertexSide * vertexSide).fill(Number.NaN),
+            },
+    })
+    cache.set(key, built)
+    return built
+  }
+  const edge = (di: number, dj: number): number[] => edgeIndices(RES, di, dj)
+  /** A vertex where the material puts it: slid by its own factor, or held. */
+  const drawn = (
+    patch: RenderPatch,
+    selected: SelectedPatch,
+    eye: Vec3,
+    index: number,
+  ): Vec3 => {
+    const k = vertexMorph(
+      patch,
+      {
+        eye,
+        start: selected.morphStart,
+        end: selected.morphEnd,
+        finerEdges: selected.finerEdges,
+      },
+      Math.floor(index / RES),
+      index % RES,
+    )
+    const at = index * 3
+    const p = patch.positions
+    const m = patch.morphPositions
+    return vec3(
+      patch.anchor.x +
+        (p[at] as number) +
+        ((m[at] as number) - (p[at] as number)) * k,
+      patch.anchor.y +
+        (p[at + 1] as number) +
+        ((m[at + 1] as number) - (p[at + 1] as number)) * k,
+      patch.anchor.z +
+        (p[at + 2] as number) +
+        ((m[at + 2] as number) - (p[at + 2] as number)) * k,
+    )
+  }
+  const toPolyline = (point: Vec3, line: readonly Vec3[]): number => {
+    let best = Infinity
+    for (let n = 0; n + 1 < line.length; n += 1) {
+      const a = line[n] as Vec3
+      const along = Vec.sub(line[n + 1] as Vec3, a)
+      const square = Vec.lengthSquared(along)
+      const t =
+        square > 0
+          ? Math.min(1, Math.max(0, Vec.dot(Vec.sub(point, a), along) / square))
+          : 0
+      best = Math.min(
+        best,
+        Vec.distance(point, Vec.add(a, Vec.scale(along, t))),
+      )
+    }
+    return best
+  }
+
+  /** The widest gap between any two patches' copies of an edge they share. */
+  const widestGap = (direction: Vec3, height: number): number => {
+    const distance = radius + elevation(direction, 14) + height
+    const selection = selectTerrain(
+      {
+        radius,
+        relief,
+        distance,
+        direction: direction as Parameters<
+          typeof selectTerrain
+        >[0]['direction'],
+      },
+      { maxLevel: 12 },
+    )
+    const eye = Vec.scale(direction, distance)
+    const byKey = new Map(
+      selection.patches.map((patch) => [regionKey(patch.region), patch]),
+    )
+    let widest = 0
+    // The nearest boundaries, which are the widest on screen and bound the run.
+    const nearest = [...selection.patches]
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, 60)
+    for (const fine of nearest) {
+      for (const [di, dj] of STEPS) {
+        const beside = regionNeighbor(fine.region, di, dj)
+        const parent = regionParent(beside)
+        // The neighbor on this level, or the coarser one covering it. A pair
+        // on one level inside a face shares its vertices outright, and is
+        // asked anyway: that is the claim, not an assumption under it.
+        const coarse =
+          byKey.get(regionKey(beside)) ??
+          (parent === null ? undefined : byKey.get(regionKey(parent)))
+        if (coarse === undefined) continue
+        const finePatch = patchAt(fine.region)
+        const coarsePatch = patchAt(coarse.region)
+        const mine = edge(di, dj)
+        // Which of the coarse patch's edges this is, by the direction the
+        // middle of this one stands in: an even vertex, so a point of the
+        // coarse grid. By direction rather than position, because the two
+        // levels carve the same point to different depths.
+        const middle = Vec.normalize(
+          vertexOf(finePatch, mine[(RES - 1) / 2] as number),
+        )
+        const theirs = STEPS.map(([ei, ej]) => edge(ei, ej)).find((indices) =>
+          indices.some(
+            (index) =>
+              Vec.distance(
+                Vec.normalize(vertexOf(coarsePatch, index)),
+                middle,
+              ) *
+                radius <
+              0.05,
+          ),
+        )
+        expect(theirs).toBeDefined()
+        const line = (theirs as number[]).map((index) =>
+          drawn(coarsePatch, coarse, eye, index),
+        )
+        for (const index of mine)
+          widest = Math.max(
+            widest,
+            toPolyline(drawn(finePatch, fine, eye, index), line),
+          )
+      }
+    }
+    return widest
+  }
+
+  /*
+   * float32 over a patch half-span, the bound the rest of this file uses: the
+   * two copies subtract different anchors from one float64 point. An open
+   * edge on this field is meters wide.
+   */
+  const CLOSED = 0.05
+
+  it('closes on a flipped cube-face edge, standing on it', () => {
+    // Faces 0 and 3 meet here and count the edge in opposite directions.
+    expect(widestGap(Vec.normalize(vec3(1, -1, 0.01)), 2)).toBeLessThan(CLOSED)
+  })
+
+  it('closes at every edge two patches share, on a field that resolves by level (property)', () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 5 }),
+        fc.double({ min: -0.95, max: 0.95, noNaN: true }),
+        fc.double({ min: -0.95, max: 0.95, noNaN: true }),
+        fc.double({ min: 1, max: 20_000, noNaN: true }),
+        (face, u, v, height) => {
+          const direction = regionDirection(
+            regionAddress(face, 0, 0, 0),
+            (u + 1) / 2,
+            (v + 1) / 2,
+          )
+          expect(widestGap(direction, height)).toBeLessThan(CLOSED)
+        },
+      ),
+      { numRuns: 6 },
+    )
   })
 })

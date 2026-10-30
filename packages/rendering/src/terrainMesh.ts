@@ -3,6 +3,8 @@ import { invariant } from '@inertialref/shared'
 import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
 import {
   COVER_CHANNELS,
+  FACE_COUNT,
+  faceToDirection,
   type HeightfieldMorph,
   heightfieldStride,
   morphIndex,
@@ -169,6 +171,51 @@ export interface RenderPatch {
 }
 
 /**
+ * Which way each axis of a cube face rounds an odd index onto its parent's
+ * grid: true rounds up, false down.
+ *
+ * Either way lands the fully morphed patch on its parent exactly: every quad
+ * of the triangle list is split along the same diagonal, so whichever quad of
+ * a two-by-two block survives the collapse is the parent's quad, split the
+ * parent's way. What decides between them is the neighbor across a cube-face
+ * edge. Two patches on one level slide the vertices they share by one factor,
+ * and those vertices have to slide to the same place — and on four of the
+ * cube's twelve edges (0–3, 1–2, 2–5, 3–5) the two faces count the shared
+ * edge in opposite directions, so "the even index below" is the far end of
+ * the cell on one side and the near end on the other. Mid-band that opens a
+ * gap a cell long, down the whole edge.
+ *
+ * So an odd index rounds toward the lower body-fixed coordinate, which both
+ * faces agree on: along a cube edge both count the one axis the edge runs
+ * along. Read off `faceToDirection` at the face's middle, where a step along
+ * either face axis is a step along a single body axis, so the convention has
+ * one owner and no table of rotations restates it.
+ */
+export interface MorphRounding {
+  readonly col: boolean
+  readonly row: boolean
+}
+
+/** Whether a step along a face axis lowers the body-fixed coordinate it moves. */
+function descends(face: number, du: number, dv: number): boolean {
+  const ahead = faceToDirection(face, du, dv)
+  const behind = faceToDirection(face, -du, -dv)
+  return ahead.x - behind.x + ahead.y - behind.y + ahead.z - behind.z < 0
+}
+
+const ROUNDING: readonly MorphRounding[] = Array.from(
+  { length: FACE_COUNT },
+  (_, face) => ({ col: descends(face, 1e-3, 0), row: descends(face, 0, 1e-3) }),
+)
+
+export const morphRounding = (face: number): MorphRounding =>
+  ROUNDING[face] as MorphRounding
+
+/** The parent's grid index for a patch index: itself when even, a neighbor when odd. */
+export const toParentGrid = (index: number, up: boolean): number =>
+  (up ? index + 1 : index) & ~1
+
+/**
  * The triangle list for a patch, shared by every patch of that resolution.
  *
  * It is a function of the resolution and nothing else — 24,576 indices, 98 KB —
@@ -222,9 +269,10 @@ export function buildPatch(input: PatchInput): RenderPatch {
     `A patch needs two rings of border to morph; got ${border}`,
   )
   /*
-   * The morph snaps to `index & ~1`, which lands on a parent vertex only
-   * because a child covers half its parent's side and `resolution - 1` is even
-   * — 64 quads halved is 32. An even resolution would leave the snapped index
+   * The morph rounds an odd index to an even neighbor (`toParentGrid`), which
+   * lands on a parent vertex only because a child covers half its parent's
+   * side and `resolution - 1` is even — 64 quads halved is 32. An even
+   * resolution would leave the rounded index
    * somewhere the parent has no vertex, and the morph would silently stop
    * being exact rather than fail.
    */
@@ -339,6 +387,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
    */
   const target = morph === null ? extended : new Float64Array(extended.length)
   const vertexSide = morphVertexSide(resolution)
+  const rounding = morphRounding(region.face)
   if (morph !== null) {
     const side = morphSide({ resolution, border })
     const first = Math.ceil(-border / 2) * 2
@@ -392,13 +441,14 @@ export function buildPatch(input: PatchInput): RenderPatch {
       /*
        * The parent's grid holds a vertex at every *even* index of this one:
        * a patch covers half its parent's side, and 64 quads halved is 32, so
-       * the child's even columns land on the parent's columns exactly. Snapping
-       * each vertex to the even index below it therefore lands every vertex on
-       * a parent vertex — which is what makes the fully morphed tessellation
-       * equal to the parent's rather than merely close to it.
+       * the child's even columns land on the parent's columns exactly.
+       * Rounding each odd index to an even neighbor therefore lands every
+       * vertex on a parent vertex — which is what makes the fully morphed
+       * tessellation equal to the parent's rather than merely close to it.
+       * Which neighbor is `morphRounding`'s, and it is not free.
        */
-      const evenRow = row & ~1
-      const evenCol = col & ~1
+      const evenRow = toParentGrid(row, rounding.row)
+      const evenCol = toParentGrid(col, rounding.col)
       const even = ((evenRow + border) * stride + (evenCol + border)) * 3
       const mx = target[even] as number
       const my = target[even + 1] as number
@@ -473,6 +523,7 @@ export function buildPatch(input: PatchInput): RenderPatch {
             stride,
             border,
             resolution,
+            rounding,
             morph === null
               ? null
               : morphSheet(
@@ -546,6 +597,7 @@ function buildWater(
   stride: number,
   border: number,
   resolution: number,
+  rounding: MorphRounding,
   twin: TwinSheet | null,
 ): WaterPatch {
   const count = resolution * resolution
@@ -580,9 +632,9 @@ function buildWater(
       if (x > highX) highX = x
       if (y > highY) highY = y
       if (z > highZ) highZ = z
-      // The same even-index snap the ground makes; see `buildPatch`.
-      const evenRow = row & ~1
-      const evenCol = col & ~1
+      // The same rounding onto the parent's grid the ground makes.
+      const evenRow = toParentGrid(row, rounding.row)
+      const evenCol = toParentGrid(col, rounding.col)
       depths[index] = depthAt(row, col)
       if (twin === null) {
         const even = (evenRow * resolution + evenCol) * 3

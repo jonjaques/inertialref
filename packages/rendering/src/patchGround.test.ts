@@ -14,6 +14,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { patchGroundRadius, patchMorph } from './patchGround.ts'
+import { onPatchEdge, PATCH_EDGE } from './terrainSelect.ts'
 import { buildPatch, type RenderPatch } from './terrainMesh.ts'
 
 /*
@@ -174,6 +175,7 @@ describe('the ground a patch draws, read along a direction', () => {
           eye: patch.anchor,
           start: -2,
           end: -1,
+          finerEdges: 0,
         }) as number
         const drawn = patchGroundRadius(parent, d, null) as number
         expect(Math.abs(morphed - drawn)).toBeLessThan(1e-3)
@@ -186,7 +188,10 @@ describe('the ground a patch draws, read along a direction', () => {
    * triangle over a point can be a neighbor stretched across it. The check is
    * the morphed mesh itself: every vertex moved toward its target by the
    * material's factor, and the ray met against the triangles around the
-   * point, keeping the one it passes inside.
+   * point, keeping the one it passes inside. Two edges and a corner are
+   * held, as the selection holds the ones finer ground shares: the band's far
+   * end reaches them, so the strip between a held edge and the slid row
+   * inside it, and the cells round a held corner, are asked as well.
    */
   it('is the morphed mesh inside a band', () => {
     const patch = patchOf(PARENT, 65)
@@ -196,6 +201,8 @@ describe('the ground a patch draws, read along a direction', () => {
       eye: vertex(patch, 32, 32),
       start: size * 0.2,
       end: size * 0.45,
+      finerEdges:
+        PATCH_EDGE.colStart | PATCH_EDGE.rowEnd | PATCH_EDGE.colEndRowStart,
     }
     const morphed = (r: number, c: number): Vec3 => {
       const at = (r * 65 + c) * 3
@@ -208,7 +215,9 @@ describe('the ground a patch draws, read along a direction', () => {
           patch.morphPositions[at + 2] as number,
         ),
       )
-      const k = patchMorph(Vec.distance(own, band.eye), band.start, band.end)
+      const k = onPatchEdge(band.finerEdges, r, c, 65)
+        ? 0
+        : patchMorph(Vec.distance(own, band.eye), band.start, band.end)
       return Vec.add(own, Vec.scale(Vec.sub(target, own), k))
     }
     const inside = (d: Vec3, a: Vec3, b: Vec3, c: Vec3): number | null => {
