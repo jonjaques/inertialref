@@ -9,9 +9,9 @@ import {
 /*
  * The detail noise, baked once into a tiling 3D texture.
  *
- * Every per-pixel octave the ground and the sea evaluate — the macro band on
- * the direction, the micro band on the patch, the grain, the swell and the
- * chop — is gradient noise on a lattice, and evaluating one octave is eight
+ * Every per-pixel octave the ground and the sea evaluate — the micro band on
+ * the patch, the grain, the swell and the chop — is gradient noise on a
+ * lattice, and evaluating one octave is eight
  * lattice hashes, eight gradient dot products and a trilinear blend, per
  * pixel, per octave. At a retina size the ground is nine million pixels and
  * eight octaves, and that arithmetic was most of the frame: 25 ms of an
@@ -25,6 +25,10 @@ import {
  * property the sub-meter bands need anyway: their domain is a patch-local
  * position offset by an origin reduced modulo the period on the CPU, and two
  * patches agree where they overlap only because the field closes on it.
+ * The period is also why two bands are not fetched from here: the macro band
+ * and the gullies are coarse enough for a frame to hold the repeat, so
+ * `latticeNoise` and `stripes` in `render/noiseNodes.ts` evaluate them per
+ * pixel, on this lattice's hash with no period.
  *
  * Four channels: the value, and its gradient. A normal built by differencing
  * a trilinear fetch in screen space is piecewise constant across each texel,

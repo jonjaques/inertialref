@@ -68,7 +68,8 @@ footprint at which the ground hands the body to its sphere.**
   are cut before the micro octave, along the landform's own gradient; a mask
   keeps them off ground under 4.6°, off crests, off painted rivers and off
   the seabed under the sheet; the profile is a V at the floor and a round
-  spur, pitched at 0.3; floors are up to 8% darker. **The fall line is the
+  spur, pitched at 0.3; a floor is 7.2% darker than its spur, and 10.9%
+  where the fine octave's floor lies in the coarse one's. **The fall line is the
   landform's gradient** because the drainage graph's flow direction does
   not reach the material; `fall` in `render/terrain.ts` is where it goes
   when it does.

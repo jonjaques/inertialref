@@ -207,7 +207,12 @@ const GULLY_SLOPE = 0.3
 const GULLY_FLOOR = 0.08
 const GULLY_ONSET = 0.35
 
-/** How much darker a gully's floor is than the spur beside it: the fines and the shade collect there. */
+/**
+ * How much a gully's floor darkens the ground, per unit of floor depth: the
+ * fines and the shade collect there. The coarse octave's floor is 0.9 deep
+ * and its spur −0.005, so a floor is 7.2% darker than the spur beside it,
+ * and 10.9% where a fine floor at half the depth lies in a coarse one.
+ */
 const GULLY_SHADE = 0.08
 
 /** The gullies' lattice seed, so their phases are not the macro noise's gradients. */
