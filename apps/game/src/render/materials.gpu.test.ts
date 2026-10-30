@@ -122,7 +122,7 @@ function patchMesh(material: Mesh['material']): Mesh {
     material,
   )
   wearGround(mesh, patch.anchor, 1_737_400)
-  placeEye(mesh, { x: 0, y: 0, z: 0 }, 1, 2)
+  placeEye(mesh, { x: 0, y: 0, z: 0 }, 1, 2, 0)
   return mesh
 }
 
@@ -435,7 +435,7 @@ function sheetMesh(material: Mesh['material']): Mesh {
     material,
   )
   wearSea(mesh, patch.anchor)
-  placeEye(mesh, { x: 0, y: 0, z: 0 }, 1, 2)
+  placeEye(mesh, { x: 0, y: 0, z: 0 }, 1, 2, 0)
   return mesh
 }
 

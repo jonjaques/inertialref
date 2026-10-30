@@ -10,6 +10,7 @@ import {
   type Node,
   type UniformNode,
   Vector3,
+  Vector4,
 } from 'three/webgpu'
 import {
   acos,
@@ -45,6 +46,7 @@ import {
   vec2,
   vec3,
   vec4,
+  vertexIndex,
 } from 'three/tsl'
 import type { DepositSlopeTable, LinearRgb } from '@inertialref/universe'
 import {
@@ -67,6 +69,7 @@ import {
 } from './noiseNodes.ts'
 import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import { createSlopeTable } from './slopeTable.ts'
+import { vertexMorphFactor } from './morph.ts'
 import { groundWearOf, NO_SLOPE_LEVEL } from './wear.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
@@ -406,6 +409,9 @@ export function createTerrainMaterial(): TerrainMaterial {
   const morphBand = uniform(new Vector2()).onObjectUpdate(
     ({ object }) => groundWearOf(object).morphBand,
   )
+  const morphEdges = uniform(new Vector4(0, 0, 0, 0)).onObjectUpdate(
+    ({ object }) => groundWearOf(object).morphEdges,
+  )
   // The patch's level, the row of the body's slope table its deposits read
   // (`slopeTable.ts`) — or `NO_SLOPE_LEVEL` for a rock or a dummy, whose
   // normal is no level's.
@@ -493,14 +499,12 @@ export function createTerrainMaterial(): TerrainMaterial {
     const targetCover = attribute<'vec4'>('terrainMorphCover', 'vec4')
     const cover2 = attribute<'vec4'>('terrainCover2', 'vec4')
     const targetCover2 = attribute<'vec4'>('terrainMorphCover2', 'vec4')
-    const distance = length(positionLocal.sub(eyeLocal))
-    // `max` on the denominator rather than a branch: a patch at level 0 has no
-    // parent and arrives with both ends of its band at the same enormous
-    // number, which has to read as "never morph" rather than as a divide.
-    const k = saturate(
-      distance
-        .sub(morphBand.x)
-        .div(max(morphBand.y.sub(morphBand.x), float(1))),
+    const k = vertexMorphFactor(
+      float(vertexIndex),
+      positionLocal,
+      eyeLocal,
+      morphBand,
+      morphEdges,
     )
     const moved = mix(positionLocal, target, k)
     // The sensor's velocity compares this against the previous position, and

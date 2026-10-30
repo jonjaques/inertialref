@@ -1,7 +1,8 @@
 import type { Meters } from '@inertialref/shared'
 import type { Vec3 } from '@inertialref/spatial'
 import { directionToFace } from '@inertialref/universe'
-import type { RenderPatch } from './terrainMesh.ts'
+import { morphRounding, type RenderPatch, toParentGrid } from './terrainMesh.ts'
+import { onPatchEdge } from './terrainSelect.ts'
 
 /*
  * The ground a patch draws, read back along a direction.
@@ -19,8 +20,8 @@ import type { RenderPatch } from './terrainMesh.ts'
  * So the rock reads the triangle. This is the surface `buildPatch` emits and
  * the index buffer draws — the quad split along the same diagonal, each vertex
  * slid toward its parent's grid by its own morph factor exactly as the
- * material slides it — as a radius from the body's center, which is what a
- * rock's instance is placed by.
+ * material slides it, the edges finer ground shares held still — as a radius
+ * from the body's center, which is what a rock's instance is placed by.
  */
 
 /**
@@ -45,6 +46,8 @@ export interface PatchMorphBand {
   readonly eye: Vec3
   readonly start: Meters
   readonly end: Meters
+  /** The selection's `finerEdges`: the edges whose vertices do not morph. */
+  readonly finerEdges: number
 }
 
 /**
@@ -77,18 +80,18 @@ export function patchGroundRadius(
    */
   if (
     morph === null ||
-    (factor(patch, morph, r0, c0) === 0 &&
-      factor(patch, morph, r0, c0 + 1) === 0 &&
-      factor(patch, morph, r0 + 1, c0) === 0 &&
-      factor(patch, morph, r0 + 1, c0 + 1) === 0)
+    (vertexMorph(patch, morph, r0, c0) === 0 &&
+      vertexMorph(patch, morph, r0, c0 + 1) === 0 &&
+      vertexMorph(patch, morph, r0 + 1, c0) === 0 &&
+      vertexMorph(patch, morph, r0 + 1, c0 + 1) === 0)
   ) {
     return triangle(patch, null, row, col, r0, c0)
   }
   /*
-   * In a band, each vertex slides toward the even index below it by its own
-   * factor, so the triangle over a point may be a neighbor's that has
-   * stretched across it — an odd vertex moves a whole cell at the band's far
-   * end. The cells either side are searched in the slid coordinates.
+   * In a band, each odd index slides onto an even neighbor by its own factor,
+   * so the triangle over a point may be a neighbor's that has stretched
+   * across it — an odd vertex moves a whole cell at the band's far end. The
+   * cells either side are searched in the slid coordinates.
    */
   for (let r = Math.max(0, r0 - 1); r <= Math.min(step - 1, r0 + 1); r += 1) {
     for (let c = Math.max(0, c0 - 1); c <= Math.min(step - 1, c0 + 1); c += 1) {
@@ -99,13 +102,18 @@ export function patchGroundRadius(
   return null
 }
 
-/** One vertex's morph factor, from its unmorphed distance to the eye. */
-function factor(
+/**
+ * The morph factor the material gives vertex (row, col) of a patch: its own,
+ * from its unmorphed distance to the eye, and zero on an edge finer ground
+ * shares — the vertex stage's `morphFactor` (`render/morph.ts`), on the CPU.
+ */
+export function vertexMorph(
   patch: RenderPatch,
   morph: PatchMorphBand,
   row: number,
   col: number,
 ): number {
+  if (onPatchEdge(morph.finerEdges, row, col, patch.resolution)) return 0
   const at = (row * patch.resolution + col) * 3
   return patchMorph(
     Math.hypot(
@@ -131,16 +139,19 @@ function slid(
   row: number,
   col: number,
 ): Slid {
-  const radius = radiusOf(patch, row, col)
-  const k = morph === null ? 0 : factor(patch, morph, row, col)
+  const radius = radiusOf(patch, row, col, patch.positions)
+  const k = morph === null ? 0 : vertexMorph(patch, morph, row, col)
   if (k === 0) return { row, col, radius }
-  // `buildPatch`'s morph target: the vertex at the even index below.
-  const evenRow = row & ~1
-  const evenCol = col & ~1
+  // `buildPatch`'s morph target: the parent's vertex at the rounded index,
+  // which is where it stands in the grid and the radius it carries there.
+  const rounding = morphRounding(patch.region.face)
+  const evenRow = toParentGrid(row, rounding.row)
+  const evenCol = toParentGrid(col, rounding.col)
+  const target = radiusOf(patch, row, col, patch.morphPositions)
   return {
     row: row + (evenRow - row) * k,
     col: col + (evenCol - col) * k,
-    radius: radius + (radiusOf(patch, evenRow, evenCol) - radius) * k,
+    radius: radius + (target - radius) * k,
   }
 }
 
@@ -189,12 +200,20 @@ function barycentric(
   return a.radius + wb * (b.radius - a.radius) + wc * (c.radius - a.radius)
 }
 
-/** A vertex's distance from the body's center, in float64 off its float32 offset. */
-function radiusOf(patch: RenderPatch, row: number, col: number): Meters {
+/**
+ * A vertex's distance from the body's center, in float64 off its float32
+ * offset — where it stands, or where its morph takes it.
+ */
+function radiusOf(
+  patch: RenderPatch,
+  row: number,
+  col: number,
+  of: Float32Array,
+): Meters {
   const at = (row * patch.resolution + col) * 3
   return Math.hypot(
-    patch.anchor.x + (patch.positions[at] as number),
-    patch.anchor.y + (patch.positions[at + 1] as number),
-    patch.anchor.z + (patch.positions[at + 2] as number),
+    patch.anchor.x + (of[at] as number),
+    patch.anchor.y + (of[at + 1] as number),
+    patch.anchor.z + (of[at + 2] as number),
   )
 }

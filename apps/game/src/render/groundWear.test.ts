@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import { BufferAttribute, Mesh, MeshBasicNodeMaterial } from 'three/webgpu'
-import { buildPatch, NO_MORPH_DISTANCE } from '@inertialref/rendering'
+import {
+  buildPatch,
+  NO_MORPH_DISTANCE,
+  PATCH_EDGE,
+} from '@inertialref/rendering'
 import { COVER_CHANNELS, regionAddress } from '@inertialref/universe'
 import {
   anchorGround,
@@ -100,9 +104,19 @@ describe('a mesh that wears the ground', () => {
     }
     // Unmorphed until the frame says where the eye is.
     expect(wear.morphBand.x).toBe(NO_MORPH_DISTANCE)
-    placeEye(mesh, { x: 1, y: 2, z: 3 }, 10, 20)
+    expect(wear.morphEdges.toArray()).toEqual([0, 0, 0, 0])
+    placeEye(
+      mesh,
+      { x: 1, y: 2, z: 3 },
+      10,
+      20,
+      PATCH_EDGE.colStart | PATCH_EDGE.rowEnd,
+    )
     expect(wear.eyeLocal.toArray()).toEqual([1, 2, 3])
     expect(wear.morphBand.toArray()).toEqual([10, 20])
+    // One lane per edge, in `PATCH_EDGE`'s order: the flags the vertex
+    // stage multiplies by.
+    expect(wear.morphEdges.toArray()).toEqual([0, 1, 1, 0])
   })
 
   /*
@@ -186,7 +200,7 @@ describe('a mesh that wears the ground', () => {
     expect(groundWearOf(undefined)).toBe(UNDRESSED_GROUND)
     expect(seaWearOf(new Mesh())).toBe(UNDRESSED_SEA)
     // Dressing is where a missing record is a failure.
-    expect(() => placeEye(new Mesh(), { x: 0, y: 0, z: 0 }, 0, 1)).toThrow(
+    expect(() => placeEye(new Mesh(), { x: 0, y: 0, z: 0 }, 0, 1, 0)).toThrow(
       /not dressed/,
     )
   })
@@ -233,7 +247,7 @@ describe('a mesh that wears the ground', () => {
     for (const name of SEA_ATTRIBUTES)
       expect(dummy.geometry.hasAttribute(name)).toBe(true)
     // The frame writes the sea's eye through the same verb as the ground's.
-    placeEye(dummy, { x: 4, y: 5, z: 6 }, 1, 2)
+    placeEye(dummy, { x: 4, y: 5, z: 6 }, 1, 2, 0)
     expect(seaWearOf(dummy).eyeLocal.toArray()).toEqual([4, 5, 6])
   })
 })

@@ -235,7 +235,13 @@ export function TerrainPatches({
       // Per-patch morph inputs, read by `onObjectUpdate` uniforms in the
       // material. The eye is in the patch's own frame and in true meters, so
       // the morph band is comparable to it whatever the placement did.
-      placeEye(mesh, placed.eyeLocal, placed.morphStart, placed.morphEnd)
+      placeEye(
+        mesh,
+        placed.eyeLocal,
+        placed.morphStart,
+        placed.morphEnd,
+        placed.finerEdges,
+      )
     }
 
     for (const [key, mesh] of meshes) {

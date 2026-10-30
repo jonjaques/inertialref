@@ -247,6 +247,12 @@ export const COARSEN_STEPS = 3
  * of the band as margin for the eye's own motion between the frame the
  * selection was taken on and the frame it is drawn on, and costs a sliver of
  * detail at the far end of a patch's life.
+ *
+ * That is the finer half of a level boundary. The coarser half is that the
+ * coarse patch draws its own grid along the shared edge, and no band can say
+ * so: a patch is wider than its band, so its far corner is past its own
+ * `MORPH_START` while its near one is at its range. `finerEdges` holds those
+ * edges still instead.
  */
 export const MORPH_START = 1.25
 export const MORPH_END = 1.8
@@ -390,7 +396,8 @@ const CORNERS: readonly (readonly [number, number])[] = [
  *
  * The no-crack argument is: a patch is fully morphed onto its parent's grid
  * wherever a coarser patch abuts it, because the coarser one did not refine and
- * so is at least its own range away. That needs the finer patch's handover
+ * so is at least its own range away — and the coarser one holds that edge on
+ * its own grid (`finerEdges`). That needs the finer patch's handover
  * distance to be under the coarser patch's range — and with measured spans,
  * those two are measured at *different points on the face*, where the scale
  * differs by up to 22% at level 2. A patch would be 15% short of its neighbor's
@@ -506,10 +513,55 @@ export interface SelectedPatch {
   /** At this distance it has arrived, and the parent takes over. */
   readonly morphEnd: Meters
   /**
+   * The edges this patch shares with finer ground, as `PATCH_EDGE` bits. The
+   * vertices on them do not morph (`onPatchEdge`).
+   *
+   * The band closes the finer side of a level boundary and says nothing about
+   * the coarser side, which is a patch wider than its own band: 64 cells
+   * against a range of about 49 of them at the flight lens, so the far end of
+   * an edge it shares with finer ground can stand at twice its range, deep
+   * in its own band. Sliding there, it leaves the finer patch — fully morphed
+   * onto this one's grid, as `MORPH_END` promises — matching a grid this
+   * patch is no longer drawing, and the gap between the two is a slit of sky.
+   * Measured standing two meters up, one edge sample in ten along the level
+   * boundaries opened more than a quarter of a pixel, Luna and Gliese 1061 IV
+   * alike, and the widest was five pixels at 49 m. Held, the coarse edge is
+   * its own grid, which is exactly what the finer side arrives on.
+   */
+  readonly finerEdges: number
+  /**
    * Refined at the picture's own lens rather than at the reference: the
    * node's ground can be in the frame. Always true without a view.
    */
   readonly inView: boolean
+}
+
+/**
+ * A patch's four edges, as bits of `SelectedPatch.finerEdges`, named for the
+ * grid line each one is. `colEnd` is the last column, `s = 1`, the edge the
+ * neighbor one step along `i` shares; `rowStart` is the first row, `t = 0`.
+ */
+export const PATCH_EDGE = {
+  colEnd: 1,
+  colStart: 2,
+  rowEnd: 4,
+  rowStart: 8,
+} as const
+
+/** Whether vertex (row, col) of a patch lies on one of `edges`, `PATCH_EDGE` bits. */
+export function onPatchEdge(
+  edges: number,
+  row: number,
+  col: number,
+  resolution: number,
+): boolean {
+  const last = resolution - 1
+  return (
+    ((edges & PATCH_EDGE.colEnd) !== 0 && col === last) ||
+    ((edges & PATCH_EDGE.colStart) !== 0 && col === 0) ||
+    ((edges & PATCH_EDGE.rowEnd) !== 0 && row === last) ||
+    ((edges & PATCH_EDGE.rowStart) !== 0 && row === 0)
+  )
 }
 
 export interface TerrainSelection {
@@ -953,6 +1005,9 @@ function walk(
   if (framing !== null)
     for (const node of balanced)
       if (!node.inView) outside.add(regionKey(node.region))
+  // Every drawn region, for the one question `finerEdges` asks of a neighbor.
+  const drawn = new Set<number | string>()
+  for (const node of balanced) drawn.add(regionKey(node.region))
 
   let deepest = 0
   let shallowest = maxLevel
@@ -996,6 +1051,7 @@ function walk(
       distance: node.distance,
       morphStart: root ? NO_MORPH_DISTANCE : range * MORPH_START,
       morphEnd: root ? NO_MORPH_DISTANCE : range * MORPH_END,
+      finerEdges: finerEdges(node.region, drawn),
       inView: node.inView,
     }
   })
@@ -1013,13 +1069,56 @@ function walk(
   }
 }
 
-/** The four neighbors that share an edge — the only ones a morph can open a gap against. */
+/**
+ * The four neighbors that share an edge — the only ones a morph can open a
+ * gap against — in `PATCH_EDGE`'s bit order.
+ */
 const EDGES: readonly (readonly [number, number])[] = [
   [1, 0],
   [-1, 0],
   [0, 1],
   [0, -1],
 ]
+
+/**
+ * The edges of a drawn region that finer drawn ground shares, as
+ * `PATCH_EDGE` bits.
+ *
+ * The neighbor is finer exactly when one of its children is drawn: the tree
+ * is restricted, so ground under a neighbor is that neighbor, its parent or
+ * its children. Two levels down is the transient a starved split leaves,
+ * which this does not hold and which `balance` names. A neighbor drawn at
+ * this level, its usual answer, costs one lookup.
+ */
+function finerEdges(
+  region: RegionAddress,
+  drawn: ReadonlySet<number | string>,
+): number {
+  const span = 2 ** region.level
+  let edges = 0
+  for (let edge = 0; edge < EDGES.length; edge += 1) {
+    const [di, dj] = EDGES[edge] as readonly [number, number]
+    const ni = region.i + di
+    const nj = region.j + dj
+    const beside =
+      ni >= 0 && ni < span && nj >= 0 && nj < span
+        ? { face: region.face, level: region.level, i: ni, j: nj }
+        : regionNeighbor(region, di, dj)
+    if (drawn.has(packed(beside.face, beside.level, beside.i, beside.j)))
+      continue
+    const level = beside.level + 1
+    const i = beside.i * 2
+    const j = beside.j * 2
+    if (
+      drawn.has(packed(beside.face, level, i, j)) ||
+      drawn.has(packed(beside.face, level, i + 1, j)) ||
+      drawn.has(packed(beside.face, level, i, j + 1)) ||
+      drawn.has(packed(beside.face, level, i + 1, j + 1))
+    )
+      edges |= 1 << edge
+  }
+  return edges
+}
 
 /**
  * Whether a coarser patch outside the view shares an edge with this one.

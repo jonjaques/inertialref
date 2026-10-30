@@ -210,7 +210,7 @@ export function ScatterRocks({
       anchorGround(mesh, anchor, state.datumRadius)
       const eye = scatter.eyeLocal
       if (eye !== null)
-        placeEye(mesh, eye, NO_MORPH_DISTANCE, NO_MORPH_DISTANCE)
+        placeEye(mesh, eye, NO_MORPH_DISTANCE, NO_MORPH_DISTANCE, 0)
     }
     /*
      * The buffers are re-uploaded only when the field laid out a new list.

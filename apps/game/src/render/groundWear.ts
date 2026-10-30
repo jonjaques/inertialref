@@ -12,9 +12,14 @@ import {
   Sphere,
   Vector2,
   Vector3,
+  Vector4,
 } from 'three/webgpu'
 import { COVER_CHANNELS } from '@inertialref/universe'
-import { NO_MORPH_DISTANCE, type RenderPatch } from '@inertialref/rendering'
+import {
+  NO_MORPH_DISTANCE,
+  PATCH_EDGE,
+  type RenderPatch,
+} from '@inertialref/rendering'
 import { grainWrap, MACRO_METERS } from './terrain.ts'
 import { waveWrap } from './water.ts'
 import {
@@ -215,6 +220,7 @@ interface Point {
 interface Placed {
   readonly eyeLocal: Vector3
   readonly morphBand: Vector2
+  readonly morphEdges: Vector4
 }
 
 /** The ground's record alone: a sea wearer has no grain origin to move. */
@@ -247,6 +253,7 @@ export function wearGround(
   const wear: GroundWear = {
     eyeLocal: new Vector3(),
     morphBand: new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE),
+    morphEdges: new Vector4(0, 0, 0, 0),
     anchor: new Vector3(),
     anchorAltitude: 0,
     grainOrigin: new Vector3(),
@@ -322,6 +329,7 @@ export function wearSea(object: Object3D, anchor: Point): SeaWear {
   const wear: SeaWear = {
     eyeLocal: new Vector3(),
     morphBand: new Vector2(NO_MORPH_DISTANCE, NO_MORPH_DISTANCE),
+    morphEdges: new Vector4(0, 0, 0, 0),
     anchor: new Vector3(
       Math.fround(anchor.x),
       Math.fround(anchor.y),
@@ -338,19 +346,31 @@ export function wearSea(object: Object3D, anchor: Point): SeaWear {
 }
 
 /**
- * Where the eye is in the wearer's own frame this frame, in true meters, and
+ * Where the eye is in the wearer's own frame this frame, in true meters,
  * where its morph to the parent begins and ends — comparable to that eye
- * whatever the placement did to the mesh.
+ * whatever the placement did to the mesh — and which of its edges hold still,
+ * the selection's `finerEdges` (0 for a wearer that is not a patch).
+ *
+ * The edges arrive as `PATCH_EDGE` bits and leave as four lanes, because the
+ * vertex stage multiplies by a flag and a bit test is integer arithmetic the
+ * WebGL fallback would have to emulate.
  */
 export function placeEye(
   object: Object3D,
   eye: Point,
   morphStart: number,
   morphEnd: number,
+  finerEdges: number,
 ): void {
   const wear = worn(object)
   wear.eyeLocal.set(eye.x, eye.y, eye.z)
   wear.morphBand.set(morphStart, morphEnd)
+  wear.morphEdges.set(
+    (finerEdges & PATCH_EDGE.colEnd) === 0 ? 0 : 1,
+    (finerEdges & PATCH_EDGE.colStart) === 0 ? 0 : 1,
+    (finerEdges & PATCH_EDGE.rowEnd) === 0 ? 0 : 1,
+    (finerEdges & PATCH_EDGE.rowStart) === 0 ? 0 : 1,
+  )
 }
 
 /* ------------------------------------------------------------------------ */

@@ -4,6 +4,7 @@ import { Vec, type Vec3 } from '@inertialref/spatial'
 import {
   HEIGHTFIELD_RESOLUTION,
   regionAddress,
+  regionChildren,
   regionDirection,
   regionForDirection,
   regionNeighbor,
@@ -60,6 +61,14 @@ const EARTH = 6_371_000
 const MIRANDA = { radius: 235_800, relief: 5_000 }
 /** Mars, with the game's own relief bound — the body the landing measures. */
 const MARS = { radius: 3_389_500, relief: 14_700 }
+
+/** A patch's four edge steps, in `PATCH_EDGE`'s bit order. */
+const EDGE_STEPS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+]
 
 const directions = fc
   .tuple(
@@ -348,7 +357,7 @@ describe('the terrain quadtree', () => {
     expect(full.coarsening).toBe(1)
   })
 
-  it('is fully morphed wherever a coarser patch abuts it (property)', () => {
+  it('is fully morphed wherever a coarser patch abuts it, which holds that edge (property)', () => {
     /*
      * The crack-free claim, in the form that can be checked without a GPU.
      *
@@ -434,7 +443,37 @@ describe('the terrain quadtree', () => {
               expect(patch.morphEnd).toBeLessThanOrEqual(
                 coarse.distance * (1 + 1e-9),
               )
+              /*
+               * And the coarser patch draws its own grid along that edge,
+               * the half of the claim no band can make: it is wider than
+               * its band, so the far end of the edge can be deep in it. The
+               * edge is the one across which the coarse patch's neighbor is
+               * this patch's parent.
+               */
+              const up = regionParent(patch.region)
+              if (up === null) continue
+              const own = terrainPatchKey('b', up)
+              const facing = EDGE_STEPS.findIndex(
+                ([ei, ej]) =>
+                  terrainPatchKey(
+                    'b',
+                    regionNeighbor(coarse.region, ei, ej),
+                  ) === own,
+              )
+              expect(facing).toBeGreaterThanOrEqual(0)
+              expect(coarse.finerEdges & (1 << facing)).not.toBe(0)
             }
+            // And nothing else is held: an edge a patch shares with its own
+            // level or a coarser one slides with its neighbor's.
+            EDGE_STEPS.forEach(([di, dj], edge) => {
+              const beside = regionNeighbor(patch.region, di, dj)
+              const finer =
+                patch.region.level < 24 &&
+                regionChildren(beside).some((child) =>
+                  byKey.has(terrainPatchKey('b', child)),
+                )
+              expect((patch.finerEdges & (1 << edge)) !== 0).toBe(finer)
+            })
           }
         },
       ),
