@@ -34,7 +34,14 @@
  * make that color itself (`aerosolTint`), and `thickness` scales the column.
  * Mars therefore keeps its butterscotch sky and its blue sunset — both are in
  * its authored colors — without this file knowing what CO₂ is.
+ *
+ * The column's shape is measured rather than authored: the gas falls off over
+ * the body's own scale height and the aerosol over the haze's, and the
+ * optical depths, the aerosol's albedo and its asymmetry are Earth's
+ * published ones. ADR-0056 has the sources and the one calibrated factor.
  */
+
+import type { AirHeights } from './datum.ts'
 
 export interface HazeAuthoring {
   readonly color: {
@@ -44,6 +51,8 @@ export interface HazeAuthoring {
   }
   readonly limb: { readonly r: number; readonly g: number; readonly b: number }
   readonly thickness: number
+  /** The aerosol's Ångström exponent: its optical depth goes as λ^−α. */
+  readonly aerosolAngstrom: number
 }
 
 export interface AtmosphereRecipe {
@@ -57,8 +66,8 @@ export interface AtmosphereRecipe {
   readonly betaRayleigh: readonly [number, number, number]
   /** Aerosol scattering coefficient per planet radius, RGB (tinted). */
   readonly mieScatter: readonly [number, number, number]
-  /** Aerosol extinction per planet radius, gray — scatter / 0.9. */
-  readonly mieExtinction: number
+  /** Aerosol extinction per planet radius, RGB — the slope, untinted. */
+  readonly mieExtinction: readonly [number, number, number]
 }
 
 export interface ScatteringLut {
@@ -70,37 +79,68 @@ export interface ScatteringLut {
 
 export const TRANSMITTANCE_WIDTH = 512
 export const TRANSMITTANCE_HEIGHT = 64
-export const MULTI_SCATTER_SIZE = 32
+/** Ψ's columns, over the sun's cosine. */
+export const MULTI_SCATTER_WIDTH = 32
+/**
+ * Ψ's rows, over altitude. Half its columns: Ψ is smooth in height, and the
+ * value at 16 rows is within 5% of the value at 32 through −15° of twilight,
+ * for half the bake.
+ */
+export const MULTI_SCATTER_HEIGHT = 16
+/**
+ * The smallest Ψ the table can say, so its logarithm is finite. A vacuum, or
+ * a point the sun cannot reach by any second bounce, reads as this.
+ */
+export const MULTI_SCATTER_FLOOR = 1e-30
 
 /**
  * Earth's vertical Rayleigh optical depth, summed over RGB, at thickness 1.
  *
- * Measured, not chosen: the real column is (0.046, 0.108, 0.265), which sums
- * to 0.42 — and splitting that sum by the authored zenith color reproduces
- * the real spectrum within a few percent, which is what licenses deriving
- * physics from art direction in the first place.
+ * Bodhaine et al. (1999) at sea level: 0.041, 0.097 and 0.243 at 680, 550 and
+ * 440 nm. Splitting the sum by the authored zenith color reproduces that
+ * spectrum within a few percent, which is what licenses deriving physics from
+ * art direction in the first place.
  */
-const TAU_RAYLEIGH_SUM = 0.42
-
-/** Vertical aerosol optical depth at thickness 1 — a hazy-bright Earth day.
- * 0.035 is the textbook clear-sky number and it read too clean: the white-gold
- * band under every ISS dusk is aerosol, and at 0.035 the band barely showed. */
-const TAU_MIE = 0.05
-
-/** Mie extinction over scattering: aerosols absorb a little. */
-const MIE_EXTINCTION_RATIO = 1.11
-
-/** Aerosol forward-scattering asymmetry. 0.76 is Earth haze; universal here. */
-export const AEROSOL_ASYMMETRY = 0.76
+const TAU_RAYLEIGH_SUM = 0.38
 
 /**
- * Scattered radiance to scene units. The march produces radiance per unit
- * sun irradiance; the scene's convention absorbs a π into every surface
- * (albedo·μ *is* the drawn color), so the sky gets the same treatment plus
- * a small artistic gain — calibrated against the previous shell's tuned
- * brightness so every body arrived at the same exposure it left.
+ * Earth's vertical aerosol optical depth at thickness 1: 0.12, the global mean
+ * at 550 nm in the MACv2 climatology (Kinne 2017), inside MODIS's 0.13–0.19.
+ *
+ * It is also what the anchor asks for. The CIE clear sky's zenith falls by a
+ * factor of eight between a 60° and a 10° sun, because at a high sun most of
+ * the zenith's light is the aerosol's forward lobe; a cleaner column of 0.05
+ * fell by three, and drew a dusk sky as bright as a noon one relative to the
+ * sun. At 0.12 the model's luminous turbidity is 2.3, where CIE type 12 puts
+ * a standard clear sky at 2.5.
  */
-export const ATMOSPHERE_GAIN = 24
+const TAU_MIE = 0.12
+
+/**
+ * The three bands' wavelengths, nm: where Bodhaine's column above is read,
+ * and where an aerosol's Ångström slope is evaluated against its 550 nm depth.
+ */
+const BANDS = [680, 550, 440] as const
+
+/** Aerosol extinction over scattering: a single-scattering albedo of 0.94
+ * (MACv2's global mean, and Wolff's for Martian dust in the solar band). */
+const MIE_EXTINCTION_RATIO = 1 / 0.94
+
+/** Aerosol asymmetry: 0.70, MACv2's global mean. Pathfinder measured Martian
+ * dust at 0.72–0.77 across the visible; one value serves every haze here. */
+export const AEROSOL_ASYMMETRY = 0.7
+
+/**
+ * Scattered radiance to scene units: π, and nothing else.
+ *
+ * The march produces radiance per unit of the sun's irradiance, and a scene
+ * unit is an albedo-one surface under that sun, which is the irradiance over
+ * π — so the sky keeps its physical ratio to the ground it stands over.
+ * Nothing is fitted: at π the zenith under a 60° sun is 1.07 times the CIE
+ * standard clear sky's (type 12, Darula and Kittler 2002) at the model's own
+ * luminous turbidity of 2.3, and `atmosphere.test.ts` holds that anchor.
+ */
+export const ATMOSPHERE_GAIN = Math.PI
 
 /** Midpoint samples along the zenith column in `zenithSkyRadiance`. */
 const ZENITH_STEPS = 32
@@ -108,52 +148,78 @@ const ZENITH_STEPS = 32
 /** March steps for the transmittance table. */
 const TRANSMITTANCE_STEPS = 48
 
-/** Directions and steps for the multiple-scattering estimate. */
-const MS_DIRECTIONS = 16
+/**
+ * Directions and steps for the multiple-scattering estimate.
+ *
+ * Sixty-four directions, because once the column is in shadow its light
+ * arrives from a narrow wedge of sunlit air toward the sun's azimuth, and a
+ * sparser sphere either misses that wedge or lands a direction in it by
+ * chance: at 16 the zenith at −12° came out nine times the measured sky, and
+ * it does not move by more than noise past 64.
+ */
+const MS_DIRECTIONS = 64
 const MS_STEPS = 16
 
 /**
- * Scale heights as fractions of the drawn shell.
- *
- * 0.22 puts e^−4.5 of the density at the authored ceiling — the same falloff
- * the analytic shell used, so the shell reads the same size it always did —
- * and the aerosol deck sits at less than half that, which is why a limb is
- * blue on top and warm underneath rather than uniformly mixed.
+ * Derive the physical recipe from an authored haze layer, its shell, and its
+ * two measured scale heights (`airHeights`), all in radii of the drawn sphere.
  */
-const RAYLEIGH_SHELL_FRACTION = 0.22
-const MIE_SHELL_FRACTION = 0.09
-
-/** Derive the physical recipe from an authored haze layer and its shell. */
 export function atmosphereRecipe(
   haze: HazeAuthoring,
   topRatio: number,
+  heights: AirHeights,
 ): AtmosphereRecipe {
-  const shell = Math.max(topRatio - 1, 1e-5)
-  const hRayleigh = shell * RAYLEIGH_SHELL_FRACTION
-  const hMie = shell * MIE_SHELL_FRACTION
+  const hRayleigh = Math.max(heights.rayleigh, 1e-7)
+  const hMie = Math.max(heights.aerosol, 1e-7)
+  const ceiling = Math.max(topRatio - 1, 1e-7)
+  // τ = β·∫ρ, so β = τ over the column the density profile actually holds.
+  const columnRayleigh = densityColumn(hRayleigh, ceiling)
+  const columnMie = densityColumn(hMie, ceiling)
 
   const { color, limb, thickness } = haze
   const colorSum = Math.max(color.r + color.g + color.b, 1e-6)
-  // τ = β·H for an exponential column, so β = τ/H.
   const tau = TAU_RAYLEIGH_SUM * thickness
   const betaRayleigh: [number, number, number] = [
-    ((color.r / colorSum) * tau) / hRayleigh,
-    ((color.g / colorSum) * tau) / hRayleigh,
-    ((color.b / colorSum) * tau) / hRayleigh,
+    ((color.r / colorSum) * tau) / columnRayleigh,
+    ((color.g / colorSum) * tau) / columnRayleigh,
+    ((color.b / colorSum) * tau) / columnRayleigh,
   ]
 
-  const tauMie = TAU_MIE * thickness
+  // The aerosol's depth per band: 550 nm is the measured one, and the
+  // others follow its Ångström slope.
+  const tauMie = BANDS.map(
+    (wavelength) =>
+      TAU_MIE * thickness * (wavelength / 550) ** -haze.aerosolAngstrom,
+  )
   const tint = aerosolTint(limb, betaRayleigh, hRayleigh)
   const mieScatter: [number, number, number] = [
-    (tint[0] * tauMie) / hMie,
-    (tint[1] * tauMie) / hMie,
-    (tint[2] * tauMie) / hMie,
+    (tint[0] * tauMie[0]!) / columnMie,
+    (tint[1] * tauMie[1]!) / columnMie,
+    (tint[2] * tauMie[2]!) / columnMie,
   ]
-  // Extinction is deliberately gray: a tinted extinction double-counts the
-  // color the scattering tint already applied, and drifts white sums.
-  const mieExtinction = (tauMie / hMie) * MIE_EXTINCTION_RATIO
+  // Extinction follows the slope and not the tint: a tinted extinction
+  // double-counts the color the scattering tint already applied, and drifts
+  // white sums.
+  const mieExtinction: [number, number, number] = [
+    (tauMie[0]! / columnMie) * MIE_EXTINCTION_RATIO,
+    (tauMie[1]! / columnMie) * MIE_EXTINCTION_RATIO,
+    (tauMie[2]! / columnMie) * MIE_EXTINCTION_RATIO,
+  ]
 
   return { topRatio, hRayleigh, hMie, betaRayleigh, mieScatter, mieExtinction }
+}
+
+/**
+ * The vertical column of a `densities` profile: ∫₀ᶜ e^(−h/H)·(1 − h/C) dh.
+ *
+ * Not H. The fade that takes the density to zero at the ceiling removes
+ * H/C of the column — 8% of Earth's gas under its 110 km shell — and an
+ * aerosol whose scale height approaches the shell loses most of it, so a
+ * coefficient taken as τ/H draws a thinner column than the one measured.
+ */
+export function densityColumn(scaleHeight: number, ceiling: number): number {
+  const ratio = scaleHeight / ceiling
+  return scaleHeight * (1 - ratio * (1 - Math.exp(-1 / ratio)))
 }
 
 /**
@@ -235,6 +301,37 @@ function densities(
   }
 }
 
+/**
+ * Sample `i` of `n` along a segment of `length`, crowded toward `perigee` —
+ * the segment's lowest point, where its air is densest. Returns the distance
+ * along the segment and the step the sample stands for.
+ *
+ * A uniform march does not resolve air that falls off over a kilometer or
+ * two. The shell's twelve put the first sample up a 120 km column 5 km high,
+ * past e^−4 of Earth's aerosol, and drew a noon zenith at 39% of one marched
+ * in 2,000 steps; a uniform 32 drew it at 80%. The samples sit at the squares
+ * of an even spread on each side of the perigee, in proportion to each
+ * side's length, so the steps are fine where the density is and coarse where
+ * there is none: 32 come within 0.5% of 2,000, and twelve within 4%.
+ * `materials.ts` places the shell's twelve by the same rule.
+ */
+export function marchSample(
+  i: number,
+  n: number,
+  length: number,
+  perigee: number,
+): readonly [number, number] {
+  const at = Math.min(Math.max(perigee, 0), length)
+  const split = length > 0 ? at / length : 0
+  const u = (i + 0.5) / n
+  if (u < split) {
+    const w = (split - u) / split
+    return [at - at * w * w, (2 * at * w) / split / n]
+  }
+  const w = (u - split) / (1 - split)
+  return [at + (length - at) * w * w, (2 * (length - at) * w) / (1 - split) / n]
+}
+
 /** Distance along (r, μ) to the sphere of radius `radius`, or Infinity. */
 function distanceToSphere(r: number, mu: number, radius: number): number {
   const discriminant = r * r * (mu * mu - 1) + radius * radius
@@ -253,7 +350,7 @@ function distanceToSphere(r: number, mu: number, radius: number): number {
  * Zero for rays that meet the ground: the light did not get through, and the
  * table stores that fact rather than leaving callers to re-derive the horizon.
  */
-function transmittanceFrom(
+export function transmittanceFrom(
   r: number,
   mu: number,
   recipe: AtmosphereRecipe,
@@ -267,18 +364,22 @@ function transmittanceFrom(
   const top = distanceToSphere(r, mu, recipe.topRatio)
   if (top === Infinity) return [1, 1, 1]
 
-  const step = top / TRANSMITTANCE_STEPS
   let tauR = 0
   let tauG = 0
   let tauB = 0
+  // A ray climbing from r is densest where it starts; one aimed below the
+  // horizontal is densest where it passes closest to the ground.
+  const perigee = mu < 0 ? -r * mu : 0
   for (let i = 0; i < TRANSMITTANCE_STEPS; i += 1) {
-    const s = (i + 0.5) * step
+    const [s, step] = marchSample(i, TRANSMITTANCE_STEPS, top, perigee)
     const radius = Math.sqrt(r * r + s * s + 2 * r * s * mu)
     const { rayleigh, mie } = densities(radius - 1, recipe)
-    const mieExt = mie * recipe.mieExtinction
-    tauR += (recipe.betaRayleigh[0] * rayleigh + mieExt) * step
-    tauG += (recipe.betaRayleigh[1] * rayleigh + mieExt) * step
-    tauB += (recipe.betaRayleigh[2] * rayleigh + mieExt) * step
+    tauR +=
+      (recipe.betaRayleigh[0] * rayleigh + recipe.mieExtinction[0] * mie) * step
+    tauG +=
+      (recipe.betaRayleigh[1] * rayleigh + recipe.mieExtinction[1] * mie) * step
+    tauB +=
+      (recipe.betaRayleigh[2] * rayleigh + recipe.mieExtinction[2] * mie) * step
   }
   return [Math.exp(-tauR), Math.exp(-tauG), Math.exp(-tauB)]
 }
@@ -360,30 +461,40 @@ function fibonacciSphere(count: number): [number, number, number][] {
 }
 
 /**
- * Hillaire's isotropic multiple-scattering table Ψ(r, μs).
+ * Hillaire's isotropic multiple-scattering table Ψ(r, μs), as ln Ψ.
  *
- * At each grid point: march a small bundle of directions, accumulating the
- * second order of scattering (single-scattered light arriving from every
- * direction, isotropic phase) and the transfer factor f — how much of what
- * scatters here scatters *again*. The geometric series over orders collapses
- * to Ψ = L₂ / (1 − f). The main march then adds Ψ·σs at every sample: all
- * orders past the first for two multiplies and a lookup, which is the entire
- * reason twilight has a sky instead of an edge.
+ * At each grid point: march a bundle of directions, accumulating the second
+ * order of scattering (single-scattered light arriving from every direction,
+ * isotropic phase) and the transfer factor f — how much of what scatters here
+ * scatters *again*. The geometric series over orders collapses to
+ * Ψ = L₂ / (1 − f). The main march then adds Ψ·σs at every sample: all orders
+ * past the first for two multiplies and a lookup, which is the entire reason
+ * twilight has a sky instead of an edge.
+ *
+ * The table holds the logarithm, and every reader takes `Math.exp` of a
+ * bilinear read (`multipleScatteringAt`). Through twilight Ψ falls tenfold
+ * every two degrees and a column of this table spans 11°, so blending the
+ * values themselves drew each texel as its brighter neighbor: the zenith at
+ * −12° came out at three times what the same table says read geometrically.
+ * Interpolating the logarithm is exact for an exponential falloff.
  */
 export function bakeMultipleScattering(
   recipe: AtmosphereRecipe,
   transmittance: ScatteringLut,
+  /** Samples per direction; the default is converged, and a test refines it. */
+  steps = MS_STEPS,
 ): ScatteringLut {
-  const size = MULTI_SCATTER_SIZE
-  const data = new Float32Array(size * size * 4)
+  const width = MULTI_SCATTER_WIDTH
+  const height = MULTI_SCATTER_HEIGHT
+  const data = new Float32Array(width * height * 4)
   const directions = fibonacciSphere(MS_DIRECTIONS)
   const ceiling = recipe.topRatio - 1
   const isotropic = 1 / (4 * Math.PI)
 
-  for (let y = 0; y < size; y += 1) {
-    const r = 1 + (y / (size - 1)) * ceiling
-    for (let x = 0; x < size; x += 1) {
-      const muSun = (x / (size - 1)) * 2 - 1
+  for (let y = 0; y < height; y += 1) {
+    const r = 1 + (y / (height - 1)) * ceiling
+    for (let x = 0; x < width; x += 1) {
+      const muSun = (x / (width - 1)) * 2 - 1
       const sun: [number, number, number] = [
         Math.sqrt(Math.max(0, 1 - muSun * muSun)),
         0,
@@ -394,16 +505,24 @@ export function bakeMultipleScattering(
       const transfer = [0, 0, 0]
       for (const direction of directions) {
         const muRay = direction[2]
-        // Same μ ≥ 0 guard as `transmittanceFrom`, for the same rounding.
+        /*
+         * From the ground row, a ray aimed down is already in the ground.
+         * `distanceToSphere` answers its far side instead — the start is on
+         * the sphere, so the near root is zero and not taken — and the march
+         * crossed the planet at the surface's density: a chord of rock lit as
+         * if it were air, which grew Ψ at the ground sixfold as the steps were
+         * refined. Same μ ≥ 0 guard as `transmittanceFrom`, for its rounding.
+         */
+        if (muRay < 0 && r <= 1) continue
         const ground = muRay < 0 ? distanceToSphere(r, muRay, 1) : Infinity
         const top = distanceToSphere(r, muRay, recipe.topRatio)
         const end = Math.min(ground, top)
         if (!Number.isFinite(end) || end <= 0) continue
-        const step = end / MS_STEPS
+        const perigee = muRay < 0 ? -r * muRay : 0
 
         const tau = [0, 0, 0]
-        for (let i = 0; i < MS_STEPS; i += 1) {
-          const s = (i + 0.5) * step
+        for (let i = 0; i < steps; i += 1) {
+          const [s, step] = marchSample(i, steps, end, perigee)
           // Position in the plane spanned by zenith and the ray.
           const px = direction[0] * s
           const py = direction[1] * s
@@ -424,7 +543,7 @@ export function bakeMultipleScattering(
               (recipe.mieScatter[c] as number) * mie
             const extinction =
               (recipe.betaRayleigh[c] as number) * rayleigh +
-              recipe.mieExtinction * mie
+              (recipe.mieExtinction[c] as number) * mie
             const view = Math.exp(
               -((tau[c] as number) + extinction * step * 0.5),
             )
@@ -437,16 +556,33 @@ export function bakeMultipleScattering(
         }
       }
 
-      const index = (y * size + x) * 4
+      const index = (y * width + x) * 4
       for (let c = 0; c < 3; c += 1) {
         const secondOrder = (luminance[c] as number) / MS_DIRECTIONS
         const f = Math.min((transfer[c] as number) / MS_DIRECTIONS, 0.95)
-        data[index + c] = secondOrder / (1 - f)
+        data[index + c] = Math.log(
+          Math.max(secondOrder / (1 - f), MULTI_SCATTER_FLOOR),
+        )
       }
       data[index + 3] = 1
     }
   }
-  return { width: size, height: size, data }
+  return { width, height, data }
+}
+
+/** Ψ at (r, μs) from the logarithmic table, interpolated geometrically. */
+export function multipleScatteringAt(
+  table: ScatteringLut,
+  recipe: AtmosphereRecipe,
+  radius: number,
+  muSun: number,
+): [number, number, number] {
+  const height01 = Math.min(
+    Math.max((radius - 1) / (recipe.topRatio - 1), 0),
+    1,
+  )
+  const [r, g, b] = sampleLut(table, (muSun + 1) / 2, height01)
+  return [Math.exp(r), Math.exp(g), Math.exp(b)]
 }
 
 /**
@@ -469,7 +605,6 @@ export function zenithSkyRadiance(
   muSun: number,
 ): [number, number, number] {
   const r = Math.max(radius, 1)
-  const ceiling = recipe.topRatio - 1
   const column = recipe.topRatio - r
   if (column <= 0) return [0, 0, 0]
   const g = AEROSOL_ASYMMETRY
@@ -478,19 +613,19 @@ export function zenithSkyRadiance(
     (1 - g * g) /
     (4 * Math.PI) /
     Math.max(1 + g * g - 2 * g * muSun, 1e-4) ** 1.5
-  const step = column / ZENITH_STEPS
   const radiance: [number, number, number] = [0, 0, 0]
   const depth = [0, 0, 0]
   for (let i = 0; i < ZENITH_STEPS; i += 1) {
-    const at = r + (i + 0.5) * step
-    const height01 = Math.min(Math.max((at - 1) / ceiling, 0), 1)
+    const [offset, step] = marchSample(i, ZENITH_STEPS, column, 0)
+    const at = r + offset
     const { rayleigh, mie } = densities(at - 1, recipe)
     const sunlight = transmittanceFrom(at, muSun, recipe)
-    const psi = sampleLut(multiScatter, (muSun + 1) / 2, height01)
+    const psi = multipleScatteringAt(multiScatter, recipe, at, muSun)
     for (let c = 0; c < 3; c += 1) {
       const scatterRayleigh = (recipe.betaRayleigh[c] as number) * rayleigh
       const scatterMie = (recipe.mieScatter[c] as number) * mie
-      const extinction = scatterRayleigh + recipe.mieExtinction * mie
+      const extinction =
+        scatterRayleigh + (recipe.mieExtinction[c] as number) * mie
       const view = Math.exp(-((depth[c] as number) + extinction * step * 0.5))
       const single =
         (scatterRayleigh * phaseRayleigh + scatterMie * phaseMie) *
@@ -526,6 +661,15 @@ export function zenithSkyRadiance(
  * color at any brightness the hue-preserving curve can show. Compressing each
  * channel instead bleached a 2° sun to 1 : 0.89 : 0.69. Zero once the planet
  * is in the way.
+ *
+ * What this returns is drawn *before* the shell divides it back down, so it
+ * is the disk over the column's transmittance, and through the last degree or
+ * two above a sea-level horizon that transmittance is 10⁻⁵ and smaller. The
+ * scene's target is half-float, whose largest value is 65,504: the drawn disk
+ * overflowed to infinity there, and the shell's extinction cannot bring an
+ * infinity back. So the return is capped at `DISK_THROUGH_AIR_CEILING`, and
+ * a sun that low dims faster than the law that drew it, in the column's own
+ * color, until the ground takes it.
  */
 export function diskThroughAir(
   recipe: AtmosphereRecipe,
@@ -537,6 +681,18 @@ export function diskThroughAir(
   const mean = (passed[0] + passed[1] + passed[2]) / 3
   const luminance = 0.2126 * passed[0] + 0.7152 * passed[1] + 0.0722 * passed[2]
   if (mean <= 1e-12 || luminance <= 1e-12) return [0, 0, 0]
-  const gain = luminance ** (compression - 1) / mean
+  const gain = Math.min(
+    luminance ** (compression - 1) / mean,
+    DISK_THROUGH_AIR_CEILING / luminance,
+  )
   return [passed[0] * gain, passed[1] * gain, passed[2] * gain]
 }
+
+/**
+ * The most `diskThroughAir` returns, in luminance: 2¹¹. At Enhanced's
+ * calibrated eight that is 16,384 in the scene's half-float target, a quarter
+ * of its range, which leaves the glare and the bloom summed over the disk room
+ * to stay finite. The law holds above a column transmittance of 8·10⁻⁵ —
+ * Earth's sun from sea level above about 2°.
+ */
+export const DISK_THROUGH_AIR_CEILING = 2048

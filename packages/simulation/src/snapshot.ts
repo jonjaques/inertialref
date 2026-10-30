@@ -126,6 +126,8 @@ export interface BodySnapshot {
   readonly frame: FrameId
   readonly hasAtmosphere: boolean
   readonly atmosphereCeiling: Meters
+  /** The gas's scale height, meters, or zero with no atmosphere. */
+  readonly atmosphereScaleHeight: Meters
   /** Peak-to-datum terrain relief, so the renderer can sink the datum sphere. */
   readonly relief: Meters
   /**
@@ -313,6 +315,7 @@ export function snapshot(
         frame,
         hasAtmosphere: body.atmosphere !== null,
         atmosphereCeiling: body.atmosphere?.ceiling ?? 0,
+        atmosphereScaleHeight: body.atmosphere?.scaleHeight ?? 0,
         relief: body.surface.maxElevation,
       })
       for (const moon of body.moons) collect(moon)

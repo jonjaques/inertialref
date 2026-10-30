@@ -53,6 +53,7 @@ function body(overrides: Partial<RenderBody> = {}): RenderBody {
     hasAtmosphere: true,
     terminator: 0.05,
     atmosphereScale: 1.025,
+    airHeights: { rayleigh: 8.5 / 6400, aerosol: 1.2 / 6400 },
     trueRadius: 6.4e6,
     rotationPeriod: 86_164,
     flattening: 0.9966,

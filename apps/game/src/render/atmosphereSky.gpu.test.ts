@@ -18,13 +18,14 @@ import { CALIBRATED_STAR_RADIANCE } from './bodyUniforms.ts'
  * The sky from the ground, drawn by the shell and read back.
  *
  * A clear noon sky on Earth is the authored zenith color — blue over green
- * over red — and the aerosol glow around the sun is white, because Earth's
- * aerosols scatter all three channels about alike. The orange of a sunset is
- * the transmittance table reddening a grazing beam, not a property of the
- * aerosol, and a recipe that tints the aerosol with the limb color applies it
- * a second time: the forward lobe sits around the sun at noon, which it turns
- * salmon, and its multiple scattering lays the tint over the whole day sky,
- * which it turns lavender.
+ * over red — and the aerosol glow around the sun is whiter than the sky away
+ * from it, because the aerosol's scattering departs from gray only along its
+ * Ångström slope. The orange of a sunset is the transmittance table
+ * reddening a grazing beam, not a property of the aerosol, and a recipe that
+ * tints the aerosol with the limb color applies it a second time: the
+ * forward lobe sits around the sun at noon, which it turns salmon, and its
+ * multiple scattering lays the tint over the whole day sky, which it turns
+ * lavender.
  */
 
 let gpu: GpuSession
@@ -36,6 +37,11 @@ afterAll(() => gpu?.dispose())
 const earth = SOLAR_PLANETS.find((body) => body.name === 'Earth')!
 const haze = earth.haze!
 const top = 1 + haze.height / earth.radius
+/** Earth's two scale heights over a ground of radius `sunk` (sea level 1). */
+const heightsOver = (sunk: number) => ({
+  rayleigh: earth.atmosphere!.scaleHeight / (earth.radius * sunk),
+  aerosol: haze.aerosolHeight / (earth.radius * sunk),
+})
 /** Sun elevation over the observer's horizon. */
 const SUN = (59 * Math.PI) / 180
 
@@ -61,7 +67,7 @@ async function skyToward(
   const up = ground.up ?? new Vector3(0, 1, 0)
   const air = createAtmosphereMaterial()
   // The tables are baked over the drawn sphere, as `Bodies` bakes them.
-  const scattering = scatteringFor(haze, top / sunk)
+  const scattering = scatteringFor(haze, top / sunk, heightsOver(sunk))
   air.setScattering(
     scattering.recipe,
     scattering.transmittance,
@@ -104,24 +110,29 @@ it('paints the noon zenith in the authored color, not the limb', async () => {
   const [red, green, blue] = await skyToward(new Vector3(0, 1, 0))
   // The authored zenith is 0.28 : 0.48 : 0.95. Single scattering at 31°
   // from the sun, the aerosol's forward lobe and the multiple scattering
-  // all pull toward white; none of them may reverse the order.
+  // all pull toward white; none of them may reverse the order. Measured
+  // 0.55 red over blue, a CIE xy of (0.275, 0.294) — a clear sky's blue.
+  // With a gray aerosol it was 0.77, a pale one.
   expect(blue).toBeGreaterThan(green)
   expect(green).toBeGreaterThan(red)
-  expect(red / blue).toBeLessThan(0.75)
+  expect(red / blue).toBeLessThan(0.65)
 })
 
-it('leaves the aureole around a high sun white', async () => {
+it('leaves the aureole around a high sun whiter than the sky, and never warm', async () => {
   const offset = (3 * Math.PI) / 180
   const pixel = await skyToward(
     new Vector3(Math.cos(SUN + offset), Math.sin(SUN + offset), 0),
   )
+  const zenith = await skyToward(new Vector3(0, 1, 0))
   // Three degrees off a 59° sun the aerosol lobe outweighs the Rayleigh sky
-  // several times over, so what is left of the blue is the only tint it
-  // carries. A tenth either way is a white glow; the limb-tinted recipe
-  // measured 1.00 : 0.49 : 0.31 here.
-  const brightest = Math.max(...pixel)
-  const faintest = Math.min(...pixel)
-  expect(faintest / brightest).toBeGreaterThan(0.85)
+  // several times over, so it is whiter than the open sky: 0.69 of its
+  // brightest channel in its faintest, against the zenith's 0.55. It keeps
+  // the blue of the Ångström slope and none of the limb's orange, which the
+  // limb-tinted recipe drew here at 1.00 : 0.49 : 0.31.
+  const whiteness = (rgb: readonly number[]) =>
+    Math.min(...rgb) / Math.max(...rgb)
+  expect(whiteness(pixel)).toBeGreaterThan(whiteness(zenith) + 0.08)
+  expect(pixel[2]).toBeGreaterThan(pixel[0])
 })
 
 it('reports the zenith it draws as the air the observer stands under', async () => {
@@ -129,10 +140,9 @@ it('reports the zenith it draws as the air the observer stands under', async () 
   // transmittance exact where the shell reads a half-float table and with
   // 32 samples where the shell takes 12. Enhanced's veil is that number, so
   // it may not drift from the sky on screen by more than the two marches
-  // differ: the shell draws 1.7–2.3% under the CPU column, per channel, at
-  // this sun. Five percent is that with room, and costs a star 0.03 mag.
+  // differ. Five percent costs a star 0.03 mag.
   const drawn = await skyToward(new Vector3(0, 1, 0))
-  const scattering = scatteringFor(haze, top)
+  const scattering = scatteringFor(haze, top, heightsOver(1))
   const reported = zenithSkyRadiance(
     scattering.recipe,
     scattering.multiScatterTable,
@@ -141,6 +151,25 @@ it('reports the zenith it draws as the air the observer stands under', async () 
   )
   for (let c = 0; c < 3; c += 1)
     expect(Math.abs(drawn[c]! / reported[c]! - 1)).toBeLessThan(0.05)
+})
+
+it('draws the twilight zenith the CPU column reports', async () => {
+  // At −8° the column is lit by Ψ alone, which falls tenfold every two
+  // degrees there. The table holds ln Ψ and is read at its texel centers, as
+  // `sampleLut` reads it; a linear read, or one a quarter texel off, is a
+  // degree of sun and a factor of three in this sky.
+  const below = (-8 * Math.PI) / 180
+  const sun = new Vector3(Math.cos(below), Math.sin(below), 0)
+  const drawn = await skyToward(new Vector3(0, 1, 0), { sun })
+  const scattering = scatteringFor(haze, top, heightsOver(1))
+  const reported = zenithSkyRadiance(
+    scattering.recipe,
+    scattering.multiScatterTable,
+    1 + 2 / earth.radius,
+    Math.sin(below),
+  )
+  for (let c = 0; c < 3; c += 1)
+    expect(Math.abs(drawn[c]! / reported[c]! - 1)).toBeLessThan(0.15)
 })
 
 it('measures the air from sea level, not from the sunk sphere or the stretch', async () => {
@@ -174,7 +203,7 @@ it('draws a setting sun brighter than the sky beside it', async () => {
   const elevation = (2 * Math.PI) / 180
   const sun = new Vector3(Math.cos(elevation), Math.sin(elevation), 0)
   const eye = new Vector3(0, 1 + 2 / earth.radius, 0)
-  const scattering = scatteringFor(haze, top)
+  const scattering = scatteringFor(haze, top, heightsOver(1))
   const throughAir = diskThroughAir(
     scattering.recipe,
     eye.y,
@@ -199,9 +228,8 @@ it('draws a setting sun brighter than the sky beside it', async () => {
     disk,
   )
   star.material.dispose()
-  // Measured 9.3 against 5.4. Gray extinction drew the disk at about 0.6,
-  // a ninth of the sky beside it; the aureole is as bright as it is because
-  // the shell's gain sits some three times over a measured clear sky.
+  // Measured 1.7 against 0.13, a deep orange disk twelve times the sky
+  // beside it. Gray extinction drew the disk under the aureole.
   expect(luminance(onDisk)).toBeGreaterThan(1.5 * luminance(beside))
   // And it set orange: red over green over blue.
   expect(onDisk[0]).toBeGreaterThan(onDisk[1])

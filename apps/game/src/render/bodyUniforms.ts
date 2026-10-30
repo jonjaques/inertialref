@@ -1,4 +1,5 @@
 import {
+  NO_AIR,
   OPEN_OCEAN,
   SURFACE_LUMINANCE,
   cloudShellAltitude,
@@ -302,6 +303,7 @@ export function starAsBody(star: RenderStar, visibility: boolean): RenderBody {
     // A star has no surface and no terminator; the disk is unlit.
     terminator: 0,
     atmosphereScale: 1,
+    airHeights: NO_AIR,
     trueRadius: 1,
     rotationPeriod: 1,
     flattening: 1,

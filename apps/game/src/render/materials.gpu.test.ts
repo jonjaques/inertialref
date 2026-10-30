@@ -296,8 +296,10 @@ describe('a stand-in texture compiles the program the real one draws with', () =
         color: { r: 0.3, g: 0.5, b: 0.9 },
         limb: { r: 1, g: 0.5, b: 0.2 },
         thickness: 1,
+        aerosolAngstrom: 1.3,
       },
       1.02,
+      { rayleigh: 0.0013, aerosol: 0.0002 },
     )
     real.setScattering(baked.recipe, baked.transmittance, baked.multiScatter)
     const a = new Mesh(new SphereGeometry(1, 8, 8), standIn.material)

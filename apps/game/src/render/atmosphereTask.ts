@@ -1,5 +1,6 @@
 import { defineTask } from '@inertialref/workers'
 import {
+  type AirHeights,
   type AtmosphereRecipe,
   atmosphereRecipe,
   bakeMultipleScattering,
@@ -38,6 +39,7 @@ import {
 export interface BakeAtmosphereRequest {
   readonly haze: HazeAuthoring
   readonly topRatio: number
+  readonly heights: AirHeights
 }
 
 export interface BakeAtmosphereResponse {
@@ -51,14 +53,14 @@ export const bakeAtmosphereTask = defineTask<
   BakeAtmosphereResponse
 >({
   name: 'render.bakeAtmosphere',
-  version: 1,
-  run({ haze, topRatio }) {
-    const recipe = atmosphereRecipe(haze, topRatio)
+  version: 2,
+  run({ haze, topRatio, heights }) {
+    const recipe = atmosphereRecipe(haze, topRatio, heights)
     const transmittance = bakeTransmittance(recipe)
     const multiScatter = bakeMultipleScattering(recipe, transmittance)
     return { recipe, transmittance, multiScatter }
   },
-  // 512×64 and 32×32 RGBA32F: 528 KB a bake, moved rather than copied.
+  // 512×64 and 32×16 RGBA32F: 520 KB a bake, moved rather than copied.
   transfers: (response) => [
     response.transmittance.data.buffer,
     response.multiScatter.data.buffer,

@@ -1,9 +1,13 @@
 import {
   AEROSOL_ASYMMETRY,
   ATMOSPHERE_GAIN,
+  MULTI_SCATTER_HEIGHT,
+  MULTI_SCATTER_WIDTH,
   STAR_VISIBILITY,
   STELLAR_V_ZERO_ILLUMINANCE,
   SURFACE_LUMINANCE,
+  TRANSMITTANCE_HEIGHT,
+  TRANSMITTANCE_WIDTH,
 } from '@inertialref/rendering'
 import { integratedSkyGain, sensorRadiance } from './radiance.ts'
 import type { StarProjection } from './starProjection.ts'
@@ -29,6 +33,7 @@ import {
 import {
   abs,
   cameraPosition,
+  clamp,
   cross,
   dot,
   exp,
@@ -206,6 +211,27 @@ export interface AtmosphereMaterial {
 /** March samples through the shell. See the budget note in the doc comment. */
 const ATMOSPHERE_SAMPLES = 12
 
+const TRANSMITTANCE = [TRANSMITTANCE_WIDTH, TRANSMITTANCE_HEIGHT] as const
+const MULTI_SCATTER = [MULTI_SCATTER_WIDTH, MULTI_SCATTER_HEIGHT] as const
+
+/**
+ * A table coordinate in [0, 1]² as the bake means it: 0 and 1 are the first
+ * and last texels' centers, where the bake put its first and last samples.
+ *
+ * A sampler puts them at the texture's edges, half a texel further out, so a
+ * bare read lands a quarter texel off the CPU's `sampleLut` midway across.
+ * On Ψ's 32 columns that is a degree of sun, and through twilight a degree
+ * is a factor of three in the sky.
+ */
+function texelCentered(
+  coordinate: Node<'vec2'>,
+  [width, height]: readonly [number, number],
+): Node<'vec2'> {
+  return coordinate
+    .mul(vec2((width - 1) / width, (height - 1) / height))
+    .add(vec2(0.5 / width, 0.5 / height))
+}
+
 /*
  * 1×1 stand-ins so a shell whose tables have not arrived runs the identical
  * graph: full transmittance and no multiple scattering, with the scattering
@@ -285,7 +311,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   // tables' units exactly; see `atmosphereRecipe` for where they come from.
   const betaRayleigh = uniform(new Vector3(0, 0, 0))
   const mieScatter = uniform(new Vector3(0, 0, 0))
-  const mieExtinction = uniform(0)
+  const mieExtinction = uniform(new Vector3(0, 0, 0))
   const hRayleigh = uniform(1)
   const hMie = uniform(1)
   const transmittanceLut = texture(LUT_WHITE)
@@ -406,12 +432,41 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
     )
 
-    const stepLength = max(far.sub(near), 0).div(ATMOSPHERE_SAMPLES)
+    /*
+     * The samples crowd toward the segment's lowest point, where its air is
+     * densest — the eye, looking up from the ground; the tangent point, on a
+     * limb seen from orbit — at the squares of an even spread on each side,
+     * as `marchSample` places the CPU's. Twelve spread evenly up a 120 km
+     * column put the first 5 km high and drew a noon zenith at 39% of its
+     * converged light: past e^−4 of Earth's aerosol, the part that makes
+     * most of a clear zenith under a high sun. Both branches are evaluated
+     * and `right` picks one, so each keeps its denominator off zero.
+     */
+    const span = max(far.sub(near), 0)
+    const perigee = clamp(closest.sub(near), 0, span)
+    const split = perigee.div(max(span, 1e-9))
+    const before = max(split, 1e-6)
+    const after = max(oneMinus(split), 1e-6)
     const inscatter = vec3(0).toVar()
     const opticalDepth = vec3(0).toVar()
 
     Loop(ATMOSPHERE_SAMPLES, ({ i }) => {
-      const t = near.add(float(i).add(0.5).mul(stepLength))
+      const u = float(i).add(0.5).div(ATMOSPHERE_SAMPLES)
+      const right = step(split, u)
+      const toward = split.sub(u).div(before)
+      const away = u.sub(split).div(after)
+      const t = near.add(
+        mix(
+          perigee.sub(perigee.mul(toward.mul(toward))),
+          perigee.add(span.sub(perigee).mul(away.mul(away))),
+          right,
+        ),
+      )
+      const stepLength = mix(
+        perigee.mul(toward).mul(2).div(before),
+        span.sub(perigee).mul(away).mul(2).div(after),
+        right,
+      ).div(ATMOSPHERE_SAMPLES)
       const point = standing.add(rayDirection.mul(t))
       const radius = length(point)
       const height = max(radius.sub(1), 0)
@@ -430,8 +485,15 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
 
       const muSun = dot(point, sun).div(max(radius, 1e-5))
       const lutUv = vec2(muSun.add(1).mul(0.5), height01)
-      const sunT = transmittanceLut.sample(lutUv).rgb
-      const psi = multiScatterLut.sample(lutUv).rgb
+      const sunT = transmittanceLut.sample(
+        texelCentered(lutUv, TRANSMITTANCE),
+      ).rgb
+      // ln Ψ, read geometrically; see `bakeMultipleScattering`. The stand-in
+      // reads as e⁰ = 1, against coefficients that are zero until the
+      // tables arrive, so it still draws a vacuum.
+      const psi = exp(
+        multiScatterLut.sample(texelCentered(lutUv, MULTI_SCATTER)).rgb,
+      )
 
       const single = betaRayleigh
         .mul(densityR)
@@ -493,7 +555,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     setScattering(recipe, transmittance, multiScatter) {
       betaRayleigh.value.set(...recipe.betaRayleigh)
       mieScatter.value.set(...recipe.mieScatter)
-      mieExtinction.value = recipe.mieExtinction
+      mieExtinction.value.set(...recipe.mieExtinction)
       hRayleigh.value = recipe.hRayleigh
       hMie.value = recipe.hMie
       transmittanceLut.value = transmittance

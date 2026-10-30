@@ -28,7 +28,7 @@ afterAll(() => {
 /** A bright star cloud: the lift takes it to 2.5 and the ceiling to 0.42. */
 const STAR_CLOUD = 3e-7
 /** Earth's zenith under a 60° sun, from `zenithSkyRadiance`, scene units. */
-const NOON_AIR = 0.49
+const NOON_AIR = 0.12
 
 async function composed(air: number): Promise<number> {
   airLuminance.value = air

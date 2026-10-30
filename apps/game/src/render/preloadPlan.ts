@@ -1,4 +1,8 @@
-import { atmosphereShellRatio } from '@inertialref/rendering'
+import {
+  type AirHeights,
+  airHeights,
+  atmosphereShellRatio,
+} from '@inertialref/rendering'
 import type { StarSystem } from '@inertialref/universe'
 import { walkBodies } from '@inertialref/universe'
 
@@ -28,11 +32,13 @@ export interface HazeLike {
   }
   readonly limb: { readonly r: number; readonly g: number; readonly b: number }
   readonly thickness: number
+  readonly aerosolAngstrom: number
 }
 
 export interface ScatteringBake {
   readonly haze: HazeLike
   readonly topRatio: number
+  readonly heights: AirHeights
 }
 
 /**
@@ -40,8 +46,12 @@ export interface ScatteringBake {
  * imported there — two copies of this string format is exactly the drift the
  * header warns about.
  */
-export function scatteringKey(haze: HazeLike, topRatio: number): string {
-  const { color, limb, thickness } = haze
+export function scatteringKey(
+  haze: HazeLike,
+  topRatio: number,
+  heights: AirHeights,
+): string {
+  const { color, limb, thickness, aerosolAngstrom } = haze
   return [
     color.r,
     color.g,
@@ -50,18 +60,21 @@ export function scatteringKey(haze: HazeLike, topRatio: number): string {
     limb.g,
     limb.b,
     thickness,
+    aerosolAngstrom,
     topRatio.toFixed(6),
+    heights.rayleigh.toPrecision(6),
+    heights.aerosol.toPrecision(6),
   ].join(':')
 }
 
 /**
  * Every distinct atmosphere bake the loaded systems can ask for.
  *
- * `topRatio` is `buildScene`'s own `atmosphereScale`, from
- * `@inertialref/rendering`'s `datum.ts` rather than recomputed here. It used to
- * be recomputed, and the two agreed only through a three-hop identity nothing
- * asserted — `relief` is assigned from `surface.maxElevation` in
- * `snapshot.ts`, which is the hop this call now makes explicit.
+ * `topRatio` and `heights` are `buildScene`'s own `atmosphereScale` and
+ * `airHeights`, from `@inertialref/rendering`'s `datum.ts` rather than
+ * recomputed here, so the two agree by construction. `relief` is assigned from
+ * `surface.maxElevation` and the gas's scale height from `atmosphere` in
+ * `snapshot.ts`, which are the hops these calls make explicit.
  */
 export function scatteringBakes(
   systems: readonly StarSystem[],
@@ -76,8 +89,15 @@ export function scatteringBakes(
         body.surface.maxElevation,
         haze.height,
       )
-      const key = scatteringKey(haze, topRatio)
-      if (!out.has(key)) out.set(key, { haze, topRatio })
+      const heights = airHeights(
+        body.radius,
+        body.surface.maxElevation,
+        haze.height,
+        body.atmosphere?.scaleHeight ?? 0,
+        haze.aerosolHeight,
+      )
+      const key = scatteringKey(haze, topRatio, heights)
+      if (!out.has(key)) out.set(key, { haze, topRatio, heights })
     }
   }
   return [...out.values()]

@@ -12,6 +12,7 @@ import { Vec, type Vec3 } from '@inertialref/spatial'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import {
+  type AirHeights,
   type AtmosphereRecipe,
   atmosphereRecipe,
   bakeMultipleScattering,
@@ -52,9 +53,10 @@ export interface AtmosphereScattering {
   readonly transmittance: Texture
   readonly multiScatter: Texture
   /**
-   * The multiple-scattering table's own floats, kept for `airOverhead`. 16 KB
-   * a haze; the transmittance table is 32 times that and is not kept, because
-   * a column straight up is cheaper to march than to look up.
+   * The multiple-scattering table's own floats — ln Ψ — kept for
+   * `airOverhead`. 8 KB a haze; the transmittance table is 64 times that and
+   * is not kept, because a column straight up is cheaper to march than to
+   * look up.
    */
   readonly multiScatterTable: ScatteringLut
 }
@@ -88,16 +90,17 @@ function toTexture(lut: ScatteringLut): DataTexture {
 export function scatteringFor(
   haze: HazeAuthoring,
   topRatio: number,
+  heights: AirHeights,
 ): AtmosphereScattering {
   const { thickness } = haze
   // The key lives in `preloadPlan.ts` so the boot prebake and this cache
   // cannot disagree about what "the same atmosphere" means.
-  const key = scatteringKey(haze, topRatio)
+  const key = scatteringKey(haze, topRatio, heights)
   const cached = cache.get(key)
   if (cached !== undefined) return cached
 
   const started = performance.now()
-  const recipe = atmosphereRecipe(haze, topRatio)
+  const recipe = atmosphereRecipe(haze, topRatio, heights)
   const transmittance = bakeTransmittance(recipe)
   const multiScatter = bakeMultipleScattering(recipe, transmittance)
   const set: AtmosphereScattering = {
@@ -114,7 +117,8 @@ export function scatteringFor(
    *
    * The label was `bake ${key}`, on the argument that the cache bounds the set.
    * It does not bound it usefully: `scatteringKey` is a colon-joined composite
-   * of six floats, a thickness and `topRatio.toFixed(6)`, the cache is a module
+   * of six floats, a thickness, `topRatio.toFixed(6)` and the two scale
+   * heights, the cache is a module
    * `Map` with no eviction, and Sol alone produces **nine** distinct keys — so
    * the set is every atmosphere the session has ever met, growing as it travels,
    * with each name retained for the life of the page. That is one aggregation
@@ -157,8 +161,9 @@ export function warmScattering(
   pool: WorkerPool,
   haze: HazeAuthoring,
   topRatio: number,
+  heights: AirHeights,
 ): Promise<AtmosphereScattering> {
-  const key = scatteringKey(haze, topRatio)
+  const key = scatteringKey(haze, topRatio, heights)
   const cached = cache.get(key)
   if (cached !== undefined) return Promise.resolve(cached)
   const inFlight = pending.get(key)
@@ -179,7 +184,7 @@ export function warmScattering(
   let job: Promise<AtmosphereScattering>
   try {
     job = pool
-      .submit(bakeAtmosphereTask, { haze, topRatio })
+      .submit(bakeAtmosphereTask, { haze, topRatio, heights })
       .result.then((baked) => {
         const raced = cache.get(key)
         if (raced !== undefined) return raced
@@ -220,10 +225,11 @@ export function scatteringVia(
   pool: WorkerPool,
   haze: HazeAuthoring,
   topRatio: number,
+  heights: AirHeights,
 ): AtmosphereScattering | null {
-  const cached = cache.get(scatteringKey(haze, topRatio))
+  const cached = cache.get(scatteringKey(haze, topRatio, heights))
   if (cached !== undefined) return cached
-  void warmScattering(pool, haze, topRatio).catch(() => {
+  void warmScattering(pool, haze, topRatio, heights).catch(() => {
     // The one rejection is a pool that has gone away — a dispose during a
     // reload, which `warmScattering` turns into a rejection because `submit`
     // raises it as a throw. The next frame asks again, and a session that
