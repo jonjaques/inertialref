@@ -351,9 +351,8 @@ export function wearSea(object: Object3D, anchor: Point): SeaWear {
  * whatever the placement did to the mesh — and which of its edges hold still,
  * the selection's `finerEdges` (0 for a wearer that is not a patch).
  *
- * The edges arrive as `PATCH_EDGE` bits and leave as four lanes, because the
- * vertex stage multiplies by a flag and a bit test is integer arithmetic the
- * WebGL fallback would have to emulate.
+ * The edges arrive as `PATCH_EDGE` bits and leave as four lanes, one flag
+ * each, which the vertex stage multiplies its factor by (`render/morph.ts`).
  */
 export function placeEye(
   object: Object3D,

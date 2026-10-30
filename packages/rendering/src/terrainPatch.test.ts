@@ -555,7 +555,11 @@ describe('the drawn ground', () => {
    * The field is synthetic because the claim is about the mesh, and a real
    * one is ten milliseconds a patch. One octave per level the selection
    * reaches, amplitude falling as wavelength^0.8, so every cell carries the
-   * curvature an open edge needs in order to show.
+   * curvature an open edge needs in order to show. It is one field at every
+   * level, so it has no morph twin and an even vertex never moves: a body
+   * whose creeks resolve by level is outside what this asks, and the corner
+   * a held edge shares with a same-level patch diagonal to finer ground is
+   * the case it cannot see.
    */
   const radius = 400_000
   const RES = HEIGHTFIELD_RESOLUTION
@@ -681,15 +685,12 @@ describe('the drawn ground', () => {
       for (const [di, dj] of STEPS) {
         const beside = regionNeighbor(fine.region, di, dj)
         const parent = regionParent(beside)
-        // A coarser neighbor, or one on this level across a cube-face edge;
-        // inside a face, one level shares its vertices outright.
+        // The neighbor on this level, or the coarser one covering it. A pair
+        // on one level inside a face shares its vertices outright, and is
+        // asked anyway: that is the claim, not an assumption under it.
         const coarse =
-          beside.face !== fine.region.face
-            ? (byKey.get(regionKey(beside)) ??
-              (parent === null ? undefined : byKey.get(regionKey(parent))))
-            : parent === null
-              ? undefined
-              : byKey.get(regionKey(parent))
+          byKey.get(regionKey(beside)) ??
+          (parent === null ? undefined : byKey.get(regionKey(parent)))
         if (coarse === undefined) continue
         const finePatch = patchAt(fine.region)
         const coarsePatch = patchAt(coarse.region)
@@ -729,7 +730,7 @@ describe('the drawn ground', () => {
     expect(widestGap(Vec.normalize(vec3(1, -1, 0.01)), 2)).toBeLessThan(CLOSED)
   })
 
-  it('closes at every edge two patches share (property)', () => {
+  it('closes at every edge two patches share, on a field with no morph twin (property)', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 0, max: 5 }),
