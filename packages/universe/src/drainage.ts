@@ -1165,9 +1165,10 @@ export function drainageLookup(
  * which at a confluence lays the tributary's floodplain over the trunk's as
  * a cone that thins downstream faster than the trunk's floor drops.
  *
- * The water is the floor over the bed, or the lake or sea that drowns the
- * reach where that stands higher, and the standing water `lakeLevelAt`
- * reads over the sample.
+ * The water is each bed's level — the floor, or the lake or sea that
+ * drowns the reach where that stands higher — weighted by the bed and
+ * faded toward the surface as the beds thin (`riverLevel`), and the
+ * standing water `lakeLevelAt` reads over the sample where that is higher.
  *
  * Below the lattice, the refined levels (`drainageRefinement.ts`), finest
  * last, each cut into what the coarser ones left: see `walk`. `finest`
@@ -1204,11 +1205,8 @@ interface Walked {
  * segments as `carveDrainage` describes, then each refined level's list.
  *
  * **Below the lattice, the refined levels cut into what the coarser ones
- * left**, finest last: `Refinement.carve`, which says how they compose. A
- * creek's own water stands no higher than the ground it runs on, which
- * differs from its floor only where a coarser channel refused the fill; a
- * lake or the sea drowning the reach it joins stands at its own level, as it
- * does over the lattice's.
+ * left**, finest last: `Refinement.carve`, which says how they compose and
+ * what level each creek's bed weighs into the water.
  *
  * **The notch is one maximum over every level**, taken last, so a creek
  * meeting a river does not deepen the river's channel by its own depth.
@@ -1232,7 +1230,8 @@ function walk(
   let notch = 0
   let channel = 0
   let corridor = 0
-  let river = Number.NaN
+  let beds = 0
+  let levels = 0
   for (let k = start; k < end; k += 1) {
     const at = (graph.cellSegments[k] as number) * SEGMENT_STRIDE
     const ax = segments[at] as number
@@ -1270,12 +1269,10 @@ function walk(
     if (bed > channel) channel = bed
     const margin = 1 - smoothstep(plain, Math.min(reach, plain * 2), d)
     if (margin > corridor) corridor = margin
-    if (bed > 0) {
-      // The water over the bed: the floor, or the lake or sea that drowns
-      // this reach where that stands higher.
-      const level = standing > floor ? standing : floor
-      if (!(level <= river)) river = level
-    }
+    // The water over the bed: the floor, or the lake or sea that drowns
+    // this reach where that stands higher.
+    beds += bed
+    levels += bed * (standing > floor ? standing : floor)
   }
 
   const refined: RefinedCarve = {
@@ -1283,22 +1280,12 @@ function walk(
     notch,
     channel,
     corridor,
-    creek: Number.NaN,
-    drowned: Number.NaN,
+    beds,
+    levels,
   }
   drainageRefinement(graph).carve(lookup, refined, until - 1)
   const surface = refined.surface
-  let creek = refined.creek
-  const drowned = refined.drowned
-  // Where a coarser channel refused the fill the bed can sit under its
-  // floor line, and a creek's own water stands no higher than the ground
-  // there. A lake or the sea drowning the reach stands where it stands.
-  if (!Number.isNaN(creek)) {
-    if (creek > surface) creek = surface
-    if (!(creek <= river)) river = creek
-  }
-  if (!Number.isNaN(drowned) && !(drowned <= river)) river = drowned
-
+  const river = riverLevel(surface, refined)
   const lake = lakeLevelAt(graph, cell, lookup)
   let water = river
   if (!Number.isNaN(lake) && !(lake <= water)) water = lake
@@ -1309,6 +1296,41 @@ function walk(
     channel: refined.channel,
     corridor: refined.corridor,
   }
+}
+
+/**
+ * The running water over a sample, or NaN where no bed reaches it: the
+ * beds' weighted mean level, faded toward the surface by the largest bed.
+ *
+ * **No level is chosen.** A maximum over the reaches in reach is a
+ * maximum over a set whose members join where their beds start, and a
+ * member joining at its full level is a step of its height over everything
+ * else. Where a bank's floor is not the ground beside it, that is water
+ * standing 181 m over the ground at the edge of a lattice bed on Earth,
+ * 4.8 m on the generated world of `drainageRefinement.test.ts` and 0.7 m
+ * on Titan. Weighted by its bed, a reach's say reaches zero exactly where
+ * it leaves the set.
+ *
+ * **The fade is the largest bed, not their sum**, because a creek is two
+ * records that share its bend and a lattice river is a chain of segments
+ * that share their nodes. Around every bend both records' beds are the
+ * same bed measured twice — on the outside of a bend both measure it from
+ * the shared point — and a sum would double the water's depth there. The mean is unmoved by a duplicate and the maximum
+ * is the bed itself; both are continuous, and so is their product.
+ *
+ * **Toward the surface, before the notch**, because the notch is the
+ * channel the water runs in and the surface is its brim. A lone reach's
+ * water is the brim where its level is the brim, which is where the reach
+ * cut or filled to its floor, and its depth is the notch's: the bed's own
+ * shape times the channel's depth. Faded toward the notched ground, the
+ * depth would be the bed's square instead, every river would stand under
+ * its banks by up to a quarter of its depth, and the canonical ground the
+ * water clamps would carry that dip. Where every bed reaches zero the
+ * notch has too, so the water meets the ground at the edge either way.
+ */
+function riverLevel(surface: Meters, refined: RefinedCarve): Meters {
+  if (!(refined.beds > 0)) return Number.NaN
+  return surface + refined.channel * (refined.levels / refined.beds - surface)
 }
 
 /*

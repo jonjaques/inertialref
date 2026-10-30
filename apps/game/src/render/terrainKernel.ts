@@ -2030,7 +2030,9 @@ export function createTerrainKernel(
           const cut = float(0).toVar()
           const fill = float(0).toVar()
           const notch = float(0).toVar()
-          const river = float(NO_KERNEL_WATER).toVar()
+          // `riverLevel`'s sums: every bed, and every bed times its level.
+          const beds = float(0).toVar()
+          const bedLevels = float(0).toVar()
           const first = drainageWord(uint(DRAINAGE_CELL_START_AT).add(cell))
           const last = drainageWord(uint(DRAINAGE_CELL_START_AT + 1).add(cell))
           loop(
@@ -2080,9 +2082,8 @@ export function createTerrainKernel(
                   smoothstepf(plain, min(reach, plain.mul(2)), dist),
                 )
                 corridor.assign(max(corridor, margin))
-                If(bed.greaterThan(0), () => {
-                  river.assign(max(river, max(floor, standing)))
-                })
+                beds.addAssign(bed)
+                bedLevels.addAssign(bed.mul(max(floor, standing)))
               })
             },
           )
@@ -2094,8 +2095,6 @@ export function createTerrainKernel(
            * taken against `sample`, on the same footing.
            */
           const surface = elevation.sub(cut).add(fill).toVar()
-          const creek = float(NO_KERNEL_WATER).toVar()
-          const drowned = float(NO_KERNEL_WATER).toVar()
           const refinedFirst = word(WORD.REFINED_FIRST)
           If(word(WORD.REFINED_LAST).greaterThan(uint(0)), () => {
             const refinedLast = word(WORD.REFINED_LAST)
@@ -2257,21 +2256,17 @@ export function createTerrainKernel(
                         smoothstepf(float(0), plain, beyond),
                       )
                       const valley = surface.sub(floor)
+                      const filled = shape
+                        .mul(others)
+                        .mul(float(1).sub(coarser))
+                        .mul(reaching)
                       If(valley.greaterThanEqual(0), () => {
                         levelCut.assign(
                           max(levelCut, valley.mul(shape).mul(others)),
                         )
                       }).Else(() => {
                         levelFill.assign(
-                          max(
-                            levelFill,
-                            valley
-                              .negate()
-                              .mul(shape)
-                              .mul(others)
-                              .mul(float(1).sub(coarser))
-                              .mul(reaching),
-                          ),
+                          max(levelFill, valley.negate().mul(filled)),
                         )
                       })
                       notch.assign(max(notch, depth.mul(bed)))
@@ -2284,12 +2279,12 @@ export function createTerrainKernel(
                           ),
                         ),
                       )
-                      If(bed.greaterThan(0), () => {
-                        creek.assign(max(creek, floor))
-                        If(standing.greaterThan(floor), () => {
-                          drowned.assign(max(drowned, standing))
-                        })
-                      })
+                      // The ground the record leaves, where under its floor.
+                      const own = valley
+                        .greaterThanEqual(0)
+                        .select(floor, surface.sub(valley.mul(filled)))
+                      beds.addAssign(bed)
+                      bedLevels.addAssign(bed.mul(max(standing, own)))
                     })
                   },
                 )
@@ -2298,11 +2293,18 @@ export function createTerrainKernel(
               },
             )
           })
-          // A creek's own water stands no higher than the ground it runs on.
-          If(creek.greaterThan(NO_KERNEL_WATER / 2), () => {
-            river.assign(max(river, min(creek, surface)))
-          })
-          river.assign(max(river, drowned))
+          // `riverLevel`: the beds' mean, faded toward the surface by the
+          // largest of them, and no water where no bed reaches.
+          const river = beds
+            .greaterThan(0)
+            .select(
+              surface.add(
+                channel.mul(
+                  bedLevels.div(max(beds, float(1e-30))).sub(surface),
+                ),
+              ),
+              float(NO_KERNEL_WATER),
+            )
           /*
            * `lakeLevelAt`: the level of the body whose nodes in reach carry
            * the most weight, blended with another only within `lakeMargin`

@@ -285,10 +285,10 @@ export interface RefinedCarve {
   channel: number
   /** The largest floodplain margin over the sample, 0..1. */
   corridor: number
-  /** Meters: the highest floor of any creek bed over the sample, or NaN. */
-  creek: Meters
-  /** Meters: the highest lake or sea drowning a creek bed here, or NaN. */
-  drowned: Meters
+  /** The sum of every bed over the sample, lattice and refined alike. */
+  beds: number
+  /** Meters: the sum of every bed over the sample times its water's level. */
+  levels: number
 }
 
 /**
@@ -400,10 +400,15 @@ export class Refinement {
    * 24 m to 6.5 m.
    *
    * **A creek's own water stands no higher than the ground it runs on**,
-   * which differs from its floor only where a coarser channel refused the
-   * fill. A lake or the sea drowning the reach it joins stands at its own
-   * level, as it does over the lattice's.
-   *
+   * which differs from its floor only where the record leaves part of a
+   * hollow under the floor unfilled — a coarser channel refusing the fill,
+   * another creek's bed, the record's own end. The level is the ground the
+   * record leaves, which is the floor wherever it cuts and the floor less
+   * the unfilled part of the hollow where it fills, so it is continuous
+   * wherever the fill is. A lake or the sea
+   * drowning the reach it joins stands at its own level, as it does over the
+   * lattice's. Each record adds its level weighted by its bed to the sums
+   * `riverLevel` reads, and a level is never chosen: see there.
    */
   carve(lookup: Vec3, state: RefinedCarve, last: number): void {
     const x = lookup.x
@@ -413,8 +418,8 @@ export class Refinement {
     let notch = state.notch
     let channel = state.channel
     let corridor = state.corridor
-    let creek = state.creek
-    let drowned = state.drowned
+    let beds = state.beds
+    let levels = state.levels
     let coarser = channel
     const final = Math.min(this.last, last)
     for (let level = this.first; level <= final; level += 1) {
@@ -502,16 +507,14 @@ export class Refinement {
           1 -
           ((IN_REACH[o + 6] as number) === firstCreek ? secondBed : firstBed)
         const valley = surface - floor
+        // How much of a hollow under the floor this record fills.
+        const filled =
+          shape * others * (1 - coarser) * (IN_REACH[o + 7] as number)
         if (valley >= 0) {
           const here = valley * shape * others
           if (here > levelCut) levelCut = here
         } else {
-          const here =
-            -valley *
-            shape *
-            others *
-            (1 - coarser) *
-            (IN_REACH[o + 7] as number)
+          const here = -valley * filled
           if (here > levelFill) levelFill = here
         }
         const here = (IN_REACH[o + 3] as number) * bed
@@ -519,10 +522,11 @@ export class Refinement {
         if (bed > channel) channel = bed
         const margin = IN_REACH[o + 5] as number
         if (margin > corridor) corridor = margin
-        if (bed > 0) {
-          if (!(floor <= creek)) creek = floor
-          if (standing > floor && !(standing <= drowned)) drowned = standing
-        }
+        // The creek's own water, at its floor or the ground it leaves
+        // there, whichever is lower; the lake or sea it joins where higher.
+        const own = valley >= 0 ? floor : surface - valley * filled
+        beds += bed
+        levels += bed * (standing > own ? standing : own)
       }
       surface = surface - levelCut + levelFill
       coarser = channel
@@ -531,8 +535,8 @@ export class Refinement {
     state.notch = notch
     state.channel = channel
     state.corridor = corridor
-    state.creek = creek
-    state.drowned = drowned
+    state.beds = beds
+    state.levels = levels
   }
 
   /** The valley's half-width at a refined level, radians. */

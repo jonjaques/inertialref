@@ -240,14 +240,18 @@ function waterGap(expected: number, actual: number, ground: number): number {
 /**
  * How far the kernel's sample can sit from the CPU's on the drainage,
  * meters, measured. A creek's bank turns the wet byte through 255 over 0.4
- * of its half-width, 1,900 bytes a meter on a creek a meter wide. A creek's
- * floor and a drowned creek's standing level are taken wherever its bed is
- * above zero at all, so at a bed's edge the water steps between two creeks'
- * levels, or between a level and none. At those vertices no float32
- * placement holds the CPU's byte or level, however exact the arithmetic
- * around it is. Every such vertex of this file's creek tiles (45, on Earth
- * and Titan at levels 12 to 17) is the CPU's own value at a point within
- * 6 mm of it, and a centimeter is that with room. The kernel's lookup
+ * of its half-width, 1,900 bytes a meter on a creek a meter wide. The water
+ * fades to the surface at a bed's edge, and past the edge there is no river:
+ * a lake's level where one is in reach, or none. A float32 bed rounds to
+ * zero a little inside the edge the CPU's float64 bed reaches, so a vertex
+ * there reads the river on one side and what lies past it on the other — on
+ * Titan, a lake 2.98 m under the river's surface, both under the ground, and
+ * the drawn tail's dip 5.7 cm under the surface the river meets. At those
+ * vertices no float32 placement holds the CPU's byte or level, however exact
+ * the arithmetic around it is. Every such vertex of this file's creek tiles
+ * (45, on Earth and Titan at levels 12 to 17: 43 bank bytes and those two
+ * levels) is the CPU's own value at a point within 8 mm of it, and a
+ * centimeter is that with room. The kernel's lookup
  * passes through the warp's three noises in float32, and the warp is 5 km
  * wide on Titan and 12.5 km on Earth, so a noise a few float32 steps off
  * moves the lookup by millimeters. Reading the lookup off absolute float32

@@ -1,3 +1,4 @@
+import fc from 'fast-check'
 import { describe, expect, it, vi } from 'vitest'
 import { rootSeed } from '@inertialref/procedural'
 import { Vec, vec3, type Vec3 } from '@inertialref/spatial'
@@ -6,9 +7,11 @@ import { catalogStub, MILKY_WAY } from './galaxy.ts'
 import {
   carveDrainage,
   type DrainageGraph,
+  drainageCell,
   drainageGraph,
   drainageLookup,
   drainageRefinement,
+  lakeLevelAt,
   SEGMENT_STRIDE,
 } from './drainage.ts'
 import { REFINEMENT_SHAPE } from './drainageRefinement.ts'
@@ -467,5 +470,166 @@ describe('the refinement below the lattice', () => {
       checked += 1
     }
     expect(checked).toBeGreaterThan(20)
+  })
+})
+
+describe('the water over a bed', () => {
+  const sol = generateSystem(
+    ROOT,
+    MILKY_WAY,
+    catalogStub(TEST_CATALOG.stars[0] as (typeof TEST_CATALOG.stars)[number]),
+  )
+  const named = (name: string): Body => {
+    for (const body of walkBodies(sol)) if (body.name === name) return body
+    throw new Error(`no ${name} in Sol`)
+  }
+
+  /** The largest step a walk across a bank may keep, meters: see below. */
+  const STEP = 1e-6
+
+  /** A reach's two ends and half-width, as a segment or a record lays them. */
+  interface Reach {
+    readonly a: Vec3
+    readonly b: Vec3
+    readonly halfWidth: number
+  }
+  const reachOf = (records: ArrayLike<number>, at: number): Reach => ({
+    a: vec3(records[at]!, records[at + 1]!, records[at + 2]!),
+    b: vec3(records[at + 4]!, records[at + 5]!, records[at + 6]!),
+    halfWidth: (records[at + 8]! + records[at + 9]!) / 2,
+  })
+
+  /** The lattice's segments and every refined level's records at the sites. */
+  const reachesOf = (body: Body): Reach[] => {
+    const graph = graphOf(body)
+    const sketch = terrainSketch(body.surface)
+    const refinement = drainageRefinement(graph)
+    const reaches: Reach[] = []
+    for (const site of surveySites(body)) {
+      const lookup = drainageLookup(
+        graph,
+        sketch,
+        geodeticDirection(site.latitude, site.longitude),
+      )
+      const cell = drainageCell(graph, lookup)
+      const end = graph.cellStart[cell + 1] as number
+      for (let k = graph.cellStart[cell] as number; k < end; k += 1) {
+        const at = (graph.cellSegments[k] as number) * SEGMENT_STRIDE
+        reaches.push(reachOf(graph.segments, at))
+      }
+      for (let level = refinement.first; level <= refinement.last; level += 1) {
+        const records = refinement.list(level, lookup)
+        for (let at = 0; at < records.length; at += SEGMENT_STRIDE) {
+          reaches.push(reachOf(records, at))
+        }
+      }
+    }
+    return reaches
+  }
+
+  it.each([
+    ['the generated world', () => generated],
+    ['Earth', () => named('Earth')],
+    ['Titan', () => named('Titan')],
+  ])('meets the ground without a step at a bed’s edge, on %s', (_, find) => {
+    /*
+     * A path three half-widths long through a random point of a random reach
+     * — a lattice segment or a refined record listed at a survey site — at a
+     * random heading, so it crosses both banks, a bend and the reaches beside
+     * it. Over a bed the path is read as the water level, under the ground
+     * or over it, because the sheet's shoreline is where the level crosses
+     * the ground between two vertices and two creeks' levels meet there.
+     * Off every bed it is read as the ground, or a lake standing over it:
+     * a lake under the ground is ground, and where it starts is
+     * `lakeLevelAt`'s business, not this test's. The landform is the one at the path's
+     * middle, held, so the walk is all that moves.
+     *
+     * Each of the eight largest jumps is bisected fifty times, and what
+     * survives is the step: at most 9e-9 m on these three bodies, float64
+     * arithmetic over an interval of 2⁻⁵⁰ of the path, and `STEP` is that
+     * with a hundredfold margin. A level that joins at full height where its
+     * bed starts leaves its height over the ground there: 181 m at a lattice
+     * bank on Earth, 4.8 m on the generated world and 0.7 m on Titan. A
+     * lake's own edge is the lake's reach, tens of kilometers out, and a
+     * path that crosses one is not this test's.
+     */
+    const body = find()
+    const graph = graphOf(body)
+    const reaches = reachesOf(body)
+    expect(reaches.length).toBeGreaterThan(40)
+    let wet = 0
+    let worst = 0
+    fc.assert(
+      fc.property(
+        fc.nat({ max: reaches.length - 1 }),
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        fc.double({ min: 0, max: Math.PI, noNaN: true }),
+        (index, t, heading) => {
+          const reach = reaches[index] as Reach
+          const middle = Vec.normalize(Vec.lerp(reach.a, reach.b, t))
+          const east = Vec.normalize(
+            Vec.cross(
+              Math.abs(middle.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0),
+              middle,
+            ),
+          )
+          const north = Vec.cross(middle, east)
+          const across = Vec.add(
+            Vec.scale(east, Math.cos(heading)),
+            Vec.scale(north, Math.sin(heading)),
+          )
+          const at = (s: number): Vec3 =>
+            Vec.normalize(
+              Vec.add(
+                middle,
+                Vec.scale(across, (s - 0.5) * 3 * reach.halfWidth),
+              ),
+            )
+          const landform = landformAt(body.surface, unwarp(graph, body, middle))
+          const lake = (s: number): boolean =>
+            Number.isNaN(lakeLevelAt(graph, drainageCell(graph, at(s)), at(s)))
+          if (lake(0) !== lake(0.5) || lake(0) !== lake(1)) return
+          const read = (s: number): number => {
+            const carve = carveDrainage(graph, at(s), landform)
+            if (carve.channel > 0) return carve.water
+            return Number.isNaN(carve.water)
+              ? carve.ground
+              : Math.max(carve.ground, carve.water)
+          }
+          const samples = 300
+          const jumps: { s: number; jump: number }[] = []
+          let previous = read(0)
+          for (let i = 1; i <= samples; i += 1) {
+            const here = read(i / samples)
+            jumps.push({ s: i / samples, jump: Math.abs(here - previous) })
+            previous = here
+          }
+          if (!Number.isNaN(carveDrainage(graph, middle, landform).water)) {
+            wet += 1
+          }
+          jumps.sort((x, y) => y.jump - x.jump)
+          for (const candidate of jumps.slice(0, 8)) {
+            let lo = candidate.s - 1 / samples
+            let hi = candidate.s
+            const atLo = read(lo)
+            for (let k = 0; k < 50; k += 1) {
+              const mid = (lo + hi) / 2
+              if (mid === lo || mid === hi) break
+              if (Math.abs(read(mid) - atLo) < candidate.jump / 2) lo = mid
+              else hi = mid
+            }
+            const gap = Math.abs(read(hi) - read(lo))
+            if (gap > worst) worst = gap
+            expect(gap).toBeLessThan(STEP)
+          }
+        },
+      ),
+      { numRuns: 120 },
+    )
+    // Most paths' middles are on a bed, so most walks cross water.
+    // Every path's middle is on its reach's bed, so every walk but one
+    // skipped for a lake's edge crosses water.
+    expect(wet).toBeGreaterThan(100)
+    expect(worst).toBeLessThan(STEP)
   })
 })

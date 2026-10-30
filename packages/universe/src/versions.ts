@@ -148,7 +148,12 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  * the coarsest refined level and by about a meter at the finest. The
  * lattice's own channels moved with it: the walk measures a segment's
  * distance to the arc over its chord, where it measured to the chord, which
- * runs under the ground by hundreds of meters at a long segment's middle. A
+ * runs under the ground by hundreds of meters at a long segment's middle.
+ * The water over a channel is every bed's level weighted by its bed and
+ * faded toward the surface (`riverLevel`), where it was the highest level
+ * of any bed above zero, at full height to the bed's edge: 181 m over the
+ * ground at a lattice bank on Earth. On a body with a sea the ground clamps
+ * to it, so it moves the canonical surface over every channel there. A
  * dry body is untouched to the last bit, and so is ground no valley reaches,
  * a wet world's open seabed among it. A patch resolves the refinement to one
  * level below its own, so the tiles moved with the field. `SYSTEM_ALGORITHM`
