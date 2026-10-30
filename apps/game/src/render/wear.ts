@@ -49,6 +49,7 @@ export interface GroundWear {
    * deposits read the slope as drawn.
    */
   readonly level: number
+  /**
    * The unrounded anchor split across the macro lattice in float64: the whole
    * cells in `macroCell`, exact integers, and the meters left over in
    * `macroOffset`, under `MACRO_METERS`. The bands that may not repeat read

@@ -44,7 +44,7 @@ import {
   createRingMaterial,
 } from './planet.ts'
 import { createTerrainMaterial } from './terrain.ts'
-import { createWaterMaterial } from './water.ts'
+import { createWaterMaterial, DEFAULT_WATER_QUALITY } from './water.ts'
 import {
   anchorGround,
   COVER_ATTRIBUTES,
@@ -733,7 +733,9 @@ describe('a magma sea, on the ground and from orbit', () => {
 
   /** The sheet over fifty meters of magma, read at its centroid. */
   async function sheet(): Promise<[number, number, number, number]> {
-    const water = createWaterMaterial({ refraction: false })
+    // The plain sea: the sheet's own color and glow, with no frame behind it.
+    const water = createWaterMaterial()
+    water.setQuality({ ...DEFAULT_WATER_QUALITY, frame: false })
     water.setPalette(palette)
     water.sunDirection.value.set(0, 0, -1)
     const mesh = seaDummy(water.material)
