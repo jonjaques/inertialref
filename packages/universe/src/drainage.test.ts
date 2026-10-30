@@ -547,13 +547,15 @@ describe('the field that reads it', () => {
       // A landform a kilometer over the floor is cut to the floor less the
       // channel's depth, one a kilometer under it filled to the same, and
       // the channel is fully bed there with the water at the floor. The
-      // segments are float32; the graph's floors are not, so a centimeter.
+      // water is the beds' weighted mean, and a creek whose record ends at
+      // a junction just downstream weighs in the junction's floor: 6 cm
+      // under the node's at the worst of these sixty, so a decimeter.
       for (const landform of [floor + 1_000, floor - 1_000]) {
         const carve = carveDrainage(graph, at, landform)
         expect(carve.channel).toBeCloseTo(1, 6)
         expect(carve.ground).toBeLessThan(floor)
         expect(carve.ground).toBeGreaterThan(floor - 200)
-        expect(carve.water).toBeGreaterThanOrEqual(floor - 1e-2)
+        expect(Math.abs(carve.water - floor)).toBeLessThan(0.1)
       }
       checked += 1
     }
