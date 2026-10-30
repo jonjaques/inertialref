@@ -6,7 +6,10 @@ carries relief, so a generated sphere shades its mountains · amended 20 Oct
 bake is built and drawn a frame's share at a time; a sea the ground boiled
 away still weakened the lithosphere, and one it froze never did; the frame
 read is a material of its own, and the full sea mirrors the land
-([ADR-0052](0052-the-sea-mirrors-the-land.md))
+([ADR-0052](0052-the-sea-mirrors-the-land.md)) · amended by
+[ADR-0053](0053-the-ground-erodes-and-the-macro-band-never-repeats.md):
+the macro band and the gullies are evaluated on a lattice with no period, not
+fetched from the texture
 
 ## Context
 

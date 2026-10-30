@@ -762,7 +762,11 @@ like everything else here.
 state them.** `engine.surfaceQuality` is the field the frame loop reads — the
 refinement threshold, the ground's octaves, the sea's frame read and waves,
 the rocks — and a driving script can set it between two `--cast`s to measure
-one term: `render/quality.ts` names what each step spends. The materials
+one term: `render/quality.ts` names what each step spends. `ground: 'full'`
+is the macro band and the eroded detail under it — the micro octave and the
+grain damped by their slope, the gullies, the talus clamp — and `'lean'` is
+the macro band alone, so the two differ by everything finer than a
+kilometer. The materials
 compare before they write, so flipping a lever costs the next frame nothing
 but the change. The record that outlives the session is the `render.surface`
 preference, which the graphics panel edits and `state/engineKnobs.ts` carries

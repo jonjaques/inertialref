@@ -705,6 +705,30 @@ ground, which is further than the band survives to. It is hand-written rather
 than taken from `mx_*` because periodicity is the one property none of the
 built-ins has.
 
+**The coarsest band may not repeat, so it is not a fetch.** Every octave the
+texture holds closes on thirty-two of its own cells, which the grain needs and
+the macro band cannot afford: at four kilometers a cell the period is 128 km,
+and a frame seen from a few hundred meters a pixel holds several. The macro
+band and the gullies are `latticeNoise` and `stripes` in
+`render/noiseNodes.ts` instead — the texture's own construction on a lattice
+with no period — and their coordinate is the grain's trick without the
+modulo: the CPU splits the unrounded anchor into whole lattice cells and a
+remainder in float64 (`macroCell`, `macroOffset`), and the graph adds
+`positionLocal` to the remainder. `anchor + local` in float32 is rounded to
+half a meter on Earth, differently in every patch, which a four-kilometer
+band survives and a fifteen-meter gully does not.
+
+**Under the macro band the detail is eroded, and it is read against the slope
+it lies on.** The micro octave and the grain are damped by the slope already
+summed beneath them — an octave keeps half its strength at the angle of
+repose — so a hillside is smoother than the ground at its foot. Gullies are a
+phasor stripe field running down the landform's fall line, kept off the flat,
+the crests and the water, and the talus clamp stops loose ground being drawn
+steeper than the angle of repose by its detail. All of it is shading; none of
+it moves the mesh. And all of it is gone by the footprint at which the relief
+gate hands the body to its sphere, which is why the sphere does not carry it.
+[ADR-0053](../adr/0053-the-ground-erodes-and-the-macro-band-never-repeats.md).
+
 **The rocks wear this material rather than one of their own**, which is what
 keeps a boulder and the regolith it is lying on agreeing about the palette, the
 photometry, the terminator, the aerial veil and the published photograph. They
@@ -959,6 +983,7 @@ flowchart TB
 - [ADR-0013](../adr/0013-measured-figures.md) — why a body that gravity never rounded off carries a radius grid rather than a sphere
 - [ADR-0020](../adr/0020-the-face.md) — the cover field, the palette and the one terrain material
 - [ADR-0021](../adr/0021-the-ground.md) — the grain band, and the rocks that wear the same material
+- [ADR-0053](../adr/0053-the-ground-erodes-and-the-macro-band-never-repeats.md) — the eroded detail, and the macro band on a lattice with no period
 - [Coordinates](coordinates.md) — what render space is derived from
 - [Streaming](streaming.md) — how terrain patches are chosen and reconciled
 - [Time](time.md) — where the interpolation alpha comes from

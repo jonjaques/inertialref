@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import fc from 'fast-check'
 import { BufferAttribute, Mesh, MeshBasicNodeMaterial } from 'three/webgpu'
 import { buildPatch, NO_MORPH_DISTANCE } from '@inertialref/rendering'
 import { COVER_CHANNELS, regionAddress } from '@inertialref/universe'
@@ -14,7 +15,7 @@ import {
   wearGround,
   wearSea,
 } from './groundWear.ts'
-import { GRAIN_PERIOD, grainWrap } from './terrain.ts'
+import { GRAIN_PERIOD, grainWrap, MACRO_METERS } from './terrain.ts'
 import { WAVE_PERIOD } from './water.ts'
 import {
   groundWearOf,
@@ -133,6 +134,50 @@ describe('a mesh that wears the ground', () => {
       expect(wear.grainOrigin[axisName]).toBeGreaterThanOrEqual(0)
       expect(wear.grainOrigin[axisName]).toBeLessThan(GRAIN_PERIOD)
     }
+  })
+
+  /*
+   * The macro split is the other half of the grain's trick: whole cells and
+   * a remainder, from the unrounded anchor. Whole cells so the graph can add
+   * the floor of a small offset to them and stay exact; a remainder under one
+   * cell so float32 holds it to a quarter of a millimeter; and the two summing
+   * back to the anchor the vertices were built from, or every patch's band is
+   * shifted by its own rounding — half a meter on Earth, which cuts a gully at
+   * every seam.
+   */
+  it('splits the unrounded anchor across the macro lattice', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: -7e6, max: 7e6, noNaN: true }),
+        fc.double({ min: -7e6, max: 7e6, noNaN: true }),
+        fc.double({ min: -7e6, max: 7e6, noNaN: true }),
+        (x, y, z) => {
+          const wear = wearGround(new Mesh(), { x, y, z }, EARTH)
+          const anchor = { x, y, z }
+          for (const axis of ['x', 'y', 'z'] as const) {
+            const cell = wear.macroCell[axis]
+            const offset = wear.macroOffset[axis]
+            expect(Number.isInteger(cell)).toBe(true)
+            // Inside one cell, to the rounding of a coordinate a hair from a
+            // lattice plane: −1e-300 m divides to a cell of −1 and an offset
+            // that rounds to exactly one cell, which the graph floors anyway.
+            expect(offset).toBeGreaterThanOrEqual(-1e-9)
+            expect(offset).toBeLessThanOrEqual(MACRO_METERS)
+            // A float64 ulp at seven thousand kilometers is a nanometer.
+            expect(
+              Math.abs(cell * MACRO_METERS + offset - anchor[axis]),
+            ).toBeLessThan(1e-8)
+          }
+        },
+      ),
+    )
+    const axis = EARTH / Math.sqrt(3)
+    const wear = wearGround(new Mesh(), { x: axis, y: axis, z: -axis }, EARTH)
+    // From the unrounded anchor, not the one the anchor uniform holds.
+    expect(wear.macroOffset.x).toBe(axis - wear.macroCell.x * MACRO_METERS)
+    expect(wear.macroOffset.x).not.toBe(
+      Math.fround(axis) - wear.macroCell.x * MACRO_METERS,
+    )
   })
 
   it('reads as undressed, not as a throw, off an object nothing dressed', () => {

@@ -201,6 +201,10 @@ export const WINGS = [
             'The sea mirrors the land',
           ],
           [
+            'docs/adr/0053-the-ground-erodes-and-the-macro-band-never-repeats.md',
+            'The ground erodes',
+          ],
+          [
             'docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md',
             'A long lens',
           ],

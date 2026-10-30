@@ -274,7 +274,7 @@ const BUILDS_PER_FRAME = 8
  * number: one pixel of silhouette, against the whole ground appearing that the
  * opacity fade traded for a transparency ramp.
  */
-const TERRAIN_RELIEF_PIXELS = 8
+export const TERRAIN_RELIEF_PIXELS = 8
 
 /**
  * How far the eye may move, in body-fixed meters, before a held selection is

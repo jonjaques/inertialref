@@ -11926,6 +11926,45 @@ smooth streak and moved 5,593 pixels of its plate. The noise past the limit
 is the picture, so the fades stay; the lever that buys the frame at
 altitude is `plain`.
 
+## The ground erodes, and the macro band's repeat was never in a picture (20 Oct 2026)
+
+[ADR-0053](docs/adr/0053-the-ground-erodes-and-the-macro-band-never-repeats.md)
+puts erosion phase 5's per-pixel half on the ground — slope-damped roughness,
+gullies down the fall line, a talus clamp — and takes the macro band off the
+baked texture onto a lattice with no period.
+
+**The tiling defect was arithmetic, and the plates say so.** The `2π` in
+`macroFrequency` made the "four-kilometer" band a 637 m cell repeating every
+20.4 km. Read as `lean` minus `flat` over lossless captures straight down on
+the far-shore world, at 200 m and at 50 m a pixel, the band is at most 3 of 255
+in either build, and the old one's autocorrelation is under 0.08 at every
+shift from 10 to 600 px: at 200 m a pixel its cell is three pixels, which is
+noise, not a tile. The new band correlates 0.67 across 5 px at 50 m a pixel,
+which is the mottle the constant names. The case for the change is the
+construction rather than a picture of the defect; the plate pair carries the
+amplified difference.
+
+**A constant array indexed at run time is on Metal's stack.** `latticeNoise`
+first read its cube-edge gradient out of a WGSL `array<vec3f, 12>` indexed by
+the hash. Twenty-four evaluations a pixel over a megapixel drew in 85 ms that
+way, 19 ms with the gradient built from the hash's bits, and 24 ms as the same
+count of texture fetches, in the GPU harness. The bits stay.
+
+**A texture fetch coherent across a frame is nearly free, and the lattice is
+not.** In one boot at the Gliese 908 IV shore, 1920×1200 at a device pixel
+ratio of two and under load, `lean` with the old fetched macro band read
+31.3 ms and `flat` 31.3; `lean` with the lattice band, 35.4. The scratch
+bench's random coordinates put a fetch above a lattice evaluation — 11.5 ms
+against 8.5 beyond an empty graph, twenty-four a pixel over a megapixel, also
+under load; the frame's coherent ones do not, and a bench that scatters its
+coordinates measures the cache, not the band.
+
+**The bake measured its footprint from each patch's anchor.** In bake mode the
+eye is at the body's center, but `eyeLocal` is the anchor-relative eye, so the
+footprint fell to nothing around each of the ninety-six patches and the
+orbital bake drew the macro band at kilometers a texel. It is measured from the
+center now, and the bake reads no macro band.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

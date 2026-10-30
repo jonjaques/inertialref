@@ -49,6 +49,14 @@ export interface GroundWear {
    * deposits read the slope as drawn.
    */
   readonly level: number
+   * The unrounded anchor split across the macro lattice in float64: the whole
+   * cells in `macroCell`, exact integers, and the meters left over in
+   * `macroOffset`, under `MACRO_METERS`. The bands that may not repeat read
+   * a lattice coordinate from these two and `positionLocal`, never from the
+   * body-fixed position (`render/terrain.ts` § the macro band).
+   */
+  readonly macroCell: Vector3
+  readonly macroOffset: Vector3
 }
 
 /** A ground wearer that is not a terrain patch: its slope is read as drawn. */
@@ -78,6 +86,8 @@ export const UNDRESSED_GROUND: GroundWear = Object.freeze({
   anchorAltitude: 0,
   grainOrigin: new Vector3(),
   level: NO_SLOPE_LEVEL,
+  macroCell: new Vector3(),
+  macroOffset: new Vector3(),
 })
 
 export const UNDRESSED_SEA: SeaWear = Object.freeze({

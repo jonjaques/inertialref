@@ -15,7 +15,7 @@ import {
 } from 'three/webgpu'
 import { COVER_CHANNELS } from '@inertialref/universe'
 import { NO_MORPH_DISTANCE, type RenderPatch } from '@inertialref/rendering'
-import { grainWrap } from './terrain.ts'
+import { grainWrap, MACRO_METERS } from './terrain.ts'
 import { waveWrap } from './water.ts'
 import {
   GROUND_WEAR,
@@ -251,6 +251,8 @@ export function wearGround(
     anchorAltitude: 0,
     grainOrigin: new Vector3(),
     level,
+    macroCell: new Vector3(),
+    macroOffset: new Vector3(),
   }
   object.userData[GROUND_WEAR] = wear
   anchorGround(object, anchor, datumRadius)
@@ -258,8 +260,8 @@ export function wearGround(
 }
 
 /**
- * Move a ground wearer's anchor: the rounded vector, its altitude and the
- * grain origin together, never one without the others.
+ * Move a ground wearer's anchor: the rounded vector, its altitude, the grain
+ * origin and the macro split together, never one without the others.
  *
  * `Math.fround` is not decoration. The uniform is float32, and the material's
  * altitude arithmetic is exact only if the offset beside it describes the
@@ -290,6 +292,22 @@ export function anchorGround(
     grainWrap(anchor.x),
     grainWrap(anchor.y),
     grainWrap(anchor.z),
+  )
+  /*
+   * The macro split, from the unrounded anchor for the grain's reason. The
+   * cell is a whole number — 1,593 on Earth, exact in float32 — and the
+   * subtraction in float64 loses nothing a float32 uniform could hold, so the
+   * offset is under four kilometers and arrives to a quarter of a millimeter.
+   */
+  wear.macroCell.set(
+    Math.floor(anchor.x / MACRO_METERS),
+    Math.floor(anchor.y / MACRO_METERS),
+    Math.floor(anchor.z / MACRO_METERS),
+  )
+  wear.macroOffset.set(
+    anchor.x - wear.macroCell.x * MACRO_METERS,
+    anchor.y - wear.macroCell.y * MACRO_METERS,
+    anchor.z - wear.macroCell.z * MACRO_METERS,
   )
 }
 
