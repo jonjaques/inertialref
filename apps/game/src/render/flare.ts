@@ -92,9 +92,9 @@ interface ElementSpec {
  * flare the eye reads as "photograph" is one it barely notices.
  */
 const ELEMENTS: readonly ElementSpec[] = [
-  // Tuned on the extended-range path, where the tone curve's shoulder lifts
-  // everything near white: what reads as restrained on an SDR capture was a
-  // furnace on an EDR display, which is where these were re-metered.
+  // Tuned on the extended-range path, where the tone curve lifts highlights
+  // into the display's headroom: what reads as restrained on an SDR capture
+  // was a furnace on an EDR display, which is where these were re-metered.
   { kind: 'glow', t: 0, size: 0.24, tint: [1, 1, 1], gain: 1.1 },
   { kind: 'streak', t: 0, size: 1.0, tint: [1, 0.95, 0.9], gain: 0.16 },
   { kind: 'disc', t: 0.38, size: 0.05, tint: [0.5, 0.9, 0.85], gain: 0.22 },

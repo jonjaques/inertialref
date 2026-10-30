@@ -7,16 +7,20 @@ import {
 import {
   clamp,
   colorSpaceToWorking,
+  float,
   Fn,
+  log2,
   luminance,
   mat3,
   max,
   smoothstep,
+  sqrt,
   uniform,
   vec3,
   vec4,
   workingToColorSpace,
 } from 'three/tsl'
+import { CALIBRATED_STAR_RADIANCE } from './bodyUniforms.ts'
 import { LINEAR_P3 } from './gamut.ts'
 
 /* The photographic response preserves channel ratios through highlights.
@@ -151,7 +155,21 @@ export function installToneCurve(
     // would pull a saturated highlight toward white as it brightens, which is
     // the one thing a star's color must not do — the star is the scene's
     // reference white and its temperature is data, not art direction.
-    const lift = smoothstep(shoulderUniform, 1, luminance(graded))
+    //
+    // And by the *scene's* luminance, on a log scale that reaches the peak at
+    // the star's own radiance, rather than by the graded value. The graded
+    // curve is all but flat above three times diffuse white, so a lift keyed
+    // on it handed nearly the whole headroom to everything past that: the
+    // noon aureole three degrees off the sun, at 2.8, drew at 1.67 on a 2×
+    // display against the disk's 1.97 — a sun that was not the brightest
+    // thing in its own sky. Below the shoulder nothing moves, so an SDR and
+    // an HDR capture still agree on skin, terrain and hull, and the ramp is
+    // the same at any headroom, which the curve cannot know.
+    const start = shoulderLuminance(shoulderUniform)
+    const reach = log2(y.div(start)).div(
+      log2(float(CALIBRATED_STAR_RADIANCE).div(start)),
+    )
+    const lift = smoothstep(0, 1, reach.clamp(0, 1))
       .mul(headroomUniform.sub(1))
       .add(1)
 
@@ -213,6 +231,22 @@ export const toneCurveFor = (
 export function selectToneCurve(renderer: Renderer): void {
   renderer.toneMapping = CustomToneMapping
 }
+
+/**
+ * The scene luminance whose graded value is `shoulder`: the rational fit
+ * below, solved for its input. It is a quadratic, and the positive root is the
+ * one on the curve. The neutral look feeds the fit `y / 0.6`, hence the 0.6.
+ */
+const shoulderLuminance = /*@__PURE__*/ Fn(([shoulder]: [Node<'float'>]) => {
+  const a = float(1).sub(shoulder.mul(0.983729))
+  const b = float(0.0245786).sub(shoulder.mul(0.983729 * 0.432951))
+  const c = shoulder.mul(0.238081).add(0.000090537).negate()
+  const root = b
+    .negate()
+    .add(sqrt(b.mul(b).sub(a.mul(c).mul(4))))
+    .div(a.mul(2))
+  return root.mul(0.6)
+})
 
 /** The ACES RRT + ODT rational fit. Source: selfshadow/ltc_code `ltc_blit.fs`. */
 const rrtAndOdtFit = /*@__PURE__*/ Fn(([color]: [Node<'vec3'>]) => {
