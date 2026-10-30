@@ -504,3 +504,39 @@ export function zenithSkyRadiance(
   }
   return radiance
 }
+
+/**
+ * What to draw a star's disk with, per channel, when the eye is inside the
+ * air and the shell will then dim it by the path's mean transmittance.
+ *
+ * The shell composites gray — L + T̄·background — which is right for a sky of
+ * faint things behind the air and wrong for the disk in two ways. It does not
+ * redden: a sun on the horizon came through white. And under Enhanced, where
+ * the disk is drawn at a calibrated eight times the surface white rather than
+ * its physical fifty thousand, the full extinction takes it below its own
+ * sky: through a dusty column at a 4.6° sun the disk was a brown spot in a
+ * peach glow, the brightest thing in the scene drawn as the dimmest.
+ *
+ * So the disk arrives in the column's own color, at the column's luminance
+ * raised to `compression` — the exponent that took the physical disk to the
+ * drawn one, ln 8 over ln 53,000 for the Sun at 1 AU under Enhanced and 1 for
+ * a photograph. The air dims the disk by the same law that put it on screen,
+ * so it keeps its rank against the sky until it is physically level with it,
+ * and it keeps its hue, because a physical disk through that column is that
+ * color at any brightness the hue-preserving curve can show. Compressing each
+ * channel instead bleached a 2° sun to 1 : 0.89 : 0.69. Zero once the planet
+ * is in the way.
+ */
+export function diskThroughAir(
+  recipe: AtmosphereRecipe,
+  radius: number,
+  mu: number,
+  compression: number,
+): [number, number, number] {
+  const passed = transmittanceFrom(Math.max(radius, 1), mu, recipe)
+  const mean = (passed[0] + passed[1] + passed[2]) / 3
+  const luminance = 0.2126 * passed[0] + 0.7152 * passed[1] + 0.0722 * passed[2]
+  if (mean <= 1e-12 || luminance <= 1e-12) return [0, 0, 0]
+  const gain = luminance ** (compression - 1) / mean
+  return [passed[0] * gain, passed[1] * gain, passed[2] * gain]
+}

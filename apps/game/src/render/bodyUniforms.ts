@@ -116,6 +116,8 @@ interface AtmosphereUniforms {
   readonly scale: Vec3
   readonly outerRadius: number
   readonly innerRadius: number
+  /** The datum's render radius; the drawn sphere is sunk below it. */
+  readonly seaLevel: number
   readonly flattening: number
 }
 
@@ -268,6 +270,18 @@ const STAR_APPEARANCE: RenderBody['appearance'] = {
 
 /** The key a star's visual is resident under, beside the bodies' addresses. */
 export const starKey = (star: RenderStar): string => `star:${star.system}`
+
+/**
+ * The exponent that took a star's physical disk to the drawn one, which the
+ * air in front of the disk then dims it by (`diskThroughAir`): ln 8 over the
+ * log of the physical radiance under Enhanced, one for a photograph. A disk
+ * Enhanced has to lift rather than compress is dimmed physically.
+ */
+export function diskCompression(star: RenderStar, visibility: boolean): number {
+  const physical = star.luminance / SURFACE_LUMINANCE
+  if (!visibility || physical <= CALIBRATED_STAR_RADIANCE) return 1
+  return Math.log(CALIBRATED_STAR_RADIANCE) / Math.log(physical)
+}
 
 /**
  * A star as a body, so it is placed and drawn by the same path as a planet.
@@ -499,6 +513,7 @@ export function bodyUniforms(
       scale: oblate(shell),
       outerRadius: shell,
       innerRadius: placement.scale,
+      seaLevel: body.trueRadius * placement.compression,
       flattening: shellFlattening,
     }
   }

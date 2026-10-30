@@ -6,6 +6,7 @@ import {
   bakeMultipleScattering,
   bakeTransmittance,
   sampleLut,
+  diskThroughAir,
   TRANSMITTANCE_WIDTH,
   zenithSkyRadiance,
 } from './atmosphere.ts'
@@ -184,6 +185,70 @@ describe('the sky overhead', () => {
     const high = overhead(1 + (EARTH_TOP - 1) * 0.5, 45)
     expect(high).toBeLessThan(ground)
     expect(high).toBeGreaterThan(0)
+  })
+})
+
+describe('a star seen through the air', () => {
+  const mean = (rgb: readonly number[]): number =>
+    ((rgb[0] as number) + (rgb[1] as number) + (rgb[2] as number)) / 3
+  const luminance = (rgb: readonly number[]): number =>
+    0.2126 * (rgb[0] as number) +
+    0.7152 * (rgb[1] as number) +
+    0.0722 * (rgb[2] as number)
+  const lowSun = Math.sin((2 * Math.PI) / 180)
+  /** ln 8 over ln 53,333: the Sun's disk at 1 AU, drawn at eight. */
+  const enhanced = Math.log(8) / Math.log(1.6e9 / 30_000)
+  /** What reaches the eye: the drawn disk, after the shell's gray mean. */
+  const arrives = (compression: number): number[] => {
+    const shell = mean(sampleT(0, lowSun))
+    return diskThroughAir(earthRecipe, 1, lowSun, compression).map(
+      (value) => value * shell,
+    )
+  }
+
+  it('arrives in the column’s own color, physically, in a photograph', () => {
+    // The table is the bilinear read of the same march, hence two places.
+    const column = sampleT(0, lowSun)
+    const passed = arrives(1)
+    for (let c = 0; c < 3; c += 1)
+      expect(passed[c]).toBeCloseTo(column[c] as number, 2)
+  })
+
+  it('keeps a setting sun above the surface white, and orange, under Enhanced', () => {
+    // Gray extinction took the calibrated disk to 8·T̄ = 0.78 at a 2° sun,
+    // beside an aureole brighter than that. Compressed by the law that drew
+    // it, it arrives at five times the surface white in the column's hue.
+    const column = sampleT(0, lowSun)
+    expect(8 * mean(column)).toBeLessThan(1)
+    const disk = arrives(enhanced).map((value) => value * 8)
+    expect(luminance(disk)).toBeGreaterThan(4)
+    for (let c = 1; c < 3; c += 1)
+      // The column is the table's bilinear read of the same march.
+      expect((disk[c] as number) / (disk[0] as number)).toBeCloseTo(
+        (column[c] as number) / (column[0] as number),
+        2,
+      )
+  })
+
+  it('is nothing behind the planet, and never brighter than in a vacuum', () => {
+    expect(diskThroughAir(earthRecipe, 1, -0.2, enhanced)).toEqual([0, 0, 0])
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1, max: EARTH_TOP, noNaN: true }),
+        fc.double({ min: -1, max: 1, noNaN: true }),
+        fc.double({ min: 0.05, max: 1, noNaN: true }),
+        (radius, mu, compression) => {
+          const drawn = diskThroughAir(earthRecipe, radius, mu, compression)
+          for (const value of drawn) {
+            expect(Number.isFinite(value)).toBe(true)
+            expect(value).toBeGreaterThanOrEqual(0)
+          }
+          // Luminance after the shell is L_T^k, which no column raises past 1.
+          const shell = mean(sampleT((radius - 1) / (EARTH_TOP - 1), mu))
+          expect(luminance(drawn) * shell).toBeLessThanOrEqual(1.02)
+        },
+      ),
+    )
   })
 })
 

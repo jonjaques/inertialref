@@ -13,14 +13,15 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { getLogger } from '@inertialref/shared'
-import type { Vec3 } from '@inertialref/spatial'
-import type { RenderBody } from '@inertialref/rendering'
+import { Vec, type Vec3 } from '@inertialref/spatial'
+import { diskThroughAir, type RenderBody } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
   type BodyFrame,
   bodyUniforms,
   type Rgb,
+  diskCompression,
   starAsBody,
   starKey,
   wantsBake,
@@ -44,8 +45,11 @@ import {
 } from '../render/planet.ts'
 import {
   airOverhead,
+  type AtmosphereScattering,
   scatteringFor,
   scatteringVia,
+  type Standing,
+  standingIn,
 } from '../render/atmosphereLuts.ts'
 import { airLuminance } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
@@ -375,6 +379,14 @@ export function Bodies({
     }
     // The brightest air the eye is inside this frame; see `airLuminance`.
     let overhead = 0
+    // Written inside `draw`, which control flow cannot see into; the cast
+    // keeps the read after the loop from narrowing to `null`.
+    let standingAir = null as {
+      readonly scattering: AtmosphereScattering
+      readonly standing: Standing
+    } | null
+    // What the air does to the star being drawn, set per star below.
+    let throughAir: readonly [number, number, number] | null = null
 
     const draw = (key: string, body: RenderBody, star: Rgb | null): void => {
       const appearance = body.appearance
@@ -423,7 +435,17 @@ export function Bodies({
       visual.mesh.renderOrder = uniforms.renderOrder
 
       if (uniforms.star !== null && visual.star !== null) {
-        setColor(visual.star.color, uniforms.star.color)
+        const color = uniforms.star.color
+        setColor(
+          visual.star.color,
+          throughAir === null
+            ? color
+            : {
+                r: color.r * throughAir[0],
+                g: color.g * throughAir[1],
+                b: color.b * throughAir[2],
+              },
+        )
         setNumber(visual.star.time, uniforms.star.time)
         setNumber(visual.star.exposure, uniforms.star.exposure)
       }
@@ -527,6 +549,7 @@ export function Bodies({
         setVector(air.center.value, position)
         setNumber(air.outerRadius, shell.outerRadius)
         setNumber(air.innerRadius, shell.innerRadius)
+        setNumber(air.seaLevel, shell.seaLevel)
         setVector(air.spinAxis.value, uniforms.spinAxis)
         setNumber(air.flattening, shell.flattening)
         const haze = appearance.haze
@@ -549,17 +572,23 @@ export function Bodies({
               scattering.transmittance,
               scattering.multiScatter,
             )
-            overhead = Math.max(
-              overhead,
-              airOverhead(
+            const standing = standingIn(
+              shell,
+              scene.camera.position,
+              position,
+              uniforms.spinAxis,
+            )
+            if (standing !== null) {
+              const sky = airOverhead(
                 scattering,
-                scene.camera.position,
-                position,
-                shell.innerRadius,
+                standing,
                 sun,
                 uniforms.sunColor,
-              ),
-            )
+              )
+              if (standingAir === null || sky >= overhead)
+                standingAir = { scattering, standing }
+              overhead = Math.max(overhead, sky)
+            }
           }
         }
         setColor(air.sunColor, uniforms.sunColor)
@@ -568,8 +597,24 @@ export function Bodies({
     }
 
     for (const body of scene.bodies) draw(body.address, body, null)
-    for (const star of scene.stars)
+    for (const star of scene.stars) {
+      throughAir =
+        standingAir === null
+          ? null
+          : diskThroughAir(
+              standingAir.scattering.recipe,
+              standingAir.standing.radius,
+              Vec.dot(
+                standingAir.standing.up,
+                Vec.normalize(
+                  Vec.sub(star.placement.position, scene.camera.position),
+                ),
+              ),
+              diskCompression(star, visibility),
+            )
       draw(starKey(star), starAsBody(star, visibility), star.color)
+    }
+    throughAir = null
     airLuminance.value = overhead
 
     residency.end()

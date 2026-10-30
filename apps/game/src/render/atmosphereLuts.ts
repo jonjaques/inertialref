@@ -232,33 +232,75 @@ export function scatteringVia(
   return null
 }
 
+/** Where an eye stands in one body's air, in the tables' own units. */
+export interface Standing {
+  /** Radius from the body's center; the tables' ground is 1. */
+  readonly radius: number
+  /** Unit render-space vector from the center through the eye. */
+  readonly up: Vec3
+}
+
+/** The shell's render-space geometry, as `bodyUniforms` hands it over. */
+export interface ShellGeometry {
+  readonly innerRadius: number
+  readonly outerRadius: number
+  readonly seaLevel: number
+  readonly flattening: number
+}
+
+const smoothstep = (edge: number, x: number): number => {
+  const t = Math.min(Math.max(x / edge, 0), 1)
+  return t * t * (3 - 2 * t)
+}
+
 /**
- * The luminance of the sky straight over an eye inside this shell, in scene
- * units, or zero outside it.
- *
- * Positions are render space, as the shell's own uniforms are; the ratio of
- * the two radii is the planet-radius altitude the tables are baked in, which
- * survives distance compression. The shell is taken as a sphere here: on
- * Earth the oblate figure moves a pole's altitude by 21 km, which only
- * thickens the column a polar observer is credited with.
+ * The eye the shell marches from, on the CPU: its altitude over sea level
+ * near the ground, the stretched geometry by the top of the air, blended as
+ * the shell's `standing` blends them. Null above the air, where there is no
+ * sky overhead and nothing between the eye and a star.
+ */
+export function standingIn(
+  shell: ShellGeometry,
+  eye: Vec3,
+  center: Vec3,
+  spinAxis: Vec3,
+): Standing | null {
+  const relative = Vec.sub(eye, center)
+  const distance = Vec.length(relative)
+  if (distance === 0 || shell.innerRadius <= 0) return null
+  const stretch = 1 / Math.max(shell.flattening, 1e-3) - 1
+  const stretched = Vec.length(
+    Vec.add(
+      relative,
+      Vec.scale(spinAxis, Vec.dot(relative, spinAxis) * stretch),
+    ),
+  )
+  const top = shell.outerRadius / shell.innerRadius
+  const altitude = distance / shell.seaLevel - 1
+  const blend = smoothstep(top - 1, altitude)
+  const radius =
+    (1 + Math.max(altitude, 0)) * (1 - blend) +
+    (stretched / shell.innerRadius) * blend
+  if (radius >= top) return null
+  return { radius, up: Vec.scale(relative, 1 / distance) }
+}
+
+/**
+ * The luminance of the sky straight over a standing eye, in scene units.
+ * Positions are render space, as the shell's own uniforms are.
  */
 export function airOverhead(
   scattering: AtmosphereScattering,
-  eye: Vec3,
-  center: Vec3,
-  innerRadius: number,
+  standing: Standing,
   sun: Vec3 | null,
   sunColor: Rgb,
 ): number {
-  if (sun === null || innerRadius <= 0) return 0
-  const up = Vec.sub(eye, center)
-  const distance = Vec.length(up)
-  if (distance === 0) return 0
+  if (sun === null) return 0
   const [r, g, b] = zenithSkyRadiance(
     scattering.recipe,
     scattering.multiScatterTable,
-    distance / innerRadius,
-    Vec.dot(up, sun) / distance,
+    standing.radius,
+    Vec.dot(standing.up, sun),
   )
   return (
     0.2126 * r * sunColor.r + 0.7152 * g * sunColor.g + 0.0722 * b * sunColor.b

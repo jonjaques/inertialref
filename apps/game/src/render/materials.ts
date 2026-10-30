@@ -178,6 +178,11 @@ export interface AtmosphereMaterial {
   /** Render-space radius of the shell, and of the ground beneath it. */
   readonly outerRadius: { value: number }
   readonly innerRadius: { value: number }
+  /**
+   * Render-space radius of the datum, which the drawn ground is sunk under.
+   * An eye's altitude in the air is measured from here; see `standing`.
+   */
+  readonly seaLevel: { value: number }
   /** Unit vector from the body toward its star, in render space. */
   readonly sunDirection: { value: Vector3 }
   /** The key light's color; the sky is scattered starlight. */
@@ -270,6 +275,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   const center = uniform(new Vector3())
   const outerRadius = uniform(1)
   const innerRadius = uniform(1)
+  const seaLevel = uniform(1)
   const sunDirection = uniform(new Vector3(0, 1, 0))
   const sunColor = uniform(new Color(1, 1, 1))
   const spinAxis = uniform(new Vector3(0, 1, 0))
@@ -337,7 +343,26 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     const shellHeight = max(top.sub(1), 1e-6)
 
     const rayDirection = normalize(wallUnits.sub(eyeUnits))
-    const toCenter = eyeUnits.negate()
+
+    /*
+     * Where the eye stands in the air, which is not where the geometry puts
+     * it. The tables' ground is the drawn sphere, sunk under the datum so the
+     * terrain covers it — 9.9 km on Earth — and the stretch lifts an eye at
+     * high latitude by up to the 21 km the spherical terrain does not share.
+     * An observer on a beach was marched from 10 to 30 km up: half the air
+     * over their head, a slate-gray zenith, and a setting sun that never
+     * reddened because the column that reddens it was below them. Near the
+     * ground the eye is put at its altitude over sea level instead, along its
+     * own radial; by the top of the air it is back where the shell is, so the
+     * limb an orbit sees does not move. `airOverhead` takes the same eye.
+     */
+    const altitude = length(eyeRelative).div(seaLevel).sub(1)
+    const standing = mix(
+      normalize(eyeUnits).mul(altitude.max(0).add(1)),
+      eyeUnits,
+      smoothstep(0, shellHeight, altitude),
+    )
+    const toCenter = standing.negate()
 
     // Closest approach along the ray, and the impact parameter squared.
     // `|d × c|` with d a unit vector gives the perpendicular distance directly
@@ -387,7 +412,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
 
     Loop(ATMOSPHERE_SAMPLES, ({ i }) => {
       const t = near.add(float(i).add(0.5).mul(stepLength))
-      const point = eyeUnits.add(rayDirection.mul(t))
+      const point = standing.add(rayDirection.mul(t))
       const radius = length(point)
       const height = max(radius.sub(1), 0)
       const height01 = saturate(height.div(shellHeight))
@@ -460,6 +485,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     center,
     outerRadius,
     innerRadius,
+    seaLevel,
     sunDirection,
     sunColor,
     spinAxis,
