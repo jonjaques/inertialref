@@ -253,7 +253,12 @@ morph slides a patch onto its _parent's_ grid, so it closes a one-level gap
 exactly and a two-level gap not at all. An unrestricted tree produced gaps of up
 to six, drawn as dashed black arcs along every level ring; the tree is restricted
 to 2:1, which is the classical answer and the rule Transvoxel's transition cells
-assume.
+assume. And one level is closed only from both sides: the finer patch arrives on
+the coarser grid, and the coarser patch holds the edge they share on that grid
+rather than sliding toward its own parent — which a patch wider than its morph
+band would otherwise be doing at the edge's far end. The selection reports those
+edges as `finerEdges`
+([rendering](rendering.md#the-morph-and-why-the-shaders-share-of-it-is-one-mix)).
 
 **What is cached, and why that split:** heightfields are cached and so is the
 geometry built from them. A [floating-origin rebase](rendering.md#the-floating-origin)

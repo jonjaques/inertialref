@@ -264,6 +264,14 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **A level boundary was closed from one side.** The crack property held the
+  finer patch fully morphed wherever a coarser one abutted it and stopped
+  there; nothing asked whether the coarser patch was still drawing the grid
+  the finer one had arrived on. A patch is wider than its own morph band, so
+  it was not, and the level rings were dashed with slits of sky. The drawn
+  ground test in `terrainPatch.test.ts` now builds a whole selection and
+  compares every shared edge as both sides draw it, and the selection's
+  property asserts the coarser side holds the edge (30 Oct 2026, below).
 - **Case-only export paths overwrite each other on macOS.** The first Astro
   corpus build generated `BayerName.html` and `bayerName.html` into the same
   file. All 47 colliding pairs now have stable, distinct canonical paths;
@@ -11979,6 +11987,72 @@ eye is at the body's center, but `eyeLocal` is the anchor-relative eye, so the
 footprint fell to nothing around each of the ninety-six patches and the
 orbital bake drew the macro band at kilometers a texel. It is measured from the
 center now, and the bake reads no macro band.
+
+## The level rings were slits of sky, because a coarse patch slid on its own edge (30 Oct 2026)
+
+Reported as triangles "warped, or facing the wrong way" and glitching at chunk
+transitions. In the app, at Gliese 1061 IV's shore 25 m up, the slits are
+rows of one-pixel dashes of sunset sky along a level ring in the midground —
+a hole through the ground reads exactly like a back-facing triangle.
+
+**Measured headlessly first.** `.scratch/lod-cracks/cracks.ts` (git-ignored)
+runs `selectTerrain`, builds every patch with `generateHeightfield` and
+`buildPatch`, slides each vertex by the material's own factor, and compares
+every edge two patches share as each draws it. At 1600×900 unless a row says
+otherwise, with an edge sample counted open past a quarter of a pixel:
+
+| Operating point                                  | Open           | Widest         |
+| ------------------------------------------------ | -------------- | -------------- |
+| Luna, 2 m                                        | 2,926 / 29,770 | 5.2 px at 49 m |
+| Luna on the flipped 0/3 cube edge, 2 m           | 3,623 / 30,160 | 4.7 px         |
+| Mars on the same edge, 2 m                       | 1,624 / 27,820 | 4.0 px         |
+| Miranda, 1 km                                    | 3,266 / 22,035 | 5.1 px         |
+| Q0_221_6_1_4 III (generated, airless), 3200×1800 | 3,908 / 29,120 | 3.9 px         |
+| Q0_221_6_1_4 I (generated, air), 50 m            | 5,096 / 27,625 | 5.2 px         |
+
+The two generated worlds are the headless catalog's zoo picks; the browser's
+catalog names different ones (Gliese 1061 d and IV). Every open sample had
+the finer side fully morphed and the coarser side sliding; with the coarser
+side static there was not one. After the fix all six read zero.
+
+**The real cause** is the half of the CDLOD argument this codebase never
+wrote down. Strugar's morph is crack-free when a coarse node's vertices near
+finer ground are still unmorphed, which needs nodes small against their LOD
+ranges. Here a patch is 64 cells against a range of about 49 at the flight
+lens, so the far end of an edge a coarse patch shares with finer ground stands
+at up to twice its range, past its own `MORPH_START`; and a patch the balance
+pass split is past its whole band. `MORPH_END` at 1.8 closed the finer side
+and nothing closed the other. The fix is topological rather than a band:
+`SelectedPatch.finerEdges` names the edges finer ground shares, and the vertex
+stage (`render/morph.ts`, ground and sea alike) holds their vertices still.
+Widening the bands instead was the alternative and does not work — no
+per-level band can hold the near corner at its range and the far corner
+unmorphed at once.
+
+**The second gap was on four cube edges.** Rounding an odd index to the even
+one below sends a shared vertex to opposite ends of its cell where two faces
+count the edge in opposite directions (0–3, 1–2, 2–5, 3–5): 0.6 to 1.35 px
+standing on one, a cell long mid-band. An odd index rounds toward the lower
+body-fixed coordinate now. A per-face table would have worked and is exactly
+the table `regions.ts` exists not to have; `morphRounding` reads it off
+`faceToDirection`.
+
+**Not done, and the likely remainder of "warped".** The morph is still
+Strugar's collapse: an odd vertex slides a whole cell sideways onto its even
+neighbor, so mid-band the grid is alternating strips half and one-and-a-half
+cells wide, and a vertex drags across the slope on a chord. That is legal and
+closes exactly, and it is visible motion at the band: half a cell at mid-band,
+which the 16-pixel tolerance puts at four to six pixels — derived from the
+band, not measured. A vertical morph (each odd vertex to the midpoint of its
+parent edge, the center to the midpoint of the parent's diagonal) lands on the
+parent's triangles just as exactly, needs no rounding direction at all, and
+moves nothing sideways; it costs the bit-exact normal and cover handover the
+collapse has, which become a renormalized average and a rounded byte. Not
+measured against the collapse in a picture.
+
+**Caught on the way:** `new Vector4()` is `(0, 0, 0, 1)`. As the default held
+edges it would have frozen every patch's first row; `groundWear.test.ts` read
+the default and failed.
 
 ## Known gaps
 
