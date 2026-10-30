@@ -56,14 +56,44 @@ function planeRadius(d: Vec3, a: Vec3, b: Vec3, c: Vec3): number {
   return Vec.dot(n, a) / Vec.dot(n, d)
 }
 
+/** The cube face's outward axis: the direction's dominant component, signed. */
+function faceAxis(d: Vec3): Vec3 {
+  const ax = Math.abs(d.x)
+  const ay = Math.abs(d.y)
+  const az = Math.abs(d.z)
+  if (ax >= ay && ax >= az) return vec3(Math.sign(d.x), 0, 0)
+  if (ay >= az) return vec3(0, Math.sign(d.y), 0)
+  return vec3(0, 0, Math.sign(d.z))
+}
+
+/**
+ * How far linear interpolation of a, b and c's radii over face coordinates
+ * can stand from their plane: the chord's cut plus the projection's lean.
+ */
+function planeDeparture(a: Vec3, b: Vec3, c: Vec3): number {
+  const edge = Math.max(
+    Vec.distance(a, b),
+    Vec.distance(b, c),
+    Vec.distance(c, a),
+  )
+  const depths = [a, b, c].map((p) => Vec.dot(p, FACE_AXIS))
+  const radii = [a, b, c].map(Vec.length)
+  const lean = Math.max(...depths) / Math.min(...depths) - 1
+  return (
+    (edge * edge) / (6 * BODY.radius) +
+    lean * (Math.max(...radii) - Math.min(...radii))
+  )
+}
+
 // Deep enough that a float32 offset from the anchor resolves a millimeter.
 const PARENT = regionAddress(4, 11, 1300, 700)
+/** The outward axis of the patch's cube face, along which depth is taken. */
+const FACE_AXIS = faceAxis(regionDirection(PARENT, 0.5, 0.5))
 
 describe('the ground a patch draws, read along a direction', () => {
   for (const resolution of [33, 65]) {
     const patch = patchOf(PARENT, resolution)
     const step = resolution - 1
-    const cell = (Math.PI * BODY.radius) / 2 / 2 ** PARENT.level / step
 
     it(`is each vertex's own radius at its vertex, at ${resolution}`, () => {
       for (let row = 0; row < resolution; row += 7) {
@@ -77,11 +107,19 @@ describe('the ground a patch draws, read along a direction', () => {
 
     /*
      * The independent statement: the plane of the triangle `patchIndices`
-     * emits for that cell, met by the ray from the center. A chord's sag and
-     * the gnomonic map's curvature across one cell are what separate the two,
-     * and both are of the order of the sag, `cell² / 8R`: 0.17 mm at the 58 m
-     * cell of this body's level-11 patch at 33 vertices a side. Twice it is
-     * the bound.
+     * emits for that cell, met by the ray from the center. The read
+     * interpolates the corners' radii linearly in face coordinates, and the
+     * plane is linear in neither, for two reasons. First, the plane cuts
+     * under the chord between its corners, by at most the longest edge
+     * squared over 6R. Second, the face's central projection is projective,
+     * so the weights a point takes from the face coordinates lean by the
+     * spread of the corners' depths along the face axis. That spread times
+     * the corners' spread in radius bounds the second error. Together they
+     * are 2.2 mm on this body's steepest level-11 triangle at 33 vertices a
+     * side, and the worst over 200,000 directions is 0.75 of the sum at
+     * either resolution. A bound from the face's mean cell alone is exceeded
+     * by 2.8 times once fast-check strays from the vertices, because relief
+     * lengthens the edges and the lean is first order in it.
      */
     it(`is the plane of the triangle drawn there, at ${resolution}`, () => {
       fc.assert(
@@ -108,7 +146,7 @@ describe('the ground a patch draws, read along a direction', () => {
                 ]
             const drawn = patchGroundRadius(patch, d, null) as number
             expect(Math.abs(drawn - planeRadius(d, a, b, c))).toBeLessThan(
-              (2 * cell * cell) / (8 * BODY.radius),
+              planeDeparture(a, b, c),
             )
           },
         ),
