@@ -415,6 +415,18 @@ is whole: half a region drawn and then completed is rocks appearing out of
 nothing in the middle of the frame, which is worse than a region that arrives
 late. Slot 837 is slot 837 whichever call resolves it.
 
+**A rock stands on the triangle drawn under it, not on the field it was
+generated from.** The two differ by the mesh's interpolation error at whatever
+level the selection drew there — 2 to 11 cm in the mean at the detail floor and
+79 cm at the worst cell on Miranda, and up to 1.9 m two levels coarser, which is
+the ground a rock a hundred meters off stands on — and the generator cannot know
+the level, because the selection is a function of the camera. So the streamer
+answers a direction with the deepest drawn region holding it, its triangle and
+its morph (`patchGroundRadius`), and the layout's signature carries an epoch that
+moves only when the drawn set does. Nor does a rock stand under water: the
+scatter's water test is the clamp's own, so a lake bed or a riverbed under its
+level holds none ([ADR-0051](../adr/0051-a-rock-stands-on-the-drawn-ground.md)).
+
 It runs on the main thread rather than through the pool, which is the one place
 this differs from the heightfields, and it is affordable only at that budget:
 128 field samples is 1.8 ms. `ir.terrain().scatter` reports what it holds —
@@ -503,14 +515,13 @@ gone.
 
 ## Current limits
 
-| Limit                                            | Consequence                                                                                                                       | Roadmap                                      |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                                                                           | [roadmap](../roadmap.md#streaming-and-scale) |
-| The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                              | [roadmap](../roadmap.md#terrain)             |
-| Vertex attributes are float32                    | 270 KB a patch, so a whole-disk selection is 129–291 MB at the flight lens                                                        | [roadmap](../roadmap.md#terrain)             |
-| Scatter resolves on the main thread              | A candidate slot is a field sample, so a 1,024-slot region is 8.5 ms and cannot land inside a frame; 128 slots go out a frame     | [roadmap](../roadmap.md#terrain)             |
-| The mesh is built on the main thread             | 0.25 ms a patch, budgeted at eight a frame; the producer already has the field                                                    | [roadmap](../roadmap.md#terrain)             |
-| Deposits are chosen from the mesh, not the field | Two patches at different levels report different slopes for the same ground, so a deposit weight steps by ~4% at a level boundary | [roadmap](../roadmap.md#terrain)             |
+| Limit                                           | Consequence                                                                                                                   | Roadmap                                      |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Interest is a radius scan over generation cells | Fine at 6 ly; a spatial index is needed for large radii                                                                       | [roadmap](../roadmap.md#streaming-and-scale) |
+| The selection is not frustum-culled             | A whole disk is generated, of which the renderer draws about a third                                                          | [roadmap](../roadmap.md#terrain)             |
+| Vertex attributes are float32                   | 270 KB a patch, so a whole-disk selection is 129–291 MB at the flight lens                                                    | [roadmap](../roadmap.md#terrain)             |
+| Scatter resolves on the main thread             | A candidate slot is a field sample, so a 1,024-slot region is 8.5 ms and cannot land inside a frame; 128 slots go out a frame | [roadmap](../roadmap.md#terrain)             |
+| The mesh is built on the main thread            | 0.25 ms a patch, budgeted at eight a frame; the producer already has the field                                                | [roadmap](../roadmap.md#terrain)             |
 
 **The morph closes one level, and that is a constraint rather than a setting.**
 A vertex slides toward the position its _parent's_ grid holds for it, so where

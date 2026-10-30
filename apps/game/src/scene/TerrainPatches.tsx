@@ -124,6 +124,7 @@ export function TerrainPatches({
     terrain.setQuality(engine.surfaceQuality.ground)
     if (state.palette !== null && state.orientation !== null) {
       terrain.setPalette(state.palette, state.datumRadius)
+      terrain.setSlopeTable(engine.depositSlopeTable())
       /*
        * The pixel angle of the **drawing buffer**, not of the display.
        *
@@ -207,8 +208,9 @@ export function TerrainPatches({
       if (mesh === undefined) {
         mesh = new Mesh(patchGeometry(patch, indices), material)
         // Body-fixed and constant for the life of the patch, which is what
-        // turns an anchor-relative vertex back into a place on the planet.
-        wearGround(mesh, patch.anchor, datumRadius)
+        // turns an anchor-relative vertex back into a place on the planet;
+        // its level is the row of the slope table its deposits read.
+        wearGround(mesh, patch.anchor, datumRadius, patch.region.level)
         mesh.userData.patch = patch
         meshes.set(key, mesh)
       }

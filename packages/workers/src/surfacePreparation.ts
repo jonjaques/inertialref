@@ -1,5 +1,6 @@
 import { getLogger } from '@inertialref/shared'
 import {
+  type DepositSlopeTable,
   drains,
   HEIGHTFIELD_RESOLUTION,
   type HeightfieldRequest,
@@ -10,6 +11,7 @@ import {
 import type { JobHandle, JobLane, WorkerPool } from './pool.ts'
 import {
   type ArchivedSource,
+  depositSlopesTask,
   encodeSurface,
   type HeightfieldResponse,
   prepareSurfaceTask,
@@ -76,6 +78,24 @@ export class SurfacePreparation {
    * throws for every reader anyway.
    */
   readonly #failed = new WeakSet<SurfaceParameters>()
+  /*
+   * The deposit slope table (`depositSlope.ts`), a second answer about the
+   * same surface and a later one: the ground waits on the floor and must not
+   * wait on this, so it is asked for only once the surface is prepared, and
+   * the deposits read the mesh's own slope until it lands.
+   */
+  readonly #slopes = new WeakMap<SurfaceParameters, DepositSlopeTable>()
+  readonly #slopeJobs = new Map<SurfaceParameters, JobHandle<unknown>>()
+  readonly #slopeWaiting = new WeakMap<
+    SurfaceParameters,
+    {
+      readonly promise: Promise<DepositSlopeTable | null>
+      readonly resolve: (table: DepositSlopeTable | null) => void
+    }
+  >()
+  readonly #slopesFailed = new WeakSet<SurfaceParameters>()
+  // Asked for through `slopes`, the material's ask, for `slopesPending`.
+  readonly #slopesAsked = new WeakSet<SurfaceParameters>()
 
   constructor(
     pool: WorkerPool | null,
@@ -83,6 +103,117 @@ export class SurfacePreparation {
   ) {
     this.#pool = pool
     this.#resolution = resolution
+  }
+
+  /**
+   * The surface's deposit slope table, or null until a worker has measured
+   * it. Asking starts the measurement, once the surface is prepared and
+   * nothing waits in the pool's queue: the measurement holds one worker for
+   * seconds, and a tile the ground is waiting for comes first. The streamer
+   * asks every frame, so it starts at the first frame the queue is empty.
+   *
+   * Null for good with no pool: the table is the material's alone, a host
+   * without a pool has no material, and the measurement is seconds of a
+   * worker that no frame may pay.
+   */
+  slopes(surface: SurfaceParameters): DepositSlopeTable | null {
+    const held = this.#slopes.get(surface)
+    if (held !== undefined) return held
+    this.#slopesAsked.add(surface)
+    if (this.#pool !== null && this.#pool.queued === 0) this.#measure(surface)
+    return null
+  }
+
+  /**
+   * Whether a table `slopes` has been asked for is still to come: asked, not
+   * yet measured, not failed, and a pool to measure it. A readout, so it
+   * starts nothing — for a capture, which has to wait for the ground's last
+   * change of tone the way it waits for the ground's last tile.
+   */
+  slopesPending(surface: SurfaceParameters): boolean {
+    const pool = this.#pool
+    return (
+      pool !== null &&
+      !pool.terminated &&
+      this.#slopesAsked.has(surface) &&
+      !this.#slopes.has(surface) &&
+      !this.#slopesFailed.has(surface)
+    )
+  }
+
+  /**
+   * Settles with the table once `slopes` has one, null where it never will —
+   * no pool, a failed measurement, a `clear`. For the orbital bake, which
+   * draws a body once and has to draw it with its table, and which starts
+   * the measurement whatever is queued: it may be drawing a body whose ground
+   * nothing streams, so no frame would ask again.
+   */
+  whenSlopes(surface: SurfaceParameters): Promise<DepositSlopeTable | null> {
+    const held = this.#slopes.get(surface)
+    if (held !== undefined) return Promise.resolve(held)
+    if (this.#pool === null || this.#slopesFailed.has(surface))
+      return Promise.resolve(null)
+    let waiting = this.#slopeWaiting.get(surface)
+    if (waiting === undefined) {
+      let resolve!: (table: DepositSlopeTable | null) => void
+      const promise = new Promise<DepositSlopeTable | null>((settle) => {
+        resolve = settle
+      })
+      waiting = { promise, resolve }
+      this.#slopeWaiting.set(surface, waiting)
+    }
+    void this.whenPrepared(surface).then((prepared) => {
+      if (prepared === null) this.#settleSlopes(surface, null)
+      else this.#measure(surface)
+    })
+    return waiting.promise
+  }
+
+  #measure(surface: SurfaceParameters): void {
+    const pool = this.#pool
+    if (
+      pool === null ||
+      pool.terminated ||
+      this.#slopes.has(surface) ||
+      this.#slopeJobs.has(surface) ||
+      this.#slopesFailed.has(surface) ||
+      this.prepare(surface) === null
+    )
+      return
+    const job = pool.submit(depositSlopesTask, {
+      surface: encodeSurface(surface),
+      resolution: this.#resolution,
+    })
+    this.#slopeJobs.set(surface, job)
+    job.result
+      .then((table) => {
+        this.#slopeJobs.delete(surface)
+        this.#slopes.set(surface, table)
+        this.#settleSlopes(surface, table)
+      })
+      .catch((cause: unknown) => {
+        this.#slopeJobs.delete(surface)
+        const message = cause instanceof Error ? cause.message : String(cause)
+        // Canceled by `clear`: released, so the next ask measures again.
+        if (message === 'canceled') {
+          this.#settleSlopes(surface, null)
+          return
+        }
+        if (message === 'pool terminated') return
+        // Held as failed rather than retried every frame; the deposits keep
+        // reading the mesh's slope, which is a picture rather than an error.
+        this.#slopesFailed.add(surface)
+        this.#settleSlopes(surface, null)
+        log.warn('deposit slope table failed', { cause: message })
+      })
+  }
+
+  #settleSlopes(
+    surface: SurfaceParameters,
+    table: DepositSlopeTable | null,
+  ): void {
+    this.#slopeWaiting.get(surface)?.resolve(table)
+    this.#slopeWaiting.delete(surface)
   }
 
   /**
@@ -159,6 +290,7 @@ export class SurfacePreparation {
    */
   clear(): void {
     for (const job of [...this.#jobs.values()]) job.cancel()
+    for (const job of [...this.#slopeJobs.values()]) job.cancel()
   }
 
   #submit(pool: WorkerPool, surface: SurfaceParameters): void {

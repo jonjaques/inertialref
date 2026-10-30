@@ -8,6 +8,8 @@ import {
   type CellContext,
   type PopulationCoverage,
   createGalaxyField,
+  type DepositSlopeTable,
+  depositSlopeTable,
   type DrainageGraph,
   drainageGraph,
   selectPopulationSky,
@@ -510,6 +512,32 @@ export const prepareSurfaceTask = defineTask<
   },
 })
 
+export const depositSlopesTask = defineTask<
+  PrepareSurfaceRequest,
+  DepositSlopeTable
+>({
+  /*
+   * The table the material maps a level's drawn slope through onto the
+   * floor's distribution (`depositSlope.ts`): a thousand probes of the drawn
+   * field at every level from the root to the floor, seconds of a worker and
+   * never a frame's. A task of its own rather than part of
+   * `prepareSurface`, because the ground waits on the floor and must not wait
+   * on this — until it lands the deposits read the mesh's own slope, which is
+   * the picture this corrects rather than a wrong one.
+   */
+  name: 'universe.depositSlopes',
+  version: 1,
+  run(payload) {
+    const table = depositSlopeTable(
+      decodeSurface(payload.surface),
+      payload.resolution,
+    )
+    // A copy, so the transfer below leaves this worker's memo whole.
+    return { levels: table.levels, table: table.table.slice() }
+  },
+  transfers: (response) => [response.table.buffer],
+})
+
 export interface SurveySystemRequest {
   readonly seed: string
   readonly galaxy: string
@@ -649,6 +677,7 @@ export function createTaskRegistry(): TaskRegistry {
   registry.register(generateHeightfieldTask)
   registry.register(surveySystemTask)
   registry.register(prepareSurfaceTask)
+  registry.register(depositSlopesTask)
   registry.register(findWorldsTask)
   return registry
 }

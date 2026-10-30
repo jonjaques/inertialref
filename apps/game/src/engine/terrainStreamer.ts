@@ -16,6 +16,7 @@ import {
   bodyFixedFrameId,
   bodyFrameId,
   type Body,
+  type BodyFixedDirection,
   findBody,
   hasSolidSurface,
   HEIGHTFIELD_BORDER,
@@ -23,7 +24,9 @@ import {
   parseAddress,
   type RegionAddress,
   regionChildren,
+  regionForDirection,
   regionParent,
+  type SurfaceParameters,
 } from '@inertialref/universe'
 import {
   buildPatch,
@@ -33,6 +36,7 @@ import {
   DEFAULT_MAX_PATCHES,
   DEFAULT_VIEWPORT,
   type LensView,
+  patchGroundRadius,
   type PatchPlacement,
   patchPlacement,
   regionKey,
@@ -57,7 +61,11 @@ import {
   type WorkerPool,
 } from '@inertialref/workers'
 import { PhaseClock, TERRAIN_PHASE, TERRAIN_SHORT } from './frameTiming.ts'
-import { ScatterField, type ScatterState } from './scatterField.ts'
+import {
+  type DrawnGround,
+  ScatterField,
+  type ScatterState,
+} from './scatterField.ts'
 
 /*
  * Terrain streaming.
@@ -494,6 +502,18 @@ export class TerrainStreamer {
   readonly #inFlight = new Map<number | string, JobHandle<unknown>>()
   #bodyAddress: string | null = null
   #drawn: readonly SelectedPatch[] = []
+  /**
+   * The drawn set by region, for the rocks: a rock stands on the triangle
+   * drawn under it, found by asking each drawn level which region holds its
+   * direction. The epoch moves when the set's content does — not on every
+   * walk, because a walk during a hover returns the same set and the rocks
+   * would be laid out again for nothing.
+   */
+  readonly #drawnIndex = new Map<number | string, SelectedPatch>()
+  readonly #ground: { epoch: number } & Pick<DrawnGround, 'radius'> = {
+    epoch: 0,
+    radius: (direction, eye) => this.#groundRadius(direction, eye),
+  }
   #deepest = 0
   #shallowest = 0
   #visited = 0
@@ -526,6 +546,18 @@ export class TerrainStreamer {
     return this.#starved
   }
 
+  /**
+   * The surface the ground is drawn from, or null when nothing streams: for
+   * what the material reads about it that the streamer does not need, the
+   * deposit slope table (`GameEngine.depositSlopeTable`). Asked for by the
+   * material's host rather than here, because a host with no material — the
+   * headless runner, the slow suite — must not spend seconds of a worker on
+   * a table nothing will read.
+   */
+  get surface(): SurfaceParameters | null {
+    return this.#surface
+  }
+
   get saturated(): boolean {
     return this.#saturated
   }
@@ -544,6 +576,7 @@ export class TerrainStreamer {
     eye: Vec3
   } | null = null
   #palette: TerrainPalette | null = null
+  #surface: SurfaceParameters | null = null
   /**
    * The body the kept palette was derived from, and the palette itself.
    *
@@ -946,6 +979,7 @@ export class TerrainStreamer {
     }
 
     const prepared = this.#preparation.prepare(surface.surface)
+    this.#surface = surface.surface
     if (prepared === null) {
       // A worker is preparing the surface. Nothing can be selected against a
       // ceiling that is not known yet, and guessing one would either starve
@@ -1075,6 +1109,7 @@ export class TerrainStreamer {
       eye.direction,
       this.#pose,
       this.#lensView,
+      this.#ground,
     )
     /*
      * The one phase that most wants a timeline rather than a mean.
@@ -1162,6 +1197,7 @@ export class TerrainStreamer {
       ready: (region) => this.#patches.has(regionKey(region)),
     })
     this.#drawn = drawn.patches
+    this.#indexDrawn(drawn.patches)
     this.#deepest = drawn.deepestLevel
     this.#shallowest = drawn.shallowestLevel
     this.#visited = drawn.visited
@@ -1542,6 +1578,54 @@ export class TerrainStreamer {
   }
 
   /**
+   * Re-key the drawn set for the rocks, and move the epoch only if it changed
+   * — region and morph band both, since either moves a triangle under a rock.
+   */
+  #indexDrawn(patches: readonly SelectedPatch[]): void {
+    const index = this.#drawnIndex
+    let same = index.size === patches.length
+    if (same) {
+      for (const selected of patches) {
+        const held = index.get(regionKey(selected.region))
+        if (
+          held === undefined ||
+          held.morphStart !== selected.morphStart ||
+          held.morphEnd !== selected.morphEnd
+        ) {
+          same = false
+          break
+        }
+      }
+    }
+    if (same) return
+    index.clear()
+    for (const selected of patches)
+      index.set(regionKey(selected.region), selected)
+    this.#ground.epoch += 1
+  }
+
+  /**
+   * The radius of the ground drawn along a direction: the deepest drawn
+   * region holding it, its triangle, and its morph at the eye's distance.
+   * Null where nothing drawn covers it.
+   */
+  #groundRadius(direction: BodyFixedDirection, eye: Vec3): Meters | null {
+    for (let level = this.#deepest; level >= this.#shallowest; level -= 1) {
+      const key = regionKey(regionForDirection(direction, level))
+      const selected = this.#drawnIndex.get(key)
+      if (selected === undefined) continue
+      const patch = this.#patches.get(key)
+      if (patch === undefined) return null
+      return patchGroundRadius(patch, direction, {
+        eye,
+        start: selected.morphStart,
+        end: selected.morphEnd,
+      })
+    }
+    return null
+  }
+
+  /**
    * Stop drawing, keep the cache. The body is here but the pipeline is not.
    *
    * Every selection mirror goes, not just the drawn set: `summary()` reads
@@ -1551,6 +1635,7 @@ export class TerrainStreamer {
    */
   #forget(): void {
     this.#drawn = []
+    this.#indexDrawn([])
     this.#deepest = 0
     this.#shallowest = 0
     this.#visited = 0
@@ -1565,6 +1650,7 @@ export class TerrainStreamer {
     // a body this streamer is no longer drawing, and the material would keep
     // wearing the last world's ground.
     this.#palette = null
+    this.#surface = null
     // The lens is a selection mirror like the rest: reporting one beside
     // `patches: 0` claims a selection was made against it, and none was.
     this.#lensView = null

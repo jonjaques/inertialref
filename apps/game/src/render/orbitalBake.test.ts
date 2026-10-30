@@ -112,6 +112,7 @@ function fixture(tick = 1) {
     setAlbedoMap() {},
     setQuality() {},
     setPixelAngle() {},
+    setSlopeTable() {},
     setBakeMode(next: number) {
       mode = next
     },
@@ -123,6 +124,8 @@ function fixture(tick = 1) {
     bodyFor: () => body,
     heightfields,
     now: () => (clock += tick),
+    // No table: the bake draws the slope as drawn.
+    slopesFor: () => Promise.resolve(null),
   })
   cleanups.push(() => baker.dispose())
   return {

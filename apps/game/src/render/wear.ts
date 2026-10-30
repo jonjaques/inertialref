@@ -42,7 +42,17 @@ export interface GroundWear {
    * wavelengths: under 64 rather than 2.5 × 10⁶, so float32 resolves microns.
    */
   readonly grainOrigin: Vector3
+  /**
+   * The patch's region level, for the row of the deposit slope table its
+   * drawn slope is mapped through; `NO_SLOPE_LEVEL` for a wearer whose
+   * normal is not a level's — a rock's faces, a warm-up dummy — whose
+   * deposits read the slope as drawn.
+   */
+  readonly level: number
 }
+
+/** A ground wearer that is not a terrain patch: its slope is read as drawn. */
+export const NO_SLOPE_LEVEL = -1
 
 /** The sea material's: the same eye, morph and anchor, and the wave field's origin in place of the grain's. */
 export interface SeaWear {
@@ -67,6 +77,7 @@ export const UNDRESSED_GROUND: GroundWear = Object.freeze({
   anchor: new Vector3(),
   anchorAltitude: 0,
   grainOrigin: new Vector3(),
+  level: NO_SLOPE_LEVEL,
 })
 
 export const UNDRESSED_SEA: SeaWear = Object.freeze({

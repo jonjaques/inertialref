@@ -11660,6 +11660,47 @@ batches of sixteen tiles take up to 154 ms of GPU each, and frames while the
 tiles are produced reach 117–132 ms on both builds; the bake's own callback
 is never more than 31.7 ms.
 
+## A rock stands on the drawn triangle, a deposit reads the floor's slope, and the cover keeps its bytes (20 Oct 2026)
+
+Erosion phase 4 was planned as slope and seat in the cover's two spare bytes,
+and neither fits there ([ADR-0051](docs/adr/0051-a-rock-stands-on-the-drawn-ground.md)).
+At every vertex the mesh is the field, so a seat byte is zero wherever it is
+written; the difference between a rock's field and the triangle under it lives
+between vertices, at whatever level the camera chose. At a two-meter stance it
+was 10.5 to 26.3 cm in the mean and 0.58 to 1.41 m at worst across the zoo,
+Gliese 908 IV and P222_1_0_9 V, under `MESH_SEAT`'s 12 cm. A rock now reads the
+drawn set's triangle with its morph, and is 0.00 cm off it. The read is 0.9 µs a
+rock unmorphed and 3.8 µs in a band, headless under load, so a rock is cut on
+the field first, widened by 4 m against a worst in-range cell of 1.86 m.
+
+**A rock stood under every lake.** The scatter's water test read the sea's
+datum, so on a body that drains a rock on a lake bed or a riverbed passed at the
+lake's height and drew through the sheet: 608 of 849 around Earth's largest
+lake, the deepest 427 m under, and every rock at the mouths of Gliese 908 IV
+and P222_1_0_9 V. The test is the clamp's own water now, the level the
+heightfield samples beside the cover.
+
+**The deposit step was a bias, so the fix is a distribution.** A coarse
+patch's normal is the ground smoothed over its cell; the mean tone step at a
+level boundary was up to 1.44% on Iapetus, 1.03% on P222_1_0_9 V and 0.36% on
+Gliese 908 IV (sixteen directions a patch, area-weighted). A fixed-baseline
+slope brings the mean to 0.1–0.5% and aliases at every coarse vertex, 8 to 10%
+from the level beside it. A per-body table maps each level's drawn slopes onto
+the floor's by quantile, measured by a worker over 1,024 land probes with the
+interpolated drawn normal: largest mean step 0.28, 0.29 and 0.16%. Measured on
+vertex normals it left 0.50% on Iapetus; 256 probes left 0.4 to 1.0%; a
+per-level gain fitted to the mean mantle had a 5.19% worst patch on Iapetus
+against the quantile map's 3.43%.
+
+**A measurement only the material reads must be asked for by the material's
+host.** The streamer asked for the table first, and the streamer also runs
+headless and in the slow suite: `terrainStreamer.test.ts`'s re-walk test sat
+behind a table measurement in its pool and timed out at 20 s, and
+its pool count read two jobs where it expects one. `GameEngine.depositSlopeTable`
+is asked by `TerrainPatches`, so a host with no material never measures. It
+starts once the pool's queue is empty, because a table is 9 to 38 s of one
+thread across the zoo with the machine at load 35 to 44; quiet is unmeasured.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

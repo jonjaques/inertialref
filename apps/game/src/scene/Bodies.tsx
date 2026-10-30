@@ -251,6 +251,7 @@ export function Bodies({
       terrain,
       bodyFor: (address) => engine.bodyFor(address),
       heightfields: engine.heightfields,
+      slopesFor: (surface) => engine.depositSlopes(surface),
     })
     baker.current = built
     const debug = window as unknown as { orbitalBaker?: OrbitalBaker }

@@ -10,6 +10,7 @@ import {
   levelForSize,
   regionDirection,
   seaDatumElevation,
+  standingWaterIsSampled,
 } from './terrain.ts'
 
 /*
@@ -57,14 +58,20 @@ export interface ScatterRock {
   readonly index: number
   /** Where it stands, in the body's rotating axes. */
   readonly direction: BodyFixedDirection
-  /** The drawn ground under it — `drawnElevation`, so it sits on the mesh. */
+  /**
+   * The drawn field at its own direction — `drawnElevation`.
+   *
+   * Not the ground a renderer draws under it, which is a triangulation of this
+   * field at whatever level is selected there and differs from it by up to a
+   * cell's interpolation error. Which level that is depends on the camera and
+   * this record does not, so the renderer seats the rock on the triangle it
+   * draws (`patchGroundRadius`) and reads this only where no patch covers it.
+   */
   readonly elevation: Meters
   /** Half its longest dimension, meters. */
   readonly radius: Meters
   /** How much of it is under the surface, 0 to 1 of its own radius. */
   readonly sink: number
-  /** And a fixed depth under that, meters. See where it is written. */
-  readonly seat: Meters
   /** Turn about the local vertical. */
   readonly spin: Radians
   /** Lean off the local vertical, and which way. */
@@ -182,32 +189,15 @@ const MAX_RADIUS: Meters = 4
  * four shapes are near-spherical by construction. The angular ones are squatter
  * than the rounded, which is what a broken block lying on its widest face is.
  *
- * Here rather than in the renderer that applies it, because the seat and the
- * sink are both spent against it and a second spelling would let the three
- * drift. `scatterField` scales the instance by exactly this.
+ * Here rather than in the renderer that applies it, because the sink is spent
+ * against it and a second spelling would let the two drift. `scatterField`
+ * scales the instance by exactly this.
  */
 export const rockRise = (radius: Meters, angularity: number): Meters =>
   radius * (0.62 + 0.2 * angularity)
 
-/** How much of a rock the seat may take. See where it is spent. */
-const SEAT_FRACTION = 0.35
-
-/** And how much of itself a rock must stand above the ground. */
+/** How much of itself a rock must stand above the ground. */
 const MIN_PROUD = 0.15
-
-/**
- * The most a rock is pushed under the ground on top of its own sink, meters.
- *
- * The mesh's own interpolation error, measured rather than guessed: at the
- * detail floor across the zoo a bilinear read of a patch differs from the field
- * it was built from by 3 to 9 cm in the mean and up to 0.70 m at the worst cell
- * on the body with the coarsest floor. Twelve centimeters seats the mean case;
- * the tail is a small rock on an atmosphered world standing a little proud, and
- * it is named here rather than hidden because the honest fix is for the rock to
- * read the mesh instead of the field, which is the same change the deposits
- * want and belongs with it.
- */
-const MESH_SEAT: Meters = 0.12
 
 /**
  * The rocks in one region, in slot order.
@@ -262,6 +252,10 @@ export function regionScatter(
       (region.face * 31 + region.level * 131)) |
     0
   const cover = new Uint8Array(COVER_CHANNELS)
+  // The level of any water over the sample, NaN where none stands; read only
+  // on a body whose standing water is sampled rather than one datum.
+  const level = new Float32Array(1)
+  const sampled = standingWaterIsSampled(surface)
   const rocks: ScatterRock[] = []
   for (let index = first; index < last; index += 1) {
     const draw = pcg4d(region.i ^ seed, region.j, index, seed)
@@ -275,11 +269,20 @@ export function regionScatter(
       Math.floor(index / SCATTER_SIDE) / SCATTER_SIDE +
       toUnit(draw.z) / SCATTER_SIDE
     const direction = regionDirection(region, s, t)
-    const elevation = groundCoverAt(surface, direction, cover, 0)
-    // Nothing lies on the sea floor that anyone can see, and the sea surface is
-    // flat by definition — `groundCoverAt` has already clamped the height, so
-    // this is the one place that can tell the two apart.
-    if (sea !== null && elevation <= sea + 0.01) continue
+    const elevation = groundCoverAt(surface, direction, cover, 0, false, level)
+    /*
+     * Nothing lies under standing water that anyone can see, and its surface
+     * is flat by definition — `groundCoverAt` has already clamped the height
+     * up to it, so this is the one place that can tell the two apart.
+     *
+     * The water is the clamp's own: on a body with a drainage graph it is
+     * the sample's level — a lake's spill, a river's surface, the sea only
+     * where the sea reaches — and a datum test there let every rock on a lake
+     * bed through, dotting the sheet wherever a rock stood taller than the
+     * water; on one without, it is the sea's datum.
+     */
+    const water = sampled ? (level[0] as number) : sea
+    if (water !== null && elevation <= water + 0.01) continue
     const here = unpackCover(cover, 0)
     // Nor in a riverbed. The ground paints its channels from `wet`, and a rock
     // wears `wet: 0` on the promise that it never stands in one — a dry block
@@ -323,25 +326,6 @@ export function regionScatter(
       0.25 + 0.6 * here.bright + 0.3 * toUnit(shape.y) - 0.15,
     )
     const kind = kindFor(angularity, here, toUnit(shape.z))
-    /*
-     * The seat, and it is capped by the rock rather than fixed at `MESH_SEAT`.
-     *
-     * A rock's foot is the *field* and the ground it stands on is a
-     * triangulation of the same field, so the two differ by the mesh's own
-     * interpolation error over one cell — 3 to 9 cm in the mean at the detail
-     * floor across the zoo, and up to 0.70 m at the worst cell on the coarsest
-     * body. Twelve centimeters covers the mean, and **twelve centimeters is
-     * taller than the bottom quarter of this population**: a 25 cm rock stands
-     * 17 cm above its own center, so a fixed seat put 60% of them entirely
-     * under the ground — 24% of every field sample, instance matrix and
-     * `MAX_ROCKS` slot spent on geometry no camera can see.
-     *
-     * So it is the smaller of the two. A rock below the mesh's own error cannot
-     * be both seated and visible, and a pebble that floats by four centimeters
-     * on ground known to seven is the better half of that trade.
-     */
-    const stand = rockRise(radius, angularity)
-    const seat = Math.min(MESH_SEAT, stand * SEAT_FRACTION)
     rocks.push({
       index,
       direction,
@@ -354,16 +338,16 @@ export function regionScatter(
        * settles, and the ones that do not are the ones a fresh impact threw
        * last week. So the sink rises with size and falls with `bright`.
        *
-       * Capped so that what is left standing clears `MIN_PROUD` of the rock's
-       * own height with the seat already spent. On a two-meter boulder the seat
-       * is 6% of it and the cap never binds; on a pebble it is a third, and the
-       * cap is what keeps the pebble a rock rather than a buried one.
+       * Spent against the ground the renderer draws under it rather than
+       * against this field, so it is the whole of how deep a rock sits: there
+       * is no seat beside it to cover the mesh's interpolation error, because
+       * the rock stands on the mesh. Capped so that `MIN_PROUD` of the rock's
+       * own height always clears the ground.
        */
       sink: Math.min(
         clamp01(0.25 + 0.35 * size - 0.2 * here.bright + 0.2 * toUnit(shape.w)),
-        Math.max(0, 1 - seat / stand - MIN_PROUD),
+        1 - MIN_PROUD,
       ),
-      seat,
       spin: toUnit(shape.y) * 2 * Math.PI,
       tilt: (0.05 + 0.25 * toUnit(shape.z)) * (1 - 0.5 * size),
       tiltAzimuth: toUnit(shape.w) * 2 * Math.PI,
