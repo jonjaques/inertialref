@@ -1094,26 +1094,32 @@ function finerEdges(
   region: RegionAddress,
   drawn: ReadonlySet<number | string>,
 ): number {
-  const span = 2 ** region.level
+  const { level } = region
+  const span = 2 ** level
   let edges = 0
   for (let edge = 0; edge < EDGES.length; edge += 1) {
     const [di, dj] = EDGES[edge] as readonly [number, number]
-    const ni = region.i + di
-    const nj = region.j + dj
-    const beside =
-      ni >= 0 && ni < span && nj >= 0 && nj < span
-        ? { face: region.face, level: region.level, i: ni, j: nj }
-        : regionNeighbor(region, di, dj)
-    if (drawn.has(packed(beside.face, beside.level, beside.i, beside.j)))
-      continue
-    const level = beside.level + 1
-    const i = beside.i * 2
-    const j = beside.j * 2
+    let face = region.face
+    let ni = region.i + di
+    let nj = region.j + dj
+    // Scalars rather than an address, for the reason `balance` walks its
+    // ancestors by halving: this runs on four edges of every drawn patch, and
+    // only a step off the face needs `regionNeighbor`'s rotated (i, j).
+    if (ni < 0 || ni >= span || nj < 0 || nj >= span) {
+      const beside = regionNeighbor(region, di, dj)
+      face = beside.face
+      ni = beside.i
+      nj = beside.j
+    }
+    if (drawn.has(packed(face, level, ni, nj))) continue
+    const finer = level + 1
+    const i = ni * 2
+    const j = nj * 2
     if (
-      drawn.has(packed(beside.face, level, i, j)) ||
-      drawn.has(packed(beside.face, level, i + 1, j)) ||
-      drawn.has(packed(beside.face, level, i, j + 1)) ||
-      drawn.has(packed(beside.face, level, i + 1, j + 1))
+      drawn.has(packed(face, finer, i, j)) ||
+      drawn.has(packed(face, finer, i + 1, j)) ||
+      drawn.has(packed(face, finer, i, j + 1)) ||
+      drawn.has(packed(face, finer, i + 1, j + 1))
     )
       edges |= 1 << edge
   }

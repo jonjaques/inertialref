@@ -29,8 +29,9 @@ const LAST = HEIGHTFIELD_RESOLUTION - 1
  * `PATCH_EDGE`'s order: x the last column, y the first, z the last row, w the
  * first. The index arrives as a float — `vertexIndex` in a material, a test's
  * own count in a kernel — and the grid is 4,225 vertices, which float32 holds
- * exactly; the half added before the divide keeps the row's floor a whole
- * hundredth of a row from either side of an integer.
+ * exactly; the half added before the divide keeps the quotient at least
+ * 0.5/65 of a row, about 0.008, from an integer on either side, which is
+ * thousands of float32 steps at a row index under 65.
  */
 export function vertexMorphFactor(
   index: Node<'float'>,

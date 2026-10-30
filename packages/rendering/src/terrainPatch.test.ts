@@ -47,6 +47,26 @@ import {
 
 const RESOLUTION = 33
 
+/** A patch's four edge steps, in `PATCH_EDGE`'s bit order. */
+const STEPS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+]
+
+/** The grid indices along the edge a step crosses, in the patch's own order. */
+const edgeIndices = (resolution: number, di: number, dj: number): number[] =>
+  Array.from({ length: resolution }, (_, k) =>
+    di === 1
+      ? k * resolution + resolution - 1
+      : di === -1
+        ? k * resolution
+        : dj === 1
+          ? (resolution - 1) * resolution + k
+          : k,
+  )
+
 /**
  * Where the parent keeps a child's vertex once it is fully morphed: the
  * child's index rounded onto the parent's grid, in the parent's grid.
@@ -439,33 +459,18 @@ describe('a terrain patch', () => {
      * Two patches on one level slide a shared vertex by one factor, so the
      * vertex has to slide to one place — and an odd vertex slides a whole cell
      * along the edge. On four of the twelve edges the faces count the edge in
-     * opposite directions, and rounding down on both sides sent the two copies
+     * opposite directions, and rounding down on both sides sends the two copies
      * to opposite ends of the cell: mid-band, a gap a cell long down the edge.
      * Every face, every edge, so the flipped four cannot hide among the eight
      * that agree.
      */
     const body = solidBody()
     const span = 2 ** 8
-    const steps: readonly (readonly [number, number])[] = [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ]
-    const last = RESOLUTION - 1
     const edge = (di: number, dj: number): number[] =>
-      Array.from({ length: RESOLUTION }, (_, k) =>
-        di === 1
-          ? k * RESOLUTION + last
-          : di === -1
-            ? k * RESOLUTION
-            : dj === 1
-              ? last * RESOLUTION + k
-              : k,
-      )
+      edgeIndices(RESOLUTION, di, dj)
     let compared = 0
     for (let face = 0; face < 6; face += 1) {
-      for (const [di, dj] of steps) {
+      for (const [di, dj] of STEPS) {
         const mine = regionAddress(
           face,
           8,
@@ -476,7 +481,7 @@ describe('a terrain patch', () => {
         expect(theirs.face).not.toBe(face)
         const a = patchOf(body, mine)
         const b = patchOf(body, theirs)
-        const candidates = [...steps].flatMap(([ei, ej]) => edge(ei, ej))
+        const candidates = STEPS.flatMap(([ei, ej]) => edge(ei, ej))
         for (const index of edge(di, dj)) {
           const here = vertexOf(a, index)
           // The same vertex on the other side, found by where it stands: which
@@ -543,9 +548,9 @@ describe('the drawn ground', () => {
    * only form of the crack-free claim that sees both halves of a level
    * boundary — the finer patch has to have arrived on the coarser one's grid,
    * which the selection's own property holds, and the coarser one has to
-   * still be drawing that grid, which nothing held until this did. Measured
-   * before it did, standing two meters up, one edge sample in ten along the
-   * level boundaries stood open by more than a quarter of a pixel.
+   * still be drawing that grid, which only `finerEdges` holds. Without the
+   * hold, standing two meters up, one edge sample in ten along the level
+   * boundaries stands open by more than a quarter of a pixel.
    *
    * The field is synthetic because the claim is about the mesh, and a real
    * one is ten milliseconds a patch. One octave per level the selection
@@ -597,22 +602,7 @@ describe('the drawn ground', () => {
     cache.set(key, built)
     return built
   }
-  const STEPS: readonly (readonly [number, number])[] = [
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
-  ]
-  const edge = (di: number, dj: number): number[] =>
-    Array.from({ length: RES }, (_, k) =>
-      di === 1
-        ? k * RES + RES - 1
-        : di === -1
-          ? k * RES
-          : dj === 1
-            ? (RES - 1) * RES + k
-            : k,
-    )
+  const edge = (di: number, dj: number): number[] => edgeIndices(RES, di, dj)
   /** A vertex where the material puts it: slid by its own factor, or held. */
   const drawn = (
     patch: RenderPatch,

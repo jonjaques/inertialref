@@ -337,9 +337,9 @@ the finer patch has arrived on the coarser grid wherever the two meet. The
 coarser patch also has to be drawing that grid there, and no band can say so,
 because a patch is wider than its band — 64 cells against a range of about 49
 at the flight lens — so the far end of an edge it shares with finer ground can
-stand at twice its range, deep in its own band. Sliding there, it left the
-finer patch matching a grid it was no longer drawing, and the gap was a slit of
-sky: standing two meters up, one edge sample in ten along the level rings stood
+stand at twice its range, deep in its own band. Sliding there, it leaves the
+finer patch matching a grid it is not drawing, and the gap is a slit of sky:
+standing two meters up, one edge sample in ten along the level rings stands
 open by more than a quarter of a pixel, up to five pixels at 49 m, on Luna and
 on generated worlds alike. The selection reports the edges finer ground shares
 (`SelectedPatch.finerEdges`) and the vertex stage holds their vertices at a

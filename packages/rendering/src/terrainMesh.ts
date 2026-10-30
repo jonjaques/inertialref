@@ -182,7 +182,7 @@ export interface RenderPatch {
  * and those vertices have to slide to the same place — and on four of the
  * cube's twelve edges (0–3, 1–2, 2–5, 3–5) the two faces count the shared
  * edge in opposite directions, so "the even index below" is the far end of
- * the cell on one side and the near end on the other. Mid-band that opened a
+ * the cell on one side and the near end on the other. Mid-band that opens a
  * gap a cell long, down the whole edge.
  *
  * So an odd index rounds toward the lower body-fixed coordinate, which both

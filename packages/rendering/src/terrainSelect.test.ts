@@ -428,12 +428,7 @@ describe('the terrain quadtree', () => {
              * place, because across a cube-face edge that parent is on another
              * face and its (i, j) are rotated.
              */
-            for (const [di, dj] of [
-              [1, 0],
-              [-1, 0],
-              [0, 1],
-              [0, -1],
-            ] as const) {
+            for (const [di, dj] of EDGE_STEPS) {
               const parent = regionParent(regionNeighbor(patch.region, di, dj))
               if (parent === null) continue
               const coarse = byKey.get(terrainPatchKey('b', parent))
