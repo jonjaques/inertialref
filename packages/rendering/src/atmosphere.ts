@@ -90,6 +90,21 @@ const TAU_MIE = 0.05
 /** Mie extinction over scattering: aerosols absorb a little. */
 const MIE_EXTINCTION_RATIO = 1.11
 
+/** Aerosol forward-scattering asymmetry. 0.76 is Earth haze; universal here. */
+export const AEROSOL_ASYMMETRY = 0.76
+
+/**
+ * Scattered radiance to scene units. The march produces radiance per unit
+ * sun irradiance; the scene's convention absorbs a π into every surface
+ * (albedo·μ *is* the drawn color), so the sky gets the same treatment plus
+ * a small artistic gain — calibrated against the previous shell's tuned
+ * brightness so every body arrived at the same exposure it left.
+ */
+export const ATMOSPHERE_GAIN = 24
+
+/** Midpoint samples along the zenith column in `zenithSkyRadiance`. */
+const ZENITH_STEPS = 32
+
 /** March steps for the transmittance table. */
 const TRANSMITTANCE_STEPS = 48
 
@@ -432,4 +447,60 @@ export function bakeMultipleScattering(
     }
   }
   return { width: size, height: size, data }
+}
+
+/**
+ * The sky straight overhead, in scene units per unit of the sun's color.
+ *
+ * The shell's own march along one ray — the zenith from `radius` planet radii
+ * — with the sun `muSun` from overhead. Along a radial line every sample sees
+ * the sun at the same cosine, so the column is one-dimensional and the sun's
+ * transmittance is computed exactly rather than read from the table. Zero
+ * above the air, and zero once the whole column is in the planet's shadow.
+ *
+ * What it is for is the one number the presentation needs about the sky an
+ * observer is standing under: how bright the air in front of everything else
+ * is. Enhanced's lift of the faint sky is measured against it.
+ */
+export function zenithSkyRadiance(
+  recipe: AtmosphereRecipe,
+  multiScatter: ScatteringLut,
+  radius: number,
+  muSun: number,
+): [number, number, number] {
+  const r = Math.max(radius, 1)
+  const ceiling = recipe.topRatio - 1
+  const column = recipe.topRatio - r
+  if (column <= 0) return [0, 0, 0]
+  const g = AEROSOL_ASYMMETRY
+  const phaseRayleigh = (3 / (16 * Math.PI)) * (1 + muSun * muSun)
+  const phaseMie =
+    (1 - g * g) /
+    (4 * Math.PI) /
+    Math.max(1 + g * g - 2 * g * muSun, 1e-4) ** 1.5
+  const step = column / ZENITH_STEPS
+  const radiance: [number, number, number] = [0, 0, 0]
+  const depth = [0, 0, 0]
+  for (let i = 0; i < ZENITH_STEPS; i += 1) {
+    const at = r + (i + 0.5) * step
+    const height01 = Math.min(Math.max((at - 1) / ceiling, 0), 1)
+    const { rayleigh, mie } = densities(at - 1, recipe)
+    const sunlight = transmittanceFrom(at, muSun, recipe)
+    const psi = sampleLut(multiScatter, (muSun + 1) / 2, height01)
+    for (let c = 0; c < 3; c += 1) {
+      const scatterRayleigh = (recipe.betaRayleigh[c] as number) * rayleigh
+      const scatterMie = (recipe.mieScatter[c] as number) * mie
+      const extinction = scatterRayleigh + recipe.mieExtinction * mie
+      const view = Math.exp(-((depth[c] as number) + extinction * step * 0.5))
+      const single =
+        (scatterRayleigh * phaseRayleigh + scatterMie * phaseMie) *
+        (sunlight[c] as number)
+      const multiple = (psi[c] as number) * (scatterRayleigh + scatterMie)
+      radiance[c] =
+        (radiance[c] as number) +
+        view * (single + multiple) * step * ATMOSPHERE_GAIN
+      depth[c] = (depth[c] as number) + extinction * step
+    }
+  }
+  return radiance
 }

@@ -8,6 +8,7 @@ import {
   Vector3,
 } from 'three/webgpu'
 import { SOLAR_PLANETS } from '@inertialref/universe'
+import { zenithSkyRadiance } from '@inertialref/rendering'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
 import { createAtmosphereMaterial } from './materials.ts'
@@ -94,4 +95,23 @@ it('leaves the aureole around a high sun white', async () => {
   const brightest = Math.max(...pixel)
   const faintest = Math.min(...pixel)
   expect(faintest / brightest).toBeGreaterThan(0.85)
+})
+
+it('reports the zenith it draws as the air the observer stands under', async () => {
+  // `airOverhead` marches the zenith on the CPU, with the sun's
+  // transmittance exact where the shell reads a half-float table and with
+  // 32 samples where the shell takes 12. Enhanced's veil is that number, so
+  // it may not drift from the sky on screen by more than the two marches
+  // differ: the shell draws 1.7–2.3% under the CPU column, per channel, at
+  // this sun. Five percent is that with room, and costs a star 0.03 mag.
+  const drawn = await skyToward(new Vector3(0, 1, 0))
+  const scattering = scatteringFor(haze, top)
+  const reported = zenithSkyRadiance(
+    scattering.recipe,
+    scattering.multiScatterTable,
+    1 + 2 / earth.radius,
+    Math.sin(SUN),
+  )
+  for (let c = 0; c < 3; c += 1)
+    expect(Math.abs(drawn[c]! / reported[c]! - 1)).toBeLessThan(0.05)
 })

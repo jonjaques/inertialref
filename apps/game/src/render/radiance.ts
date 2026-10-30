@@ -20,6 +20,14 @@ export const enhancedSky = uniform(0).onRenderUpdate(({ renderer }) =>
  * The scene's 0.16 ambient reaches hulls and props through different materials.
  */
 export const visibilityAmbient = enhancedSky.mul(0.03)
+/**
+ * The luminance of the air between the observer and space, in scene units:
+ * the zenith of whatever atmosphere the eye is inside, zero in a vacuum.
+ * Written once a frame by `Bodies`. Only Enhanced reads it — its lift of the
+ * faint sky has to be measured against the air in front of that sky; the
+ * photographic views add the two physically and let exposure decide.
+ */
+export const airLuminance = uniform(0)
 export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
   renderer === null ? 1 : (gains.get(renderer) ?? 1),
 )

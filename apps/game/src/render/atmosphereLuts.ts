@@ -8,6 +8,7 @@ import {
   type Texture,
 } from 'three/webgpu'
 import { getLogger, getTimer } from '@inertialref/shared'
+import { Vec, type Vec3 } from '@inertialref/spatial'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import {
@@ -17,10 +18,12 @@ import {
   bakeTransmittance,
   type HazeAuthoring,
   type ScatteringLut,
+  zenithSkyRadiance,
 } from '@inertialref/rendering'
 import type { WorkerPool } from '@inertialref/workers'
 import { bakeAtmosphereTask } from './atmosphereTask.ts'
 import { scatteringKey } from './preloadPlan.ts'
+import type { Rgb } from './bodyUniforms.ts'
 
 /*
  * The scattering tables, as GPU textures, cached per atmosphere.
@@ -48,6 +51,12 @@ export interface AtmosphereScattering {
   readonly recipe: AtmosphereRecipe
   readonly transmittance: Texture
   readonly multiScatter: Texture
+  /**
+   * The multiple-scattering table's own floats, kept for `airOverhead`. 16 KB
+   * a haze; the transmittance table is 32 times that and is not kept, because
+   * a column straight up is cheaper to march than to look up.
+   */
+  readonly multiScatterTable: ScatteringLut
 }
 
 const cache = new Map<string, AtmosphereScattering>()
@@ -95,6 +104,7 @@ export function scatteringFor(
     recipe,
     transmittance: toTexture(transmittance),
     multiScatter: toTexture(multiScatter),
+    multiScatterTable: multiScatter,
   }
   cache.set(key, set)
   const finished = performance.now()
@@ -177,6 +187,7 @@ export function warmScattering(
           recipe: baked.recipe,
           transmittance: toTexture(baked.transmittance),
           multiScatter: toTexture(baked.multiScatter),
+          multiScatterTable: baked.multiScatter,
         }
         cache.set(key, set)
         log.info('scattering tables baked on the pool', {
@@ -219,4 +230,37 @@ export function scatteringVia(
     // ends has no frame to draw the haze in anyway.
   })
   return null
+}
+
+/**
+ * The luminance of the sky straight over an eye inside this shell, in scene
+ * units, or zero outside it.
+ *
+ * Positions are render space, as the shell's own uniforms are; the ratio of
+ * the two radii is the planet-radius altitude the tables are baked in, which
+ * survives distance compression. The shell is taken as a sphere here: on
+ * Earth the oblate figure moves a pole's altitude by 21 km, which only
+ * thickens the column a polar observer is credited with.
+ */
+export function airOverhead(
+  scattering: AtmosphereScattering,
+  eye: Vec3,
+  center: Vec3,
+  innerRadius: number,
+  sun: Vec3 | null,
+  sunColor: Rgb,
+): number {
+  if (sun === null || innerRadius <= 0) return 0
+  const up = Vec.sub(eye, center)
+  const distance = Vec.length(up)
+  if (distance === 0) return 0
+  const [r, g, b] = zenithSkyRadiance(
+    scattering.recipe,
+    scattering.multiScatterTable,
+    distance / innerRadius,
+    Vec.dot(up, sun) / distance,
+  )
+  return (
+    0.2126 * r * sunColor.r + 0.7152 * g * sunColor.g + 0.0722 * b * sunColor.b
+  )
 }

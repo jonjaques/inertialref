@@ -7,6 +7,7 @@ import {
   bakeTransmittance,
   sampleLut,
   TRANSMITTANCE_WIDTH,
+  zenithSkyRadiance,
 } from './atmosphere.ts'
 
 /*
@@ -130,6 +131,59 @@ describe('multiple scattering', () => {
     for (let i = 0; i < none.data.length; i += 4) {
       expect(none.data[i]).toBe(0)
     }
+  })
+})
+
+describe('the sky overhead', () => {
+  const psi = bakeMultipleScattering(earthRecipe, earthT)
+  const luminance = (rgb: readonly number[]): number =>
+    0.2126 * (rgb[0] as number) +
+    0.7152 * (rgb[1] as number) +
+    0.0722 * (rgb[2] as number)
+  const overhead = (radius: number, sunDegrees: number): number =>
+    luminance(
+      zenithSkyRadiance(
+        earthRecipe,
+        psi,
+        radius,
+        Math.sin((sunDegrees * Math.PI) / 180),
+      ),
+    )
+
+  it('is a daylit sky at noon and nothing above the air', () => {
+    // A clear zenith under a high sun is a few thousand cd/m², a tenth of
+    // the 30,000 cd/m² surface white or more; the shell's artistic gain
+    // puts it at roughly twice that. Bounded loosely on both sides because
+    // the claim is the order of magnitude, which is what the veil uses.
+    const noon = overhead(1, 60)
+    expect(noon).toBeGreaterThan(0.1)
+    expect(noon).toBeLessThan(1)
+    expect(overhead(EARTH_TOP, 60)).toBe(0)
+    expect(overhead(EARTH_TOP + 1, 60)).toBe(0)
+  })
+
+  it('darkens by orders of magnitude through twilight, and never brightens', () => {
+    let previous = Infinity
+    for (let sun = 60; sun >= -25; sun -= 1) {
+      const sky = overhead(1, sun)
+      expect(sky).toBeLessThanOrEqual(previous * (1 + 1e-9))
+      previous = sky
+    }
+    // A real zenith is near 1 cd/m² at −6° and 0.003 cd/m² at −12°. The
+    // model's is 75 and 1.6 — Ψ keeps lighting the column for some degrees
+    // after the whole of it is in shadow — so the bound is where the model
+    // actually reaches night: five and a half decades under noon by −18°,
+    // which is where the Milky Way comes back out from under the veil, and
+    // nothing by −25°.
+    expect(overhead(1, -18)).toBeLessThan(overhead(1, 60) * 1e-5)
+    expect(overhead(1, -25)).toBeLessThan(overhead(1, 60) * 1e-12)
+  })
+
+  it('thins as the observer climbs', () => {
+    const ground = overhead(1, 45)
+    const high = overhead(1 + (EARTH_TOP - 1) * 0.5, 45)
+    expect(high).toBeLessThan(ground)
+    expect(high).toBeGreaterThan(0)
   })
 })
 

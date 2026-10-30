@@ -1,4 +1,6 @@
 import {
+  AEROSOL_ASYMMETRY,
+  ATMOSPHERE_GAIN,
   STAR_VISIBILITY,
   STELLAR_V_ZERO_ILLUMINANCE,
   SURFACE_LUMINANCE,
@@ -199,18 +201,6 @@ export interface AtmosphereMaterial {
 /** March samples through the shell. See the budget note in the doc comment. */
 const ATMOSPHERE_SAMPLES = 12
 
-/**
- * Scattered radiance to scene units. The march produces radiance per unit
- * sun irradiance; the scene's convention absorbs a π into every surface
- * (albedo·μ *is* the drawn color), so the sky gets the same treatment plus
- * a small artistic gain — calibrated against the previous shell's tuned
- * brightness so every body arrived at the same exposure it left.
- */
-const ATMOSPHERE_GAIN = 24
-
-/** Aerosol forward-scattering asymmetry. 0.76 is Earth haze; universal here. */
-const MIE_G = 0.76
-
 /*
  * 1×1 stand-ins so a shell whose tables have not arrived runs the identical
  * graph: full transmittance and no multiple scattering, with the scattering
@@ -386,8 +376,9 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     const sun = normalize(sunDirection)
     const nu = dot(rayDirection, sun)
     const phaseRayleigh = float(3 / (16 * Math.PI)).mul(nu.mul(nu).add(1))
-    const phaseMie = float((1 - MIE_G * MIE_G) / (4 * Math.PI)).div(
-      pow(max(float(1 + MIE_G * MIE_G).sub(nu.mul(2 * MIE_G)), 1e-4), 1.5),
+    const g = AEROSOL_ASYMMETRY
+    const phaseMie = float((1 - g * g) / (4 * Math.PI)).div(
+      pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
     )
 
     const stepLength = max(far.sub(near), 0).div(ATMOSPHERE_SAMPLES)
@@ -496,6 +487,11 @@ export interface StarfieldMaterial {
   readonly size: { value: number }
   readonly angularDensity: { value: number }
   readonly integrated: { value: number }
+  /**
+   * Magnitudes the sky in front takes from every star under Enhanced —
+   * `skyMagnitudeLoss` of the air's luminance. Zero in a vacuum.
+   */
+  readonly skyLoss: { value: number }
   readonly visibility: InstancedBufferAttribute
   readonly enabled: InstancedBufferAttribute
   readonly transmission: InstancedBufferAttribute
@@ -543,6 +539,7 @@ export function createStarfieldMaterial(
     3,
   )
   const integrated = uniform(0)
+  const skyLoss = uniform(0)
   const size = uniform(1.8)
   const angularDensity = uniform(1)
 
@@ -578,9 +575,14 @@ export function createStarfieldMaterial(
   ).greaterThan(0.5)
   const transported =
     transportedLight ?? instancedBufferAttribute<'vec3'>(transmission, 'vec3')
+  // The sky's loss rides on the magnitude rather than on the brightness, so
+  // a daylit sky takes the faint stars first and leaves the response's shape
+  // alone for whatever is still bright enough to show through it.
   const magnitude = log2(
     scale.mul(transported.g).max(1e-30).div(STELLAR_V_ZERO_ILLUMINANCE),
-  ).mul(-2.5 / Math.log2(10))
+  )
+    .mul(-2.5 / Math.log2(10))
+    .add(skyLoss)
   const amount = float(STAR_VISIBILITY.faintMagnitude)
     .sub(magnitude)
     .div(STAR_VISIBILITY.faintMagnitude - STAR_VISIBILITY.brightMagnitude)
@@ -644,6 +646,7 @@ export function createStarfieldMaterial(
     prominence,
     visibility,
     integrated,
+    skyLoss,
     size,
     angularDensity,
     enabled,

@@ -42,7 +42,12 @@ import {
   type PlanetMaterial,
   type RingMaterial,
 } from '../render/planet.ts'
-import { scatteringFor, scatteringVia } from '../render/atmosphereLuts.ts'
+import {
+  airOverhead,
+  scatteringFor,
+  scatteringVia,
+} from '../render/atmosphereLuts.ts'
+import { airLuminance } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -368,6 +373,8 @@ export function Bodies({
       renderTime: engine.snapshot?.renderTime ?? 0,
       eye: scene.camera.position,
     }
+    // The brightest air the eye is inside this frame; see `airLuminance`.
+    let overhead = 0
 
     const draw = (key: string, body: RenderBody, star: Rgb | null): void => {
       const appearance = body.appearance
@@ -536,12 +543,24 @@ export function Bodies({
             pool === null
               ? scatteringFor(haze, body.atmosphereScale)
               : scatteringVia(pool, haze, body.atmosphereScale)
-          if (scattering !== null)
+          if (scattering !== null) {
             air.setScattering(
               scattering.recipe,
               scattering.transmittance,
               scattering.multiScatter,
             )
+            overhead = Math.max(
+              overhead,
+              airOverhead(
+                scattering,
+                scene.camera.position,
+                position,
+                shell.innerRadius,
+                sun,
+                uniforms.sunColor,
+              ),
+            )
+          }
         }
         setColor(air.sunColor, uniforms.sunColor)
         if (sun !== null) setVector(air.sunDirection.value, sun)
@@ -551,6 +570,7 @@ export function Bodies({
     for (const body of scene.bodies) draw(body.address, body, null)
     for (const star of scene.stars)
       draw(starKey(star), starAsBody(star, visibility), star.color)
+    airLuminance.value = overhead
 
     residency.end()
 
