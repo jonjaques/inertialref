@@ -193,7 +193,7 @@ of a pixel of diameter — sub-pixel on purpose, because a star is always smalle
 than a pixel and must still draw, so what the threshold decides is when a point
 cloud stops being an honest description, not when something becomes resolvable.
 A constant can only be right at one lens: the boundary at the telephoto end of
-the slider is an eighth of the boundary at the wide end
+the slider is a fourteenth of the boundary at the wide end
 ([ADR-0017](../adr/0017-the-lens.md)), which is why Atlas at 104,146 km draws as
 a point at 110° and as a billboard at 20°. `sphere` and `surface` stay
 constants, because they are claims about _representation_ — a disk with a
@@ -261,7 +261,9 @@ vertex beside the cover, NaN where nothing stands — and a body with no graph
 is handed the sea's datum instead, which is every vertex's level. A vertex
 under nothing sits a cell's width of ground under the ground, so the sheet
 hides rather than fights. `render/water.ts` draws it, and
-[ADR-0026](../adr/0026-the-liquid.md) says how.
+[ADR-0026](../adr/0026-the-liquid.md) says how;
+[ADR-0052](../adr/0052-the-sea-mirrors-the-land.md) says how it mirrors the
+land, through the frame it already reads.
 
 ```mermaid
 sequenceDiagram
@@ -429,12 +431,31 @@ stored in, because at forty kilometers a texel the real slope is a few
 hundredths: a byte resolves that to five steps and the relief exaggeration draws
 every step as a facet.
 
+Where the mask says sea, the sphere takes the liquid as the ground draws it:
+its deep color, and — for magma — its glow, emitted before the veil and
+outside the albedo, as the sea sheet and the ground's painted channels emit it
+below the eight-pixel gate. Without the glow a lava world is red at the gate
+and dark on its night side from orbit. A photographed body's mask is a sea the
+ground does not paint, so it keeps the color and never glows.
+
 The baker owns the jobs and both cube targets for each held body. An address
 locates the entry; the loaded body's object identity validates it. Replacing
 the body at the same address retires its old bake, and a late tile completion
 checks that identity before drawing. Eviction and disposal use the same
 retirement path. Flat bodies are checked from the current body rather than
 remembered by address. An unchanged body keeps its ready maps across frames.
+
+The bake is built and drawn a frame's share at a time, because ninety-six
+patches and twelve face renders taken in one frame are a hitch on the frame
+the tiles arrive in. `advance` runs once a frame, after the engine's tick and
+the camera and ahead of the ground's own frame callback: it builds patches
+for two milliseconds of the frame, then draws one face a frame, each face
+from the sixteen patches of its own cube face, so a patch's buffers upload
+once and in the face that draws it. Until the twelfth face is drawn the
+sphere keeps the flat tint it wore before the bake was asked for; the
+targets are handed over whole or not at all. The tiles themselves are asked
+for in the [background lane](workers.md#two-lanes), behind the streamer's
+ground.
 
 ### Two shapes, and which one is not a rendering choice
 
@@ -625,6 +646,14 @@ what happens when three weights all say 0.4; a stack says the ice is on the
 sand, which is true. The angle of repose does most of the visible work, and 33°
 is a fact about friction rather than about a planet.
 
+**The slope a deposit reads is the detail floor's at every level.** A coarse
+patch's normal is the ground smoothed over its cell, so read raw it draws
+flatter ground than the floor would, and the deposits ring at every morph band.
+A worker measures each body's drawn slopes at every level, and the material
+maps a patch's slope onto the floor's distribution, rank kept, mixing its own
+level's row with its parent's by the morph
+([ADR-0051](../adr/0051-a-rock-stands-on-the-drawn-ground.md)).
+
 **The palette is ratios against the body's own published color, never absolute
 values.** `packages/rendering/src/terrainPalette.ts` holds it. Absolute colors
 make every rocky world the same sandstone, and they make the ground disagree
@@ -675,6 +704,30 @@ period — exact, continuous across every boundary, and repeating every 45 m of
 ground, which is further than the band survives to. It is hand-written rather
 than taken from `mx_*` because periodicity is the one property none of the
 built-ins has.
+
+**The coarsest band may not repeat, so it is not a fetch.** Every octave the
+texture holds closes on thirty-two of its own cells, which the grain needs and
+the macro band cannot afford: at four kilometers a cell the period is 128 km,
+and a frame seen from a few hundred meters a pixel holds several. The macro
+band and the gullies are `latticeNoise` and `stripes` in
+`render/noiseNodes.ts` instead — the texture's own construction on a lattice
+with no period — and their coordinate is the grain's trick without the
+modulo: the CPU splits the unrounded anchor into whole lattice cells and a
+remainder in float64 (`macroCell`, `macroOffset`), and the graph adds
+`positionLocal` to the remainder. `anchor + local` in float32 is rounded to
+half a meter on Earth, differently in every patch, which a four-kilometer
+band survives and a fifteen-meter gully does not.
+
+**Under the macro band the detail is eroded, and it is read against the slope
+it lies on.** The micro octave and the grain are damped by the slope already
+summed beneath them — an octave keeps half its strength at the angle of
+repose — so a hillside is smoother than the ground at its foot. Gullies are a
+phasor stripe field running down the landform's fall line, kept off the flat,
+the crests and the water, and the talus clamp stops loose ground being drawn
+steeper than the angle of repose by its detail. All of it is shading; none of
+it moves the mesh. And all of it is gone by the footprint at which the relief
+gate hands the body to its sphere, which is why the sphere does not carry it.
+[ADR-0053](../adr/0053-the-ground-erodes-and-the-macro-band-never-repeats.md).
 
 **The rocks wear this material rather than one of their own**, which is what
 keeps a boulder and the regolith it is lying on agreeing about the palette, the
@@ -930,6 +983,7 @@ flowchart TB
 - [ADR-0013](../adr/0013-measured-figures.md) — why a body that gravity never rounded off carries a radius grid rather than a sphere
 - [ADR-0020](../adr/0020-the-face.md) — the cover field, the palette and the one terrain material
 - [ADR-0021](../adr/0021-the-ground.md) — the grain band, and the rocks that wear the same material
+- [ADR-0053](../adr/0053-the-ground-erodes-and-the-macro-band-never-repeats.md) — the eroded detail, and the macro band on a lattice with no period
 - [Coordinates](coordinates.md) — what render space is derived from
 - [Streaming](streaming.md) — how terrain patches are chosen and reconciled
 - [Time](time.md) — where the interpolation alpha comes from

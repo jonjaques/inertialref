@@ -10,9 +10,9 @@
       "body": "e7f37f13c0a7de78",
       "framing": "rise",
       "time": 0,
-      "fovDeg": 20,
+      "fovDeg": 11.5287338,
       "lens": {
-        "focalLength": 68.05538184,
+        "focalLength": 118.8730788,
         "gauge": 24,
         "zoom": 1,
         "fStop": 2.8,
@@ -44,10 +44,10 @@
         "radius": 1843995
       },
       "terrain": {
-        "patches": 90,
-        "deepest": 5,
+        "patches": 147,
+        "deepest": 6,
         "shallowest": 3,
-        "visited": 154,
+        "visited": 230,
         "culled": 27
       }
     },

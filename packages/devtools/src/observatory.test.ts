@@ -25,6 +25,8 @@ import {
 } from '@inertialref/spatial'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import {
+  FOV_MAX,
+  FOV_MIN,
   type Lens,
   LENS_PRESETS,
   MAX_OBSERVER_DISTANCE,
@@ -551,10 +553,12 @@ describe('a rise', () => {
     // the photograph was taken from.
     expect(status.surface?.stance.height).toBeGreaterThan(50_000)
     expect(status.surface?.stance.height).toBeLessThan(200_000)
-    // Earth is 1.9° across from here, so the solve wants 11.4° and gets the
-    // 20° floor. Stated as the floor rather than as a range, because the clamp
-    // is the interesting fact: a lens below 20° is its own phase.
-    expect(fovDeg).toBe(20)
+    // Earth is 1.9° across from here, so a sixth of the frame asks for
+    // 11.53° at this instant, when Earth is 380,396 km off and a little nearer
+    // than its mean. The long end of the range is 11.4°, so the picture is the
+    // photograph's framing rather than the clamp's.
+    expect(fovDeg).toBeGreaterThan(FOV_MIN)
+    expect(fovDeg).toBeCloseTo(11.53, 2)
     session.dispose()
   })
 
@@ -593,8 +597,8 @@ describe('the pictures', () => {
       )
       // A lens the slider can actually be set to. A picture composed at an
       // angle the control cannot reach is a frame nobody can reproduce by hand.
-      expect(fovDeg, id).toBeGreaterThanOrEqual(20)
-      expect(fovDeg, id).toBeLessThanOrEqual(110)
+      expect(fovDeg, id).toBeGreaterThanOrEqual(FOV_MIN)
+      expect(fovDeg, id).toBeLessThanOrEqual(FOV_MAX)
     }
     session.dispose()
   })
@@ -622,7 +626,9 @@ describe('a picture fits the lens it names', () => {
     const { harness: ir, session, lens } = harness()
     const taken = ir.preset('earthrise')
     expect(verticalFovDegrees(lens())).toBeCloseTo(taken.fovDeg, 6)
-    expect(taken.fovDeg).toBe(20)
+    // Solved, not clamped: the picture's instant has Earth a little nearer
+    // than its mean, so the field is a hair longer than the floor allows.
+    expect(taken.fovDeg).toBeGreaterThan(FOV_MIN)
     session.dispose()
   })
 

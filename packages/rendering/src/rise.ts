@@ -79,12 +79,13 @@ export const HORIZON_THIRD = 1 / 3
  * is 42° across from Phobos, a factor of twenty-two. A single lens that framed
  * one of them would put the other off the edges or in a corner as a speck.
  *
- * Clamped to the slider's own range, and the clamp is doing real work at the
- * long end: Earthrise at the photograph's framing wants 11.4°, and the range
- * stops at 20° because the terrain predicate saturates there
- * (`docs/adr/0017-the-lens.md`). The picture below 20° is a phase of its own; until then Earth is
- * smaller in this frame than in the photograph, which is a stated limit rather
- * than a silent one.
+ * Clamped to the slider's own range, and the long end is this picture: Earth
+ * from Luna at its mean distance wants 11.4°, which is where the range stops.
+ * Across a month the solve runs from 10.8° at apogee to 12.1° at perigee, so
+ * for the far half of the orbit the clamp holds Earth up to 5% under a sixth
+ * of the frame; the floor is set by what the terrain predicate's patch cap holds
+ * (`docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md`), not by
+ * this picture's arithmetic, and Mars from Phobos is at the other wall.
  */
 export function riseFov(
   parentRadius: Meters,

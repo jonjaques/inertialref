@@ -1,6 +1,7 @@
 # ADR-0018: The instrument the lens is operated from
 
-Status: accepted · 2026-08-28
+Status: accepted · 2026-08-28 · amended by [ADR-0055](0055-a-long-lens-refines-what-its-frame-can-reach.md): the
+long end of the lens is 11.4°, and Earthrise takes the field it solves
 
 ## Context
 

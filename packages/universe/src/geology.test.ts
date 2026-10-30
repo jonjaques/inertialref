@@ -1,6 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { rootSeed, type Seed } from '@inertialref/procedural'
+import { deriveSeed, Rng, rootSeed, type Seed } from '@inertialref/procedural'
 import { Vec, vec3 } from '@inertialref/spatial'
 import { regionAddress } from './address.ts'
 import {
@@ -9,6 +9,7 @@ import {
   HYPSOMETRY_MARGIN,
   hypsometryBand,
   plateContext,
+  stripeProfile,
 } from './bands.ts'
 import {
   craterCountAbove,
@@ -17,12 +18,15 @@ import {
   softLimit,
 } from './craters.ts'
 import { TEST_CATALOG } from './catalog/fixture.ts'
+import { drainageGraph } from './drainage.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
 import {
   craterDepth,
   CRUST_STRENGTH,
   type GrammarFacts,
+  liquidKind,
   MAX_RELIEF,
+  readDrawnSea,
   reliefLimit,
   surfaceGrammar,
   surfaceTemperature,
@@ -44,6 +48,21 @@ const SOL = generateSystem(
 const find = (name: string): Body => {
   for (const body of walkBodies(SOL)) if (body.name === name) return body
   throw new Error(`no ${name} in Sol`)
+}
+
+/** A generated body from one of `TEST_CATALOG`'s other systems, by name. */
+const generated = (name: string): Body => {
+  for (const star of TEST_CATALOG.stars) {
+    if (star.name === 'Sol') continue
+    let system: ReturnType<typeof generateSystem>
+    try {
+      system = generateSystem(ROOT, MILKY_WAY, catalogStub(star))
+    } catch {
+      continue
+    }
+    for (const body of walkBodies(system)) if (body.name === name) return body
+  }
+  throw new Error(`no ${name} in the fixture`)
 }
 
 /** A spread of directions, golden-angle so nothing clusters at a pole. */
@@ -148,6 +167,56 @@ describe('the surface grammar', () => {
     expect(find('Luna').surface.grammar.plateCount).toBe(1)
   })
 
+  it('keeps the plates a sea gave a world whose ground then boiled it', () => {
+    /*
+     * Proxima Centauri II drew a sea, and its ground stands at 491 K — between
+     * the water window and the basalt solidus, where nothing the generator
+     * knows is liquid — so the datum is read as dry and the world has no sea.
+     * The water that weakened its lithosphere into plates is the sea it had
+     * before its ground boiled it, not the sea standing now, and reading the
+     * weakening off the standing sea took all twenty of them: the fixture's
+     * plate world was a stagnant lid.
+     */
+    const proxima = generated('Proxima Centauri II')
+    expect(proxima.surface.seaLevel).toBeNull()
+    expect(proxima.surface.grammar.liquidKind).toBeNull()
+    expect(proxima.surface.grammar.plateCount).toBe(20)
+  })
+
+  it('counts a sea the ground boiled as one the world had, and never one it froze', () => {
+    /*
+     * A star brightens as it ages, so a world's ground has only ever warmed:
+     * one too hot for any liquid passed through the window while its star was
+     * young, and one too cold was colder still and never held a liquid at
+     * all. The frozen side is everything short of the water band's boiling
+     * edge — the gap above the hydrocarbons included, where water is ice —
+     * and the standing and boiled sides are Titan's lakes, Earth, Proxima
+     * Centauri II at 491 K, Venus and a lava sea.
+     */
+    const drawn = 0.4
+    for (const kelvin of [40, 150, 200, 240]) {
+      expect(`${kelvin} K: ${readDrawnSea(drawn, kelvin).hadOcean}`).toBe(
+        `${kelvin} K: false`,
+      )
+    }
+    for (const kelvin of [94, 288, 491, 739, 1_500]) {
+      expect(`${kelvin} K: ${readDrawnSea(drawn, kelvin).hadOcean}`).toBe(
+        `${kelvin} K: true`,
+      )
+    }
+    // No draw is no history, at any temperature.
+    expect(readDrawnSea(null, 288)).toEqual({ seaLevel: null, hadOcean: false })
+    // And a sea that stands is a sea the world had: `hasOcean` implies
+    // `hadOcean` at every temperature, so neither can read the other's half.
+    fc.assert(
+      fc.property(fc.double({ min: 0, max: 5_000, noNaN: true }), (kelvin) => {
+        const sea = readDrawnSea(drawn, kelvin)
+        expect(sea.seaLevel === null || sea.hadOcean).toBe(true)
+        expect(sea.seaLevel === null).toBe(liquidKind(kelvin) === null)
+      }),
+    )
+  })
+
   it('relaxes old ice, and only where it is warm enough to flow', () => {
     // Callisto at 134 K is smooth at large scales because its big craters have
     // sagged; Pluto at 40 K stands three-kilometer water-ice mountains with no
@@ -196,22 +265,35 @@ describe('the surface grammar', () => {
     const facts: GrammarFacts = {
       mass: 7.35e22,
       meanRadius: 1.737e6,
-      atmosphere: null,
+      // Air, so that the standing sea has a liquid and a biosphere to move.
+      atmosphere: { surfaceDensity: 1.2, scaleHeight: 8_500, ceiling: 100_000 },
       temperature: 270,
       tidalProxy: 0,
       hasOcean: false,
+      hadOcean: false,
       reliefSpent: 0.8,
       publishedRelief: null,
     }
     const seed: Seed = ROOT
-    expect(surfaceGrammar(seed, facts)).toEqual(surfaceGrammar(seed, facts))
+    const base = surfaceGrammar(seed, facts)
+    expect(surfaceGrammar(seed, facts)).toEqual(base)
     // And every fact moves it, which is what stops one of them being dead.
-    expect(surfaceGrammar(seed, { ...facts, hasOcean: true })).not.toEqual(
-      surfaceGrammar(seed, facts),
-    )
     expect(surfaceGrammar(seed, { ...facts, temperature: 90 })).not.toEqual(
-      surfaceGrammar(seed, facts),
+      base,
     )
+    /*
+     * The two oceans move different things. The sea a world has decides what
+     * stands on it — the liquid and the life — and the sea it had decides
+     * whether its lithosphere moves; neither reaches the other's half.
+     */
+    const standing = surfaceGrammar(seed, { ...facts, hasOcean: true })
+    expect(standing.biota).not.toBe(base.biota)
+    expect(standing.mobility).toBe(base.mobility)
+    expect(standing.plateCount).toBe(base.plateCount)
+    const had = surfaceGrammar(seed, { ...facts, hadOcean: true })
+    expect(had.mobility).not.toBe(base.mobility)
+    expect(had.biota).toBe(base.biota)
+    expect(had.liquid).toBe(base.liquid)
   })
 })
 
@@ -402,6 +484,16 @@ describe('the crater field', () => {
       const at = (t: number): ReturnType<typeof vec3> =>
         Vec.normalize(Vec.lerp(from, to, t))
       /*
+       * At the drainage lattice's own resolution on a world that drains:
+       * this walk holds the craters and the plates, an arc of twenty
+       * thousand samples is twenty thousand isolated ones, and each would
+       * build the refinement's chain for nothing the claim reads. The
+       * refined levels' own step test is in `drainageRefinement.test.ts`.
+       */
+      const finest = drainageGraph(body.surface)?.level ?? Infinity
+      const ground = (d: ReturnType<typeof vec3>): number =>
+        elevationAt(body.surface, d, finest)
+      /*
        * The four largest jumps on the arc, not the largest.
        *
        * A step is not usually the biggest thing on a walk — a crater rim is
@@ -412,9 +504,9 @@ describe('the crater field', () => {
        * sixty samples against the four thousand the scan already spent.
        */
       const candidates: { at: number; jump: number }[] = []
-      let previous = elevationAt(body.surface, at(0))
+      let previous = ground(at(0))
       for (let i = 1; i <= samples; i += 1) {
-        const here = elevationAt(body.surface, at(i / samples))
+        const here = ground(at(i / samples))
         const jump = Math.abs(here - previous)
         previous = here
         if (candidates.length === 4 && jump <= (candidates[3]?.jump ?? 0))
@@ -429,20 +521,14 @@ describe('the crater field', () => {
         // Bisect onto the jump, keeping `lo` on the side the walk started from.
         let lo = candidate.at - 1 / samples
         let hi = candidate.at
-        const atLo = elevationAt(body.surface, at(lo))
+        const atLo = ground(at(lo))
         for (let i = 0; i < 60; i += 1) {
           const mid = (lo + hi) / 2
           if (mid === lo || mid === hi) break
-          if (
-            Math.abs(elevationAt(body.surface, at(mid)) - atLo) <
-            candidate.jump / 2
-          )
-            lo = mid
+          if (Math.abs(ground(at(mid)) - atLo) < candidate.jump / 2) lo = mid
           else hi = mid
         }
-        const gap = Math.abs(
-          elevationAt(body.surface, at(hi)) - elevationAt(body.surface, at(lo)),
-        )
+        const gap = Math.abs(ground(at(hi)) - ground(at(lo)))
         if (gap > survivor) survivor = gap
       }
       return survivor
@@ -500,39 +586,16 @@ describe('the crater field', () => {
      * which is why it is named individually rather than left to whichever
      * bodies a zoo sweep happens to pick.
      *
-     * The generated subject is the most-plated solid world in `TEST_CATALOG`,
-     * found rather than named. It was Proxima Centauri II, at twenty plates —
-     * the worst case, where a plate boundary stepped 9,433.9 m, 46% of
-     * everything that world has, against 891.2 m on Earth — until its sea was
-     * read against its 491 K ground and went, and with it the ocean that
-     * weakens a lithosphere into plates. A name pins the test to one body's
-     * facts; a search pins it to the claim, which is about any plate world.
+     * The generated subject is Proxima Centauri II, at twenty plates, and it
+     * is named because it is the worst case the ranked-identity rule was
+     * measured on: a plate boundary there stepped 9,433.9 m, 46% of everything
+     * that world has, against 891.2 m on Earth. Its sea does not survive its
+     * 491 K ground and its plates do, which the grammar's own test holds. The
+     * count is held exactly: `> 1` passed on a two-plate body and proved
+     * nothing about the rule the tectonic bands exist to hold.
      */
-    let plated: Body | null = null
-    for (const star of TEST_CATALOG.stars) {
-      if (star.name === 'Sol') continue
-      let system: ReturnType<typeof generateSystem>
-      try {
-        system = generateSystem(ROOT, MILKY_WAY, catalogStub(star))
-      } catch {
-        continue
-      }
-      for (const body of walkBodies(system)) {
-        if (body.surface.maxElevation <= 0 || body.radius < 1e6) continue
-        if (
-          plated === null ||
-          body.surface.grammar.plateCount > plated.surface.grammar.plateCount
-        ) {
-          plated = body
-        }
-      }
-    }
-    /*
-     * The floor is the measured one: Sirius II at nine plates is the most-plated
-     * generated body in the fixture. `> 1` passed on a two-plate body and proved
-     * nothing about the ranked-identity rule the tectonic bands exist to hold.
-     */
-    expect(plated?.surface.grammar.plateCount).toBeGreaterThanOrEqual(9)
+    const plated = generated('Proxima Centauri II')
+    expect(plated.surface.grammar.plateCount).toBe(20)
     expect(find('Earth').surface.grammar.plateCount).toBeGreaterThan(1)
 
     const subjects: readonly Body[] = [
@@ -545,9 +608,7 @@ describe('the crater field', () => {
     }
 
     /*
-     * The generated plate world is held to the same meter as everything else,
-     * and Proxima Centauri II — which held the role while it had a sea — is
-     * the body that had to earn it.
+     * The generated plate world is held to the same meter as everything else.
      *
      * The seam here was never a plate boundary. `plateAt` used to return the
      * second-nearest plate, and which plate that *is* changes discontinuously
@@ -565,7 +626,7 @@ describe('the crater field', () => {
      * happened to miss, while a sweep of twenty-four great circles found
      * 3,081 m of it — reads 1.2e-4.
      */
-    for (const body of [find('Earth'), plated as Body]) {
+    for (const body of [find('Earth'), plated]) {
       expect(`${body.name}: ${sweep(body, 16) < 1}`).toBe(`${body.name}: true`)
     }
   })
@@ -788,5 +849,108 @@ describe('the band stack', () => {
       ),
       { numRuns: 60 },
     )
+  })
+})
+
+describe('the tiger stripes', () => {
+  /*
+   * Enceladus's four sulci are a south-polar family: about 130 km long,
+   * roughly parallel, about 35 km apart, on a 252 km moon. A mapless sphere
+   * wears its relief, so a stripe cut around a whole great circle reads from
+   * orbit as a hairline from pole to pole; the extent is what keeps the
+   * family at the pole, and the taper is what keeps its ends from being a
+   * crease in the canonical field.
+   */
+  const south = vec3(0, -1, 0)
+  const arc = (a: ReturnType<typeof vec3>, b: ReturnType<typeof vec3>) =>
+    Math.acos(Math.min(1, Math.max(-1, Vec.dot(a, b))))
+
+  it('are a south-polar family on Enceladus, 130 km long and 35 km apart', () => {
+    const body = find('Enceladus')
+    const radius = body.surface.grammar.meanRadius
+    const stripes = terrainSketch(body.surface).stripes
+    expect(stripes).toHaveLength(4)
+    for (const stripe of stripes) {
+      // The middle of the extent is on the stripe's own circle, and near the
+      // pole: the family is four stripes 35 km apart, so its outer two sit
+      // about 50 km off it.
+      expect(Math.abs(Vec.dot(stripe.center, stripe.pole))).toBeLessThan(1e-12)
+      expect(arc(stripe.center, south) * radius).toBeLessThan(80_000)
+      const length = 2 * stripe.halfLength * radius
+      expect(length).toBeGreaterThan(100_000)
+      expect(length).toBeLessThan(160_000)
+    }
+    for (let i = 1; i < stripes.length; i += 1) {
+      const here = stripes[i] as (typeof stripes)[number]
+      const before = stripes[i - 1] as (typeof stripes)[number]
+      // Apart: the center's distance from the neighbor's circle.
+      const apart =
+        Math.asin(Math.abs(Vec.dot(here.center, before.pole))) * radius
+      expect(apart).toBeGreaterThan(25_000)
+      expect(apart).toBeLessThan(45_000)
+      // Roughly parallel: the two run within fifteen degrees of each other.
+      const run = (stripe: typeof here) =>
+        Vec.normalize(Vec.cross(stripe.pole, stripe.center))
+      expect(Math.abs(Vec.dot(run(here), run(before)))).toBeGreaterThan(
+        Math.cos((15 * Math.PI) / 180),
+      )
+    }
+  })
+
+  it('cut nothing outside their extent, and taper to nothing at its ends', () => {
+    const stripes = terrainSketch(find('Enceladus').surface).stripes
+    for (const stripe of stripes) {
+      const along = Vec.normalize(Vec.cross(stripe.pole, stripe.center))
+      // A point on the stripe's own circle, `angle` from the middle.
+      const on = (angle: number) =>
+        Vec.add(
+          Vec.scale(stripe.center, Math.cos(angle)),
+          Vec.scale(along, Math.sin(angle)),
+        )
+      // The trough is cut at the middle of the extent.
+      expect(stripeProfile(stripe, stripe.center)).toBeLessThan(-0.2)
+      // And nowhere else on the great circle: the north pole's side of it is
+      // where the hairline was.
+      for (let i = 0; i < 360; i += 1) {
+        const angle = (i / 360) * 2 * Math.PI
+        const off = Math.min(angle, 2 * Math.PI - angle)
+        if (off <= stripe.halfLength) continue
+        expect(stripeProfile(stripe, on(angle))).toBe(0)
+      }
+      // Walked from the middle out past the end, the profile never steps:
+      // the largest change between neighbors is what its slope allows at
+      // that spacing, not a cliff where the extent stops.
+      const samples = 4_000
+      let previous = stripeProfile(stripe, on(0))
+      let jump = 0
+      for (let i = 1; i <= samples; i += 1) {
+        const here = stripeProfile(
+          stripe,
+          on((1.3 * stripe.halfLength * i) / samples),
+        )
+        jump = Math.max(jump, Math.abs(here - previous))
+        previous = here
+      }
+      expect(previous).toBe(0)
+      expect(jump).toBeLessThan(2e-3)
+    }
+  })
+
+  it('draws the widths and offsets it always drew, from the stream they came from', () => {
+    /*
+     * The stripe stream is its own derived seed, so a draw appended to it
+     * moves nothing else — and the draws already on it keep their order, so
+     * every stripe keeps the trough and the shoulders it had.
+     */
+    for (const name of ['Enceladus', 'Miranda']) {
+      const body = find(name)
+      const rng = new Rng(deriveSeed(body.surface.seed, 'stripes'))
+      rng.unitVector()
+      rng.range(0, 2 * Math.PI)
+      for (const stripe of terrainSketch(body.surface).stripes) {
+        expect(stripe.halfWidth).toBe(rng.range(0.004, 0.01))
+        expect(stripe.offset).toBe(rng.range(0.002, 0.006))
+      }
+    }
   })
 })

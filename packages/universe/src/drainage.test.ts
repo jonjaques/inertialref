@@ -4,12 +4,14 @@ import { rootSeed } from '@inertialref/procedural'
 import { Vec, vec3, type Vec3 } from '@inertialref/spatial'
 import { TEST_CATALOG } from './catalog/fixture.ts'
 import { catalogStub, MILKY_WAY } from './galaxy.ts'
+import { DRAINAGE_SHAPE } from './drainageShape.ts'
 import {
   carveDrainage,
-  DRAINAGE_SHAPE,
   type DrainageGraph,
+  drainageCell,
   drainageGraph,
   drainageLookup,
+  lakeLevelAt,
   SEGMENT_STRIDE,
 } from './drainage.ts'
 import { terrainSketch } from './sketch.ts'
@@ -383,6 +385,12 @@ describe('the field that reads it', () => {
      * channel's depth whichever way the landform went. Into a lake or the
      * sea the receiver's surface is the water's; the walk reaches the water
      * at the ria depth below it, which is the point.
+     *
+     * At the lattice's own resolution of the field: this walk holds the
+     * lattice, node to node across the whole body, and every node is an
+     * isolated sample that would otherwise build the refinement's chain
+     * for nothing the claim reads. The refined levels' own walk is in
+     * `drainageRefinement.test.ts`.
      */
     for (const body of [earth, generated]) {
       const graph = graphOf(body)
@@ -390,8 +398,8 @@ describe('the field that reads it', () => {
       const surface = (n: number): number => {
         if (graph.sea[n] === 1) return sea as number
         const at = unwarp(graph, body, nodeDirection(graph, n))
-        const ground = elevationAt(body.surface, at)
-        const water = waterLevelAt(body.surface, at)
+        const ground = elevationAt(body.surface, at, graph.level)
+        const water = waterLevelAt(body.surface, at, graph.level)
         const level = Math.max(
           Number.isNaN(water) ? -Infinity : water,
           sea ?? -Infinity,
@@ -406,10 +414,18 @@ describe('the field that reads it', () => {
         walked += 1
         const here = surface(n)
         const there = surface(r)
-        // A meter of tolerance against a budget of kilometers: the lake
-        // level is a kernel mean over the nodes in reach, and two lakes at
-        // different levels can share a ring.
-        if (there > here + 1) {
+        // A centimeter: the segments' floors and the level the field hands
+        // back are float32, at a relief budget of kilometers.
+        //
+        // Into a lake or the sea it is a theorem. A lake node's ring holds
+        // no other body — adjacent lake nodes share a level by the flood's
+        // construction — so the receiver reads its own level exactly, and
+        // a river reaching it is drowned at that level or runs above it.
+        // Onto dry ground it is a measurement at these two bodies: a lake
+        // whose reach crosses a ridge into another basin's channel would
+        // stand its level over that channel, which is the plan's "a lake is
+        // a kernel over its nodes" and not a mix of two bodies.
+        if (there > here + 1e-2) {
           rises.push(`${body.name} node ${n}: ${here} → ${there}`)
         }
       }
@@ -430,7 +446,7 @@ describe('the field that reads it', () => {
         expect(Number.isNaN(level)).toBe(false)
         // The field's level is the graph's through the coast's remap, which
         // the ground under it takes too; adjacent lake nodes share a level
-        // by the flood's construction, so the ring's mean is the level.
+        // by the flood's construction, so the ring holds this lake alone.
         const sea = seaDatumElevation(body.surface)
         const expected =
           sea === null
@@ -456,6 +472,11 @@ describe('the field that reads it', () => {
      * lookup crossing a lattice cell, a lake node leaving the ring — each is
      * a place a step could hide, and the bound is a meter against a
      * kilometer of carve.
+     *
+     * At the lattice's resolution, for the reason the walk above gives: an
+     * arc across the body is eight thousand isolated samples, and the
+     * refined levels' steps are held at their own scale, across their own
+     * cells and a face edge, by `drainageRefinement.test.ts`.
      */
     const walk = (
       body: Body,
@@ -464,10 +485,11 @@ describe('the field that reads it', () => {
       samples: number,
     ): number => {
       const at = (t: number): Vec3 => Vec.normalize(Vec.lerp(from, to, t))
+      const level = graphOf(body).level
       const candidates: { at: number; jump: number }[] = []
-      let previous = elevationAt(body.surface, at(0))
+      let previous = elevationAt(body.surface, at(0), level)
       for (let i = 1; i <= samples; i += 1) {
-        const here = elevationAt(body.surface, at(i / samples))
+        const here = elevationAt(body.surface, at(i / samples), level)
         const jump = Math.abs(here - previous)
         previous = here
         if (candidates.length === 4 && jump <= (candidates[3]?.jump ?? 0))
@@ -480,19 +502,20 @@ describe('the field that reads it', () => {
       for (const candidate of candidates) {
         let lo = candidate.at - 1 / samples
         let hi = candidate.at
-        const atLo = elevationAt(body.surface, at(lo))
+        const atLo = elevationAt(body.surface, at(lo), level)
         for (let i = 0; i < 60; i += 1) {
           const mid = (lo + hi) / 2
           if (mid === lo || mid === hi) break
           if (
-            Math.abs(elevationAt(body.surface, at(mid)) - atLo) <
+            Math.abs(elevationAt(body.surface, at(mid), level) - atLo) <
             candidate.jump / 2
           )
             lo = mid
           else hi = mid
         }
         const gap = Math.abs(
-          elevationAt(body.surface, at(hi)) - elevationAt(body.surface, at(lo)),
+          elevationAt(body.surface, at(hi), level) -
+            elevationAt(body.surface, at(lo), level),
         )
         if (gap > survivor) survivor = gap
       }
@@ -524,13 +547,15 @@ describe('the field that reads it', () => {
       // A landform a kilometer over the floor is cut to the floor less the
       // channel's depth, one a kilometer under it filled to the same, and
       // the channel is fully bed there with the water at the floor. The
-      // segments are float32; the graph's floors are not, so a centimeter.
+      // water is the beds' weighted mean, and a creek whose record ends at
+      // a junction just downstream weighs in the junction's floor: 6 cm
+      // under the node's at the worst of these sixty, so a decimeter.
       for (const landform of [floor + 1_000, floor - 1_000]) {
         const carve = carveDrainage(graph, at, landform)
         expect(carve.channel).toBeCloseTo(1, 6)
         expect(carve.ground).toBeLessThan(floor)
         expect(carve.ground).toBeGreaterThan(floor - 200)
-        expect(carve.water).toBeGreaterThanOrEqual(floor - 1e-2)
+        expect(Math.abs(carve.water - floor)).toBeLessThan(0.1)
       }
       checked += 1
     }
@@ -560,6 +585,156 @@ describe('the field that reads it', () => {
         Math.cos(DRAINAGE_SHAPE.jitter * Math.SQRT2 * (2 / graph.cells)),
       )
     }
+  })
+})
+
+describe('the water between two bodies', () => {
+  /*
+   * A sample within `lakeReach` of two bodies of standing water at different
+   * levels — two lakes, or a lake and the sea. The level it reads is one
+   * body's: the one whose nodes in reach carry the most of the kernel's
+   * weight. A kernel mean over both reads a level belonging to neither across
+   * the whole overlap, so the sheet tilts across the gap and the clamp
+   * follows it; a choice by rank is a step wherever the ranking changes, and
+   * the lattice cannot put that step where the ground stands above both
+   * levels. What remains is rule 11's margin: the two meet in a blend over
+   * the few percent of the overlap where neither leads, and nowhere else.
+   *
+   * Walked on the lattice's own chord between the two bodies' nodes, through
+   * `lakeLevelAt` alone, so a river's surface and the coast's remap are not
+   * in it.
+   */
+  const reach = (graph: DrainageGraph): number =>
+    (DRAINAGE_SHAPE.lakeReach * Math.PI) / 2 / graph.cells
+
+  /** The levels a sample's cell and ring hold within reach of it. */
+  const inReach = (graph: DrainageGraph, p: Vec3): Set<number> => {
+    const cell = drainageCell(graph, p)
+    const levels = new Set<number>()
+    for (const n of [cell, ...graph.neighbors.slice(cell * 8, cell * 8 + 8)]) {
+      if (n < 0 || !isLake(graph, n)) continue
+      if (Vec.length(Vec.sub(nodeDirection(graph, n), p)) >= reach(graph))
+        continue
+      levels.add(graph.lake[n] as number)
+    }
+    return levels
+  }
+
+  /**
+   * Pairs of nodes under standing water at different levels whose reaches
+   * overlap; with `sea`, one of the two is the sea's.
+   */
+  const pairs = (graph: DrainageGraph, sea: boolean): [number, number][] => {
+    const found: [number, number][] = []
+    for (let n = 0; n < graph.nodes; n += 1) {
+      if (!isLake(graph, n) || graph.sea[n] === 1) continue
+      for (const m of graph.neighbors.slice(n * 8, n * 8 + 8)) {
+        if (m < 0) continue
+        for (const o of graph.neighbors.slice(m * 8, m * 8 + 8)) {
+          if (o < 0 || !isLake(graph, o) || (graph.sea[o] === 1) !== sea)
+            continue
+          if (graph.lake[o] === graph.lake[n]) continue
+          const apart = Vec.length(
+            Vec.sub(nodeDirection(graph, n), nodeDirection(graph, o)),
+          )
+          if (apart < 2 * reach(graph)) found.push([n, o])
+        }
+      }
+    }
+    return found
+  }
+
+  const chord =
+    (graph: DrainageGraph, n: number, m: number) =>
+    (t: number): Vec3 =>
+      Vec.normalize(
+        Vec.lerp(nodeDirection(graph, n), nodeDirection(graph, m), t),
+      )
+
+  const level = (graph: DrainageGraph, p: Vec3): number =>
+    lakeLevelAt(graph, drainageCell(graph, p), p)
+
+  it.each([
+    ['two lakes', () => find('Titan'), false],
+    ['a lake and the sea', () => earth, true],
+  ])('reads one body between %s', (_, body, sea) => {
+    const graph = graphOf(body())
+    const sites = pairs(graph, sea)
+    expect(sites.length).toBeGreaterThan(0)
+    let overlap = 0
+    let neither = 0
+    let worst = 0
+    for (const [n, m] of sites.slice(0, 24)) {
+      const at = chord(graph, n, m)
+      for (let i = 0; i <= 400; i += 1) {
+        const p = at(i / 400)
+        const levels = inReach(graph, p)
+        if (levels.size < 2) continue
+        overlap += 1
+        const here = level(graph, p)
+        if (levels.has(here)) continue
+        neither += 1
+        // Inside the margin the level is a blend of the bodies in reach, so
+        // it never leaves the span of their levels.
+        const span = [...levels]
+        expect(here).toBeGreaterThanOrEqual(Math.min(...span) - 1e-9)
+        expect(here).toBeLessThanOrEqual(Math.max(...span) + 1e-9)
+        let away = Infinity
+        for (const l of span) away = Math.min(away, Math.abs(here - l))
+        worst = Math.max(worst, away)
+      }
+    }
+    expect(overlap).toBeGreaterThan(100)
+    // The margin is a tenth of the kernel's weight: a sample reads a level
+    // belonging to neither body only where neither leads by that much, which
+    // is a few percent of the overlap. The mean read it at all of it.
+    expect(neither / overlap).toBeLessThan(0.1)
+    expect(Number.isFinite(worst)).toBe(true)
+  })
+
+  it.each([
+    ['two lakes', () => find('Titan'), false],
+    ['a lake and the sea', () => earth, true],
+  ])('meets the other body without a step, between %s', (_, body, sea) => {
+    /*
+     * The walk the field's own step test makes: the largest jumps on the
+     * chord, each bisected until the interval stops shrinking. A level read
+     * off the leading body alone would keep the whole difference between
+     * the two levels across the last interval; the margin's blend is
+     * continuous and keeps nothing.
+     */
+    const graph = graphOf(body())
+    let survivor = 0
+    for (const [n, m] of pairs(graph, sea).slice(0, 24)) {
+      const at = chord(graph, n, m)
+      const read = (t: number): number => {
+        const value = level(graph, at(t))
+        return Number.isNaN(value) ? Number.NEGATIVE_INFINITY : value
+      }
+      const samples = 400
+      for (let i = 1; i <= samples; i += 1) {
+        let lo = (i - 1) / samples
+        let hi = i / samples
+        const a = read(lo)
+        const b = read(hi)
+        // Both sides read water: the step a lone lake has at its reach,
+        // where it ends over dry ground, is not this test's.
+        if (!Number.isFinite(a) || !Number.isFinite(b)) continue
+        if (Math.abs(b - a) < 1e-6) continue
+        for (let k = 0; k < 60; k += 1) {
+          const mid = (lo + hi) / 2
+          if (mid === lo || mid === hi) break
+          if (Math.abs(read(mid) - a) < Math.abs(b - a) / 2) lo = mid
+          else hi = mid
+        }
+        const gap = Math.abs(read(hi) - read(lo))
+        if (Number.isFinite(gap) && gap > survivor) survivor = gap
+      }
+    }
+    // A millimeter: what float64 arithmetic leaves of a blend across an
+    // interval of 2⁻⁶⁰ of the chord. The step a ranked choice leaves is the
+    // difference between the levels, meters to hundreds of them.
+    expect(survivor).toBeLessThan(1e-3)
   })
 })
 

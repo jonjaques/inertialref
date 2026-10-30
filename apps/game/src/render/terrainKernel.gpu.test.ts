@@ -1,23 +1,36 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { ComputeNode } from 'three/webgpu'
 import { openSession, type Session, terrainZoo } from '@inertialref/devtools'
-import { vec3 } from '@inertialref/spatial'
+import { Vec, vec3 } from '@inertialref/spatial'
 import {
   type Body,
+  coastRemap,
+  coastWidth,
   COVER_CHANNELS,
+  drainageGraph,
+  drainageLookup,
+  drainageRefinement,
+  DRAINAGE_SHAPE,
   findBody,
   generateHeightfield,
+  geodeticDirection,
+  groundCoverAt,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
   parseAddress,
   type RegionAddress,
+  regionDirection,
+  regionDrainageLevel,
   regionForDirection,
   regionSize,
   SOL,
+  STRIPE_SHAPE,
+  stripeProfile,
   surfaceDetailFloor,
   surfaceKernel,
-  TILE_STRIDE,
+  surveySites,
+  terrainSketch,
   walkBodies,
-  writeTileFrame,
   seaDatumElevation,
   NO_KERNEL_WATER,
 } from '@inertialref/universe'
@@ -26,6 +39,7 @@ import {
   createTerrainKernel,
   type TerrainKernel,
   uploadSurface,
+  writeBatch,
 } from './terrainKernel.ts'
 
 /*
@@ -83,34 +97,57 @@ interface GpuTile {
   readonly water: Float32Array
 }
 
-/** Run one batch of tiles of one body through the kernel and split them out. */
+/**
+ * Run one batch of tiles of one body through a kernel — this file's unless
+ * another is named — and split them out.
+ */
 async function gpuTiles(
   body: Body,
   regions: readonly RegionAddress[],
   seabed = false,
+  on: TerrainKernel = kernel,
 ): Promise<GpuTile[]> {
   if (regions.length > MAX_TILES)
     throw new Error('too many tiles for one batch')
   const packed = surfaceKernel(body.surface, seabed)
-  uploadSurface(kernel, packed)
-  const frames = kernel.tiles.array as Float32Array
-  regions.forEach((region, i) =>
-    writeTileFrame(packed, region, frames, i * TILE_STRIDE * 4),
-  )
-  kernel.tiles.needsUpdate = true
-  kernel.total.value = regions.length * kernel.samples
-  await gpu.compute(kernel.compute)
-  const elevations = new Float32Array(await gpu.readBuffer(kernel.elevations))
-  const cover = new Uint8Array(await gpu.readBuffer(kernel.cover))
-  const water = new Float32Array(await gpu.readBuffer(kernel.water))
+  uploadSurface(on, packed)
+  if (!writeBatch(on, body.surface, packed, regions)) {
+    throw new Error('the refined rows overran the drainage buffer')
+  }
+  on.total.value = regions.length * on.samples
+  await gpu.compute(on.compute)
+  const elevations = new Float32Array(await gpu.readBuffer(on.elevations))
+  const cover = new Uint8Array(await gpu.readBuffer(on.cover))
+  const water = new Float32Array(await gpu.readBuffer(on.water))
   return regions.map((_, i) => ({
-    elevations: elevations.slice(i * kernel.samples, (i + 1) * kernel.samples),
+    elevations: elevations.slice(i * on.samples, (i + 1) * on.samples),
     cover: cover.slice(
-      i * kernel.interior * COVER_CHANNELS,
-      (i + 1) * kernel.interior * COVER_CHANNELS,
+      i * on.interior * COVER_CHANNELS,
+      (i + 1) * on.interior * COVER_CHANNELS,
     ),
-    water: water.slice(i * kernel.interior, (i + 1) * kernel.interior),
+    water: water.slice(i * on.interior, (i + 1) * on.interior),
   }))
+}
+
+/** Elements of two equal-length arrays whose bits differ. */
+function bitsApart(
+  a: Float32Array | Uint8Array | Uint32Array,
+  b: Float32Array | Uint8Array | Uint32Array,
+): number {
+  const x = new Uint8Array(a.buffer, a.byteOffset, a.byteLength)
+  const y = new Uint8Array(b.buffer, b.byteOffset, b.byteLength)
+  if (a.length !== b.length) return Math.max(a.length, b.length)
+  let apart = 0
+  const width = a.BYTES_PER_ELEMENT
+  for (let i = 0; i < x.length; i += width) {
+    for (let k = 0; k < width; k += 1) {
+      if (x[i + k] !== y[i + k]) {
+        apart += 1
+        break
+      }
+    }
+  }
+  return apart
 }
 
 /** A spread of regions over a body at one level: four directions. */
@@ -170,16 +207,14 @@ function compare(
       const ground = field.elevations[
         (row + HEIGHTFIELD_BORDER) * stride + col + HEIGHTFIELD_BORDER
       ] as number
-      const expected = field.water[vertex] as number
-      const actual = got.water[vertex] as number
-      const expectedWet = !Number.isNaN(expected)
-      const actualWet = actual > NO_KERNEL_WATER / 2
-      if (expectedWet && actualWet) {
-        water = Math.max(water, Math.abs(actual - expected))
-      } else if (expectedWet !== actualWet) {
-        const level = expectedWet ? expected : actual
-        water = Math.max(water, Math.max(0, level - ground))
-      }
+      water = Math.max(
+        water,
+        waterGap(
+          field.water[vertex] as number,
+          got.water[vertex] as number,
+          ground,
+        ),
+      )
     }
   }
   return {
@@ -188,6 +223,134 @@ function compare(
     water,
     reliefAtLevel: field.maxElevation - field.minElevation,
   }
+}
+
+/**
+ * One vertex's water against the CPU's: the two levels apart where both have
+ * one, and where only one does, that level's height above the ground.
+ */
+function waterGap(expected: number, actual: number, ground: number): number {
+  const expectedWet = !Number.isNaN(expected)
+  const actualWet = actual > NO_KERNEL_WATER / 2
+  if (expectedWet && actualWet) return Math.abs(actual - expected)
+  if (expectedWet === actualWet) return 0
+  return Math.max(0, (expectedWet ? expected : actual) - ground)
+}
+
+/**
+ * How far the kernel's sample can sit from the CPU's on the drainage,
+ * meters, measured. A creek's bank turns the wet byte through 255 over 0.4
+ * of its half-width, 1,900 bytes a meter on a creek a meter wide. The water
+ * fades to the surface at a bed's edge, and past the edge there is no river:
+ * a lake's level where one is in reach, or none. A float32 bed rounds to
+ * zero a little inside the edge the CPU's float64 bed reaches, so a vertex
+ * there reads the river on one side and what lies past it on the other — on
+ * Titan, a lake 2.98 m under the river's surface, both under the ground, and
+ * the drawn tail's dip 5.7 cm under the surface the river meets. At those
+ * vertices no float32 placement holds the CPU's byte or level, however exact
+ * the arithmetic around it is. Every such vertex of this file's creek tiles
+ * (45, on Earth and Titan at levels 12 to 17: 43 bank bytes and those two
+ * levels) is the CPU's own value at a point within 8 mm of it, and a
+ * centimeter is that with room. The kernel's lookup
+ * passes through the warp's three noises in float32, and the warp is 5 km
+ * wide on Titan and 12.5 km on Earth, so a noise a few float32 steps off
+ * moves the lookup by millimeters. Reading the lookup off absolute float32
+ * directions misplaces a bed by half a meter, fifty times this, and a
+ * sample moved half a meter fails 11 of these 14 tiles.
+ */
+const CREEK_PLACEMENT = 0.01
+
+/**
+ * The interior vertices of a tile that neither match the CPU's sample there
+ * (cover within `COVER_BOUND`, water within `limit`) nor match its sample at
+ * any of 48 points within `CREEK_PLACEMENT` of it.
+ */
+function unplaced(
+  body: Body,
+  region: RegionAddress,
+  tile: GpuTile,
+  limit: number,
+): string[] {
+  const field = generateHeightfield(body.surface, {
+    region,
+    resolution: HEIGHTFIELD_RESOLUTION,
+    border: HEIGHTFIELD_BORDER,
+  })
+  const finest = regionDrainageLevel(region.level)
+  const radius = body.surface.grammar.meanRadius
+  const cover = new Uint8Array(COVER_CHANNELS)
+  const water = new Float32Array(1)
+  const holds = (
+    bytes: Uint8Array,
+    at: number,
+    level: number,
+    ground: number,
+  ) => {
+    for (let k = 0; k < COVER_CHANNELS; k += 1) {
+      const apart = Math.abs(
+        (tile.cover[at + k] as number) - (bytes[k] as number),
+      )
+      if (apart > COVER_BOUND) return false
+    }
+    return (
+      waterGap(level, tile.water[at / COVER_CHANNELS] as number, ground) < limit
+    )
+  }
+  const step = HEIGHTFIELD_RESOLUTION - 1
+  const stride = HEIGHTFIELD_RESOLUTION + 2 * HEIGHTFIELD_BORDER
+  const missed: string[] = []
+  for (let row = 0; row < HEIGHTFIELD_RESOLUTION; row += 1) {
+    for (let col = 0; col < HEIGHTFIELD_RESOLUTION; col += 1) {
+      const vertex = row * HEIGHTFIELD_RESOLUTION + col
+      const at = vertex * COVER_CHANNELS
+      const ground = field.elevations[
+        (row + HEIGHTFIELD_BORDER) * stride + col + HEIGHTFIELD_BORDER
+      ] as number
+      if (
+        holds(
+          field.cover.subarray(at),
+          at,
+          field.water[vertex] as number,
+          ground,
+        )
+      ) {
+        continue
+      }
+      const d = regionDirection(region, col / step, row / step)
+      const east = Vec.normalize(
+        Vec.cross(d, Math.abs(d.y) < 0.9 ? vec3(0, 1, 0) : vec3(1, 0, 0)),
+      )
+      const north = Vec.cross(d, east)
+      let found = false
+      for (const reach of [0.25, 0.5, 1]) {
+        for (let k = 0; k < 16 && !found; k += 1) {
+          const turn = (k * Math.PI) / 8
+          const off = Vec.add(
+            Vec.scale(east, Math.cos(turn)),
+            Vec.scale(north, Math.sin(turn)),
+          )
+          const moved = Vec.normalize(
+            Vec.add(d, Vec.scale(off, (reach * CREEK_PLACEMENT) / radius)),
+          )
+          water[0] = Number.NaN
+          const elevation = groundCoverAt(
+            body.surface,
+            moved,
+            cover,
+            0,
+            false,
+            water,
+            0,
+            finest,
+          )
+          found = holds(cover, at, water[0] as number, elevation)
+        }
+        if (found) break
+      }
+      if (!found) missed.push(`${row},${col}`)
+    }
+  }
+  return missed
 }
 
 /**
@@ -226,8 +389,63 @@ const bound = (body: Body, level: number): number =>
  * A cover byte is `round(x · 255)` on both sides, and the two roundings can
  * fall either side of a half — one step — on any channel whose float32
  * evaluation differs from float64's at all, which every channel's does.
+ *
+ * At level 0 the sample's own position is `bound`'s second term: a tile is
+ * a cube face, its samples are placed to a third of a meter on Earth, and a
+ * channel's bank turns the wet byte through 255 over 0.4 of the channel's
+ * half-width. Where a lattice river's bank falls on a level-0 sample — and
+ * since the walk measures to the arc, a bed runs the whole of its segment
+ * and banks do fall there — that is four bytes on Earth, measured.
  */
 const COVER_BOUND = 2
+const coverBound = (level: number): number => (level === 0 ? 4 : COVER_BOUND)
+
+/**
+ * `maxStorageBuffersPerShaderStage` as the WebGPU spec defaults it, which is
+ * what a device runs at unless it asks for more. Nothing asks: not
+ * `createRenderer`, not the producer, not the harness.
+ */
+const BASELINE_STORAGE_BUFFERS = 8
+
+describe('the kernel’s bindings', () => {
+  /*
+   * At the baseline a ninth binding fails pipeline validation. Here that is
+   * a harness error in the tolerance tests below; in the app it is the
+   * producer's `warm()` retiring the GPU for the session with a logged
+   * reason, and the ground arriving at the pool's pace with nothing else to
+   * say why. Both depend on the device having been granted the default — the
+   * adapter on an M5 offers ten — so this counts the bindings in the program
+   * itself against the spec's figure, whatever limits a device was given,
+   * and says which budget a new one spends. A list the drainage graph grows
+   * is a row in its offset table (`DRAINAGE_NODES_AT` and the rest), not a
+   * binding.
+   */
+  it('binds no more storage buffers than the baseline device has', () => {
+    const nodes = (
+      gpu.renderer as unknown as {
+        _nodes: { getForCompute(node: ComputeNode): { computeShader: string } }
+      }
+    )._nodes
+    const wgsl = nodes.getForCompute(kernel.compute).computeShader
+    const bindings = wgsl.match(/var<storage\b/g)?.length ?? 0
+    console.info(
+      `the kernel binds ${bindings} storage buffers of the baseline's ${BASELINE_STORAGE_BUFFERS}`,
+    )
+    // A floor as well as a ceiling: the count is a regex over three's WGSL,
+    // and a spelling that stops matching would pass the ceiling at zero.
+    expect(bindings).toBeGreaterThan(0)
+    expect(bindings).toBeLessThanOrEqual(BASELINE_STORAGE_BUFFERS)
+  })
+
+  it('is held at the baseline by a device granted only the baseline', () => {
+    // The other half of the claim above: the tolerance tests in this file
+    // build the kernel on a device at the default, as the app does.
+    const device = (gpu.renderer.backend as { device?: GPUDevice }).device
+    expect(device?.limits.maxStorageBuffersPerShaderStage).toBe(
+      BASELINE_STORAGE_BUFFERS,
+    )
+  })
+})
 
 describe('the kernel against generateHeightfield', () => {
   it('agrees on every body at every level, within the stated bound', async () => {
@@ -273,7 +491,7 @@ describe('the kernel against generateHeightfield', () => {
             `${body.name} L${level}: water ${water} m against ${limit}`,
           )
         }
-        if (cover > COVER_BOUND) {
+        if (cover > coverBound(level)) {
           failures.push(`${body.name} L${level}: cover byte off by ${cover}`)
         }
       }
@@ -307,5 +525,306 @@ describe('the kernel against generateHeightfield', () => {
     })
     expect(elevation).toBeLessThan(bound(wet, 0))
     expect(submarine).toBeGreaterThan(0)
+  }, 60_000)
+
+  /*
+   * The water between two bodies of standing water, where the level is the
+   * heavier body's and the two blend only within `lakeMargin` of a tie. The
+   * spread above lands on few such places, and this is the part of the lake
+   * block with arithmetic in it: tiles centered between a lake and the sea on
+   * Earth, and between two lakes on Titan, at a level where a vertex is a
+   * kilometer and the blend a few of them across.
+   */
+  it('reads the water between two bodies as the CPU does', async () => {
+    const failures: string[] = []
+    const rows: string[] = []
+    let blended = 0
+    for (const [body, sea] of [
+      [solBody('Earth'), true],
+      [solBody('Titan'), false],
+    ] as const) {
+      const graph = drainageGraph(body.surface)
+      if (graph === null) throw new Error(`${body.name} has no drainage graph`)
+      const reach = (DRAINAGE_SHAPE.lakeReach * Math.PI) / 2 / graph.cells
+      const at = (n: number) =>
+        vec3(
+          graph.positions[n * 3] as number,
+          graph.positions[n * 3 + 1] as number,
+          graph.positions[n * 3 + 2] as number,
+        )
+      const isLake = (n: number) => !Number.isNaN(graph.lake[n] as number)
+      const sites: { region: RegionAddress; levels: [number, number] }[] = []
+      for (let n = 0; n < graph.nodes && sites.length < MAX_TILES; n += 1) {
+        if (!isLake(n) || graph.sea[n] === 1) continue
+        for (let k = 0; k < 64 && sites.length < MAX_TILES; k += 1) {
+          const m = graph.neighbors[n * 8 + (k >> 3)] as number
+          if (m < 0) continue
+          const o = graph.neighbors[m * 8 + (k & 7)] as number
+          if (o < 0 || !isLake(o) || (graph.sea[o] === 1) !== sea) continue
+          if (graph.lake[o] === graph.lake[n]) continue
+          if (Vec.length(Vec.sub(at(n), at(o))) >= 2 * reach) continue
+          const region = regionForDirection(
+            Vec.normalize(Vec.add(at(n), at(o))),
+            7,
+          )
+          const taken = sites.some(
+            (site) =>
+              site.region.face === region.face &&
+              site.region.i === region.i &&
+              site.region.j === region.j,
+          )
+          if (taken) continue
+          sites.push({
+            region,
+            levels: [graph.lake[n] as number, graph.lake[o] as number],
+          })
+          break
+        }
+      }
+      expect(sites.length).toBeGreaterThan(0)
+      const tiles = await gpuTiles(
+        body,
+        sites.map((site) => site.region),
+      )
+      const datum = seaDatumElevation(body.surface)
+      const remap = (level: number): number =>
+        datum === null
+          ? level
+          : coastRemap(level, datum, coastWidth(body.surface))
+      sites.forEach((site, i) => {
+        const tile = tiles[i] as GpuTile
+        const gap = compare(body, site.region, tile)
+        const limit = bound(body, site.region.level)
+        /*
+         * These tiles sit on the drainage, so the ground carries the carve,
+         * and the carve's own bound is half a meter more than the field's
+         * (`terrainBands.gpu.test.ts`): a float32 position across a
+         * channel's bank. Titan's relief budget is small enough that the
+         * field's bound is under that — 4.2 cm of ground against 1.8 cm at
+         * one tile, with the water there 0.5 mm off — so the ground is held
+         * to the carve's allowance and the water, which is this test's
+         * subject, to the field's.
+         */
+        const ground = limit + 0.5
+        rows.push(
+          `${body.name.padEnd(8)} ${site.region.face}/${site.region.i}/${site.region.j}  elevation ${gap.elevation.toExponential(2)} of ${ground.toExponential(2)}  water ${gap.water.toExponential(2)} m of ${limit.toExponential(2)}`,
+        )
+        if (gap.elevation >= ground || gap.water >= limit) {
+          failures.push(
+            `${body.name} ${site.region.face}/${site.region.i}/${site.region.j}: elevation ${gap.elevation} water ${gap.water} m against ${limit}`,
+          )
+        }
+        const low = remap(Math.min(...site.levels))
+        const high = remap(Math.max(...site.levels))
+        for (const level of tile.water) {
+          if (level > low + 1e-3 && level < high - 1e-3) blended += 1
+        }
+      })
+    }
+    console.info(`\n${rows.join('\n')}\n${blended} blended vertices\n`)
+    expect(failures).toEqual([])
+    // The blend is in the tiles, so the comparison above covered it.
+    expect(blended).toBeGreaterThan(0)
+  }, 120_000)
+
+  /*
+   * Enceladus's stripes are a south-polar family cut along a stretch of each
+   * circle, and the spread above never reaches a pole. Tiles at the middle of
+   * each stripe and on its taper, at three levels, so the extent and its ends
+   * are compared where they are cut.
+   */
+  it('cuts a creek a walker stands beside as the CPU does', async () => {
+    /*
+     * The refined levels' walk, held where it matters: tiles at levels 12,
+     * 14 and 17 sitting on a finest-level creek's bed, near each survey
+     * site of Earth and of Titan, against `generateHeightfield`'s.
+     * A creek there is a meter or two wide, so this is the test of the rows'
+     * origin and of the warp's frames: read off absolute float32 directions
+     * the bed lands half a meter from where the CPU puts it, and the wet
+     * byte across it is a different byte. The CPU's tile has to hold the
+     * bed — a wet vertex — or the test proves nothing. The cover and water
+     * are held to the CPU's within `CREEK_PLACEMENT` of each vertex rather
+     * than at it, because a bank and a bed's edge are steeper than float32
+     * places a sample.
+     */
+    const failures: string[] = []
+    const rows: string[] = []
+    for (const body of [solBody('Earth'), solBody('Titan')]) {
+      const graph = drainageGraph(body.surface)
+      if (graph === null) throw new Error(`${body.name} has no drainage graph`)
+      const refinement = drainageRefinement(graph)
+      const sketch = terrainSketch(body.surface)
+      const regions: RegionAddress[] = []
+      for (const site of surveySites(body)) {
+        const records = refinement.list(
+          refinement.last,
+          drainageLookup(
+            graph,
+            sketch,
+            geodeticDirection(site.latitude, site.longitude),
+          ),
+        )
+        if (records.length === 0) continue
+        // The middle of the first record, back through the warp.
+        const target = Vec.normalize(
+          Vec.lerp(
+            vec3(records[0]!, records[1]!, records[2]!),
+            vec3(records[4]!, records[5]!, records[6]!),
+            0.5,
+          ),
+        )
+        let guess = target
+        for (let i = 0; i < 40; i += 1) {
+          guess = Vec.normalize(
+            Vec.add(
+              guess,
+              Vec.sub(target, drainageLookup(graph, sketch, guess)),
+            ),
+          )
+        }
+        for (const level of [12, 14, 17]) {
+          if (regions.length < MAX_TILES) {
+            regions.push(regionForDirection(guess, level))
+          }
+        }
+      }
+      expect(regions.length).toBeGreaterThan(2)
+      const tiles = await gpuTiles(body, regions)
+      let wet = 0
+      regions.forEach((region, i) => {
+        const tile = tiles[i] as GpuTile
+        const gap = compare(body, region, tile)
+        const field = generateHeightfield(body.surface, {
+          region,
+          resolution: HEIGHTFIELD_RESOLUTION,
+          border: HEIGHTFIELD_BORDER,
+        })
+        for (let v = 4; v < field.cover.length; v += COVER_CHANNELS) {
+          if ((field.cover[v] as number) > 0) wet += 1
+        }
+        const limit = bound(body, region.level)
+        rows.push(
+          `${body.name.padEnd(14)} L${region.level}  elevation ${gap.elevation.toExponential(2)} m of ${limit.toExponential(2)}  water ${gap.water.toExponential(2)}  cover ${gap.cover}`,
+        )
+        if (gap.elevation >= limit) {
+          failures.push(`${body.name} L${region.level}: ${gap.elevation} m`)
+        }
+        // The cover and water a sample's placement explains, by vertex.
+        const missed = unplaced(body, region, tile, limit)
+        if (missed.length > 0) {
+          failures.push(
+            `${body.name} L${region.level}: ${missed.length} vertices no point within ${CREEK_PLACEMENT} m reproduces, first ${missed[0]}`,
+          )
+        }
+      })
+      expect(wet).toBeGreaterThan(0)
+    }
+    console.info(`\n${rows.join('\n')}\n`)
+    expect(failures).toEqual([])
+  }, 120_000)
+
+  it('cuts the tiger stripes as the CPU does, along their extent and its ends', async () => {
+    const body = solBody('Enceladus')
+    const stripes = terrainSketch(body.surface).stripes
+    expect(stripes).toHaveLength(4)
+    const failures: string[] = []
+    let cut = 0
+    for (const level of [3, 6, 9]) {
+      const regions = stripes.flatMap((stripe) => {
+        const run = Vec.normalize(Vec.cross(stripe.pole, stripe.center))
+        const taper = stripe.halfLength * (1 - STRIPE_SHAPE.taper / 2)
+        const onTaper = Vec.add(
+          Vec.scale(stripe.center, Math.cos(taper)),
+          Vec.scale(run, Math.sin(taper)),
+        )
+        return [
+          regionForDirection(stripe.center, level),
+          regionForDirection(onTaper, level),
+        ]
+      })
+      const tiles = await gpuTiles(body, regions)
+      const limit = bound(body, level)
+      regions.forEach((region, i) => {
+        const gap = compare(body, region, tiles[i] as GpuTile)
+        if (gap.elevation >= limit) {
+          failures.push(
+            `Enceladus L${level} ${region.face}/${region.i}/${region.j}: ${gap.elevation} m against ${limit}`,
+          )
+        }
+        for (let s = 0; s <= 8; s += 1) {
+          for (let t = 0; t <= 8; t += 1) {
+            const direction = regionDirection(region, s / 8, t / 8)
+            if (
+              stripes.some((stripe) => stripeProfile(stripe, direction) !== 0)
+            )
+              cut += 1
+          }
+        }
+      })
+    }
+    expect(failures).toEqual([])
+    // The tiles sit on the stripes, so the comparison above covered the cut.
+    expect(cut).toBeGreaterThan(0)
+  }, 120_000)
+})
+
+describe('a dry body after a wet one', () => {
+  /*
+   * `uploadSurface` uploads nothing into the drainage buffer for a body with
+   * no graph, so after a wet body the buffer still holds that body's nodes,
+   * segments and cell lists. That is the decision — clearing it is megabytes
+   * of writes on every switch — and it is safe only while every reader of
+   * the buffer is behind the drainage stage's one gate, which is zero for
+   * the dry body. A reader behind anything else carves the previous
+   * planet's rivers and lakes into this one.
+   *
+   * So the dry body's tiles, drawn with Earth's graph still in the buffer,
+   * are held bit for bit to the same tiles from a kernel that never held a
+   * graph. Mars and Luna: one with a budget for a stale carve to cut into,
+   * and the cratered body the plan names beside it.
+   */
+  it('draws as it does on a kernel that never held a graph', async () => {
+    const wet = solBody('Earth')
+    const graph = surfaceKernel(wet.surface).drainage
+    if (graph === null) throw new Error('Earth has no drainage graph')
+    const fresh = createTerrainKernel({
+      resolution: HEIGHTFIELD_RESOLUTION,
+      border: HEIGHTFIELD_BORDER,
+      maxTiles: MAX_TILES,
+    })
+    const apart: string[] = []
+    try {
+      for (const dry of [solBody('Mars'), solBody('Luna')]) {
+        expect(surfaceKernel(dry.surface).drainage).toBeNull()
+        for (const level of [0, 6, 12]) {
+          const regions = regionsAt(level)
+          await gpuTiles(wet, regions)
+          const stale = await gpuTiles(dry, regions)
+          // The premise: the wet body's graph is what the buffer holds on
+          // the device while the dry body's tiles are drawn.
+          const held = new Uint32Array(await gpu.readBuffer(kernel.drainage))
+          expect(
+            bitsApart(held.subarray(0, graph.words.length), graph.words),
+          ).toBe(0)
+          const clean = await gpuTiles(dry, regions, false, fresh)
+          stale.forEach((tile, i) => {
+            const other = clean[i] as GpuTile
+            const counts = [
+              bitsApart(tile.elevations, other.elevations),
+              bitsApart(tile.cover, other.cover),
+              bitsApart(tile.water, other.water),
+            ]
+            if (counts.some((count) => count > 0)) {
+              apart.push(
+                `${dry.name} L${level} tile ${i}: elevations ${counts[0]}, cover ${counts[1]}, water ${counts[2]} apart`,
+              )
+            }
+          })
+        }
+      }
+    } finally {
+      fresh.dispose()
+    }
+    expect(apart).toEqual([])
   }, 60_000)
 })

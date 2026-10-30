@@ -16,15 +16,15 @@ import {
   type KernelSurface,
   MAX_TILE_LEVEL,
   NO_KERNEL_WATER,
+  packedStageOn,
   type SurfaceParameters,
   surfaceKernel,
-  TILE_STRIDE,
-  writeTileFrame,
 } from '@inertialref/universe'
 import {
   type ArchivedSource,
   HeightfieldUnavailable,
   type HeightfieldResponse,
+  type JobLane,
   POOL_ARCHIVE,
 } from '@inertialref/workers'
 import { timingDetailed } from '../engine/browserTiming.ts'
@@ -32,6 +32,7 @@ import { QUERY } from '../pages/paths.ts'
 import {
   createTerrainKernel,
   TERRAIN_KERNEL_REVISION,
+  writeBatch,
   type TerrainKernel,
   uploadSurface,
 } from './terrainKernel.ts'
@@ -55,6 +56,14 @@ import {
  * and a second dispatch into them before the first was read back would race
  * the copy. The wait is a readback's latency, which is a frame or two, and
  * at a batch of sixteen that is still an order of magnitude past the pool.
+ *
+ * **The ground first.** A batch is drawn from the foreground lane while it
+ * holds anything, and from the background lane — the orbital bake's
+ * ninety-six tiles — only when it does not, so a bake that starts on a descent
+ * waits behind the ground the descent needs rather than ahead of it. The lane
+ * picks which waiting tiles the next dispatch takes and nothing else: a
+ * tile's answer is a function of its request, so the order cannot reach a
+ * value (`JobLane` in `packages/workers`).
  *
  * **One body per batch.** The kernel reads one packed body; a batch is cut at
  * the first request for a different surface, and the body is uploaded only
@@ -145,6 +154,7 @@ export interface TileProducer extends ArchivedSource {
 interface Queued {
   readonly surface: SurfaceParameters
   readonly request: HeightfieldRequest
+  readonly lane: JobLane
   readonly resolve: (response: HeightfieldResponse) => void
   readonly reject: (cause: Error) => void
   canceled: boolean
@@ -266,7 +276,11 @@ export function createTileProducer(
     // Drop what was canceled while queued; a batch of nothing is no batch.
     while (queue.length > 0 && (queue[0] as Queued).canceled) queue.shift()
     if (queue.length === 0) return
-    const head = queue[0] as Queued
+    // The oldest foreground job when there is one; the oldest of all when
+    // there is not, which is then a background one. See the header.
+    const head =
+      queue.find((job) => !job.canceled && job.lane === 'foreground') ??
+      (queue[0] as Queued)
     const taken: Queued[] = []
     let cursor = 0
     while (taken.length < batch && cursor < queue.length) {
@@ -275,7 +289,7 @@ export function createTileProducer(
         queue.splice(cursor, 1)
         continue
       }
-      if (!sameBody(job, head)) {
+      if (job.lane !== head.lane || !sameBody(job, head)) {
         cursor += 1
         continue
       }
@@ -310,26 +324,47 @@ export function createTileProducer(
         uploadSurface(kernel, packed)
         uploaded = packed
       }
-      const frames = kernel.tiles.array as Float32Array
-      taken.forEach((job, i) => {
-        writeTileFrame(packed, job.request.region, frames, i * TILE_STRIDE * 4)
-      })
-      kernel.tiles.needsUpdate = true
+      if (
+        !writeBatch(
+          kernel,
+          head.surface,
+          packed,
+          taken.map((job) => job.request.region),
+        )
+      ) {
+        // Rows past the buffer: these tiles are the pool's, the next batch
+        // the GPU's.
+        inFlight = 0
+        for (const job of taken) job.reject(new HeightfieldUnavailable())
+        schedule()
+        return
+      }
       kernel.total.value = taken.length * kernel.samples
       renderer.compute(kernel.compute, taken.length * kernel.samples)
-      // Both copies on the queue before either is waited for: each readback
-      // is its own staging buffer and command buffer, so issued together they
+      /*
+       * A body that drains is the only one whose water is anything but
+       * "none": with the drainage stage's gate closed the kernel writes the
+       * sentinel at every vertex, and the whole buffer — 270 KB at sixteen
+       * tiles of 4,225 vertices, copied, mapped and then scanned a tile at
+       * a time — would come back to be turned into NaN. So a dry body's copy
+       * is never queued, and its tiles get the NaN the scan would have made.
+       * The gate is the one every reader of the drainage buffer tests
+       * (`uploadSurface` says why).
+       */
+      const wet = packedStageOn(packed, 'drainage')
+      // Every copy on the queue before any is waited for: each readback is
+      // its own staging buffer and command buffer, so issued together they
       // share one fence, and issued in turn the cover's copy is not even
       // encoded until the elevations' map has resolved — two round trips
-      // where one covers both.
+      // where one covers all.
       const [elevationBytes, coverBytes, waterBytes] = await Promise.all([
         renderer.getArrayBufferAsync(kernel.elevations),
         renderer.getArrayBufferAsync(kernel.cover),
-        renderer.getArrayBufferAsync(kernel.water),
+        wet ? renderer.getArrayBufferAsync(kernel.water) : null,
       ])
       const elevations = new Float32Array(elevationBytes)
       const cover = new Uint8Array(coverBytes)
-      const water = new Float32Array(waterBytes)
+      const water = waterBytes === null ? null : new Float32Array(waterBytes)
       const finished = performance.now()
       batches += 1
       tiles += taken.length
@@ -364,7 +399,9 @@ export function createTileProducer(
               i * kernel.interior * COVER_CHANNELS,
               (i + 1) * kernel.interior * COVER_CHANNELS,
             ),
-            water.slice(i * kernel.interior, (i + 1) * kernel.interior),
+            water === null
+              ? null
+              : water.slice(i * kernel.interior, (i + 1) * kernel.interior),
           ),
         )
       })
@@ -389,12 +426,16 @@ export function createTileProducer(
    * The extremes are read off the float32 array the mesh will be built from,
    * for the reason `generateHeightfield` gives: a bounding volume sized from
    * a value the mesh does not contain can be a rounding step too small.
+   *
+   * `water` is the kernel's slice, or null for a dry body's tile, whose
+   * slice was not read back: NaN at every vertex, which is what the kernel's
+   * sentinel would have come to.
    */
   function unpack(
     request: HeightfieldRequest,
     elevations: Float32Array,
     cover: Uint8Array,
-    water: Float32Array,
+    slice: Float32Array | null,
   ): HeightfieldResponse {
     const { resolution, border } = kernel.layout
     const stride = heightfieldStride(kernel.layout)
@@ -408,10 +449,17 @@ export function createTileProducer(
         if (elevation > max) max = elevation
       }
     }
-    // The kernel's "no water" is a sentinel below any ground; the field's is
-    // NaN, which WGSL cannot write as a constant. One convention past here.
-    for (let i = 0; i < water.length; i += 1) {
-      if ((water[i] as number) <= NO_KERNEL_WATER / 2) water[i] = Number.NaN
+    let water: Float32Array
+    if (slice === null) {
+      water = new Float32Array(resolution * resolution).fill(Number.NaN)
+    } else {
+      // The kernel's "no water" is a sentinel below any ground; the field's
+      // is NaN, which WGSL cannot write as a constant. One convention past
+      // here.
+      water = slice
+      for (let i = 0; i < water.length; i += 1) {
+        if ((water[i] as number) <= NO_KERNEL_WATER / 2) water[i] = Number.NaN
+      }
     }
     return {
       region: request.region,
@@ -420,6 +468,9 @@ export function createTileProducer(
       elevations,
       cover,
       water,
+      // The kernel does not take the twin yet: a GPU tile hands over to its
+      // parent by the one refined level the two resolve differently.
+      morph: null,
       minElevation: min,
       maxElevation: max,
     }
@@ -435,7 +486,7 @@ export function createTileProducer(
     supports: (request) =>
       request.resolution === kernel.layout.resolution &&
       (request.border ?? HEIGHTFIELD_BORDER) === kernel.layout.border,
-    submit(surface, request) {
+    submit(surface, request, lane = 'foreground') {
       const id = nextId++
       let resolve!: (response: HeightfieldResponse) => void
       let reject!: (cause: Error) => void
@@ -446,6 +497,7 @@ export function createTileProducer(
       const job: Queued = {
         surface,
         request,
+        lane,
         resolve,
         reject,
         canceled: false,

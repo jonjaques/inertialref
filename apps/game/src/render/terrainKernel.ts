@@ -30,8 +30,10 @@ import {
   sqrt,
   storage,
   uint,
+  uintBitsToFloat,
   uniform,
   uvec2,
+  uvec4,
   vec3,
   vec4,
   wgslFn,
@@ -54,7 +56,7 @@ import {
   DRAINAGE_CELL_START_AT,
   DRAINAGE_NEIGHBORS_AT,
   DRAINAGE_NODES_AT,
-  DRAINAGE_RECORDS,
+  DRAINAGE_REFINED_AT,
   DRAINAGE_SEGMENT_STRIDE,
   DRAINAGE_SEGMENTS_AT,
   DRAINAGE_SHAPE,
@@ -79,6 +81,7 @@ import {
   LEVELS_AT,
   MARE_CYCLES,
   MINERAL_CYCLES,
+  NEIGHBOR_OFFSETS,
   NO_KERNEL_WATER,
   packCover,
   PLATE_MARGIN,
@@ -91,6 +94,9 @@ import {
   RAY_SHAPE,
   RAY_STRIDE,
   RAYS_AT,
+  REFINED_ENTRY_WORDS,
+  REFINED_TILE_WORDS,
+  REFINEMENT_SHAPE,
   RELIEF_SHAPE,
   RIM_INNER,
   RIM_OUTER,
@@ -106,7 +112,13 @@ import {
   SULCI_SHAPE,
   TILE_STRIDE,
   tileSamples,
+  WARP_FRAMES_AT,
   WORD,
+  packRefinedTiles,
+  type RegionAddress,
+  SEGMENT_STRIDE,
+  type SurfaceParameters,
+  writeTileFrame,
 } from '@inertialref/universe'
 
 /*
@@ -682,6 +694,33 @@ const drainageCellCode = wgslFn(`
   }
 `)
 
+const drainageFractionCode = wgslFn(`
+  fn drainageFraction(d: vec3<f32>, cells: u32) -> vec2<f32> {
+    // drainage.ts \`cellFraction\` on both face axes: where the sample sits
+    // across the cell \`drainageCell\` names, by the same projection.
+    let a = abs(d);
+    var u = 0.0;
+    var v = 0.0;
+    if (a.x >= a.y && a.x >= a.z) {
+      if (d.x > 0.0) { u = -d.z / a.x; v = d.y / a.x; }
+      else { u = d.z / a.x; v = d.y / a.x; }
+    } else if (a.y >= a.z) {
+      if (d.y > 0.0) { u = d.x / a.y; v = -d.z / a.y; }
+      else { u = d.x / a.y; v = d.z / a.y; }
+    } else {
+      if (d.z > 0.0) { u = d.x / a.z; v = d.y / a.z; }
+      else { u = -d.x / a.z; v = d.y / a.z; }
+    }
+    let n = f32(cells);
+    let s = (u + 1.0) * 0.5 * n;
+    let t = (v + 1.0) * 0.5 * n;
+    return vec2<f32>(
+      s - clamp(floor(s), 0.0, n - 1.0),
+      t - clamp(floor(t), 0.0, n - 1.0),
+    );
+  }
+`)
+
 const valleyShapeCode = wgslFn(
   `
   fn valleyShape(d: f32, halfWidth: f32, plain: f32, reach: f32) -> f32 {
@@ -756,6 +795,7 @@ const biotaWindowCode = wgslFn(
 type F = Node<'float'>
 type U = Node<'uint'>
 type I = Node<'int'>
+type V2 = Node<'vec2'>
 type V3 = Node<'vec3'>
 type V4 = Node<'vec4'>
 type Bool = Node<'bool'>
@@ -763,6 +803,7 @@ type Bool = Node<'bool'>
 const asF = (node: unknown): F => node as F
 const asU = (node: unknown): U => node as U
 const asI = (node: unknown): I => node as I
+const asV2 = (node: unknown): V2 => node as V2
 const asV3 = (node: unknown): V3 => node as V3
 const asV4 = (node: unknown): V4 => node as V4
 const asBool = (node: unknown): Bool => node as Bool
@@ -865,9 +906,11 @@ export interface TerrainKernel {
    * producer turns the sentinel back into NaN.
    */
   readonly water: StorageBufferAttribute
-  /** The drainage graph's two buffers, `KernelDrainage` laid out per `terrainKernel.ts`. */
-  readonly drainageRecords: StorageBufferAttribute
-  readonly drainageWords: StorageBufferAttribute
+  /**
+   * The drainage graph, `KernelDrainage.words` in the offset table
+   * `terrainKernel.ts` lays out. One binding however many lists it holds.
+   */
+  readonly drainage: StorageBufferAttribute
   /** Invocations to run this dispatch: tiles times `samples`. */
   readonly total: { value: number }
   dispose(): void
@@ -875,9 +918,19 @@ export interface TerrainKernel {
 
 /**
  * Upload one packed body: the records, the words, and the drainage graph's
- * buffers where it has one. One function, because three callers — the
- * producer and the two tolerance tests — used to set two attributes each,
- * and a third buffer added to the record is a buffer one of them forgets.
+ * buffer where it has one. One function, because three callers — the
+ * producer and the two tolerance tests — each set every attribute, and a
+ * buffer added to the record is a buffer one of them forgets.
+ *
+ * **A dry body leaves the last wet body's graph in the drainage buffer.**
+ * Clearing it is 4.4 MB of writes on every switch to a body that never
+ * reads it, and nothing does: every reader — the valleys, the lake level,
+ * the clamp's choice between the sample's level and the datum, the
+ * producer's water readback — tests the drainage stage's gate in
+ * `BAND_STACK`, which is the body's own `WORD.DRAINAGE_CELLS` and zero
+ * wherever this returns early. A read behind any other test carves the
+ * previous planet's rivers into this one; `terrainKernel.gpu.test.ts` draws
+ * a dry body after a wet one against a kernel that never held a graph.
  */
 export function uploadSurface(
   kernel: TerrainKernel,
@@ -889,10 +942,52 @@ export function uploadSurface(
   kernel.words.needsUpdate = true
   const graph = packed.drainage
   if (graph === null) return
-  ;(kernel.drainageRecords.array as Float32Array).set(graph.records)
-  ;(kernel.drainageWords.array as Uint32Array).set(graph.words)
-  kernel.drainageRecords.needsUpdate = true
-  kernel.drainageWords.needsUpdate = true
+  ;(kernel.drainage.array as Uint32Array).set(graph.words)
+  // The whole buffer, so no range a batch left behind narrows the upload.
+  kernel.drainage.clearUpdateRanges()
+  kernel.drainage.needsUpdate = true
+  uploadedWhole.add(kernel)
+}
+
+/** Kernels whose drainage buffer goes up whole on the next dispatch. */
+const uploadedWhole = new WeakSet<TerrainKernel>()
+
+/**
+ * Write one batch's tiles: each tile's frame, and on a body that drains each
+ * tile's refined rows (`packRefinedTiles`), uploaded as the one range of the
+ * drainage buffer they fill — or as part of the whole buffer when
+ * `uploadSurface` has just written it. Returns false where the rows would
+ * overrun the buffer, and the caller sends the batch to the pool.
+ *
+ * One function for the reason `uploadSurface` is one: the producer and the
+ * two tolerance tests each write a batch, and the refined rows are a write
+ * one of them would forget.
+ */
+export function writeBatch(
+  kernel: TerrainKernel,
+  surface: SurfaceParameters,
+  packed: KernelSurface,
+  regions: readonly RegionAddress[],
+): boolean {
+  const frames = kernel.tiles.array as Float32Array
+  regions.forEach((region, i) => {
+    writeTileFrame(packed, region, frames, i * TILE_STRIDE * 4)
+  })
+  kernel.tiles.needsUpdate = true
+  if (packed.drainage === null) return true
+  const used = packRefinedTiles(
+    surface,
+    regions,
+    kernel.layout,
+    kernel.drainage.array as Uint32Array,
+  )
+  if (used === null) return false
+  if (!uploadedWhole.has(kernel)) {
+    kernel.drainage.addUpdateRange(DRAINAGE_REFINED_AT, used)
+  }
+  uploadedWhole.delete(kernel)
+  kernel.drainage.needsUpdate = true
+  return true
 }
 
 /**
@@ -940,11 +1035,7 @@ export function createTerrainKernel(
     new Float32Array(maxTiles * interior),
     1,
   )
-  const drainageRecordsAttribute = new StorageBufferAttribute(
-    new Float32Array(DRAINAGE_RECORDS * 4),
-    4,
-  )
-  const drainageWordsAttribute = new StorageBufferAttribute(
+  const drainageAttribute = new StorageBufferAttribute(
     new Uint32Array(DRAINAGE_WORDS),
     1,
   )
@@ -963,21 +1054,31 @@ export function createTerrainKernel(
     maxTiles * interior * COVER_WORDS,
   )
   const water = storage(waterAttribute, 'float', maxTiles * interior)
-  const drainageRecords = storage(
-    drainageRecordsAttribute,
-    'vec4',
-    DRAINAGE_RECORDS,
-  ).toReadOnly()
-  const drainageWords = storage(
-    drainageWordsAttribute,
+  const drainage = storage(
+    drainageAttribute,
     'uint',
     DRAINAGE_WORDS,
   ).toReadOnly()
+  /** A word of the drainage buffer, at an offset from its table. */
+  const drainageWord = (index: U): U => asU(drainage.element(index))
+  /** Four words from `at`, as the floats the packer wrote by their bits. */
+  const drainageFloats = (at: U): V4 =>
+    asV4(
+      uintBitsToFloat(
+        uvec4(
+          drainageWord(at),
+          drainageWord(at.add(uint(1))),
+          drainageWord(at.add(uint(2))),
+          drainageWord(at.add(uint(3))),
+        ),
+      ),
+    )
+  /** Node `n`: `[x y z lake]`. */
   const drainageNode = (n: U): V4 =>
-    asV4(drainageRecords.element(uint(DRAINAGE_NODES_AT).add(n)))
+    drainageFloats(uint(DRAINAGE_NODES_AT).add(n.mul(uint(4))))
+  /** A segment's `vec4` slot, `DRAINAGE_SEGMENT_STRIDE` to a segment. */
   const drainageSegment = (slot: U): V4 =>
-    asV4(drainageRecords.element(uint(DRAINAGE_SEGMENTS_AT).add(slot)))
-  const drainageWord = (index: U): U => asU(drainageWords.element(index))
+    drainageFloats(uint(DRAINAGE_SEGMENTS_AT).add(slot.mul(uint(4))))
   // A float, compared against `float(instanceIndex)`: exact below 2²⁴, which
   // is 3,500 tiles of 4,761 samples.
   const total = uniform(0)
@@ -1054,6 +1155,8 @@ export function createTerrainKernel(
     asF(softLimitCode({ value, limit }))
   const drainageCell = (p: V3, cells: U): U =>
     asU(drainageCellCode({ d: p, cells }))
+  const drainageFraction = (p: V3, cells: U): V2 =>
+    asV2(drainageFractionCode({ d: p, cells }))
   const valleyShape = (d: F, halfWidth: F, plain: F, reach: F): F =>
     asF(valleyShapeCode({ d, halfWidth, plain, reach }))
   const bedShape = (d: F, halfWidth: F): F =>
@@ -1786,10 +1889,18 @@ export function createTerrainKernel(
               const first = record(slot)
               const pole = asV3(first.xyz)
               const halfWidth = asF(first.w)
-              const offset = asF(record(slot.add(uint(1))).x)
+              const second = record(slot.add(uint(1)))
+              const offset = asF(second.x)
+              const end = asF(second.y)
+              const taper = asF(second.z)
+              const center = asV3(record(slot.add(uint(2))).xyz)
               const away = dot(d, pole).abs()
               const reach = halfWidth.add(offset.mul(STRIPE_SHAPE.reach))
-              If(away.lessThanEqual(reach), () => {
+              // `stripeProfile`'s extent: the chord from the middle, against
+              // the end's and the taper's, packed in float64 and read here.
+              const along = length(d.sub(center))
+              If(away.lessThanEqual(reach).and(along.lessThan(end)), () => {
+                const extent = float(1).sub(smoothstepf(taper, end, along))
                 const trough = falloff(min(float(1), away.div(halfWidth)))
                 const shoulderCenter = halfWidth.add(offset)
                 const shoulder = falloff(
@@ -1801,7 +1912,7 @@ export function createTerrainKernel(
                       .div(offset.mul(STRIPE_SHAPE.shoulderWidth)),
                   ),
                 ).mul(STRIPE_SHAPE.shoulder)
-                icy.addAssign(stripes.mul(shoulder.sub(trough)))
+                icy.addAssign(stripes.mul(extent).mul(shoulder.sub(trough)))
               })
             },
           )
@@ -1848,17 +1959,80 @@ export function createTerrainKernel(
             (DRAINAGE_SHAPE.warpAmount * Math.PI) / 2,
           ).div(float(cells))
           const seed = word(WORD.SEED_DRAINAGE)
-          const warped = d.mul(warpCycles)
-          const wx = noise3(seed, warped.add(vec3(37.1, 0, 0)))
-          const wy = noise3(seed, warped.add(vec3(71.3, 0, 0)))
-          const wz = noise3(seed, warped.add(vec3(113.7, 0, 0)))
+          // `drainageLookup`'s three noises, each from its tile frame plus
+          // the sample's offset: `WARP_FRAMES_AT` says why not from `d`.
+          const warpNoise = (k: number): F => {
+            const frameAt = tile
+              .mul(uint(TILE_STRIDE))
+              .add(uint(1 + (WARP_FRAMES_AT + k) * 2))
+            const c0 = ivec3(asV3(tiles.element(frameAt).xyz))
+            const f0 = asV3(tiles.element(frameAt.add(uint(1))).xyz)
+            const q = f0.add(delta.mul(warpCycles))
+            const cell = floor(q)
+            return asF(
+              noise3AtCode({ seed, cell: c0.add(ivec3(cell)), f: q.sub(cell) }),
+            )
+          }
+          const wx = warpNoise(0)
+          const wy = warpNoise(1)
+          const wz = warpNoise(2)
           const lookup = normalize(d.add(vec3(wx, wy, wz).mul(warpAmount)))
+          /*
+           * The sample measured from its tile's origin, which the refined
+           * rows hold for every tile of a body that drains
+           * (`packRefinedTiles`). The lookup is `(C + e)/|C + e|` with `C`
+           * the tile's true center and `e` its offset and warp; less the
+           * origin, that is the origin's rounding plus `(e − C·s)/(1 + s)`,
+           * with `s = |C + e| − 1` formed from small terms, and `C` is the
+           * origin wherever it multiplies something small. Every distance
+           * below is taken against this rather than `lookup`, whose float32
+           * rounding is a third of a meter on Earth: a lattice bank moved
+           * enough to turn the wet byte, and most of a creek's width.
+           *
+           * `rows`, `origin` and `sample` are variables, assigned here. A bare
+           * expression is assigned where the builder first meets it, which
+           * for these is inside the lattice walk's loop, and the refined walk
+           * after the loop reads them. A sample whose lattice cell lists no
+           * segment never enters that loop and would read `rows` as zero:
+           * its level pairs are then the bits of a node's coordinates, a cell
+           * count of a billion or more, and the dispatch runs until Metal's
+           * watchdog loses the device.
+           */
+          const rows = uint(DRAINAGE_REFINED_AT)
+            .add(tile.mul(uint(REFINED_TILE_WORDS)))
+            .toVar()
+          const origin = asV3(drainageFloats(rows).xyz).toVar()
+          const residual = asV3(drainageFloats(rows.add(uint(4))).xyz)
+          const e = delta.add(vec3(wx, wy, wz).mul(warpAmount))
+          const grow = dot(origin, e)
+            .mul(2)
+            .add(dot(e, e))
+            .div(length(origin.add(e)).add(1))
+          const sample = residual
+            .add(e.sub(origin.mul(grow)).div(grow.add(1)))
+            .toVar()
+          /**
+           * `toArc` from the origin: the chord's foot lifted onto the sphere,
+           * less the origin, from relative terms alone.
+           */
+          const arc = (a: V3, ab: V3, t: F): F => {
+            const foot = a.add(ab.mul(t))
+            const rise = dot(origin, foot)
+              .mul(2)
+              .add(dot(foot, foot))
+              .div(length(origin.add(foot)).add(1))
+            return length(
+              sample.sub(foot.sub(origin.mul(rise)).div(rise.add(1))),
+            )
+          }
           const cell = drainageCell(lookup, cells)
           const reach = scalar(SCALAR.DRAINAGE_REACH)
           const cut = float(0).toVar()
           const fill = float(0).toVar()
           const notch = float(0).toVar()
-          const river = float(NO_KERNEL_WATER).toVar()
+          // `riverLevel`'s sums: every bed, and every bed times its level.
+          const beds = float(0).toVar()
+          const bedLevels = float(0).toVar()
           const first = drainageWord(uint(DRAINAGE_CELL_START_AT).add(cell))
           const last = drainageWord(uint(DRAINAGE_CELL_START_AT + 1).add(cell))
           loop(
@@ -1873,15 +2047,19 @@ export function createTerrainKernel(
               const b = drainageSegment(slot.add(uint(1)))
               const c = drainageSegment(slot.add(uint(2)))
               const standing = asF(drainageSegment(slot.add(uint(3))).x)
-              const ax = asV3(a.xyz)
-              const ab = asV3(b.xyz).sub(ax)
-              const p = lookup.sub(ax)
+              // From the origin. A node less the float32 origin is exact
+              // componentwise wherever the two are within a factor of two,
+              // which every node in reach of a fine tile is; on a coarse one
+              // it is a rounding of the node, as the absolute form was.
+              const ax = asV3(a.xyz).sub(origin)
+              const ab = asV3(b.xyz).sub(asV3(a.xyz))
               const along = dot(ab, ab)
               const t = along
                 .greaterThan(0)
-                .select(saturate(dot(p, ab).div(along)), float(0))
-              const e = p.sub(ab.mul(t))
-              const dist = length(e)
+                .select(saturate(dot(sample.sub(ax), ab).div(along)), float(0))
+              // `toArc`: a long segment's chord runs hundreds of meters
+              // under the ground it carves.
+              const dist = arc(ax, ab, t)
               If(dist.lessThan(reach), () => {
                 const floor = mixF(asF(a.w), asF(b.w), t)
                 const halfWidth = mixF(asF(c.x), asF(c.y), t)
@@ -1904,44 +2082,321 @@ export function createTerrainKernel(
                   smoothstepf(plain, min(reach, plain.mul(2)), dist),
                 )
                 corridor.assign(max(corridor, margin))
-                If(bed.greaterThan(0), () => {
-                  river.assign(max(river, max(floor, standing)))
-                })
+                beds.addAssign(bed)
+                bedLevels.addAssign(bed.mul(max(floor, standing)))
               })
             },
           )
           /*
-           * `lakeLevelAt`: a kernel-weighted mean over the lake nodes within
-           * reach — the cell's own and its eight neighbors, read off the
-           * packed table where the CPU reads the lattice's.
+           * `Refinement.carve`: the refined levels this tile resolves, each
+           * cell's list read from the tile's rows (`packRefinedTiles`), in
+           * the order and with the guards the CPU composes them with. The
+           * rows hold positions less the tile's origin, and every distance is
+           * taken against `sample`, on the same footing.
+           */
+          const surface = elevation.sub(cut).add(fill).toVar()
+          const refinedFirst = word(WORD.REFINED_FIRST)
+          If(word(WORD.REFINED_LAST).greaterThan(uint(0)), () => {
+            const refinedLast = word(WORD.REFINED_LAST)
+            const resolved = uint(asF(header.y)).add(uint(1))
+            const finest = refinedLast
+              .lessThan(resolved)
+              .select(refinedLast, resolved)
+            const coarser = channel.toVar()
+            loop(
+              'refined',
+              { start: refinedFirst, end: finest, condition: '<=' },
+              'uint',
+              (refinedLevel) => {
+                const at = asU(refinedLevel)
+                // Variables, for `rows`' reason: each would be first met
+                // inside a loop below and read after it, and the key would
+                // be recomputed for every entry the search passes.
+                const span = uint(1).shiftLeft(at).toVar()
+                // The cell, from the absolute lookup: a float decision the
+                // rows make safe, as the lattice's lists make theirs.
+                const key = drainageCell(lookup, span).toVar()
+                const pair = rows
+                  .add(uint(8))
+                  .add(at.sub(refinedFirst).mul(uint(2)))
+                const entries = drainageWord(pair)
+                const start = uint(0).toVar()
+                const count = uint(0).toVar()
+                loop(
+                  'entry',
+                  {
+                    start: uint(0),
+                    end: drainageWord(pair.add(uint(1))),
+                    condition: '<',
+                  },
+                  'uint',
+                  (n) => {
+                    const entry = entries.add(
+                      asU(n).mul(uint(REFINED_ENTRY_WORDS)),
+                    )
+                    If(drainageWord(entry).equal(key), () => {
+                      start.assign(drainageWord(entry.add(uint(1))))
+                      count.assign(drainageWord(entry.add(uint(2))))
+                      Break()
+                    })
+                  },
+                )
+                const fine = float((REFINEMENT_SHAPE.reach * Math.PI) / 2)
+                  .div(float(span))
+                  .toVar()
+                const record = (r: U): { a: V4; b: V4; c: V4; d: V4 } => {
+                  const slot = start.add(r.mul(uint(SEGMENT_STRIDE)))
+                  return {
+                    a: drainageFloats(slot),
+                    b: drainageFloats(slot.add(uint(4))),
+                    c: drainageFloats(slot.add(uint(8))),
+                    d: drainageFloats(slot.add(uint(12))),
+                  }
+                }
+                // A creek is two records sharing its bend, one after the other.
+                const index = int(-1).toVar()
+                const previous = vec3(1e9, 1e9, 1e9).toVar()
+                const step = (a: V4, b: V4): void => {
+                  If(
+                    asF(a.x)
+                      .notEqual(previous.x)
+                      .or(asF(a.y).notEqual(previous.y))
+                      .or(asF(a.z).notEqual(previous.z)),
+                    () => {
+                      index.addAssign(1)
+                    },
+                  )
+                  previous.assign(b.xyz)
+                }
+                // First the largest bed of any creek, and of any but that one.
+                const bedHere = float(0).toVar()
+                const firstCreek = int(-1).toVar()
+                const firstBed = float(0).toVar()
+                const secondBed = float(0).toVar()
+                const fold = (creekIndex: I): void => {
+                  If(bedHere.greaterThan(firstBed), () => {
+                    secondBed.assign(firstBed)
+                    firstBed.assign(bedHere)
+                    firstCreek.assign(creekIndex)
+                  }).ElseIf(bedHere.greaterThan(secondBed), () => {
+                    secondBed.assign(bedHere)
+                  })
+                }
+                loop(
+                  'reached',
+                  { start: uint(0), end: count, condition: '<' },
+                  'uint',
+                  (r) => {
+                    const { a, b, c } = record(asU(r))
+                    const was = int(index).toVar()
+                    step(a, b)
+                    If(index.notEqual(was), () => {
+                      If(was.greaterThanEqual(0), () => fold(was))
+                      bedHere.assign(0)
+                    })
+                    const ax = asV3(a.xyz)
+                    const ab = asV3(b.xyz).sub(ax)
+                    const length2 = dot(ab, ab)
+                    const t = length2
+                      .greaterThan(0)
+                      .select(
+                        saturate(dot(sample.sub(ax), ab).div(length2)),
+                        float(0),
+                      )
+                    const dist = arc(ax, ab, t)
+                    If(dist.lessThan(fine), () => {
+                      bedHere.assign(
+                        max(
+                          bedHere,
+                          bedShape(dist, mixF(asF(c.x), asF(c.y), t)),
+                        ),
+                      )
+                    })
+                  },
+                )
+                If(index.greaterThanEqual(0), () => fold(index))
+                // Then each record's carve, the others' beds held off it.
+                const levelCut = float(0).toVar()
+                const levelFill = float(0).toVar()
+                index.assign(-1)
+                previous.assign(vec3(1e9, 1e9, 1e9))
+                loop(
+                  'carved',
+                  { start: uint(0), end: count, condition: '<' },
+                  'uint',
+                  (r) => {
+                    const { a, b, c, d } = record(asU(r))
+                    step(a, b)
+                    const ax = asV3(a.xyz)
+                    const ab = asV3(b.xyz).sub(ax)
+                    const length2 = dot(ab, ab)
+                    const raw = length2
+                      .greaterThan(0)
+                      .select(dot(sample.sub(ax), ab).div(length2), float(0))
+                    const t = saturate(raw)
+                    const dist = arc(ax, ab, t)
+                    If(dist.lessThan(fine), () => {
+                      const floor = mixF(asF(a.w), asF(b.w), t)
+                      const halfWidth = mixF(asF(c.x), asF(c.y), t)
+                      const depth = mixF(asF(c.z), asF(c.w), t)
+                      const standing = asF(d.x)
+                      const plain = min(
+                        halfWidth.mul(DRAINAGE_SHAPE.floodplain),
+                        fine.mul(0.8),
+                      )
+                      const shape = valleyShape(dist, halfWidth, plain, fine)
+                      const bed = bedShape(dist, halfWidth)
+                      const others = float(1).sub(
+                        index.equal(firstCreek).select(secondBed, firstBed),
+                      )
+                      const beyond = max(raw.sub(1), float(0)).mul(
+                        sqrt(length2),
+                      )
+                      const reaching = float(1).sub(
+                        smoothstepf(float(0), plain, beyond),
+                      )
+                      const valley = surface.sub(floor)
+                      const filled = shape
+                        .mul(others)
+                        .mul(float(1).sub(coarser))
+                        .mul(reaching)
+                      If(valley.greaterThanEqual(0), () => {
+                        levelCut.assign(
+                          max(levelCut, valley.mul(shape).mul(others)),
+                        )
+                      }).Else(() => {
+                        levelFill.assign(
+                          max(levelFill, valley.negate().mul(filled)),
+                        )
+                      })
+                      notch.assign(max(notch, depth.mul(bed)))
+                      channel.assign(max(channel, bed))
+                      corridor.assign(
+                        max(
+                          corridor,
+                          float(1).sub(
+                            smoothstepf(plain, min(fine, plain.mul(2)), dist),
+                          ),
+                        ),
+                      )
+                      // The ground the record leaves, where under its floor.
+                      const own = valley
+                        .greaterThanEqual(0)
+                        .select(floor, surface.sub(valley.mul(filled)))
+                      beds.addAssign(bed)
+                      bedLevels.addAssign(bed.mul(max(standing, own)))
+                    })
+                  },
+                )
+                surface.assign(surface.sub(levelCut).add(levelFill))
+                coarser.assign(channel)
+              },
+            )
+          })
+          // `riverLevel`: the beds' mean, faded toward the surface by the
+          // largest of them, and no water where no bed reaches.
+          const river = beds
+            .greaterThan(0)
+            .select(
+              surface.add(
+                channel.mul(
+                  bedLevels.div(max(beds, float(1e-30))).sub(surface),
+                ),
+              ),
+              float(NO_KERNEL_WATER),
+            )
+          /*
+           * `lakeLevelAt`: the level of the body whose nodes in reach carry
+           * the most weight, blended with another only within `lakeMargin`
+           * of a tie, each neighbor faded to zero over the half of the cell
+           * away from it. The nine nodes are unrolled — the cell's own and
+           * its ring, read off the packed table where the CPU reads the
+           * lattice's — and a node's body is every node at its level.
            */
           const lakeReach = float((DRAINAGE_SHAPE.lakeReach * Math.PI) / 2).div(
             float(cells),
           )
-          const lakeTotal = float(0).toVar()
-          const lakeWeight = float(0).toVar()
-          const consider = (n: U): void => {
+          const fraction = drainageFraction(lookup, cells)
+          const levels: F[] = []
+          const weights: F[] = []
+          const candidate = (n: U, di: number, dj: number): void => {
+            const level = float(NO_KERNEL_WATER).toVar()
+            const weight = float(0).toVar()
             const node = drainageNode(n)
             const lake = asF(node.w)
             If(lake.greaterThan(NO_KERNEL_WATER / 2), () => {
               const away = length(asV3(node.xyz).sub(lookup)).div(lakeReach)
               If(away.lessThan(1), () => {
-                const weight = square(float(1).sub(square(away)))
-                lakeTotal.addAssign(weight.mul(lake))
-                lakeWeight.addAssign(weight)
+                let fade: F = float(1)
+                if (di !== 0) {
+                  const x = di > 0 ? fraction.x : float(1).sub(fraction.x)
+                  fade = fade.mul(smoothstepf(0, 0.5, asF(x)))
+                }
+                if (dj !== 0) {
+                  const y = dj > 0 ? fraction.y : float(1).sub(fraction.y)
+                  fade = fade.mul(smoothstepf(0, 0.5, asF(y)))
+                }
+                level.assign(lake)
+                weight.assign(square(float(1).sub(square(away))).mul(fade))
               })
             })
+            levels.push(level)
+            weights.push(weight)
           }
-          consider(cell)
+          candidate(cell, 0, 0)
           const ring = cell.mul(uint(8)).add(uint(DRAINAGE_NEIGHBORS_AT))
           for (let k = 0; k < 8; k += 1) {
             const m = drainageWord(ring.add(uint(k)))
-            If(m.notEqual(uint(0xffff_ffff)), () => consider(m))
+            const [di, dj] = NEIGHBOR_OFFSETS[k] as readonly [number, number]
+            // A cube corner's missing diagonal reads the cell's own node at
+            // no weight, rather than an index past the table.
+            const present = m.notEqual(uint(0xffff_ffff))
+            const before = weights.length
+            candidate(present.select(m, cell), di, dj)
+            const weight = weights[before] as F
+            If(present.not(), () => {
+              weight.assign(0)
+            })
           }
-          const lake = lakeWeight
+          const lakeTotal = weights.reduce((sum, w) => sum.add(w), float(0))
+          const bodies = levels.map((level, i) =>
+            weights
+              .reduce<F>(
+                (sum, w, j) =>
+                  sum.add((levels[j] as F).equal(level).select(w, float(0))),
+                float(0),
+              )
+              .toVar(`lakeBody${i}`),
+          )
+          const best = bodies.reduce<F>(
+            (most, body) => max(most, body),
+            float(0),
+          )
+          const lakeSum = float(0).toVar()
+          const lakeSay = float(0).toVar()
+          levels.forEach((level, i) => {
+            let first = (weights[i] as F).greaterThan(0)
+            for (let j = 0; j < i; j += 1) {
+              first = first.and(
+                (weights[j] as F)
+                  .greaterThan(0)
+                  .and((levels[j] as F).equal(level))
+                  .not(),
+              )
+            }
+            If(first, () => {
+              const say = plateWeight(
+                best.sub(bodies[i] as F).div(lakeTotal),
+                float(DRAINAGE_SHAPE.lakeMargin),
+              )
+              lakeSum.addAssign(say.mul(level))
+              lakeSay.addAssign(say)
+            })
+          })
+          const lake = lakeSay
             .greaterThan(0)
-            .select(lakeTotal.div(lakeWeight), float(NO_KERNEL_WATER))
-          elevation.assign(elevation.sub(cut).add(fill).sub(notch))
+            .select(lakeSum.div(lakeSay), float(NO_KERNEL_WATER))
+          elevation.assign(surface.sub(notch))
           level.assign(max(river, lake))
           aboveDatum.assign(elevation.sub(scalar(SCALAR.DRAINAGE_DATUM)))
         })
@@ -2025,7 +2480,9 @@ export function createTerrainKernel(
         If(gate('clamp'), () => {
           // `waterSurface`: the datum on a body with no graph, the sample's
           // own level where there is one — the sea only where the sea reaches.
-          If(word(WORD.DRAINAGE_CELLS).greaterThan(uint(0)), () => {
+          // The drainage stage's own gate, because the level came out of the
+          // drainage buffer and the buffer can hold another body's graph.
+          If(gate('drainage'), () => {
             elevation.assign(max(elevation, level))
           }).Else(() => {
             elevation.assign(max(elevation, scalar(SCALAR.SEA_DATUM)))
@@ -2316,8 +2773,7 @@ export function createTerrainKernel(
     elevations: elevationsAttribute,
     cover: coverAttribute,
     water: waterAttribute,
-    drainageRecords: drainageRecordsAttribute,
-    drainageWords: drainageWordsAttribute,
+    drainage: drainageAttribute,
     total,
     dispose() {
       compute.dispose()

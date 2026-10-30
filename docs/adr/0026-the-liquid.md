@@ -1,7 +1,15 @@
 # ADR-0026: The liquid — a sea is a sheet, a valley is a strip, and a world is drawn in families
 
 Status: accepted · 2 Sep 2026 · amended 3 Sep 2026: the bake's second pass
-carries relief, so a generated sphere shades its mountains
+carries relief, so a generated sphere shades its mountains · amended 20 Oct
+2026: the sphere emits a magma sea's glow where its bake says sea, and the
+bake is built and drawn a frame's share at a time; a sea the ground boiled
+away still weakened the lithosphere, and one it froze never did; the frame
+read is a material of its own, and the full sea mirrors the land
+([ADR-0052](0052-the-sea-mirrors-the-land.md)) · amended by
+[ADR-0053](0053-the-ground-erodes-and-the-macro-band-never-repeats.md):
+the macro band and the gullies are evaluated on a lattice with no period, not
+fetched from the texture
 
 ## Context
 
@@ -75,8 +83,9 @@ and what reflects off it; the seabed read from the frame the opaque pass
 just drew, displaced by the wave slope and attenuated by
 `e^(−absorption · path)` along the refracted ray, so a shelf is turquoise
 and the deep is the liquid's own color; the sky and a two-lobe sun in the
-reflection; a swell and a chop; foam where the sea is shallower than a wave
-is high. Magma is the same graph with a glow. A river is painted on its bed
+reflection, and the land where a search of the frame finds it
+([ADR-0052](0052-the-sea-mirrors-the-land.md)); a swell and a chop; foam where
+the sea is shallower than a wave is high, running in at the swell's period. Magma is the same graph with a glow. A river is painted on its bed
 rather than drawn as a sheet, because a sheet per valley is a mesh per
 valley.
 
@@ -125,14 +134,16 @@ the mesh normal's slopes along geographic east and north as `x / 2 + 1/2`
 with the sea mask in the third lane, which is the layout and the encoding the
 sphere already reads the archive's normal map in, so one decode path serves a
 bake and a photograph. The sphere samples both by its unit position and keys
-its ocean color and sun-glint on the mask as it does on a photographed body's.
+its ocean color and sun-glint on the mask as it does on a photographed body's,
+and a magma sea's glow beside them — the sheet's own emission, added before
+the veil — so a lava world is not red at the gate and dark from orbit at night.
 One graph draws the ground and takes its picture, which is how the seam rule
 holds for a bake at all: there is no second deposit stack to keep in step. Asked the first time a mapless
 solid body's disk exceeds a hundredth of a radian, ready a few frames later,
 kept four deep.
 
 **The surface has four levers, and they are named costs.** `render/quality.ts`
-carries the refinement threshold, the ground's octaves, the sea's refraction
+carries the refinement threshold, the ground's octaves, the sea's frame read
 and waves, and the rocks, as one persisted record the frame loop reads and a
 driving script can set. Not a ladder: each is one measured term, so a frame
 rate can be reported against the setting it was taken at.
@@ -206,10 +217,17 @@ the aerial veil, the sky shell and MSAA at nine million pixels, which a
 timestamp query per pass is the instrument for. Run-to-run variance across
 this table is about two frames a second.
 
-**The fixture's plate world lost its plates.** Proxima Centauri II drew a sea
-on ground at 491 K; read against its temperature the sea goes, and with it
-the ocean that weakens a lithosphere into plates. `geology.test.ts` finds the
-most-plated solid body in the fixture rather than naming one.
+**A hot world's sea goes and its plates stay.** Proxima Centauri II drew a sea
+on ground at 491 K; read against its temperature the sea goes. The ocean that
+weakens a lithosphere into plates is the one the world had, not the one
+standing — the grammar's facts carry it as `hadOcean` beside `hasOcean`, both
+read off the same windows by `readDrawnSea` — so the world keeps its twenty
+plates and `geology.test.ts` names it as the fixture's plate world. A sea the
+ground froze does not count: a star brightens as it ages, so a world too hot
+for any liquid passed through the window while its star was young, and one
+too cold was colder still and never held a liquid at all. Read off the
+standing sea instead, the weakening took the plates of every world whose
+ground boiled its sea: 51 of the 2,201 bodies within 25 ly, at terrain v5.
 
 **A generated world is itself from orbit.** Measured against the streamed
 ground either side of the relief gate, at 650 and 1,100 km over Gliese
@@ -221,18 +239,27 @@ the archive alone, so a generated disk shaded as a smooth sphere — is the
 second pass amending this record: the mesh normal's slopes east and north
 in the archive's own encoding, with the sea mask beside them.
 
-**The bake's twelve draws are one frame's stall.** Ninety-six tiles of the
-producer, ninety-six patches built on the main thread, and twelve renders of
-them, in the frame the tiles arrive: a bake is a hitch of a few tens of
-milliseconds once per body. Spreading the build across frames is the plain
-next step if the hitch is felt.
+**The bake is a frame's share at a time.** Ninety-six tiles of the producer,
+ninety-six patches built on the main thread and twelve renders of them, taken
+in the frame the tiles arrived, were a hitch of tens of milliseconds once per
+body. The 20 Oct 2026 amendment spreads them: `advance`, once a frame ahead
+of the ground's frame callback, builds patches for two milliseconds and then
+draws one face a frame, each face from the sixteen patches of its own cube
+face so a patch's buffers upload once and in the face that draws it. The
+sphere wears its tint until the twelfth face is drawn and the targets are
+handed over whole. The tiles are asked for in the pool's and the producer's
+background lane, so a bake that starts on a descent waits behind the ground.
+Measured in Chrome on a shared machine, the frame a bake landed in was
+166–217 ms; spread, the largest slice is the first face of a session's first
+bake, 26–32 ms, because a face is a one-sample target the boot does not warm
+and that face builds its pipeline variant. Every other slice is under 9 ms
+but one build of 15.2, a single `buildPatch` the budget cannot divide.
 
-**The harness cannot draw the sea.** `viewportSharedTexture` copies the
-framebuffer once a frame, ending the render pass and beginning it again, and
-the harness has neither a swap chain to copy nor a pass that survives being
-re-begun around its single draw. The frame read is a build option;
-`materials.gpu.test.ts` compiles the graph without it, and the copy is
-exercised where it runs.
+**The harness draws the sea the way the scene pass does**, into a
+four-sample target with a float depth: the frame read copies the frame and
+ends the pass and begins it again, so `water.gpu.test.ts` holds the full sea
+to one split, the plain one to none, and the full one's search to the land
+it should find ([ADR-0052](0052-the-sea-mirrors-the-land.md)).
 
 **The rocks are worth twelve milliseconds at a two-meter stance**, drawn with
 `frustumCulled` off at the field's whole population. They have a lever;

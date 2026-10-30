@@ -26,7 +26,7 @@ import { DEFAULT_LENS, DEFAULT_VIEWPORT } from './terrainSelect.ts'
  * stops covering pixels, and how far away that is depends entirely on the
  * optics: at the flight lens the smallest rock the generator places is two
  * pixels at 212 m, and at the telephoto end of the same slider it is two pixels
- * at 765. Reading `pixelsPerRadian` is the same thing `selectTerrain` does and
+ * at 1,353. Reading `pixelsPerRadian` is the same thing `selectTerrain` does and
  * for the same reason — a fixed range is right for exactly one setting of two
  * controls.
  *
@@ -110,9 +110,9 @@ export const scatterRange = (lens: Lens, viewport: Viewport): Meters =>
  *
  * A ceiling rather than a working limit, and it is the telephoto end that makes
  * one necessary: `scatterRange` goes as `pixelsPerRadian`, so the disk goes as
- * its square, and a 20° lens at 8× zoom asks for a thousand times the regions a
+ * its square, and the long end at 8× zoom asks for 2,600 times the regions a
  * hover does. At the flight lens the answer is five — a 212 m range on Luna's
- * 333 m regions — and thirty-three at the telephoto end, so this never binds on
+ * 333 m regions — and eighty-eight at the telephoto end, so this never binds on
  * a lens anything is flown behind, and where it does bind the far rocks simply
  * stop rather than the frame going away.
  */

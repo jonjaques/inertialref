@@ -284,6 +284,14 @@ Every driving verb took an address and nothing produced one.
   restores the renderer afterward. The GPU regression counted a second
   pipeline before the fix and none afterward.
 
+- **One fact read for two histories.** `hasOcean` was both the sea standing on
+  a world and the water that weakened its rock, so reading the sea against
+  the ground temperature took the plates of every world whose ground boiled
+  its sea — Proxima Centauri II from 20 to 1, 51 plate counts within 25 ly.
+  `hadOcean` is a sea that stood, now or before the ground boiled it, and
+  `hasOcean` the sea that is left; `geology.test.ts` holds Proxima at 20 with
+  no sea, holds that a frozen sea is never one the world had, and holds that
+  each fact moves only its own half of the grammar.
 - **A cache keyed without the body, cleared without the queue.** `regionKey` is
   packed arithmetic over the region alone, so after a retarget a job still out
   for the discarded world names the same key the new body's roots do — and
@@ -11496,6 +11504,481 @@ translation produces, and any regression in the pass timeline, which still
 needs a workstation. `presets:compare` stays local. It needs Chrome to present
 the app, and runner-images #14840 records WebGL2 stalling in Metal resource
 creation on the same image.
+
+## The drainage graph is one binding, and the stale one answers to one gate (20 Oct 2026)
+
+The terrain kernel bound eight storage buffers, the drainage graph's records
+and words among them, and eight is `maxStorageBuffersPerShaderStage` on any
+device that asks for nothing more. Nothing asks: the M5's adapter offers ten
+through Dawn and the device three requests gets eight. The graph is now one
+`array<u32>` read through an offset table in
+`packages/universe/src/terrainKernel.ts` — nodes, segments, neighbors, cell
+starts, cell lists, every offset in words — with the float records written
+through a `Float32Array` over the same memory and read back with
+`bitcast<vec4<f32>>`. Rejected: a float buffer carrying the words, which
+holds `0xffffffff`, the missing neighbor, as a NaN; packing the graph into a
+buffer the stack already binds, which moves the wall; and requesting the
+adapter's limit, which builds the kernel on one machine and not the next.
+The kernel binds seven, and every tile is bit-identical to the two-buffer
+kernel's over 366 hashes of elevations, cover and water (the zoo, Luna,
+Earth, Mercury, Mars and the far-shore world, both sides of the sea, level 0
+to each floor), so `TERRAIN_KERNEL_REVISION` stays at 1. A batch of sixteen
+on a wet body costs the same within about one percent, 13.80 against 13.93
+ms on Earth at level 6 in one alternation and 13.71 against 13.83 in the
+other, under load.
+
+The erosion plan said a ninth binding fails no test. It fails three GPU
+files at the baseline — the producer's `warm()` returns false in
+`terrainProducer.gpu.test.ts`'s `beforeAll`, and the harness reports "The
+number of storage buffers (9) in the Compute stage exceeds the maximum
+per-stage limit (8)" in the kernel and band tests — and nothing in
+`pnpm check`, which runs no GPU file. All of those depend on the device
+having been granted the default, so `terrainKernel.gpu.test.ts` also counts
+`var<storage` in the kernel's own WGSL against the spec's eight and holds the
+harness device at eight.
+
+**Every reader of the drainage buffer tests one gate.** `uploadSurface`
+leaves the last wet body's graph in the buffer through every dry body,
+because clearing it is 4.4 MB of writes a switch. The stage ran behind
+`SCALAR.DRAINAGE` and the clamp chose its water on `WORD.DRAINAGE_CELLS`;
+both were zero on a dry body, and a future reader behind one and not the
+other would carve the previous planet's rivers into this one. The stage's
+packed gate in `BAND_STACK` is now `WORD.DRAINAGE_CELLS` alone, the clamp and
+the producer read it through the table, and the scalar is gone. The
+regression test draws Mars and Luna after Earth with Earth's graph still in
+the buffer and holds them bit for bit to a kernel that never held one; with
+the stage behind any other gate, every Mars tile's water came back up to all
+4,225 vertices apart, Earth's sea drawn over Mars.
+
+A dry body also reads no water back. The copy the producer skipped is
+270 KB a batch — sixteen tiles of 4,225 unbordered vertices; the plan's
+1.2 MB counted sixty-four tiles of bordered samples — and skipping it and
+its sentinel scan is about a millisecond of a fourteen-millisecond batch on
+Luna and Mars, under load.
+
+## The orbital bake waits behind the ground, in a lane of its own (20 Oct 2026)
+
+A generated body's bake asks for ninety-six level-2 tiles at once, and the
+streamer and the bake shared one queue on both adapters: the pool was a FIFO
+and the GPU producer took its next batch from the head of one. A bake that
+started on a descent — the disk crossing a hundredth of a radian on the way
+down — put all ninety-six ahead of the ground the descent was about to need.
+Measured in `terrainProducer.gpu.test.ts`: with forty-eight bake tiles queued
+and the first batch on the GPU, a ground tile asked for next was delivered
+49th, behind every one of them; it is delivered 17th now, behind only the
+batch already dispatched. The pool's version of the same test dispatched the
+next bake tile to the free worker instead of the ground.
+
+`JobLane` in `packages/workers/src/pool.ts` is the fix: `foreground` by
+default, `background` for the bake, and a free worker — or the producer's next
+batch — takes a background job only when no foreground job waits. Nothing is
+preempted. The producer draws each batch from one lane rather than topping a
+short ground batch up with bake tiles, because a bake tile in the ground's
+batch is delivered with it rather than after it, and the batch it lengthens
+is the one the descent is waiting on. A bake that starts mid-descent therefore
+waits until the streamer stops asking, which is what it should do: below the
+eight-pixel gate the ground is drawn and the sphere is not.
+
+The lane travels as a third argument to `submit` through `Heightfields`, the
+archive and the surface preparation, and is not a field of the request — the
+request is the archive's key, and a tile the bake and the streamer both ask
+for is one tile. Residency (`RESIDENCY_MS` in `orbitalBake.ts`) stops a bake
+thrashing; the lane is what stops it being in the way. It is scheduling, not
+generation: a task's answer is a function of its payload, so the lane moves
+when an answer arrives and never what it is.
+
+## A lava sea glows from orbit as it does at the gate (20 Oct 2026)
+
+The sheet adds a magma liquid's glow to its color before its veil, and the
+ground adds it over a painted channel; the sphere took only the liquid's
+color through `oceanColor`, so a magma world was red at the gate and dark on
+its night side from orbit. Drawn through the production graphs on the night
+side, the sheet over fifty meters of magma reads 3.116 in the red and the
+sphere over a bake whose mask says sea read 0; with `liquidGlow` on
+`PlanetMaterial`, added where the mask says sea, they agree within 5 × 10⁻⁴.
+`bodyUniforms` passes the glow only through a bake: the bake's mask is the
+ground's own water, and a photographed body's mask is a sea its ground does
+not paint. It is a uniform, so the archetype the boot compiles is the
+pipeline a lava world draws with — `warmup.gpu.test.ts` counts no new
+pipeline after the bake and the glow are bound.
+
+No generated world within sixty light years of Sol has a magma sea. The one
+magma liquid inside that, `s:Q0_223_6_4_b/b:0` at 52 ly, drew no datum, so
+nothing stands on it to glow. The nearest seas are `s:Q0_229_6_9_3/b:0` at
+104 ly, an icy world at −2,357 m, and `s:Q0_227_5_4_c/b:0` at 130 ly, a rocky
+one at −1,061 m with a 3,485 km radius; a search past about 160 ly runs a
+headless session out of heap.
+
+## The orbital bake was a hundred milliseconds in one task, and is now a frame's share (20 Oct 2026)
+
+ADR-0026 called the bake "a hitch of a few tens of milliseconds once per body".
+Measured under Dawn in Node, with the machine shared by other agents' suites
+(under load), the task the last tile arrived in was 118–150 ms of main-thread
+work for Gliese 908 IV, Iapetus and Rhea. Two costs were larger than assumed.
+`buildPatch` with the cover and its morph twin took 0.9–1.9 ms a patch, where
+the streamer's eight-a-frame allowance in `terrainStreamer.ts` is sized on
+0.25 ms. And the first face drawn uploaded a third of the body: three's
+frustum test is a bounding sphere against the face's pyramid, so every patch
+straddling an edge drew too, and face 0 alone took 18 ms warm and 38.7 ms
+cold, the next faces 6.1, 6.0, 2.6, 2.5, 1.1 and 1.1 as the uploads ran out.
+
+`advance` runs once a frame at priority −0.25, ahead of `TerrainPatches`,
+because a face draw writes the shared ground material's palette and the
+streamed body's has to be written back before the frame draws. It builds
+patches for two milliseconds — one clock read a build, stopping before the
+build that would overrun and always building one — then draws one face a
+frame from the sixteen patches of that face alone. `faceOf` picks the face
+whose camera looks most squarely at the patch's anchor; a level-2 region is a
+sixteenth of one face's view pyramid, so that face sees all of it and no other
+face sees any. Each patch then uploads in the face that draws it: the
+reflectance faces take 3.5–8.8 ms and the relief faces 0.5–0.9 ms under Dawn,
+the largest slice of a whole bake is 6–9 ms, and a bake is ready about 105
+frames after its tiles arrive. Drawing all sixteen patches into every face,
+with culling off, is the obvious alternative and the wrong one: it uploads
+the body in face 0.
+
+`drawCubeFace` is `CubeCamera.update` for one face, including the
+reversed-depth clear the renderer does not make outside its own pass;
+`orbitalBake.gpu.test.ts` holds it to `update` texel for texel, and checks
+all six reflectance faces for holes — with the patches withheld from their
+faces the check reads 16,384 empty texels. Until the twelfth face is drawn
+`textureFor` answers null, so the sphere keeps its flat tint and never wears
+a target with five faces in it.
+
+In Chrome, at the 1600×900 default and with two other agents' suites running
+(under load), the frame the bake landed in was 166.5 ms on Iapetus and
+216.6 ms on `s:P222_1_0_9/b:4`, the far-shore world, taken against
+`origin/main`. Spread, neither run has a frame over 34.7 ms around the
+handover. The bake is ready 145 and 161 frames after the ask, 2.6 and 3.45 s,
+and the sphere wears its tint for all of them. `buildPatch` took about 2.4 ms
+a patch in Chrome, so every build frame builds one, and one of them took
+15.2 ms, which a budget checked between builds cannot divide. The reflectance
+faces took 3.6–8.8 ms and the relief faces 0.5–1.9, the last 3.9–5.2 with the
+handover in it. One slice is larger: the first face of a session's first bake,
+26.4 ms on the far-shore world and 31.7 on Iapetus, where a second bake in
+the same page, Rhea after Iapetus, drew its first face in 7.7. A face is a
+one-sample half-float target and the boot warms only the scene pass's
+four-sample layout, so the first face builds the bake's variant in its own
+frame. Warming that layout behind the boot cover is the fix if it is felt.
+
+Two larger frames in the same recordings are not the bake's. The frame a
+look starts in is 100–217 ms on both builds, and a second look at a body
+already baked, which asks for nothing, still takes 99.9 ms. The producer's
+batches of sixteen tiles take up to 154 ms of GPU each, and frames while the
+tiles are produced reach 117–132 ms on both builds; the bake's own callback
+is never more than 31.7 ms.
+
+## A rock stands on the drawn triangle, a deposit reads the floor's slope, and the cover keeps its bytes (20 Oct 2026)
+
+Erosion phase 4 was planned as slope and seat in the cover's two spare bytes,
+and neither fits there ([ADR-0051](docs/adr/0051-a-rock-stands-on-the-drawn-ground.md)).
+At every vertex the mesh is the field, so a seat byte is zero wherever it is
+written; the difference between a rock's field and the triangle under it lives
+between vertices, at whatever level the camera chose. At a two-meter stance it
+was 10.5 to 26.3 cm in the mean and 0.58 to 1.41 m at worst across the zoo,
+Gliese 908 IV and P222_1_0_9 V, under `MESH_SEAT`'s 12 cm. A rock now reads the
+drawn set's triangle with its morph, and is 0.00 cm off it. The read is 0.9 µs a
+rock unmorphed and 3.8 µs in a band, headless under load, so a rock is cut on
+the field first, widened by 4 m against a worst in-range cell of 1.86 m.
+
+**A rock stood under every lake.** The scatter's water test read the sea's
+datum, so on a body that drains a rock on a lake bed or a riverbed passed at the
+lake's height and drew through the sheet: 608 of 849 around Earth's largest
+lake, the deepest 427 m under, and every rock at the mouths of Gliese 908 IV
+and P222_1_0_9 V. The test is the clamp's own water now, the level the
+heightfield samples beside the cover.
+
+**The deposit step was a bias, so the fix is a distribution.** A coarse
+patch's normal is the ground smoothed over its cell; the mean tone step at a
+level boundary was up to 1.44% on Iapetus, 1.03% on P222_1_0_9 V and 0.36% on
+Gliese 908 IV (sixteen directions a patch, area-weighted). A fixed-baseline
+slope brings the mean to 0.1–0.5% and aliases at every coarse vertex, 8 to 10%
+from the level beside it. A per-body table maps each level's drawn slopes onto
+the floor's by quantile, measured by a worker over 1,024 land probes with the
+interpolated drawn normal: largest mean step 0.28, 0.29 and 0.16%. Measured on
+vertex normals it left 0.50% on Iapetus; 256 probes left 0.4 to 1.0%; a
+per-level gain fitted to the mean mantle had a 5.19% worst patch on Iapetus
+against the quantile map's 3.43%.
+
+**A measurement only the material reads must be asked for by the material's
+host.** The streamer asked for the table first, and the streamer also runs
+headless and in the slow suite: `terrainStreamer.test.ts`'s re-walk test sat
+behind a table measurement in its pool and timed out at 20 s, and
+its pool count read two jobs where it expects one. `GameEngine.depositSlopeTable`
+is asked by `TerrainPatches`, so a host with no material never measures. It
+starts once the pool's queue is empty, because a table is 9 to 38 s of one
+thread across the zoo with the machine at load 35 to 44; quiet is unmeasured.
+
+## Terrain v6: a surface is one identity, and a boiled sea leaves its plates (20 Oct 2026)
+
+`TERRAIN_ALGORITHM` is 6, spent once for the four changes erosion § 6
+batched: the surface's identity (arch-review B), the weakening read from the
+sea a world drew (erosion defect 3), one water body per sample (defect 6) and
+Enceladus's stripes taking a south-polar extent (terrain § 2). The first two
+are this entry and the other two the next; `versions.ts` names all four at
+the constant.
+
+**The identity.** The drainage memo and the survey keyed on five hand-listed
+`SurfaceParameters` fields plus `JSON.stringify(grammar)`, which writes NaN and
+both infinities as `null` and −0 as `0`; the archive had a complete
+serializer, `stable()`, in `packages/workers`, which the two keys below it
+could not reach by layer. `surfaceIdentity` in `packages/universe` is the whole
+surface through `identityText` — keys sorted, every number spelled, −0
+included — memoized per object: 993 characters for Earth and about 5 µs to
+format, measured on the shared machine. The archive's request goes through the
+same `identityText`, so `packages/workers` keeps no serializer of its own. The
+sketch keeps its narrower key, because it shares one derivation between
+surfaces that differ only in fields it does not read. One fast-check property
+in `heightfieldCache.test.ts` replaces the hand-written cases: over every leaf
+of the surface and the request, two values at one leaf share the key exactly
+when they are `Object.is` equal. With numbers through `JSON.stringify` it finds
+`[surface.seed.a, 0, -0]` in 296 runs; with only the non-finite ones through
+it, `[surface.seed.a, -Infinity, null]` in 38.
+
+**The weakening.** `GrammarFacts` carries `hadOcean` beside `hasOcean`, and
+mobility reads it; the liquid window and the biota keep `hasOcean`.
+`makeSurface` takes both from the draw through `readDrawnSea`, one reading of
+the windows: a sea stood if it stands now or if the ground is past the water
+band's boiling edge, and never if the ground is on the cold side. The two
+sides differ because a star brightens as it ages. A world too hot for any
+liquid passed through the window while its star was young — Venus, with an
+ocean's worth of water in its past — so its sea soaked the rock before it
+boiled; a world too cold was colder still then, and its drawn datum never
+held a liquid. Setting `hadOcean` from the draw alone was the first cut, and
+it gave thirteen frozen worlds within 25 ly plates (46–239 K) for a sea that
+never stood; it was reversed on that argument. The biota was the other
+read to decide: an ocean is where a world's volatile inventory lives, and a sea
+that froze or boiled holds none, so it reads the sea standing now. Sol sets
+`hadOcean` from the published facts, which is Earth alone: the weakening
+stands for plates, and Venus and Mars have none whatever seas they once held.
+So Sol is untouched to the last bit. An optional `hadOcean` defaulting to
+`hasOcean` was the smaller diff and was not taken: a producer that forgets the
+field would get defect 3 back without a sound, and every hand-built
+`GrammarFacts` in the tests states it instead.
+
+Proxima Centauri II (the `TEST_CATALOG` system, 491 K ground, no sea) is back
+at 20 plates from 1, and `geology.test.ts` names it again; the most-plated
+search would now find Sirius I at 25. No draw moved: a scratch dump of every
+generated value, split into the grammar and everything else, over every system
+and body within 50 ly of Sol in the packed catalog and every `TEST_CATALOG`
+system — 26,094 rows — has no value outside a grammar that differs before and
+after, the terrain stamp in each system's manifest aside. Within 25 ly, 60 of
+2,201 grammars move and 51 plate counts with them: 43 projected bodies and 8
+observed exoplanets whose ground is generated (Barnard's Star b, c and d among
+them), every one on ground between 390 and 1,211 K; 45 go from a lid to plates
+and 6 plated worlds gain more, up to the cap of 30. Within 50 ly it is 495
+plate counts and 583 grammars in 24,393 bodies, on ground from 383 to 1,241 K.
+
+**What the bump costs.** Every archive key moves (`6-cpu@7`). The slow suite
+from an empty archive, on the shared M5 with the heavy lock held: 40.6 s wall
+and 209 s of CPU, writing the descent's 1,246 tiles (89 MB), taken on the
+identity and the weakening alone. The water and the stripes write the same
+1,246 tiles and add nothing measurable to a wet patch: alternated against
+`main` over sixty 65×65 patches at Earth's shore, Titan's lake and
+P222_1_0_9 V's lake, the batch ran 124–288 ms a patch to `main`'s 129–405,
+under load. The descent's hook allows 600 s, twice the 284 s the last cold CI run took before the
+descent moved to threads, so CI's first run on the batch is slow rather than
+failed. `heightfieldFingerprint.test.ts` re-pins `terrain: 6` with its seven
+tiles unchanged, since none of the four moves the ground under them.
+
+## Between two bodies of standing water the level is one body's, and the stripes went to the south pole (20 Oct 2026)
+
+Erosion defect 6 and Enceladus's stripe extent, the other half of terrain v6;
+the entry above spends the version.
+
+**A sample in reach of two water bodies reads the heavier one.**
+`lakeLevelAt` was a kernel mean over every lake node within 1.2 cells, so
+between two lakes at different spills, or a lake and the sea, it read a level
+belonging to neither across the whole overlap: 99.9–100% of the overlap on a
+transect between every such pair on eleven wet bodies, the worst 162.6 m off
+either level on Earth (sea 355.6 m, lake 680.0 m), 11.6 m between two lakes on
+Titan, 874 m on Q0_221_4_1_i III. The plan's fix was to weight one body, by
+nearness or by the body the sample's own receiver drains to. Both were
+measured, and neither puts the step where the ground stands above both
+levels, which is what rule 11 asks of a choice by rank. The lattice samples
+the landform once a cell, and between two nodes the field's ground sits
+hundreds of meters from it — on Earth's worst pair a lake node's lattice
+elevation was 410 m and the field under it ran 340–1,227 m. On a transect
+sweep every ranked rule (nearest node, heaviest body, highest level, lowest,
+the body the cell drains to) left visible steps with a p90 of 1.7–377 m, and
+the CPU and the GPU would each compare their own floats at the tie. So the
+choice is rule 11's margin: the heavier body's level exactly wherever its
+share of the weight leads by `lakeMargin` (a tenth), a `plateWeight` blend in
+the sliver where it does not — 5–6% of the overlap, at most 23 km wide on a
+275 km cell. With the margin at zero the step test fails at 329 m on Earth.
+
+Against a flood fill of the field itself on 60×60 grids around 13–20 lake
+sites a body, the mean, the heaviest body and the margin agree within 1%; the
+lake model's own error dwarfs the rule (a mean of 0.1–142 m off the fill), because
+the kernel floods every hollow within its reach whether the field connects it
+or not. The body the cell drains to, held strictly, is the one rule that fixes
+"wrong across a ridge": the channel walk's worst rise goes from 187 m to 4.6 m
+on P222_1_0_9 V and from 13 m to none on Titan. It also clips every lake at
+each rim cell that drains away from it, and against the fill it was 10–120%
+worse on single lakes, so it was not taken. What the ridge case would take
+instead is a lattice that resolves the rim — the plan's phase 3 — or a
+per-cell flood of the field on the CPU, packed for the kernel.
+
+**The kernel's lake ring was missing nodes inside its own reach.** The level
+reads the cell's own node and its ring, and near a face edge a gnomonic cell is
+half the angle of one at the center, so a node two cells over sat inside the
+1.2-cell reach: a sample crossing into the next cell gained or lost it with
+weight. For one lake that is invisible; between two bodies it was a step of
+their difference times its share, 47 m on Earth where the sea met a lake at a
+face edge and 2.3 cm on Titan. A ring node's weight now fades to zero over the
+half of the sample's cell away from it, the edge it leaves the ring across.
+
+**Enceladus's stripes are a south-polar family.** `StripeAxis` was a whole
+great circle, so a mapless sphere wearing its relief showed four hairlines from
+pole to pole. A stripe now carries an extent, a middle on its circle and a
+half-length, with the profile tapering to zero over the last 30%; the family is
+built at the body-fixed south pole, (0, −1, 0), four stripes 35/252 rad apart
+and 130/252 rad long before their own draws. On Enceladus they are 110.6–134.7
+km long and 34.3–35.0 km apart, within 3.4° of parallel. The stream's first
+draw, the old family axis, is still drawn and not read, so the azimuth, widths
+and offsets after it keep their values; each stripe appends a length, a slide
+and a turn. Twenty-eight Sol bodies draw stripes — Mimas, Dione, Miranda,
+Phobos and Deimos among them — and no generated body within 60 ly does: the
+weight is `young² · icy`, and `young` is a tidal proxy no generated moon
+reaches.
+
+## A long lens refines only its frame, and the slider reaches Earthrise (20 Oct 2026)
+
+`FOV_MIN` is 11.4°, down from 20°, because the terrain selection now reads where
+the picture looks: past the flight lens it refines at the lens only where the
+frame can reach and at the flight lens everywhere else
+([ADR-0055](docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md)).
+Earthrise takes the 11.53° it solves at the preset's instant rather than the
+clamp.
+
+**Measured headlessly** with `apps/headless/.scratch/lensDemand.ts` over the
+sixty survey sites of Earth, Luna, the four zoo bodies, Gliese 908 IV and the
+far-shore world, standing at two meters, and a 32-step descent onto each basin,
+1920×1080 display pixels, 16 px a cell, cap 1,280. A whole disk at 11.4° wants
+2,063–12,330 patches standing and cuts 8 of 60 eyes at the loosest rung, every
+one short of the floor underfoot; with the view, looking at the horizon, 929–3,491
+and none cut, descents peaking at 1,221–1,946 and none cut. Looking straight
+down, three cut — all the `corner` site, at most 12% over — at 11.4°, six at
+10° and fourteen at 8°; at 8° five of 240 horizon eyes cut as well. On a
+3200×1800 window the horizon at 11.4° cuts 26 of 240, 20 at corners, never short
+underfoot, where 20° over the whole disk cut 8 of 60 standing, all short. At
+11.4° with the zoom racked to 8× the frame alone wants 3,003–17,760 and cuts on
+nearly every eye; the zoom channel stays uncovered.
+
+**Two things that must not come back.** A bounding sphere about each node for
+the in-view test: its radius cannot be under the relief, so on Earth every node
+within 9.9 km is in view, behind the camera too — 3,289 patches on the basin at
+11.4° against the capsule's 1,756. And a cap checked only during the walk: two
+regimes grade across the frame's edges in the balance pass, and a Luna descent
+at 11.4° whose every walk fitted came back over the cap on 22 of 32 steps. Both
+regression tests in `terrainSelect.test.ts` were watched failing with their
+defect back.
+
+**The ship arm's camera is not the frame owner's pose.** `owner.pose` on the
+ship arm is the hull's attitude; the camera is `flightCameraPose`, which
+`CameraRig` computed after the engine step. `GameEngine.cameraPose()` now
+computes it once for both readers.
+
+**A turn is cheap.** At 11.4° a turn of 256 px asks for at most 33 patches the
+previous selection did not hold, 1,024 px at most 102 and two frame widths at
+most 357, so the memo retakes the walk every 256 px and the 1,024 px margin
+leaves 768 px to stream into.
+
+**A seam between equals, which must not come back.** A patch in view that
+borders coarser ground outside takes its band at the reference, so that edge
+closes — and its same-level neighbors in view keep the lens's band, so the edge
+between equals opens. The margin argument (a patch near its range is 1,024 px
+across) does not hold at the level floor, where a level-16 patch on Luna is
+over 2,000 px wide at 100 m: on the live streamer at 11.4° on Luna's map seam
+such edges lay in the frame at 4 of 12 headings, open by up to 3.9 cm, 12 px,
+and headlessly reached the frame on 2 of 48 standing eyes on Luna and 6 on
+Mars. None showed in the stills at the predicted positions. The balance pass
+now splits a node outside the view wherever an edge neighbor holds a finer node
+within `VIEW_TURN_PIXELS` of the frame, for 2% more patches; splitting the whole
+boundary costs 13%, widening each patch's in-view test by its own size 21%.
+`holdsTogether` checks same-level neighbors, and a floor-limited standing
+property fails against the old selector in three runs.
+
+**Rejected:** a 10° floor, which frames Earthrise at its solved angle all month
+but doubles the nadir cuts and puts 117 scatter regions on Luna against a
+ceiling of 96; a finer reference lens, which costs patches without a gain since
+the outside count is 2:1 grading rather than the reference's predicate; and no
+margin, which puts the demoted ring of patches at the frame's edges.
+
+## The sea mirrors the land, and its waves moved once a minute (20 Oct 2026)
+
+The sea's wave clock was the presentation instant handed to the shader whole.
+Simulation time is seconds after J2000 — 8.2 × 10⁸ of them for a session set
+in 2026 — and float32 holds that to the nearest 64 s, so the swell and the
+chop moved once a minute; a preset held near J2000, where every sea plate
+was taken, hid it. `render/water.ts` reduces the clock by 6,400 s on the CPU,
+a period over which every drift returns to its own field, and
+`water.gpu.test.ts` draws a sheet a second apart at a 2026 instant, which
+moves it by a tenth of its brightest pixel and moved it by nothing before.
+The foam's crests run in on the same clock, at the 12 m swell's deep-water
+period of 2.77 s.
+
+`sea: plain` set a uniform that multiplied the refraction out. The frame
+read is a binding, and its copy splits the scene pass whether the sample is
+used or not: on 09b4aaf2, 2 km over the Gliese 908 IV shore at 1920×1200 and
+DPR 2, `plain` bought 1.6 ms. It is now a material built without the read,
+and buys 14.1 ms at 2 km and 17.1 at 3 m — figures taken with other agents'
+suites on the machine, so differences within one boot rather than frame
+times. [ADR-0052](docs/adr/0052-the-sea-mirrors-the-land.md) has the search
+the full sea runs instead, and two findings from it that must not come back:
+a depth copy whose sample count is not tied to its target makes the warm-up
+build a single-sampled layout and the first frame a second pipeline, and a
+march jittered per pixel cost 26.4 ms where twelve aligned steps cost 7.6.
+
+The erosion plan's first defect asked for the waves' fades to move without
+a visible change. At 2 km, fading every octave at its Nyquist limit — a
+quarter to a half of its own wavelength a pixel — cut the frame by 9.7 ms;
+ending the fades at a wavelength and a half, 8.2; at two, 6.5; the chop
+alone, 1.3, inside the noise. Every one that moved the figure took two
+things with it: the grain of the middle distance from 2 km, and the low
+sun's glitter path on the far-shore preset, which went from facets to a
+smooth streak and moved 5,593 pixels of its plate. The noise past the limit
+is the picture, so the fades stay; the lever that buys the frame at
+altitude is `plain`.
+
+## The ground erodes, and the macro band's repeat was never in a picture (20 Oct 2026)
+
+[ADR-0053](docs/adr/0053-the-ground-erodes-and-the-macro-band-never-repeats.md)
+puts erosion phase 5's per-pixel half on the ground — slope-damped roughness,
+gullies down the fall line, a talus clamp — and takes the macro band off the
+baked texture onto a lattice with no period.
+
+**The tiling defect was arithmetic, and the plates say so.** The `2π` in
+`macroFrequency` made the "four-kilometer" band a 637 m cell repeating every
+20.4 km. Read as `lean` minus `flat` over lossless captures straight down on
+the far-shore world, at 200 m and at 50 m a pixel, the band is at most 3 of 255
+in either build, and the old one's autocorrelation is under 0.08 at every
+shift from 10 to 600 px: at 200 m a pixel its cell is three pixels, which is
+noise, not a tile. The new band correlates 0.67 across 5 px at 50 m a pixel,
+which is the mottle the constant names. The case for the change is the
+construction rather than a picture of the defect; the plate pair carries the
+amplified difference.
+
+**A constant array indexed at run time is on Metal's stack.** `latticeNoise`
+first read its cube-edge gradient out of a WGSL `array<vec3f, 12>` indexed by
+the hash. Twenty-four evaluations a pixel over a megapixel drew in 85 ms that
+way, 19 ms with the gradient built from the hash's bits, and 24 ms as the same
+count of texture fetches, in the GPU harness. The bits stay.
+
+**A texture fetch coherent across a frame is nearly free, and the lattice is
+not.** In one boot at the Gliese 908 IV shore, 1920×1200 at a device pixel
+ratio of two and under load, `lean` with the old fetched macro band read
+31.3 ms and `flat` 31.3; `lean` with the lattice band, 35.4. The scratch
+bench's random coordinates put a fetch above a lattice evaluation — 11.5 ms
+against 8.5 beyond an empty graph, twenty-four a pixel over a megapixel, also
+under load; the frame's coherent ones do not, and a bench that scatters its
+coordinates measures the cache, not the band.
+
+**The bake measured its footprint from each patch's anchor.** In bake mode the
+eye is at the body's center, but `eyeLocal` is the anchor-relative eye, so the
+footprint fell to nothing around each of the ninety-six patches and the
+orbital bake drew the macro band at kilometers a texel. It is measured from the
+center now, and the bake reads no macro band.
 
 ## Known gaps
 

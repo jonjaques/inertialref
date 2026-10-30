@@ -49,6 +49,7 @@ import {
 } from '@inertialref/simulation'
 import {
   type Body,
+  type DepositSlopeTable,
   drains,
   type EntityId,
   findBody,
@@ -56,10 +57,13 @@ import {
   MARS_PAD,
   parseAddress,
   type StarCatalog,
+  type SurfaceParameters,
   type SystemId,
 } from '@inertialref/universe'
 import {
   buildScene,
+  CHASE_OFFSET,
+  flightCameraPose,
   lookAlong,
   ROCI_HALF_LENGTH,
   type CinematicEffects,
@@ -188,6 +192,9 @@ export const DEFAULT_LENS: Lens = LENS_PRESETS.flight
 
 /** The same lens as an angle, for the two places Three.js wants degrees. */
 export const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
+
+/** A camera's own forward: Three's cameras look down their −Z. */
+const FORWARD: Vec3 = vec3(0, 0, -1)
 
 export type { StarField }
 
@@ -1119,6 +1126,39 @@ export class GameEngine {
     return this.#scene
   }
 
+  /**
+   * Where the camera stands and looks this frame, in render space. Null
+   * before the first scene.
+   *
+   * A script's camera and the observatory's or the walker's are the frame
+   * owner's own pose. The ship arm's is not the entity's: it is
+   * `flightCameraPose`, the chase behind the hull or the orbit beside it with
+   * the head turned as the flight camera says. The offset scales with the
+   * modeled hull once one is mounted; the hand-tuned 6 m default covers the
+   * debug cone, whose orbit is measured against the same length.
+   *
+   * One function with two readers, which is why it is here rather than in
+   * `CameraRig`: the terrain streamer needs the camera's forward inside
+   * `#step`, before any component has run, and a second copy of the chase
+   * arithmetic for it would be a second producer of the pose that only agrees
+   * with the first until one of them changes.
+   */
+  cameraPose(): { readonly position: Vec3; readonly orientation: Quat } | null {
+    const scene = this.#scene
+    if (scene === null) return null
+    const owner = this.owner
+    if (owner !== null && owner.arm !== 'ship')
+      return owner.arm === 'cutscene'
+        ? owner.cinematic.camera
+        : owner.view.camera
+    return flightCameraPose(
+      scene,
+      this.harness.flightCamera.state,
+      this.hull === null ? 6 : this.hull.lengthMeters,
+      this.hull === null ? CHASE_OFFSET : undefined,
+    )
+  }
+
   frameStats(): FrameStats {
     return {
       fps: this.#fps,
@@ -1208,6 +1248,27 @@ export class GameEngine {
   }
 
   /**
+   * The deposit slope table of the body whose ground is streaming, or null
+   * until a worker has measured it — asked every frame by the material's
+   * host, and the asking is what starts it, once the surface is prepared and
+   * no tile waits in the pool's queue. The deposits read the mesh's own slope
+   * until then.
+   */
+  depositSlopeTable(): DepositSlopeTable | null {
+    const surface = this.#terrain.surface
+    return surface === null ? null : this.#preparation.slopes(surface)
+  }
+
+  /**
+   * A surface's deposit slope table once a worker has measured it, through
+   * the one preparation the ground reads it from, so a body is measured
+   * once whichever of the ground and the bake asks first.
+   */
+  depositSlopes(surface: SurfaceParameters): Promise<DepositSlopeTable | null> {
+    return this.#preparation.whenSlopes(surface)
+  }
+
+  /**
    * The body at an address, out of the loaded world, or null.
    *
    * For a reader holding a `RenderBody` — the scene's description, which
@@ -1242,7 +1303,13 @@ export class GameEngine {
    */
   terrain(): TerrainReport | null {
     const { bodyAddress, ...rest } = this.#terrain.summary()
-    return { body: bodyAddress, ...rest }
+    const surface = this.#terrain.surface
+    return {
+      body: bodyAddress,
+      ...rest,
+      depositsPending:
+        surface !== null && this.#preparation.slopesPending(surface),
+    }
   }
 
   /**
@@ -1672,6 +1739,10 @@ export class GameEngine {
     // it never landed on is a selection nobody can reproduce.
     this.#terrain.lensView = view
     this.#terrain.cellPixels = cellPixelsFor(this.surfaceQuality.terrain)
+    // And where it looks, so a long lens spends its patches inside the frame.
+    const looking = this.cameraPose()
+    this.#terrain.forward =
+      looking === null ? null : Q.rotate(looking.orientation, FORWARD)
     this.#terrain.update(
       this.world,
       shot.renderTime,

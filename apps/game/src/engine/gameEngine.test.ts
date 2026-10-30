@@ -523,6 +523,7 @@ describe('the terrain archive, through the engine', () => {
       temperature: 250,
       tidalProxy: 0,
       hasOcean: false,
+      hadOcean: false,
       reliefSpent: 1,
       publishedRelief: 6000,
     }),
@@ -718,6 +719,7 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
     water: new Float32Array(request.resolution * request.resolution).fill(
       Number.NaN,
     ),
+    morph: null,
     minElevation: 0,
     maxElevation: 0,
   }

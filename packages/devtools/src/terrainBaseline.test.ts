@@ -119,10 +119,12 @@ describe('the terrain baseline', () => {
     /*
      * Both `summarizeBaseline` branches from a clock. No descent asks for
      * fewer regions than the twelve the warm-up discards: `simulateDescent`
-     * flies at least two steps, and two steps over Sol already ask for more
-     * than seven hundred. A timed slice of zero patches is the same
-     * `g.patches === 0` a profile that short would produce, reached through
-     * the module's own option.
+     * flies at least two steps, and two steps over Sol ask for 690 (Miranda)
+     * to 786 (Iapetus). The bound is the warm-up and the default slice of
+     * forty-eight, what the module needs, rather than a count a body's ground
+     * moves. A timed slice of zero patches is the same `g.patches === 0` a
+     * profile that short would produce, reached through the module's own
+     * option.
      */
     const { world } = session({ seed: 'inertialref', workers: null })
     const one = terrainBaseline(world, counting(), {
@@ -133,7 +135,7 @@ describe('the terrain baseline', () => {
     expect(one.resolution).toBe(TIMED.resolution)
     expect(one.entries.length).toBeGreaterThan(0)
     for (const entry of one.entries) {
-      expect(descentRegions(entry.descent).length).toBeGreaterThan(700)
+      expect(descentRegions(entry.descent).length).toBeGreaterThan(12 + 48)
       expect(entry.generation.patches).toBe(1)
       expect(entry.generation.totalMs).toBe(1)
       expect(entry.generation.msPerPatch).toBe(1)

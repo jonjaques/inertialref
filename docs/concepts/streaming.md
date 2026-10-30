@@ -187,16 +187,21 @@ it: the size of the smallest thing a patch can express.
 "What the screen can tell" is a statement about optics, and it reads the lens
 the picture is actually taken with — [ADR-0017](../adr/0017-the-lens.md). A
 fixed angle would be right for exactly one setting of the field-of-view slider
-and three levels wrong across it — six once the zoom channel is counted; the
-patch demand climbs steeply with the pixels-per-radian, so the assumption would
-decide how much terrain exists rather than the picture deciding it. Not as its
-square, which is what the arithmetic suggests: refinement runs out of _levels_ at
-`surfaceDetailFloor` before it runs out of budget, and the telephoto end of the
-slider measures 1.9× to 3.2× the flight lens's demand rather than thirteen times
-it. Racking the zoom out on top of that is the one corner where the floor is
-reached and the square bites again — a telephoto held on a subject wants an order
-of magnitude past any cap, so the disk goes a level coarse on every step and says
-so. The viewport is
+and nearly four levels wrong across it — nearly seven once the zoom channel is
+counted; the patch demand climbs steeply with the pixels-per-radian, so the
+assumption would decide how much terrain exists rather than the picture deciding
+it. Not as its square, which is what the arithmetic suggests: refinement runs
+out of _levels_ at `surfaceDetailFloor` before it runs out of budget, and a whole
+disk at the telephoto end asks for 2,063 to 12,330 patches standing at two
+meters where the flight lens asks for 456 to 1,061, rather than forty-one times
+as many. That is still far past the cap, and a telephoto's pixel angle is a
+claim about its frame and nothing else — so past the flight lens the selection
+refines at the lens only where the frame can reach and at the flight lens
+everywhere else ([ADR-0055](../adr/0055-a-long-lens-refines-what-its-frame-can-reach.md)). The same eyes looking at the
+horizon ask for 950 to 3,494, which the coarsening ladder fits on every one.
+Racking the zoom out on top of that is the one corner where the square bites
+again — a telephoto held on a subject wants several times the cap even inside
+its frame, so the disk goes coarse on most steps and says so. The viewport is
 in **display** pixels with any supersampling divided back out: supersampling raises the
 sample count, not the
 detail a viewer can resolve, and feeding the raw buffer in asks for 6.5× the
@@ -344,6 +349,9 @@ keeping one cancellation handle for the caller. Level and request-shape limits
 are checked before submission. If no adapter can finish, the result is null;
 ordinary request failures propagate. `ir.terrain().producer` names the currently
 preferred available adapter, though a request beyond its limits uses the pool.
+The orbital baker asks in the [background lane](workers.md#two-lanes), so on
+either adapter its ninety-six tiles wait behind the streamer's ground rather
+than ahead of it.
 The GPU tile is held to the CPU tile by `terrainKernel.gpu.test.ts`: within
 3 × 10⁻⁵ of the budget plus eight sample offsets, which is under 4 cm on Earth
 from level 12 down and 1.21 m at level 0, where a sample's own position is held
@@ -366,7 +374,8 @@ headless runs use SQLite under `.data/heightfields/`. These stores are separate
 from saves and from the streamer's in-memory geometry and heightfield caches.
 A floating-origin move changes none of their inputs.
 
-Cache identity includes the complete surface and request, including `seabed`,
+Cache identity includes the complete surface — `surfaceIdentity`, the same
+text the drainage memo and the survey key on — and request, including `seabed`,
 plus the canonical terrain version and the namespace the source declares beside
 its own arithmetic: the pool's is its task's version (`POOL_ARCHIVE`), the GPU
 producer's its kernel's revision. CPU and GPU tiles therefore never share an
@@ -411,6 +420,18 @@ exactly that reason, 128 slots go out a frame, and a region is drawn only once i
 is whole: half a region drawn and then completed is rocks appearing out of
 nothing in the middle of the frame, which is worse than a region that arrives
 late. Slot 837 is slot 837 whichever call resolves it.
+
+**A rock stands on the triangle drawn under it, not on the field it was
+generated from.** The two differ by the mesh's interpolation error at whatever
+level the selection drew there — 2 to 11 cm in the mean at the detail floor and
+79 cm at the worst cell on Miranda, and up to 1.9 m two levels coarser, which is
+the ground a rock a hundred meters off stands on — and the generator cannot know
+the level, because the selection is a function of the camera. So the streamer
+answers a direction with the deepest drawn region holding it, its triangle and
+its morph (`patchGroundRadius`), and the layout's signature carries an epoch that
+moves only when the drawn set does. Nor does a rock stand under water: the
+scatter's water test is the clamp's own, so a lake bed or a riverbed under its
+level holds none ([ADR-0051](../adr/0051-a-rock-stands-on-the-drawn-ground.md)).
 
 It runs on the main thread rather than through the pool, which is the one place
 this differs from the heightfields, and it is affordable only at that budget:
@@ -500,14 +521,13 @@ gone.
 
 ## Current limits
 
-| Limit                                            | Consequence                                                                                                                       | Roadmap                                      |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| Interest is a radius scan over generation cells  | Fine at 6 ly; a spatial index is needed for large radii                                                                           | [roadmap](../roadmap.md#streaming-and-scale) |
-| The selection is not frustum-culled              | A whole disk is generated, of which the renderer draws about a third                                                              | [roadmap](../roadmap.md#terrain)             |
-| Vertex attributes are float32                    | 270 KB a patch, so a whole-disk selection is 129–291 MB at the flight lens                                                        | [roadmap](../roadmap.md#terrain)             |
-| Scatter resolves on the main thread              | A candidate slot is a field sample, so a 1,024-slot region is 8.5 ms and cannot land inside a frame; 128 slots go out a frame     | [roadmap](../roadmap.md#terrain)             |
-| The mesh is built on the main thread             | 0.25 ms a patch, budgeted at eight a frame; the producer already has the field                                                    | [roadmap](../roadmap.md#terrain)             |
-| Deposits are chosen from the mesh, not the field | Two patches at different levels report different slopes for the same ground, so a deposit weight steps by ~4% at a level boundary | [roadmap](../roadmap.md#terrain)             |
+| Limit                                           | Consequence                                                                                                                   | Roadmap                                      |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| Interest is a radius scan over generation cells | Fine at 6 ly; a spatial index is needed for large radii                                                                       | [roadmap](../roadmap.md#streaming-and-scale) |
+| The selection is not frustum-culled             | A whole disk is generated, of which the renderer draws about a third                                                          | [roadmap](../roadmap.md#terrain)             |
+| Vertex attributes are float32                   | 270 KB a patch, so a whole-disk selection is 129–291 MB at the flight lens                                                    | [roadmap](../roadmap.md#terrain)             |
+| Scatter resolves on the main thread             | A candidate slot is a field sample, so a 1,024-slot region is 8.5 ms and cannot land inside a frame; 128 slots go out a frame | [roadmap](../roadmap.md#terrain)             |
+| The mesh is built on the main thread            | 0.25 ms a patch, budgeted at eight a frame; the producer already has the field                                                | [roadmap](../roadmap.md#terrain)             |
 
 **The morph closes one level, and that is a constraint rather than a setting.**
 A vertex slides toward the position its _parent's_ grid holds for it, so where

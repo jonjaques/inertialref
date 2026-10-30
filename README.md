@@ -103,8 +103,8 @@ pnpm dev                 # → http://localhost:5173
 One command starts both halves — Astro on 5173 and the Cloudflare Worker on 8787,
 with `/api` and `/ws` proxied to it. `pnpm dev:client` and `pnpm dev:server` are
 the halves if you want one without the other. After a fresh install,
-`pnpm docs:build && pnpm dev:client` starts the client without a full build;
-combined development also needs the Worker assets produced by `pnpm build`.
+`pnpm dev:client` starts the client without a full build, generating the
+documentation manifest on its first start; combined development also needs the Worker assets produced by `pnpm build`.
 `pnpm preview` builds and then
 serves the result through the real Worker, which is the closest thing to
 production that runs locally.

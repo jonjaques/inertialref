@@ -20,7 +20,11 @@ import {
   type HeightfieldSource,
 } from '@inertialref/workers'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
-import { createTileProducer, type TileProducer } from './terrainProducer.ts'
+import {
+  createTileProducer,
+  TILES_PER_BATCH,
+  type TileProducer,
+} from './terrainProducer.ts'
 
 /*
  * The producer around the kernel: batching, the body upload, cancellation,
@@ -219,6 +223,58 @@ describe('the tile producer', () => {
     })
   })
 
+  it('reads back no water for a body that does not drain, and hands it the NaN', async () => {
+    /*
+     * With the drainage gate closed the kernel writes "none" at every
+     * vertex, so the producer leaves the water buffer on the device and
+     * gives each tile the NaN the readback would have come to. Counted at
+     * the renderer's readback, which is the one call a copy cannot be issued
+     * without: two for Luna's batch, three for Earth's.
+     */
+    const luna = solBody('Luna')
+    const earth = solBody('Earth')
+    const own = createTileProducer(gpu.renderer)
+    const reads = vi.spyOn(gpu.renderer, 'getArrayBufferAsync')
+    try {
+      const wanted = regions(0, 4)
+      const dry = await Promise.all(
+        wanted.map(
+          (region) => own.submit(luna.surface, requestFor(region)).result,
+        ),
+      )
+      const dryReads = reads.mock.calls.length
+      reads.mockClear()
+      const wet = await Promise.all(
+        wanted.map(
+          (region) => own.submit(earth.surface, requestFor(region)).result,
+        ),
+      )
+      const wetReads = reads.mock.calls.length
+      expect(own.stats().batches).toBe(2)
+      expect({ dryReads, wetReads }).toEqual({ dryReads: 2, wetReads: 3 })
+      // The water a dry tile carries is the CPU tile's, to the bit: a
+      // `Float32Array` of NaN at every vertex.
+      dry.forEach((tile, i) => {
+        const expected = generateHeightfield(
+          luna.surface,
+          requestFor(wanted[i] as RegionAddress),
+        ).water
+        expect(tile.water).toBeInstanceOf(Float32Array)
+        expect(tile.water).toHaveLength(expected.length)
+        expect(new Uint32Array(tile.water.buffer)).toEqual(
+          new Uint32Array(expected.buffer),
+        )
+      })
+      // And the wet body's is still read: at level 0 its sea is on every face.
+      expect(
+        wet.some((tile) => tile.water.some((level) => !Number.isNaN(level))),
+      ).toBe(true)
+    } finally {
+      reads.mockRestore()
+      own.dispose()
+    }
+  })
+
   it('cancels what is still queued and delivers what was already dispatched', async () => {
     const luna = solBody('Luna')
     const handles = regions(10, 40).map((region) =>
@@ -344,6 +400,38 @@ describe('the tile producer', () => {
     } finally {
       own.dispose()
     }
+  })
+
+  it('serves the ground ahead of a bake queued before it', async () => {
+    /*
+     * The orbital bake asks for ninety-six tiles at once, and the streamer
+     * asks for the ground a descent is about to need. Asked in one queue, a
+     * bake that starts on a descent holds that ground behind every one of its
+     * own batches; in the background lane the next batch after the one on the
+     * GPU is the ground's, and the bake resumes behind it.
+     */
+    const luna = solBody('Luna')
+    const order: string[] = []
+    const bake = regions(2, 48).map((region, i) => {
+      const job = producer.submit(
+        luna.surface,
+        requestFor(region),
+        'background',
+      )
+      void job.result.then(() => order.push(`bake ${i}`))
+      return job
+    })
+    // The first batch is taken on a microtask: this turn sees it dispatched.
+    await Promise.resolve()
+    expect(producer.stats().inFlight).toBe(TILES_PER_BATCH)
+    const [near] = regions(12, 1) as [RegionAddress]
+    const ground = producer.submit(luna.surface, requestFor(near), 'foreground')
+    void ground.result.then(() => order.push('ground'))
+    await Promise.all([ground.result, ...bake.map((job) => job.result)])
+    // Only the batch already on the GPU lands before it.
+    expect(order.indexOf('ground')).toBe(TILES_PER_BATCH)
+    expect(order).toHaveLength(49)
+    expect(producer.stats().queued).toBe(0)
   })
 
   it('refuses a request shaped for another kernel rather than answering it wrong', async () => {

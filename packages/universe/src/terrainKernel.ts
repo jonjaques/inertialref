@@ -11,24 +11,35 @@ import {
   HYPSOMETRY_SHAPE,
   octavesFor,
   RELIEF_SHAPE,
+  STRIPE_SHAPE,
+  stripeChord,
   SULCI_SHAPE,
 } from './bands.ts'
 import { COVER_CHANNELS } from './cover.ts'
 import { MAX_RAY_CRATERS, RAY_HARMONICS } from './craters.ts'
 import {
-  DRAINAGE_SHAPE,
   type DrainageGraph,
   drainageGraph,
+  drainageLookup,
+  drainageRefinement,
   NO_STANDING,
+  regionDrainageLevel,
   SEGMENT_STRIDE,
 } from './drainage.ts'
+import { DRAINAGE_SHAPE, DRAINAGE_WARP_OFFSETS } from './drainageShape.ts'
 import {
   GRIT_OCTAVES,
   gritCycles,
   gritRelief,
   MICRO_CRATER_CEILING,
 } from './micro.ts'
-import { type CraterLevel, MAX_CRATER_LEVELS, terrainSketch } from './sketch.ts'
+import { directionToFace, faceToDirection } from './regions.ts'
+import {
+  type CraterLevel,
+  MAX_CRATER_LEVELS,
+  type TerrainSketch,
+  terrainSketch,
+} from './sketch.ts'
 import type { SurfaceParameters } from './system.ts'
 import {
   coastWidth,
@@ -100,14 +111,14 @@ export const MAX_TILE_LEVEL = 23
  *
  *   plate    [ax ay az continental] [mx my mz base] [step · · ·]
  *   hotspot  [ax ay az radius] [strength caldera · ·]
- *   stripe   [px py pz halfWidth] [offset · · ·]
+ *   stripe   [px py pz halfWidth] [offset end taper ·] [cx cy cz ·]
  *   level    [cells diameter density rung]
  *   ray      [ax ay az angularRadius] [tx ty tz age] [bx by bz cosReach]
  *            [phase0 phase1 phase2 phase3] [phase4 phase5 · ·]
  */
 export const PLATE_STRIDE = 3
 export const HOTSPOT_STRIDE = 2
-export const STRIPE_STRIDE = 2
+export const STRIPE_STRIDE = 3
 export const LEVEL_STRIDE = 1
 export const RAY_STRIDE = 5
 
@@ -148,7 +159,6 @@ export const SCALAR = {
   WARP_AMOUNT: 31,
   DUNE_CYCLES: 32,
   CHAOS_CELLS: 33,
-  DRAINAGE: 34,
   LIQUID: 35,
   BIOTA: 36,
   DRAINAGE_DATUM: 37,
@@ -157,7 +167,10 @@ export const SCALAR = {
   DRAINAGE_REACH: 39,
 } as const
 
-/** `vec4` slots the scalar block occupies. Forty-eight floats; forty are spent. */
+/**
+ * `vec4` slots the scalar block occupies. Forty-eight floats; thirty-nine are
+ * spent, and index 34 is free.
+ */
 const SCALAR_SLOTS = 12
 
 export const SCALARS_AT = 0
@@ -211,20 +224,48 @@ export const WORD = {
   ERODED: 29,
   SEED_DRAINAGE: 30,
   SEED_RAIN: 31,
-  /** Cells per face edge of the drainage lattice; zero where no graph. */
+  /**
+   * Cells per face edge of the drainage lattice; zero where no graph. The
+   * drainage stage's gate in `BAND_STACK`, and the only one: every reader of
+   * the drainage buffer tests it.
+   */
   DRAINAGE_CELLS: 32,
+  /**
+   * The refinement's first and last levels (`Refinement.first`, `.last`):
+   * a tile carves the ones between that its own resolution reaches
+   * (`regionDrainageLevel`). Zero where no graph.
+   */
+  REFINED_FIRST: 33,
+  REFINED_LAST: 34,
 } as const
 
 /*
- * The drainage graph's two buffers, sized once for the lattice every body
- * uses: one of `vec4` floats, one of words. Two rather than five because a
- * compute stage may bind eight storage buffers on the baseline device and
- * the stack's own five plus the water are six.
+ * The drainage graph, in one buffer of words read through the offset table
+ * below, sized once for the lattice every body uses.
  *
- *   records  [nodes: x y z lake] × MAX_NODES, then [segments] × MAX_NODES
- *            at DRAINAGE_SEGMENT_STRIDE slots each
- *   words    neighbors (eight a node, 0xffffffff where none), then the
- *            cell starts (MAX_NODES + 1), then the cell lists
+ * One buffer rather than one per list, because a compute stage may bind
+ * eight storage buffers on the baseline device and the stack spends six of
+ * them: its records, its words, its tiles and its three outputs. Nothing
+ * requests a raised limit — not the renderer, not the producer, not the Dawn
+ * harness — and a raised one would make the kernel build on one adapter and
+ * not on the next. Packing the graph into a buffer the stack already binds
+ * would only move the wall. So the graph is one binding however many lists
+ * it grows: a list is a row in this table, not a binding in the kernel, and
+ * `terrainKernel.gpu.test.ts` counts the kernel's bindings against the
+ * baseline's eight.
+ *
+ * Words throughout, because a buffer has one element type. The node and
+ * segment records are floats stored by their bits — written through a
+ * `Float32Array` over the same memory, read back with `bitcast` — which is
+ * the value a `vec4<f32>` buffer would have held, to the last bit, and the
+ * graph's words keep their integers exact. The other way round would carry
+ * `0xffffffff`, a neighbor that is not there, as a NaN.
+ *
+ *   nodes        [x y z lake] × MAX_NODES, four words each
+ *   segments     [SEGMENT_STRIDE floats] × MAX_NODES
+ *   neighbors    eight a node, 0xffffffff where none
+ *   cell starts  MAX_NODES + 1
+ *   cell lists   MAX_LISTS
  *
  * A node per cell and at most a segment per node; the cell lists are the
  * rasterizer's, measured at a mean of two to nine entries a cell and a peak
@@ -237,25 +278,62 @@ export const MAX_KERNEL_DRAINAGE_NODES = 6 * DRAINAGE_SHAPE.lattice ** 2
 export const MAX_KERNEL_DRAINAGE_LISTS = 16 * MAX_KERNEL_DRAINAGE_NODES
 /** `vec4` slots per segment: `SEGMENT_STRIDE / 4`. */
 export const DRAINAGE_SEGMENT_STRIDE = SEGMENT_STRIDE / 4
+/** Words, like every offset below. */
 export const DRAINAGE_NODES_AT = 0
-/**
- * An offset, not an alias: it equals `MAX_KERNEL_DRAINAGE_NODES` because the
- * node records come first.
- */
-export const DRAINAGE_SEGMENTS_AT = MAX_KERNEL_DRAINAGE_NODES
-/** `vec4` slots in the drainage records. */
-export const DRAINAGE_RECORDS =
-  DRAINAGE_SEGMENTS_AT + MAX_KERNEL_DRAINAGE_NODES * DRAINAGE_SEGMENT_STRIDE
-export const DRAINAGE_NEIGHBORS_AT = 0
-export const DRAINAGE_CELL_START_AT = 8 * MAX_KERNEL_DRAINAGE_NODES
+export const DRAINAGE_SEGMENTS_AT =
+  DRAINAGE_NODES_AT + 4 * MAX_KERNEL_DRAINAGE_NODES
+export const DRAINAGE_NEIGHBORS_AT =
+  DRAINAGE_SEGMENTS_AT + SEGMENT_STRIDE * MAX_KERNEL_DRAINAGE_NODES
+export const DRAINAGE_CELL_START_AT =
+  DRAINAGE_NEIGHBORS_AT + 8 * MAX_KERNEL_DRAINAGE_NODES
 export const DRAINAGE_CELL_LISTS_AT =
   DRAINAGE_CELL_START_AT + MAX_KERNEL_DRAINAGE_NODES + 1
-/** Words in the drainage words. */
-export const DRAINAGE_WORDS = DRAINAGE_CELL_LISTS_AT + MAX_KERNEL_DRAINAGE_LISTS
+/*
+ * The refinement below the lattice, per batch: the lists each tile's samples
+ * can name at every refined level it resolves, rows in the same buffer
+ * rather than a binding of their own, written for each dispatch and uploaded
+ * as one range (`TerrainKernel.drainage`'s update range).
+ *
+ * The drainage buffer and not the tiles buffer, though the rows are per tile,
+ * because they are the graph's: the lattice's lists are read through this
+ * buffer's offset table, and a refined list is the same record in the same
+ * loop. The cost is the one range a batch writes rather than nothing.
+ *
+ *   per tile    [ox oy oz ·] [rx ry rz ·], the origin and its rounding,
+ *               then a [start count] pair a refined level
+ *   entries     [key recordStart recordCount] per cell of a level
+ *   records     `SEGMENT_STRIDE` floats each, positions less the tile's origin
+ *
+ * **A record's positions are its tile's.** A creek at the finest level is a
+ * meter or two wide and a float32 unit vector resolves six parts in 10⁸ of
+ * a radian — 0.4 m on Earth — so a creek's bed read off absolute directions
+ * would land a bank away on one processor from where it lies on the other.
+ * Packed less the tile's origin, a record is a small vector float32 holds to
+ * a fraction of a millimeter, and the kernel measures the sample against it
+ * the same way (`TerrainKernel`'s refined walk).
+ */
+/** Refined levels a tile can carve: the most any body in the catalog refines. */
+export const MAX_REFINED_LEVELS = 10
+/** Words of one tile's header in the refined rows. */
+export const REFINED_TILE_WORDS = 8 + 2 * MAX_REFINED_LEVELS
+/** Tiles one dispatch may carry refined rows for. */
+export const MAX_REFINED_TILES = 64
+/** Words per cell entry: `[key recordStart recordCount]`. */
+export const REFINED_ENTRY_WORDS = 3
+/** Where the refined rows begin. */
+export const DRAINAGE_REFINED_AT =
+  DRAINAGE_CELL_LISTS_AT + MAX_KERNEL_DRAINAGE_LISTS
+/** Words the refined rows may fill in one dispatch. */
+export const MAX_REFINED_WORDS = 1 << 20
+/** Words in the drainage buffer. */
+export const DRAINAGE_WORDS = DRAINAGE_REFINED_AT + MAX_REFINED_WORDS
 
 /** The graph as the kernel reads it, in the layout above; packed once per graph. */
 export interface KernelDrainage {
-  readonly records: Float32Array
+  /**
+   * The buffer up to the refined rows: the floats by their bits, the
+   * integers as themselves.
+   */
   readonly words: Uint32Array
   readonly segmentCount: number
 }
@@ -315,8 +393,21 @@ export const COVER_WORDS = COVER_CHANNELS / 4
  * an alias: it equals `MAX_KERNEL_LEVELS` because the crater frames come first.
  */
 export const GRIT_FRAMES_AT = MAX_KERNEL_LEVELS
-/** Rung frames a tile carries: every crater level, then every grit octave. */
-export const TILE_FRAMES = MAX_KERNEL_LEVELS + GRIT_OCTAVES
+/**
+ * Where the drainage warp's three lookups start in a tile's frames, one
+ * frame for each of `DRAINAGE_WARP_OFFSETS`.
+ *
+ * The warp is a noise read at the direction times a hundred and sixty
+ * cycles, and read off the sample's own float32 direction it is a hundred
+ * and sixty times that direction's rounding — half a meter of lookup on
+ * Earth, which is a lattice river's bank moved enough to turn a cover byte
+ * by six and a refined creek's bed moved most of its own width. Read from
+ * the tile's frame plus `delta`, as the grit is, it is exact to float32's
+ * fraction.
+ */
+export const WARP_FRAMES_AT = GRIT_FRAMES_AT + GRIT_OCTAVES
+/** Frames a tile carries: every crater level, every grit octave, the warp. */
+export const TILE_FRAMES = WARP_FRAMES_AT + DRAINAGE_WARP_OFFSETS.length
 /**
  * `vec4` slots per tile: `[face level i j]`, then per frame `[c0]` and `[f0]`.
  *
@@ -469,12 +560,12 @@ function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
   scalar(SCALAR.DUNE_CYCLES, reliefCycles * DUNE_SHAPE.cycles)
   scalar(SCALAR.CHAOS_CELLS, grammar.meanRadius / CHAOS_SHAPE.blockMeters)
   /*
-   * The drainage gate is the graph's existence, not the grammar's number
-   * alone: `drainageGraph` is null on a bare body and on one the grammar
-   * gives no drainage, and the stage on the CPU does nothing without it.
+   * Null on a bare body and on one the grammar gives no drainage. Its
+   * existence is the drainage stage's gate, and the gate is one word —
+   * `WORD.DRAINAGE_CELLS`, below — because the kernel's drainage buffer
+   * outlives the body that filled it.
    */
   const graph = drainageGraph(surface)
-  scalar(SCALAR.DRAINAGE, graph === null ? 0 : grammar.drainage)
   scalar(SCALAR.DRAINAGE_REACH, graph === null ? 0 : graph.reach)
   scalar(SCALAR.LIQUID, grammar.liquid)
   scalar(SCALAR.BIOTA, grammar.biota)
@@ -505,10 +596,22 @@ function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
     put(at, hotspot.axis.x, hotspot.axis.y, hotspot.axis.z, hotspot.radius)
     put(at + 4, hotspot.strength, hotspot.caldera)
   })
+  /*
+   * A stripe's extent travels as the two chords `stripeProfile` compares
+   * against, the end and where the taper starts, taken here in float64 so
+   * the kernel reads the same arc the CPU does rather than a sine of a
+   * float32 angle.
+   */
   sketch.stripes.forEach((stripe, i) => {
     const at = slot(STRIPES_AT + i * STRIPE_STRIDE)
     put(at, stripe.pole.x, stripe.pole.y, stripe.pole.z, stripe.halfWidth)
-    put(at + 4, stripe.offset)
+    put(
+      at + 4,
+      stripe.offset,
+      stripeChord(stripe.halfLength),
+      stripeChord(stripe.halfLength * (1 - STRIPE_SHAPE.taper)),
+    )
+    put(at + 8, stripe.center.x, stripe.center.y, stripe.center.z)
   })
   /*
    * Every rung, canonical then tail, each carrying the rung number its hashes
@@ -604,6 +707,14 @@ function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
   words[WORD.SEED_DRAINAGE] = seeds.drainage.a >>> 0
   words[WORD.SEED_RAIN] = seeds.rain.a >>> 0
   words[WORD.DRAINAGE_CELLS] = graph === null ? 0 : graph.cells
+  const refinement = graph === null ? null : drainageRefinement(graph)
+  invariant(
+    refinement === null ||
+      refinement.last - refinement.first + 1 <= MAX_REFINED_LEVELS,
+    `${surface.grammar.meanRadius} m refines past the kernel's ${MAX_REFINED_LEVELS} levels`,
+  )
+  words[WORD.REFINED_FIRST] = refinement?.first ?? 0
+  words[WORD.REFINED_LAST] = refinement?.last ?? 0
 
   /*
    * The octave counts, from the same calls the bands make with the same
@@ -677,36 +788,203 @@ function packDrainage(graph: DrainageGraph): KernelDrainage {
     graph.nodes <= MAX_KERNEL_DRAINAGE_NODES,
     `${graph.nodes} drainage nodes exceed the kernel's ${MAX_KERNEL_DRAINAGE_NODES}`,
   )
+  // Its own check, not the nodes': the regions share one buffer, so a
+  // segment past its region raises nothing and lands on the neighbor table.
+  invariant(
+    graph.segments.length <= SEGMENT_STRIDE * MAX_KERNEL_DRAINAGE_NODES,
+    `${graph.segmentCount} drainage segments exceed the kernel's ${MAX_KERNEL_DRAINAGE_NODES}`,
+  )
   invariant(
     graph.cellSegments.length <= MAX_KERNEL_DRAINAGE_LISTS,
     `${graph.cellSegments.length} drainage list entries exceed the kernel's ${MAX_KERNEL_DRAINAGE_LISTS}`,
   )
-  const records = new Float32Array(DRAINAGE_RECORDS * 4)
-  const words = new Uint32Array(DRAINAGE_WORDS)
+  // The lattice's rows only: the refined rows are a batch's, written per
+  // dispatch (`packRefinedTiles`), and a graph has no use for their space.
+  const words = new Uint32Array(DRAINAGE_REFINED_AT)
+  const floats = new Float32Array(words.buffer)
   for (let n = 0; n < graph.nodes; n += 1) {
-    const at = (DRAINAGE_NODES_AT + n) * 4
-    records[at] = graph.positions[n * 3] as number
-    records[at + 1] = graph.positions[n * 3 + 1] as number
-    records[at + 2] = graph.positions[n * 3 + 2] as number
+    const at = DRAINAGE_NODES_AT + n * 4
+    floats[at] = graph.positions[n * 3] as number
+    floats[at + 1] = graph.positions[n * 3 + 1] as number
+    floats[at + 2] = graph.positions[n * 3 + 2] as number
     // NaN has no literal the kernel can compare against; a lake level below
     // any ground is the same "none" in a `greaterThan`.
     const lake = graph.lake[n] as number
-    records[at + 3] = Number.isNaN(lake) ? NO_KERNEL_WATER : lake
+    floats[at + 3] = Number.isNaN(lake) ? NO_KERNEL_WATER : lake
     for (let k = 0; k < 8; k += 1) {
       const m = graph.neighbors[n * 8 + k] as number
       words[DRAINAGE_NEIGHBORS_AT + n * 8 + k] = m < 0 ? 0xffff_ffff : m
     }
   }
-  records.set(graph.segments, DRAINAGE_SEGMENTS_AT * 4)
+  floats.set(graph.segments, DRAINAGE_SEGMENTS_AT)
   words.set(graph.cellStart, DRAINAGE_CELL_START_AT)
   words.set(graph.cellSegments, DRAINAGE_CELL_LISTS_AT)
-  const built: KernelDrainage = {
-    records,
-    words,
-    segmentCount: graph.segmentCount,
-  }
+  const built: KernelDrainage = { words, segmentCount: graph.segmentCount }
   packedDrainage.set(graph, built)
   return built
+}
+
+/**
+ * Write each tile's refined rows into the drainage buffer's words, and
+ * return how many words past `DRAINAGE_REFINED_AT` were written — the range
+ * the dispatch uploads. Tile `t` of the batch reads header `t`.
+ *
+ * A tile names, at each refined level its region resolves, every cell any of
+ * its samples can fall in: the cell under each of a 9 × 9 grid of lookups
+ * over the bordered tile, and the cells a step of `REFINED_MARGIN` cells away
+ * from each. The warp's slope is under a half, so a sample between grid
+ * lookups is within that step of one, and the step is also what a float32
+ * lookup can differ from the float64 one by, many times over. Returns null
+ * where the rows would overrun `MAX_REFINED_WORDS`, and the producer sends
+ * that batch's tiles to the pool.
+ */
+export function packRefinedTiles(
+  surface: SurfaceParameters,
+  regions: readonly RegionAddress[],
+  layout: { readonly resolution: number; readonly border: number },
+  words: Uint32Array,
+): number | null {
+  invariant(
+    regions.length <= MAX_REFINED_TILES,
+    `${regions.length} tiles exceed the kernel's ${MAX_REFINED_TILES} refined headers`,
+  )
+  const graph = drainageGraph(surface)
+  const floats = new Float32Array(words.buffer)
+  if (graph === null) return 0
+  const refinement = drainageRefinement(graph)
+  const sketch = terrainSketch(surface)
+  let cursor = DRAINAGE_REFINED_AT + MAX_REFINED_TILES * REFINED_TILE_WORDS
+  const limit = DRAINAGE_REFINED_AT + MAX_REFINED_WORDS
+  for (const [t, region] of regions.entries()) {
+    const header = DRAINAGE_REFINED_AT + t * REFINED_TILE_WORDS
+    /*
+     * The origin is the tile's true center rounded to float32, and the
+     * rounding is written beside it: the kernel's `delta` is the sample's
+     * offset from the true center, so the residual is what puts the sample
+     * on the origin's footing exactly.
+     */
+    const origin = regionDirection(region, 0.5, 0.5)
+    floats[header] = origin.x
+    floats[header + 1] = origin.y
+    floats[header + 2] = origin.z
+    words[header + 3] = 0
+    const ox = floats[header] as number
+    const oy = floats[header + 1] as number
+    const oz = floats[header + 2] as number
+    floats[header + 4] = origin.x - ox
+    floats[header + 5] = origin.y - oy
+    floats[header + 6] = origin.z - oz
+    words[header + 7] = 0
+    const lookups = refinedLookups(graph, sketch, region, layout)
+    const finest = Math.min(refinement.last, regionDrainageLevel(region.level))
+    for (let k = 0; k < MAX_REFINED_LEVELS; k += 1) {
+      const level = refinement.first + k
+      const pair = header + 8 + k * 2
+      if (level > finest) {
+        words[pair] = 0
+        words[pair + 1] = 0
+        continue
+      }
+      const cells = refinedCells(lookups, level)
+      const entries = cursor
+      cursor += cells.length * REFINED_ENTRY_WORDS
+      if (cursor > limit) return null
+      words[pair] = entries
+      words[pair + 1] = cells.length
+      for (const [e, cell] of cells.entries()) {
+        const records = refinement.listAt(level, cell.face, cell.i, cell.j)
+        const entry = entries + e * REFINED_ENTRY_WORDS
+        const span = 2 ** level
+        words[entry] = (cell.face * span + cell.i) * span + cell.j
+        words[entry + 1] = cursor
+        words[entry + 2] = records.length / SEGMENT_STRIDE
+        if (cursor + records.length > limit) return null
+        floats.set(records, cursor)
+        for (
+          let at = cursor;
+          at < cursor + records.length;
+          at += SEGMENT_STRIDE
+        ) {
+          floats[at] = (floats[at] as number) - ox
+          floats[at + 1] = (floats[at + 1] as number) - oy
+          floats[at + 2] = (floats[at + 2] as number) - oz
+          floats[at + 4] = (floats[at + 4] as number) - ox
+          floats[at + 5] = (floats[at + 5] as number) - oy
+          floats[at + 6] = (floats[at + 6] as number) - oz
+        }
+        cursor += records.length
+      }
+    }
+  }
+  return cursor - DRAINAGE_REFINED_AT
+}
+
+/** How far past each grid lookup a tile's cells are taken, in that level's cells. */
+const REFINED_MARGIN = 0.35
+
+/** Lookups over a tile's bordered grid, 9 × 9, as flat triples. */
+function refinedLookups(
+  graph: DrainageGraph,
+  sketch: TerrainSketch,
+  region: RegionAddress,
+  layout: { readonly resolution: number; readonly border: number },
+): Float64Array {
+  const out = new Float64Array(81 * 3)
+  const step = layout.resolution - 1
+  const from = -layout.border / step
+  const span = (step + 2 * layout.border) / step
+  for (let a = 0; a < 9; a += 1) {
+    for (let b = 0; b < 9; b += 1) {
+      const lookup = drainageLookup(
+        graph,
+        sketch,
+        regionDirection(region, from + (span * b) / 8, from + (span * a) / 8),
+      )
+      const at = (a * 9 + b) * 3
+      out[at] = lookup.x
+      out[at + 1] = lookup.y
+      out[at + 2] = lookup.z
+    }
+  }
+  return out
+}
+
+/** The cells of `level` the lookups and their margins fall in, each once. */
+function refinedCells(
+  lookups: Float64Array,
+  level: number,
+): { readonly face: number; readonly i: number; readonly j: number }[] {
+  const span = 2 ** level
+  const step = (REFINED_MARGIN * 2) / span
+  const seen = new Set<number>()
+  const out: { face: number; i: number; j: number }[] = []
+  for (let at = 0; at < lookups.length; at += 3) {
+    const x = lookups[at] as number
+    const y = lookups[at + 1] as number
+    const z = lookups[at + 2] as number
+    const { face, u, v } = directionToFace({ x, y, z })
+    for (const du of [-step, 0, step]) {
+      for (const dv of [-step, 0, step]) {
+        const there =
+          du === 0 && dv === 0
+            ? { face, u, v }
+            : directionToFace(faceToDirection(face, u + du, v + dv))
+        const i = Math.min(
+          span - 1,
+          Math.max(0, Math.floor(((there.u + 1) / 2) * span)),
+        )
+        const j = Math.min(
+          span - 1,
+          Math.max(0, Math.floor(((there.v + 1) / 2) * span)),
+        )
+        const key = (there.face * span + i) * span + j
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({ face: there.face, i, j })
+      }
+    }
+  }
+  return out
 }
 
 /**
@@ -748,10 +1026,10 @@ export function writeTileFrame(
   out[at + 1] = region.level
   out[at + 2] = region.i
   out[at + 3] = region.j
-  const frame = (index: number, cells: number): void => {
+  const frame = (index: number, cells: number, offset = 0): void => {
     const cell = at + 4 + index * 8
     const fraction = cell + 4
-    writeAxisFrame(center.x, cells, out, cell, fraction)
+    writeAxisFrame(center.x, cells, out, cell, fraction, offset)
     writeAxisFrame(center.y, cells, out, cell + 1, fraction + 1)
     writeAxisFrame(center.z, cells, out, cell + 2, fraction + 2)
     out[cell + 3] = 0
@@ -761,6 +1039,12 @@ export function writeTileFrame(
   kernel.gritFrequencies.forEach((frequency, k) =>
     frame(GRIT_FRAMES_AT + k, frequency),
   )
+  // `drainageLookup`'s cycles: every graph is on the one lattice.
+  const warp =
+    DRAINAGE_SHAPE.warpCycles * DRAINAGE_SHAPE.lattice * (2 / Math.PI) * 2
+  DRAINAGE_WARP_OFFSETS.forEach((offset, k) =>
+    frame(WARP_FRAMES_AT + k, warp, offset),
+  )
 }
 
 function writeAxisFrame(
@@ -769,8 +1053,9 @@ function writeAxisFrame(
   out: Float32Array,
   cellAt: number,
   fractionAt: number,
+  offset = 0,
 ): void {
-  const scaled = component * cells
+  const scaled = component * cells + offset
   const cell = Math.floor(scaled)
   invariant(
     Math.abs(cell) < 2 ** 24,

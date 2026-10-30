@@ -1,9 +1,11 @@
+import fc from 'fast-check'
 import { describe, expect, it, vi } from 'vitest'
 import { rootSeed } from '@inertialref/procedural'
 import {
   generateHeightfield,
   regionAddress,
   surfaceGrammar,
+  surfaceIdentity,
 } from '@inertialref/universe'
 import type { ArchivedSource } from './tasks.ts'
 import {
@@ -26,6 +28,7 @@ const surface = {
     temperature: 270,
     tidalProxy: 0,
     hasOcean: true,
+    hadOcean: true,
     reliefSpent: 1,
     publishedRelief: 8000,
   }),
@@ -80,9 +83,86 @@ function fixture() {
   return { rows, store, source, archive, cache: archive.wrap(source) }
 }
 
+/** The path to every leaf of a plain record: each number, string, boolean and null in it. */
+function leaves(value: unknown, path: readonly string[] = []): string[][] {
+  if (value === null || typeof value !== 'object') return [[...path]]
+  return Object.entries(value).flatMap(([key, item]) =>
+    leaves(item, [...path, key]),
+  )
+}
+
+/** A copy of `value` with one leaf replaced, every record on the way to it new. */
+function replaced(
+  value: unknown,
+  path: readonly string[],
+  leaf: unknown,
+): unknown {
+  const [head, ...rest] = path
+  if (head === undefined) return leaf
+  const record = value as Record<string, unknown>
+  return { ...record, [head]: replaced(record[head], rest, leaf) }
+}
+
 describe('regenerable heightfield cache', () => {
-  it('keys the full surface, request, producer and arithmetic versions independent of object order', () => {
+  /*
+   * The archive key is the surface's identity, the request's, the canonical
+   * terrain version and the producer's namespace, and the property is that it
+   * moves exactly when one input field does — over every leaf of the surface,
+   * its grammar included, and of the request, read off the records rather than
+   * listed, so a field added to either is a field this already covers.
+   *
+   * The values are weighted to the ones a serializer collapses:
+   * `JSON.stringify` writes `null` for NaN and both infinities and `0` for −0,
+   * and drops a field set to `undefined` altogether. Two of those at one leaf
+   * sharing a key is a lookup answered with a tile generated from different
+   * arithmetic.
+   */
+  it('moves the key exactly when a field of the surface or the request moves', () => {
+    // `seabed` spelled out, so the one optional request member is a leaf too.
+    const inputs = { surface, request: { ...request, seabed: false } }
+    const awkward = fc.constantFrom<unknown>(
+      null,
+      undefined,
+      Number.NaN,
+      Infinity,
+      -Infinity,
+      0,
+      -0,
+      '',
+      'null',
+      'NaN',
+      false,
+    )
+    const value = fc.oneof(awkward, fc.double(), fc.integer(), fc.string())
+    const key = (changed: unknown): string => {
+      const { surface: s, request: r } = changed as typeof inputs
+      return heightfieldCacheKey(s, r, 'cpu')
+    }
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...leaves(inputs)),
+        value,
+        value,
+        (path, a, b) => {
+          const x = replaced(inputs, path, a)
+          const y = replaced(inputs, path, b)
+          expect(key(x) === key(y)).toBe(Object.is(a, b))
+          if (path[0] === 'surface') {
+            const sx = (x as typeof inputs).surface
+            const sy = (y as typeof inputs).surface
+            expect(surfaceIdentity(sx) === surfaceIdentity(sy)).toBe(
+              Object.is(a, b),
+            )
+          }
+        },
+      ),
+      { numRuns: 2_000 },
+    )
+  })
+  it('keys a surface and a request rebuilt in another order alike, under its version and namespace', () => {
     const key = heightfieldCacheKey(surface, request, 'cpu')
+    // A worker rebuilds the surface from its payload, and a request may be
+    // spread in any order; neither is a different tile.
     expect(
       heightfieldCacheKey(
         { ...surface, grammar: { ...surface.grammar } },
@@ -90,41 +170,11 @@ describe('regenerable heightfield cache', () => {
         'cpu',
       ),
     ).toBe(key)
-    for (const changed of [
-      { ...request, seabed: true },
-      { ...request, border: 0 },
-      { ...request, resolution: 4 },
-      { ...request, region: regionAddress(1, 2, 0, 0) },
-    ])
-      expect(heightfieldCacheKey(surface, changed, 'cpu')).not.toBe(key)
-    for (const changed of [
-      { ...surface, maxElevation: 8001 },
-      { ...surface, roughness: 4 },
-      { ...surface, seaLevel: null },
-      { ...surface, seed: rootSeed('other') },
-      {
-        ...surface,
-        grammar: {
-          ...surface.grammar,
-          meanRadius: surface.grammar.meanRadius + 1,
-        },
-      },
-    ])
-      expect(heightfieldCacheKey(changed, request, 'cpu')).not.toBe(key)
     expect(heightfieldCacheKey(surface, request, 'gpu')).not.toBe(key)
     // The canonical terrain version leads the key, under every namespace.
     expect(
       key.startsWith(JSON.stringify(heightfieldArchiveVersion('cpu'))),
     ).toBe(true)
-  })
-  it('separates a non-finite number from null and from the other non-finites', () => {
-    // `JSON.stringify` writes `null` for NaN and for either infinity, so four
-    // distinct sea levels would have shared one key and the cache would have
-    // answered a lookup with a tile generated from different arithmetic.
-    const keys = [null, Number.NaN, Infinity, -Infinity].map((seaLevel) =>
-      heightfieldCacheKey({ ...surface, seaLevel }, request, 'cpu'),
-    )
-    expect(new Set(keys).size).toBe(4)
   })
   it('restores every typed array exactly across archives without generating', async () => {
     const f = fixture()
@@ -222,6 +272,17 @@ function deferred(namespace: string) {
     arrive: () => resolve(generateHeightfield(surface, request)),
   }
 }
+
+it('asks its source in the caller’s lane on a miss', async () => {
+  // The lane is not part of the key: the bake and the streamer asking for one
+  // region are one tile, and a hit answers either without asking anyone.
+  const f = fixture()
+  await f.cache.submit(surface, request, 'background').result
+  expect(vi.mocked(f.source.submit).mock.calls[0]![2]).toBe('background')
+  await f.archive.flush()
+  await f.cache.submit(surface, request, 'foreground').result
+  expect(f.source.submit).toHaveBeenCalledOnce()
+})
 
 describe('the archive', () => {
   it('retires every producer’s lookups on clear, so none repopulates it', async () => {

@@ -108,7 +108,7 @@ export function PlanetariumMode({
    *
    * Two tones on one surface, because there is one place on screen where this
    * mode reports back and a preset that moved the camera and the lens has to
-   * say so — "Earthrise — Luna, 20°" is not a failure, and drawing it in the
+   * say so — "Earthrise — Luna, 11.5°" is not a failure, and drawing it in the
    * rose the address errors use would read as one. Everything else about the
    * surface, including that `Shift+H` clears it, stays the same.
    */

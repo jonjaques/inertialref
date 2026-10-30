@@ -7,7 +7,7 @@ import type { RenderHost } from './host.ts'
  * A drag moves the picture by the pixels dragged at any lens, which
  * `DRAG_RADIANS_PER_PIXEL` alone cannot do: it is a constant, so at 8× zoom
  * on the flight lens a 100 px drag swings the frame through three of its own
- * field-widths, and eleven at the telephoto end.
+ * field-widths, and twenty at the telephoto end.
  *
  * **Two pixel counts, and they are not the same one.** `pixelAngle` is
  * radians per *display* pixel — the viewport keeps the device ratio, because

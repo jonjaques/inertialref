@@ -1,16 +1,20 @@
 import {
   COVER_CHANNELS,
   HEIGHTFIELD_BORDER,
+  identityText,
+  morphIndex,
+  morphSide,
+  morphVertexSide,
+  surfaceIdentity,
   TERRAIN_ALGORITHM,
   type HeightfieldRequest,
   type SurfaceParameters,
 } from '@inertialref/universe'
-import type { JobHandle } from './pool.ts'
-import {
-  type ArchivedSource,
-  encodeSurface,
-  type HeightfieldResponse,
-  type HeightfieldSource,
+import type { JobHandle, JobLane } from './pool.ts'
+import type {
+  ArchivedSource,
+  HeightfieldResponse,
+  HeightfieldSource,
 } from './tasks.ts'
 
 /*
@@ -56,39 +60,38 @@ export interface HeightfieldStore {
   close?(): void
 }
 
-function stable(value: unknown): string {
-  if (value === undefined) return 'undefined'
-  // `JSON.stringify` writes `null` for NaN and for either infinity, so three
-  // distinct numbers and an absent value would share one key — which is the
-  // one failure this key is built to make impossible. Spell them instead.
-  if (typeof value === 'number' && !Number.isFinite(value)) return String(value)
-  if (value === null || typeof value !== 'object') return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
-  return `{${Object.entries(value)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`)
-    .join(',')}}`
-}
-
-const surfaceKeys = new WeakMap<SurfaceParameters, string>()
-
-/** Every field travels into the key; adding a surface/request member cannot silently omit it. */
+/**
+ * Every field travels into the key; adding a surface/request member cannot
+ * silently omit it. The surface's half is `surfaceIdentity`, the one the
+ * drainage memo and the survey key on, and the request is spelled by the same
+ * serializer.
+ */
 export function heightfieldCacheKey(
   surface: SurfaceParameters,
   request: HeightfieldRequest,
   namespace: string,
 ): string {
-  let encoded = surfaceKeys.get(surface)
-  if (encoded === undefined) {
-    encoded = stable(encodeSurface(surface))
-    surfaceKeys.set(surface, encoded)
-  }
-  return `${JSON.stringify(heightfieldArchiveVersion(namespace))}:${encoded}:${stable(request)}`
+  return `${JSON.stringify(heightfieldArchiveVersion(namespace))}:${surfaceIdentity(surface)}:${identityText(request)}`
 }
+
+/** The arrays a record carries, the twin's after the patch's own. */
+const arraysOf = (
+  field: HeightfieldResponse,
+): readonly (Float32Array | Uint8Array)[] =>
+  field.morph === null
+    ? [field.elevations, field.cover, field.water]
+    : [
+        field.elevations,
+        field.cover,
+        field.water,
+        field.morph.elevations,
+        field.morph.cover,
+        field.morph.water,
+      ]
 
 function checksum(field: HeightfieldResponse): number {
   let hash = 2166136261
-  for (const array of [field.elevations, field.cover, field.water]) {
+  for (const array of arraysOf(field)) {
     const bytes = new Uint8Array(
       array.buffer,
       array.byteOffset,
@@ -106,9 +109,7 @@ function checksum(field: HeightfieldResponse): number {
 /** The portable estimate both the record and its validation must agree on. */
 function recordBytes(key: string, field: HeightfieldResponse): number {
   return (
-    field.elevations.byteLength +
-    field.cover.byteLength +
-    field.water.byteLength +
+    arraysOf(field).reduce((sum, array) => sum + array.byteLength, 0) +
     key.length * 2 +
     128
   )
@@ -141,7 +142,7 @@ export function validateHeightfieldCacheRecord(
   if (
     field.resolution !== resolution ||
     field.border !== border ||
-    stable(field.region) !== stable(request.region)
+    identityText(field.region) !== identityText(request.region)
   )
     return null
   const count = resolution * resolution
@@ -153,6 +154,20 @@ export function validateHeightfieldCacheRecord(
     field.cover.length !== count * COVER_CHANNELS ||
     !(field.water instanceof Float32Array) ||
     field.water.length !== count
+  )
+    return null
+  const morph = field.morph
+  const side = morphSide({ resolution, border })
+  const vertices = morphVertexSide(resolution) ** 2
+  if (
+    morph !== null &&
+    (typeof morph !== 'object' ||
+      !(morph.elevations instanceof Float32Array) ||
+      morph.elevations.length !== side * side ||
+      !(morph.cover instanceof Uint8Array) ||
+      morph.cover.length !== vertices * COVER_CHANNELS ||
+      !(morph.water instanceof Float32Array) ||
+      morph.water.length !== vertices)
   )
     return null
   if (
@@ -178,6 +193,17 @@ export function validateHeightfieldCacheRecord(
       max = Math.max(max, elevation)
     }
   }
+  // The extremes hold the morph target too: it is drawn.
+  if (morph !== null) {
+    for (let row = 0; row < resolution; row += 2) {
+      for (let col = 0; col < resolution; col += 2) {
+        const elevation = morph.elevations[morphIndex(side, border, row, col)]!
+        if (!Number.isFinite(elevation)) return null
+        min = Math.min(min, elevation)
+        max = Math.max(max, elevation)
+      }
+    }
+  }
   // CPU extrema are recorded before the float32 store. Permit that rounding only.
   const tolerance = Math.max(1, Math.abs(min), Math.abs(max)) * 2 ** -22
   if (
@@ -186,6 +212,8 @@ export function validateHeightfieldCacheRecord(
   )
     return null
   for (const water of field.water)
+    if (!Number.isFinite(water) && !Number.isNaN(water)) return null
+  for (const water of morph?.water ?? [])
     if (!Number.isFinite(water) && !Number.isNaN(water)) return null
   if (row.checksum !== checksum(field)) return null
   return row.bytes === recordBytes(key, field)
@@ -322,9 +350,10 @@ class ArchivedHeightfieldSource implements HeightfieldSource {
   submit(
     surface: SurfaceParameters,
     request: HeightfieldRequest,
+    lane?: JobLane,
   ): JobHandle<HeightfieldResponse> {
     const state = this.#state
-    if (state.closed) return this.#source.submit(surface, request)
+    if (state.closed) return this.#source.submit(surface, request, lane)
     const counts = state.counts
     const store = state.store
     const id = this.#nextId++
@@ -365,7 +394,7 @@ class ArchivedHeightfieldSource implements HeightfieldSource {
           if (canceled) return
         }
         counts.misses++
-        active = this.#source.submit(surface, request)
+        active = this.#source.submit(surface, request, lane)
         const field = await active.result
         if (canceled) return
         if (epoch === state.epoch) {

@@ -28,13 +28,13 @@ import type { OutputPreference, RendererDescription } from '../render/output.ts'
  * It was declared here, beside the slider that spends it, which was right until
  * two things outside the shell had to solve against the same range: the lens a
  * rise is framed with, which clamps at the long end and says so, and the
- * terrain predicate, whose saturation at 20° is why the long end is there. Two
- * copies of a perceptual limit is how a slider ends up offering an angle the
- * solver will not produce.
+ * terrain predicate, whose patch cap is what says how long the long end can
+ * be. Two copies of a perceptual limit is how a slider ends up offering an
+ * angle the solver will not produce.
  */
 export { FOV_MAX, FOV_MIN }
 
-/** The same two limits as glass, on a 24 mm gauge: 8.40 mm and 68.06 mm. */
+/** The same two limits as glass, on a 24 mm gauge: 8.40 mm and 120.22 mm. */
 export const FOCAL_MIN = lensForFov(FOV_MAX).focalLength
 export const FOCAL_MAX = lensForFov(FOV_MIN).focalLength
 
@@ -61,15 +61,16 @@ export const SHUTTER_MAX = 3600
  *
  * Half a meter is closer than any camera in this game gets to anything. The top
  * is set by the **longest** lens rather than by a round number: hyperfocal is
- * 5.4 m at the flying lens and 4.5 km at the telephoto end with the zoom racked
- * out, so a band that stopped at a kilometer could not reach the one distance
- * at which the telephoto is sharp to infinity — the control was unreachable
- * exactly where it is the only one that matters. 10 km clears it with room, and
- * everything past it is the same picture at every lens here, which is what the
- * ∞ position at the top of the travel is for.
+ * 5.4 m at the flying lens and 13.9 km at the telephoto end with the zoom
+ * racked out, over a 1520 px buffer, so a band that stopped short of it could
+ * not reach the one distance at which the telephoto is sharp to infinity — the
+ * control would be unreachable exactly where it is the only one that matters.
+ * 30 km clears it with room, and everything past it is the same picture at
+ * every lens here, which is what the ∞ position at the top of the travel is
+ * for.
  */
 export const FOCUS_MIN = 0.5
-export const FOCUS_MAX = 10_000
+export const FOCUS_MAX = 30_000
 
 /**
  * How many positions a lens slider has, and why the channels need to know.
@@ -92,9 +93,9 @@ const FOCUS_FINITE_BAND = (LENS_SLIDER_STEPS - 1) / LENS_SLIDER_STEPS
 /**
  * Slider positions are logarithmic in the value, and every channel here is.
  *
- * A linear focal-length slider spends two thirds of its travel between 30 and
- * 68 mm, where the angle changes by 20°, and gives the wide end — where it
- * changes by 50° — the last third. Logarithmic makes a fixed drag a fixed
+ * A linear focal-length slider spends two thirds of its travel between 45 and
+ * 120 mm, where the angle changes by 18°, and gives the wide end — where it
+ * changes by 81° — the last third. Logarithmic makes a fixed drag a fixed
  * *ratio*, which is what a stop is on the aperture ring and what a zoom is by
  * definition.
  */

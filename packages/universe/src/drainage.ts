@@ -1,32 +1,40 @@
 import type { Meters } from '@inertialref/shared'
 import { invariant } from '@inertialref/shared'
-import {
-  formatSeed,
-  noise3,
-  pcg4d,
-  smoothstep,
-  toUnit,
-} from '@inertialref/procedural'
+import { noise3, pcg4d, smoothstep, toUnit } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
 import { regionAddress } from './address.ts'
-import {
-  beltBand,
-  hypsometryBand,
-  iceBand,
-  plateContext,
-  reliefBand,
-  volcanicBand,
-} from './bands.ts'
 import { bareGround, type StageContext, stageOn } from './bandStack.ts'
-import { ladderField, softLimit } from './craters.ts'
-import { type TerrainSketch, terrainSketch } from './sketch.ts'
+import {
+  along,
+  bedShape,
+  channelDepth,
+  channelHalfWidth,
+  DRAINAGE_SHAPE,
+  DRAINAGE_WARP_OFFSETS,
+  toArc,
+  valleyShape,
+} from './drainageShape.ts'
+import {
+  RECORD_STRIDE,
+  type RefinedCarve,
+  Refinement,
+  type RefinementChannel,
+  type RefinementControl,
+  refinementDepth,
+} from './drainageRefinement.ts'
+import { Heap } from './drainageHeap.ts'
+import { fineRungMean, latticeLandform } from './latticeLandform.ts'
+import { plateWeight, type TerrainSketch, terrainSketch } from './sketch.ts'
+import { surfaceIdentity } from './surfaceIdentity.ts'
 import type { SurfaceParameters } from './system.ts'
 import {
   coastWidth,
+  directionToFace,
   drainageDatum,
   regionDirection,
   regionForDirection,
   regionNeighbor,
+  regionSize,
   seaDatumElevation,
 } from './regions.ts'
 
@@ -71,107 +79,14 @@ import {
  */
 
 /**
- * The numbers the graph is built and read with. Exported for the reason
- * `bands.ts` gives: the TSL port in `apps/game/src/render/terrainKernel.ts`
- * reads the same constants and a tolerance test holds the two together.
- */
-export const DRAINAGE_SHAPE = {
-  /**
-   * Cells per face edge of the lattice — 6 × 64², 24,576 nodes. A cell is
-   * 156 km on Earth and 43 km on Luna, and the build across the zoo is what
-   * sets it: the macro bands at every node are most of the cost, and the
-   * flood is `n log n` over them. The plan's 128 is four times the nodes
-   * and measured at four times the time; the lattice size is the CPU's
-   * budget, and this is where it lands today.
-   */
-  lattice: 64,
-  /** How far a node sits from its cell's center, in cells, per axis. */
-  jitter: 0.25,
-  /** The valley's half-width — where the carve reaches zero — in cells. */
-  reach: 0.6,
-  /** The deepest cut at full drainage, as a fraction of the relief budget. */
-  depth: 0.13,
-  /** How much of the ground's height above base a channel may take. */
-  headGain: 0.85,
-  /** Upstream area, in cells, at which a channel earns its full cut. */
-  cutArea: 64,
-  cutPower: 0.35,
-  /**
-   * Flint's law: the channel slope is `S₀ · A^(−θ)` with `A` in cells and
-   * `S₀ = slopeGain · budget / R` — the landform's own characteristic slope
-   * times a gain, so a one-cell headwater climbs steeply and a thousand-cell
-   * trunk climbs at a twentieth of that.
-   */
-  slopeGain: 40,
-  concavity: 0.45,
-  /**
-   * Hydraulic geometry (Leopold & Maddock 1953): channel width
-   * `w = a · Q^0.5`, depth `h = c · Q^0.4`, discharge `Q = p · A`. `widthGain`
-   * is the full width in meters per √(m²) of area at a meter a year of rain;
-   * a 10⁶ km² catchment comes out 900 m wide and 25 m deep, which is the
-   * Mississippi's order.
-   */
-  widthGain: 9e-4,
-  depthGain: 0.4,
-  depthPower: 0.4,
-  /** A meter a year, in meters a second. */
-  precipitation: 3.2e-8,
-  /** The floodplain's half-width, in channel widths: the meander belt. */
-  floodplain: 9,
-  /**
-   * How much of the landform's relief the floodplain keeps, past the bank.
-   * A plain cut to the floor exactly is a plane thirty kilometers wide, and
-   * a great river's plain read as a canal across a desert; a few percent is
-   * the terraces and the old channels a plain actually has.
-   */
-  plainRelief: 0.06,
-  /** Where the bank starts, as a fraction of the channel half-width. */
-  bank: 0.6,
-  /**
-   * How far below its base level a river reaches the sea or a lake, as a
-   * fraction of the coast width: the valley is cut before the water rose
-   * into it, and the sea floods the last of it — a ria.
-   */
-  ria: 0.5,
-  /**
-   * A fill shallower than this fraction of the relief budget is a flat the
-   * river crosses at its spill level and not a lake: a noise pit filled by
-   * a few meters is a plain, and on a dry world with one outlet every pit
-   * fills, so without the floor a fifth of Titan stood under a film.
-   */
-  lakeFloor: 0.0025,
-  /** How far a lake node's level reaches, in cells. */
-  lakeReach: 1.2,
-  /**
-   * The fewest nodes a fill may span and be a lake. A crater under one
-   * node fills to its spill like any pit, and a level read over a cell
-   * around one node paints every hollow within reach at that level — which
-   * is the flooded-crater field the graph exists to end. A lake is a basin
-   * the lattice can see: three nodes at one level, adjacent.
-   */
-  lakeNodes: 3,
-  /**
-   * A warp under the lookup, so a segment between two nodes is a meander
-   * rather than a chord: cycles per cell and amplitude in cells.
-   *
-   * The product is what matters. A gradient noise at `c` cycles moves at
-   * up to about three times `c` per unit, so the warp's own slope is near
-   * `3 · cycles · amount` — under one, the map is one to one and a
-   * monotone floor stays monotone along the warped channel; over one it
-   * folds, a channel is drawn twice and a bed runs uphill between the two
-   * copies. Three cycles at 0.12 cells was 2.3, and folded.
-   */
-  warpCycles: 2,
-  warpAmount: 0.08,
-} as const
-
-/**
  * Floats per segment record:
  * `[ax ay az fA] [bx by bz fB] [wA wB hA hB] [standing · · ·]`, where
  * `standing` is the level of the lake or sea the reach is drowned by, or
- * `NO_STANDING` where the bed is above every water it drains to.
+ * `NO_STANDING` where the bed is above every water it drains to. A refined
+ * creek's records are the same record, so the walk and the kernel read both
+ * with one loop.
  */
-export const SEGMENT_STRIDE = 16
+export const SEGMENT_STRIDE = RECORD_STRIDE
 /** The `standing` lane of a reach nothing drowns: below any ground. */
 export const NO_STANDING = -1e30
 
@@ -246,7 +161,12 @@ interface Topology {
 
 const TOPOLOGIES = new Map<number, Topology>()
 
-const OFFSETS: readonly (readonly [number, number])[] = [
+/**
+ * The ring's steps, `[di, dj]` per neighbor slot in the order `neighbors`
+ * lists them. Exported because the kernel's lake block fades a neighbor by
+ * which side of the sample's cell it lies on, and reads the side from here.
+ */
+export const NEIGHBOR_OFFSETS: readonly (readonly [number, number])[] = [
   [-1, -1],
   [0, -1],
   [1, -1],
@@ -277,7 +197,7 @@ function topology(cells: number): Topology {
           extent[(node * MARKS + k) * 3 + 2] = direction.z
         })
         for (let k = 0; k < 8; k += 1) {
-          const [di, dj] = OFFSETS[k] as readonly [number, number]
+          const [di, dj] = NEIGHBOR_OFFSETS[k] as readonly [number, number]
           const other = regionNeighbor(region, di, dj)
           const index = (other.face * cells + other.i) * cells + other.j
           if (index === node) continue
@@ -310,227 +230,22 @@ const CORNERS: readonly (readonly [number, number])[] = [
 const MARKS = CORNERS.length
 
 /**
- * The macro landform at a lattice node: every stage of the stack before the
- * drainage, read at the lattice's own wavelength floor, plus the crater
- * rungs coarse enough to hold a lake, plus the mean of the rest.
- *
- * The same expression `evaluate` sums and in the same order, with three
- * differences a lattice node earns. An octave finer than a cell is relief
- * the flow routing cannot see and would pay for at every node, so each band
- * stops at the cell size — which costs nothing in the mean, because a
- * normalized noise has none. The crater ladder is walked only over the
- * rungs whose craters span two cells or more: those are the basins that
- * flood — a below-datum floor a thousand kilometers inland is a lake at its
- * own spill and not at the sea's — and the finer rungs are a hundred cell
- * tests a node for craters no node can resolve. And the finer rungs are
- * not nothing: a crater is one-signed, so a ladder saturated at its fine
- * end depresses the whole surface by a near constant — on Earth the coarse
- * rung alone folds to −76 m through the soft limit and the whole ladder to
- * −610 — and a lattice that left it out held every floor half a kilometer
- * over the ground the field actually has. `fineMean` is that constant: the
- * mean, once per body, of what the whole ladder folds to less what the
- * coarse rungs fold to, added after the limit — the limit is a `tanh`, and
- * the fold of a mean is not the mean of the folds.
+ * Where a lattice node sits in its cell, (s, t) in cell units: jittered so
+ * the network is not a grid. The hash is the lattice's own, on a lane no
+ * crater rung reaches, and the refinement reads it back to know which of a
+ * cell's four children holds the node.
  */
-function latticeLandform(
-  surface: SurfaceParameters,
-  sketch: TerrainSketch,
-  stack: StageContext,
-  direction: Vec3,
-  floor: Meters,
-  coarseRungs: number,
-  fineMean: Meters,
-): Meters {
-  const grammar = surface.grammar
-  const budget = surface.maxElevation
-  const bands = grammar.bands
-  const plates = plateContext(sketch, direction)
-  let height =
-    bands.hypsometry *
-      hypsometryBand(
-        sketch,
-        grammar,
-        plates,
-        direction,
-        bands.hypsometry * budget,
-        floor,
-      ) +
-    bands.belts *
-      beltBand(
-        sketch,
-        grammar,
-        plates,
-        direction,
-        bands.belts * budget,
-        floor,
-      ) +
-    bands.volcanism *
-      volcanicBand(
-        sketch,
-        grammar,
-        plates,
-        direction,
-        bands.volcanism * budget,
-        floor,
-      ) +
-    bands.relief *
-      reliefBand(
-        sketch,
-        grammar,
-        surface.roughness,
-        direction,
-        bands.relief * budget,
-        floor,
-      )
-  if (stageOn('ice', stack)) {
-    height +=
-      bands.ice * iceBand(sketch, grammar, direction, bands.ice * budget, floor)
-  }
-  let elevation = height * budget
-  if (stageOn('craters', stack)) {
-    const coarse =
-      coarseRungs > 0
-        ? ladderField(
-            sketch.latticeSeed,
-            sketch.craterLevels.slice(0, coarseRungs),
-            0,
-            grammar,
-            direction,
-            0,
-          )
-        : 0
-    elevation += softLimit(coarse, bands.craters * budget) + fineMean
-  }
-  return elevation
-}
-
-/** Directions the fine rungs' mean is taken over: golden-angle, so nothing clusters. */
-const FINE_MEAN_SAMPLES = 256
-
-/**
- * What the crater ladder below the lattice's coarse rungs adds to the
- * ground in the mean, meters: the whole ladder through the soft limit less
- * the coarse rungs through it, averaged over a spread of directions. A few
- * hundred walks of the ladder once per body, against the tens of thousands
- * of nodes the mean is then applied to.
- */
-function fineRungMean(
-  sketch: TerrainSketch,
-  surface: SurfaceParameters,
-  coarseRungs: number,
-): Meters {
-  if (sketch.craterLevels.length <= coarseRungs) return 0
-  const limit = surface.grammar.bands.craters * surface.maxElevation
-  const coarse = sketch.craterLevels.slice(0, coarseRungs)
-  let total = 0
-  for (let i = 0; i < FINE_MEAN_SAMPLES; i += 1) {
-    const z = 1 - (2 * i + 1) / FINE_MEAN_SAMPLES
-    const around = i * Math.PI * (3 - Math.sqrt(5))
-    const ring = Math.sqrt(Math.max(0, 1 - z * z))
-    const direction = {
-      x: Math.cos(around) * ring,
-      y: z,
-      z: Math.sin(around) * ring,
-    }
-    const whole = ladderField(
-      sketch.latticeSeed,
-      sketch.craterLevels,
-      0,
-      surface.grammar,
-      direction,
-      0,
-    )
-    const part =
-      coarseRungs > 0
-        ? ladderField(
-            sketch.latticeSeed,
-            coarse,
-            0,
-            surface.grammar,
-            direction,
-            0,
-          )
-        : 0
-    total += softLimit(whole, limit) - softLimit(part, limit)
-  }
-  return total / FINE_MEAN_SAMPLES
-}
-
-/*
- * A binary heap of (level, node), lowest first, ties by node index.
- *
- * The tie-break is the determinism: two nodes at one level are popped in
- * index order whatever order they were pushed in, so the receiver a flat
- * hands its neighbors is a property of the lattice and not of the walk.
- */
-class Heap {
-  readonly #level: Float64Array
-  readonly #node: Int32Array
-  #size = 0
-
-  constructor(capacity: number) {
-    this.#level = new Float64Array(capacity)
-    this.#node = new Int32Array(capacity)
-  }
-
-  get size(): number {
-    return this.#size
-  }
-
-  #less(a: number, b: number): boolean {
-    const la = this.#level[a] as number
-    const lb = this.#level[b] as number
-    if (la !== lb) return la < lb
-    return (this.#node[a] as number) < (this.#node[b] as number)
-  }
-
-  #swap(a: number, b: number): void {
-    const level = this.#level[a] as number
-    const node = this.#node[a] as number
-    this.#level[a] = this.#level[b] as number
-    this.#node[a] = this.#node[b] as number
-    this.#level[b] = level
-    this.#node[b] = node
-  }
-
-  push(level: number, node: number): void {
-    let at = this.#size
-    this.#size += 1
-    this.#level[at] = level
-    this.#node[at] = node
-    while (at > 0) {
-      const parent = (at - 1) >> 1
-      if (!this.#less(at, parent)) break
-      this.#swap(at, parent)
-      at = parent
-    }
-  }
-
-  /** Removes the top and returns its node; the level is read by `topLevel` first. */
-  topLevel(): number {
-    return this.#level[0] as number
-  }
-
-  pop(): number {
-    const node = this.#node[0] as number
-    this.#size -= 1
-    if (this.#size > 0) {
-      this.#level[0] = this.#level[this.#size] as number
-      this.#node[0] = this.#node[this.#size] as number
-      let at = 0
-      for (;;) {
-        const left = at * 2 + 1
-        const right = left + 1
-        let best = at
-        if (left < this.#size && this.#less(left, best)) best = left
-        if (right < this.#size && this.#less(right, best)) best = right
-        if (best === at) break
-        this.#swap(at, best)
-        at = best
-      }
-    }
-    return node
-  }
+function latticePoint(
+  seedLane: number,
+  face: number,
+  i: number,
+  j: number,
+): [number, number] {
+  const hash = pcg4d(i ^ seedLane, j, face, 977)
+  return [
+    0.5 + (toUnit(hash.x) * 2 - 1) * DRAINAGE_SHAPE.jitter,
+    0.5 + (toUnit(hash.y) * 2 - 1) * DRAINAGE_SHAPE.jitter,
+  ]
 }
 
 /** Chord between two unit directions held as flat arrays, radians to first order. */
@@ -539,24 +254,6 @@ function chord(positions: Float64Array, a: number, b: number): number {
   const dy = (positions[a * 3 + 1] as number) - (positions[b * 3 + 1] as number)
   const dz = (positions[a * 3 + 2] as number) - (positions[b * 3 + 2] as number)
   return Math.sqrt(dx * dx + dy * dy + dz * dz)
-}
-
-/**
- * The channel's half-width at an upstream area, radians on the unit sphere.
- *
- * `w = a·Q^0.5` with `Q = p·A`: the root of the area times a gain, halved
- * for the half-width and divided by the radius for an angle.
- */
-export function channelHalfWidth(areaMeters: number, radius: Meters): number {
-  return (0.5 * DRAINAGE_SHAPE.widthGain * Math.sqrt(areaMeters)) / radius
-}
-
-/** The channel's depth at an upstream area, meters: `h = c·Q^0.4`. */
-export function channelDepth(areaMeters: number): Meters {
-  return (
-    DRAINAGE_SHAPE.depthGain *
-    (DRAINAGE_SHAPE.precipitation * areaMeters) ** DRAINAGE_SHAPE.depthPower
-  )
 }
 
 /**
@@ -607,15 +304,11 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
     for (let i = 0; i < cells; i += 1) {
       for (let j = 0; j < cells; j += 1) {
         const node = (face * cells + i) * cells + j
-        // Jittered inside its cell so the network is not a grid. The hash is
-        // the lattice's own, on a lane no crater rung reaches.
-        const hash = pcg4d(i ^ seedLane, j, face, 977)
-        const jx = (toUnit(hash.x) * 2 - 1) * DRAINAGE_SHAPE.jitter
-        const jy = (toUnit(hash.y) * 2 - 1) * DRAINAGE_SHAPE.jitter
+        const [s, t] = latticePoint(seedLane, face, i, j)
         const direction = regionDirection(
           regionAddress(face, level, i, j),
-          0.5 + jx,
-          0.5 + jy,
+          s,
+          t,
         )
         positions[node * 3] = direction.x
         positions[node * 3 + 1] = direction.y
@@ -1045,7 +738,12 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
     // farther than half the half-diagonal from the nearest mark, so a mark
     // within the reach plus that is the conservative test — and the center
     // alone rejects a cell wholly out of range before the eight are read.
-    const slack = halfDiagonal / 2
+    // Plus the chord's sag, `length / 8` on the unit sphere: the walk
+    // measures to the arc over the chord, which is that much nearer a point
+    // on the ground than the chord is (see `walk`), and a list built on the
+    // chord alone would miss a segment the walk reaches.
+    const sag = length / 8
+    const slack = halfDiagonal / 2 + sag
     for (let k = 0; k < MARKS; k += 1) {
       const px = (extent[base + k * 3] as number) - ax
       const py = (extent[base + k * 3 + 1] as number) - ay
@@ -1059,7 +757,7 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
       const ez = pz - bz * t
       const d = Math.sqrt(ex * ex + ey * ey + ez * ez)
       if (d <= reach + slack) return true
-      if (k === 0 && d > reach + halfDiagonal) return false
+      if (k === 0 && d > reach + halfDiagonal + sag) return false
     }
     return false
   }
@@ -1126,23 +824,15 @@ function build(surface: SurfaceParameters): DrainageGraph | null {
 /*
  * Memoized twice over, as the sketch is and for the same two reasons: the
  * string cache because a worker rebuilds `SurfaceParameters` per task, the
- * `WeakMap` because the field resolves the graph per sample. The key is
- * everything the build reads, and the grammar goes in whole for the reason
- * `surveySites` gives — the build reads most of it.
+ * `WeakMap` because the field resolves the graph per sample. The string key
+ * is the surface's whole identity (`surfaceIdentity`) rather than the fields
+ * the build reads, because the build reads most of the grammar and a list of
+ * them goes stale without a sound.
  */
 const BY_SURFACE = new WeakMap<SurfaceParameters, DrainageGraph | null>()
 const CACHE = new Map<string, DrainageGraph | null>()
 /** Graphs kept by the string cache. A few megabytes each, so few. */
 export const DRAINAGE_CACHE_LIMIT = 12
-
-const cacheKey = (surface: SurfaceParameters): string =>
-  [
-    formatSeed(surface.seed),
-    surface.maxElevation,
-    surface.roughness,
-    surface.seaLevel ?? 'dry',
-    JSON.stringify(surface.grammar),
-  ].join('|')
 
 /** Graphs this thread has built, as against looked up or been handed. */
 let builds = 0
@@ -1153,7 +843,7 @@ export function drainageGraph(
 ): DrainageGraph | null {
   const known = BY_SURFACE.get(surface)
   if (known !== undefined) return known
-  const key = cacheKey(surface)
+  const key = surfaceIdentity(surface)
   const hit = CACHE.get(key)
   if (hit !== undefined) {
     BY_SURFACE.set(surface, hit)
@@ -1182,7 +872,7 @@ export function seedDrainageGraph(
   graph: DrainageGraph | null,
 ): void {
   if (BY_SURFACE.has(surface)) return
-  const key = cacheKey(surface)
+  const key = surfaceIdentity(surface)
   const held = CACHE.get(key)
   if (held !== undefined) BY_SURFACE.set(surface, held)
   else keep(surface, key, graph)
@@ -1202,7 +892,161 @@ function keep(
   }
   CACHE.set(key, graph)
   BY_SURFACE.set(surface, graph)
+  if (graph !== null) SOURCES.set(graph, surface)
   return graph
+}
+
+/*
+ * The surface each graph was built or handed for, which the refinement reads
+ * its bands from. Beside the graph rather than on it: a graph crosses threads
+ * by structured clone, and its refinement is this thread's cache of cells,
+ * not data to post. Every surface that maps to one graph shares its key, so
+ * the first one kept answers for all of them.
+ */
+const SOURCES = new WeakMap<DrainageGraph, SurfaceParameters>()
+const REFINEMENTS = new WeakMap<DrainageGraph, Refinement>()
+
+/**
+ * The finest refined drainage level a reader asking about a region at
+ * `level` resolves: one below the region's own. ADR-0054.
+ */
+export const regionDrainageLevel = (level: number): number => level + 1
+
+/**
+ * The refinement below a graph's lattice, made on first use and kept with
+ * the graph. Exported for the tests and rigs that count its constructions;
+ * the field reaches it through `carveDrainage`.
+ */
+export function drainageRefinement(graph: DrainageGraph): Refinement {
+  const known = REFINEMENTS.get(graph)
+  if (known !== undefined) return known
+  const surface = SOURCES.get(graph)
+  /*
+   * A graph reaches the field only through `drainageGraph` or
+   * `seedDrainageGraph`, and both record its surface. One that arrived some
+   * other way — a clone read without being seeded — would carve without its
+   * refinement and quietly be a different field, so it is refused instead.
+   */
+  invariant(
+    surface !== undefined,
+    'a drainage graph is carved only after drainageGraph or seedDrainageGraph has kept it',
+  )
+  const made = new Refinement(
+    refinementHost(graph, surface),
+    refinementDepth(surface.grammar.meanRadius, graph.level),
+  )
+  REFINEMENTS.set(graph, made)
+  return made
+}
+
+/**
+ * What the refinement needs from the lattice: its lists, its node jitter,
+ * and the laws a channel of a given area obeys — width, depth and Flint's
+ * slope as `build` spends them, and the cut a head makes, which is `build`'s
+ * own cut at an area under one cell.
+ *
+ * The control — the ground a level's creeks are cut into — is the stack read
+ * the way `latticeLandform` reads it, at that level's own cell size, then
+ * carved by the lattice and every coarser refined level. It is read at the
+ * key point's preimage under the lookup's warp, because the refined segments
+ * live in lookup space with the lattice's, and the bands do not. The
+ * preimage is a fixed point, found from the point itself: the warp's slope
+ * is under a half, so each step halves the error at least, and the warp's
+ * twelfth of a lattice cell comes down to a twentieth of a refined cell in
+ * two more steps than the level is below the lattice. More would be time
+ * spent placing a hillside more finely than the creek on it can see.
+ */
+function refinementHost(graph: DrainageGraph, surface: SurfaceParameters) {
+  const grammar = surface.grammar
+  const sketch = terrainSketch(surface)
+  const stack: StageContext = {
+    surface,
+    sketch,
+    sea: seaDatumElevation(surface),
+    seabed: false,
+  }
+  const radius = grammar.meanRadius
+  const budget = surface.maxElevation
+  const datum = drainageDatum(surface)
+  const latticeArea = (4 * Math.PI * radius * radius) / graph.nodes
+  const deepest = DRAINAGE_SHAPE.depth * budget * grammar.drainage
+  const slopeZero = (DRAINAGE_SHAPE.slopeGain * budget) / radius
+  const craters = stageOn('craters', stack)
+  const rungs = new Map<number, { coarse: number; mean: Meters }>()
+  const ladderAt = (level: number): { coarse: number; mean: Meters } => {
+    const known = rungs.get(level)
+    if (known !== undefined) return known
+    const cellMeters = regionSize(radius, level)
+    let coarse = 0
+    if (craters) {
+      for (const rung of sketch.craterLevels) {
+        if (rung.diameter < 2 * cellMeters) break
+        coarse += 1
+      }
+    }
+    const made = {
+      coarse,
+      mean: craters ? fineRungMean(sketch, surface, coarse) : 0,
+    }
+    rungs.set(level, made)
+    return made
+  }
+  return {
+    level: graph.level,
+    cells: graph.cells,
+    cellStart: graph.cellStart,
+    cellSegments: graph.cellSegments,
+    segments: graph.segments,
+    radius,
+    seedLane: sketch.latticeSeed,
+    latticePoint: (face: number, i: number, j: number) =>
+      latticePoint(sketch.latticeSeed, face, i, j),
+    control(lookup: Vec3, level: number): RefinementControl {
+      let x = lookup.x
+      let y = lookup.y
+      let z = lookup.z
+      const steps = 2 + level - graph.level
+      for (let step = 0; step < steps; step += 1) {
+        const warped = drainageLookup(graph, sketch, { x, y, z })
+        x += lookup.x - warped.x
+        y += lookup.y - warped.y
+        z += lookup.z - warped.z
+        const norm = 1 / Math.sqrt(x * x + y * y + z * z)
+        x *= norm
+        y *= norm
+        z *= norm
+      }
+      const ladder = ladderAt(level)
+      const landform = latticeLandform(
+        surface,
+        sketch,
+        stack,
+        { x, y, z },
+        regionSize(radius, level),
+        ladder.coarse,
+        ladder.mean,
+      )
+      const carved = walk(graph, lookup, landform, level)
+      return { surface: carved.surface, water: carved.water }
+    },
+    channel(areaMeters: number, ground: Meters): RefinementChannel {
+      const cells = areaMeters / latticeArea
+      const above = Math.max(0, ground - datum)
+      const gain = Math.min(
+        1,
+        (cells / DRAINAGE_SHAPE.cutArea) ** DRAINAGE_SHAPE.cutPower,
+      )
+      return {
+        halfWidth: channelHalfWidth(areaMeters, radius),
+        depth: channelDepth(areaMeters),
+        slope: slopeZero * cells ** -DRAINAGE_SHAPE.concavity,
+        incision:
+          deepest *
+          gain *
+          (1 - Math.exp((-DRAINAGE_SHAPE.headGain * above) / deepest)),
+      }
+    },
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1260,21 +1104,22 @@ export function drainageLookup(
   const cycles = DRAINAGE_SHAPE.warpCycles * graph.cells * (2 / Math.PI) * 2
   const amount = (DRAINAGE_SHAPE.warpAmount * Math.PI) / 2 / graph.cells
   const seed = sketch.seeds.drainage
+  const [ox, oy, oz] = DRAINAGE_WARP_OFFSETS
   const wx = noise3(
     seed,
-    direction.x * cycles + 37.1,
+    direction.x * cycles + ox,
     direction.y * cycles,
     direction.z * cycles,
   )
   const wy = noise3(
     seed,
-    direction.x * cycles + 71.3,
+    direction.x * cycles + oy,
     direction.y * cycles,
     direction.z * cycles,
   )
   const wz = noise3(
     seed,
-    direction.x * cycles + 113.7,
+    direction.x * cycles + oz,
     direction.y * cycles,
     direction.z * cycles,
   )
@@ -1283,30 +1128,6 @@ export function drainageLookup(
   const z = direction.z + wz * amount
   const inverse = 1 / Math.sqrt(x * x + y * y + z * z)
   return { x: x * inverse, y: y * inverse, z: z * inverse }
-}
-
-/**
- * The valley's cross-section: one over the bed, a few percent under one
- * across the floodplain, falling to zero at the reach. `d` is the distance
- * to the channel, `halfWidth` the channel's, `plain` the floodplain's and
- * `reach` the valley's, all in the same units.
- */
-export function valleyShape(
-  d: number,
-  halfWidth: number,
-  plain: number,
-  reach: number,
-): number {
-  if (d >= reach) return 0
-  const top =
-    1 - DRAINAGE_SHAPE.plainRelief * smoothstep(halfWidth, 2 * halfWidth, d)
-  if (d <= plain) return top
-  return top * (1 - smoothstep(0, 1, (d - plain) / (reach - plain)))
-}
-
-/** The channel's own notch: one over the bed, zero past the bank. */
-export function bedShape(d: number, halfWidth: number): number {
-  return 1 - smoothstep(DRAINAGE_SHAPE.bank * halfWidth, halfWidth, d)
 }
 
 /**
@@ -1344,16 +1165,58 @@ export function bedShape(d: number, halfWidth: number): number {
  * which at a confluence lays the tributary's floodplain over the trunk's as
  * a cone that thins downstream faster than the trunk's floor drops.
  *
- * The water is the floor over the bed, or the lake or sea that drowns the
- * reach where that stands higher, and a lake's spill level over its floor,
- * read as a kernel-weighted mean over the lake nodes within reach so one
- * lake is one level exactly.
+ * The water is each bed's level — the floor, or the lake or sea that
+ * drowns the reach where that stands higher — weighted by the bed and
+ * faded toward the surface as the beds thin (`riverLevel`), and the
+ * standing water `lakeLevelAt` reads over the sample where that is higher.
+ *
+ * Below the lattice, the refined levels (`drainageRefinement.ts`), finest
+ * last, each cut into what the coarser ones left: see `walk`. `finest`
+ * stops them at a level — a reader asking about a region stops at
+ * `regionDrainageLevel`, and one measuring what a level does stops above it.
  */
 export function carveDrainage(
   graph: DrainageGraph,
   lookup: Vec3,
   landform: Meters,
+  finest: number = Number.POSITIVE_INFINITY,
 ): DrainageCarve {
+  const carved = walk(graph, lookup, landform, finest + 1)
+  return {
+    ground: carved.surface - carved.notch,
+    water: carved.water,
+    channel: carved.channel,
+    corridor: carved.corridor,
+  }
+}
+
+/** A walk's result: the carve with the channels' notch held apart. */
+interface Walked {
+  /** The ground with every valley cut and filled, before the notch. */
+  readonly surface: Meters
+  readonly notch: Meters
+  readonly water: Meters
+  readonly channel: number
+  readonly corridor: number
+}
+
+/**
+ * The carve, through the levels coarser than `until`: the lattice's
+ * segments as `carveDrainage` describes, then each refined level's list.
+ *
+ * **Below the lattice, the refined levels cut into what the coarser ones
+ * left**, finest last: `Refinement.carve`, which says how they compose and
+ * what level each creek's bed weighs into the water.
+ *
+ * **The notch is one maximum over every level**, taken last, so a creek
+ * meeting a river does not deepen the river's channel by its own depth.
+ */
+function walk(
+  graph: DrainageGraph,
+  lookup: Vec3,
+  landform: Meters,
+  until: number,
+): Walked {
   const cell = drainageCell(graph, lookup)
   const start = graph.cellStart[cell] as number
   const end = graph.cellStart[cell + 1] as number
@@ -1367,7 +1230,8 @@ export function carveDrainage(
   let notch = 0
   let channel = 0
   let corridor = 0
-  let river = Number.NaN
+  let beds = 0
+  let levels = 0
   for (let k = start; k < end; k += 1) {
     const at = (graph.cellSegments[k] as number) * SEGMENT_STRIDE
     const ax = segments[at] as number
@@ -1376,18 +1240,8 @@ export function carveDrainage(
     const bx = (segments[at + 4] as number) - ax
     const by = (segments[at + 5] as number) - ay
     const bz = (segments[at + 6] as number) - az
-    const px = x - ax
-    const py = y - ay
-    const pz = z - az
-    const length = bx * bx + by * by + bz * bz
-    const t =
-      length > 0
-        ? Math.min(1, Math.max(0, (px * bx + py * by + pz * bz) / length))
-        : 0
-    const ex = px - bx * t
-    const ey = py - by * t
-    const ez = pz - bz * t
-    const d = Math.sqrt(ex * ex + ey * ey + ez * ez)
+    const t = along(x - ax, y - ay, z - az, bx, by, bz)
+    const d = toArc(x, y, z, ax, ay, az, bx, by, bz, t)
     if (d >= reach) continue
     const fA = segments[at + 3] as number
     const fB = segments[at + 7] as number
@@ -1415,29 +1269,134 @@ export function carveDrainage(
     if (bed > channel) channel = bed
     const margin = 1 - smoothstep(plain, Math.min(reach, plain * 2), d)
     if (margin > corridor) corridor = margin
-    if (bed > 0) {
-      // The water over the bed: the floor, or the lake or sea that drowns
-      // this reach where that stands higher.
-      const level = standing > floor ? standing : floor
-      if (!(level <= river)) river = level
-    }
+    // The water over the bed: the floor, or the lake or sea that drowns
+    // this reach where that stands higher.
+    beds += bed
+    levels += bed * (standing > floor ? standing : floor)
   }
+
+  const refined: RefinedCarve = {
+    surface: landform - cut + fill,
+    notch,
+    channel,
+    corridor,
+    beds,
+    levels,
+  }
+  drainageRefinement(graph).carve(lookup, refined, until - 1)
+  const surface = refined.surface
+  const river = riverLevel(surface, refined)
   const lake = lakeLevelAt(graph, cell, lookup)
   let water = river
   if (!Number.isNaN(lake) && !(lake <= water)) water = lake
-  return { ground: landform - cut + fill - notch, water, channel, corridor }
+  return {
+    surface,
+    notch: refined.notch,
+    water,
+    channel: refined.channel,
+    corridor: refined.corridor,
+  }
 }
 
 /**
- * The lake level over a sample, or NaN: a kernel-weighted mean over the
- * lake nodes within `lakeReach` of it, the cell's own and its ring.
+ * The running water over a sample, or NaN where no bed reaches it: the
+ * beds' weighted mean level, faded toward the surface by the largest bed.
+ *
+ * **No level is chosen.** A maximum over the reaches in reach is a
+ * maximum over a set whose members join where their beds start, and a
+ * member joining at its full level is a step of its height over everything
+ * else. Where a bank's floor is not the ground beside it, that is water
+ * standing 181 m over the ground at the edge of a lattice bed on Earth,
+ * 4.8 m on the generated world of `drainageRefinement.test.ts` and 0.7 m
+ * on Titan. Weighted by its bed, a reach's say reaches zero exactly where
+ * it leaves the set.
+ *
+ * **The fade is the largest bed, not their sum**, because a creek is two
+ * records that share its bend and a lattice river is a chain of segments
+ * that share their nodes. Around every bend both records' beds are the
+ * same bed measured twice — on the outside of a bend both measure it from
+ * the shared point — and a sum would double the water's depth there. The mean is unmoved by a duplicate and the maximum
+ * is the bed itself; both are continuous, and so is their product.
+ *
+ * **Toward the surface, before the notch**, because the notch is the
+ * channel the water runs in and the surface is its brim. A lone reach's
+ * water is the brim where its level is the brim, which is where the reach
+ * cut or filled to its floor, and its depth is the notch's: the bed's own
+ * shape times the channel's depth. Faded toward the notched ground, the
+ * depth would be the bed's square instead, every river would stand under
+ * its banks by up to a quarter of its depth, and the canonical ground the
+ * water clamps would carry that dip. Where every bed reaches zero the
+ * notch has too, so the water meets the ground at the edge either way.
  */
-function lakeLevelAt(graph: DrainageGraph, cell: number, lookup: Vec3): number {
+function riverLevel(surface: Meters, refined: RefinedCarve): Meters {
+  if (!(refined.beds > 0)) return Number.NaN
+  return surface + refined.channel * (refined.levels / refined.beds - surface)
+}
+
+/*
+ * Scratch for `lakeLevelAt`: the level and weight of each of the nine nodes
+ * it reads, and the weight of the body each belongs to. The field is
+ * synchronous and samples one direction at a time, so one set is enough.
+ */
+const LAKE_LEVELS = new Float64Array(9)
+const LAKE_WEIGHTS = new Float64Array(9)
+const LAKE_BODIES = new Float64Array(9)
+
+/** Where a sample sits across its lattice cell along one face axis, 0..1. */
+function cellFraction(coordinate: number, cells: number): number {
+  const t = ((coordinate + 1) / 2) * cells
+  return t - Math.min(cells - 1, Math.max(0, Math.floor(t)))
+}
+
+/**
+ * The standing water over a sample, or NaN: the level of one body — the
+ * lake, or the sea at its datum — read off the lake nodes within
+ * `lakeReach` of it, the cell's own and its ring.
+ *
+ * **A lake is one level exactly.** Each node in reach weighs
+ * `(1 − (d/reach)²)²`, the weights of the nodes at one level sum to that
+ * body's, and a sample in reach of one body reads its level whatever the
+ * weights are. Adjacent lake nodes share a level by the flood's
+ * construction, so two bodies at different levels are never neighbors and
+ * the level a sample reads is a choice between bodies, not between nodes.
+ *
+ * **Between two bodies it reads the heavier one.** A mean over both is a
+ * level belonging to neither across the whole overlap — 2.4 cells wide
+ * at most, 156 km a cell on Earth — so the sheet would tilt across the
+ * gap and the clamp follow it. Read off the leader alone, it is a step where
+ * the lead changes hands, and that is where the weights tie, not where the
+ * ground stands above both levels: the lattice samples the landform once a
+ * cell and the field's ground between two nodes is hundreds of meters from
+ * it, so no ranking of nodes puts the step where neither sheet shows it.
+ * So rule 11's margin: each body's say is `plateWeight` of how far its
+ * share of the weight trails the leader's, which is the leader's level
+ * exactly wherever it leads by `lakeMargin` and a continuous blend over the
+ * sliver where it does not.
+ *
+ * **A node's weight reaches zero before it leaves the ring.** The ring is
+ * the cell's eight neighbors, and a node two cells over can be inside the
+ * reach — a cell near a face's edge is half the angle of one at its center
+ * — so the sample crossing into the next cell would gain or lose it with
+ * weight, and between two bodies that is a step of the levels' difference
+ * times its share: 47 m on Earth, where the sea meets a lake at a face edge.
+ * A neighbor's weight fades to zero over the half of the sample's cell
+ * away from it, which is the edge it leaves the ring across, and the cell
+ * decision is safe for the reason it is for the segments: the two cells a
+ * boundary sample could name read the same weights there.
+ */
+export function lakeLevelAt(
+  graph: DrainageGraph,
+  cell: number,
+  lookup: Vec3,
+): number {
   const neighbors = graph.neighbors
   const reach = (DRAINAGE_SHAPE.lakeReach * Math.PI) / 2 / graph.cells
+  const { u, v } = directionToFace(lookup)
+  const across = cellFraction(u, graph.cells)
+  const along = cellFraction(v, graph.cells)
+  let count = 0
   let total = 0
-  let weight = 0
-  const consider = (n: number): void => {
+  const consider = (n: number, di: number, dj: number): void => {
     const level = graph.lake[n] as number
     if (Number.isNaN(level)) return
     const dx = (graph.positions[n * 3] as number) - lookup.x
@@ -1445,14 +1404,48 @@ function lakeLevelAt(graph: DrainageGraph, cell: number, lookup: Vec3): number {
     const dz = (graph.positions[n * 3 + 2] as number) - lookup.z
     const d = Math.sqrt(dx * dx + dy * dy + dz * dz) / reach
     if (d >= 1) return
-    const w = (1 - d * d) ** 2
-    total += w * level
-    weight += w
+    const fade =
+      (di === 0 ? 1 : smoothstep(0, 0.5, di > 0 ? across : 1 - across)) *
+      (dj === 0 ? 1 : smoothstep(0, 0.5, dj > 0 ? along : 1 - along))
+    const w = (1 - d * d) ** 2 * fade
+    if (w <= 0) return
+    LAKE_LEVELS[count] = level
+    LAKE_WEIGHTS[count] = w
+    count += 1
+    total += w
   }
-  consider(cell)
+  consider(cell, 0, 0)
   for (let k = 0; k < 8; k += 1) {
     const n = neighbors[cell * 8 + k] as number
-    if (n >= 0) consider(n)
+    const [di, dj] = NEIGHBOR_OFFSETS[k] as readonly [number, number]
+    if (n >= 0) consider(n, di, dj)
   }
-  return weight > 0 ? total / weight : Number.NaN
+  if (count === 0) return Number.NaN
+  let best = 0
+  for (let i = 0; i < count; i += 1) {
+    let body = 0
+    for (let j = 0; j < count; j += 1) {
+      if (LAKE_LEVELS[j] === LAKE_LEVELS[i]) body += LAKE_WEIGHTS[j] as number
+    }
+    LAKE_BODIES[i] = body
+    if (body > best) best = body
+  }
+  // Each body once, at its first node; the sum is symmetric in the bodies,
+  // so the order the ring lists them in cannot move it.
+  let sum = 0
+  let weight = 0
+  for (let i = 0; i < count; i += 1) {
+    let first = true
+    for (let j = 0; j < i; j += 1) {
+      if (LAKE_LEVELS[j] === LAKE_LEVELS[i]) first = false
+    }
+    if (!first) continue
+    const say = plateWeight(
+      (best - (LAKE_BODIES[i] as number)) / total,
+      DRAINAGE_SHAPE.lakeMargin,
+    )
+    sum += say * (LAKE_LEVELS[i] as number)
+    weight += say
+  }
+  return sum / weight
 }

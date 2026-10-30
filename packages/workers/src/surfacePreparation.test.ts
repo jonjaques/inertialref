@@ -24,6 +24,7 @@ import { defineTask, TaskRegistry } from './task.ts'
 import {
   type ArchivedSource,
   createTaskRegistry,
+  depositSlopesTask,
   type HeightfieldResponse,
   type PreparedSurface,
   prepareSurfaceTask,
@@ -114,6 +115,7 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
     elevations: new Float32Array(side * side),
     cover: new Uint8Array(0),
     water: new Float32Array(0),
+    morph: null,
     minElevation: 0,
     maxElevation: 0,
   }
@@ -122,14 +124,16 @@ function flatField(request: HeightfieldRequest): HeightfieldResponse {
 /** A producer that counts what reaches it. */
 function countingSource() {
   const asked: SurfaceParameters[] = []
+  const lanes: (string | undefined)[] = []
   const source: ArchivedSource & { available: boolean } = {
     kind: 'gpu',
     archive: 'gpu@test',
     available: true,
     maxLevel: 9,
     supports: (request) => request.region.level > 0,
-    submit(surface, request) {
+    submit(surface, request, lane) {
       asked.push(surface)
+      lanes.push(lane)
       return {
         id: asked.length,
         result: Promise.resolve(flatField(request)),
@@ -137,7 +141,7 @@ function countingSource() {
       }
     },
   }
-  return { source, asked }
+  return { source, asked, lanes }
 }
 
 const REQUEST: HeightfieldRequest = {
@@ -380,6 +384,19 @@ describe('a source held for its surface', () => {
     gate.pool.terminate()
   })
 
+  it('asks the producer in the lane it was asked in, held or not', async () => {
+    const gate = gatedPool(() => ({ level: 5, drainage: null }))
+    const preparation = new SurfacePreparation(gate.pool)
+    const { source, lanes } = countingSource()
+    const held = preparation.holding(source)
+    const waiting = held.submit(unseen('Earth'), REQUEST, 'background')
+    await held.submit(unseen(), REQUEST, 'background').result
+    await gate.release()
+    await waiting.result
+    expect(lanes).toEqual(['background', 'background'])
+    gate.pool.terminate()
+  })
+
   it('passes a prepared surface straight through, and says what the producer says', async () => {
     const preparation = new SurfacePreparation(null)
     const { source, asked } = countingSource()
@@ -399,5 +416,112 @@ describe('a source held for its surface', () => {
     // the frame it retires, and the router routes around it.
     source.available = false
     expect(held.available).toBe(false)
+  })
+})
+
+describe('the deposit slope table', () => {
+  /*
+   * A pool answering both tasks at once, the table with a marker so the test
+   * can tell it arrived; the real measurement is seconds of a worker and is
+   * `depositSlope.test.ts`'s.
+   */
+  function slopePool() {
+    let measured = 0
+    const releases: (() => void)[] = []
+    const registry = new TaskRegistry()
+    // A tile the test holds open, so the queue can be made to wait behind it.
+    const hold = defineTask({
+      name: 'test.hold',
+      version: 1,
+      async run(): Promise<null> {
+        await new Promise<void>((resolve) => releases.push(resolve))
+        return null
+      },
+    })
+    registry.register(hold)
+    registry.register(
+      defineTask({
+        name: prepareSurfaceTask.name,
+        version: prepareSurfaceTask.version,
+        run: (): PreparedSurface => ({ level: 3, drainage: null }),
+      }),
+    )
+    registry.register(
+      defineTask({
+        name: depositSlopesTask.name,
+        version: depositSlopesTask.version,
+        run: () => {
+          measured += 1
+          return { levels: 1, table: new Float32Array([42]) }
+        },
+      }),
+    )
+    const pool = new WorkerPool({
+      factory: () => createInlineWorker(registry),
+      size: 1,
+    })
+    return {
+      pool,
+      measured: () => measured,
+      hold: () => pool.submit(hold, {}),
+      release: () => {
+        for (const release of releases.splice(0)) release()
+      },
+    }
+  }
+
+  it('is measured once, and only after the surface is prepared', async () => {
+    const { pool, measured } = slopePool()
+    const preparation = new SurfacePreparation(pool)
+    const surface = unseen()
+    // The ground's floor first: asking for the table starts nothing yet.
+    expect(preparation.slopes(surface)).toBeNull()
+    await settle()
+    expect(measured()).toBe(0)
+    expect(preparation.slopes(surface)).toBeNull()
+    expect(preparation.slopes(surface)).toBeNull()
+    await settle()
+    expect(measured()).toBe(1)
+    expect(preparation.slopes(surface)?.table[0]).toBe(42)
+    pool.terminate()
+  })
+
+  it('waits for the pool’s queue to empty before it measures', async () => {
+    const { pool, measured, hold, release } = slopePool()
+    const preparation = new SurfacePreparation(pool)
+    const surface = unseen()
+    expect(preparation.slopes(surface)).toBeNull()
+    await settle()
+    // One tile on the only worker and one waiting behind it.
+    hold()
+    hold()
+    await settle()
+    expect(pool.queued).toBe(1)
+    expect(preparation.slopes(surface)).toBeNull()
+    await settle()
+    expect(measured()).toBe(0)
+    release()
+    await settle()
+    release()
+    await settle()
+    expect(pool.queued).toBe(0)
+    expect(preparation.slopes(surface)).toBeNull()
+    await settle()
+    expect(measured()).toBe(1)
+    pool.terminate()
+  })
+
+  it('settles a waiter with the table, starting the measurement itself', async () => {
+    const { pool } = slopePool()
+    const table = await new SurfacePreparation(pool).whenSlopes(unseen())
+    expect(table?.table[0]).toBe(42)
+    pool.terminate()
+  })
+
+  it('never measures without a pool, and says so at once', async () => {
+    const preparation = new SurfacePreparation(null)
+    const surface = unseen()
+    expect(preparation.slopes(surface)).toBeNull()
+    expect(await preparation.whenSlopes(surface)).toBeNull()
   })
 })

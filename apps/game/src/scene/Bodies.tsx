@@ -251,6 +251,7 @@ export function Bodies({
       terrain,
       bodyFor: (address) => engine.bodyFor(address),
       heightfields: engine.heightfields,
+      slopesFor: (surface) => engine.depositSlopes(surface),
     })
     baker.current = built
     const debug = window as unknown as { orbitalBaker?: OrbitalBaker }
@@ -281,6 +282,16 @@ export function Bodies({
     },
     [residency, spheres, rings],
   )
+
+  /*
+   * The orbital bakes in flight, a frame's share at a time — a few patches,
+   * or one face (`render/orbitalBake.ts`). At a priority of its own, ahead of
+   * every priority-0 callback, because a face draw writes the shared ground
+   * material's palette and `TerrainPatches` has to write the streamed body's
+   * back after it, before the frame draws. Inside this component's callback
+   * the mount order would say the same today, and nothing would hold it.
+   */
+  useTimedFrame('orbitalBake', () => baker.current?.advance(), -0.25)
 
   useTimedFrame('bodies', () => {
     const scene = engine.scene()
@@ -431,6 +442,7 @@ export function Bodies({
         setVector(planet.center.value, position)
         setColor(planet.baseColor, values.baseColor)
         setColor(planet.oceanColor, values.oceanColor)
+        setColor(planet.liquidGlow, values.liquidGlow)
         setNumber(planet.albedoScale, values.albedoScale)
         setNumber(planet.lunarLambert, values.lunarLambert)
         setNumber(planet.terminator, values.terminator)

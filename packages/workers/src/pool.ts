@@ -63,6 +63,25 @@ const RUN_DETAIL: TimingDetail = Object.freeze({
   color: 'secondary-dark',
 })
 
+/**
+ * Which queue a job waits in.
+ *
+ * A free worker takes the oldest `foreground` job, and a `background` job only
+ * when no foreground job is waiting. The orbital bake's ninety-six tiles are
+ * the case: they share this pool with the streamer, and in one queue a bake
+ * that starts on a descent puts every one of them ahead of the ground the
+ * descent is about to need. Nothing in the background lane is ever taken
+ * *instead of* a foreground job, and a dispatched job is never preempted — a
+ * lane decides which job a free worker takes next, not how long anything runs.
+ *
+ * This is scheduling, not generation. A task's answer is a function of its
+ * payload alone, so the order jobs reach a worker moves when an answer arrives
+ * and never what it is: reordering here cannot make a tile depend on which
+ * tile was asked for first, and the order-independence rule in `AGENTS.md` is
+ * untouched by it.
+ */
+export type JobLane = 'foreground' | 'background'
+
 export interface PoolOptions {
   readonly factory: WorkerFactory
   readonly size: number
@@ -111,7 +130,11 @@ export interface JobHandle<Response> {
 export class WorkerPool {
   #nextJobId: JobId = 1
   readonly #workers: PooledWorker[] = []
-  readonly #queue: PendingJob[] = []
+  /** Waiting jobs by lane, each oldest first. See `JobLane`. */
+  readonly #queues: Record<JobLane, PendingJob[]> = {
+    foreground: [],
+    background: [],
+  }
   readonly #active = new Map<JobId, PendingJob>()
   readonly #now: () => number
   readonly #log: Logger
@@ -163,6 +186,7 @@ export class WorkerPool {
     task: TaskDefinition<Request, Response>,
     payload: Request,
     transfer: readonly ArrayBufferLike[] = [],
+    lane: JobLane = 'foreground',
   ): JobHandle<Response> {
     invariant(!this.#terminated, 'Worker pool has been terminated')
     const id = this.#nextJobId++
@@ -183,7 +207,7 @@ export class WorkerPool {
       resolve,
       reject,
     }
-    this.#queue.push(job)
+    this.#queues[lane].push(job)
     this.#pump()
     return { id, result, cancel: () => this.cancel(id) }
   }
@@ -197,9 +221,10 @@ export class WorkerPool {
   }
 
   cancel(id: JobId): void {
-    const queuedIndex = this.#queue.findIndex((job) => job.id === id)
-    if (queuedIndex >= 0) {
-      const [job] = this.#queue.splice(queuedIndex, 1)
+    for (const queue of Object.values(this.#queues)) {
+      const queuedIndex = queue.findIndex((job) => job.id === id)
+      if (queuedIndex < 0) continue
+      const [job] = queue.splice(queuedIndex, 1)
       this.#canceled += 1
       job?.reject(new Error('canceled'))
       return
@@ -218,7 +243,7 @@ export class WorkerPool {
    * `stats()` allocates — an object, and an array to count the idle workers.
    */
   get queued(): number {
-    return this.#queue.length
+    return this.#queues.foreground.length + this.#queues.background.length
   }
 
   /**
@@ -249,7 +274,7 @@ export class WorkerPool {
     return {
       workers: this.#workers.length,
       idle: this.#workers.filter((w) => w.job === null).length,
-      queued: this.#queue.length,
+      queued: this.queued,
       active: this.#active.size,
       completed: this.#completed,
       failed: this.#failed,
@@ -262,8 +287,9 @@ export class WorkerPool {
 
   terminate(): void {
     this.#terminated = true
-    for (const job of this.#queue.splice(0))
-      job.reject(new Error('pool terminated'))
+    for (const queue of Object.values(this.#queues))
+      for (const job of queue.splice(0))
+        job.reject(new Error('pool terminated'))
     for (const job of this.#active.values())
       job.reject(new Error('pool terminated'))
     this.#active.clear()
@@ -273,7 +299,8 @@ export class WorkerPool {
   #pump(): void {
     for (const worker of this.#workers) {
       if (worker.job !== null) continue
-      const job = this.#queue.shift()
+      const job =
+        this.#queues.foreground.shift() ?? this.#queues.background.shift()
       if (job === undefined) return
       job.dispatchedAt = this.#now()
       const waited = job.dispatchedAt - job.enqueuedAt

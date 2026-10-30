@@ -23,8 +23,9 @@ byte, so one producer's cached tile cannot silently become the other's answer.
 cache failure falls back to the original source, and no cache joins a save.**
 
 The portable archive lives in `packages/workers`, one per store, and wraps each
-source with `archive.wrap(source)`. Its key contains the complete encoded
-`SurfaceParameters`, every `HeightfieldRequest` member, the terrain algorithm
+source with `archive.wrap(source)`. Its key contains the surface's complete
+identity (`surfaceIdentity`, which the drainage memo and the survey key on as
+well), every `HeightfieldRequest` member, the terrain algorithm
 version and the namespace the source declares beside its own arithmetic: the
 pool's is `cpu@` and its task's version (`POOL_ARCHIVE`), and the GPU
 producer's is `gpu:terrain-tsl@` and `TERRAIN_KERNEL_REVISION`, in the kernel's

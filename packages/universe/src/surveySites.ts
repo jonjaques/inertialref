@@ -1,14 +1,15 @@
 import { formatReading, type Meters, type Radians } from '@inertialref/shared'
-import { formatSeed } from '@inertialref/procedural'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import { type RegionAddress, regionAddress } from './address.ts'
 import {
   type DrainageGraph,
   drainageGraph,
   drainageLookup,
+  regionDrainageLevel,
 } from './drainage.ts'
 import { directionToGeodetic } from './frames.ts'
 import { terrainSketch } from './sketch.ts'
+import { surfaceIdentity } from './surfaceIdentity.ts'
 import type { Body } from './system.ts'
 import {
   type BodyFixedDirection,
@@ -116,7 +117,15 @@ interface Cell {
  */
 const centerOf = (body: Body, region: RegionAddress): Cell => {
   const direction = regionDirection(region, 0.5, 0.5)
-  const land = elevationAt(body.surface, direction)
+  // At the cell's own resolution of the drainage, which is what a patch at
+  // its level draws: a coarse cell asked for every creek a hundred meters
+  // across is a creek's construction paid to pick a summit, and the survey
+  // visits two thousand of them. The deepest cells resolve every level.
+  const land = elevationAt(
+    body.surface,
+    direction,
+    regionDrainageLevel(region.level),
+  )
   const sea = seaDatumElevation(body.surface)
   return {
     region,
@@ -637,27 +646,23 @@ const CACHE = new Map<string, readonly SurveySite[]>()
 const CACHE_LIMIT = 64
 
 /*
- * The grammar goes in whole, and that is deliberate rather than lazy.
+ * The surface goes in whole, and that is deliberate rather than lazy.
  *
  * The derivation is ~2,100 `elevationAt` samples, and `elevationAt` reads about
  * twenty grammar fields — every band's share of the budget, the crater ladder's
  * three, the erosion damping, the ice set, the plate count. Listing them here is
  * a list that has to be revisited every time a band reads one more, and the
  * failure when it is not is silent: two bodies agreeing on seed and radii get
- * each other's summits. Stringifying the record is complete by construction,
- * which is the claim the docstring above makes, and it is a few microseconds
- * against a derivation measured in tens of milliseconds.
+ * each other's summits. `surfaceIdentity` is complete by construction, which is
+ * the claim the docstring above makes; the radii beside it are the body's,
+ * which place the samples and are not on the surface.
  */
 const cacheKey = (body: Body): string =>
   [
-    formatSeed(body.surface.seed),
-    body.surface.maxElevation,
-    body.surface.roughness,
-    body.surface.seaLevel ?? 'dry',
+    surfaceIdentity(body.surface),
     body.radius,
     body.polarRadius,
     body.figure?.intermediateRadius ?? body.radius,
-    JSON.stringify(body.surface.grammar),
   ].join('|')
 
 /**

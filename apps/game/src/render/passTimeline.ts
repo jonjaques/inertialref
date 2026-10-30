@@ -16,7 +16,7 @@ import { drainedFrameMs } from './measure.ts'
  * - **It has no names.** A pass is keyed `r:<calls>:<contextId>:f<frame>`,
  *   and the context id is a counter; nothing maps it back to a target.
  * - **It loses the part of the scene pass before a framebuffer copy.**
- *   `copyFramebufferToTexture` — the sea's `viewportSharedTexture` — ends the
+ *   `copyFramebufferToTexture` — the sea's frame read, `SeaFrameNode` — ends the
  *   pass and begins a new one from the same descriptor, whose
  *   `timestampWrites` still name the same two query slots. The second begin
  *   overwrites the first, so the scene pass reads as only what was drawn after

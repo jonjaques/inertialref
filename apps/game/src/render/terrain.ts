@@ -22,6 +22,7 @@ import {
   dot,
   exp,
   float,
+  floor,
   Fn,
   If,
   length,
@@ -38,27 +39,41 @@ import {
   smoothstep,
   sqrt,
   texture,
+  uint,
   uniform,
   varying,
   vec2,
   vec3,
   vec4,
 } from 'three/tsl'
-import type { LinearRgb } from '@inertialref/universe'
+import type { DepositSlopeTable, LinearRgb } from '@inertialref/universe'
 import {
   OPEN_OCEAN,
   REFLECTANCE_CEILING,
   type SurfaceMaterial,
   type TerrainPalette,
 } from '@inertialref/rendering'
-import { asVector, bumped, fbmFetch, noiseSampler } from './noiseNodes.ts'
+import {
+  asField,
+  asVector,
+  bumped,
+  type Field,
+  latticeNoise,
+  noiseFetch,
+  noiseSampler,
+  stripes,
+  STRIPES_PER_CELL,
+  type Vector,
+} from './noiseNodes.ts'
 import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
-import { groundWearOf } from './wear.ts'
+import { createSlopeTable } from './slopeTable.ts'
+import { groundWearOf, NO_SLOPE_LEVEL } from './wear.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   groundBandsFor,
   type GroundDetail,
 } from './quality.ts'
+import { TERRAIN_RELIEF_PIXELS } from '../engine/terrainStreamer.ts'
 
 /*
  * The ground's own material.
@@ -101,8 +116,12 @@ export interface TerrainMaterial {
   readonly sunIntensity: { value: number }
   /** Enhanced visibility on the lit surface; orbital bakes remain physical. */
   readonly albedoScale: { value: number }
-  /** How much sky one display pixel subtends, radians. See `pixelAngle`. */
-  setPixelAngle(radians: number): void
+  /**
+   * How much sky one sample of the drawing buffer subtends, radians, and one
+   * display pixel — the second is what the relief gate counts in, and it is
+   * the first wherever the two are the same. See `pixelAngle`.
+   */
+  setPixelAngle(radians: number, displayRadians?: number): void
   /** Point the material at one body's surface appearance. Idempotent. */
   setPalette(palette: TerrainPalette, datumRadius: number): void
   /**
@@ -113,6 +132,12 @@ export interface TerrainMaterial {
    * whatever the manifest says exists.
    */
   setAlbedoMap(map: Texture | null, hasMap: boolean): void
+  /**
+   * The body's deposit slope table, or null for none — the deposits then
+   * read the drawn slope at every level. Compares by identity before it
+   * uploads, so writing it every frame is free.
+   */
+  setSlopeTable(table: DepositSlopeTable | null): void
   /**
    * The ground's slice of the surface-quality lever — the sea's goes to
    * `WaterMaterial`, the rocks' to the scatter. Compares before it writes.
@@ -128,17 +153,77 @@ export interface TerrainMaterial {
 }
 
 /**
- * Ground wavelength of the coarsest detail octave, meters.
+ * Ground wavelength of the coarsest detail octave, meters: one cell of
+ * `latticeNoise`, which is a gradient noise's wavelength — it is zero on
+ * every lattice point and has one feature between two of them.
  *
- * Four kilometers, and the ceiling on it is float32 rather than taste. This
- * octave is evaluated on the *direction* — a unit vector, so it is continuous
- * over the whole body with no patch, face or level seam anywhere — and a float32
- * direction resolves about 6 × 10⁻⁸ of a radian. Asking for features finer than
- * roughly a hundred meters of ground quantizes the noise domain into visible
- * steps; three octaves down from four kilometers stops an order of magnitude
- * short of that.
+ * **The macro band never repeats, and that is why it is not a fetch.** Every
+ * other octave reads the baked texture, which closes on `NOISE_CELLS`; this
+ * one is the coarsest, so its period is the one a frame can hold — thirty-two
+ * cells is 128 km, and a footprint of a few hundred meters a pixel draws the
+ * same tile several times across. It is `latticeNoise`, the texture's own
+ * construction on a lattice with no period, at two octaves.
+ *
+ * **Its coordinate is the patch anchor split in float64, plus the patch-local
+ * position.** `anchor + local` in float32 is rounded to half a meter on
+ * Earth, by a different amount in each patch, so a lattice coordinate formed
+ * from it steps at every seam — invisible at four kilometers, and a gully
+ * fifteen meters across cut off at every patch edge. So the CPU splits the
+ * unrounded anchor into whole cells and a remainder (`macroCell`,
+ * `macroOffset` in `wear.ts`), and the graph adds the patch-local offset to
+ * the remainder: exact to a fraction of a millimeter at every distance,
+ * continuous over the whole body, and the split the gullies' finer lattices
+ * read too, which is why their cells divide this one exactly.
  */
-const MACRO_METERS = 4000
+export const MACRO_METERS = 4000
+
+/**
+ * The gullies' coarsest lattice cell, meters — a hundred and twenty-eighth of
+ * the macro cell, so a gully cell index is `macroCell · 128` plus the floor
+ * of a small offset, exact. Stripes at `STRIPES_PER_CELL` a cell put the
+ * coarse gullies 15.6 m apart and the fine ones 7.8 m, which is the micro
+ * band's scale: below the mesh at a hover, a hillside's own texture from a
+ * stance.
+ */
+const GULLY_CELL = MACRO_METERS / 128
+
+/** Octaves of gullies, each half the last and cut along the slope the last one left. */
+const GULLY_OCTAVES = 2
+
+/**
+ * How much shallower each octave's walls pitch than the last's. At one the
+ * rills are as steep as the gullies they feed, and two equal octaves read as
+ * a comb drawn down the slope rather than as water's work.
+ */
+const GULLY_GAIN = 0.6
+
+/**
+ * The steepest a gully's wall pitches the ground across the fall line, as a
+ * slope. A V of this pitch at 15.6 m is a gully 1.5 m deep, which is what a
+ * hillside a mesh cell across can carry without the shading claiming relief
+ * the silhouette does not have.
+ */
+const GULLY_SLOPE = 0.3
+
+/**
+ * The ground slopes between which gullies come in, from none to full
+ * strength. Water does not channel on the flat, and a ridge crest has no fall
+ * line to run along; both read zero, and under the first figure the gullies
+ * are a branch not taken — most of a coastal plain.
+ */
+const GULLY_FLOOR = 0.08
+const GULLY_ONSET = 0.35
+
+/**
+ * How much a gully's floor darkens the ground, per unit of floor depth: the
+ * fines and the shade collect there. The coarse octave's floor is 0.9 deep
+ * and its spur −0.005, so a floor is 7.2% darker than the spur beside it,
+ * and 10.9% where a fine floor at half the depth lies in a coarse one.
+ */
+const GULLY_SHADE = 0.08
+
+/** The gullies' lattice seed, so their phases are not the macro noise's gradients. */
+const GULLY_SEED = 0x6a09e667
 
 /**
  * And of the middle octave, evaluated on the patch-local position instead.
@@ -207,7 +292,6 @@ export function createTerrainMaterial(): TerrainMaterial {
   const sunColor = uniform(new Color(1, 1, 1))
   const sunIntensity = uniform(1)
   const albedoScale = uniform(1)
-  const macroFrequency = uniform(1)
 
   /*
    * One color and one `(roughness, grain, bump)` triple per deposit.
@@ -234,6 +318,12 @@ export function createTerrainMaterial(): TerrainMaterial {
   const aeolian = uniform(0)
   const evaporitic = uniform(0)
   const repose = uniform(0.16)
+  /*
+   * The angle of repose as a slope, rise over run — the unit every gradient
+   * in the erosion field is in, where `repose` is `1 − cos θ` for the
+   * deposits' sake.
+   */
+  const reposeSlope = uniform(0.65)
   const maxElevation = uniform(1)
   const seaEnabled = uniform(0)
   const seaDatum = uniform(0)
@@ -280,6 +370,12 @@ export function createTerrainMaterial(): TerrainMaterial {
    */
   const pixelAngle = uniform(1e-3)
   /*
+   * And one *display* pixel's, which differs by the supersampling factor:
+   * the relief gate counts display pixels, so the footprint at which the
+   * streamer hands the body back to its sphere is a ratio of the two.
+   */
+  const displayPixelAngle = uniform(1e-3)
+  /*
    * The archive's own picture of this body, and whether there is one.
    *
    * A mapped body's ground wears its published map — the same photograph the
@@ -310,6 +406,13 @@ export function createTerrainMaterial(): TerrainMaterial {
   const morphBand = uniform(new Vector2()).onObjectUpdate(
     ({ object }) => groundWearOf(object).morphBand,
   )
+  // The patch's level, the row of the body's slope table its deposits read
+  // (`slopeTable.ts`) — or `NO_SLOPE_LEVEL` for a rock or a dummy, whose
+  // normal is no level's.
+  const patchLevel = uniform(NO_SLOPE_LEVEL).onObjectUpdate(
+    ({ object }) => groundWearOf(object).level,
+  )
+  const slopeTable = createSlopeTable()
   /*
    * The patch's own anchor, which is what turns an anchor-relative vertex back
    * into a place on the body.
@@ -342,9 +445,20 @@ export function createTerrainMaterial(): TerrainMaterial {
   const grainOrigin = uniform(new Vector3()).onObjectUpdate(
     ({ object }) => groundWearOf(object).grainOrigin,
   )
+  /*
+   * The anchor split across the macro lattice — whole cells, and meters under
+   * one — so the bands that may not repeat read an exact coordinate from
+   * `positionLocal` and these. See `MACRO_METERS`.
+   */
+  const macroCell = uniform(new Vector3()).onObjectUpdate(
+    ({ object }) => groundWearOf(object).macroCell,
+  )
+  const macroOffset = uniform(new Vector3()).onObjectUpdate(
+    ({ object }) => groundWearOf(object).macroOffset,
+  )
 
   /*
-   * Three varyings, and none of them may take an attribute's name.
+   * The varyings, and none of them may take an attribute's name.
    *
    * `varying` and `attribute` both become identifiers in the generated WGSL, so
    * a varying called `terrainCover` beside the attribute of that name is a
@@ -356,6 +470,9 @@ export function createTerrainMaterial(): TerrainMaterial {
   const localPosition = varying(vec3(), 'terrainLocal')
   const surfaceCover = varying(vec4(), 'terrainDeposit')
   const surfaceCover2 = varying(vec4(), 'terrainDeposit2')
+  // How far this vertex has slid onto its parent's grid, for the row of the
+  // slope table its deposits read between the two levels.
+  const morphFactor = varying(float(), 'terrainMorphFactor')
 
   const material = sensorRadiance(new MeshBasicNodeMaterial())
 
@@ -390,6 +507,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     // that defaults to the raw attribute: a morphed vertex would then report
     // its whole snap as motion every frame and blur the band while parked.
     positionPrevious.assign(moved)
+    morphFactor.assign(k)
     shadedNormal.assign(normalize(mix(normalLocal, targetNormal, k)))
     localPosition.assign(moved)
     surfaceCover.assign(mix(cover, targetCover, k))
@@ -498,14 +616,55 @@ export function createTerrainMaterial(): TerrainMaterial {
     const toEye = eyeLocal.sub(local)
     const view = normalize(toEye)
     const squareOn = max(dot(normal, view).abs(), float(0.08))
-    const footprint = length(toEye).mul(pixelAngle).div(squareOn)
+    /*
+     * In bake mode the eye is not where `eyeLocal` says. The bake's camera is
+     * at the body's center and every patch is worn at its own anchor, so
+     * measured from the anchor the footprint fell to nothing around each of
+     * the ninety-six and the bake drew detail there at kilometers a texel.
+     * From the center a texel covers the radius times its angle, everywhere.
+     */
+    const footprint = mix(
+      length(toEye).mul(pixelAngle).div(squareOn),
+      anchorLength.mul(pixelAngle),
+      saturate(bakeMode),
+    )
 
+    /*
+     * The footprint at which this ground stops being drawn, and the detail
+     * that is gone before it.
+     *
+     * The streamer hands a body back to its sphere once its relief covers
+     * fewer than `TERRAIN_RELIEF_PIXELS` display pixels, and the sphere wears
+     * the orbital bake, which holds none of the bands below — so every one of
+     * them has to be zero on this side of the switch, or the switch is a step
+     * (ADR-0020's seam). At that height the nearest ground is the eye's height
+     * away, give or take the relief itself, which is under one percent of the
+     * height at any lens; no pixel's footprint is smaller than that height
+     * times the sample angle, which is `gateFootprint`. Reaching zero at nine
+     * tenths of it leaves the margin for the relief, and the bands fade in
+     * over the factor of four below.
+     */
+    const gateFootprint = maxElevation
+      .mul(pixelAngle)
+      .div(max(displayPixelAngle, float(1e-12)).mul(TERRAIN_RELIEF_PIXELS))
+    const gate = oneMinus(
+      smoothstep(gateFootprint.mul(0.25), gateFootprint.mul(0.9), footprint),
+    )
+
+    /*
+     * The macro band's two octaves fade on their own wavelengths — four
+     * kilometers and two — and both on the gate.
+     */
     const macroFade = oneMinus(
       smoothstep(float(MACRO_METERS * 0.25), float(MACRO_METERS), footprint),
-    )
-    const microFade = oneMinus(
-      smoothstep(float(MICRO_METERS * 0.4), float(MICRO_METERS * 2), footprint),
-    )
+    ).mul(gate)
+    const macroFineFade = oneMinus(
+      smoothstep(
+        float(MACRO_METERS * 0.125),
+        float(MACRO_METERS * 0.5),
+        footprint,
+      ),
+    ).mul(gate)
 
     /*
      * Each octave runs only where it is worth anything: inside a branch on
@@ -514,66 +673,41 @@ export function createTerrainMaterial(): TerrainMaterial {
      * pixel is most of what a whole-screen ground costs at a retina size —
      * the far ground, which is most of the frame from any height, pays for
      * none of the micro or the grain this way.
-     */
-    // Direction-domain, so it is one continuous field over the whole body with
-    // no patch, no cube face and no level in it.
-    /*
-     * Each field is a value and a gradient — `x` and `yzw` of the fetch —
-     * and the gradient is carried in meters per meter along the body-fixed
-     * axes: the direction-domain band's slope over `|anchor|`, because a
-     * step of one meter on the ground is `1/|anchor|` of a unit direction;
-     * the meter-domain bands' over their own wavelengths.
+     *
+     * Each field is a value and a gradient — `x` and `yzw` — and the gradient
+     * is carried in meters per meter along the body-fixed axes.
+     *
+     * The bake reads none of it: its texels are kilometers, the sphere draws
+     * nothing finer than the bake, and a band sampled once a texel is noise.
      */
     const macro = vec4(0).toVar()
-    If(detailBands.greaterThan(0.5).and(macroFade.greaterThan(0)), () => {
-      const field = fbmFetch(noise, asVector(up.mul(macroFrequency)), 2)
-      macro.assign(
-        vec4(field.x, field.yzw.mul(macroFrequency).div(anchorLength)).mul(
-          macroFade,
-        ),
-      )
-    })
-    // Meters-domain, so it stays sharp at arm's length. See `MICRO_METERS`.
-    const micro = vec4(0).toVar()
-    If(detailBands.greaterThan(1.5).and(microFade.greaterThan(0)), () => {
-      const field = fbmFetch(
-        noise,
-        asVector(local.mul(float(1 / MICRO_METERS))),
-        1,
-      )
-      micro.assign(
-        vec4(field.x, field.yzw.mul(float(1 / MICRO_METERS))).mul(microFade),
-      )
-    })
-    const detail = macro.x.mul(0.6).add(micro.x.mul(0.4))
-    const detailSlope = macro.yzw.mul(0.6).add(micro.yzw.mul(0.4))
-
-    /*
-     * And the grain: the band between a mesh cell and a pixel.
-     *
-     * Its own fade, its own domain and its own amplitude, so it is a separate
-     * term from `detail` rather than two more octaves of it — `detail` is spent
-     * on reflectance as well as on shape, and mottling an ocean or a dust plain
-     * at nine centimeters is not the same decision as bumping it.
-     */
-    const grainFade = oneMinus(
-      smoothstep(
-        float(GRAIN_METERS * 0.3),
-        float(GRAIN_METERS * 1.5),
-        footprint,
-      ),
+    If(
+      detailBands
+        .greaterThan(0.5)
+        .and(macroFade.greaterThan(0))
+        .and(bakeMode.lessThan(0.5)),
+      () => {
+        macro.assign(
+          macroOctave(
+            asVector(macroCell),
+            asVector(macroOffset),
+            asVector(local),
+            0,
+          ).mul(macroFade),
+        )
+        If(macroFineFade.greaterThan(0), () => {
+          macro.addAssign(
+            macroOctave(
+              asVector(macroCell),
+              asVector(macroOffset),
+              asVector(local),
+              1,
+            ).mul(macroFineFade.mul(0.5)),
+          )
+        })
+        macro.mulAssign(1 / 1.5)
+      },
     )
-    const grit = vec4(0).toVar()
-    If(detailBands.greaterThan(1.5).and(grainFade.greaterThan(0)), () => {
-      const field = fbmFetch(
-        noise,
-        asVector(grainOrigin.add(local.mul(float(1 / GRAIN_METERS)))),
-        GRAIN_OCTAVES,
-      )
-      grit.assign(
-        vec4(field.x, field.yzw.mul(float(1 / GRAIN_METERS))).mul(grainFade),
-      )
-    })
 
     /* --- which deposit is here --------------------------------------------- */
 
@@ -601,15 +735,26 @@ export function createTerrainMaterial(): TerrainMaterial {
      * *about* the angle of repose, and 33° is where loose material stops
      * resting whatever it is made of.
      *
-     * The real fix is for the deposits to read the canonical field rather than
-     * the mesh, which means more channels on the cover and belongs with the
-     * scatter that will want them.
+     * Wide bands do not account for all of it, because the difference is not
+     * noise: a coarse patch's normal is the ground smoothed over its cell, so
+     * a coarser level draws flatter ground on average — 0.4 to 1.4% of the
+     * drawn value at each level boundary on Iapetus and the shore world,
+     * rings of tone at every morph band. So the slope the deposits read is the
+     * drawn one mapped through the body's slope table onto the floor's
+     * distribution (`depositSlope.ts`): rank kept, so a coarse level's
+     * steepest ground is still where its bedrock goes, and the fraction past
+     * any threshold the floor's at every level. Blended between the patch's
+     * row and its parent's by the morph, so a patch that has slid onto its
+     * parent's grid reads its parent's row with its parent's normal.
      */
+    const depositSlope = slopeTable.read(slope, patchLevel, morphFactor)
     const mantled = oneMinus(
-      smoothstep(repose.mul(0.6), repose.mul(2.2), slope),
+      smoothstep(repose.mul(0.6), repose.mul(2.2), depositSlope),
     )
     // A dune sea and a playa need flatter ground than a regolith mantle does.
-    const level = oneMinus(smoothstep(repose.mul(0.05), repose.mul(1), slope))
+    const level = oneMinus(
+      smoothstep(repose.mul(0.05), repose.mul(1), depositSlope),
+    )
 
     /*
      * Water is a different material, not a different color — and it is decided
@@ -745,6 +890,192 @@ export function createTerrainMaterial(): TerrainMaterial {
     const grain = scalars.y
     const bump = scalars.z
 
+    /* --- the eroded detail -------------------------------------------------- */
+
+    /*
+     * Everything finer than the macro band, read against the slope it lies on.
+     *
+     * `fall` is the running slope in meters per meter along the body-fixed
+     * axes: the landform's own, from the mesh normal against the radial, and
+     * then each band's added as it is drawn — scaled as the shading will see
+     * it, by the deposit's bump and nothing on water. Three things read it.
+     *
+     * **The roughness is damped by it.** Each octave's amplitude is divided by
+     * `1 + |fall|² / tan²(repose)` — Quílez's accumulation, in slopes rather
+     * than in noise units, so an octave keeps half its strength at the angle
+     * of repose and nearly all of it on the flat. Erosion takes the texture
+     * off a slope and leaves it on the ground the slope runs down to, and the
+     * gradient each fetch already carries is the whole cost: one add an
+     * octave.
+     *
+     * **The gullies run down it.** See `stripes` in `noiseNodes.ts`; each
+     * octave's stripes follow the slope the coarser one left, so the fine
+     * gullies bend into the coarse ones the way rills feed a gully. `fall`
+     * is the landform's gradient, which is the fall line wherever the ground
+     * drains in a straight line; a drainage segment's own direction is the
+     * better answer near a channel, and when the material can read one it
+     * replaces the landform's gradient here and nowhere else.
+     *
+     * **The talus settles at it.** Loose ground is not drawn steeper than the
+     * angle of repose — the detail's slope is clamped where the sum would
+     * exceed it — so the apron under a scarp reads as the smooth, planar fan
+     * a scree slope is, under the gullied rock above. Rock steeper than the
+     * angle keeps its own slope; the clamp limits what the detail adds.
+     */
+    const fineBands = detailBands.greaterThan(1.5)
+    const bumpWeight = bump.mul(dry)
+    const landSlope = up.sub(normal.div(max(dot(normal, up), float(0.2))))
+    const fall = landSlope
+      .add(macro.yzw.mul(0.6 * MICRO_RELIEF).mul(bumpWeight))
+      .toVar()
+    const reposeSquared = reposeSlope.mul(reposeSlope)
+    const damping = (): Node<'float'> => {
+      const across = fall.sub(up.mul(dot(fall, up)))
+      return float(1).div(float(1).add(dot(across, across).div(reposeSquared)))
+    }
+
+    /*
+     * The gullies: `x` how deep in a gully floor this is, for the albedo, and
+     * `yzw` the slope of its walls. Their fades are their stripes' — 15.6 m
+     * and 7.8 m — and the gate's, and they end at one wavelength rather than
+     * the noise bands' two: a stripe is a period, and a period sampled
+     * coarser than itself is a moiré where noise is only noise. The mask is
+     * the slope's, eased out from the flat and the crest, and each octave's
+     * mask is the coarser one's times its own, so the fine gullies keep to
+     * the slopes the coarse ones cut.
+     *
+     * They are cut before the micro octave is laid on, so the fall line they
+     * follow is the landform's: the micro octave's own slope is a few
+     * hundredths, which on a plain is all the slope there is, and stripes
+     * steered by it wander across the flat like a fingerprint.
+     */
+    /*
+     * Not under water: neither the painted river nor the seabed under the
+     * sheet. A gully is what running water cuts into a slope it runs over,
+     * and the seabed is drawn in full and then mostly absorbed — at a
+     * two-meter stance over the shore it is two thirds of the frame.
+     */
+    const exposed = dry.mul(oneMinus(submerged))
+    const gully = vec4(0).toVar()
+    const gullyFades = Array.from({ length: GULLY_OCTAVES }, (_, octave) => {
+      const wavelength = GULLY_CELL / 2 ** octave / STRIPES_PER_CELL
+      return oneMinus(
+        smoothstep(float(wavelength * 0.25), float(wavelength), footprint),
+      ).mul(gate)
+    })
+    If(
+      fineBands
+        .and(exposed.greaterThan(0))
+        .and(gullyFades[0]!.greaterThan(0))
+        .and(length(fall.sub(up.mul(dot(fall, up)))).greaterThan(GULLY_FLOOR)),
+      () => {
+        const mask = float(1).toVar()
+        for (let octave = 0; octave < GULLY_OCTAVES; octave += 1) {
+          const cell = GULLY_CELL / 2 ** octave
+          const flowing = fall.sub(up.mul(dot(fall, up)))
+          const steepness = length(flowing)
+          const flat = saturate(
+            steepness.sub(GULLY_FLOOR).div(GULLY_ONSET - GULLY_FLOOR),
+          ).oneMinus()
+          mask.mulAssign(oneMinus(flat.mul(flat)))
+          // `up × flowing` is the across-slope direction at the slope's length.
+          const across = cross(up, flowing).div(max(steepness, float(1e-4)))
+          const point = asVector(macroOffset.add(local).mul(1 / cell))
+          const whole = asVector(floor(point))
+          const phasor = stripes(
+            asVector(macroCell.mul(MACRO_METERS / cell).add(whole)),
+            asVector(point.sub(whole)),
+            asVector(across),
+            uint(GULLY_SEED + octave),
+          )
+          /*
+           * The profile is `√((1 − cos θ)/2)`, a V at the floor and a round
+           * spur between — gullies cut into a slope rather than ripples on
+           * it — and its slope across the fall line is `sin θ / 2q` times
+           * the wall's pitch: ±1 at the floor, zero on the spur. The small
+           * constant under the root rounds the V's point, which is where a
+           * float decides a sign.
+           */
+          const depth = sqrt(
+            max(oneMinus(phasor.x).mul(0.5), float(0)).add(0.01),
+          )
+          const weight = mask.mul(gullyFades[octave]!).mul(exposed)
+          const wall = across.mul(
+            phasor.y
+              .div(depth.mul(2))
+              .mul(weight.mul(GULLY_SLOPE * GULLY_GAIN ** octave)),
+          )
+          gully.addAssign(
+            vec4(
+              oneMinus(depth)
+                .mul(weight)
+                .mul(0.5 ** octave),
+              wall,
+            ),
+          )
+          fall.addAssign(wall)
+        }
+      },
+    )
+
+    // Meters-domain, so it stays sharp at arm's length. See `MICRO_METERS`.
+    const microFade = oneMinus(
+      smoothstep(float(MICRO_METERS * 0.4), float(MICRO_METERS * 2), footprint),
+    )
+    const micro = vec4(0).toVar()
+    If(fineBands.and(microFade.greaterThan(0)), () => {
+      const field = noiseFetch(
+        noise,
+        asVector(local.mul(float(1 / MICRO_METERS))),
+      )
+      micro.assign(
+        vec4(field.x, field.yzw.mul(float(1 / MICRO_METERS))).mul(
+          microFade.mul(damping()),
+        ),
+      )
+      fall.addAssign(micro.yzw.mul(0.4 * MICRO_RELIEF).mul(bumpWeight))
+    })
+    const detail = macro.x.mul(0.6).add(micro.x.mul(0.4))
+    const detailSlope = macro.yzw.mul(0.6).add(micro.yzw.mul(0.4))
+
+    /*
+     * And the grain: the band between a mesh cell and a pixel.
+     *
+     * Its own fade, its own domain and its own amplitude, so it is a separate
+     * term from `detail` rather than two more octaves of it — `detail` is spent
+     * on reflectance as well as on shape, and mottling an ocean or a dust plain
+     * at nine centimeters is not the same decision as bumping it.
+     */
+    const grainFade = oneMinus(
+      smoothstep(
+        float(GRAIN_METERS * 0.3),
+        float(GRAIN_METERS * 1.5),
+        footprint,
+      ),
+    )
+    const grit = vec4(0).toVar()
+    If(fineBands.and(grainFade.greaterThan(0)), () => {
+      const point = asVector(
+        grainOrigin.add(local.mul(float(1 / GRAIN_METERS))),
+      )
+      let amplitude = 1 / (2 - 0.5 ** (GRAIN_OCTAVES - 1))
+      let scale = 1
+      for (let octave = 0; octave < GRAIN_OCTAVES; octave += 1) {
+        const field = noiseFetch(noise, asVector(point.mul(scale)))
+        const octaveField = vec4(
+          field.x,
+          field.yzw.mul(float(scale / GRAIN_METERS)),
+        ).mul(damping().mul(amplitude))
+        grit.addAssign(octaveField)
+        fall.addAssign(
+          octaveField.yzw.mul(grainFade.mul(GRAIN_RELIEF)).mul(bumpWeight),
+        )
+        amplitude *= 0.5
+        scale *= 2
+      }
+      grit.mulAssign(grainFade)
+    })
+
     /* --- what it reflects --------------------------------------------------- */
 
     /*
@@ -771,7 +1102,9 @@ export function createTerrainMaterial(): TerrainMaterial {
      * noise and mottling an ocean with rock grain is the one thing that would
      * make it read as wet concrete.
      */
-    const mottle = float(1).add(detail.mul(grain).mul(dry))
+    const mottle = float(1)
+      .add(detail.mul(grain).mul(dry))
+      .mul(oneMinus(gully.x.mul(GULLY_SHADE)))
     // And the one high-contrast feature an airless world has.
     const fresh = mix(float(1), freshGain, saturate(cover.x).mul(invented))
 
@@ -901,11 +1234,26 @@ export function createTerrainMaterial(): TerrainMaterial {
      * a flat sea with rock grain is the one thing that would make an ocean
      * read as wet concrete.
      */
-    const slopeOfDetail = detailSlope
+    const detailRelief = detailSlope
       .mul(float(MICRO_RELIEF))
       .add(grit.yzw.mul(float(GRAIN_RELIEF)))
-      .mul(bump)
-      .mul(dry)
+      .mul(bumpWeight)
+      .add(gully.yzw)
+    /*
+     * The talus clamp. On loose ground — a landform under the angle of
+     * repose, eased off above it — the slope the detail draws may not exceed
+     * the angle or the landform's own slope, whichever is steeper; what it
+     * would add beyond that is taken back along the summed slope's own
+     * direction, so the detail keeps its pattern and loses its steepness.
+     */
+    const loose = oneMinus(
+      smoothstep(reposeSlope.mul(0.9), reposeSlope.mul(1.4), length(landSlope)),
+    )
+    const drawnSlope = landSlope.add(detailRelief)
+    const drawnSteepness = max(length(drawnSlope), float(1e-4))
+    const allowed = max(reposeSlope, length(landSlope))
+    const settled = drawnSlope.mul(min(float(1), allowed.div(drawnSteepness)))
+    const slopeOfDetail = mix(drawnSlope, settled, loose).sub(landSlope)
     const shaded = bumped(asVector(normal), asVector(slopeOfDetail))
 
     /* --- the light ---------------------------------------------------------- */
@@ -1092,10 +1440,11 @@ export function createTerrainMaterial(): TerrainMaterial {
     sunColor,
     sunIntensity,
     albedoScale,
-    setPixelAngle(radians) {
+    setPixelAngle(radians, displayRadians = radians) {
       pixelAngle.value = radians
+      displayPixelAngle.value = displayRadians
     },
-    setPalette(palette, datumRadius) {
+    setPalette(palette) {
       write(rock, palette.rock)
       write(regolith, palette.regolith)
       write(basalt, palette.basalt)
@@ -1122,15 +1471,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       paint(hazeColor, palette.hazeColor)
       skyStrength.value = palette.airThickness
       paint(sunsetTint, palette.sunsetTint)
-      /*
-       * The macro octave's frequency, in cycles per unit of the *direction*.
-       *
-       * A direction is dimensionless, so the wavelength has to be converted
-       * through the body's own size — which is also what makes one constant
-       * serve a 236 km moon and a 6,371 km planet: four kilometers of ground is
-       * four kilometers of ground on both.
-       */
-      macroFrequency.value = (2 * Math.PI * datumRadius) / MACRO_METERS
+      reposeSlope.value = Math.tan(Math.acos(1 - palette.repose))
     },
     setQuality(ground) {
       const bands = groundBandsFor(ground)
@@ -1153,7 +1494,36 @@ export function createTerrainMaterial(): TerrainMaterial {
       albedoMap.value = map ?? BLANK
       mapped.value = hasMap ? 1 : 0
     },
+    setSlopeTable(table) {
+      slopeTable.set(table)
+    },
   }
+}
+
+/**
+ * One octave of the macro band at a point on the ground: `latticeNoise` at
+ * `2^octave` cells a `MACRO_METERS` cell, the value in `x` and its gradient
+ * per meter in `yzw`. `cell` and `offset` are a wearer's `macroCell` and
+ * `macroOffset`; the octave's whole cells are the anchor's times its scale
+ * plus the floor of a small number, so no lattice decision is taken on a
+ * planetary-sized float.
+ */
+export function macroOctave(
+  cell: Vector,
+  offset: Vector,
+  local: Vector,
+  octave: number,
+): Field {
+  const scale = 2 ** octave
+  const point = asVector(offset.add(local).mul(scale / MACRO_METERS))
+  const whole = asVector(floor(point))
+  const field = asField(
+    latticeNoise(
+      asVector(cell.mul(scale).add(whole)),
+      asVector(point.sub(whole)),
+    ),
+  )
+  return asField(vec4(field.x, field.yzw.mul(scale / MACRO_METERS)))
 }
 
 /**

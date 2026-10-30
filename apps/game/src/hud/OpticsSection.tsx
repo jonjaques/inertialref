@@ -11,7 +11,7 @@ import { Section } from './Section.tsx'
  *
  * Two of them settle scope on sight. The hyperfocal distance is 5.4 m at the
  * flight lens, so everything at planetary range is sharp — it climbs with the
- * glass, to 4.5 km at the telephoto end with the zoom racked out, which is the
+ * glass, to 13.9 km at the telephoto end with the zoom racked out, which is the
  * one corner of the controls where defocus reaches the ground. And the
  * diffraction limit is f/12, so the aperture is a free control until it is not.
  *

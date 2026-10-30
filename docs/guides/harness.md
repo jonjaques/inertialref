@@ -497,7 +497,11 @@ and `lit` is the verdict a fixture is chosen by. `ir.settled()` is what a
 capture waits for instead of a number of milliseconds: the sky's physical
 cubes publish tile by tile and the streamer fills a ring at a time, and a
 still taken while either is in flight is a still of something still
-arriving. `pnpm drive --settle <ms>` polls it.
+arriving. The ground is also not settled until the body's deposit slope
+table lands (`ir.terrain().depositsPending`), seconds after its tiles,
+because it moves the ground's tone once at every coarse level
+([ADR-0051](../adr/0051-a-rock-stands-on-the-drawn-ground.md)).
+`pnpm drive --settle <ms>` polls it.
 
 **`visit` cuts and `drop` flies**, and the difference is the intent rather than
 the destination. `visit` is what a plate is captured through, so the frame after
@@ -756,9 +760,13 @@ like everything else here.
 
 **Every frame-rate figure is a function of the surface levers as well, so
 state them.** `engine.surfaceQuality` is the field the frame loop reads — the
-refinement threshold, the ground's octaves, the sea's refraction and waves,
+refinement threshold, the ground's octaves, the sea's frame read and waves,
 the rocks — and a driving script can set it between two `--cast`s to measure
-one term: `render/quality.ts` names what each step spends. The materials
+one term: `render/quality.ts` names what each step spends. `ground: 'full'`
+is the macro band and the eroded detail under it — the micro octave and the
+grain damped by their slope, the gullies, the talus clamp — and `'lean'` is
+the macro band alone, so the two differ by everything finer than a
+kilometer. The materials
 compare before they write, so flipping a lever costs the next frame nothing
 but the change. The record that outlives the session is the `render.surface`
 preference, which the graphics panel edits and `state/engineKnobs.ts` carries
@@ -766,10 +774,15 @@ to the field, so a script's write holds until that key next moves and does not
 survive a reload — which is what you want of a measurement.
 
 **Every count here is a function of the lens, so every report states one.** The
-demand climbs steeply with the pixels-per-radian — measured, the telephoto end
-of the slider wants 1.9× to 3.2× what the flight lens does — so a figure taken
-without the optics beside it is one nobody can reproduce or compare with
-yesterday's. `ir.descend` and `ir.terrainBaseline` print the lens and the
+demand climbs steeply with the pixels-per-radian — measured, a whole disk at the
+telephoto end wants 2,063 to 12,330 patches standing where the flight lens wants
+456 to 1,061 — so a figure taken without the optics beside it is one nobody can
+reproduce or compare with yesterday's. The live streamer also knows where the
+picture looks: past the flight lens it refines at the lens only where the frame
+can reach, and `ir.terrain().outside` counts the patches it refined at the
+flight lens instead. `ir.descend` and `ir.terrainBaseline` have no camera to
+aim, so they refine the whole disk at whatever lens they are handed — the
+conservative question, and a different one. `ir.descend` and `ir.terrainBaseline` print the lens and the
 viewport in their headers and carry both in the returned object; `ir.terrain`
 carries the live one. Both probes take a `lens` and a `viewport` to ask the
 question at another setting, and `ir.descend` takes a `maxPatches` — the

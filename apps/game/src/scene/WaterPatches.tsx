@@ -40,7 +40,6 @@ export function WaterPatches({
 }) {
   const group = useRef<Group>(null)
   const meshes = useMemo(() => new Map<string, Mesh>(), [])
-  const material = water.material
   const indices = useMemo(
     () => new BufferAttribute(patchIndices(HEIGHTFIELD_RESOLUTION), 1),
     [],
@@ -50,31 +49,38 @@ export function WaterPatches({
   const scene = useThree((state) => state.scene)
 
   /*
-   * Compile the sheet's pipeline at mount on a one-triangle dummy carrying
+   * Compile the sheet's pipelines at mount on a one-triangle dummy carrying
    * every attribute the graph reads, for the reason `TerrainPatches` gives:
    * the first real sheet otherwise pays the build in the frame it lands.
+   * Every material the sea lever can select, not only the one it selects
+   * now: the lever moved mid-descent is a different pipeline, built in the
+   * frame it moved.
    */
   useEffect(() => {
     warmAtMount({
       label: 'compiling the sea',
-      units: 1,
+      units: water.materials.length,
       run: async (done) => {
-        const dummy = seaDummy(material)
-        await warmCompile(warmRenderer(gl, engine.sceneLayout(gl)), {
-          object: dummy,
-          camera,
-          scene: scene as Scene,
-        }).then(done)
-        dummy.geometry.dispose()
+        const renderer = warmRenderer(gl, engine.sceneLayout(gl))
+        for (const material of water.materials) {
+          const dummy = seaDummy(material)
+          await warmCompile(renderer, {
+            object: dummy,
+            camera,
+            scene: scene as Scene,
+          }).then(done)
+          dummy.geometry.dispose()
+        }
       },
     })
-  }, [engine, gl, camera, scene, material])
+  }, [engine, gl, camera, scene, water])
 
   useTimedFrame('waterPatches', () => {
     const container = group.current
     if (container === null) return
     const state = engine.terrainState()
     water.setQuality(seaQualityFor(engine.surfaceQuality.sea))
+    const material = water.material
     if (state.palette !== null && state.orientation !== null) {
       water.setPalette(state.palette)
       if (state.lens !== null) {
@@ -101,7 +107,7 @@ export function WaterPatches({
             ?.sunlight ?? key.sunlight
         water.sunIntensity.value = engine.visibilityProcessing ? 1 : light
       }
-      water.time.value = engine.snapshot?.renderTime ?? 0
+      water.setTime(engine.snapshot?.renderTime ?? 0)
     }
     const drawn = state.palette !== null && state.palette.sheet > 0
     const seen = new Set<string>()
@@ -125,6 +131,10 @@ export function WaterPatches({
           mesh.userData.patch = patch
           meshes.set(key, mesh)
         }
+        // The lever's material every frame: reassigning the one a mesh holds
+        // is a property write, and a moved lever reaches every sheet in the
+        // frame it moved rather than only the sheets built after it.
+        mesh.material = material
         if (mesh.parent === null) container.add(mesh)
         mesh.position.set(
           placement.position.x,

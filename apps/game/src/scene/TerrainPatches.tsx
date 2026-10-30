@@ -124,6 +124,7 @@ export function TerrainPatches({
     terrain.setQuality(engine.surfaceQuality.ground)
     if (state.palette !== null && state.orientation !== null) {
       terrain.setPalette(state.palette, state.datumRadius)
+      terrain.setSlopeTable(engine.depositSlopeTable())
       /*
        * The pixel angle of the **drawing buffer**, not of the display.
        *
@@ -137,13 +138,15 @@ export function TerrainPatches({
        * The ratio below is that factor's **reciprocal**, and it is spelled as a
        * ratio rather than read from `engine.supersample` for exactly that
        * reason: the engine's field is the factor itself, and reaching for it
-       * here would be a factor of four the wrong way at 4× AA.
+       * here would be a factor of four the wrong way at 4× AA. The display
+       * angle goes alongside, because the relief gate counts display pixels
+       * and the detail has to be gone by the footprint at which it switches.
        */
       if (state.lens !== null) {
         const display = pixelAngle(state.lens.lens, state.lens.viewport)
         const perSample =
           state.lens.viewport.height / Math.max(1, gl.domElement.height)
-        terrain.setPixelAngle(display * perSample)
+        terrain.setPixelAngle(display * perSample, display)
       }
       /*
        * The same texture set `Bodies.tsx` draws the sphere from, looked up by
@@ -207,8 +210,9 @@ export function TerrainPatches({
       if (mesh === undefined) {
         mesh = new Mesh(patchGeometry(patch, indices), material)
         // Body-fixed and constant for the life of the patch, which is what
-        // turns an anchor-relative vertex back into a place on the planet.
-        wearGround(mesh, patch.anchor, datumRadius)
+        // turns an anchor-relative vertex back into a place on the planet;
+        // its level is the row of the slope table its deposits read.
+        wearGround(mesh, patch.anchor, datumRadius, patch.region.level)
         mesh.userData.patch = patch
         meshes.set(key, mesh)
       }

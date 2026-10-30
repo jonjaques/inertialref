@@ -5,11 +5,14 @@ import {
   type Body,
   COVER_CHANNELS,
   generateHeightfield,
+  geodeticDirection,
   HEIGHTFIELD_RESOLUTION,
   type RegionAddress,
   regionAddress,
   regionChildren,
+  regionForDirection,
   regionNeighbor,
+  surveySites,
   systemId,
   TEST_CATALOG,
   walkBodies,
@@ -35,19 +38,97 @@ function solidBody(): Body {
   return body
 }
 
-function patchOf(body: Body, region: RegionAddress): RenderPatch {
-  const field = generateHeightfield(body.surface, {
-    region,
-    resolution: RESOLUTION,
-  })
+function patchOf(
+  body: Body,
+  region: RegionAddress,
+  resolution = RESOLUTION,
+  twin = true,
+): RenderPatch {
+  const field = generateHeightfield(body.surface, { region, resolution })
   return buildPatch({
     region,
-    resolution: RESOLUTION,
+    resolution,
     border: field.border,
     elevations: field.elevations,
     cover: field.cover,
     bodyRadius: body.radius,
+    morph: twin ? field.morph : null,
   })
+}
+
+/** Earth: a world that drains, so a patch and its parent resolve different creeks. */
+function wetBody(): Body {
+  const world = new World({ seed: 'inertialref', catalog: TEST_CATALOG })
+  const system = world.loadSystem(systemId('SOL'))
+  const body = [...walkBodies(system)].find((b) => b.name === 'Earth')
+  if (body === undefined) throw new Error('no Earth')
+  return body
+}
+
+/**
+ * How far a child's fully morphed tessellation stands from its parent's: the
+ * worst vertex, the worst normal component, and how many cover bytes differ.
+ */
+function handover(
+  body: Body,
+  parentRegion: RegionAddress,
+  resolution: number,
+  twin: boolean,
+): { position: number; normal: number; cover: number } {
+  const parent = patchOf(body, parentRegion, resolution)
+  let position = 0
+  let normal = 0
+  let cover = 0
+  for (const [quadrant, childRegion] of regionChildren(
+    parentRegion,
+  ).entries()) {
+    const child = patchOf(body, childRegion, resolution, twin)
+    const qi = quadrant % 2
+    const qj = quadrant < 2 ? 0 : 1
+    const half = (resolution - 1) / 2
+    for (let row = 0; row < resolution; row += 1) {
+      for (let col = 0; col < resolution; col += 1) {
+        const index = row * resolution + col
+        const parentIndex =
+          (half * qj + (row & ~1) / 2) * resolution +
+          (half * qi + (col & ~1) / 2)
+        const mine = Vec.add(
+          child.anchor,
+          vec3(
+            child.morphPositions[index * 3] as number,
+            child.morphPositions[index * 3 + 1] as number,
+            child.morphPositions[index * 3 + 2] as number,
+          ),
+        )
+        const theirs = Vec.add(
+          parent.anchor,
+          vec3(
+            parent.positions[parentIndex * 3] as number,
+            parent.positions[parentIndex * 3 + 1] as number,
+            parent.positions[parentIndex * 3 + 2] as number,
+          ),
+        )
+        position = Math.max(position, Vec.distance(mine, theirs))
+        for (let k = 0; k < 3; k += 1) {
+          normal = Math.max(
+            normal,
+            Math.abs(
+              (child.morphNormals[index * 3 + k] as number) -
+                (parent.normals[parentIndex * 3 + k] as number),
+            ),
+          )
+        }
+        for (let k = 0; k < COVER_CHANNELS; k += 1) {
+          if (
+            child.morphCover[index * COVER_CHANNELS + k] !==
+            parent.cover[parentIndex * COVER_CHANNELS + k]
+          )
+            cover += 1
+        }
+      }
+    }
+  }
+  return { position, normal, cover }
 }
 
 /** A vertex in body-fixed axes: anchor-relative plus the anchor. */
@@ -157,6 +238,36 @@ describe('a terrain patch', () => {
        */
       expect(worstNormal).toBeLessThan(1e-6)
     }
+  })
+
+  it('is exactly its parent once fully morphed where the two resolve different creeks', () => {
+    /*
+     * The drainage refinement is resolved to one level below a patch's own
+     * (`regionDrainageLevel`), so a child carries a level of creeks its
+     * parent does not, and its own samples at the parent's grid are not the
+     * parent's. The heightfield's morph twin is the child's even samples at
+     * the parent's resolution, and the three claims above hold through it:
+     * positions to float32 over the patch, normals to a float32 step, cover
+     * to the byte.
+     *
+     * The parent is the level-9 cell over Earth's survey summit, where it
+     * resolves level 10 and its children level 11 — both refined — so the
+     * handover crosses a level of creeks; without the twin the same handover
+     * misses, and the last line says so.
+     */
+    const body = wetBody()
+    const summit = surveySites(body).find((site) => site.id === 'summit')
+    if (summit === undefined) throw new Error('Earth has no summit')
+    const parentRegion = regionForDirection(
+      geodeticDirection(summit.latitude, summit.longitude),
+      9,
+    )
+    const exact = handover(body, parentRegion, RESOLUTION, true)
+    expect(exact.position).toBeLessThan(0.05)
+    expect(exact.normal).toBeLessThan(1e-6)
+    expect(exact.cover).toBe(0)
+    const own = handover(body, parentRegion, RESOLUTION, false)
+    expect(own.position).toBeGreaterThan(0.05)
   })
 
   it("wears exactly its parent's cover once fully morphed", () => {

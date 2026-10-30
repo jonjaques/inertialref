@@ -77,13 +77,23 @@ export interface CraterLevel {
   readonly density: number
 }
 
-/** A great-circle trough: the pole of the circle, and how deep it cuts. */
+/**
+ * A tiger stripe: a trough along a stretch of a great circle — the pole of the
+ * circle, how wide it cuts, and the stretch it cuts along.
+ */
 export interface StripeAxis {
   readonly pole: Vec3
   /** Angular half-width of the trough, radians. */
   readonly halfWidth: number
   /** Offset of the pair from the great circle itself, radians. */
   readonly offset: number
+  /** The middle of the stretch, a unit vector on the circle. */
+  readonly center: Vec3
+  /**
+   * Half the stretch's length, radians from `center`. The profile tapers to
+   * zero by there and cuts nothing past it. See `stripeProfile`.
+   */
+  readonly halfLength: number
 }
 
 /**
@@ -404,6 +414,24 @@ function pairConvergence(
   return Math.max(-1, Math.min(1, Vec.dot(relative, unit)))
 }
 
+/**
+ * The tiger stripes as a family, in radians so a moon of any size wears
+ * Enceladus's proportions: four sulci 130 km long and 35 km apart on a
+ * 252 km radius. The profile across one is `STRIPE_SHAPE`, in `bands.ts`.
+ */
+export const STRIPE_FAMILY = {
+  /** A stripe's length, before its own draw stretches it by up to 15%. */
+  length: 130 / 252,
+  /** Between neighbors, across the family. */
+  spacing: 35 / 252,
+} as const
+
+/**
+ * The body-fixed south pole. Body-fixed axes are +Y up, the spin axis
+ * (`geodeticDirection`), and Enceladus's stripes are south-polar.
+ */
+const SOUTH_POLE = vec3(0, -1, 0)
+
 /** A unit tangent to the sphere at `axis`, rotated by `angle` about it. */
 function tangentAt(axis: Vec3, angle: number): Vec3 {
   // Any vector not parallel to the axis works as a seed for the basis; +Y is
@@ -700,22 +728,58 @@ function derive(seed: Seed, grammar: SurfaceGrammar): TerrainSketch {
   if (grammar.stripes > 0.05) {
     const stripeRng = new Rng(deriveSeed(seed, 'stripes'))
     /*
-     * Enceladus has four, they are roughly parallel, and they are tens of
-     * kilometers apart on a 252 km moon — so the poles of their great circles
-     * cluster rather than scatter. One drawn axis and small perturbations of it
-     * is what makes them read as a set rather than as four unrelated cuts.
+     * Enceladus has four, roughly parallel, about 35 km apart and 130 km long
+     * on a 252 km moon, and all of them at the south pole — a family, not four
+     * cuts around the body. Each runs along `run` through a point stepped
+     * across the family from the pole, so the four are parallel where they
+     * are cut and meet only on the equator, past every extent.
+     *
+     * The stream's first draw is a unit vector nothing reads — the family's
+     * place is the pole — and it stays drawn so the azimuth, the widths and
+     * the offsets after it keep their values; what each stripe adds is
+     * appended after them, and the stream is its own derived seed, so
+     * appending moves nothing else.
      */
-    const anchor = Vec.normalize(stripeRng.unitVector())
-    const across = tangentAt(anchor, stripeRng.range(0, 2 * Math.PI))
+    stripeRng.unitVector()
+    const run = tangentAt(SOUTH_POLE, stripeRng.range(0, 2 * Math.PI))
+    const across = Vec.cross(SOUTH_POLE, run)
+    const widths: { halfWidth: number; offset: number }[] = []
     for (let i = 0; i < 4; i += 1) {
-      stripes.push({
-        pole: Vec.normalize(
-          Vec.add(anchor, Vec.scale(across, (i - 1.5) * 0.06)),
-        ),
+      widths.push({
         halfWidth: stripeRng.range(0.004, 0.01),
         offset: stripeRng.range(0.002, 0.006),
       })
     }
+    widths.forEach(({ halfWidth, offset }, i) => {
+      // The appended draws: a length, a slide along the stripe so the ends do
+      // not line up like a barcode, and a few degrees of turn so the family
+      // is roughly parallel rather than ruled.
+      const halfLength =
+        (STRIPE_FAMILY.length / 2) * stripeRng.range(0.85, 1.15)
+      const slide = stripeRng.range(-0.15, 0.15) * halfLength
+      const turn = stripeRng.range(-0.06, 0.06)
+      const through = Vec.normalize(
+        Vec.add(
+          SOUTH_POLE,
+          Vec.scale(across, (i - 1.5) * STRIPE_FAMILY.spacing),
+        ),
+      )
+      const heading = Vec.add(
+        Vec.scale(run, Math.cos(turn)),
+        Vec.scale(Vec.cross(through, run), Math.sin(turn)),
+      )
+      const pole = Vec.normalize(Vec.cross(through, heading))
+      // Slid along the circle, then put back on it exactly: `heading` is a
+      // tangent at `through` only to the last bit.
+      const slid = Vec.add(
+        Vec.scale(through, Math.cos(slide)),
+        Vec.scale(heading, Math.sin(slide)),
+      )
+      const center = Vec.normalize(
+        Vec.sub(slid, Vec.scale(pole, Vec.dot(slid, pole))),
+      )
+      stripes.push({ pole, halfWidth, offset, center, halfLength })
+    })
   }
 
   const craterLevels = craterLadder(grammar)

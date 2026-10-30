@@ -62,6 +62,25 @@ export interface ScatterBatch {
   readonly cover: Uint8Array
 }
 
+/**
+ * The ground the streamer draws this frame, read back along a direction.
+ *
+ * A rock is generated from the field and stands on a triangulation of it, at
+ * a level the generator cannot know; the two differ by up to a cell's
+ * interpolation error, 79 cm at the floor on Miranda and 1.9 m two levels
+ * coarser, which is no constant seat's job. So the rock asks the drawn set.
+ */
+export interface DrawnGround {
+  /** Changes whenever `radius` could answer differently for the same question. */
+  readonly epoch: number
+  /**
+   * The radius of the drawn ground along `direction`, its morph taken from
+   * `eye` the way the material takes it — or null where no drawn patch
+   * covers the direction.
+   */
+  radius(direction: BodyFixedDirection, eye: Vec3): Meters | null
+}
+
 export interface ScatterState {
   /**
    * Where the instance coordinates are measured from, in body-fixed axes.
@@ -170,6 +189,7 @@ export class ScatterField {
       readonly scale: number
     },
     lensView: LensView,
+    ground: DrawnGround,
   ): void {
     if (address !== this.#bodyAddress) {
       this.clear()
@@ -268,10 +288,18 @@ export class ScatterField {
      * rocks wrong at the range edge, which draws as rocks arriving in clusters
      * when the region set finally moves rather than one at a time. Quantized to
      * `EYE_STEP`, so a hover still rebuilds nothing.
+     *
+     * **And so is the drawn ground**, because every rock stands on it: a patch
+     * refined under a rock is a different triangle, and a rock left at the
+     * old one floats or sinks by the interpolation error the seat exists to
+     * remove. The epoch moves only when the drawn set does, so a converged
+     * stance still rebuilds nothing.
      */
     const signature = `${key(home)}|${range.toFixed(1)}|${step(eyeLocal.x)},${step(
       eyeLocal.y,
-    )},${step(eyeLocal.z)}|${ready.map((region) => key(region)).join(',')}`
+    )},${step(eyeLocal.z)}|${ground.epoch}|${ready
+      .map((region) => key(region))
+      .join(',')}`
     /*
      * `#built` rather than `batches.length > 0`: an empty answer is an answer.
      * Gated on the length, a pose where every resolved rock fails the range or
@@ -281,7 +309,15 @@ export class ScatterField {
     const batches =
       this.#built && signature === this.#signature
         ? this.#state.batches
-        : this.#build(ready, anchor, eyeLocal, body.radius, lensView, range)
+        : this.#build(
+            ready,
+            anchor,
+            eyeLocal,
+            body.radius,
+            lensView,
+            range,
+            ground,
+          )
     this.#signature = signature
     this.#built = true
 
@@ -337,6 +373,7 @@ export class ScatterField {
     bodyRadius: Meters,
     lensView: LensView,
     range: Meters,
+    ground: DrawnGround,
   ): readonly ScatterBatch[] {
     const perRadian = pixelsPerRadian(lensView.lens, lensView.viewport)
     const drawn: {
@@ -350,25 +387,50 @@ export class ScatterField {
       if (resident === undefined) continue
       for (const rock of resident.rocks) {
         /*
-         * Where the rock's center sits: on the ground, then down by its own
-         * sink and the seat that covers the mesh's interpolation error.
+         * Where the rock's center sits: on the triangle drawn under it, then
+         * down by its own sink.
+         *
+         * The triangle rather than the field the rock was generated from:
+         * the two differ by the mesh's interpolation error at whatever level
+         * is drawn there, and a rock standing on the field floats over a
+         * hollow the mesh cut across and sinks into a hump it rounded. The
+         * field is the fallback for a rock no drawn patch covers, which inside
+         * the range is an arrival's first frames, before any ground is drawn.
          *
          * The sink is spent against the **drawn** half-height rather than
          * against `rock.radius`. `radius` is half the rock's *longest*
          * dimension and `writeInstance` draws it flatter than that — 0.62 to
          * 0.82 of it up the local vertical, because a rock is not a sphere — so
          * taking a sink of 0.7 off the long axis put the whole rock under the
-         * ground. Median sink is 0.53 and median half-height 0.67, which left
-         * 0.14 of a 0.72 m rock standing against a 0.12 m seat: the median rock
-         * did not show. `sink` is documented as a fraction of the rock, and
-         * this is the extent the rock actually has in the direction it sinks.
+         * ground. `sink` is documented as a fraction of the rock, and this is
+         * the extent the rock actually has in the direction it sinks.
          */
-        const radius =
-          bodyRadius +
-          rock.elevation -
-          rock.sink * rockRise(rock.radius, rock.angularity) -
-          rock.seat
-        const center = Vec.scale(rock.direction, radius)
+        const sunk = rock.sink * rockRise(rock.radius, rock.angularity)
+        /*
+         * Both cuts below are taken on the field first, widened by how far
+         * the drawn ground can stand from it inside the range, so the
+         * triangle — a region lookup per drawn level and a slid-vertex
+         * search in a morph band — is read only for a rock that can
+         * survive them: the wanted regions cover a square three or four
+         * times the range's disk.
+         *
+         * Each is widened toward keeping the rock, so the drawn ground can
+         * stand at most `GROUND_SLACK` nearer: the range against the field
+         * distance less the slack, the pixel width against it too, because a
+         * nearer rock is wider. Widened the other way, the pixel cut drops
+         * every rock whose exact distance is inside the slack of its own
+         * limit, and those are the ones the exact test keeps.
+         */
+        const rough = Vec.distance(
+          Vec.scale(rock.direction, bodyRadius + rock.elevation - sunk),
+          eyeLocal,
+        )
+        const nearest = Math.max(rough - GROUND_SLACK, 0)
+        if (nearest > range) continue
+        if (2 * rock.radius * perRadian < ROCK_PIXELS * nearest) continue
+        const floor =
+          ground.radius(rock.direction, eyeLocal) ?? bodyRadius + rock.elevation
+        const center = Vec.scale(rock.direction, floor - sunk)
         const distance = Vec.distance(center, eyeLocal)
         if (distance > range) continue
         // `ROCK_PIXELS` of the rock's own width, applied per rock rather than
@@ -428,6 +490,17 @@ const key = (region: RegionAddress): string =>
 const EYE_STEP: Meters = 16
 
 const step = (meters: number): number => Math.round(meters / EYE_STEP)
+
+/**
+ * How far the drawn ground can stand from the field inside the range,
+ * meters, for cutting on the field before the triangle is read.
+ *
+ * The rocks in range stand on the floor's patches and the two levels above
+ * it, whose worst cells across the zoo, Gliese 908 IV and P222_1_0_9 V are
+ * 0.79, 1.01 and 1.86 m off the field. Four is that with room; too small and
+ * a rock at the range's edge is cut that the exact test would keep.
+ */
+const GROUND_SLACK: Meters = 4
 
 /**
  * One rock's transform: stand it up, turn it, lean it, scale it.

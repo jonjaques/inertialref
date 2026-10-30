@@ -8,6 +8,8 @@ import {
   type CellContext,
   type PopulationCoverage,
   createGalaxyField,
+  type DepositSlopeTable,
+  depositSlopeTable,
   type DrainageGraph,
   drainageGraph,
   selectPopulationSky,
@@ -19,6 +21,7 @@ import {
   generateHeightfield,
   generateSystem,
   type Heightfield,
+  type HeightfieldMorph,
   type HeightfieldRequest,
   type RegionAddress,
   regionAddress,
@@ -32,7 +35,7 @@ import {
   type WorldQuery,
 } from '@inertialref/universe'
 import { UV } from '@inertialref/spatial'
-import type { JobHandle, WorkerPool } from './pool.ts'
+import type { JobHandle, JobLane, WorkerPool } from './pool.ts'
 import { defineTask, TaskRegistry } from './task.ts'
 
 /*
@@ -295,6 +298,8 @@ export interface HeightfieldResponse {
   readonly cover: Uint8Array
   /** The level of any lake or river over each vertex, NaN where none; unbordered. See `Heightfield.water`. */
   readonly water: Float32Array
+  /** The patch as its parent draws it at the even samples, or null. See `Heightfield.morph`. */
+  readonly morph: HeightfieldMorph | null
   readonly minElevation: number
   readonly maxElevation: number
 }
@@ -339,13 +344,18 @@ export const generateHeightfieldTask = defineTask<
    * handed one, so the mismatch is a patch with no lakes rather than an
    * error; the version makes it loud.
    *
+   * 8: the response carries the morph twin — the patch at its parent's
+   * resolution of the drainage refinement, at the even samples — beside the
+   * water. A version 7 worker's answer has none, and the patch would hand
+   * over to a parent by a level of creeks it does not draw.
+   *
    * The version is also the revision of the CPU tile: the heightfield archive
    * keeps the pool's tiles under it (`POOL_ARCHIVE`). A change to the tile's
    * arithmetic that no canonical terrain version covers — the drawn tail,
    * which is not canon — spends a version here, and
    * `heightfieldFingerprint.test.ts` fails until it is spent.
    */
-  version: 7,
+  version: 8,
   run(payload) {
     const { surface, region, ...request } = payload
     const field: Heightfield = generateHeightfield(decodeSurface(surface), {
@@ -361,6 +371,7 @@ export const generateHeightfieldTask = defineTask<
       elevations: field.elevations,
       cover: field.cover,
       water: field.water,
+      morph: field.morph,
       minElevation: field.minElevation,
       maxElevation: field.maxElevation,
     }
@@ -368,11 +379,16 @@ export const generateHeightfieldTask = defineTask<
   transfers(response) {
     // Transferred, not copied: the main thread hands this straight to a
     // BufferAttribute and the worker has no further use for it.
-    return [
+    const buffers: ArrayBufferLike[] = [
       response.elevations.buffer,
       response.cover.buffer,
       response.water.buffer,
     ]
+    const twin = response.morph
+    if (twin !== null) {
+      buffers.push(twin.elevations.buffer, twin.cover.buffer, twin.water.buffer)
+    }
+    return buffers
   },
 })
 
@@ -414,9 +430,16 @@ export interface HeightfieldSource {
   readonly maxLevel?: number
   /** Additional request-shape limits, checked before submitting to this adapter. */
   supports?(request: HeightfieldRequest): boolean
+  /**
+   * `lane` is when the tile is wanted, not what it is: the streamer's ground
+   * is the foreground and the orbital bake the background (`JobLane`). It is
+   * deliberately not a field of the request, which is the archive's key — a
+   * tile asked for by the bake and by the streamer is one tile.
+   */
   submit(
     surface: SurfaceParameters,
     request: HeightfieldRequest,
+    lane?: JobLane,
   ): JobHandle<HeightfieldResponse>
 }
 
@@ -442,11 +465,13 @@ export const poolHeightfieldSource = (pool: WorkerPool): ArchivedSource => ({
   kind: 'pool',
   archive: POOL_ARCHIVE,
   available: true,
-  submit: (surface, request) =>
-    pool.submit(generateHeightfieldTask, {
-      ...request,
-      surface: encodeSurface(surface),
-    }),
+  submit: (surface, request, lane) =>
+    pool.submit(
+      generateHeightfieldTask,
+      { ...request, surface: encodeSurface(surface) },
+      [],
+      lane,
+    ),
 })
 
 /** The surface on the wire, and the patch resolution the floor is measured at. */
@@ -499,6 +524,32 @@ export const prepareSurfaceTask = defineTask<
       level: surfaceDetailFloor(surface, payload.resolution),
     }
   },
+})
+
+export const depositSlopesTask = defineTask<
+  PrepareSurfaceRequest,
+  DepositSlopeTable
+>({
+  /*
+   * The table the material maps a level's drawn slope through onto the
+   * floor's distribution (`depositSlope.ts`): a thousand probes of the drawn
+   * field at every level from the root to the floor, seconds of a worker and
+   * never a frame's. A task of its own rather than part of
+   * `prepareSurface`, because the ground waits on the floor and must not wait
+   * on this — until it lands the deposits read the mesh's own slope, which is
+   * the picture this corrects rather than a wrong one.
+   */
+  name: 'universe.depositSlopes',
+  version: 1,
+  run(payload) {
+    const table = depositSlopeTable(
+      decodeSurface(payload.surface),
+      payload.resolution,
+    )
+    // A copy, so the transfer below leaves this worker's memo whole.
+    return { levels: table.levels, table: table.table.slice() }
+  },
+  transfers: (response) => [response.table.buffer],
 })
 
 export interface SurveySystemRequest {
@@ -640,6 +691,7 @@ export function createTaskRegistry(): TaskRegistry {
   registry.register(generateHeightfieldTask)
   registry.register(surveySystemTask)
   registry.register(prepareSurfaceTask)
+  registry.register(depositSlopesTask)
   registry.register(findWorldsTask)
   return registry
 }

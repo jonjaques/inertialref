@@ -189,12 +189,33 @@ failure, so the rejection is matched on and not logged.
 
 ---
 
+## Two lanes
+
+A job waits in one of two lanes, named when it is submitted. A free worker
+takes the oldest **foreground** job, and a **background** job only when no
+foreground job is waiting; nothing running is ever preempted. Everything is
+foreground unless it says otherwise, and the one caller that says otherwise is
+the orbital bake: a generated body's sphere asks for ninety-six tiles at once,
+and in one queue a bake that started on a descent put every one of them ahead
+of the ground the descent was about to need. The lane is the caller's to
+choose and travels with the request through `Heightfields`, the archive and
+the surface preparation to whichever adapter answers — the GPU producer keeps
+the same two lanes per batch — but it is not part of the request, which is
+the archive's key: a tile the bake and the streamer both ask for is one tile.
+
+A lane is scheduling, never generation. A task's answer is a function of its
+payload, so the order jobs reach a worker moves when an answer arrives and
+never what it is — the [order-independence rule](determinism.md) is untouched
+by it.
+
+---
+
 ## A source is a port over the pool
 
 The streamer does not ask the pool for heightfields. It asks a
 `HeightfieldSource` — `kind`, `available`, an optional `maxLevel`,
-`submit(surface, request) → JobHandle`, the arguments `generateHeightfield`
-takes — and `poolHeightfieldSource(pool)` is the pool wearing that
+`submit(surface, request, lane?) → JobHandle`, the arguments `generateHeightfield`
+takes and the lane it is wanted in — and `poolHeightfieldSource(pool)` is the pool wearing that
 interface. The
 other implementation is `createTileProducer(renderer)` in
 `apps/game/src/render/terrainProducer.ts`: a TSL compute kernel that produces
@@ -224,11 +245,11 @@ because the pool is the one source with a wire to cross.
 
 ## What is deliberately not here
 
-| Not used                                     | Why                                                                                                                                                                                                                                                                |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `SharedArrayBuffer`                          | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic.                                                                                                               |
-| The simulation itself in a worker            | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker).                                                                     |
-| A second pool for a different priority class | One pool, FIFO — and terrain does compete with the star survey, which read 4–8 s of queue behind a landing's heightfields. Canceling the window the streamer no longer wants is what that needed; a priority class would have reordered work nobody wanted at all. |
+| Not used                                     | Why                                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SharedArrayBuffer`                          | Requires cross-origin isolation headers, which constrains hosting. Nothing yet needs shared mutable memory; transferables cover the current traffic.                                                                                                                                                                                                                   |
+| The simulation itself in a worker            | Plausible rather than proven: `apps/headless` shows the core runs unchanged with no DOM, no React and no WebGL — but nothing yet requires it. [Roadmap](../roadmap.md#simulation-in-a-worker).                                                                                                                                                                         |
+| A second pool for a different priority class | One pool, two lanes. Terrain does compete with the star survey, which read 4–8 s of queue behind a landing's heightfields, and canceling the window the streamer no longer wants is what that needed — a priority class would have reordered work nobody wanted at all. The background lane is for work somebody does want, later: the orbital bake behind the ground. |
 
 ---
 

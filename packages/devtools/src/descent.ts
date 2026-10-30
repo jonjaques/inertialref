@@ -233,6 +233,13 @@ export interface TerrainReport {
    */
   readonly saturated: boolean
   /**
+   * Of the drawn patches, how many were refined at the flight lens rather
+   * than the picture's own because the frame cannot reach them. Zero at the
+   * flight lens and wider, where the selection is the whole disk;
+   * `terrainSelect.ts` § `REFERENCE_LENS`.
+   */
+  readonly outside: number
+  /**
    * The multiple of the quality step's cell pixels the last ideal selection
    * was made at — 1 while the budget is not binding, 1.5 and its powers
    * while it is. `terrainSelect.ts` § `COARSEN_STEP`.
@@ -262,6 +269,13 @@ export interface TerrainReport {
    * ground on screen came from wherever it came from.
    */
   readonly producer: string
+  /**
+   * Whether the deposit slope table the material has asked for is still
+   * being measured (ADR-0051). The ground's tone moves once when it lands, so
+   * a capture waits for it as it waits for `pending`. False on a host with no
+   * material, which never asks.
+   */
+  readonly depositsPending: boolean
   /**
    * The rocks lying on it.
    *
