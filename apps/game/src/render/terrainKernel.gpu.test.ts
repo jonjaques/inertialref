@@ -1,21 +1,29 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { ComputeNode } from 'three/webgpu'
 import { openSession, type Session, terrainZoo } from '@inertialref/devtools'
-import { vec3 } from '@inertialref/spatial'
+import { Vec, vec3 } from '@inertialref/spatial'
 import {
   type Body,
+  coastRemap,
+  coastWidth,
   COVER_CHANNELS,
+  drainageGraph,
+  DRAINAGE_SHAPE,
   findBody,
   generateHeightfield,
   HEIGHTFIELD_BORDER,
   HEIGHTFIELD_RESOLUTION,
   parseAddress,
   type RegionAddress,
+  regionDirection,
   regionForDirection,
   regionSize,
   SOL,
+  STRIPE_SHAPE,
+  stripeProfile,
   surfaceDetailFloor,
   surfaceKernel,
+  terrainSketch,
   TILE_STRIDE,
   walkBodies,
   writeTileFrame,
@@ -381,6 +389,156 @@ describe('the kernel against generateHeightfield', () => {
     expect(elevation).toBeLessThan(bound(wet, 0))
     expect(submarine).toBeGreaterThan(0)
   }, 60_000)
+
+  /*
+   * The water between two bodies of standing water, where the level is the
+   * heavier body's and the two blend only within `lakeMargin` of a tie. The
+   * spread above lands on few such places, and this is the part of the lake
+   * block with arithmetic in it: tiles centered between a lake and the sea on
+   * Earth, and between two lakes on Titan, at a level where a vertex is a
+   * kilometer and the blend a few of them across.
+   */
+  it('reads the water between two bodies as the CPU does', async () => {
+    const failures: string[] = []
+    const rows: string[] = []
+    let blended = 0
+    for (const [body, sea] of [
+      [solBody('Earth'), true],
+      [solBody('Titan'), false],
+    ] as const) {
+      const graph = drainageGraph(body.surface)
+      if (graph === null) throw new Error(`${body.name} has no drainage graph`)
+      const reach = (DRAINAGE_SHAPE.lakeReach * Math.PI) / 2 / graph.cells
+      const at = (n: number) =>
+        vec3(
+          graph.positions[n * 3] as number,
+          graph.positions[n * 3 + 1] as number,
+          graph.positions[n * 3 + 2] as number,
+        )
+      const isLake = (n: number) => !Number.isNaN(graph.lake[n] as number)
+      const sites: { region: RegionAddress; levels: [number, number] }[] = []
+      for (let n = 0; n < graph.nodes && sites.length < MAX_TILES; n += 1) {
+        if (!isLake(n) || graph.sea[n] === 1) continue
+        for (let k = 0; k < 64 && sites.length < MAX_TILES; k += 1) {
+          const m = graph.neighbors[n * 8 + (k >> 3)] as number
+          if (m < 0) continue
+          const o = graph.neighbors[m * 8 + (k & 7)] as number
+          if (o < 0 || !isLake(o) || (graph.sea[o] === 1) !== sea) continue
+          if (graph.lake[o] === graph.lake[n]) continue
+          if (Vec.length(Vec.sub(at(n), at(o))) >= 2 * reach) continue
+          const region = regionForDirection(
+            Vec.normalize(Vec.add(at(n), at(o))),
+            7,
+          )
+          const taken = sites.some(
+            (site) =>
+              site.region.face === region.face &&
+              site.region.i === region.i &&
+              site.region.j === region.j,
+          )
+          if (taken) continue
+          sites.push({
+            region,
+            levels: [graph.lake[n] as number, graph.lake[o] as number],
+          })
+          break
+        }
+      }
+      expect(sites.length).toBeGreaterThan(0)
+      const tiles = await gpuTiles(
+        body,
+        sites.map((site) => site.region),
+      )
+      const datum = seaDatumElevation(body.surface)
+      const remap = (level: number): number =>
+        datum === null
+          ? level
+          : coastRemap(level, datum, coastWidth(body.surface))
+      sites.forEach((site, i) => {
+        const tile = tiles[i] as GpuTile
+        const gap = compare(body, site.region, tile)
+        const limit = bound(body, site.region.level)
+        /*
+         * These tiles sit on the drainage, so the ground carries the carve,
+         * and the carve's own bound is half a meter more than the field's
+         * (`terrainBands.gpu.test.ts`): a float32 position across a
+         * channel's bank. Titan's relief budget is small enough that the
+         * field's bound is under that — 4.2 cm of ground against 1.8 cm at
+         * one tile, with the water there 0.5 mm off — so the ground is held
+         * to the carve's allowance and the water, which is this test's
+         * subject, to the field's.
+         */
+        const ground = limit + 0.5
+        rows.push(
+          `${body.name.padEnd(8)} ${site.region.face}/${site.region.i}/${site.region.j}  elevation ${gap.elevation.toExponential(2)} of ${ground.toExponential(2)}  water ${gap.water.toExponential(2)} m of ${limit.toExponential(2)}`,
+        )
+        if (gap.elevation >= ground || gap.water >= limit) {
+          failures.push(
+            `${body.name} ${site.region.face}/${site.region.i}/${site.region.j}: elevation ${gap.elevation} water ${gap.water} m against ${limit}`,
+          )
+        }
+        const low = remap(Math.min(...site.levels))
+        const high = remap(Math.max(...site.levels))
+        for (const level of tile.water) {
+          if (level > low + 1e-3 && level < high - 1e-3) blended += 1
+        }
+      })
+    }
+    console.info(`\n${rows.join('\n')}\n${blended} blended vertices\n`)
+    expect(failures).toEqual([])
+    // The blend is in the tiles, so the comparison above covered it.
+    expect(blended).toBeGreaterThan(0)
+  }, 120_000)
+
+  /*
+   * Enceladus's stripes are a south-polar family cut along a stretch of each
+   * circle, and the spread above never reaches a pole. Tiles at the middle of
+   * each stripe and on its taper, at three levels, so the extent and its ends
+   * are compared where they are cut.
+   */
+  it('cuts the tiger stripes as the CPU does, along their extent and its ends', async () => {
+    const body = solBody('Enceladus')
+    const stripes = terrainSketch(body.surface).stripes
+    expect(stripes).toHaveLength(4)
+    const failures: string[] = []
+    let cut = 0
+    for (const level of [3, 6, 9]) {
+      const regions = stripes.flatMap((stripe) => {
+        const run = Vec.normalize(Vec.cross(stripe.pole, stripe.center))
+        const taper = stripe.halfLength * (1 - STRIPE_SHAPE.taper / 2)
+        const onTaper = Vec.add(
+          Vec.scale(stripe.center, Math.cos(taper)),
+          Vec.scale(run, Math.sin(taper)),
+        )
+        return [
+          regionForDirection(stripe.center, level),
+          regionForDirection(onTaper, level),
+        ]
+      })
+      const tiles = await gpuTiles(body, regions)
+      const limit = bound(body, level)
+      regions.forEach((region, i) => {
+        const gap = compare(body, region, tiles[i] as GpuTile)
+        if (gap.elevation >= limit) {
+          failures.push(
+            `Enceladus L${level} ${region.face}/${region.i}/${region.j}: ${gap.elevation} m against ${limit}`,
+          )
+        }
+        for (let s = 0; s <= 8; s += 1) {
+          for (let t = 0; t <= 8; t += 1) {
+            const direction = regionDirection(region, s / 8, t / 8)
+            if (
+              stripes.some((stripe) => stripeProfile(stripe, direction) !== 0)
+            )
+              cut += 1
+          }
+        }
+      })
+    }
+    expect(failures).toEqual([])
+    // The tiles sit on the stripes, so the comparison above covered the cut.
+    expect(cut).toBeGreaterThan(0)
+  }, 120_000)
 })
 
 describe('a dry body after a wet one', () => {

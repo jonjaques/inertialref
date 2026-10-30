@@ -165,6 +165,13 @@ function surfaceOf(
     tidalProxy: tidal,
     hasOcean: seaLevel !== null,
     /*
+     * Earth, and only Earth, because the published fact the weakening stands
+     * for is plates rather than water: Venus and Mars may both have had seas
+     * and neither has plate tectonics, so the one Sol body whose lithosphere
+     * water weakened is the one body with plates.
+     */
+    hadOcean: seaLevel !== null,
+    /*
      * Unused, because `publishedRelief` is never null here — and that is a seam
      * rather than a tidy default.
      *

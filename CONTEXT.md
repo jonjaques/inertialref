@@ -284,6 +284,14 @@ Every driving verb took an address and nothing produced one.
   restores the renderer afterward. The GPU regression counted a second
   pipeline before the fix and none afterward.
 
+- **One fact read for two histories.** `hasOcean` was both the sea standing on
+  a world and the water that weakened its rock, so reading the sea against
+  the ground temperature took the plates of every world whose ground boiled
+  its sea — Proxima Centauri II from 20 to 1, 51 plate counts within 25 ly.
+  `hadOcean` is a sea that stood, now or before the ground boiled it, and
+  `hasOcean` the sea that is left; `geology.test.ts` holds Proxima at 20 with
+  no sea, holds that a frozen sea is never one the world had, and holds that
+  each fact moves only its own half of the grammar.
 - **A cache keyed without the body, cleared without the queue.** `regionKey` is
   packed arithmetic over the region alone, so after a retarget a job still out
   for the discarded world names the same key the new body's roots do — and
@@ -11700,6 +11708,139 @@ its pool count read two jobs where it expects one. `GameEngine.depositSlopeTable
 is asked by `TerrainPatches`, so a host with no material never measures. It
 starts once the pool's queue is empty, because a table is 9 to 38 s of one
 thread across the zoo with the machine at load 35 to 44; quiet is unmeasured.
+
+## Terrain v6: a surface is one identity, and a boiled sea leaves its plates (20 Oct 2026)
+
+`TERRAIN_ALGORITHM` is 6, spent once for the four changes erosion § 6
+batched: the surface's identity (arch-review B), the weakening read from the
+sea a world drew (erosion defect 3), one water body per sample (defect 6) and
+Enceladus's stripes taking a south-polar extent (terrain § 2). The first two
+are this entry and the other two the next; `versions.ts` names all four at
+the constant.
+
+**The identity.** The drainage memo and the survey keyed on five hand-listed
+`SurfaceParameters` fields plus `JSON.stringify(grammar)`, which writes NaN and
+both infinities as `null` and −0 as `0`; the archive had a complete
+serializer, `stable()`, in `packages/workers`, which the two keys below it
+could not reach by layer. `surfaceIdentity` in `packages/universe` is the whole
+surface through `identityText` — keys sorted, every number spelled, −0
+included — memoized per object: 993 characters for Earth and about 5 µs to
+format, measured on the shared machine. The archive's request goes through the
+same `identityText`, so `packages/workers` keeps no serializer of its own. The
+sketch keeps its narrower key, because it shares one derivation between
+surfaces that differ only in fields it does not read. One fast-check property
+in `heightfieldCache.test.ts` replaces the hand-written cases: over every leaf
+of the surface and the request, two values at one leaf share the key exactly
+when they are `Object.is` equal. With numbers through `JSON.stringify` it finds
+`[surface.seed.a, 0, -0]` in 296 runs; with only the non-finite ones through
+it, `[surface.seed.a, -Infinity, null]` in 38.
+
+**The weakening.** `GrammarFacts` carries `hadOcean` beside `hasOcean`, and
+mobility reads it; the liquid window and the biota keep `hasOcean`.
+`makeSurface` takes both from the draw through `readDrawnSea`, one reading of
+the windows: a sea stood if it stands now or if the ground is past the water
+band's boiling edge, and never if the ground is on the cold side. The two
+sides differ because a star brightens as it ages. A world too hot for any
+liquid passed through the window while its star was young — Venus, with an
+ocean's worth of water in its past — so its sea soaked the rock before it
+boiled; a world too cold was colder still then, and its drawn datum never
+held a liquid. Setting `hadOcean` from the draw alone was the first cut, and
+it gave thirteen frozen worlds within 25 ly plates (46–239 K) for a sea that
+never stood; it was reversed on that argument. The biota was the other
+read to decide: an ocean is where a world's volatile inventory lives, and a sea
+that froze or boiled holds none, so it reads the sea standing now. Sol sets
+`hadOcean` from the published facts, which is Earth alone: the weakening
+stands for plates, and Venus and Mars have none whatever seas they once held.
+So Sol is untouched to the last bit. An optional `hadOcean` defaulting to
+`hasOcean` was the smaller diff and was not taken: a producer that forgets the
+field would get defect 3 back without a sound, and every hand-built
+`GrammarFacts` in the tests states it instead.
+
+Proxima Centauri II (the `TEST_CATALOG` system, 491 K ground, no sea) is back
+at 20 plates from 1, and `geology.test.ts` names it again; the most-plated
+search would now find Sirius I at 25. No draw moved: a scratch dump of every
+generated value, split into the grammar and everything else, over every system
+and body within 50 ly of Sol in the packed catalog and every `TEST_CATALOG`
+system — 26,094 rows — has no value outside a grammar that differs before and
+after, the terrain stamp in each system's manifest aside. Within 25 ly, 60 of
+2,201 grammars move and 51 plate counts with them: 43 projected bodies and 8
+observed exoplanets whose ground is generated (Barnard's Star b, c and d among
+them), every one on ground between 390 and 1,211 K; 45 go from a lid to plates
+and 6 plated worlds gain more, up to the cap of 30. Within 50 ly it is 495
+plate counts and 583 grammars in 24,393 bodies, on ground from 383 to 1,241 K.
+
+**What the bump costs.** Every archive key moves (`6-cpu@7`). The slow suite
+from an empty archive, on the shared M5 with the heavy lock held: 40.6 s wall
+and 209 s of CPU, writing the descent's 1,246 tiles (89 MB), taken on the
+identity and the weakening alone. The water and the stripes write the same
+1,246 tiles and add nothing measurable to a wet patch: alternated against
+`main` over sixty 65×65 patches at Earth's shore, Titan's lake and
+P222_1_0_9 V's lake, the batch ran 124–288 ms a patch to `main`'s 129–405,
+under load. The descent's hook allows 600 s, twice the 284 s the last cold CI run took before the
+descent moved to threads, so CI's first run on the batch is slow rather than
+failed. `heightfieldFingerprint.test.ts` re-pins `terrain: 6` with its seven
+tiles unchanged, since none of the four moves the ground under them.
+
+## Between two bodies of standing water the level is one body's, and the stripes went to the south pole (20 Oct 2026)
+
+Erosion defect 6 and Enceladus's stripe extent, the other half of terrain v6;
+the entry above spends the version.
+
+**A sample in reach of two water bodies reads the heavier one.**
+`lakeLevelAt` was a kernel mean over every lake node within 1.2 cells, so
+between two lakes at different spills, or a lake and the sea, it read a level
+belonging to neither across the whole overlap: 99.9–100% of the overlap on a
+transect between every such pair on eleven wet bodies, the worst 162.6 m off
+either level on Earth (sea 355.6 m, lake 680.0 m), 11.6 m between two lakes on
+Titan, 874 m on Q0_221_4_1_i III. The plan's fix was to weight one body, by
+nearness or by the body the sample's own receiver drains to. Both were
+measured, and neither puts the step where the ground stands above both
+levels, which is what rule 11 asks of a choice by rank. The lattice samples
+the landform once a cell, and between two nodes the field's ground sits
+hundreds of meters from it — on Earth's worst pair a lake node's lattice
+elevation was 410 m and the field under it ran 340–1,227 m. On a transect
+sweep every ranked rule (nearest node, heaviest body, highest level, lowest,
+the body the cell drains to) left visible steps with a p90 of 1.7–377 m, and
+the CPU and the GPU would each compare their own floats at the tie. So the
+choice is rule 11's margin: the heavier body's level exactly wherever its
+share of the weight leads by `lakeMargin` (a tenth), a `plateWeight` blend in
+the sliver where it does not — 5–6% of the overlap, at most 23 km wide on a
+275 km cell. With the margin at zero the step test fails at 329 m on Earth.
+
+Against a flood fill of the field itself on 60×60 grids around 13–20 lake
+sites a body, the mean, the heaviest body and the margin agree within 1%; the
+lake model's own error dwarfs the rule (a mean of 0.1–142 m off the fill), because
+the kernel floods every hollow within its reach whether the field connects it
+or not. The body the cell drains to, held strictly, is the one rule that fixes
+"wrong across a ridge": the channel walk's worst rise goes from 187 m to 4.6 m
+on P222_1_0_9 V and from 13 m to none on Titan. It also clips every lake at
+each rim cell that drains away from it, and against the fill it was 10–120%
+worse on single lakes, so it was not taken. What the ridge case would take
+instead is a lattice that resolves the rim — the plan's phase 3 — or a
+per-cell flood of the field on the CPU, packed for the kernel.
+
+**The kernel's lake ring was missing nodes inside its own reach.** The level
+reads the cell's own node and its ring, and near a face edge a gnomonic cell is
+half the angle of one at the center, so a node two cells over sat inside the
+1.2-cell reach: a sample crossing into the next cell gained or lost it with
+weight. For one lake that is invisible; between two bodies it was a step of
+their difference times its share, 47 m on Earth where the sea met a lake at a
+face edge and 2.3 cm on Titan. A ring node's weight now fades to zero over the
+half of the sample's cell away from it, the edge it leaves the ring across.
+
+**Enceladus's stripes are a south-polar family.** `StripeAxis` was a whole
+great circle, so a mapless sphere wearing its relief showed four hairlines from
+pole to pole. A stripe now carries an extent, a middle on its circle and a
+half-length, with the profile tapering to zero over the last 30%; the family is
+built at the body-fixed south pole, (0, −1, 0), four stripes 35/252 rad apart
+and 130/252 rad long before their own draws. On Enceladus they are 110.6–134.7
+km long and 34.3–35.0 km apart, within 3.4° of parallel. The stream's first
+draw, the old family axis, is still drawn and not read, so the azimuth, widths
+and offsets after it keep their values; each stripe appends a length, a slide
+and a turn. Twenty-eight Sol bodies draw stripes — Mimas, Dione, Miranda,
+Phobos and Deimos among them — and no generated body within 60 ly does: the
+weight is `young² · icy`, and `young` is a tidal proxy no generated moon
+reaches.
 
 ## Known gaps
 

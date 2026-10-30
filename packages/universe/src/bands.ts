@@ -195,11 +195,15 @@ export const SULCI_SHAPE = {
   floor: 0.05,
 } as const
 
-/** A tiger stripe's double ridge, in multiples of its own offset. */
+/**
+ * A tiger stripe's double ridge, in multiples of its own offset, and the
+ * share of its half-length its ends taper over.
+ */
 export const STRIPE_SHAPE = {
   shoulder: 0.7,
   reach: 3,
   shoulderWidth: 2,
+  taper: 0.3,
 } as const
 
 /** The relief tail: its scale from `roughness`, the warp that bends it. */
@@ -576,8 +580,9 @@ function shieldProfile(hotspot: Hotspot, direction: Vec3): number {
  * different heights, which is a Voronoi field with plateau interiors and sharp
  * walls. Sulci are Ganymede's grooved bands, parallel ridges over tens of
  * kilometers, which is ridged noise with one axis compressed fivefold. Tiger
- * stripes are Enceladus's four parallel fractures — a great-circle trough with
- * a raised ridge on each shoulder, which is what a double ridge is.
+ * stripes are Enceladus's four parallel fractures at its south pole — a trough
+ * along a stretch of a great circle with a raised ridge on each shoulder,
+ * which is what a double ridge is.
  */
 export function iceBand(
   sketch: TerrainSketch,
@@ -622,14 +627,23 @@ export function iceBand(
 }
 
 /**
- * A double ridge over a great-circle fracture.
+ * A double ridge over a fracture along a stretch of a great circle.
  *
  * The trough is the fracture itself and the two ridges are the material pushed
  * up on either side of it as the walls grind. Cassini measured Enceladus's at
  * ~500 m deep and ~2 km wide with flanking ridges roughly as high, so the
  * shoulders are a real feature rather than a way of hiding the cut.
+ *
+ * **It is cut along the stripe's extent and nowhere else.** A mapless sphere
+ * wears the relief, so a trough around the whole circle reads from orbit as a
+ * hairline from pole to pole. The ends taper over the last `taper` of the
+ * half-length, because a profile that stopped there would be a step in the
+ * canonical field. The distance along is the chord from the extent's middle,
+ * which is the arc's monotone stand-in and well conditioned in float32 where
+ * an arccosine is not; within a trough's width of the circle it differs from
+ * the distance along it by under a kilometer on Enceladus.
  */
-function stripeProfile(stripe: StripeAxis, direction: Vec3): number {
+export function stripeProfile(stripe: StripeAxis, direction: Vec3): number {
   const away = Math.abs(
     direction.x * stripe.pole.x +
       direction.y * stripe.pole.y +
@@ -637,6 +651,19 @@ function stripeProfile(stripe: StripeAxis, direction: Vec3): number {
   )
   const reach = stripe.halfWidth + stripe.offset * STRIPE_SHAPE.reach
   if (away > reach) return 0
+  const ex = direction.x - stripe.center.x
+  const ey = direction.y - stripe.center.y
+  const ez = direction.z - stripe.center.z
+  const along = Math.sqrt(ex * ex + ey * ey + ez * ez)
+  const end = stripeChord(stripe.halfLength)
+  if (along >= end) return 0
+  const extent =
+    1 -
+    smoothstep(
+      stripeChord(stripe.halfLength * (1 - STRIPE_SHAPE.taper)),
+      end,
+      along,
+    )
   const trough = -falloff(Math.min(1, away / stripe.halfWidth))
   const shoulderCenter = stripe.halfWidth + stripe.offset
   const shoulder =
@@ -648,8 +675,11 @@ function stripeProfile(stripe: StripeAxis, direction: Vec3): number {
           (stripe.offset * STRIPE_SHAPE.shoulderWidth),
       ),
     )
-  return trough + shoulder
+  return extent * (trough + shoulder)
 }
+
+/** The chord a stripe's extent is measured in: `2 sin(θ/2)` of an arc. */
+export const stripeChord = (arc: number): number => 2 * Math.sin(arc / 2)
 
 /**
  * Voronoi block rafts: plateau interiors, sharp walls, each block at its own

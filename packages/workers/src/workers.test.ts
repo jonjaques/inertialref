@@ -274,6 +274,7 @@ describe('terrain task', () => {
       temperature: 270,
       tidalProxy: 0,
       hasOcean: false,
+      hadOcean: false,
       reliefSpent: 1,
       publishedRelief: 8_000,
     })
@@ -329,6 +330,7 @@ describe('terrain task', () => {
       temperature: 270,
       tidalProxy: 0,
       hasOcean: false,
+      hadOcean: false,
       reliefSpent: 1,
       publishedRelief: 8_000,
     })
@@ -381,6 +383,7 @@ describe('terrain task', () => {
       temperature: 270,
       tidalProxy: 0,
       hasOcean: false,
+      hadOcean: false,
       reliefSpent: 1,
       publishedRelief: 8_848,
     })
@@ -440,6 +443,7 @@ describe('terrain task', () => {
       temperature: 288,
       tidalProxy: 0,
       hasOcean: true,
+      hadOcean: true,
       reliefSpent: 1,
       publishedRelief: 8_848,
     })
@@ -620,6 +624,7 @@ describe('timing across the worker boundary', () => {
             temperature: 270,
             tidalProxy: 0,
             hasOcean: false,
+            hadOcean: false,
             reliefSpent: 1,
             publishedRelief: 8_000,
           }),

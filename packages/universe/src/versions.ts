@@ -104,7 +104,41 @@ export const SYSTEM_ALGORITHM = algorithm('system', 4)
  * last bit. `SYSTEM_ALGORITHM` stays: nothing `system.ts` generates reads
  * the graph.
  */
-export const TERRAIN_ALGORITHM = algorithm('terrain', 5)
+/*
+ * Bumped to 6 for a batch of four, spent together because every change to
+ * the canonical field moves every landed ship and misses every archived tile,
+ * and one bump pays that once where four would pay it four times.
+ *
+ * - **The surface's identity** (`surfaceIdentity`) moves no ground and every
+ *   archive key. The drainage memo, the survey and the archive read one
+ *   complete text where two of them listed fields and stringified the
+ *   grammar, which spells NaN and both infinities `null`.
+ * - **The weakening is the sea a world had, not the sea it kept**
+ *   (`hadOcean`). A world whose ground boiled its sea keeps the plates the
+ *   water gave it; one whose ground froze its sea never held a liquid, and
+ *   gains none. 51 plate counts move in the 2,201 bodies within 25 ly,
+ *   Proxima Centauri II's twenty among them, and nine more grammars move
+ *   their hotspots and band shares under the plate threshold.
+ * - **One water body per sample** (`lakeLevelAt`). A sample within reach of
+ *   two lakes, or of a lake and the sea, takes the level of the body whose
+ *   nodes carry most of its weight, and blends toward the other only within
+ *   a tenth of a tie (`lakeMargin`), so the sheet and the ground clamp stop
+ *   tilting across the gap and do not step where the bodies meet. Only a
+ *   body with a drainage graph moves.
+ * - **The tiger stripes are a south-polar family** (`STRIPE_FAMILY`): four
+ *   stripes about 130 km long and 35 km apart on Enceladus, tapered at their
+ *   ends, where a stripe axis was a whole great circle drawn pole to pole.
+ *   The sizes are angles, so they scale with a body's radius.
+ *
+ * A body that drew no sea its ground boiled, has no drainage graph and draws
+ * no stripes is untouched to the last bit: in Sol, everything but Earth and
+ * Titan, whose graphs are read, and the twenty-eight bodies that draw
+ * stripes, Titan, Mimas and Phobos among them.
+ * `SYSTEM_ALGORITHM` stays: the weakening reads a draw already taken, and
+ * every generated value outside the grammar is identical across the bump,
+ * over every system within 50 ly.
+ */
+export const TERRAIN_ALGORITHM = algorithm('terrain', 6)
 export const GALAXY_ALGORITHM = algorithm('galaxy', 5)
 /**
  * The measured-to-physical conversion in `catalog/photometry.ts`.

@@ -11,6 +11,8 @@ import {
   HYPSOMETRY_SHAPE,
   octavesFor,
   RELIEF_SHAPE,
+  STRIPE_SHAPE,
+  stripeChord,
   SULCI_SHAPE,
 } from './bands.ts'
 import { COVER_CHANNELS } from './cover.ts'
@@ -100,14 +102,14 @@ export const MAX_TILE_LEVEL = 23
  *
  *   plate    [ax ay az continental] [mx my mz base] [step · · ·]
  *   hotspot  [ax ay az radius] [strength caldera · ·]
- *   stripe   [px py pz halfWidth] [offset · · ·]
+ *   stripe   [px py pz halfWidth] [offset end taper ·] [cx cy cz ·]
  *   level    [cells diameter density rung]
  *   ray      [ax ay az angularRadius] [tx ty tz age] [bx by bz cosReach]
  *            [phase0 phase1 phase2 phase3] [phase4 phase5 · ·]
  */
 export const PLATE_STRIDE = 3
 export const HOTSPOT_STRIDE = 2
-export const STRIPE_STRIDE = 2
+export const STRIPE_STRIDE = 3
 export const LEVEL_STRIDE = 1
 export const RAY_STRIDE = 5
 
@@ -525,10 +527,22 @@ function pack(surface: SurfaceParameters, seabed: boolean): KernelSurface {
     put(at, hotspot.axis.x, hotspot.axis.y, hotspot.axis.z, hotspot.radius)
     put(at + 4, hotspot.strength, hotspot.caldera)
   })
+  /*
+   * A stripe's extent travels as the two chords `stripeProfile` compares
+   * against, the end and where the taper starts, taken here in float64 so
+   * the kernel reads the same arc the CPU does rather than a sine of a
+   * float32 angle.
+   */
   sketch.stripes.forEach((stripe, i) => {
     const at = slot(STRIPES_AT + i * STRIPE_STRIDE)
     put(at, stripe.pole.x, stripe.pole.y, stripe.pole.z, stripe.halfWidth)
-    put(at + 4, stripe.offset)
+    put(
+      at + 4,
+      stripe.offset,
+      stripeChord(stripe.halfLength),
+      stripeChord(stripe.halfLength * (1 - STRIPE_SHAPE.taper)),
+    )
+    put(at + 8, stripe.center.x, stripe.center.y, stripe.center.z)
   })
   /*
    * Every rung, canonical then tail, each carrying the rung number its hashes
