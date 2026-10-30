@@ -1,9 +1,15 @@
 import { afterAll, beforeAll, expect, it } from 'vitest'
+import type { Node } from 'three/webgpu'
 import { vec3, vec4 } from 'three/tsl'
 import { SURFACE_LUMINANCE } from '@inertialref/rendering'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { composeSky } from './enhancedSky.ts'
-import { airLuminance, setSceneExposure } from './radiance.ts'
+import {
+  airLuminance,
+  sceneRadianceGain,
+  setSceneExposure,
+  visibilityAmbient,
+} from './radiance.ts'
 
 /*
  * Enhanced's lift of the faint sky, against the air in front of it.
@@ -57,4 +63,33 @@ it('leaves the photographic field physical whatever the air', async () => {
   setSceneExposure(gpu.renderer, pre, pre, 'photographic')
   expect(await composed(NOON_AIR)).toBeCloseTo(STAR_CLOUD, 12)
   expect(await composed(0)).toBeCloseTo(STAR_CLOUD, 12)
+})
+
+it('holds the composed field and the night fill when a darkening sky opens the exposure', async () => {
+  // `airAdaptation` opens Enhanced by up to eleven stops at dusk. Everything
+  // a material draws is multiplied by the scene gain on its way out, so what
+  // Enhanced stages — the composed galaxy, the three-percent night fill —
+  // has to carry the inverse, or civil dusk lifts them two thousandfold.
+  const drawn = async (graph: Node<'vec3'>) =>
+    (
+      await gpu.drawGraph(vec4(graph, 1), {
+        width: 1,
+        height: 1,
+        float: true,
+      })
+    ).at(0, 0)[1]
+  const calibrated = 1 / SURFACE_LUMINANCE
+  airLuminance.value = 0
+  setSceneExposure(gpu.renderer, calibrated, calibrated, 'enhanced')
+  const field = await drawn(composeSky(vec3(STAR_CLOUD)).mul(sceneRadianceGain))
+  const fill = await drawn(vec3(visibilityAmbient).mul(sceneRadianceGain))
+  const opened = calibrated * 2 ** 6
+  setSceneExposure(gpu.renderer, opened, opened, 'enhanced')
+  expect(
+    await drawn(composeSky(vec3(STAR_CLOUD)).mul(sceneRadianceGain)),
+  ).toBeCloseTo(field, 5)
+  expect(
+    await drawn(vec3(visibilityAmbient).mul(sceneRadianceGain)),
+  ).toBeCloseTo(fill, 5)
+  expect(fill).toBeCloseTo(0.03, 5)
 })

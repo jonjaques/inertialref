@@ -1,4 +1,4 @@
-import { sensorRadiance } from './radiance.ts'
+import { sensorRadiance, stagedLight } from './radiance.ts'
 import {
   AddEquation,
   Color,
@@ -258,7 +258,10 @@ function elementMaterial(kind: ElementKind): {
   // An overlay: the quads hang twenty meters in front of the lens, and the
   // sensor must not take that for the distance of the sky behind the Sun.
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
-  material.colorNode = color.mul(profile).mul(intensity)
+  // Staged under Enhanced, unlike the disk: the ghosts were authored at the
+  // calibration, and a sunset that opens the camera by three stops would
+  // otherwise brighten every one of them eightfold.
+  material.colorNode = color.mul(profile).mul(intensity).mul(stagedLight)
   material.transparent = true
   /*
    * Additive in color, and **silent in alpha** — not `AdditiveBlending`.

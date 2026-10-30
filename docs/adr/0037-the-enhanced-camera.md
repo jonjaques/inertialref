@@ -1,7 +1,8 @@
 # ADR-0037: Enhanced composes the default sky; Automatic and Manual expose it photographically
 
 Status: accepted · 7 Sep 2026; amended 30 Oct 2026, the air in front of the
-sky is part of what Enhanced compresses. Camera policy, processing and
+sky is part of what Enhanced compresses, and Enhanced opens up for the
+daylight left in a darkening sky. Camera policy, processing and
 surface-light separation are implemented and verified. The camera plan
 records image and runtime acceptance, including the limits of each
 measurement.
@@ -75,6 +76,24 @@ reports effective EV, gain relative to the lens, compensation and the override.
 A positive compensation brightens Automatic; it cannot add gain to Manual.
 Enhanced holds the 30,000 cd/m² surface calibration and declares its separate
 sky processing. Display peak and output negotiation do not select a mode.
+
+Standing inside an atmosphere, Enhanced opens up for the daylight that is
+left. In space the calibration is the point: the sun is the same sun wherever
+the ship is. On the ground the light itself goes away. Measured air puts a
+civil-dusk zenith near 0.65 cd/m², thirteen stops under a noon one, and at the
+calibration that sky drew black where a camera or an eye has opened by some
+ten stops. `airAdaptation` reads the daylight on a level surface at the eye
+(`daylightOver`: the sky overhead plus the direct sun through the air). It
+does nothing down to about 2,000 cd/m², so noon and every orbit keep the
+calibration. Below that it follows the light stop for stop, up to eleven, and
+then gives the stops back between the light of a −7° sun and astronomical
+night. The night sky — the stars, the Milky Way, a Moon with its relief — is
+then presented at the calibration it was composed at. A pinned or staged
+exposure ignores it. What Enhanced stages rather than measures is held at
+its display level while the exposure is open (`stagedLight`): the composed
+galaxy, the three-percent night fill, the lens flare, and the near field's
+key, fill and ambient, alongside the integrated stars, which already
+carried the inverse.
 
 Enhanced compresses diffuse sky luminance before the scene's half-float
 conversion. The owned sky target retains physical V-anchored radiance in

@@ -12167,6 +12167,47 @@ ground at Earth's −6° and Mars's −4° (`before-earth-civil`, `after-mars-du
 The white dots reported below the horizon at −77.5° did not reproduce in a
 rebuild of that frame, in either build.
 
+## Enhanced opens up through dusk, and the dusk is ozone's blue (30 Oct 2026)
+
+The measured air left Earth's civil dusk black: a zenith of 0.65 cd/m² under
+Enhanced's fixed surface calibration. Opening the exposure alone made it
+worse, and showed why the fixed exposure had hidden two faults.
+
+**What opening the exposure exposed.** At +10 stops the civil-dusk sky was
+gray-brown over a desert lit pale orange. The gray was the missing ozone:
+past sunset the zenith is lit edgeways through the stratosphere, and without
+the Chappuis band that light arrives as a dim sunset's. The orange was the
+ground's skylight, a linear ramp in the sun's cosine that reached zero only
+near −14°, so at −6° it still gave a sixth of the day's sky (measured: 3.4 lx
+against 17 klx).
+
+**What landed.** `airAdaptation` opens Enhanced for the daylight on a level
+surface at the eye (`daylightOver`: the zenith plus the direct sun), from
+nothing down to about 2,000 cd/m², stop for stop to eleven, and back to the
+calibration by astronomical night. At Jon's site it reads 0, 3.8, 11, 4.9, 0.7
+and 0 stops at noon, 0.5°, −6°, −9.8°, −12.4° and night. What Enhanced stages
+holds its display level while the exposure is open (`stagedLight`, and the
+near-field lights in `CameraRig`). Without that, the composed galaxy drew at
+26.7 against 0.42 at +6 stops. The ground's skylight falls past the horizon at
+e^(66·incidence) (`skylightLeft`). Earth carries 300 DU of ozone. Its
+cross-sections are averaged over each channel's CIE lobe: read at 680 nm the
+red escaped the 600 nm band and a −6° zenith came out violet (0.65 : 0.39 : 1).
+Averaged, it is 0.32 : 0.39 : 1, against 0.26 : 0.43 : 1 in Jon's civil-dusk
+photograph. With ozone the zenith is 0.75 to 1.17 of Koomen's from 5° to
+−12°, where it was 1.4 to 3 times without.
+
+**Traps.** In the rig, `await import('/src/render/radiance.ts')` after an
+edit returns a fresh module, not the app's: it read `airLuminance` 0 while
+the exposure was plainly adapting. Read `engine.exposure` instead. A gate run
+while the rig's Chrome was still drawing failed a test at 176 s and passed
+alone.
+
+**Left open.** Noon over bright sand is a deep slate blue, at its physical
+ratio to the ground. A phone's photograph is brighter and bluer because it
+meters the scene, balances the sun to white and saturates — camera choices,
+and the default 6500 K balance draws the Sun at 1 : 0.88 : 0.82. Mars's day
+sky is dark until its columns are composition-aware (ADR-0056).
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

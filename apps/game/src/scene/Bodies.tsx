@@ -46,12 +46,13 @@ import {
 import {
   airOverhead,
   type AtmosphereScattering,
+  daylightOver,
   scatteringFor,
   scatteringVia,
   type Standing,
   standingIn,
 } from '../render/atmosphereLuts.ts'
-import { airLuminance } from '../render/radiance.ts'
+import { airLuminance, observerDaylight } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -384,6 +385,7 @@ export function Bodies({
     let standingAir = null as {
       readonly scattering: AtmosphereScattering
       readonly standing: Standing
+      readonly daylight: number
     } | null
     // What the air does to the star being drawn, set per star below.
     let throughAir: readonly [number, number, number] | null = null
@@ -586,7 +588,16 @@ export function Bodies({
                 uniforms.sunColor,
               )
               if (standingAir === null || sky >= overhead)
-                standingAir = { scattering, standing }
+                standingAir = {
+                  scattering,
+                  standing,
+                  daylight: daylightOver(
+                    scattering,
+                    standing,
+                    sun,
+                    uniforms.sunColor,
+                  ),
+                }
               overhead = Math.max(overhead, sky)
             }
           }
@@ -616,6 +627,7 @@ export function Bodies({
     }
     throughAir = null
     airLuminance.value = overhead
+    observerDaylight.value = standingAir?.daylight ?? Number.POSITIVE_INFINITY
 
     residency.end()
 

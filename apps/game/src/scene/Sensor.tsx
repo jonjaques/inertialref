@@ -2,10 +2,12 @@ import { useThree } from '@react-three/fiber'
 import { useEffect, useState } from 'react'
 import type { WebGPURenderer } from 'three/webgpu'
 import { invariant } from '@inertialref/shared'
+import { airAdaptation } from '@inertialref/rendering'
 import { pictureUpscales, type Picture } from '../render/picture.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { sceneBackend, sceneLayout } from '../render/sceneLayout.ts'
 import { createSensor, type Sensor as SensorChain } from '../render/sensor.ts'
+import { observerDaylight } from '../render/radiance.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 import { warmAtMount } from '../render/warmup.ts'
 import { createHandover } from './chainHandover.ts'
@@ -105,6 +107,7 @@ export function Sensor({
             : '',
         ].join(':'),
         pinned: engine.pinnedExposure,
+        airAdaptation: airAdaptation(observerDaylight.value),
         stagingLook: (engine.cinematic?.effects.calibratedLight ?? 0) > 0,
         headroom: engine.gl?.description.headroom ?? 1,
         motionBlur: engine.presentation.resolved().motionBlur,

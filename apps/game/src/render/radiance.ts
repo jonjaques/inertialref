@@ -1,6 +1,6 @@
 import { SURFACE_LUMINANCE } from '@inertialref/rendering'
 import type { NodeMaterial, Renderer } from 'three/webgpu'
-import { Fn, output, uniform, vec4 } from 'three/tsl'
+import { float, Fn, output, uniform, vec4 } from 'three/tsl'
 import { meterOverlay, motionOverlay, reactiveCoverage } from './sensorMrt.ts'
 
 /** Offscreen reflectance bakes remain reflectance; only the scene collects light. */
@@ -11,15 +11,6 @@ const enhanced = new WeakMap<Renderer, boolean>()
 export const enhancedSky = uniform(0).onRenderUpdate(({ renderer }) =>
   renderer !== null && enhanced.get(renderer) === true ? 1 : 0,
 )
-/**
- * Enhanced's three-percent night-side fill is legibility, not measured light.
- * Ground and water share the resolved processing gate; photographic views and
- * reflectance bakes receive none. Atmospheric scattering remains independent.
- * Earthshine on Luna is about 2.6 × 10⁻⁴ of sunlight; three percent is an
- * authored floor that lets a night limb read against space at daylight exposure.
- * The scene's 0.16 ambient reaches hulls and props through different materials.
- */
-export const visibilityAmbient = enhancedSky.mul(0.03)
 /**
  * The luminance of the air between the observer and space, in scene units:
  * the zenith of whatever atmosphere the eye is inside, zero in a vacuum.
@@ -35,6 +26,35 @@ export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
 export const integratedSkyGain = uniform(1).onRenderUpdate(({ renderer }) =>
   renderer === null ? 1 : (integratedGains.get(renderer) ?? 1),
 )
+
+/**
+ * Light Enhanced stages rather than measures — the composed galaxy, the
+ * night fill, the lens flare — held at the display level it was authored at
+ * when the exposure opens up in a darkening sky (`airAdaptation`). Under the
+ * calibration it is one; the photographic views measure everything, and it is
+ * one there too.
+ */
+export const stagedLight = enhancedSky
+  .greaterThan(0.5)
+  .select(integratedSkyGain, float(1))
+
+/**
+ * The daylight on a level surface where the observer stands, in scene units:
+ * the sky overhead and the direct sun, or infinity outside any air. Written
+ * once a frame by `Bodies`, read by the sensor for `airAdaptation`.
+ */
+export const observerDaylight = { value: Number.POSITIVE_INFINITY }
+
+/**
+ * Enhanced's three-percent night-side fill is legibility, not measured light.
+ * Ground and water share the resolved processing gate; photographic views and
+ * reflectance bakes receive none. Atmospheric scattering remains independent.
+ * Earthshine on Luna is about 2.6 × 10⁻⁴ of sunlight; three percent is an
+ * authored floor that lets a night limb read against space at daylight exposure.
+ * The scene's 0.16 ambient reaches hulls and props through different materials.
+ * Staged, so a dusk exposure does not take the floor up with it.
+ */
+export const visibilityAmbient = enhancedSky.mul(0.03).mul(stagedLight)
 
 export function setSceneExposure(
   renderer: Renderer,

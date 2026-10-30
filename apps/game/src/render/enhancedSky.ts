@@ -1,6 +1,6 @@
 import type { Node } from 'three/webgpu'
 import { vec3 } from 'three/tsl'
-import { airLuminance, enhancedSky } from './radiance.ts'
+import { airLuminance, enhancedSky, stagedLight } from './radiance.ts'
 
 /**
  * The field retains nW m^-2 sr^-1. Only the composed view spends this gain.
@@ -25,6 +25,10 @@ export function composeSky(physical: Node<'vec3'>): Node<'vec3'> {
   const lifted = physical.mul(ENHANCED_SKY_GAIN)
   const y = lifted.dot(vec3(0.2126, 0.7152, 0.0722))
   const veil = airLuminance.mul(ENHANCED_SKY_GAIN)
-  const composed = lifted.div(y.add(veil).div(ENHANCED_SKY_CEILING).add(1))
+  // Staged: composed at the calibration, and held there when the exposure
+  // opens up for a darkening sky.
+  const composed = lifted
+    .div(y.add(veil).div(ENHANCED_SKY_CEILING).add(1))
+    .mul(stagedLight)
   return enhancedSky.greaterThan(0.5).select(composed, physical)
 }

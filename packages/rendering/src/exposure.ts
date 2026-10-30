@@ -137,11 +137,54 @@ export interface CameraPolicy {
   readonly override: 'staging' | null
 }
 
+/**
+ * How far Enhanced opens up for the daylight an observer inside an
+ * atmosphere is actually getting.
+ *
+ * Enhanced holds the surface white fixed, and in space that is the point:
+ * the sun is the same sun wherever the ship is, so one calibration serves a
+ * sunlit world, its night side and the sky behind both. On the ground the
+ * light itself goes away. Measured air puts a civil-dusk zenith near
+ * 1 cd/m² — fifteen stops under noon — and at the fixed calibration that sky
+ * drew black, where a camera or an eye has opened by some ten stops and sees
+ * deep blue over a bright horizon.
+ *
+ * `daylight` is the light on a level surface in scene units: the sky
+ * overhead plus the direct sun. Down to `day` (about 2,000 cd/m² of it, a
+ * sun a few degrees up) nothing moves, so noon and every orbit keep the
+ * calibration. Below it the exposure follows the light stop for stop, up to
+ * `most`, and then gives the stops back between `full` (about 0.3 cd/m², the
+ * sun near −7°) and `night` (0.3 mcd/m², astronomical night), so the night
+ * sky — the stars, the Milky Way, a Moon with its relief — is presented at
+ * the calibration it was composed at. In between the air goes dark as the
+ * eye sees it go. A vacuum, or any daylight at all, is zero.
+ */
+export const AIR_ADAPTATION = Object.freeze({
+  day: 0.07,
+  full: 1e-5,
+  night: 1e-8,
+  most: 11,
+})
+
+/** Stops Enhanced opens up by for `daylight` scene units on a level surface. */
+export function airAdaptation(daylight: number): number {
+  const { day, full, night, most } = AIR_ADAPTATION
+  if (!(daylight < day)) return 0
+  const level = Math.log2(Math.max(daylight, 1e-30))
+  const t = Math.min(
+    Math.max((level - Math.log2(night)) / Math.log2(full / night), 0),
+    1,
+  )
+  return Math.min(Math.log2(day) - level, most * t * t * (3 - 2 * t))
+}
+
 /** Resolve staging once without rewriting the player's selected camera mode. */
 export function resolveCameraPolicy(
   settings: SensorSettings,
   lens: Lens,
   pinned: number | null = null,
+  /** `airAdaptation` stops; staging and the photographic modes ignore it. */
+  adaptation = 0,
 ): CameraPolicy {
   const override = pinned === null ? null : 'staging'
   const enhanced = settings.mode === 'enhanced' && override === null
@@ -155,7 +198,7 @@ export function resolveCameraPolicy(
       pinned !== null
         ? exposureForLuminance(SURFACE_LUMINANCE) + pinned
         : enhanced
-          ? exposureForLuminance(SURFACE_LUMINANCE)
+          ? exposureForLuminance(SURFACE_LUMINANCE) - adaptation
           : settings.mode === 'manual'
             ? exposureValue(lens)
             : null,
@@ -318,8 +361,9 @@ export class ExposureMeter {
     settings: SensorSettings,
     time: number,
     pinned: number | null = null,
+    adaptation = 0,
   ): Exposure {
-    const policy = resolveCameraPolicy(settings, lens, pinned)
+    const policy = resolveCameraPolicy(settings, lens, pinned, adaptation)
     const set = exposureValue(lens)
     const changed =
       this.#mode !== null &&

@@ -19,6 +19,7 @@ import {
   bakeTransmittance,
   type HazeAuthoring,
   type ScatteringLut,
+  transmittanceFrom,
   zenithSkyRadiance,
 } from '@inertialref/rendering'
 import type { WorkerPool } from '@inertialref/workers'
@@ -310,5 +311,33 @@ export function airOverhead(
   )
   return (
     0.2126 * r * sunColor.r + 0.7152 * g * sunColor.g + 0.0722 * b * sunColor.b
+  )
+}
+
+/**
+ * The daylight on a level surface where a standing eye is, in scene units:
+ * the sky overhead plus the sun that reaches the ground through the air,
+ * each weighted by the sun's color. What `airAdaptation` opens the exposure
+ * for, so it counts the direct sun — a high observer under a thin, dark sky
+ * is still in full daylight, and opening up for the sky alone would burn out
+ * the sunlit world below.
+ */
+export function daylightOver(
+  scattering: AtmosphereScattering,
+  standing: Standing,
+  sun: Vec3 | null,
+  sunColor: Rgb,
+): number {
+  const sky = airOverhead(scattering, standing, sun, sunColor)
+  if (sun === null) return sky
+  const mu = Vec.dot(standing.up, sun)
+  if (mu <= 0) return sky
+  const [r, g, b] = transmittanceFrom(standing.radius, mu, scattering.recipe)
+  return (
+    sky +
+    mu *
+      (0.2126 * r * sunColor.r +
+        0.7152 * g * sunColor.g +
+        0.0722 * b * sunColor.b)
   )
 }
