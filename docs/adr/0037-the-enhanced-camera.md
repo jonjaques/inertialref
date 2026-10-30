@@ -95,6 +95,14 @@ galaxy, the three-percent night fill, the lens flare, and the near field's
 key, fill and ambient, alongside the integrated stars, which already
 carried the inverse.
 
+The neutral look keeps a light's hue through the whole curve, and over its
+top 5% it rolls a saturated light toward white rather than down. Mixing
+toward the gray of its own luminance, only as far as its brightest channel
+needs, keeps both the luminance and the hue angle. Scaled down instead, a
+2° sun drew darker than its own aureole (0.55 against 0.79), where a camera
+clips the disk to a pale core. A star's darkened limb, below that top 5%,
+keeps the color it is drawn with.
+
 Enhanced compresses diffuse sky luminance before the scene's half-float
 conversion. The owned sky target retains physical V-anchored radiance in
 nW m⁻² sr⁻¹; the composition reads that radiance and applies a presentation

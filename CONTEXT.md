@@ -12202,11 +12202,24 @@ the exposure was plainly adapting. Read `engine.exposure` instead. A gate run
 while the rig's Chrome was still drawing failed a test at 176 s and passed
 alone.
 
+**After review.** A `/code-review xhigh --fix` pass found an eye over a
+giant's pole reading as below the air, a dipped horizon opening 10.8 stops
+over a sunlit limb at 60 km, a setting disk's red clipping at 109,736 in the
+half-float target, and a one-stop snap on leaving the air. All four are
+fixed in `5b006db2`. The sun at sunset then still drew darker than its
+aureole, because the neutral curve scales a saturated light down to fit
+(0.55 against 0.79). The curve's top 5% now rolls toward white at the
+light's own hue (`e744ad68`), and every setting sun photographed since is a
+white disk in its glow.
+
 **Left open.** Noon over bright sand is a deep slate blue, at its physical
 ratio to the ground. A phone's photograph is brighter and bluer because it
 meters the scene, balances the sun to white and saturates — camera choices,
 and the default 6500 K balance draws the Sun at 1 : 0.88 : 0.82. Mars's day
-sky is dark until its columns are composition-aware (ADR-0056).
+sky is dark until its columns are composition-aware (ADR-0056). The ground's
+skylight above the horizon is the day's linear ramp, a quarter of the noon
+sky with the sun on the horizon against a measured 400 lx in 10 to 25 klx.
+Under the sunset exposure that lights high-albedo snow pastel pink.
 
 ## Known gaps
 
