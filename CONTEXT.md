@@ -12221,6 +12221,73 @@ skylight above the horizon is the day's linear ramp, a quarter of the noon
 sky with the sun on the horizon against a measured 400 lx in 10 to 25 klx.
 Under the sunset exposure that lights high-albedo snow pastel pink.
 
+## The sky is marched once, and the camera on the ground is a camera (30 Oct 2026)
+
+Jon's four frames after the measured air: the limb from orbit gone to a line,
+a black band between the far shore's sea and its sky, Mars white at a sun
+2.6° under the horizon with its slopes burning red, and a noon desert whose
+horizon went gray against a hard edge of sand. Each had a different cause.
+
+**The band was the shell's own ground.** A ray the shell meets the ground
+with is a short, dense, sunless path, far darker than the sky beside it, so
+the ground's horizon has to lie under every drawn surface. The shell stopped
+at the sphere its standing eye was placed on — sea level, with the eye's
+altitude clamped at zero — and the far shore's sea lies 211 m under its
+datum: from 80 m over the water the shell's horizon was level while the
+sea's dipped 0.36°, five rows at 16 px/°. Measured by hiding every class of
+draw in turn through R3F's root map: the band survived the shell, the
+ground, the sea, the sphere, the galaxy and the lines, because it was where
+nothing drew. The shell now works in sea-level units — the tables baked over
+the datum (`airHeights`, `airTopRatio`), the eye wherever it is — and stops a
+ray at the drawn sphere, sunk under the datum, whose horizon is under the
+terrain and the sea everywhere. `standing` and `spheroidRadiusToward` go
+with it. Terrestrial shells are round: the terrain is spherical, and Earth's
+0.3% of oblateness put a sea-level eye 4.4 km up in its air at 27°.
+
+**Mars was two things.** Enhanced opened 4.1 stops for a daylight figure
+keyed on the zenith and the direct sun — the zenith dark, the horizon still
+sunlit from 7.7 km up — where Automatic's meter saw the frame and stopped a
+stop earlier; and the ground lit every point within the body's whole
+terminator width, 6° on Mars from 20 km of relief, so a slope tilted toward
+a sun under the horizon took a tenth of the beam. Inside the air Enhanced
+now meters as Automatic does (`meteredShare`, ADR-0037): the desert meters
+to 12.72 EV under Enhanced and 12.71 under Automatic, where Enhanced held
+14.6. `airAdaptation` and `daylightOver` go. Each point of the ground
+carries the sun past the horizon by √(2h/R) of its own height, early for a
+basin, with the airless disk's 0.025 for the beam's width; the sphere keeps
+its averaged terminator, and the descent gate's terminator band is where
+the two still differ.
+
+**The horizon was three veils.** The sphere, the ground and the sea each
+carried an authored veil — an airmass over a flat atmosphere, a haze color,
+0.15, 0.55, 0.68 — and none of it was the sky the shell drew beside it: 50 km
+of ground was veiled 27% where the path's transmittance is 0.22. `render/
+air.ts` holds the shell's recipe and tables as uniforms and one march, and
+all four materials call it; a surface is `T · surface + L` along the eye's
+own path, and the direct beam arrives through the transmittance table's
+column in place of an authored sunset tint. `hazeColor`, `sunsetTint`,
+`hazeLimb` and the sphere's `hazeStrength` go. The desert's far hills now
+haze into the sky that continues above them.
+
+**The limb is a licensed cheat.** The physical limb is two pixels on a disk
+four hundred across. From outside the air, Enhanced adds the glow the gas
+would scatter falling off over three times its height, gained four times
+(`LIMB_HEIGHTS`, `LIMB_GAIN`), above the physics and not in the extinction;
+three heights alone left a crisp bright line, because the lifted glow at
+20 km was a fifth of the base and two pixels wide. Ten shell heights of
+fade-in keep a climbing ship's sky.
+
+**Two camera choices.** The default balance is 5,800 K, the Sun's
+photosphere, so sunlight is white and the sky keeps its blue; 6,500 K drew
+the Sun at 1 : 0.88 : 0.82 and the noon zenith slate. A `render.gamma`
+display preference, 0.5 to 2, is a power on the displayed range up to white
+and on nothing above it (ADR-0044).
+
+**A chain that hid its failures.** `vitest … | rg` returns rg's status, so a
+red test and a red gate both passed a `&&` chain and the gamma slider was
+committed with a broken knob test and a type error. `set -o pipefail` on
+every chain that commits, and a fix-forward commit for that one.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

@@ -97,6 +97,19 @@ its display level while the exposure is away from the calibration
 flare, and the near field's key, fill and ambient, alongside the integrated
 stars, which already carried the inverse.
 
+From orbit, Enhanced lifts the limb. The physical limb is a line: Earth's
+gas falls off over 8.5 km, a seventh of a percent of the radius, two pixels
+on a disk four hundred across, and a camera's limb is that line and no more.
+The deep-space composite is where the bible licenses a cheat, and the soft
+ring the home page wraps the disk in is one. Outside the air, the shell adds
+the glow the gas would scatter if it fell off over three times its height,
+gained four times (`LIMB_HEIGHTS`, `LIMB_GAIN` in `render/air.ts`) — in the
+light it scatters and not in what it takes, so the limb's own line and the
+disk under it stay the physics and only the glow above them is the
+presentation. It comes in over ten shell heights up from the top of the air,
+so a ship climbing out keeps the sky it had; the photographic views never
+see it.
+
 The neutral look keeps a light's hue through the whole curve, and over its
 top 5% it rolls a saturated light toward white rather than down. Mixing
 toward the gray of its own luminance, only as far as its brightest channel
