@@ -14,6 +14,7 @@ import {
   RENDER_PICTURE,
   RENDER_SENSOR,
   RENDER_LENS_FLARE,
+  RENDER_GAMMA,
   RENDER_SURFACE,
   write,
 } from './preferences.ts'

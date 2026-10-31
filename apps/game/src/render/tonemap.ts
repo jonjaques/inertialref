@@ -17,7 +17,6 @@ import {
   pow,
   smoothstep,
   sqrt,
-  step,
   uniform,
   vec3,
   vec4,
@@ -217,14 +216,12 @@ export function installToneCurve(
         clamp(light, vec3(0), vec3(headroomUniform)),
         clamp(graded.mul(lift), vec3(0), vec3(headroomUniform)),
       )
-    // The display gamma, as a power on the range up to white and on nothing
-    // above it: the headroom is a star's and a sun's, and lifting the
-    // midtones for a bright room must not move where a disk clips. The two
-    // meet at white, so the seam between them is not a step.
-    const result = mix(
-      fitted,
-      pow(fitted, float(1).div(gammaUniform)),
-      step(fitted, vec3(1)),
+    // The display gamma, as a power on the range up to white with the excess
+    // over white added back as it is: the headroom is a star's and a sun's,
+    // and lifting the midtones for a bright room must not move where a disk
+    // clips. The two meet at white, so the seam between them is not a step.
+    const result = pow(fitted.min(1), vec3(float(1).div(gammaUniform))).add(
+      fitted.sub(1).max(0),
     )
     return wideUniform
       .greaterThan(0.5)
