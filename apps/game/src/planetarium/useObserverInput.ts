@@ -1,7 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { useActions, useKeyContext } from '../input/useKeymap.ts'
+import {
+  useActionFrame,
+  useActions,
+  useKeyContext,
+} from '../input/useKeymap.ts'
 import type { ActionId } from '../input/keymap.ts'
+import {
+  DOLLY_NOTCHES_PER_SECOND,
+  lookDelta,
+  lookIds,
+} from '../input/lookRate.ts'
+import type { TreeStep } from './navigator.ts'
+import {
+  CONTROLS_PAD_TUNING,
+  usePersistentState,
+} from '../state/preferences.ts'
 import {
   centroid,
   GESTURE_START,
@@ -51,6 +65,23 @@ const ARROWS: Readonly<Record<string, Point>> = {
 
 const ARROW_IDS = Object.keys(ARROWS) as readonly ActionId[]
 
+/** The held orbit, which looks instead where the arrows would. */
+const SWING = {
+  left: 'observe.swingLeft',
+  right: 'observe.swingRight',
+  up: 'observe.swingUp',
+  down: 'observe.swingDown',
+} as const
+
+const LOOK = lookIds('observe')
+
+const STEPS: Readonly<Record<string, TreeStep>> = {
+  'observe.previous': 'previous',
+  'observe.next': 'next',
+  'observe.parent': 'parent',
+  'observe.child': 'child',
+}
+
 export interface ObserverInputOptions {
   /** Off in every other mode; the surface listeners are not attached at all. */
   readonly enabled: boolean
@@ -69,6 +100,8 @@ export interface ObserverInputOptions {
   readonly onFrame: () => void
   /** `Home` — back to where the session opened. */
   readonly onReset: () => void
+  /** A pad's walk through the system as a tree. See `stepTarget`. */
+  readonly onStep: (step: TreeStep) => void
   /** Whether the observatory is standing, so `standing` is a live context. */
   readonly standing: boolean
   /** Whether the primary drag and the arrows look instead of orbiting. */
@@ -127,6 +160,61 @@ export function useObserverInput(
     observatory.drag(dx, dy, observatory.dragSensitivity())
   })
 
+  const [tuning] = usePersistentState(CONTROLS_PAD_TUNING)
+  const speed = useRef(tuning.lookSpeed)
+  speed.current = tuning.lookSpeed
+
+  // The held orbit: a stick sweeping round the subject, at the lens's own
+  // rate, and the look wherever the arrows would look — standing, or with
+  // free look on.
+  useActionFrame(Object.values(SWING), (values, seconds) => {
+    const { x, y } = lookDelta(values, SWING, seconds, speed.current)
+    const observatory = engine.harness.observatory
+    latest.current.onGesture()
+    if (latest.current.freeLook || observatory.standing) observatory.turn(x, y)
+    else observatory.drag(x, y, observatory.dragSensitivity())
+  })
+  // The other stick turns the head off the subject without moving the camera,
+  // which is the planetarium's whole reason to have an aim offset.
+  useActionFrame(Object.values(LOOK), (values, seconds) => {
+    const { x, y } = lookDelta(values, LOOK, seconds, speed.current)
+    latest.current.onGesture()
+    engine.harness.observatory.turn(x, y)
+  })
+  useActionFrame(['observe.approach', 'observe.retreat'], (values, seconds) => {
+    const notches =
+      ((values.get('observe.retreat') ?? 0) -
+        (values.get('observe.approach') ?? 0)) *
+      DOLLY_NOTCHES_PER_SECOND *
+      seconds
+    latest.current.onGesture()
+    engine.harness.observatory.zoomNotches(notches)
+  })
+  /*
+   * The pad's click, under the reticle.
+   *
+   * Asked of the reticle's own box rather than taken as the window's middle:
+   * the reticle is centered in `.hud-layer`, which the attached menu's band
+   * and the safe areas inset, so the two centers part by half a band — most
+   * of `PICK_SLOP` — and a press aimed at a moon under the ring would test a
+   * point beside it. The window's middle is the fallback for a cleared
+   * interface, where there is no reticle to aim with anyway.
+   */
+  useActions(['observe.pick'], () => {
+    latest.current.onGesture()
+    const aim = document.querySelector('[data-aim]')?.getBoundingClientRect()
+    latest.current.onPick(
+      aim === undefined
+        ? { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+        : { x: aim.left + aim.width / 2, y: aim.top + aim.height / 2 },
+    )
+  })
+  useActions(['observe.center'], () => engine.harness.observatory.center())
+  useActions(Object.keys(STEPS), (id) => {
+    const step = STEPS[id]
+    if (step !== undefined) latest.current.onStep(step)
+  })
+
   useActions(['observe.in'], () => engine.harness.observatory.zoomNotches(-1))
   useActions(['observe.out'], () => engine.harness.observatory.zoomNotches(1))
   useActions(['observe.frame'], () => latest.current.onFrame())
@@ -136,10 +224,17 @@ export function useObserverInput(
   )
 
   useActions(['stand.leave'], () => engine.harness.observatory.leaveSurface())
-  // The six flight keys, as one held set: every edge rewrites the whole
-  // vector, so a key that goes up while its opposite stays down leaves the
-  // opposite's motion and nothing of its own.
-  const flying = useRef(new Set<string>())
+  // The six flight keys, as one held map of magnitudes: every edge rewrites
+  // the whole vector, so a key that goes up while its opposite stays down
+  // leaves the opposite's motion and nothing of its own — and a stick halfway
+  // out flies at half the rate.
+  const flying = useRef(new Map<string, number>())
+  /*
+   * Shift, as the keys last reported it. Every keyboard edge carries the
+   * modifier's state, and a pad's edges carry none — so a stick moving must
+   * not read as Shift let go under a hand still holding it.
+   */
+  const shifted = useRef(false)
   useActions(
     [
       'stand.forward',
@@ -148,19 +243,21 @@ export function useObserverInput(
       'stand.right',
       'stand.rise',
       'stand.lower',
+      'stand.fast',
     ],
     (id, event) => {
       const held = flying.current
-      if (event.phase === 'down') held.add(id)
-      else held.delete(id)
+      if (event.phase === 'up') held.delete(id)
+      else held.set(id, event.value)
+      if (event.device === 'keyboard') shifted.current = event.shift
       const axis = (positive: string, negative: string): number =>
-        Number(held.has(positive)) - Number(held.has(negative))
+        (held.get(positive) ?? 0) - (held.get(negative) ?? 0)
       latest.current.onGesture()
       engine.harness.observatory.setStanceFlight({
         forward: axis('stand.forward', 'stand.back'),
         right: axis('stand.right', 'stand.left'),
         up: axis('stand.rise', 'stand.lower'),
-        fast: event.shift,
+        fast: shifted.current || held.has('stand.fast'),
       })
     },
     options.standing,

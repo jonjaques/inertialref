@@ -1,6 +1,11 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { useAction, useActions, useKeyContext } from '../input/useKeymap.ts'
+import {
+  useAction,
+  useActions,
+  useKeyContext,
+  useKeymap,
+} from '../input/useKeymap.ts'
 import type { ActionId } from '../input/keymap.ts'
 
 /*
@@ -63,36 +68,52 @@ const AXIS_IDS = Object.keys(AXES) as readonly ActionId[]
  */
 const THROTTLE_STEP = 0.05
 
+/**
+ * How often the drive's rumble is renewed, and how long each effect runs.
+ *
+ * The Gamepad API has no "rumble until told to stop": an effect has a
+ * duration and a newer one preempts it. So a continuous hum is a chain of
+ * short effects, each a little longer than the gap to the next so the motor
+ * never spins down between them, and the chain simply stops being renewed
+ * when the drive is cut.
+ */
+const DRIVE_RENEW_SECONDS = 0.1
+const DRIVE_EFFECT_MS = 140
+
 export function useShipControls(
   engine: GameEngine,
   bindings: ControlBindings,
 ): void {
   /*
-   * Which axes are held, as a Set the dispatcher fills through the edges.
+   * Which axes are held, and how far, as a map the dispatcher fills through
+   * the edges.
    *
-   * A ref rather than state: this changes on every key and the vector it
-   * produces goes straight at the engine, so a re-render would be work for a
-   * value no component reads. The dispatcher releases everything on a blur and
-   * on the context leaving, so the set cannot be left with a thruster in it.
+   * A magnitude rather than membership, because a stick halfway out is half a
+   * thruster — and a key is a stick at full throw, so the keyboard's arithmetic
+   * is the same sum with every value one. A ref rather than state: this changes
+   * on every key and every stick movement and the vector goes straight at the
+   * engine, so a re-render would be work for a value no component reads. The
+   * dispatcher releases everything on a blur and on the context leaving, so
+   * the map cannot be left with a thruster in it.
    */
-  const held = useRef(new Set<string>())
+  const held = useRef(new Map<string, number>())
 
   const apply = (): void => {
     const translation: [number, number, number] = [0, 0, 0]
     const rotation: [number, number, number] = [0, 0, 0]
-    for (const id of held.current) {
+    for (const [id, value] of held.current) {
       const binding = AXES[id]
       if (binding === undefined) continue
       const [axis, index, sign] = binding
-      if (axis === 'translation') translation[index] += sign
-      else rotation[index] += sign
+      if (axis === 'translation') translation[index] += sign * value
+      else rotation[index] += sign * value
     }
     engine.setControl(translation, rotation)
   }
 
   useActions(AXIS_IDS, (id, event) => {
-    if (event.phase === 'down') held.current.add(id)
-    else held.current.delete(id)
+    if (event.phase === 'up') held.current.delete(id)
+    else held.current.set(id, event.value)
     apply()
   })
 
@@ -100,8 +121,38 @@ export function useShipControls(
   useAction('flight.throttleDown', () => engine.nudgeThrottle(-THROTTLE_STEP))
   useAction('flight.throttleFull', () => engine.setThrottle(1))
   useAction('flight.throttleCut', () => engine.setThrottle(0))
-  useAction('flight.assist', () => bindings.onToggleAssist())
-  useAction('flight.kill', () => bindings.onKillRotation())
+  const store = useKeymap()
+  // A state change felt as well as read: a tick for the assist, a thump for
+  // the reaction wheels catching the spin. The store drops both unless the
+  // pad is the hand in use, so a keyboard press never buzzes a pad on a desk.
+  useAction('flight.assist', () => {
+    bindings.onToggleAssist()
+    store.rumble(0, 0.35, 60)
+  })
+  useAction('flight.kill', () => {
+    bindings.onKillRotation()
+    store.rumble(0.55, 0.3, 160)
+  })
+
+  /*
+   * The main drive, felt: the light motor at the throttle, for as long as the
+   * pilot is flying. Only while `flight` is live — the ship keeps burning
+   * under the planetarium and a walk, and a pad humming in somebody's hand
+   * while they look at Saturn is the ship's drive reaching through a mode it
+   * has no part in.
+   */
+  useEffect(() => {
+    let since = DRIVE_RENEW_SECONDS
+    return store.onFrame((seconds) => {
+      since += seconds
+      if (since < DRIVE_RENEW_SECONDS) return
+      since = 0
+      if (!store.live.includes('flight')) return
+      const throttle = engine.throttle()
+      if (throttle <= 0) return
+      store.rumble(throttle * 0.15, throttle * 0.45, DRIVE_EFFECT_MS)
+    })
+  }, [store, engine])
   useAction('time.pause', () => bindings.onPause())
   useAction('time.faster', () => bindings.onWarp(1))
   useAction('time.slower', () => bindings.onWarp(-1))

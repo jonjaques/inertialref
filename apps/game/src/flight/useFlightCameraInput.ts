@@ -1,6 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { useActions } from '../input/useKeymap.ts'
+import { lookDelta, lookIds } from '../input/lookRate.ts'
+import { useActionFrame, useActions, useKeymap } from '../input/useKeymap.ts'
+import {
+  CONTROLS_PAD_TUNING,
+  usePersistentState,
+} from '../state/preferences.ts'
 import {
   centroid,
   GESTURE_START,
@@ -27,6 +32,17 @@ import {
  * they are ids, so the hint that names them reads the live chord.
  */
 
+/**
+ * A free-look press shorter than this is a tap, and a tap looks ahead again.
+ *
+ * Long enough to be a deliberate tap and short enough that nobody who meant
+ * to hold and look has let go by then; a look shorter than this has not
+ * turned the head anywhere worth keeping.
+ */
+const TAP_SECONDS = 0.25
+
+const LOOK = lookIds('flight')
+
 export function useFlightCameraInput(
   engine: GameEngine,
   enabled = true,
@@ -46,6 +62,60 @@ export function useFlightCameraInput(
     ['flight.recenter'],
     () => {
       engine.harness.flightCamera.recenter()
+    },
+    enabled,
+  )
+
+  /*
+   * Free look: the steering stick turns the head while the button is held.
+   *
+   * By a layer rather than a branch in the ship's handler. Holding it claims
+   * `flight-look`, where the right stick is bound to the head; the keymap
+   * re-resolves the pad against the new context on its next poll, lets go of
+   * the hull's pitch and yaw, and hands the stick to the look — and gives it
+   * back on release. Claimed on the store directly rather than through
+   * `useKeyContext`, because a context that waited for a render would leave
+   * a frame of the stick still steering the ship after the button went down.
+   */
+  const store = useKeymap()
+  const looking = useRef<{ release: () => void; at: number } | null>(null)
+  useActions(
+    ['flight.freeLook'],
+    (_, event) => {
+      if (event.phase === 'down' && looking.current === null) {
+        looking.current = {
+          release: store.claim({ context: 'flight-look' }),
+          at: performance.now(),
+        }
+        return
+      }
+      if (event.phase !== 'up' || looking.current === null) return
+      const { release, at } = looking.current
+      looking.current = null
+      release()
+      if ((performance.now() - at) / 1000 < TAP_SECONDS)
+        engine.harness.flightCamera.recenter()
+    },
+    enabled,
+  )
+  useEffect(
+    () => () => {
+      looking.current?.release()
+      looking.current = null
+    },
+    [],
+  )
+
+  const [tuning] = usePersistentState(CONTROLS_PAD_TUNING)
+  const speed = useRef(tuning.lookSpeed)
+  speed.current = tuning.lookSpeed
+  // A drag, at a rate: in the chase it turns the head, in the orbit it orbits,
+  // which is what a drag of the same pixels does.
+  useActionFrame(
+    Object.values(LOOK),
+    (values, seconds) => {
+      const { x, y } = lookDelta(values, LOOK, seconds, speed.current)
+      engine.harness.flightCamera.drag(x, y)
     },
     enabled,
   )

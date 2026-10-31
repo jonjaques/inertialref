@@ -23,7 +23,8 @@ export const CHARACTER_HELD_ACTIONS = [
 export class CharacterInput {
   readonly #controller: CharacterInputTarget
   readonly #now: () => number
-  readonly #held = new Set<string>()
+  /** Every held action and its magnitude: one for a key, a stick's throw for a pad. */
+  readonly #held = new Map<string, number>()
   #jumpAt: number | null = null
 
   constructor(controller: CharacterInputTarget, now: () => number) {
@@ -33,9 +34,15 @@ export class CharacterInput {
 
   action(id: string, event: ActionEvent): void {
     if (!this.#controller.locked) return
-    if (event.phase === 'down') {
+    if (event.phase === 'change') {
+      // A stick moving inside one push: the magnitude, and nothing that a
+      // press does — a jump is taken on the edge, not on every tremor of a
+      // trigger that is already down.
+      if (!this.#held.has(id)) return
+      this.#held.set(id, event.value)
+    } else if (event.phase === 'down') {
       if (this.#held.has(id)) return
-      this.#held.add(id)
+      this.#held.set(id, event.value)
       if (id === 'character.jump') {
         const now = this.#now()
         if (
@@ -50,9 +57,11 @@ export class CharacterInput {
     } else this.#held.delete(id)
     const held = (action: string): boolean =>
       this.#held.has(`character.${action}`)
+    const amount = (action: string): number =>
+      this.#held.get(`character.${action}`) ?? 0
     this.#controller.input({
-      forward: Number(held('forward')) - Number(held('back')),
-      right: Number(held('right')) - Number(held('left')),
+      forward: amount('forward') - amount('back'),
+      right: amount('right') - amount('left'),
       sprint: held('sprint'),
       crouch: held('crouch'),
       jump: held('jump'),

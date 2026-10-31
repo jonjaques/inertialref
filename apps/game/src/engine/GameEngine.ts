@@ -1845,6 +1845,16 @@ export class GameEngine {
     return this.world.setThrottle(player, fraction).control.throttle
   }
 
+  /**
+   * The drive's setting on the ship the keys fly, 0..1; zero on foot. Read by
+   * the pad's rumble, which is presentation and writes nothing.
+   */
+  throttle(): number {
+    const player = this.#pilot()
+    if (player === null) return 0
+    return this.world.entities.get(player)?.control.throttle ?? 0
+  }
+
   /** Walk the throttle by a step, from wherever it is. */
   nudgeThrottle(delta: number): number {
     const player = this.#pilot()

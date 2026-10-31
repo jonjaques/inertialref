@@ -406,3 +406,52 @@ export function moveInList(
       return null
   }
 }
+
+/** One step through a system as a tree, which is how a pad walks it. */
+export type TreeStep = 'previous' | 'next' | 'parent' | 'child'
+
+/**
+ * Where a step from `current` lands, among the survey's `rows`, or null.
+ *
+ * A pad cannot point, so the planetarium is walked rather than clicked: the
+ * bumpers step between bodies round the same primary, in orbital order and
+ * wrapping, and the d-pad climbs to the primary or down to its first
+ * satellite. A flat "next body" through Sol would be a hundred and twenty-nine
+ * presses, most of them asteroids — the tree is the shape the catalog already
+ * draws, and `accepts` is the catalog's own class filter, so the bumpers skip
+ * exactly what the reader has switched off there.
+ *
+ * The current body is found among the unfiltered siblings, so a body the
+ * filter hides can still be stepped *from*: somebody who clicked a rock with
+ * "Asteroids" off is not stranded on it.
+ */
+export function stepTarget(
+  rows: readonly TravelTarget[],
+  current: string,
+  step: TreeStep,
+  accepts: (row: TravelTarget) => boolean = () => true,
+): string | null {
+  const here = rows.find((row) => row.address === current)
+  if (here === undefined) return null
+  const ordered = orbitalOrder(
+    rows.filter((row) => row.kind === 'body' && row.system === here.system),
+  )
+  if (step === 'parent')
+    return here.kind === 'system' || here.parent === null ? null : here.parent
+  if (step === 'child')
+    return (
+      ordered.find((row) => row.parent === here.address && accepts(row))
+        ?.address ?? null
+    )
+  if (here.kind === 'system') return null
+  const siblings = ordered.filter((row) => row.parent === here.parent)
+  const at = siblings.findIndex((row) => row.address === current)
+  const direction = step === 'next' ? 1 : -1
+  for (let offset = 1; offset < siblings.length; offset++) {
+    const index =
+      (at + direction * offset + siblings.length * offset) % siblings.length
+    const candidate = siblings[index]
+    if (candidate !== undefined && accepts(candidate)) return candidate.address
+  }
+  return null
+}

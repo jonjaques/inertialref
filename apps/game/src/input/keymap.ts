@@ -1,4 +1,5 @@
 import { type Chord, chord, chordEquals, parseChord } from './chord.ts'
+import { type PadControl, parsePad } from './pad.ts'
 
 /*
  * Every key this build binds, in one table.
@@ -34,6 +35,12 @@ export type KeyContext =
   | 'flight'
   | 'planetarium'
   | 'standing'
+  /**
+   * The ship's free look, while it is held. A layer over `flight` rather than
+   * a mode: the pad's steering stick turns the head instead of the hull for as
+   * long as the button is down, and the hull's axes come back on release.
+   */
+  | 'flight-look'
   | 'character-entry'
   | 'character'
   | 'cinema'
@@ -56,6 +63,7 @@ export type KeyContext =
 const MODE_SETS: readonly (readonly KeyContext[])[] = [
   ['global', 'menu'],
   ['global', 'flight', 'character-entry'],
+  ['global', 'flight', 'character-entry', 'flight-look'],
   ['global', 'character', 'character-entry'],
   ['global', 'planetarium'],
   ['global', 'planetarium', 'standing'],
@@ -110,6 +118,7 @@ const SPECIFICITY: Readonly<Record<KeyContext, number>> = {
   flight: 1,
   planetarium: 1,
   standing: 2,
+  'flight-look': 2,
   'character-entry': 1,
   character: 2,
   cutscene: 3,
@@ -167,10 +176,12 @@ export interface ActionDefinition {
   /**
    * Whether the action fires for the whole time the key is down.
    *
-   * The flight axes, and nothing else. A held action gets both edges and a
-   * blur; a pressed one gets the down edge alone. They are the same table
-   * because they are the same question — "what is `W` bound to" has one answer
-   * — and because the axes were the largest of the six listeners.
+   * The axes — the ship's, the stance's, the walker's, and the analog
+   * cameras'. A held action gets both edges, a magnitude, and a blur; a
+   * pressed one gets the down edge alone. They are the same table because
+   * they are the same question — "what is `W` bound to" has one answer — and
+   * because a held action is exactly what a stick is: an axis with a
+   * magnitude, of which a key is the case where the magnitude is one.
    */
   readonly held?: boolean
   /**
@@ -217,6 +228,27 @@ export interface ActionDefinition {
   readonly yieldsToFocus?: boolean
   /** One line, for the keys sheet and the editor's row. */
   readonly hint?: string
+  /**
+   * What it is bound to on a gamepad out of the box, by position (`pad.ts`).
+   * `null` is unbound, as for a chord.
+   *
+   * A second binding on the same action rather than a second table of pad
+   * acts, and that is the decision the rest follows from: a mode registers a
+   * handler for `flight.pitchUp` and is told when it fires, and whether a key
+   * or a stick fired it is not its business. The keymap's contexts, mutes and
+   * arbitration apply to the pad unchanged, so `Cross` can frame the subject
+   * in the planetarium and jump on foot for the reason `F` can translate down
+   * in flight and frame in the planetarium.
+   */
+  readonly pad: PadControl | null
+  /**
+   * Which of the two invert preferences flips this action's stick.
+   *
+   * Two, because they are two habits: a pilot who flies inverted pitch — stick
+   * back is nose up, as in every aircraft — very often looks with the stick
+   * the right way up. Applied to the pad alone; a key named Up means up.
+   */
+  readonly invert?: 'look' | 'pitch'
 }
 
 const press = (
@@ -226,7 +258,52 @@ const press = (
   context: KeyContext,
   binding: Chord | null,
   extra: Partial<ActionDefinition> = {},
-): ActionDefinition => ({ id, label, group, context, chord: binding, ...extra })
+): ActionDefinition => ({
+  id,
+  label,
+  group,
+  context,
+  chord: binding,
+  pad: null,
+  ...extra,
+})
+
+/**
+ * Four held look actions on one stick, as a run: `<prefix>.lookLeft` and so on.
+ *
+ * Unbound on the keyboard, because the mouse is the keyboard's look and a key
+ * held to turn a head is a worse version of a drag — but they are ordinary
+ * rows, so somebody who wants one on a key can put it there.
+ */
+function look(
+  prefix: string,
+  context: KeyContext,
+  group: string,
+  stick: 'ls' | 'rs',
+  hint: string,
+): readonly ActionDefinition[] {
+  return [
+    press(`${prefix}.lookLeft`, 'Look Left', group, context, null, {
+      held: true,
+      pad: `${stick}.left`,
+      hint,
+    }),
+    press(`${prefix}.lookRight`, 'Look Right', group, context, null, {
+      held: true,
+      pad: `${stick}.right`,
+    }),
+    press(`${prefix}.lookUp`, 'Look Up', group, context, null, {
+      held: true,
+      pad: `${stick}.up`,
+      invert: 'look',
+    }),
+    press(`${prefix}.lookDown`, 'Look Down', group, context, null, {
+      held: true,
+      pad: `${stick}.down`,
+      invert: 'look',
+    }),
+  ]
+}
 
 /**
  * The default table — every core act, on a key, in one place.
@@ -240,9 +317,14 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('time.pause', 'Pause', 'Time', 'global', chord('Space'), {
     yieldsToFocus: true,
     hint: 'stop and start the simulated clock',
+    pad: 'west',
   }),
-  press('time.slower', 'Slower', 'Time', 'global', chord('BracketLeft')),
-  press('time.faster', 'Faster', 'Time', 'global', chord('BracketRight')),
+  press('time.slower', 'Slower', 'Time', 'global', chord('BracketLeft'), {
+    pad: 'left',
+  }),
+  press('time.faster', 'Faster', 'Time', 'global', chord('BracketRight'), {
+    pad: 'right',
+  }),
   press('time.normal', 'Real Time', 'Time', 'global', chord('Backslash'), {
     hint: 'back to one second per second',
   }),
@@ -281,7 +363,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Screen',
     'global',
     chord('Slash', { shift: true }),
-    { hint: 'this sheet, from any mode' },
+    { hint: 'this sheet, from any mode', pad: 'touchpad' },
   ),
   press(
     'sensor.response',
@@ -290,7 +372,20 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'global',
     chord('KeyV', { shift: true }),
   ),
-  press('chrome.settings', 'Settings', 'Screen', 'global', chord('Comma')),
+  press('chrome.settings', 'Settings', 'Screen', 'global', chord('Comma'), {
+    pad: 'start',
+  }),
+  /*
+   * The pad's `Tab`: into the panels, so the d-pad and ✕ work them.
+   *
+   * A pad has no pointer and no Tab, and without a way in the dock is a wall
+   * of controls a pad cannot reach. Unbound on the keyboard because the
+   * keyboard has Tab, which is the platform's and is not rebindable.
+   */
+  press('chrome.focus', 'The Panels', 'Screen', 'global', null, {
+    pad: 'select',
+    hint: 'move into the panels, so the d-pad and the bottom button work them; the right button comes back out',
+  }),
 
   press('panel.1', 'First Panel', 'Panels', 'global', chord('Digit1')),
   press('panel.2', 'Second Panel', 'Panels', 'global', chord('Digit2')),
@@ -302,28 +397,44 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('panel.perf', 'Perf', 'Panels', 'global', chord('KeyP')),
 
   /* ------------------------------- flight ------------------------------- */
+  /*
+   * The pad's flight layout is the one most six-axis games on a pad share —
+   * Everspace 2, Star Citizen and Outer Wilds among them: translation on the
+   * left stick, attitude on the right, vertical thrust on the triggers, and
+   * roll on the bumpers. A pad has five analog axes for six degrees of
+   * freedom, and roll is the one that goes digital, because a roll is the
+   * axis a pilot holds at full rate rather than trims.
+   */
   press('flight.fore', 'Thrust Ahead', 'Flight', 'flight', chord('KeyW'), {
     held: true,
+    pad: 'ls.up',
     hint: 'the thrusters, not the drive — a nudge, for docking and station-keeping',
   }),
   press('flight.aft', 'Thrust Astern', 'Flight', 'flight', chord('KeyS'), {
     held: true,
+    pad: 'ls.down',
   }),
   press('flight.left', 'Translate Left', 'Flight', 'flight', chord('KeyA'), {
     held: true,
+    pad: 'ls.left',
   }),
   press('flight.right', 'Translate Right', 'Flight', 'flight', chord('KeyD'), {
     held: true,
+    pad: 'ls.right',
   }),
   press('flight.up', 'Translate Up', 'Flight', 'flight', chord('KeyR'), {
     held: true,
+    pad: 'r2',
   }),
   press('flight.down', 'Translate Down', 'Flight', 'flight', chord('KeyF'), {
     held: true,
+    pad: 'l2',
   }),
   press('flight.pitchUp', 'Pitch Up', 'Flight', 'flight', chord('ArrowUp'), {
     held: true,
     yieldsToFocus: true,
+    pad: 'rs.up',
+    invert: 'pitch',
   }),
   press(
     'flight.pitchDown',
@@ -331,11 +442,12 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Flight',
     'flight',
     chord('ArrowDown'),
-    { held: true, yieldsToFocus: true },
+    { held: true, yieldsToFocus: true, pad: 'rs.down', invert: 'pitch' },
   ),
   press('flight.yawLeft', 'Yaw Left', 'Flight', 'flight', chord('ArrowLeft'), {
     held: true,
     yieldsToFocus: true,
+    pad: 'rs.left',
   }),
   press(
     'flight.yawRight',
@@ -343,13 +455,15 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Flight',
     'flight',
     chord('ArrowRight'),
-    { held: true, yieldsToFocus: true },
+    { held: true, yieldsToFocus: true, pad: 'rs.right' },
   ),
   press('flight.rollLeft', 'Roll Left', 'Flight', 'flight', chord('KeyQ'), {
     held: true,
+    pad: 'l1',
   }),
   press('flight.rollRight', 'Roll Right', 'Flight', 'flight', chord('KeyE'), {
     held: true,
+    pad: 'r1',
   }),
   /*
    * The drive is a setting, not a held key, so its four acts are presses.
@@ -361,6 +475,10 @@ export const ACTIONS: readonly ActionDefinition[] = [
    */
   press('flight.throttleUp', 'Throttle Up', 'Flight', 'flight', chord('KeyT'), {
     repeats: true,
+    // The d-pad, as in Kerbal Space Program's pad layout: the sticks and the
+    // bumpers are already the six axes, and a setting that is walked rather
+    // than held belongs on a control that is pressed rather than pushed.
+    pad: 'up',
     hint: 'the main drive, a twentieth at a time; hold it to walk',
   }),
   press(
@@ -369,7 +487,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Flight',
     'flight',
     chord('KeyG'),
-    { repeats: true },
+    { repeats: true, pad: 'down' },
   ),
   press(
     'flight.throttleFull',
@@ -386,15 +504,38 @@ export const ACTIONS: readonly ActionDefinition[] = [
     chord('KeyG', { shift: true }),
     { hint: 'the drive to nothing in one press, whatever the ship is doing' },
   ),
-  press('flight.assist', 'Flight Assist', 'Flight', 'flight', chord('KeyZ')),
-  press('flight.kill', 'Kill Rotation', 'Flight', 'flight', chord('KeyX')),
+  // A stick press for the assist, as Star Citizen puts its decoupled toggle:
+  // the face buttons are the acts taken often, and this is not one.
+  press('flight.assist', 'Flight Assist', 'Flight', 'flight', chord('KeyZ'), {
+    pad: 'l3',
+  }),
+  press('flight.kill', 'Kill Rotation', 'Flight', 'flight', chord('KeyX'), {
+    pad: 'south',
+  }),
   press('flight.view', 'Camera View', 'Flight', 'flight', chord('KeyV'), {
+    pad: 'r3',
     hint: 'chase the ship, or stand off and orbit it — drag to look or orbit, wheel to dolly',
   }),
   press('flight.recenter', 'Recenter', 'Flight', 'flight', chord('Home'), {
     yieldsToFocus: true,
     hint: 'look where the view aims again',
   }),
+  /*
+   * Hold to look, tap to look ahead — Starfield's free look, on the button a
+   * pad's thumb is already resting beside.
+   *
+   * Held, because the pad has no spare stick: both are flying the ship, so the
+   * head borrows the right one for as long as the button is down
+   * (`flight-look`) and gives it back on release. A press shorter than a
+   * blink is a recenter, which is the act a pilot who has been looking around
+   * wants next.
+   */
+  press('flight.freeLook', 'Free Look', 'Flight', 'flight', null, {
+    held: true,
+    pad: 'east',
+    hint: 'hold to turn the head with the steering stick; tap to look ahead again',
+  }),
+  ...look('flight', 'flight-look', 'Flight', 'rs', 'look where the head turns'),
 
   press(
     'guide.pause',
@@ -463,10 +604,95 @@ export const ACTIONS: readonly ActionDefinition[] = [
     { shiftScales: true },
   ),
   press('observe.frame', 'Frame', 'Planetarium', 'planetarium', chord('KeyF'), {
+    pad: 'north',
     hint: 'solve the distance that fills the frame at this lens',
   }),
   press('observe.home', 'Home', 'Planetarium', 'planetarium', chord('Home'), {
+    pad: 'l3',
     hint: 'back to where the session opened',
+  }),
+  /*
+   * The pad's planetarium is a map view's: the right stick orbits, the
+   * triggers close in and pull back, ✕ picks whatever is under the reticle
+   * — the Elite galaxy map's, Starfield's star map's and SpaceEngine's
+   * crosshair — and the bumpers and the d-pad walk the system as a tree.
+   */
+  press('observe.swingLeft', 'Swing Left', 'Planetarium', 'planetarium', null, {
+    held: true,
+    pad: 'rs.left',
+    hint: 'orbit for as long as it is held, at a rate the lens scales; standing, it looks',
+  }),
+  press(
+    'observe.swingRight',
+    'Swing Right',
+    'Planetarium',
+    'planetarium',
+    null,
+    { held: true, pad: 'rs.right' },
+  ),
+  press('observe.swingUp', 'Swing Up', 'Planetarium', 'planetarium', null, {
+    held: true,
+    pad: 'rs.up',
+    invert: 'look',
+  }),
+  press('observe.swingDown', 'Swing Down', 'Planetarium', 'planetarium', null, {
+    held: true,
+    pad: 'rs.down',
+    invert: 'look',
+  }),
+  ...look(
+    'observe',
+    'planetarium',
+    'Planetarium',
+    'ls',
+    'turn the head off the subject without moving the camera',
+  ),
+  press('observe.approach', 'Close In', 'Planetarium', 'planetarium', null, {
+    held: true,
+    pad: 'r2',
+    hint: 'move toward the subject for as long as it is held — harder is faster',
+  }),
+  press('observe.retreat', 'Pull Back', 'Planetarium', 'planetarium', null, {
+    held: true,
+    pad: 'l2',
+  }),
+  press(
+    'observe.pick',
+    'Choose the Center',
+    'Planetarium',
+    'planetarium',
+    null,
+    {
+      pad: 'south',
+      hint: 'look at whatever is under the reticle — the pad’s click',
+    },
+  ),
+  press('observe.center', 'Look Ahead', 'Planetarium', 'planetarium', null, {
+    pad: 'east',
+    hint: 'turn the head back to the subject',
+  }),
+  press(
+    'observe.previous',
+    'Previous Body',
+    'Planetarium',
+    'planetarium',
+    null,
+    {
+      pad: 'l1',
+      hint: 'the next one in, round the same primary',
+    },
+  ),
+  press('observe.next', 'Next Body', 'Planetarium', 'planetarium', null, {
+    pad: 'r1',
+    hint: 'the next one out, round the same primary',
+  }),
+  press('observe.parent', 'Its Primary', 'Planetarium', 'planetarium', null, {
+    pad: 'up',
+    hint: 'from a moon to its planet, from a planet to its star',
+  }),
+  press('observe.child', 'Its Satellites', 'Planetarium', 'planetarium', null, {
+    pad: 'down',
+    hint: 'from a star to its first planet, from a planet to its first moon',
   }),
   press(
     'observe.freeLook',
@@ -490,10 +716,12 @@ export const ACTIONS: readonly ActionDefinition[] = [
    */
   press('stand.up', 'Rise', 'Standing', 'standing', chord('PageUp'), {
     repeats: true,
+    pad: 'up',
     hint: 'climb, from two meters to the orbit floor',
   }),
   press('stand.down', 'Descend', 'Standing', 'standing', chord('PageDown'), {
     repeats: true,
+    pad: 'down',
   }),
   press(
     'stand.leave',
@@ -501,6 +729,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Standing',
     'standing',
     chord('Backspace'),
+    { pad: 'east' },
   ),
   /*
    * Flying the stance. Held, like the flight axes, because a key that moves
@@ -511,27 +740,43 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('stand.forward', 'Fly Forward', 'Standing', 'standing', chord('KeyW'), {
     held: true,
     shiftScales: true,
+    pad: 'ls.up',
     hint: 'along the heading; hold Shift for fast',
   }),
   press('stand.back', 'Fly Back', 'Standing', 'standing', chord('KeyS'), {
     held: true,
     shiftScales: true,
+    pad: 'ls.down',
   }),
   press('stand.left', 'Fly Left', 'Standing', 'standing', chord('KeyA'), {
     held: true,
     shiftScales: true,
+    pad: 'ls.left',
   }),
   press('stand.right', 'Fly Right', 'Standing', 'standing', chord('KeyD'), {
     held: true,
     shiftScales: true,
+    pad: 'ls.right',
   }),
   press('stand.rise', 'Fly Up', 'Standing', 'standing', chord('KeyE'), {
     held: true,
     shiftScales: true,
+    pad: 'r2',
   }),
   press('stand.lower', 'Fly Down', 'Standing', 'standing', chord('KeyQ'), {
     held: true,
     shiftScales: true,
+    pad: 'l2',
+  }),
+  /*
+   * Shift, for a hand without one. The keyboard reads Shift as a magnitude on
+   * the six keys above; a pad has no modifier to read, so fast is a held
+   * action of its own on the stick press every free camera puts its sprint on.
+   */
+  press('stand.fast', 'Fly Fast', 'Standing', 'standing', null, {
+    held: true,
+    pad: 'l3',
+    hint: 'hold for fast, as Shift does on the keys',
   }),
 
   /* ------------------------------ character ----------------------------- */
@@ -541,6 +786,15 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Character',
     'character-entry',
     chord('KeyL', { shift: true }),
+    {
+      /*
+       * On the button most games use to leave a vehicle, and live beside the
+       * walk as well as beside flight, so one press steps out and the next
+       * hands the walker back. A pad takes no pointer lock — it has no
+       * pointer to lock — so from a pad this engages the walker directly.
+       */
+      pad: 'north',
+    },
   ),
   press(
     'character.forward',
@@ -548,7 +802,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Character',
     'character',
     chord('KeyW'),
-    { held: true, shiftScales: true },
+    { held: true, shiftScales: true, pad: 'ls.up' },
   ),
   press(
     'character.back',
@@ -556,7 +810,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Character',
     'character',
     chord('KeyS'),
-    { held: true, shiftScales: true },
+    { held: true, shiftScales: true, pad: 'ls.down' },
   ),
   press(
     'character.left',
@@ -564,7 +818,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Character',
     'character',
     chord('KeyA'),
-    { held: true, shiftScales: true },
+    { held: true, shiftScales: true, pad: 'ls.left' },
   ),
   press(
     'character.right',
@@ -572,7 +826,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Character',
     'character',
     chord('KeyD'),
-    { held: true, shiftScales: true },
+    { held: true, shiftScales: true, pad: 'ls.right' },
   ),
   press(
     'character.sprint',
@@ -580,7 +834,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Character',
     'character',
     chord('Shift'),
-    { held: true },
+    { held: true, pad: 'l3' },
   ),
   press(
     'character.crouch',
@@ -588,7 +842,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Character',
     'character',
     chord('KeyC'),
-    { held: true, shiftScales: true },
+    { held: true, shiftScales: true, pad: 'east' },
   ),
   press(
     'character.jump',
@@ -599,6 +853,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     {
       held: true,
       shiftScales: true,
+      pad: 'south',
       hint: 'double-tap to toggle flight when permitted',
     },
   ),
@@ -608,7 +863,14 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Character',
     'character',
     chord('KeyV'),
-    { hint: 'switch between first and third person' },
+    { pad: 'r3', hint: 'switch between first and third person' },
+  ),
+  ...look(
+    'character',
+    'character',
+    'Character',
+    'rs',
+    'turn the walker and the camera',
   ),
   press(
     'character.release',
@@ -619,12 +881,15 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
 
   /* ------------------------------- cinema ------------------------------- */
+  // A media player's pad: ✕ plays, the d-pad steps, ○ goes back.
   press('cinema.play', 'Play', 'Cinema', 'cinema', chord('Space'), {
     yieldsToFocus: true,
+    pad: 'south',
   }),
   press('cinema.back', 'Step Back', 'Cinema', 'cinema', chord('ArrowLeft'), {
     shiftScales: true,
     yieldsToFocus: true,
+    pad: 'left',
     hint: 'one frame, or a second with Shift',
   }),
   press(
@@ -633,9 +898,11 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'Cinema',
     'cinema',
     chord('ArrowRight'),
-    { shiftScales: true, yieldsToFocus: true },
+    { shiftScales: true, yieldsToFocus: true, pad: 'right' },
   ),
-  press('cinema.library', 'The Library', 'Cinema', 'cinema', chord('Escape')),
+  press('cinema.library', 'The Library', 'Cinema', 'cinema', chord('Escape'), {
+    pad: 'east',
+  }),
 
   /* -------------------------------- docs -------------------------------- */
   press('docs.search', 'Search the Docs', 'Reading', 'docs', chord('Slash'), {
@@ -644,9 +911,11 @@ export const ACTIONS: readonly ActionDefinition[] = [
 
   /* ------------------------- over everything ---------------------------- */
   press('overlay.close', 'Close', 'Dialogs', 'dialog', chord('Escape'), {
+    pad: 'east',
     hint: 'the platform’s gesture, and the reason Escape is not rebindable',
   }),
   press('cutscene.skip', 'Skip', 'Dialogs', 'cutscene', chord('Escape'), {
+    pad: 'east',
     hint: 'stop the scene and put the ship back where it was',
   }),
 ]
@@ -741,6 +1010,61 @@ export function actionFor(
   return best
 }
 
+/** The live pad control for every action, defaults with overrides laid over. */
+export type PadBindings = ReadonlyMap<ActionId, PadControl | null>
+
+/**
+ * The pad's `resolveBindings`, with the same rule for the same reason:
+ * overrides only, an unknown id dropped, a control this build would not have
+ * written dropped.
+ */
+export function resolvePadBindings(
+  overrides: Readonly<Record<string, string | null>> = {},
+): PadBindings {
+  const resolved = new Map<ActionId, PadControl | null>()
+  for (const action of ACTIONS) resolved.set(action.id, action.pad)
+  for (const [id, stored] of Object.entries(overrides)) {
+    if (!BY_ID.has(id)) continue
+    if (stored === null) {
+      resolved.set(id, null)
+      continue
+    }
+    const parsed = parsePad(stored)
+    if (parsed !== null) resolved.set(id, parsed)
+  }
+  return resolved
+}
+
+/**
+ * What every pad control means, given what is live.
+ *
+ * A map rather than one control at a time, because the pad is polled: every
+ * control is asked every frame, and a scan of the table per control per frame
+ * is a cost paid for an answer that changes only when a context or a binding
+ * does. The caller caches it on exactly those two.
+ */
+export function padActions(
+  bindings: PadBindings,
+  live: readonly KeyContext[],
+  muted: readonly ActionId[] = [],
+): ReadonlyMap<PadControl, ActionDefinition> {
+  const found = new Map<PadControl, ActionDefinition>()
+  const reachable = arbitrate(live)
+  for (const action of ACTIONS) {
+    if (!reachable.includes(action.context)) continue
+    if (muted.includes(action.id)) continue
+    const control = bindings.get(action.id) ?? null
+    if (control === null) continue
+    const held = found.get(control)
+    if (
+      held === undefined ||
+      SPECIFICITY[action.context] > SPECIFICITY[held.context]
+    )
+      found.set(control, action)
+  }
+  return found
+}
+
 /** Two actions that would answer to one chord at one moment. */
 export interface Collision {
   readonly chord: Chord
@@ -773,7 +1097,51 @@ export interface Collision {
  * nothing at all with nothing to see in the console.
  */
 export function collisions(bindings: Bindings): readonly Collision[] {
-  const found: Collision[] = []
+  return collide(bindings, (action, bound) =>
+    // Keyed by what the dispatcher compares: an action reading Shift as a
+    // magnitude answers to the bare key, so `Shift` is not part of its key
+    // here either.
+    action.shiftScales === true
+      ? `${bound.alt ? 'Alt+' : ''}${bound.code}`
+      : `${bound.alt ? 'Alt+' : ''}${bound.shift ? 'Shift+' : ''}${bound.code}`,
+  )
+}
+
+/** Two actions that would answer to one pad control at one moment. */
+export interface PadCollision {
+  readonly control: PadControl
+  readonly ids: readonly ActionId[]
+  readonly live: readonly KeyContext[]
+  readonly kind: 'ambiguous' | 'shadowed'
+}
+
+/**
+ * `collisions`, for the pad. The same live sets and the same two kinds,
+ * because the pad is dispatched through the same arbitration — a control is
+ * only ever as ambiguous as a key in the same place would be.
+ */
+export function padCollisions(bindings: PadBindings): readonly PadCollision[] {
+  return collide(bindings, (_, bound) => bound).map(
+    ({ chord: control, ...rest }) => ({ control, ...rest }),
+  )
+}
+
+/** One detector for both devices, keyed by what each dispatcher compares. */
+function collide<B>(
+  bindings: ReadonlyMap<ActionId, B | null>,
+  keyOf: (action: ActionDefinition, bound: B) => string,
+): readonly {
+  readonly chord: B
+  readonly ids: readonly ActionId[]
+  readonly live: readonly KeyContext[]
+  readonly kind: 'ambiguous' | 'shadowed'
+}[] {
+  const found: {
+    chord: B
+    ids: ActionId[]
+    live: readonly KeyContext[]
+    kind: 'ambiguous' | 'shadowed'
+  }[] = []
   for (const live of LIVE_SETS) {
     const reachable = arbitrate(live)
     const seen = new Map<string, ActionDefinition[]>()
@@ -781,13 +1149,7 @@ export function collisions(bindings: Bindings): readonly Collision[] {
       if (!reachable.includes(action.context)) continue
       const bound = bindings.get(action.id) ?? null
       if (bound === null) continue
-      // Keyed by what the dispatcher compares: an action reading Shift as a
-      // magnitude answers to the bare key, so `Shift` is not part of its key
-      // here either.
-      const key =
-        action.shiftScales === true
-          ? `${bound.alt ? 'Alt+' : ''}${bound.code}`
-          : `${bound.alt ? 'Alt+' : ''}${bound.shift ? 'Shift+' : ''}${bound.code}`
+      const key = keyOf(action, bound)
       const held = seen.get(key) ?? []
       held.push(action)
       seen.set(key, held)

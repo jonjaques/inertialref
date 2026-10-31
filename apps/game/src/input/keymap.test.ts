@@ -455,9 +455,21 @@ describe('the store', () => {
     const release = store.register('time.pause', (event) =>
       seen.push(event.phase),
     )
-    store.invoke('time.pause', { phase: 'down', shift: false, repeat: false })
+    store.invoke('time.pause', {
+      phase: 'down',
+      value: 1,
+      device: 'keyboard',
+      shift: false,
+      repeat: false,
+    })
     release()
-    store.invoke('time.pause', { phase: 'down', shift: false, repeat: false })
+    store.invoke('time.pause', {
+      phase: 'down',
+      value: 1,
+      device: 'keyboard',
+      shift: false,
+      repeat: false,
+    })
     expect(seen).toEqual(['down'])
   })
 

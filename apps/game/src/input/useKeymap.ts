@@ -18,8 +18,11 @@ import type {
   ActionEvent,
   ActionHandler,
   ContextClaim,
+  InputDevice,
   KeymapStore,
 } from './keymapStore.ts'
+import type { PadControl } from './pad.ts'
+import { type PadFamily, padLabel } from './padFamily.ts'
 
 /*
  * How a mode reaches the dispatcher.
@@ -104,6 +107,76 @@ export function useActions(
 }
 
 /**
+ * Be told once a frame, with the merged magnitudes, while any of these held
+ * actions is held.
+ *
+ * The analog cameras are the callers. A stick at half throw turns a view at
+ * half rate for as long as it is held, so the work is an integral over time
+ * rather than a response to an edge — and the frame it runs in is the
+ * keymap's, which polls the pad first, so the integral uses this frame's
+ * stick. The ids are registered as handlers as well: the dispatcher leaves a
+ * key alone when nothing claims its action, and these are claimed.
+ */
+export function useActionFrame(
+  ids: readonly ActionId[],
+  handler: (values: ReadonlyMap<ActionId, number>, seconds: number) => void,
+  active = true,
+): void {
+  const store = useKeymap()
+  const latest = useRef(handler)
+  latest.current = handler
+  const key = ids.join(',')
+  useEffect(() => {
+    if (!active) return
+    const list = key.split(',')
+    const releases = list.map((id) => store.register(id, () => {}))
+    const stop = store.onFrame((seconds) => {
+      let values: Map<ActionId, number> | null = null
+      for (const id of list) {
+        const value = store.value(id)
+        if (value === 0) continue
+        values ??= new Map()
+        values.set(id, value)
+      }
+      if (values !== null) latest.current(values, seconds)
+    })
+    return () => {
+      stop()
+      for (const release of releases) release()
+    }
+  }, [store, key, active])
+}
+
+/** Which hand was used last, and which family of pad. */
+export function useInputDevice(): {
+  readonly device: InputDevice
+  readonly family: PadFamily
+} {
+  const store = useKeymap()
+  const device = useSyncExternalStore(
+    (onChange) => store.watch(onChange),
+    () => store.device,
+    () => 'keyboard' as const,
+  )
+  const family = useSyncExternalStore(
+    (onChange) => store.watch(onChange),
+    () => store.family,
+    () => 'generic' as const,
+  )
+  return { device, family }
+}
+
+/** What an action is bound to on a pad right now, or null. */
+export function usePadControl(id: ActionId): PadControl | null {
+  const store = useKeymap()
+  return useSyncExternalStore(
+    (onChange) => store.watch(onChange),
+    () => store.padBindings.get(id) ?? null,
+    () => findAction(id)?.pad ?? null,
+  )
+}
+
+/**
  * Declare a context live for as long as this is mounted.
  *
  * The claim is rebuilt whenever the mutes change, and never otherwise: a claim
@@ -154,11 +227,20 @@ export function useChord(id: ActionId): Chord | null {
 export function useKeyLabel(id: ActionId): string | null {
   const store = useKeymap()
   const bound = useChord(id)
+  const pad = usePadControl(id)
+  const { device, family } = useInputDevice()
   const layout = useSyncExternalStore(
     (onChange) => store.watch(onChange),
     () => store.layout,
     () => null,
   )
+  /*
+   * The hand in use decides, and there is no falling back across it: a pad
+   * player told to press `F` for an act the pad has no button for has been
+   * told something they cannot do from where their hands are, and the honest
+   * prompt for that is none.
+   */
+  if (device === 'pad') return pad === null ? null : padLabel(pad, family)
   return bound === null ? null : chordLabel(bound, layout)
 }
 
@@ -180,6 +262,8 @@ export interface KeyRow {
   readonly action: ActionDefinition
   /** What to press, or null when the action is deliberately unbound. */
   readonly label: string | null
+  /** The pad control, or null when the pad has nothing for it. */
+  readonly pad: PadControl | null
 }
 
 /** A run of rows under one heading. */
@@ -215,6 +299,11 @@ export function useKeyRows(
     () => store.layout,
     () => null,
   )
+  const pads = useSyncExternalStore(
+    (onChange) => store.watch(onChange),
+    () => store.padBindings,
+    () => store.padBindings,
+  )
   const actions = ACTIONS.filter((action) => contexts.includes(action.context))
   return groupsOf(actions).map((group) => ({
     group,
@@ -225,6 +314,7 @@ export function useKeyRows(
         return {
           action,
           label: bound === null ? null : chordLabel(bound, layout),
+          pad: pads.get(action.id) ?? null,
         }
       }),
   }))

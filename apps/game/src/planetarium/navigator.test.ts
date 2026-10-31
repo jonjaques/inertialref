@@ -10,6 +10,7 @@ import {
   moveInList,
   orbitalOrder,
   searchRows,
+  stepTarget,
 } from './navigator.ts'
 import { acceptsRow } from './kinds.ts'
 
@@ -420,5 +421,68 @@ describe('searchRows', () => {
     ])
     expect(rows[0]).toMatchObject({ kind: 'body', indent: 0 })
     expect(rows[1]).toMatchObject({ kind: 'system', foldable: false })
+  })
+})
+
+describe('stepTarget', () => {
+  // Issued out of order on purpose: the walk is orbital, never by address.
+  const sol = row({ address: 'SOL', kind: 'system', depth: 0, parent: 'SOL' })
+  const rows = [
+    sol,
+    row({ address: 'b:2', name: 'Earth', parent: 'SOL', semiMajorAxis: AU }),
+    row({
+      address: 'b:0',
+      name: 'Mercury',
+      parent: 'SOL',
+      semiMajorAxis: 0.39 * AU,
+    }),
+    row({
+      address: 'b:4',
+      name: 'Mars',
+      parent: 'SOL',
+      semiMajorAxis: 1.52 * AU,
+    }),
+    row({
+      address: 'b:9',
+      name: 'Ceres',
+      parent: 'SOL',
+      semiMajorAxis: 2.77 * AU,
+      bodyKind: 'asteroid',
+    }),
+    row({
+      address: 'b:2.0',
+      name: 'Luna',
+      parent: 'b:2',
+      depth: 2,
+      semiMajorAxis: 3.84e8,
+    }),
+  ]
+
+  it('steps outward and inward round one primary, wrapping', () => {
+    expect(stepTarget(rows, 'b:0', 'next')).toBe('b:2')
+    expect(stepTarget(rows, 'b:2', 'next')).toBe('b:4')
+    expect(stepTarget(rows, 'b:9', 'next')).toBe('b:0')
+    expect(stepTarget(rows, 'b:0', 'previous')).toBe('b:9')
+  })
+
+  it('climbs to the primary and descends to the first satellite', () => {
+    expect(stepTarget(rows, 'b:2.0', 'parent')).toBe('b:2')
+    expect(stepTarget(rows, 'b:2', 'parent')).toBe('SOL')
+    expect(stepTarget(rows, 'SOL', 'parent')).toBeNull()
+    expect(stepTarget(rows, 'SOL', 'child')).toBe('b:0')
+    expect(stepTarget(rows, 'b:2', 'child')).toBe('b:2.0')
+    expect(stepTarget(rows, 'b:4', 'child')).toBeNull()
+  })
+
+  it('skips what the catalog filter has off, and steps away from a hidden body', () => {
+    const planets = (one: TravelTarget) => one.bodyKind !== 'asteroid'
+    expect(stepTarget(rows, 'b:4', 'next', planets)).toBe('b:0')
+    expect(stepTarget(rows, 'b:9', 'next', planets)).toBe('b:0')
+    expect(stepTarget(rows, 'b:9', 'previous', planets)).toBe('b:4')
+  })
+
+  it('has nowhere to step from a body it has no row for, or alone', () => {
+    expect(stepTarget(rows, 'b:7', 'next')).toBeNull()
+    expect(stepTarget(rows, 'b:2.0', 'next')).toBeNull()
   })
 })
