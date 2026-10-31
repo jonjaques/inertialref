@@ -11,11 +11,8 @@ import { SOLAR_PLANETS } from '@inertialref/universe'
 import { diskThroughAir, zenithSkyRadiance } from '@inertialref/rendering'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
-import {
-  createAtmosphereMaterial,
-  createStarMaterial,
-  ENHANCED_LIMB_HEIGHTS,
-} from './materials.ts'
+import { LIMB_GAIN, LIMB_HEIGHTS } from './air.ts'
+import { createAtmosphereMaterial, createStarMaterial } from './materials.ts'
 import { setSceneExposure } from './radiance.ts'
 import { CALIBRATED_STAR_RADIANCE } from './bodyUniforms.ts'
 
@@ -285,10 +282,11 @@ it('draws a setting sun brighter than the sky beside it', async () => {
 it('lifts the limb from orbit under Enhanced, and nothing from the ground', async () => {
   // Earth's gas falls off over 8.5 km and its limb is a line two pixels wide
   // on a disk four hundred across. The home page wraps the disk in a soft
-  // ring, and that is Enhanced's cheat from orbit: the gas scatters as if it
-  // fell off over three times its height. The glow 40 km over the limb,
-  // seen from four radii out, is e^(40/8.5 − 40/25.5) ≈ 23 times the
-  // physics; the sky from a beach is the physics under either view.
+  // ring, and that is Enhanced's cheat from orbit: the glow the gas would
+  // scatter falling off over three times its height, gained four times,
+  // added above the physics. Forty kilometers over the limb, seen from four
+  // radii out, that is some ninety times the physics; the sky from a beach
+  // is the physics under either view.
   const glow = async (enhanced: boolean) => {
     const pre = 1 / 30_000
     setSceneExposure(
@@ -313,8 +311,9 @@ it('lifts the limb from orbit under Enhanced, and nothing from the ground', asyn
     0.2126 * r! + 0.7152 * g! + 0.0722 * b!
   const lifted = luminance(await glow(true))
   const physical = luminance(await glow(false))
-  expect(lifted).toBeGreaterThan(5 * physical)
-  expect(ENHANCED_LIMB_HEIGHTS).toBe(3)
+  expect(lifted).toBeGreaterThan(20 * physical)
+  expect(LIMB_HEIGHTS).toBe(3)
+  expect(LIMB_GAIN).toBe(4)
   const ground = async (enhanced: boolean) => {
     const pre = 1 / 30_000
     setSceneExposure(

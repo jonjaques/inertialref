@@ -446,9 +446,10 @@ export function createWaterMaterial(): WaterMaterial {
       // takes them; the beam arrives through the table's column for the sun.
       const pointUnits = anchor.add(local).div(datumRadius)
       const eyeUnits = anchor.add(eyeLocal).div(datumRadius)
-      const sunlight = sunColor
-        .mul(sunIntensity)
-        .mul(sunThrough(air, pointUnits, sun))
+      // The star's light above the air, which the skylight and the in-scatter
+      // are made of; the beam alone crosses the column.
+      const dayColor = sunColor.mul(sunIntensity)
+      const sunlight = dayColor.mul(sunThrough(air, pointUnits, sun))
       const diffuse = skyStrength.mul(SKY_FRACTION)
 
       /* --- Fresnel ---------------------------------------------------------- */
@@ -500,9 +501,14 @@ export function createWaterMaterial(): WaterMaterial {
       const diffuseLight = max(incidence, float(0))
         .mul(daylight)
         .mul(oneMinus(diffuse))
-        .add(skyColor.mul(diffuse).mul(skylightLeft(incidence, 0.25)))
-        .add(skyView.mul(visibilityAmbient))
         .mul(sunlight)
+        .add(
+          skyColor
+            .mul(diffuse)
+            .mul(skylightLeft(incidence, 0.25))
+            .add(skyView.mul(visibilityAmbient))
+            .mul(dayColor),
+        )
       const bodyLight = liquid.mul(diffuseLight)
       // Without the frame the seabed is not seen, and what comes up through
       // the water is the water's own light.
@@ -528,7 +534,7 @@ export function createWaterMaterial(): WaterMaterial {
         .mul(skylightLeft(incidence, 0.15))
         .mul(0.9)
         .add(vec3(visibilityAmbient))
-        .mul(sunlight)
+        .mul(dayColor)
       const half = normalize(sun.add(view))
       const facing = max(dot(view, half), float(0))
       const glintFresnel = float(0.02).add(pow(oneMinus(facing), 5).mul(0.98))
@@ -622,12 +628,7 @@ export function createWaterMaterial(): WaterMaterial {
       const marched = airToward(air, eyeUnits, pointUnits, sun)
       return color
         .mul(marched.transmittance)
-        .add(
-          marched.inscatter
-            .mul(sunColor)
-            .mul(sunIntensity)
-            .mul(ATMOSPHERE_GAIN),
-        )
+        .add(marched.inscatter.mul(dayColor).mul(ATMOSPHERE_GAIN))
     })
 
     material.colorNode = shading()

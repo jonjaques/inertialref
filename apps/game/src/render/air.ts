@@ -202,12 +202,13 @@ export function marchAir(
   sun: Node<'vec3'>,
   samples: number,
   /**
-   * A presentation lift on the gas's scale height, in the light it scatters
-   * and not in what it takes: 1 is the physics, and the shell's limb from
-   * orbit under Enhanced is the one caller that passes more. A number
-   * builds no second density.
+   * How much of Enhanced's limb this march draws, 0 to 1: the glow the gas
+   * would scatter if it fell off over `LIMB_HEIGHTS` times its height,
+   * gained `LIMB_GAIN` times, added to the physics above the limb's own
+   * line and nowhere in the extinction. The shell from orbit is the one
+   * caller that passes more than 0, and a number builds no second density.
    */
-  gasHeights: Node<'float'> | number = 1,
+  limb: Node<'float'> | number = 0,
 ): Marched {
   const shellHeight = max(air.top.sub(1), 1e-6)
   const nu = dot(direction, sun)
@@ -251,9 +252,14 @@ export function marchAir(
     const densityR = exp(height.div(air.hRayleigh).negate()).mul(fade)
     const densityM = exp(height.div(air.hMie).negate()).mul(fade)
     const scatterR =
-      gasHeights === 1
+      limb === 0
         ? densityR
-        : exp(height.div(air.hRayleigh.mul(gasHeights)).negate()).mul(fade)
+        : densityR.add(
+            exp(height.div(air.hRayleigh.mul(LIMB_HEIGHTS)).negate())
+              .mul(fade)
+              .sub(densityR)
+              .mul(float(LIMB_GAIN).mul(limb)),
+          )
 
     // The ozone tent absorbs and scatters nothing; `densities` holds the
     // same shape on the CPU.
@@ -301,6 +307,17 @@ export function marchAir(
 
 /** March samples a surface takes through the air in front of it. */
 export const SURFACE_AIR_SAMPLES = 4
+
+/**
+ * Enhanced's limb from orbit: the gas glows as if it fell off over this many
+ * of its own scale heights — 25 km on Earth, where the physics is 8.5 — and
+ * the glow that adds above the physics is gained this much. Together they
+ * are the soft ring the home page wraps the disk in: at 50 km over Earth's
+ * limb, half the line's own light where the physics has a third of a
+ * percent, fading to none at the top of the shell.
+ */
+export const LIMB_HEIGHTS = 3
+export const LIMB_GAIN = 4
 
 /**
  * The air between the eye and a point on a surface, both in sea-level units

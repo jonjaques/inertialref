@@ -200,13 +200,6 @@ export interface AtmosphereMaterial {
 const ATMOSPHERE_SAMPLES = 12
 
 /**
- * How many times its own scale height Enhanced's limb lets the gas glow
- * over, from orbit. Three is the ring the home page wraps the Earth in:
- * 25 km on Earth, where the physics is 8.5.
- */
-export const ENHANCED_LIMB_HEIGHTS = 3
-
-/**
  * The atmosphere, as the length of air a view ray actually crosses.
  *
  * The shell is a back-side sphere, so the fragment is always on its far wall and
@@ -364,24 +357,19 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
      * pixels on a disk four hundred across, and a camera's limb is that line
      * and no more. The deep-space composite is where this project licenses
      * a cheat (`art.md`), and the soft ring that wraps the disk on the home
-     * page is one. Outside the air, Enhanced marches the gas as if it fell
-     * off over `ENHANCED_LIMB_HEIGHTS` times its height — in the light it
-     * scatters and not in what it takes, so the limb's own line and the
-     * disk under it stay the physics and only the glow above them is the
-     * presentation. It comes in over ten shell heights up from the top of
-     * the air, so a ship climbing out keeps the sky it had, and the
-     * photographic views never see it.
+     * page is one. Outside the air, Enhanced adds the glow the gas would
+     * scatter if it fell off over `LIMB_HEIGHTS` times its height, gained
+     * `LIMB_GAIN` times — in the light it scatters and not in what it takes,
+     * so the limb's own line and the disk under it stay the physics and only
+     * the glow above them is the presentation. It comes in over ten shell
+     * heights up from the top of the air, so a ship climbing out keeps the
+     * sky it had, and the photographic views never see it.
      */
     const shellHeight = max(top.sub(1), 1e-6)
     const outside = smoothstep(
       top,
       top.add(shellHeight.mul(10)),
       length(eyeUnits),
-    )
-    const gasHeights = mix(
-      float(1),
-      float(ENHANCED_LIMB_HEIGHTS),
-      outside.mul(enhancedSky),
     )
     const { inscatter, transmittance } = marchAir(
       air,
@@ -391,7 +379,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       far,
       sun,
       ATMOSPHERE_SAMPLES,
-      gasHeights,
+      outside.mul(enhancedSky),
     )
     const radiance = inscatter.mul(sunColor).mul(ATMOSPHERE_GAIN)
     const survives = transmittance

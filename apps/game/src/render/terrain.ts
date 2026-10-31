@@ -1329,9 +1329,10 @@ export function createTerrainMaterial(): TerrainMaterial {
     // on an airless world — as the sphere's does, from the same table.
     const pointUnits = anchor.add(local).div(bodyRadius)
     const eyeUnits = anchor.add(eyeLocal).div(bodyRadius)
-    const sunlight = sunColor
-      .mul(sunIntensity)
-      .mul(sunThrough(air, pointUnits, sun))
+    // The star's light as it is above the air, which the skylight and the
+    // in-scatter are made of; the beam alone crosses the column.
+    const dayColor = sunColor.mul(sunIntensity)
+    const sunlight = dayColor.mul(sunThrough(air, pointUnits, sun))
 
     /*
      * Skylight, which on a body with air is most of what lights a shadow — and
@@ -1362,7 +1363,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       .mul(diffuse)
       .mul(skyView)
       .mul(skylightLeft(incidence, 0.25))
-      .mul(sunlight)
+      .mul(dayColor)
       // A crater floor sees half the sky a plain does, including Enhanced's
       // visibility fill. Photographic views retain only the scattered light.
       .add(skyView.mul(visibilityAmbient))
@@ -1410,9 +1411,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     const surface = direct.add(indirect).add(sunlight.mul(glint)).add(emission)
     const lit = surface
       .mul(marched.transmittance)
-      .add(
-        marched.inscatter.mul(sunColor).mul(sunIntensity).mul(ATMOSPHERE_GAIN),
-      )
+      .add(marched.inscatter.mul(dayColor).mul(ATMOSPHERE_GAIN))
     /*
      * The bake: mode 1 is the reflectance alone; mode 2 is the sphere's
      * normal-map record — the mesh normal's components along geographic east

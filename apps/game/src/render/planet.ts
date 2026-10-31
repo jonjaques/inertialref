@@ -479,9 +479,8 @@ export function createPlanetMaterial(): PlanetMaterial {
   // its beam from the same table, so the two agree across the gate.
   const pointUnits = positionWorld.sub(center).div(seaLevel)
   const eyeUnits = cameraPosition.sub(center).div(seaLevel)
-  const sunlight = sunColor
-    .mul(sunIntensity)
-    .mul(sunThrough(air, pointUnits, light))
+  const dayColor = sunColor.mul(sunIntensity)
+  const sunlight = dayColor.mul(sunThrough(air, pointUnits, light))
   const lit = daylight.mul(ringShade).mul(cloudShade)
 
   /*
@@ -559,8 +558,7 @@ export function createPlanetMaterial(): PlanetMaterial {
    */
   const marched = airToward(air, eyeUnits, pointUnits, light)
   const veilLight = marched.inscatter
-    .mul(sunColor)
-    .mul(sunIntensity)
+    .mul(dayColor)
     .mul(ATMOSPHERE_GAIN)
     .mul(ringShade)
 
