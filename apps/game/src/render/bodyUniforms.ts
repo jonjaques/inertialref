@@ -118,9 +118,9 @@ interface AtmosphereUniforms {
   readonly outerRadius: number
   readonly innerRadius: number
   /**
-   * Render radius of the ground under the eye, along the eye's own radial —
-   * what the shell's `standing` measures an eye's altitude from. The datum
-   * sphere for a body with terrain; the drawn spheroid for a giant.
+   * Render radius of sea level, the datum: the air is measured from it and
+   * the tables are baked over it. The drawn sphere, `innerRadius`, is sunk
+   * under it, and is where the shell stops a ray.
    */
   readonly seaLevel: number
   readonly flattening: number
@@ -307,6 +307,7 @@ export function starAsBody(star: RenderStar, visibility: boolean): RenderBody {
     // A star has no surface and no terminator; the disk is unlit.
     terminator: 0,
     atmosphereScale: 1,
+    airTop: 1,
     airHeights: NO_AIR,
     trueRadius: 1,
     rotationPeriod: 1,
@@ -322,31 +323,6 @@ export function starAsBody(star: RenderStar, visibility: boolean): RenderBody {
 const WHITE: Rgb = { r: 1, g: 1, b: 1 }
 const BLACK: Rgb = { r: 0, g: 0, b: 0 }
 const UP: Vec3 = { x: 0, y: 1, z: 0 }
-
-/**
- * The radius of a spheroid of equatorial radius `equatorial` and the given
- * flattening, along the direction `toward` from its center.
- *
- * A giant's ground is its drawn spheroid, not the datum sphere a body with
- * terrain stands on: the streamed terrain is spherical, which is why the
- * shell measures a walker's altitude against a sphere, but a giant streams
- * none. Measured against its equatorial sphere, an eye 5,000 km above
- * Saturn's polar cloud tops — outside the air, which is 480 km deep — is 900
- * km under that sphere, and the shell and `standingIn` march it from the
- * bottom of the air.
- */
-function spheroidRadiusToward(
-  equatorial: number,
-  toward: Vec3,
-  axis: Vec3,
-  flattening: number,
-): number {
-  const distance = Vec.length(toward)
-  if (distance === 0) return equatorial
-  const along = Vec.dot(toward, axis) / distance
-  const polar = along / Math.max(flattening, 1e-3)
-  return equatorial / Math.sqrt(1 - along * along + polar * polar)
-}
 
 /**
  * One body's uniforms for this frame. `star` is the star's rendered color when
@@ -533,26 +509,31 @@ export function bodyUniforms(
   let atmosphere: AtmosphereUniforms | null = null
   if (body.hasAtmosphere && drawn) {
     const shell = placement.scale * body.atmosphereScale
+    const giant = giantKind(body.kind)
     /*
-     * Oblate like the body it wraps, or the shell floats a tenth of a radius
-     * off Saturn's poles; the shader unstretches it. The shell's shader needs
-     * the same geometry the transform encodes, in render space, because it
-     * integrates along the view ray rather than shading a surface — and both
-     * radii move whenever distance compression changes the tier.
+     * Oblate about a giant, or the shell floats a tenth of a radius off
+     * Saturn's poles; the shader unstretches it. Round over terrain: the
+     * streamed terrain is spherical and a walker's altitude is read against
+     * it, so a shell squashed by Earth's 0.3% put an eye at sea level 4.4 km
+     * up in its air at 27° latitude and 21 km up at the pole — half the air
+     * over their head. From orbit the same 21 km is a third of a percent of
+     * the disk, under a pixel on any plate. The shell's shader needs the
+     * geometry the transform encodes, in render space, because it integrates
+     * along the view ray rather than shading a surface — and both radii move
+     * whenever distance compression changes the tier.
+     *
+     * The ground it stops a ray at is the drawn sphere's polar radius, which
+     * is at or under the drawn surface everywhere; that is all the stop
+     * asks, since every ray it stops is behind the sphere, the sea or the
+     * terrain. The air is measured from `seaLevel`, the datum, which the
+     * drawn sphere is sunk under.
      */
     atmosphere = {
-      scale: oblate(shell),
+      scale: giant ? oblate(shell) : { x: shell, y: shell, z: shell },
       outerRadius: shell,
-      innerRadius: placement.scale,
-      seaLevel: giantKind(body.kind)
-        ? spheroidRadiusToward(
-            placement.scale,
-            Vec.sub(frame.eye, position),
-            spinAxis,
-            shellFlattening,
-          )
-        : body.trueRadius * placement.compression,
-      flattening: shellFlattening,
+      innerRadius: placement.scale * (giant ? 1 : shellFlattening),
+      seaLevel: body.trueRadius * placement.compression,
+      flattening: giant ? shellFlattening : 1,
     }
   }
 

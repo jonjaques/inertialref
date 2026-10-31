@@ -571,8 +571,8 @@ export function Bodies({
           const pool = engine.pool()
           const scattering =
             pool === null
-              ? scatteringFor(haze, body.atmosphereScale, body.airHeights)
-              : scatteringVia(pool, haze, body.atmosphereScale, body.airHeights)
+              ? scatteringFor(haze, body.airTop, body.airHeights)
+              : scatteringVia(pool, haze, body.airTop, body.airHeights)
           if (scattering !== null) {
             air.setScattering(
               scattering.recipe,

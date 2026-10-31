@@ -15,7 +15,7 @@ import {
   transmittanceFrom,
   zenithSkyRadiance,
 } from './atmosphere.ts'
-import { airHeights, sunkSphereRadius } from './datum.ts'
+import { airHeights } from './datum.ts'
 
 /*
  * The physics of the scattering tables, held still in Node.
@@ -43,11 +43,9 @@ const EARTH = {
   scaleHeight: 8_500,
   aerosolHeight: 1_200,
 }
-const EARTH_TOP =
-  (EARTH.radius + EARTH.haze) / sunkSphereRadius(EARTH.radius, EARTH.relief)
+const EARTH_TOP = (EARTH.radius + EARTH.haze) / EARTH.radius
 const EARTH_HEIGHTS = airHeights(
   EARTH.radius,
-  EARTH.relief,
   EARTH.haze,
   EARTH.scaleHeight,
   EARTH.aerosolHeight,
@@ -162,15 +160,15 @@ describe('multiple scattering', () => {
     // ground row is where it failed: a ray aimed down from the ground crossed
     // the planet at the surface's density, and Ψ there grew sixfold as the
     // steps were refined. Under twilight Ψ is lit through a narrow wedge of
-    // sunlit air and moves by up to 31% at −13°; below −15° it is under the
-    // night sky's floor and not claimed.
+    // sunlit air and moves by up to 0.38 in ln Ψ at −13°; below −15° it is
+    // under the night sky's floor and not claimed.
     const fine = bakeMultipleScattering(earthRecipe, earthT, 128)
     const { width, height } = psi
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
         const muSun = (x / (width - 1)) * 2 - 1
         if (muSun < Math.sin((-15 * Math.PI) / 180)) continue
-        const bound = muSun >= 0 ? 0.03 : 0.35
+        const bound = muSun >= 0 ? 0.03 : 0.4
         for (let c = 0; c < 3; c += 1) {
           const index = (y * width + x) * 4 + c
           const moved = Math.abs(
@@ -423,9 +421,8 @@ describe('the recipe', () => {
     // Earth's gas over 8.5 km and its aerosol over 1.2, whatever the shell:
     // a shell-sized falloff put the gas at 22 km and the aerosol at 9, half
     // the air over a beach above the beach.
-    const sphere = sunkSphereRadius(EARTH.radius, EARTH.relief)
-    expect(earthRecipe.hRayleigh * sphere).toBeCloseTo(8_500, 6)
-    expect(earthRecipe.hMie * sphere).toBeCloseTo(1_200, 6)
+    expect(earthRecipe.hRayleigh * EARTH.radius).toBeCloseTo(8_500, 6)
+    expect(earthRecipe.hMie * EARTH.radius).toBeCloseTo(1_200, 6)
   })
 
   it('holds the measured optical depth whatever the heights', () => {

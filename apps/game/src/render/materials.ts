@@ -180,14 +180,13 @@ export interface AtmosphereMaterial {
   readonly material: MeshBasicNodeMaterial
   /** Body center in render space. Written every frame — the planet is orbiting. */
   readonly center: { value: Vector3 }
-  /** Render-space radius of the shell, and of the ground beneath it. */
+  /** Render-space radius of the shell, and of the drawn sphere a ray stops at. */
   readonly outerRadius: { value: number }
   readonly innerRadius: { value: number }
   /**
-   * Render-space radius of the ground under the eye: the datum, which the
-   * drawn sphere is sunk under, or a giant's spheroid along the eye's
-   * radial. An eye's altitude in the air is measured from here; see
-   * `standing`.
+   * Render-space radius of sea level — the datum, which the drawn sphere is
+   * sunk under. The air is measured from it, and it is the unit the tables
+   * are baked in.
    */
   readonly seaLevel: { value: number }
   /** Unit vector from the body toward its star, in render space. */
@@ -362,40 +361,35 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     )
 
     /*
-     * Planet-radius units from here down: the ground is 1, the shell top is
-     * `top`. This is the one scale that survives distance compression — both
-     * render radii are rescaled together whenever the LOD tier moves — and it
-     * is the unit the tables were baked in, so a LUT coordinate is just an
-     * altitude fraction and a cosine.
+     * Sea-level units from here down: the datum is 1, the shell top is `top`,
+     * and the drawn sphere — sunk under the datum so the terrain covers it,
+     * 9.9 km on Earth — is `ground`, under 1. Both render radii are rescaled
+     * together whenever the LOD tier moves, so the ratios survive distance
+     * compression, and the tables are baked in this unit, so a LUT coordinate
+     * is just an altitude fraction and a cosine.
+     *
+     * The air is measured from sea level and a ray is stopped at the drawn
+     * sphere, and the two are kept apart on purpose. Marched with the drawn
+     * sphere as its sea level, an observer on a beach stood 10 km up in the
+     * air: half of it over their head, a slate-gray zenith, and a setting
+     * sun that did not redden because the column that reddens it was below
+     * them. And a ray the shell meets the ground with is a short, dense,
+     * sunless path, far darker than the sky beside it, so the ground's
+     * horizon has to lie under every drawn surface — which sea level does
+     * not. A sea can sit under its datum, the far shore's by 211 m, and from
+     * 80 m over that water a shell that stopped at sea level stood its
+     * horizon 0.36° above the sea's: a black band five pixels tall between
+     * the water and the sky. The sunk sphere's horizon is under the terrain
+     * and the sea everywhere, so the rays it stops are rays they cover.
      */
-    const eyeUnits = eye.div(innerRadius)
-    const wallUnits = wall.div(innerRadius)
-    const top = outerRadius.div(innerRadius)
+    const eyeUnits = eye.div(seaLevel)
+    const wallUnits = wall.div(seaLevel)
+    const top = outerRadius.div(seaLevel)
+    const ground = innerRadius.div(seaLevel)
     const shellHeight = max(top.sub(1), 1e-6)
 
     const rayDirection = normalize(wallUnits.sub(eyeUnits))
-
-    /*
-     * Where the eye stands in the air, which is not where the geometry puts
-     * it. The tables' ground is the drawn sphere, sunk under the datum so the
-     * terrain covers it — 9.9 km on Earth — and the stretch lifts an eye at
-     * high latitude by up to the 21 km the spherical terrain does not share.
-     * Marched from the geometry, an observer on a beach stands 10 to 30 km
-     * up: half the air over their head, a slate-gray zenith, and a setting
-     * sun that does not redden because the column that reddens it is below
-     * them. Near the ground the eye is put at its altitude over `seaLevel`
-     * instead, along its own radial — a giant's spheroid rather than the
-     * datum, since a giant has no spherical terrain to stand on; by the top of
-     * the air it is back where the shell is, so the limb an orbit sees does
-     * not move. `airOverhead` takes the same eye.
-     */
-    const altitude = length(eyeRelative).div(seaLevel).sub(1)
-    const standing = mix(
-      normalize(eyeUnits).mul(altitude.max(0).add(1)),
-      eyeUnits,
-      smoothstep(0, shellHeight, altitude),
-    )
-    const toCenter = standing.negate()
+    const toCenter = eyeUnits.negate()
 
     // Closest approach along the ray, and the impact parameter squared.
     // `|d × c|` with d a unit vector gives the perpendicular distance directly
@@ -405,7 +399,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     const impactSquared = max(length(cross(rayDirection, toCenter)).pow(2), 0)
 
     const halfOuter = sqrt(max(top.mul(top).sub(impactSquared), 0))
-    const halfInner = sqrt(max(float(1).sub(impactSquared), 0))
+    const halfInner = sqrt(max(ground.mul(ground).sub(impactSquared), 0))
 
     // Clamped at 0 so a camera already inside the air starts counting from
     // itself.
@@ -415,7 +409,9 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     // second step is load-bearing: without it, looking up from the ground
     // counts as "meets ground" because the backwards extension of the ray
     // does, and the zenith sky computes zero air.
-    const meetsGround = step(impactSquared, 1).mul(step(float(0), closest))
+    const meetsGround = step(impactSquared, ground.mul(ground)).mul(
+      step(float(0), closest),
+    )
     const far = mix(
       closest.add(halfOuter),
       max(closest.sub(halfInner), near),
@@ -474,7 +470,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
         span.sub(perigee).mul(away).mul(2).div(after),
         right,
       ).div(ATMOSPHERE_SAMPLES)
-      const point = standing.add(rayDirection.mul(t))
+      const point = eyeUnits.add(rayDirection.mul(t))
       const radius = length(point)
       const height = max(radius.sub(1), 0)
       const height01 = saturate(height.div(shellHeight))

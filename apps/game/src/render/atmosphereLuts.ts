@@ -8,7 +8,6 @@ import {
   type Texture,
 } from 'three/webgpu'
 import { getLogger, getTimer } from '@inertialref/shared'
-import { smoothstep } from '@inertialref/procedural'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
@@ -242,7 +241,7 @@ export function scatteringVia(
 
 /** Where an eye stands in one body's air, in the tables' own units. */
 export interface Standing {
-  /** Radius from the body's center; the tables' ground is 1. */
+  /** Radius from the body's center over sea level, which is 1; never under it. */
   readonly radius: number
   /** Unit render-space vector from the center through the eye. */
   readonly up: Vec3
@@ -257,10 +256,12 @@ export interface ShellGeometry {
 }
 
 /**
- * The eye the shell marches from, on the CPU: its altitude over sea level
- * near the ground, the stretched geometry by the top of the air, blended as
- * the shell's `standing` blends them. Null above the air, where there is no
- * sky overhead and nothing between the eye and a star.
+ * The eye the shell marches from, on the CPU: its radius over sea level in
+ * the space the shell works in, which is stretched along the spin axis for
+ * a giant's oblate shell and is the geometry for a round one. Clamped at sea
+ * level, because the air under the datum — over a sea that lies under it,
+ * in a basin — is sea-level air. Null above the air, where there is no sky
+ * overhead and nothing between the eye and a star.
  */
 export function standingIn(
   shell: ShellGeometry,
@@ -270,7 +271,7 @@ export function standingIn(
 ): Standing | null {
   const relative = Vec.sub(eye, center)
   const distance = Vec.length(relative)
-  if (distance === 0 || shell.innerRadius <= 0) return null
+  if (distance === 0 || shell.seaLevel <= 0) return null
   const stretch = 1 / Math.max(shell.flattening, 1e-3) - 1
   const stretched = Vec.length(
     Vec.add(
@@ -278,14 +279,12 @@ export function standingIn(
       Vec.scale(spinAxis, Vec.dot(relative, spinAxis) * stretch),
     ),
   )
-  const top = shell.outerRadius / shell.innerRadius
-  const altitude = distance / shell.seaLevel - 1
-  const blend = smoothstep(0, top - 1, altitude)
-  const radius =
-    (1 + Math.max(altitude, 0)) * (1 - blend) +
-    (stretched / shell.innerRadius) * blend
-  if (radius >= top) return null
-  return { radius, up: Vec.scale(relative, 1 / distance) }
+  const radius = stretched / shell.seaLevel
+  if (radius >= shell.outerRadius / shell.seaLevel) return null
+  return {
+    radius: Math.max(radius, 1),
+    up: Vec.scale(relative, 1 / distance),
+  }
 }
 
 /**

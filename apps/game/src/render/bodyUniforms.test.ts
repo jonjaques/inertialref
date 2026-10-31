@@ -53,6 +53,7 @@ function body(overrides: Partial<RenderBody> = {}): RenderBody {
     hasAtmosphere: true,
     terminator: 0.05,
     atmosphereScale: 1.025,
+    airTop: 1.016,
     airHeights: { rayleigh: 8.5 / 6400, aerosol: 1.2 / 6400 },
     trueRadius: 6.4e6,
     rotationPeriod: 86_164,
@@ -96,10 +97,17 @@ describe('the figure branch', () => {
       0.9966,
       12,
     )
-    expect(
-      uniforms.atmosphere!.scale.y / uniforms.atmosphere!.scale.x,
-    ).toBeCloseTo(0.9966, 12)
-    expect(uniforms.atmosphere!.flattening).toBe(0.9966)
+    // The air over terrain is round whatever the sphere under it: the
+    // terrain is spherical, and a walker's altitude is read against it.
+    expect(uniforms.atmosphere!.scale.y).toBe(uniforms.atmosphere!.scale.x)
+    expect(uniforms.atmosphere!.flattening).toBe(1)
+  })
+
+  it("flattens a giant's air with the giant", () => {
+    const giant = body({ kind: 'gas-giant' })
+    const air = bodyUniforms(giant, FRAME, NO_MAPS, null).atmosphere!
+    expect(air.scale.y / air.scale.x).toBeCloseTo(0.9966, 12)
+    expect(air.flattening).toBe(0.9966)
   })
 
   it('flattens nothing about a figured body: not the mesh, the clouds or the air', () => {
@@ -131,43 +139,35 @@ describe('the figure branch', () => {
   })
 })
 
-describe('the ground an eye in the air is measured from', () => {
-  // Over the pole of a body flattened to 0.9: a giant's cloud tops are 10%
-  // inside the equatorial sphere there, and terrain is not.
+describe('the sea level the air is measured from, and the ground a ray stops at', () => {
+  // A body flattened to 0.9: a giant's cloud tops are 10% inside the
+  // equatorial sphere at the pole, and terrain is not.
   const flattened = { flattening: 0.9 }
-  const pole = (spun: RenderBody) =>
-    Quaternion.rotate(spun.orientation, vec3(0, 6.4e6, 0))
 
-  it('is the datum sphere under terrain, which is spherical', () => {
-    const rocky = body(flattened)
-    const air = bodyUniforms(
-      rocky,
-      { ...FRAME, eye: pole(rocky) },
-      NO_MAPS,
-      null,
-    ).atmosphere!
-    expect(air.seaLevel).toBe(6.4e6)
+  it('measures the air from the datum, over terrain and over a giant alike', () => {
+    for (const spun of [
+      body(flattened),
+      body({ ...flattened, kind: 'gas-giant' }),
+    ]) {
+      const air = bodyUniforms(spun, FRAME, NO_MAPS, null).atmosphere!
+      expect(air.seaLevel).toBe(spun.trueRadius * spun.placement.compression)
+    }
   })
 
-  it("is a giant's drawn spheroid, along the eye's own radial", () => {
+  it("stops a ray at the drawn sphere's polar radius under terrain, which is under the surface everywhere", () => {
+    const rocky = body(flattened)
+    const uniforms = bodyUniforms(rocky, FRAME, NO_MAPS, null)
+    expect(uniforms.atmosphere!.innerRadius).toBeCloseTo(
+      uniforms.scale.x * 0.9,
+      3,
+    )
+  })
+
+  it("stops a ray at a giant's spheroid, which its shell is stretched into a sphere with", () => {
     const giant = body({ ...flattened, kind: 'gas-giant' })
-    const overPole = bodyUniforms(
-      giant,
-      { ...FRAME, eye: pole(giant) },
-      NO_MAPS,
-      null,
-    ).atmosphere!
-    // An eye at the equatorial radius over the pole is 0.1 R above the
-    // cloud tops — far outside a giant's air, not on its floor.
-    expect(overPole.seaLevel).toBeCloseTo(6.4e6 * 0.9, 3)
-    const equator = Quaternion.rotate(giant.orientation, vec3(7e6, 0, 0))
-    const overEquator = bodyUniforms(
-      giant,
-      { ...FRAME, eye: equator },
-      NO_MAPS,
-      null,
-    ).atmosphere!
-    expect(overEquator.seaLevel).toBeCloseTo(6.4e6, 3)
+    const uniforms = bodyUniforms(giant, FRAME, NO_MAPS, null)
+    expect(uniforms.atmosphere!.innerRadius).toBe(uniforms.scale.x)
+    expect(uniforms.atmosphere!.flattening).toBe(0.9)
   })
 })
 

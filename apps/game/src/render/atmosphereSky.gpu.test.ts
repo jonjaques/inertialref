@@ -37,17 +37,28 @@ afterAll(() => gpu?.dispose())
 const earth = SOLAR_PLANETS.find((body) => body.name === 'Earth')!
 const haze = earth.haze!
 const top = 1 + haze.height / earth.radius
-/** Earth's two scale heights over a ground of radius `sunk` (sea level 1). */
-const heightsOver = (sunk: number) => ({
-  rayleigh: earth.atmosphere!.scaleHeight / (earth.radius * sunk),
-  aerosol: haze.aerosolHeight / (earth.radius * sunk),
-})
+/** Earth's two scale heights over the datum, the unit the tables are baked in. */
+const HEIGHTS = {
+  rayleigh: earth.atmosphere!.scaleHeight / earth.radius,
+  aerosol: haze.aerosolHeight / earth.radius,
+}
 /** Sun elevation over the observer's horizon. */
 const SUN = (59 * Math.PI) / 180
 
 interface Ground {
   /** The drawn sphere's radius under sea level, as `sunkSphereRadius` sinks it. */
   readonly sunk?: number
+  /**
+   * The eye's height over sea level, meters; two by default. Negative over a
+   * sea that lies under its datum, as a generated sea can.
+   */
+  readonly height?: number
+  /**
+   * The lens's vertical field, degrees; 2 by default, which reads a pixel a
+   * quarter of a degree off the axis. A claim about a third of a degree of
+   * sky needs a narrower one.
+   */
+  readonly fov?: number
   /** Polar over equatorial radius, with the spin axis along +Y. */
   readonly flattening?: number
   /** The observer's direction from the center; +Y by default. */
@@ -56,7 +67,7 @@ interface Ground {
   readonly sun?: Vector3
 }
 
-/** RGB of a narrow view from two meters above sea level along `direction`. */
+/** RGB of a narrow view from `height` over sea level along `direction`. */
 async function skyToward(
   direction: Vector3,
   ground: Ground = {},
@@ -66,8 +77,9 @@ async function skyToward(
   const flattening = ground.flattening ?? 1
   const up = ground.up ?? new Vector3(0, 1, 0)
   const air = createAtmosphereMaterial()
-  // The tables are baked over the drawn sphere, as `Bodies` bakes them.
-  const scattering = scatteringFor(haze, top / sunk, heightsOver(sunk))
+  // The tables are baked over the datum, as `Bodies` bakes them; the drawn
+  // sphere is `sunk` under it.
+  const scattering = scatteringFor(haze, top, HEIGHTS)
   air.setScattering(
     scattering.recipe,
     scattering.transmittance,
@@ -89,8 +101,8 @@ async function skyToward(
   shell.scale.set(1, flattening, 1)
   scene.add(shell)
   if (extra !== undefined) scene.add(extra)
-  const eye = up.clone().multiplyScalar(1 + 2 / earth.radius)
-  const camera = new PerspectiveCamera(2, 1, 1e-6, 10)
+  const eye = up.clone().multiplyScalar(1 + (ground.height ?? 2) / earth.radius)
+  const camera = new PerspectiveCamera(ground.fov ?? 2, 1, 1e-6, 10)
   camera.position.copy(eye)
   camera.up.set(0, 0, 1)
   camera.lookAt(eye.clone().add(direction))
@@ -142,7 +154,7 @@ it('reports the zenith it draws as the air the observer stands under', async () 
   // it may not drift from the sky on screen by more than the two marches
   // differ. Five percent costs a star 0.03 mag.
   const drawn = await skyToward(new Vector3(0, 1, 0))
-  const scattering = scatteringFor(haze, top, heightsOver(1))
+  const scattering = scatteringFor(haze, top, HEIGHTS)
   const reported = zenithSkyRadiance(
     scattering.recipe,
     scattering.multiScatterTable,
@@ -161,7 +173,7 @@ it('draws the twilight zenith the CPU column reports', async () => {
   const below = (-8 * Math.PI) / 180
   const sun = new Vector3(Math.cos(below), Math.sin(below), 0)
   const drawn = await skyToward(new Vector3(0, 1, 0), { sun })
-  const scattering = scatteringFor(haze, top, heightsOver(1))
+  const scattering = scatteringFor(haze, top, HEIGHTS)
   const reported = zenithSkyRadiance(
     scattering.recipe,
     scattering.multiScatterTable,
@@ -172,13 +184,12 @@ it('draws the twilight zenith the CPU column reports', async () => {
     expect(Math.abs(drawn[c]! / reported[c]! - 1)).toBeLessThan(0.15)
 })
 
-it('measures the air from sea level, not from the sunk sphere or the stretch', async () => {
+it('measures the air from sea level, not from the sunk sphere', async () => {
   // The drawn sphere is sunk 9.9 km under Earth's datum so the terrain covers
-  // it, and the shell is oblate where the terrain is not. Marched from the
-  // geometry, an observer at sea level at 77° latitude stood some 30 km up in
-  // the air: a zenith at half its light, and a setting sun that never
-  // reddened. The sky over sea level is the sky over sea level, however the
-  // sphere under it is drawn.
+  // it. Marched with that sphere as sea level, an observer on a beach stood
+  // 9.9 km up in the air: a zenith at half its light, and a setting sun that
+  // never reddened. The sky over sea level is the sky over sea level,
+  // however deep the sphere under it is drawn.
   const latitude = (77 * Math.PI) / 180
   const up = new Vector3(Math.cos(latitude), Math.sin(latitude), 0)
   const sun = up
@@ -189,10 +200,40 @@ it('measures the air from sea level, not from the sunk sphere or the stretch', a
     up,
     sun,
     sunk: 1 - 9_900 / earth.radius,
-    flattening: earth.polarRadius / earth.radius,
   })
   for (let c = 0; c < 3; c += 1)
     expect(Math.abs(drawn[c]! / reference[c]! - 1)).toBeLessThan(0.05)
+})
+
+it('stops a ray at the drawn sphere, under every surface, and not at sea level', async () => {
+  // A ray the shell meets the ground with is a short, dense, sunless path,
+  // far darker than the sky beside it, so the ground's horizon has to lie
+  // under every drawn surface. Sea level does not: the far shore's sea lies
+  // 211 m under its datum, and from 80 m over that water — 131 m under the
+  // datum — a shell stopped at sea level stood its horizon level while the
+  // sea's dipped 0.36°, a black band five pixels tall between the water and
+  // the sky. A ray 0.15° under level is above the sea's horizon, and sky.
+  const dip = (0.15 * Math.PI) / 180
+  const elevation = (4.6 * Math.PI) / 180
+  const ground: Ground = {
+    height: -131,
+    fov: 0.2,
+    sunk: 1 - 9_900 / earth.radius,
+    sun: new Vector3(Math.cos(elevation), Math.sin(elevation), 0),
+  }
+  const luminance = ([r, g, b]: readonly number[]) =>
+    0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+  const under = await skyToward(
+    new Vector3(-Math.cos(dip), -Math.sin(dip), 0),
+    ground,
+  )
+  const over = await skyToward(
+    new Vector3(-Math.cos(dip), Math.sin(dip), 0),
+    ground,
+  )
+  // Stopped at sea level the ray under level drew at 0.004 of the one over
+  // it; as sky it is 0.98 of it.
+  expect(luminance(under)).toBeGreaterThan(0.7 * luminance(over))
 })
 
 it('draws a setting sun brighter than the sky beside it', async () => {
@@ -203,7 +244,7 @@ it('draws a setting sun brighter than the sky beside it', async () => {
   const elevation = (2 * Math.PI) / 180
   const sun = new Vector3(Math.cos(elevation), Math.sin(elevation), 0)
   const eye = new Vector3(0, 1 + 2 / earth.radius, 0)
-  const scattering = scatteringFor(haze, top, heightsOver(1))
+  const scattering = scatteringFor(haze, top, HEIGHTS)
   const throughAir = diskThroughAir(
     scattering.recipe,
     eye.y,
