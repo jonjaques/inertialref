@@ -84,7 +84,7 @@ any rule governing the files being changed.
 - **Never size or position chrome against the viewport.** [Details](docs/agents/invariants.md#rule-30).
 - **Never add a second producer of the camera.** [Details](docs/agents/invariants.md#rule-31).
 - **Never add a second producer of the lens.** [Details](docs/agents/invariants.md#rule-32).
-- **Never add a second window-level key listener.** [Details](docs/agents/invariants.md#rule-33).
+- **Never add a second window-level key listener, or a second gamepad poll.** [Details](docs/agents/invariants.md#rule-33).
 - **Never call `localStorage` outside `state/preferences.ts`.** [Details](docs/agents/invariants.md#rule-34).
 - **Never write a key name in a label.** [Details](docs/agents/invariants.md#rule-35).
 - **Never turn the head at a constant radians-per-pixel.** [Details](docs/agents/invariants.md#rule-36).

@@ -12068,6 +12068,62 @@ opens whole edges rather than one vertex.
 edges it would have frozen every patch's first row; `groundWear.test.ts` read
 the default and failed.
 
+## The gamepad, and a stick that looked the wrong way (31 Oct 2026)
+
+[ADR-0057](docs/adr/0057-a-gamepad-is-a-second-binding-on-every-action.md)
+made the pad a second binding on the keymap's actions. What the record does
+not carry is what the build and the browser did on the way.
+
+**A stick is not a drag.** The pad's held looks went into the cameras as drag
+pixels and turned the chase camera _left_ when pushed right. The rig showed it:
+two stills 250 ms apart at 0.8 right-stick throw, with the ship sliding right
+in frame. A drag grabs the picture, so the ground under the pointer follows the
+pointer and dragging right swings the view left. A stick is a rate pointed
+where the player wants to look. `lookDelta` signs by the view and the grab
+cameras convert through `asDrag`. The walker's `look` is a pointer-locked
+mouse, which turns the way it moves, so it takes the rate unconverted with
+screen y down. A fourth camera will want one of the two, and choosing wrong
+looks like an inverted-Y preference nobody set.
+
+**Chrome on macOS loses the USB ids from `Gamepad.id` from M148.** It reads
+PlayStation and Xbox pads through Apple's GameController framework there, and
+the id becomes the product name plus `(STANDARD GAMEPAD)`. A family detector
+matching `Vendor: 054c` stops recognizing a DualSense, which is what Babylon's
+gamepad manager does. `padFamily` matches the ids in both engines' formats and
+falls back to the name. The controls page also has a prompts override for the
+pads that report neither.
+
+**A press belongs to the owner it began under.** ✕ on a dialog's Close
+closes the dialog, the mode's bindings return on the next poll, and ✕ is still
+down. A driver that latched per action fired the mode's ✕ then: kill
+rotation, or a pick in the planetarium. The latch now moves to the new owner
+without firing. The test fails with the guard removed.
+
+**A rebinding capture takes a press that rises during the capture, not the
+next one seen.** The ✕ that activates a row's button is down when the capture
+begins. Taken, it binds every row a pad user touches to ✕.
+
+**Driving it in the rig.** No physical pad reaches the rig's Chrome: a pad is
+exposed only to a page that sees the press, and the rig's window never has the
+real focus. `.scratch/pad/install.mjs` (git-ignored) replaces
+`navigator.getGamepads` with fresh snapshots of a mutable state, as Chromium's
+are, and dispatches a plain `Event('gamepadconnected')` carrying a `gamepad`
+property. `GamepadEvent`'s constructor refuses anything that is not a real
+`Gamepad`. `__pad.press('south')`, `__pad.stick('right', 1, 0)` and
+`__pad.state.rumbles` are then the whole driver. With it the pad flew the
+ship (0.7 left stick ahead gave 0.54 of the thruster, through the 1.6 curve),
+opened Settings from Options, walked the dock from Create, stepped Mercury to
+Venus to Apophis on R1, dollied 16.6 Mm to 10.1 Mm on R2, and walked the Mars
+pad. Port 5173 belonged to another project that day, so the client ran on 5197
+with `--no-serve`. A driven page answering from the wrong tree would have
+passed every probe.
+
+**Tried and rejected.** A gamepad library: none of six handles the macOS id,
+and the useful parts are the keymap's own. Synthetic `KeyboardEvent`s from the
+pad: no magnitude, and untrusted. Star Citizen's modifier layers: they take away
+the axes a hand shares with the modifier, so free look is the one layer, on the
+stick that has nothing else to do while the head turns.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

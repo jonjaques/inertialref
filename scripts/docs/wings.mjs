@@ -208,6 +208,10 @@ export const WINGS = [
             'docs/adr/0055-a-long-lens-refines-what-its-frame-can-reach.md',
             'A long lens',
           ],
+          [
+            'docs/adr/0057-a-gamepad-is-a-second-binding-on-every-action.md',
+            'The gamepad',
+          ],
         ],
       },
     ],
