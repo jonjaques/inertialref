@@ -25,6 +25,7 @@ export interface PadPort {
   poll(seconds: number): void
   readonly state: PadState | null
   rumble(strong: number, weak: number, milliseconds: number): void
+  capture(take: ((control: PadControl) => void) | null): void
 }
 
 /** A pad arriving or leaving, for the notice that says so. */

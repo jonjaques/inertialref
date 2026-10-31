@@ -17,7 +17,12 @@ import {
   type StickValue,
   TRIGGER_PRESS,
 } from './padShape.ts'
-import { DEFAULT_TUNING, type PadTuning, stickShapeOf } from './padTuning.ts'
+import {
+  DEFAULT_TUNING,
+  type PadTuning,
+  promptFamily,
+  stickShapeOf,
+} from './padTuning.ts'
 import type { ActionDefinition, ActionId } from './keymap.ts'
 import type { KeymapStore } from './keymapStore.ts'
 
@@ -144,6 +149,9 @@ export class PadDriver {
   /** The pad that moved last: whose glyphs, and whose motors. */
   #active: PadReading | null = null
   #state: PadState | null = null
+  #capture: ((control: PadControl) => void) | null = null
+  /** Each control's value when the capture began, or last poll during it. */
+  #captureFrom = new Map<PadControl, number>()
   /**
    * The last-seen input timestamp of each pad, by index.
    *
@@ -172,6 +180,21 @@ export class PadDriver {
     return this.#state
   }
 
+  /**
+   * Hand the next fresh press to `take`, and nothing else, until it comes.
+   *
+   * The controls page's rebinding. Fresh is the whole subtlety: the press that
+   * started the capture — ✕ on the row's own button — is still down when the
+   * capture begins, and taking it would bind every row to the button that
+   * opened it. So a control counts only once it rises past its threshold from
+   * below during the capture. While it waits, nothing navigates and nothing
+   * flies: the press being listened for is not a command.
+   */
+  capture(take: ((control: PadControl) => void) | null): void {
+    this.#capture = take
+    this.#captureFrom = new Map(this.#values)
+  }
+
   /** One poll. `seconds` since the last, for repeats; zero on the first. */
   poll(seconds: number): void {
     const pads = this.#read().filter(
@@ -187,6 +210,10 @@ export class PadDriver {
     const shape = stickShapeOf(this.#tuning)
     const sticks = this.#merge(pads, shape)
     this.#noticeActivity(pads, sticks.shaped)
+    if (this.#capture !== null) {
+      this.#captured()
+      return
+    }
     const consumed = this.#navigate(seconds, sticks.shaped.right)
     this.#dispatch(seconds, consumed)
   }
@@ -230,7 +257,7 @@ export class PadDriver {
     const shown = this.#active ?? pads[0]
     this.#state = {
       id: shown?.id ?? '',
-      family: padFamily(shown?.id ?? ''),
+      family: promptFamily(this.#tuning.prompts, padFamily(shown?.id ?? '')),
       mapping: shown?.mapping ?? '',
       buttons,
       raw: { left: rawLeft, right: rawRight },
@@ -265,11 +292,41 @@ export class PadDriver {
       length(shaped.right) > ACTIVITY
     if (mover !== null) this.#active = mover
     if (!anything) return
+    const id = (mover ?? this.#active ?? pads[0])?.id ?? ''
     this.#store.useDevice(
       'pad',
-      padFamily((mover ?? this.#active ?? pads[0])?.id ?? ''),
+      promptFamily(this.#tuning.prompts, padFamily(id)),
     )
     this.#store.padActivity()
+  }
+
+  /** One poll of a capture: the first control to rise, if any did. */
+  #captured(): void {
+    const take = this.#capture
+    if (take === null) return
+    // Everything held lets go first, so a capture begun mid-burn does not
+    // leave the thruster on for as long as the capture waits.
+    this.#releaseAll()
+    for (const control of PAD_CONTROLS) {
+      if (control === 'home') continue
+      const value = this.#values.get(control) ?? 0
+      const was = this.#captureFrom.get(control) ?? 0
+      const threshold = thresholdsFor(control)
+      if (value >= threshold.press && was < threshold.press) {
+        this.#capture = null
+        // Latched as pressed and carried, so the press that was bound does
+        // not also fire its new action the moment the capture lets go.
+        this.#latched.set(control, {
+          action: UNBOUND,
+          held: 0,
+          fired: 0,
+          carried: true,
+        })
+        take(control)
+        return
+      }
+    }
+    this.#captureFrom = new Map(this.#values)
   }
 
   /**

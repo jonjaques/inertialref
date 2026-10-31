@@ -151,6 +151,8 @@ export function useActionFrame(
 export function useInputDevice(): {
   readonly device: InputDevice
   readonly family: PadFamily
+  /** How many pads are attached and exposed. */
+  readonly pads: number
 } {
   const store = useKeymap()
   const device = useSyncExternalStore(
@@ -163,7 +165,12 @@ export function useInputDevice(): {
     () => store.family,
     () => 'generic' as const,
   )
-  return { device, family }
+  const pads = useSyncExternalStore(
+    (onChange) => store.watch(onChange),
+    () => store.pads,
+    () => 0,
+  )
+  return { device, family, pads }
 }
 
 /** What an action is bound to on a pad right now, or null. */

@@ -782,7 +782,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   /* ------------------------------ character ----------------------------- */
   press(
     'character.lock',
-    'Lock pointer to walk',
+    'Step out to walk',
     'Character',
     'character-entry',
     chord('KeyL', { shift: true }),

@@ -1,3 +1,4 @@
+import type { PadFamily } from './padFamily.ts'
 import { DEFAULT_STICK, type StickShape } from './padShape.ts'
 
 /*
@@ -25,7 +26,23 @@ export interface PadTuning {
   readonly invertPitch: boolean
   /** Rumble, from the drive and the acts that change the ship's state. */
   readonly vibration: boolean
+  /**
+   * Whose glyphs the prompts print. `auto` reads the pad; the others are for
+   * a pad that reports itself generically — most third-party pads do, and a
+   * DualSense on a browser that drops the USB ids would read as one too.
+   */
+  readonly prompts: PadPrompts
 }
+
+export const PAD_PROMPTS = ['auto', 'dualsense', 'xbox', 'switch'] as const
+
+export type PadPrompts = (typeof PAD_PROMPTS)[number]
+
+/** The family a pad's prompts are drawn in, given what it says it is. */
+export const promptFamily = (
+  prompts: PadPrompts,
+  reported: PadFamily,
+): PadFamily => (prompts === 'auto' ? reported : prompts)
 
 export const TUNING_RANGES = {
   deadzone: { min: 0.02, max: 0.4, step: 0.01 },
@@ -40,6 +57,7 @@ export const DEFAULT_TUNING: PadTuning = {
   invertLook: false,
   invertPitch: false,
   vibration: true,
+  prompts: 'auto',
 }
 
 const within = (value: unknown, range: { min: number; max: number }) =>
@@ -70,7 +88,9 @@ export function isPadTuning(value: unknown): value is PadTuning {
       within(held.lookSpeed, TUNING_RANGES.lookSpeed)) &&
     flag(held.invertLook) &&
     flag(held.invertPitch) &&
-    flag(held.vibration)
+    flag(held.vibration) &&
+    (held.prompts === undefined ||
+      (PAD_PROMPTS as readonly unknown[]).includes(held.prompts))
   )
 }
 
