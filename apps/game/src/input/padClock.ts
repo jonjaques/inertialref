@@ -40,8 +40,14 @@ export function startPadClock(
   let frame: number | null = null
   const run = (timestamp: number): void => {
     frame = null
-    store.tick(timestamp)
-    if (store.wantsFrames()) frame = target.requestAnimationFrame(run)
+    try {
+      store.tick(timestamp)
+    } finally {
+      // Re-armed even when a handler the tick reached throws: the throw is
+      // that handler's, and a clock that stopped on it would leave the pad
+      // dead outside the scene until a pad arriving woke it again.
+      if (store.wantsFrames()) frame = target.requestAnimationFrame(run)
+    }
   }
   const wake = (): void => {
     frame ??= target.requestAnimationFrame(run)

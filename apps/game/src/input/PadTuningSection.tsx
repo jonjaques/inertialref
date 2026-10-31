@@ -15,7 +15,7 @@ import {
   type PadTuning,
   TUNING_RANGES,
 } from './padTuning.ts'
-import { useInputDevice, useKeymap } from './useKeymap.ts'
+import { useKeymap } from './useKeymap.ts'
 
 /** The three sliders, each a label, a reading and a travel. */
 const SLIDERS = [
@@ -58,12 +58,21 @@ const PROMPT_LABELS = {
  * asked to unlearn. Saved as one preference, so an export carries the feel of
  * the pad along with its bindings.
  */
-export function PadTuningSection() {
+export function PadTuningSection({
+  rumbles,
+}: {
+  /**
+   * Whether the pad in hand has motors, from the page's live reading.
+   *
+   * A prop rather than a read of `store.pad.state` here: that is a mutable
+   * port nothing re-renders this for, and a pad that connects is counted
+   * before its first poll fills the state — so a read on the render the count
+   * caused saw no pad, and the test button stayed disabled with one in hand.
+   */
+  readonly rumbles: boolean
+}) {
   const [tuning, setTuning] = usePersistentState(CONTROLS_PAD_TUNING)
   const store = useKeymap()
-  // Re-rendered as pads come and go, so the test button follows the hardware.
-  const { pads } = useInputDevice()
-  const rumbles = pads > 0 && store.pad?.state?.vibration === true
   const id = useId()
   const set = <K extends keyof PadTuning>(field: K, value: PadTuning[K]) =>
     setTuning((held) => ({ ...held, [field]: value }))

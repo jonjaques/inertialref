@@ -103,7 +103,9 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   `event.key` carries a modifier that means nothing. ADR-0018.
 - **One gamepad poll, and it is `input/padClock.ts`'s.** A pad binding is a
   second binding on the same action ids, dispatched through the same contexts;
-  never a pad dispatcher, never a synthetic `KeyboardEvent`. A held action
+  never a pad dispatcher, and never an action reached by a synthetic
+  `KeyboardEvent` (stepping a focused slider by its own arrow key is the one
+  synthetic key, and the store does not count it as a hand). A held action
   carries `value` and a `change` phase — treat only `up` as a release. A stick
   look is signed by where the view turns; a grab camera takes it through
   `asDrag`. ADR-0057.

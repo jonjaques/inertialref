@@ -1,4 +1,5 @@
 import {
+  isPadBindable,
   isPadStick,
   PAD_BUTTONS,
   PAD_CONTROLS,
@@ -207,6 +208,11 @@ export class PadDriver {
       this.#active = null
       return
     }
+    // This poll's snapshot of the pad that moved last, or none once it has
+    // gone: a snapshot kept from an earlier poll reads that poll forever, and
+    // one kept after its pad left names, draws and rumbles a pad nobody holds.
+    const last = this.#active?.index
+    this.#active = pads.find((pad) => pad.index === last) ?? null
     const shape = stickShapeOf(this.#tuning)
     const sticks = this.#merge(pads, shape)
     this.#noticeActivity(pads, sticks.shaped)
@@ -305,10 +311,13 @@ export class PadDriver {
     const take = this.#capture
     if (take === null) return
     // Everything held lets go first, so a capture begun mid-burn does not
-    // leave the thruster on for as long as the capture waits.
-    this.#releaseAll()
+    // leave the thruster on for as long as the capture waits. The latches
+    // stay: a control still down when the capture ends is the press it was,
+    // not a fresh one for whatever it means then.
+    if (this.#holding.size > 0) this.#store.releasePad()
+    this.#holding.clear()
     for (const control of PAD_CONTROLS) {
-      if (control === 'home') continue
+      if (!isPadBindable(control)) continue
       const value = this.#values.get(control) ?? 0
       const was = this.#captureFrom.get(control) ?? 0
       const threshold = thresholdsFor(control)
@@ -402,6 +411,11 @@ export class PadDriver {
    * this the walker jumps as the dialog closes. A stick is exempt: a stick
    * held across a mode change is a hand still asking for motion, and the
    * motion it asks for is the new mode's.
+   *
+   * A button that is holding an action is latched under it, for the same
+   * reason in the other direction: ✕ held for a jump while Options opens
+   * Settings is not a press of whatever the dialog focused first, and ○ held
+   * for a crouch is not the dialog's Close.
    */
   #carried(control: PadControl, action: ActionId): boolean {
     if (isPadStick(control)) {
@@ -410,13 +424,15 @@ export class PadDriver {
     }
     const held = this.#latched.get(control)
     const value = this.#values.get(control) ?? 0
-    if (held === undefined || held.action === action) {
+    if (!latch(value, held !== undefined, thresholdsFor(control))) {
       this.#latched.delete(control)
       return false
     }
-    if (latch(value, true, thresholdsFor(control))) return true
-    this.#latched.delete(control)
-    return false
+    if (held === undefined) {
+      this.#latched.set(control, { action, held: 0, fired: 0, carried: false })
+      return false
+    }
+    return held.action !== action
   }
 
   /**

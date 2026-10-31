@@ -15,6 +15,7 @@ import {
 import type { PadControl } from './pad.ts'
 import type { PadState } from './padDriver.ts'
 import type { PadFamily } from './padFamily.ts'
+import { isForeignModal, isOverlayControl, isTyping } from '../hud/focus.ts'
 
 /**
  * The pad driver, as the store sees it: what to draw and how to rumble.
@@ -34,7 +35,6 @@ export interface PadConnection {
   readonly connected: boolean
   readonly id: string
 }
-import { isForeignModal, isOverlayControl, isTyping } from '../hud/focus.ts'
 
 /*
  * The one window `keydown` listener, and everything it needs to decide.
@@ -486,7 +486,11 @@ export class KeymapStore {
     // Before every refusal below: the cinema's idle timer wants to know that
     // somebody is still here, and typing into a field is still being here.
     for (const watcher of this.#activity) watcher()
-    this.useDevice('keyboard')
+    // A trusted key only. The pad steps a focused slider by dispatching the
+    // slider's own arrow key (`padNavigation.ts`), and that event bubbles here
+    // too — counted as a hand, one tap of the d-pad on the deadzone slider
+    // would hand the prompts and the cursor back to a keyboard nobody touched.
+    if (event.isTrusted !== false) this.useDevice('keyboard')
     // A key typed into the search box is not a camera command. The focus check
     // is here rather than in the table because "is something else listening" is
     // a fact about the document, not about the key.

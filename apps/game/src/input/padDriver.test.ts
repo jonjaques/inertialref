@@ -240,6 +240,68 @@ describe('the interface takes the pad when it has the focus', () => {
     r.frame(pad({ south: 1 }))
     expect(r.events.map(([id]) => id)).toEqual(['flight.kill'])
   })
+
+  it('does not press the interface with a button still holding the mode’s act', () => {
+    // ✕ held for a jump while Options opens Settings: the dialog takes the
+    // focus, and the button under the thumb is still the jump.
+    const owns = { value: false }
+    const { nav, log } = navigator(owns)
+    const r = rig(nav)
+    r.store.claim({ context: 'character' })
+    r.listen('character.jump')
+    r.frame(pad({ south: 1 }))
+    r.frame(pad({ south: 1 }))
+    owns.value = true
+    r.frame(pad({ south: 1 }))
+    expect(log).toEqual([])
+    r.frame(pad())
+    r.frame(pad({ south: 1 }))
+    expect(log).toEqual(['activate'])
+  })
+
+  it('does not close a dialog with a button still holding the mode’s act', () => {
+    const r = rig()
+    r.store.claim({ context: 'character' })
+    r.listen('character.crouch', 'overlay.close')
+    r.frame(pad({ east: 1 }))
+    r.store.claim({ context: 'dialog' })
+    r.frame(pad({ east: 1 }))
+    r.frame(pad({ east: 1 }))
+    expect(r.events.map(([id, phase]) => `${id} ${phase}`)).toEqual([
+      'character.crouch down',
+      'character.crouch up',
+    ])
+  })
+})
+
+describe('a capture', () => {
+  it('takes the next fresh press, and leaves a press made before it unfired', () => {
+    // ✕ on a row starts the capture; △ pressed with ✕ still down is the
+    // binding, and ✕ coming out of the capture is still the press it was.
+    const { nav, log } = navigatorLog()
+    const r = rig(nav)
+    const taken: string[] = []
+    r.frame(pad({ south: 1 }))
+    r.driver.capture((control) => taken.push(control))
+    r.frame(pad({ south: 1 }))
+    r.frame(pad({ south: 1, north: 1 }))
+    r.frame(pad({ south: 1 }))
+    expect(taken).toEqual(['north'])
+    expect(log).toEqual(['activate'])
+  })
+
+  function navigatorLog() {
+    const log: string[] = []
+    const nav: PadNavigator = {
+      owns: () => true,
+      move: (direction) => log.push(direction),
+      activate: () => log.push('activate'),
+      canBack: () => false,
+      back: () => log.push('back'),
+      scroll: () => {},
+    }
+    return { nav, log }
+  }
 })
 
 describe('the hand in use', () => {

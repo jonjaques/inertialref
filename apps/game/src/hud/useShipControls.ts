@@ -6,7 +6,7 @@ import {
   useKeyContext,
   useKeymap,
 } from '../input/useKeymap.ts'
-import type { ActionId } from '../input/keymap.ts'
+import { type ActionId, arbitrate } from '../input/keymap.ts'
 
 /*
  * Keyboard flight.
@@ -136,10 +136,12 @@ export function useShipControls(
 
   /*
    * The main drive, felt: the light motor at the throttle, for as long as the
-   * pilot is flying. Only while `flight` is live — the ship keeps burning
-   * under the planetarium and a walk, and a pad humming in somebody's hand
-   * while they look at Saturn is the ship's drive reaching through a mode it
-   * has no part in.
+   * pilot is flying. Only while `flight` is reachable — the ship keeps
+   * burning under the planetarium and a walk, and a pad humming in somebody's
+   * hand while they look at Saturn is the ship's drive reaching through a
+   * mode it has no part in. Reachable rather than live, because a dialog over
+   * flight leaves `flight` claimed: the hum would run on under Settings and
+   * cut the controller page's test rumble off at its first renewal.
    */
   useEffect(() => {
     let since = DRIVE_RENEW_SECONDS
@@ -147,7 +149,7 @@ export function useShipControls(
       since += seconds
       if (since < DRIVE_RENEW_SECONDS) return
       since = 0
-      if (!store.live.includes('flight')) return
+      if (!arbitrate(store.live).includes('flight')) return
       const throttle = engine.throttle()
       if (throttle <= 0) return
       store.rumble(throttle * 0.15, throttle * 0.45, DRIVE_EFFECT_MS)

@@ -491,6 +491,20 @@ describe('the store', () => {
     expect(phases).toEqual(['down', 'up'])
   })
 
+  it('leaves the hand in use alone for a key the page dispatched itself', () => {
+    // The pad steps a focused slider by dispatching the slider's own arrow
+    // key, and that untrusted event reaches this listener too.
+    const store = new KeymapStore()
+    store.useDevice('pad')
+    store.handleKeyDown({
+      ...keyEvent('ArrowLeft'),
+      isTrusted: false,
+    } as KeyboardEvent)
+    expect(store.device).toBe('pad')
+    store.handleKeyDown(keyEvent('ArrowLeft'))
+    expect(store.device).toBe('keyboard')
+  })
+
   it('keeps a held key when a layer over its context comes and goes', () => {
     /*
      * The pad's free look claims `flight-look` over `flight` and drops it on

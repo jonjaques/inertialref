@@ -162,7 +162,7 @@ export function ControllerSection() {
       />
 
       <Section id="settings.controller.feel" title="Feel">
-        <PadTuningSection />
+        <PadTuningSection rumbles={pads > 0 && live?.vibration === true} />
       </Section>
     </div>
   )
