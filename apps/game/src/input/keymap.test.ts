@@ -491,6 +491,25 @@ describe('the store', () => {
     expect(phases).toEqual(['down', 'up'])
   })
 
+  it('keeps a held key when a layer over its context comes and goes', () => {
+    /*
+     * The pad's free look claims `flight-look` over `flight` and drops it on
+     * release. W held through that is still a thruster somebody is holding,
+     * and the operating system's repeat will never press it again — so a
+     * release of everything would cut the thruster until the key was lifted
+     * and pressed. Only what the departing context made unreachable goes up.
+     */
+    const store = new KeymapStore()
+    const phases: string[] = []
+    store.register('flight.fore', (event) => phases.push(event.phase))
+    store.claim({ context: 'flight' })
+    store.handleKeyDown(keyEvent('KeyW'))
+    const layer = store.claim({ context: 'flight-look' })
+    layer()
+    expect(phases).toEqual(['down'])
+    expect(store.value('flight.fore')).toBe(1)
+  })
+
   it('ends a held action on the physical key, whatever the modifiers did', () => {
     /*
      * Shift can go down or up between the press and the release, so a key-up

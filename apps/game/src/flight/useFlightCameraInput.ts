@@ -98,6 +98,16 @@ export function useFlightCameraInput(
     },
     enabled,
   )
+  /*
+   * The layer goes with the hand that held it: on unmount, and when this hook
+   * stops listening — the walker taking over mid-look unregisters the handler,
+   * so the release that would have dropped the claim never arrives.
+   */
+  useEffect(() => {
+    if (enabled) return
+    looking.current?.release()
+    looking.current = null
+  }, [enabled])
   useEffect(
     () => () => {
       looking.current?.release()

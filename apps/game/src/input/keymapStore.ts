@@ -5,6 +5,7 @@ import {
   actionFor,
   arbitrate,
   type Bindings,
+  findAction,
   type KeyContext,
   padActions,
   type PadBindings,
@@ -304,7 +305,7 @@ export class KeymapStore {
       for (const watcher of this.#contexts) watcher()
       // Leaving a context with keys held would leave the drive burning for the
       // rest of the session, with nothing still listening for the key-up.
-      this.#releaseHeld()
+      this.#releaseUnreachable()
     }
   }
 
@@ -600,6 +601,28 @@ export class KeymapStore {
     this.#padHeld.clear()
     for (const id of ids)
       this.#report(id, padded.has(id) ? 'pad' : 'keyboard', false)
+  }
+
+  /**
+   * The held actions no live context reaches any more go up; the rest stay.
+   *
+   * Narrower than `#releaseHeld` on purpose. A layer leaving — the pad's free
+   * look dropping `flight-look` — leaves `flight` live under it, and W held
+   * through that is still a thruster somebody is holding: the operating
+   * system's repeat never presses it again, so releasing it would cut the
+   * thruster until the key was lifted and pressed. A mode leaving makes its own
+   * held actions unreachable, so they go, which is the case this exists for.
+   */
+  #releaseUnreachable(): void {
+    const reachable = arbitrate(this.live)
+    const padded = new Set(this.#padHeld.keys())
+    for (const id of new Set([...this.#held, ...padded])) {
+      const action = findAction(id)
+      if (action !== undefined && reachable.includes(action.context)) continue
+      this.#held.delete(id)
+      this.#padHeld.delete(id)
+      this.#report(id, padded.has(id) ? 'pad' : 'keyboard', false)
+    }
   }
 
   /** The pad's own release: a disconnect, or a pad driver losing its pads. */
