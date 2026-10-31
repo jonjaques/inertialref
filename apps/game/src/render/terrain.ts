@@ -318,7 +318,8 @@ export function createTerrainMaterial(): TerrainMaterial {
   const mineralHigh = uniform(new Color(1, 1, 1))
   const freshGain = uniform(1.6)
   const lunarLambert = uniform(0.92)
-  const terminator = uniform(0.05)
+  /** The datum's radius, meters: what a height carries the sun past the horizon by. */
+  const bodyRadius = uniform(1)
   const aeolian = uniform(0)
   const evaporitic = uniform(0)
   const repose = uniform(0.16)
@@ -1271,19 +1272,36 @@ export function createTerrainMaterial(): TerrainMaterial {
 
     /*
      * The terminator is measured against the *radial*, not the shading normal,
-     * and it is widened by the body's own relief.
+     * and each point carries the sun past it by its own height.
      *
      * A slope may face the sun on the far side of a planet and it is still on
      * the far side; letting the shading normal decide alone lights specks in
      * the dark, which is the classic artifact. But a hard geometric terminator
      * is wrong in the other direction: a peak of height `h` catches the sun
      * `√(2h/R)` of a radian past it, which on Luna's 22 km of relief is 0.16 —
-     * six times the 0.025 an airless disk is drawn with. `terminator` carries
-     * the wider of the two, so the lit peaks past the shadow line are the
-     * terrain's own and not a soft focus over the whole limb.
+     * six times the 0.025 an airless disk is drawn with. The sphere widens
+     * its terminator by the body's whole relief, which from orbit averages
+     * its peaks and valleys; the same width on every point of the ground lit
+     * the whole of Mars within 6° past its terminator at up to half the sun,
+     * and slopes tilted toward a sun 2.6° under the horizon burned under an
+     * open exposure. Here the sun is carried past the horizon by the point's
+     * own height — early for a basin under the datum — and the terminator
+     * keeps the airless disk's width: a valley floor goes dark at the
+     * geometric terminator, and a 20 km peak keeps the sun 6° past it. The
+     * twilight on the ground is the sky's, `skylightLeft` below.
      */
     const incidence = dot(up, sun)
-    const daylight = smoothstep(terminator.negate(), terminator, incidence)
+    const pastHorizon = altitude
+      .abs()
+      .mul(2)
+      .div(max(bodyRadius, float(1)))
+      .sqrt()
+      .mul(altitude.sign())
+    const daylight = smoothstep(
+      float(-BEAM_TERMINATOR),
+      float(BEAM_TERMINATOR),
+      incidence.add(pastHorizon),
+    )
 
     // Lunar-Lambert. Lommel-Seeliger normalized so head-on gives 1, blended
     // toward Lambert by however much air there is over the surface.
@@ -1453,7 +1471,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       pixelAngle.value = radians
       displayPixelAngle.value = displayRadians
     },
-    setPalette(palette) {
+    setPalette(palette, datumRadius) {
       write(rock, palette.rock)
       write(regolith, palette.regolith)
       write(basalt, palette.basalt)
@@ -1466,7 +1484,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       paint(mineralHigh, palette.mineralHigh)
       freshGain.value = palette.freshGain
       lunarLambert.value = palette.lunarLambert
-      terminator.value = palette.terminator
+      bodyRadius.value = datumRadius
       aeolian.value = palette.aeolian
       evaporitic.value = palette.evaporitic
       repose.value = palette.repose
@@ -1596,6 +1614,13 @@ function write(into: Deposit, from: SurfaceMaterial): void {
 export function paint(into: { value: Color }, from: LinearRgb): void {
   into.value.setRGB(from.r, from.g, from.b)
 }
+
+/**
+ * Half-width of the direct beam's terminator on the ground, in cosine of the
+ * incidence: the airless disk's, which covers the sun's half degree and the
+ * air's refraction. A point's own height carries the beam past it.
+ */
+export const BEAM_TERMINATOR = 0.025
 
 /**
  * The scale height the ground-level veil measures a path against, meters.

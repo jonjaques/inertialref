@@ -138,59 +138,31 @@ export interface CameraPolicy {
 }
 
 /**
- * How far Enhanced opens up for the daylight an observer inside an
- * atmosphere is actually getting.
+ * The meter's share of Enhanced's exposure for an eye `depth` down the air
+ * it stands in — 1 on the ground, 0 at the air's top and in a vacuum.
  *
  * Enhanced holds the surface white fixed, and in space that is the point:
  * the sun is the same sun wherever the ship is, so one calibration serves a
  * sunlit world, its night side and the sky behind both. On the ground the
  * light itself goes away. Measured air puts a civil-dusk zenith near
  * 1 cd/m² — fifteen stops under noon — and at the fixed calibration that sky
- * drew black, where a camera or an eye has opened by some ten stops and sees
- * deep blue over a bright horizon.
+ * drew black, where a camera or an eye has opened by some ten stops. And no
+ * figure for the light at the eye says what the frame holds: keyed on the
+ * zenith and the direct sun, Enhanced opened 4.1 stops on Mars with the sun
+ * 2.6° under the surface's horizon, where the zenith was dark and the
+ * horizon, still sunlit from 7.7 km up, was not, and drew the sky white.
+ * So inside the air Enhanced takes the meter Automatic takes, at its rates
+ * and within its comfort range, and on the ground the two agree about the
+ * light; what Enhanced adds there is its staging.
  *
- * `daylight` is the light where the observer stands, in scene units: the sky
- * overhead plus the direct sun, its incidence taken against the observer's
- * own horizon — at sea level, a level surface. Down to `day` (about 2,000 cd/m² of it, a
- * sun a few degrees up) nothing moves, so noon and every orbit keep the
- * calibration. Below it the exposure follows the light stop for stop, up to
- * `most`, and then gives the stops back between `full` (about 0.3 cd/m², the
- * sun near −7°) and `night` (0.3 mcd/m², astronomical night), so the night
- * sky — the stars, the Milky Way, a Moon with its relief — is presented at
- * the calibration it was composed at. In between the air goes dark as the
- * eye sees it go. A vacuum, or any daylight at all, is zero.
+ * None of the meter above the air, all of it a fifth of the way down, so
+ * leaving the air is not a step in the exposure: a ship climbing out near
+ * the terminator otherwise left a metered dusk for the calibration in one
+ * frame.
  */
-export const AIR_ADAPTATION = Object.freeze({
-  day: 0.07,
-  full: 1e-5,
-  night: 1e-8,
-  most: 11,
-})
-
-/**
- * Stops Enhanced opens up by for `daylight` scene units where the eye is,
- * `depth` down the air it stands in — 1 on the ground, 0 at the air's top.
- *
- * Above the air there is nothing to open for, so the top fifth of it fades
- * the stops to none. Without that, a ship climbing out near the terminator
- * left an opened exposure for the calibration in one frame: a stop with the
- * sun 2° up at 100 km, and more as the sun nears the horizon.
- */
-export function airAdaptation(daylight: number, depth = 1): number {
-  const { day, full, night, most } = AIR_ADAPTATION
-  if (!(daylight < day)) return 0
-  const level = Math.log2(Math.max(daylight, 1e-30))
-  const t = Math.min(
-    Math.max((level - Math.log2(night)) / Math.log2(full / night), 0),
-    1,
-  )
-  const inside = Math.min(Math.max(depth / 0.2, 0), 1)
-  return (
-    Math.min(Math.log2(day) - level, most * t * t * (3 - 2 * t)) *
-    inside *
-    inside *
-    (3 - 2 * inside)
-  )
+export function meteredShare(depth: number): number {
+  const t = Math.min(Math.max(depth / 0.2, 0), 1)
+  return t * t * (3 - 2 * t)
 }
 
 /** Resolve staging once without rewriting the player's selected camera mode. */
@@ -198,25 +170,31 @@ export function resolveCameraPolicy(
   settings: SensorSettings,
   lens: Lens,
   pinned: number | null = null,
-  /** `airAdaptation` stops; staging and the photographic modes ignore it. */
-  adaptation = 0,
+  /**
+   * How far down its air the eye stands, 0 above it; Enhanced meters inside
+   * the air (`meteredShare`). Staging and the photographic modes ignore it.
+   */
+  depth = 0,
 ): CameraPolicy {
   const override = pinned === null ? null : 'staging'
   const enhanced = settings.mode === 'enhanced' && override === null
+  const inAir = enhanced && depth > 0
+  const metered = override === null && (settings.mode === 'automatic' || inAir)
   return {
     mode: settings.mode,
     look: settings.look,
     processing: enhanced ? 'enhanced' : 'photographic',
-    exposure:
-      settings.mode === 'automatic' && override === null ? 'metered' : 'fixed',
+    exposure: metered ? 'metered' : 'fixed',
     fixedEV:
       pinned !== null
         ? exposureForLuminance(SURFACE_LUMINANCE) + pinned
-        : enhanced
-          ? exposureForLuminance(SURFACE_LUMINANCE) - adaptation
-          : settings.mode === 'manual'
-            ? exposureValue(lens)
-            : null,
+        : inAir
+          ? null
+          : enhanced
+            ? exposureForLuminance(SURFACE_LUMINANCE)
+            : settings.mode === 'manual'
+              ? exposureValue(lens)
+              : null,
     compensation:
       settings.mode === 'automatic' && override === null
         ? settings.compensation
@@ -343,6 +321,8 @@ export interface Exposure {
 /** State belongs to the instrument, never the universe or the lens's ISO. */
 export class ExposureMeter {
   #ev = exposureForLuminance(SURFACE_LUMINANCE)
+  /** What the frame was exposed at: `#ev`, or Enhanced's share of it. */
+  #effective = exposureForLuminance(SURFACE_LUMINANCE)
   #time: number | null = null
   #mode: CameraMode | null = null
   #pin: number | null = null
@@ -356,7 +336,7 @@ export class ExposureMeter {
     lens: Lens,
     settings: SensorSettings,
   ): void {
-    if (settings.mode !== 'automatic' || this.#pin !== null) return
+    if (settings.mode === 'manual' || this.#pin !== null) return
     this.#target = meterHistogram(bins, pre, exposureValue(lens), settings)
   }
 
@@ -368,6 +348,7 @@ export class ExposureMeter {
     this.#compensation = 0
     this.#target = null
     this.#ev = exposureForLuminance(SURFACE_LUMINANCE)
+    this.#effective = this.#ev
     this.reading = null
   }
 
@@ -376,16 +357,17 @@ export class ExposureMeter {
     settings: SensorSettings,
     time: number,
     pinned: number | null = null,
-    adaptation = 0,
+    /** How far down its air the eye stands; see `meteredShare`. */
+    depth = 0,
   ): Exposure {
-    const policy = resolveCameraPolicy(settings, lens, pinned, adaptation)
+    const policy = resolveCameraPolicy(settings, lens, pinned, depth)
     const set = exposureValue(lens)
     const changed =
       this.#mode !== null &&
       (settings.mode !== this.#mode || pinned !== this.#pin)
     const reversed = this.#time !== null && time < this.#time
     if (changed || reversed) this.reset()
-    const previous = this.#ev
+    const previous = this.#effective
     const dt = this.#time === null ? 0 : Math.max(0, time - this.#time)
     if (policy.fixedEV !== null) this.#ev = policy.fixedEV
     else {
@@ -403,25 +385,33 @@ export class ExposureMeter {
         settings,
       )
     }
+    // Enhanced inside the air: the meter by its share of the depth, the
+    // calibration above it. The meter's own state keeps adapting underneath.
+    const calibration = exposureForLuminance(SURFACE_LUMINANCE)
+    const effective =
+      policy.processing === 'enhanced' && policy.fixedEV === null
+        ? calibration + (this.#ev - calibration) * meteredShare(depth)
+        : this.#ev
     const discontinuity =
       this.#time === null ||
       policy.fixedEV !== null ||
-      Math.abs(this.#ev - previous) > 2
+      Math.abs(effective - previous) > 2
     this.#time = time
     this.#mode = settings.mode
     this.#pin = pinned
     this.#compensation = policy.compensation
-    const split = splitExposure(this.#ev, discontinuity ? this.#ev : previous)
+    this.#effective = effective
+    const split = splitExposure(effective, discontinuity ? effective : previous)
     this.reading = {
       mode: settings.mode,
       policy,
       processing: policy.processing,
       look: policy.look,
       set,
-      auto: this.#ev - set,
-      adapted: this.#ev,
-      effectiveEV: this.#ev,
-      gain: 2 ** (set - this.#ev),
+      auto: effective - set,
+      adapted: effective,
+      effectiveEV: effective,
+      gain: 2 ** (set - effective),
       compensation: policy.compensation,
       override: policy.override,
       ...split,

@@ -66,7 +66,8 @@ it('leaves the photographic field physical whatever the air', async () => {
 })
 
 it('holds the composed field and the night fill when a darkening sky opens the exposure', async () => {
-  // `airAdaptation` opens Enhanced by up to eleven stops at dusk. Everything
+  // Inside an atmosphere Enhanced meters, and a dusk meters some ten stops
+  // under the calibration. Everything
   // a material draws is multiplied by the scene gain on its way out, so what
   // Enhanced stages — the composed galaxy, the three-percent night fill —
   // has to carry the inverse, or civil dusk lifts them two thousandfold.

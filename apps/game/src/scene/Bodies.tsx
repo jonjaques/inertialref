@@ -15,10 +15,11 @@ import {
 import { getLogger } from '@inertialref/shared'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import {
-  airAdaptation,
+  exposureForLuminance,
   DISK_THROUGH_AIR_CEILING,
   diskThroughAir,
   type RenderBody,
+  SURFACE_LUMINANCE,
 } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -51,13 +52,12 @@ import {
 import {
   airOverhead,
   type AtmosphereScattering,
-  daylightOver,
   scatteringFor,
   scatteringVia,
   type Standing,
   standingIn,
 } from '../render/atmosphereLuts.ts'
-import { airLuminance, observerDaylight } from '../render/radiance.ts'
+import { airLuminance, observerAir } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -390,7 +390,6 @@ export function Bodies({
     let standingAir = null as {
       readonly scattering: AtmosphereScattering
       readonly standing: Standing
-      readonly daylight: number
     } | null
     // What the air does to the star being drawn, set per star below.
     let throughAir: readonly [number, number, number] | null = null
@@ -593,17 +592,7 @@ export function Bodies({
                 uniforms.sunColor,
               )
               if (standingAir === null || sky >= overhead)
-                standingAir = {
-                  scattering,
-                  standing,
-                  daylight: daylightOver(
-                    scattering,
-                    standing,
-                    sun,
-                    uniforms.sunColor,
-                    sky,
-                  ),
-                }
+                standingAir = { scattering, standing }
               overhead = Math.max(overhead, sky)
             }
           }
@@ -614,11 +603,15 @@ export function Bodies({
     }
 
     for (const body of scene.bodies) draw(body.address, body, null)
-    // The stops the sensor opens Enhanced by this frame, from the daylight
-    // written below: each one doubles the disk on its way into the target.
+    // The stops the sensor has Enhanced open by, from its last reading: each
+    // one doubles the disk on its way into the target.
+    const reading = engine.exposure
     const opened =
-      standingAir !== null && engine.cameraPolicy.processing === 'enhanced'
-        ? airAdaptation(standingAir.daylight)
+      standingAir !== null && reading?.processing === 'enhanced'
+        ? Math.max(
+            0,
+            exposureForLuminance(SURFACE_LUMINANCE) - reading.effectiveEV,
+          )
         : 0
     for (const star of scene.stars) {
       throughAir =
@@ -640,10 +633,9 @@ export function Bodies({
     }
     throughAir = null
     airLuminance.value = overhead
-    observerDaylight.value = standingAir?.daylight ?? Number.POSITIVE_INFINITY
     // How far down its air the eye stands, in the tables' own units.
     const top = standingAir?.scattering.recipe.topRatio ?? 1
-    observerDaylight.depth =
+    observerAir.depth =
       standingAir === null
         ? 0
         : Math.min(

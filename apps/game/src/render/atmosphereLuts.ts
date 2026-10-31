@@ -19,7 +19,6 @@ import {
   bakeTransmittance,
   type HazeAuthoring,
   type ScatteringLut,
-  transmittanceFrom,
   zenithSkyRadiance,
 } from '@inertialref/rendering'
 import type { WorkerPool } from '@inertialref/workers'
@@ -306,44 +305,5 @@ export function airOverhead(
   )
   return (
     0.2126 * r * sunColor.r + 0.7152 * g * sunColor.g + 0.0722 * b * sunColor.b
-  )
-}
-
-/**
- * The daylight where a standing eye is, in scene units: the sky overhead —
- * `sky`, the caller's `airOverhead` — plus the sun that reaches the eye
- * through the air, each weighted by the sun's color. What `airAdaptation`
- * opens the exposure for, so it counts the direct sun — a high observer under
- * a thin, dark sky is still in full daylight, and opening up for the sky
- * alone would burn out the sunlit world below.
- *
- * The sun's incidence is taken against the eye's own horizon rather than the
- * local horizontal. From altitude the horizon dips — 7.8° at 60 km on Earth —
- * and a sun between the two lights the hull and the world in view through
- * an all but clear column, while a level surface at the eye sees none of it:
- * counted from the horizontal, the sky alone opens Enhanced by 10.8 stops at
- * 60 km with the sun 2° under it. At sea level the two horizons are one.
- */
-export function daylightOver(
-  scattering: AtmosphereScattering,
-  standing: Standing,
-  sun: Vec3 | null,
-  sunColor: Rgb,
-  sky: number,
-): number {
-  if (sun === null) return sky
-  const mu = Vec.dot(standing.up, sun)
-  const horizon = -Math.sqrt(
-    Math.max(0, 1 - 1 / (standing.radius * standing.radius)),
-  )
-  const incidence = mu - horizon
-  if (incidence <= 0) return sky
-  const [r, g, b] = transmittanceFrom(standing.radius, mu, scattering.recipe)
-  return (
-    sky +
-    incidence *
-      (0.2126 * r * sunColor.r +
-        0.7152 * g * sunColor.g +
-        0.0722 * b * sunColor.b)
   )
 }
