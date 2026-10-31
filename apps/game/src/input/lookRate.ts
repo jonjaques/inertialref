@@ -40,18 +40,38 @@ export const lookIds = (prefix: string): LookIds => ({
 })
 
 /**
- * This frame's motion for a held look, in drag pixels, signed as a drag is:
- * x right, y down.
+ * This frame's held look, in drag pixels, signed by where the *view* turns:
+ * `right` positive turns the view right, `up` positive turns it up.
+ *
+ * Not signed as a drag, and the difference is the whole of the convention. A
+ * drag grabs the picture — the ground under the pointer follows the pointer,
+ * so dragging right swings the view left — while a stick is a rate pointed
+ * where the player wants to look, so fed through as drag pixels a stick
+ * pushed right would turn the chase camera left. Each consumer maps these to
+ * its own verb's sign: the grab cameras through `asDrag`, and the walker as a
+ * pointer-locked mouse, which turns the way it moves.
  */
 export function lookDelta(
   values: ReadonlyMap<ActionId, number>,
   ids: LookIds,
   seconds: number,
   speed = 1,
-): { readonly x: number; readonly y: number } {
+): { readonly right: number; readonly up: number } {
   const rate = LOOK_PIXELS_PER_SECOND * speed * seconds
   return {
-    x: ((values.get(ids.right) ?? 0) - (values.get(ids.left) ?? 0)) * rate,
-    y: ((values.get(ids.down) ?? 0) - (values.get(ids.up) ?? 0)) * rate,
+    right: ((values.get(ids.right) ?? 0) - (values.get(ids.left) ?? 0)) * rate,
+    up: ((values.get(ids.up) ?? 0) - (values.get(ids.down) ?? 0)) * rate,
   }
 }
+
+/**
+ * A held look as the drag that turns a grab camera the same way: the picture
+ * pulled left to look right, pulled down to look up.
+ */
+export const asDrag = (look: {
+  readonly right: number
+  readonly up: number
+}): { readonly x: number; readonly y: number } => ({
+  x: -look.right,
+  y: look.up,
+})

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { lookDelta, lookIds } from '../input/lookRate.ts'
+import { asDrag, lookDelta, lookIds } from '../input/lookRate.ts'
 import { useActionFrame, useActions, useKeymap } from '../input/useKeymap.ts'
 import {
   CONTROLS_PAD_TUNING,
@@ -114,7 +114,7 @@ export function useFlightCameraInput(
   useActionFrame(
     Object.values(LOOK),
     (values, seconds) => {
-      const { x, y } = lookDelta(values, LOOK, seconds, speed.current)
+      const { x, y } = asDrag(lookDelta(values, LOOK, seconds, speed.current))
       engine.harness.flightCamera.drag(x, y)
     },
     enabled,

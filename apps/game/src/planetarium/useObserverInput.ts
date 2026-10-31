@@ -7,6 +7,7 @@ import {
 } from '../input/useKeymap.ts'
 import type { ActionId } from '../input/keymap.ts'
 import {
+  asDrag,
   DOLLY_NOTCHES_PER_SECOND,
   lookDelta,
   lookIds,
@@ -168,7 +169,7 @@ export function useObserverInput(
   // rate, and the look wherever the arrows would look — standing, or with
   // free look on.
   useActionFrame(Object.values(SWING), (values, seconds) => {
-    const { x, y } = lookDelta(values, SWING, seconds, speed.current)
+    const { x, y } = asDrag(lookDelta(values, SWING, seconds, speed.current))
     const observatory = engine.harness.observatory
     latest.current.onGesture()
     if (latest.current.freeLook || observatory.standing) observatory.turn(x, y)
@@ -177,7 +178,7 @@ export function useObserverInput(
   // The other stick turns the head off the subject without moving the camera,
   // which is the planetarium's whole reason to have an aim offset.
   useActionFrame(Object.values(LOOK), (values, seconds) => {
-    const { x, y } = lookDelta(values, LOOK, seconds, speed.current)
+    const { x, y } = asDrag(lookDelta(values, LOOK, seconds, speed.current))
     latest.current.onGesture()
     engine.harness.observatory.turn(x, y)
   })

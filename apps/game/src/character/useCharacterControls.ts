@@ -156,12 +156,14 @@ export function useCharacterControls(
   const speed = useRef(tuning.lookSpeed)
   speed.current = tuning.lookSpeed
   // The walker's head at a rate, through the same `look` a locked mouse
-  // drives, so the pitch clamp and the yaw the world takes are one path.
+  // drives, so the pitch clamp and the yaw the world takes are one path. A
+  // locked mouse is not a grab — it turns the way it moves, screen y down —
+  // so the stick goes in as the mouse would, not as a drag (`asDrag`).
   useActionFrame(
     Object.values(LOOK),
     (values, seconds) => {
-      const { x, y } = lookDelta(values, LOOK, seconds, speed.current)
-      controller.look(x, y)
+      const { right, up } = lookDelta(values, LOOK, seconds, speed.current)
+      controller.look(right, -up)
     },
     options.enabled && locked,
   )
