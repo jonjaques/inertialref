@@ -24,7 +24,12 @@ export interface SensorSettings {
   /** Stops from the lens exposure, positive in either direction. */
   readonly range: { readonly bright: number; readonly dark: number }
   readonly peak: number
-  /** Kelvin. D65 is the unfiltered instrument. */
+  /**
+   * Kelvin: the illuminant drawn white. 5,800 K is the Sun's photosphere,
+   * so sunlight is white and a clear sky keeps its blue; 6,500 K is the
+   * unfiltered instrument, which drew the Sun at 1 : 0.88 : 0.82 and the
+   * noon sky toward gray.
+   */
   readonly balance: number
 }
 
@@ -35,7 +40,7 @@ export const DEFAULT_SENSOR_SETTINGS: SensorSettings = {
   rate: 1,
   range: { bright: 24, dark: 16 },
   peak: 2,
-  balance: 6500,
+  balance: 5800,
 }
 
 const within = (value: unknown, lo: number, hi: number): boolean =>
