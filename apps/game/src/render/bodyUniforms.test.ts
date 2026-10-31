@@ -190,7 +190,6 @@ describe('a mapped body', () => {
     expect(planet.specularStrength).toBe(1)
     expect(planet.nightStrength).toBe(1)
     expect(planet.cloudShadow).toBe(0.55)
-    expect(planet.hazeStrength).toBe(0.6)
   })
 
   it('scales no relief, glint, lights or cloud shadow it has no image for', () => {

@@ -52,10 +52,9 @@ import {
 import {
   airOverhead,
   type AtmosphereScattering,
-  scatteringFor,
-  scatteringVia,
   type Standing,
   standingIn,
+  scatteringOf,
 } from '../render/atmosphereLuts.ts'
 import { airLuminance, observerAir } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
@@ -486,10 +485,17 @@ export function Bodies({
         setNumber(planet.saturation, values.saturation)
         setNumber(planet.flowRate, values.flowRate)
         setNumber(planet.time, values.time)
-        setNumber(planet.hazeStrength, values.hazeStrength)
-        if (values.hazeColor !== null)
-          setColor(planet.hazeColor, values.hazeColor)
-        if (values.hazeLimb !== null) setColor(planet.hazeLimb, values.hazeLimb)
+        // The air in front of the disk: the same tables the shell marches,
+        // in the same sea-level unit.
+        setNumber(planet.seaLevel, body.trueRadius * body.placement.compression)
+        const tables = scatteringOf(engine, body)
+        if (tables === null) planet.air.clear()
+        else
+          planet.air.set(
+            tables.recipe,
+            tables.transmittance,
+            tables.multiScatter,
+          )
         setNumber(planet.specularStrength, values.specularStrength)
         setNumber(planet.nightStrength, values.nightStrength)
         setNumber(planet.cloudShadow, values.cloudShadow)
@@ -567,11 +573,7 @@ export function Bodies({
            * thing an arrival would pay. Written every frame, so the frame the
            * tables arrive on is the frame they bind. `atmosphereLuts.ts`.
            */
-          const pool = engine.pool()
-          const scattering =
-            pool === null
-              ? scatteringFor(haze, body.airTop, body.airHeights)
-              : scatteringVia(pool, haze, body.airTop, body.airHeights)
+          const scattering = scatteringOf(engine, body)
           if (scattering !== null) {
             air.setScattering(
               scattering.recipe,

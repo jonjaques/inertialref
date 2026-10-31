@@ -1,4 +1,11 @@
+import {
+  airToward,
+  type AirUniforms,
+  createAirUniforms,
+  sunThrough,
+} from './air.ts'
 import { sensorRadiance } from './radiance.ts'
+import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
 import {
   Color,
   type CubeTexture,
@@ -222,12 +229,10 @@ export interface PlanetMaterial {
   readonly nightStrength: { value: number }
   readonly specularStrength: { value: number }
   readonly specularSharpness: { value: number }
-  /** Scattering color of the air, seen looking down through it. */
-  readonly hazeColor: { value: Color }
-  /** What the low sun turns: the sunset tint the air lends the light. */
-  readonly hazeLimb: { value: Color }
-  /** How much air sits over this surface. 0 disables the whole aerial term. */
-  readonly hazeStrength: { value: number }
+  /** Sea level — the datum — in render meters: the unit the air is marched in. */
+  readonly seaLevel: { value: number }
+  /** The air in front of the disk; `Bodies` points it at the body's tables. */
+  readonly air: AirUniforms
   /** What deep water looks like from orbit; the map's bathymetry is not it. */
   readonly oceanColor: { value: Color }
   /**
@@ -308,9 +313,8 @@ export function createPlanetMaterial(): PlanetMaterial {
   const nightStrength = uniform(1)
   const specularStrength = uniform(0)
   const specularSharpness = uniform(420)
-  const hazeColor = uniform(new Color(0.28, 0.48, 0.95))
-  const hazeLimb = uniform(new Color(0.92, 0.42, 0.2))
-  const hazeStrength = uniform(0)
+  const seaLevel = uniform(1)
+  const air = createAirUniforms()
   // Open-ocean reflectance to start; `Bodies` writes the body's own liquid
   // over it every frame, so a bake's sea is the color the ground gives it.
   const oceanColor = uniform(
@@ -467,9 +471,17 @@ export function createPlanetMaterial(): PlanetMaterial {
    * path length, not the slope of any hill; and scaled by how much air the
    * body has, because the Moon's terminator is gray to the end.
    */
-  const lowSun = smoothstep(float(0.35), float(0.02), incidence)
-  const lightTint = mix(vec3(1), hazeLimb, lowSun.mul(hazeStrength).mul(0.85))
-  const sunlight = sunColor.mul(sunIntensity).mul(lightTint)
+  // Sea-level units about the center, for the air: the fragment, on a
+  // sphere sunk under the datum, reads as sea level, and the eye is wherever
+  // it is. The direct beam arrives through the column the table holds for
+  // that altitude and sun — reddened and dimmed as the sun drops, white on
+  // an airless world — and the ground streamed in front of this disk takes
+  // its beam from the same table, so the two agree across the gate.
+  const pointUnits = positionWorld.sub(center).div(seaLevel)
+  const eyeUnits = cameraPosition.sub(center).div(seaLevel)
+  const sunlight = sunColor
+    .mul(sunIntensity)
+    .mul(sunThrough(air, pointUnits, light))
   const lit = daylight.mul(ringShade).mul(cloudShade)
 
   /*
@@ -536,24 +548,21 @@ export function createPlanetMaterial(): PlanetMaterial {
    *
    * The atmosphere shell only survives the depth test outside the planet's
    * silhouette, so everything the air does *in front of* the ground has to
-   * happen here. This is the term that turns a map wrapped on a sphere into a
-   * planet photographed through weather: a faint blue lift at nadir growing
-   * into a white-blue wash at the limb, warmed wherever the sun is low. The
-   * airmass is the flat-atmosphere 1/μ approximation from both directions —
-   * light in, view out — which is wrong past ~85° and clamped there, where the
-   * shell's halo takes over anyway.
+   * happen here: the march in `air.ts`, from where the eye's ray enters the
+   * air to the fragment, through the tables the shell reads, so the limb's
+   * wash continues into the shell's glow past it without a seam, and the
+   * ground streamed in front of this disk fades to the same sky. This is the
+   * term that turns a map wrapped on a sphere into a planet photographed
+   * through weather: a faint blue lift at nadir growing into a white-blue
+   * wash at the limb, warmed wherever the sun is low. The rings shade the
+   * air as they shade the ground.
    */
-  const airmass = float(1)
-    .div(max(mu, float(0.09)))
-    .add(float(1).div(max(dot(geometric, light), float(0.09))))
-    .mul(0.5)
-  const veil = oneMinus(exp(airmass.mul(-0.15)))
-    .mul(hazeStrength)
-    .mul(smoothstep(float(-0.06), float(0.28), incidence))
+  const marched = airToward(air, eyeUnits, pointUnits, light)
+  const veilLight = marched.inscatter
+    .mul(sunColor)
+    .mul(sunIntensity)
+    .mul(ATMOSPHERE_GAIN)
     .mul(ringShade)
-  const veilColor = mix(hazeColor, vec3(1), veil.mul(0.55)).mul(
-    sunColor.mul(sunIntensity).mul(lightTint),
-  )
 
   /*
    * A magma sea is its own light, emitted where the mask says sea: the same
@@ -567,9 +576,7 @@ export function createPlanetMaterial(): PlanetMaterial {
   const surfaceLight = diffuse
     .add(sunlight.mul(glint))
     .add(liquidGlow.mul(ocean))
-  // 0.68, not higher: at 0.8 the whole disk went milky and the ocean lost
-  // its depth — the photographs keep a saturated blue mid-disk under the veil.
-  const shadedSurface = mix(surfaceLight, veilColor, veil.mul(0.68))
+  const shadedSurface = surfaceLight.mul(marched.transmittance).add(veilLight)
 
   /*
    * Night lights, revealed slightly *before* the terminator.
@@ -584,7 +591,7 @@ export function createPlanetMaterial(): PlanetMaterial {
     // A city under cloud is not visible from orbit.
     .mul(oneMinus(cloudCover.mul(0.85)))
     // And one under a hundred kilometers of slant air is dimmed by it.
-    .mul(oneMinus(veil.mul(0.6)))
+    .mul(marched.transmittance)
 
   const material = sensorRadiance(new MeshBasicNodeMaterial())
   material.colorNode = shadedSurface.add(night)
@@ -608,9 +615,8 @@ export function createPlanetMaterial(): PlanetMaterial {
     nightStrength,
     specularStrength,
     specularSharpness,
-    hazeColor,
-    hazeLimb,
-    hazeStrength,
+    seaLevel,
+    air,
     oceanColor,
     liquidGlow,
     cloudHeight,

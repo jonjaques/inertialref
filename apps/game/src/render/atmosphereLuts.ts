@@ -20,6 +20,7 @@ import {
   type HazeAuthoring,
   type ScatteringLut,
   zenithSkyRadiance,
+  type RenderBody,
 } from '@inertialref/rendering'
 import type { WorkerPool } from '@inertialref/workers'
 import { bakeAtmosphereTask } from './atmosphereTask.ts'
@@ -306,4 +307,24 @@ export function airOverhead(
   return (
     0.2126 * r * sunColor.r + 0.7152 * g * sunColor.g + 0.0722 * b * sunColor.b
   )
+}
+
+/**
+ * One body's tables: from the pool when there is one — null until that bake
+ * lands, and the material draws a vacuum meanwhile, because a 40 ms bake
+ * inside a frame is the largest single thing an arrival would pay — and
+ * baked here when there is none. Cached after the first ask either way, so
+ * the shell, the sphere, the ground and the sea asking every frame share
+ * one lookup. Null for a body with no haze.
+ */
+export function scatteringOf(
+  engine: { pool(): WorkerPool | null },
+  body: RenderBody,
+): AtmosphereScattering | null {
+  const haze = body.appearance.haze
+  if (haze === null) return null
+  const pool = engine.pool()
+  return pool === null
+    ? scatteringFor(haze, body.airTop, body.airHeights)
+    : scatteringVia(pool, haze, body.airTop, body.airHeights)
 }

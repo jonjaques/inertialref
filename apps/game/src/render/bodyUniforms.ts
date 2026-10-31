@@ -73,10 +73,6 @@ interface PlanetUniforms {
   readonly saturation: number
   readonly flowRate: number
   readonly time: number
-  readonly hazeStrength: number
-  /** Null where the body has no haze; the material keeps what it held. */
-  readonly hazeColor: Rgb | null
-  readonly hazeLimb: Rgb | null
   readonly specularStrength: number
   readonly nightStrength: number
   readonly cloudShadow: number
@@ -377,7 +373,6 @@ export function bodyUniforms(
     }
   } else {
     const tuning = tuningFor(body)
-    const haze = appearance.haze
     const relief = maps.normal || maps.bake
     planet = {
       baseColor: surfaceColor(appearance),
@@ -419,18 +414,6 @@ export function bodyUniforms(
       saturation: tuning.saturation,
       flowRate: tuning.flowRate,
       time,
-      /*
-       * The aerial term reads the same authored haze the shell does, so the
-       * air over the ground and the air past the limb cannot disagree about
-       * what color the sky is. Giants get less: their "surface" already is
-       * cloud-top, and a full-strength veil flattens Jupiter's bands into fog.
-       * The veil is what limb-brightens an atmosphere-bearing disk;
-       * lunar-Lambert would otherwise leave it too flat to read as a sphere.
-       */
-      hazeStrength:
-        haze === null ? 0 : giantKind(body.kind) ? 0.18 : haze.thickness,
-      hazeColor: haze?.color ?? null,
-      hazeLimb: haze?.limb ?? null,
       // Sun-glint needs an ocean to land on, and the mask that says where one
       // is rides in the normal map's blue — or in the bake's relief record's.
       specularStrength: relief ? tuning.specular : 0,

@@ -11,7 +11,12 @@ import { SOLAR_PLANETS } from '@inertialref/universe'
 import { diskThroughAir, zenithSkyRadiance } from '@inertialref/rendering'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
-import { createAtmosphereMaterial, createStarMaterial } from './materials.ts'
+import {
+  createAtmosphereMaterial,
+  createStarMaterial,
+  ENHANCED_LIMB_HEIGHTS,
+} from './materials.ts'
+import { setSceneExposure } from './radiance.ts'
 import { CALIBRATED_STAR_RADIANCE } from './bodyUniforms.ts'
 
 /*
@@ -275,4 +280,54 @@ it('draws a setting sun brighter than the sky beside it', async () => {
   // And it set orange: red over green over blue.
   expect(onDisk[0]).toBeGreaterThan(onDisk[1])
   expect(onDisk[1]).toBeGreaterThan(onDisk[2])
+})
+
+it('lifts the limb from orbit under Enhanced, and nothing from the ground', async () => {
+  // Earth's gas falls off over 8.5 km and its limb is a line two pixels wide
+  // on a disk four hundred across. The home page wraps the disk in a soft
+  // ring, and that is Enhanced's cheat from orbit: the gas scatters as if it
+  // fell off over three times its height. The glow 40 km over the limb,
+  // seen from four radii out, is e^(40/8.5 − 40/25.5) ≈ 23 times the
+  // physics; the sky from a beach is the physics under either view.
+  const glow = async (enhanced: boolean) => {
+    const pre = 1 / 30_000
+    setSceneExposure(
+      gpu.renderer,
+      pre,
+      pre,
+      enhanced ? 'enhanced' : 'photographic',
+    )
+    try {
+      const tangent = 1 + 40_000 / earth.radius
+      const eye = 4
+      const sine = tangent / eye
+      return await skyToward(
+        new Vector3(sine, -Math.sqrt(1 - sine * sine), 0),
+        { height: (eye - 1) * earth.radius, fov: 0.05 },
+      )
+    } finally {
+      setSceneExposure(gpu.renderer, null)
+    }
+  }
+  const luminance = ([r, g, b]: readonly number[]) =>
+    0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+  const lifted = luminance(await glow(true))
+  const physical = luminance(await glow(false))
+  expect(lifted).toBeGreaterThan(5 * physical)
+  expect(ENHANCED_LIMB_HEIGHTS).toBe(3)
+  const ground = async (enhanced: boolean) => {
+    const pre = 1 / 30_000
+    setSceneExposure(
+      gpu.renderer,
+      pre,
+      pre,
+      enhanced ? 'enhanced' : 'photographic',
+    )
+    try {
+      return luminance(await skyToward(new Vector3(0, 1, 0)))
+    } finally {
+      setSceneExposure(gpu.renderer, null)
+    }
+  }
+  expect(await ground(true)).toBeCloseTo(await ground(false), 6)
 })

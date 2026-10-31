@@ -187,21 +187,6 @@ describe('the terrain palette', () => {
     expect(terrainPalette(find('Earth')).evaporitic).toBeGreaterThan(0.5)
   })
 
-  it('separates the sky it is lit by from the haze it is seen through', () => {
-    /*
-     * Two fields with two jobs. `skyColor` tints the light arriving at the
-     * surface and carries no brightness of its own; `hazeColor` is the aerial
-     * veil in front of it, and its value is the veil's.
-     */
-    const mars = terrainPalette(find('Mars'))
-    expect(mars.hazeColor).not.toEqual(mars.skyColor)
-    expect(terrainPalette(find('Luna')).hazeColor).toEqual({
-      r: 0,
-      g: 0,
-      b: 0,
-    })
-  })
-
   it('carries the sky as a tint rather than as a brightness', () => {
     /*
      * How much light the sky delivers is `airThickness`; this is only what

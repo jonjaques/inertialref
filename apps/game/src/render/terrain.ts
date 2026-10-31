@@ -1,4 +1,11 @@
+import {
+  airToward,
+  type AirUniforms,
+  createAirUniforms,
+  sunThrough,
+} from './air.ts'
 import { sensorRadiance, visibilityAmbient } from './radiance.ts'
+import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
 import { skylightLeft } from './twilight.ts'
 import {
   Color,
@@ -22,7 +29,6 @@ import {
   dFdx,
   dFdy,
   dot,
-  exp,
   float,
   floor,
   Fn,
@@ -118,6 +124,8 @@ export interface TerrainMaterial {
   readonly sunDirection: { value: Vector3 }
   readonly sunColor: { value: Color }
   readonly sunIntensity: { value: number }
+  /** The air in front of the ground and the column over it; see `air.ts`. */
+  readonly air: AirUniforms
   /** Enhanced visibility on the lit surface; orbital bakes remain physical. */
   readonly albedoScale: { value: number }
   /**
@@ -363,9 +371,8 @@ export function createTerrainMaterial(): TerrainMaterial {
    */
   const bakeMode = uniform(0)
   const skyColor = uniform(new Color(0, 0, 0))
-  const hazeColor = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
-  const sunsetTint = uniform(new Color(1, 1, 1))
+  const air = createAirUniforms()
   /**
    * How much of the sky one display pixel subtends, radians.
    *
@@ -1314,11 +1321,17 @@ export function createTerrainMaterial(): TerrainMaterial {
     const lommel = mu0.div(mu0.add(mu)).mul(2)
     const photometric = mix(mu0, lommel.mul(mu0.sign()), lunarLambert)
 
-    // Direct light reddens as the sun drops, because it is arriving through
-    // hundreds of kilometers of air. Nothing on an airless world.
-    const lowSun = smoothstep(float(0.35), float(0.02), incidence)
-    const tint = mix(vec3(1), sunsetTint, lowSun.mul(skyStrength).mul(0.85))
-    const sunlight = sunColor.mul(sunIntensity).mul(tint)
+    // Sea-level units about the body's center, for the air: `anchor + local`
+    // is the point and `anchor + eyeLocal` the eye, both body-fixed, and the
+    // half-meter float32 keeps at this scale is nothing to a column of air.
+    // The direct beam arrives through the column the table holds for this
+    // point's altitude and sun — reddened and dimmed as the sun drops, white
+    // on an airless world — as the sphere's does, from the same table.
+    const pointUnits = anchor.add(local).div(bodyRadius)
+    const eyeUnits = anchor.add(eyeLocal).div(bodyRadius)
+    const sunlight = sunColor
+      .mul(sunIntensity)
+      .mul(sunThrough(air, pointUnits, sun))
 
     /*
      * Skylight, which on a body with air is most of what lights a shadow — and
@@ -1386,43 +1399,20 @@ export function createTerrainMaterial(): TerrainMaterial {
      * only survives the depth test **outside** the planet's silhouette —
      * everything the air does between the camera and the ground has to happen
      * here, which is the same reason `render/planet.ts` carries this term for
-     * the disk. Identical arithmetic, because the two are the same body and the
-     * gate between them is one pixel of relief: without it the streamed ground
-     * came out 48% darker and far more saturated than the photograph it
-     * replaces, at 900 km over Earth.
-     *
-     * The airmass is the flat-atmosphere 1/μ from both directions — light in,
-     * view out — clamped where it stops being true and the shell's halo takes
-     * over anyway.
+     * the disk. The same march through the same tables (`air.ts`), because
+     * the two are the same body and the gate between them is one pixel of
+     * relief, and because the sky the shell draws at the horizon is what the
+     * far ground has to fade into: veiled toward an authored haze color by
+     * 27% where the path's transmittance is 0.22, fifty kilometers of desert
+     * met a gray-white horizon in a hard line.
      */
-    /*
-     * The view leg is the shorter of two paths, because the flat-atmosphere
-     * `1/μ` is a statement about looking down from space and says something
-     * absurd from a standing camera: the ground forty meters away, seen at
-     * five degrees, is not behind eleven atmospheres of air. The air between
-     * a point and the eye is at most the distance between them over the
-     * scale height, and that term takes over exactly where the orbital one
-     * stops being true — below the gate, at the ground, where the seam the
-     * disk shares has no say. `AIR_SCALE_HEIGHT` is Earth's; the haze's own
-     * thickness already scales the whole veil.
-     */
-    const viewLeg = min(
-      float(1).div(max(mu, float(0.09))),
-      length(toEye).div(float(AIR_SCALE_HEIGHT)),
-    )
-    const airmass = viewLeg
-      .add(float(1).div(max(incidence, float(0.09))))
-      .mul(0.5)
-    const veil = oneMinus(exp(airmass.mul(-0.15)))
-      .mul(skyStrength)
-      .mul(smoothstep(float(-0.06), float(0.28), incidence))
-    const veilColor = mix(hazeColor, vec3(1), veil.mul(0.55)).mul(sunlight)
-
+    const marched = airToward(air, eyeUnits, pointUnits, sun)
     const surface = direct.add(indirect).add(sunlight.mul(glint)).add(emission)
-    // 0.68 for the reason the disk uses it: at 0.8 the whole thing goes milky
-    // and the ocean loses its depth, where the photographs keep a saturated
-    // blue mid-disk under the veil.
-    const lit = mix(surface, veilColor, veil.mul(0.68))
+    const lit = surface
+      .mul(marched.transmittance)
+      .add(
+        marched.inscatter.mul(sunColor).mul(sunIntensity).mul(ATMOSPHERE_GAIN),
+      )
     /*
      * The bake: mode 1 is the reflectance alone; mode 2 is the sphere's
      * normal-map record — the mesh normal's components along geographic east
@@ -1466,6 +1456,7 @@ export function createTerrainMaterial(): TerrainMaterial {
     sunDirection,
     sunColor,
     sunIntensity,
+    air,
     albedoScale,
     setPixelAngle(radians, displayRadians = radians) {
       pixelAngle.value = radians
@@ -1495,9 +1486,7 @@ export function createTerrainMaterial(): TerrainMaterial {
       paint(oceanColor, palette.oceanColor)
       paint(liquidGlow, palette.liquid?.glow ?? BLACK_RGB)
       paint(skyColor, palette.skyColor)
-      paint(hazeColor, palette.hazeColor)
       skyStrength.value = palette.airThickness
-      paint(sunsetTint, palette.sunsetTint)
       reposeSlope.value = Math.tan(Math.acos(1 - palette.repose))
     },
     setQuality(ground) {
@@ -1621,16 +1610,6 @@ export function paint(into: { value: Color }, from: LinearRgb): void {
  * air's refraction. A point's own height carries the beam past it.
  */
 export const BEAM_TERMINATOR = 0.025
-
-/**
- * The scale height the ground-level veil measures a path against, meters.
- *
- * Earth's 8.5 km. A horizontal path of one scale height at sea level holds
- * about the air a vertical column does, which is what makes it the unit the
- * orbital `1/μ` term is already in; the two legs of the veil can then be the
- * lesser of each other with nothing converted.
- */
-export const AIR_SCALE_HEIGHT = 8_500
 
 /**
  * How much of the light under a full atmosphere arrives from the sky rather

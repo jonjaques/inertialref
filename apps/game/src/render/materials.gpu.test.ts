@@ -739,7 +739,8 @@ describe('a magma sea, on the ground and from orbit', () => {
     // The plain sea: the sheet's own color and glow, with no frame behind it.
     const water = createWaterMaterial()
     water.setQuality({ ...DEFAULT_WATER_QUALITY, frame: false })
-    water.setPalette(palette)
+    // Luna's radius, which only sets the air's unit; Luna has none.
+    water.setPalette(palette, 1_737_400)
     water.sunDirection.value.set(0, 0, -1)
     const mesh = seaDummy(water.material)
     for (const name of ['waterDepth', 'waterMorphDepth']) {
