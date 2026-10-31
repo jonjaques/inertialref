@@ -682,10 +682,12 @@ sphere above — so they share the lunar-Lambert split, the terminator and the
 published photograph, and a term on one side alone is a step at the switch a
 descent flies straight through. Measured across it: 3.1% apart in mean value
 on Mars, 1.5% on Earth. Three terms had to be matched to get there — skylight
-comes _out of_ the direct beam rather than beside it, the aerial veil the
-disk wears is carried by the ground as well because the shell only survives
-outside the silhouette, and where a photograph exists it supplies the albedo
-outright. Each was 15%, 48% and 9% of the drawn value on its own.
+comes _out of_ the direct beam rather than beside it, the air the disk is
+seen through is carried by the ground and the sea as well because the shell
+only survives outside the silhouette — one march through the shell's own
+tables in `render/air.ts`, so the far ground fades to the sky beside it —
+and where a photograph exists it supplies the albedo outright. Each was 15%,
+48% and 9% of the drawn value on its own.
 [ADR-0020](../adr/0020-the-face.md).
 
 ### Rule 60

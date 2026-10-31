@@ -187,7 +187,7 @@ it.each(['ground', 'water', 'foam'] as const)(
     const terrain = createTerrainMaterial()
     const water = createWaterMaterial()
     terrain.setPalette(palette, RADIUS)
-    water.setPalette(palette)
+    water.setPalette(palette, RADIUS)
     water.setQuality({ frame: false, waveOctaves: 0 })
     const material = kind === 'ground' ? terrain : water
     material.sunDirection.value.set(0.1, 0, -1).normalize()
@@ -232,9 +232,9 @@ it.each(['ground', 'water', 'foam'] as const)(
       // the day's 17 klx (`skylightLeft`); on this dark palette under a 0.4
       // column that is a few millionths, measured 3·10⁻⁶ for the ground and
       // 7·10⁻⁶ for the sea.
-      const aired = { ...palette, airThickness: 0.4, terminator: 0.025 }
+      const aired = { ...palette, airThickness: 0.4 }
       terrain.setPalette(aired, RADIUS)
-      water.setPalette(aired)
+      water.setPalette(aired, RADIUS)
       material.sunDirection.value.set(1, 0, -0.1).normalize()
       const twilight = (await gpu.draw(scene, camera, { float: true })).at(
         36,

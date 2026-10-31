@@ -77,23 +77,38 @@ A positive compensation brightens Automatic; it cannot add gain to Manual.
 Enhanced holds the 30,000 cd/m² surface calibration and declares its separate
 sky processing. Display peak and output negotiation do not select a mode.
 
-Standing inside an atmosphere, Enhanced opens up for the daylight that is
-left. In space the calibration is the point: the sun is the same sun wherever
-the ship is. On the ground the light itself goes away. Measured air puts a
-civil-dusk zenith near 0.65 cd/m², thirteen stops under a noon one, and at the
-calibration that sky drew black where a camera or an eye has opened by some
-ten stops. `airAdaptation` reads the daylight on a level surface at the eye
-(`daylightOver`: the sky overhead plus the direct sun through the air). It
-does nothing down to about 2,000 cd/m², so noon and every orbit keep the
-calibration. Below that it follows the light stop for stop, up to eleven, and
-then gives the stops back between the light of a −7° sun and astronomical
-night. The night sky — the stars, the Milky Way, a Moon with its relief — is
-then presented at the calibration it was composed at. A pinned or staged
-exposure ignores it. What Enhanced stages rather than measures is held at
-its display level while the exposure is open (`stagedLight`): the composed
-galaxy, the three-percent night fill, the lens flare, and the near field's
-key, fill and ambient, alongside the integrated stars, which already
-carried the inverse.
+Standing inside an atmosphere, Enhanced meters. In space the calibration is
+the point: the sun is the same sun wherever the ship is. On the ground the
+light itself goes away. Measured air puts a civil-dusk zenith near
+0.65 cd/m², thirteen stops under a noon one, and at the calibration that sky
+drew black where a camera or an eye has opened by some ten stops. No figure
+for the light at the eye says what the frame holds: keyed on the zenith and
+the direct sun, Enhanced opened 4.1 stops on Mars with the sun 2.6° under the
+surface's horizon, where the zenith was dark and the horizon, still sunlit
+from 7.7 km up, was not, and the sky drew white. So inside the air Enhanced
+takes the meter Automatic takes, at Automatic's rates and within its comfort
+range, with no compensation: the exposure is the calibration above the air,
+the meter a fifth of the way into it, and a blend between
+(`meteredShare`). On the ground Enhanced and Automatic agree about the
+light; what Enhanced adds there is its staging. A pinned or staged exposure
+ignores the meter. What Enhanced stages rather than measures is held at
+its display level while the exposure is away from the calibration
+(`stagedLight`): the composed galaxy, the three-percent night fill, the lens
+flare, and the near field's key, fill and ambient, alongside the integrated
+stars, which already carried the inverse.
+
+From orbit, Enhanced lifts the limb. The physical limb is a line: Earth's
+gas falls off over 8.5 km, a seventh of a percent of the radius, two pixels
+on a disk four hundred across, and a camera's limb is that line and no more.
+The deep-space composite is where the bible licenses a cheat, and the soft
+ring the home page wraps the disk in is one. Outside the air, the shell adds
+the glow the gas would scatter if it fell off over three times its height,
+gained four times (`LIMB_HEIGHTS`, `LIMB_GAIN` in `render/air.ts`) — in the
+light it scatters and not in what it takes, so the limb's own line and the
+disk under it stay the physics and only the glow above them is the
+presentation. It comes in over ten shell heights up from the top of the air,
+so a ship climbing out keeps the sky it had; the photographic views never
+see it.
 
 The neutral look keeps a light's hue through the whole curve, and over its
 top 5% it rolls a saturated light toward white rather than down. Mixing

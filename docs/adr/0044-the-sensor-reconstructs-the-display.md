@@ -27,7 +27,11 @@ the default. Spatial FSR accepts raw or four-sample input at reduced resolution;
 temporal FSR accepts zero samples at native or reduced resolution. Supersampling
 uses native scale and doubles each drawing-buffer axis. The ratios are 1.5 for
 Quality, 1.7 for Balanced, 2 for Performance and 3 for Ultra performance.
-Sharpness is off, standard at 0.8, or crisp at 1.
+Sharpness is off, standard at 0.8, or crisp at 1. `render.gamma` is a display
+preference beside them, 0.5 to 2 with 1 as the curve is authored: a power on
+the displayed range up to white and on nothing above it, written to the tone
+curve as a uniform, because a monitor in a bright room and one in a dark room
+do not agree about where the midtones sit and the curve cannot know the room.
 
 `render.picture` migrates saved `render.aa` choices once. The page's `?picture=`
 override does not write the preference. The resolver preserves an unsupported

@@ -1,7 +1,7 @@
 import {
   type AirHeights,
   airHeights,
-  atmosphereShellRatio,
+  airTopRatio,
 } from '@inertialref/rendering'
 import type { StarSystem } from '@inertialref/universe'
 import { walkBodies } from '@inertialref/universe'
@@ -72,11 +72,10 @@ export function scatteringKey(
 /**
  * Every distinct atmosphere bake the loaded systems can ask for.
  *
- * `topRatio` and `heights` are `buildScene`'s own `atmosphereScale` and
- * `airHeights`, from `@inertialref/rendering`'s `datum.ts` rather than
- * recomputed here, so the two agree by construction. `relief` is assigned from
- * `surface.maxElevation` and the gas's scale height from `atmosphere` in
- * `snapshot.ts`, which are the hops these calls make explicit.
+ * `topRatio` and `heights` are `buildScene`'s own `airTop` and `airHeights`,
+ * from `@inertialref/rendering`'s `datum.ts` rather than recomputed here, so
+ * the two agree by construction. The gas's scale height is assigned from
+ * `atmosphere` in `snapshot.ts`, which is the hop these calls make explicit.
  */
 export function scatteringBakes(
   systems: readonly StarSystem[],
@@ -86,14 +85,9 @@ export function scatteringBakes(
     for (const body of walkBodies(system)) {
       const haze = body.appearance.haze
       if (haze === null) continue
-      const topRatio = atmosphereShellRatio(
-        body.radius,
-        body.surface.maxElevation,
-        haze.height,
-      )
+      const topRatio = airTopRatio(body.radius, haze.height)
       const heights = airHeights(
         body.radius,
-        body.surface.maxElevation,
         haze.height,
         body.atmosphere?.scaleHeight ?? 0,
         haze.aerosolHeight,

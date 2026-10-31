@@ -22,7 +22,6 @@ import {
   If,
   length,
   max,
-  min,
   mix,
   modelViewMatrix,
   normalize,
@@ -58,7 +57,14 @@ import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import { seaWearOf } from './wear.ts'
 import { vertexMorphFactor } from './morph.ts'
 import { WAVE_OCTAVES } from './quality.ts'
-import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
+import { BEAM_TERMINATOR, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
+import {
+  airToward,
+  type AirUniforms,
+  createAirUniforms,
+  sunThrough,
+} from './air.ts'
+import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
 import { skylightLeft } from './twilight.ts'
 import { landReflection, seaFrame, type SeaFrameNode } from './seaReflection.ts'
 
@@ -104,12 +110,14 @@ export interface WaterMaterial {
   readonly sunDirection: { value: Vector3 }
   readonly sunColor: { value: Color }
   readonly sunIntensity: { value: number }
+  /** The air in front of the sheet and the column over it; see `air.ts`. */
+  readonly air: AirUniforms
   /** The presentation instant, seconds. The waves and the surf run against it. */
   setTime(seconds: number): void
   /** How much sky one display pixel subtends, radians. See `pixelAngle`. */
   setPixelAngle(radians: number): void
-  /** Point the material at one body's liquid. Idempotent. */
-  setPalette(palette: TerrainPalette): void
+  /** Point the material at one body's liquid, over a datum of this radius. Idempotent. */
+  setPalette(palette: TerrainPalette, datumRadius: number): void
   /** The tuneables `state/preferences.ts` exposes. */
   setQuality(quality: WaterQuality): void
 }
@@ -265,10 +273,10 @@ export function createWaterMaterial(): WaterMaterial {
   const absorption = uniform(new Vector3(0.35, 0.065, 0.025))
   const glow = uniform(new Color(0, 0, 0))
   const skyColor = uniform(new Color(0, 0, 0))
-  const hazeColor = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
-  const sunsetTint = uniform(new Color(1, 1, 1))
-  const terminator = uniform(0.05)
+  const air = createAirUniforms()
+  /** The datum's radius, render meters: the unit the air is marched in. */
+  const datumRadius = uniform(1)
   const waveOctaves = uniform(DEFAULT_WATER_QUALITY.waveOctaves)
 
   // The per-mesh inputs, read off what the sheet wears — one record, one key,
@@ -427,10 +435,21 @@ export function createWaterMaterial(): WaterMaterial {
 
       const sun = normalize(sunDirection)
       const incidence = dot(up, sun)
-      const daylight = smoothstep(terminator.negate(), terminator, incidence)
-      const lowSun = smoothstep(float(0.35), float(0.02), incidence)
-      const tint = mix(vec3(1), sunsetTint, lowSun.mul(skyStrength).mul(0.85))
-      const sunlight = sunColor.mul(sunIntensity).mul(tint)
+      // The sheet lies at the datum, so the beam's terminator is the ground's
+      // at no height: the airless disk's width, with the twilight the sky's.
+      const daylight = smoothstep(
+        float(-BEAM_TERMINATOR),
+        float(BEAM_TERMINATOR),
+        incidence,
+      )
+      // Sea-level units about the body's center, for the air, as the ground
+      // takes them; the beam arrives through the table's column for the sun.
+      const pointUnits = anchor.add(local).div(datumRadius)
+      const eyeUnits = anchor.add(eyeLocal).div(datumRadius)
+      // The star's light above the air, which the skylight and the in-scatter
+      // are made of; the beam alone crosses the column.
+      const dayColor = sunColor.mul(sunIntensity)
+      const sunlight = dayColor.mul(sunThrough(air, pointUnits, sun))
       const diffuse = skyStrength.mul(SKY_FRACTION)
 
       /* --- Fresnel ---------------------------------------------------------- */
@@ -482,9 +501,14 @@ export function createWaterMaterial(): WaterMaterial {
       const diffuseLight = max(incidence, float(0))
         .mul(daylight)
         .mul(oneMinus(diffuse))
-        .add(skyColor.mul(diffuse).mul(skylightLeft(incidence, 0.25)))
-        .add(skyView.mul(visibilityAmbient))
         .mul(sunlight)
+        .add(
+          skyColor
+            .mul(diffuse)
+            .mul(skylightLeft(incidence, 0.25))
+            .add(skyView.mul(visibilityAmbient))
+            .mul(dayColor),
+        )
       const bodyLight = liquid.mul(diffuseLight)
       // Without the frame the seabed is not seen, and what comes up through
       // the water is the water's own light.
@@ -510,7 +534,7 @@ export function createWaterMaterial(): WaterMaterial {
         .mul(skylightLeft(incidence, 0.15))
         .mul(0.9)
         .add(vec3(visibilityAmbient))
-        .mul(sunlight)
+        .mul(dayColor)
       const half = normalize(sun.add(view))
       const facing = max(dot(view, half), float(0))
       const glintFresnel = float(0.02).add(pow(oneMinus(facing), 5).mul(0.98))
@@ -598,20 +622,13 @@ export function createWaterMaterial(): WaterMaterial {
 
       /* --- the air in front of it -------------------------------------------- */
 
-      // The lesser of the orbital and the ground-level path, as the ground's
-      // material measures it; see `AIR_SCALE_HEIGHT` there.
-      const viewLeg = min(
-        float(1).div(max(dot(up, view), float(0.09))),
-        length(toEye).div(float(AIR_SCALE_HEIGHT)),
-      )
-      const airmass = viewLeg
-        .add(float(1).div(max(incidence, float(0.09))))
-        .mul(0.5)
-      const veil = oneMinus(exp(airmass.mul(-0.15)))
-        .mul(skyStrength)
-        .mul(smoothstep(float(-0.06), float(0.28), incidence))
-      const veilColor = mix(hazeColor, vec3(1), veil.mul(0.55)).mul(sunlight)
-      return mix(color, veilColor, veil.mul(0.68))
+      // The march the ground and the sphere take, through the same tables,
+      // so the sheet fades to the sky at the horizon as the shore beside it
+      // does; see `air.ts`.
+      const marched = airToward(air, eyeUnits, pointUnits, sun)
+      return color
+        .mul(marched.transmittance)
+        .add(marched.inscatter.mul(dayColor).mul(ATMOSPHERE_GAIN))
     })
 
     material.colorNode = shading()
@@ -641,6 +658,7 @@ export function createWaterMaterial(): WaterMaterial {
     sunDirection,
     sunColor,
     sunIntensity,
+    air,
     setTime(seconds) {
       waveTime.value =
         seconds - Math.floor(seconds / WAVE_CLOCK_PERIOD) * WAVE_CLOCK_PERIOD
@@ -650,17 +668,15 @@ export function createWaterMaterial(): WaterMaterial {
     setPixelAngle(radians) {
       pixelAngle.value = radians
     },
-    setPalette(palette) {
+    setPalette(palette, datum) {
       const liquid = palette.liquid
       paint(liquidColor, palette.oceanColor)
       const absorb = liquid?.absorption ?? WATER_ABSORPTION
       absorption.value.set(absorb.r, absorb.g, absorb.b)
       paint(glow, liquid?.glow ?? BLACK_RGB)
       paint(skyColor, palette.skyColor)
-      paint(hazeColor, palette.hazeColor)
       skyStrength.value = palette.airThickness
-      paint(sunsetTint, palette.sunsetTint)
-      terminator.value = palette.terminator
+      datumRadius.value = datum
     },
     setQuality(quality) {
       selected = quality.frame ? full : plain

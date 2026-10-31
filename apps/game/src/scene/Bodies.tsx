@@ -15,10 +15,11 @@ import {
 import { getLogger } from '@inertialref/shared'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import {
-  airAdaptation,
+  exposureForLuminance,
   DISK_THROUGH_AIR_CEILING,
   diskThroughAir,
   type RenderBody,
+  SURFACE_LUMINANCE,
 } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -51,13 +52,11 @@ import {
 import {
   airOverhead,
   type AtmosphereScattering,
-  daylightOver,
-  scatteringFor,
-  scatteringVia,
   type Standing,
   standingIn,
+  scatteringOf,
 } from '../render/atmosphereLuts.ts'
-import { airLuminance, observerDaylight } from '../render/radiance.ts'
+import { airLuminance, observerAir } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -390,7 +389,6 @@ export function Bodies({
     let standingAir = null as {
       readonly scattering: AtmosphereScattering
       readonly standing: Standing
-      readonly daylight: number
     } | null
     // What the air does to the star being drawn, set per star below.
     let throughAir: readonly [number, number, number] | null = null
@@ -487,10 +485,18 @@ export function Bodies({
         setNumber(planet.saturation, values.saturation)
         setNumber(planet.flowRate, values.flowRate)
         setNumber(planet.time, values.time)
-        setNumber(planet.hazeStrength, values.hazeStrength)
-        if (values.hazeColor !== null)
-          setColor(planet.hazeColor, values.hazeColor)
-        if (values.hazeLimb !== null) setColor(planet.hazeLimb, values.hazeLimb)
+        // The air in front of the disk: the same tables the shell marches,
+        // in the same sea-level unit and the same stretched space.
+        setNumber(planet.seaLevel, body.trueRadius * body.placement.compression)
+        setNumber(planet.flattening, uniforms.atmosphere?.flattening ?? 1)
+        const tables = scatteringOf(engine, body)
+        if (tables === null) planet.air.clear()
+        else
+          planet.air.set(
+            tables.recipe,
+            tables.transmittance,
+            tables.multiScatter,
+          )
         setNumber(planet.specularStrength, values.specularStrength)
         setNumber(planet.nightStrength, values.nightStrength)
         setNumber(planet.cloudShadow, values.cloudShadow)
@@ -568,11 +574,7 @@ export function Bodies({
            * thing an arrival would pay. Written every frame, so the frame the
            * tables arrive on is the frame they bind. `atmosphereLuts.ts`.
            */
-          const pool = engine.pool()
-          const scattering =
-            pool === null
-              ? scatteringFor(haze, body.atmosphereScale, body.airHeights)
-              : scatteringVia(pool, haze, body.atmosphereScale, body.airHeights)
+          const scattering = scatteringOf(engine, body)
           if (scattering !== null) {
             air.setScattering(
               scattering.recipe,
@@ -593,17 +595,7 @@ export function Bodies({
                 uniforms.sunColor,
               )
               if (standingAir === null || sky >= overhead)
-                standingAir = {
-                  scattering,
-                  standing,
-                  daylight: daylightOver(
-                    scattering,
-                    standing,
-                    sun,
-                    uniforms.sunColor,
-                    sky,
-                  ),
-                }
+                standingAir = { scattering, standing }
               overhead = Math.max(overhead, sky)
             }
           }
@@ -614,11 +606,15 @@ export function Bodies({
     }
 
     for (const body of scene.bodies) draw(body.address, body, null)
-    // The stops the sensor opens Enhanced by this frame, from the daylight
-    // written below: each one doubles the disk on its way into the target.
+    // The stops the sensor has Enhanced open by, from its last reading: each
+    // one doubles the disk on its way into the target.
+    const reading = engine.exposure
     const opened =
-      standingAir !== null && engine.cameraPolicy.processing === 'enhanced'
-        ? airAdaptation(standingAir.daylight)
+      standingAir !== null && reading?.processing === 'enhanced'
+        ? Math.max(
+            0,
+            exposureForLuminance(SURFACE_LUMINANCE) - reading.effectiveEV,
+          )
         : 0
     for (const star of scene.stars) {
       throughAir =
@@ -640,10 +636,9 @@ export function Bodies({
     }
     throughAir = null
     airLuminance.value = overhead
-    observerDaylight.value = standingAir?.daylight ?? Number.POSITIVE_INFINITY
     // How far down its air the eye stands, in the tables' own units.
     const top = standingAir?.scattering.recipe.topRatio ?? 1
-    observerDaylight.depth =
+    observerAir.depth =
       standingAir === null
         ? 0
         : Math.min(

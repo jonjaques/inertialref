@@ -1,4 +1,11 @@
+import {
+  airToward,
+  type AirUniforms,
+  createAirUniforms,
+  sunThrough,
+} from './air.ts'
 import { sensorRadiance } from './radiance.ts'
+import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
 import {
   Color,
   type CubeTexture,
@@ -7,6 +14,7 @@ import {
   HalfFloatType,
   LinearFilter,
   MeshBasicNodeMaterial,
+  type Node,
   RGBAFormat,
   type Texture,
   Vector3,
@@ -20,6 +28,7 @@ import {
   dot,
   exp,
   float,
+  Fn,
   length,
   luminance,
   max,
@@ -222,12 +231,16 @@ export interface PlanetMaterial {
   readonly nightStrength: { value: number }
   readonly specularStrength: { value: number }
   readonly specularSharpness: { value: number }
-  /** Scattering color of the air, seen looking down through it. */
-  readonly hazeColor: { value: Color }
-  /** What the low sun turns: the sunset tint the air lends the light. */
-  readonly hazeLimb: { value: Color }
-  /** How much air sits over this surface. 0 disables the whole aerial term. */
-  readonly hazeStrength: { value: number }
+  /** Sea level — the datum — in render meters: the unit the air is marched in. */
+  readonly seaLevel: { value: number }
+  /**
+   * Polar over equatorial radius of the air's shell, 1 for a round one. The
+   * march unstretches a giant along its spin axis as the shell does, so the
+   * two agree about where the air is.
+   */
+  readonly flattening: { value: number }
+  /** The air in front of the disk; `Bodies` points it at the body's tables. */
+  readonly air: AirUniforms
   /** What deep water looks like from orbit; the map's bathymetry is not it. */
   readonly oceanColor: { value: Color }
   /**
@@ -308,9 +321,9 @@ export function createPlanetMaterial(): PlanetMaterial {
   const nightStrength = uniform(1)
   const specularStrength = uniform(0)
   const specularSharpness = uniform(420)
-  const hazeColor = uniform(new Color(0.28, 0.48, 0.95))
-  const hazeLimb = uniform(new Color(0.92, 0.42, 0.2))
-  const hazeStrength = uniform(0)
+  const seaLevel = uniform(1)
+  const flattening = uniform(1)
+  const air = createAirUniforms()
   // Open-ocean reflectance to start; `Bodies` writes the body's own liquid
   // over it every frame, so a bake's sea is the color the ground gives it.
   const oceanColor = uniform(
@@ -467,9 +480,34 @@ export function createPlanetMaterial(): PlanetMaterial {
    * path length, not the slope of any hill; and scaled by how much air the
    * body has, because the Moon's terminator is gray to the end.
    */
-  const lowSun = smoothstep(float(0.35), float(0.02), incidence)
-  const lightTint = mix(vec3(1), hazeLimb, lowSun.mul(hazeStrength).mul(0.85))
-  const sunlight = sunColor.mul(sunIntensity).mul(lightTint)
+  /*
+   * Sea-level units about the center, for the air, in the space the shell
+   * marches: stretched 1/flattening along the spin axis, so a giant's oblate
+   * air is the sphere the march assumes. The eye is wherever it is.
+   *
+   * The march ends on the datum under the fragment, not on the fragment. The
+   * mesh is the drawn sphere — sunk under the datum so the terrain covers
+   * it, 9.9 km on Earth, and oblate besides — and `marchAir` holds every
+   * point under sea level at sea-level density, so a path marched to the
+   * mesh crosses that depth as if it were air: 9.9 km of it at nadir, more
+   * than the column above the datum holds, and at a flattened giant's pole
+   * a tenth of a radius of it, which is fog over the whole high latitude.
+   *
+   * The direct beam arrives through the column the table holds for that
+   * point and sun — reddened and dimmed as the sun drops, white on an
+   * airless world — and the ground streamed in front of this disk takes its
+   * beam from the same table, so the two agree across the gate.
+   */
+  const stretchGain = float(1)
+    .div(max(flattening, float(1e-3)))
+    .sub(1)
+  const unstretch = (toward: Node<'vec3'>): Node<'vec3'> =>
+    toward.add(axis.mul(dot(toward, axis).mul(stretchGain)))
+  const meshUnits = unstretch(positionWorld.sub(center)).div(seaLevel)
+  const pointUnits = normalize(meshUnits).mul(max(length(meshUnits), float(1)))
+  const eyeUnits = unstretch(cameraPosition.sub(center)).div(seaLevel)
+  const dayColor = sunColor.mul(sunIntensity)
+  const sunlight = dayColor.mul(sunThrough(air, pointUnits, light))
   const lit = daylight.mul(ringShade).mul(cloudShade)
 
   /*
@@ -536,58 +574,63 @@ export function createPlanetMaterial(): PlanetMaterial {
    *
    * The atmosphere shell only survives the depth test outside the planet's
    * silhouette, so everything the air does *in front of* the ground has to
-   * happen here. This is the term that turns a map wrapped on a sphere into a
-   * planet photographed through weather: a faint blue lift at nadir growing
-   * into a white-blue wash at the limb, warmed wherever the sun is low. The
-   * airmass is the flat-atmosphere 1/μ approximation from both directions —
-   * light in, view out — which is wrong past ~85° and clamped there, where the
-   * shell's halo takes over anyway.
-   */
-  const airmass = float(1)
-    .div(max(mu, float(0.09)))
-    .add(float(1).div(max(dot(geometric, light), float(0.09))))
-    .mul(0.5)
-  const veil = oneMinus(exp(airmass.mul(-0.15)))
-    .mul(hazeStrength)
-    .mul(smoothstep(float(-0.06), float(0.28), incidence))
-    .mul(ringShade)
-  const veilColor = mix(hazeColor, vec3(1), veil.mul(0.55)).mul(
-    sunColor.mul(sunIntensity).mul(lightTint),
-  )
-
-  /*
-   * A magma sea is its own light, emitted where the mask says sea: the same
-   * glow `render/water.ts` adds over the sheet and `render/terrain.ts` adds
-   * over a painted channel, and the mask is the bake's record of exactly
-   * those two. Added before the veil, as both of them add it, and outside
-   * the albedo, because emission is not a reflectance — neither the
-   * visibility gain nor the sun reaches it. A uniform rather than a variant,
-   * so the program the boot warms is the one a lava world draws with.
-   */
-  const surfaceLight = diffuse
-    .add(sunlight.mul(glint))
-    .add(liquidGlow.mul(ocean))
-  // 0.68, not higher: at 0.8 the whole disk went milky and the ocean lost
-  // its depth — the photographs keep a saturated blue mid-disk under the veil.
-  const shadedSurface = mix(surfaceLight, veilColor, veil.mul(0.68))
-
-  /*
-   * Night lights, revealed slightly *before* the terminator.
+   * happen here: the march in `air.ts`, from where the eye's ray enters the
+   * air to the fragment, through the tables the shell reads, so the limb's
+   * wash continues into the shell's glow past it without a seam, and the
+   * ground streamed in front of this disk fades to the same sky. This is the
+   * term that turns a map wrapped on a sphere into a planet photographed
+   * through weather: a faint blue lift at nadir growing into a white-blue
+   * wash at the limb, warmed wherever the sun is low. The rings shade the
+   * air as they shade the ground.
    *
-   * Cities are visible in late twilight from orbit, and starting the ramp just
-   * on the lit side is what stops them switching on like a light bulb. The band
-   * is asymmetric for the same reason twilight is.
+   * Inside one `Fn`, as the shell's march is and for the same reason: `Loop`
+   * and the accumulators emit statements, and a statement exists only on a
+   * shader function's stack. Built at material scope the loop dangles off
+   * the graph and is never emitted, the accumulators stay at their zeros,
+   * and the disk draws through a vacuum — which compiles cleanly and logs
+   * nothing. `materials.gpu.test.ts` draws the veil over a black disk to
+   * hold it.
    */
-  const night = nightMap.rgb
-    .mul(smoothstep(float(0.05), float(-0.14), incidence))
-    .mul(nightStrength)
-    // A city under cloud is not visible from orbit.
-    .mul(oneMinus(cloudCover.mul(0.85)))
-    // And one under a hundred kilometers of slant air is dimmed by it.
-    .mul(oneMinus(veil.mul(0.6)))
-
   const material = sensorRadiance(new MeshBasicNodeMaterial())
-  material.colorNode = shadedSurface.add(night)
+  material.colorNode = Fn(() => {
+    const marched = airToward(air, eyeUnits, pointUnits, light)
+    const veilLight = marched.inscatter
+      .mul(dayColor)
+      .mul(ATMOSPHERE_GAIN)
+      .mul(ringShade)
+
+    /*
+     * A magma sea is its own light, emitted where the mask says sea: the
+     * same glow `render/water.ts` adds over the sheet and `render/terrain.ts`
+     * adds over a painted channel, and the mask is the bake's record of
+     * exactly those two. Added before the veil, as both of them add it, and
+     * outside the albedo, because emission is not a reflectance — neither
+     * the visibility gain nor the sun reaches it. A uniform rather than a
+     * variant, so the program the boot warms is the one a lava world draws
+     * with.
+     */
+    const surfaceLight = diffuse
+      .add(sunlight.mul(glint))
+      .add(liquidGlow.mul(ocean))
+    const shadedSurface = surfaceLight.mul(marched.transmittance).add(veilLight)
+
+    /*
+     * Night lights, revealed slightly *before* the terminator.
+     *
+     * Cities are visible in late twilight from orbit, and starting the ramp
+     * just on the lit side is what stops them switching on like a light
+     * bulb. The band is asymmetric for the same reason twilight is.
+     */
+    const night = nightMap.rgb
+      .mul(smoothstep(float(0.05), float(-0.14), incidence))
+      .mul(nightStrength)
+      // A city under cloud is not visible from orbit.
+      .mul(oneMinus(cloudCover.mul(0.85)))
+      // And one under a hundred kilometers of slant air is dimmed by it.
+      .mul(marched.transmittance)
+
+    return shadedSurface.add(night)
+  })()
 
   const handle: PlanetMaterial = {
     material,
@@ -608,9 +651,9 @@ export function createPlanetMaterial(): PlanetMaterial {
     nightStrength,
     specularStrength,
     specularSharpness,
-    hazeColor,
-    hazeLimb,
-    hazeStrength,
+    seaLevel,
+    flattening,
+    air,
     oceanColor,
     liquidGlow,
     cloudHeight,

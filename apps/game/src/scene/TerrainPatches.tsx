@@ -1,4 +1,5 @@
 import { useThree } from '@react-three/fiber'
+import { scatteringOf } from '../render/atmosphereLuts.ts'
 import { useEffect, useMemo, useRef } from 'react'
 import { BufferAttribute, type Group, Mesh, type Scene } from 'three/webgpu'
 import { Quaternion as Q, Vec } from '@inertialref/spatial'
@@ -187,6 +188,15 @@ export function TerrainPatches({
         const light = body?.sunlight ?? key.sunlight
         terrain.sunIntensity.value = visibility ? 1 : light
       }
+      // The body's own air, from the tables the shell and the sphere march.
+      const tables = body === undefined ? null : scatteringOf(engine, body)
+      if (tables === null) terrain.air.clear()
+      else
+        terrain.air.set(
+          tables.recipe,
+          tables.transmittance,
+          tables.multiScatter,
+        )
     }
     const seen = new Set<string>()
 
