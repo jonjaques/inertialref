@@ -763,9 +763,9 @@ export function diskThroughAir(
   compression: number,
   /**
    * The cap on the brightest channel: `DISK_THROUGH_AIR_CEILING` at the
-   * calibration, and that over the scene gain when an exposure opened for a
-   * darkening sky (`airAdaptation`) multiplies the disk on its way into the
-   * target.
+   * calibration, and that over the scene gain when Enhanced meters inside
+   * the air (`meteredShare`) and the stops it opens multiply the disk on its
+   * way into the target.
    */
   ceiling = DISK_THROUGH_AIR_CEILING,
 ): [number, number, number] {

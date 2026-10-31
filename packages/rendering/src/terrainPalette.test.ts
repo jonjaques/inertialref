@@ -11,6 +11,7 @@ import {
 import {
   REFLECTANCE_CEILING,
   type SurfaceMaterial,
+  terminatorFor,
   terrainPalette,
 } from './terrainPalette.ts'
 
@@ -157,17 +158,25 @@ describe('the terrain palette', () => {
     expect(gray(palette.rock) / gray(palette.regolith)).toBeCloseTo(1.18, 2)
   })
 
-  it('widens the terminator by the relief the body actually has', () => {
+  it("widens the sphere's terminator by the relief the body actually has", () => {
     /*
      * A disk drawn from a photograph ends at 0.025 of a cosine because its
      * surface is smooth at the resolution of the map. Terrain is not: a peak of
-     * height `h` catches the sun `√(2h/R)` past the geometric shadow line.
+     * height `h` catches the sun `√(2h/R)` past the geometric shadow line. The
+     * sphere takes the body's whole relief; the ground carries each point past
+     * the horizon by its own height instead, so the palette carries no width.
      */
     const luna = find('Luna')
     const expected = Math.sqrt(
       (2 * luna.surface.maxElevation) / luna.surface.grammar.meanRadius,
     )
-    expect(terrainPalette(luna).terminator).toBeCloseTo(expected, 6)
+    expect(
+      terminatorFor(
+        luna.surface.grammar.air > 0,
+        luna.surface.maxElevation,
+        luna.radius,
+      ),
+    ).toBeCloseTo(expected, 6)
     expect(expected).toBeGreaterThan(0.025 * 3)
   })
 

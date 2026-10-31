@@ -422,6 +422,27 @@ describe('Enhanced inside an atmosphere', () => {
     })
   })
 
+  it('meters nothing for a pinned or a manual exposure, however deep the air', () => {
+    // The air opens Enhanced alone. A cutscene's pin is staging and holds its
+    // stops from the calibration; Manual is the lens, on the ground as in space.
+    const lens = LENS_PRESETS.flight
+    expect(resolveCameraPolicy(enhanced, lens, 0, 1)).toMatchObject({
+      exposure: 'fixed',
+      fixedEV: calibration,
+    })
+    expect(resolveCameraPolicy(enhanced, lens, 6, 1).fixedEV).toBe(
+      calibration + 6,
+    )
+    expect(
+      resolveCameraPolicy(
+        { ...DEFAULT_SENSOR_SETTINGS, mode: 'manual' },
+        lens,
+        null,
+        1,
+      ),
+    ).toMatchObject({ exposure: 'fixed', fixedEV: exposureValue(lens) })
+  })
+
   it('agrees with Automatic about the light on the ground', () => {
     const ground = settled(enhanced)
     expect(ground.metered).toBe(true)

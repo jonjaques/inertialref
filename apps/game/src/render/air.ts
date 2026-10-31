@@ -97,7 +97,10 @@ function texelCentered(
  * rebuilds no WGSL, so a nearest stand-in leaves the real tables read at mip
  * 0 with no interpolation between their entries. The terrain stand-in has the
  * sharper version of the same trap — see `BLANK` in `terrain.ts`. One
- * stand-in object per node, or two nodes compile to one binding.
+ * stand-in object per node, or two nodes compile to one binding — and one
+ * object per role across every material, as `BLANK` is: a material's
+ * textures are not its own to dispose, so a pair allocated per material is a
+ * pair per body visual, kept for the session.
  */
 function lutPixel(r: number, g: number, b: number): DataTexture {
   const map = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat)
@@ -106,13 +109,15 @@ function lutPixel(r: number, g: number, b: number): DataTexture {
   map.needsUpdate = true
   return map
 }
+const LUT_WHITE = /*@__PURE__*/ lutPixel(255, 255, 255)
+const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
 
 /**
  * The uniforms one material marches through: the recipe's coefficients in
  * sea-level units, the two tables, and `top`, the tables' ceiling over sea
  * level — 1 with no air. `set` points them at one body's air, idempotently
- * and without a rebuild; `clear` is a vacuum, which draws nothing and
- * extinguishes nothing.
+ * and without a rebuild; `clear` is a vacuum, which draws nothing,
+ * extinguishes nothing and passes the beam white.
  */
 export function createAirUniforms() {
   const top = uniform(1)
@@ -124,8 +129,8 @@ export function createAirUniforms() {
   const ozoneHalfWidth = uniform(1)
   const hRayleigh = uniform(1)
   const hMie = uniform(1)
-  const transmittance = texture(lutPixel(255, 255, 255))
-  const multiScatter = texture(lutPixel(0, 0, 0))
+  const transmittance = texture(LUT_WHITE)
+  const multiScatter = texture(LUT_BLACK)
   return {
     top,
     betaRayleigh,
@@ -157,6 +162,18 @@ export function createAirUniforms() {
       mieScatter.value.set(0, 0, 0)
       mieExtinction.value.set(0, 0, 0)
       ozone.value.set(0, 0, 0)
+      ozonePeak.value = 0
+      ozoneHalfWidth.value = 1
+      hRayleigh.value = 1
+      hMie.value = 1
+      // The tables as well as the coefficients. `sunThrough` hands back the
+      // transmittance table as the beam's color, with no coefficient to zero
+      // it, so a material cleared for an airless body but still bound to the
+      // last body's tables lit Luna's low sun through Earth's sea-level
+      // column — one shared ground material, one shared sea, and a walk from
+      // one world to the next.
+      transmittance.value = LUT_WHITE
+      multiScatter.value = LUT_BLACK
     },
   }
 }

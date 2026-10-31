@@ -1596,7 +1596,7 @@ function write(into: Deposit, from: SurfaceMaterial): void {
  * One palette color into one uniform.
  *
  * Spelled out, each of these names its field three times, which is the shape a
- * `skyColor.b` pasted into the `hazeColor` block type-checks through and then
+ * `skyColor.b` pasted into the `oceanColor` block type-checks through and then
  * reads as an art choice rather than as a bug.
  */
 export function paint(into: { value: Color }, from: LinearRgb): void {

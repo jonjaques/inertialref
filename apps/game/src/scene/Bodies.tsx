@@ -486,8 +486,9 @@ export function Bodies({
         setNumber(planet.flowRate, values.flowRate)
         setNumber(planet.time, values.time)
         // The air in front of the disk: the same tables the shell marches,
-        // in the same sea-level unit.
+        // in the same sea-level unit and the same stretched space.
         setNumber(planet.seaLevel, body.trueRadius * body.placement.compression)
+        setNumber(planet.flattening, uniforms.atmosphere?.flattening ?? 1)
         const tables = scatteringOf(engine, body)
         if (tables === null) planet.air.clear()
         else

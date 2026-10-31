@@ -102,8 +102,6 @@ export interface TerrainPalette {
    * under air is much closer to Lambert.
    */
   readonly lunarLambert: number
-  /** Half-width of the terminator, in cosine of the incidence angle. */
-  readonly terminator: number
 
   /** Whether wind can sort fines here at all, 0..1. */
   readonly aeolian: number
@@ -463,13 +461,8 @@ export function terrainPalette(body: Body): TerrainPalette {
     mineralHigh: { r: 1.1, g: 1.04, b: 0.93 },
 
     freshGain: 1.6,
-    // The same pair `tuningFor` gives the body material. A powder backscatters.
+    // The same split `tuningFor` gives the body material. A powder backscatters.
     lunarLambert: air > 0 ? 0.3 : 0.92,
-    terminator: terminatorFor(
-      grammar.air > 0,
-      body.surface.maxElevation,
-      body.radius,
-    ),
 
     // Wind needs air to blow and something loose to move. `dunes` is the
     // grammar's own answer to the second, from the archetype.
