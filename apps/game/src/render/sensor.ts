@@ -116,6 +116,8 @@ export interface SensorFrame {
    */
   readonly depth?: number
   readonly headroom: number
+  /** The display gamma, `ToneCurveControls.gamma`; 1 when absent. */
+  readonly gamma?: number
   readonly motionBlur?: boolean
   readonly noiseTick?: number
 }
@@ -437,6 +439,7 @@ export function createSensor(
           tone.wide.value = renderer.outputColorSpace === DISPLAY_P3 ? 1 : 0
           tone.headroom.value = Math.min(state.headroom, state.settings.peak)
           tone.shoulder.value = LOOK_SHOULDERS[reading.look]
+          tone.gamma.value = state.gamma ?? 1
         }
       }
       // R3F sets `toneMapping` after the factory resolves and `commitToneCurve`

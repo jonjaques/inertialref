@@ -277,6 +277,20 @@ export const RENDER_LENS_FLARE = define({
 })
 
 /**
+ * Display gamma: a power on the displayed picture's range up to white, 1 as
+ * the curve is authored, under 1 lifting the midtones and over 1 sinking
+ * them. A monitor in a bright room and one in a dark room do not agree about
+ * where the midtones sit, and the tone curve cannot know which it is on.
+ */
+export const RENDER_GAMMA = define({
+  key: 'render.gamma',
+  group: 'display',
+  what: 'display gamma',
+  initial: 1,
+  accept: numberWithin(0.5, 2),
+})
+
+/**
  * The surface's levers, as one record.
  *
  * One preference rather than four because they are read together, by the

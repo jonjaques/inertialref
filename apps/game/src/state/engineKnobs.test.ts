@@ -29,6 +29,8 @@ import {
 
 const KNOBS = [
   CAMERA_LENS,
+  RENDER_GAMMA,
+  RENDER_GAMMA,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
   RENDER_PICTURE,
@@ -40,6 +42,7 @@ function engine(): EngineKnobs {
     sensorSettings: DEFAULT_SENSOR_SETTINGS,
     flightLens: LENS_PRESETS.flight,
     lensFlare: true,
+    gamma: 1,
     surfaceQuality: DEFAULT_SURFACE_QUALITY,
     supersample: 1,
     picture: DEFAULT_PICTURE,

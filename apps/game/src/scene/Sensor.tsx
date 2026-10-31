@@ -109,6 +109,7 @@ export function Sensor({
         depth: observerAir.depth,
         stagingLook: (engine.cinematic?.effects.calibratedLight ?? 0) > 0,
         headroom: engine.gl?.description.headroom ?? 1,
+        gamma: engine.gamma,
         motionBlur: engine.presentation.resolved().motionBlur,
         noiseTick: Math.floor(
           engine.cinematic?.frame ?? (engine.snapshot?.renderTime ?? 0) * 60,

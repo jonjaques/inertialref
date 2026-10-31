@@ -14,8 +14,10 @@ import {
   mat3,
   max,
   mix,
+  pow,
   smoothstep,
   sqrt,
+  step,
   uniform,
   vec3,
   vec4,
@@ -66,6 +68,11 @@ export interface ToneCurveControls {
   readonly direct: { value: number }
   readonly wide: { value: number }
   readonly natural: { value: number }
+  /**
+   * The display gamma: a power on the displayed range up to white, 1 as the
+   * curve is authored. The viewer's, for the room the monitor is in.
+   */
+  readonly gamma: { value: number }
 }
 
 /**
@@ -111,6 +118,7 @@ export function installToneCurve(
   const directUniform = uniform(0)
   const wideUniform = uniform(0)
   const naturalUniform = uniform(1)
+  const gammaUniform = uniform(1)
 
   const toneCurve = Fn(([color, exposure]: [Node<'vec3'>, Node<'float'>]) => {
     // Branches share one detector result; inlining it at each use can exceed
@@ -203,12 +211,21 @@ export function installToneCurve(
     // throw and does not appear in the console — it renders the entire scene
     // black. `graded.clamp()` gets away with plain numbers because a const is
     // converted where a uniform node is not.
-    const result = directUniform
+    const fitted = directUniform
       .greaterThan(0.5)
       .select(
         clamp(light, vec3(0), vec3(headroomUniform)),
         clamp(graded.mul(lift), vec3(0), vec3(headroomUniform)),
       )
+    // The display gamma, as a power on the range up to white and on nothing
+    // above it: the headroom is a star's and a sun's, and lifting the
+    // midtones for a bright room must not move where a disk clips. The two
+    // meet at white, so the seam between them is not a step.
+    const result = mix(
+      fitted,
+      pow(fitted, float(1).div(gammaUniform)),
+      step(fitted, vec3(1)),
+    )
     return wideUniform
       .greaterThan(0.5)
       .select(
@@ -236,6 +253,7 @@ export function installToneCurve(
     direct: directUniform,
     wide: wideUniform,
     natural: naturalUniform,
+    gamma: gammaUniform,
   }
   installed.set(renderer, controls)
   return controls

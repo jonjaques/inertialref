@@ -6,6 +6,7 @@ import {
   type Preference,
   read,
   RENDER_PICTURE,
+  RENDER_GAMMA,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
   RENDER_SENSOR,
@@ -44,6 +45,7 @@ export interface EngineKnobs {
   sensorSettings: SensorSettings
   flightLens: Lens
   lensFlare: boolean
+  gamma: number
   surfaceQuality: SurfaceQuality
   supersample: number
   picture: Picture
@@ -71,6 +73,9 @@ const KNOBS: readonly ((engine: EngineKnobs) => () => void)[] = [
   }),
   knob(RENDER_LENS_FLARE, (engine, on) => {
     engine.lensFlare = on
+  }),
+  knob(RENDER_GAMMA, (engine, gamma) => {
+    engine.gamma = gamma
   }),
   knob(RENDER_SURFACE, (engine, quality) => {
     engine.surfaceQuality = quality
