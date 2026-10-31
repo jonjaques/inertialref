@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { SURFACE_LUMINANCE, type RenderBody } from '@inertialref/rendering'
+import {
+  SURFACE_LUMINANCE,
+  type RenderBody,
+  LIMB_CEILING,
+} from '@inertialref/rendering'
 import { Quaternion, vec3 } from '@inertialref/spatial'
 import {
   type BodyFrame,
@@ -55,6 +59,8 @@ function body(overrides: Partial<RenderBody> = {}): RenderBody {
     atmosphereScale: 1.025,
     airTop: 1.016,
     airHeights: { rayleigh: 8.5 / 6400, aerosol: 1.2 / 6400 },
+    limb: 0,
+    limbFalloff: 0.04,
     trueRadius: 6.4e6,
     rotationPeriod: 86_164,
     flattening: 0.9966,
@@ -234,6 +240,22 @@ describe('a mapped body', () => {
   it('drifts its deck by the difference of the two rates', () => {
     const clouds = bodyUniforms(mapped, FRAME, maps, null).clouds!
     expect(clouds.drift).toBeCloseTo(3600 / 80_000 - 3600 / 86_164, 15)
+  })
+
+  it("grows the shell to the limb's reach as the eye leaves the air, and keeps the march's top", () => {
+    const inside = bodyUniforms(body({ limb: 0 }), FRAME, NO_MAPS, null)
+    const outside = bodyUniforms(body({ limb: 1 }), FRAME, NO_MAPS, null)
+    const top = inside.atmosphere!.outerRadius
+    // Inside the air the mesh is the top of the air, within float rounding.
+    expect(inside.atmosphere!.scale.x / top).toBeCloseTo(1, 9)
+    // At the full lift it is the ceiling over sea level, a sixth of a
+    // radius out — and the shader's `top` is still the air's.
+    expect(outside.atmosphere!.scale.x).toBeCloseTo(
+      outside.atmosphere!.seaLevel * LIMB_CEILING,
+      6,
+    )
+    expect(outside.atmosphere!.outerRadius).toBe(top)
+    expect(outside.atmosphere!.limb).toBe(1)
   })
 
   it('draws no shell at a point', () => {

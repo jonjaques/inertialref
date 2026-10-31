@@ -8,11 +8,17 @@ import {
   Vector3,
 } from 'three/webgpu'
 import { SOLAR_PLANETS } from '@inertialref/universe'
-import { diskThroughAir, zenithSkyRadiance } from '@inertialref/rendering'
+import {
+  diskThroughAir,
+  limbFalloff,
+  limbLift,
+  limbReach,
+  zenithSkyRadiance,
+} from '@inertialref/rendering'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
-import { LIMB_GAIN, LIMB_HEIGHTS } from './air.ts'
 import { createAtmosphereMaterial, createStarMaterial } from './materials.ts'
+import { createPlanetMaterial } from './planet.ts'
 import { setSceneExposure } from './radiance.ts'
 import { CALIBRATED_STAR_RADIANCE } from './bodyUniforms.ts'
 
@@ -67,6 +73,12 @@ interface Ground {
   readonly up?: Vector3
   /** The sun's direction; 59° from the horizon toward +X by default. */
   readonly sun?: Vector3
+  /**
+   * How far the eye stands outside the air, as `buildScene` hands it to
+   * the shell; by default what `limbLift` says of `height`, which is none
+   * from the ground and all of it from four radii out.
+   */
+  readonly limb?: number
 }
 
 /** RGB of a narrow view from `height` over sea level along `direction`. */
@@ -97,13 +109,20 @@ async function skyToward(
     ground.sun ?? new Vector3(Math.cos(SUN), Math.sin(SUN), 0),
   )
   air.sunColor.value.setRGB(1, 1, 1)
+  const eyeRatio = 1 + (ground.height ?? 2) / earth.radius
+  const limb = ground.limb ?? limbLift(eyeRatio, top)
+  air.setLimb(limb, limbFalloff(eyeRatio))
   expect(air.material.side).toBe(BackSide)
   const scene = new Scene()
-  const shell = new Mesh(new SphereGeometry(top, 96, 64), air.material)
+  // The mesh grows to the limb's reach as `bodyUniforms` grows it.
+  const shell = new Mesh(
+    new SphereGeometry(limbReach(top, limb, eyeRatio), 96, 64),
+    air.material,
+  )
   shell.scale.set(1, flattening, 1)
   scene.add(shell)
   if (extra !== undefined) scene.add(extra)
-  const eye = up.clone().multiplyScalar(1 + (ground.height ?? 2) / earth.radius)
+  const eye = up.clone().multiplyScalar(eyeRatio)
   const camera = new PerspectiveCamera(ground.fov ?? 2, 1, 1e-6, 10)
   camera.position.copy(eye)
   camera.up.set(0, 0, 1)
@@ -279,15 +298,28 @@ it('draws a setting sun brighter than the sky beside it', async () => {
   expect(onDisk[1]).toBeGreaterThan(onDisk[2])
 })
 
-it('lifts the limb from orbit under Enhanced, and nothing from the ground', async () => {
+it("draws the limb from orbit under Enhanced in the air's own colors, and nothing from the ground", async () => {
   // Earth's gas falls off over 8.5 km and its limb is a line two pixels wide
   // on a disk four hundred across. The home page wraps the disk in a soft
-  // ring, and that is Enhanced's cheat from orbit: the glow the gas would
-  // scatter falling off over three times its height, gained four times,
-  // added above the physics. Forty kilometers over the limb, seen from four
-  // radii out, that is some ninety times the physics; the sky from a beach
-  // is the physics under either view.
-  const glow = async (enhanced: boolean) => {
+  // ring, and that is Enhanced's cheat from orbit: the same recipe stretched
+  // a twenty-fifth of a radius tall, read through the same tables at the
+  // height the stretch maps to, with the aerosol's forward lobe and not its
+  // extinction. Forty kilometers over the limb, seen from four radii out,
+  // the physics has e^−4.7 of its sea-level gas and the stretched profile
+  // e^−0.16. Under a sun a degree and a half over that point's horizon,
+  // ahead of the eye, the stretched gas reads the table at 1.3 km, where
+  // the beam has crossed a horizon's worth of air and arrives red, and the
+  // lobe throws it forward; the physics reads the table at 40 km, where the
+  // beam arrives white and the gas scatters blue. The sky from a beach is
+  // the physics under either view.
+  const luminance = ([r, g, b]: readonly number[]) =>
+    0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+  const limbRay = async (
+    tangentMeters: number,
+    sunOverHorizontal: number,
+    enhanced: boolean,
+    ahead = false,
+  ) => {
     const pre = 1 / 30_000
     setSceneExposure(
       gpu.renderer,
@@ -296,24 +328,122 @@ it('lifts the limb from orbit under Enhanced, and nothing from the ground', asyn
       enhanced ? 'enhanced' : 'photographic',
     )
     try {
-      const tangent = 1 + 40_000 / earth.radius
+      const tangent = 1 + tangentMeters / earth.radius
       const eye = 4
       const sine = tangent / eye
-      return await skyToward(
-        new Vector3(sine, -Math.sqrt(1 - sine * sine), 0),
-        { height: (eye - 1) * earth.radius, fov: 0.05 },
+      const cosine = Math.sqrt(1 - sine * sine)
+      // The tangent point's own radial, and the sun that height over its
+      // horizontal: ahead of the eye along the view, or square to it so the
+      // aerosol's lobe stays out of the reading.
+      const radial = new Vector3(cosine, sine, 0)
+      const horizontal = ahead
+        ? new Vector3(sine, -cosine, 0)
+        : new Vector3(0, 0, 1)
+      const sun = horizontal
+        .add(radial.clone().multiplyScalar(sunOverHorizontal))
+        .normalize()
+      return await skyToward(new Vector3(sine, -cosine, 0), {
+        height: (eye - 1) * earth.radius,
+        fov: 0.05,
+        sun,
+      })
+    } finally {
+      setSceneExposure(gpu.renderer, null)
+    }
+  }
+
+  // Under a high sun square to the view the ring is the gas's blue,
+  // fourteen times the physics at its foot (measured 0.17 against 0.012).
+  const noonFoot = await limbRay(40_000, 0.5, true)
+  const physicalNoonFoot = await limbRay(40_000, 0.5, false)
+  expect(luminance(noonFoot)).toBeGreaterThan(6 * luminance(physicalNoonFoot))
+  expect(noonFoot[2]).toBeGreaterThan(noonFoot[0])
+
+  // Toward a sun a degree and a half over the foot's horizon the ring is
+  // orange at five kilometers (0.64 : 0.40 : 0.19), warm at forty
+  // (0.46 : 0.41 : 0.30) where the physics at that height is blue, and
+  // blue at the crown 400 km up: the order of a photograph of the limb
+  // at sunrise — the troposphere, the stratosphere and the blue above.
+  const foot5 = await limbRay(5_000, 0.03, true, true)
+  expect(foot5[0]).toBeGreaterThan(2 * foot5[2])
+  const foot = await limbRay(40_000, 0.03, true, true)
+  const physicalFoot = await limbRay(40_000, 0.03, false, true)
+  expect(foot[0]).toBeGreaterThan(foot[1])
+  expect(foot[1]).toBeGreaterThan(foot[2])
+  expect(physicalFoot[2]).toBeGreaterThan(physicalFoot[0])
+  const crown = await limbRay(400_000, 0.03, true, true)
+  expect(crown[2]).toBeGreaterThan(crown[0])
+  expect(crown[0] / crown[2]).toBeLessThan(0.5 * (foot[0] / foot[2]))
+
+  // The ring ends where the sun sets on the gas as it stands on this
+  // planet, foot first. Eight degrees under the horizontal and square to
+  // the view, the foot's own beam is in the ground and its chord keeps a
+  // fifth of its light from the gas beyond it, while the crown, which
+  // dips twenty degrees, keeps all of it (measured 0.018 of 0.095 against
+  // 0.024 of 0.026). Read through the table's own horizon — the physical
+  // planet's at a fraction of the height — both were dark, and a backlit
+  // Earth wore no ring.
+  const squareFoot = await limbRay(40_000, 0.03, true)
+  const squareCrown = await limbRay(400_000, 0.03, true)
+  const shadowedFoot = await limbRay(40_000, -0.14, true)
+  const shadowedCrown = await limbRay(400_000, -0.14, true)
+  expect(luminance(shadowedFoot)).toBeLessThan(0.33 * luminance(squareFoot))
+  expect(luminance(shadowedCrown)).toBeGreaterThan(
+    0.25 * luminance(squareCrown),
+  )
+  // Toward the sun the foot's chord collects the lit gas beyond it, thrown
+  // forward by the aerosol's lobe, and reads orange while the sun is a few
+  // degrees under its horizontal — 0.21 : 0.17 : 0.13 at three degrees, the
+  // ring of a backlit Earth — and under half of that, still warm, at eight.
+  const backlitFoot = await limbRay(40_000, -0.05, true, true)
+  expect(luminance(backlitFoot)).toBeGreaterThan(0.03)
+  expect(backlitFoot[0]).toBeGreaterThan(backlitFoot[1])
+  expect(backlitFoot[1]).toBeGreaterThan(backlitFoot[2])
+  const deepFoot = await limbRay(40_000, -0.14, true, true)
+  expect(luminance(deepFoot)).toBeLessThan(0.5 * luminance(backlitFoot))
+  expect(deepFoot[0]).toBeGreaterThan(deepFoot[2])
+
+  // The ring crosses the silhouette without a step: the sphere composes
+  // the same lifted gas in front of its edge that the shell draws past it.
+  // Twenty kilometers either side of the edge, from four radii under a
+  // sun 30° over the tangent point, measured 0.22 inside and 0.23 outside.
+  const disk = (sun: Vector3) => {
+    const planet = createPlanetMaterial()
+    planet.baseColor.value.setRGB(0, 0, 0)
+    planet.sunDirection.value.copy(sun)
+    planet.seaLevel.value = 1
+    const baked = scatteringFor(haze, top, HEIGHTS)
+    planet.air.set(baked.recipe, baked.transmittance, baked.multiScatter)
+    planet.air.lift(1)
+    return new Mesh(new SphereGeometry(1, 128, 96), planet.material)
+  }
+  const edgeRay = async (tangentMeters: number) => {
+    const pre = 1 / 30_000
+    setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
+    try {
+      const tangent = 1 + tangentMeters / earth.radius
+      const eye = 4
+      const sine = tangent / eye
+      const cosine = Math.sqrt(1 - sine * sine)
+      const radial = new Vector3(cosine, sine, 0)
+      const sun = new Vector3(0, 0, 1)
+        .add(radial.clone().multiplyScalar(0.5))
+        .normalize()
+      return luminance(
+        await skyToward(
+          new Vector3(sine, -cosine, 0),
+          { height: (eye - 1) * earth.radius, fov: 0.05, sun },
+          disk(sun),
+        ),
       )
     } finally {
       setSceneExposure(gpu.renderer, null)
     }
   }
-  const luminance = ([r, g, b]: readonly number[]) =>
-    0.2126 * r! + 0.7152 * g! + 0.0722 * b!
-  const lifted = luminance(await glow(true))
-  const physical = luminance(await glow(false))
-  expect(lifted).toBeGreaterThan(20 * physical)
-  expect(LIMB_HEIGHTS).toBe(3)
-  expect(LIMB_GAIN).toBe(4)
+  const inside = await edgeRay(-20_000)
+  const outside = await edgeRay(20_000)
+  expect(Math.abs(inside / outside - 1)).toBeLessThan(0.3)
+
   const ground = async (enhanced: boolean) => {
     const pre = 1 / 30_000
     setSceneExposure(

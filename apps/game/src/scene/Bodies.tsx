@@ -491,12 +491,14 @@ export function Bodies({
         setNumber(planet.flattening, uniforms.atmosphere?.flattening ?? 1)
         const tables = scatteringOf(engine, body)
         if (tables === null) planet.air.clear()
-        else
+        else {
           planet.air.set(
             tables.recipe,
             tables.transmittance,
             tables.multiScatter,
           )
+          planet.air.lift(body.limb, body.limbFalloff)
+        }
         setNumber(planet.specularStrength, values.specularStrength)
         setNumber(planet.nightStrength, values.nightStrength)
         setNumber(planet.cloudShadow, values.cloudShadow)
@@ -565,6 +567,7 @@ export function Bodies({
         setNumber(air.seaLevel, shell.seaLevel)
         setVector(air.spinAxis.value, uniforms.spinAxis)
         setNumber(air.flattening, shell.flattening)
+        air.setLimb(shell.limb, shell.limbFalloff)
         const haze = appearance.haze
         if (haze !== null) {
           /*

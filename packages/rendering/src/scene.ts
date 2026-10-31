@@ -31,6 +31,7 @@ import {
   ringScales,
   sunkSphereRadius,
 } from './datum.ts'
+import { limbFalloff, limbLift } from './atmosphere.ts'
 import { terminatorFor } from './terrainPalette.ts'
 import {
   LOD_THRESHOLDS,
@@ -85,6 +86,21 @@ export interface RenderBody {
    * Zero for a body with no haze.
    */
   readonly airHeights: AirHeights
+  /**
+   * How far the eye stands outside this body's air, 0 to 1, over the two
+   * shell heights above its top (`limbLift`): what Enhanced draws its limb
+   * at, and what the shell mesh grows by to carry it. Zero inside the air,
+   * and for a body with none. One producer, here, because the shell, the
+   * sphere, the ground and the sea each march it and a ring one of them
+   * drew alone would end at that material's edge.
+   */
+  readonly limb: number
+  /**
+   * The ring's fall-off for this eye, in datum units (`limbFalloff`): a
+   * fifth of the eye's height over the datum, up to a twenty-fifth of the
+   * radius, so the eye is never inside the gas it draws.
+   */
+  readonly limbFalloff: number
   readonly trueRadius: Meters
   /**
    * Sidereal rotation period, seconds, negative for retrograde. A cloud
@@ -325,6 +341,10 @@ export function buildScene(
       thresholds,
     )
     if (placement.angularRadius < cullAngle) continue
+    const airTop =
+      body.appearance.haze === null
+        ? 1
+        : airTopRatio(body.radius, body.appearance.haze.height)
     // Ring radii are authored in meters from the body's center and leave as
     // multiples of the drawn sphere, which is not the body's radius.
     const rings = body.appearance.rings
@@ -359,10 +379,9 @@ export function buildScene(
               body.relief,
               body.appearance.haze.height,
             ),
-      airTop:
-        body.appearance.haze === null
-          ? 1
-          : airTopRatio(body.radius, body.appearance.haze.height),
+      airTop,
+      limb: limbLift(placement.distance / body.radius, airTop),
+      limbFalloff: limbFalloff(placement.distance / body.radius),
       airHeights:
         body.appearance.haze === null
           ? NO_AIR

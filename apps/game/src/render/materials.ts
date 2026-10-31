@@ -4,8 +4,15 @@ import {
   STELLAR_V_ZERO_ILLUMINANCE,
   SURFACE_LUMINANCE,
 } from '@inertialref/rendering'
-import { createAirUniforms, marchAir } from './air.ts'
-import { enhancedSky, integratedSkyGain, sensorRadiance } from './radiance.ts'
+import {
+  createAirUniforms,
+  LIMB_SAMPLES,
+  limbReachOf,
+  marchAir,
+  marchLimb,
+  throughLimb,
+} from './air.ts'
+import { integratedSkyGain, sensorRadiance } from './radiance.ts'
 import type { StarProjection } from './starProjection.ts'
 import {
   AddEquation,
@@ -194,6 +201,13 @@ export interface AtmosphereMaterial {
     transmittance: Texture,
     multiScatter: Texture,
   ): void
+  /**
+   * How far the eye stands outside the air, 0 to 1 (`RenderBody.limb`),
+   * and the ring's fall-off for that eye (`RenderBody.limbFalloff`): what
+   * Enhanced's limb is drawn at. The mesh is sized to `limbReach` of them
+   * by `bodyUniforms`; the shader derives the same reach from `top`.
+   */
+  setLimb(lift: number, falloff: number): void
 }
 
 /** March samples through the shell. See the budget note in the doc comment. */
@@ -350,28 +364,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     )
 
     const sun = normalize(sunDirection)
-
-    /*
-     * Enhanced's limb from orbit. The physical limb is a line: Earth's gas
-     * falls off over 8.5 km, a seventh of a percent of the radius, two
-     * pixels on a disk four hundred across, and a camera's limb is that line
-     * and no more. The deep-space composite is where this project licenses
-     * a cheat (`art.md`), and the soft ring that wraps the disk on the home
-     * page is one. Outside the air, Enhanced adds the glow the gas would
-     * scatter if it fell off over `LIMB_HEIGHTS` times its height, gained
-     * `LIMB_GAIN` times — in the light it scatters and not in what it takes,
-     * so the limb's own line and the disk under it stay the physics and only
-     * the glow above them is the presentation. It comes in over ten shell
-     * heights up from the top of the air, so a ship climbing out keeps the
-     * sky it had, and the photographic views never see it.
-     */
-    const shellHeight = max(top.sub(1), 1e-6)
-    const outside = smoothstep(
-      top,
-      top.add(shellHeight.mul(10)),
-      length(eyeUnits),
-    )
-    const { inscatter, transmittance } = marchAir(
+    const physical = marchAir(
       air,
       eyeUnits,
       rayDirection,
@@ -379,10 +372,40 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       far,
       sun,
       ATMOSPHERE_SAMPLES,
-      outside.mul(enhancedSky),
     )
+
+    /*
+     * Enhanced's limb from orbit: the same recipe stretched a sixth of a
+     * radius tall (`marchLimb`, and `LIMB_FALLOFF` for why a stretch and
+     * not a glow), marched along the same ray through its own, taller
+     * sphere — the mesh grows to it under the lift — and stopped at the
+     * drawn ground where the physics is. Composed beside the physics
+     * (`throughLimb`), and the stars behind the ring are not dimmed by it:
+     * a gas a sixth of a radius deep takes a third of the Milky Way at its
+     * foot, and a backlit Earth wore a dark halo against the galaxy where
+     * the ring's own light was under a count. The ring adds, and takes
+     * nothing from what is behind it.
+     */
+    const reach = limbReachOf(air)
+    const halfReach = sqrt(max(reach.mul(reach).sub(impactSquared), 0))
+    const nearLimb = max(closest.sub(halfReach), 0)
+    const farLimb = mix(
+      closest.add(halfReach),
+      max(closest.sub(halfInner), nearLimb),
+      meetsGround,
+    )
+    const lifted = marchLimb(
+      air,
+      eyeUnits,
+      rayDirection,
+      nearLimb,
+      farLimb,
+      sun,
+      LIMB_SAMPLES,
+    )
+    const { inscatter } = throughLimb(physical, lifted)
     const radiance = inscatter.mul(sunColor).mul(ATMOSPHERE_GAIN)
-    const survives = transmittance
+    const survives = physical.transmittance
     const extinguished = oneMinus(
       survives.x.add(survives.y).add(survives.z).div(3),
     )
@@ -428,6 +451,9 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     flattening,
     setScattering(recipe, transmittance, multiScatter) {
       air.set(recipe, transmittance, multiScatter)
+    },
+    setLimb(lift, falloff) {
+      air.lift(lift, falloff)
     },
   }
 }

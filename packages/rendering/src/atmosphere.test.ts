@@ -8,6 +8,13 @@ import {
   densityColumn,
   DISK_THROUGH_AIR_CEILING,
   diskThroughAir,
+  LIMB_CEILING,
+  LIMB_FADE_HEIGHTS,
+  LIMB_FALLOFF,
+  LIMB_STANDOFF,
+  limbFalloff,
+  limbLift,
+  limbReach,
   multipleScatteringAt,
   MULTI_SCATTER_FLOOR,
   sampleLut,
@@ -577,5 +584,99 @@ describe('the recipe', () => {
         },
       ),
     )
+  })
+})
+
+describe("Enhanced's limb", () => {
+  it('lifts nothing inside the air and everything ten shell heights above it', () => {
+    const top = 1.0157
+    expect(limbLift(1, top)).toBe(0)
+    expect(limbLift(top, top)).toBe(0)
+    expect(limbLift(top + (top - 1) * LIMB_FADE_HEIGHTS, top)).toBe(1)
+    expect(limbLift(4, top)).toBe(1)
+    // Halfway up the fade is half the lift: a smoothstep's midpoint.
+    expect(
+      limbLift(top + (top - 1) * (LIMB_FADE_HEIGHTS / 2), top),
+    ).toBeCloseTo(0.5, 12)
+  })
+
+  it('lifts nothing over a body with no air, at any height', () => {
+    fc.assert(
+      fc.property(fc.double({ min: 1, max: 100, noNaN: true }), (eye) => {
+        expect(limbLift(eye, 1)).toBe(0)
+      }),
+    )
+  })
+
+  it('never falls as the eye climbs, and stays in [0, 1]', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1.0001, max: 1.5, noNaN: true }),
+        fc.double({ min: 1, max: 20, noNaN: true }),
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        (top, lower, climb) => {
+          const higher = lower + climb
+          const below = limbLift(lower, top)
+          const above = limbLift(higher, top)
+          expect(below).toBeGreaterThanOrEqual(0)
+          expect(above).toBeLessThanOrEqual(1)
+          expect(above).toBeGreaterThanOrEqual(below)
+        },
+      ),
+    )
+  })
+
+  it("falls off over a fifth of the eye's height, up to a twenty-fifth of the radius", () => {
+    expect(limbFalloff(1)).toBe(0)
+    expect(limbFalloff(1 + 313_000 / 6_371_000)).toBeCloseTo(
+      313_000 / 6_371_000 / LIMB_STANDOFF,
+      12,
+    )
+    expect(limbFalloff(1 + LIMB_FALLOFF * LIMB_STANDOFF)).toBeCloseTo(
+      LIMB_FALLOFF,
+      12,
+    )
+    expect(limbFalloff(4)).toBe(LIMB_FALLOFF)
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1, max: 20, noNaN: true }),
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        (eye, climb) => {
+          // The eye is never inside the gas: at least the standoff above the
+          // foot in fall-offs, and the fall-off never falls as the eye climbs.
+          const falloff = limbFalloff(eye)
+          expect(eye - 1).toBeGreaterThanOrEqual(
+            LIMB_STANDOFF * falloff - 1e-12,
+          )
+          expect(limbFalloff(eye + climb)).toBeGreaterThanOrEqual(falloff)
+        },
+      ),
+    )
+  })
+
+  it("reaches the air's top at no lift and the eye's ceiling at the full lift, never under the top", () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1, max: 1.5, noNaN: true }),
+        fc.double({ min: 0, max: 1, noNaN: true }),
+        fc.double({ min: 1, max: 20, noNaN: true }),
+        (top, lift, eye) => {
+          const reach = limbReach(top, lift, eye)
+          expect(reach).toBeGreaterThanOrEqual(top)
+          expect(reach).toBeLessThanOrEqual(Math.max(LIMB_CEILING, top))
+        },
+      ),
+    )
+    expect(limbReach(1.0157, 0, 4)).toBe(1.0157)
+    expect(limbReach(1.0157, 1, 4)).toBe(LIMB_CEILING)
+    // From a station the ceiling is the station's: four fall-offs of a
+    // fifth of its height, which is under the ceiling from the Moon.
+    const station = 1 + 313_000 / 6_371_000
+    expect(limbReach(1.0157, 1, station)).toBeCloseTo(
+      1 + 4 * limbFalloff(station),
+      12,
+    )
+    // An air already taller than the ceiling keeps its own top.
+    expect(limbReach(1.3, 1, 4)).toBe(1.3)
   })
 })

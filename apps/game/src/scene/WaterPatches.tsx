@@ -111,8 +111,10 @@ export function WaterPatches({
       // The body's own air, as the ground beside the sheet takes it.
       const tables = body === undefined ? null : scatteringOf(engine, body)
       if (tables === null) water.air.clear()
-      else
+      else {
         water.air.set(tables.recipe, tables.transmittance, tables.multiScatter)
+        water.air.lift(body?.limb ?? 0, body?.limbFalloff)
+      }
       water.setTime(engine.snapshot?.renderTime ?? 0)
     }
     const drawn = state.palette !== null && state.palette.sheet > 0
