@@ -455,9 +455,21 @@ describe('the store', () => {
     const release = store.register('time.pause', (event) =>
       seen.push(event.phase),
     )
-    store.invoke('time.pause', { phase: 'down', shift: false, repeat: false })
+    store.invoke('time.pause', {
+      phase: 'down',
+      value: 1,
+      device: 'keyboard',
+      shift: false,
+      repeat: false,
+    })
     release()
-    store.invoke('time.pause', { phase: 'down', shift: false, repeat: false })
+    store.invoke('time.pause', {
+      phase: 'down',
+      value: 1,
+      device: 'keyboard',
+      shift: false,
+      repeat: false,
+    })
     expect(seen).toEqual(['down'])
   })
 
@@ -477,6 +489,39 @@ describe('the store', () => {
     expect(phases).toEqual(['down'])
     release()
     expect(phases).toEqual(['down', 'up'])
+  })
+
+  it('leaves the hand in use alone for a key the page dispatched itself', () => {
+    // The pad steps a focused slider by dispatching the slider's own arrow
+    // key, and that untrusted event reaches this listener too.
+    const store = new KeymapStore()
+    store.useDevice('pad')
+    store.handleKeyDown({
+      ...keyEvent('ArrowLeft'),
+      isTrusted: false,
+    } as KeyboardEvent)
+    expect(store.device).toBe('pad')
+    store.handleKeyDown(keyEvent('ArrowLeft'))
+    expect(store.device).toBe('keyboard')
+  })
+
+  it('keeps a held key when a layer over its context comes and goes', () => {
+    /*
+     * The pad's free look claims `flight-look` over `flight` and drops it on
+     * release. W held through that is still a thruster somebody is holding,
+     * and the operating system's repeat will never press it again — so a
+     * release of everything would cut the thruster until the key was lifted
+     * and pressed. Only what the departing context made unreachable goes up.
+     */
+    const store = new KeymapStore()
+    const phases: string[] = []
+    store.register('flight.fore', (event) => phases.push(event.phase))
+    store.claim({ context: 'flight' })
+    store.handleKeyDown(keyEvent('KeyW'))
+    const layer = store.claim({ context: 'flight-look' })
+    layer()
+    expect(phases).toEqual(['down'])
+    expect(store.value('flight.fore')).toBe(1)
   })
 
   it('ends a held action on the physical key, whatever the modifiers did', () => {
