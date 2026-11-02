@@ -10,11 +10,16 @@
 # environment's configuration is reviewable and reproducible rather than living only in a
 # text box.
 #
-# It exists for one reason: **cloud session images ship Node 20, 21 and 22, and this
+# It exists for two reasons. **Cloud session images ship Node 20, 21 and 22, and this
 # repository needs Node 26.** That is not a preference. `pnpm sim`, vitest and the headless
 # runner execute the TypeScript sources directly through type stripping with no build step,
 # so an older runtime does not degrade — it fails at the first import. A SessionStart hook
 # cannot fix it, because a hook cannot change PATH for the commands that run after it.
+# And **the image has no git-lfs**, while the hull models are LFS content: without the
+# filter the clone holds pointers, `hullClearance.test.ts` fails at collection and a bundle
+# ships a 130-byte file where the ship should be. The clone happens before this script
+# runs, so installing the filter here is half of it — .claude/hooks/session-start.sh pulls
+# the objects the clone left as pointers.
 #
 # Dependencies are deliberately NOT installed here: .claude/hooks/session-start.sh does
 # that on every session, cloud and local, and it takes ~3s.
@@ -22,13 +27,31 @@
 # Constraints this is written around (from the cloud-environments docs):
 #   * must exit zero, or the session fails to start — hence `|| true` and the final exit 0;
 #   * must finish inside ~5 minutes for the snapshot to build;
-#   * needs Trusted network access. nodejs.org and registry.npmjs.org are both on the
-#     default allowlist, so no extra domains are required.
+#   * needs Trusted network access. nodejs.org, registry.npmjs.org and archive.ubuntu.com
+#     are all on the default allowlist, so no extra domains are required;
+#   * the environment's variables are not set yet when it runs, and `gh pr` and every
+#     other GraphQL subcommand answer 403 through the GitHub proxy for the whole session —
+#     the `/ship` skill carries the `gh api` REST forms.
 
 set -uo pipefail
 
-NODE_MAJOR=$(tr -d '[:space:]' < .node-version 2>/dev/null || echo 26)
-PNPM_VERSION=12.3.4
+# Guarded rather than redirected: with the file absent it is the redirect that fails,
+# before `tr` or its `2>/dev/null` exist, and the shell's own "No such file" lands in the
+# setup log. The script may well run outside the clone; 26 is the pinned major today.
+NODE_MAJOR=26
+[ -f .node-version ] && NODE_MAJOR=$(tr -d '[:space:]' <.node-version)
+
+# The version package.json pins in `packageManager`, read with the Node the image has.
+# Any pnpm from 10 on re-executes the pinned version itself, so a stale fallback costs one
+# download at first use rather than a mismatch — but the fallback is still worth keeping
+# current, because that download is the one thing a cached environment never skips.
+PNPM_VERSION=$(node -p "require('./package.json').packageManager.split('@')[1]" 2>/dev/null || echo 12.14.0)
+
+# git-lfs, for the reason in the header. `--system` because the script runs as root and
+# the session does not; a `--local` install would also be skipped by every worktree
+# Claude Code creates, which neutralizes the repository's own filter drivers on purpose.
+(apt-get update -qq && apt-get install -y -qq git-lfs && git lfs install --system) >/dev/null 2>&1 ||
+  echo "git-lfs install failed; the model files will be pointers until 'git lfs pull' runs" >&2
 
 case "$(uname -m)" in
   x86_64) ARCH=x64 ;;
@@ -83,5 +106,6 @@ done
 echo "Installed Node ${VERSION} and pnpm ${PNPM_VERSION}."
 echo "node -> $(node -v 2>/dev/null || echo 'not resolving; check PATH order')"
 echo "pnpm -> $(pnpm -v 2>/dev/null || echo 'not resolving; check PATH order')"
+echo "git-lfs -> $(git lfs version 2>/dev/null || echo 'not installed')"
 
 exit 0

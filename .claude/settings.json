@@ -63,6 +63,7 @@
     ],
     "ask": [
       "Bash(gh pr merge:*)",
+      "Bash(gh api *merge*)",
       "mcp__github__merge_pull_request",
       "Bash(pnpm run deploy:worker)",
       "Bash(pnpm catalog:build:*)",
@@ -87,7 +88,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume",
+        "matcher": "startup|resume|clear|fork",
         "hooks": [
           {
             "type": "command",

@@ -48,6 +48,36 @@ if [ -f "$cwd/pnpm-workspace.yaml" ] && [ ! -d "$cwd/node_modules" ]; then
   fi
 fi
 
+# --- LFS objects -------------------------------------------------------------------
+#
+# The hull models under data/models are LFS content, and two things read the bytes
+# rather than the pointer: `hullClearance.test.ts` decodes the glTF, so a pointer
+# checkout fails the root suite at collection, and `shipModels.ts` bundles whatever is
+# on disk, so `pnpm build` ships a 130-byte file where the hero ship should be. Both
+# read as a broken change and neither is one. A cloud session clones before its setup
+# script has installed git-lfs, and Claude Code checks a worktree out without the
+# repository's own filter drivers on purpose, so a machine whose LFS filter is
+# installed `--local` gets pointers there too. `git lfs ls-files` marks a pointer with
+# `-`, so the pull runs only when one is present and a smudged checkout pays nothing.
+
+if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1 &&
+  grep -qs 'filter=lfs' "$cwd/.gitattributes"; then
+  if ! command -v git-lfs >/dev/null 2>&1; then
+    notes+=("git-lfs is not installed, so the LFS-tracked models in $cwd are pointer files: hullClearance.test.ts fails at collection and pnpm build bundles a pointer where the ship model belongs. Neither is the change's fault. scripts/cloud-setup.sh installs git-lfs for a cloud environment; 'brew install git-lfs' does it here.")
+    alerts+=("No git-lfs on PATH — the model files in $cwd are pointers.")
+  elif git -C "$cwd" lfs ls-files 2>/dev/null | grep -q ' - '; then
+    # GIT_TERMINAL_PROMPT=0 is the HTTPS half of BatchMode: a credential prompt would
+    # otherwise hold the session open until the hook's timeout.
+    if GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o ConnectTimeout=8 -o BatchMode=yes" \
+      git -C "$cwd" lfs pull >/dev/null 2>&1; then
+      notes+=("LFS objects were fetched into $cwd — the checkout held pointers, which fail hullClearance.test.ts and put a pointer where the ship model belongs in a bundle.")
+    else
+      notes+=("The checkout in $cwd holds LFS pointers and 'git lfs pull' failed. hullClearance.test.ts will fail at collection and pnpm build will bundle a pointer for the ship model; neither is the change's fault. Run 'git lfs pull' and read its output.")
+      alerts+=("git lfs pull failed in $cwd — the model files are pointers.")
+    fi
+  fi
+fi
+
 # --- runtime -----------------------------------------------------------------------
 #
 # Node 26 is not a preference. `pnpm sim`, `pnpm test` and the vitest suite execute the
