@@ -1,0 +1,32 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "iconPath": "apps/game/public/icon-192.png",
+  "scripts": [
+    {
+      "name": "Worktree setup",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "command": "main=$(git worktree list --porcelain | sed -n '1s/^worktree //p'); (cd \"$main\" && fd -HI -t f -E node_modules -E .git -E .claude -E .data -E .pnpm-store -E .scratch -E .wrangler '^\\.env' .) | rsync -a --ignore-existing --files-from=- \"$main/\" ./; mise exec -- pnpm install --frozen-lockfile --prefer-offline"
+    },
+    {
+      "name": "Dev (vite + worker)",
+      "icon": "play",
+      "command": "mise exec -- pnpm dev",
+      "async": true,
+      "previewUrl": "http://localhost:5173",
+      "autoOpenPreview": true
+    },
+    { "name": "Test", "icon": "test", "command": "mise exec -- pnpm test" },
+    {
+      "name": "Typecheck",
+      "icon": "lint",
+      "command": "mise exec -- pnpm typecheck"
+    },
+    {
+      "name": "Check (full gate)",
+      "icon": "lint",
+      "command": "mise exec -- pnpm check"
+    },
+    { "name": "Build", "icon": "build", "command": "mise exec -- pnpm build" }
+  ]
+}
