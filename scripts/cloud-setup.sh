@@ -18,8 +18,8 @@
 # And **the image has no git-lfs**, while the hull models are LFS content: without the
 # filter the clone holds pointers, `hullClearance.test.ts` fails at collection and a bundle
 # ships a 130-byte file where the ship should be. The clone happens before this script
-# runs, so installing the filter here is half of it — .claude/hooks/session-start.sh pulls
-# the objects the clone left as pointers.
+# runs, so installing git-lfs here is half of it — .claude/hooks/session-start.sh pulls
+# the objects the clone left as pointers, and says so when the pull fails.
 #
 # Dependencies are deliberately NOT installed here: .claude/hooks/session-start.sh does
 # that on every session, cloud and local, and it takes ~3s.
@@ -50,7 +50,12 @@ PNPM_VERSION=$(node -p "require('./package.json').packageManager.split('@')[1]" 
 # git-lfs, for the reason in the header. `--system` because the script runs as root and
 # the session does not; a `--local` install would also be skipped by every worktree
 # Claude Code creates, which neutralizes the repository's own filter drivers on purpose.
-(apt-get update -qq && apt-get install -y -qq git-lfs && git lfs install --system) >/dev/null 2>&1 ||
+# `--skip-smudge` because `git lfs install` also sets `filter.lfs.required`: a smudge that
+# cannot reach the LFS server through the proxy then fails the checkout outright, where a
+# skipped one leaves a pointer the SessionStart hook pulls and reports on. The image's
+# `check-tools` asks for the same `--skip`. The cost is a branch switched to mid-session,
+# whose changed models stay pointers until `git lfs pull`.
+(apt-get update -qq && apt-get install -y -qq git-lfs && git lfs install --system --skip-smudge) >/dev/null 2>&1 ||
   echo "git-lfs install failed; the model files will be pointers until 'git lfs pull' runs" >&2
 
 case "$(uname -m)" in

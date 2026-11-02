@@ -59,13 +59,16 @@ fi
 # repository's own filter drivers on purpose, so a machine whose LFS filter is
 # installed `--local` gets pointers there too. `git lfs ls-files` marks a pointer with
 # `-`, so the pull runs only when one is present and a smudged checkout pays nothing.
+# The grep reads the whole listing rather than `-q`: under `pipefail`, `grep -q` exits
+# at the first pointer, git-lfs dies of SIGPIPE on its next line, and the pipeline
+# reports 141 — false exactly when there is something to pull.
 
 if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1 &&
   grep -qs 'filter=lfs' "$cwd/.gitattributes"; then
   if ! command -v git-lfs >/dev/null 2>&1; then
     notes+=("git-lfs is not installed, so the LFS-tracked models in $cwd are pointer files: hullClearance.test.ts fails at collection and pnpm build bundles a pointer where the ship model belongs. Neither is the change's fault. scripts/cloud-setup.sh installs git-lfs for a cloud environment; 'brew install git-lfs' does it here.")
     alerts+=("No git-lfs on PATH — the model files in $cwd are pointers.")
-  elif git -C "$cwd" lfs ls-files 2>/dev/null | grep -q ' - '; then
+  elif git -C "$cwd" lfs ls-files 2>/dev/null | grep ' - ' >/dev/null; then
     # GIT_TERMINAL_PROMPT=0 is the HTTPS half of BatchMode: a credential prompt would
     # otherwise hold the session open until the hook's timeout.
     if GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o ConnectTimeout=8 -o BatchMode=yes" \
