@@ -15,11 +15,12 @@
 # runner execute the TypeScript sources directly through type stripping with no build step,
 # so an older runtime does not degrade — it fails at the first import. A SessionStart hook
 # cannot fix it, because a hook cannot change PATH for the commands that run after it.
-# And **the image has no git-lfs**, while the hull models are LFS content: without the
-# filter the clone holds pointers, `hullClearance.test.ts` fails at collection and a bundle
-# ships a 130-byte file where the ship should be. The clone happens before this script
-# runs, so installing git-lfs here is half of it — .claude/hooks/session-start.sh pulls
-# the objects the clone left as pointers, and says so when the pull fails.
+# And **the clone holds LFS pointers**, while the hull models are LFS content: the image
+# ships git-lfs with its smudge skipped, so `hullClearance.test.ts` fails at collection
+# and a bundle ships a 130-byte file where the ship should be. The clone happens before
+# this script runs, so nothing here can fetch the objects into it —
+# .claude/hooks/session-start.sh pulls the ones the clone left as pointers, and says so
+# when the pull fails. This script only makes sure the filter is installed system-wide.
 #
 # Dependencies are deliberately NOT installed here: .claude/hooks/session-start.sh does
 # that on every session, cloud and local, and it takes ~3s.
@@ -54,8 +55,10 @@ PNPM_VERSION=$(node -p "require('./package.json').packageManager.split('@')[1]" 
 # cannot reach the LFS server through the proxy then fails the checkout outright, where a
 # skipped one leaves a pointer the SessionStart hook pulls and reports on. The image's
 # `check-tools` asks for the same `--skip`. The cost is a branch switched to mid-session,
-# whose changed models stay pointers until `git lfs pull`.
-(apt-get update -qq && apt-get install -y -qq git-lfs && git lfs install --system --skip-smudge) >/dev/null 2>&1 ||
+# whose changed models stay pointers until `git lfs pull`. The image carries git-lfs
+# already, so apt runs only on an image that does not.
+(command -v git-lfs >/dev/null || { apt-get update -qq && apt-get install -y -qq git-lfs; }) >/dev/null 2>&1 &&
+  git lfs install --system --skip-smudge >/dev/null 2>&1 ||
   echo "git-lfs install failed; the model files will be pointers until 'git lfs pull' runs" >&2
 
 case "$(uname -m)" in
@@ -93,7 +96,9 @@ rm -f /tmp/node.tar.xz
 # The image puts Node 22 on PATH from /opt/node22/bin, which may sit ahead of
 # /usr/local/bin — so symlinking into /usr/local/bin alone is not enough to win. Link into
 # whichever directory currently owns `node` as well, and prepend ours for login shells.
-for target in /usr/local/bin "$(dirname "$(command -v node 2>/dev/null || echo /usr/local/bin/node)")"; do
+# The same directory carries the image's own pnpm 10, which shadows ours the same way.
+SHADOW_DIR=$(dirname "$(command -v node 2>/dev/null || echo /usr/local/bin/node)")
+for target in /usr/local/bin "$SHADOW_DIR"; do
   [ -d "$target" ] || continue
   for bin in node npm npx; do
     ln -sf "/opt/node${NODE_MAJOR}/bin/${bin}" "${target}/${bin}" 2>/dev/null || true
@@ -104,7 +109,8 @@ echo "export PATH=/opt/node${NODE_MAJOR}/bin:\$PATH" > /etc/profile.d/node"${NOD
 # pnpm, at the version pinned in package.json's packageManager field. Installed explicitly
 # rather than through corepack, which is no longer bundled with current Node releases.
 "/opt/node${NODE_MAJOR}/bin/npm" install -g "pnpm@${PNPM_VERSION}" >/dev/null 2>&1 || true
-for target in /usr/local/bin; do
+for target in /usr/local/bin "$SHADOW_DIR"; do
+  [ -d "$target" ] || continue
   ln -sf "/opt/node${NODE_MAJOR}/bin/pnpm" "${target}/pnpm" 2>/dev/null || true
 done
 

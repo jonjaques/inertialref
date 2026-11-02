@@ -54,8 +54,8 @@ fi
 # rather than the pointer: `hullClearance.test.ts` decodes the glTF, so a pointer
 # checkout fails the root suite at collection, and `shipModels.ts` bundles whatever is
 # on disk, so `pnpm build` ships a 130-byte file where the hero ship should be. Both
-# read as a broken change and neither is one. A cloud session clones before its setup
-# script has installed git-lfs, and Claude Code checks a worktree out without the
+# read as a broken change and neither is one. A cloud image ships git-lfs with its smudge
+# skipped, so a cloud session clones pointers, and Claude Code checks a worktree out without the
 # repository's own filter drivers on purpose, so a machine whose LFS filter is
 # installed `--local` gets pointers there too. `git lfs ls-files` marks a pointer with
 # `-`, so the pull runs only when one is present and a smudged checkout pays nothing.

@@ -135,7 +135,7 @@ triggered and opens the PR without it; ask for either by name when the change
 is worth it, and its findings are edited into the PR afterward.
 
 **Cloud sessions need one manual step, and differ in three ways.** Cloud
-images ship Node 20/21/22 and no git-lfs; this repository needs Node 26 for
+images ship Node 20/21/22 and clone LFS files as pointers; this repository needs Node 26 for
 type stripping and the LFS bytes for the hull models. Paste
 [`scripts/cloud-setup.sh`](scripts/cloud-setup.sh) into the environment's
 **Setup script** field at claude.ai/code — once per environment; the result is
