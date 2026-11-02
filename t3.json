@@ -1,12 +1,14 @@
 {
   "$schema": "https://t3.codes/schema/t3.json",
   "iconPath": "apps/game/public/icon-192.png",
+  "defaultThreadEnvMode": "worktree",
   "scripts": [
     {
       "name": "Worktree setup",
       "icon": "configure",
       "runOnWorktreeCreate": true,
-      "command": "main=$(git worktree list --porcelain | sed -n '1s/^worktree //p'); (cd \"$main\" && fd -HI -t f -E node_modules -E .git -E .claude -E .data -E .pnpm-store -E .scratch -E .wrangler '^\\.env' .) | rsync -a --ignore-existing --files-from=- \"$main/\" ./; mise exec -- pnpm install --frozen-lockfile --prefer-offline"
+      "async": false,
+      "command": "bash scripts/worktree-setup.sh"
     },
     {
       "name": "Dev (vite + worker)",

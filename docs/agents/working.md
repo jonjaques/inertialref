@@ -120,7 +120,8 @@ Not "the browser rendered something." Done means:
 - The debug tooling can inspect whatever you added.
 
 Claude, Cursor, and Codex adapters share the hook implementations in
-`.claude/hooks/`. Codex translates lifecycle inputs through
+`.claude/hooks/`; T3 Code runs Claude Code itself, so the Claude path applies
+there unchanged. Codex translates lifecycle inputs through
 `scripts/agents/codex-hook.mjs`; its setup is documented in
 [`.codex/README.md`](../../.codex/README.md). When the host has not trusted or
 enabled hooks, perform setup, formatting, and verification explicitly.

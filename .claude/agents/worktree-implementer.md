@@ -23,9 +23,11 @@ run before this will fail for a reason that has nothing to do with your task.**
 
 ## Then
 
-1. Read `AGENTS.md` § "The rules that actually matter". The path-scoped extracts in
-   `.claude/rules/` load automatically as you open matching files — trust them; they are
-   the invariants for the code you are about to touch.
+1. Read `AGENTS.md` § "The rules that actually matter", then the `.claude/rules/` extracts
+   for the paths you own — the table in `.claude/rules/README.md` says which. Read them
+   yourself: in a worktree the path-scoped rules do **not** load as you open files,
+   because Claude Code hands a worktree subagent the instruction files of the main
+   conversation and skips the worktree's own `CLAUDE.md` and `.claude/rules/`.
 2. Read the ADR for the area you are changing, from `docs/adr/`. These decisions are not
    yours to relitigate inside a fan-out.
 3. Find the test that covers the behavior you are about to change. If there is not one,

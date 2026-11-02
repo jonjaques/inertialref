@@ -22,10 +22,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# A PR that is pushed to twice does not need the first run to finish.
+# A PR that is pushed to twice does not need the first run to finish. A run on
+# `main` does: it exists to save the terrain archive, and a cancelled run saves
+# nothing, so two merges inside one run's twenty minutes would leave the cache
+# where the first merge found it.
 concurrency:
   group: check-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

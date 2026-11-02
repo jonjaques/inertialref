@@ -136,7 +136,10 @@ Pushing and opening a PR use
 Cursor's environment is `.cursor/environment.json`; it pins Node 26 and pnpm
 12 and installs dependencies during the build. Inspect the **Game and Worker**
 terminal before starting another dev server. `pnpm dev` serves ports 5173 and 8787. Claude cloud setup is in `CLAUDE.md`; other fresh hosts use
-`scripts/cloud-setup.sh` as their environment setup script.
+`scripts/cloud-setup.sh` as their environment setup script. T3 Code's project
+actions and worktree setup are `t3.json` and `scripts/worktree-setup.sh`; its
+worktree threads live under T3's home directory on a branch T3 cut from
+`origin/main`, and run the same hooks.
 
 The app and tests need no Docker, database, or production credentials. Missing
 reference audio and analytics settings must still produce a successful silent,

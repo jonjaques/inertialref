@@ -90,9 +90,27 @@ Most of `.claude/` runs without being asked.
   hook, and the first thing that notices is `format:check` in CI. Run prettier
   on those paths yourself, or make the edit through the tool.
 - **A fresh checkout installs itself.** `SessionStart` runs `pnpm install`
-  when `node_modules` is absent. This covers worktrees and cloud sessions. It
-  does **not** fire for subagents: an agent working in a worktree must run
-  `pnpm install --frozen-lockfile --prefer-offline` itself, first.
+  when `node_modules` is absent, and `git lfs pull` when the hull models are
+  pointers. This covers worktrees and cloud sessions. It does **not** fire for
+  subagents: an agent working in a worktree must run
+  `pnpm install --frozen-lockfile --prefer-offline` itself, first — and read
+  the `.claude/rules/` extracts for its paths itself, because a worktree
+  subagent is handed the main conversation's instruction files and the
+  path-scoped rules do not load as it opens files there.
+- **T3 Code runs this same configuration.** Its threads are Claude Code
+  sessions, so the hooks, rules, skills and agents here apply unchanged; a
+  skill is typed as `$ship` in its composer, one per message.
+  [`t3.json`](t3.json) holds the project actions and the worktree setup. Its
+  worktree threads live under T3's home directory rather than
+  `.claude/worktrees/`, each on a branch T3 cut from `origin/main` before the
+  first turn, and [`scripts/worktree-setup.sh`](scripts/worktree-setup.sh)
+  runs there first and synchronously, so the SessionStart hook finds a
+  finished install rather than a half-written one. A pull request opened from
+  a thread is linked with `link_pull_request` and watched with
+  `watch_pull_request`, which wakes the thread on a red check; the `Monitor`
+  loop in `/ship` is for a terminal. `pnpm dev` binds 5173 and 8787 by name,
+  so one worktree serves at a time, and `../tng-inertial` resolves only from
+  the main checkout.
 
 | Skill          | For                                                     |
 | -------------- | ------------------------------------------------------- |
@@ -116,12 +134,24 @@ and the author have already been over. `/ship` names the one it would have
 triggered and opens the PR without it; ask for either by name when the change
 is worth it, and its findings are edited into the PR afterward.
 
-**Cloud sessions need one manual step.** Cloud images ship Node 20/21/22;
-this repository needs Node 26 for type stripping. Paste
+**Cloud sessions need one manual step, and differ in three ways.** Cloud
+images ship Node 20/21/22 and clone LFS files as pointers; this repository needs Node 26 for
+type stripping and the LFS bytes for the hull models. Paste
 [`scripts/cloud-setup.sh`](scripts/cloud-setup.sh) into the environment's
-**Setup script** field at claude.ai/code — once per environment; the result
-is snapshotted. Until then `claude --cloud` starts and fails at the first
-import.
+**Setup script** field at claude.ai/code — once per environment; the result is
+snapshotted, and the SessionStart hook pulls the LFS objects the clone left as
+pointers. Until then `claude --cloud` starts and fails at the first import.
+Set `BASH_DEFAULT_TIMEOUT_MS=600000` in the environment's variables: the VM
+has 4 vCPUs, and `pnpm check` there outlives the two-minute default. And
+`gh pr`, `gh issue` and every other GraphQL subcommand answer 403 through the
+GitHub proxy — `/ship` carries the `gh api` REST forms for opening the PR and
+reading its checks.
+
+**Ultracode is the user's to switch on.** The `Workflow` tool runs only when
+the word `ultracode`, "use a workflow" or `/effort ultracode` comes from the
+user; it is the fan-out engine `/parallel` describes, with
+`worktree-implementer` as the worker, and the briefs there bind a workflow
+agent exactly as they bind a subagent.
 
 ---
 
