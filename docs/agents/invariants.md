@@ -383,7 +383,7 @@ constructor argument rather than a writer.
 
 ### Rule 33
 
-**Never add a second window-level key listener.** `input/keymapStore.ts` owns
+**Never add a second window-level key listener, or a second gamepad poll.** `input/keymapStore.ts` owns
 the one `keydown` in `apps/game/src`, and there were six: two read `event.key`
 and four read `event.code`, which is why `+` carried a comment about `Shift`. A
 mode registers a handler for an **action id** (`useAction`) and declares which
@@ -393,6 +393,16 @@ because `global` is live alongside everything, and "conflicts within a context"
 misses exactly the pair that shipped as a bug: `Space` was the pause key and
 the cinema transport, both handlers ran, and `clock.paused` flipped twice.
 [ADR-0018](../adr/0018-the-instrument.md).
+
+The pad is the same rule. `input/padClock.ts` holds the one
+`navigator.getGamepads()`, and the driver turns what moved into the keymap's
+own actions through the same contexts and arbitration — a pad binding is a
+second binding on an action, never a second dispatcher. A second reader would
+be a second idea of which pad is in use and a second set of latched edges, so
+one press would fire once per reader. A held action carries a `value` and
+reports `change` while a stick moves, and a handler that treats every phase
+but `down` as a release stops the thruster the moment the stick does.
+[ADR-0057](../adr/0057-a-gamepad-is-a-second-binding-on-every-action.md).
 
 ### Rule 34
 

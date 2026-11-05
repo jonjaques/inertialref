@@ -100,7 +100,7 @@ export function FlightMode({
        */}
       <div
         ref={surface}
-        className="hud-bleed pointer-events-auto absolute touch-none select-none"
+        className="scene-surface hud-bleed pointer-events-auto absolute touch-none select-none"
         style={{
           cursor: characterActive
             ? 'default'

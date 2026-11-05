@@ -23,7 +23,13 @@
 #                    into ~640 MB per worktree. `pnpm install --frozen-lockfile
 #                    --prefer-offline` rebuilds it from the machine-global store in ~3s,
 #                    which .claude/hooks/session-start.sh does automatically for a session
-#                    and every worktree subagent is told to run first.
+#                    and every worktree subagent is told to run first. Nor is it symlinked
+#                    with `worktree.symlinkDirectories` in .claude/settings.json: a
+#                    workspace's node_modules links `@inertialref/*` back to
+#                    `../../packages/*` by relative path, so a symlinked
+#                    `apps/game/node_modules` would resolve the worktree's imports to the
+#                    main checkout's sources and test the wrong tree.
+#                    scripts/worktree-setup.sh is the same decision for a T3 Code worktree.
 #   .data/         — 34 MB of raw HYG downloads that exist only to produce
 #                    data/catalog (committed). `pnpm catalog:fetch` re-downloads them.
 #   apps/server/.wrangler/ — local Worker state; a fresh one is correct.

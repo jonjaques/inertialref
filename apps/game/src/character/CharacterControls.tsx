@@ -4,7 +4,11 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { useChromeHidden } from '../hud/chrome.ts'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
-import { useActionTitle, useKeyLabel } from '../input/useKeymap.ts'
+import {
+  useActionTitle,
+  useInputDevice,
+  useKeyLabel,
+} from '../input/useKeymap.ts'
 import { isOverlayPath, modeForPath, resolvedLocation } from '../pages/paths.ts'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { useCharacterControls } from './useCharacterControls.ts'
@@ -66,6 +70,8 @@ export function CharacterControls({
   const sprintKey = useKeyLabel('character.sprint')
   const crouchKey = useKeyLabel('character.crouch')
   const jumpKey = useKeyLabel('character.jump')
+  const { device } = useInputDevice()
+  const pad = device === 'pad'
   const error = controls.error ?? state.error
 
   if (
@@ -125,7 +131,14 @@ export function CharacterControls({
             />
           )}
         </div>
-        {controls.locked ? (
+        {controls.locked && pad ? (
+          /* A pad's four movement directions are one stick, and printing them
+             as four glyphs would be naming the stick four times. */
+          <p className="type-ui mt-1 text-balance text-slate-400">
+            Sticks move and look · {sprintKey} sprint · {crouchKey} crouch ·{' '}
+            {jumpKey} jump · {viewKey} view · {lockKey} leave the walk
+          </p>
+        ) : controls.locked ? (
           <p className="type-ui mt-1 text-balance text-slate-400">
             {[forwardKey, leftKey, backKey, rightKey]
               .filter(Boolean)
@@ -137,7 +150,9 @@ export function CharacterControls({
           <p className="type-ui mt-1 text-balance text-slate-400">
             {lockKey === null
               ? 'Activate the control to capture the pointer.'
-              : `${lockKey} captures the pointer.`}{' '}
+              : pad
+                ? `${lockKey} steps out.`
+                : `${lockKey} captures the pointer.`}{' '}
             Free look stays available before entering.
           </p>
         )}

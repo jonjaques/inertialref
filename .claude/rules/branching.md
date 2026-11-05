@@ -17,6 +17,11 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
   `git switch -c <name> origin/main`, from `origin/main` rather than from whatever
   `HEAD` happens to be, so a stale or already-merged branch cannot become the base.
 
+- **A worktree the host made is already on its branch.** A T3 Code worktree thread and
+  `claude --worktree` cut the branch before the first turn, from `origin/main`; keep it,
+  and never `switch -c` away from it. The SessionStart report is silent about the branch
+  there for that reason.
+
 - **Name the branch the way the commit subjects are named.** `feat/…`, `fix/…`, or a
   bare topic, in the declarative voice `git log --oneline -20` shows — a claim about
   the work, not a ticket number.

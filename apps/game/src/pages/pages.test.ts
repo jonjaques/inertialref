@@ -120,6 +120,12 @@ describe('the routed dialogs', () => {
     // the half that could not exist while the bindings were string literals in
     // five files.
     expect(at(settingsSection('controls'))).toContain('Flight Assist')
+    // The controller's page is drawn from the same table: the picture's
+    // callouts name the flight acts on the pad's controls before any pad has
+    // been seen.
+    const pad = at(settingsSection('controller'))
+    expect(pad).toContain('Kill Rotation')
+    expect(pad).toContain('Thrust · Translate')
   })
 
   it('falls back rather than 404ing on a section it has never heard of', () => {

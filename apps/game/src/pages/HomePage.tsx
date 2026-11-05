@@ -8,11 +8,12 @@ import { FooterLink } from './FooterLink.tsx'
 import { ModeLink } from './ModeLink.tsx'
 import { ModeRow } from './ModeRow.tsx'
 import { Poster } from './Poster.tsx'
-import { ENTERABLE, WITHHELD } from './modes.ts'
+import { doors } from './modes.ts'
 import { ABOUT, DOCS, SETTINGS } from './paths.ts'
 import { MENU_KEYS } from '../input/keymap.ts'
 import { useKeyContext } from '../input/useKeymap.ts'
 import { useHydrated } from '../state/hydration.ts'
+import { useGrants } from '../account/grants.ts'
 
 /*
  * The front door.
@@ -61,6 +62,9 @@ export function HomePage() {
   const hydrated = useHydrated()
   const boot = useBoot()
   useKeyContext(MENU_KEYS)
+  // Solo for an account granted it; the prerender and a visitor with no
+  // grant get the build's own menu (`modes.ts`).
+  const { enterable, withheld } = doors(useGrants())
 
   return (
     <Poster>
@@ -130,7 +134,7 @@ export function HomePage() {
             to the panel's edge had its last few words dissolving into Earth,
             which is a lovely effect and an unreadable sentence. */}
       <nav aria-label="Modes" className="flex max-w-[33rem] flex-col gap-2.5">
-        {ENTERABLE.map((mode, index) => (
+        {enterable.map((mode, index) => (
           <motion.div
             key={mode.to}
             initial={hydrated ? { y: 12 } : false}
@@ -154,7 +158,7 @@ export function HomePage() {
           </motion.div>
         ))}
 
-        {WITHHELD.length > 0 && (
+        {withheld.length > 0 && (
           <div className="mt-3 border-t border-slate-800 pt-3">
             {/*
              * Named, not hidden. `DESIGN.md` keeps a disabled control on
@@ -167,7 +171,7 @@ export function HomePage() {
               Not in This Build
             </h2>
             <div className="flex flex-col gap-1.5">
-              {WITHHELD.map((mode) => (
+              {withheld.map((mode) => (
                 <ModeRow key={mode.to} mode={mode} />
               ))}
             </div>

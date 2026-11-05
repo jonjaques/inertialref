@@ -36,6 +36,13 @@ import {
 } from '../dock/floating.ts'
 import { DOCK_PLACEMENTS, type DockPlacement } from '../dock/placement.ts'
 import { parseChord } from '../input/chord.ts'
+import { parsePad } from '../input/pad.ts'
+import {
+  DEFAULT_TUNING,
+  isPadTuning,
+  type PadTuning,
+  reviveTuning,
+} from '../input/padTuning.ts'
 import { isLens, reviveLens } from '../hud/controls.ts'
 import { isLabelDensity, isOrbitScope } from '../planetarium/layers.ts'
 import { ALL_CLASSES, RADII } from '../planetarium/kinds.ts'
@@ -396,6 +403,36 @@ export const CONTROLS_KEYMAP = define<Readonly<Record<string, string | null>>>({
   ),
 })
 
+/**
+ * The pad's rebindings, as `{[actionId]: control | null}`.
+ *
+ * The keymap's shape and the keymap's reasons: overrides only, `null` a
+ * deliberate unbind, the control stored by its position name (`"l2"`,
+ * `"rs.up"`) so a hand edit reads as what it is. A separate key rather than a
+ * second field in `controls.keymap`, so a profile from before the pad imports
+ * unchanged and a reset of one device's bindings leaves the other's alone.
+ */
+export const CONTROLS_PAD = define<Readonly<Record<string, string | null>>>({
+  key: 'controls.pad',
+  group: 'controls',
+  what: 'rebound controller buttons',
+  initial: {},
+  accept: recordOf(
+    (value): value is string | null =>
+      value === null || parsePad(value) !== null,
+  ),
+})
+
+/** The deadzone, curve, look speed, the two inverts and the rumble. */
+export const CONTROLS_PAD_TUNING = define<PadTuning>({
+  key: 'controls.padTuning',
+  group: 'controls',
+  what: 'controller deadzone, sensitivity, invert and vibration',
+  initial: DEFAULT_TUNING,
+  accept: isPadTuning,
+  revive: reviveTuning,
+})
+
 /* ------------------------------------------------------------------------ */
 /* planetarium                                                               */
 /* ------------------------------------------------------------------------ */
@@ -613,6 +650,8 @@ export const REGISTRY: readonly AnyPreference[] = [
   CAMERA_LENS,
   PERSONAL_PICTURES,
   CONTROLS_KEYMAP,
+  CONTROLS_PAD,
+  CONTROLS_PAD_TUNING,
   PLANETARIUM_LABELS,
   PLANETARIUM_LABEL_DENSITY,
   PLANETARIUM_LABEL_MINOR,
