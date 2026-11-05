@@ -400,10 +400,11 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   expect(luminance(deepFoot)).toBeLessThan(0.5 * luminance(backlitFoot))
   expect(deepFoot[0]).toBeGreaterThan(deepFoot[2])
 
-  // The ring is the shell's: the sphere is seen through the physics alone,
-  // with the lift or without it, and the shell past the edge picks up from
-  // it without a step. Twenty kilometers either side of the edge, from four
-  // radii under a sun 30° over the tangent point, the disk measured 0.845
+  // The ring is the shell's: the sphere takes the physics' light, with the
+  // lift or without it — within a percent, the lift lighting its air with a
+  // cleared beam — and the shell past the edge picks up from it without a
+  // step. Twenty kilometers either side of the edge, from four
+  // radii under a sun 30° over the tangent point, the disk measured 1.21
   // inside with the lift and without, and the shell outside is within
   // thirty percent of it.
   const disk = (sun: Vector3, lift: number) => {
@@ -440,7 +441,7 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
     }
   }
   const inside = await edgeRay(-20_000)
-  expect(await edgeRay(-20_000, 0)).toBeCloseTo(inside, 6)
+  expect(Math.abs((await edgeRay(-20_000, 0)) / inside - 1)).toBeLessThan(0.01)
   const outside = await edgeRay(20_000)
   expect(Math.abs(inside / outside - 1)).toBeLessThan(0.3)
 

@@ -875,8 +875,10 @@ describe('the disk, seen through its own air', () => {
     // The lifted gas is the same column as the physics, so composed in front
     // of the disk it is a second nadir veil — measured 0.089 against the
     // physics' 0.053 — and the blue of it tints a Blue Marble's Sahara
-    // magenta. The ring is the shell's, past the silhouette; under Enhanced
-    // from outside the air the disk keeps the physics' own veil.
+    // magenta. The ring is the shell's, past the silhouette. Under Enhanced
+    // from outside the air the disk's veil is the physics', lit by the beam
+    // cleared halfway: 0.0546 against 0.0525 at nadir, where the ring
+    // composed over it drew 0.089.
     const pre = 1 / 30_000
     setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
     let lifted: number
@@ -888,7 +890,7 @@ describe('the disk, seen through its own air', () => {
       setSceneExposure(gpu.renderer, null)
     }
     expect(physical).toBeGreaterThan(0.01)
-    expect(lifted).toBeCloseTo(physical, 6)
+    expect(Math.abs(lifted / physical - 1)).toBeLessThan(0.1)
   })
 
   it('draws a surface from orbit at its own light under Enhanced, and through the measured air otherwise', async () => {

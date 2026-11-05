@@ -248,6 +248,7 @@ export function marchAir(
   far: Node<'float'>,
   sun: Node<'vec3'>,
   samples: number,
+  clearBeam?: Node<'float'>,
 ): Marched {
   const shellHeight = max(air.top.sub(1), 1e-6)
   const phase = phasesToward(direction, sun)
@@ -280,7 +281,11 @@ export function marchAir(
     const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
 
     const muSun = dot(point, sun).div(max(radius, 1e-5))
-    const sunT = sunTableAt(air, muSun, height01)
+    const tableT = sunTableAt(air, muSun, height01)
+    const sunT =
+      clearBeam === undefined
+        ? tableT
+        : clearedBeam(air, tableT, height01, clearBeam)
     const psi = psiTableAt(air, muSun, height01)
     const single = air.betaRayleigh
       .mul(densityR)
@@ -604,7 +609,16 @@ export function airToward(
   const top = air.top
   const halfOuter = sqrt(max(top.mul(top).sub(impactSquared), 0))
   const near = clamp(closest.sub(halfOuter), 0, span)
-  const physical = marchAir(air, eye, direction, near, span, sun, samples)
+  const physical = marchAir(
+    air,
+    eye,
+    direction,
+    near,
+    span,
+    sun,
+    samples,
+    clearedFromOrbit(air).mul(ORBIT_AIRLIGHT),
+  )
   return {
     inscatter: physical.inscatter,
     transmittance: mix(physical.transmittance, vec3(1), clearedFromOrbit(air)),
@@ -624,7 +638,8 @@ export function airToward(
  * the cheat (`art.md`), so from outside the air Enhanced lights the
  * surface at its own light in the beam's hue (`sunThrough`), shows it
  * without the view path's extinction, and keeps the air's light over it — the
- * physics' airlight, which is the haze toward the limb — and the sphere,
+ * physics' airlight, which is the haze toward the limb, lit by the beam
+ * cleared `ORBIT_AIRLIGHT` of the way — and the sphere,
  * the ground and the sea take it from the one lift, as they take the air.
  * On the ground the lift is nothing and the air is the measured one.
  */
@@ -638,7 +653,8 @@ export function clearedFromOrbit(air: AirUniforms): Node<'float'> {
  * as, reddened and dimmed by the column it crossed. White without air.
  *
  * As Enhanced draws a surface from orbit (`clearedFromOrbit`), the beam
- * keeps its hue and takes off its dimming, and the hue is the slant's over
+ * keeps its hue and takes off its dimming (`clearedBeam`, down to
+ * `ORBIT_BEAM_FLOOR`), and the hue is the slant's over
  * the column straight overhead: white at the subsolar point and warm toward
  * the terminator, so a sunward crescent is peach and not gray. Taken off
  * whole, the beam was white everywhere and a crescent Earth's lit sliver a
@@ -660,13 +676,52 @@ export function sunThrough(
   const table = air.transmittance.sample(
     texelCentered(vec2(muSun.add(1).mul(0.5), height01), TRANSMITTANCE),
   ).rgb
+  return clearedBeam(air, table, height01, clearedFromOrbit(air))
+}
+
+/**
+ * A beam read from the transmittance table, cleared by `strength` toward its
+ * hue: the slant's color over the column straight overhead at `height01`,
+ * with its dimming taken off down to `ORBIT_BEAM_FLOOR` of the overhead
+ * light and kept under that.
+ */
+function clearedBeam(
+  air: AirUniforms,
+  table: Node<'vec3'>,
+  height01: Node<'float'>,
+  strength: Node<'float'>,
+): Node<'vec3'> {
   const overhead = air.transmittance.sample(
     texelCentered(vec2(1, height01), TRANSMITTANCE),
   ).rgb
   const slant = table.div(max(overhead, vec3(1e-4)))
-  const hue = slant.div(max(max(slant.x, slant.y), max(slant.z, 1e-4)))
-  return mix(table, hue, clearedFromOrbit(air))
+  const hue = slant.div(
+    max(max(slant.x, slant.y), max(slant.z, ORBIT_BEAM_FLOOR)),
+  )
+  return mix(table, hue, strength)
 }
+
+/**
+ * How dim a beam may be, as a share of the overhead light, and still have
+ * its dimming taken off. A beam the column has all but put out — a
+ * thousandth of the overhead light, grazing the terminator — normalized to
+ * full brightness is a full-strength orange, and it lit the air over the
+ * night side beside a crescent and a sunrise limb: the sunrise limb's crop
+ * went from 0.036 RMSE of the composite's to 0.057. Under a third the beam
+ * keeps its own dimming, and the crop is 0.036 again.
+ */
+const ORBIT_BEAM_FLOOR = 0.3
+
+/**
+ * How far the air over a surface from orbit is lit by the cleared beam.
+ * Production's day side brightens into a pale haze just sunward of the
+ * terminator, where the measured air's light falls away with the beam that
+ * lights it: a half-lit Earth's terminator draws dark and hard. Lit by the
+ * whole cleared beam the haze is there — the half-lit plate 0.021 RMSE of
+ * the composite's against 0.025 — and a crescent's sliver and a dark limb
+ * wash white (0.043 against 0.033). Half is between: 0.023 and 0.040.
+ */
+const ORBIT_AIRLIGHT = 0.5
 
 /** The point's radial, for a march that only has the point. */
 export const radialOf = (point: Node<'vec3'>): Node<'vec3'> => normalize(point)

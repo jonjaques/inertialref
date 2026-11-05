@@ -153,7 +153,10 @@ the composite has a pale face. Enhanced lights the surface at its own light, in 
 hue the beam's slant gives it over the column overhead — white at the
 subsolar point, peach on a sunward crescent — shows it without the view
 path's extinction, and keeps the air's light over it, which is the haze
-toward the limb; the sphere, the ground and the sea take it from the one lift, and on
+toward the limb, lit by the beam cleared halfway so the day side brightens
+into a pale haze before the terminator as the composite's does. A beam the
+column has all but put out keeps its own dimming under a third of the
+overhead light, or it lights the air over the night side orange; the sphere, the ground and the sea take it from the one lift, and on
 the ground the lift is nothing. The shell 20 km past the edge reads within
 thirty percent of the disk 20 km inside it, so the edge does not step. The ring takes no light from the limb's own line, which seen through
 it keeps a quarter of its blue and turns a sunrise's band gray from low
