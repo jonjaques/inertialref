@@ -397,7 +397,10 @@ describe('a star seen through the air', () => {
         fc.double({ min: 0.05, max: 1, noNaN: true }),
         (radius, mu, compression) => {
           const drawn = diskThroughAir(earthRecipe, radius, mu, compression)
-          expect(luminance(drawn)).toBeLessThanOrEqual(
+          // Every channel, not the luminance: the target clips each channel
+          // on the way in, and a deep-red disk's red is four times its
+          // luminance, so a luminance bound passes a red already clipped.
+          expect(Math.max(...drawn)).toBeLessThanOrEqual(
             DISK_THROUGH_AIR_CEILING * (1 + 1e-9),
           )
         },
@@ -588,7 +591,7 @@ describe('the recipe', () => {
 })
 
 describe("Enhanced's limb", () => {
-  it('lifts nothing inside the air and everything ten shell heights above it', () => {
+  it('lifts nothing inside the air and everything LIMB_FADE_HEIGHTS shell heights above it', () => {
     const top = 1.0157
     expect(limbLift(1, top)).toBe(0)
     expect(limbLift(top, top)).toBe(0)

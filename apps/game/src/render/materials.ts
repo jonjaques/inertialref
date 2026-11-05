@@ -405,9 +405,8 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       sun,
       LIMB_SAMPLES,
     )
-    const { inscatter } = throughLimb(physical, lifted)
+    const { inscatter, transmittance: survives } = throughLimb(physical, lifted)
     const radiance = inscatter.mul(sunColor).mul(ATMOSPHERE_GAIN)
-    const survives = physical.transmittance
     const extinguished = oneMinus(
       survives.x.add(survives.y).add(survives.z).div(3),
     )

@@ -315,7 +315,8 @@ export function airOverhead(
  * inside a frame is the largest single thing an arrival would pay — and
  * baked here when there is none. Cached after the first ask either way, so
  * the shell, the sphere, the ground and the sea asking every frame share
- * one lookup. Null for a body with no haze.
+ * one bake; each ask still builds the key, so a caller drawing several of
+ * them asks once. Null for a body with no haze.
  */
 export function scatteringOf(
   engine: { pool(): WorkerPool | null },

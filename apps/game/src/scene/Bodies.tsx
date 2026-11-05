@@ -403,6 +403,16 @@ export function Bodies({
         ),
       )
       if (visual === null) return
+      /*
+       * The body's tables, asked once for the sphere and the shell together:
+       * the ask builds the cache key from a dozen floats. Cached after the
+       * first ask; baked on the pool when there is one, and drawn with the
+       * stand-ins — a vacuum — until the tables land, because a 40 ms bake
+       * inside this frame is the largest single thing an arrival would pay.
+       * Asked every frame, so the frame the tables arrive on is the frame
+       * they bind. `atmosphereLuts.ts`. Null with no haze.
+       */
+      const scattering = scatteringOf(engine, body)
 
       // The textures stay here; the uniforms only need to know which exist.
       const maps = texturesFor(appearance.texture, anisotropy)
@@ -489,13 +499,12 @@ export function Bodies({
         // in the same sea-level unit and the same stretched space.
         setNumber(planet.seaLevel, body.trueRadius * body.placement.compression)
         setNumber(planet.flattening, uniforms.atmosphere?.flattening ?? 1)
-        const tables = scatteringOf(engine, body)
-        if (tables === null) planet.air.clear()
+        if (scattering === null) planet.air.clear()
         else {
           planet.air.set(
-            tables.recipe,
-            tables.transmittance,
-            tables.multiScatter,
+            scattering.recipe,
+            scattering.transmittance,
+            scattering.multiScatter,
           )
           planet.air.lift(body.limb, body.limbFalloff)
         }
@@ -568,39 +577,28 @@ export function Bodies({
         setVector(air.spinAxis.value, uniforms.spinAxis)
         setNumber(air.flattening, shell.flattening)
         air.setLimb(shell.limb, shell.limbFalloff)
-        const haze = appearance.haze
-        if (haze !== null) {
-          /*
-           * Cached after the first ask; baked on the pool when there is one,
-           * and drawn with the stand-ins — a vacuum — until the tables land,
-           * because a 40 ms bake inside this frame is the largest single
-           * thing an arrival would pay. Written every frame, so the frame the
-           * tables arrive on is the frame they bind. `atmosphereLuts.ts`.
-           */
-          const scattering = scatteringOf(engine, body)
-          if (scattering !== null) {
-            air.setScattering(
-              scattering.recipe,
-              scattering.transmittance,
-              scattering.multiScatter,
+        if (scattering !== null) {
+          air.setScattering(
+            scattering.recipe,
+            scattering.transmittance,
+            scattering.multiScatter,
+          )
+          const standing = standingIn(
+            shell,
+            scene.camera.position,
+            position,
+            uniforms.spinAxis,
+          )
+          if (standing !== null) {
+            const sky = airOverhead(
+              scattering,
+              standing,
+              sun,
+              uniforms.sunColor,
             )
-            const standing = standingIn(
-              shell,
-              scene.camera.position,
-              position,
-              uniforms.spinAxis,
-            )
-            if (standing !== null) {
-              const sky = airOverhead(
-                scattering,
-                standing,
-                sun,
-                uniforms.sunColor,
-              )
-              if (standingAir === null || sky >= overhead)
-                standingAir = { scattering, standing }
-              overhead = Math.max(overhead, sky)
-            }
+            if (standingAir === null || sky >= overhead)
+              standingAir = { scattering, standing }
+            overhead = Math.max(overhead, sky)
           }
         }
         setColor(air.sunColor, uniforms.sunColor)

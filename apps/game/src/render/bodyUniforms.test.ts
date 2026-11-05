@@ -248,8 +248,9 @@ describe('a mapped body', () => {
     const top = inside.atmosphere!.outerRadius
     // Inside the air the mesh is the top of the air, within float rounding.
     expect(inside.atmosphere!.scale.x / top).toBeCloseTo(1, 9)
-    // At the full lift it is the ring's ceiling over sea level, four of its
-    // fall-offs out — and the shader's `top` is still the air's.
+    // At the full lift it is the ring's ceiling over sea level,
+    // `LIMB_CEILING_FALLOFFS` of its fall-offs out — and the shader's `top`
+    // is still the air's.
     expect(outside.atmosphere!.scale.x).toBeCloseTo(
       outside.atmosphere!.seaLevel *
         (1 + LIMB_CEILING_FALLOFFS * outside.atmosphere!.limbFalloff),

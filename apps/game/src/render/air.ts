@@ -19,7 +19,6 @@ import {
   max,
   min,
   mix,
-  normalize,
   oneMinus,
   pow,
   saturate,
@@ -50,16 +49,14 @@ import { enhancedSky } from './radiance.ts'
  *
  * The atmosphere shell is a back-side sphere, so it survives the depth test
  * only outside the planet's silhouette; everything the air does in front of
- * a surface has to happen in that surface's material. Each of the three
- * carried an authored veil for it — an airmass over a flat atmosphere, a
- * haze color, 0.15 of extinction per airmass, 0.55 toward white, 0.68 of the
- * surface — and none of it was the sky the shell drew beside it. On a desert
- * at noon the horizon sky went to the gray-white a long path makes while the
- * sand met it in a hard line: 50 km of ground was veiled 27% where the
- * path's transmittance is 0.22, and the veil's color was a haze color the
- * sky did not have. One march and one set of tables, and the ground fades
- * to exactly the sky that continues above it, on every body, from every
- * height, with nothing authored in between.
+ * a surface has to happen in that surface's material. An authored veil there
+ * — an airmass over a flat atmosphere, a haze color, a fixed extinction per
+ * airmass — is not the sky the shell draws beside it: on a desert at noon
+ * the horizon sky is the gray-white a long path makes, and 50 km of sand
+ * veiled 27% where the path's transmittance is 0.22, in a haze color the sky
+ * does not have, meets it in a hard line. One march and one set of tables,
+ * and the ground fades to exactly the sky that continues above it, on every
+ * body, from every height, with nothing authored in between.
  *
  * Positions are in sea-level units about the body's center — the datum is
  * 1, the tables' ceiling is `top` — which is the unit the tables are baked
@@ -102,9 +99,11 @@ function texelCentered(
 
 /*
  * 1×1 stand-ins so a material whose tables have not arrived runs the
- * identical graph: full transmittance and no multiple scattering, with the
- * scattering coefficients defaulting to zero — a vacuum that draws nothing,
- * rather than one frame of some other planet's sky.
+ * identical graph: full transmittance, and a Ψ table of zeros — ln Ψ = 0,
+ * which reads as Ψ = 1 — against scattering coefficients that default to
+ * zero, so nothing multiplies it: a vacuum that draws nothing, rather than
+ * one frame of some other planet's sky. Only the coefficients keep the
+ * stand-in dark, which is why `set` writes them and the tables together.
  *
  * Filtered like the tables they stand in for, or the graph is not identical
  * where it counts: `DataTexture` defaults to nearest, the WGSL builder reads a
@@ -465,12 +464,12 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * between the two, the orange on Earth's sunrise limb from low orbit is a
  * thread under a band of blue; at the stretch itself, seen from four radii
  * toward a sun a degree and a half over the foot's horizon, red stays over
- * blue twenty kilometers up (1.02 : 0.82 : 0.56). The horizon is read as
- * this planet's whatever the table's height: the table's own horizon at
- * a fraction of the height is under which a crown well up the ring goes
- * dark with the sun a degree behind
- * the disk, where it sees the sun well past the terminator — a backlit
- * Earth drew no ring at all. So a beam that climbs from its sample reads
+ * blue twenty kilometers up (1.02 : 0.82 : 0.56). The horizon is this
+ * planet's, whatever height the table is read at: the table's own horizon,
+ * read at a fraction of the height, puts a crown well up the ring in shadow
+ * with the sun a degree behind the disk, where that crown sees the sun well
+ * past the terminator, and a backlit Earth draws no ring at all. So a beam
+ * that climbs from its sample reads
  * the table as it stands, and a beam that descends is read at its own
  * grazing height on this planet, as the horizontal table there squared
  * over the horizontal table at the sample — the far half of the tangent
@@ -572,12 +571,13 @@ export function marchLimb(
  * two thirds of its red, and from low orbit that turned a sunrise's blue
  * band gray-tan — 68 : 66 : 62 where the plate had 153 : 188 : 252. The
  * limb's own line and its band are the photograph, so the ring adds to
- * them and takes nothing from them.
+ * them and takes nothing from them — nor from what is behind the shell: the
+ * composite's transmittance is the physics' alone.
  */
 export function throughLimb(physical: Marched, lifted: Marched): Marched {
   return {
     inscatter: lifted.inscatter.add(physical.inscatter),
-    transmittance: physical.transmittance.mul(lifted.transmittance),
+    transmittance: physical.transmittance,
   }
 }
 
@@ -722,6 +722,3 @@ const ORBIT_BEAM_FLOOR = 0.3
  * wash white (0.043 against 0.033). Half is between: 0.023 and 0.040.
  */
 const ORBIT_AIRLIGHT = 0.5
-
-/** The point's radial, for a march that only has the point. */
-export const radialOf = (point: Node<'vec3'>): Node<'vec3'> => normalize(point)

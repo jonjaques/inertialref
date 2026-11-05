@@ -523,23 +523,23 @@ export function bodyUniforms(
      * drawn sphere is sunk under.
      */
     /*
-     * The mesh grows to the limb's reach as the eye leaves the air — four
-     * of the ring's fall-offs, where that is above the top of the air —
-     * because the shell is a back-side sphere and draws nothing
-     * past its own wall: a ring marched to a ceiling the mesh does not
-     * reach ends in a hard circle at the mesh. It grows in every view, not
-     * only Enhanced's, because the mesh is sized here with no camera mode
-     * in reach and a photographic view marches the extra width as a vacuum
-     * — fragments that draw nothing. `limbReach` is the one formula, read
-     * again by the shader.
+     * The mesh grows to the limb's reach as the eye leaves the air —
+     * `LIMB_CEILING_FALLOFFS` of the ring's fall-offs, where that is above
+     * the top of the air — because the shell is a back-side sphere and
+     * draws nothing past its own wall: a ring marched to a ceiling the mesh
+     * does not reach ends in a hard circle at the mesh. It grows in every
+     * view, not only Enhanced's, because the mesh is sized here with no
+     * camera mode in reach and a photographic view marches the extra width
+     * as a vacuum — fragments that draw nothing. `limbReach` is the one
+     * formula, read again by the shader.
      */
     const seaLevel = body.trueRadius * placement.compression
-    const drawn = Math.max(
+    const mesh = Math.max(
       shell,
       seaLevel * limbReach(body.airTop, body.limb, body.limbFalloff),
     )
     atmosphere = {
-      scale: giant ? oblate(drawn) : { x: drawn, y: drawn, z: drawn },
+      scale: giant ? oblate(mesh) : { x: mesh, y: mesh, z: mesh },
       outerRadius: shell,
       innerRadius: placement.scale * (giant ? 1 : shellFlattening),
       seaLevel,

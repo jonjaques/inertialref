@@ -118,8 +118,8 @@ const TAU_RAYLEIGH_SUM = 0.38
  * factor of eight between a 60° and a 10° sun, because at a high sun most of
  * the zenith's light is the aerosol's forward lobe; a cleaner column of 0.05
  * falls by three, which makes a low sun's sky as bright as a noon one beside
- * the sun that lights it. At 0.12 the model's luminous turbidity is 2.3, where CIE type 12 puts
- * a standard clear sky at 2.5.
+ * the sun that lights it. At 0.12 the model's luminous turbidity is 2.3,
+ * where CIE type 12 puts a standard clear sky at 2.5.
  */
 const TAU_MIE = 0.12
 
@@ -219,11 +219,13 @@ export const ATMOSPHERE_GAIN = Math.PI
  */
 export const LIMB_STRETCH = 3
 /**
- * The lifted gas ends this many of its own fall-offs up. Over two the ring
- * is lit clear of the reddened foot and scatters the gas's blue, six times
- * over: at four that crown is a periwinkle band twice the height of the
- * orange under it on Earth's sunrise limb, and on Mars, whose sunset limb
- * from low orbit is a thin line, a broad blue-white arch.
+ * The lifted gas ends this many of its own fall-offs up, or at the top of
+ * the air where that is higher (`limbReach`). Over two the ring is lit
+ * clear of the reddened foot and scatters the gas's blue, six times over:
+ * at four, on Mars, whose sunset limb from low orbit is a thin line, that
+ * crown is a broad blue-white arch. Earth's 100 km top is above two of its
+ * ring's 25 km fall-offs, so there the ring ends at the top and this has
+ * no say.
  */
 export const LIMB_CEILING_FALLOFFS = 2
 export const LIMB_GAIN = 1
@@ -715,7 +717,8 @@ export function bakeMultipleScattering(
          * the sphere, so the near root is zero and not taken — and a march
          * past this line crosses the planet at the surface's density: a chord
          * of rock lit as if it were air, which grows Ψ at the ground sixfold
-         * as the steps are refined. Same μ ≥ 0 guard as `transmittanceFrom`, for its rounding.
+         * as the steps are refined. Same μ ≥ 0 guard as `transmittanceFrom`,
+         * for its rounding.
          */
         if (muRay < 0 && r <= 1) continue
         const ground = muRay < 0 ? distanceToSphere(r, muRay, 1) : Infinity

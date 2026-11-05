@@ -472,15 +472,6 @@ export function createPlanetMaterial(): PlanetMaterial {
   const photometric = mix(mu0, lommelSeeliger.mul(mu0.sign()), lunarLambert)
 
   /*
-   * The light itself reddens as the sun drops. A surface near the terminator
-   * is lit through hundreds of kilometers of air that has scattered the blue
-   * away, which is why every orbital photograph puts an amber band along the
-   * dawn and dusk lines — the ground there is lit by sunset. Keyed to the
-   * geometric incidence, because it is the sun's altitude that decides the
-   * path length, not the slope of any hill; and scaled by how much air the
-   * body has, because the Moon's terminator is gray to the end.
-   */
-  /*
    * Sea-level units about the center, for the air, in the space the shell
    * marches: stretched 1/flattening along the spin axis, so a giant's oblate
    * air is the sphere the march assumes. The eye is wherever it is.
@@ -494,9 +485,11 @@ export function createPlanetMaterial(): PlanetMaterial {
    * a tenth of a radius of it, which is fog over the whole high latitude.
    *
    * The direct beam arrives through the column the table holds for that
-   * point and sun — reddened and dimmed as the sun drops, white on an
-   * airless world — and the ground streamed in front of this disk takes its
-   * beam from the same table, so the two agree across the gate.
+   * point and sun — reddened and dimmed as the sun drops, which is the amber
+   * band every orbital photograph puts along the dawn and dusk lines, and
+   * white on an airless world — and the ground streamed in front of this
+   * disk takes its beam from the same table, so the two agree across the
+   * gate.
    */
   const stretchGain = float(1)
     .div(max(flattening, float(1e-3)))
