@@ -4,7 +4,7 @@ import {
   createAirUniforms,
   sunThrough,
 } from './air.ts'
-import { sensorRadiance, visibilityAmbient } from './radiance.ts'
+import { sensorRadiance, skyOverhead, visibilityAmbient } from './radiance.ts'
 import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
 import { skylightLeft } from './twilight.ts'
 import {
@@ -57,6 +57,8 @@ import {
 } from 'three/tsl'
 import type { DepositSlopeTable, LinearRgb } from '@inertialref/universe'
 import {
+  LIMB_OWN_FROM,
+  LIMB_OWN_TO,
   OPEN_OCEAN,
   REFLECTANCE_CEILING,
   type SurfaceMaterial,
@@ -1352,18 +1354,36 @@ export function createTerrainMaterial(): TerrainMaterial {
      * carries the inscatter between the camera and the ground; what it cannot
      * do is put light *on* the ground.
      */
-    const diffuse = skyStrength.mul(SKY_FRACTION)
+    // Capped at one: the fraction comes out of the beam, and over one it is
+    // a negative beam.
+    const diffuse = min(skyStrength.mul(SKY_FRACTION), 1)
     const skyView = saturate(dot(shaded, up)).mul(0.5).add(0.5)
     const direct = surfaceAlbedo
       .mul(photometric)
       .mul(daylight)
       .mul(sunlight)
       .mul(oneMinus(diffuse))
-    const ambient = skyColor
+    /*
+     * Past a few of Earth's columns the fraction is the whole beam and only
+     * the tables know what the sky delivers: under Titan's four optical
+     * depths the zenith is 1.4% of white and the beam e^−4.3 of itself, so a
+     * ground lit by the authored tan at a third of the sun stood cream under
+     * a near-black sky. There the sky is the zenith the camera marches each
+     * frame (`skyOverhead`), the irradiance of a uniform sky over π, which a
+     * sky that deep is. The two meet over the same columns the limb's lift
+     * leaves (`LIMB_OWN_FROM`).
+     */
+    const deep = smoothstep(
+      float(LIMB_OWN_FROM),
+      float(LIMB_OWN_TO),
+      skyStrength,
+    )
+    const thin = skyColor
       .mul(diffuse)
       .mul(skyView)
       .mul(skylightLeft(incidence, 0.25))
       .mul(dayColor)
+    const ambient = mix(thin, skyOverhead.mul(skyView), deep)
       // A crater floor sees half the sky a plain does, including Enhanced's
       // visibility fill. Photographic views retain only the scattered light.
       .add(skyView.mul(visibilityAmbient))

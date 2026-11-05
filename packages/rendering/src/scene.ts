@@ -31,7 +31,7 @@ import {
   ringScales,
   sunkSphereRadius,
 } from './datum.ts'
-import { limbFalloff, limbLift } from './atmosphere.ts'
+import { limbFalloff, limbLift, limbShare } from './atmosphere.ts'
 import { terminatorFor } from './terrainPalette.ts'
 import {
   LOD_THRESHOLDS,
@@ -389,7 +389,9 @@ export function buildScene(
               body.appearance.haze.height,
             ),
       airTop,
-      limb: limbLift(placement.distance / body.radius, airTop),
+      limb:
+        limbLift(placement.distance / body.radius, airTop) *
+        (body.appearance.haze === null ? 1 : limbShare(body.appearance.haze)),
       limbFalloff: limbFalloff(
         placement.distance / body.radius,
         heights.rayleigh,

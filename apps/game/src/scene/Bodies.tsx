@@ -51,12 +51,13 @@ import {
 } from '../render/planet.ts'
 import {
   airOverhead,
+  airOverheadRgb,
   type AtmosphereScattering,
   type Standing,
   standingIn,
   scatteringOf,
 } from '../render/atmosphereLuts.ts'
-import { airLuminance, observerAir } from '../render/radiance.ts'
+import { airLuminance, observerAir, skyOverhead } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -389,6 +390,8 @@ export function Bodies({
     let standingAir = null as {
       readonly scattering: AtmosphereScattering
       readonly standing: Standing
+      readonly sun: Vec3 | null
+      readonly sunColor: Rgb
     } | null
     // What the air does to the star being drawn, set per star below.
     let throughAir: readonly [number, number, number] | null = null
@@ -597,7 +600,12 @@ export function Bodies({
               uniforms.sunColor,
             )
             if (standingAir === null || sky >= overhead)
-              standingAir = { scattering, standing }
+              standingAir = {
+                scattering,
+                standing,
+                sun,
+                sunColor: uniforms.sunColor,
+              }
             overhead = Math.max(overhead, sky)
           }
         }
@@ -637,6 +645,17 @@ export function Bodies({
     }
     throughAir = null
     airLuminance.value = overhead
+    // The same zenith in color, for the ground and the sea under a deep air.
+    if (standingAir === null) skyOverhead.value.set(0, 0, 0)
+    else {
+      const [r, g, b] = airOverheadRgb(
+        standingAir.scattering,
+        standingAir.standing,
+        standingAir.sun,
+        standingAir.sunColor,
+      )
+      skyOverhead.value.set(r, g, b)
+    }
     // How far down its air the eye stands, in the tables' own units.
     const top = standingAir?.scattering.recipe.topRatio ?? 1
     observerAir.depth =
