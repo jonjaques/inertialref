@@ -130,8 +130,9 @@ is empty when it should not be, check the page before checking the code.
 Session flags worth knowing: `--url` (the mode is a function of the path and the query,
 and the driver re-boots unless the attached page is already showing everything the URL
 asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
-profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--keep-storage`, `--fresh`,
-`--json`, `--down`, `--status`.
+profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--color-profile` (Chrome's output color space; `srgb`
+makes a plate the build's rather than the display's, and a Chrome already up under another
+profile is refused until `--down`), `--keep-storage`, `--fresh`, `--json`, `--down`, `--status`.
 
 A `--shot` is downscaled to 1568 px on its long edge, because that is where the reader
 downsamples anyway — beyond it a bigger file is bytes spent on pixels nobody sees. Pass

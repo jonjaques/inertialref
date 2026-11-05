@@ -189,7 +189,7 @@ Session flags:
                      Chrome's output color profile (srgb, display-p3-d65, …);
                      default is the attached display's. Applies at launch, so
                      a Chrome already up under another profile is refused
-  --fresh           re-boot even if the attached page is already rendering
+  --fresh            re-boot even if the attached page is already rendering
   --keep-storage     retain local storage/cookies and allow a warm attach;
                      default clears both before booting the requested page
   --user-gesture     activate only --js/--file evaluations as user gestures;
@@ -386,8 +386,14 @@ async function launchChrome(state) {
     // record the one that was asked for beside it.
     const running = state.colorProfile ?? null
     if (running !== COLOR_PROFILE) {
+      // A rig with no record of the flag is one an older driver launched, and
+      // that driver never forced a profile: the display's, said so.
+      const recorded =
+        state.colorProfile === undefined
+          ? ' (none recorded, so the display)'
+          : ''
       throw new Error(
-        `Chrome on port ${PORT} runs color profile ${running ?? 'display'}, not ${COLOR_PROFILE ?? 'display'}; ` +
+        `Chrome on port ${PORT} runs color profile ${running ?? 'display'}${recorded}, not ${COLOR_PROFILE ?? 'display'}; ` +
           `node scripts/drive.mjs --port ${PORT} --down first`,
       )
     }
@@ -560,6 +566,7 @@ async function status() {
       `port      ${PORT}`,
       `url       ${URL_} ${(await answers(URL_)) ? '(answering)' : '(down)'}`,
       `chrome    ${chrome ? `listening, pid ${state.chromePid ?? '?'}` : 'not running'}`,
+      `profile   ${state.colorProfile ?? 'display'}`,
       `dev       ${
         state.startedServer === true
           ? `started by this rig, pid ${state.serverPid ?? '?'}`
