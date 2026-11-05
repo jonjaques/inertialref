@@ -161,7 +161,9 @@ dev` — against the development instance: each environment's build settings
   account module answers who is asking and fetches the user's private
   metadata with the secret key; `grants.ts` alone says which flag opens
   which feature — `tour`, `solo`, `multiplayer`, each strictly `true`, and
-  `admin` for every one — and `tour/access.ts` asks it for `tour`. The
+  `admin` for every one — and `tour/access.ts` asks it for `tour`.
+  `/api/account` carries the features an account is granted, and the menu
+  offers Solo to an account granted `solo` in a build that holds it out. The
   planetarium asks `/api/tour/capabilities` once per signed-in user and offers
   the Guide panel only on a yes; the Worker refuses a session to anybody else
   — 401 signed out, 403 without the grant — whatever the menu showed. Whether

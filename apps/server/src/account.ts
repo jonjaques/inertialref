@@ -78,12 +78,12 @@ export function accountKeys(env: Env, request: Request): AccountKeys {
 
 const log = logger('server.account')
 
-const UNCONFIGURED: AccountStatus = {
+const UNCONFIGURED: Identity = {
   configured: false,
   signedIn: false,
   userId: null,
 }
-const SIGNED_OUT: AccountStatus = {
+const SIGNED_OUT: Identity = {
   configured: true,
   signedIn: false,
   userId: null,
@@ -188,11 +188,18 @@ export async function verifySession(
   return { userId: sub, sessionId: sid, expiresAt: exp }
 }
 
+/**
+ * Who is asking, without what they are granted: the account record less its
+ * `grants`, which cost a call to Clerk that a question about identity alone
+ * does not need to make (`accountStatus` in `grants.ts` adds them).
+ */
+export type Identity = Omit<AccountStatus, 'grants'>
+
 /** Who a request is from, by the bearer token it carries. */
 export async function identify(
   request: Request,
   keys: AccountKeys,
-): Promise<AccountStatus> {
+): Promise<Identity> {
   if (!keys.secretKey && !keys.jwtKey) return UNCONFIGURED
   const token = bearer(request)
   if (token === null) return SIGNED_OUT
