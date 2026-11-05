@@ -10,6 +10,11 @@ Reasoning and the full card: [`.claude/skills/drive/SKILL.md`](../skills/drive/S
   `localhost:5173` are indistinguishable to it. The driver launches its own Chrome on its
   own profile and port and needs no focus.
 
+- **T3 Code's `preview_*` tools are the user's window, not the rig.** Use them when the
+  user asks for browser work in the T3 preview. Evidence — a plate, a figure, a strobe —
+  is still `scripts/drive.mjs`: the preview is a window the compositor may not be
+  presenting, and nothing below about occlusion or capture holds for it.
+
 - **Ask headlessly first.** `pnpm sim`, `pnpm vitest run <file>`, a throwaway script
   against `openSession` in `.scratch/`, or `pnpm test:gpu` for a shader — the graph
   on the real GPU, with the cost determined by the selected tests and adapter. The

@@ -1,7 +1,9 @@
 # ADR-0018: The instrument the lens is operated from
 
 Status: accepted · 2026-08-28 · amended by [ADR-0055](0055-a-long-lens-refines-what-its-frame-can-reach.md): the
-long end of the lens is 11.4°, and Earthrise takes the field it solves
+long end of the lens is 11.4°, and Earthrise takes the field it solves · the
+gamepad is [ADR-0057](0057-a-gamepad-is-a-second-binding-on-every-action.md),
+built on the action ids this names as its seam
 
 ## Context
 
@@ -253,8 +255,9 @@ the state a plate is defined to be taken in. None of them is a second producer o
 anything: the lens port writes the same flight lens a slider writes, and
 `engine.lens` still resolves the cutscene arm first.
 
-**Deferred, with the seam named.** Gamepad and HOTAS — the action ids are the
-seam. Bindings in the save — the `controls` group is what would sync. A bookmark
+**Deferred, with the seam named.** HOTAS — the action ids are the seam, as
+they were for the gamepad, which [ADR-0057](0057-a-gamepad-is-a-second-binding-on-every-action.md)
+builds on them. Bindings in the save — the `controls` group is what would sync. A bookmark
 store — a preset whose address the viewer wrote is a bookmark and `pictures.ts`
 is the record, so the store is what is missing. The flight canopy's
 hold-to-free-look — the aim offset is the mechanism. Photo-mode export — the

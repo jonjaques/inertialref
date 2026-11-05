@@ -3,7 +3,7 @@ name: ship
 description: Take finished, verified work to a pull request — rebased onto origin/main, committed in house style, pushed, opened ready rather than draft, with CI watched. It runs no gate; the checks are CI's and the evidence is what was gathered during the work. Review is /code-review, which the user invokes next.
 argument-hint: '[branch name or PR title]'
 disable-model-invocation: true
-allowed-tools: Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git add:*) Bash(git commit:*) Bash(git switch:*) Bash(git checkout -b:*) Bash(git fetch:*) Bash(git rebase:*) Bash(git push:*) Bash(gh pr create:*) Bash(gh pr edit:*) Bash(gh pr view:*) Bash(gh pr diff:*) Bash(gh pr checks:*) Bash(gh pr comment:*) Bash(gh run list:*) Bash(gh run view:*) Bash(gh run watch:*) Bash(pnpm check:*)
+allowed-tools: Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git add:*) Bash(git commit:*) Bash(git switch:*) Bash(git checkout -b:*) Bash(git fetch:*) Bash(git rebase:*) Bash(git push:*) Bash(gh pr create:*) Bash(gh pr edit:*) Bash(gh pr view:*) Bash(gh pr diff:*) Bash(gh pr checks:*) Bash(gh pr comment:*) Bash(gh run list:*) Bash(gh run view:*) Bash(gh run watch:*) Bash(gh api:*) Bash(pnpm check:*) mcp__t3-code__link_pull_request mcp__t3-code__watch_pull_request
 ---
 
 # Ship it
@@ -91,10 +91,21 @@ git push -u origin HEAD          # --force-with-lease after a rebase of a pushed
 gh pr create --base main --title "<subject>" --body-file <file>
 ```
 
-No `--draft`: a PR that sits in draft after the work is finished is a PR nobody looks
-at. `.github/pull_request_template.md` is the shape — what changed, the invariants it
-touches, screenshots, verification, what was left out. Write the body to a file and pass
-`--body-file`; a heredoc through `--body` mangles backticks and blank lines.
+In a cloud session that answers 403: `gh pr`, `gh issue` and every other GraphQL
+subcommand are refused by the GitHub proxy. The REST forms work there and from a
+terminal alike, so they are the fallback rather than a second procedure:
+
+```bash
+gh api -X POST repos/jonjaques/inertialref/pulls --jq .html_url \
+  -f base=main -f head="$(git branch --show-current)" -f title="<subject>" -F body=@<file>
+gh api -X PATCH repos/jonjaques/inertialref/pulls/<n> -F body=@<file>    # the later edit
+```
+
+No `--draft`, and the REST form opens ready by default: a PR that sits in draft after
+the work is finished is a PR nobody looks at. `.github/pull_request_template.md` is the
+shape — what changed, the invariants it touches, screenshots, verification, what was left
+out. Write the body to a file and pass `--body-file` or `-F body=@<file>`; a heredoc
+through `--body` mangles backticks and blank lines.
 
 **Verification is a list of what ran, with its numbers, and what did not.** The Stop
 gate's stages, `pnpm check` if it ran, the `pnpm presets:compare` table for anything
@@ -106,36 +117,45 @@ names its operating point, and at least one is outside Sol.
 
 ## 5. Watch CI, and fix red
 
-Start the watch and **keep working** — do not block on it:
+**In T3 Code the host watches.** Call `link_pull_request` with the URL, then
+`watch_pull_request`, and end the turn: the server polls every two minutes and wakes the
+thread when a check fails, the required checks pass, someone else comments or the branch
+starts to conflict. No `Monitor`, no `sleep` loop, no `gh run watch` — a thread that polls
+is a thread that never settles, and a watch started from a subagent does nothing.
+
+**In a terminal or a cloud session**, start the watch and **keep working** — do not block
+on it:
 
 ```
 Monitor({
   description: 'CI checks on PR #<n>',
   timeout_ms: 1800000,
   persistent: false,
-  command: `prev=""
+  command: `sha=$(git rev-parse HEAD); prev=""
     while true; do
-      s=$(gh pr checks <n> --json name,bucket 2>/dev/null)
-      [ -n "$s" ] || { sleep 30; continue; }
-      cur=$(jq -r '.[] | select(.bucket!="pending") | "\\(.name): \\(.bucket)"' <<<"$s" | sort)
+      cur=$(gh api "repos/jonjaques/inertialref/commits/$sha/check-runs" --jq '.check_runs[] | "\\(.name): \\(.status)\\(if .conclusion then " " + .conclusion else "" end)"' 2>/dev/null | sort)
+      [ -n "$cur" ] || { sleep 30; continue; }
       comm -13 <(echo "$prev") <(echo "$cur")
       prev=$cur
-      jq -e 'length > 0 and all(.[]; .bucket!="pending")' <<<"$s" >/dev/null && break
+      echo "$cur" | grep -qv completed || break
       sleep 30
     done`,
 })
 ```
 
-It emits one line per check as it settles and exits when none are pending, so a failure
-and a pass both arrive. **Key the loop on the output, not on the exit code**: `gh pr
-checks` exits 8 while any check is pending and 1 when one has failed, so `|| continue`
-never reaches the parse and the watch runs to its timeout having emitted nothing.
+It emits one line per check as it changes and exits when none is still queued or running,
+so a failure and a pass both arrive. The commit's check-runs rather than `gh pr checks`:
+the latter is GraphQL, which the cloud proxy refuses, and all three checks register as
+check-runs, so the REST answer is the whole answer. **Key the loop on the output, never on
+an exit code** — an empty answer means the checks have not registered yet, not that there
+are none, and `gh pr checks` exiting 8 while pending is how an earlier loop ran to its
+timeout having emitted nothing.
 
-There are two checks: `pnpm check` from `.github/workflows/check.yml` — the runner's log
-names the stage that failed and what it cost — and a Cloudflare `Workers Builds`
-deployment. Both have to be green. If CI comes back red, fix it, commit the fix as its
-own step, push again, and say so in the report rather than letting a red PR sit under
-a "ready" label.
+There are three checks: `pnpm check` and `pnpm test:gpu (macOS, Metal)` from
+`.github/workflows/check.yml` — the runner's log names the stage that failed and what it
+cost — and the Cloudflare `Workers Builds: inertialrefd` deployment. All three have to be
+green. If CI comes back red, fix it, commit the fix as its own step, push again, and say so
+in the report rather than letting a red PR sit under a "ready" label.
 
 ## 6. Hand off
 

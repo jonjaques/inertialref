@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router'
 import {
   Aperture,
   Database,
+  Gamepad2,
   Keyboard,
   MonitorCog,
   type LucideIcon,
@@ -11,6 +12,7 @@ import { OpticsSection } from '../hud/OpticsSection.tsx'
 import type { HudRenderState } from '../hud/controls.ts'
 import { GraphicsPanel } from '../hud/GraphicsPanel.tsx'
 import { FOCUS_RING } from '../hud/focus.ts'
+import { ControllerSection } from './ControllerSection.tsx'
 import { ControlsSection } from './ControlsSection.tsx'
 import { DataSection } from './DataSection.tsx'
 import { OverlayPage } from './OverlayPage.tsx'
@@ -42,6 +44,7 @@ const SECTIONS = [
   // — a lens control reached from two places must not look like two things.
   { id: 'camera', title: 'Camera', icon: Aperture },
   { id: 'controls', title: 'Controls', icon: Keyboard },
+  { id: 'controller', title: 'Controller', icon: Gamepad2 },
   { id: 'data', title: 'Data', icon: Database },
 ] as const satisfies readonly {
   id: string
@@ -77,7 +80,14 @@ export function SettingsPage({
     SECTIONS.find((entry) => entry.id === section)?.id ?? DEFAULT_SECTION
 
   return (
-    <OverlayPage title="Settings" subtitle="The simulation keeps running">
+    // Wide for the controller alone: its page is a picture of a pad with a
+    // column of callouts down each side, and at the narrow width the callouts
+    // set below the interface's smallest label size.
+    <OverlayPage
+      title="Settings"
+      subtitle="The simulation keeps running"
+      wide={active === 'controller'}
+    >
       <nav
         aria-label="Settings sections"
         className="mb-3 flex gap-1 border-b border-slate-800 pb-2"
@@ -117,6 +127,7 @@ export function SettingsPage({
         </>
       )}
       {active === 'controls' && <ControlsSection />}
+      {active === 'controller' && <ControllerSection />}
       {active === 'data' && <DataSection />}
     </OverlayPage>
   )

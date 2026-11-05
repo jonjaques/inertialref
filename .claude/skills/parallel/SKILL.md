@@ -63,8 +63,11 @@ symlink farm into `.pnpm`, and copying it dereferences the links into ~640 MB.
 An isolated agent cannot ask you a question cheaply, so the brief has to carry everything:
 
 - the exact files it owns, and that it must not touch others;
-- the invariants that apply — point at the `.claude/rules/` file for its paths, which
-  loads automatically once it opens a matching file;
+- the invariants that apply — name the `.claude/rules/` files for its paths (the table in
+  `.claude/rules/README.md`) and tell it to read them first. A subagent in its own worktree
+  does **not** load the path-scoped rules as it opens files there: Claude Code hands it the
+  instruction files of the main conversation and skips the worktree's own `CLAUDE.md` and
+  `.claude/rules/`;
 - the command that proves it done: `pnpm typecheck && pnpm test`, or a named test file;
 - that it must report what it verified with numbers, not "it works".
 
@@ -91,6 +94,17 @@ remove it. `git worktree list` shows them.
 - **`/code-review`** — the review pass, at any effort level, with `--fix` to apply what it
   finds and `ultra` for a deep multi-agent review in the cloud. User-triggered and billed,
   and deliberately not part of `/ship`: name it in the handoff, never launch it.
+- **A workflow (ultracode)** — the `Workflow` tool runs a script that spawns dozens of
+  agents and reports one result; it is this skill's fan-out with the orchestration in code.
+  It runs only when the user opts in — the word `ultracode`, "use a workflow", or
+  `/effort ultracode` — never on a judgment that the task would benefit. When they do,
+  `worktree-implementer` is the worker, and everything above about the brief, the install
+  and the explicit rules read binds a workflow agent exactly as it binds a subagent.
+- **A T3 Code thread** — the host's own fan-out: a new thread in its own worktree under
+  T3's home directory, on a branch T3 cuts from `origin/main`, with
+  `scripts/worktree-setup.sh` run before its first turn. Only when the user asks for a new
+  thread; "parallel" and "subagent" never mean one.
 - **`claude --cloud "<task>"`** — a full cloud session per task, running independently of
   this machine. It clones the GitHub remote at your current branch, so **push first**.
-  Requires the Node 26 setup script; see `scripts/cloud-setup.sh`.
+  Requires the Node 26 setup script; see `scripts/cloud-setup.sh`. There `gh pr` answers
+  403 through the GitHub proxy, and `/ship` carries the REST forms.

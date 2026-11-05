@@ -157,14 +157,17 @@ dev` — against the development instance: each environment's build settings
   speaks or is spoken to. Signing out elsewhere or ending a session in the
   dashboard stops `getToken()` from minting, so revocation reaches a live
   connection within one token lifetime of its next exchange.
-- **The guide's grant is private metadata, decided in `tour/access.ts`.** The
+- **The guide's grant is private metadata, read in `grants.ts`.** The
   account module answers who is asking and fetches the user's private
-  metadata with the secret key; the tour module alone says that `admin` or
-  `tour`, strictly `true`, grants the guide. The planetarium asks
-  `/api/tour/capabilities` once per signed-in user and offers the Guide panel
-  only on a yes; the Worker refuses a session to anybody else — 401 signed
-  out, 403 without the grant — whatever the menu showed. Whether the
-  deployment offers the guide at all is decided there too: without a provider
+  metadata with the secret key; `grants.ts` alone says which flag opens
+  which feature — `tour`, `solo`, `multiplayer`, each strictly `true`, and
+  `admin` for every one — and `tour/access.ts` asks it for `tour`.
+  `/api/account` carries the features an account is granted, and the menu
+  offers Solo to an account granted `solo` in a build that holds it out. The
+  planetarium asks `/api/tour/capabilities` once per signed-in user and offers
+  the Guide panel only on a yes; the Worker refuses a session to anybody else
+  — 401 signed out, 403 without the grant — whatever the menu showed. Whether
+  the deployment offers the guide at all is decided in `tour/access.ts`: without a provider
   key, a secret key at the request's host, or with `TOUR_GUIDE_ENABLED` off,
   the verdict is `unavailable` before any token is read: the session route
   answers 503 and the verdict route answers it as the verdict. `guideAccess`

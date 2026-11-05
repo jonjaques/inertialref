@@ -362,9 +362,14 @@ describe('the network handshake', () => {
   })
 
   it('decodes the server’s account verdict, null user included', () => {
-    const out = { configured: true, signedIn: false, userId: null }
+    const out = { configured: true, signedIn: false, userId: null, grants: [] }
     expect(decode(decodeAccountStatus, out)).toEqual({ ok: true, value: out })
-    const inside = { configured: true, signedIn: true, userId: 'user_2x' }
+    const inside = {
+      configured: true,
+      signedIn: true,
+      userId: 'user_2x',
+      grants: ['tour', 'solo'],
+    }
     expect(decode(decodeAccountStatus, inside)).toEqual({
       ok: true,
       value: inside,

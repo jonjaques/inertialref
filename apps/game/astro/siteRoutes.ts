@@ -36,6 +36,8 @@ export const shellPaths = [
   SETTINGS,
   SIGN_IN,
   SIGN_UP,
-  ...['display', 'camera', 'controls', 'data'].map(settingsSection),
+  ...['display', 'camera', 'controls', 'controller', 'data'].map(
+    settingsSection,
+  ),
   ...CUTSCENES.map((script) => cinemaScene(script.id)),
 ]

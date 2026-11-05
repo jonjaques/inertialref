@@ -81,5 +81,10 @@ export function useWayHome(): boolean {
  */
 export function focusWayHome(): void {
   if (typeof document === 'undefined') return
-  document.getElementById(WAY_HOME)?.focus({ preventScroll: true })
+  // `focusVisible` for the pad's way in (`chrome.focus`): the browser decides
+  // the ring from the last keyboard or pointer event, and a pad is neither, so
+  // without it the panels take the focus with nothing on screen to say where.
+  document
+    .getElementById(WAY_HOME)
+    ?.focus({ preventScroll: true, focusVisible: true } as FocusOptions)
 }
