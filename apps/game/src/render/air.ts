@@ -582,9 +582,9 @@ export function throughLimb(physical: Marched, lifted: Marched): Marched {
  * the lifted gas is the shell's (see the module's doc comment), and its
  * extinction except as Enhanced draws a surface from orbit
  * (`clearedFromOrbit`). The segment starts where it enters the air —
- * where the eye is, inside it — and ends at the point, so a surface seen from orbit is veiled by the
- * whole slant column and one seen from a beach by the meters between, with
- * no second model for either.
+ * where the eye is, inside it — and ends at the point, so a surface seen
+ * from orbit is veiled by the whole slant column and one seen from a beach
+ * by the meters between, with no second model for either.
  */
 export function airToward(
   air: AirUniforms,
