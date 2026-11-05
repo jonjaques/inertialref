@@ -417,7 +417,11 @@ host. Without the publishable key there is no account badge; without the
 secret `/api/account` answers that accounts are not configured and the guide is
 unavailable. Both states are supported builds. The guide is
 granted by hand: `tour: true` or `admin: true` in the user's private metadata
-in Clerk's dashboard.
+in Clerk's dashboard. `apps/server/src/grants.ts` is the table of flags —
+`tour`, `solo`, `multiplayer`, and `admin` for all of them. `pnpm dev` offers
+Solo in the menu to everybody; a production build offers it only to an account
+granted `solo`, so checking that path needs `pnpm build` and a signed-in
+account.
 
 **Reference audio** is not in git. It lives in R2 and reaches the browser
 from one table, `apps/server/src/media.ts`: `pnpm media:pull` copies it into

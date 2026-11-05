@@ -19,7 +19,8 @@ import { GENERATION_VERSIONS } from '@inertialref/universe'
  * disagree about where the stars were.
  */
 import catalogManifest from '../../../data/catalog/manifest.json' with { type: 'json' }
-import { accountKeys, AccountUnavailableError, identify } from './account.ts'
+import { AccountUnavailableError } from './account.ts'
+import { accountStatus } from './grants.ts'
 import { allowed, RETRY_AFTER, sourceKey } from './limits.ts'
 import { routeFor } from './routes.ts'
 import { type MediaStores, serveMedia } from './serveMedia.ts'
@@ -97,9 +98,9 @@ export default {
           return api({ error: 'account is a GET' }, 405)
         }
         try {
-          return api(await identify(request, accountKeys(env, request)))
+          return api(await accountStatus(request, env))
         } catch (error) {
-          // Logged with its reason in `identify`; the visitor gets the fact.
+          // Logged with its reason in `account.ts`; the visitor gets the fact.
           if (error instanceof AccountUnavailableError)
             return api({ error: 'accounts are unavailable' }, 503)
           throw error
