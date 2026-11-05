@@ -16,6 +16,9 @@ import {
   LIMB_STRETCH,
   limbFalloff,
   limbLift,
+  limbShare,
+  LIMB_OWN_FROM,
+  LIMB_OWN_TO,
   limbReach,
   multipleScatteringAt,
   MULTI_SCATTER_FLOOR,
@@ -811,5 +814,26 @@ describe("Enhanced's limb", () => {
     )
     // An air already taller than the ceiling keeps its own top.
     expect(limbReach(1.3, 1, falloff)).toBe(1.3)
+  })
+})
+
+describe('the lift’s share of a column', () => {
+  it('is whole for every thin air and nothing for a haze that is its own ring', () => {
+    // Earth is one visible column and Mars's dust 0.76; both stand under
+    // LIMB_OWN_FROM and keep the whole lift. A haze at ten of Earth's columns
+    // is opaque along its tangent and gets none; between, a smoothstep.
+    expect(limbShare(EARTH_HAZE)).toBe(1)
+    expect(limbShare(MARS_HAZE)).toBe(1)
+    expect(visibleThickness(MARS_HAZE)).toBeLessThan(LIMB_OWN_FROM)
+    const deep = { ...MARS_HAZE, aerosolDepth: 4.3, aerosolAlbedo: 0.95 }
+    expect(visibleThickness(deep)).toBeGreaterThan(LIMB_OWN_TO)
+    expect(limbShare(deep)).toBe(0)
+    let previous = 1
+    for (let depth = 0; depth <= 6; depth += 0.1) {
+      const share = limbShare({ ...MARS_HAZE, aerosolDepth: depth })
+      expect(share).toBeLessThanOrEqual(previous + 1e-12)
+      expect(share).toBeGreaterThanOrEqual(0)
+      previous = share
+    }
   })
 })

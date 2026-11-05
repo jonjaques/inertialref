@@ -331,6 +331,30 @@ export function limbLift(eyeRatio: number, airTop: number): number {
 }
 
 /**
+ * The lift is for air too thin to see from orbit, and a column past a few
+ * of Earth's is its own ring: between `LIMB_OWN_FROM` and `LIMB_OWN_TO`
+ * visible columns (`visibleThickness`) the lift's share falls from one to
+ * nothing. Drawn six times over on a column opaque along its tangent, the
+ * ring is a hard orange rim inside a limb the physics already draws as a
+ * broad glow — Titan's, at ten of Earth's columns — and a hairline is a
+ * gray band standing off it. Earth, Mars and every thin haze stand under
+ * two and keep the whole lift.
+ */
+export const LIMB_OWN_FROM = 2
+export const LIMB_OWN_TO = 5
+
+export function limbShare(haze: HazeAuthoring): number {
+  const u = Math.min(
+    Math.max(
+      (visibleThickness(haze) - LIMB_OWN_FROM) / (LIMB_OWN_TO - LIMB_OWN_FROM),
+      0,
+    ),
+    1,
+  )
+  return 1 - u * u * (3 - 2 * u)
+}
+
+/**
  * The ring's fall-off for an eye at `eyeRatio` over the datum, in datum
  * units: `LIMB_STRETCH` of the gas's own scale height `gasHeight` (datum
  * units, `airHeights`), or a `LIMB_STANDOFF`th of the eye's height if

@@ -2,6 +2,7 @@ import {
   sensorRadiance,
   sceneRadianceGain,
   visibilityAmbient,
+  skyOverhead,
 } from './radiance.ts'
 import {
   Color,
@@ -22,6 +23,7 @@ import {
   If,
   length,
   max,
+  min,
   mix,
   modelViewMatrix,
   normalize,
@@ -43,7 +45,12 @@ import {
   vertexIndex,
 } from 'three/tsl'
 import type { LinearRgb } from '@inertialref/universe'
-import { OPEN_OCEAN, type TerrainPalette } from '@inertialref/rendering'
+import {
+  LIMB_OWN_FROM,
+  LIMB_OWN_TO,
+  OPEN_OCEAN,
+  type TerrainPalette,
+} from '@inertialref/rendering'
 import {
   asField,
   asVector,
@@ -450,7 +457,8 @@ export function createWaterMaterial(): WaterMaterial {
       // are made of; the beam alone crosses the column.
       const dayColor = sunColor.mul(sunIntensity)
       const sunlight = dayColor.mul(sunThrough(air, pointUnits, sun))
-      const diffuse = skyStrength.mul(SKY_FRACTION)
+      // Capped at one, as the ground caps it.
+      const diffuse = min(skyStrength.mul(SKY_FRACTION), 1)
 
       /* --- Fresnel ---------------------------------------------------------- */
 
@@ -529,12 +537,21 @@ export function createWaterMaterial(): WaterMaterial {
        * the two-lobe glint the sphere and the ground already share — on the
        * wave normal now, because the wave field is in this geometry.
        */
-      const skyLight = skyColor
-        .mul(skyStrength)
-        .mul(skylightLeft(incidence, 0.15))
-        .mul(0.9)
-        .add(vec3(visibilityAmbient))
-        .mul(dayColor)
+      // Under a deep air the sky is the marched zenith, as the ground's is.
+      const deep = smoothstep(
+        float(LIMB_OWN_FROM),
+        float(LIMB_OWN_TO),
+        skyStrength,
+      )
+      const skyLight = mix(
+        skyColor
+          .mul(min(skyStrength, 1))
+          .mul(skylightLeft(incidence, 0.15))
+          .mul(0.9)
+          .mul(dayColor),
+        skyOverhead.mul(0.9),
+        deep,
+      ).add(vec3(visibilityAmbient).mul(dayColor))
       const half = normalize(sun.add(view))
       const facing = max(dot(view, half), float(0))
       const glintFresnel = float(0.02).add(pow(oneMinus(facing), 5).mul(0.98))
