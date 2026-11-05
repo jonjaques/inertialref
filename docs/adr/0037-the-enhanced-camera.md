@@ -107,9 +107,12 @@ ozone stretched to fall off over three of its own scale heights
 (`LIMB_STRETCH`, 25 km on Earth) or a fifth of the eye's height over the
 datum, whichever is less (`limbFalloff`, `LIMB_STANDOFF`), so the eye is
 never inside the gas it draws — the same column `LIMB_GAIN` times over,
-read through the body's own tables at a sample's height over the root of
-the stretch, and drawn `LIMB_BRIGHTNESS` times over (`marchLimb` in
-`render/air.ts`, ADR-0056 for the physics). A multiple of the gas and not a
+ending at two of its fall-offs (`LIMB_CEILING_FALLOFFS`), read through the
+body's own tables at the height the stretch maps a sample to, and drawn
+`LIMB_BRIGHTNESS` times over (`marchLimb` in `render/air.ts`, ADR-0056 for
+the physics). At four fall-offs the crown, lit clear of the reddened foot,
+is a periwinkle band twice the height of the orange under it, and Mars's
+sunset limb a broad blue-white arch where a photograph has a thin line. A multiple of the gas and not a
 fraction of the radius, so it is the same ring on every world; at a
 twenty-fifth of the radius the ring stood off Earth's disk as a halo four to
 seven percent of the radius wide, which the owner rejected, and a fraction
@@ -118,13 +121,17 @@ radiance gain because the stretched foot is optically thick along a
 tangent — sixteen in Earth's blue — so more column only raises the height
 where the ring turns opaque; at six the line is the brightest thing on the
 disk's edge and a sunrise from low orbit is orange under white under blue.
-The aerosol is stretched with the gas and scatters without taking:
-stretched, it is a band 3.6 km thick at the ring's foot, a dozen deep along
-the tangent, and what it would take is the limb's own line, while its
-forward lobe — fifty times its side-scatter — is the orange every
-photograph of a limb has toward the sun. A quarter of the column
-(`LIMB_AEROSOL`), because the whole of it saturates the lobe and paints a
-low-orbit sunrise's blue band tan-white. Nothing authors a color. The
+The aerosol rides in the ring at its whole column and scatters without
+taking: stretched, it is a band 3.6 km thick at the ring's foot, a dozen
+deep along the tangent, and what it would take is the limb's own line,
+while its forward lobe — fifty times its side-scatter — is the orange every
+photograph of a limb has toward the sun, and its gray the white between
+the orange and the blue. Its fall-off is stretched with the gas's but never
+past the gas's own scale height, so the lobe stays at the foot on every
+world: Mars's dust is mixed with its gas and Titan's haze is three times
+its gas, and spread up the ring either paints a broad tan-white arch over
+a limb photographed as a thin line. At a quarter of the column the foot of
+Earth's sunrise limb is an orange thread under a periwinkle band. Nothing authors a color. The
 ring's crown is blue because the sun reaches it clear; its foot is orange
 toward the sun because the table's column reddens the beam there and the
 lobe throws it forward; and the ring ends where the sun sets on the gas as

@@ -192,10 +192,10 @@ export const ATMOSPHERE_GAIN = Math.PI
  * shell draws the body's air a second time as if it fell off over
  * `LIMB_STRETCH` of its own scale heights — 25 km on Earth in place of 8.5
  * — with `LIMB_GAIN` of the same column of gas spread over the taller
- * profile, reads it through the body's own tables at the sample's height
- * over the root of the stretch (`marchLimb` for the two heights that lies
- * between), with the aerosol's forward lobe and not its extinction, and
- * draws its light `LIMB_BRIGHTNESS` times over. Nothing authors a color:
+ * profile, reads it through the body's own tables at the height the
+ * stretch maps a sample to (`marchLimb` for why), with the aerosol's
+ * forward lobe at its foot and not its extinction, and draws its light
+ * `LIMB_BRIGHTNESS` times over. Nothing authors a color:
  * the ring's foot is orange toward the sun because the table's column
  * reddens the beam there and the lobe throws it forward, its crown stays
  * blue because the sun reaches it clear, and the ring ends where the sun
@@ -217,8 +217,14 @@ export const ATMOSPHERE_GAIN = Math.PI
  * line a percent of the radius wide, hugging the disk.
  */
 export const LIMB_STRETCH = 3
-/** The lifted gas ends this many of its own fall-offs up. */
-export const LIMB_CEILING_FALLOFFS = 4
+/**
+ * The lifted gas ends this many of its own fall-offs up. Over two the ring
+ * is lit clear of the reddened foot and scatters the gas's blue, six times
+ * over: at four that crown is a periwinkle band twice the height of the
+ * orange under it on Earth's sunrise limb, and on Mars, whose sunset limb
+ * from low orbit is a thin line, a broad blue-white arch.
+ */
+export const LIMB_CEILING_FALLOFFS = 2
 export const LIMB_GAIN = 1
 /**
  * The ring's light over the stretched gas's own. Along a tangent the
@@ -242,15 +248,6 @@ export const LIMB_BRIGHTNESS = 6
  * a gas that tall does, and not what a photograph from a station shows.
  */
 export const LIMB_STANDOFF = 5
-/**
- * How much of the aerosol's column rides in the ring, stretched with the
- * gas and scattering without taking. Its forward lobe is the orange at the
- * ring's foot toward the sun, and the whole column saturates it: a sunrise
- * from low orbit lights the foot along its whole arc, and at the full
- * column the lobe painted the arc's blue band over tan-white. A quarter
- * keeps the orange orange and the band blue.
- */
-export const LIMB_AEROSOL = 0.25
 /**
  * The lift comes in over this many shell heights up from the top of the
  * air — two hundred kilometers on Earth, full by three hundred — so a ship

@@ -175,9 +175,9 @@ its budget.
   pixels wide on a disk four hundred across. Under Enhanced, from outside
   the air, the shell marches the gas a second time, stretched to fall off
   over three of its own scale heights — or a fifth of the eye's height,
-  under that — at the same column, through the same tables at a sample's
-  height over the root of the stretch, with this planet's horizon, and
-  draws it six times over (ADR-0037). The bright line the home page draws
+  under that — at the same column, through the same tables at the height
+  the stretch maps a sample to, with this planet's horizon, and draws it
+  six times over (ADR-0037). The bright line the home page draws
   on the disk's edge is that second march, as a presentation above the
   physics and not in place of it; the disk itself is seen through the
   physics alone.

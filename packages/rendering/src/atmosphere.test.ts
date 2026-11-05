@@ -666,7 +666,7 @@ describe("Enhanced's limb", () => {
     )
   })
 
-  it("reaches the air's top at no lift and four fall-offs at the full lift, never under the top", () => {
+  it("reaches the air's top at no lift and the ring's ceiling at the full lift, never under the top", () => {
     fc.assert(
       fc.property(
         fc.double({ min: 1, max: 1.5, noNaN: true }),
@@ -682,13 +682,15 @@ describe("Enhanced's limb", () => {
     )
     const falloff = limbFalloff(STATION, EARTH_GAS)
     expect(limbReach(1.0157, 0, falloff)).toBe(1.0157)
-    // Four fall-offs of Earth's 25.5 km is 102 km, just over a top 100 km up.
-    expect(limbReach(1.0157, 1, falloff)).toBeCloseTo(
-      1 + LIMB_CEILING_FALLOFFS * LIMB_STRETCH * EARTH_GAS,
+    // Two fall-offs of Earth's 25.5 km is 51 km, under a top 100 km up: the
+    // shell already carries the ring.
+    expect(1 + LIMB_CEILING_FALLOFFS * falloff).toBeLessThan(1.0157)
+    expect(limbReach(1.0157, 1, falloff)).toBe(1.0157)
+    // A taller fall-off reaches past the top.
+    expect(limbReach(1.0157, 1, 0.01)).toBeCloseTo(
+      1 + LIMB_CEILING_FALLOFFS * 0.01,
       12,
     )
-    // A taller fall-off reaches past the top.
-    expect(limbReach(1.0157, 1, 0.01)).toBeCloseTo(1.04, 12)
     // An air already taller than the ceiling keeps its own top.
     expect(limbReach(1.3, 1, falloff)).toBe(1.3)
   })

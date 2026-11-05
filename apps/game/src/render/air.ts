@@ -17,6 +17,7 @@ import {
   length,
   Loop,
   max,
+  min,
   mix,
   normalize,
   oneMinus,
@@ -32,7 +33,6 @@ import {
 import {
   AEROSOL_ASYMMETRY,
   type AtmosphereRecipe,
-  LIMB_AEROSOL,
   LIMB_BRIGHTNESS,
   LIMB_CEILING_FALLOFFS,
   LIMB_GAIN,
@@ -415,47 +415,49 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * multiplied by it and every coefficient divided by it, `LIMB_GAIN` times
  * over: the same column of gas, that much taller.
  *
- * The aerosol is stretched with the gas and scatters without taking.
- * Stretched, it is a band 3.6 km thick at the ring's foot on Earth, a dozen
- * deep along the tangent, and what it would take is the limb's own line,
- * which is where the physics is: it scatters nothing toward an eye square
- * to the sun, and taking it halves what the physics draws under it. What it has that the gas does not is its
- * forward lobe, fifty times the side-scatter, and the lobe is the orange:
- * a sunrise at the limb, the ring of a backlit Earth, every reference
- * photograph's glow toward the sun is reddened sunlight thrown forward by
- * the aerosol at the foot. So the ring keeps the lobe and drops the
- * extinction, which is the one place the ring departs from a stretched
- * physics. At the foot and not over the ring: spread to the gas's own
- * fall-off the lobe reaches forty degrees from the sun, and a sunrise seen
- * from low orbit washed its whole blue arc tan. And `LIMB_AEROSOL` of the
- * column, because the whole of it saturates: the same sunrise lights the
- * foot along its whole arc, and the lobe painted the blue band over.
+ * The aerosol rides in the ring at its whole column and scatters without
+ * taking. Stretched, it is a band 3.6 km thick at the ring's foot on
+ * Earth, a dozen deep along the tangent, and what it would take is the
+ * limb's own line, which is where the physics is: it scatters nothing
+ * toward an eye square to the sun, and taking it halves what the physics
+ * draws under it. What it has that the gas does not is its forward lobe,
+ * fifty times the side-scatter, and the lobe is the orange: a sunrise at
+ * the limb, the ring of a backlit Earth, every reference photograph's glow
+ * toward the sun is reddened sunlight thrown forward by the aerosol at the
+ * foot, and its gray is the white between the orange and the blue. So the
+ * ring keeps the lobe and drops the extinction, which is the one place
+ * the ring departs from a stretched physics. At the foot and not over the
+ * ring: its fall-off is stretched with the gas's but never past the gas's
+ * own scale height. Earth's boundary layer stays under that at 3.6 km;
+ * Mars's dust, mixed with the gas, would otherwise fill the whole ring,
+ * and Titan's haze, three times its gas, reach past it — and the lobe
+ * spread that high paints a broad tan-white arch over a limb photographed
+ * as a thin line. At a quarter of the column the foot of Earth's sunrise
+ * limb is an orange thread under a periwinkle band; at the whole column,
+ * confined to the foot, it is orange under white under blue.
  *
- * The tables are read at the sample's height over the root of the
- * stretch, which lies between two heights that are both wrong; the
- * figures here are at a stretch of thirty, where the two lie furthest
- * apart. Read at the sample's own height — the ring lit by the sun through the air that
- * is actually there — a sample forty kilometers up sees a white sun, and
- * the ring toward a rising sun is a white glare at the surface's own
- * brightness with the orange in the physical line alone. Read at the
- * height the stretch maps it to, `h / stretch` — the ring lit as the gas
- * of a planet stretched the same way is, which has exactly the physical
- * gas's transmittance there — the same sample reads the table at 1.3 km,
- * the ring reddens over its lower half, and a sunrise from a station
- * drew its band warm gray where a photograph has blue over an orange
- * foot. At the root, the foot reddens over the ring's bottom quarter and
- * the crown is blue: the troposphere, the stratosphere and the blue above,
- * in a photograph's proportions. The horizon is read as this planet's
- * whatever the table's height: the table's own horizon at a fraction of
- * the height is under which a crown a thousand kilometers up went dark
- * with the sun a degree behind the disk, where it sees the sun thirty
- * degrees past the terminator — a backlit Earth drew no ring at all. So a
- * beam that climbs from its sample reads the table as it stands, and a
- * beam that descends is read at its own grazing height on this planet, as
- * the horizontal table there squared over the horizontal table at the
- * sample — the far half of the tangent column and the near part down to
- * it — and as nothing once the grazing height is under the ground. The two
- * agree where the beam is level. Nothing here authors a color.
+ * The tables are read at the height the stretch maps the sample to,
+ * `h / stretch` — the ring lit as the gas of a planet stretched the same
+ * way is, which has exactly the physical gas's transmittance there. Read
+ * at the sample's own height, the ring is lit by the sun through the air
+ * that is actually there, which at a sample's height over the foot is
+ * nearly none: the ring toward a rising sun is a white glare with the
+ * orange in the physical line alone. Read at the root of the stretch,
+ * between the two, the ring seen from four radii toward a sun a degree and
+ * a half over its foot's horizon turns from red over blue to blue over red
+ * near 18 km, and on Earth's sunrise limb from low orbit the orange is a
+ * thread under a band of blue; at the stretch it turns near 24 km (red
+ * over blue 1.43 at 20 km, against 0.86). The horizon is read as this planet's whatever the table's
+ * height: the table's own horizon at a fraction of the height is under
+ * which a crown well up the ring goes dark with the sun a degree behind
+ * the disk, where it sees the sun well past the terminator — a backlit
+ * Earth drew no ring at all. So a beam that climbs from its sample reads
+ * the table as it stands, and a beam that descends is read at its own
+ * grazing height on this planet, as the horizontal table there squared
+ * over the horizontal table at the sample — the far half of the tangent
+ * column and the near part down to it — and as nothing once the grazing
+ * height is under the ground. The two agree where the beam is level.
+ * Nothing here authors a color.
  *
  * Gated on the lift and on Enhanced by one uniform branch, so the shell
  * under a photographic lens or inside the air pays none of it; the
@@ -480,9 +482,9 @@ export function marchLimb(
     const falloff = max(air.limbFalloff, 1e-6)
     const stretch = falloff.div(max(air.hRayleigh, 1e-9))
     const column = float(LIMB_GAIN).div(stretch).mul(strength)
-    // The tables are read at the sample's height over the root of the
-    // stretch; see the doc comment for the two heights it lies between.
-    const readingHeight = sqrt(stretch).mul(shellHeight)
+    // The tables are read at the height the stretch maps the sample to;
+    // see the doc comment for why not at its own.
+    const readingHeight = stretch.mul(shellHeight)
     const phase = phasesToward(direction, sun)
 
     crowdedSamples(
@@ -497,9 +499,11 @@ export function marchLimb(
         // To zero at the ceiling, as the physics goes to zero at its top.
         const fade = oneMinus(saturate(height.div(ceiling)))
         const density = exp(height.div(falloff).negate()).mul(fade)
-        const densityM = exp(height.div(air.hMie.mul(stretch)).negate()).mul(
-          fade,
-        )
+        // The aerosol at the foot: stretched, but never past the gas's own
+        // height (see the doc comment).
+        const densityM = exp(
+          height.div(min(air.hMie.mul(stretch), air.hRayleigh)).negate(),
+        ).mul(fade)
         const densityO = max(
           float(1).sub(
             abs(height.sub(air.ozonePeak.mul(stretch))).div(
@@ -535,10 +539,7 @@ export function marchLimb(
         ).mul(clears)
         const psi = psiTableAt(air, muSun, height01)
         const scatterR = air.betaRayleigh.mul(density).mul(column)
-        const scatterM = air.mieScatter
-          .mul(densityM)
-          .mul(column)
-          .mul(LIMB_AEROSOL)
+        const scatterM = air.mieScatter.mul(densityM).mul(column)
         const single = scatterR
           .mul(phase.rayleigh)
           .add(scatterM.mul(phase.mie))
