@@ -131,7 +131,12 @@ foot: stretched with the gas, Mars's mixed dust and Titan's haze, three
 times its gas, fill the ring and paint a broad tan-white arch over a limb
 photographed as a thin line, and under the gas's height Earth's white is a
 thread and its low-orbit sunrise orange under blue. At a quarter of the
-column the orange is a thread too. The ozone stays in the physics, where it
+column the orange is a thread too. A dust that is the whole column
+(`aerosolSky`, ADR-0056) is the exception: it rides at its whole column and
+takes as it scatters, because six times an opaque dust that takes nothing
+is a white band — Mars's sunset limb from low orbit at 219 : 192 : 191 —
+and taking, six times over, is six times its lit surface, a butterscotch
+line on the edge. The ozone stays in the physics, where it
 turns a twilight zenith blue from the ground; stretched up the ring and
 drawn six times over, its tent took the orange out of the band between the
 foot and the crown, so a low-orbit sunrise read orange under violet with no
