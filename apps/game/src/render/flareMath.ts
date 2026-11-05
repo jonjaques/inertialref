@@ -146,3 +146,52 @@ export function edgeFade(sunNdcX: number, sunNdcY: number): number {
   const edge = Math.max(Math.abs(sunNdcX), Math.abs(sunNdcY))
   return 1 - smooth(1.1, 1.5, edge)
 }
+
+/**
+ * A disk on screen as a ghost meets it: its center and its radius in NDC
+ * units of the frame's height, with x corrected for the aspect so a
+ * distance in these units is a distance on screen.
+ */
+export interface FlareDisk {
+  readonly x: number
+  readonly y: number
+  readonly radius: number
+}
+
+/**
+ * A body whose angular radius is past this is the ground and not a disk:
+ * its edge is the horizon, and a ghost over a ground view keeps its place
+ * in the sky. Sixty degrees — a limb composition from 1.04 radii stands at
+ * 74°, and a raking disk filling the frame subtends under twenty.
+ */
+export const GHOST_DISK_LIMIT = Math.PI / 3
+
+/**
+ * How much of a ghost survives where it lands on a body's disk, 0..1.
+ *
+ * A flare happens inside the lens, in front of everything, and the ISS
+ * sunset photographs do show ghosts over the dark Earth. What no photograph
+ * shows is a colored ring sitting on a crescent's limb as if it were the
+ * planet's, which is what the chain draws whenever a composition puts a body
+ * between the star's image and the frame's center — every crescent in the
+ * planetarium, with the aperture ghost mirrored past center onto the limb.
+ * So a ghost fades as it overlaps a disk: whole where it clears the disk by
+ * its own radius, gone with its center inside it, and a smooth ramp between
+ * so a drifting ghost never pops. `ghost.radius` is the ghost's own, in the
+ * disk's units.
+ */
+export function ghostCover(
+  ghost: FlareDisk,
+  disks: readonly FlareDisk[],
+): number {
+  let cover = 1
+  for (const disk of disks) {
+    const distance = Math.hypot(ghost.x - disk.x, ghost.y - disk.y)
+    cover *= smooth(
+      0,
+      1,
+      (distance - disk.radius) / Math.max(ghost.radius, 1e-6),
+    )
+  }
+  return cover
+}

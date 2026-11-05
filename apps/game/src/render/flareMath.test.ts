@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { edgeFade, ghostPosition, sunVisibility } from './flareMath.ts'
+import {
+  edgeFade,
+  ghostCover,
+  ghostPosition,
+  sunVisibility,
+} from './flareMath.ts'
 
 const SUN = { x: 1e9, y: 0, z: 0 }
 const CAMERA = { x: 0, y: 0, z: 0 }
@@ -67,5 +72,37 @@ describe('edgeFade', () => {
     expect(edgeFade(1.3, 0)).toBeGreaterThan(0)
     expect(edgeFade(1.3, 0)).toBeLessThan(1)
     expect(edgeFade(1.6, 0)).toBe(0)
+  })
+})
+
+describe('ghostCover', () => {
+  const disk = { x: 0, y: 0, radius: 0.3 }
+  const ghost = (x: number) => ({ x, y: 0, radius: 0.1 })
+
+  it('leaves a ghost whole clear of every disk, and removes one centered on a disk', () => {
+    expect(ghostCover(ghost(0.9), [disk])).toBe(1)
+    expect(ghostCover(ghost(0.4), [disk])).toBe(1)
+    expect(ghostCover(ghost(0.1), [disk])).toBe(0)
+    expect(ghostCover(ghost(0.3), [disk])).toBe(0)
+    expect(ghostCover(ghost(0.1), [])).toBe(1)
+  })
+
+  it('fades across the overlap rather than stepping', () => {
+    // The gap between the ghost's center and the limb, in ghost radii: a
+    // ghost half over the limb sits strictly between its neighbors.
+    const half = ghostCover(ghost(0.35), [disk])
+    expect(half).toBeGreaterThan(0)
+    expect(half).toBeLessThan(1)
+    expect(ghostCover(ghost(0.33), [disk])).toBeLessThan(half)
+    expect(ghostCover(ghost(0.38), [disk])).toBeGreaterThan(half)
+  })
+
+  it('compounds over several disks', () => {
+    const other = { x: 0.7, y: 0, radius: 0.3 }
+    const between = ghost(0.35)
+    expect(ghostCover(between, [disk, other])).toBeCloseTo(
+      ghostCover(between, [disk]) * ghostCover(between, [other]),
+      12,
+    )
   })
 })

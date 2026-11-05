@@ -30,7 +30,15 @@ import {
 } from 'three/tsl'
 import { type Lens, saturate, verticalFov } from '@inertialref/rendering'
 import { asVector } from './noiseNodes.ts'
-import { edgeFade, type FlareVisibility, ghostPosition } from './flareMath.ts'
+import {
+  edgeFade,
+  type FlareDisk,
+  type FlareOccluder,
+  type FlareVisibility,
+  GHOST_DISK_LIMIT,
+  ghostCover,
+  ghostPosition,
+} from './flareMath.ts'
 
 /*
  * The lens flare: the camera admitting it is a camera.
@@ -336,6 +344,11 @@ export interface LensFlare {
     anamorphicDrive?: number,
     /** Gain on the analytic solar glow alone, independent of coating artifacts. */
     coreGain?: number,
+    /**
+     * Every drawn body, as the visibility test sees them: a ghost fades
+     * where it lands on one's disk (`ghostCover`).
+     */
+    occluders?: readonly FlareOccluder[],
   ): void
   dispose(): void
 }
@@ -374,6 +387,9 @@ export function createLensFlare(): LensFlare {
   const projected = new Vector3()
   const view = new Vector3()
   const occluderNdc = new Vector3()
+  const bodyView = new Vector3()
+  const bodyNdc = new Vector3()
+  const disks: FlareDisk[] = []
 
   return {
     group,
@@ -390,6 +406,7 @@ export function createLensFlare(): LensFlare {
       natural = true,
       anamorphicDrive = 0,
       coreGain = 1,
+      occluders = [],
     ) {
       // Behind test in view space; NDC alone cannot tell front from back.
       view
@@ -425,6 +442,31 @@ export function createLensFlare(): LensFlare {
       const tanHalf = Math.tan(verticalFov(lens) / 2)
       const aspect = camera.aspect ?? 1
       const frameHeight = 2 * tanHalf * PLANE
+
+      /*
+       * The bodies on screen as disks, for the ghosts to fade on where they
+       * land (`ghostCover`). A body the eye stands on or skims is left out:
+       * past `GHOST_DISK_LIMIT` its edge is the horizon, not a limb.
+       */
+      disks.length = 0
+      for (const body of occluders) {
+        if (body.radius <= 0) continue
+        bodyView
+          .set(body.position.x, body.position.y, body.position.z)
+          .applyMatrix4(camera.matrixWorldInverse)
+        if (bodyView.z >= 0) continue
+        const distance = bodyView.length()
+        const angle = Math.asin(Math.min(1, body.radius / distance))
+        if (angle > GHOST_DISK_LIMIT) continue
+        bodyNdc
+          .set(body.position.x, body.position.y, body.position.z)
+          .project(camera)
+        disks.push({
+          x: bodyNdc.x * aspect,
+          y: bodyNdc.y,
+          radius: Math.tan(angle) / tanHalf,
+        })
+      }
       // A star that subtends real angle blooms wider than a point: the glow
       // tracks the disk so a close pass reads as approaching a *sun*, not a
       // lamp.
@@ -555,11 +597,17 @@ export function createLensFlare(): LensFlare {
           : smoothFade(
               Math.hypot((at.x - projected.x) * aspect, at.y - projected.y),
             )
+        // The quad is `size` of the frame's height across, so its radius in
+        // NDC units of the height is `size` itself.
+        const onDisk = core
+          ? 1
+          : ghostCover({ x: at.x * aspect, y: at.y, radius: spec.size }, disks)
         const lens = spec.kind === 'glow' ? 1 : artifacts
         element.intensity.value =
           spec.gain *
           strength *
           nearSun *
+          onDisk *
           lens *
           (core && !natural ? 0 : 1) *
           (spec.kind === 'glow' ? coreGain : 1)

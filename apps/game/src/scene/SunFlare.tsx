@@ -93,6 +93,9 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       engine.visibilityProcessing,
       engine.cinematic?.effects.anamorphicFlare ?? 0,
       1 - 0.94 * (engine.cinematic?.effects.skyHaze ?? 0),
+      // The same bodies the visibility test sees, so a ghost can fade where
+      // it lands on a disk.
+      occluders,
     )
   })
 
