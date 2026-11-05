@@ -349,19 +349,19 @@ export function privateMetadata(
 ): Promise<Flags> {
   const key = `${secretKey}\n${userId}`
   const now = Date.now()
-  const held = grants.get(key)
+  const held = heldMetadata.get(key)
   if (held !== undefined && now - held.at < GRANT_TTL_MS) return held.flags
   // Deleted and set again, so insertion order stays age order and the first
   // entry is always the one to evict.
-  grants.delete(key)
-  if (grants.size >= GRANT_LIMIT) {
-    const oldest = grants.keys().next()
-    if (oldest.done !== true) grants.delete(oldest.value)
+  heldMetadata.delete(key)
+  if (heldMetadata.size >= GRANT_LIMIT) {
+    const oldest = heldMetadata.keys().next()
+    if (oldest.done !== true) heldMetadata.delete(oldest.value)
   }
   const flags = lookUp(userId, secretKey)
-  grants.set(key, { at: now, flags })
+  heldMetadata.set(key, { at: now, flags })
   void flags.catch(() => {
-    if (grants.get(key)?.flags === flags) grants.delete(key)
+    if (heldMetadata.get(key)?.flags === flags) heldMetadata.delete(key)
   })
   return flags
 }
@@ -369,7 +369,7 @@ export function privateMetadata(
 const GRANT_TTL_MS = 60_000
 /** Far above the accounts this alpha has; a bound on memory, not a working set. */
 const GRANT_LIMIT = 1024
-const grants = new Map<
+const heldMetadata = new Map<
   string,
   { readonly at: number; readonly flags: Promise<Flags> }
 >()

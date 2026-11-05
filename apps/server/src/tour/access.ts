@@ -14,10 +14,10 @@ import { type Flags, grants } from '../grants.ts'
  *
  * The account module answers who is asking and hands over the flags, and
  * `grants.ts` says which of them open the guide. Whether this deployment
- * offers the guide at all is decided here and nowhere else. The routes map the answer to a
- * status code and a sentence; what they decide on their own — the origin
- * check, the allowance, a Clerk outage as a 503 — is about the request, never
- * about who is asking.
+ * offers the guide at all is decided here and nowhere else. The routes map
+ * the answer to a status code and a sentence; what they decide on their own —
+ * the origin check, the allowance, a Clerk outage as a 503 — is about the
+ * request, never about who is asking.
  */
 
 /**

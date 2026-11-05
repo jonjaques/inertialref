@@ -22,11 +22,12 @@
  * The features a grant can open.
  *
  *   tour         The Planetarium guide (`tour/access.ts`).
- *   solo         A solo game, once it is offered behind a grant.
- *   multiplayer  A multiplayer game, once it is offered behind a grant.
+ *   solo         A solo game.
+ *   multiplayer  A multiplayer game.
  *
- * `solo` and `multiplayer` are read by nothing yet. They are named now so the
- * flags can be set on accounts ahead of the gate that will read them.
+ * `solo` and `multiplayer` have no gate that reads them. They are named so the
+ * flags can be set on accounts ahead of one, and a gate asks for its feature
+ * by this name.
  */
 export const FEATURES = ['tour', 'solo', 'multiplayer'] as const
 
@@ -38,7 +39,3 @@ export type Flags = Readonly<Record<string, unknown>>
 /** Whether these flags grant `feature`: its own flag, or `admin`. */
 export const grants = (flags: Flags, feature: Feature): boolean =>
   flags.admin === true || flags[feature] === true
-
-/** Every feature these flags grant, in `FEATURES` order. */
-export const granted = (flags: Flags): readonly Feature[] =>
-  FEATURES.filter((feature) => grants(flags, feature))

@@ -45,8 +45,8 @@ or removed in the dashboard reaches the Worker within that minute.
 The flags are `tour`, `solo` and `multiplayer`, one per feature, and `admin`,
 which grants every feature — including one added after it was set. Each is
 strictly `true`; `"true"` typed in the editor grants nothing. The table is
-`apps/server/src/grants.ts`. Only `tour` is read today: `solo` and
-`multiplayer` can be set on an account ahead of the gate that will read them.
+`apps/server/src/grants.ts`. Only the guide reads its flag: `solo` and
+`multiplayer` have no gate, and setting them on an account opens nothing.
 
 Local `pnpm dev` starts the server through `scripts/tour/dev.mjs`. That adapter
 loads the repository's gitignored `.env.local` into its own process, which
