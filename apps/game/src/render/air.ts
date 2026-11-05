@@ -17,6 +17,7 @@ import {
   length,
   Loop,
   max,
+  min,
   mix,
   normalize,
   oneMinus,
@@ -416,7 +417,7 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * it and every coefficient divided by it, `LIMB_GAIN` times over: the same
  * column of gas, that much taller.
  *
- * Without its ozone, where the ring departs from a stretched
+ * Without its ozone, the second place the ring departs from a stretched
  * physics. Ozone absorbs and scatters nothing; what it does is take the
  * orange out of light that crosses the stratosphere edgeways, which is what
  * turns a twilight zenith blue from the ground, and the physics keeps it
@@ -428,26 +429,26 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * composite's against 0.046 with it. The tables the ring is lit through
  * keep the ozone; the sun that reaches the ring has crossed the real one.
  *
- * The aerosol rides in the ring at its whole column, falls off over the
- * gas's own scale height, and scatters without taking. Its extinction
- * would take the limb's own line, which is where the physics is: it
- * scatters nothing toward an eye square to the sun, and taking it halves
- * what the physics draws under it. What it has that the gas does not is
- * its forward lobe, fifty times the side-scatter, and the lobe is the
- * orange: a sunrise at the limb, the ring of a backlit Earth, every
- * reference photograph's glow toward the sun is reddened sunlight thrown
- * forward by the aerosol at the foot, and its gray is the white between
- * the orange and the blue. So the ring keeps the lobe and drops the
- * extinction. Over the gas's own height and not the ring's: that is the
- * lower third of the ring on every world, so the lobe stays at the foot.
- * Stretched with the gas, Mars's dust, mixed with it, fills the whole ring
- * and Titan's haze, three times its gas, reaches past it, and the lobe
+ * The aerosol rides in the ring at its whole column and scatters without
+ * taking. Stretched, it is a band 3.6 km thick at the ring's foot on
+ * Earth, a dozen deep along the tangent, and what it would take is the
+ * limb's own line, which is where the physics is: it scatters nothing
+ * toward an eye square to the sun, and taking it halves what the physics
+ * draws under it. What it has that the gas does not is its forward lobe,
+ * fifty times the side-scatter, and the lobe is the orange: a sunrise at
+ * the limb, the ring of a backlit Earth, every reference photograph's glow
+ * toward the sun is reddened sunlight thrown forward by the aerosol at the
+ * foot, and its gray is the white between the orange and the blue. So the
+ * ring keeps the lobe and drops the extinction, which is the one place
+ * the ring departs from a stretched physics. At the foot and not over the
+ * ring: its fall-off is stretched with the gas's but never past the gas's
+ * own scale height. Earth's boundary layer stays under that at 3.6 km;
+ * Mars's dust, mixed with the gas, would otherwise fill the whole ring,
+ * and Titan's haze, three times its gas, reach past it — and the lobe
  * spread that high paints a broad tan-white arch over a limb photographed
- * as a thin line. Under the gas's height — Earth's boundary layer
- * stretched to 3.6 km — the white is a thread at the foot, and Earth's
- * sunrise limb from low orbit is orange under blue; over 8.5 km it is
- * orange under white under blue, its crop 0.030 RMSE of the composite's
- * against 0.036. At a quarter of the column the orange is a thread too.
+ * as a thin line. At a quarter of the column the foot of Earth's sunrise
+ * limb is an orange thread under a periwinkle band; at the whole column,
+ * confined to the foot, it is orange under white under blue.
  *
  * The tables are read at the height the stretch maps the sample to,
  * `h / stretch` — the ring lit as the gas of a planet stretched the same
@@ -459,7 +460,7 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * between the two, the orange on Earth's sunrise limb from low orbit is a
  * thread under a band of blue; at the stretch itself, seen from four radii
  * toward a sun a degree and a half over the foot's horizon, red stays over
- * blue twenty kilometers up (10.6 : 6.96 : 2.52). The horizon is read as
+ * blue twenty kilometers up (1.02 : 0.82 : 0.56). The horizon is read as
  * this planet's whatever the table's height: the table's own horizon at
  * a fraction of the height is under which a crown well up the ring goes
  * dark with the sun a degree behind
@@ -512,8 +513,11 @@ export function marchLimb(
         // To zero at the ceiling, as the physics goes to zero at its top.
         const fade = oneMinus(saturate(height.div(ceiling)))
         const density = exp(height.div(falloff).negate()).mul(fade)
-        // The aerosol over the gas's own height (see the doc comment).
-        const densityM = exp(height.div(air.hRayleigh).negate()).mul(fade)
+        // The aerosol at the foot: stretched, but never past the gas's own
+        // height (see the doc comment).
+        const densityM = exp(
+          height.div(min(air.hMie.mul(stretch), air.hRayleigh)).negate(),
+        ).mul(fade)
         // The gas without its ozone; see the doc comment.
         const extinction = air.betaRayleigh.mul(density).mul(column)
         const stepTau = extinction.mul(stepLength)
@@ -624,15 +628,6 @@ export function airToward(
  * the ground and the sea take it from the one lift, as they take the air.
  * On the ground the lift is nothing and the air is the measured one.
  */
-/**
- * How much of the slant's hue the beam keeps as Enhanced draws a surface
- * from orbit, as a power of it: a half keeps the reddening's square root.
- * The whole of it lights a sunward crescent a saturated orange-red with a
- * blown core, where the composite's crescent is a pale peach; none lights
- * it gray. At a half the crescent's plate is 0.031 RMSE of the composite's
- * against 0.033 whole, and Centauri II's gibbous 0.015 against 0.019.
- */
-const ORBIT_BEAM_HUE = 0.5
 export function clearedFromOrbit(air: AirUniforms): Node<'float'> {
   return air.limb.mul(enhancedSky)
 }
@@ -669,9 +664,7 @@ export function sunThrough(
     texelCentered(vec2(1, height01), TRANSMITTANCE),
   ).rgb
   const slant = table.div(max(overhead, vec3(1e-4)))
-  const hue = slant
-    .div(max(max(slant.x, slant.y), max(slant.z, 1e-4)))
-    .pow(vec3(ORBIT_BEAM_HUE))
+  const hue = slant.div(max(max(slant.x, slant.y), max(slant.z, 1e-4)))
   return mix(table, hue, clearedFromOrbit(air))
 }
 
