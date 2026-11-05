@@ -6,6 +6,7 @@ import {
   seaDatumElevation,
   standingWaterIsSampled,
 } from '@inertialref/universe'
+import { visibleThickness } from './atmosphere.ts'
 import { surfaceColor } from './surfaceColor.ts'
 
 /*
@@ -483,7 +484,12 @@ export function terrainPalette(body: Body): TerrainPalette {
     liquid: body.appearance.liquid,
     sheet: patchWater(body).seabed ? 1 : 0,
 
-    airThickness: body.appearance.haze?.thickness ?? 0,
+    // What the column scatters, over Earth's: the gas's thickness where the
+    // gas is the sky, the dust's depth where the dust is (`visibleThickness`).
+    airThickness:
+      body.appearance.haze === null
+        ? 0
+        : visibleThickness(body.appearance.haze),
     skyColor: unitLuminance(body.appearance.haze?.color),
     textureKey: body.appearance.texture,
   }

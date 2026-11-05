@@ -31,6 +31,7 @@ import {
 } from 'three/tsl'
 import {
   AEROSOL_ASYMMETRY,
+  AEROSOL_FORWARD_PEAK,
   type AtmosphereRecipe,
   LIMB_BRIGHTNESS,
   LIMB_CEILING_FALLOFFS,
@@ -145,6 +146,8 @@ export function createAirUniforms() {
   const betaRayleigh = uniform(new Vector3(0, 0, 0))
   const mieScatter = uniform(new Vector3(0, 0, 0))
   const mieExtinction = uniform(new Vector3(0, 0, 0))
+  const mieForward = uniform(new Vector3(0, 0, 0))
+  const aerosolSky = uniform(0)
   const ozone = uniform(new Vector3(0, 0, 0))
   const ozonePeak = uniform(0)
   const ozoneHalfWidth = uniform(1)
@@ -157,6 +160,8 @@ export function createAirUniforms() {
     betaRayleigh,
     mieScatter,
     mieExtinction,
+    mieForward,
+    aerosolSky,
     ozone,
     ozonePeak,
     ozoneHalfWidth,
@@ -171,6 +176,8 @@ export function createAirUniforms() {
       betaRayleigh.value.set(...recipe.betaRayleigh)
       mieScatter.value.set(...recipe.mieScatter)
       mieExtinction.value.set(...recipe.mieExtinction)
+      mieForward.value.set(...recipe.mieForward)
+      aerosolSky.value = recipe.aerosolSky
       ozone.value.set(...recipe.ozone)
       ozonePeak.value = recipe.ozonePeak
       ozoneHalfWidth.value = recipe.ozoneHalfWidth
@@ -190,6 +197,8 @@ export function createAirUniforms() {
       betaRayleigh.value.set(0, 0, 0)
       mieScatter.value.set(0, 0, 0)
       mieExtinction.value.set(0, 0, 0)
+      mieForward.value.set(0, 0, 0)
+      aerosolSky.value = 0
       ozone.value.set(0, 0, 0)
       ozonePeak.value = 0
       ozoneHalfWidth.value = 1
@@ -286,10 +295,14 @@ export function marchAir(
         ? tableT
         : clearedBeam(air, tableT, height01, clearBeam)
     const psi = psiTableAt(air, muSun, height01)
+    // The aerosol scatters the sky's color sideways and the limb's toward
+    // the sun, turning between them along its lobe's own shape; the multiple
+    // scattering keeps the sideways color, as the Ψ bake does.
+    const scatterToward = mix(air.mieScatter, air.mieForward, phase.forward)
     const single = air.betaRayleigh
       .mul(densityR)
       .mul(phase.rayleigh)
-      .add(air.mieScatter.mul(densityM).mul(phase.mie))
+      .add(scatterToward.mul(densityM).mul(phase.mie))
       .mul(sunT)
     const multiple = psi.mul(
       air.betaRayleigh.mul(densityR).add(air.mieScatter.mul(densityM)),
@@ -303,19 +316,27 @@ export function marchAir(
 
 /**
  * The two phase functions for a view direction against the sun: Rayleigh's,
- * and Henyey–Greenstein at the one aerosol asymmetry.
+ * and Henyey–Greenstein at the one aerosol asymmetry — and the lobe's share
+ * of its peak toward the sun, which is how far the aerosol's color has
+ * turned from the sky's (`mieScatter`) to the limb's (`mieForward`).
  */
 function phasesToward(
   direction: Node<'vec3'>,
   sun: Node<'vec3'>,
-): { readonly rayleigh: Node<'float'>; readonly mie: Node<'float'> } {
+): {
+  readonly rayleigh: Node<'float'>
+  readonly mie: Node<'float'>
+  readonly forward: Node<'float'>
+} {
   const nu = dot(direction, sun)
   const g = AEROSOL_ASYMMETRY
+  const mie = float((1 - g * g) / (4 * Math.PI)).div(
+    pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
+  )
   return {
     rayleigh: float(3 / (16 * Math.PI)).mul(nu.mul(nu).add(1)),
-    mie: float((1 - g * g) / (4 * Math.PI)).div(
-      pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
-    ),
+    mie,
+    forward: mie.div(AEROSOL_FORWARD_PEAK),
   }
 }
 
@@ -519,11 +540,34 @@ export function marchLimb(
         const density = exp(height.div(falloff).negate()).mul(fade)
         // The aerosol at the foot: stretched, but never past the gas's own
         // height (see the doc comment).
-        const densityM = exp(
-          height.div(min(air.hMie.mul(stretch), air.hRayleigh)).negate(),
-        ).mul(fade)
+        const aerosolHeight = min(air.hMie.mul(stretch), air.hRayleigh)
+        const densityM = exp(height.div(aerosolHeight).negate()).mul(fade)
+        /*
+         * Where the aerosol is the sky (`aerosolSky`) it rides at its whole
+         * column — the cap on its height keeps the coefficient's share of
+         * the stretch, so a dust mixed with its gas is restored to the column
+         * the physics draws — and it takes as it scatters, below. Six times
+         * an opaque dust that takes nothing is a white band (Mars's sunset
+         * limb from low orbit at 219 : 192 : 191); taking, six times over
+         * is six times its lit surface, a butterscotch line on the edge.
+         */
+        const aerosolColumn = column.mul(
+          mix(
+            float(1),
+            air.hMie.mul(stretch).div(aerosolHeight),
+            air.aerosolSky,
+          ),
+        )
         // The gas without its ozone; see the doc comment.
-        const extinction = air.betaRayleigh.mul(density).mul(column)
+        const extinction = air.betaRayleigh
+          .mul(density)
+          .mul(column)
+          .add(
+            air.mieExtinction
+              .mul(densityM)
+              .mul(aerosolColumn)
+              .mul(air.aerosolSky),
+          )
         const stepTau = extinction.mul(stepLength)
         const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
 
@@ -547,10 +591,14 @@ export function marchLimb(
         ).mul(clears)
         const psi = psiTableAt(air, muSun, height01)
         const scatterR = air.betaRayleigh.mul(density).mul(column)
-        const scatterM = air.mieScatter.mul(densityM).mul(column)
+        const scatterM = air.mieScatter.mul(densityM).mul(aerosolColumn)
+        // The lobe in the limb's color toward the sun, as `marchAir` turns it.
+        const scatterToward = mix(air.mieScatter, air.mieForward, phase.forward)
+          .mul(densityM)
+          .mul(aerosolColumn)
         const single = scatterR
           .mul(phase.rayleigh)
-          .add(scatterM.mul(phase.mie))
+          .add(scatterToward.mul(phase.mie))
           .mul(sunT)
         const multiple = psi.mul(scatterR.add(scatterM))
         inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))

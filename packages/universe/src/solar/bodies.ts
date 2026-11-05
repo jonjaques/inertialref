@@ -87,6 +87,10 @@ export interface SolarHaze {
   readonly aerosolAngstrom: number
   /** The ozone column, Dobson units. See `HazeLayer`. */
   readonly ozone: number
+  /** The aerosol's measured depth at 550 nm, where it is the sky. See `HazeLayer`. */
+  readonly aerosolDepth?: number
+  /** Its single-scattering albedo in its brightest channel. See `HazeLayer`. */
+  readonly aerosolAlbedo?: number
 }
 
 export interface SolarClouds {
@@ -563,16 +567,33 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
     texture: 'mars',
     haze: {
       height: 60_000,
-      color: { r: 0.78, g: 0.6, b: 0.48 },
-      limb: { r: 0.62, g: 0.66, b: 0.9 },
-      // 600 Pa of CO₂ and dust: a translucent butterscotch limb that must
-      // never whiten. Viking's oblique photographs are the reference.
-      thickness: 0.15,
+      // The dust's own color, sideways: Perseverance's natural-color sky
+      // is a butterscotch near 1 : 0.55 : 0.3 in linear light, and the
+      // paler 0.78 : 0.6 : 0.48 the gas was read at drew a pink-gray sky.
+      color: { r: 0.8, g: 0.55, b: 0.36 },
+      // The dust's color thrown forward: the cold blue around a setting sun,
+      // Curiosity's at Gale near 0.52 : 0.69 : 1 in linear light.
+      limb: { r: 0.5, g: 0.64, b: 0.9 },
+      // 600 Pa of CO₂ scatters almost nothing: Annis's Rayleigh depth of
+      // 0.0025 at 550 nm over Bodhaine's 0.38 for Earth. The sky is the
+      // dust's, below. Read as a gas at 0.15 the column was twenty times
+      // its measured depth and still drew a near-black zenith over a
+      // flat-lit orange ground, because a gas that thin cannot light a sky.
+      thickness: 0.0066,
       // The dust is mixed with the gas to some 50 km (Viking; Conrath's
       // ν = 0.007), so it shares the gas's scale height.
       aerosolHeight: 11_100,
       // Pathfinder's τ is 0.56–0.61 from 443 to 965 nm: the dust is gray.
       aerosolAngstrom: 0,
+      // A clear sol's dust: τ 0.3–1.0 at the rovers (Lemmon 2015), and the
+      // diffuse sky Pathfinder put level with the direct beam at a 20° sun
+      // is what a depth near this makes; the gas makes none of it.
+      aerosolDepth: 0.4,
+      // Single-scattering albedo 0.93 at 671 nm against 0.75 at 444 (Lemmon
+      // 2015): the dust takes blue, which is the butterscotch of every sky
+      // photographed from the surface, and thrown forward it is the blue
+      // around the setting sun — the limb color above.
+      aerosolAlbedo: 0.93,
       ozone: 0,
     },
     // Olympus Mons to Hellas Planitia: 29 km, the largest relief on any
