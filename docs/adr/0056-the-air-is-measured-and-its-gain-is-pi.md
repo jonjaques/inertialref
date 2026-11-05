@@ -186,18 +186,24 @@ its budget.
 - Under 20° of sun the zenith runs bright: 1.6 times the CIE sky at 10°.
   The model has no ground bounce. By −15° the measured sky is mostly airglow
   and starlight, which the model does not draw, so there it falls short.
-- **`thickness` still scales the gas and the aerosol together**, and the
-  zenith color is still read as the Rayleigh spectrum. That is right for
-  Earth and the giants and wrong where the aerosol is the sky. Mars draws a
-  Rayleigh depth of 0.057 against a measured 0.0025, and a dust depth of 0.018
-  against 0.3 to 1.0. Its butterscotch is a Rayleigh color, and its sky has
-  none of the diffuse light a dust depth near 0.5 makes, which at a 20° sun
-  Pathfinder's team put level with the direct beam. Titan draws Earth's column
+- **`thickness` scales the gas and the aerosol together where the gas is
+  the sky**, and the zenith color is read as the Rayleigh spectrum, which is
+  right for Earth and the giants. Where the aerosol is the sky a haze
+  authors `aerosolDepth`, its measured extinction depth at 550 nm, and
+  `aerosolAlbedo`, its single-scattering albedo in its brightest channel,
+  and the aerosol carries the two authored colors itself: the sky's
+  sideways and the limb's toward the sun, turning between them along the
+  Henyey–Greenstein lobe's share of its own peak (`AEROSOL_FORWARD_PEAK`),
+  with no channel scattering more than it takes. Mars is the one so
+  authored: its gas at its measured Rayleigh depth of 0.0025 and its dust at
+  0.4 with an albedo of 0.93 in the red (the table above), so its zenith
+  under a 41° sun is 0.066 of the surface white where the gas read as
+  butterscotch made 0.009 and a near-black sky, and the blue around its
+  setting sun is the dust's forward lobe. Titan still draws Earth's column
   in orange, so its column extinguishes red and its low sun comes through
-  green-white, where Huygens measured a haze of 4.5 whose albedo falls toward
-  the blue. Composition-aware columns
-  are the next step: gas depth from column mass, and aerosol depth, albedo
-  and slope per band from the table above.
+  green-white, where Huygens measured a haze of 4.5 whose albedo falls
+  toward the blue; its depth, albedo and slope per band are in the table
+  above and wait on the same two fields.
 - A sun within a degree or two of a sea-level horizon dims faster than the
   compression law, under the cap, until the ground takes it.
 - A bake costs 39 ms where it cost 22 on the development machine — the
