@@ -121,21 +121,21 @@ radiance gain because the stretched foot is optically thick along a
 tangent — sixteen in Earth's blue — so more column only raises the height
 where the ring turns opaque; at six the line is the brightest thing on the
 disk's edge and a sunrise from low orbit is orange under white under blue.
-The aerosol rides in the ring at its whole column and scatters without
-taking: stretched, it is a band 3.6 km thick at the ring's foot, a dozen
-deep along the tangent, and what it would take is the limb's own line,
-while its forward lobe — fifty times its side-scatter — is the orange every
-photograph of a limb has toward the sun, and its gray the white between
-the orange and the blue. Its fall-off is stretched with the gas's but never
-past the gas's own scale height, so the lobe stays at the foot on every
-world: Mars's dust is mixed with its gas and Titan's haze is three times
-its gas, and spread up the ring either paints a broad tan-white arch over
-a limb photographed as a thin line. At a quarter of the column the foot of
-Earth's sunrise limb is an orange thread under a periwinkle band. The ozone
-stays in the physics, where it turns a twilight zenith blue from the ground;
-stretched up the ring and drawn six times over, its tent took the orange out
-of the band between the foot and the crown, so a low-orbit sunrise read
-orange under violet with no white between and every lit rim a blue-violet. Nothing authors a color. The
+The aerosol rides in the ring at its whole column, falls off over the
+gas's own scale height, and scatters without taking: what it would take is
+the limb's own line, while its forward lobe — fifty times its side-scatter
+— is the orange every photograph of a limb has toward the sun, and its
+gray the white between the orange and the blue. Over the gas's own height
+it is the lower third of the ring on every world, so the lobe stays at the
+foot: stretched with the gas, Mars's mixed dust and Titan's haze, three
+times its gas, fill the ring and paint a broad tan-white arch over a limb
+photographed as a thin line, and under the gas's height Earth's white is a
+thread and its low-orbit sunrise orange under blue. At a quarter of the
+column the orange is a thread too. The ozone stays in the physics, where it
+turns a twilight zenith blue from the ground; stretched up the ring and
+drawn six times over, its tent took the orange out of the band between the
+foot and the crown, so a low-orbit sunrise read orange under violet with no
+white between and every lit rim a blue-violet. Nothing authors a color. The
 ring's crown is blue because the sun reaches it clear; its foot is orange
 toward the sun because the table's column reddens the beam there and the
 lobe throws it forward; and the ring ends where the sun sets on the gas as
@@ -150,8 +150,8 @@ surface twice, on the sun's way down and the eye's way out, to about two
 thirds of its own light at nadir, and reddens it toward the terminator, so
 a half-lit Earth's day side read dark brown under a hard terminator where
 the composite has a pale face. Enhanced lights the surface at its own light, in the
-hue the beam's slant gives it over the column overhead — white at the
-subsolar point, peach on a sunward crescent — shows it without the view
+hue the beam's slant gives it over the column overhead, at half its
+reddening — white at the subsolar point, peach on a sunward crescent — shows it without the view
 path's extinction, and keeps the air's light over it, which is the haze
 toward the limb; the sphere, the ground and the sea take it from the one lift, and on
 the ground the lift is nothing. The shell 20 km past the edge reads within
