@@ -91,6 +91,10 @@ const OPTIONS = {
   width: { type: 'string', default: '1600' },
   height: { type: 'string', default: '900' },
   dpr: { type: 'string', default: '1' },
+  /** Chrome's output color space, `--force-color-profile`. Unset is the
+   *  attached display's profile, which is why two machines' plates of one
+   *  build differ by a cast; `srgb` makes a plate the build's alone. */
+  'color-profile': { type: 'string' },
   /** Reload and re-boot even when the attached page is already rendering. */
   fresh: { type: 'boolean', default: false },
   /** Preserve local storage and cookies, and permit a warm attach. */
@@ -181,7 +185,11 @@ Session flags:
                      agents must differ
   --width/--height   viewport, default 1600x900
   --dpr <n>          device scale factor, default 1
-  --fresh            re-boot even if the attached page is already rendering
+  --color-profile <name>
+                     Chrome's output color profile (srgb, display-p3-d65, …);
+                     default is the attached display's. Applies at launch, so
+                     a Chrome already up under another profile is refused
+  --fresh           re-boot even if the attached page is already rendering
   --keep-storage     retain local storage/cookies and allow a warm attach;
                      default clears both before booting the requested page
   --user-gesture     activate only --js/--file evaluations as user gestures;
@@ -267,6 +275,7 @@ if (values['print-url'] === true) {
 const WIDTH = Number(values.width)
 const HEIGHT = Number(values.height)
 const DPR = Number(values.dpr)
+const COLOR_PROFILE = values['color-profile'] ?? null
 const MAX_PX = Number(values['max-px'])
 const QUALITY = Number(values.quality)
 const SERVE = values.serve === true
@@ -337,6 +346,11 @@ async function serve(state) {
   // purpose, and `--down` kills the group so the Worker goes with vite.
   const child = spawn('node', ['scripts/dev.mjs'], {
     cwd: ROOT,
+    // No Astro dev toolbar: it is a strip of chrome over the bottom of every
+    // dev page that `chrome=0` cannot clear, so a local plate carried it and a
+    // production plate never did. A dev server this rig did not start keeps
+    // whatever its owner chose.
+    env: { ...process.env, ASTRO_DEV_TOOLBAR: '0' },
     stdio: ['ignore', log, log],
     detached: true,
   })
@@ -366,7 +380,19 @@ async function launchChrome(state) {
   const up = await fetch(`http://127.0.0.1:${PORT}/json/version`).catch(
     () => null,
   )
-  if (up?.ok) return state.chromePid ?? null
+  if (up?.ok) {
+    // The profile is a launch flag: attaching to a Chrome started under
+    // another one would take a plate in a color space nobody asked for and
+    // record the one that was asked for beside it.
+    const running = state.colorProfile ?? null
+    if (running !== COLOR_PROFILE) {
+      throw new Error(
+        `Chrome on port ${PORT} runs color profile ${running ?? 'display'}, not ${COLOR_PROFILE ?? 'display'}; ` +
+          `node scripts/drive.mjs --port ${PORT} --down first`,
+      )
+    }
+    return state.chromePid ?? null
+  }
   if (!existsSync(CHROME)) throw new Error(`no Chrome at ${CHROME}`)
   const child = spawn(
     CHROME,
@@ -380,6 +406,9 @@ async function launchChrome(state) {
       // rendering, and a window nobody can see is a window nobody clicks in.
       `--window-size=${WIDTH},${HEIGHT + 120}`,
       '--window-position=2400,60',
+      ...(COLOR_PROFILE === null
+        ? []
+        : [`--force-color-profile=${COLOR_PROFILE}`]),
       // A proof with scripts disabled or requests blocked must not execute
       // the requested page before the DevTools controls reach this target.
       DOCUMENT || BLOCKED_URLS.length > 0 ? 'about:blank' : URL_,
@@ -389,7 +418,10 @@ async function launchChrome(state) {
   child.unref()
   // Same reason as the dev server above: a Chrome that never opens its
   // debugging port is still a Chrome, and `--down` can only kill what it knows.
-  await writeState({ chromePid: child.pid ?? null })
+  await writeState({
+    chromePid: child.pid ?? null,
+    colorProfile: COLOR_PROFILE,
+  })
   for (let i = 0; i < 80; i += 1) {
     await sleep(500)
     const r = await fetch(`http://127.0.0.1:${PORT}/json/version`).catch(
