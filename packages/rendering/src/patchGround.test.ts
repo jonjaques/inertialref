@@ -200,7 +200,8 @@ describe('the ground a patch draws, read along a direction', () => {
    * wall in that line's plane. The cells either side then meet the line at
    * two radii, and a ray along it runs up the wall from one to the other: at
    * s = 0.875, t = 0.561 the step is 1.5 cm, with (35, 56) at 0.936 of its
-   * slide and (35, 57) at 1. Exactly on the line, the 3D inside test lands on
+   * slide and (35, 57) at 1, and on the band's even lines the step reaches
+   * 29 cm, at s = 0.875, t = 0.533. Exactly on the line, the 3D inside test lands on
    * one side or the other by float noise. So every triangle the ray meets
    * within the float32 resolution of a vertex offset counts, and the read
    * must fall in the span of their radii.
@@ -232,9 +233,15 @@ describe('the ground a patch draws, read along a direction', () => {
         : patchMorph(Vec.distance(own, band.eye), band.start, band.end)
       return Vec.add(own, Vec.scale(Vec.sub(target, own), k))
     }
-    // A vertex is a float32 offset from the anchor, and none is farther
-    // from it than the patch is wide: that offset's last bit, in meters.
-    const offsetResolution = size * 2 ** -23
+    // A vertex is a float32 offset from the anchor: that offset's last bit,
+    // in meters, at the largest one. Not the patch's width — the anchor is on
+    // the datum and this ground stands two kilometers under it, so an offset
+    // reaches 2.6 km on a 1.9 km patch.
+    let farthest = 0
+    for (const x of [...patch.positions, ...patch.morphPositions]) {
+      farthest = Math.max(farthest, Math.abs(x))
+    }
+    const offsetResolution = farthest * 2 ** -23
     const inside = (d: Vec3, a: Vec3, b: Vec3, c: Vec3): number | null => {
       const n = Vec.cross(Vec.sub(b, a), Vec.sub(c, a))
       if (Vec.dot(n, n) < 1e-12) return null
@@ -284,14 +291,16 @@ describe('the ground a patch draws, read along a direction', () => {
           )
           if (k > 0 && k < 1) banded += 1
           const drawn = patchGroundRadius(patch, d, band) as number
-          // Off a fold, the met radii are one triangle's, or one edge's
-          // seen from both sides. Within a millimeter, the grid-space read
-          // against the 3D plane (`patchGroundRadius`'s chord-sag note).
+          // Off a fold, the met radii are one point of the mesh, seen from
+          // each triangle that touches it. Within a millimeter, the
+          // grid-space read against the 3D plane: the chord's cut and the
+          // projection's lean `planeDeparture` bounds, 0.71 mm at worst on
+          // this patch's unmorphed triangles.
           expect(drawn).toBeGreaterThan(Math.min(...met) - 1e-3)
           expect(drawn).toBeLessThan(Math.max(...met) + 1e-3)
         },
       ),
-      // CI's seed 1914660721 drew the folded cell on column 56, exactly.
+      // A ray exactly along column 56, through the folded cell.
       { numRuns: 400, examples: [[0.875, 0.561]] },
     )
     // The band crosses the patch, so the property was asked inside it.
