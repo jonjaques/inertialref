@@ -4,32 +4,36 @@ A plan for the second version of the experiment that took Earth from orbit
 back toward production on #179: one orchestrator changes the renderer and
 takes the plates, three reviewers from three providers score them blind, and
 the climb runs until they agree. This records what the first run taught and
-how the next one is built. First draft; the numbers are from memory of one
-run and are to be checked.
+how the next one is built. The figures are from the run's ledger
+(`.data/look-council/ledger/history.csv`); the proposals are a first draft.
 
 ## What the first run was
 
 - 24 scenes as picture fixtures: 8 Earth-from-orbit scenes scored against a
   reference (Part A), 16 more as blind top/bottom pairs with one control
   (Part B).
-- One reviewer each from Claude, Codex and Muse, a fresh delegate every
-  round, a frozen brief, a randomly named packet of images and nothing else.
+- One reviewer from each of three providers, a fresh delegate every round, a
+  frozen brief, a randomly named packet of images and nothing else.
 - Up to three changes a round, a revert rule on a 0.5 drop, a stop at eight
   rounds.
-- Result: the council's mean overall went 3.0 → 7.0 over seven rounds, Part A
-  3.5 → 7.9. The pass bar (every seat at 9) was not reached.
+- Result: the council's mean overall went from 3.0 in round one to 7.0 in
+  round seven, the best of eight; the Part A mean from 3.5 to 7.9. Mean RMSE
+  to the reference over the eight Earth scenes fell from 0.042 to 0.020 on the
+  frame and from 0.071 to 0.030 on the limb crops. The pass bar (every seat
+  at 9) was not reached: one seat said `ship` in rounds seven and eight, two
+  never did, and every seat preferred the reference on two of Mars's views.
 
 ## What worked
 
 - **Blindness held.** No reviewer ever saw another's words, the round, the
-  diff or a hint. Controls scored identically in every one of 24 reviews, so
+  diff or a hint. The control pair scored a gap of zero in all 24 reviews, so
   no seat was inventing differences.
 - **Proof of looking.** Three random observations per review, checked against
   the images, caught nothing false in eight rounds; the requirement alone
   seems to keep reviews honest.
 - **Pixel distance beside opinion.** RMSE against the reference over full
-  frames and limb crops was the orchestrator's fast loop: a dozen experiments
-  a round, each a tier-A capture of about ninety seconds, judged by number and
+  frames and limb crops was the orchestrator's fast loop: each experiment a
+  tier-A capture of about ninety seconds, judged by number and
   by eye before anything reached the council.
 - **One provider per seat.** The seats disagreed for real reasons — one read
   Part B ground scenes as decisive, one weighted the limb, one the face —
@@ -62,19 +66,24 @@ Production draws a starry, unlit afternoon and a sun through the ground. Two
 seats inferred, blind, that the broken half might be the candidate and held
 `ship` and `overall` down for it; one seat's overall swung 6 → 4 → 6 on
 ground scenes that had not changed by more than noise since round two. That
-swing triggered the revert rule in round six while Part A was flat.
+swing triggered the revert rule in round six (mean overall 6.83 → 6.17) while
+the Part A mean did not move (7.79 → 7.79). The candidate won more Part B
+pairs than it lost in 21 of 24 reviews, and Earth's ground scenes, won by
+2–6 points every round, never lifted `overall` past what the orbit allowed.
 
 - Split `overall` into **`overall_orbit`** (the goal) and a separate
   **regression verdict** per Part B scene. Score the climb on the goal; gate
   it on regressions.
-- Tell reviewers that Part B's builds do not change from round to round
-  unless the scene's group is named as touched. Better: show Part B only for
-  scenes whose candidate plate moved beyond the noise floor since the last
-  review, and carry the previous verdict forward for the rest.
-- Give each Part B pair a **known-good anchor**: the reference's half is
-  labeled "reference" in the orchestrator's key and the regression question
-  is asked against the previous accepted candidate, not against production,
-  which may be worse than the candidate on purpose (the keep list).
+- Show Part B only for scenes whose candidate plate moved beyond the noise
+  floor since the last review, and carry the previous verdict forward for the
+  rest. Telling reviewers which groups were touched would do the same with
+  less tooling, but it is a hint, and blindness is worth more than the
+  tooling.
+- Ask the regression question **against the last accepted candidate**, not
+  against production. Production is worse than the candidate on purpose in
+  the keep list's scenes, so a pair against it measures the keep list again
+  every round; a pair against the last accepted plate measures only this
+  round's change.
 - Run the revert rule on Part A and on the regression verdicts, not on
   `overall`.
 
@@ -164,6 +173,19 @@ left its Chrome up and the next capture timed out on it.
   candidate and every experiment in one image per scene, which is what the
   orchestrator actually looked at to choose.
 
+## Stronger models
+
+The next run should seat each provider's strongest model of the day, at its
+highest reasoning effort, and keep one provider per seat. The first run's
+seats read the plates well enough to agree on direction and disagree on
+weight; what they could not do reliably was estimate a rim's width as a
+fraction of the radius or tell a small color shift from noise, which is where
+the instruments above take over. A stronger seat is measured, not assumed:
+rescore one archived round (its packets are kept) with the new seat beside
+the old, and check both against the profilers before trusting the swap. The
+orchestrator gains as much as the seats: most of a round's judgment was
+choosing which experiment to put in front of the council.
+
 ## Open questions
 
 - Should the owner be a seat? One human pass per round on the experiment
@@ -174,3 +196,6 @@ left its Chrome up and the next capture timed out on it.
   one reference with a keep list beside it.
 - How many seats? Three disagreed usefully; a fourth provider would show
   whether a seat's swings are the seat or the scenes.
+- What do Mars's limbs need? In the best round every seat preferred the
+  reference on the sunset limb and on the raking view. They need their own
+  target in the next run, not a side effect of Earth's.
