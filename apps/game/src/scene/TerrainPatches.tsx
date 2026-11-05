@@ -197,7 +197,6 @@ export function TerrainPatches({
           tables.transmittance,
           tables.multiScatter,
         )
-        terrain.air.lift(body?.limb ?? 0, body?.limbFalloff)
       }
     }
     const seen = new Set<string>()

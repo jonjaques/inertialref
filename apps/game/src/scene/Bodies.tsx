@@ -497,7 +497,6 @@ export function Bodies({
             tables.transmittance,
             tables.multiScatter,
           )
-          planet.air.lift(body.limb, body.limbFalloff)
         }
         setNumber(planet.specularStrength, values.specularStrength)
         setNumber(planet.nightStrength, values.nightStrength)

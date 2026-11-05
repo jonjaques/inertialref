@@ -8,10 +8,10 @@ import {
   densityColumn,
   DISK_THROUGH_AIR_CEILING,
   diskThroughAir,
-  LIMB_CEILING,
+  LIMB_CEILING_FALLOFFS,
   LIMB_FADE_HEIGHTS,
-  LIMB_FALLOFF,
   LIMB_STANDOFF,
+  LIMB_STRETCH,
   limbFalloff,
   limbLift,
   limbReach,
@@ -626,57 +626,70 @@ describe("Enhanced's limb", () => {
     )
   })
 
-  it("falls off over a fifth of the eye's height, up to a twenty-fifth of the radius", () => {
-    expect(limbFalloff(1)).toBe(0)
-    expect(limbFalloff(1 + 313_000 / 6_371_000)).toBeCloseTo(
-      313_000 / 6_371_000 / LIMB_STANDOFF,
+  // Earth's gas scale height in datum units, and a station's eye.
+  const EARTH_GAS = 8_500 / 6_371_000
+  const STATION = 1 + 313_000 / 6_371_000
+
+  it("falls off over three of the gas's own heights, or a fifth of the eye's height under that", () => {
+    expect(limbFalloff(1, EARTH_GAS)).toBe(0)
+    expect(limbFalloff(STATION, EARTH_GAS)).toBeCloseTo(
+      LIMB_STRETCH * EARTH_GAS,
       12,
     )
-    expect(limbFalloff(1 + LIMB_FALLOFF * LIMB_STANDOFF)).toBeCloseTo(
-      LIMB_FALLOFF,
+    // Low enough, the eye's height is the bound.
+    const low = 1 + LIMB_STRETCH * EARTH_GAS * LIMB_STANDOFF * 0.5
+    expect(limbFalloff(low, EARTH_GAS)).toBeCloseTo(
+      (low - 1) / LIMB_STANDOFF,
       12,
     )
-    expect(limbFalloff(4)).toBe(LIMB_FALLOFF)
+    expect(limbFalloff(4, EARTH_GAS)).toBe(LIMB_STRETCH * EARTH_GAS)
     fc.assert(
       fc.property(
         fc.double({ min: 1, max: 20, noNaN: true }),
         fc.double({ min: 0, max: 1, noNaN: true }),
-        (eye, climb) => {
+        fc.double({ min: 1e-5, max: 0.05, noNaN: true }),
+        (eye, climb, gas) => {
           // The eye is never inside the gas: at least the standoff above the
-          // foot in fall-offs, and the fall-off never falls as the eye climbs.
-          const falloff = limbFalloff(eye)
+          // foot in fall-offs; the fall-off never falls as the eye climbs; and
+          // the ring is never more than the stretch, nor thinner than the gas
+          // once the eye is far enough out for the stretch to bind.
+          const falloff = limbFalloff(eye, gas)
           expect(eye - 1).toBeGreaterThanOrEqual(
             LIMB_STANDOFF * falloff - 1e-12,
           )
-          expect(limbFalloff(eye + climb)).toBeGreaterThanOrEqual(falloff)
+          expect(limbFalloff(eye + climb, gas)).toBeGreaterThanOrEqual(falloff)
+          expect(falloff).toBeLessThanOrEqual(LIMB_STRETCH * gas + 1e-15)
+          if (eye - 1 >= LIMB_STANDOFF * LIMB_STRETCH * gas)
+            expect(falloff).toBeCloseTo(LIMB_STRETCH * gas, 12)
         },
       ),
     )
   })
 
-  it("reaches the air's top at no lift and the eye's ceiling at the full lift, never under the top", () => {
+  it("reaches the air's top at no lift and four fall-offs at the full lift, never under the top", () => {
     fc.assert(
       fc.property(
         fc.double({ min: 1, max: 1.5, noNaN: true }),
         fc.double({ min: 0, max: 1, noNaN: true }),
-        fc.double({ min: 1, max: 20, noNaN: true }),
-        (top, lift, eye) => {
-          const reach = limbReach(top, lift, eye)
+        fc.double({ min: 0, max: 0.05, noNaN: true }),
+        (top, lift, falloff) => {
+          const reach = limbReach(top, lift, falloff)
+          const ceiling = 1 + LIMB_CEILING_FALLOFFS * falloff
           expect(reach).toBeGreaterThanOrEqual(top)
-          expect(reach).toBeLessThanOrEqual(Math.max(LIMB_CEILING, top))
+          expect(reach).toBeLessThanOrEqual(Math.max(ceiling, top) + 1e-12)
         },
       ),
     )
-    expect(limbReach(1.0157, 0, 4)).toBe(1.0157)
-    expect(limbReach(1.0157, 1, 4)).toBe(LIMB_CEILING)
-    // From a station the ceiling is the station's: four fall-offs of a
-    // fifth of its height, which is under the ceiling from the Moon.
-    const station = 1 + 313_000 / 6_371_000
-    expect(limbReach(1.0157, 1, station)).toBeCloseTo(
-      1 + 4 * limbFalloff(station),
+    const falloff = limbFalloff(STATION, EARTH_GAS)
+    expect(limbReach(1.0157, 0, falloff)).toBe(1.0157)
+    // Four fall-offs of Earth's 25.5 km is 102 km, just over a top 100 km up.
+    expect(limbReach(1.0157, 1, falloff)).toBeCloseTo(
+      1 + LIMB_CEILING_FALLOFFS * LIMB_STRETCH * EARTH_GAS,
       12,
     )
+    // A taller fall-off reaches past the top.
+    expect(limbReach(1.0157, 1, 0.01)).toBeCloseTo(1.04, 12)
     // An air already taller than the ceiling keeps its own top.
-    expect(limbReach(1.3, 1, 4)).toBe(1.3)
+    expect(limbReach(1.3, 1, falloff)).toBe(1.3)
   })
 })

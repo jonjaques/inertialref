@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   SURFACE_LUMINANCE,
   type RenderBody,
-  LIMB_CEILING,
+  LIMB_CEILING_FALLOFFS,
 } from '@inertialref/rendering'
 import { Quaternion, vec3 } from '@inertialref/spatial'
 import {
@@ -248,10 +248,11 @@ describe('a mapped body', () => {
     const top = inside.atmosphere!.outerRadius
     // Inside the air the mesh is the top of the air, within float rounding.
     expect(inside.atmosphere!.scale.x / top).toBeCloseTo(1, 9)
-    // At the full lift it is the ceiling over sea level, a sixth of a
-    // radius out — and the shader's `top` is still the air's.
+    // At the full lift it is the ring's ceiling over sea level, four of its
+    // fall-offs out — and the shader's `top` is still the air's.
     expect(outside.atmosphere!.scale.x).toBeCloseTo(
-      outside.atmosphere!.seaLevel * LIMB_CEILING,
+      outside.atmosphere!.seaLevel *
+        (1 + LIMB_CEILING_FALLOFFS * outside.atmosphere!.limbFalloff),
       6,
     )
     expect(outside.atmosphere!.outerRadius).toBe(top)

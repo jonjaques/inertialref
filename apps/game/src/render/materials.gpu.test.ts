@@ -20,7 +20,11 @@ import {
 } from 'three/webgpu'
 import { openSession, type Session } from '@inertialref/devtools'
 import { rng, rootSeed } from '@inertialref/procedural'
-import { buildPatch, terrainPalette } from '@inertialref/rendering'
+import {
+  buildPatch,
+  LIMB_STRETCH,
+  terrainPalette,
+} from '@inertialref/rendering'
 import {
   type Body,
   COVER_CHANNELS,
@@ -833,7 +837,10 @@ describe('the disk, seen through its own air', () => {
     if (air) {
       const baked = tables()
       planet.air.set(baked.recipe, baked.transmittance, baked.multiScatter)
-      planet.air.lift(lift)
+      planet.air.lift(
+        lift,
+        LIMB_STRETCH * (earth.atmosphere!.scaleHeight / earth.radius),
+      )
     }
     const disk = new Mesh(new SphereGeometry(mesh, 48, 32), planet.material)
     const eye = new PerspectiveCamera(10, 1, 0.1, 100)
@@ -858,14 +865,12 @@ describe('the disk, seen through its own air', () => {
     expect(await veil(false)).toBeLessThan(1e-6)
   })
 
-  it("composes Enhanced's limb in front of the disk, and keeps it off the ground", async () => {
-    // The ring the shell draws past the silhouette continues across it
-    // through the same march, so the lifted gas in front of the disk is
-    // the sphere's to draw: at nadir it is a fiftieth of its tangent
-    // column, and under Enhanced from outside the air it adds to the
-    // physics' own veil: measured 0.089 against 0.053. Nothing under a
-    // photographic lens, and nothing from the ground, where `buildScene`
-    // lifts nothing.
+  it("keeps Enhanced's limb off the disk: the sphere is seen through the physics alone", async () => {
+    // The lifted gas is the same column as the physics, so composed in front
+    // of the disk it is a second nadir veil — measured 0.089 against the
+    // physics' 0.053 — and the blue of it tints a Blue Marble's Sahara
+    // magenta. The ring is the shell's, past the silhouette; under Enhanced
+    // from outside the air the disk keeps the physics' own veil.
     const pre = 1 / 30_000
     setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
     let lifted: number
@@ -876,8 +881,8 @@ describe('the disk, seen through its own air', () => {
     } finally {
       setSceneExposure(gpu.renderer, null)
     }
-    expect(lifted).toBeGreaterThan(1.3 * physical)
-    expect(await veil(true, 1, 1)).toBeCloseTo(physical, 6)
+    expect(physical).toBeGreaterThan(0.01)
+    expect(lifted).toBeCloseTo(physical, 6)
   })
 
   it('marches to the datum, not to the sunk sphere under it', async () => {

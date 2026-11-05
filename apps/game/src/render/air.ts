@@ -33,8 +33,8 @@ import {
   AEROSOL_ASYMMETRY,
   type AtmosphereRecipe,
   LIMB_AEROSOL,
+  LIMB_BRIGHTNESS,
   LIMB_CEILING_FALLOFFS,
-  LIMB_FALLOFF,
   LIMB_GAIN,
   MULTI_SCATTER_HEIGHT,
   MULTI_SCATTER_WIDTH,
@@ -68,10 +68,13 @@ import { enhancedSky } from './radiance.ts'
  * march the LUTs made affordable, and a surface takes a third of that.
  *
  * Enhanced's limb from orbit is a second march through the same tables
- * (`marchLimb`): the recipe stretched `LIMB_FALLOFF` of a radius tall, which
- * every caller of `airToward` composes beside its own physics, so the ring
- * the shell draws past the disk's edge continues across the edge into the
- * sphere, the ground and the sea without a seam.
+ * (`marchLimb`): the recipe stretched `LIMB_STRETCH` of its own scale
+ * heights tall, which the shell draws past the disk's edge and nothing
+ * draws in front of a surface. Composed over the sphere, the ground and the
+ * sea it is the same column of gas a second time at nadir — a blue veil
+ * that tints a Blue Marble's Sahara magenta, 143 : 125 : 137 where the
+ * physics alone draws 140 : 114 : 109 — so a surface is seen through the
+ * physical air alone, and all three still take it from the one march.
  */
 
 const TRANSMITTANCE = [TRANSMITTANCE_WIDTH, TRANSMITTANCE_HEIGHT] as const
@@ -129,15 +132,15 @@ const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
  * sea-level units, the two tables, `top`, the tables' ceiling over sea
  * level — 1 with no air — and the limb: `limb`, how far the eye stands
  * outside the air (`RenderBody.limb`), and `limbFalloff`, the ring's
- * fall-off for that eye (`limbFalloff`), which only Enhanced's second march
- * reads. `set` points them at one body's air, idempotently and without a
+ * fall-off for that eye (`limbFalloff`), which only the shell's second
+ * march reads. `set` points them at one body's air, idempotently and without a
  * rebuild, `lift` writes the limb beside it, and `clear` is a vacuum, which
  * draws nothing, extinguishes nothing and passes the beam white.
  */
 export function createAirUniforms() {
   const top = uniform(1)
   const limb = uniform(0)
-  const limbFalloff = uniform(LIMB_FALLOFF)
+  const limbFalloff = uniform(0)
   const betaRayleigh = uniform(new Vector3(0, 0, 0))
   const mieScatter = uniform(new Vector3(0, 0, 0))
   const mieExtinction = uniform(new Vector3(0, 0, 0))
@@ -175,14 +178,14 @@ export function createAirUniforms() {
       transmittance.value = sunTable
       multiScatter.value = psiTable
     },
-    lift(strength: number, falloff = LIMB_FALLOFF): void {
+    lift(strength: number, falloff: number): void {
       limb.value = strength
       limbFalloff.value = falloff
     },
     clear(): void {
       top.value = 1
       limb.value = 0
-      limbFalloff.value = LIMB_FALLOFF
+      limbFalloff.value = 0
       betaRayleigh.value.set(0, 0, 0)
       mieScatter.value.set(0, 0, 0)
       mieExtinction.value.set(0, 0, 0)
@@ -385,9 +388,8 @@ export const SURFACE_AIR_SAMPLES = 4
 
 /**
  * March samples the shell takes through the lifted gas. Eight against the
- * physics' twelve: the stretched profile is thirty times smoother than the
- * one it stretches, and the tangent chord through its ceiling is a radius
- * long, so a sample crowded to the perigee covers it.
+ * physics' twelve: the stretched profile is `LIMB_STRETCH` times smoother
+ * than the one it stretches, so a sample crowded to the perigee covers it.
  */
 export const LIMB_SAMPLES = 8
 
@@ -404,20 +406,20 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
 
 /**
  * Enhanced's limb: the recipe stretched to fall off over `limbFalloff` —
- * up to `LIMB_FALLOFF` of a radius, a fifth of the eye's height under that
- * (`LIMB_STANDOFF`) — marched from `near` to `far` like the physics.
+ * `LIMB_STRETCH` of the gas's own scale heights, a fifth of the eye's
+ * height under that (`LIMB_STANDOFF`) — marched from `near` to `far` like
+ * the physics, and drawn `LIMB_BRIGHTNESS` times over.
  *
- * The stretch is one number, the fall-off over the gas's own scale height
- * — thirty on Earth at the full fall-off — and the lifted recipe is the physical gas and its
- * ozone with every height multiplied by it and every coefficient divided by
- * it, `LIMB_GAIN` times over: the same column of gas, that much taller.
+ * The stretch is one number, the fall-off over the gas's own scale height,
+ * and the lifted recipe is the physical gas and its ozone with every height
+ * multiplied by it and every coefficient divided by it, `LIMB_GAIN` times
+ * over: the same column of gas, that much taller.
  *
  * The aerosol is stretched with the gas and scatters without taking.
- * Stretched, it is a band 36 km thick at the ring's foot on Earth, three
- * and a half deep along the tangent, and what it would take is the limb's
- * own line and the disk's edge, which are where the physics is: it
- * scatters nothing toward an eye square to the sun and took half of what
- * the physics drew under it. What it has that the gas does not is its
+ * Stretched, it is a band 3.6 km thick at the ring's foot on Earth, a dozen
+ * deep along the tangent, and what it would take is the limb's own line,
+ * which is where the physics is: it scatters nothing toward an eye square
+ * to the sun, and taking it halves what the physics draws under it. What it has that the gas does not is its
  * forward lobe, fifty times the side-scatter, and the lobe is the orange:
  * a sunrise at the limb, the ring of a backlit Earth, every reference
  * photograph's glow toward the sun is reddened sunlight thrown forward by
@@ -430,8 +432,9 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * foot along its whole arc, and the lobe painted the blue band over.
  *
  * The tables are read at the sample's height over the root of the
- * stretch, which lies between two heights that are both wrong. Read at
- * the sample's own height — the ring lit by the sun through the air that
+ * stretch, which lies between two heights that are both wrong; the
+ * figures here are at a stretch of thirty, where the two lie furthest
+ * apart. Read at the sample's own height — the ring lit by the sun through the air that
  * is actually there — a sample forty kilometers up sees a white sun, and
  * the ring toward a rising sun is a white glare at the surface's own
  * brightness with the orange in the physical line alone. Read at the
@@ -454,10 +457,9 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * it — and as nothing once the grazing height is under the ground. The two
  * agree where the beam is level. Nothing here authors a color.
  *
- * Gated on the lift and on Enhanced by one uniform branch, so the ground,
- * the sea and the sphere under a photographic lens or inside the air pay
- * none of it; the accumulators keep their zeros and the composite is the
- * physics alone.
+ * Gated on the lift and on Enhanced by one uniform branch, so the shell
+ * under a photographic lens or inside the air pays none of it; the
+ * accumulators keep their zeros and the composite is the physics alone.
  */
 export function marchLimb(
   air: AirUniforms,
@@ -548,7 +550,10 @@ export function marchLimb(
     )
   })
 
-  return { inscatter, transmittance: exp(opticalDepth.negate()) }
+  return {
+    inscatter: inscatter.mul(LIMB_BRIGHTNESS),
+    transmittance: exp(opticalDepth.negate()),
+  }
 }
 
 /**
@@ -557,9 +562,7 @@ export function marchLimb(
  * two thirds of its red, and from low orbit that turned a sunrise's blue
  * band gray-tan — 68 : 66 : 62 where the plate had 153 : 188 : 252. The
  * limb's own line and its band are the photograph, so the ring adds to
- * them and takes nothing from them. A surface behind both is veiled by
- * both: that is the disk's edge blending into the ring, and a fifth of the
- * blue at nadir.
+ * them and takes nothing from them.
  */
 export function throughLimb(physical: Marched, lifted: Marched): Marched {
   return {
@@ -570,7 +573,8 @@ export function throughLimb(physical: Marched, lifted: Marched): Marched {
 
 /**
  * The air between the eye and a point on a surface, both in sea-level units
- * about the body's center, with Enhanced's limb composed under it. The
+ * about the body's center: the physics alone, under every lens, because
+ * the lifted gas is the shell's (see the module's doc comment). The
  * segment starts where it enters the air — where the eye is, inside it —
  * and ends at the point, so a surface seen from orbit is veiled by the
  * whole slant column and one seen from a beach by the meters between, with
@@ -594,14 +598,7 @@ export function airToward(
   const top = air.top
   const halfOuter = sqrt(max(top.mul(top).sub(impactSquared), 0))
   const near = clamp(closest.sub(halfOuter), 0, span)
-  const physical = marchAir(air, eye, direction, near, span, sun, samples)
-  // And the lifted gas from where the ray enters its reach, which is the
-  // same entry inside the air and under a photographic lens.
-  const reach = limbReachOf(air)
-  const halfReach = sqrt(max(reach.mul(reach).sub(impactSquared), 0))
-  const nearLimb = clamp(closest.sub(halfReach), 0, span)
-  const lifted = marchLimb(air, eye, direction, nearLimb, span, sun, samples)
-  return throughLimb(physical, lifted)
+  return marchAir(air, eye, direction, near, span, sun, samples)
 }
 
 /**

@@ -187,42 +187,59 @@ export const ATMOSPHERE_GAIN = Math.PI
  * The physical limb is a line: Earth's gas falls off over 8.5 km, a seventh
  * of a percent of the radius, two pixels on a disk four hundred across, and
  * a camera's limb is that line and no more. The deep-space composite is
- * where the bible licenses a cheat (`art.md`), and the soft ring the home
- * page wraps the disk in is one. From outside the air, Enhanced draws the
- * body's air a second time as if it fell off over `LIMB_FALLOFF` of the
- * radius — 255 km on Earth in place of 8.5 — with `LIMB_GAIN` of the same
- * column of gas spread over the taller profile, and reads it through the
- * body's own tables at the sample's height over the root of the stretch
- * (`marchLimb` for the two heights that lies between), with the aerosol's
- * forward lobe and not its extinction. Nothing authors a color: the ring's
- * foot is orange toward the sun because the table's column reddens the
- * beam there and the lobe throws it forward, its crown stays blue because
- * the sun reaches it clear, and the ring ends where the sun sets on the
- * gas, foot first. The lifted gas takes light from the surface under it,
- * which is what blends the disk's edge into the ring, and from nothing
- * else.
+ * where the bible licenses a cheat (`art.md`), and the bright ring the home
+ * page draws on the disk's edge is one. From outside the air, Enhanced's
+ * shell draws the body's air a second time as if it fell off over
+ * `LIMB_STRETCH` of its own scale heights — 25 km on Earth in place of 8.5
+ * — with `LIMB_GAIN` of the same column of gas spread over the taller
+ * profile, reads it through the body's own tables at the sample's height
+ * over the root of the stretch (`marchLimb` for the two heights that lies
+ * between), with the aerosol's forward lobe and not its extinction, and
+ * draws its light `LIMB_BRIGHTNESS` times over. Nothing authors a color:
+ * the ring's foot is orange toward the sun because the table's column
+ * reddens the beam there and the lobe throws it forward, its crown stays
+ * blue because the sun reaches it clear, and the ring ends where the sun
+ * sets on the gas, foot first. It is drawn past the silhouette and nowhere
+ * else: the disk is seen through the physical air alone.
  *
  * Why a stretch of the same recipe rather than a glow: a halo painted
  * around the disk has one color, and the one thing a camera's limb has is
  * the order of its colors — orange under white under blue, and dark where
  * the sun has set on it.
  */
-export const LIMB_FALLOFF = 0.04
+/**
+ * The ring falls off over this many of the gas's own scale heights. As a
+ * multiple of the gas and not a fraction of the radius, so it is the same
+ * ring on every world: a fraction small enough for Earth's 8.5 km is under
+ * Titan's own 20 km, and would draw Titan a ring thinner than its air. At
+ * thirty — a twenty-fifth of Earth's radius — the ring stands off the disk
+ * as a halo four to seven percent of the radius wide; at three it is a
+ * line a percent of the radius wide, hugging the disk.
+ */
+export const LIMB_STRETCH = 3
 /** The lifted gas ends this many of its own fall-offs up. */
 export const LIMB_CEILING_FALLOFFS = 4
-/** Where the lifted gas ends at the full fall-off, as a multiple of the datum. */
-export const LIMB_CEILING = 1 + LIMB_CEILING_FALLOFFS * LIMB_FALLOFF
 export const LIMB_GAIN = 1
 /**
- * The eye stands this many of the ring's fall-offs above the ring's foot:
- * the fall-off is the eye's height over the datum divided by this, up to
- * `LIMB_FALLOFF` (`limbFalloff`). A ring that fell off over the full
- * twenty-fifth of the radius from 313 km put the eye inside its own gas,
- * and a sunrise from that height filled the whole sky with reddened haze
- * — what a gas that tall does, and not what a photograph from a station
- * shows. Sized to the eye, from a station the ring is a band five times the
- * gas's own under a black sky, from the Moon it is the full twenty-fifth,
- * and between them it grows with the altitude, never around the eye.
+ * The ring's light over the stretched gas's own. Along a tangent the
+ * stretched foot is optically thick — Earth's sea-level Rayleigh depth of
+ * 0.24 in the blue is sixteen along the chord — so more column only lifts
+ * the height where the ring turns opaque and leaves it as dim: at three
+ * times the column the line is still a dark blue, where a photograph's
+ * limb is white-blue. What the ring lacks is radiance. At one the line on
+ * a Blue Marble is dimmer than the disk beside it, and a sunrise from low
+ * orbit is a blue band over a thread of orange; at six the line is the
+ * brightest thing on the disk's edge and the sunrise band is orange under
+ * white under blue.
+ */
+export const LIMB_BRIGHTNESS = 6
+/**
+ * The eye stands at least this many of the ring's fall-offs above the
+ * ring's foot: the fall-off is the eye's height over the datum divided by
+ * this, if that is under `LIMB_STRETCH` scale heights (`limbFalloff`).
+ * A ring taller than the eye's height puts the eye inside its own gas, and
+ * a sunrise from that height fills the whole sky with reddened haze — what
+ * a gas that tall does, and not what a photograph from a station shows.
  */
 export const LIMB_STANDOFF = 5
 /**
@@ -263,15 +280,20 @@ export function limbLift(eyeRatio: number, airTop: number): number {
 
 /**
  * The ring's fall-off for an eye at `eyeRatio` over the datum, in datum
- * units: a `LIMB_STANDOFF`th of the eye's height, up to `LIMB_FALLOFF`.
+ * units: `LIMB_STRETCH` of the gas's own scale height `gasHeight` (datum
+ * units, `airHeights`), or a `LIMB_STANDOFF`th of the eye's height if
+ * that is less.
  */
-export function limbFalloff(eyeRatio: number): number {
-  return Math.min(LIMB_FALLOFF, Math.max(eyeRatio - 1, 0) / LIMB_STANDOFF)
+export function limbFalloff(eyeRatio: number, gasHeight: number): number {
+  return Math.min(
+    LIMB_STRETCH * Math.max(gasHeight, 0),
+    Math.max(eyeRatio - 1, 0) / LIMB_STANDOFF,
+  )
 }
 
 /**
  * Where the air ends for a lift: the air's own top at none, the ring's
- * ceiling for this eye at one — or the top, for an air that already
+ * ceiling for its fall-off at one — or the top, for an air that already
  * reaches past it — in datum units. The shell mesh is drawn to it, and the
  * march of the lifted gas stops at it, so the ring is never clipped by the
  * geometry that carries it.
@@ -279,9 +301,9 @@ export function limbFalloff(eyeRatio: number): number {
 export function limbReach(
   airTop: number,
   lift: number,
-  eyeRatio: number,
+  falloff: number,
 ): number {
-  const ceiling = 1 + LIMB_CEILING_FALLOFFS * limbFalloff(eyeRatio)
+  const ceiling = 1 + LIMB_CEILING_FALLOFFS * falloff
   return airTop + (Math.max(ceiling, airTop) - airTop) * lift
 }
 
