@@ -413,9 +413,21 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * the physics, and drawn `LIMB_BRIGHTNESS` times over.
  *
  * The stretch is one number, the fall-off over the gas's own scale height,
- * and the lifted recipe is the physical gas and its ozone with every height
- * multiplied by it and every coefficient divided by it, `LIMB_GAIN` times
- * over: the same column of gas, that much taller.
+ * and the lifted recipe is the physical gas with every height multiplied by
+ * it and every coefficient divided by it, `LIMB_GAIN` times over: the same
+ * column of gas, that much taller.
+ *
+ * Without its ozone, the second place the ring departs from a stretched
+ * physics. Ozone absorbs and scatters nothing; what it does is take the
+ * orange out of light that crosses the stratosphere edgeways, which is what
+ * turns a twilight zenith blue from the ground, and the physics keeps it
+ * for that. Stretched with the gas and drawn six times over, the tent sits
+ * across the ring's middle and takes the orange out of the band between the
+ * foot and the crown: a sunrise from low orbit reads orange under violet
+ * with no white between, and every lit rim a blue-violet. Without it the
+ * band is orange under white under blue, its crop 0.036 RMSE of the
+ * composite's against 0.046 with it. The tables the ring is lit through
+ * keep the ozone; the sun that reaches the ring has crossed the real one.
  *
  * The aerosol rides in the ring at its whole column and scatters without
  * taking. Stretched, it is a band 3.6 km thick at the ring's foot on
@@ -445,13 +457,13 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * that is actually there, which at a sample's height over the foot is
  * nearly none: the ring toward a rising sun is a white glare with the
  * orange in the physical line alone. Read at the root of the stretch,
- * between the two, the ring seen from four radii toward a sun a degree and
- * a half over its foot's horizon turns from red over blue to blue over red
- * near 18 km, and on Earth's sunrise limb from low orbit the orange is a
- * thread under a band of blue; at the stretch it turns near 24 km (red
- * over blue 1.43 at 20 km, against 0.86). The horizon is read as this planet's whatever the table's
- * height: the table's own horizon at a fraction of the height is under
- * which a crown well up the ring goes dark with the sun a degree behind
+ * between the two, the orange on Earth's sunrise limb from low orbit is a
+ * thread under a band of blue; at the stretch itself, seen from four radii
+ * toward a sun a degree and a half over the foot's horizon, red stays over
+ * blue twenty kilometers up (1.02 : 0.82 : 0.56). The horizon is read as
+ * this planet's whatever the table's height: the table's own horizon at
+ * a fraction of the height is under which a crown well up the ring goes
+ * dark with the sun a degree behind
  * the disk, where it sees the sun well past the terminator — a backlit
  * Earth drew no ring at all. So a beam that climbs from its sample reads
  * the table as it stands, and a beam that descends is read at its own
@@ -506,18 +518,8 @@ export function marchLimb(
         const densityM = exp(
           height.div(min(air.hMie.mul(stretch), air.hRayleigh)).negate(),
         ).mul(fade)
-        const densityO = max(
-          float(1).sub(
-            abs(height.sub(air.ozonePeak.mul(stretch))).div(
-              max(air.ozoneHalfWidth.mul(stretch), 1e-9),
-            ),
-          ),
-          0,
-        )
-        const extinction = air.betaRayleigh
-          .mul(density)
-          .add(air.ozone.mul(densityO))
-          .mul(column)
+        // The gas without its ozone; see the doc comment.
+        const extinction = air.betaRayleigh.mul(density).mul(column)
         const stepTau = extinction.mul(stepLength)
         const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
 
@@ -579,8 +581,8 @@ export function throughLimb(physical: Marched, lifted: Marched): Marched {
  * about the body's center: the physics' light, under every lens, because
  * the lifted gas is the shell's (see the module's doc comment), and its
  * extinction except as Enhanced draws a surface from orbit
- * (`clearedFromOrbit`). The segment starts where it enters the air — where the eye is, inside it —
- * and ends at the point, so a surface seen from orbit is veiled by the
+ * (`clearedFromOrbit`). The segment starts where it enters the air —
+ * where the eye is, inside it — and ends at the point, so a surface seen from orbit is veiled by the
  * whole slant column and one seen from a beach by the meters between, with
  * no second model for either.
  */
@@ -619,8 +621,9 @@ export function airToward(
  * 140 : 114 : 109 where the composite the home page shows draws
  * 169 : 142 : 129, and a half-lit Earth's day side reads dark brown under a
  * hard terminator. The deep-space composite is where the bible licenses
- * the cheat (`art.md`), so from outside the air Enhanced lights and shows
- * the surface at its own color and keeps the air's light over it — the
+ * the cheat (`art.md`), so from outside the air Enhanced lights the
+ * surface at its own light in the beam's hue (`sunThrough`), shows it
+ * without the view path's extinction, and keeps the air's light over it — the
  * physics' airlight, which is the haze toward the limb — and the sphere,
  * the ground and the sea take it from the one lift, as they take the air.
  * On the ground the lift is nothing and the air is the measured one.
@@ -632,8 +635,17 @@ export function clearedFromOrbit(air: AirUniforms): Node<'float'> {
 /**
  * The sun's transmittance to a point, read from the table at its altitude
  * and the sun's cosine over its own horizontal: what the direct beam arrives
- * as, reddened and dimmed by the column it crossed. White without air, and
- * white as Enhanced draws a surface from orbit (`clearedFromOrbit`).
+ * as, reddened and dimmed by the column it crossed. White without air.
+ *
+ * As Enhanced draws a surface from orbit (`clearedFromOrbit`), the beam
+ * keeps its hue and takes off its dimming, and the hue is the slant's over
+ * the column straight overhead: white at the subsolar point and warm toward
+ * the terminator, so a sunward crescent is peach and not gray. Taken off
+ * whole, the beam was white everywhere and a crescent Earth's lit sliver a
+ * near-white gray; normalized as it stands, the column overhead tinted the
+ * whole lit face yellow, and Centauri II's went from 0.012 RMSE of the
+ * composite's to 0.023 (0.019 over the column overhead); divided by the
+ * column overhead and left dim, the crescent and the terminator went dark.
  */
 export function sunThrough(
   air: AirUniforms,
@@ -648,7 +660,12 @@ export function sunThrough(
   const table = air.transmittance.sample(
     texelCentered(vec2(muSun.add(1).mul(0.5), height01), TRANSMITTANCE),
   ).rgb
-  return mix(table, vec3(1), clearedFromOrbit(air))
+  const overhead = air.transmittance.sample(
+    texelCentered(vec2(1, height01), TRANSMITTANCE),
+  ).rgb
+  const slant = table.div(max(overhead, vec3(1e-4)))
+  const hue = slant.div(max(max(slant.x, slant.y), max(slant.z, 1e-4)))
+  return mix(table, hue, clearedFromOrbit(air))
 }
 
 /** The point's radial, for a march that only has the point. */

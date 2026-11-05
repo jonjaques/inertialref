@@ -102,8 +102,8 @@ line: Earth's gas falls off over 8.5 km, a seventh of a percent of the
 radius, two pixels on a disk four hundred across, and a camera's limb is
 that line and no more. The deep-space composite is where the bible licenses
 a cheat, and the bright line the home page draws on the disk's edge is one.
-Outside the air, the shell marches the air again as the body's own gas and
-ozone stretched to fall off over three of its own scale heights
+Outside the air, the shell marches the air again as the body's own gas,
+without its ozone, stretched to fall off over three of its own scale heights
 (`LIMB_STRETCH`, 25 km on Earth) or a fifth of the eye's height over the
 datum, whichever is less (`limbFalloff`, `LIMB_STANDOFF`), so the eye is
 never inside the gas it draws — the same column `LIMB_GAIN` times over,
@@ -131,7 +131,11 @@ past the gas's own scale height, so the lobe stays at the foot on every
 world: Mars's dust is mixed with its gas and Titan's haze is three times
 its gas, and spread up the ring either paints a broad tan-white arch over
 a limb photographed as a thin line. At a quarter of the column the foot of
-Earth's sunrise limb is an orange thread under a periwinkle band. Nothing authors a color. The
+Earth's sunrise limb is an orange thread under a periwinkle band. The ozone
+stays in the physics, where it turns a twilight zenith blue from the ground;
+stretched up the ring and drawn six times over, its tent took the orange out
+of the band between the foot and the crown, so a low-orbit sunrise read
+orange under violet with no white between and every lit rim a blue-violet. Nothing authors a color. The
 ring's crown is blue because the sun reaches it clear; its foot is orange
 toward the sun because the table's column reddens the beam there and the
 lobe throws it forward; and the ring ends where the sun sets on the gas as
@@ -145,9 +149,11 @@ its extinction (`clearedFromOrbit`): from orbit the measured air dims a
 surface twice, on the sun's way down and the eye's way out, to about two
 thirds of its own light at nadir, and reddens it toward the terminator, so
 a half-lit Earth's day side read dark brown under a hard terminator where
-the composite has a pale face. Enhanced lights and shows the surface at its
-own color and keeps the air's light over it, which is the haze toward the
-limb; the sphere, the ground and the sea take it from the one lift, and on
+the composite has a pale face. Enhanced lights the surface at its own light, in the
+hue the beam's slant gives it over the column overhead — white at the
+subsolar point, peach on a sunward crescent — shows it without the view
+path's extinction, and keeps the air's light over it, which is the haze
+toward the limb; the sphere, the ground and the sea take it from the one lift, and on
 the ground the lift is nothing. The shell 20 km past the edge reads within
 thirty percent of the disk 20 km inside it, so the edge does not step. The ring takes no light from the limb's own line, which seen through
 it keeps a quarter of its blue and turns a sunrise's band gray from low
