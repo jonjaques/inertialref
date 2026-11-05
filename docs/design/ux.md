@@ -345,7 +345,7 @@ not punish having one.
 | Scheme               | Assumption         | Notes                                                                                                                                                    |
 | -------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Mouse + keyboard** | Default            | Relative mouse for pitch/yaw with a configurable deadzone and return-to-center. This has to be _good_, not tolerated — it is what most players will use. |
-| **Gamepad**          | Full parity        | Dual sticks for rotation and translation; pips on the d-pad                                                                                              |
+| **Gamepad**          | Full parity        | Translation on the left stick, attitude on the right, vertical thrust on the triggers, roll on the bumpers; the throttle walks on the d-pad              |
 | **HOTAS / HOSAS**    | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles. **Chromium only** — see below                                                              |
 
 **Everything is rebindable, including modifier layers**, and the editor is
@@ -364,8 +364,27 @@ exists, a US table where it does not.
 Those belong to the browser, and a mode that claims `Tab` owns focus navigation
 whether it means to or not.
 
-**Where they are stored.** `controls.keymap` in this browser, as overrides only
-— a stored copy of the whole table stops tracking the defaults, so an act whose
+**The pad is a second binding on the same acts**, by position: the bottom face
+button is ✕, A or B depending on the pad, and the binding is the position, so
+one table serves every family. The keyboard's contexts decide what a control
+means, so ✕ kills rotation in flight, picks the body under the reticle in the
+planetarium, jumps on foot and plays in the cinema. A stick is the same act as
+a key at a magnitude — half out is half a thruster — and the analog cameras
+sweep at a rate the lens scales, so a long lens turns slower. Every prompt
+names the hand used last, and moves between ✕ and `Space` on the first input
+from the other one. `/settings/controller` draws the pad live with what each
+control does per mode, rebinds by pressing a control on the pad or clicking it
+on the picture, and holds the feel: deadzone, response curve, look speed,
+inverted look, inverted pitch, vibration, and whose glyphs the prompts print.
+
+The d-pad, ✕ and ○ move through the interface whenever it has the focus — over
+a dialog, on the front door, and in the panels, which Create or View enters —
+and that navigation is fixed, as `Tab` and `Escape` are.
+[ADR-0057](../adr/0057-a-gamepad-is-a-second-binding-on-every-action.md).
+
+**Where they are stored.** `controls.keymap` and `controls.pad` in this
+browser, as overrides only, and the pad's feel as `controls.padTuning` — a
+stored copy of the whole table stops tracking the defaults, so an act whose
 default later moves is frozen at the old one for everybody who ever opened the
 editor. Preferences are not part of the universe, so they are not in a save;
 `/settings/data` exports them as a file, which is how they reach a second

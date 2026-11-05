@@ -42,6 +42,17 @@ session token and not in the user object the browser sees, so the Worker reads
 it with the secret key and holds the answer for a minute per user: a grant set
 or removed in the dashboard reaches the Worker within that minute.
 
+The flags are `tour`, `solo` and `multiplayer`, one per feature, and `admin`,
+which grants every feature — including one added after it was set. Each is
+strictly `true`; `"true"` typed in the editor grants nothing. The table is
+`apps/server/src/grants.ts`. `/api/account` answers a signed-in visitor with
+the features their flags grant — the reading, never the flags — and the menu
+offers a held-out mode to an account granted it: `solo` puts Solo among the
+doors of a production build, whose menu otherwise holds it out. A grant opens a
+mode that is built and nothing earlier, so `multiplayer` opens nothing until
+Multiplayer is. The address of a mode is not gated: `/play/solo` resolves for
+anybody who types it, as it does without accounts.
+
 Local `pnpm dev` starts the server through `scripts/tour/dev.mjs`. That adapter
 loads the repository's gitignored `.env.local` into its own process, which
 starts nothing but `cf dev`; `cf dev` reads each declared secret from that

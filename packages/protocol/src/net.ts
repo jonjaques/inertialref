@@ -1,4 +1,6 @@
+import { ok } from '@inertialref/shared'
 import {
+  decodeArray,
   decodeBoolean,
   decodeInteger,
   decodeLiteral,
@@ -141,12 +143,51 @@ export interface AccountStatus {
   readonly signedIn: boolean
   /** The provider's stable user id. `null` whenever `signedIn` is false. */
   readonly userId: string | null
+  /**
+   * The features this account is granted, in `FEATURES` order. Empty whenever
+   * `signedIn` is false. The flags behind it are the account's private
+   * metadata, which the browser cannot read; this is the Worker's reading of
+   * them (`apps/server/src/grants.ts`), and only the reading crosses the wire.
+   */
+  readonly grants: readonly Feature[]
+}
+
+/**
+ * The features an account can be granted, by the name the Worker and the
+ * browser both spell them with.
+ *
+ *   tour         The Planetarium guide.
+ *   solo         Solo flight, in a build whose menu holds it out.
+ *   multiplayer  Multiplayer, in a build whose menu holds it out.
+ *
+ * `admin` is not one of them: it is a flag that grants all of these, read by
+ * the Worker and never sent.
+ */
+export const FEATURES = ['tour', 'solo', 'multiplayer'] as const
+
+export type Feature = (typeof FEATURES)[number]
+
+export const isFeature = (value: unknown): value is Feature =>
+  (FEATURES as readonly unknown[]).includes(value)
+
+/*
+ * Lenient where the rest of the record is strict, on purpose. A Worker
+ * deployed ahead of the page may name a feature this bundle has never heard
+ * of, and refusing the whole record for it would read a signed-in visitor as
+ * an unreachable server; an unknown name grants nothing here, so it is
+ * dropped. An absent list is a Worker older than grants, which granted none.
+ */
+const decodeGrants: Decoder<readonly Feature[]> = (value, path) => {
+  if (value === undefined) return ok([])
+  const names = decodeArray(decodeString)(value, path)
+  return names.ok ? ok(names.value.filter(isFeature)) : names
 }
 
 export const decodeAccountStatus: Decoder<AccountStatus> = decodeObject({
   configured: decodeBoolean,
   signedIn: decodeBoolean,
   userId: decodeNullable(decodeString),
+  grants: decodeGrants,
 })
 
 /**

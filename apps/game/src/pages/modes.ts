@@ -5,6 +5,7 @@ import {
   Users,
   Wifi,
 } from 'lucide-react'
+import type { Feature } from '@inertialref/protocol'
 import { Observatory } from '../icons/index.tsx'
 import {
   CINEMA,
@@ -37,6 +38,13 @@ export interface ModeCard {
    * something that runs would be the menu lying in the other direction.
    */
   readonly status: 'ready' | 'built' | 'designed' | 'deferred'
+  /**
+   * The grant that opens it once it is `built`: an account whose private
+   * metadata says so, or says `admin`, is offered it in any build
+   * (`apps/server/src/grants.ts`). A mode with none is offered by its status
+   * alone.
+   */
+  readonly feature?: Feature
   readonly accent?: boolean
 }
 
@@ -70,6 +78,7 @@ export const MODES: readonly ModeCard[] = [
     blurb: 'The whole game, offline. Nothing to download, nothing to ask for.',
     icon: Rocket,
     status: 'built',
+    feature: 'solo',
   },
   {
     to: PLAY_ONLINE,
@@ -85,11 +94,12 @@ export const MODES: readonly ModeCard[] = [
     blurb: 'One shared, persistent galaxy. Deliberately deferred.',
     icon: Users,
     status: 'deferred',
+    feature: 'multiplayer',
   },
 ]
 
 /**
- * Whether the menu offers it as a door.
+ * Whether the menu offers it as a door, to an account granted `grants`.
  *
  * One predicate, read by the menu and by nothing else — the *routes* stay
  * mounted, so a pasted `/play/solo` still resolves and the author still has a
@@ -101,14 +111,34 @@ export const MODES: readonly ModeCard[] = [
  * works but is held out of the shipped menu — is a door only in a **development
  * build**: the person building the game is an audience the menu can be honest
  * with, and offering the flyable-but-unfinished flight to them is the point of
- * the status. `import.meta.env.DEV` is replaced at build time, so a production
- * bundle folds this to `status === 'ready'` and never links solo from the menu.
+ * the status. `import.meta.env.DEV` is replaced at build time, so in a
+ * production bundle a `built` mode is a door only for an account granted its
+ * `feature`.
+ *
+ * A grant opens a `built` mode and nothing earlier. Multiplayer carries its
+ * feature while it is still `deferred`, so the account that holds the grant is
+ * offered it the day it is built, with no change here; until then there is
+ * nothing behind the door, and the grant does not invent one.
  */
-export const isEnterable = (mode: ModeCard): boolean =>
-  mode.status === 'ready' || (import.meta.env.DEV && mode.status === 'built')
+export const isEnterable = (
+  mode: ModeCard,
+  grants: readonly Feature[] = [],
+): boolean =>
+  mode.status === 'ready' ||
+  (mode.status === 'built' &&
+    (import.meta.env.DEV ||
+      (mode.feature !== undefined && grants.includes(mode.feature))))
 
-export const ENTERABLE = MODES.filter(isEnterable)
-export const WITHHELD = MODES.filter((mode) => !isEnterable(mode))
+/** The menu's two lists: the doors, and the line of what is not open. */
+export function doors(grants: readonly Feature[] = []): {
+  readonly enterable: readonly ModeCard[]
+  readonly withheld: readonly ModeCard[]
+} {
+  return {
+    enterable: MODES.filter((mode) => isEnterable(mode, grants)),
+    withheld: MODES.filter((mode) => !isEnterable(mode, grants)),
+  }
+}
 
 /*
  * Title case in the source, uppercase on screen.

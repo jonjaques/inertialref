@@ -7,7 +7,8 @@
 # would vanish, and the next failure would look like a product bug.
 FROM node:26.7.0-bookworm
 
-ARG PNPM_VERSION=12.3.4
+# The version package.json pins in `packageManager`; a build ARG cannot read the file.
+ARG PNPM_VERSION=12.14.0
 
 # LANG is set after locale-gen. Setting it first makes apt print
 # "Setting locale failed" on every package, which looks like a failed Build.

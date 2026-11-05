@@ -5,6 +5,7 @@ import {
 } from '@clerk/backend/errors'
 import { decodeJwt, verifyJwt } from '@clerk/backend/jwt'
 import type { AccountStatus } from '@inertialref/protocol'
+import type { Flags } from './grants.ts'
 import { logger } from './log.ts'
 import { offersAccounts, siteOrigins } from './origins.ts'
 
@@ -77,12 +78,12 @@ export function accountKeys(env: Env, request: Request): AccountKeys {
 
 const log = logger('server.account')
 
-const UNCONFIGURED: AccountStatus = {
+const UNCONFIGURED: Identity = {
   configured: false,
   signedIn: false,
   userId: null,
 }
-const SIGNED_OUT: AccountStatus = {
+const SIGNED_OUT: Identity = {
   configured: true,
   signedIn: false,
   userId: null,
@@ -187,11 +188,18 @@ export async function verifySession(
   return { userId: sub, sessionId: sid, expiresAt: exp }
 }
 
+/**
+ * Who is asking, without what they are granted: the account record less its
+ * `grants`, which cost a call to Clerk that a question about identity alone
+ * does not need to make (`accountStatus` in `grants.ts` adds them).
+ */
+export type Identity = Omit<AccountStatus, 'grants'>
+
 /** Who a request is from, by the bearer token it carries. */
 export async function identify(
   request: Request,
   keys: AccountKeys,
-): Promise<AccountStatus> {
+): Promise<Identity> {
   if (!keys.secretKey && !keys.jwtKey) return UNCONFIGURED
   const token = bearer(request)
   if (token === null) return SIGNED_OUT
@@ -331,8 +339,7 @@ async function load(set: KeySet, secretKey: string): Promise<void> {
  * object the browser sees, and only a secret key can set it. That is what
  * makes it the right home for an authorization flag set by hand in the
  * dashboard — and why the answer costs a round trip to Clerk's API instead of
- * reading a claim. The route that asks is the one that decides what the flags
- * mean; this only fetches them.
+ * reading a claim. What a flag opens is `grants.ts`; this only fetches them.
  *
  * Held for `GRANT_TTL_MS` per user, and concurrent asks share one call. The
  * capabilities check and the session request arrive seconds apart for the
@@ -349,29 +356,27 @@ export function privateMetadata(
 ): Promise<Flags> {
   const key = `${secretKey}\n${userId}`
   const now = Date.now()
-  const held = grants.get(key)
+  const held = heldMetadata.get(key)
   if (held !== undefined && now - held.at < GRANT_TTL_MS) return held.flags
   // Deleted and set again, so insertion order stays age order and the first
   // entry is always the one to evict.
-  grants.delete(key)
-  if (grants.size >= GRANT_LIMIT) {
-    const oldest = grants.keys().next()
-    if (oldest.done !== true) grants.delete(oldest.value)
+  heldMetadata.delete(key)
+  if (heldMetadata.size >= GRANT_LIMIT) {
+    const oldest = heldMetadata.keys().next()
+    if (oldest.done !== true) heldMetadata.delete(oldest.value)
   }
   const flags = lookUp(userId, secretKey)
-  grants.set(key, { at: now, flags })
+  heldMetadata.set(key, { at: now, flags })
   void flags.catch(() => {
-    if (grants.get(key)?.flags === flags) grants.delete(key)
+    if (heldMetadata.get(key)?.flags === flags) heldMetadata.delete(key)
   })
   return flags
 }
 
-type Flags = Readonly<Record<string, unknown>>
-
 const GRANT_TTL_MS = 60_000
 /** Far above the accounts this alpha has; a bound on memory, not a working set. */
 const GRANT_LIMIT = 1024
-const grants = new Map<
+const heldMetadata = new Map<
   string,
   { readonly at: number; readonly flags: Promise<Flags> }
 >()

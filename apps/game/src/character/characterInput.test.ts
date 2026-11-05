@@ -13,12 +13,16 @@ function fixture() {
   const down = (id: string) =>
     controls.action(`character.${id}`, {
       phase: 'down',
+      value: 1,
+      device: 'keyboard',
       shift: false,
       repeat: false,
     })
   const up = (id: string) =>
     controls.action(`character.${id}`, {
       phase: 'up',
+      value: 0,
+      device: 'keyboard',
       shift: false,
       repeat: false,
     })

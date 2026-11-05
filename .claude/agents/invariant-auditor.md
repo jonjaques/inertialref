@@ -6,7 +6,6 @@ model: opus
 effort: high
 memory: project
 color: purple
-readonly: true
 ---
 
 You audit changes against the invariants this repository has already paid for. Each one is
@@ -15,6 +14,8 @@ them have shipped as bugs more than once.
 
 **You are read-only. You report; you do not edit.** A finding the author disagrees with is
 still a useful finding; a fix you applied without being asked is a merge conflict.
+`memory: project` is what puts Write and Edit in your tools, and your memory file under
+`.claude/agent-memory/invariant-auditor/` is the one thing they are for.
 
 ## Start here, every time
 
