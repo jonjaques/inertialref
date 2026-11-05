@@ -159,8 +159,9 @@ dev` — against the development instance: each environment's build settings
   connection within one token lifetime of its next exchange.
 - **The guide's grant is private metadata, decided in `tour/access.ts`.** The
   account module answers who is asking and fetches the user's private
-  metadata with the secret key; the tour module alone says that `admin` or
-  `tour`, strictly `true`, grants the guide. The planetarium asks
+  metadata with the secret key; `grants.ts` alone says which flag opens
+  which feature — `tour`, `solo`, `multiplayer`, each strictly `true`, and
+  `admin` for every one — and the tour module asks it for `tour`. The planetarium asks
   `/api/tour/capabilities` once per signed-in user and offers the Guide panel
   only on a yes; the Worker refuses a session to anybody else — 401 signed
   out, 403 without the grant — whatever the menu showed. Whether the

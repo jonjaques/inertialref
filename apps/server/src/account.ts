@@ -5,6 +5,7 @@ import {
 } from '@clerk/backend/errors'
 import { decodeJwt, verifyJwt } from '@clerk/backend/jwt'
 import type { AccountStatus } from '@inertialref/protocol'
+import type { Flags } from './grants.ts'
 import { logger } from './log.ts'
 import { offersAccounts, siteOrigins } from './origins.ts'
 
@@ -331,8 +332,7 @@ async function load(set: KeySet, secretKey: string): Promise<void> {
  * object the browser sees, and only a secret key can set it. That is what
  * makes it the right home for an authorization flag set by hand in the
  * dashboard — and why the answer costs a round trip to Clerk's API instead of
- * reading a claim. The route that asks is the one that decides what the flags
- * mean; this only fetches them.
+ * reading a claim. What a flag opens is `grants.ts`; this only fetches them.
  *
  * Held for `GRANT_TTL_MS` per user, and concurrent asks share one call. The
  * capabilities check and the session request arrive seconds apart for the
@@ -365,8 +365,6 @@ export function privateMetadata(
   })
   return flags
 }
-
-type Flags = Readonly<Record<string, unknown>>
 
 const GRANT_TTL_MS = 60_000
 /** Far above the accounts this alpha has; a bound on memory, not a working set. */

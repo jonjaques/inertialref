@@ -1,18 +1,20 @@
 import type { GuideRefusal } from '@inertialref/protocol'
 import { accountKeys, identify, privateMetadata } from '../account.ts'
+import { type Flags, grants } from '../grants.ts'
 
 /*
  * Who may use the guide, on this deployment.
  *
- * A signed-in account whose private metadata says `admin: true` or
- * `tour: true`, set by hand in Clerk's dashboard. The guide spends the OpenAI
- * project's budget on every minute of conversation, so it is a grant rather
- * than a consequence of having signed up — and private metadata is the grant
- * the visitor can neither see nor write (`account.ts` has why).
+ * A signed-in account granted the `tour` feature — `tour: true` or
+ * `admin: true` in its private metadata (`grants.ts`), set by hand in Clerk's
+ * dashboard. The guide spends the OpenAI project's budget on every minute of
+ * conversation, so it is a grant rather than a consequence of having signed
+ * up — and private metadata is the grant the visitor can neither see nor
+ * write (`account.ts` has why).
  *
- * The account module answers who is asking and hands over the flags; what the
- * flags mean for the guide, and whether this deployment offers the guide at
- * all, is decided here and nowhere else. The routes map the answer to a
+ * The account module answers who is asking and hands over the flags, and
+ * `grants.ts` says which of them open the guide. Whether this deployment
+ * offers the guide at all is decided here and nowhere else. The routes map the answer to a
  * status code and a sentence; what they decide on their own — the origin
  * check, the allowance, a Clerk outage as a 503 — is about the request, never
  * about who is asking.
@@ -31,9 +33,8 @@ const refuse = (reason: GuideRefusal): GuideAccess => ({
   reason,
 })
 
-/** The two flags that grant the guide. Strictly `true`: a string is not a grant. */
-export const grantsGuide = (flags: Readonly<Record<string, unknown>>) =>
-  flags.admin === true || flags.tour === true
+/** Whether these flags grant the guide: `tour`, or `admin` (`grants.ts`). */
+export const grantsGuide = (flags: Flags) => grants(flags, 'tour')
 
 /**
  * The verdict for one request on this deployment.
