@@ -200,7 +200,8 @@ export const ATMOSPHERE_GAIN = Math.PI
  * reddens the beam there and the lobe throws it forward, its crown stays
  * blue because the sun reaches it clear, and the ring ends where the sun
  * sets on the gas, foot first. It is drawn past the silhouette and nowhere
- * else: the disk is seen through the physical air alone.
+ * else: the disk takes the physical air's light, and under the same lift
+ * none of its extinction (`clearedFromOrbit` in `render/air.ts`).
  *
  * Why a stretch of the same recipe rather than a glow: a halo painted
  * around the disk has one color, and the one thing a camera's limb has is

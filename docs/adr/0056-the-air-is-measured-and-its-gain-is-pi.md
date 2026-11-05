@@ -179,8 +179,10 @@ its budget.
   the stretch maps a sample to, with this planet's horizon, and draws it
   six times over (ADR-0037). The bright line the home page draws
   on the disk's edge is that second march, as a presentation above the
-  physics and not in place of it; the disk itself is seen through the
-  physics alone.
+  physics and not in place of it. The disk takes the physics' light, and
+  under the same lift none of its extinction: from orbit the measured air
+  dims a surface twice, to about two thirds of its own light at nadir, and
+  Enhanced draws it at its own color under the air's light.
 - Under 20° of sun the zenith runs bright: 1.6 times the CIE sky at 10°.
   The model has no ground bounce. By −15° the measured sky is mostly airglow
   and starlight, which the model does not draw, so there it falls short.

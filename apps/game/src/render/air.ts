@@ -73,8 +73,10 @@ import { enhancedSky } from './radiance.ts'
  * draws in front of a surface. Composed over the sphere, the ground and the
  * sea it is the same column of gas a second time at nadir — a blue veil
  * that tints a Blue Marble's Sahara magenta, 143 : 125 : 137 where the
- * physics alone draws 140 : 114 : 109 — so a surface is seen through the
- * physical air alone, and all three still take it from the one march.
+ * physics alone draws 140 : 114 : 109 — so a surface takes the physical
+ * air's light alone, and all three take it from the one march. What the
+ * lift does to a surface is take the air's extinction off it
+ * (`clearedFromOrbit`).
  */
 
 const TRANSMITTANCE = [TRANSMITTANCE_WIDTH, TRANSMITTANCE_HEIGHT] as const
@@ -574,9 +576,10 @@ export function throughLimb(physical: Marched, lifted: Marched): Marched {
 
 /**
  * The air between the eye and a point on a surface, both in sea-level units
- * about the body's center: the physics alone, under every lens, because
- * the lifted gas is the shell's (see the module's doc comment). The
- * segment starts where it enters the air — where the eye is, inside it —
+ * about the body's center: the physics' light, under every lens, because
+ * the lifted gas is the shell's (see the module's doc comment), and its
+ * extinction except as Enhanced draws a surface from orbit
+ * (`clearedFromOrbit`). The segment starts where it enters the air — where the eye is, inside it —
  * and ends at the point, so a surface seen from orbit is veiled by the
  * whole slant column and one seen from a beach by the meters between, with
  * no second model for either.
@@ -599,13 +602,38 @@ export function airToward(
   const top = air.top
   const halfOuter = sqrt(max(top.mul(top).sub(impactSquared), 0))
   const near = clamp(closest.sub(halfOuter), 0, span)
-  return marchAir(air, eye, direction, near, span, sun, samples)
+  const physical = marchAir(air, eye, direction, near, span, sun, samples)
+  return {
+    inscatter: physical.inscatter,
+    transmittance: mix(physical.transmittance, vec3(1), clearedFromOrbit(air)),
+  }
+}
+
+/**
+ * How far Enhanced draws a surface clear of the air's extinction: the lift
+ * under Enhanced, so nothing inside the air or under a photographic lens.
+ *
+ * From orbit the measured air dims a surface twice, on the sun's way down
+ * and the eye's way out, to about two thirds of its own light at nadir, and
+ * reddens it toward the terminator: a Blue Marble's Sahara draws at
+ * 140 : 114 : 109 where the composite the home page shows draws
+ * 169 : 142 : 129, and a half-lit Earth's day side reads dark brown under a
+ * hard terminator. The deep-space composite is where the bible licenses
+ * the cheat (`art.md`), so from outside the air Enhanced lights and shows
+ * the surface at its own color and keeps the air's light over it — the
+ * physics' airlight, which is the haze toward the limb — and the sphere,
+ * the ground and the sea take it from the one lift, as they take the air.
+ * On the ground the lift is nothing and the air is the measured one.
+ */
+export function clearedFromOrbit(air: AirUniforms): Node<'float'> {
+  return air.limb.mul(enhancedSky)
 }
 
 /**
  * The sun's transmittance to a point, read from the table at its altitude
  * and the sun's cosine over its own horizontal: what the direct beam arrives
- * as, reddened and dimmed by the column it crossed. White without air.
+ * as, reddened and dimmed by the column it crossed. White without air, and
+ * white as Enhanced draws a surface from orbit (`clearedFromOrbit`).
  */
 export function sunThrough(
   air: AirUniforms,
@@ -617,9 +645,10 @@ export function sunThrough(
     max(radius.sub(1), 0).div(max(air.top.sub(1), 1e-6)),
   )
   const muSun = dot(point, sun).div(max(radius, 1e-5))
-  return air.transmittance.sample(
+  const table = air.transmittance.sample(
     texelCentered(vec2(muSun.add(1).mul(0.5), height01), TRANSMITTANCE),
   ).rgb
+  return mix(table, vec3(1), clearedFromOrbit(air))
 }
 
 /** The point's radial, for a march that only has the point. */

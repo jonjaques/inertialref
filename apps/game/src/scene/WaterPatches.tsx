@@ -113,6 +113,7 @@ export function WaterPatches({
       if (tables === null) water.air.clear()
       else {
         water.air.set(tables.recipe, tables.transmittance, tables.multiScatter)
+        water.air.lift(body?.limb ?? 0, body?.limbFalloff ?? 0)
       }
       water.setTime(engine.snapshot?.renderTime ?? 0)
     }

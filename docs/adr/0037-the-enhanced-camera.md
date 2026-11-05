@@ -137,12 +137,19 @@ toward the sun because the table's column reddens the beam there and the
 lobe throws it forward; and the ring ends where the sun sets on the gas as
 it stands on this planet, foot first — a backlit Earth wears it all round.
 The ring is the shell's alone, drawn past the silhouette. The sphere, the
-ground and the sea are seen through the physical air: the lifted gas is the
+ground and the sea take the physical air's light: the lifted gas is the
 same column a second time at nadir, and composed over the disk it laid a
 blue veil that turned a Blue Marble's Sahara magenta (143 : 125 : 137 where
-the physics draws 140 : 114 : 109). The shell 20 km past the edge reads
-within fifteen percent of the disk 20 km inside it, so the edge does not
-step. The ring takes no light from the limb's own line, which seen through
+the physics draws 140 : 114 : 109). Under the same lift they take none of
+its extinction (`clearedFromOrbit`): from orbit the measured air dims a
+surface twice, on the sun's way down and the eye's way out, to about two
+thirds of its own light at nadir, and reddens it toward the terminator, so
+a half-lit Earth's day side read dark brown under a hard terminator where
+the composite has a pale face. Enhanced lights and shows the surface at its
+own color and keeps the air's light over it, which is the haze toward the
+limb; the sphere, the ground and the sea take it from the one lift, and on
+the ground the lift is nothing. The shell 20 km past the edge reads within
+thirty percent of the disk 20 km inside it, so the edge does not step. The ring takes no light from the limb's own line, which seen through
 it keeps a quarter of its blue and turns a sunrise's band gray from low
 orbit, nor from the stars behind it, where a stretched gas wears a dark
 halo wherever its own light is under a count. The lift comes in over two

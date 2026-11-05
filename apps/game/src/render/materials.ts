@@ -380,8 +380,8 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
      * stretch and not a glow), marched along the same ray through its own,
      * taller sphere — the mesh grows to it under the lift — and stopped at
      * the drawn ground where the physics is. This is the only place the
-     * ring is drawn; the disk behind the silhouette is seen through the
-     * physics alone (`airToward`). Composed beside the physics
+     * ring is drawn; the disk behind the silhouette takes the physics'
+     * light alone (`airToward`). Composed beside the physics
      * (`throughLimb`), and the stars behind the ring are not dimmed by it:
      * a stretched gas takes a share of the Milky Way at its foot, and a
      * backlit Earth wears a dark halo against the galaxy wherever the
