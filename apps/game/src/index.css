@@ -740,6 +740,20 @@ a {
   dynamic-range-limit: standard;
 }
 
+/**
+ * No pointer over the sky while a pad is flying.
+ *
+ * The keymap sets `data-input` on the document to the hand used last. A mouse
+ * cursor left parked mid-picture is a dark arrow on a star field, in exactly
+ * the place somebody is looking. `!important` because each mode writes its
+ * surface's cursor inline — grab, move — and that is the mode's right for a
+ * pointer, not for a pad. Only the scene's surfaces: a panel a pad has moved
+ * the focus into is still somewhere a mouse might come back to.
+ */
+[data-input='pad'] .scene-surface {
+  cursor: none !important;
+}
+
 .hud-layer {
   dynamic-range-limit: standard;
   /* See `:root` above: this is the one place the safe-area insets are spent.

@@ -28,10 +28,11 @@ import {
   PLANETARIUM_ORBITS,
   PLANETARIUM_HINTED,
   PLANETARIUM_SHIP,
+  NAVIGATOR_CLASSES,
   usePersistentState,
 } from '../state/preferences.ts'
 import { useChromeHidden } from '../hud/chrome.ts'
-import { useKeyLabel } from '../input/useKeymap.ts'
+import { useInputDevice, useKeyLabel } from '../input/useKeymap.ts'
 import { useEngine } from '../state/engineStore.ts'
 import { QUERY, CATALOG, PRESETS } from '../pages/paths.ts'
 import type { PlanetariumContext } from './context.ts'
@@ -39,7 +40,9 @@ import { planetariumPanels } from './registry.tsx'
 import { CROSSHAIR_RING } from '../hud/crosshair.ts'
 import { timeCommands } from '../hud/time.ts'
 import { DropHandle } from './DropHandle.tsx'
-import { pick } from './pick.ts'
+import { acceptsRow } from './kinds.ts'
+import { stepTarget } from './navigator.ts'
+import { pick, PICK_SLOP } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
 import { useObserverInput } from './useObserverInput.ts'
@@ -128,6 +131,8 @@ export function PlanetariumMode({
    */
   const [freeLook, setFreeLook] = useState(false)
   const [hinted, setHinted] = usePersistentState(PLANETARIUM_HINTED)
+  const [classes] = usePersistentState(NAVIGATOR_CLASSES)
+  const { device } = useInputDevice()
   // The sheet's own chord, so the hint cannot name a key the editor has moved.
   const keysLabel = useKeyLabel('chrome.keys')
   const chromeHidden = useChromeHidden()
@@ -362,6 +367,23 @@ export function PlanetariumMode({
     onPick,
     onFrame: () => engine.harness.observatory.frameTarget(DEFAULT_FILL),
     onReset: () => focus(DEFAULT_TARGET),
+    /*
+     * The survey at zero light years, which is every *loaded* system and its
+     * bodies and nothing swept: the step never leaves the system it is in,
+     * and a sweep of the neighborhood per press would be a cost for rows the
+     * step cannot use.
+     */
+    onStep: (step) => {
+      const current = engine.harness.observatory.target?.address
+      if (current === undefined) return
+      const next = stepTarget(
+        engine.harness.targets({ lightYears: 0 }),
+        current,
+        step,
+        (row) => acceptsRow(row, classes),
+      )
+      if (next !== null) focus(next)
+    },
     standing,
     freeLook,
     onFreeLook: setFreeLook,
@@ -400,7 +422,7 @@ export function PlanetariumMode({
           conditions are the same question asked of two things. */}
       <div
         ref={surface}
-        className="hud-bleed pointer-events-auto absolute touch-none select-none"
+        className="scene-surface hud-bleed pointer-events-auto absolute touch-none select-none"
         style={{ cursor: freeLook || standing ? 'move' : 'grab' }}
         aria-hidden
       />
@@ -449,8 +471,20 @@ export function PlanetariumMode({
           the labels above are content and stay. The stroke is
           `hud/crosshair.ts`, so it reads over a lit disk as well as the sky. */}
       {!chromeHidden && (
-        <div className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div
+          data-aim
+          className="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+        >
           <div className={`size-1.5 ${CROSSHAIR_RING}`} />
+          {/* With a pad in hand the reticle is the pointer, so it says how far
+              its reach is: the pick slop, drawn. A mouse has no use for it —
+              the pointer is where the click is — so it is the pad's alone. */}
+          {device === 'pad' && (
+            <div
+              className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-40 ${CROSSHAIR_RING}`}
+              style={{ width: PICK_SLOP * 2, height: PICK_SLOP * 2 }}
+            />
+          )}
         </div>
       )}
 

@@ -5,10 +5,36 @@ import {
   actionFor,
   arbitrate,
   type Bindings,
+  findAction,
   type KeyContext,
+  padActions,
+  type PadBindings,
   resolveBindings,
+  resolvePadBindings,
 } from './keymap.ts'
+import type { PadControl } from './pad.ts'
+import type { PadState } from './padDriver.ts'
+import type { PadFamily } from './padFamily.ts'
 import { isForeignModal, isOverlayControl, isTyping } from '../hud/focus.ts'
+
+/**
+ * The pad driver, as the store sees it: what to draw and how to rumble.
+ *
+ * A port rather than the class, so the store does not import the driver that
+ * imports it, and a test can hand over a stub.
+ */
+export interface PadPort {
+  poll(seconds: number): void
+  readonly state: PadState | null
+  rumble(strong: number, weak: number, milliseconds: number): void
+  capture(take: ((control: PadControl) => void) | null): void
+}
+
+/** A pad arriving or leaving, for the notice that says so. */
+export interface PadConnection {
+  readonly connected: boolean
+  readonly id: string
+}
 
 /*
  * The one window `keydown` listener, and everything it needs to decide.
@@ -27,10 +53,31 @@ import { isForeignModal, isOverlayControl, isTyping } from '../hud/focus.ts'
  * thruster twice and toggles nothing you meant.
  */
 
+/** Which hand an action came from. Mouse and touch count as the keyboard's. */
+export type InputDevice = 'keyboard' | 'pad'
+
 /** What a handler is told when its action fires. */
 export interface ActionEvent {
-  /** `up` only ever arrives for a held action. */
-  readonly phase: 'down' | 'up'
+  /**
+   * `up` and `change` only ever arrive for a held action.
+   *
+   * `change` is a stick moving while it stays out of its deadzone: the action
+   * is still held and only its magnitude moved. A handler that treats every
+   * phase but `down` as a release would stop the thruster the moment the
+   * stick shifted, which is why the phase says so rather than repeating
+   * `down`.
+   */
+  readonly phase: 'down' | 'change' | 'up'
+  /**
+   * How hard, 0..1. One for a key, the stick's shaped magnitude for a pad,
+   * and zero on `up`.
+   *
+   * The held actions are axes with a magnitude, and the keyboard's magnitude
+   * is one — so a handler written for the keys and a stick at full throw see
+   * the same event, and a stick halfway out is half a thruster.
+   */
+  readonly value: number
+  readonly device: InputDevice
   /**
    * Whether Shift was down, for an action that reads it as a magnitude.
    *
@@ -44,6 +91,21 @@ export interface ActionEvent {
 }
 
 export type ActionHandler = (event: ActionEvent) => void
+
+/** Told once per frame while frames are running, with the seconds since the last. */
+export type FrameConsumer = (seconds: number) => void
+
+/**
+ * The longest step a frame consumer is handed, in seconds.
+ *
+ * A camera turning at a rate integrates `rate × seconds`, and a frame that
+ * arrives after a stall — a tab brought back, a long task, a held measurement
+ * frame — would otherwise turn it by the stall's length in one jump.
+ */
+const MAX_FRAME_SECONDS = 1 / 20
+
+/** CSS pixels of pointer travel in one event that count as picking up the mouse. */
+const POINTER_SWITCH = 4
 
 /** What a mode says about itself while it is on screen. */
 export interface ContextClaim {
@@ -63,10 +125,35 @@ export interface ContextClaim {
 
 export class KeymapStore {
   #bindings: Bindings = resolveBindings()
+  #padBindings: PadBindings = resolvePadBindings()
+  /** `padActions` for the live set, rebuilt when a claim or a binding moves. */
+  #padMap: ReadonlyMap<PadControl, ActionDefinition> | null = null
   readonly #handlers = new Map<ActionId, Set<ActionHandler>>()
   readonly #claims = new Set<ContextClaim>()
-  /** Every action currently held down, so a blur can release all of them. */
+  /** Every held action a key is holding down, so a blur can release all of them. */
   readonly #held = new Set<ActionId>()
+  /** Every held action a pad is holding, and how far. */
+  readonly #padHeld = new Map<ActionId, number>()
+  /**
+   * The magnitude each held action last reported to its handlers.
+   *
+   * The two sources are merged here, as the larger of the two, and a handler
+   * hears one action rather than two devices: a key let go while the stick
+   * still holds the same thruster is a `change` to the stick's magnitude, not
+   * an `up` that stops a thruster somebody is still pushing.
+   */
+  readonly #reported = new Map<ActionId, number>()
+  readonly #frames = new Set<FrameConsumer>()
+  /** The timestamp of the last frame told, so two clocks share one frame. */
+  #lastFrame: number | null = null
+  /** Asked to start frames when something new wants them. */
+  #wake: () => void = () => {}
+  #pad: PadPort | null = null
+  readonly #connections = new Set<(event: PadConnection) => void>()
+  #device: InputDevice = 'keyboard'
+  #family: PadFamily = 'generic'
+  /** How many pads are attached, for whether frames must run. */
+  #pads = 0
   readonly #watchers = new Set<() => void>()
   /**
    * Told about every key press, before anything is resolved.
@@ -87,6 +174,31 @@ export class KeymapStore {
 
   get layout(): ReadonlyMap<string, string> | null {
     return this.#layout
+  }
+
+  get padBindings(): PadBindings {
+    return this.#padBindings
+  }
+
+  /**
+   * Which hand was used last, which is what every prompt should name.
+   *
+   * Decided by input rather than by what is attached, because a pad plugged
+   * in and lying on the desk is not how somebody is playing: a prompt that
+   * printed ✕ the moment a controller connected would be wrong for everybody
+   * who keeps one connected and flies with the mouse.
+   */
+  get device(): InputDevice {
+    return this.#device
+  }
+
+  /** The family of the pad used last, for its glyphs. */
+  get family(): PadFamily {
+    return this.#family
+  }
+
+  get pads(): number {
+    return this.#pads
   }
 
   /**
@@ -117,9 +229,41 @@ export class KeymapStore {
     this.#announce()
   }
 
+  setPadBindings(bindings: PadBindings): void {
+    // The keyboard's reason, for the pad: the held set is keyed by action and
+    // the table that says which control holds which action is about to move.
+    this.#releaseHeld()
+    this.#padBindings = bindings
+    this.#padMap = null
+    this.#announce()
+  }
+
   setLayout(layout: ReadonlyMap<string, string> | null): void {
     this.#layout = layout
     this.#announce()
+  }
+
+  /**
+   * Somebody used this hand. Labels redraw when it is a change of hand.
+   *
+   * Called by the keyboard listener, by the pointer and by the pad driver on
+   * any input past a deadzone — never on a pad merely connecting.
+   */
+  useDevice(device: InputDevice, family?: PadFamily): void {
+    const moved =
+      device !== this.#device ||
+      (family !== undefined && family !== this.#family)
+    this.#device = device
+    if (family !== undefined) this.#family = family
+    if (moved) this.#announce()
+  }
+
+  /** How many pads are attached. Frames run while one is. */
+  setPads(count: number): void {
+    const was = this.#pads
+    this.#pads = count
+    if (count > 0 && was === 0) this.#wake()
+    if (count !== was) this.#announce()
   }
 
   /**
@@ -152,14 +296,16 @@ export class KeymapStore {
 
   claim(claim: ContextClaim): () => void {
     this.#claims.add(claim)
+    this.#padMap = null
     if (arbitrate(this.live).length !== this.live.length) this.#releaseHeld()
     for (const watcher of this.#contexts) watcher()
     return () => {
       this.#claims.delete(claim)
+      this.#padMap = null
       for (const watcher of this.#contexts) watcher()
       // Leaving a context with keys held would leave the drive burning for the
       // rest of the session, with nothing still listening for the key-up.
-      this.#releaseHeld()
+      this.#releaseUnreachable()
     }
   }
 
@@ -186,14 +332,165 @@ export class KeymapStore {
    * of that needs an event.
    */
   resolve(pressed: Chord): ActionDefinition | null {
-    const muted = [...this.#claims].flatMap((claim) => claim.mutes ?? [])
-    return actionFor(this.#bindings, this.live, pressed, muted)
+    return actionFor(this.#bindings, this.live, pressed, this.#muted())
+  }
+
+  #muted(): readonly ActionId[] {
+    return [...this.#claims].flatMap((claim) => claim.mutes ?? [])
+  }
+
+  /**
+   * What every pad control means here, with the same arbitration a key gets,
+   * restricted to the actions somebody has registered a handler for — the
+   * keyboard's rule that a binding nobody listens for leaves the input alone.
+   */
+  padMap(): ReadonlyMap<PadControl, ActionDefinition> {
+    this.#padMap ??= padActions(this.#padBindings, this.live, this.#muted())
+    return this.#padMap
+  }
+
+  /** Whether anything is listening for this action right now. */
+  claimed(id: ActionId): boolean {
+    return this.#handlers.has(id)
+  }
+
+  /**
+   * A pad pressed a press action. The pad driver has already latched the
+   * edge and decided whether this is a repeat the action asked for.
+   */
+  padPress(id: ActionId, repeat = false): void {
+    if (!this.#handlers.has(id)) return
+    this.invoke(id, {
+      phase: 'down',
+      value: 1,
+      device: 'pad',
+      shift: false,
+      repeat,
+    })
+  }
+
+  /** A pad holds a held action at this magnitude. Zero lets it go. */
+  padHold(id: ActionId, value: number): void {
+    if (value > 0) this.#padHeld.set(id, value)
+    else this.#padHeld.delete(id)
+    this.#report(id, 'pad', false)
+  }
+
+  /** The merged magnitude of a held action right now, 0..1. */
+  value(id: ActionId): number {
+    return this.#reported.get(id) ?? 0
+  }
+
+  /**
+   * Tell the handlers a held action's new merged magnitude, if it moved.
+   *
+   * The larger of the two sources, not their sum: a key and a stick on one
+   * thruster are two hands asking for the same thing, and full throttle plus
+   * full throttle is still full throttle.
+   */
+  #report(id: ActionId, device: InputDevice, shift: boolean): void {
+    const value = Math.max(
+      this.#held.has(id) ? 1 : 0,
+      this.#padHeld.get(id) ?? 0,
+    )
+    const was = this.#reported.get(id) ?? 0
+    if (value === was) return
+    if (value > 0) this.#reported.set(id, value)
+    else this.#reported.delete(id)
+    if (value > 0 && this.#frames.size > 0 && was === 0) this.#wake()
+    this.invoke(id, {
+      phase: was === 0 ? 'down' : value === 0 ? 'up' : 'change',
+      value,
+      device,
+      shift,
+      repeat: false,
+    })
+  }
+
+  /**
+   * Be told once a frame while frames run.
+   *
+   * The analog camera is the caller: a stick held at half throw turns the
+   * view at half rate for as long as it is held, which is a question about
+   * time and not about an edge. Frames run while a pad is attached or a held
+   * action is down, and stop otherwise.
+   */
+  onFrame(consumer: FrameConsumer): () => void {
+    this.#frames.add(consumer)
+    if (this.#reported.size > 0) this.#wake()
+    return () => this.#frames.delete(consumer)
+  }
+
+  /** Whether the frame clock should keep running. */
+  wantsFrames(): boolean {
+    return this.#pads > 0 || (this.#frames.size > 0 && this.#reported.size > 0)
+  }
+
+  /** Who to ask for frames. The provider's clock. */
+  setWake(wake: () => void): void {
+    this.#wake = wake
+  }
+
+  /** The pad driver, polled from `tick`. */
+  setPad(pad: PadPort | null): void {
+    this.#pad = pad
+  }
+
+  get pad(): PadPort | null {
+    return this.#pad
+  }
+
+  /** Be told when a pad arrives or leaves. */
+  watchConnections(watcher: (event: PadConnection) => void): () => void {
+    this.#connections.add(watcher)
+    return () => this.#connections.delete(watcher)
+  }
+
+  /** A pad arrived or left. The clock calls this from the window's events. */
+  announceConnection(event: PadConnection): void {
+    for (const watcher of this.#connections) watcher(event)
+  }
+
+  /** Rumble the pad in use, when the pad is in use. A no-op otherwise. */
+  rumble(strong: number, weak: number, milliseconds: number): void {
+    if (this.#device !== 'pad') return
+    this.#pad?.rumble(strong, weak, milliseconds)
+  }
+
+  /**
+   * One frame, at a `requestAnimationFrame` timestamp in milliseconds.
+   *
+   * Two clocks call this — the scene's own loop, ahead of the simulation step,
+   * and the provider's, for the modes and dialogs where the scene is not
+   * running — and every callback in one animation frame is handed the same
+   * timestamp, so the second caller in a frame is a no-op. Whichever runs
+   * first polls; the scene's runs before the step, so a stick moved this
+   * frame moves the ship this frame.
+   */
+  tick(timestamp: number): void {
+    if (timestamp === this.#lastFrame) return
+    const seconds =
+      this.#lastFrame === null
+        ? 0
+        : Math.min(
+            Math.max((timestamp - this.#lastFrame) / 1000, 0),
+            MAX_FRAME_SECONDS,
+          )
+    this.#lastFrame = timestamp
+    this.#pad?.poll(seconds)
+    if (seconds === 0) return
+    for (const consumer of [...this.#frames]) consumer(seconds)
   }
 
   handleKeyDown(event: KeyboardEvent): void {
     // Before every refusal below: the cinema's idle timer wants to know that
     // somebody is still here, and typing into a field is still being here.
     for (const watcher of this.#activity) watcher()
+    // A trusted key only. The pad steps a focused slider by dispatching the
+    // slider's own arrow key (`padNavigation.ts`), and that event bubbles here
+    // too — counted as a hand, one tap of the d-pad on the deadzone slider
+    // would hand the prompts and the cursor back to a keyboard nobody touched.
+    if (event.isTrusted !== false) this.useDevice('keyboard')
     // A key typed into the search box is not a camera command. The focus check
     // is here rather than in the table because "is something else listening" is
     // a fact about the document, not about the key.
@@ -239,12 +536,30 @@ export class KeymapStore {
       return
     }
     event.preventDefault()
-    if (action.held === true) this.#held.add(action.id)
+    if (action.held === true) {
+      this.#held.add(action.id)
+      this.#report(
+        action.id,
+        'keyboard',
+        action.shiftScales === true && event.shiftKey,
+      )
+      return
+    }
     this.invoke(action.id, {
       phase: 'down',
+      value: 1,
+      device: 'keyboard',
       shift: action.shiftScales === true && event.shiftKey,
       repeat: event.repeat,
     })
+  }
+
+  /**
+   * Activity the pad saw, for the cinema's idle timer — the pad's hand is as
+   * present as the keyboard's.
+   */
+  padActivity(): void {
+    for (const watcher of this.#activity) watcher()
   }
 
   handleKeyUp(event: KeyboardEvent): void {
@@ -270,16 +585,53 @@ export class KeymapStore {
       if (bound === null || bound === undefined) continue
       if (bound.code !== released.code) continue
       this.#held.delete(id)
-      this.invoke(id, { phase: 'up', shift: false, repeat: false })
+      this.#report(id, 'keyboard', false)
     }
   }
 
-  /** Everything held goes up. Focus leaving the window, or a mode unmounting. */
+  /**
+   * Everything held goes up, from both hands. Focus leaving the window, a mode
+   * unmounting, a binding moving.
+   *
+   * The pad's holds go too, and the pad driver re-asserts whatever a stick is
+   * still pushing on its next poll — against the bindings and contexts that
+   * are live *then*, which is the point: a stick held across a mode change
+   * must not keep driving an action of the mode that left.
+   */
   #releaseHeld(): void {
-    for (const id of [...this.#held]) {
+    const padded = new Set(this.#padHeld.keys())
+    const ids = new Set([...this.#held, ...padded])
+    this.#held.clear()
+    this.#padHeld.clear()
+    for (const id of ids)
+      this.#report(id, padded.has(id) ? 'pad' : 'keyboard', false)
+  }
+
+  /**
+   * The held actions no live context reaches any more go up; the rest stay.
+   *
+   * Narrower than `#releaseHeld` on purpose. A layer leaving — the pad's free
+   * look dropping `flight-look` — leaves `flight` live under it, and W held
+   * through that is still a thruster somebody is holding: the operating
+   * system's repeat never presses it again, so releasing it would cut the
+   * thruster until the key was lifted and pressed. A mode leaving makes its own
+   * held actions unreachable, so they go, which is the case this exists for.
+   */
+  #releaseUnreachable(): void {
+    const reachable = arbitrate(this.live)
+    const padded = new Set(this.#padHeld.keys())
+    for (const id of new Set([...this.#held, ...padded])) {
+      const action = findAction(id)
+      if (action !== undefined && reachable.includes(action.context)) continue
       this.#held.delete(id)
-      this.invoke(id, { phase: 'up', shift: false, repeat: false })
+      this.#padHeld.delete(id)
+      this.#report(id, padded.has(id) ? 'pad' : 'keyboard', false)
     }
+  }
+
+  /** The pad's own release: a disconnect, or a pad driver losing its pads. */
+  releasePad(): void {
+    for (const id of [...this.#padHeld.keys()]) this.padHold(id, 0)
   }
 
   /**
@@ -294,13 +646,34 @@ export class KeymapStore {
     const down = (event: KeyboardEvent): void => this.handleKeyDown(event)
     const up = (event: KeyboardEvent): void => this.handleKeyUp(event)
     const blur = (): void => this.#releaseHeld()
+    /*
+     * The pointer hands the prompts back to the keyboard.
+     *
+     * Movement rather than any `pointermove`, because a mouse resting on a
+     * desk while somebody flies with a pad still reports the odd sub-pixel
+     * twitch, and prompts that flickered between ✕ and Space on a twitch
+     * would be worse than prompts that lagged a real switch by a frame.
+     */
+    const pointer = (event: PointerEvent): void => {
+      if (this.#device === 'keyboard') return
+      if (
+        event.type === 'pointermove' &&
+        Math.abs(event.movementX) + Math.abs(event.movementY) < POINTER_SWITCH
+      )
+        return
+      this.useDevice('keyboard')
+    }
     target.addEventListener('keydown', down)
     target.addEventListener('keyup', up)
     target.addEventListener('blur', blur)
+    target.addEventListener('pointerdown', pointer)
+    target.addEventListener('pointermove', pointer, { passive: true })
     return () => {
       target.removeEventListener('keydown', down)
       target.removeEventListener('keyup', up)
       target.removeEventListener('blur', blur)
+      target.removeEventListener('pointerdown', pointer)
+      target.removeEventListener('pointermove', pointer)
       this.#releaseHeld()
     }
   }

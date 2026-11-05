@@ -69,8 +69,8 @@ pnpm media:push
 **`pnpm dev` needs a `dist/` to exist, which a fresh worktree does not have.**
 `apps/server/wrangler.config.ts` points the assets at `../game/dist`, and `cf
 dev` refuses to start when that directory is absent — so in a worktree created
-by [`/parallel`](../../.claude/skills/parallel/SKILL.md), or in any clone that
-has never built, the Worker half exits immediately and `scripts/dev.mjs` stops
+by [`/parallel`](../../.claude/skills/parallel/SKILL.md) or by a T3 Code
+thread, or in any clone that has never built, the Worker half exits immediately and `scripts/dev.mjs` stops
 the Astro half with it. The failure names the directory and nothing else, and it
 is easy to read as a broken checkout.
 
@@ -417,7 +417,11 @@ host. Without the publishable key there is no account badge; without the
 secret `/api/account` answers that accounts are not configured and the guide is
 unavailable. Both states are supported builds. The guide is
 granted by hand: `tour: true` or `admin: true` in the user's private metadata
-in Clerk's dashboard.
+in Clerk's dashboard. `apps/server/src/grants.ts` is the table of flags —
+`tour`, `solo`, `multiplayer`, and `admin` for all of them. `pnpm dev` offers
+Solo in the menu to everybody; a production build offers it only to an account
+granted `solo`, so checking that path needs `pnpm build` and a signed-in
+account.
 
 **Reference audio** is not in git. It lives in R2 and reaches the browser
 from one table, `apps/server/src/media.ts`: `pnpm media:pull` copies it into
@@ -435,7 +439,11 @@ that half.
 `git-lfs`, `tmux`, and a UTF-8 locale — Cursor clones and runs terminals inside
 that image, not beside it. Claude cloud environments that still ship Node 20–22
 use [`scripts/cloud-setup.sh`](../../scripts/cloud-setup.sh); until the correct
-runtime is installed, type stripping fails at the first import.
+runtime is installed, type stripping fails at the first import. A T3 Code
+worktree thread gets its dependencies and the ignored env files from
+[`scripts/worktree-setup.sh`](../../scripts/worktree-setup.sh), which `t3.json`
+runs before the thread's first turn — through `mise exec`, so the pinned Node
+is the one that runs.
 
 ---
 

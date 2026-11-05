@@ -101,6 +101,14 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", ADR-0011.
   handlers ran, and `clock.paused` flipped twice with nothing in the console.
   A chord is `event.code`: `+` is `Shift+Equal` everywhere this ships, so
   `event.key` carries a modifier that means nothing. ADR-0018.
+- **One gamepad poll, and it is `input/padClock.ts`'s.** A pad binding is a
+  second binding on the same action ids, dispatched through the same contexts;
+  never a pad dispatcher, and never an action reached by a synthetic
+  `KeyboardEvent` (stepping a focused slider by its own arrow key is the one
+  synthetic key, and the store does not count it as a hand). A held action
+  carries `value` and a `change` phase — treat only `up` as a release. A stick
+  look is signed by where the view turns; a grab camera takes it through
+  `asDrag`. ADR-0057.
 - **No `localStorage` outside `state/preferences.ts`.** Keys are declared there
   once and a call site takes the definition, never a string. The export, the
   import and the live subscription each need the whole set, which is why the

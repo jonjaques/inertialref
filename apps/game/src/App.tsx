@@ -1,5 +1,5 @@
 import { timeCommands } from './hud/time.ts'
-import { Canvas } from '@react-three/fiber'
+import { addEffect, Canvas } from '@react-three/fiber'
 import {
   useCallback,
   useEffect,
@@ -29,7 +29,9 @@ import {
   write,
   usePersistentState,
 } from './state/preferences.ts'
-import { useAction } from './input/useKeymap.ts'
+import { useAction, useKeymap } from './input/useKeymap.ts'
+import { familyName, padFamily } from './input/padFamily.ts'
+import { focusWayHome } from './dock/wayHome.ts'
 import { CharacterControls } from './character/CharacterControls.tsx'
 import { devPanels } from './hud/registry.tsx'
 import { useShipControls } from './hud/useShipControls.ts'
@@ -654,6 +656,28 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     })
   })
   useAction('time.normal', commands.realTime)
+  useAction('chrome.focus', focusWayHome)
+
+  /*
+   * The pad, polled from the scene's own loop and ahead of the step.
+   *
+   * R3F runs its global effects before every root's `useFrame`, so this reads
+   * the pad before `EngineTick` steps the simulation: a stick moved this
+   * frame moves the ship this frame. The keymap's own clock keeps polling
+   * where the scene does not run, and the two share one poll per animation
+   * frame by its timestamp (`KeymapStore.tick`).
+   */
+  const keymap = useKeymap()
+  useEffect(() => addEffect((timestamp) => keymap.tick(timestamp)), [keymap])
+  useEffect(
+    () =>
+      keymap.watchConnections(({ connected, id }) =>
+        flash(
+          `${familyName(padFamily(id))} ${connected ? 'connected' : 'disconnected'}`,
+        ),
+      ),
+    [keymap, flash],
+  )
   useAction('chrome.instruments', () => setDebug(!debug))
   /*
    * Asked of the engine, not of the snapshot.

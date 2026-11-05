@@ -1,0 +1,34 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "iconPath": "apps/game/public/icon-192.png",
+  "defaultThreadEnvMode": "worktree",
+  "scripts": [
+    {
+      "name": "Worktree setup",
+      "icon": "configure",
+      "runOnWorktreeCreate": true,
+      "async": false,
+      "command": "bash scripts/worktree-setup.sh"
+    },
+    {
+      "name": "Dev (vite + worker)",
+      "icon": "play",
+      "command": "mise exec -- pnpm dev",
+      "async": true,
+      "previewUrl": "http://localhost:5173",
+      "autoOpenPreview": true
+    },
+    { "name": "Test", "icon": "test", "command": "mise exec -- pnpm test" },
+    {
+      "name": "Typecheck",
+      "icon": "lint",
+      "command": "mise exec -- pnpm typecheck"
+    },
+    {
+      "name": "Check (full gate)",
+      "icon": "lint",
+      "command": "mise exec -- pnpm check"
+    },
+    { "name": "Build", "icon": "build", "command": "mise exec -- pnpm build" }
+  ]
+}

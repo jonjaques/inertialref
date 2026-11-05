@@ -188,10 +188,23 @@ describe('the ground a patch draws, read along a direction', () => {
    * triangle over a point can be a neighbor stretched across it. The check is
    * the morphed mesh itself: every vertex moved toward its target by the
    * material's factor, and the ray met against the triangles around the
-   * point, keeping the one it passes inside. Two edges and a corner are
-   * held, as the selection holds the ones finer ground shares: the band's far
-   * end reaches them, so the strip between a held edge and the slid row
-   * inside it, and the cells round a held corner, are asked as well.
+   * point. Two edges and a corner are held, as the selection holds the ones
+   * finer ground shares: the band's far end reaches them, so the strip
+   * between a held edge and the slid row inside it, and the cells round a
+   * held corner, are asked as well.
+   *
+   * The ray can meet more than one triangle, and the read must be on the
+   * mesh, not on whichever triangle the search happens to reach first. An odd
+   * vertex on an even grid line that has slid only part of the way, beside
+   * a neighbor that has arrived, folds the cell between them into a radial
+   * wall in that line's plane. The cells either side then meet the line at
+   * two radii, and a ray along it runs up the wall from one to the other: at
+   * s = 0.875, t = 0.561 the step is 1.5 cm, with (35, 56) at 0.936 of its
+   * slide and (35, 57) at 1, and on the band's even lines the step reaches
+   * 29 cm, at s = 0.875, t = 0.533. Exactly on the line, the 3D inside test lands on
+   * one side or the other by float noise. So every triangle the ray meets
+   * within the float32 resolution of a vertex offset counts, and the read
+   * must fall in the span of their radii.
    */
   it('is the morphed mesh inside a band', () => {
     const patch = patchOf(PARENT, 65)
@@ -220,14 +233,25 @@ describe('the ground a patch draws, read along a direction', () => {
         : patchMorph(Vec.distance(own, band.eye), band.start, band.end)
       return Vec.add(own, Vec.scale(Vec.sub(target, own), k))
     }
+    // A vertex is a float32 offset from the anchor: that offset's last bit,
+    // in meters, at the largest one. Not the patch's width — the anchor is on
+    // the datum and this ground stands two kilometers under it, so an offset
+    // reaches 2.6 km on a 1.9 km patch.
+    let farthest = 0
+    for (const x of [...patch.positions, ...patch.morphPositions]) {
+      farthest = Math.max(farthest, Math.abs(x))
+    }
+    const offsetResolution = farthest * 2 ** -23
     const inside = (d: Vec3, a: Vec3, b: Vec3, c: Vec3): number | null => {
       const n = Vec.cross(Vec.sub(b, a), Vec.sub(c, a))
       if (Vec.dot(n, n) < 1e-12) return null
       const radius = Vec.dot(n, a) / Vec.dot(n, d)
       const p = Vec.scale(d, radius)
+      // How far p stands inside the edge from x to y, in meters.
       const edge = (x: Vec3, y: Vec3): number =>
-        Vec.dot(Vec.cross(Vec.sub(y, x), Vec.sub(p, x)), n)
-      const slack = -1e-9 * Vec.dot(n, n)
+        Vec.dot(Vec.cross(Vec.sub(y, x), Vec.sub(p, x)), n) /
+        (Vec.distance(x, y) * Vec.length(n))
+      const slack = -offsetResolution
       return edge(a, b) >= slack && edge(b, c) >= slack && edge(c, a) >= slack
         ? radius
         : null
@@ -243,25 +267,23 @@ describe('the ground a patch draws, read along a direction', () => {
           const d = regionDirection(PARENT, s, t)
           const r0 = Math.floor(t * 64)
           const c0 = Math.floor(s * 64)
-          let mesh: number | null = null
-          for (let r = r0 - 1; r <= r0 + 1 && mesh === null; r += 1) {
-            for (let c = c0 - 1; c <= c0 + 1 && mesh === null; c += 1) {
-              mesh =
-                inside(
-                  d,
-                  morphed(r, c),
-                  morphed(r, c + 1),
-                  morphed(r + 1, c),
-                ) ??
+          const met: number[] = []
+          for (let r = r0 - 1; r <= r0 + 1; r += 1) {
+            for (let c = c0 - 1; c <= c0 + 1; c += 1) {
+              for (const radius of [
+                inside(d, morphed(r, c), morphed(r, c + 1), morphed(r + 1, c)),
                 inside(
                   d,
                   morphed(r, c + 1),
                   morphed(r + 1, c + 1),
                   morphed(r + 1, c),
-                )
+                ),
+              ]) {
+                if (radius !== null) met.push(radius)
+              }
             }
           }
-          if (mesh === null) return
+          if (met.length === 0) return
           const k = patchMorph(
             Vec.distance(vertex(patch, r0, c0), band.eye),
             band.start,
@@ -269,10 +291,17 @@ describe('the ground a patch draws, read along a direction', () => {
           )
           if (k > 0 && k < 1) banded += 1
           const drawn = patchGroundRadius(patch, d, band) as number
-          expect(Math.abs(drawn - mesh)).toBeLessThan(1e-3)
+          // Off a fold, the met radii are one point of the mesh, seen from
+          // each triangle that touches it. Within a millimeter, the
+          // grid-space read against the 3D plane: the chord's cut and the
+          // projection's lean `planeDeparture` bounds, 0.71 mm at worst on
+          // this patch's unmorphed triangles.
+          expect(drawn).toBeGreaterThan(Math.min(...met) - 1e-3)
+          expect(drawn).toBeLessThan(Math.max(...met) + 1e-3)
         },
       ),
-      { numRuns: 400 },
+      // A ray exactly along column 56, through the folded cell.
+      { numRuns: 400, examples: [[0.875, 0.561]] },
     )
     // The band crosses the patch, so the property was asked inside it.
     expect(banded).toBeGreaterThan(50)
