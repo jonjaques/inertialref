@@ -353,7 +353,7 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   }
 
   // Under a high sun square to the view the ring is the gas's blue, a dozen
-  // times the physics twenty kilometers up (measured 1.92 against 0.076 in
+  // times the physics twenty kilometers up (measured 1.22 against 0.076 in
   // the green).
   const noonFoot = await limbRay(20_000, 0.5, true)
   const physicalNoonFoot = await limbRay(20_000, 0.5, false)
@@ -361,9 +361,9 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   expect(noonFoot[2]).toBeGreaterThan(noonFoot[0])
 
   // Toward a sun a degree and a half over the foot's horizon the ring is
-  // orange at five kilometers (11.9 : 3.27 : 0.25), warm at ten
-  // (16.2 : 6.37 : 0.82) and blue at the crown forty kilometers up
-  // (1.63 : 1.80 : 2.11): the order of a photograph of the limb at
+  // orange at five kilometers (4.59 : 1.18 : 0.11), warm at ten
+  // (3.55 : 1.44 : 0.26) and blue at the crown forty kilometers up
+  // (0.34 : 0.47 : 0.76): the order of a photograph of the limb at
   // sunrise — the troposphere, the stratosphere and the blue above.
   const foot5 = await limbRay(5_000, 0.03, true, true)
   expect(foot5[0]).toBeGreaterThan(2 * foot5[2])
@@ -377,7 +377,7 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   // The ring ends where the sun sets on the gas as it stands on this
   // planet, foot first. Eight degrees under the horizontal and square to
   // the view, the foot's own beam is in the ground and keeps nothing
-  // (measured 1e-4 of 0.70), while the crown fifty kilometers up, at
+  // (measured under 1e-4 of 0.44), while the crown fifty kilometers up, at
   // the ring's ceiling, still keeps a share (7e-4). Read through the
   // table's own horizon — the physical planet's at a fraction of the
   // height — the crown was as dark as the foot, and a backlit Earth wore
@@ -389,7 +389,7 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   expect(luminance(shadowedCrown)).toBeGreaterThan(3 * luminance(shadowedFoot))
   // Toward the sun the foot's chord collects the lit gas beyond it, thrown
   // forward by the aerosol's lobe, and reads orange while the sun is a few
-  // degrees under its horizontal — 1.72 : 0.49 : 0.033 at three degrees,
+  // degrees under its horizontal — 0.23 : 0.068 : 0.008 at three degrees,
   // the ring of a backlit Earth — and under half of that, still warm, at
   // eight.
   const backlitFoot = await limbRay(10_000, -0.05, true, true)
