@@ -192,11 +192,13 @@ export function installToneCurve(
     // an HDR capture still agree on skin, terrain and hull, and the ramp is
     // the same at any headroom, which the curve cannot know.
     //
-    // The shoulder is held under 0.98 for the solve, because it is written
+    // The shoulder is held to [0, 0.98] for the solve, because it is written
     // from the console: past about 0.985 its scene luminance passes the
     // star's own and the ramp runs backward, and past 1.017 the fit never
     // reaches it: the root is negative and the lift NaN in every pixel.
-    const start = shoulderLuminance(shoulderUniform.min(0.98))
+    // Below zero the solve leaves the curve as fast: the root is negative
+    // under −0.0004 and the discriminant under −0.001, NaN in every pixel.
+    const start = shoulderLuminance(shoulderUniform.clamp(0, 0.98))
     const reach = log2(y.div(start)).div(
       log2(float(CALIBRATED_STAR_RADIANCE).div(start)),
     )

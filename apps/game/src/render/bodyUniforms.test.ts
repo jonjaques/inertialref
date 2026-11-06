@@ -258,6 +258,20 @@ describe('a mapped body', () => {
     )
     expect(outside.atmosphere!.outerRadius).toBe(top)
     expect(outside.atmosphere!.limb).toBe(1)
+    // Sized from the fall-off the shader is handed, not re-derived from the
+    // eye: a fall-off the field carries draws its own ceiling at any
+    // distance. A twentieth, so the ceiling clears the fixture's top.
+    const handed = bodyUniforms(
+      body({ limb: 1, limbFalloff: 0.05 }),
+      FRAME,
+      NO_MAPS,
+      null,
+    )
+    expect(handed.atmosphere!.scale.x).toBeCloseTo(
+      handed.atmosphere!.seaLevel * (1 + LIMB_CEILING_FALLOFFS * 0.05),
+      6,
+    )
+    expect(handed.atmosphere!.limbFalloff).toBe(0.05)
   })
 
   it('draws no shell at a point', () => {

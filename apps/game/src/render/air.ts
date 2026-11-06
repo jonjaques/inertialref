@@ -673,9 +673,7 @@ export function sunThrough(
     max(radius.sub(1), 0).div(max(air.top.sub(1), 1e-6)),
   )
   const muSun = dot(point, sun).div(max(radius, 1e-5))
-  const table = air.transmittance.sample(
-    texelCentered(vec2(muSun.add(1).mul(0.5), height01), TRANSMITTANCE),
-  ).rgb
+  const table = sunTableAt(air, muSun, height01)
   return clearedBeam(air, table, height01, clearedFromOrbit(air))
 }
 

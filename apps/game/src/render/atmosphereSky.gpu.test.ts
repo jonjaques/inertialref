@@ -419,31 +419,35 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   }
   const edgeRay = async (tangentMeters: number, lift = 1) => {
     const pre = 1 / 30_000
+    const tangent = 1 + tangentMeters / earth.radius
+    const eye = 4
+    const sine = tangent / eye
+    const cosine = Math.sqrt(1 - sine * sine)
+    const radial = new Vector3(cosine, sine, 0)
+    const sun = new Vector3(0, 0, 1)
+      .add(radial.clone().multiplyScalar(0.5))
+      .normalize()
+    const sphere = disk(sun, lift)
     setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
     try {
-      const tangent = 1 + tangentMeters / earth.radius
-      const eye = 4
-      const sine = tangent / eye
-      const cosine = Math.sqrt(1 - sine * sine)
-      const radial = new Vector3(cosine, sine, 0)
-      const sun = new Vector3(0, 0, 1)
-        .add(radial.clone().multiplyScalar(0.5))
-        .normalize()
       return luminance(
         await skyToward(
           new Vector3(sine, -cosine, 0),
           { height: (eye - 1) * earth.radius, fov: 0.05, sun },
-          disk(sun, lift),
+          sphere,
         ),
       )
     } finally {
       setSceneExposure(gpu.renderer, null)
+      sphere.material.dispose()
     }
   }
   const inside = await edgeRay(-20_000)
   expect(Math.abs((await edgeRay(-20_000, 0)) / inside - 1)).toBeLessThan(0.01)
   const outside = await edgeRay(20_000)
-  expect(Math.abs(inside / outside - 1)).toBeLessThan(0.3)
+  // A tenth: the shell and the sphere march the same chord at different
+  // sample counts, and the step between them is the seam this holds.
+  expect(Math.abs(inside / outside - 1)).toBeLessThan(0.1)
 
   const ground = async (enhanced: boolean) => {
     const pre = 1 / 30_000
