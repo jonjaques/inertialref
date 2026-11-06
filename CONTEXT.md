@@ -12288,6 +12288,112 @@ red test and a red gate both passed a `&&` chain and the gamma slider was
 committed with a broken knob test and a type error. `set -o pipefail` on
 every chain that commits, and a fix-forward commit for that one.
 
+## The limb is the air, stretched (31 Oct 2026)
+
+Jon's verdict on the lifted limb: the horizon fixes are right, and the ring
+is not. Production's ring — the physical line with the surfaces' authored
+veil behind it — had what he wanted and the lift had lost: the light
+filtering through the air to orange and red toward the sun, and a soft
+fall-off that blends the disk's edge rather than drawing a line at it. Two
+ISS photographs of the limb were the brief: orange under white under blue,
+and the glow around a sun rising through it.
+
+**The ring is a second march of the same recipe.** The lift was a
+scattering term grafted onto the physical march — the gas's glow over three
+times its height, gained four — with no transmittance of its own, so its
+color was the table's at the physical height: white where the ring should
+redden, and it ended at the top of the shell, under two percent of the
+radius. Now every material that marches the air marches it again as the
+gas and its ozone stretched to fall off over a twenty-fifth of the radius
+(`LIMB_FALLOFF`, 255 km on Earth), the same column that much taller
+(`marchLimb` in `render/air.ts`), read through the body's own tables at a
+sample's height over the root of the stretch — between its own height,
+where a sample forty kilometers up sees a white sun and the ring toward a
+rising sun is a white glare at 1.0 with the orange in the physical line
+alone, and the height the stretch maps it to, where the same sample reads
+the table at 1.3 km, the ring reddens over its lower half, and a station's
+sunrise band went warm gray where the photograph is blue over an orange
+foot. The shell mesh grows to the ring's ceiling with the lift
+(`limbReach`, `bodyUniforms`), because a back-side sphere draws nothing
+past its wall and a ring marched to a ceiling the mesh does not reach ends
+in a hard circle. One producer of the lift, `RenderBody.limb` from
+`limbLift` in `buildScene`, because a ring one material drew alone ends at
+that material's edge; `airToward` composes it under the physics for the
+sphere, the ground and the sea, and the shell composes its own chord.
+
+**Three things the stretch got wrong, measured on the GPU.** The aerosol
+stretched on its own, from 1.2 km, is a gray band three and a half deep
+along the tangent at the ring's foot: it scatters nothing toward an eye
+square to the sun and took half of what the physics drew under it — the
+foot read gray and darker than the physical line alone (0.024 against
+0.054). What the aerosol has that the gas lacks is its forward lobe, fifty
+times the side-scatter, and the lobe is the orange in every reference
+photograph; so the ring keeps the lobe and drops the aerosol's extinction,
+the one place it departs from a stretched physics. At the foot, and a
+quarter of the column (`LIMB_AEROSOL`): spread to the gas's own fall-off
+the lobe reaches forty degrees from the sun, and at the whole column it
+saturates, and either way Centauri's sunrise from low orbit — the foot lit
+along its whole arc — painted the blue band over tan-white, where a
+troposphere's glow is a thin band near the sun. The table's
+horizon is the physical planet's at a thirtieth of
+the height, so a crown a thousand kilometers up went dark with the sun a
+degree behind the disk, where on this planet it sees the sun thirty
+degrees past the terminator: the backlit composition — "the atmosphere
+doing all the work" — drew no ring. A beam that climbs from its sample
+reads the table as it stands; one that descends is read at its own
+grazing height on this planet, the horizontal table there squared over
+the horizontal table at the sample, and as nothing once the grazing
+height is under the ground. Ψ takes neither branch: it is read at the
+sample's own sun cosine and the root-of-the-stretch height on both, and the
+ground does not gate it. Shifting the sun's
+cosine by the dip difference alone — the first fix — moved the reddening
+with the shadow and left the foot blue. And a gas a sixth of a radius
+deep takes a third of the Milky Way at its foot: the backlit Earth wore a
+dark halo against the galaxy where the ring's own light was under a
+count, so the shell's alpha is the physics' transmittance only. And seen
+through the lifted gas the physical limb line kept a quarter of its blue
+and two thirds of its red along a tangent, which from low orbit turned
+Centauri's blue band gray-tan (68 : 66 : 62 where the plate had
+153 : 188 : 252); the physics is composed beside the ring, not behind it.
+The ring takes light from the surface under it — the edge's blend — and
+from nothing else. And the lift came in over ten shell heights, a thousand
+kilometers on Earth, so from 313 km over Centauri's world — the altitude
+every station photograph of a limb is taken from — the ring was a tenth of
+itself and the sunrise arc was the physical limb alone, a dim gray-white
+where the accepted plate had the earlier lift's blue; it comes in over two
+(`LIMB_FADE_HEIGHTS`), full by three hundred kilometers. Full there, a ring
+falling off over 255 km put the eye inside its own gas, and the sunrise
+filled the whole sky with reddened haze — a fifth of the plate changed,
+tan — which is what a gas that tall does and not what a station
+photograph shows. So the ring is sized to the eye: its fall-off is a fifth
+of the eye's height over the datum, up to the twenty-fifth
+(`limbFalloff`, `LIMB_STANDOFF`), and the eye stands five fall-offs above
+the ring's foot wherever it is.
+
+**What it measures.** From four radii, forty kilometers over Earth's limb:
+under a high sun square to the view the ring is fourteen times the
+physics and blue (0.17 against 0.012); toward a sun a degree and a half
+over the foot's horizon the ring is orange at five kilometers
+(0.64 : 0.40 : 0.19), warm at forty (0.46 : 0.41 : 0.30) where the physics
+at that height is blue, and blue at the crown 400 km up; square to the
+view eight degrees under the horizontal the foot keeps a fifth of its
+light and the crown all of it, and toward the sun three degrees under the
+foot's chord collects the lit gas beyond it and reads warm orange
+(0.21 : 0.17 : 0.13) — the backlit ring, under half of that at eight;
+twenty kilometers either
+side of the silhouette the sphere and the shell agree within seven
+percent; at nadir the stretched gas is a fiftieth of its tangent column
+and adds 0.09 to the physics' 0.05 of veil over a black disk. The sky
+from a beach is the physics under either view. `atmosphereSky.gpu`,
+`materials.gpu`, `atmosphere.test` and `bodyUniforms.test` hold each.
+
+**The trap.** The lifted ring's foot square to the sun reads neutral-pink,
+not orange: Hillaire's Ψ is isotropic, and at a horizon sun the gas's
+second-order light is the blue of the sky away from the sun, which is
+what a photograph shows there too. The orange lives toward the sun, in
+the forward lobe, and a claim about the ring's color is a claim about
+where the sun is.
+
 ## The gamepad, and a stick that looked the wrong way (31 Oct 2026)
 
 [ADR-0057](docs/adr/0057-a-gamepad-is-a-second-binding-on-every-action.md)

@@ -13,6 +13,7 @@ import {
   dot,
   exp,
   float,
+  If,
   length,
   Loop,
   max,
@@ -30,11 +31,16 @@ import {
 import {
   AEROSOL_ASYMMETRY,
   type AtmosphereRecipe,
+  LIMB_AEROSOL,
+  LIMB_CEILING_FALLOFFS,
+  LIMB_FALLOFF,
+  LIMB_GAIN,
   MULTI_SCATTER_HEIGHT,
   MULTI_SCATTER_WIDTH,
   TRANSMITTANCE_HEIGHT,
   TRANSMITTANCE_WIDTH,
 } from '@inertialref/rendering'
+import { enhancedSky } from './radiance.ts'
 
 /*
  * The air a body's surfaces are seen through: the shell's recipe and tables
@@ -58,6 +64,12 @@ import {
  * in, and the one that survives distance compression. The shell's doc
  * comment has the budget: twelve samples with two table reads each is the
  * march the LUTs made affordable, and a surface takes a third of that.
+ *
+ * Enhanced's limb from orbit is a second march through the same tables
+ * (`marchLimb`): the recipe stretched `LIMB_FALLOFF` of a radius tall, which
+ * every caller of `airToward` composes beside its own physics, so the ring
+ * the shell draws past the disk's edge continues across the edge into the
+ * sphere, the ground and the sea without a seam.
  */
 
 const TRANSMITTANCE = [TRANSMITTANCE_WIDTH, TRANSMITTANCE_HEIGHT] as const
@@ -112,13 +124,18 @@ const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
 
 /**
  * The uniforms one material marches through: the recipe's coefficients in
- * sea-level units, the two tables, and `top`, the tables' ceiling over sea
- * level — 1 with no air. `set` points them at one body's air, idempotently
- * and without a rebuild; `clear` is a vacuum, which draws nothing,
- * extinguishes nothing and passes the beam white.
+ * sea-level units, the two tables, `top`, the tables' ceiling over sea
+ * level — 1 with no air — and the limb: `limb`, how far the eye stands
+ * outside the air (`RenderBody.limb`), and `limbFalloff`, the ring's
+ * fall-off for that eye (`limbFalloff`), which only Enhanced's second march
+ * reads. `set` points them at one body's air, idempotently and without a
+ * rebuild, `lift` writes the limb beside it, and `clear` is a vacuum, which
+ * draws nothing, extinguishes nothing and passes the beam white.
  */
 export function createAirUniforms() {
   const top = uniform(1)
+  const limb = uniform(0)
+  const limbFalloff = uniform(LIMB_FALLOFF)
   const betaRayleigh = uniform(new Vector3(0, 0, 0))
   const mieScatter = uniform(new Vector3(0, 0, 0))
   const mieExtinction = uniform(new Vector3(0, 0, 0))
@@ -141,6 +158,8 @@ export function createAirUniforms() {
     hMie,
     transmittance,
     multiScatter,
+    limb,
+    limbFalloff,
     set(recipe: AtmosphereRecipe, sunTable: Texture, psiTable: Texture): void {
       top.value = recipe.topRatio
       betaRayleigh.value.set(...recipe.betaRayleigh)
@@ -154,8 +173,14 @@ export function createAirUniforms() {
       transmittance.value = sunTable
       multiScatter.value = psiTable
     },
+    lift(strength: number, falloff = LIMB_FALLOFF): void {
+      limb.value = strength
+      limbFalloff.value = falloff
+    },
     clear(): void {
       top.value = 1
+      limb.value = 0
+      limbFalloff.value = LIMB_FALLOFF
       betaRayleigh.value.set(0, 0, 0)
       mieScatter.value.set(0, 0, 0)
       mieExtinction.value.set(0, 0, 0)
@@ -216,65 +241,19 @@ export function marchAir(
   far: Node<'float'>,
   sun: Node<'vec3'>,
   samples: number,
-  /**
-   * How much of Enhanced's limb this march draws, 0 to 1: the glow the gas
-   * would scatter if it fell off over `LIMB_HEIGHTS` times its height,
-   * gained `LIMB_GAIN` times, added to the physics above the limb's own
-   * line and nowhere in the extinction. The shell from orbit is the one
-   * caller that passes more than 0, and a number builds no second density.
-   */
-  limb: Node<'float'> | number = 0,
 ): Marched {
   const shellHeight = max(air.top.sub(1), 1e-6)
-  const nu = dot(direction, sun)
-  const phaseRayleigh = float(3 / (16 * Math.PI)).mul(nu.mul(nu).add(1))
-  const g = AEROSOL_ASYMMETRY
-  const phaseMie = float((1 - g * g) / (4 * Math.PI)).div(
-    pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
-  )
-
-  const span = max(far.sub(near), 0)
-  const closest = dot(origin.negate(), direction)
-  const perigee = clamp(closest.sub(near), 0, span)
-  const split = perigee.div(max(span, 1e-9))
-  const before = max(split, 1e-6)
-  const after = max(oneMinus(split), 1e-6)
+  const phase = phasesToward(direction, sun)
   const inscatter = vec3(0).toVar()
   const opticalDepth = vec3(0).toVar()
 
-  Loop(samples, ({ i }) => {
-    const u = float(i).add(0.5).div(samples)
-    const right = step(split, u)
-    const toward = split.sub(u).div(before)
-    const away = u.sub(split).div(after)
-    const t = near.add(
-      mix(
-        perigee.sub(perigee.mul(toward.mul(toward))),
-        perigee.add(span.sub(perigee).mul(away.mul(away))),
-        right,
-      ),
-    )
-    const stepLength = mix(
-      perigee.mul(toward).mul(2).div(before),
-      span.sub(perigee).mul(away).mul(2).div(after),
-      right,
-    ).div(samples)
-    const point = origin.add(direction.mul(t))
+  crowdedSamples(origin, direction, near, far, samples, (point, stepLength) => {
     const radius = length(point)
     const height = max(radius.sub(1), 0)
     const height01 = saturate(height.div(shellHeight))
     const fade = oneMinus(height01)
     const densityR = exp(height.div(air.hRayleigh).negate()).mul(fade)
     const densityM = exp(height.div(air.hMie).negate()).mul(fade)
-    const scatterR =
-      limb === 0
-        ? densityR
-        : densityR.add(
-            exp(height.div(air.hRayleigh.mul(LIMB_HEIGHTS)).negate())
-              .mul(fade)
-              .sub(densityR)
-              .mul(float(LIMB_GAIN).mul(limb)),
-          )
 
     // The ozone tent absorbs and scatters nothing; `densities` holds the
     // same shape on the CPU.
@@ -294,24 +273,15 @@ export function marchAir(
     const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
 
     const muSun = dot(point, sun).div(max(radius, 1e-5))
-    const lutUv = vec2(muSun.add(1).mul(0.5), height01)
-    const sunT = air.transmittance.sample(
-      texelCentered(lutUv, TRANSMITTANCE),
-    ).rgb
-    // ln Ψ, read geometrically; see `bakeMultipleScattering`. The stand-in
-    // reads as e⁰ = 1, against coefficients that are zero until the
-    // tables arrive, so it still draws a vacuum.
-    const psi = exp(
-      air.multiScatter.sample(texelCentered(lutUv, MULTI_SCATTER)).rgb,
-    )
-
+    const sunT = sunTableAt(air, muSun, height01)
+    const psi = psiTableAt(air, muSun, height01)
     const single = air.betaRayleigh
-      .mul(scatterR)
-      .mul(phaseRayleigh)
-      .add(air.mieScatter.mul(densityM).mul(phaseMie))
+      .mul(densityR)
+      .mul(phase.rayleigh)
+      .add(air.mieScatter.mul(densityM).mul(phase.mie))
       .mul(sunT)
     const multiple = psi.mul(
-      air.betaRayleigh.mul(scatterR).add(air.mieScatter.mul(densityM)),
+      air.betaRayleigh.mul(densityR).add(air.mieScatter.mul(densityM)),
     )
     inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))
     opticalDepth.addAssign(stepTau)
@@ -320,26 +290,289 @@ export function marchAir(
   return { inscatter, transmittance: exp(opticalDepth.negate()) }
 }
 
+/**
+ * The two phase functions for a view direction against the sun: Rayleigh's,
+ * and Henyey–Greenstein at the one aerosol asymmetry.
+ */
+function phasesToward(
+  direction: Node<'vec3'>,
+  sun: Node<'vec3'>,
+): { readonly rayleigh: Node<'float'>; readonly mie: Node<'float'> } {
+  const nu = dot(direction, sun)
+  const g = AEROSOL_ASYMMETRY
+  return {
+    rayleigh: float(3 / (16 * Math.PI)).mul(nu.mul(nu).add(1)),
+    mie: float((1 - g * g) / (4 * Math.PI)).div(
+      pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
+    ),
+  }
+}
+
+/**
+ * The sun's transmittance at one sample, read at `muSun`, the sun's cosine
+ * over the sample's horizontal, and at `height01`, the altitude fraction —
+ * the sample's own for the physics, the stretched one for the limb.
+ */
+function sunTableAt(
+  air: AirUniforms,
+  muSun: Node<'float'>,
+  height01: Node<'float'>,
+): Node<'vec3'> {
+  const lutUv = vec2(muSun.add(1).mul(0.5), height01)
+  return air.transmittance.sample(texelCentered(lutUv, TRANSMITTANCE)).rgb
+}
+
+/**
+ * Ψ at one sample, in the same coordinates. ln Ψ, read geometrically; see
+ * `bakeMultipleScattering`. The stand-in reads as e⁰ = 1, against
+ * coefficients that are zero until the tables arrive, so it still draws a
+ * vacuum.
+ */
+function psiTableAt(
+  air: AirUniforms,
+  muSun: Node<'float'>,
+  height01: Node<'float'>,
+): Node<'vec3'> {
+  const lutUv = vec2(muSun.add(1).mul(0.5), height01)
+  return exp(air.multiScatter.sample(texelCentered(lutUv, MULTI_SCATTER)).rgb)
+}
+
+/**
+ * `samples` midpoint samples from `near` to `far` along `direction` from
+ * `origin`, crowded toward the segment's lowest point as the doc comment on
+ * `marchAir` describes, each handed to `each` with its step length. A
+ * `Loop`, so it lives inside a material's `Fn`.
+ */
+function crowdedSamples(
+  origin: Node<'vec3'>,
+  direction: Node<'vec3'>,
+  near: Node<'float'>,
+  far: Node<'float'>,
+  samples: number,
+  each: (point: Node<'vec3'>, stepLength: Node<'float'>) => void,
+): void {
+  const span = max(far.sub(near), 0)
+  const closest = dot(origin.negate(), direction)
+  const perigee = clamp(closest.sub(near), 0, span)
+  const split = perigee.div(max(span, 1e-9))
+  const before = max(split, 1e-6)
+  const after = max(oneMinus(split), 1e-6)
+  Loop(samples, ({ i }) => {
+    const u = float(i).add(0.5).div(samples)
+    const right = step(split, u)
+    const toward = split.sub(u).div(before)
+    const away = u.sub(split).div(after)
+    const t = near.add(
+      mix(
+        perigee.sub(perigee.mul(toward.mul(toward))),
+        perigee.add(span.sub(perigee).mul(away.mul(away))),
+        right,
+      ),
+    )
+    const stepLength = mix(
+      perigee.mul(toward).mul(2).div(before),
+      span.sub(perigee).mul(away).mul(2).div(after),
+      right,
+    ).div(samples)
+    each(origin.add(direction.mul(t)), stepLength)
+  })
+}
+
 /** March samples a surface takes through the air in front of it. */
 export const SURFACE_AIR_SAMPLES = 4
 
 /**
- * Enhanced's limb from orbit: the gas glows as if it fell off over this many
- * of its own scale heights — 25 km on Earth, where the physics is 8.5 — and
- * the glow that adds above the physics is gained this much. Together they
- * are the soft ring the home page wraps the disk in: at 50 km over Earth's
- * limb, half the line's own light where the physics has a third of a
- * percent, fading to none at the top of the shell.
+ * March samples the shell takes through the lifted gas. Eight against the
+ * physics' twelve: the stretched profile is thirty times smoother than the
+ * one it stretches, and the tangent chord through its ceiling is a radius
+ * long, so a sample crowded to the perigee covers it.
  */
-export const LIMB_HEIGHTS = 3
-export const LIMB_GAIN = 4
+export const LIMB_SAMPLES = 8
+
+/**
+ * Where the air ends for the eye's lift, in sea-level units: `top` inside
+ * the air, the ring's ceiling for this eye at the full lift — or `top`, for
+ * an air that already reaches past it. `limbReach` on the CPU is the same
+ * formula, and sizes the mesh the shell is drawn on.
+ */
+export function limbReachOf(air: AirUniforms): Node<'float'> {
+  const ceiling = air.limbFalloff.mul(LIMB_CEILING_FALLOFFS).add(1)
+  return air.top.add(max(ceiling, air.top).sub(air.top).mul(air.limb))
+}
+
+/**
+ * Enhanced's limb: the recipe stretched to fall off over `limbFalloff` —
+ * up to `LIMB_FALLOFF` of a radius, a fifth of the eye's height under that
+ * (`LIMB_STANDOFF`) — marched from `near` to `far` like the physics.
+ *
+ * The stretch is one number, the fall-off over the gas's own scale height
+ * — thirty on Earth at the full fall-off — and the lifted recipe is the physical gas and its
+ * ozone with every height multiplied by it and every coefficient divided by
+ * it, `LIMB_GAIN` times over: the same column of gas, that much taller.
+ *
+ * The aerosol is stretched with the gas and scatters without taking.
+ * Stretched, it is a band 36 km thick at the ring's foot on Earth, three
+ * and a half deep along the tangent, and what it would take is the limb's
+ * own line and the disk's edge, which are where the physics is: it
+ * scatters nothing toward an eye square to the sun and took half of what
+ * the physics drew under it. What it has that the gas does not is its
+ * forward lobe, fifty times the side-scatter, and the lobe is the orange:
+ * a sunrise at the limb, the ring of a backlit Earth, every reference
+ * photograph's glow toward the sun is reddened sunlight thrown forward by
+ * the aerosol at the foot. So the ring keeps the lobe and drops the
+ * extinction, which is the one place the ring departs from a stretched
+ * physics. At the foot and not over the ring: spread to the gas's own
+ * fall-off the lobe reaches forty degrees from the sun, and a sunrise seen
+ * from low orbit washed its whole blue arc tan. And `LIMB_AEROSOL` of the
+ * column, because the whole of it saturates: the same sunrise lights the
+ * foot along its whole arc, and the lobe painted the blue band over.
+ *
+ * The tables are read at the sample's height over the root of the
+ * stretch, which lies between two heights that are both wrong. Read at
+ * the sample's own height — the ring lit by the sun through the air that
+ * is actually there — a sample forty kilometers up sees a white sun, and
+ * the ring toward a rising sun is a white glare at the surface's own
+ * brightness with the orange in the physical line alone. Read at the
+ * height the stretch maps it to, `h / stretch` — the ring lit as the gas
+ * of a planet stretched the same way is, which has exactly the physical
+ * gas's transmittance there — the same sample reads the table at 1.3 km,
+ * the ring reddens over its lower half, and a sunrise from a station
+ * drew its band warm gray where a photograph has blue over an orange
+ * foot. At the root, the foot reddens over the ring's bottom quarter and
+ * the crown is blue: the troposphere, the stratosphere and the blue above,
+ * in a photograph's proportions. The horizon is read as this planet's
+ * whatever the table's height: the table's own horizon at a fraction of
+ * the height is under which a crown a thousand kilometers up went dark
+ * with the sun a degree behind the disk, where it sees the sun thirty
+ * degrees past the terminator — a backlit Earth drew no ring at all. So a
+ * beam that climbs from its sample reads the table as it stands, and a
+ * beam that descends is read at its own grazing height on this planet, as
+ * the horizontal table there squared over the horizontal table at the
+ * sample — the far half of the tangent column and the near part down to
+ * it — and as nothing once the grazing height is under the ground. The two
+ * agree where the beam is level. Nothing here authors a color.
+ *
+ * Gated on the lift and on Enhanced by one uniform branch, so the ground,
+ * the sea and the sphere under a photographic lens or inside the air pay
+ * none of it; the accumulators keep their zeros and the composite is the
+ * physics alone.
+ */
+export function marchLimb(
+  air: AirUniforms,
+  origin: Node<'vec3'>,
+  direction: Node<'vec3'>,
+  near: Node<'float'>,
+  far: Node<'float'>,
+  sun: Node<'vec3'>,
+  samples: number,
+): Marched {
+  const inscatter = vec3(0).toVar()
+  const opticalDepth = vec3(0).toVar()
+  const strength = air.limb.mul(enhancedSky)
+
+  If(strength.greaterThan(0), () => {
+    const shellHeight = max(air.top.sub(1), 1e-6)
+    const ceiling = max(limbReachOf(air).sub(1), 1e-6)
+    const falloff = max(air.limbFalloff, 1e-6)
+    const stretch = falloff.div(max(air.hRayleigh, 1e-9))
+    const column = float(LIMB_GAIN).div(stretch).mul(strength)
+    // The tables are read at the sample's height over the root of the
+    // stretch; see the doc comment for the two heights it lies between.
+    const readingHeight = sqrt(stretch).mul(shellHeight)
+    const phase = phasesToward(direction, sun)
+
+    crowdedSamples(
+      origin,
+      direction,
+      near,
+      far,
+      samples,
+      (point, stepLength) => {
+        const radius = length(point)
+        const height = max(radius.sub(1), 0)
+        // To zero at the ceiling, as the physics goes to zero at its top.
+        const fade = oneMinus(saturate(height.div(ceiling)))
+        const density = exp(height.div(falloff).negate()).mul(fade)
+        const densityM = exp(height.div(air.hMie.mul(stretch)).negate()).mul(
+          fade,
+        )
+        const densityO = max(
+          float(1).sub(
+            abs(height.sub(air.ozonePeak.mul(stretch))).div(
+              max(air.ozoneHalfWidth.mul(stretch), 1e-9),
+            ),
+          ),
+          0,
+        )
+        const extinction = air.betaRayleigh
+          .mul(density)
+          .add(air.ozone.mul(densityO))
+          .mul(column)
+        const stepTau = extinction.mul(stepLength)
+        const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
+
+        const height01 = saturate(height.div(readingHeight))
+        const muSun = dot(point, sun).div(max(radius, 1e-5))
+        const climbing = step(0, muSun)
+        // The beam's grazing height on this planet, and whether it clears
+        // the ground; a climbing beam's lowest point is the sample.
+        const level = radius.mul(sqrt(max(oneMinus(muSun.mul(muSun)), 0)))
+        const graze = max(level.sub(1), 0)
+        const clears = mix(step(1, level), float(1), climbing)
+        const horizontalAt = (h: Node<'float'>) =>
+          sunTableAt(air, float(0), saturate(h.div(readingHeight)))
+        const descending = horizontalAt(graze)
+          .pow(2)
+          .div(max(horizontalAt(height), 1e-4))
+        const sunT = mix(
+          descending,
+          sunTableAt(air, muSun, height01),
+          climbing,
+        ).mul(clears)
+        const psi = psiTableAt(air, muSun, height01)
+        const scatterR = air.betaRayleigh.mul(density).mul(column)
+        const scatterM = air.mieScatter
+          .mul(densityM)
+          .mul(column)
+          .mul(LIMB_AEROSOL)
+        const single = scatterR
+          .mul(phase.rayleigh)
+          .add(scatterM.mul(phase.mie))
+          .mul(sunT)
+        const multiple = psi.mul(scatterR.add(scatterM))
+        inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))
+        opticalDepth.addAssign(stepTau)
+      },
+    )
+  })
+
+  return { inscatter, transmittance: exp(opticalDepth.negate()) }
+}
+
+/**
+ * The physics beside the lifted gas, not behind it. A stretched gas fronts
+ * the physical limb along a tangent and passes a quarter of its blue and
+ * two thirds of its red, and from low orbit that turned a sunrise's blue
+ * band gray-tan — 68 : 66 : 62 where the plate had 153 : 188 : 252. The
+ * limb's own line and its band are the photograph, so the ring adds to
+ * them and takes nothing from them. A surface behind both is veiled by
+ * both: that is the disk's edge blending into the ring, and a fifth of the
+ * blue at nadir.
+ */
+export function throughLimb(physical: Marched, lifted: Marched): Marched {
+  return {
+    inscatter: lifted.inscatter.add(physical.inscatter),
+    transmittance: physical.transmittance.mul(lifted.transmittance),
+  }
+}
 
 /**
  * The air between the eye and a point on a surface, both in sea-level units
- * about the body's center. The segment starts where it enters the air —
- * where the eye is, inside it — and ends at the point, so a surface seen
- * from orbit is veiled by the whole slant column and one seen from a beach
- * by the meters between, with no second model for either.
+ * about the body's center, with Enhanced's limb composed under it. The
+ * segment starts where it enters the air — where the eye is, inside it —
+ * and ends at the point, so a surface seen from orbit is veiled by the
+ * whole slant column and one seen from a beach by the meters between, with
+ * no second model for either.
  */
 export function airToward(
   air: AirUniforms,
@@ -359,7 +592,14 @@ export function airToward(
   const top = air.top
   const halfOuter = sqrt(max(top.mul(top).sub(impactSquared), 0))
   const near = clamp(closest.sub(halfOuter), 0, span)
-  return marchAir(air, eye, direction, near, span, sun, samples)
+  const physical = marchAir(air, eye, direction, near, span, sun, samples)
+  // And the lifted gas from where the ray enters its reach, which is the
+  // same entry inside the air and under a photographic lens.
+  const reach = limbReachOf(air)
+  const halfReach = sqrt(max(reach.mul(reach).sub(impactSquared), 0))
+  const nearLimb = clamp(closest.sub(halfReach), 0, span)
+  const lifted = marchLimb(air, eye, direction, nearLimb, span, sun, samples)
+  return throughLimb(physical, lifted)
 }
 
 /**
@@ -377,7 +617,5 @@ export function sunThrough(
     max(radius.sub(1), 0).div(max(air.top.sub(1), 1e-6)),
   )
   const muSun = dot(point, sun).div(max(radius, 1e-5))
-  return air.transmittance.sample(
-    texelCentered(vec2(muSun.add(1).mul(0.5), height01), TRANSMITTANCE),
-  ).rgb
+  return sunTableAt(air, muSun, height01)
 }

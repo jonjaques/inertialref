@@ -7,6 +7,7 @@ import {
   surfaceVisibilityGain,
   type RenderBody,
   type RenderStar,
+  limbReach,
 } from '@inertialref/rendering'
 import { Quaternion, Vec, type Vec3 } from '@inertialref/spatial'
 
@@ -120,6 +121,14 @@ interface AtmosphereUniforms {
    */
   readonly seaLevel: number
   readonly flattening: number
+  /**
+   * `RenderBody.limb` and `limbFalloff`: how far the eye stands outside
+   * the air, 0 to 1, and the ring's fall-off for it. The mesh is drawn to
+   * `limbReach` of the datum for them, so Enhanced's ring has geometry to
+   * be drawn on; the march's own `top` stays `outerRadius`.
+   */
+  readonly limb: number
+  readonly limbFalloff: number
 }
 
 /** One body's frame: the transform, and one record per material it draws. */
@@ -305,6 +314,8 @@ export function starAsBody(star: RenderStar, visibility: boolean): RenderBody {
     atmosphereScale: 1,
     airTop: 1,
     airHeights: NO_AIR,
+    limb: 0,
+    limbFalloff: 0,
     trueRadius: 1,
     rotationPeriod: 1,
     flattening: 1,
@@ -511,12 +522,30 @@ export function bodyUniforms(
      * terrain. The air is measured from `seaLevel`, the datum, which the
      * drawn sphere is sunk under.
      */
+    /*
+     * The mesh grows to the limb's reach as the eye leaves the air — a
+     * sixth of a radius out at the full lift, against a top under two
+     * percent — because the shell is a back-side sphere and draws nothing
+     * past its own wall: a ring marched to a ceiling the mesh does not
+     * reach ends in a hard circle at the mesh. It grows in every view, not
+     * only Enhanced's, because the mesh is sized here with no camera mode
+     * in reach and a photographic view marches the extra width as a vacuum
+     * — fragments that draw nothing, over a ring the size of the disk's
+     * third. `limbReach` is the one formula, read again by the shader.
+     */
+    const seaLevel = body.trueRadius * placement.compression
+    const mesh = Math.max(
+      shell,
+      seaLevel * limbReach(body.airTop, body.limb, body.limbFalloff),
+    )
     atmosphere = {
-      scale: giant ? oblate(shell) : { x: shell, y: shell, z: shell },
+      scale: giant ? oblate(mesh) : { x: mesh, y: mesh, z: mesh },
       outerRadius: shell,
       innerRadius: placement.scale * (giant ? 1 : shellFlattening),
-      seaLevel: body.trueRadius * placement.compression,
+      seaLevel,
       flattening: giant ? shellFlattening : 1,
+      limb: body.limb,
+      limbFalloff: body.limbFalloff,
     }
   }
 

@@ -191,12 +191,14 @@ export function TerrainPatches({
       // The body's own air, from the tables the shell and the sphere march.
       const tables = body === undefined ? null : scatteringOf(engine, body)
       if (tables === null) terrain.air.clear()
-      else
+      else {
         terrain.air.set(
           tables.recipe,
           tables.transmittance,
           tables.multiScatter,
         )
+        terrain.air.lift(body?.limb ?? 0, body?.limbFalloff)
+      }
     }
     const seen = new Set<string>()
 

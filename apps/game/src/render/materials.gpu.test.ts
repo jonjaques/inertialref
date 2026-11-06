@@ -32,6 +32,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { scatteringFor } from './atmosphereLuts.ts'
+import { setSceneExposure } from './radiance.ts'
 import { createLensFlare } from './flare.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import {
@@ -824,7 +825,7 @@ describe('the disk, seen through its own air', () => {
    * own light. `mesh` is the drawn sphere's radius in sea-level units — 1 on
    * the datum, under it as the renderer sinks it.
    */
-  async function veil(air: boolean, mesh = 1): Promise<number> {
+  async function veil(air: boolean, mesh = 1, lift = 0): Promise<number> {
     const planet = createPlanetMaterial()
     planet.baseColor.value.setRGB(0, 0, 0)
     planet.sunDirection.value.set(0, 0, 1)
@@ -832,6 +833,7 @@ describe('the disk, seen through its own air', () => {
     if (air) {
       const baked = tables()
       planet.air.set(baked.recipe, baked.transmittance, baked.multiScatter)
+      planet.air.lift(lift)
     }
     const disk = new Mesh(new SphereGeometry(mesh, 48, 32), planet.material)
     const eye = new PerspectiveCamera(10, 1, 0.1, 100)
@@ -854,6 +856,28 @@ describe('the disk, seen through its own air', () => {
     // percent of the surface white back at the eye; a vacuum scatters none.
     expect(await veil(true)).toBeGreaterThan(0.01)
     expect(await veil(false)).toBeLessThan(1e-6)
+  })
+
+  it("composes Enhanced's limb in front of the disk, and keeps it off the ground", async () => {
+    // The ring the shell draws past the silhouette continues across it
+    // through the same march, so the lifted gas in front of the disk is
+    // the sphere's to draw: at nadir it is a fiftieth of its tangent
+    // column, and under Enhanced from outside the air it adds to the
+    // physics' own veil: measured 0.089 against 0.053. Nothing under a
+    // photographic lens, and nothing from the ground, where `buildScene`
+    // lifts nothing.
+    const pre = 1 / 30_000
+    setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
+    let lifted: number
+    let physical: number
+    try {
+      lifted = await veil(true, 1, 1)
+      physical = await veil(true, 1, 0)
+    } finally {
+      setSceneExposure(gpu.renderer, null)
+    }
+    expect(lifted).toBeGreaterThan(1.3 * physical)
+    expect(await veil(true, 1, 1)).toBeCloseTo(physical, 6)
   })
 
   it('marches to the datum, not to the sunk sphere under it', async () => {

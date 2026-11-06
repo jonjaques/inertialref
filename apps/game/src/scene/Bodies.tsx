@@ -498,12 +498,14 @@ export function Bodies({
         setNumber(planet.seaLevel, body.trueRadius * body.placement.compression)
         setNumber(planet.flattening, uniforms.atmosphere?.flattening ?? 1)
         if (tables === null) planet.air.clear()
-        else
+        else {
           planet.air.set(
             tables.recipe,
             tables.transmittance,
             tables.multiScatter,
           )
+          planet.air.lift(body.limb, body.limbFalloff)
+        }
         setNumber(planet.specularStrength, values.specularStrength)
         setNumber(planet.nightStrength, values.nightStrength)
         setNumber(planet.cloudShadow, values.cloudShadow)
@@ -572,6 +574,7 @@ export function Bodies({
         setNumber(air.seaLevel, shell.seaLevel)
         setVector(air.spinAxis.value, uniforms.spinAxis)
         setNumber(air.flattening, shell.flattening)
+        air.setLimb(shell.limb, shell.limbFalloff)
         /*
          * Cached after the first ask; baked on the pool when there is one,
          * and drawn with the stand-ins — a vacuum — until the tables land,
