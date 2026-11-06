@@ -10,6 +10,7 @@ import {
   densityColumn,
   DISK_THROUGH_AIR_CEILING,
   diskThroughAir,
+  horizonCosine,
   LIMB_CEILING_FALLOFFS,
   LIMB_FADE_HEIGHTS,
   LIMB_STANDOFF,
@@ -23,6 +24,7 @@ import {
   multipleScatteringAt,
   MULTI_SCATTER_FLOOR,
   sampleLut,
+  settingDiskCosine,
   TRANSMITTANCE_WIDTH,
   transmittanceFrom,
   visibleThickness,
@@ -74,10 +76,10 @@ const MARS_HAZE = {
   thickness: 0.0066,
   aerosolAngstrom: 0,
   ozone: 0,
-  aerosolDepth: 0.4,
+  aerosolDepth: 0.3,
   aerosolAlbedo: 0.93,
 }
-const MARS = { radius: 3_396_200, haze: 60_000, scaleHeight: 11_100 }
+const MARS = { radius: 3_396_200, haze: 100_000, scaleHeight: 11_100 }
 const MARS_TOP = (MARS.radius + MARS.haze) / MARS.radius
 const MARS_HEIGHTS = airHeights(
   MARS.radius,
@@ -433,6 +435,51 @@ describe('a star seen through the air', () => {
       ),
     )
   })
+
+  it('stays lit while any of a setting disk is above the horizon', () => {
+    // The Sun's 0.27° radius. Read at its center, a disk whose center has
+    // just set is zero while its upper half is still in the sky.
+    const radiusOfDisk = (0.267 * Math.PI) / 180
+    const halfSet = -radiusOfDisk / 2
+    expect(diskThroughAir(earthRecipe, 1, halfSet, enhanced)).toEqual([0, 0, 0])
+    const read = settingDiskCosine(1, halfSet, radiusOfDisk)
+    expect(
+      luminance(diskThroughAir(earthRecipe, 1, read, enhanced)),
+    ).toBeGreaterThan(0)
+    // Gone once the upper limb is down; the center above the band is its own.
+    expect(settingDiskCosine(1, -1.01 * radiusOfDisk, radiusOfDisk)).toBe(
+      -1.01 * radiusOfDisk,
+    )
+    expect(settingDiskCosine(1, lowSun, radiusOfDisk)).toBe(lowSun)
+  })
+
+  it('eases a setting disk into its center with no step, from any height', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1, max: EARTH_TOP, noNaN: true }),
+        fc.double({ min: 1e-4, max: 0.02, noNaN: true }),
+        fc.double({ min: -2, max: 2, noNaN: true }),
+        (radius, band, offset) => {
+          const horizon = horizonCosine(radius)
+          const mu = horizon + offset * band
+          const read = settingDiskCosine(radius, mu, band)
+          // Never below the center, never above it past the band, and never
+          // under the horizon while the upper limb is over it.
+          expect(read).toBeGreaterThanOrEqual(mu - 1e-15)
+          if (offset >= 1) expect(read).toBe(mu)
+          if (offset > -1) expect(read).toBeGreaterThanOrEqual(horizon)
+          // Continuous at the top of the band, where it hands back the center.
+          const step = band * 1e-6
+          expect(
+            Math.abs(
+              settingDiskCosine(radius, horizon + band - step, band) -
+                (horizon + band - step),
+            ),
+          ).toBeLessThan(step)
+        },
+      ),
+    )
+  })
 })
 
 describe('the recipe', () => {
@@ -622,13 +669,13 @@ describe('the recipe', () => {
   })
 
   it('is the dust where its depth is authored: the sky color sideways, the limb forward, under the albedo', () => {
-    // Mars: a measured dust depth of 0.4 at 550 nm is the extinction, and
+    // Mars: a measured dust depth of 0.3 at 550 nm is the extinction, and
     // what the dust scatters of it is the authored colors under an albedo of
     // 0.93 in the red — the butterscotch sideways, the blue toward the sun —
     // with no channel scattering more than it takes. The gas keeps its own
     // measured depth, two decades under the dust's.
     const aerosol = densityColumn(marsRecipe.hMie, marsRecipe.topRatio - 1)
-    expect(marsRecipe.mieExtinction[1] * aerosol).toBeCloseTo(0.4, 6)
+    expect(marsRecipe.mieExtinction[1] * aerosol).toBeCloseTo(0.3, 6)
     const side = marsRecipe.mieScatter.map(
       (scatter, c) => scatter / marsRecipe.mieExtinction[c]!,
     )
@@ -692,8 +739,8 @@ describe('the recipe', () => {
         },
       ),
     )
-    // Mars's dust shows two decades more than its gas would, and under
-    // Earth: the skylight that fills a Martian shadow.
+    // Mars's dust shows 86 times what its gas would, and under Earth: the
+    // skylight that fills a Martian shadow.
     const gasOnly = {
       color: MARS_HAZE.color,
       limb: MARS_HAZE.limb,
@@ -702,14 +749,14 @@ describe('the recipe', () => {
       ozone: 0,
     }
     expect(visibleThickness(MARS_HAZE)).toBeGreaterThan(
-      100 * visibleThickness(gasOnly),
+      80 * visibleThickness(gasOnly),
     )
     expect(visibleThickness(MARS_HAZE)).toBeLessThan(1)
   })
 })
 
 describe("Enhanced's limb", () => {
-  it('lifts nothing inside the air and everything LIMB_FADE_HEIGHTS shell heights above it', () => {
+  it(`lifts nothing inside the air and everything ${LIMB_FADE_HEIGHTS} shell heights above it`, () => {
     const top = 1.0157
     expect(limbLift(1, top)).toBe(0)
     expect(limbLift(top, top)).toBe(0)

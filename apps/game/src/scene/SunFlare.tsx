@@ -3,7 +3,11 @@ import { useEffect, useMemo } from 'react'
 import type { PerspectiveCamera, Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createLensFlare } from '../render/flare.ts'
-import { type FlareOccluder, sunVisibility } from '../render/flareMath.ts'
+import {
+  type FlareOccluder,
+  standingWeight,
+  sunVisibility,
+} from '../render/flareMath.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
@@ -54,10 +58,32 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       flare.group.visible = false
       return
     }
-    const occluders: FlareOccluder[] = scene.bodies.map((body) => ({
-      position: body.placement.position,
-      radius: body.placement.scale,
-    }))
+    /*
+     * The drawn sphere is sunk under the datum by the body's relief, and
+     * from a summit its horizon lies degrees under the ground's: against it
+     * a sun 3° under Mars's horizon from 1.5 km over its highest ground draws
+     * its glare through the ridges that hide it. Where the eye stands on a
+     * body's streamed ground, the ground under it is the occluder.
+     *
+     * Only where it stands, on the weight the horizon test blends in on
+     * (`standingWeight`). The ground streams out to the eight-pixel gate,
+     * thousands of kilometers over Mars, and from orbit the ground under the
+     * eye says nothing about the limb the sun sets behind: taken whole there,
+     * the sunset ramp of every low-orbit composition moves with whatever
+     * terrain the ship is over, and steps by the relief at the gate.
+     */
+    const ground = engine.groundUnderEye()
+    const occluders: FlareOccluder[] = scene.bodies.map((body) => {
+      const drawn = body.placement.scale
+      if (ground === null || body.address !== ground.body)
+        return { position: body.placement.position, radius: drawn }
+      const lifted = ground.ground * body.placement.compression
+      const standing = standingWeight(ground.eye / ground.ground - 1)
+      return {
+        position: body.placement.position,
+        radius: Math.max(drawn, drawn + (lifted - drawn) * standing),
+      }
+    })
     // The flare is a lens's response to an unresolved point of glare. Once
     // the disk is genuinely resolved — the star-orbit arrival subtends ~15°
     // — the camera is exposed for the surface and the artifact stack fades,
@@ -73,7 +99,12 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       star.color,
       star.brightness * (1 - filling * 0.85),
       star.placement.angularRadius,
-      sunVisibility(scene.camera.position, star.placement.position, occluders),
+      sunVisibility(
+        scene.camera.position,
+        star.placement.position,
+        occluders,
+        star.placement.angularRadius,
+      ),
       // Scripts choose their coating response. The clean default keeps the
       // reference-matched title shots free of ghost chains crossing the type.
       engine.owner?.arm === 'cutscene'

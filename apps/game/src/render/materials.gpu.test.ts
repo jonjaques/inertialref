@@ -18,6 +18,7 @@ import {
   Sprite,
   CubeRenderTarget,
 } from 'three/webgpu'
+import { float, vec3, vec4 } from 'three/tsl'
 import { openSession, type Session } from '@inertialref/devtools'
 import { rng, rootSeed } from '@inertialref/procedural'
 import {
@@ -35,6 +36,12 @@ import {
   SOLAR_PLANETS,
   walkBodies,
 } from '@inertialref/universe'
+import {
+  createAirUniforms,
+  ORBIT_BEAM_FLOOR,
+  sunTableAt,
+  sunThrough,
+} from './air.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
 import { setSceneExposure } from './radiance.ts'
 import { createLensFlare } from './flare.ts'
@@ -898,8 +905,8 @@ describe('the disk, seen through its own air', () => {
     // down and the eye's way out: a gray disk at nadir under a high sun draws
     // 0.34 through it against 0.50 bare, less the 0.053 of veil. Under
     // Enhanced from outside the air the surface takes none of that
-    // extinction and keeps the air's light over it — bare plus veil, 0.5527
-    // against 0.5001 and 0.0525 — and under a photographic lens the lift
+    // extinction and keeps the air's light over it — bare plus veil, 0.5548
+    // against 0.5001 and 0.0546 — and under a photographic lens the lift
     // changes nothing.
     const pre = 1 / 30_000
     const measure = async (mode: 'enhanced' | 'photographic') => {
@@ -920,6 +927,51 @@ describe('the disk, seen through its own air', () => {
     expect(enhanced.physical).toBeLessThan(0.75 * enhanced.lifted)
     const photographic = await measure('photographic')
     expect(photographic.lifted).toBeCloseTo(photographic.physical, 6)
+  })
+
+  it('keeps a beam under the floor as dim as it is, and halves the reddening of its hue alone', async () => {
+    // Enhanced clears a surface's beam from orbit toward its hue: the slant
+    // over the column overhead, over its brightest channel, its reddening
+    // halved as a power. A beam under `ORBIT_BEAM_FLOOR` of the overhead
+    // light is divided by the floor and keeps that dimming, or the air over
+    // the night side beside a crescent lights orange. Taken inside the power
+    // too, the dimming is its own square root: grazing the ground at a 1.1°
+    // sun the red slant is 0.0047 of overhead, which over the floor is
+    // 0.016, and drawn at 0.125. Red is the brightest channel at both suns
+    // here, so it reads the kept dimming alone.
+    const baked = tables()
+    const air = createAirUniforms()
+    air.set(baked.recipe, baked.transmittance, baked.multiScatter)
+    air.lift(1, LIMB_STRETCH * (earth.atmosphere!.scaleHeight / earth.radius))
+    const pre = 1 / 30_000
+    const read = async (mu: number) => {
+      const beam = sunThrough(
+        air,
+        vec3(1, 0, 0),
+        vec3(mu, Math.sqrt(1 - mu * mu), 0),
+      )
+      const slant = sunTableAt(air, float(mu), float(0)).x.div(
+        sunTableAt(air, float(1), float(0)).x,
+      )
+      setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
+      try {
+        const pixels = await gpu.drawGraph(vec4(beam.x, slant, 0, 1), {
+          width: 1,
+          height: 1,
+          float: true,
+        })
+        const [red, ratio] = pixels.at(0, 0)
+        return { red: red!, slant: ratio! }
+      } finally {
+        setSceneExposure(gpu.renderer, null)
+      }
+    }
+    const grazing = await read(0.02)
+    expect(grazing.slant).toBeLessThan(ORBIT_BEAM_FLOOR / 2)
+    expect(grazing.red).toBeCloseTo(grazing.slant / ORBIT_BEAM_FLOOR, 3)
+    const high = await read(0.5)
+    expect(high.slant).toBeGreaterThan(ORBIT_BEAM_FLOOR)
+    expect(high.red).toBeCloseTo(1, 3)
   })
 
   it('marches to the datum, not to the sunk sphere under it', async () => {

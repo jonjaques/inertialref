@@ -282,7 +282,10 @@ export function createWaterMaterial(): WaterMaterial {
   const skyColor = uniform(new Color(0, 0, 0))
   const skyStrength = uniform(0)
   const air = createAirUniforms()
-  /** The datum's radius, render meters: the unit the air is marched in. */
+  /**
+   * The datum's radius in meters, the ground's own: the unit the air is
+   * marched in.
+   */
   const datumRadius = uniform(1)
   const waveOctaves = uniform(DEFAULT_WATER_QUALITY.waveOctaves)
 

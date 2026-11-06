@@ -314,11 +314,14 @@ export function marchAir(
     const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
 
     const muSun = dot(point, sun).div(max(radius, 1e-5))
-    const tableT = sunTableAt(air, muSun, height01)
-    const sunT =
-      clearBeam === undefined
-        ? tableT
-        : clearedBeam(air, tableT, height01, clearBeam)
+    const sunT = sunTableAt(air, muSun, height01).toVar()
+    // Behind a uniform branch: on the ground and under a photographic lens
+    // the strength is zero, and the overhead read `clearedBeam` takes per
+    // sample would be mixed in at nothing.
+    if (clearBeam !== undefined)
+      If(clearBeam.greaterThan(0), () => {
+        sunT.assign(clearedBeam(air, sunT, height01, clearBeam))
+      })
     const psi = psiTableAt(air, muSun, height01)
     // The aerosol scatters the sky's color sideways and the limb's toward
     // the sun, turning between them along its lobe's own shape; the multiple
@@ -374,7 +377,7 @@ function phasesToward(
  * over the sample's horizontal, and at `height01`, the altitude fraction —
  * the sample's own for the physics, the stretched one for the limb.
  */
-function sunTableAt(
+export function sunTableAt(
   air: AirUniforms,
   muSun: Node<'float'>,
   height01: Node<'float'>,
@@ -542,7 +545,7 @@ export function marchLimb(
   far: Node<'float'>,
   sun: Node<'vec3'>,
   samples: number,
-): Marched {
+): Node<'vec3'> {
   const inscatter = vec3(0).toVar()
   const opticalDepth = vec3(0).toVar()
   const strength = air.limb.mul(enhancedSky)
@@ -638,24 +641,24 @@ export function marchLimb(
     )
   })
 
-  return {
-    inscatter: inscatter.mul(LIMB_BRIGHTNESS),
-    transmittance: exp(opticalDepth.negate()),
-  }
+  // The ring's light alone: its own extinction dims the gas behind it along
+  // the chord, and nothing else (`throughLimb`).
+  return inscatter.mul(LIMB_BRIGHTNESS)
 }
 
 /**
  * The physics beside the lifted gas, not behind it. A stretched gas fronts
  * the physical limb along a tangent and passes a quarter of its blue and
- * two thirds of its red, and from low orbit that turned a sunrise's blue
- * band gray-tan — 68 : 66 : 62 where the plate had 153 : 188 : 252. The
+ * two thirds of its red, and from low orbit that turns a sunrise's blue
+ * band gray-tan — 68 : 66 : 62 where the plate has 153 : 188 : 252. The
  * limb's own line and its band are the photograph, so the ring adds to
  * them and takes nothing from them — nor from what is behind the shell: the
- * composite's transmittance is the physics' alone.
+ * composite's transmittance is the physics' alone, which is why
+ * `marchLimb` hands back light and no transmittance.
  */
-export function throughLimb(physical: Marched, lifted: Marched): Marched {
+export function throughLimb(physical: Marched, ring: Node<'vec3'>): Marched {
   return {
-    inscatter: lifted.inscatter.add(physical.inscatter),
+    inscatter: ring.add(physical.inscatter),
     transmittance: physical.transmittance,
   }
 }
@@ -722,16 +725,6 @@ export function airToward(
  * the ground and the sea take it from the one lift, as they take the air.
  * On the ground the lift is nothing and the air is the measured one.
  */
-/**
- * How much of the slant's hue the beam keeps as Enhanced draws a surface
- * from orbit, as a power of it: a half keeps the reddening's square root.
- * The whole of it lights a sunward crescent a saturated orange-red with a
- * blown core, where the composite's crescent is a pale peach; none lights
- * it gray. At a half the crescent is peach-white, the half-lit plate 0.022
- * RMSE of the composite's against 0.023 whole, and Centauri II's gibbous
- * 0.014 against 0.018.
- */
-const ORBIT_BEAM_HUE = 0.5
 export function clearedFromOrbit(air: AirUniforms): Node<'float'> {
   return air.limb.mul(enhancedSky)
 }
@@ -746,11 +739,12 @@ export function clearedFromOrbit(air: AirUniforms): Node<'float'> {
  * `ORBIT_BEAM_FLOOR`), and the hue is the slant's over
  * the column straight overhead: white at the subsolar point and warm toward
  * the terminator, so a sunward crescent is peach and not gray. Taken off
- * whole, the beam was white everywhere and a crescent Earth's lit sliver a
- * near-white gray; normalized as it stands, the column overhead tinted the
- * whole lit face yellow, and Centauri II's went from 0.012 RMSE of the
- * composite's to 0.023 (0.019 over the column overhead); divided by the
- * column overhead and left dim, the crescent and the terminator went dark.
+ * whole, the beam is white everywhere and a crescent Earth's lit sliver a
+ * near-white gray; normalized as it stands, the column overhead tints the
+ * whole lit face yellow, and Centauri II's, 0.012 RMSE of the composite's
+ * under the beam the table holds, is 0.023 (0.019 over the column
+ * overhead); divided by the column overhead and left dim, the crescent and
+ * the terminator go dark.
  */
 export function sunThrough(
   air: AirUniforms,
@@ -762,9 +756,7 @@ export function sunThrough(
     max(radius.sub(1), 0).div(max(air.top.sub(1), 1e-6)),
   )
   const muSun = dot(point, sun).div(max(radius, 1e-5))
-  const table = air.transmittance.sample(
-    texelCentered(vec2(muSun.add(1).mul(0.5), height01), TRANSMITTANCE),
-  ).rgb
+  const table = sunTableAt(air, muSun, height01)
   return clearedBeam(air, table, height01, clearedFromOrbit(air))
 }
 
@@ -784,9 +776,15 @@ function clearedBeam(
     texelCentered(vec2(1, height01), TRANSMITTANCE),
   ).rgb
   const slant = table.div(max(overhead, vec3(1e-4)))
+  const brightest = max(max(slant.x, slant.y), slant.z)
+  // The power halves the hue's reddening and nothing else. The dimming under
+  // the floor multiplies outside it: taken inside, a beam 0.016 of the floor
+  // draws at its square root, 0.125, and lights the night side's air.
+  const kept = brightest.div(max(brightest, float(ORBIT_BEAM_FLOOR)))
   const hue = slant
-    .div(max(max(slant.x, slant.y), max(slant.z, ORBIT_BEAM_FLOOR)))
+    .div(max(brightest, float(1e-6)))
     .pow(vec3(ORBIT_BEAM_HUE))
+    .mul(kept)
   return mix(table, hue, strength)
 }
 
@@ -794,12 +792,24 @@ function clearedBeam(
  * How dim a beam may be, as a share of the overhead light, and still have
  * its dimming taken off. A beam the column has all but put out — a
  * thousandth of the overhead light, grazing the terminator — normalized to
- * full brightness is a full-strength orange, and it lit the air over the
+ * full brightness is a full-strength orange, and it lights the air over the
  * night side beside a crescent and a sunrise limb: the sunrise limb's crop
- * went from 0.036 RMSE of the composite's to 0.057. Under a third the beam
- * keeps its own dimming, and the crop is 0.036 again.
+ * is 0.057 RMSE of the composite's. Under the floor the beam is divided by
+ * the floor and not by its own brightest channel, so it stays as far under
+ * full brightness as it is under the floor, and the crop is 0.036.
  */
-const ORBIT_BEAM_FLOOR = 0.3
+export const ORBIT_BEAM_FLOOR = 0.3
+
+/**
+ * How much of the slant's hue the beam keeps as Enhanced draws a surface
+ * from orbit, as a power of it: a half keeps the reddening's square root.
+ * The whole of it lights a sunward crescent a saturated orange-red with a
+ * blown core, where the composite's crescent is a pale peach; none lights
+ * it gray. At a half the crescent is peach-white, the half-lit plate 0.022
+ * RMSE of the composite's against 0.023 whole, and Centauri II's gibbous
+ * 0.014 against 0.018.
+ */
+const ORBIT_BEAM_HUE = 0.5
 
 /**
  * How far the air over a surface from orbit is lit by the cleared beam.

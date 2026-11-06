@@ -12343,7 +12343,9 @@ doing all the work" — drew no ring. A beam that climbs from its sample
 reads the table as it stands; one that descends is read at its own
 grazing height on this planet, the horizontal table there squared over
 the horizontal table at the sample, and as nothing once the grazing
-height is under the ground; Ψ follows the branch. Shifting the sun's
+height is under the ground. Ψ takes neither branch: it is read at the
+sample's own sun cosine and the root-of-the-stretch height on both, and the
+ground does not gate it. Shifting the sun's
 cosine by the dip difference alone — the first fix — moved the reddening
 with the shadow and left the foot blue. And a gas a sixth of a radius
 deep takes a third of the Milky Way at its foot: the backlit Earth wore a

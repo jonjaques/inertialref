@@ -31,6 +31,7 @@ import {
   surfaceTemperature,
 } from './grammar.ts'
 import {
+  GIANT_AEROSOL,
   hazeFor,
   type LiquidAppearance,
   liquidAppearance,
@@ -347,7 +348,7 @@ export interface HazeLayer {
   /**
    * The aerosol's vertical extinction depth at 550 nm, where the aerosol is
    * the sky and its depth is measured apart from the gas's: Mars's dust at
-   * 0.4, where `thickness` carries only its 600 Pa of CO₂. Authored, the
+   * 0.3, where `thickness` carries only its 600 Pa of CO₂. Authored, the
    * aerosol scatters `color` sideways and `limb` toward the sun; absent, it
    * is Earth's aerosol scaled by `thickness`, which is right where the gas
    * is the sky.
@@ -1240,7 +1241,7 @@ function proceduralAppearance(
   const palette = new Rng(deriveSeed(surface.seed, 'appearance'))
   const grammar = surface.grammar
   const hue = giant
-    ? { ...(KIND_HAZE[kind] ?? KIND_HAZE.rocky), aerosolScale: 1, angstrom: 0 }
+    ? { ...(KIND_HAZE[kind] ?? KIND_HAZE.rocky), ...GIANT_AEROSOL }
     : hazeFor(palette.fork('haze'), grammar)
   return {
     texture: null,

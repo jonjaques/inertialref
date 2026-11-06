@@ -59,7 +59,8 @@ export interface HazeAuthoring {
   readonly ozone: number
   /**
    * The aerosol's vertical extinction depth at 550 nm, where it is measured
-   * apart from the gas's: Mars's dust at 0.4, Titan's haze at 4.5. Authored,
+   * apart from the gas's: Mars's clear-season dust at 0.3, Titan's haze at
+   * 4.5. Authored,
    * the aerosol is the sky, and its color is the authored `color` sideways
    * and `limb` forward (`atmosphereRecipe`). Absent, the aerosol is Earth's
    * column scaled by `thickness` (`TAU_MIE`) in the gray the limb cannot
@@ -339,8 +340,8 @@ export const LIMB_STANDOFF = 5
  * air — two hundred kilometers on Earth, full by three hundred — so a ship
  * climbing out keeps the sky it had and has the ring by the altitude the
  * reference photographs were taken from: every limb photographed from a
- * station is photographed from four hundred kilometers, and at ten shell
- * heights the ring was a tenth of itself there.
+ * station is photographed from four hundred kilometers, and over ten shell
+ * heights the ring would be a tenth of itself there.
  */
 export const LIMB_FADE_HEIGHTS = 2
 
@@ -403,7 +404,10 @@ export function limbFalloff(eyeRatio: number, gasHeight: number): number {
  * ceiling for its fall-off at one — or the top, for an air that already
  * reaches past it — in datum units. The shell mesh is drawn to it, and the
  * march of the lifted gas stops at it, so the ring is never clipped by the
- * geometry that carries it.
+ * geometry that carries it. It takes the fall-off the shader is handed
+ * (`RenderBody.limbFalloff`) rather than the eye it came from: a mesh sized
+ * from a second derivation of that number is a mesh the shader's reach can
+ * outgrow, and the ring ends in a hard circle where they part.
  */
 export function limbReach(
   airTop: number,
@@ -488,9 +492,9 @@ export function atmosphereRecipe(
      * it scatters of that is its albedo in the authored colors: the sky's
      * sideways and the limb's toward the sun, each at `aerosolAlbedo` in its
      * brightest channel and under it in the rest, so no channel scatters
-     * more than it takes. Read as a gas instead, Mars's 600 Pa carried a
+     * more than it takes. Read as a gas instead, Mars's 600 Pa carries a
      * Rayleigh column twenty times its measured depth and a dust column a
-     * twentieth of its own, and drew a near-black zenith over the one sky in
+     * twentieth of its own, and draws a near-black zenith over the one sky in
      * the system that is lit by its dust from horizon to horizon.
      */
     const albedo = haze.aerosolAlbedo ?? AEROSOL_ALBEDO
@@ -574,11 +578,12 @@ function underPeak(
 }
 
 /**
- * How much the air shows, 0..1 with Earth at 1: the column's scattering
- * depth over Earth's, for the skylight the ground takes from its sky
- * (`terrainPalette`). It is `thickness` where the gas is the sky, and the
- * dust's depth where the dust is: Mars's 0.4 scatters two decades more than
- * its gas, and a skylight read off the gas lit a Martian shadow at a
+ * How much the air shows, with Earth at 1: the column's scattering depth
+ * over Earth's, for the skylight the ground takes from its sky
+ * (`terrainPalette`, which holds it to Earth's). It is `thickness` where the
+ * gas is the sky, and the dust's depth where the dust is, past 1 for a dust
+ * deeper than Earth's whole column: Mars's 0.3 scatters two decades more
+ * than its gas, and a skylight read off the gas lights a Martian shadow at a
  * twentieth of its sky — the black pools under every ridge of a flat-lit
  * orange afternoon.
  */
@@ -1091,11 +1096,11 @@ export function zenithSkyRadiance(
  *
  * The shell composites gray — L + T̄·background — which is right for a sky of
  * faint things behind the air and wrong for the disk in two ways. It does not
- * redden: a sun on the horizon came through white. And under Enhanced, where
+ * redden: a sun on the horizon comes through white. And under Enhanced, where
  * the disk is drawn at a calibrated eight times the surface white rather than
  * its physical fifty thousand, the full extinction takes it below its own
- * sky: through a dusty column at a 4.6° sun the disk was a brown spot in a
- * peach glow, the brightest thing in the scene drawn as the dimmest.
+ * sky: through a dusty column at a 4.6° sun a gray-dimmed disk is a brown spot
+ * in a peach glow, the brightest thing in the scene drawn as the dimmest.
  *
  * So the disk arrives in the column's own color, at the column's luminance
  * raised to `compression` — the exponent that took the physical disk to the
@@ -1104,8 +1109,9 @@ export function zenithSkyRadiance(
  * so it keeps its rank against the sky until it is physically level with it,
  * and it keeps its hue, because a physical disk through that column is that
  * color at any brightness the hue-preserving curve can show. Compressing each
- * channel instead bleached a 2° sun to 1 : 0.89 : 0.69. Zero once the planet
- * is in the way.
+ * channel instead bleaches a 2° sun to 1 : 0.89 : 0.69. Zero once the planet
+ * is in the way, which for a setting disk is a question for
+ * `settingDiskCosine` rather than for its center.
  *
  * What this returns is drawn *before* the shell divides it back down, so it
  * is the disk over the column's transmittance, and through the last degree or
@@ -1153,3 +1159,37 @@ export function diskThroughAir(
  * an opened exposure divides the cap by the opening.
  */
 export const DISK_THROUGH_AIR_CEILING = 2048
+
+/**
+ * The zenith cosine of the horizon from `radius` planet radii: the ray that
+ * grazes the ground. Zero on the ground, and below zero as the eye climbs.
+ */
+export function horizonCosine(radius: number): number {
+  return -Math.sqrt(Math.max(0, 1 - 1 / (radius * radius)))
+}
+
+/**
+ * The zenith cosine at which to read a disk of `angularRadius` radians,
+ * centered at `mu`, for `diskThroughAir` from `radius` planet radii.
+ *
+ * `diskThroughAir` colors the whole disk from one ray, and the ray through the
+ * center meets the ground while the upper half of the disk is still in the
+ * sky. Read there, a half-set sun is zero, and it drops out of a bright
+ * horizon in one frame. Across the band where the horizon cuts the disk the
+ * cosine eases from the center's to the horizon's, which it reaches as the
+ * upper limb sets: `h + a·x²` over `x` from 0 to 1 meets the center's cosine,
+ * and its slope, at the top of the band. What is under the drawn horizon is
+ * the ground's to cover. Near the horizon a step in the cosine is a step in
+ * elevation, so the angular radius serves as one.
+ */
+export function settingDiskCosine(
+  radius: number,
+  mu: number,
+  angularRadius: number,
+): number {
+  const horizon = horizonCosine(Math.max(radius, 1))
+  const band = Math.max(angularRadius, 0)
+  if (!(band > 0) || mu >= horizon + band || mu < horizon - band) return mu
+  const x = (mu - horizon + band) / (2 * band)
+  return horizon + band * x * x
+}
