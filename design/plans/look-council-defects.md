@@ -107,6 +107,43 @@ alike:
   alone, and the pairs read it as even; on Titan it takes the sun with it.
   _Rejected arm_.
 
+## The exoplanets
+
+The phase's one round put three arms against the Mars branch: the dust,
+sulfuric and violet families as their own skies; that with the march's
+exact step integral; that with the thickness cap raised to two and a half.
+The middle arm (`feat/look-council-exoplanets`) gained +0.17 with both valid
+seats in favor, under the three-arm bound of 0.49, and none of its twenty
+moved guards was called worse. What the seats reported:
+
+- **The gibbous worlds are featureless balls.** Centauri II, Sirius II,
+  Struve IV, Eta Cassiopeiae II and Gliese 682 b read as gray, lilac-washed
+  or solid orange balls with a one-to-three-pixel bright outline, which
+  could be swapped between scenes unnoticed; the direction wants the
+  surface clear at the center, the family's tint and contrast loss confined
+  to the limb, and the limb a soft graded layer in the photographs' order
+  carried into a twilight band at the terminator. The outline is the lifted
+  ring's line on a thin air, and the veil is the family's color at a
+  Rayleigh column over a surface with no map. Authoring the two aerosol
+  families as their own skies answered the sulfuric world (3.5 → 5.5) and
+  the violet one (its sunset limb 3.5 → 6.5) and not the gas-lit five.
+  _Open_: the ring's structure on a thin air, and the face's veil.
+- **The far shore's horizon is a dark stripe** under the dust family's sky
+  (6.5 → 4): the dust's forward lobe under an orange star lays a brown band
+  where the incumbent's gas lays a peach one. _Rejected arm_,
+  `ledger/round-09/b.patch`.
+- **The suns.** A red dwarf's disk should be large and deep orange and a
+  low sun should sit on its limb with its glare and a glitter path on the
+  sea; the disks are small white dots and the paths faint. The disk is the
+  star's drawn size, _out of scope_; the glare and the path, _open_.
+- **The cloud deck was dark until the integral**: a march that weighs a
+  step's light by its midpoint's transmittance keeps four percent of an
+  eleven-depth step, so eight optical depths of bright droplets drew darker
+  than the ground under them. The exact integral (`ee61d70`) fixes that and
+  brightens every opaque tangent path a little — Earth's gibbous limb by
+  0.0018 RMSE, Mars's day horizon by 0.011 — which the seats read as even.
+  _Rejected arm_, with Titan's seam and dim disk in its reach.
+
 ## The protocol
 
 - One harness loads its own skill (`~/.agents/skills/unslop/SKILL.md`), the

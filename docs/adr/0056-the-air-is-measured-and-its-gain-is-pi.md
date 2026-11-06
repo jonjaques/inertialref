@@ -230,6 +230,30 @@ its budget.
   on the main haze's opaque edge, blue-white and a fiftieth deep. Mars
   carries none: its ice hazes 40 to 60 km up read, at the plate's scale, as
   a second outline a pixel over the first.
+- The physical march takes a step's light as the integral over a step of
+  constant density, (1 − e^−τ)/σ from the transmittance at the step's start,
+  in the shader (`marchAir`), the Ψ bake and the zenith column alike, with
+  the series under a hundredth of a depth where the subtraction cancels in
+  float32. Enhanced's lifted ring (`marchLimb`) keeps the midpoint's
+  weight, on which its brightness is set (ADR-0037). The midpoint's
+  transmittance times the length is that integral to a part in ten
+  thousand for Earth's 0.04-depth steps and keeps four percent of the light
+  of an eleven-depth step, the first of twelve crowded toward a surface
+  under an opaque haze: an opaque haze drew at half its albedo, with a dark
+  seam where its surface march met the shell's at the silhouette. Thin
+  airs move where their tangent paths are opaque — Earth's gibbous limb by
+  0.0018 RMSE, Mars's day horizon by 0.011 — and nowhere else.
+- A procedural family may be the sky as Mars's dust is: the dust family at
+  0.4, inside the rovers' range and over Mars's clear-season 0.3, at Mars's
+  albedo of 0.93; the sulfuric family a cloud deck of eight optical depths
+  of droplets whose authored colors are their own albedo,
+  0.98 : 0.95 : 0.85, since depths past four compound a color; the
+  violet family a high haze a quarter of a depth deep, violet sideways and
+  rose toward the sun over a gas that keeps its blue. Methane's aerosol
+  carries the photochemical slope. The families' weights, bounds and order
+  are untouched, so every other draw is where it was; the version holds
+  because a haze is presentation, which rides along (ADR-0027,
+  `versions.ts`).
 - A sun within a degree or two of a sea-level horizon dims faster than the
   compression law, under the cap, until the ground takes it.
 - A bake costs 39 ms where it cost 22 on the development machine — the

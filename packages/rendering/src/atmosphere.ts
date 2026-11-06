@@ -946,7 +946,8 @@ export function bakeMultipleScattering(
         if (!Number.isFinite(end) || end <= 0) continue
         const perigee = muRay < 0 ? -r * muRay : 0
 
-        const tau = [0, 0, 0]
+        // The transmittance to each step's start, as the shader carries it.
+        const view = [1, 1, 1]
         for (let i = 0; i < steps; i += 1) {
           const [s, step] = marchSample(i, steps, end, perigee)
           // Position in the plane spanned by zenith and the ray.
@@ -976,14 +977,17 @@ export function bakeMultipleScattering(
               (recipe.mieExtinction[c] as number) * mie +
               (recipe.ozone[c] as number) * ozone +
               recipe.detachedExtinction * detached
-            const view = Math.exp(
-              -((tau[c] as number) + extinction * step * 0.5),
-            )
+            const stepTau = extinction * step
+            const lost = -Math.expm1(-stepTau)
+            // The step's light as the integral over constant density, as
+            // the shader's march takes it (`marchAir`).
+            const light = stepLight(step, stepTau, lost)
+            const through = view[c] as number
             luminance[c] =
               (luminance[c] as number) +
-              view * scatter * isotropic * (sunlight[c] as number) * step
-            transfer[c] = (transfer[c] as number) + view * scatter * step
-            tau[c] = (tau[c] as number) + extinction * step
+              through * scatter * isotropic * (sunlight[c] as number) * light
+            transfer[c] = (transfer[c] as number) + through * scatter * light
+            view[c] = through * (1 - lost)
           }
         }
       }
@@ -1047,7 +1051,8 @@ export function zenithSkyRadiance(
     Math.max(1 + g * g - 2 * g * muSun, 1e-4) ** 1.5
   const forwardShare = phaseMie / AEROSOL_FORWARD_PEAK
   const radiance: [number, number, number] = [0, 0, 0]
-  const depth = [0, 0, 0]
+  // The transmittance to each step's start, as the shader carries it.
+  const view = [1, 1, 1]
   for (let i = 0; i < ZENITH_STEPS; i += 1) {
     const [offset, step] = marchSample(i, ZENITH_STEPS, column, 0)
     const at = r + offset
@@ -1071,7 +1076,9 @@ export function zenithSkyRadiance(
         (recipe.mieExtinction[c] as number) * mie +
         (recipe.ozone[c] as number) * ozone +
         recipe.detachedExtinction * detached
-      const view = Math.exp(-((depth[c] as number) + extinction * step * 0.5))
+      const stepTau = extinction * step
+      const lost = -Math.expm1(-stepTau)
+      const through = view[c] as number
       const single =
         ((scatterRayleigh + scatterDetached) * phaseRayleigh +
           scatterToward * phaseMie) *
@@ -1080,11 +1087,28 @@ export function zenithSkyRadiance(
         (psi[c] as number) * (scatterRayleigh + scatterMie + scatterDetached)
       radiance[c] =
         (radiance[c] as number) +
-        view * (single + multiple) * step * ATMOSPHERE_GAIN
-      depth[c] = (depth[c] as number) + extinction * step
+        through *
+          (single + multiple) *
+          stepLight(step, stepTau, lost) *
+          ATMOSPHERE_GAIN
+      view[c] = through * (1 - lost)
     }
   }
   return radiance
+}
+
+/**
+ * A step's light: the integral over a step of constant density from the
+ * transmittance at its start, (1 − e^−τ)/σ, for a step `length` long holding
+ * `depth` optical depths, given `lost` = 1 − e^−τ. The shader's march takes
+ * the same integral (`stepShare` in `render/air.ts`).
+ *
+ * A step that holds nothing keeps its whole length, the integral's limit. A
+ * floor under τ in the quotient takes it to nothing instead: under a floor
+ * of 10⁻⁷, a step of 10⁻⁹ draws a hundredth of its light.
+ */
+function stepLight(length: number, depth: number, lost: number): number {
+  return depth > 0 ? (length * lost) / depth : length
 }
 
 /**

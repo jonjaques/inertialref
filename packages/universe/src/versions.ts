@@ -50,6 +50,19 @@ import { GALAXY_FIELD_ALGORITHM } from './galaxy/field.ts'
  * the ground's datum or the contact test. ADR-0027 records the argument, which
  * is one bump for whatever moved, not one per field.
  */
+/*
+ * Held at 4 when three procedural haze families became their own skies.
+ *
+ * The dust, sulfuric and violet families carry an aerosol depth and albedo,
+ * the sulfuric family its droplets' colors and methane its photochemical
+ * slope, so the haze moved on every world those families draw. A haze is
+ * presentation: no frame, no terrain and no contact test reads it, and a save
+ * written against `system@4` describes the world this build generates, which
+ * is the one question a version answers. It rides along, as `polarRadius`
+ * did. That the families' draw is the same draw is not the reason and would
+ * not be one: order protects a body's neighbors and says nothing about the
+ * body.
+ */
 export const SYSTEM_ALGORITHM = algorithm('system', 4)
 /*
  * Bumped to 2 when the three noise bands became a band stack.

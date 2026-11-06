@@ -538,6 +538,42 @@ through `Vec` and `Q` for the Sun direction each frame, cinema only. The
 `pnpm sim` tick benchmark at 400 km with zero, one and twenty placements is
 the experiment that would put a figure on the gate; it has not been run.
 
+## The air
+
+What the air measured into it ([the plan](the-air.md),
+[ADR-0056](../../docs/adr/0056-the-air-is-measured-and-its-gain-is-pi.md))
+costs, none of it on the perf tab yet.
+
+### The zenith column is marched on the CPU every frame
+
+`airOverhead` asks `zenithSkyRadiance` for the zenith over the eye on every
+frame the eye stands in an air: 32 samples, each a 48-step `transmittanceFrom`,
+each step allocating its arrays — about 1,500 density evaluations and 3,000
+short-lived arrays a frame, 27.6 µs a call as #170's review measured it in Node
+on this M5. A deep air marches it a second time for the ground's sky
+(`airOverheadRgb`); a thin one skips that. A lookup in the transmittance table
+the shader already reads would be 32 bilinear reads, and keeping that table on
+the CPU costs about 512 KB a haze.
+
+### Enhanced's ring reads the tables four times a sample, unmeasured
+
+`marchLimb` reads the transmittance table at the sample, twice more at the
+horizontal for a beam that descends, and Ψ, and `mix` evaluates both branches:
+the shell pays 32 reads a pixel beside the physics' 24. Since #179 the ring is
+the shell's alone and the surfaces pay none of it. The tables have no mips, so
+reading them with `textureSampleLevel` would let the descending pair sit behind
+a real branch. `ATMOSPHERE_SAMPLES`' budget note in `materials.ts` still counts
+twelve samples and two reads.
+
+### The Ψ bake is 26 to 28 ms a haze
+
+Under the exact step integral #182's review measured the bake at 27.7 ms with
+two transcendental calls a step and 25.6 to 26.6 ms with the transmittance
+carried as a product, in Node on this M5; ADR-0056 puts a whole bake at 39 ms
+against 22 before the integral. The boot prebake is behind the cover, as
+[the bake's entry above](#the-atmosphere-bake-is-on-the-pool-and-the-boot-prebake-is-not)
+says.
+
 ## The order it is worth taking
 
 1. **Shipped-build mode switches and docs pages.** Every figure is dev React at

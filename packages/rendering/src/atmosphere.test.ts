@@ -195,7 +195,7 @@ describe('multiple scattering', () => {
     // ground row is where it failed: a ray aimed down from the ground crossed
     // the planet at the surface's density, and Ψ there grew sixfold as the
     // steps were refined. Under twilight Ψ is lit through a narrow wedge of
-    // sunlit air and moves by up to 0.38 in ln Ψ at −13°; below −15° it is
+    // sunlit air and moves by up to 0.42 in ln Ψ at −13°; below −15° it is
     // under the night sky's floor and not claimed.
     const fine = bakeMultipleScattering(earthRecipe, earthT, 128)
     const { width, height } = psi
@@ -203,7 +203,7 @@ describe('multiple scattering', () => {
       for (let x = 0; x < width; x += 1) {
         const muSun = (x / (width - 1)) * 2 - 1
         if (muSun < Math.sin((-15 * Math.PI) / 180)) continue
-        const bound = muSun >= 0 ? 0.03 : 0.4
+        const bound = muSun >= 0 ? 0.03 : 0.45
         for (let c = 0; c < 3; c += 1) {
           const index = (y * width + x) * 4 + c
           const moved = Math.abs(
@@ -211,6 +211,43 @@ describe('multiple scattering', () => {
           )
           expect(moved).toBeLessThan(bound)
         }
+      }
+    }
+  })
+
+  it('is converged under an opaque haze, where a step is its own sky', () => {
+    // Titan's authored haze, copied from `solar/bodies.ts` without its
+    // detached layer: 4.3 optical depths, so the first of sixteen steps
+    // crowded toward the ground holds several. Weighed by the midpoint's
+    // transmittance such a step keeps a few percent of its light, and the
+    // daylit table moves by 0.53 in ln Ψ as the steps are refined eightfold;
+    // taken as its integral it moves by 0.03.
+    const haze = {
+      color: { r: 0.95, g: 0.9, b: 0.74 },
+      limb: { r: 0.95, g: 0.92, b: 0.78 },
+      thickness: 2.7,
+      aerosolAngstrom: 1.5,
+      ozone: 0,
+      aerosolDepth: 4.3,
+      aerosolAlbedo: 0.95,
+    }
+    const radius = 2_574_700
+    const recipe = atmosphereRecipe(
+      haze,
+      (radius + 600_000) / radius,
+      airHeights(radius, 600_000, 21_000, 70_000),
+    )
+    const transmittance = bakeTransmittance(recipe)
+    const coarse = bakeMultipleScattering(recipe, transmittance)
+    const fine = bakeMultipleScattering(recipe, transmittance, 128)
+    for (let i = 0; i < coarse.data.length; i += 4) {
+      const x = (i / 4) % coarse.width
+      if ((x / (coarse.width - 1)) * 2 - 1 < 0) continue
+      for (let c = 0; c < 3; c += 1) {
+        const moved = Math.abs(
+          (coarse.data[i + c] as number) - (fine.data[i + c] as number),
+        )
+        expect(moved).toBeLessThan(0.05)
       }
     }
   })

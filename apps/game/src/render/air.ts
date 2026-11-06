@@ -276,7 +276,10 @@ export function marchAir(
   const shellHeight = max(air.top.sub(1), 1e-6)
   const phase = phasesToward(direction, sun)
   const inscatter = vec3(0).toVar()
-  const opticalDepth = vec3(0).toVar()
+  // The transmittance to the current step's start, carried as a product so
+  // the step's own e^−τ is the one exponential a sample pays for both its
+  // light and the path past it.
+  const throughput = vec3(1).toVar()
 
   crowdedSamples(origin, direction, near, far, samples, (point, stepLength) => {
     const radius = length(point)
@@ -299,9 +302,18 @@ export function marchAir(
       .add(air.ozone.mul(densityO))
       .add(air.detachedExtinction.mul(densityD))
     const stepTau = extinction.mul(stepLength)
-    // Transmittance to the middle of this step: the half keeps the midpoint
-    // rule honest about its own sample's extinction.
-    const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
+    const stepThrough = exp(stepTau.negate()).toVar()
+    /*
+     * Transmittance to the start of this step, and the step's light as the
+     * integral over a step of constant density, (1 − e^−τ)/σ, rather than
+     * the midpoint's transmittance times the length. The two agree to a
+     * part in ten thousand at a step of 0.04 optical depths, which is
+     * Earth's; at a step of eleven — the first of twelve crowded toward a
+     * surface under Titan's haze — the midpoint rule keeps four percent of
+     * the light, so an opaque haze draws at half its albedo with a dark
+     * seam where its march meets the shell's at the silhouette.
+     */
+    const stepLight = stepLength.mul(stepShare(stepTau, stepThrough))
 
     const muSun = dot(point, sun).div(max(radius, 1e-5))
     const sunT = sunTableAt(air, muSun, height01).toVar()
@@ -329,11 +341,35 @@ export function marchAir(
         .add(air.mieScatter.mul(densityM))
         .add(scatterD),
     )
-    inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))
-    opticalDepth.addAssign(stepTau)
+    inscatter.addAssign(throughput.mul(single.add(multiple)).mul(stepLight))
+    throughput.mulAssign(stepThrough)
   })
 
-  return { inscatter, transmittance: exp(opticalDepth.negate()) }
+  return { inscatter, transmittance: throughput }
+}
+
+/**
+ * A step's share of its own length that reaches its start, (1 − e^−τ)/τ,
+ * given its transmittance `through` = e^−τ: 1 for a step that holds nothing,
+ * 1/τ for an opaque one.
+ *
+ * Under a hundredth of a depth the subtraction cancels in float32: even
+ * through a correctly rounded exponential a step of 10⁻⁶ comes out 1% off,
+ * one of 10⁻⁷ a fifth off, and one under 3 × 10⁻⁸ as nothing — the steps
+ * near the ceiling, where the fade takes the density to zero, and those of a
+ * ray that grazes the air high over a limb. So the series takes it there,
+ * as `segmentTransmission` does in `galaxyKernel.ts`; its first dropped
+ * term is τ⁴/120. A floor under τ in the quotient takes a thin step's light
+ * to nothing rather than to its length. A per-channel `step` rather than
+ * `select`, so both arms are plain vector arithmetic.
+ */
+function stepShare(stepTau: Node<'vec3'>, through: Node<'vec3'>): Node<'vec3'> {
+  const series = vec3(1)
+    .sub(stepTau.mul(0.5))
+    .add(stepTau.mul(stepTau).div(6))
+    .sub(stepTau.mul(stepTau).mul(stepTau).div(24))
+  const exact = oneMinus(through).div(max(stepTau, vec3(0.01)))
+  return series.add(exact.sub(series).mul(step(vec3(0.01), stepTau)))
 }
 
 /** A tent in height, 1 at `peak` and nothing from `halfWidth` either side. */
