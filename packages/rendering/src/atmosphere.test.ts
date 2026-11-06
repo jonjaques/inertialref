@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import {
+  AEROSOL_ASYMMETRY,
+  AEROSOL_FORWARD_PEAK,
   aerosolTint,
   atmosphereRecipe,
   bakeMultipleScattering,
@@ -22,6 +24,7 @@ import {
   settingDiskCosine,
   TRANSMITTANCE_WIDTH,
   transmittanceFrom,
+  visibleThickness,
   zenithSkyRadiance,
 } from './atmosphere.ts'
 import { airHeights } from './datum.ts'
@@ -62,6 +65,26 @@ const EARTH_HEIGHTS = airHeights(
 
 const earthRecipe = atmosphereRecipe(EARTH_HAZE, EARTH_TOP, EARTH_HEIGHTS)
 const earthT = bakeTransmittance(earthRecipe)
+
+/** Mars's authored haze, copied from `solar/bodies.ts`: the dust is the sky. */
+const MARS_HAZE = {
+  color: { r: 0.8, g: 0.55, b: 0.36 },
+  limb: { r: 0.5, g: 0.64, b: 0.9 },
+  thickness: 0.0066,
+  aerosolAngstrom: 0,
+  ozone: 0,
+  aerosolDepth: 0.3,
+  aerosolAlbedo: 0.93,
+}
+const MARS = { radius: 3_396_200, haze: 100_000, scaleHeight: 11_100 }
+const MARS_TOP = (MARS.radius + MARS.haze) / MARS.radius
+const MARS_HEIGHTS = airHeights(
+  MARS.radius,
+  MARS.haze,
+  MARS.scaleHeight,
+  MARS.scaleHeight,
+)
+const marsRecipe = atmosphereRecipe(MARS_HAZE, MARS_TOP, MARS_HEIGHTS)
 
 const sampleT = (radius01: number, mu: number): [number, number, number] =>
   sampleLut(earthT, (mu + 1) / 2, radius01)
@@ -634,6 +657,98 @@ describe('the recipe', () => {
         },
       ),
     )
+  })
+
+  it('scatters forward what it scatters sideways where the gas is the sky', () => {
+    // Earth's aerosol has one color at every angle; the forward coefficient
+    // is the sideways one, so the turn along the lobe moves nothing.
+    expect(earthRecipe.mieForward).toEqual(earthRecipe.mieScatter)
+  })
+
+  it('is the dust where its depth is authored: the sky color sideways, the limb forward, under the albedo', () => {
+    // Mars: a measured dust depth of 0.3 at 550 nm is the extinction, and
+    // what the dust scatters of it is the authored colors under an albedo of
+    // 0.93 in the red — the butterscotch sideways, the blue toward the sun —
+    // with no channel scattering more than it takes. The gas keeps its own
+    // measured depth, two decades under the dust's.
+    const aerosol = densityColumn(marsRecipe.hMie, marsRecipe.topRatio - 1)
+    expect(marsRecipe.mieExtinction[1] * aerosol).toBeCloseTo(0.3, 6)
+    const side = marsRecipe.mieScatter.map(
+      (scatter, c) => scatter / marsRecipe.mieExtinction[c]!,
+    )
+    const forward = marsRecipe.mieForward.map(
+      (scatter, c) => scatter / marsRecipe.mieExtinction[c]!,
+    )
+    expect(Math.max(...side)).toBeCloseTo(0.93, 9)
+    expect(Math.max(...forward)).toBeCloseTo(0.93, 9)
+    expect(side[2]! / side[0]!).toBeCloseTo(0.36 / 0.8, 9)
+    // Enhanced's ring carries a gas-lit haze's lobe alone, and a dust whole.
+    expect(earthRecipe.aerosolSky).toBe(0)
+    expect(marsRecipe.aerosolSky).toBe(1)
+    expect(forward[0]! / forward[2]!).toBeCloseTo(0.5 / 0.9, 9)
+    for (const albedo of [...side, ...forward])
+      expect(albedo).toBeLessThanOrEqual(0.93 + 1e-9)
+    const gas = densityColumn(marsRecipe.hRayleigh, marsRecipe.topRatio - 1)
+    expect(
+      marsRecipe.betaRayleigh.reduce((sum, beta) => sum + beta * gas, 0),
+    ).toBeCloseTo(0.0025, 3)
+  })
+
+  it('turns the aerosol toward its forward color by the lobe’s own share', () => {
+    // The peak is the Henyey–Greenstein lobe straight at the sun, so the
+    // share is 1 there and the lobe's own shape elsewhere.
+    const g = AEROSOL_ASYMMETRY
+    const lobe = (nu: number) =>
+      (1 - g * g) / (4 * Math.PI) / (1 + g * g - 2 * g * nu) ** 1.5
+    expect(lobe(1)).toBeCloseTo(AEROSOL_FORWARD_PEAK, 12)
+    expect(
+      lobe(Math.cos((20 * Math.PI) / 180)) / AEROSOL_FORWARD_PEAK,
+    ).toBeCloseTo(0.37, 2)
+    // Under a sun straight overhead the zenith looks into the lobe and takes
+    // the dust's forward color, the limb's blue; under a sun twenty degrees
+    // up it takes the sideways one, the sky's butterscotch.
+    const psi = bakeMultipleScattering(
+      marsRecipe,
+      bakeTransmittance(marsRecipe),
+    )
+    const overhead = zenithSkyRadiance(marsRecipe, psi, 1, 1)
+    const low = zenithSkyRadiance(
+      marsRecipe,
+      psi,
+      1,
+      Math.sin((20 * Math.PI) / 180),
+    )
+    expect(low[2] / low[0]).toBeLessThan(1)
+    expect(overhead[2] / overhead[0]).toBeGreaterThan(1.5 * (low[2] / low[0]))
+  })
+
+  it('shows as much as its column scatters', () => {
+    // Earth defines 1, and a haze lit by its gas shows its thickness.
+    expect(visibleThickness(EARTH_HAZE)).toBeCloseTo(1, 9)
+    fc.assert(
+      fc.property(
+        fc.double({ min: 0.001, max: 2, noNaN: true }),
+        (thickness) => {
+          expect(visibleThickness({ ...EARTH_HAZE, thickness })).toBeCloseTo(
+            thickness,
+            9,
+          )
+        },
+      ),
+    )
+    // Mars's dust shows 86 times what its gas would, and under Earth: the
+    // skylight that fills a Martian shadow.
+    const gasOnly = {
+      color: MARS_HAZE.color,
+      limb: MARS_HAZE.limb,
+      thickness: MARS_HAZE.thickness,
+      aerosolAngstrom: 0,
+      ozone: 0,
+    }
+    expect(visibleThickness(MARS_HAZE)).toBeGreaterThan(
+      80 * visibleThickness(gasOnly),
+    )
+    expect(visibleThickness(MARS_HAZE)).toBeLessThan(1)
   })
 })
 

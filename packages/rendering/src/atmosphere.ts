@@ -32,6 +32,8 @@
  * zenith color *is* the scattering spectrum (a sky's color is β, up to
  * normalization), the limb color tints the aerosol where the column cannot
  * make that color itself (`aerosolTint`), and `thickness` scales the column.
+ * Where the aerosol is the sky (`aerosolDepth`), the dust or the haze
+ * carries the two colors itself, the sky's sideways and the limb's forward.
  * Mars therefore keeps its butterscotch sky and its blue sunset — both are in
  * its authored colors — without this file knowing what CO₂ is.
  *
@@ -55,6 +57,23 @@ export interface HazeAuthoring {
   readonly aerosolAngstrom: number
   /** The ozone column, Dobson units. Earth's is about 300. */
   readonly ozone: number
+  /**
+   * The aerosol's vertical extinction depth at 550 nm, where it is measured
+   * apart from the gas's: Mars's clear-season dust at 0.3, Titan's haze at
+   * 4.5. Authored,
+   * the aerosol is the sky, and its color is the authored `color` sideways
+   * and `limb` forward (`atmosphereRecipe`). Absent, the aerosol is Earth's
+   * column scaled by `thickness` (`TAU_MIE`) in the gray the limb cannot
+   * account for (`aerosolTint`), which is right where the gas is the sky.
+   */
+  readonly aerosolDepth?: number
+  /**
+   * The aerosol's single-scattering albedo in its brightest channel, where
+   * `aerosolDepth` is authored: how much of what it takes it scatters. The
+   * other channels sit under it by the authored colors' own ratios.
+   * `AEROSOL_ALBEDO` absent.
+   */
+  readonly aerosolAlbedo?: number
 }
 
 export interface AtmosphereRecipe {
@@ -70,6 +89,26 @@ export interface AtmosphereRecipe {
   readonly mieScatter: readonly [number, number, number]
   /** Aerosol extinction per planet radius, RGB — the slope, untinted. */
   readonly mieExtinction: readonly [number, number, number]
+  /**
+   * Aerosol scattering coefficient straight toward the sun, RGB: the
+   * `mieScatter` of a haze whose forward color is its sideways one, and the
+   * limb's color at the same albedo where the aerosol is the sky. The march
+   * turns between the two along the lobe's own share of its peak
+   * (`AEROSOL_FORWARD_PEAK`).
+   */
+  readonly mieForward: readonly [number, number, number]
+  /**
+   * Whether the aerosol is the sky, 0 or 1: how Enhanced's limb from orbit
+   * (`marchLimb` in `render/air.ts`) carries it. A gas-lit haze's aerosol
+   * rides in the ring at its lobe alone, the orange at the foot, and takes
+   * nothing. A dust that is the whole column rides at its whole column and
+   * takes as it scatters, so six times an opaque column is six times its
+   * lit surface and not six times its depth: without its extinction Mars's
+   * sunset limb from low orbit read 219 : 192 : 191 at its foot, a white
+   * band, and with no aerosol in the ring at all its full face wore a rim
+   * of 141 : 116 : 105, dimmer than the disk beside it (171 : 94 : 71).
+   */
+  readonly aerosolSky: number
   /** Ozone absorption per planet radius at the layer's peak, RGB. */
   readonly ozone: readonly [number, number, number]
   /** Where the ozone layer peaks, and its half-width, planet radii. */
@@ -129,13 +168,27 @@ const TAU_MIE = 0.12
  */
 const BANDS = [680, 550, 440] as const
 
-/** Aerosol extinction over scattering: a single-scattering albedo of 0.94
- * (MACv2's global mean, and Wolff's for Martian dust in the solar band). */
-const MIE_EXTINCTION_RATIO = 1 / 0.94
+/** The aerosol's single-scattering albedo where none is authored: 0.94,
+ * MACv2's global mean. Extinction over scattering is its inverse. */
+export const AEROSOL_ALBEDO = 0.94
+const MIE_EXTINCTION_RATIO = 1 / AEROSOL_ALBEDO
 
 /** Aerosol asymmetry: 0.70, MACv2's global mean. Pathfinder measured Martian
  * dust at 0.72–0.77 across the visible; one value serves every haze here. */
 export const AEROSOL_ASYMMETRY = 0.7
+
+/**
+ * The Henyey–Greenstein lobe's value straight toward the sun, per
+ * steradian, which the lobe at any other angle is a share of: 0.37 twenty
+ * degrees off the sun, 0.04 at sixty. An aerosol whose forward color
+ * differs from its sideways one (`mieForward`) turns from the one to the
+ * other along that share, in `phasesToward` (`render/air.ts`) and in
+ * `zenithSkyRadiance` alike, so the turn is the lobe's own shape and costs
+ * no second phase function: a dust's blue gathers around a low sun and the
+ * sky away from it stays the dust's own color.
+ */
+export const AEROSOL_FORWARD_PEAK =
+  (1 + AEROSOL_ASYMMETRY) / (4 * Math.PI * (1 - AEROSOL_ASYMMETRY) ** 2)
 
 /**
  * Ozone's Chappuis-band cross-sections for the three channels, m² a
@@ -355,24 +408,59 @@ export function atmosphereRecipe(
 
   // The aerosol's depth per band: 550 nm is the measured one, and the
   // others follow its Ångström slope.
+  const depth = haze.aerosolDepth ?? TAU_MIE * thickness
   const tauMie = BANDS.map(
-    (wavelength) =>
-      TAU_MIE * thickness * (wavelength / 550) ** -haze.aerosolAngstrom,
+    (wavelength) => depth * (wavelength / 550) ** -haze.aerosolAngstrom,
   )
-  const tint = aerosolTint(limb, betaRayleigh, hRayleigh)
-  const mieScatter: [number, number, number] = [
-    (tint[0] * tauMie[0]!) / columnMie,
-    (tint[1] * tauMie[1]!) / columnMie,
-    (tint[2] * tauMie[2]!) / columnMie,
-  ]
-  // Extinction follows the slope and not the tint: a tinted extinction
-  // double-counts the color the scattering tint already applied, and drifts
-  // white sums.
-  const mieExtinction: [number, number, number] = [
-    (tauMie[0]! / columnMie) * MIE_EXTINCTION_RATIO,
-    (tauMie[1]! / columnMie) * MIE_EXTINCTION_RATIO,
-    (tauMie[2]! / columnMie) * MIE_EXTINCTION_RATIO,
-  ]
+  let mieScatter: [number, number, number]
+  let mieExtinction: [number, number, number]
+  let mieForward: [number, number, number]
+  if (haze.aerosolDepth === undefined) {
+    const tint = aerosolTint(limb, betaRayleigh, hRayleigh)
+    mieScatter = [
+      (tint[0] * tauMie[0]!) / columnMie,
+      (tint[1] * tauMie[1]!) / columnMie,
+      (tint[2] * tauMie[2]!) / columnMie,
+    ]
+    // Extinction follows the slope and not the tint: a tinted extinction
+    // double-counts the color the scattering tint already applied, and
+    // drifts white sums.
+    mieExtinction = [
+      (tauMie[0]! / columnMie) * MIE_EXTINCTION_RATIO,
+      (tauMie[1]! / columnMie) * MIE_EXTINCTION_RATIO,
+      (tauMie[2]! / columnMie) * MIE_EXTINCTION_RATIO,
+    ]
+    mieForward = mieScatter
+  } else {
+    /*
+     * The aerosol is the sky. Its measured depth is an extinction, and what
+     * it scatters of that is its albedo in the authored colors: the sky's
+     * sideways and the limb's toward the sun, each at `aerosolAlbedo` in its
+     * brightest channel and under it in the rest, so no channel scatters
+     * more than it takes. Read as a gas instead, Mars's 600 Pa carries a
+     * Rayleigh column twenty times its measured depth and a dust column a
+     * twentieth of its own, and draws a near-black zenith over the one sky in
+     * the system that is lit by its dust from horizon to horizon.
+     */
+    const albedo = haze.aerosolAlbedo ?? AEROSOL_ALBEDO
+    const side = underPeak(color, albedo)
+    const forward = underPeak(limb, albedo)
+    mieExtinction = [
+      tauMie[0]! / columnMie,
+      tauMie[1]! / columnMie,
+      tauMie[2]! / columnMie,
+    ]
+    mieScatter = [
+      mieExtinction[0] * side[0],
+      mieExtinction[1] * side[1],
+      mieExtinction[2] * side[2],
+    ]
+    mieForward = [
+      mieExtinction[0] * forward[0],
+      mieExtinction[1] * forward[1],
+      mieExtinction[2] * forward[2],
+    ]
+  }
 
   // A tent's area is its peak times its half-width, so the peak absorption is
   // the column's depth over the half-width.
@@ -392,10 +480,44 @@ export function atmosphereRecipe(
     betaRayleigh,
     mieScatter,
     mieExtinction,
+    mieForward,
+    aerosolSky: haze.aerosolDepth === undefined ? 0 : 1,
     ozone,
     ozonePeak,
     ozoneHalfWidth,
   }
+}
+
+/** A color scaled so its brightest channel is `peak`, the others under it. */
+function underPeak(
+  color: HazeAuthoring['color'],
+  peak: number,
+): [number, number, number] {
+  const brightest = Math.max(color.r, color.g, color.b, 1e-6)
+  return [
+    (color.r / brightest) * peak,
+    (color.g / brightest) * peak,
+    (color.b / brightest) * peak,
+  ]
+}
+
+/**
+ * How much the air shows, with Earth at 1: the column's scattering depth
+ * over Earth's, for the skylight the ground takes from its sky
+ * (`terrainPalette`, which holds it to Earth's). It is `thickness` where the
+ * gas is the sky, and the dust's depth where the dust is, past 1 for a dust
+ * deeper than Earth's whole column: Mars's 0.3 scatters two decades more
+ * than its gas, and a skylight read off the gas lights a Martian shadow at a
+ * twentieth of its sky — the black pools under every ridge of a flat-lit
+ * orange afternoon.
+ */
+export function visibleThickness(haze: HazeAuthoring): number {
+  const gas = TAU_RAYLEIGH_SUM * haze.thickness
+  const aerosol =
+    haze.aerosolDepth === undefined
+      ? TAU_MIE * haze.thickness * AEROSOL_ALBEDO
+      : haze.aerosolDepth * (haze.aerosolAlbedo ?? AEROSOL_ALBEDO)
+  return (gas + aerosol) / (TAU_RAYLEIGH_SUM + TAU_MIE * AEROSOL_ALBEDO)
 }
 
 /**
@@ -824,6 +946,7 @@ export function zenithSkyRadiance(
     (1 - g * g) /
     (4 * Math.PI) /
     Math.max(1 + g * g - 2 * g * muSun, 1e-4) ** 1.5
+  const forwardShare = phaseMie / AEROSOL_FORWARD_PEAK
   const radiance: [number, number, number] = [0, 0, 0]
   const depth = [0, 0, 0]
   for (let i = 0; i < ZENITH_STEPS; i += 1) {
@@ -835,13 +958,20 @@ export function zenithSkyRadiance(
     for (let c = 0; c < 3; c += 1) {
       const scatterRayleigh = (recipe.betaRayleigh[c] as number) * rayleigh
       const scatterMie = (recipe.mieScatter[c] as number) * mie
+      // The aerosol turns to its forward color by the lobe's share, as the
+      // march does; the multiple scattering keeps the sideways one.
+      const scatterToward =
+        scatterMie +
+        ((recipe.mieForward[c] as number) - (recipe.mieScatter[c] as number)) *
+          mie *
+          forwardShare
       const extinction =
         scatterRayleigh +
         (recipe.mieExtinction[c] as number) * mie +
         (recipe.ozone[c] as number) * ozone
       const view = Math.exp(-((depth[c] as number) + extinction * step * 0.5))
       const single =
-        (scatterRayleigh * phaseRayleigh + scatterMie * phaseMie) *
+        (scatterRayleigh * phaseRayleigh + scatterToward * phaseMie) *
         (sunlight[c] as number)
       const multiple = (psi[c] as number) * (scatterRayleigh + scatterMie)
       radiance[c] =

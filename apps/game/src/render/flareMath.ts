@@ -65,10 +65,30 @@ const ECLIPSE_INNER = 0.985
 const ECLIPSE_OUTER = 1.03
 /** The graze band: how far past the limb the reddening reaches. */
 const GRAZE_OUTER = 1.3
+/**
+ * An eye under this many of a body's radii over its surface stands on it,
+ * and its horizon is the test (`sunVisibility`); the test blends in from a
+ * quarter of that, so a ship climbing out never steps. Two hundredths: 127 km
+ * over Earth and 68 km over Mars, every ground view and no limb composition,
+ * which stand at 1.04 radii and keep the ramp.
+ */
+const STANDING = 0.02
+/** The Sun's angular radius from Earth, radians: the disk a setting sun fades over where none is given. */
+export const SUN_ANGULAR_RADIUS = 0.0047
 
 const smooth = (edge0: number, edge1: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
   return t * t * (3 - 2 * t)
+}
+
+/**
+ * How far an eye `above` a body's radii over its surface stands on it, 0..1:
+ * whole under a quarter of `STANDING`, and nothing past it. The horizon test
+ * and the ground the flare is hidden by (`SunFlare`) both blend in on this,
+ * so neither steps as a ship climbs out.
+ */
+export function standingWeight(above: number): number {
+  return 1 - smooth(STANDING / 4, STANDING, above)
 }
 
 /**
@@ -77,11 +97,20 @@ const smooth = (edge0: number, edge1: number, x: number): number => {
  * Each body's contribution comes from the closest approach of the sight
  * *segment* to its center — the segment, not the line, because a body behind
  * the camera or beyond the star occludes nothing however well aligned it is.
+ *
+ * Standing on a body, that closest approach is quadratic in the sun's
+ * elevation, so a ramp in it keeps a sun three degrees under the horizon at
+ * half visibility and draws its glare through the ground. Under `STANDING`
+ * radii over a body's surface the test is the sun's elevation against the
+ * horizon's dip, fading across the disk's own diameter (`sunRadius`), as a
+ * setting sun does. The horizon only takes the flare away: where the sun
+ * is up the ramp's own value stands.
  */
 export function sunVisibility(
   camera: FlareVector,
   sun: FlareVector,
   occluders: readonly FlareOccluder[],
+  sunRadius = SUN_ANGULAR_RADIUS,
 ): FlareVisibility {
   const dx = sun.x - camera.x
   const dy = sun.y - camera.y
@@ -106,7 +135,27 @@ export function sunVisibility(
     const closest = Math.hypot(cx, cy, cz)
     const ratio = closest / body.radius
 
-    visibility *= smooth(ECLIPSE_INNER, ECLIPSE_OUTER, ratio)
+    const distance = Math.hypot(ox, oy, oz)
+    const above = distance / body.radius - 1
+    let eclipsed = smooth(ECLIPSE_INNER, ECLIPSE_OUTER, ratio)
+    if (above > 0 && above < STANDING) {
+      // The eye's up is away from the center; the sun's elevation is over
+      // the horizontal there, and the horizon dips below it by the eye's
+      // height.
+      const elevation = Math.asin(
+        Math.min(
+          1,
+          Math.max(-1, -(ox * dx + oy * dy + oz * dz) / (distance * span)),
+        ),
+      )
+      const dip = -Math.acos(Math.min(1, body.radius / distance))
+      const standing = smooth(dip - sunRadius, dip + sunRadius, elevation)
+      const weight = standingWeight(above)
+      // The horizon's own visibility multiplies the ramp's, so where the
+      // sun is up nothing moves and the fade spans the sun's disk.
+      eclipsed *= 1 - weight + weight * standing
+    }
+    visibility *= eclipsed
     // Only a body actually in front of the camera can put its limb in the
     // shot. The graze band is one-sided: inside the eclipse it is the
     // eclipse's problem.
@@ -145,4 +194,57 @@ export const ghostPosition = (
 export function edgeFade(sunNdcX: number, sunNdcY: number): number {
   const edge = Math.max(Math.abs(sunNdcX), Math.abs(sunNdcY))
   return 1 - smooth(1.1, 1.5, edge)
+}
+
+/**
+ * A disk on screen as a ghost meets it: its center and its radius in NDC
+ * units of the frame's height, with x corrected for the aspect so a
+ * distance in these units is a distance on screen.
+ */
+export interface FlareDisk {
+  readonly x: number
+  readonly y: number
+  readonly radius: number
+}
+
+/**
+ * A body whose angular radius is past this is the ground and not a disk:
+ * its edge is the horizon, and a ghost over a ground view keeps its place
+ * in the sky. Sixty degrees — a limb composition from 1.04 radii stands at
+ * 74°, and a raking disk filling the frame subtends under twenty.
+ */
+export const GHOST_DISK_LIMIT = Math.PI / 3
+
+/**
+ * How much of a ghost survives where it lands on a body's disk, 0..1.
+ *
+ * A flare happens inside the lens, in front of everything, and the ISS
+ * sunset photographs do show ghosts over the dark Earth. What no photograph
+ * shows is a colored ring sitting on a crescent's limb as if it were the
+ * planet's, which is what the chain draws whenever a composition puts a body
+ * between the star's image and the frame's center — every crescent in the
+ * planetarium, with the aperture ghost mirrored past center onto the limb.
+ * So a ghost fades as it overlaps a disk: whole where it clears the disk by
+ * its own radius, gone with its center inside it, and a smooth ramp between
+ * so a drifting ghost never pops. `ghost.radius` is the ghost's own, in the
+ * disk's units.
+ *
+ * Only a disk the ghost's own size or larger takes it whole. A ghost has no
+ * limb to sit on over a moon a few pixels across, and weighed whole, every
+ * dot in the frame puts out the ghost that wanders over it — a blink as the
+ * chain sweeps past. The weight rises with the disk to the ghost's radius,
+ * so a disk growing through it fades its ghost in rather than stepping.
+ */
+export function ghostCover(
+  ghost: FlareDisk,
+  disks: readonly FlareDisk[],
+): number {
+  const size = Math.max(ghost.radius, 1e-6)
+  let cover = 1
+  for (const disk of disks) {
+    const distance = Math.hypot(ghost.x - disk.x, ghost.y - disk.y)
+    const clear = smooth(0, 1, (distance - disk.radius) / size)
+    cover *= 1 - smooth(0, size, disk.radius) * (1 - clear)
+  }
+  return cover
 }

@@ -1616,7 +1616,8 @@ export const BEAM_TERMINATOR = 0.025
  *
  * A third is the diffuse fraction of a clear terrestrial noon; it rises toward
  * one under overcast, which is a state this model does not carry. Scaled by
- * `airThickness` so Mars's 0.15 gives 5% and Luna's absent air gives none.
+ * `airThickness` so Mars's dust, at 0.57, gives 19% and Luna's absent air
+ * gives none.
  */
 export const SKY_FRACTION = 0.33
 

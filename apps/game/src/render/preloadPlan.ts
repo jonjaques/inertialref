@@ -34,6 +34,8 @@ export interface HazeLike {
   readonly thickness: number
   readonly aerosolAngstrom: number
   readonly ozone: number
+  readonly aerosolDepth?: number
+  readonly aerosolAlbedo?: number
 }
 
 export interface ScatteringBake {
@@ -63,6 +65,10 @@ export function scatteringKey(
     thickness,
     aerosolAngstrom,
     ozone,
+    // The two fields a haze whose aerosol is the sky carries; a gas-lit
+    // haze keys `gas` in both.
+    haze.aerosolDepth ?? 'gas',
+    haze.aerosolAlbedo ?? 'gas',
     topRatio.toFixed(6),
     heights.rayleigh.toPrecision(6),
     heights.aerosol.toPrecision(6),

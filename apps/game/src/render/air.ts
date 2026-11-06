@@ -17,7 +17,6 @@ import {
   length,
   Loop,
   max,
-  min,
   mix,
   oneMinus,
   pow,
@@ -31,6 +30,7 @@ import {
 } from 'three/tsl'
 import {
   AEROSOL_ASYMMETRY,
+  AEROSOL_FORWARD_PEAK,
   type AtmosphereRecipe,
   LIMB_BRIGHTNESS,
   LIMB_CEILING_FALLOFFS,
@@ -145,6 +145,8 @@ export function createAirUniforms() {
   const betaRayleigh = uniform(new Vector3(0, 0, 0))
   const mieScatter = uniform(new Vector3(0, 0, 0))
   const mieExtinction = uniform(new Vector3(0, 0, 0))
+  const mieForward = uniform(new Vector3(0, 0, 0))
+  const aerosolSky = uniform(0)
   const ozone = uniform(new Vector3(0, 0, 0))
   const ozonePeak = uniform(0)
   const ozoneHalfWidth = uniform(1)
@@ -157,6 +159,8 @@ export function createAirUniforms() {
     betaRayleigh,
     mieScatter,
     mieExtinction,
+    mieForward,
+    aerosolSky,
     ozone,
     ozonePeak,
     ozoneHalfWidth,
@@ -171,6 +175,8 @@ export function createAirUniforms() {
       betaRayleigh.value.set(...recipe.betaRayleigh)
       mieScatter.value.set(...recipe.mieScatter)
       mieExtinction.value.set(...recipe.mieExtinction)
+      mieForward.value.set(...recipe.mieForward)
+      aerosolSky.value = recipe.aerosolSky
       ozone.value.set(...recipe.ozone)
       ozonePeak.value = recipe.ozonePeak
       ozoneHalfWidth.value = recipe.ozoneHalfWidth
@@ -190,6 +196,8 @@ export function createAirUniforms() {
       betaRayleigh.value.set(0, 0, 0)
       mieScatter.value.set(0, 0, 0)
       mieExtinction.value.set(0, 0, 0)
+      mieForward.value.set(0, 0, 0)
+      aerosolSky.value = 0
       ozone.value.set(0, 0, 0)
       ozonePeak.value = 0
       ozoneHalfWidth.value = 1
@@ -289,10 +297,14 @@ export function marchAir(
         sunT.assign(clearedBeam(air, sunT, height01, clearBeam))
       })
     const psi = psiTableAt(air, muSun, height01)
+    // The aerosol scatters the sky's color sideways and the limb's toward
+    // the sun, turning between them along its lobe's own shape; the multiple
+    // scattering keeps the sideways color, as the Ψ bake does.
+    const scatterToward = mix(air.mieScatter, air.mieForward, phase.forward)
     const single = air.betaRayleigh
       .mul(densityR)
       .mul(phase.rayleigh)
-      .add(air.mieScatter.mul(densityM).mul(phase.mie))
+      .add(scatterToward.mul(densityM).mul(phase.mie))
       .mul(sunT)
     const multiple = psi.mul(
       air.betaRayleigh.mul(densityR).add(air.mieScatter.mul(densityM)),
@@ -306,19 +318,27 @@ export function marchAir(
 
 /**
  * The two phase functions for a view direction against the sun: Rayleigh's,
- * and Henyey–Greenstein at the one aerosol asymmetry.
+ * and Henyey–Greenstein at the one aerosol asymmetry — and the lobe's share
+ * of its peak toward the sun, which is how far the aerosol's color has
+ * turned from the sky's (`mieScatter`) to the limb's (`mieForward`).
  */
 function phasesToward(
   direction: Node<'vec3'>,
   sun: Node<'vec3'>,
-): { readonly rayleigh: Node<'float'>; readonly mie: Node<'float'> } {
+): {
+  readonly rayleigh: Node<'float'>
+  readonly mie: Node<'float'>
+  readonly forward: Node<'float'>
+} {
   const nu = dot(direction, sun)
   const g = AEROSOL_ASYMMETRY
+  const mie = float((1 - g * g) / (4 * Math.PI)).div(
+    pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
+  )
   return {
     rayleigh: float(3 / (16 * Math.PI)).mul(nu.mul(nu).add(1)),
-    mie: float((1 - g * g) / (4 * Math.PI)).div(
-      pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
-    ),
+    mie,
+    forward: mie.div(AEROSOL_FORWARD_PEAK),
   }
 }
 
@@ -327,7 +347,7 @@ function phasesToward(
  * over the sample's horizontal, and at `height01`, the altitude fraction —
  * the sample's own for the physics, the stretched one for the limb.
  */
-function sunTableAt(
+export function sunTableAt(
   air: AirUniforms,
   muSun: Node<'float'>,
   height01: Node<'float'>,
@@ -436,26 +456,28 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * composite's against 0.046 with it. The tables the ring is lit through
  * keep the ozone; the sun that reaches the ring has crossed the real one.
  *
- * The aerosol rides in the ring at its whole column and scatters without
- * taking. Stretched, it is a band 3.6 km thick at the ring's foot on
- * Earth, a dozen deep along the tangent, and what it would take is the
- * limb's own line, which is where the physics is: it scatters nothing
- * toward an eye square to the sun, and taking it halves what the physics
- * draws under it. What it has that the gas does not is its forward lobe,
- * fifty times the side-scatter, and the lobe is the orange: a sunrise at
- * the limb, the ring of a backlit Earth, every reference photograph's glow
- * toward the sun is reddened sunlight thrown forward by the aerosol at the
- * foot, and its gray is the white between the orange and the blue. So the
- * ring keeps the lobe and drops the extinction, which is the one place
- * the ring departs from a stretched physics. At the foot and not over the
- * ring: its fall-off is stretched with the gas's but never past the gas's
- * own scale height. Earth's boundary layer stays under that at 3.6 km;
- * Mars's dust, mixed with the gas, would otherwise fill the whole ring,
- * and Titan's haze, three times its gas, reach past it — and the lobe
- * spread that high paints a broad tan-white arch over a limb photographed
- * as a thin line. At a quarter of the column the foot of Earth's sunrise
- * limb is an orange thread under a periwinkle band; at the whole column,
- * confined to the foot, it is orange under white under blue.
+ * The aerosol rides in the ring at its whole column, falls off over the
+ * gas's own scale height, and scatters without taking. Its extinction
+ * would take the limb's own line, which is where the physics is: it
+ * scatters nothing toward an eye square to the sun, and taking it halves
+ * what the physics draws under it. What it has that the gas does not is
+ * its forward lobe, fifty times the side-scatter, and the lobe is the
+ * orange: a sunrise at the limb, the ring of a backlit Earth, every
+ * reference photograph's glow toward the sun is reddened sunlight thrown
+ * forward by the aerosol at the foot, and its gray is the white between
+ * the orange and the blue. So the ring keeps the lobe and drops the
+ * extinction. Over the gas's own height and not the ring's: that is the
+ * lower third of the ring on every world, so the lobe stays at the foot.
+ * Stretched with the gas, Titan's haze, three times its gas, reaches past
+ * it, and the lobe spread that high paints a broad tan-white arch over a
+ * limb photographed as a thin line. Under the gas's height — Earth's
+ * boundary layer stretched to 3.6 km — the white is a thread at the foot,
+ * and Earth's sunrise limb from low orbit is orange under blue; over
+ * 8.5 km it is orange under white under blue, its frame 0.030 RMSE of the
+ * composite's against 0.044. At a quarter of the column the orange is a
+ * thread too. A dust that is the whole column (`aerosolSky`) is the
+ * exception: it rides at its whole column and takes as it scatters, which
+ * the march below says why.
  *
  * The tables are read at the height the stretch maps the sample to,
  * `h / stretch` — the ring lit as the gas of a planet stretched the same
@@ -520,13 +542,35 @@ export function marchLimb(
         // To zero at the ceiling, as the physics goes to zero at its top.
         const fade = oneMinus(saturate(height.div(ceiling)))
         const density = exp(height.div(falloff).negate()).mul(fade)
-        // The aerosol at the foot: stretched, but never past the gas's own
-        // height (see the doc comment).
-        const densityM = exp(
-          height.div(min(air.hMie.mul(stretch), air.hRayleigh)).negate(),
-        ).mul(fade)
+        // The aerosol over the gas's own height (see the doc comment).
+        const aerosolHeight = air.hRayleigh
+        const densityM = exp(height.div(aerosolHeight).negate()).mul(fade)
+        /*
+         * Where the aerosol is the sky (`aerosolSky`) it rides at its whole
+         * column — the cap on its height keeps the coefficient's share of
+         * the stretch, so a dust mixed with its gas is restored to the column
+         * the physics draws — and it takes as it scatters, below. Six times
+         * an opaque dust that takes nothing is a white band (Mars's sunset
+         * limb from low orbit at 219 : 192 : 191); taking, six times over
+         * is six times its lit surface, a butterscotch line on the edge.
+         */
+        const aerosolColumn = column.mul(
+          mix(
+            float(1),
+            air.hMie.mul(stretch).div(aerosolHeight),
+            air.aerosolSky,
+          ),
+        )
         // The gas without its ozone; see the doc comment.
-        const extinction = air.betaRayleigh.mul(density).mul(column)
+        const extinction = air.betaRayleigh
+          .mul(density)
+          .mul(column)
+          .add(
+            air.mieExtinction
+              .mul(densityM)
+              .mul(aerosolColumn)
+              .mul(air.aerosolSky),
+          )
         const stepTau = extinction.mul(stepLength)
         const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
 
@@ -550,10 +594,14 @@ export function marchLimb(
         ).mul(clears)
         const psi = psiTableAt(air, muSun, height01)
         const scatterR = air.betaRayleigh.mul(density).mul(column)
-        const scatterM = air.mieScatter.mul(densityM).mul(column)
+        const scatterM = air.mieScatter.mul(densityM).mul(aerosolColumn)
+        // The lobe in the limb's color toward the sun, as `marchAir` turns it.
+        const scatterToward = mix(air.mieScatter, air.mieForward, phase.forward)
+          .mul(densityM)
+          .mul(aerosolColumn)
         const single = scatterR
           .mul(phase.rayleigh)
-          .add(scatterM.mul(phase.mie))
+          .add(scatterToward.mul(phase.mie))
           .mul(sunT)
         const multiple = psi.mul(scatterR.add(scatterM))
         inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))
@@ -697,9 +745,15 @@ function clearedBeam(
     texelCentered(vec2(1, height01), TRANSMITTANCE),
   ).rgb
   const slant = table.div(max(overhead, vec3(1e-4)))
-  const hue = slant.div(
-    max(max(slant.x, slant.y), max(slant.z, ORBIT_BEAM_FLOOR)),
-  )
+  const brightest = max(max(slant.x, slant.y), slant.z)
+  // The power halves the hue's reddening and nothing else. The dimming under
+  // the floor multiplies outside it: taken inside, a beam 0.016 of the floor
+  // draws at its square root, 0.125, and lights the night side's air.
+  const kept = brightest.div(max(brightest, float(ORBIT_BEAM_FLOOR)))
+  const hue = slant
+    .div(max(brightest, float(1e-6)))
+    .pow(vec3(ORBIT_BEAM_HUE))
+    .mul(kept)
   return mix(table, hue, strength)
 }
 
@@ -713,7 +767,18 @@ function clearedBeam(
  * the floor and not by its own brightest channel, so it stays as far under
  * full brightness as it is under the floor, and the crop is 0.036.
  */
-const ORBIT_BEAM_FLOOR = 0.3
+export const ORBIT_BEAM_FLOOR = 0.3
+
+/**
+ * How much of the slant's hue the beam keeps as Enhanced draws a surface
+ * from orbit, as a power of it: a half keeps the reddening's square root.
+ * The whole of it lights a sunward crescent a saturated orange-red with a
+ * blown core, where the composite's crescent is a pale peach; none lights
+ * it gray. At a half the crescent is peach-white, the half-lit plate 0.022
+ * RMSE of the composite's against 0.023 whole, and Centauri II's gibbous
+ * 0.014 against 0.018.
+ */
+const ORBIT_BEAM_HUE = 0.5
 
 /**
  * How far the air over a surface from orbit is lit by the cleared beam.
