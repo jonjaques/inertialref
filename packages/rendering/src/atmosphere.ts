@@ -59,7 +59,8 @@ export interface HazeAuthoring {
   readonly ozone: number
   /**
    * The aerosol's vertical extinction depth at 550 nm, where it is measured
-   * apart from the gas's: Mars's dust at 0.4, Titan's haze at 4.5. Authored,
+   * apart from the gas's: Mars's clear-season dust at 0.3, Titan's haze at
+   * 4.5. Authored,
    * the aerosol is the sky, and its color is the authored `color` sideways
    * and `limb` forward (`atmosphereRecipe`). Absent, the aerosol is Earth's
    * column scaled by `thickness` (`TAU_MIE`) in the gray the limb cannot
@@ -436,9 +437,9 @@ export function atmosphereRecipe(
      * it scatters of that is its albedo in the authored colors: the sky's
      * sideways and the limb's toward the sun, each at `aerosolAlbedo` in its
      * brightest channel and under it in the rest, so no channel scatters
-     * more than it takes. Read as a gas instead, Mars's 600 Pa carried a
+     * more than it takes. Read as a gas instead, Mars's 600 Pa carries a
      * Rayleigh column twenty times its measured depth and a dust column a
-     * twentieth of its own, and drew a near-black zenith over the one sky in
+     * twentieth of its own, and draws a near-black zenith over the one sky in
      * the system that is lit by its dust from horizon to horizon.
      */
     const albedo = haze.aerosolAlbedo ?? AEROSOL_ALBEDO
@@ -501,11 +502,12 @@ function underPeak(
 }
 
 /**
- * How much the air shows, 0..1 with Earth at 1: the column's scattering
- * depth over Earth's, for the skylight the ground takes from its sky
- * (`terrainPalette`). It is `thickness` where the gas is the sky, and the
- * dust's depth where the dust is: Mars's 0.4 scatters two decades more than
- * its gas, and a skylight read off the gas lit a Martian shadow at a
+ * How much the air shows, with Earth at 1: the column's scattering depth
+ * over Earth's, for the skylight the ground takes from its sky
+ * (`terrainPalette`, which holds it to Earth's). It is `thickness` where the
+ * gas is the sky, and the dust's depth where the dust is, past 1 for a dust
+ * deeper than Earth's whole column: Mars's 0.3 scatters two decades more
+ * than its gas, and a skylight read off the gas lights a Martian shadow at a
  * twentieth of its sky — the black pools under every ridge of a flat-lit
  * orange afternoon.
  */

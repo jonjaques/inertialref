@@ -82,6 +82,16 @@ const smooth = (edge0: number, edge1: number, x: number): number => {
 }
 
 /**
+ * How far an eye `above` a body's radii over its surface stands on it, 0..1:
+ * whole under a quarter of `STANDING`, and nothing past it. The horizon test
+ * and the ground the flare is hidden by (`SunFlare`) both blend in on this,
+ * so neither steps as a ship climbs out.
+ */
+export function standingWeight(above: number): number {
+  return 1 - smooth(STANDING / 4, STANDING, above)
+}
+
+/**
  * Visibility of `sun` from `camera` past a set of spherical occluders.
  *
  * Each body's contribution comes from the closest approach of the sight
@@ -140,7 +150,7 @@ export function sunVisibility(
       )
       const dip = -Math.acos(Math.min(1, body.radius / distance))
       const standing = smooth(dip - sunRadius, dip + sunRadius, elevation)
-      const weight = 1 - smooth(STANDING / 4, STANDING, above)
+      const weight = standingWeight(above)
       // The horizon's own visibility multiplies the ramp's, so where the
       // sun is up nothing moves and the fade spans the sun's disk.
       eclipsed *= 1 - weight + weight * standing
@@ -218,19 +228,23 @@ export const GHOST_DISK_LIMIT = Math.PI / 3
  * its own radius, gone with its center inside it, and a smooth ramp between
  * so a drifting ghost never pops. `ghost.radius` is the ghost's own, in the
  * disk's units.
+ *
+ * Only a disk the ghost's own size or larger takes it whole. A ghost has no
+ * limb to sit on over a moon a few pixels across, and weighed whole, every
+ * dot in the frame puts out the ghost that wanders over it — a blink as the
+ * chain sweeps past. The weight rises with the disk to the ghost's radius,
+ * so a disk growing through it fades its ghost in rather than stepping.
  */
 export function ghostCover(
   ghost: FlareDisk,
   disks: readonly FlareDisk[],
 ): number {
+  const size = Math.max(ghost.radius, 1e-6)
   let cover = 1
   for (const disk of disks) {
     const distance = Math.hypot(ghost.x - disk.x, ghost.y - disk.y)
-    cover *= smooth(
-      0,
-      1,
-      (distance - disk.radius) / Math.max(ghost.radius, 1e-6),
-    )
+    const clear = smooth(0, 1, (distance - disk.radius) / size)
+    cover *= 1 - smooth(0, size, disk.radius) * (1 - clear)
   }
   return cover
 }

@@ -347,7 +347,7 @@ function phasesToward(
  * over the sample's horizontal, and at `height01`, the altitude fraction —
  * the sample's own for the physics, the stretched one for the limb.
  */
-function sunTableAt(
+export function sunTableAt(
   air: AirUniforms,
   muSun: Node<'float'>,
   height01: Node<'float'>,
@@ -694,16 +694,6 @@ export function airToward(
  * the ground and the sea take it from the one lift, as they take the air.
  * On the ground the lift is nothing and the air is the measured one.
  */
-/**
- * How much of the slant's hue the beam keeps as Enhanced draws a surface
- * from orbit, as a power of it: a half keeps the reddening's square root.
- * The whole of it lights a sunward crescent a saturated orange-red with a
- * blown core, where the composite's crescent is a pale peach; none lights
- * it gray. At a half the crescent is peach-white, the half-lit plate 0.022
- * RMSE of the composite's against 0.023 whole, and Centauri II's gibbous
- * 0.014 against 0.018.
- */
-const ORBIT_BEAM_HUE = 0.5
 export function clearedFromOrbit(air: AirUniforms): Node<'float'> {
   return air.limb.mul(enhancedSky)
 }
@@ -755,9 +745,15 @@ function clearedBeam(
     texelCentered(vec2(1, height01), TRANSMITTANCE),
   ).rgb
   const slant = table.div(max(overhead, vec3(1e-4)))
+  const brightest = max(max(slant.x, slant.y), slant.z)
+  // The power halves the hue's reddening and nothing else. The dimming under
+  // the floor multiplies outside it: taken inside, a beam 0.016 of the floor
+  // draws at its square root, 0.125, and lights the night side's air.
+  const kept = brightest.div(max(brightest, float(ORBIT_BEAM_FLOOR)))
   const hue = slant
-    .div(max(max(slant.x, slant.y), max(slant.z, ORBIT_BEAM_FLOOR)))
+    .div(max(brightest, float(1e-6)))
     .pow(vec3(ORBIT_BEAM_HUE))
+    .mul(kept)
   return mix(table, hue, strength)
 }
 
@@ -771,7 +767,18 @@ function clearedBeam(
  * the floor and not by its own brightest channel, so it stays as far under
  * full brightness as it is under the floor, and the crop is 0.036.
  */
-const ORBIT_BEAM_FLOOR = 0.3
+export const ORBIT_BEAM_FLOOR = 0.3
+
+/**
+ * How much of the slant's hue the beam keeps as Enhanced draws a surface
+ * from orbit, as a power of it: a half keeps the reddening's square root.
+ * The whole of it lights a sunward crescent a saturated orange-red with a
+ * blown core, where the composite's crescent is a pale peach; none lights
+ * it gray. At a half the crescent is peach-white, the half-lit plate 0.022
+ * RMSE of the composite's against 0.023 whole, and Centauri II's gibbous
+ * 0.014 against 0.018.
+ */
+const ORBIT_BEAM_HUE = 0.5
 
 /**
  * How far the air over a surface from orbit is lit by the cleared beam.

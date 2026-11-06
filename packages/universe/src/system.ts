@@ -348,7 +348,7 @@ export interface HazeLayer {
   /**
    * The aerosol's vertical extinction depth at 550 nm, where the aerosol is
    * the sky and its depth is measured apart from the gas's: Mars's dust at
-   * 0.4, where `thickness` carries only its 600 Pa of CO₂. Authored, the
+   * 0.3, where `thickness` carries only its 600 Pa of CO₂. Authored, the
    * aerosol scatters `color` sideways and `limb` toward the sun; absent, it
    * is Earth's aerosol scaled by `thickness`, which is right where the gas
    * is the sky.

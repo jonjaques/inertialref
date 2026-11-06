@@ -66,7 +66,7 @@ export function scatteringKey(
     aerosolAngstrom,
     ozone,
     // The two fields a haze whose aerosol is the sky carries; a gas-lit
-    // haze keys as it did without them.
+    // haze keys `gas` in both.
     haze.aerosolDepth ?? 'gas',
     haze.aerosolAlbedo ?? 'gas',
     topRatio.toFixed(6),

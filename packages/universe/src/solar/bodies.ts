@@ -571,17 +571,17 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       // none of it — a black cutout where there is a faint ring.
       height: 100_000,
       // The dust's own color, sideways: Perseverance's natural-color sky
-      // is a butterscotch near 1 : 0.55 : 0.3 in linear light, and the
-      // paler 0.78 : 0.6 : 0.48 the gas was read at drew a pink-gray sky.
+      // is a butterscotch near 1 : 0.55 : 0.3 in linear light, and a paler
+      // 0.78 : 0.6 : 0.48 draws a pink-gray sky.
       color: { r: 0.8, g: 0.55, b: 0.36 },
       // The dust's color thrown forward: the cold blue around a setting sun,
       // Curiosity's at Gale near 0.52 : 0.69 : 1 in linear light.
       limb: { r: 0.5, g: 0.64, b: 0.9 },
       // 600 Pa of CO₂ scatters almost nothing: Annis's Rayleigh depth of
       // 0.0025 at 550 nm over Bodhaine's 0.38 for Earth. The sky is the
-      // dust's, below. Read as a gas at 0.15 the column was twenty times
-      // its measured depth and still drew a near-black zenith over a
-      // flat-lit orange ground, because a gas that thin cannot light a sky.
+      // dust's, below. A gas column twenty times its measured depth still
+      // draws a near-black zenith over a flat-lit orange ground, because a
+      // gas that thin cannot light a sky.
       thickness: 0.0066,
       // The dust is mixed with the gas to some 50 km (Viking; Conrath's
       // ν = 0.007), so it shares the gas's scale height.

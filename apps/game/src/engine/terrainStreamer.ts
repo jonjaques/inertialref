@@ -484,6 +484,16 @@ export interface TerrainState {
   readonly scatter: ScatterState
 }
 
+/**
+ * The drawn ground under the eye and the eye itself, as radii from the
+ * body's center in meters (`TerrainStreamer.groundUnderEye`).
+ */
+export interface GroundUnderEye {
+  readonly body: string
+  readonly ground: Meters
+  readonly eye: Meters
+}
+
 export class TerrainStreamer {
   readonly #preparation: SurfacePreparation
   readonly heightfields: Heightfields
@@ -587,17 +597,13 @@ export class TerrainStreamer {
   #palette: TerrainPalette | null = null
   #surface: SurfaceParameters | null = null
   /**
-   * The drawn ground under the eye and the eye itself, as radii from the
-   * body's center in meters, while this body's ground is streaming; null
-   * otherwise. One `drawnSurfaceRadius` a frame, so the sun's flare can be
-   * hidden by the ground the eye stands over rather than by the sunk sphere
-   * under it, whose horizon from a summit is degrees under the real one.
+   * The drawn ground under the eye and the eye itself while this body's
+   * ground is streaming; null otherwise. One `drawnSurfaceRadius` a frame, so
+   * the sun's flare can be hidden by the ground the eye stands over rather
+   * than by the sunk sphere under it, whose horizon from a summit is degrees
+   * under the real one.
    */
-  #standing: {
-    readonly body: string
-    readonly ground: Meters
-    readonly eye: Meters
-  } | null = null
+  #standing: GroundUnderEye | null = null
   /**
    * The body the kept palette was derived from, and the palette itself.
    *
@@ -870,14 +876,13 @@ export class TerrainStreamer {
 
   /**
    * The drawn ground under the eye, as a radius from the body's center in
-   * meters, beside the eye's own, while this body's ground is streaming.
-   * Null from orbit and on a body with no streamed ground.
+   * meters, beside the eye's own, while this body's ground is streaming —
+   * which is out past the eight-pixel gate (`TERRAIN_RELIEF_PIXELS`), 2,000 km
+   * over Earth, so a consumer that wants a standing eye compares the two.
+   * Null past the gate, while the surface is being prepared, and on a body
+   * with no streamed ground.
    */
-  groundUnderEye(): {
-    readonly body: string
-    readonly ground: Meters
-    readonly eye: Meters
-  } | null {
+  groundUnderEye(): GroundUnderEye | null {
     return this.#standing
   }
 
@@ -1033,11 +1038,6 @@ export class TerrainStreamer {
       this.#forget()
       return
     }
-    this.#standing = {
-      body: body.address,
-      ground: drawnSurfaceRadius(surface, eye.direction),
-      eye: eye.distance,
-    }
 
     const prepared = this.#preparation.prepare(surface.surface)
     this.#surface = surface.surface
@@ -1052,6 +1052,15 @@ export class TerrainStreamer {
       // surface the site list or a bake asked about.
       this.#forget()
       return
+    }
+    // After the preparation and not before it: on a body that drains, the
+    // first field sample builds the drainage graph on this thread, 57 to
+    // 103 ms in the browser (`SurfacePreparation`), and the worker's answer
+    // is what seeds it as a lookup.
+    this.#standing = {
+      body: body.address,
+      ground: drawnSurfaceRadius(surface, eye.direction),
+      eye: eye.distance,
     }
     // The camera's forward in the body's axes: back out of render space
     // through the rotation `#pose` carries the patches into it with.

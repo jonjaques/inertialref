@@ -128,6 +128,18 @@ describe('ghostCover', () => {
     expect(ghostCover(ghost(0.38), [disk])).toBeGreaterThan(half)
   })
 
+  it('leaves a ghost over a dot much smaller than itself nearly whole', () => {
+    // A moon a hundredth of the ghost's radius, dead under its center.
+    const dot = { x: 0.5, y: 0, radius: 0.001 }
+    expect(ghostCover(ghost(0.5), [dot])).toBeGreaterThan(0.99)
+    // And the weight grows with the disk, so a disk half the ghost's size
+    // takes part of it and one its own size takes the whole.
+    const half = ghostCover(ghost(0.5), [{ ...dot, radius: 0.05 }])
+    expect(half).toBeGreaterThan(0)
+    expect(half).toBeLessThan(1)
+    expect(ghostCover(ghost(0.5), [{ ...dot, radius: 0.1 }])).toBe(0)
+  })
+
   it('compounds over several disks', () => {
     const other = { x: 0.7, y: 0, radius: 0.3 }
     const between = ghost(0.35)

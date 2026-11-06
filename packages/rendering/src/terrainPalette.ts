@@ -486,10 +486,13 @@ export function terrainPalette(body: Body): TerrainPalette {
 
     // What the column scatters, over Earth's: the gas's thickness where the
     // gas is the sky, the dust's depth where the dust is (`visibleThickness`).
+    // Held to Earth's at most: the ground and the sea take `SKY_FRACTION` of
+    // this out of the direct beam, and a dust past a depth near 1.6 — Titan's
+    // 4.5, a Martian storm's — would take more than the whole of it.
     airThickness:
       body.appearance.haze === null
         ? 0
-        : visibleThickness(body.appearance.haze),
+        : Math.min(1, visibleThickness(body.appearance.haze)),
     skyColor: unitLuminance(body.appearance.haze?.color),
     textureKey: body.appearance.texture,
   }
