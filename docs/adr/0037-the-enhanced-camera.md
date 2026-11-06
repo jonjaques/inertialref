@@ -137,7 +137,13 @@ column the orange is a thread too. A dust that is the whole column
 takes as it scatters, because six times an opaque dust that takes nothing
 is a white band — Mars's sunset limb from low orbit at 219 : 192 : 191 —
 and taking, six times over, is six times its lit surface, a butterscotch
-line on the edge. The ozone stays in the physics, where it
+line on the edge. A column past two of Earth's visible ones is its own ring:
+the lift's share falls from one to nothing between `LIMB_OWN_FROM` and
+`LIMB_OWN_TO` columns (`limbShare`), since drawn six times over on a column
+opaque along its tangent the ring is a hard orange rim inside a limb the
+physics already draws as a broad glow — Titan's, at ten. The share scales
+`RenderBody.limb`, which also clears a surface from orbit, so a deep haze's
+face is drawn through its measured air. The ozone stays in the physics, where it
 turns a twilight zenith blue from the ground; stretched up the ring and
 drawn six times over, its tent took the orange out of the band between the
 foot and the crown, so a low-orbit sunrise read orange under violet with no
