@@ -27,9 +27,10 @@ fix found).
 - **No forward-scattered ring on the backlit view.** The composition stands
   at phase 172° from 3.09 radii, where every limb point has the sun 11–18°
   under its own horizon and the planet's shadow 63 km up, above all of
-  Mars's dust; a shell to 100 km gives the sun 0.3% of the dust and a faint
-  ring (round 4). _Out of scope_ (the composition), _rejected arm_ (the
-  shell, `ledger/round-06/c.patch`).
+  Mars's dust. The air now reaches 100 km and lights the 0.3% of the dust
+  over the shadow, which draws no ring: the faint ring round 4 showed was
+  the ice layer's line under the shadow's edge, gone with the layer in
+  round 5. _Out of scope_ (the composition).
 - **The crescent's rim is a flat white-pink sliver** rather than
   butterscotch grading to blue-white toward the sun, and **the sunset
   limb's band is blue-white across the horizon** rather than butterscotch
@@ -38,16 +39,11 @@ fix found).
   lobe is a different phase function for every aerosol. _Out of scope_.
 - **The sunset limb's glow leaks under the ridge.** The flare's ramp from
   1.04 radii holds the sun at 0.55 and its glare reaches below the horizon
-  line. The ground-horizon fix stops at 0.02 radii by design. _Open._
+  line. The flare's horizon test stands only within 0.02 radii of the
+  ground, by design. _Open._
 
 ## Mars from the ground
 
-- **Sun glare through the terrain or under the horizon that hides the sun**
-  (Mars dusk, Earth's dusk sea). Every seat's first ask in every round. The
-  flare's occluder is the sunk sphere, whose horizon from a summit lies
-  degrees under the ground's; the fix tests the sun against the drawn
-  ground's horizon. Gained +0.19 to +0.22 with every seat in favor in rounds
-  4–6, under the floor of 0.25. _Rejected arm_, `ledger/round-06/c.patch`.
 - **The twilight dome too large and bright, the dusk sky brighter than
   Earth's.** The summit compositions stand 22.5 km up, above 85% of the
   dust, so a 2° sun lights the dust at the eye nearly unextinguished and the

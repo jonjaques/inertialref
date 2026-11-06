@@ -1249,6 +1249,15 @@ export class GameEngine {
     return this.#terrain.state()
   }
 
+  /**
+   * The drawn ground under the eye while a body's ground is streaming, as
+   * radii from its center in meters (`TerrainStreamer.groundUnderEye`): what
+   * hides the sun's flare from a standing eye, in place of the sunk sphere.
+   */
+  groundUnderEye(): ReturnType<TerrainStreamer['groundUnderEye']> {
+    return this.#terrain.groundUnderEye()
+  }
+
   /** Streaming and orbital baking share one heightfield routing policy. */
   get heightfields(): Heightfields {
     return this.#terrain.heightfields

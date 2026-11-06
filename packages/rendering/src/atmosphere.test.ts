@@ -73,10 +73,10 @@ const MARS_HAZE = {
   thickness: 0.0066,
   aerosolAngstrom: 0,
   ozone: 0,
-  aerosolDepth: 0.4,
+  aerosolDepth: 0.3,
   aerosolAlbedo: 0.93,
 }
-const MARS = { radius: 3_396_200, haze: 60_000, scaleHeight: 11_100 }
+const MARS = { radius: 3_396_200, haze: 100_000, scaleHeight: 11_100 }
 const MARS_TOP = (MARS.radius + MARS.haze) / MARS.radius
 const MARS_HEIGHTS = airHeights(
   MARS.radius,
@@ -666,13 +666,13 @@ describe('the recipe', () => {
   })
 
   it('is the dust where its depth is authored: the sky color sideways, the limb forward, under the albedo', () => {
-    // Mars: a measured dust depth of 0.4 at 550 nm is the extinction, and
+    // Mars: a measured dust depth of 0.3 at 550 nm is the extinction, and
     // what the dust scatters of it is the authored colors under an albedo of
     // 0.93 in the red — the butterscotch sideways, the blue toward the sun —
     // with no channel scattering more than it takes. The gas keeps its own
     // measured depth, two decades under the dust's.
     const aerosol = densityColumn(marsRecipe.hMie, marsRecipe.topRatio - 1)
-    expect(marsRecipe.mieExtinction[1] * aerosol).toBeCloseTo(0.4, 6)
+    expect(marsRecipe.mieExtinction[1] * aerosol).toBeCloseTo(0.3, 6)
     const side = marsRecipe.mieScatter.map(
       (scatter, c) => scatter / marsRecipe.mieExtinction[c]!,
     )
@@ -736,8 +736,8 @@ describe('the recipe', () => {
         },
       ),
     )
-    // Mars's dust shows two decades more than its gas would, and under
-    // Earth: the skylight that fills a Martian shadow.
+    // Mars's dust shows 86 times what its gas would, and under Earth: the
+    // skylight that fills a Martian shadow.
     const gasOnly = {
       color: MARS_HAZE.color,
       limb: MARS_HAZE.limb,
@@ -746,7 +746,7 @@ describe('the recipe', () => {
       ozone: 0,
     }
     expect(visibleThickness(MARS_HAZE)).toBeGreaterThan(
-      100 * visibleThickness(gasOnly),
+      80 * visibleThickness(gasOnly),
     )
     expect(visibleThickness(MARS_HAZE)).toBeLessThan(1)
   })

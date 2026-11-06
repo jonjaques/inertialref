@@ -42,6 +42,37 @@ describe('sunVisibility', () => {
     expect(clear.graze).toBe(0)
   })
 
+  it('hides a sun under a standing eye’s horizon and leaves one above it as it was', () => {
+    // 1.5 km over Mars's radius the horizon dips 1.7°. The closest-approach
+    // ramp alone holds a sun 3° under it at 0.23 — the glare drawn through
+    // the ridges that hide it — and one anywhere above it at 0.27, so
+    // standing on a body the horizon takes the flare away across the disk's
+    // own diameter, and above the horizon the ramp's 0.27 stands.
+    const radius = 3.39e6
+    const eye = { x: 0, y: radius + 1_500, z: 0 }
+    const body = { position: { x: 0, y: 0, z: 0 }, radius }
+    const sunAt = (degrees: number) => {
+      const e = (degrees * Math.PI) / 180
+      return { x: 1e11 * Math.cos(e), y: eye.y + 1e11 * Math.sin(e), z: 0 }
+    }
+    const at = (degrees: number) =>
+      sunVisibility(eye, sunAt(degrees), [body], 0.0047).visibility
+    const dip = (-Math.acos(radius / eye.y) * 180) / Math.PI
+    expect(dip).toBeCloseTo(-1.7, 1)
+    const up = at(60)
+    expect(up).toBeCloseTo(0.27, 2)
+    expect(at(2)).toBeCloseTo(up, 6)
+    expect(at(-3)).toBe(0)
+    expect(at(dip + 0.5)).toBeGreaterThan(0.9 * up)
+    expect(at(dip + 0.5)).toBeLessThanOrEqual(up)
+    expect(at(dip - 0.5)).toBe(0)
+    const half = at(dip)
+    expect(half).toBeGreaterThan(0.3 * up)
+    expect(half).toBeLessThan(0.7 * up)
+    expect(at(dip - 0.15)).toBeLessThan(half)
+    expect(at(dip + 0.15)).toBeGreaterThan(half)
+  })
+
   it('reports a graze that peaks at the limb and dies away from it', () => {
     const radius = 1e5
     const at = (offset: number) =>

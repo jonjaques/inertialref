@@ -17,6 +17,7 @@ import {
   bodyFrameId,
   type Body,
   type BodyFixedDirection,
+  drawnSurfaceRadius,
   findBody,
   hasSolidSurface,
   HEIGHTFIELD_BORDER,
@@ -586,6 +587,18 @@ export class TerrainStreamer {
   #palette: TerrainPalette | null = null
   #surface: SurfaceParameters | null = null
   /**
+   * The drawn ground under the eye and the eye itself, as radii from the
+   * body's center in meters, while this body's ground is streaming; null
+   * otherwise. One `drawnSurfaceRadius` a frame, so the sun's flare can be
+   * hidden by the ground the eye stands over rather than by the sunk sphere
+   * under it, whose horizon from a summit is degrees under the real one.
+   */
+  #standing: {
+    readonly body: string
+    readonly ground: Meters
+    readonly eye: Meters
+  } | null = null
+  /**
    * The body the kept palette was derived from, and the palette itself.
    *
    * Separate from `#palette`, which `#forget` nulls: a streamer that stops
@@ -855,6 +868,19 @@ export class TerrainStreamer {
     }
   }
 
+  /**
+   * The drawn ground under the eye, as a radius from the body's center in
+   * meters, beside the eye's own, while this body's ground is streaming.
+   * Null from orbit and on a body with no streamed ground.
+   */
+  groundUnderEye(): {
+    readonly body: string
+    readonly ground: Meters
+    readonly eye: Meters
+  } | null {
+    return this.#standing
+  }
+
   state(): TerrainState {
     const pose = this.#pose
     const patches: PlacedPatch[] = []
@@ -1006,6 +1032,11 @@ export class TerrainStreamer {
     ) {
       this.#forget()
       return
+    }
+    this.#standing = {
+      body: body.address,
+      ground: drawnSurfaceRadius(surface, eye.direction),
+      eye: eye.distance,
     }
 
     const prepared = this.#preparation.prepare(surface.surface)
@@ -1694,6 +1725,7 @@ export class TerrainStreamer {
     // otherwise revive them wholesale on the frame the gate reopens.
     this.#selection = null
     this.#pose = null
+    this.#standing = null
     // Same argument as the lens below: a palette beside `patches: 0` describes
     // a body this streamer is no longer drawing, and the material would keep
     // wearing the last world's ground.

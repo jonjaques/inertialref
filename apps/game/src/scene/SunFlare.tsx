@@ -54,9 +54,23 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       flare.group.visible = false
       return
     }
+    /*
+     * The drawn sphere is sunk under the datum by the body's relief, and
+     * from a summit its horizon lies degrees under the ground's: a sun 3°
+     * under Mars's horizon from 1.5 km over its highest ground drew its glare
+     * through the ridges that hid it. Where a body's ground is streaming, the
+     * ground under the eye is the occluder.
+     */
+    const ground = engine.groundUnderEye()
     const occluders: FlareOccluder[] = scene.bodies.map((body) => ({
       position: body.placement.position,
-      radius: body.placement.scale,
+      radius:
+        ground !== null && body.address === ground.body
+          ? Math.max(
+              body.placement.scale,
+              ground.ground * body.placement.compression,
+            )
+          : body.placement.scale,
     }))
     // The flare is a lens's response to an unresolved point of glare. Once
     // the disk is genuinely resolved — the star-orbit arrival subtends ~15°
@@ -73,7 +87,12 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
       star.color,
       star.brightness * (1 - filling * 0.85),
       star.placement.angularRadius,
-      sunVisibility(scene.camera.position, star.placement.position, occluders),
+      sunVisibility(
+        scene.camera.position,
+        star.placement.position,
+        occluders,
+        star.placement.angularRadius,
+      ),
       // Scripts choose their coating response. The clean default keeps the
       // reference-matched title shots free of ghost chains crossing the type.
       engine.owner?.arm === 'cutscene'

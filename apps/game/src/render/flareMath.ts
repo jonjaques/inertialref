@@ -65,6 +65,16 @@ const ECLIPSE_INNER = 0.985
 const ECLIPSE_OUTER = 1.03
 /** The graze band: how far past the limb the reddening reaches. */
 const GRAZE_OUTER = 1.3
+/**
+ * An eye under this many of a body's radii over its surface stands on it,
+ * and its horizon is the test (`sunVisibility`); the test blends in from a
+ * quarter of that, so a ship climbing out never steps. Two hundredths: 127 km
+ * over Earth and 68 km over Mars, every ground view and no limb composition,
+ * which stand at 1.04 radii and keep the ramp.
+ */
+const STANDING = 0.02
+/** The Sun's angular radius from Earth, radians: the disk a setting sun fades over where none is given. */
+export const SUN_ANGULAR_RADIUS = 0.0047
 
 const smooth = (edge0: number, edge1: number, x: number): number => {
   const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
@@ -77,11 +87,20 @@ const smooth = (edge0: number, edge1: number, x: number): number => {
  * Each body's contribution comes from the closest approach of the sight
  * *segment* to its center — the segment, not the line, because a body behind
  * the camera or beyond the star occludes nothing however well aligned it is.
+ *
+ * Standing on a body, that closest approach is quadratic in the sun's
+ * elevation, so a ramp in it keeps a sun three degrees under the horizon at
+ * half visibility and draws its glare through the ground. Under `STANDING`
+ * radii over a body's surface the test is the sun's elevation against the
+ * horizon's dip, fading across the disk's own diameter (`sunRadius`), as a
+ * setting sun does. The horizon only takes the flare away: where the sun
+ * is up the ramp's own value stands.
  */
 export function sunVisibility(
   camera: FlareVector,
   sun: FlareVector,
   occluders: readonly FlareOccluder[],
+  sunRadius = SUN_ANGULAR_RADIUS,
 ): FlareVisibility {
   const dx = sun.x - camera.x
   const dy = sun.y - camera.y
@@ -106,7 +125,27 @@ export function sunVisibility(
     const closest = Math.hypot(cx, cy, cz)
     const ratio = closest / body.radius
 
-    visibility *= smooth(ECLIPSE_INNER, ECLIPSE_OUTER, ratio)
+    const distance = Math.hypot(ox, oy, oz)
+    const above = distance / body.radius - 1
+    let eclipsed = smooth(ECLIPSE_INNER, ECLIPSE_OUTER, ratio)
+    if (above > 0 && above < STANDING) {
+      // The eye's up is away from the center; the sun's elevation is over
+      // the horizontal there, and the horizon dips below it by the eye's
+      // height.
+      const elevation = Math.asin(
+        Math.min(
+          1,
+          Math.max(-1, -(ox * dx + oy * dy + oz * dz) / (distance * span)),
+        ),
+      )
+      const dip = -Math.acos(Math.min(1, body.radius / distance))
+      const standing = smooth(dip - sunRadius, dip + sunRadius, elevation)
+      const weight = 1 - smooth(STANDING / 4, STANDING, above)
+      // The horizon's own visibility multiplies the ramp's, so where the
+      // sun is up nothing moves and the fade spans the sun's disk.
+      eclipsed *= 1 - weight + weight * standing
+    }
+    visibility *= eclipsed
     // Only a body actually in front of the camera can put its limb in the
     // shot. The graze band is one-sided: inside the eclipse it is the
     // eclipse's problem.
