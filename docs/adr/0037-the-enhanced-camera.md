@@ -101,44 +101,75 @@ From orbit, Enhanced draws the limb a second time. The physical limb is a
 line: Earth's gas falls off over 8.5 km, a seventh of a percent of the
 radius, two pixels on a disk four hundred across, and a camera's limb is
 that line and no more. The deep-space composite is where the bible licenses
-a cheat, and the soft ring the home page wraps the disk in is one. Outside
-the air, every material that marches the air — the shell, the sphere, the
-ground and the sea — marches it again as the body's own gas and ozone
-stretched to fall off over a twenty-fifth of the radius (`LIMB_FALLOFF`,
-255 km on Earth) or a fifth of the eye's height over the datum, whichever
-is less (`limbFalloff`, `LIMB_STANDOFF`), so the eye is never inside the gas
-it draws — from a station the ring is a band five times the gas's own under
-a black sky, from the Moon the full twenty-fifth — the same column
-`LIMB_GAIN` times over, read through the
-body's own tables at a sample's height over the root of the stretch —
-between its own height, where the ring toward a rising sun is a white
-glare, and the height the stretch maps it to, where the ring reddens over
-its lower half and a station's sunrise band goes warm gray (`marchLimb` in
-`render/air.ts`, ADR-0056 for the physics). The aerosol
-is stretched with the gas and scatters without taking: stretched, it is a
-band 36 km thick at the ring's foot, three and a half deep along the
-tangent, and what it would take is the limb's own line and the disk's
-edge, while its forward lobe — fifty times its side-scatter — is the
-orange every photograph of a limb has toward the sun. At the foot and not
-over the ring, and a quarter of the column (`LIMB_AEROSOL`): spread to the
-gas's fall-off the lobe reaches forty degrees from the sun, and at the
-whole column it saturates, and either way a sunrise from low orbit lit the
-foot along its whole arc and painted the blue band over tan-white. Nothing
-authors a color. The ring's crown is blue because the sun
-reaches it clear; its foot is orange toward the sun because the table's
-column reddens the beam there and the lobe throws it forward; and the ring
-ends where the sun sets on the gas as it stands on this planet, foot first
-— a backlit Earth wears it all round. The lifted gas takes light from the
-surface under it, which is what blends the disk's edge into the ring, and
-from nothing else: not from the limb's own line, which seen through it
-kept a quarter of its blue and turned a sunrise's band gray from low
-orbit, and not from the stars behind it, because a gas that deep takes a
-third of the Milky Way at its foot and wore a dark halo where its own
-light was under a count. The lift
-comes in over two shell heights up from the top of the air (`limbLift`),
-full by three hundred kilometers on Earth, where the reference photographs
-are taken from, so
-a ship climbing out keeps the sky it had, and the shell mesh grows to the
+a cheat, and the bright line the home page draws on the disk's edge is one.
+Outside the air, the shell marches the air again as the body's own gas,
+without its ozone, stretched to fall off over three of its own scale heights
+(`LIMB_STRETCH`, 25 km on Earth) or a fifth of the eye's height over the
+datum, whichever is less (`limbFalloff`, `LIMB_STANDOFF`), so the eye is
+never inside the gas it draws — the same column `LIMB_GAIN` times over,
+ending at two of its fall-offs (`LIMB_CEILING_FALLOFFS`) or at the top of
+the air where that is higher, as it is on Earth, read through the
+body's own tables at the height the stretch maps a sample to, and drawn
+`LIMB_BRIGHTNESS` times over (`marchLimb` in `render/air.ts`, ADR-0056 for
+the physics). At four fall-offs the crown, lit clear of the reddened foot,
+is a periwinkle band twice the height of the orange under it, and Mars's
+sunset limb a broad blue-white arch where a photograph has a thin line. A multiple of the gas and not a
+fraction of the radius, so it is the same ring on every world; at a
+twenty-fifth of the radius the ring stood off Earth's disk as a halo four to
+seven percent of the radius wide, which the owner rejected, and a fraction
+small enough for Earth is under Titan's own gas. The brightness is a
+radiance gain because the stretched foot is optically thick along a
+tangent — sixteen in Earth's blue — so more column only raises the height
+where the ring turns opaque; at six the line is the brightest thing on the
+disk's edge and a sunrise from low orbit is orange under white under blue.
+The aerosol rides in the ring at its whole column and scatters without
+taking: stretched, it is a band 3.6 km thick at the ring's foot, a dozen
+deep along the tangent, and what it would take is the limb's own line,
+while its forward lobe — fifty times its side-scatter — is the orange every
+photograph of a limb has toward the sun, and its gray the white between
+the orange and the blue. Its fall-off is stretched with the gas's but never
+past the gas's own scale height, so the lobe stays at the foot on every
+world: Mars's dust is mixed with its gas and Titan's haze is three times
+its gas, and spread up the ring either paints a broad tan-white arch over
+a limb photographed as a thin line. At a quarter of the column the foot of
+Earth's sunrise limb is an orange thread under a periwinkle band. The ozone
+stays in the physics, where it turns a twilight zenith blue from the ground;
+stretched up the ring and drawn six times over, its tent took the orange out
+of the band between the foot and the crown, so a low-orbit sunrise read
+orange under violet with no white between and every lit rim a blue-violet. Nothing authors a color. The
+ring's crown is blue because the sun reaches it clear; its foot is orange
+toward the sun because the table's column reddens the beam there and the
+lobe throws it forward; and the ring ends where the sun sets on the gas as
+it stands on this planet, foot first — a backlit Earth wears it all round.
+The ring is the shell's alone, drawn past the silhouette. The sphere, the
+ground and the sea take the physical air's light: the lifted gas is the
+same column a second time at nadir, and composed over the disk it laid a
+blue veil that turned a Blue Marble's Sahara magenta (143 : 125 : 137 where
+the physics draws 140 : 114 : 109). Under the same lift they take none of
+its extinction (`clearedFromOrbit`): from orbit the measured air dims a
+surface twice, on the sun's way down and the eye's way out, to about two
+thirds of its own light at nadir, and reddens it toward the terminator, so
+a half-lit Earth's day side read dark brown under a hard terminator where
+the composite has a pale face. Enhanced lights the surface at its own light, in the
+hue the beam's slant gives it over the column overhead — white at the
+subsolar point, peach on a sunward crescent — shows it without the view
+path's extinction, and keeps the air's light over it, which is the haze
+toward the limb, lit by the beam cleared halfway so the day side brightens
+into a pale haze before the terminator as the composite's does. A beam the
+column has all but put out, under 0.3 of the overhead light, is divided by
+that floor rather than brought to full brightness, or it lights the air
+over the night side orange; the sphere, the ground and the sea take it from the one lift, and on
+the ground the lift is nothing. Under a sun 30° over the tangent point the
+shell 20 km past the edge reads within a tenth of the disk 20 km inside it,
+so the edge does not step there; with the sun on the tangent point's
+horizon the shell is nearly twice the disk, and the ring is a bright line
+past the edge. The ring takes no light from the limb's own line, which seen through
+it keeps a quarter of its blue and turns a sunrise's band gray from low
+orbit, nor from the stars behind it, where a stretched gas wears a dark
+halo wherever its own light is under a count. The lift comes in over two
+shell heights up from the top of the air (`limbLift`), full by three hundred
+kilometers on Earth, where the reference photographs are taken from, so a
+ship climbing out keeps the sky it had, and the shell mesh grows to the
 ring's ceiling with it (`limbReach`); the photographic views never see it.
 
 The neutral look keeps a light's hue through the whole curve, and over its

@@ -485,13 +485,11 @@ export function createPlanetMaterial(): PlanetMaterial {
    * a tenth of a radius of it, which is fog over the whole high latitude.
    *
    * The direct beam arrives through the column the table holds for that
-   * point and sun — reddened and dimmed as the sun drops, white on an
-   * airless world — and the ground streamed in front of this disk takes its
-   * beam from the same table, so the two agree across the gate. A surface
-   * near the terminator is lit through hundreds of kilometers of air that
-   * has scattered the blue away, which is the amber band every orbital
-   * photograph puts along the dawn and dusk lines, and the Moon's terminator
-   * stays gray to the end.
+   * point and sun — reddened and dimmed as the sun drops, which is the amber
+   * band every orbital photograph puts along the dawn and dusk lines, and
+   * white on an airless world — and the ground streamed in front of this
+   * disk takes its beam from the same table, so the two agree across the
+   * gate.
    */
   const stretchGain = float(1)
     .div(max(flattening, float(1e-3)))
@@ -621,7 +619,9 @@ export function createPlanetMaterial(): PlanetMaterial {
       .mul(nightStrength)
       // A city under cloud is not visible from orbit.
       .mul(oneMinus(cloudCover.mul(0.85)))
-      // And one under a hundred kilometers of slant air is dimmed by it.
+      // And one under a hundred kilometers of slant air is dimmed by it —
+      // except as Enhanced draws a surface from orbit (`clearedFromOrbit`),
+      // where the limb's cities shine through the slant at their own light.
       .mul(marched.transmittance)
 
     return shadedSurface.add(night)

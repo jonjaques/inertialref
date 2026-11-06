@@ -111,7 +111,7 @@ async function skyToward(
   air.sunColor.value.setRGB(1, 1, 1)
   const eyeRatio = 1 + (ground.height ?? 2) / earth.radius
   const limb = ground.limb ?? limbLift(eyeRatio, top)
-  const falloff = limbFalloff(eyeRatio)
+  const falloff = limbFalloff(eyeRatio, HEIGHTS.rayleigh)
   air.setLimb(limb, falloff)
   expect(air.material.side).toBe(BackSide)
   const scene = new Scene()
@@ -301,19 +301,18 @@ it('draws a setting sun brighter than the sky beside it', async () => {
 
 it("draws the limb from orbit under Enhanced in the air's own colors, and nothing from the ground", async () => {
   // Earth's gas falls off over 8.5 km and its limb is a line two pixels wide
-  // on a disk four hundred across. The home page wraps the disk in a soft
-  // ring, and that is Enhanced's cheat from orbit: the same recipe stretched
-  // a twenty-fifth of a radius tall, read through the same tables at the
-  // sample's height over the root of the stretch, with the aerosol's forward
-  // lobe and not its extinction. Forty kilometers over the limb, seen from
-  // four radii out, the physics has e^−4.7 of its sea-level gas and the
-  // stretched profile e^−0.16. Under a sun a degree and a half over that
-  // point's horizon, ahead of the eye, the stretched gas reads the table at
-  // 7.3 km — forty over the root of thirty — where the beam has crossed most
-  // of a horizon's air and arrives reddened, and the lobe throws it forward;
-  // the physics reads the table at 40 km, where the beam arrives white and
-  // the gas scatters blue. The sky from a beach is the physics under either
-  // view.
+  // on a disk four hundred across. Enhanced's cheat from orbit is the same
+  // recipe stretched three scale heights tall and ending at the air's
+  // 100 km top, which on Earth is over the two of them the ring's own
+  // ceiling would be, read through the same tables at the height the
+  // stretch maps a sample to, with the aerosol's forward lobe at its foot
+  // and not its extinction, and drawn six times over: a bright line under a
+  // percent of the radius wide. Seen from four radii out, toward a sun a
+  // degree and a half over the tangent point's horizon, the foot reads the
+  // table where the beam has crossed a horizon's worth of air and arrives
+  // red, and the lobe throws it forward; the crown reads it where the beam
+  // arrives white and the gas scatters blue. The sky from a beach is the
+  // physics under either view.
   const luminance = ([r, g, b]: readonly number[]) =>
     0.2126 * r! + 0.7152 * g! + 0.0722 * b!
   const limbRay = async (
@@ -354,72 +353,73 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
     }
   }
 
-  // Under a high sun square to the view the ring is the gas's blue,
-  // fourteen times the physics at its foot (measured 0.17 against 0.012).
-  const noonFoot = await limbRay(40_000, 0.5, true)
-  const physicalNoonFoot = await limbRay(40_000, 0.5, false)
+  // Under a high sun square to the view the ring is the gas's blue, a dozen
+  // times the physics twenty kilometers up (measured 1.22 against 0.076 in
+  // the green).
+  const noonFoot = await limbRay(20_000, 0.5, true)
+  const physicalNoonFoot = await limbRay(20_000, 0.5, false)
   expect(luminance(noonFoot)).toBeGreaterThan(6 * luminance(physicalNoonFoot))
   expect(noonFoot[2]).toBeGreaterThan(noonFoot[0])
 
   // Toward a sun a degree and a half over the foot's horizon the ring is
-  // orange at five kilometers (0.64 : 0.40 : 0.19), warm at forty
-  // (0.46 : 0.41 : 0.30) where the physics at that height is blue, and
-  // blue at the crown 400 km up: the order of a photograph of the limb
-  // at sunrise — the troposphere, the stratosphere and the blue above.
+  // orange at five kilometers (4.59 : 1.18 : 0.11), warm at ten
+  // (3.55 : 1.44 : 0.26) and blue at the crown forty kilometers up
+  // (0.34 : 0.47 : 0.76): the order of a photograph of the limb at
+  // sunrise — the troposphere, the stratosphere and the blue above.
   const foot5 = await limbRay(5_000, 0.03, true, true)
   expect(foot5[0]).toBeGreaterThan(2 * foot5[2])
-  const foot = await limbRay(40_000, 0.03, true, true)
-  const physicalFoot = await limbRay(40_000, 0.03, false, true)
+  const foot = await limbRay(10_000, 0.03, true, true)
   expect(foot[0]).toBeGreaterThan(foot[1])
   expect(foot[1]).toBeGreaterThan(foot[2])
-  expect(physicalFoot[2]).toBeGreaterThan(physicalFoot[0])
-  const crown = await limbRay(400_000, 0.03, true, true)
+  const crown = await limbRay(40_000, 0.03, true, true)
   expect(crown[2]).toBeGreaterThan(crown[0])
   expect(crown[0] / crown[2]).toBeLessThan(0.5 * (foot[0] / foot[2]))
 
   // The ring ends where the sun sets on the gas as it stands on this
   // planet, foot first. Eight degrees under the horizontal and square to
-  // the view, the foot's own beam is in the ground and its chord keeps a
-  // fifth of its light from the gas beyond it, while the crown, which
-  // dips twenty degrees, keeps all of it (measured 0.018 of 0.095 against
-  // 0.024 of 0.026). Read through the table's own horizon — the physical
-  // planet's at a fraction of the height — both were dark, and a backlit
-  // Earth wore no ring.
-  const squareFoot = await limbRay(40_000, 0.03, true)
-  const squareCrown = await limbRay(400_000, 0.03, true)
-  const shadowedFoot = await limbRay(40_000, -0.14, true)
-  const shadowedCrown = await limbRay(400_000, -0.14, true)
-  expect(luminance(shadowedFoot)).toBeLessThan(0.33 * luminance(squareFoot))
-  expect(luminance(shadowedCrown)).toBeGreaterThan(
-    0.25 * luminance(squareCrown),
-  )
+  // the view, the foot's own beam is in the ground and keeps nothing
+  // (measured under 1e-4 of 0.44), while the crown fifty kilometers up,
+  // halfway to the ring's ceiling at the air's top, still keeps a share
+  // (7e-4). Read through the table's own horizon — the physical planet's at
+  // a fraction of the height — the crown would be as dark as the foot, and
+  // a backlit Earth would wear no ring.
+  const squareFoot = await limbRay(10_000, 0.03, true)
+  const shadowedFoot = await limbRay(10_000, -0.14, true)
+  const shadowedCrown = await limbRay(50_000, -0.14, true)
+  expect(luminance(shadowedFoot)).toBeLessThan(0.01 * luminance(squareFoot))
+  expect(luminance(shadowedCrown)).toBeGreaterThan(3 * luminance(shadowedFoot))
   // Toward the sun the foot's chord collects the lit gas beyond it, thrown
   // forward by the aerosol's lobe, and reads orange while the sun is a few
-  // degrees under its horizontal — 0.21 : 0.17 : 0.13 at three degrees, the
-  // ring of a backlit Earth — and under half of that, still warm, at eight.
-  const backlitFoot = await limbRay(40_000, -0.05, true, true)
+  // degrees under its horizontal — 0.23 : 0.068 : 0.008 at three degrees,
+  // the ring of a backlit Earth — and under half of that, still warm, at
+  // eight.
+  const backlitFoot = await limbRay(10_000, -0.05, true, true)
   expect(luminance(backlitFoot)).toBeGreaterThan(0.03)
   expect(backlitFoot[0]).toBeGreaterThan(backlitFoot[1])
   expect(backlitFoot[1]).toBeGreaterThan(backlitFoot[2])
-  const deepFoot = await limbRay(40_000, -0.14, true, true)
+  const deepFoot = await limbRay(10_000, -0.14, true, true)
   expect(luminance(deepFoot)).toBeLessThan(0.5 * luminance(backlitFoot))
   expect(deepFoot[0]).toBeGreaterThan(deepFoot[2])
 
-  // The ring crosses the silhouette without a step: the sphere composes
-  // the same lifted gas in front of its edge that the shell draws past it.
-  // Twenty kilometers either side of the edge, from four radii under a
-  // sun 30° over the tangent point, measured 0.22 inside and 0.23 outside.
-  const disk = (sun: Vector3) => {
+  // The ring is the shell's: the sphere takes the physics' light, with the
+  // lift or without it — within a percent, the lift lighting its air with a
+  // cleared beam — and the shell past the edge picks up from it without a
+  // step under a high sun. Twenty kilometers either side of the edge, from
+  // four radii under a sun 30° over the tangent point, the disk measured
+  // 1.21 inside with the lift and without, and the shell outside 1.18. That
+  // is a figure about a high sun: on the tangent point's horizon the disk
+  // is 0.13 and the shell 0.24, the ring a bright line past the edge.
+  const disk = (sun: Vector3, lift: number) => {
     const planet = createPlanetMaterial()
     planet.baseColor.value.setRGB(0, 0, 0)
     planet.sunDirection.value.copy(sun)
     planet.seaLevel.value = 1
     const baked = scatteringFor(haze, top, HEIGHTS)
     planet.air.set(baked.recipe, baked.transmittance, baked.multiScatter)
-    planet.air.lift(1)
+    planet.air.lift(lift, limbFalloff(4, HEIGHTS.rayleigh))
     return new Mesh(new SphereGeometry(1, 128, 96), planet.material)
   }
-  const edgeRay = async (tangentMeters: number) => {
+  const edgeRay = async (tangentMeters: number, lift = 1) => {
     const pre = 1 / 30_000
     const tangent = 1 + tangentMeters / earth.radius
     const eye = 4
@@ -429,7 +429,7 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
     const sun = new Vector3(0, 0, 1)
       .add(radial.clone().multiplyScalar(0.5))
       .normalize()
-    const sphere = disk(sun)
+    const sphere = disk(sun, lift)
     setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
     try {
       return luminance(
@@ -445,6 +445,7 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
     }
   }
   const inside = await edgeRay(-20_000)
+  expect(Math.abs((await edgeRay(-20_000, 0)) / inside - 1)).toBeLessThan(0.01)
   const outside = await edgeRay(20_000)
   // A tenth: the shell and the sphere march the same chord at different
   // sample counts, and the step between them is the seam this holds.

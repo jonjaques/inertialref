@@ -20,7 +20,11 @@ import {
 } from 'three/webgpu'
 import { openSession, type Session } from '@inertialref/devtools'
 import { rng, rootSeed } from '@inertialref/procedural'
-import { buildPatch, terrainPalette } from '@inertialref/rendering'
+import {
+  buildPatch,
+  LIMB_STRETCH,
+  terrainPalette,
+} from '@inertialref/rendering'
 import {
   type Body,
   COVER_CHANNELS,
@@ -823,17 +827,26 @@ describe('the disk, seen through its own air', () => {
    * The luminance at the center of a black disk seen at nadir from four
    * radii out, under a sun behind the eye: whatever is drawn is the air's
    * own light. `mesh` is the drawn sphere's radius in sea-level units — 1 on
-   * the datum, under it as the renderer sinks it.
+   * the datum, under it as the renderer sinks it. `albedo` grays the disk,
+   * so the surface's own light is drawn under the air's.
    */
-  async function veil(air: boolean, mesh = 1, lift = 0): Promise<number> {
+  async function veil(
+    air: boolean,
+    mesh = 1,
+    lift = 0,
+    albedo = 0,
+  ): Promise<number> {
     const planet = createPlanetMaterial()
-    planet.baseColor.value.setRGB(0, 0, 0)
+    planet.baseColor.value.setRGB(albedo, albedo, albedo)
     planet.sunDirection.value.set(0, 0, 1)
     planet.seaLevel.value = 1
     if (air) {
       const baked = tables()
       planet.air.set(baked.recipe, baked.transmittance, baked.multiScatter)
-      planet.air.lift(lift)
+      planet.air.lift(
+        lift,
+        LIMB_STRETCH * (earth.atmosphere!.scaleHeight / earth.radius),
+      )
     }
     const disk = new Mesh(new SphereGeometry(mesh, 48, 32), planet.material)
     const eye = new PerspectiveCamera(10, 1, 0.1, 100)
@@ -858,14 +871,14 @@ describe('the disk, seen through its own air', () => {
     expect(await veil(false)).toBeLessThan(1e-6)
   })
 
-  it("composes Enhanced's limb in front of the disk, and keeps it off the ground", async () => {
-    // The ring the shell draws past the silhouette continues across it
-    // through the same march, so the lifted gas in front of the disk is
-    // the sphere's to draw: at nadir it is a fiftieth of its tangent
-    // column, and under Enhanced from outside the air it adds to the
-    // physics' own veil: measured 0.089 against 0.053. Nothing under a
-    // photographic lens, and nothing from the ground, where `buildScene`
-    // lifts nothing.
+  it("keeps Enhanced's limb off the disk: the sphere takes the physics' light alone", async () => {
+    // The lifted gas is the same column as the physics, so composed in front
+    // of the disk it is a second nadir veil — measured 0.089 against the
+    // physics' 0.053 — and the blue of it tints a Blue Marble's Sahara
+    // magenta. The ring is the shell's, past the silhouette. Under Enhanced
+    // from outside the air the disk's veil is the physics', lit by the beam
+    // cleared halfway: 0.0546 against 0.0525 at nadir, where the ring
+    // composed over it drew 0.089.
     const pre = 1 / 30_000
     setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
     let lifted: number
@@ -876,8 +889,37 @@ describe('the disk, seen through its own air', () => {
     } finally {
       setSceneExposure(gpu.renderer, null)
     }
-    expect(lifted).toBeGreaterThan(1.3 * physical)
-    expect(await veil(true, 1, 1)).toBeCloseTo(physical, 6)
+    expect(physical).toBeGreaterThan(0.01)
+    expect(Math.abs(lifted / physical - 1)).toBeLessThan(0.1)
+  })
+
+  it('draws a surface from orbit at its own light under Enhanced, and through the measured air otherwise', async () => {
+    // From orbit the measured air dims a surface twice, on the sun's way
+    // down and the eye's way out: a gray disk at nadir under a high sun draws
+    // 0.34 through it against 0.50 bare, less the 0.053 of veil. Under
+    // Enhanced from outside the air the surface takes none of that
+    // extinction and keeps the air's light over it — bare plus veil, 0.5548
+    // against 0.5001 and 0.0546 — and under a photographic lens the lift
+    // changes nothing.
+    const pre = 1 / 30_000
+    const measure = async (mode: 'enhanced' | 'photographic') => {
+      setSceneExposure(gpu.renderer, pre, pre, mode)
+      try {
+        return {
+          lifted: await veil(true, 1, 1, 0.5),
+          physical: await veil(true, 1, 0, 0.5),
+          bare: await veil(false, 1, 0, 0.5),
+          airlight: await veil(true, 1, 1),
+        }
+      } finally {
+        setSceneExposure(gpu.renderer, null)
+      }
+    }
+    const enhanced = await measure('enhanced')
+    expect(enhanced.lifted).toBeCloseTo(enhanced.bare + enhanced.airlight, 3)
+    expect(enhanced.physical).toBeLessThan(0.75 * enhanced.lifted)
+    const photographic = await measure('photographic')
+    expect(photographic.lifted).toBeCloseTo(photographic.physical, 6)
   })
 
   it('marches to the datum, not to the sunk sphere under it', async () => {

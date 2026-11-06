@@ -173,13 +173,16 @@ its budget.
   generated shore's sun is a disk over its glow rather than a spot inside it.
 - Every atmosphere seen from orbit has the limb its air makes, a line two
   pixels wide on a disk four hundred across. Under Enhanced, from outside
-  the air, every surface and the shell march the gas a second time,
-  stretched to fall off over a twenty-fifth of the radius — or a fifth of
-  the eye's height, under that — at the same column, through the same
-  tables at a sample's height over the root of the stretch, with this
-  planet's horizon (ADR-0037). The soft ring the home page wraps the disk
-  in is that second march, as a presentation above the physics and not in
-  place of it.
+  the air, the shell marches the gas a second time, stretched to fall off
+  over three of its own scale heights — or a fifth of the eye's height,
+  under that — at the same column, through the same tables at the height
+  the stretch maps a sample to, with this planet's horizon, and draws it
+  six times over (ADR-0037). The bright line the home page draws
+  on the disk's edge is that second march, as a presentation above the
+  physics and not in place of it. The disk takes the physics' light, and
+  under the same lift none of its extinction: from orbit the measured air
+  dims a surface twice, to about two thirds of its own light at nadir, and
+  Enhanced draws it at its own color under the air's light.
 - Under 20° of sun the zenith runs bright: 1.6 times the CIE sky at 10°.
   The model has no ground bounce. By −15° the measured sky is mostly airglow
   and starlight, which the model does not draw, so there it falls short.

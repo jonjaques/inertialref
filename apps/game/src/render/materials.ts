@@ -376,16 +376,18 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     )
 
     /*
-     * Enhanced's limb from orbit: the same recipe stretched a sixth of a
-     * radius tall (`marchLimb`, and `LIMB_FALLOFF` for why a stretch and
-     * not a glow), marched along the same ray through its own, taller
-     * sphere — the mesh grows to it under the lift — and stopped at the
-     * drawn ground where the physics is. Composed beside the physics
+     * Enhanced's limb from orbit: the same recipe stretched three of its
+     * own scale heights tall (`marchLimb`, and `LIMB_STRETCH` for why a
+     * stretch and not a glow), marched along the same ray through its own,
+     * taller sphere — the mesh grows to it under the lift — and stopped at
+     * the drawn ground where the physics is. This is the only place the
+     * ring is drawn; the disk behind the silhouette takes the physics'
+     * light alone (`airToward`). Composed beside the physics
      * (`throughLimb`), and the stars behind the ring are not dimmed by it:
-     * a gas a sixth of a radius deep takes a third of the Milky Way at its
-     * foot, and a backlit Earth wore a dark halo against the galaxy where
-     * the ring's own light was under a count. The ring adds, and takes
-     * nothing from what is behind it.
+     * a stretched gas takes a share of the Milky Way at its foot, and a
+     * backlit Earth wears a dark halo against the galaxy wherever the
+     * ring's own light is under a count. The ring adds, and takes nothing
+     * from what is behind it.
      */
     const reach = limbReachOf(air)
     const halfReach = sqrt(max(reach.mul(reach).sub(impactSquared), 0))
@@ -395,7 +397,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       max(closest.sub(halfInner), nearLimb),
       meetsGround,
     )
-    const lifted = marchLimb(
+    const ring = marchLimb(
       air,
       eyeUnits,
       rayDirection,
@@ -404,9 +406,8 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       sun,
       LIMB_SAMPLES,
     )
-    const { inscatter } = throughLimb(physical, lifted)
+    const { inscatter, transmittance: survives } = throughLimb(physical, ring)
     const radiance = inscatter.mul(sunColor).mul(ATMOSPHERE_GAIN)
-    const survives = physical.transmittance
     const extinguished = oneMinus(
       survives.x.add(survives.y).add(survives.z).div(3),
     )

@@ -96,9 +96,9 @@ export interface RenderBody {
    */
   readonly limb: number
   /**
-   * The ring's fall-off for this eye, in datum units (`limbFalloff`): a
-   * fifth of the eye's height over the datum, up to a twenty-fifth of the
-   * radius, so the eye is never inside the gas it draws.
+   * The ring's fall-off for this eye, in datum units (`limbFalloff`): three
+   * of the gas's own scale heights, or a fifth of the eye's height over the
+   * datum if that is less, so the eye is never inside the gas it draws.
    */
   readonly limbFalloff: number
   readonly trueRadius: Meters
@@ -350,6 +350,15 @@ export function buildScene(
     const rings = body.appearance.rings
     const ringSpan =
       rings === null ? null : ringScales(body.radius, body.relief, rings)
+    const heights =
+      body.appearance.haze === null
+        ? NO_AIR
+        : airHeights(
+            body.radius,
+            body.appearance.haze.height,
+            body.atmosphereScaleHeight,
+            body.appearance.haze.aerosolHeight,
+          )
     bodies.push({
       sunlight: snapshot.stars.reduce(
         (sum, star) =>
@@ -381,16 +390,11 @@ export function buildScene(
             ),
       airTop,
       limb: limbLift(placement.distance / body.radius, airTop),
-      limbFalloff: limbFalloff(placement.distance / body.radius),
-      airHeights:
-        body.appearance.haze === null
-          ? NO_AIR
-          : airHeights(
-              body.radius,
-              body.appearance.haze.height,
-              body.atmosphereScaleHeight,
-              body.appearance.haze.aerosolHeight,
-            ),
+      limbFalloff: limbFalloff(
+        placement.distance / body.radius,
+        heights.rayleigh,
+      ),
+      airHeights: heights,
       trueRadius: body.radius,
       rotationPeriod: body.rotationPeriod,
       flattening: body.polarRadius / body.radius,

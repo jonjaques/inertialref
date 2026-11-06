@@ -523,15 +523,15 @@ export function bodyUniforms(
      * drawn sphere is sunk under.
      */
     /*
-     * The mesh grows to the limb's reach as the eye leaves the air — a
-     * sixth of a radius out at the full lift, against a top under two
-     * percent — because the shell is a back-side sphere and draws nothing
-     * past its own wall: a ring marched to a ceiling the mesh does not
-     * reach ends in a hard circle at the mesh. It grows in every view, not
-     * only Enhanced's, because the mesh is sized here with no camera mode
-     * in reach and a photographic view marches the extra width as a vacuum
-     * — fragments that draw nothing, over a ring the size of the disk's
-     * third. `limbReach` is the one formula, read again by the shader.
+     * The mesh grows to the limb's reach as the eye leaves the air —
+     * `LIMB_CEILING_FALLOFFS` of the ring's fall-offs, where that is above
+     * the top of the air — because the shell is a back-side sphere and
+     * draws nothing past its own wall: a ring marched to a ceiling the mesh
+     * does not reach ends in a hard circle at the mesh. It grows in every
+     * view, not only Enhanced's, because the mesh is sized here with no
+     * camera mode in reach and a photographic view marches the extra width
+     * as a vacuum — fragments that draw nothing. `limbReach` is the one
+     * formula, read again by the shader.
      */
     const seaLevel = body.trueRadius * placement.compression
     const mesh = Math.max(
