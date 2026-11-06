@@ -272,6 +272,19 @@ describe('a mapped body', () => {
       6,
     )
     expect(handed.atmosphere!.limbFalloff).toBe(0.05)
+    // Earth's own fall-off, three of its 8.5 km scale heights, ends two of
+    // them under the air's top, so the mesh is the top and grows nothing:
+    // the common case, where the ring is drawn inside the shell it has.
+    const earthLike = bodyUniforms(
+      body({ limb: 1, limbFalloff: 0.004 }),
+      FRAME,
+      NO_MAPS,
+      null,
+    )
+    expect(earthLike.atmosphere!.scale.x).toBeCloseTo(
+      earthLike.atmosphere!.outerRadius,
+      6,
+    )
   })
 
   it('draws no shell at a point', () => {

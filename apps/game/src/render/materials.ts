@@ -397,7 +397,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       max(closest.sub(halfInner), nearLimb),
       meetsGround,
     )
-    const lifted = marchLimb(
+    const ring = marchLimb(
       air,
       eyeUnits,
       rayDirection,
@@ -406,7 +406,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       sun,
       LIMB_SAMPLES,
     )
-    const { inscatter, transmittance: survives } = throughLimb(physical, lifted)
+    const { inscatter, transmittance: survives } = throughLimb(physical, ring)
     const radiance = inscatter.mul(sunColor).mul(ATMOSPHERE_GAIN)
     const extinguished = oneMinus(
       survives.x.add(survives.y).add(survives.z).div(3),

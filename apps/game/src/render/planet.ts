@@ -619,7 +619,9 @@ export function createPlanetMaterial(): PlanetMaterial {
       .mul(nightStrength)
       // A city under cloud is not visible from orbit.
       .mul(oneMinus(cloudCover.mul(0.85)))
-      // And one under a hundred kilometers of slant air is dimmed by it.
+      // And one under a hundred kilometers of slant air is dimmed by it —
+      // except as Enhanced draws a surface from orbit (`clearedFromOrbit`),
+      // where the limb's cities shine through the slant at their own light.
       .mul(marched.transmittance)
 
     return shadedSurface.add(night)
