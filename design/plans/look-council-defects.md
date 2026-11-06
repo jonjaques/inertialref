@@ -73,18 +73,43 @@ fix found).
   eye, which is the occluder the fix uses. A terrain-aware occluder is a
   depth read the flare was built to avoid. _Open._
 
-## Titan (seen in the phase's preparation)
+## Titan
 
-- **The ground stands as bright as its sky.** Under four optical depths the
-  sky is 1.4% of white and Enhanced's three-percent visibility fill is twice
-  that, so the fill lights the ground. _Out of scope_ (the camera).
-- **The backlit ring is dim and incomplete** (luma 151 against production's
-  cloud sphere at 215): the haze the sun reaches past the shadow is its top,
-  and the lobe at 0.7 throws less forward than tholin aggregates do. _Open._
-- **The in-haze dome clips to one orange.** The meter. _Out of scope._
-- **The disk is half the photograph's brightness.** Titan's geometric albedo
-  is 0.22 and Enhanced's exposure from orbit is fixed; Cassini's frames are
-  stretched. _Physical_, noted.
+The phase's one round put the haze-as-the-sky arm (`feat/look-council-titan`)
+against the cloud sphere and lost it, −0.43 with no seat in favor. The arm
+gains the crescent (4 → 5.67) and the half, and loses the full face, the
+backlit view and every ground view. What the seats reported, all three
+alike:
+
+- **Concentric collars at the limb.** A dark seam at the sphere's
+  silhouette, the haze's own opaque collar beyond it, then a gray-blue top
+  as thick as the orange, where one continuous orange volume fading
+  straight out of the disk with a hair-thin blue-violet fringe is wanted.
+  The seam is Mars's hairline on an opaque haze: the surface march and the
+  shell's march meet at the silhouette and the surface march crowds its
+  samples toward the surface point, while an opaque column's light comes
+  from its near end. The march is every body's. Moving the detached layer
+  onto the haze's edge as a thin fringe changes the rim by under a unit.
+  _Open_, in the march's sampling.
+- **The light inside the haze and on the ground is upside down.** A bright
+  dome brightest overhead, a flat lit orange ground as bright as the sky,
+  a hard horizon, the sun a white point with a streak or missing. The dome
+  is the meter opening for a dark sky; the ground is Enhanced's
+  three-percent visibility fill, twice the light a sky at 1.4% of white
+  delivers; the hard horizon is that bright ground against the brown
+  horizon sky; the sun's slant path at the horizon passes nothing, so the
+  disk is gone and the flare, seen through the air, goes with it. _Out of
+  scope_ (the camera), except the sun as a soft reddened disk, _open_.
+- **The backlit ring is dim and incomplete** (luma 151 against the cloud
+  sphere's 215): the haze the sun reaches past the shadow is its top, and
+  the lobe at 0.7 throws less forward than tholin aggregates do. _Open._
+- **The disk is half the photograph's brightness.** Titan's geometric
+  albedo is 0.22 and Enhanced's exposure from orbit is fixed; Cassini's
+  frames are stretched. _Physical_, noted.
+- **The flare seen through the air** (`ledger/round-07/b.patch`) takes the
+  glare from under Mars's and Earth's dusk horizons through the column
+  alone, and the pairs read it as even; on Titan it takes the sun with it.
+  _Rejected arm_.
 
 ## The protocol
 
