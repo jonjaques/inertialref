@@ -73,6 +73,28 @@ export interface HazeAuthoring {
    * `AEROSOL_ALBEDO` absent.
    */
   readonly aerosolAlbedo?: number
+  /** A thin layer of small particles high over the main haze, or none. */
+  readonly detached?: DetachedHaze
+}
+
+/**
+ * A detached haze layer: small particles in a thin layer high over the main
+ * haze, like Titan's at 300 to 500 km — the blue-violet ring outside its
+ * orange limb in every Cassini natural-color frame — and the ice hazes 30 to
+ * 50 km over Mars's dust, the pale line over its butterscotch limb. A tent
+ * in height like the ozone's, authored in scale heights of the gas so the
+ * recipe stays free of the radius; it scatters its authored color with
+ * Rayleigh's phase, as small particles do, and takes gray.
+ */
+export interface DetachedHaze {
+  /** The layer's peak over the datum, in scale heights of the gas. */
+  readonly center: number
+  /** Its half-width in the same unit; the tent reaches zero there. */
+  readonly halfWidth: number
+  /** Its vertical extinction depth at 550 nm. */
+  readonly depth: number
+  /** What it scatters, scaled so its brightest channel scatters all it takes. */
+  readonly color: { readonly r: number; readonly g: number; readonly b: number }
 }
 
 export interface AtmosphereRecipe {
@@ -113,6 +135,15 @@ export interface AtmosphereRecipe {
   /** Where the ozone layer peaks, and its half-width, planet radii. */
   readonly ozonePeak: number
   readonly ozoneHalfWidth: number
+  /**
+   * The detached layer's tent, planet radii, and its coefficients at the
+   * peak: a gray extinction and an RGB scattering, both per planet radius.
+   * Zero extinction where a haze has none.
+   */
+  readonly detachedPeak: number
+  readonly detachedHalfWidth: number
+  readonly detachedExtinction: number
+  readonly detachedScatter: readonly [number, number, number]
 }
 
 export interface ScatteringLut {
@@ -469,6 +500,23 @@ export function atmosphereRecipe(
     (molecules * OZONE_CROSS_SECTION[2]) / ozoneHalfWidth,
   ]
 
+  // The detached layer: a tent whose area is its peak times its half-width,
+  // so the peak extinction is the depth over the half-width, as the ozone's.
+  const detached = haze.detached
+  const detachedPeak = detached === undefined ? 0 : hRayleigh * detached.center
+  const detachedHalfWidth =
+    detached === undefined ? 1 : Math.max(hRayleigh * detached.halfWidth, 1e-9)
+  const detachedExtinction =
+    detached === undefined ? 0 : detached.depth / detachedHalfWidth
+  const detachedScatter: [number, number, number] =
+    detached === undefined
+      ? [0, 0, 0]
+      : (underPeak(detached.color, detachedExtinction) as [
+          number,
+          number,
+          number,
+        ])
+
   return {
     topRatio,
     hRayleigh,
@@ -481,6 +529,10 @@ export function atmosphereRecipe(
     ozone,
     ozonePeak,
     ozoneHalfWidth,
+    detachedPeak,
+    detachedHalfWidth,
+    detachedExtinction,
+    detachedScatter,
   }
 }
 
@@ -592,21 +644,28 @@ export function aerosolTint(
 function densities(
   h: number,
   recipe: AtmosphereRecipe,
-): { rayleigh: number; mie: number; ozone: number } {
+): { rayleigh: number; mie: number; ozone: number; detached: number } {
   const ceiling = recipe.topRatio - 1
   const fade = Math.max(0, 1 - h / ceiling)
   const ozone = ozoneDensity(h, recipe)
+  const detached = detachedDensity(h, recipe)
   if (fade === 0 || h < 0) {
     // Below the ground the air is whatever it is at the ground: a march step
     // that dips fractionally under r = 1 must not read vacuum.
     if (h < 0)
-      return { rayleigh: fade > 0 ? 1 : 0, mie: fade > 0 ? 1 : 0, ozone }
-    return { rayleigh: 0, mie: 0, ozone }
+      return {
+        rayleigh: fade > 0 ? 1 : 0,
+        mie: fade > 0 ? 1 : 0,
+        ozone,
+        detached,
+      }
+    return { rayleigh: 0, mie: 0, ozone, detached }
   }
   return {
     rayleigh: Math.exp(-h / recipe.hRayleigh) * fade,
     mie: Math.exp(-h / recipe.hMie) * fade,
     ozone,
+    detached,
   }
 }
 
@@ -615,6 +674,16 @@ function ozoneDensity(h: number, recipe: AtmosphereRecipe): number {
   return Math.max(
     0,
     1 - Math.abs(h - recipe.ozonePeak) / Math.max(recipe.ozoneHalfWidth, 1e-9),
+  )
+}
+
+/** The detached layer's tent at height `h`, 1 at its peak; the shader's is the same. */
+function detachedDensity(h: number, recipe: AtmosphereRecipe): number {
+  return Math.max(
+    0,
+    1 -
+      Math.abs(h - recipe.detachedPeak) /
+        Math.max(recipe.detachedHalfWidth, 1e-9),
   )
 }
 
@@ -690,21 +759,25 @@ export function transmittanceFrom(
   for (let i = 0; i < TRANSMITTANCE_STEPS; i += 1) {
     const [s, step] = marchSample(i, TRANSMITTANCE_STEPS, top, perigee)
     const radius = Math.sqrt(r * r + s * s + 2 * r * s * mu)
-    const { rayleigh, mie, ozone } = densities(radius - 1, recipe)
+    const { rayleigh, mie, ozone, detached } = densities(radius - 1, recipe)
+    const gray = recipe.detachedExtinction * detached
     tauR +=
       (recipe.betaRayleigh[0] * rayleigh +
         recipe.mieExtinction[0] * mie +
-        recipe.ozone[0] * ozone) *
+        recipe.ozone[0] * ozone +
+        gray) *
       step
     tauG +=
       (recipe.betaRayleigh[1] * rayleigh +
         recipe.mieExtinction[1] * mie +
-        recipe.ozone[1] * ozone) *
+        recipe.ozone[1] * ozone +
+        gray) *
       step
     tauB +=
       (recipe.betaRayleigh[2] * rayleigh +
         recipe.mieExtinction[2] * mie +
-        recipe.ozone[2] * ozone) *
+        recipe.ozone[2] * ozone +
+        gray) *
       step
   }
   return [Math.exp(-tauR), Math.exp(-tauG), Math.exp(-tauB)]
@@ -855,7 +928,10 @@ export function bakeMultipleScattering(
           const py = direction[1] * s
           const pz = r + direction[2] * s
           const radius = Math.sqrt(px * px + py * py + pz * pz)
-          const { rayleigh, mie, ozone } = densities(radius - 1, recipe)
+          const { rayleigh, mie, ozone, detached } = densities(
+            radius - 1,
+            recipe,
+          )
           const muSunHere =
             (px * sun[0] + py * sun[1] + pz * sun[2]) / Math.max(radius, 1e-6)
           const sunlight = transmittanceAt(
@@ -867,11 +943,13 @@ export function bakeMultipleScattering(
           for (let c = 0; c < 3; c += 1) {
             const scatter =
               (recipe.betaRayleigh[c] as number) * rayleigh +
-              (recipe.mieScatter[c] as number) * mie
+              (recipe.mieScatter[c] as number) * mie +
+              (recipe.detachedScatter[c] as number) * detached
             const extinction =
               (recipe.betaRayleigh[c] as number) * rayleigh +
               (recipe.mieExtinction[c] as number) * mie +
-              (recipe.ozone[c] as number) * ozone
+              (recipe.ozone[c] as number) * ozone +
+              recipe.detachedExtinction * detached
             const view = Math.exp(
               -((tau[c] as number) + extinction * step * 0.5),
             )
@@ -947,12 +1025,14 @@ export function zenithSkyRadiance(
   for (let i = 0; i < ZENITH_STEPS; i += 1) {
     const [offset, step] = marchSample(i, ZENITH_STEPS, column, 0)
     const at = r + offset
-    const { rayleigh, mie, ozone } = densities(at - 1, recipe)
+    const { rayleigh, mie, ozone, detached } = densities(at - 1, recipe)
     const sunlight = transmittanceFrom(at, muSun, recipe)
     const psi = multipleScatteringAt(multiScatter, recipe, at, muSun)
     for (let c = 0; c < 3; c += 1) {
       const scatterRayleigh = (recipe.betaRayleigh[c] as number) * rayleigh
       const scatterMie = (recipe.mieScatter[c] as number) * mie
+      // The detached layer's small particles scatter with Rayleigh's phase.
+      const scatterDetached = (recipe.detachedScatter[c] as number) * detached
       // The aerosol turns to its forward color by the lobe's share, as the
       // march does; the multiple scattering keeps the sideways one.
       const scatterToward =
@@ -963,12 +1043,15 @@ export function zenithSkyRadiance(
       const extinction =
         scatterRayleigh +
         (recipe.mieExtinction[c] as number) * mie +
-        (recipe.ozone[c] as number) * ozone
+        (recipe.ozone[c] as number) * ozone +
+        recipe.detachedExtinction * detached
       const view = Math.exp(-((depth[c] as number) + extinction * step * 0.5))
       const single =
-        (scatterRayleigh * phaseRayleigh + scatterToward * phaseMie) *
+        ((scatterRayleigh + scatterDetached) * phaseRayleigh +
+          scatterToward * phaseMie) *
         (sunlight[c] as number)
-      const multiple = (psi[c] as number) * (scatterRayleigh + scatterMie)
+      const multiple =
+        (psi[c] as number) * (scatterRayleigh + scatterMie + scatterDetached)
       radiance[c] =
         (radiance[c] as number) +
         view * (single + multiple) * step * ATMOSPHERE_GAIN

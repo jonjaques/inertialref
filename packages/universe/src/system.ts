@@ -359,6 +359,21 @@ export interface HazeLayer {
    * the blue it takes. 0.94 absent, MACv2's global mean.
    */
   readonly aerosolAlbedo?: number
+  /**
+   * A thin layer of small particles high over the main haze, or none:
+   * Titan's detached haze at 300 to 500 km, the blue-violet ring outside its
+   * orange limb in every Cassini natural-color frame, and the ice hazes 30
+   * to 50 km over Mars's dust. A tent in height, in scale heights of the
+   * gas so it is free of the radius: its peak, its half-width, its vertical
+   * extinction depth at 550 nm, and what it scatters, which it does with
+   * Rayleigh's phase, as small particles do.
+   */
+  readonly detached?: {
+    readonly center: number
+    readonly halfWidth: number
+    readonly depth: number
+    readonly color: LinearRgb
+  }
 }
 
 export interface BodyAppearance {

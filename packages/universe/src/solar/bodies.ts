@@ -91,6 +91,13 @@ export interface SolarHaze {
   readonly aerosolDepth?: number
   /** Its single-scattering albedo in its brightest channel. See `HazeLayer`. */
   readonly aerosolAlbedo?: number
+  /** A detached layer of small particles high over the haze. See `HazeLayer`. */
+  readonly detached?: {
+    readonly center: number
+    readonly halfWidth: number
+    readonly depth: number
+    readonly color: LinearRgb
+  }
 }
 
 export interface SolarClouds {
@@ -360,6 +367,16 @@ const SATURNIAN: readonly SolarBody[] = [
       // DISR: 4.5 at 531 nm against 2 at 939.
       aerosolAngstrom: 1.5,
       ozone: 0,
+      // The detached haze layer Cassini photographs outside the orange
+      // limb, 300 to 500 km up: 14.3 scale heights of the 21 km gas with a
+      // 50 km half-width, scattering blue-violet. Thin: at 0.08 it stood on
+      // the disk's edge as a gray ring 2% of the radius wide.
+      detached: {
+        center: 14.3,
+        halfWidth: 2.4,
+        depth: 0.01,
+        color: { r: 0.45, g: 0.6, b: 1 },
+      },
     },
     // Opaque, and drawn from the tint rather than a map: Titan is a featureless
     // orange ball to anything but radar.
@@ -595,6 +612,9 @@ export const SOLAR_PLANETS: readonly SolarBody[] = [
       // around the setting sun — the limb color above.
       aerosolAlbedo: 0.93,
       ozone: 0,
+      // No ice layer: the fine pale line the orbiters photograph 40 to
+      // 60 km over the butterscotch limb is, at the plate's scale, a second
+      // contour a pixel over the first, and the rim reads as two strokes.
     },
     // Olympus Mons to Hellas Planitia: 29 km, the largest relief on any
     // terrestrial surface in the system.
