@@ -898,8 +898,8 @@ describe('the disk, seen through its own air', () => {
     // down and the eye's way out: a gray disk at nadir under a high sun draws
     // 0.34 through it against 0.50 bare, less the 0.053 of veil. Under
     // Enhanced from outside the air the surface takes none of that
-    // extinction and keeps the air's light over it — bare plus veil, 0.5527
-    // against 0.5001 and 0.0525 — and under a photographic lens the lift
+    // extinction and keeps the air's light over it — bare plus veil, 0.5548
+    // against 0.5001 and 0.0546 — and under a photographic lens the lift
     // changes nothing.
     const pre = 1 / 30_000
     const measure = async (mode: 'enhanced' | 'photographic') => {

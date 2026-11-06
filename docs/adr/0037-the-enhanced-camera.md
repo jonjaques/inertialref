@@ -107,7 +107,8 @@ without its ozone, stretched to fall off over three of its own scale heights
 (`LIMB_STRETCH`, 25 km on Earth) or a fifth of the eye's height over the
 datum, whichever is less (`limbFalloff`, `LIMB_STANDOFF`), so the eye is
 never inside the gas it draws — the same column `LIMB_GAIN` times over,
-ending at two of its fall-offs (`LIMB_CEILING_FALLOFFS`), read through the
+ending at two of its fall-offs (`LIMB_CEILING_FALLOFFS`) or at the top of
+the air where that is higher, as it is on Earth, read through the
 body's own tables at the height the stretch maps a sample to, and drawn
 `LIMB_BRIGHTNESS` times over (`marchLimb` in `render/air.ts`, ADR-0056 for
 the physics). At four fall-offs the crown, lit clear of the reddened foot,
@@ -160,10 +161,14 @@ reddening — white at the subsolar point, peach on a sunward crescent — shows
 path's extinction, and keeps the air's light over it, which is the haze
 toward the limb, lit by the beam cleared halfway so the day side brightens
 into a pale haze before the terminator as the composite's does. A beam the
-column has all but put out keeps its own dimming under a third of the
-overhead light, or it lights the air over the night side orange; the sphere, the ground and the sea take it from the one lift, and on
-the ground the lift is nothing. The shell 20 km past the edge reads within
-thirty percent of the disk 20 km inside it, so the edge does not step. The ring takes no light from the limb's own line, which seen through
+column has all but put out, under 0.3 of the overhead light, is divided by
+that floor rather than brought to full brightness, or it lights the air
+over the night side orange; the sphere, the ground and the sea take it from the one lift, and on
+the ground the lift is nothing. Under a sun 30° over the tangent point the
+shell 20 km past the edge reads within a tenth of the disk 20 km inside it,
+so the edge does not step there; with the sun on the tangent point's
+horizon the shell is nearly twice the disk, and the ring is a bright line
+past the edge. The ring takes no light from the limb's own line, which seen through
 it keeps a quarter of its blue and turns a sunrise's band gray from low
 orbit, nor from the stars behind it, where a stretched gas wears a dark
 halo wherever its own light is under a count. The lift comes in over two

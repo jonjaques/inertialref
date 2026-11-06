@@ -258,6 +258,33 @@ describe('a mapped body', () => {
     )
     expect(outside.atmosphere!.outerRadius).toBe(top)
     expect(outside.atmosphere!.limb).toBe(1)
+    // Sized from the fall-off the shader is handed, not re-derived from the
+    // eye: a fall-off the field carries draws its own ceiling at any
+    // distance. A twentieth, so the ceiling clears the fixture's top.
+    const handed = bodyUniforms(
+      body({ limb: 1, limbFalloff: 0.05 }),
+      FRAME,
+      NO_MAPS,
+      null,
+    )
+    expect(handed.atmosphere!.scale.x).toBeCloseTo(
+      handed.atmosphere!.seaLevel * (1 + LIMB_CEILING_FALLOFFS * 0.05),
+      6,
+    )
+    expect(handed.atmosphere!.limbFalloff).toBe(0.05)
+    // Earth's own fall-off, three of its 8.5 km scale heights, ends two of
+    // them under the air's top, so the mesh is the top and grows nothing:
+    // the common case, where the ring is drawn inside the shell it has.
+    const earthLike = bodyUniforms(
+      body({ limb: 1, limbFalloff: 0.004 }),
+      FRAME,
+      NO_MAPS,
+      null,
+    )
+    expect(earthLike.atmosphere!.scale.x).toBeCloseTo(
+      earthLike.atmosphere!.outerRadius,
+      6,
+    )
   })
 
   it('draws no shell at a point', () => {

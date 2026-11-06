@@ -205,7 +205,8 @@ export interface AtmosphereMaterial {
    * How far the eye stands outside the air, 0 to 1 (`RenderBody.limb`),
    * and the ring's fall-off for that eye (`RenderBody.limbFalloff`): what
    * Enhanced's limb is drawn at. The mesh is sized to `limbReach` of them
-   * by `bodyUniforms`; the shader derives the same reach from `top`.
+   * and the air's top by `bodyUniforms`; the shader derives the same reach
+   * from the same three (`limbReachOf`).
    */
   setLimb(lift: number, falloff: number): void
 }
@@ -396,7 +397,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       max(closest.sub(halfInner), nearLimb),
       meetsGround,
     )
-    const lifted = marchLimb(
+    const ring = marchLimb(
       air,
       eyeUnits,
       rayDirection,
@@ -405,7 +406,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
       sun,
       LIMB_SAMPLES,
     )
-    const { inscatter, transmittance: survives } = throughLimb(physical, lifted)
+    const { inscatter, transmittance: survives } = throughLimb(physical, ring)
     const radiance = inscatter.mul(sunColor).mul(ATMOSPHERE_GAIN)
     const extinguished = oneMinus(
       survives.x.add(survives.y).add(survives.z).div(3),

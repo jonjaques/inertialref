@@ -302,16 +302,17 @@ it('draws a setting sun brighter than the sky beside it', async () => {
 it("draws the limb from orbit under Enhanced in the air's own colors, and nothing from the ground", async () => {
   // Earth's gas falls off over 8.5 km and its limb is a line two pixels wide
   // on a disk four hundred across. Enhanced's cheat from orbit is the same
-  // recipe stretched three scale heights tall and ending at two of them,
-  // read through the same tables at the height the stretch maps a sample
-  // to, with the aerosol's forward lobe at its foot and not its extinction,
-  // and drawn six times over: a bright line under a percent of the radius
-  // wide. Seen from four radii out, toward a sun a degree and a half
-  // over the tangent point's horizon, the foot reads the table where the
-  // beam has crossed a horizon's worth of air and arrives red, and the lobe
-  // throws it forward; the crown reads it where the beam arrives white and
-  // the gas scatters blue. The sky from a beach is the physics under either
-  // view.
+  // recipe stretched three scale heights tall and ending at the air's
+  // 100 km top, which on Earth is over the two of them the ring's own
+  // ceiling would be, read through the same tables at the height the
+  // stretch maps a sample to, with the aerosol's forward lobe at its foot
+  // and not its extinction, and drawn six times over: a bright line under a
+  // percent of the radius wide. Seen from four radii out, toward a sun a
+  // degree and a half over the tangent point's horizon, the foot reads the
+  // table where the beam has crossed a horizon's worth of air and arrives
+  // red, and the lobe throws it forward; the crown reads it where the beam
+  // arrives white and the gas scatters blue. The sky from a beach is the
+  // physics under either view.
   const luminance = ([r, g, b]: readonly number[]) =>
     0.2126 * r! + 0.7152 * g! + 0.0722 * b!
   const limbRay = async (
@@ -377,11 +378,11 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   // The ring ends where the sun sets on the gas as it stands on this
   // planet, foot first. Eight degrees under the horizontal and square to
   // the view, the foot's own beam is in the ground and keeps nothing
-  // (measured 1e-4 of 0.70), while the crown fifty kilometers up, at
-  // the ring's ceiling, still keeps a share (7e-4). Read through the
-  // table's own horizon — the physical planet's at a fraction of the
-  // height — the crown was as dark as the foot, and a backlit Earth wore
-  // no ring.
+  // (measured 1e-4 of 0.70), while the crown fifty kilometers up, halfway
+  // to the ring's ceiling at the air's top, still keeps a share (7e-4).
+  // Read through the table's own horizon — the physical planet's at a
+  // fraction of the height — the crown would be as dark as the foot, and a
+  // backlit Earth would wear no ring.
   const squareFoot = await limbRay(10_000, 0.03, true)
   const shadowedFoot = await limbRay(10_000, -0.14, true)
   const shadowedCrown = await limbRay(50_000, -0.14, true)
@@ -403,10 +404,11 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   // The ring is the shell's: the sphere takes the physics' light, with the
   // lift or without it — within a percent, the lift lighting its air with a
   // cleared beam — and the shell past the edge picks up from it without a
-  // step. Twenty kilometers either side of the edge, from four
-  // radii under a sun 30° over the tangent point, the disk measured 1.21
-  // inside with the lift and without, and the shell outside is within
-  // thirty percent of it.
+  // step under a high sun. Twenty kilometers either side of the edge, from
+  // four radii under a sun 30° over the tangent point, the disk measured
+  // 1.21 inside with the lift and without, and the shell outside 1.18. That
+  // is a figure about a high sun: on the tangent point's horizon the disk
+  // is 0.13 and the shell 0.24, the ring a bright line past the edge.
   const disk = (sun: Vector3, lift: number) => {
     const planet = createPlanetMaterial()
     planet.baseColor.value.setRGB(0, 0, 0)
@@ -419,31 +421,35 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   }
   const edgeRay = async (tangentMeters: number, lift = 1) => {
     const pre = 1 / 30_000
+    const tangent = 1 + tangentMeters / earth.radius
+    const eye = 4
+    const sine = tangent / eye
+    const cosine = Math.sqrt(1 - sine * sine)
+    const radial = new Vector3(cosine, sine, 0)
+    const sun = new Vector3(0, 0, 1)
+      .add(radial.clone().multiplyScalar(0.5))
+      .normalize()
+    const sphere = disk(sun, lift)
     setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
     try {
-      const tangent = 1 + tangentMeters / earth.radius
-      const eye = 4
-      const sine = tangent / eye
-      const cosine = Math.sqrt(1 - sine * sine)
-      const radial = new Vector3(cosine, sine, 0)
-      const sun = new Vector3(0, 0, 1)
-        .add(radial.clone().multiplyScalar(0.5))
-        .normalize()
       return luminance(
         await skyToward(
           new Vector3(sine, -cosine, 0),
           { height: (eye - 1) * earth.radius, fov: 0.05, sun },
-          disk(sun, lift),
+          sphere,
         ),
       )
     } finally {
       setSceneExposure(gpu.renderer, null)
+      sphere.material.dispose()
     }
   }
   const inside = await edgeRay(-20_000)
   expect(Math.abs((await edgeRay(-20_000, 0)) / inside - 1)).toBeLessThan(0.01)
   const outside = await edgeRay(20_000)
-  expect(Math.abs(inside / outside - 1)).toBeLessThan(0.3)
+  // A tenth: the shell and the sphere march the same chord at different
+  // sample counts, and the step between them is the seam this holds.
+  expect(Math.abs(inside / outside - 1)).toBeLessThan(0.1)
 
   const ground = async (enhanced: boolean) => {
     const pre = 1 / 30_000

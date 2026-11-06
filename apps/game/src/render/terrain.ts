@@ -1403,9 +1403,9 @@ export function createTerrainMaterial(): TerrainMaterial {
      * the disk. The same march through the same tables (`air.ts`), because
      * the two are the same body and the gate between them is one pixel of
      * relief, and because the sky the shell draws at the horizon is what the
-     * far ground has to fade into: veiled toward an authored haze color by
-     * 27% where the path's transmittance is 0.22, fifty kilometers of desert
-     * met a gray-white horizon in a hard line.
+     * far ground has to fade into: fifty kilometers of desert veiled 27%
+     * toward an authored haze color, where the path's transmittance is 0.22,
+     * meets a gray-white horizon in a hard line.
      */
     const marched = airToward(air, eyeUnits, pointUnits, sun)
     const surface = direct.add(indirect).add(sunlight.mul(glint)).add(emission)
