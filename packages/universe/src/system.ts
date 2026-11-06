@@ -31,6 +31,7 @@ import {
   surfaceTemperature,
 } from './grammar.ts'
 import {
+  GIANT_AEROSOL,
   hazeFor,
   type LiquidAppearance,
   liquidAppearance,
@@ -347,7 +348,7 @@ export interface HazeLayer {
   /**
    * The aerosol's vertical extinction depth at 550 nm, where the aerosol is
    * the sky and its depth is measured apart from the gas's: Mars's dust at
-   * 0.4, where `thickness` carries only its 600 Pa of CO₂. Authored, the
+   * 0.3, where `thickness` carries only its 600 Pa of CO₂. Authored, the
    * aerosol scatters `color` sideways and `limb` toward the sun; absent, it
    * is Earth's aerosol scaled by `thickness`, which is right where the gas
    * is the sky.
@@ -359,6 +360,21 @@ export interface HazeLayer {
    * the blue it takes. 0.94 absent, MACv2's global mean.
    */
   readonly aerosolAlbedo?: number
+  /**
+   * A thin layer of small particles high over the main haze, or none:
+   * Titan's detached haze at 300 to 500 km, the blue-violet ring outside its
+   * orange limb in every Cassini natural-color frame, and the ice hazes 30
+   * to 50 km over Mars's dust. A tent in height, in scale heights of the
+   * gas so it is free of the radius: its peak, its half-width, its vertical
+   * extinction depth at 550 nm, and what it scatters, which it does with
+   * Rayleigh's phase, as small particles do.
+   */
+  readonly detached?: {
+    readonly center: number
+    readonly halfWidth: number
+    readonly depth: number
+    readonly color: LinearRgb
+  }
 }
 
 export interface BodyAppearance {
@@ -1225,7 +1241,7 @@ function proceduralAppearance(
   const palette = new Rng(deriveSeed(surface.seed, 'appearance'))
   const grammar = surface.grammar
   const hue: ReturnType<typeof hazeFor> = giant
-    ? { ...(KIND_HAZE[kind] ?? KIND_HAZE.rocky), aerosolScale: 1, angstrom: 0 }
+    ? { ...(KIND_HAZE[kind] ?? KIND_HAZE.rocky), ...GIANT_AEROSOL }
     : hazeFor(palette.fork('haze'), grammar)
   return {
     texture: null,

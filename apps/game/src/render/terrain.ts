@@ -1358,26 +1358,24 @@ export function createTerrainMaterial(): TerrainMaterial {
     // a negative beam.
     const diffuse = min(skyStrength.mul(SKY_FRACTION), 1)
     const skyView = saturate(dot(shaded, up)).mul(0.5).add(0.5)
-    const direct = surfaceAlbedo
-      .mul(photometric)
-      .mul(daylight)
-      .mul(sunlight)
-      .mul(oneMinus(diffuse))
     /*
      * Past a few of Earth's columns the fraction is the whole beam and only
      * the tables know what the sky delivers: under Titan's four optical
      * depths the zenith is 1.4% of white and the beam e^−4.3 of itself, so a
-     * ground lit by the authored tan at a third of the sun stood cream under
-     * a near-black sky. There the sky is the zenith the camera marches each
-     * frame (`skyOverhead`), the irradiance of a uniform sky over π, which a
-     * sky that deep is. The two meet over the same columns the limb's lift
-     * leaves (`LIMB_OWN_FROM`).
+     * ground lit by the authored tan at a third of the sun stands cream under
+     * a near-black sky. There the sky is the marched zenith over the ground
+     * (`skyOverhead`), the irradiance of a uniform sky over π, which a sky
+     * that deep is (`deepSky`). That sky is not taken out of the beam: it is
+     * the tables' own light rather than a share of the beam's, and the beam
+     * already arrives through the tables' extinction. Taken out as well, the
+     * fraction leaves the ground no sun and no shading from it.
      */
-    const deep = smoothstep(
-      float(LIMB_OWN_FROM),
-      float(LIMB_OWN_TO),
-      skyStrength,
-    )
+    const deep = deepSky(skyStrength)
+    const direct = surfaceAlbedo
+      .mul(photometric)
+      .mul(daylight)
+      .mul(sunlight)
+      .mul(oneMinus(diffuse.mul(oneMinus(deep))))
     const thin = skyColor
       .mul(diffuse)
       .mul(skyView)
@@ -1423,9 +1421,9 @@ export function createTerrainMaterial(): TerrainMaterial {
      * the disk. The same march through the same tables (`air.ts`), because
      * the two are the same body and the gate between them is one pixel of
      * relief, and because the sky the shell draws at the horizon is what the
-     * far ground has to fade into: veiled toward an authored haze color by
-     * 27% where the path's transmittance is 0.22, fifty kilometers of desert
-     * met a gray-white horizon in a hard line.
+     * far ground has to fade into: fifty kilometers of desert veiled 27%
+     * toward an authored haze color, where the path's transmittance is 0.22,
+     * meets a gray-white horizon in a hard line.
      */
     const marched = airToward(air, eyeUnits, pointUnits, sun)
     const surface = direct.add(indirect).add(sunlight.mul(glint)).add(emission)
@@ -1636,9 +1634,20 @@ export const BEAM_TERMINATOR = 0.025
  *
  * A third is the diffuse fraction of a clear terrestrial noon; it rises toward
  * one under overcast, which is a state this model does not carry. Scaled by
- * `airThickness` so Mars's 0.15 gives 5% and Luna's absent air gives none.
+ * `airThickness` so Mars's dust, at 0.57, gives 19% and Luna's absent air
+ * gives none.
  */
 export const SKY_FRACTION = 0.33
+
+/**
+ * How far a ground or a sea under `skyStrength` of Earth's columns takes its
+ * sky from the marched zenith (`skyOverhead`) instead of the authored tint:
+ * none under `LIMB_OWN_FROM`, all past `LIMB_OWN_TO`, the same columns over
+ * which the limb's lift leaves a haze to its own ring.
+ */
+export function deepSky(skyStrength: Node<'float'>): Node<'float'> {
+  return smoothstep(float(LIMB_OWN_FROM), float(LIMB_OWN_TO), skyStrength)
+}
 
 /*
  * A one-pixel white stand-in, so a body with no map runs the identical graph.

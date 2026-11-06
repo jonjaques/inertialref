@@ -53,7 +53,7 @@ export const bakeAtmosphereTask = defineTask<
   BakeAtmosphereResponse
 >({
   name: 'render.bakeAtmosphere',
-  version: 2,
+  version: 4,
   run({ haze, topRatio, heights }) {
     const recipe = atmosphereRecipe(haze, topRatio, heights)
     const transmittance = bakeTransmittance(recipe)

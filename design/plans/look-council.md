@@ -246,6 +246,17 @@ views as guards. What it kept from the list above, and what it found.
   Codex seat opened `~/.agents/skills/unslop/SKILL.md`, listed it honestly
   under `opened`, and the strict packet rule threw the review out, twice in
   one round. The rule should name the harness's own files as allowed.
+- **Titan and the exoplanets did not land, for reasons the run could not
+  reach.** Titan's haze as the sky lost its round by −0.43: the seats saw
+  concentric collars at the limb, which are the surface march meeting the
+  shell's at the silhouette, and a ground as bright as its sky, which is
+  the camera's fill. The exoplanet families as their own skies gained
+  +0.17 with every valid seat in favor, under a three-arm bound of 0.49:
+  the two aerosol worlds answered and the five gas-lit ones stayed balls
+  under the ring's outline. The march's step integral, found on the
+  sulfuric world's dark cloud deck, is the one physics fix of the run, and
+  the seats read every finished scene it moved as even. Each phase's work
+  is a draft pull request stacked on the first, marked as not landed.
 - **The defects that did not land are logged.**
   [`look-council-defects.md`](look-council-defects.md) carries every one a
   seat reported, with its status and the patch that fixes it where one

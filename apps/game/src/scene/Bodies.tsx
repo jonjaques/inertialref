@@ -18,8 +18,11 @@ import {
   exposureForLuminance,
   DISK_THROUGH_AIR_CEILING,
   diskThroughAir,
+  LIMB_OWN_FROM,
   type RenderBody,
+  settingDiskCosine,
   SURFACE_LUMINANCE,
+  visibleThickness,
 } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -392,11 +395,17 @@ export function Bodies({
       readonly standing: Standing
       readonly sun: Vec3 | null
       readonly sunColor: Rgb
+      /** Past `LIMB_OWN_FROM` of Earth's columns, where the ground reads `skyOverhead`. */
+      readonly deep: boolean
     } | null
-    // What the air does to the star being drawn, set per star below.
-    let throughAir: readonly [number, number, number] | null = null
 
-    const draw = (key: string, body: RenderBody, star: Rgb | null): void => {
+    /** `throughAir` is what the air does to a star's disk, per channel. */
+    const draw = (
+      key: string,
+      body: RenderBody,
+      star: Rgb | null,
+      throughAir: readonly [number, number, number] | null = null,
+    ): void => {
       const appearance = body.appearance
       const visual = residency.draw(key, () =>
         materialize(
@@ -605,6 +614,9 @@ export function Bodies({
                 standing,
                 sun,
                 sunColor: uniforms.sunColor,
+                deep:
+                  appearance.haze !== null &&
+                  visibleThickness(appearance.haze) > LIMB_OWN_FROM,
               }
             overhead = Math.max(overhead, sky)
           }
@@ -626,31 +638,41 @@ export function Bodies({
           )
         : 0
     for (const star of scene.stars) {
-      throughAir =
+      const throughAir =
         standingAir === null
           ? null
           : diskThroughAir(
               standingAir.scattering.recipe,
               standingAir.standing.radius,
-              Vec.dot(
-                standingAir.standing.up,
-                Vec.normalize(
-                  Vec.sub(star.placement.position, scene.camera.position),
+              settingDiskCosine(
+                standingAir.standing.radius,
+                Vec.dot(
+                  standingAir.standing.up,
+                  Vec.normalize(
+                    Vec.sub(star.placement.position, scene.camera.position),
+                  ),
                 ),
+                star.placement.angularRadius,
               ),
               diskCompression(star, visibility),
               DISK_THROUGH_AIR_CEILING / 2 ** opened,
             )
-      draw(starKey(star), starAsBody(star, visibility), star.color)
+      draw(starKey(star), starAsBody(star, visibility), star.color, throughAir)
     }
-    throughAir = null
     airLuminance.value = overhead
-    // The same zenith in color, for the ground and the sea under a deep air.
-    if (standingAir === null) skyOverhead.value.set(0, 0, 0)
+    /*
+     * The zenith over the ground under the eye, in color, for the ground and
+     * the sea under a deep air. At the datum and not at the eye: 100 km up
+     * Titan's haze the column overhead is a fifth of the ground's, and a
+     * ground lit by the eye's sky brightens and dims as the eye climbs. A
+     * thin air skips the march, since no shader reads it there.
+     */
+    if (standingAir === null || !standingAir.deep)
+      skyOverhead.value.set(0, 0, 0)
     else {
       const [r, g, b] = airOverheadRgb(
         standingAir.scattering,
-        standingAir.standing,
+        { radius: 1, up: standingAir.standing.up },
         standingAir.sun,
         standingAir.sunColor,
       )

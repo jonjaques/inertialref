@@ -196,10 +196,13 @@ its budget.
   Henyey–Greenstein lobe's share of its own peak (`AEROSOL_FORWARD_PEAK`),
   with no channel scattering more than it takes. Mars is the one so
   authored: its gas at its measured Rayleigh depth of 0.0025 and its dust at
-  0.4 with an albedo of 0.93 in the red (the table above), so its zenith
-  under a 41° sun is 0.066 of the surface white where the gas read as
-  butterscotch made 0.009 and a near-black sky, and the blue around its
-  setting sun is the dust's forward lobe. Titan still draws Earth's column
+  a clear season's 0.3, the low end of the rovers' 0.3 to 1.0, with an
+  albedo of 0.93 in the red (the table above). At 0.4 its zenith under a 41°
+  sun is 0.066 of the surface white and at 0.3 a fifth less, where the gas
+  read as butterscotch makes 0.009 and a near-black sky, and the blue around
+  its setting sun is the dust's forward lobe. Its air reaches 100 km, as
+  Earth's does: a backlit limb's shadow stands 63 km up, where the dust is
+  0.3% of itself, and a shell cut at 60 km leaves that faint dust unlit. Titan still draws Earth's column
   in orange, so its column extinguishes red and its low sun comes through
   green-white, where Huygens measured a haze of 4.5 whose albedo falls
   toward the blue; its depth, albedo and slope per band are in the table

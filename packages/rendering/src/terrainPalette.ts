@@ -140,7 +140,10 @@ export interface TerrainPalette {
    */
   readonly sheet: number
 
-  /** How much air there is over the ground, 0..1 with Earth at 1. */
+  /**
+   * How much air there is over the ground, with Earth at 1 and no ceiling:
+   * Titan's haze is ten (`visibleThickness`).
+   */
   readonly airThickness: number
   /**
    * What the sky over this ground is, as a **tint** of unit luminance.
@@ -486,6 +489,10 @@ export function terrainPalette(body: Body): TerrainPalette {
 
     // What the column scatters, over Earth's: the gas's thickness where the
     // gas is the sky, the dust's depth where the dust is (`visibleThickness`).
+    // Not held to Earth's: the ground and the sea cap the share they take out
+    // of the direct beam at the whole of it, and past `LIMB_OWN_FROM` of
+    // Earth's columns they take the marched zenith instead, which needs the
+    // column's own depth, Titan's ten.
     airThickness:
       body.appearance.haze === null
         ? 0

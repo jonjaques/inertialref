@@ -59,7 +59,8 @@ export interface HazeAuthoring {
   readonly ozone: number
   /**
    * The aerosol's vertical extinction depth at 550 nm, where it is measured
-   * apart from the gas's: Mars's dust at 0.4, Titan's haze at 4.5. Authored,
+   * apart from the gas's: Mars's clear-season dust at 0.3, Titan's haze at
+   * 4.5. Authored,
    * the aerosol is the sky, and its color is the authored `color` sideways
    * and `limb` forward (`atmosphereRecipe`). Absent, the aerosol is Earth's
    * column scaled by `thickness` (`TAU_MIE`) in the gray the limb cannot
@@ -73,6 +74,28 @@ export interface HazeAuthoring {
    * `AEROSOL_ALBEDO` absent.
    */
   readonly aerosolAlbedo?: number
+  /** A thin layer of small particles high over the main haze, or none. */
+  readonly detached?: DetachedHaze
+}
+
+/**
+ * A detached haze layer: small particles in a thin layer high over the main
+ * haze, like Titan's at 300 to 500 km — the blue-violet ring outside its
+ * orange limb in every Cassini natural-color frame — and the ice hazes 30 to
+ * 50 km over Mars's dust, the pale line over its butterscotch limb. A tent
+ * in height like the ozone's, authored in scale heights of the gas so the
+ * recipe stays free of the radius; it scatters its authored color with
+ * Rayleigh's phase, as small particles do, and takes gray.
+ */
+export interface DetachedHaze {
+  /** The layer's peak over the datum, in scale heights of the gas. */
+  readonly center: number
+  /** Its half-width in the same unit; the tent reaches zero there. */
+  readonly halfWidth: number
+  /** Its vertical extinction depth at 550 nm. */
+  readonly depth: number
+  /** What it scatters, scaled so its brightest channel scatters all it takes. */
+  readonly color: { readonly r: number; readonly g: number; readonly b: number }
 }
 
 export interface AtmosphereRecipe {
@@ -113,6 +136,15 @@ export interface AtmosphereRecipe {
   /** Where the ozone layer peaks, and its half-width, planet radii. */
   readonly ozonePeak: number
   readonly ozoneHalfWidth: number
+  /**
+   * The detached layer's tent, planet radii, and its coefficients at the
+   * peak: a gray extinction and an RGB scattering, both per planet radius.
+   * Zero extinction where a haze has none.
+   */
+  readonly detachedPeak: number
+  readonly detachedHalfWidth: number
+  readonly detachedExtinction: number
+  readonly detachedScatter: readonly [number, number, number]
 }
 
 export interface ScatteringLut {
@@ -308,8 +340,8 @@ export const LIMB_STANDOFF = 5
  * air — two hundred kilometers on Earth, full by three hundred — so a ship
  * climbing out keeps the sky it had and has the ring by the altitude the
  * reference photographs were taken from: every limb photographed from a
- * station is photographed from four hundred kilometers, and at ten shell
- * heights the ring was a tenth of itself there.
+ * station is photographed from four hundred kilometers, and over ten shell
+ * heights the ring would be a tenth of itself there.
  */
 export const LIMB_FADE_HEIGHTS = 2
 
@@ -372,7 +404,10 @@ export function limbFalloff(eyeRatio: number, gasHeight: number): number {
  * ceiling for its fall-off at one — or the top, for an air that already
  * reaches past it — in datum units. The shell mesh is drawn to it, and the
  * march of the lifted gas stops at it, so the ring is never clipped by the
- * geometry that carries it.
+ * geometry that carries it. It takes the fall-off the shader is handed
+ * (`RenderBody.limbFalloff`) rather than the eye it came from: a mesh sized
+ * from a second derivation of that number is a mesh the shader's reach can
+ * outgrow, and the ring ends in a hard circle where they part.
  */
 export function limbReach(
   airTop: number,
@@ -457,9 +492,9 @@ export function atmosphereRecipe(
      * it scatters of that is its albedo in the authored colors: the sky's
      * sideways and the limb's toward the sun, each at `aerosolAlbedo` in its
      * brightest channel and under it in the rest, so no channel scatters
-     * more than it takes. Read as a gas instead, Mars's 600 Pa carried a
+     * more than it takes. Read as a gas instead, Mars's 600 Pa carries a
      * Rayleigh column twenty times its measured depth and a dust column a
-     * twentieth of its own, and drew a near-black zenith over the one sky in
+     * twentieth of its own, and draws a near-black zenith over the one sky in
      * the system that is lit by its dust from horizon to horizon.
      */
     const albedo = haze.aerosolAlbedo ?? AEROSOL_ALBEDO
@@ -493,6 +528,23 @@ export function atmosphereRecipe(
     (molecules * OZONE_CROSS_SECTION[2]) / ozoneHalfWidth,
   ]
 
+  // The detached layer: a tent whose area is its peak times its half-width,
+  // so the peak extinction is the depth over the half-width, as the ozone's.
+  const detached = haze.detached
+  const detachedPeak = detached === undefined ? 0 : hRayleigh * detached.center
+  const detachedHalfWidth =
+    detached === undefined ? 1 : Math.max(hRayleigh * detached.halfWidth, 1e-9)
+  const detachedExtinction =
+    detached === undefined ? 0 : detached.depth / detachedHalfWidth
+  const detachedScatter: [number, number, number] =
+    detached === undefined
+      ? [0, 0, 0]
+      : (underPeak(detached.color, detachedExtinction) as [
+          number,
+          number,
+          number,
+        ])
+
   return {
     topRatio,
     hRayleigh,
@@ -505,6 +557,10 @@ export function atmosphereRecipe(
     ozone,
     ozonePeak,
     ozoneHalfWidth,
+    detachedPeak,
+    detachedHalfWidth,
+    detachedExtinction,
+    detachedScatter,
   }
 }
 
@@ -522,13 +578,14 @@ function underPeak(
 }
 
 /**
- * How much the air shows, 0..1 with Earth at 1: the column's scattering
- * depth over Earth's, for the skylight the ground takes from its sky
- * (`terrainPalette`). It is `thickness` where the gas is the sky, and the
- * dust's depth where the dust is: Mars's 0.4 scatters two decades more than
- * its gas, and a skylight read off the gas lit a Martian shadow at a
- * twentieth of its sky — the black pools under every ridge of a flat-lit
- * orange afternoon.
+ * How much the air shows, with Earth at 1: the column's scattering depth
+ * over Earth's, for the skylight the ground takes from its sky
+ * (`terrainPalette`) and the lift's share of a limb (`limbShare`). It is
+ * `thickness` where the gas is the sky, and the dust's depth where the dust
+ * is, past 1 for a dust deeper than Earth's whole column: Mars's 0.3
+ * scatters two decades more than its gas, and a skylight read off the gas
+ * lights a Martian shadow at a twentieth of its sky — the black pools under
+ * every ridge of a flat-lit orange afternoon.
  */
 export function visibleThickness(haze: HazeAuthoring): number {
   const gas = TAU_RAYLEIGH_SUM * haze.thickness
@@ -616,30 +673,44 @@ export function aerosolTint(
 function densities(
   h: number,
   recipe: AtmosphereRecipe,
-): { rayleigh: number; mie: number; ozone: number } {
+): { rayleigh: number; mie: number; ozone: number; detached: number } {
   const ceiling = recipe.topRatio - 1
   const fade = Math.max(0, 1 - h / ceiling)
   const ozone = ozoneDensity(h, recipe)
+  const detached = detachedDensity(h, recipe)
   if (fade === 0 || h < 0) {
     // Below the ground the air is whatever it is at the ground: a march step
     // that dips fractionally under r = 1 must not read vacuum.
     if (h < 0)
-      return { rayleigh: fade > 0 ? 1 : 0, mie: fade > 0 ? 1 : 0, ozone }
-    return { rayleigh: 0, mie: 0, ozone }
+      return {
+        rayleigh: fade > 0 ? 1 : 0,
+        mie: fade > 0 ? 1 : 0,
+        ozone,
+        detached,
+      }
+    return { rayleigh: 0, mie: 0, ozone, detached }
   }
   return {
     rayleigh: Math.exp(-h / recipe.hRayleigh) * fade,
     mie: Math.exp(-h / recipe.hMie) * fade,
     ozone,
+    detached,
   }
 }
 
 /** The ozone tent at height `h`, 1 at its peak; the shader's is the same. */
 function ozoneDensity(h: number, recipe: AtmosphereRecipe): number {
-  return Math.max(
-    0,
-    1 - Math.abs(h - recipe.ozonePeak) / Math.max(recipe.ozoneHalfWidth, 1e-9),
-  )
+  return tent(h, recipe.ozonePeak, recipe.ozoneHalfWidth)
+}
+
+/** The detached layer's tent at height `h`, 1 at its peak; the shader's is the same. */
+function detachedDensity(h: number, recipe: AtmosphereRecipe): number {
+  return tent(h, recipe.detachedPeak, recipe.detachedHalfWidth)
+}
+
+/** A tent in height, 1 at `peak` and nothing from `halfWidth` either side. */
+function tent(h: number, peak: number, halfWidth: number): number {
+  return Math.max(0, 1 - Math.abs(h - peak) / Math.max(halfWidth, 1e-9))
 }
 
 /**
@@ -714,21 +785,25 @@ export function transmittanceFrom(
   for (let i = 0; i < TRANSMITTANCE_STEPS; i += 1) {
     const [s, step] = marchSample(i, TRANSMITTANCE_STEPS, top, perigee)
     const radius = Math.sqrt(r * r + s * s + 2 * r * s * mu)
-    const { rayleigh, mie, ozone } = densities(radius - 1, recipe)
+    const { rayleigh, mie, ozone, detached } = densities(radius - 1, recipe)
+    const gray = recipe.detachedExtinction * detached
     tauR +=
       (recipe.betaRayleigh[0] * rayleigh +
         recipe.mieExtinction[0] * mie +
-        recipe.ozone[0] * ozone) *
+        recipe.ozone[0] * ozone +
+        gray) *
       step
     tauG +=
       (recipe.betaRayleigh[1] * rayleigh +
         recipe.mieExtinction[1] * mie +
-        recipe.ozone[1] * ozone) *
+        recipe.ozone[1] * ozone +
+        gray) *
       step
     tauB +=
       (recipe.betaRayleigh[2] * rayleigh +
         recipe.mieExtinction[2] * mie +
-        recipe.ozone[2] * ozone) *
+        recipe.ozone[2] * ozone +
+        gray) *
       step
   }
   return [Math.exp(-tauR), Math.exp(-tauG), Math.exp(-tauB)]
@@ -879,7 +954,10 @@ export function bakeMultipleScattering(
           const py = direction[1] * s
           const pz = r + direction[2] * s
           const radius = Math.sqrt(px * px + py * py + pz * pz)
-          const { rayleigh, mie, ozone } = densities(radius - 1, recipe)
+          const { rayleigh, mie, ozone, detached } = densities(
+            radius - 1,
+            recipe,
+          )
           const muSunHere =
             (px * sun[0] + py * sun[1] + pz * sun[2]) / Math.max(radius, 1e-6)
           const sunlight = transmittanceAt(
@@ -891,11 +969,13 @@ export function bakeMultipleScattering(
           for (let c = 0; c < 3; c += 1) {
             const scatter =
               (recipe.betaRayleigh[c] as number) * rayleigh +
-              (recipe.mieScatter[c] as number) * mie
+              (recipe.mieScatter[c] as number) * mie +
+              (recipe.detachedScatter[c] as number) * detached
             const extinction =
               (recipe.betaRayleigh[c] as number) * rayleigh +
               (recipe.mieExtinction[c] as number) * mie +
-              (recipe.ozone[c] as number) * ozone
+              (recipe.ozone[c] as number) * ozone +
+              recipe.detachedExtinction * detached
             const view = Math.exp(-(tau[c] as number))
             const stepTau = extinction * step
             // The step's light as the integral over constant density, as
@@ -974,12 +1054,14 @@ export function zenithSkyRadiance(
   for (let i = 0; i < ZENITH_STEPS; i += 1) {
     const [offset, step] = marchSample(i, ZENITH_STEPS, column, 0)
     const at = r + offset
-    const { rayleigh, mie, ozone } = densities(at - 1, recipe)
+    const { rayleigh, mie, ozone, detached } = densities(at - 1, recipe)
     const sunlight = transmittanceFrom(at, muSun, recipe)
     const psi = multipleScatteringAt(multiScatter, recipe, at, muSun)
     for (let c = 0; c < 3; c += 1) {
       const scatterRayleigh = (recipe.betaRayleigh[c] as number) * rayleigh
       const scatterMie = (recipe.mieScatter[c] as number) * mie
+      // The detached layer's small particles scatter with Rayleigh's phase.
+      const scatterDetached = (recipe.detachedScatter[c] as number) * detached
       // The aerosol turns to its forward color by the lobe's share, as the
       // march does; the multiple scattering keeps the sideways one.
       const scatterToward =
@@ -990,15 +1072,18 @@ export function zenithSkyRadiance(
       const extinction =
         scatterRayleigh +
         (recipe.mieExtinction[c] as number) * mie +
-        (recipe.ozone[c] as number) * ozone
+        (recipe.ozone[c] as number) * ozone +
+        recipe.detachedExtinction * detached
       const view = Math.exp(-(depth[c] as number))
       const stepTau = extinction * step
       // The step's light as the integral over constant density (`marchAir`).
       const stepLight = (step * -Math.expm1(-stepTau)) / Math.max(stepTau, 1e-7)
       const single =
-        (scatterRayleigh * phaseRayleigh + scatterToward * phaseMie) *
+        ((scatterRayleigh + scatterDetached) * phaseRayleigh +
+          scatterToward * phaseMie) *
         (sunlight[c] as number)
-      const multiple = (psi[c] as number) * (scatterRayleigh + scatterMie)
+      const multiple =
+        (psi[c] as number) * (scatterRayleigh + scatterMie + scatterDetached)
       radiance[c] =
         (radiance[c] as number) +
         view * (single + multiple) * stepLight * ATMOSPHERE_GAIN
@@ -1014,11 +1099,11 @@ export function zenithSkyRadiance(
  *
  * The shell composites gray — L + T̄·background — which is right for a sky of
  * faint things behind the air and wrong for the disk in two ways. It does not
- * redden: a sun on the horizon came through white. And under Enhanced, where
+ * redden: a sun on the horizon comes through white. And under Enhanced, where
  * the disk is drawn at a calibrated eight times the surface white rather than
  * its physical fifty thousand, the full extinction takes it below its own
- * sky: through a dusty column at a 4.6° sun the disk was a brown spot in a
- * peach glow, the brightest thing in the scene drawn as the dimmest.
+ * sky: through a dusty column at a 4.6° sun a gray-dimmed disk is a brown spot
+ * in a peach glow, the brightest thing in the scene drawn as the dimmest.
  *
  * So the disk arrives in the column's own color, at the column's luminance
  * raised to `compression` — the exponent that took the physical disk to the
@@ -1027,8 +1112,9 @@ export function zenithSkyRadiance(
  * so it keeps its rank against the sky until it is physically level with it,
  * and it keeps its hue, because a physical disk through that column is that
  * color at any brightness the hue-preserving curve can show. Compressing each
- * channel instead bleached a 2° sun to 1 : 0.89 : 0.69. Zero once the planet
- * is in the way.
+ * channel instead bleaches a 2° sun to 1 : 0.89 : 0.69. Zero once the planet
+ * is in the way, which for a setting disk is a question for
+ * `settingDiskCosine` rather than for its center.
  *
  * What this returns is drawn *before* the shell divides it back down, so it
  * is the disk over the column's transmittance, and through the last degree or
@@ -1076,3 +1162,37 @@ export function diskThroughAir(
  * an opened exposure divides the cap by the opening.
  */
 export const DISK_THROUGH_AIR_CEILING = 2048
+
+/**
+ * The zenith cosine of the horizon from `radius` planet radii: the ray that
+ * grazes the ground. Zero on the ground, and below zero as the eye climbs.
+ */
+export function horizonCosine(radius: number): number {
+  return -Math.sqrt(Math.max(0, 1 - 1 / (radius * radius)))
+}
+
+/**
+ * The zenith cosine at which to read a disk of `angularRadius` radians,
+ * centered at `mu`, for `diskThroughAir` from `radius` planet radii.
+ *
+ * `diskThroughAir` colors the whole disk from one ray, and the ray through the
+ * center meets the ground while the upper half of the disk is still in the
+ * sky. Read there, a half-set sun is zero, and it drops out of a bright
+ * horizon in one frame. Across the band where the horizon cuts the disk the
+ * cosine eases from the center's to the horizon's, which it reaches as the
+ * upper limb sets: `h + a·x²` over `x` from 0 to 1 meets the center's cosine,
+ * and its slope, at the top of the band. What is under the drawn horizon is
+ * the ground's to cover. Near the horizon a step in the cosine is a step in
+ * elevation, so the angular radius serves as one.
+ */
+export function settingDiskCosine(
+  radius: number,
+  mu: number,
+  angularRadius: number,
+): number {
+  const horizon = horizonCosine(Math.max(radius, 1))
+  const band = Math.max(angularRadius, 0)
+  if (!(band > 0) || mu >= horizon + band || mu < horizon - band) return mu
+  const x = (mu - horizon + band) / (2 * band)
+  return horizon + band * x * x
+}

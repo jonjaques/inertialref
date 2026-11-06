@@ -446,27 +446,30 @@ export function createLensFlare(): LensFlare {
       /*
        * The bodies on screen as disks, for the ghosts to fade on where they
        * land (`ghostCover`). A body the eye stands on or skims is left out:
-       * past `GHOST_DISK_LIMIT` its edge is the horizon, not a limb.
+       * past `GHOST_DISK_LIMIT` its edge is the horizon, not a limb. Under
+       * the clean coating every ghost is at nothing, and so is the
+       * projection of every body for them.
        */
       disks.length = 0
-      for (const body of occluders) {
-        if (body.radius <= 0) continue
-        bodyView
-          .set(body.position.x, body.position.y, body.position.z)
-          .applyMatrix4(camera.matrixWorldInverse)
-        if (bodyView.z >= 0) continue
-        const distance = bodyView.length()
-        const angle = Math.asin(Math.min(1, body.radius / distance))
-        if (angle > GHOST_DISK_LIMIT) continue
-        bodyNdc
-          .set(body.position.x, body.position.y, body.position.z)
-          .project(camera)
-        disks.push({
-          x: bodyNdc.x * aspect,
-          y: bodyNdc.y,
-          radius: Math.tan(angle) / tanHalf,
-        })
-      }
+      if (artifacts > 0)
+        for (const body of occluders) {
+          if (body.radius <= 0) continue
+          bodyView
+            .set(body.position.x, body.position.y, body.position.z)
+            .applyMatrix4(camera.matrixWorldInverse)
+          if (bodyView.z >= 0) continue
+          const distance = bodyView.length()
+          const angle = Math.asin(Math.min(1, body.radius / distance))
+          if (angle > GHOST_DISK_LIMIT) continue
+          bodyNdc
+            .set(body.position.x, body.position.y, body.position.z)
+            .project(camera)
+          disks.push({
+            x: bodyNdc.x * aspect,
+            y: bodyNdc.y,
+            radius: Math.tan(angle) / tanHalf,
+          })
+        }
       // A star that subtends real angle blooms wider than a point: the glow
       // tracks the disk so a close pass reads as approaching a *sun*, not a
       // lamp.

@@ -192,6 +192,15 @@ const GRAY = 0
 /** Huygens's haze: 4.5 at 531 nm against 2 at 939. */
 const PHOTOCHEMICAL = 1.5
 
+/**
+ * A generated giant's aerosol: mixed with its gas and gray, as every giant in
+ * Sol is taken to be, since none has a published depth or slope for its haze.
+ */
+export const GIANT_AEROSOL = Object.freeze({
+  aerosolScale: WELL_MIXED,
+  angstrom: GRAY,
+})
+
 const HAZE_FAMILIES: readonly HazeFamily[] = [
   // Rayleigh: a blue sky and an orange limb.
   {

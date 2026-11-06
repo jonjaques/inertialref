@@ -149,7 +149,7 @@ export function reviewMarkdown(pictures, origin) {
   return [
     'Camera review links use the same pose, photographic time and lens in each mode triplet. The separate long Manual view changes only shutter to 2400 s.',
     '',
-    'All views use a 24 mm gauge, zoom 1, infinite focus and D65 white balance. Automatic uses compensation 0, adaptation rate 1, bright range 24 EV and dark range 16 EV. Links contain no adaptation history or display settings; begin review in standard SDR and compare at the same window size.',
+    `All views use a 24 mm gauge, zoom 1, infinite focus and ${DEFAULT_PICTURE_PROCESSING.balance} K white balance. Automatic uses compensation 0, adaptation rate 1, bright range 24 EV and dark range 16 EV. Links contain no adaptation history or display settings; begin review in standard SDR and compare at the same window size.`,
     '',
     '| Scene | Time, seconds from J2000 | Matched lens | Matched modes | Separate long exposure |',
     '| --- | --- | --- | --- | --- |',
