@@ -1224,7 +1224,7 @@ function proceduralAppearance(
    */
   const palette = new Rng(deriveSeed(surface.seed, 'appearance'))
   const grammar = surface.grammar
-  const hue = giant
+  const hue: ReturnType<typeof hazeFor> = giant
     ? { ...(KIND_HAZE[kind] ?? KIND_HAZE.rocky), aerosolScale: 1, angstrom: 0 }
     : hazeFor(palette.fork('haze'), grammar)
   return {
@@ -1256,6 +1256,10 @@ function proceduralAppearance(
             aerosolHeight: hue.aerosolScale * atmosphere.scaleHeight,
             aerosolAngstrom: hue.angstrom,
             ozone: 0,
+            // Where the family's aerosol is the sky, its depth and albedo
+            // ride along; a giant's and a gas-lit family's are absent.
+            aerosolDepth: hue.aerosolDepth,
+            aerosolAlbedo: hue.aerosolAlbedo,
           },
     color: giant
       ? (KIND_COLOR[kind] ?? KIND_COLOR.rocky)

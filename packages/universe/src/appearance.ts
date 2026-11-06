@@ -165,6 +165,14 @@ export interface HazeFamily {
    * like Titan's 1.5. See `HazeLayer.aerosolAngstrom`.
    */
   readonly angstrom: number
+  /**
+   * Where the aerosol is the sky, its measured extinction depth at 550 nm
+   * and its single-scattering albedo in its brightest channel; absent, the
+   * gas is the sky and the color is read as its spectrum. See
+   * `HazeLayer.aerosolDepth`.
+   */
+  readonly aerosolDepth?: number
+  readonly aerosolAlbedo?: number
   readonly weight: number
   readonly coldest: Kelvin
   readonly hottest: Kelvin
@@ -195,22 +203,31 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
     coldest: 0,
     hottest: Infinity,
   },
-  // Dust: butterscotch by day, blue at the terminator.
+  // Dust: butterscotch by day, blue at the terminator. The dust is the sky,
+  // at Mars's clear-season depth and albedo (ADR-0056): read as a gas, the
+  // butterscotch is a brown tint on the gas's column and a gray rim.
   {
     color: { r: 0.74, g: 0.56, b: 0.36 },
     limb: { r: 0.42, g: 0.58, b: 0.92 },
     aerosolScale: WELL_MIXED,
     angstrom: GRAY,
+    aerosolDepth: 0.4,
+    aerosolAlbedo: 0.93,
     weight: 1.4,
     coldest: 150,
     hottest: 900,
   },
-  // Sulfuric: a yellow-white glare.
+  // Sulfuric: a yellow-white glare. The cloud deck is the sky, eight
+  // optical depths of bright droplets (Venus's clouds are 25 to 40 and its
+  // Bond albedo 0.76), so the authored colors are the droplets' own albedo,
+  // which compounds to a cream-gold disk and little surface showing through.
   {
-    color: { r: 0.88, g: 0.8, b: 0.5 },
-    limb: { r: 0.96, g: 0.72, b: 0.32 },
+    color: { r: 0.98, g: 0.95, b: 0.85 },
+    limb: { r: 0.98, g: 0.9, b: 0.7 },
     aerosolScale: WELL_MIXED,
     angstrom: GRAY,
+    aerosolDepth: 8,
+    aerosolAlbedo: 0.98,
     weight: 1.2,
     coldest: 450,
     hottest: Infinity,
@@ -225,22 +242,28 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
     coldest: 0,
     hottest: 170,
   },
-  // Methane: a teal sky and a warm limb.
+  // Methane: a teal sky and a warm limb. Its aerosol is a photochemical
+  // haze, as Titan's is, and not a gray dust: gray, it whitened the teal
+  // limb to a pale rim.
   {
     color: { r: 0.32, g: 0.7, b: 0.82 },
     limb: { r: 0.72, g: 0.58, b: 0.42 },
     aerosolScale: WELL_MIXED,
-    angstrom: GRAY,
+    angstrom: PHOTOCHEMICAL,
     weight: 1.0,
     coldest: 0,
     hottest: 230,
   },
-  // Thin and high: violet.
+  // Thin and high: violet. The high haze is the sky, a quarter of a depth,
+  // scattering violet sideways and rose toward the sun; the gas under it
+  // keeps its own blue.
   {
     color: { r: 0.42, g: 0.36, b: 0.92 },
     limb: { r: 0.9, g: 0.42, b: 0.5 },
     aerosolScale: ALOFT,
     angstrom: PHOTOCHEMICAL,
+    aerosolDepth: 0.25,
+    aerosolAlbedo: 0.9,
     weight: 0.6,
     coldest: 0,
     hottest: Infinity,
@@ -265,6 +288,8 @@ export function hazeFor(
   readonly limb: LinearRgb
   readonly aerosolScale: number
   readonly angstrom: number
+  readonly aerosolDepth?: number
+  readonly aerosolAlbedo?: number
 } {
   const temperature = grammar.groundTemperature
   const index = rng.weightedIndex(
@@ -280,6 +305,8 @@ export function hazeFor(
     limb: family.limb,
     aerosolScale: family.aerosolScale,
     angstrom: family.angstrom,
+    aerosolDepth: family.aerosolDepth,
+    aerosolAlbedo: family.aerosolAlbedo,
   }
 }
 
