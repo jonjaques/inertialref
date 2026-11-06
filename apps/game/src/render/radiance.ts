@@ -1,5 +1,5 @@
 import { SURFACE_LUMINANCE } from '@inertialref/rendering'
-import type { NodeMaterial, Renderer } from 'three/webgpu'
+import { type NodeMaterial, type Renderer, Vector3 } from 'three/webgpu'
 import { float, Fn, output, uniform, vec4 } from 'three/tsl'
 import { meterOverlay, motionOverlay, reactiveCoverage } from './sensorMrt.ts'
 
@@ -19,6 +19,13 @@ export const enhancedSky = uniform(0).onRenderUpdate(({ renderer }) =>
  * photographic views add the two physically and let exposure decide.
  */
 export const airLuminance = uniform(0)
+/**
+ * The zenith over the ground under the eye, in color, with the star's light
+ * in it, as the ground and the sea under a deep air take their skylight from
+ * it (`deepSky` in `render/terrain.ts`); zero in a vacuum and under a thin
+ * air, where nothing reads it. Written beside `airLuminance`.
+ */
+export const skyOverhead = uniform(new Vector3(0, 0, 0))
 export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
   renderer === null ? 1 : (gains.get(renderer) ?? 1),
 )

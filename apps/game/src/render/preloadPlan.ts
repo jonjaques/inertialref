@@ -2,6 +2,7 @@ import {
   type AirHeights,
   airHeights,
   airTopRatio,
+  type DetachedHaze,
 } from '@inertialref/rendering'
 import type { StarSystem } from '@inertialref/universe'
 import { walkBodies } from '@inertialref/universe'
@@ -36,6 +37,7 @@ export interface HazeLike {
   readonly ozone: number
   readonly aerosolDepth?: number
   readonly aerosolAlbedo?: number
+  readonly detached?: DetachedHaze
 }
 
 export interface ScatteringBake {
@@ -69,6 +71,16 @@ export function scatteringKey(
     // haze keys `gas` in both.
     haze.aerosolDepth ?? 'gas',
     haze.aerosolAlbedo ?? 'gas',
+    haze.detached === undefined
+      ? 'none'
+      : [
+          haze.detached.center,
+          haze.detached.halfWidth,
+          haze.detached.depth,
+          haze.detached.color.r,
+          haze.detached.color.g,
+          haze.detached.color.b,
+        ].join('/'),
     topRatio.toFixed(6),
     heights.rayleigh.toPrecision(6),
     heights.aerosol.toPrecision(6),

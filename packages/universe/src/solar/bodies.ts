@@ -8,7 +8,7 @@ import {
   type Seconds,
   SECONDS_PER_DAY,
 } from '@inertialref/shared'
-import type { BodyFigure, BodyKind } from '../system.ts'
+import type { BodyFigure, BodyKind, HazeLayer } from '../system.ts'
 import { JOVIAN_MINOR, NEPTUNIAN_MINOR, SATURNIAN_MINOR } from './minorMoons.ts'
 import type { LinearRgb } from '../catalog/photometry.ts'
 
@@ -91,6 +91,8 @@ export interface SolarHaze {
   readonly aerosolDepth?: number
   /** Its single-scattering albedo in its brightest channel. See `HazeLayer`. */
   readonly aerosolAlbedo?: number
+  /** A detached layer of small particles high over the haze. See `HazeLayer`. */
+  readonly detached?: HazeLayer['detached']
 }
 
 export interface SolarClouds {
@@ -334,36 +336,62 @@ const SATURNIAN: readonly SolarBody[] = [
     temperature: 94,
     relief: 700,
     roughness: 0.6,
-    // No vendored map: the surface is not visible through the haze anyway, and
-    // the haze is what every photograph before Cassini's radar shows.
-    tint: { r: 0.88, g: 0.62, b: 0.3 },
+    // No vendored map: under four optical depths of haze the surface is a
+    // tenth of the light and none of the color. Huygens' ground: dark
+    // orange-brown pebbles and sand, an albedo under a fifth.
+    tint: { r: 0.3, g: 0.2, b: 0.1 },
     // The only moon with a real atmosphere, and it is denser at the surface than
-    // Earth's. Drawn as an opaque orange haze, because that is what every
-    // photograph of it before Cassini showed.
+    // Earth's.
     atmosphere: {
       surfacePressure: 146_700,
       scaleHeight: 21_000,
       ceiling: 600_000,
       surfaceDensity: 5.4,
     },
-    // Tholins: orange looking down and orange looking along, which is why Titan
-    // is a featureless orange ball in every image taken in visible light.
+    // Tholins: the haze is the sky, and the body. Four optical depths of it
+    // at 531 nm (DISR), so what the eye sees from anywhere is light that has
+    // scattered many times, and the authored colors are the particles' own
+    // single-scattering albedo, red to blue, not the look: a thick haze
+    // reflects (1 − √(1 − a))/(1 + √(1 − a)) of each channel, which takes
+    // 0.95 : 0.9 : 0.74 to Cassini's tan disk, and from the ground the same
+    // particles compound to Huygens' orange-brown with little blue left in
+    // it. Authored as the look, the compounding makes a red sky.
     haze: {
-      height: 400_000,
-      color: { r: 0.86, g: 0.6, b: 0.3 },
-      limb: { r: 0.95, g: 0.7, b: 0.35 },
-      // Denser than Earth's by column: the smog is the whole view.
-      thickness: 1,
+      // To the ceiling: the haze that the sun reaches past the body's
+      // shadow when it is backlit is its top, 300 km and up, and a shell
+      // cut at 400 km lights a dim brown ring where Cassini's is gold.
+      height: 600_000,
+      color: { r: 0.95, g: 0.9, b: 0.74 },
+      limb: { r: 0.95, g: 0.92, b: 0.78 },
+      // The gas at its own Rayleigh depth: 1.47 bar over 1.35 m/s² is 2.7
+      // of Earth's column, a depth of 1.03 at 550 nm, under the haze.
+      thickness: 2.7,
       // Cassini's occultations put the haze's scale height at 45–75 km over
-      // a 20 km gas column; Tomasko's DISR model uses 65.
-      aerosolHeight: 60_000,
+      // a 20 km gas column; Tomasko's DISR model uses 65, and the haze
+      // aloft falls off more slowly than the main deck.
+      aerosolHeight: 70_000,
       // DISR: 4.5 at 531 nm against 2 at 939.
       aerosolAngstrom: 1.5,
       ozone: 0,
+      // DISR's haze depth at 531 nm, and tholins' albedo in the red.
+      aerosolDepth: 4.3,
+      aerosolAlbedo: 0.95,
+      // The detached haze layer Cassini photographs outside the orange
+      // limb: 16 scale heights of the 21 km gas up with a 50 km half-width,
+      // 290 to 390 km, its foot on the main haze's own edge, which is
+      // opaque along a tangent to about 300 km; standing off the disk with
+      // a gap under it, it is a gray band, and in blue-violet a purple
+      // line. Blue-white, a fiftieth deep.
+      detached: {
+        center: 16,
+        halfWidth: 2.4,
+        depth: 0.02,
+        color: { r: 0.6, g: 0.75, b: 1 },
+      },
     },
-    // Opaque, and drawn from the tint rather than a map: Titan is a featureless
-    // orange ball to anything but radar.
-    clouds: { altitude: 200_000, rotationPeriod: 15.945 * DAY, opacity: 0.95 },
+    // No cloud sphere: an opaque shell at 200 km sits over 96% of a haze
+    // that falls off over 60, and is what the eye sees instead of it.
+    clouds: null,
   }),
   moon('Iapetus', 734.5, 1.805_9e21, 3_560_840, 79.321_5, 0.05, {
     eccentricity: 0.0283,

@@ -17,6 +17,9 @@ import {
   LIMB_STRETCH,
   limbFalloff,
   limbLift,
+  limbShare,
+  LIMB_OWN_FROM,
+  LIMB_OWN_TO,
   limbReach,
   multipleScatteringAt,
   MULTI_SCATTER_FLOOR,
@@ -858,5 +861,132 @@ describe("Enhanced's limb", () => {
     )
     // An air already taller than the ceiling keeps its own top.
     expect(limbReach(1.3, 1, falloff)).toBe(1.3)
+  })
+})
+
+describe('a detached layer', () => {
+  /** Mars's ice hazes as the orbiters photograph them, which `solar/bodies.ts` leaves off Mars. */
+  const ICE = {
+    center: 4.5,
+    halfWidth: 0.6,
+    depth: 0.01,
+    color: { r: 0.7, g: 0.85, b: 1 },
+  }
+  const layered = atmosphereRecipe(
+    { ...MARS_HAZE, detached: ICE },
+    MARS_TOP,
+    MARS_HEIGHTS,
+  )
+  const marsT = bakeTransmittance(marsRecipe)
+  const layeredT = bakeTransmittance(layered)
+  const luminance = (rgb: readonly number[]): number =>
+    0.2126 * (rgb[0] as number) +
+    0.7152 * (rgb[1] as number) +
+    0.0722 * (rgb[2] as number)
+
+  it('stands where it is authored, in the gas’s own heights, and takes its depth', () => {
+    // 4.5 scale heights of 11.1 km with a 0.6 half-width: 50 ± 7 km, inside
+    // the 60 km shell and clear of the dust's own foot.
+    expect(layered.detachedPeak * MARS.radius).toBeCloseTo(49_950, 6)
+    expect(layered.detachedHalfWidth * MARS.radius).toBeCloseTo(6_660, 6)
+    expect(layered.detachedPeak + layered.detachedHalfWidth).toBeLessThan(
+      MARS_TOP - 1,
+    )
+    // The tent's area is its depth — the peak extinction times the
+    // half-width — as the ozone's is.
+    expect(layered.detachedExtinction * layered.detachedHalfWidth).toBeCloseTo(
+      0.01,
+      12,
+    )
+    // Its brightest channel scatters all it takes and the others their
+    // authored share of that, so no channel scatters more than it takes.
+    expect(layered.detachedScatter[2]).toBeCloseTo(
+      layered.detachedExtinction,
+      12,
+    )
+    expect(
+      layered.detachedScatter[0]! / layered.detachedScatter[2]!,
+    ).toBeCloseTo(0.7, 12)
+    expect(
+      layered.detachedScatter[1]! / layered.detachedScatter[2]!,
+    ).toBeCloseTo(0.85, 12)
+    // A haze without one takes nothing there, and the layer leaves the gas
+    // and the dust under it as they are.
+    expect(marsRecipe.detachedExtinction).toBe(0)
+    expect(marsRecipe.detachedScatter).toEqual([0, 0, 0])
+    expect(layered.betaRayleigh).toEqual(marsRecipe.betaRayleigh)
+    expect(layered.mieScatter).toEqual(marsRecipe.mieScatter)
+    expect(layered.mieExtinction).toEqual(marsRecipe.mieExtinction)
+  })
+
+  it('dims a zenith column by its depth, gray', () => {
+    // Small particles take every color alike: e^−0.01 in each channel, the
+    // three within a float of each other. The table's march lands within
+    // 1e-4 of the exact figure.
+    const plain = sampleLut(marsT, 1, 0)
+    const dimmed = sampleLut(layeredT, 1, 0)
+    const ratio = dimmed.map((t, c) => t / (plain[c] as number))
+    for (const r of ratio) expect(r).toBeCloseTo(Math.exp(-0.01), 3)
+    expect(Math.max(...ratio) - Math.min(...ratio)).toBeLessThan(1e-6)
+  })
+
+  it('is a sky of its own color over the dust, and a line, not a veil, from the ground', () => {
+    // The dust falls off over 11.1 km, so at the layer's foot, 43 km up, 2%
+    // of it remains and the zenith there is the layer's: at a 10° sun, 7.9
+    // times the plain recipe's light and blue-white, b/r 1.12, where the dust
+    // alone is butterscotch at 0.38. From the ground the same layer is the
+    // fine line over the limb and next to nothing overhead: the zenith moves
+    // 8% at a 10° sun and 0.9% at 60°.
+    const psiPlain = bakeMultipleScattering(marsRecipe, marsT)
+    const psiLayer = bakeMultipleScattering(layered, layeredT)
+    const sky = (
+      recipe: typeof marsRecipe,
+      psi: typeof psiPlain,
+      radius: number,
+      sunDegrees: number,
+    ) =>
+      zenithSkyRadiance(
+        recipe,
+        psi,
+        radius,
+        Math.sin((sunDegrees * Math.PI) / 180),
+      )
+    const foot = 1 + layered.detachedPeak - layered.detachedHalfWidth
+    const plainFoot = sky(marsRecipe, psiPlain, foot, 10)
+    const layerFoot = sky(layered, psiLayer, foot, 10)
+    expect(luminance(layerFoot) / luminance(plainFoot)).toBeGreaterThan(6)
+    expect(layerFoot[2]! / layerFoot[0]!).toBeGreaterThan(1)
+    expect(plainFoot[2]! / plainFoot[0]!).toBeLessThan(0.5)
+    for (const [sun, within] of [
+      [10, 0.1],
+      [60, 0.01],
+    ] as const) {
+      const plainGround = sky(marsRecipe, psiPlain, 1, sun)
+      const layerGround = sky(layered, psiLayer, 1, sun)
+      expect(
+        Math.abs(luminance(layerGround) / luminance(plainGround) - 1),
+      ).toBeLessThan(within)
+    }
+  })
+})
+
+describe('the lift’s share of a column', () => {
+  it('is whole for every thin air and nothing for a haze that is its own ring', () => {
+    // Earth is one visible column and Mars's dust 0.76; both stand under
+    // LIMB_OWN_FROM and keep the whole lift. A haze at ten of Earth's columns
+    // is opaque along its tangent and gets none; between, a smoothstep.
+    expect(limbShare(EARTH_HAZE)).toBe(1)
+    expect(limbShare(MARS_HAZE)).toBe(1)
+    expect(visibleThickness(MARS_HAZE)).toBeLessThan(LIMB_OWN_FROM)
+    const deep = { ...MARS_HAZE, aerosolDepth: 4.3, aerosolAlbedo: 0.95 }
+    expect(visibleThickness(deep)).toBeGreaterThan(LIMB_OWN_TO)
+    expect(limbShare(deep)).toBe(0)
+    let previous = 1
+    for (let depth = 0; depth <= 6; depth += 0.1) {
+      const share = limbShare({ ...MARS_HAZE, aerosolDepth: depth })
+      expect(share).toBeLessThanOrEqual(previous + 1e-12)
+      expect(share).toBeGreaterThanOrEqual(0)
+      previous = share
+    }
   })
 })

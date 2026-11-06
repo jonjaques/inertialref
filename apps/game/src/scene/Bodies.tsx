@@ -18,9 +18,11 @@ import {
   exposureForLuminance,
   DISK_THROUGH_AIR_CEILING,
   diskThroughAir,
+  LIMB_OWN_FROM,
   type RenderBody,
   settingDiskCosine,
   SURFACE_LUMINANCE,
+  visibleThickness,
 } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -52,12 +54,13 @@ import {
 } from '../render/planet.ts'
 import {
   airOverhead,
+  airOverheadRgb,
   type AtmosphereScattering,
   type Standing,
   standingIn,
   scatteringOf,
 } from '../render/atmosphereLuts.ts'
-import { airLuminance, observerAir } from '../render/radiance.ts'
+import { airLuminance, observerAir, skyOverhead } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
@@ -390,6 +393,10 @@ export function Bodies({
     let standingAir = null as {
       readonly scattering: AtmosphereScattering
       readonly standing: Standing
+      readonly sun: Vec3 | null
+      readonly sunColor: Rgb
+      /** Past `LIMB_OWN_FROM` of Earth's columns, where the ground reads `skyOverhead`. */
+      readonly deep: boolean
     } | null
 
     /** `throughAir` is what the air does to a star's disk, per channel. */
@@ -602,7 +609,15 @@ export function Bodies({
               uniforms.sunColor,
             )
             if (standingAir === null || sky >= overhead)
-              standingAir = { scattering, standing }
+              standingAir = {
+                scattering,
+                standing,
+                sun,
+                sunColor: uniforms.sunColor,
+                deep:
+                  appearance.haze !== null &&
+                  visibleThickness(appearance.haze) > LIMB_OWN_FROM,
+              }
             overhead = Math.max(overhead, sky)
           }
         }
@@ -645,6 +660,24 @@ export function Bodies({
       draw(starKey(star), starAsBody(star, visibility), star.color, throughAir)
     }
     airLuminance.value = overhead
+    /*
+     * The zenith over the ground under the eye, in color, for the ground and
+     * the sea under a deep air. At the datum and not at the eye: 100 km up
+     * Titan's haze the column overhead is a fifth of the ground's, and a
+     * ground lit by the eye's sky brightens and dims as the eye climbs. A
+     * thin air skips the march, since no shader reads it there.
+     */
+    if (standingAir === null || !standingAir.deep)
+      skyOverhead.value.set(0, 0, 0)
+    else {
+      const [r, g, b] = airOverheadRgb(
+        standingAir.scattering,
+        { radius: 1, up: standingAir.standing.up },
+        standingAir.sun,
+        standingAir.sunColor,
+      )
+      skyOverhead.value.set(r, g, b)
+    }
     // How far down its air the eye stands, in the tables' own units.
     const top = standingAir?.scattering.recipe.topRatio ?? 1
     observerAir.depth =

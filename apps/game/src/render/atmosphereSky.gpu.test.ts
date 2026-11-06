@@ -79,6 +79,10 @@ interface Ground {
    * from the ground and all of it from four radii out.
    */
   readonly limb?: number
+  /** The body whose air is drawn; Earth by default. */
+  readonly body?: typeof earth
+  /** The haze to draw over it; the body's own by default. */
+  readonly haze?: NonNullable<typeof earth.haze>
 }
 
 /** RGB of a narrow view from `height` over sea level along `direction`. */
@@ -93,7 +97,14 @@ async function skyToward(
   const air = createAtmosphereMaterial()
   // The tables are baked over the datum, as `Bodies` bakes them; the drawn
   // sphere is `sunk` under it.
-  const scattering = scatteringFor(haze, top, HEIGHTS)
+  const planet = ground.body ?? earth
+  const planetHaze = ground.haze ?? planet.haze!
+  const planetTop = 1 + planetHaze.height / planet.radius
+  const planetHeights = {
+    rayleigh: planet.atmosphere!.scaleHeight / planet.radius,
+    aerosol: planetHaze.aerosolHeight / planet.radius,
+  }
+  const scattering = scatteringFor(planetHaze, planetTop, planetHeights)
   air.setScattering(
     scattering.recipe,
     scattering.transmittance,
@@ -101,7 +112,7 @@ async function skyToward(
   )
   air.center.value.set(0, 0, 0)
   air.innerRadius.value = sunk
-  air.outerRadius.value = top
+  air.outerRadius.value = planetTop
   air.seaLevel.value = 1
   air.flattening.value = flattening
   air.spinAxis.value.set(0, 1, 0)
@@ -109,15 +120,15 @@ async function skyToward(
     ground.sun ?? new Vector3(Math.cos(SUN), Math.sin(SUN), 0),
   )
   air.sunColor.value.setRGB(1, 1, 1)
-  const eyeRatio = 1 + (ground.height ?? 2) / earth.radius
-  const limb = ground.limb ?? limbLift(eyeRatio, top)
-  const falloff = limbFalloff(eyeRatio, HEIGHTS.rayleigh)
+  const eyeRatio = 1 + (ground.height ?? 2) / planet.radius
+  const limb = ground.limb ?? limbLift(eyeRatio, planetTop)
+  const falloff = limbFalloff(eyeRatio, planetHeights.rayleigh)
   air.setLimb(limb, falloff)
   expect(air.material.side).toBe(BackSide)
   const scene = new Scene()
   // The mesh grows to the limb's reach as `bodyUniforms` grows it.
   const shell = new Mesh(
-    new SphereGeometry(limbReach(top, limb, falloff), 96, 64),
+    new SphereGeometry(limbReach(planetTop, limb, falloff), 96, 64),
     air.material,
   )
   shell.scale.set(1, flattening, 1)
@@ -204,6 +215,51 @@ it('draws the twilight zenith the CPU column reports', async () => {
   )
   for (let c = 0; c < 3; c += 1)
     expect(Math.abs(drawn[c]! / reported[c]! - 1)).toBeLessThan(0.15)
+})
+
+it('draws a detached layer’s zenith the CPU column reports', async () => {
+  // Mars's ice hazes are a tent 50 ± 7 km up over a dust that is 2% of
+  // itself by 43 km, so from the layer's foot the zenith is the layer's as
+  // much as the dust's: at this sun 2.6 times the dust's light, and bluer
+  // than the dust alone, b/r 0.95 against 0.56. The march crowds its twelve
+  // samples toward the eye and the tent peaks seven kilometers over it,
+  // which is where the two marches differ most; the shell's column may not
+  // drift from the CPU's there by more than they differ over Earth's zenith.
+  const mars = SOLAR_PLANETS.find((body) => body.name === 'Mars')!
+  // The layer is the test's own, over Mars's authored dust: the ice hazes
+  // 50 ± 7 km up, a hundredth deep, blue-white.
+  const marsHaze = {
+    ...mars.haze!,
+    detached: {
+      center: 4.5,
+      halfWidth: 0.6,
+      depth: 0.01,
+      color: { r: 0.7, g: 0.85, b: 1 },
+    },
+  }
+  const marsTop = 1 + marsHaze.height / mars.radius
+  const marsHeights = {
+    rayleigh: mars.atmosphere!.scaleHeight / mars.radius,
+    aerosol: marsHaze.aerosolHeight / mars.radius,
+  }
+  const scattering = scatteringFor(marsHaze, marsTop, marsHeights)
+  const foot =
+    (scattering.recipe.detachedPeak - scattering.recipe.detachedHalfWidth) *
+    mars.radius
+  const drawn = await skyToward(new Vector3(0, 1, 0), {
+    body: mars,
+    haze: marsHaze,
+    height: foot,
+  })
+  const reported = zenithSkyRadiance(
+    scattering.recipe,
+    scattering.multiScatterTable,
+    1 + foot / mars.radius,
+    Math.sin(SUN),
+  )
+  expect(drawn[2]! / drawn[0]!).toBeGreaterThan(0.75)
+  for (let c = 0; c < 3; c += 1)
+    expect(Math.abs(drawn[c]! / reported[c]! - 1)).toBeLessThan(0.05)
 })
 
 it('measures the air from sea level, not from the sunk sphere', async () => {

@@ -8,6 +8,7 @@ import {
   TEST_CATALOG,
   walkBodies,
 } from '@inertialref/universe'
+import { LIMB_OWN_TO } from './atmosphere.ts'
 import {
   REFLECTANCE_CEILING,
   type SurfaceMaterial,
@@ -208,6 +209,19 @@ describe('the terrain palette', () => {
       expect(`${name}: ${lit.toFixed(4)}`).toBe(`${name}: 1.0000`)
     }
     expect(terrainPalette(find('Luna')).airThickness).toBe(0)
+  })
+
+  it("carries a deep air's own depth, past where the ground takes the marched zenith", () => {
+    /*
+     * The ground and the sea blend from the authored tint to the zenith the
+     * camera marches over `LIMB_OWN_FROM` to `LIMB_OWN_TO` of Earth's
+     * columns, read off `airThickness`. Held to Earth's one, Titan's ten
+     * never reaches the blend, and its ground stands cream under a black sky.
+     */
+    expect(terrainPalette(find('Titan')).airThickness).toBeGreaterThan(
+      LIMB_OWN_TO,
+    )
+    expect(terrainPalette(find('Earth')).airThickness).toBeCloseTo(1, 6)
   })
 
   it('names the archive key for a mapped body and null for a generated one', () => {

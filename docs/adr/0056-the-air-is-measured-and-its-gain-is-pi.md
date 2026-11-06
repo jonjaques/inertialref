@@ -194,19 +194,42 @@ its budget.
   and the aerosol carries the two authored colors itself: the sky's
   sideways and the limb's toward the sun, turning between them along the
   Henyey–Greenstein lobe's share of its own peak (`AEROSOL_FORWARD_PEAK`),
-  with no channel scattering more than it takes. Mars is the one so
-  authored: its gas at its measured Rayleigh depth of 0.0025 and its dust at
+  with no channel scattering more than it takes. Mars is so authored: its
+  gas at its measured Rayleigh depth of 0.0025 and its dust at
   a clear season's 0.3, the low end of the rovers' 0.3 to 1.0, with an
   albedo of 0.93 in the red (the table above). At 0.4 its zenith under a 41°
   sun is 0.066 of the surface white and at 0.3 a fifth less, where the gas
   read as butterscotch makes 0.009 and a near-black sky, and the blue around
   its setting sun is the dust's forward lobe. Its air reaches 100 km, as
   Earth's does: a backlit limb's shadow stands 63 km up, where the dust is
-  0.3% of itself, and a shell cut at 60 km leaves that faint dust unlit. Titan still draws Earth's column
-  in orange, so its column extinguishes red and its low sun comes through
-  green-white, where Huygens measured a haze of 4.5 whose albedo falls
-  toward the blue; its depth, albedo and slope per band are in the table
-  above and wait on the same two fields.
+  0.3% of itself, and a shell cut at 60 km leaves that faint dust unlit.
+  Titan is too: DISR's haze of 4.3 at 531 nm with an albedo of 0.95, falling
+  off over 70 km to the 600 km ceiling, over a gas at 2.7 of Earth's column,
+  and no cloud sphere. Under four optical depths what any eye sees has
+  scattered many times, so Titan's authored colors are the particles'
+  single-scattering albedo, 0.95 : 0.9 : 0.74, which a thick haze reflects
+  as Cassini's tan disk and compounds from the ground to Huygens'
+  orange-brown; authored as the look, the compounding draws a red sky.
+- **A deep air is its own sky.** The ground's skylight is a share of the
+  beam scaled by the column's visible depth (`visibleThickness`), which is
+  right where the sky is a few percent of the light; under Titan's four
+  optical depths the zenith is 1.4% of white and the beam e^−4.3 of itself,
+  and a ground lit by the authored tint at a third of the sun stands cream
+  under a near-black sky. Past two of Earth's visible columns
+  (`LIMB_OWN_FROM`) the ground and the sea blend to the zenith the camera
+  marches over the datum under the eye (`skyOverhead`), the irradiance of a
+  uniform sky over π, and take all of it past five (`LIMB_OWN_TO`). That sky
+  is the tables' own light and not a share of the beam, so the beam stays
+  whole, arriving through the tables' extinction. Earth and Mars stand under
+  two columns and are the same pixels.
+- **A haze may carry a detached layer** (`detached`): a thin tent of small
+  particles high over the main haze, placed in scale heights of the gas so
+  it is free of the radius, with its vertical extinction depth at 550 nm and
+  its color, scattering with Rayleigh's phase, in the tables, the zenith
+  column and the physical march. Titan's stands 290 to 390 km up, its foot
+  on the main haze's opaque edge, blue-white and a fiftieth deep. Mars
+  carries none: its ice hazes 40 to 60 km up read, at the plate's scale, as
+  a second outline a pixel over the first.
 - A sun within a degree or two of a sea-level horizon dims faster than the
   compression law, under the cap, until the ground takes it.
 - A bake costs 39 ms where it cost 22 on the development machine — the

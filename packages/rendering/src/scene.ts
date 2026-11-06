@@ -31,7 +31,7 @@ import {
   ringScales,
   sunkSphereRadius,
 } from './datum.ts'
-import { limbFalloff, limbLift } from './atmosphere.ts'
+import { limbFalloff, limbLift, limbShare } from './atmosphere.ts'
 import { terminatorFor } from './terrainPalette.ts'
 import {
   LOD_THRESHOLDS,
@@ -88,9 +88,11 @@ export interface RenderBody {
   readonly airHeights: AirHeights
   /**
    * How far the eye stands outside this body's air, 0 to 1, over the two
-   * shell heights above its top (`limbLift`): what Enhanced draws its limb
-   * at, and what the shell mesh grows by to carry it. Zero inside the air,
-   * and for a body with none. One producer, here, because the shell, the
+   * shell heights above its top (`limbLift`), times the lift's share of the
+   * column (`limbShare`): what Enhanced draws its limb at, what it clears a
+   * surface from orbit by (`clearedFromOrbit`), and what the shell mesh
+   * grows by to carry it. Zero inside the air, for a body with none, and for
+   * a haze deep enough to be its own ring. One producer, here, because the shell, the
    * sphere, the ground and the sea each march it and a ring one of them
    * drew alone would end at that material's edge.
    */
@@ -389,7 +391,9 @@ export function buildScene(
               body.appearance.haze.height,
             ),
       airTop,
-      limb: limbLift(placement.distance / body.radius, airTop),
+      limb:
+        limbLift(placement.distance / body.radius, airTop) *
+        (body.appearance.haze === null ? 1 : limbShare(body.appearance.haze)),
       limbFalloff: limbFalloff(
         placement.distance / body.radius,
         heights.rayleigh,

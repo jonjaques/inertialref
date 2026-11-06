@@ -297,16 +297,25 @@ export function airOverhead(
   sun: Vec3 | null,
   sunColor: Rgb,
 ): number {
-  if (sun === null) return 0
+  const [r, g, b] = airOverheadRgb(scattering, standing, sun, sunColor)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/** The same zenith in color, the star's light in it; black with no sun. */
+export function airOverheadRgb(
+  scattering: AtmosphereScattering,
+  standing: Standing,
+  sun: Vec3 | null,
+  sunColor: Rgb,
+): readonly [number, number, number] {
+  if (sun === null) return [0, 0, 0]
   const [r, g, b] = zenithSkyRadiance(
     scattering.recipe,
     scattering.multiScatterTable,
     standing.radius,
     Vec.dot(standing.up, sun),
   )
-  return (
-    0.2126 * r * sunColor.r + 0.7152 * g * sunColor.g + 0.0722 * b * sunColor.b
-  )
+  return [r * sunColor.r, g * sunColor.g, b * sunColor.b]
 }
 
 /**

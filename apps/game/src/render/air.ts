@@ -150,6 +150,10 @@ export function createAirUniforms() {
   const ozone = uniform(new Vector3(0, 0, 0))
   const ozonePeak = uniform(0)
   const ozoneHalfWidth = uniform(1)
+  const detachedPeak = uniform(0)
+  const detachedHalfWidth = uniform(1)
+  const detachedExtinction = uniform(0)
+  const detachedScatter = uniform(new Vector3(0, 0, 0))
   const hRayleigh = uniform(1)
   const hMie = uniform(1)
   const transmittance = texture(LUT_WHITE)
@@ -164,6 +168,10 @@ export function createAirUniforms() {
     ozone,
     ozonePeak,
     ozoneHalfWidth,
+    detachedPeak,
+    detachedHalfWidth,
+    detachedExtinction,
+    detachedScatter,
     hRayleigh,
     hMie,
     transmittance,
@@ -180,6 +188,10 @@ export function createAirUniforms() {
       ozone.value.set(...recipe.ozone)
       ozonePeak.value = recipe.ozonePeak
       ozoneHalfWidth.value = recipe.ozoneHalfWidth
+      detachedPeak.value = recipe.detachedPeak
+      detachedHalfWidth.value = recipe.detachedHalfWidth
+      detachedExtinction.value = recipe.detachedExtinction
+      detachedScatter.value.set(...recipe.detachedScatter)
       hRayleigh.value = recipe.hRayleigh
       hMie.value = recipe.hMie
       transmittance.value = sunTable
@@ -201,6 +213,10 @@ export function createAirUniforms() {
       ozone.value.set(0, 0, 0)
       ozonePeak.value = 0
       ozoneHalfWidth.value = 1
+      detachedPeak.value = 0
+      detachedHalfWidth.value = 1
+      detachedExtinction.value = 0
+      detachedScatter.value.set(0, 0, 0)
       hRayleigh.value = 1
       hMie.value = 1
       // The tables as well as the coefficients. `sunThrough` hands back the
@@ -272,16 +288,16 @@ export function marchAir(
 
     // The ozone tent absorbs and scatters nothing; `densities` holds the
     // same shape on the CPU.
-    const densityO = max(
-      float(1).sub(
-        abs(height.sub(air.ozonePeak)).div(max(air.ozoneHalfWidth, 1e-9)),
-      ),
-      0,
-    )
+    const densityO = tentAt(height, air.ozonePeak, air.ozoneHalfWidth)
+    // The detached layer's tent, the same shape on the CPU: small particles
+    // that take gray and scatter their color with Rayleigh's phase.
+    const densityD = tentAt(height, air.detachedPeak, air.detachedHalfWidth)
+    const scatterD = air.detachedScatter.mul(densityD)
     const extinction = air.betaRayleigh
       .mul(densityR)
       .add(air.mieExtinction.mul(densityM))
       .add(air.ozone.mul(densityO))
+      .add(air.detachedExtinction.mul(densityD))
     const stepTau = extinction.mul(stepLength)
     // Transmittance to the middle of this step: the half keeps the midpoint
     // rule honest about its own sample's extinction.
@@ -303,17 +319,30 @@ export function marchAir(
     const scatterToward = mix(air.mieScatter, air.mieForward, phase.forward)
     const single = air.betaRayleigh
       .mul(densityR)
+      .add(scatterD)
       .mul(phase.rayleigh)
       .add(scatterToward.mul(densityM).mul(phase.mie))
       .mul(sunT)
     const multiple = psi.mul(
-      air.betaRayleigh.mul(densityR).add(air.mieScatter.mul(densityM)),
+      air.betaRayleigh
+        .mul(densityR)
+        .add(air.mieScatter.mul(densityM))
+        .add(scatterD),
     )
     inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))
     opticalDepth.addAssign(stepTau)
   })
 
   return { inscatter, transmittance: exp(opticalDepth.negate()) }
+}
+
+/** A tent in height, 1 at `peak` and nothing from `halfWidth` either side. */
+function tentAt(
+  height: Node<'float'>,
+  peak: Node<'float'>,
+  halfWidth: Node<'float'>,
+): Node<'float'> {
+  return max(float(1).sub(abs(height.sub(peak)).div(max(halfWidth, 1e-9))), 0)
 }
 
 /**
@@ -477,7 +506,8 @@ export function limbReachOf(air: AirUniforms): Node<'float'> {
  * composite's against 0.044. At a quarter of the column the orange is a
  * thread too. A dust that is the whole column (`aerosolSky`) is the
  * exception: it rides at its whole column and takes as it scatters, which
- * the march below says why.
+ * the march below says why. A detached layer stays in the physics: drawn
+ * six times over it is a second outline standing off the first.
  *
  * The tables are read at the height the stretch maps the sample to,
  * `h / stretch` — the ring lit as the gas of a planet stretched the same
