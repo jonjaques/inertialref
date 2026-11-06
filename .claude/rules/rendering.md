@@ -148,10 +148,11 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   message on a channel the page console does not carry, and a planet that draws nothing.
 
 - **The ground and the sphere behind it are one body, so they shade alike.**
-  `render/terrain.ts` and `render/planet.ts` share the lunar-Lambert split, the
-  terminator and the archive's photograph. A descent crosses the eight-pixel gate
-  between them — 3.1% apart on Mars, 1.5% on Earth — so anything added to one side is
-  a step at the switch. The air is the case that proves it and the least
+  `render/terrain.ts` and `render/planet.ts` share the lunar-Lambert split and the
+  archive's photograph. A descent crosses the eight-pixel gate between them — 3.1%
+  apart on Mars, 1.5% on Earth — so anything added to one side is a step at the
+  switch. The terminator is the exception that steps today: the ground's is per
+  point, from its own height, and the sphere's spans the whole relief. The air is the case that proves it and the least
   obvious: the atmosphere shell is a back-side sphere, so it survives the depth
   test only _outside_ the silhouette, and everything the air does in front of
   a surface happens in that surface's material — the sphere, the ground and

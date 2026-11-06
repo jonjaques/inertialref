@@ -18,7 +18,6 @@ import {
   Loop,
   max,
   mix,
-  normalize,
   oneMinus,
   pow,
   saturate,
@@ -50,16 +49,15 @@ import { enhancedSky } from './radiance.ts'
  *
  * The atmosphere shell is a back-side sphere, so it survives the depth test
  * only outside the planet's silhouette; everything the air does in front of
- * a surface has to happen in that surface's material. Each of the three
- * carried an authored veil for it — an airmass over a flat atmosphere, a
- * haze color, 0.15 of extinction per airmass, 0.55 toward white, 0.68 of the
- * surface — and none of it was the sky the shell drew beside it. On a desert
- * at noon the horizon sky went to the gray-white a long path makes while the
- * sand met it in a hard line: 50 km of ground was veiled 27% where the
- * path's transmittance is 0.22, and the veil's color was a haze color the
- * sky did not have. One march and one set of tables, and the ground fades
- * to exactly the sky that continues above it, on every body, from every
- * height, with nothing authored in between.
+ * a surface has to happen in that surface's material, and it has to be the
+ * shell's own air. A veil authored per surface — an airmass over a flat
+ * atmosphere, toward a haze color — is not the sky the shell draws beside
+ * it: on a desert at noon the horizon sky is the gray-white a long path
+ * makes, and such a veil dims 50 km of ground by 27% where the path's
+ * transmittance is 0.22, toward a color the sky does not have, so the sand
+ * meets the sky in a hard line. One march and one set of tables, and the
+ * ground fades to exactly the sky that continues above it, on every body,
+ * from every height, with nothing authored in between.
  *
  * Positions are in sea-level units about the body's center — the datum is
  * 1, the tables' ceiling is `top` — which is the unit the tables are baked
@@ -623,6 +621,3 @@ export function sunThrough(
     texelCentered(vec2(muSun.add(1).mul(0.5), height01), TRANSMITTANCE),
   ).rgb
 }
-
-/** The point's radial, for a march that only has the point. */
-export const radialOf = (point: Node<'vec3'>): Node<'vec3'> => normalize(point)

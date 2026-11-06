@@ -833,11 +833,11 @@ export function zenithSkyRadiance(
  *
  * The shell composites gray — L + T̄·background — which is right for a sky of
  * faint things behind the air and wrong for the disk in two ways. It does not
- * redden: a sun on the horizon came through white. And under Enhanced, where
+ * redden: a sun on the horizon comes through white. And under Enhanced, where
  * the disk is drawn at a calibrated eight times the surface white rather than
  * its physical fifty thousand, the full extinction takes it below its own
- * sky: through a dusty column at a 4.6° sun the disk was a brown spot in a
- * peach glow, the brightest thing in the scene drawn as the dimmest.
+ * sky: through a dusty column at a 4.6° sun a gray-dimmed disk is a brown spot
+ * in a peach glow, the brightest thing in the scene drawn as the dimmest.
  *
  * So the disk arrives in the column's own color, at the column's luminance
  * raised to `compression` — the exponent that took the physical disk to the
@@ -846,8 +846,9 @@ export function zenithSkyRadiance(
  * so it keeps its rank against the sky until it is physically level with it,
  * and it keeps its hue, because a physical disk through that column is that
  * color at any brightness the hue-preserving curve can show. Compressing each
- * channel instead bleached a 2° sun to 1 : 0.89 : 0.69. Zero once the planet
- * is in the way.
+ * channel instead bleaches a 2° sun to 1 : 0.89 : 0.69. Zero once the planet
+ * is in the way, which for a setting disk is a question for
+ * `settingDiskCosine` rather than for its center.
  *
  * What this returns is drawn *before* the shell divides it back down, so it
  * is the disk over the column's transmittance, and through the last degree or
@@ -895,3 +896,37 @@ export function diskThroughAir(
  * an opened exposure divides the cap by the opening.
  */
 export const DISK_THROUGH_AIR_CEILING = 2048
+
+/**
+ * The zenith cosine of the horizon from `radius` planet radii: the ray that
+ * grazes the ground. Zero on the ground, and below zero as the eye climbs.
+ */
+export function horizonCosine(radius: number): number {
+  return -Math.sqrt(Math.max(0, 1 - 1 / (radius * radius)))
+}
+
+/**
+ * The zenith cosine at which to read a disk of `angularRadius` radians,
+ * centered at `mu`, for `diskThroughAir` from `radius` planet radii.
+ *
+ * `diskThroughAir` colors the whole disk from one ray, and the ray through the
+ * center meets the ground while the upper half of the disk is still in the
+ * sky. Read there, a half-set sun is zero, and it drops out of a bright
+ * horizon in one frame. Across the band where the horizon cuts the disk the
+ * cosine eases from the center's to the horizon's, which it reaches as the
+ * upper limb sets: `h + a·x²` over `x` from 0 to 1 meets the center's cosine,
+ * and its slope, at the top of the band. What is under the drawn horizon is
+ * the ground's to cover. Near the horizon a step in the cosine is a step in
+ * elevation, so the angular radius serves as one.
+ */
+export function settingDiskCosine(
+  radius: number,
+  mu: number,
+  angularRadius: number,
+): number {
+  const horizon = horizonCosine(Math.max(radius, 1))
+  const band = Math.max(angularRadius, 0)
+  if (!(band > 0) || mu >= horizon + band || mu < horizon - band) return mu
+  const x = (mu - horizon + band) / (2 * band)
+  return horizon + band * x * x
+}
