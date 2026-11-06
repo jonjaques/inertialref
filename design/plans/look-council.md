@@ -186,6 +186,71 @@ the old, and check both against the profilers before trusting the swap. The
 orchestrator gains as much as the seats: most of a round's judgment was
 choosing which experiment to put in front of the council.
 
+## The second run
+
+The second run took the protocol above into `.data/look-council-2` and ran
+it over three phases — Mars, Titan, the exoplanets — against production
+captured on the same rig, with #179's Earth from orbit and #172's ground
+views as guards. What it kept from the list above, and what it found.
+
+### What the protocol did
+
+- **The reference was the rig's.** Production, every candidate and every
+  guard were captured on one rig in one session at 1440×900, DPR 2, sRGB
+  forced, SDR, with the display, the commit and a hash of the fixtures in
+  every `capture.json`; the tools refuse to put two captures side by side
+  whose rig records disagree. The settle is the sensor's, nine time
+  constants after the scene stands still, so two captures of one tree agree
+  to 0.0001 RMSE where run one's Mars dusk sat 0.015 from itself.
+- **Arms, not rounds.** Each round put the incumbent and two arms in front of
+  the council as blind letters per scene, with every guard that moved past
+  the noise floor as a regression pair and one control pair. An arm won by
+  paired gain over the incumbent beyond `max(0.25, z·SE)` with alpha split
+  across the arms, every seat in favor, and no regression pair flagged by
+  two seats. Round 1's winner gained +0.78 against a bound of 0.64; rounds
+  2 to 6 gained −0.29, +0.08, +0.19, +0.22 and +0.19 and lost, the last
+  three with every seat in favor.
+- **The measures chose the arms.** Rim width and color, standoff, the
+  sunset band's layers, the ground's zenith and horizon, and whole-frame
+  RMSE against the noise floor, from a fast capture of the scenes an
+  experiment should move. Three iterations on the dust-is-the-sky arm ran
+  on measures alone before the council saw one.
+- **Seats were calibrated before they were trusted.** Each provider's
+  strongest model at its highest effort rescored run one's round seven
+  beside the old seats and the profilers; Muse Wonder Full 1.0 replaced
+  Wonder 1.0 on that evidence (rank correlation with the old seats 0.93
+  against 0.48). Every review was checked: every image opened, no file
+  outside the packet, the control pair within a point, three observations
+  per seat verified against the images.
+
+### What it found
+
+- **The council agrees on direction and the measures cannot read it.** All
+  three seats asked, round after round, for the same three things on Mars:
+  a thin attached butterscotch rim with a pale hairline over it, no glare
+  through the ground that hides the sun, and a dusk that darkens. Two of
+  the three are the camera's — the meter opens for a dark sky and the
+  summit's aureole blows — and one is the flare's analytic occluder.
+- **A fine line reads as an outline at the packet's scale.** The ice layer
+  over Mars's rim is a two-pixel paling in the crops and a "uniform white
+  outline" to every seat on the plates, and the tan line it caps ranked
+  higher every time. A rim's structure needs the crop beside the plate and
+  a question about the crop.
+- **A single-scene fix cannot win a twelve-scene round.** The floor of 0.25
+  on the paired gain is a quarter of a point over the mean; a glare fixed on
+  one scene is +0.11, however every seat asks for it. The next run should
+  carry a defect lane beside the hill-climb: a change that removes a named
+  defect on the scenes it names, moves nothing else past the noise floor,
+  and is called better by every seat on those scenes, lands.
+- **One harness loads its own skill and the rule discards the seat.** The
+  Codex seat opened `~/.agents/skills/unslop/SKILL.md`, listed it honestly
+  under `opened`, and the strict packet rule threw the review out, twice in
+  one round. The rule should name the harness's own files as allowed.
+- **The defects that did not land are logged.**
+  [`look-council-defects.md`](look-council-defects.md) carries every one a
+  seat reported, with its status and the patch that fixes it where one
+  exists, so the next run starts from the list and not from the reviews.
+
 ## Open questions
 
 - Should the owner be a seat? One human pass per round on the experiment
