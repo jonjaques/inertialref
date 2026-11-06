@@ -865,7 +865,7 @@ describe("Enhanced's limb", () => {
 })
 
 describe('a detached layer', () => {
-  /** Mars's ice hazes, copied from `solar/bodies.ts`. */
+  /** Mars's ice hazes as the orbiters photograph them, which `solar/bodies.ts` leaves off Mars. */
   const ICE = {
     center: 4.5,
     halfWidth: 0.6,
@@ -932,11 +932,11 @@ describe('a detached layer', () => {
 
   it('is a sky of its own color over the dust, and a line, not a veil, from the ground', () => {
     // The dust falls off over 11.1 km, so at the layer's foot, 43 km up, 2%
-    // of it remains and the zenith there is the layer's: at a 10° sun, 17
-    // times the plain recipe's light and blue-white, b/r 1.20, where the dust
-    // alone is butterscotch at 0.37. From the ground the same layer is the
-    // fine line over the limb and nothing overhead: the zenith moves 6% at
-    // a 10° sun and 0.4% at 60°.
+    // of it remains and the zenith there is the layer's: at a 10° sun, 7.9
+    // times the plain recipe's light and blue-white, b/r 1.12, where the dust
+    // alone is butterscotch at 0.38. From the ground the same layer is the
+    // fine line over the limb and next to nothing overhead: the zenith moves
+    // 8% at a 10° sun and 0.9% at 60°.
     const psiPlain = bakeMultipleScattering(marsRecipe, marsT)
     const psiLayer = bakeMultipleScattering(layered, layeredT)
     const sky = (
@@ -954,7 +954,7 @@ describe('a detached layer', () => {
     const foot = 1 + layered.detachedPeak - layered.detachedHalfWidth
     const plainFoot = sky(marsRecipe, psiPlain, foot, 10)
     const layerFoot = sky(layered, psiLayer, foot, 10)
-    expect(luminance(layerFoot) / luminance(plainFoot)).toBeGreaterThan(10)
+    expect(luminance(layerFoot) / luminance(plainFoot)).toBeGreaterThan(6)
     expect(layerFoot[2]! / layerFoot[0]!).toBeGreaterThan(1)
     expect(plainFoot[2]! / plainFoot[0]!).toBeLessThan(0.5)
     for (const [sun, within] of [

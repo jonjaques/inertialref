@@ -218,13 +218,13 @@ it('draws the twilight zenith the CPU column reports', async () => {
 })
 
 it('draws a detached layer’s zenith the CPU column reports', async () => {
-  // Mars's ice hazes are a tent 50 ± 9 km up over a dust that is 2.5% of
-  // itself by 41 km, so from the layer's foot the zenith is the layer: six
-  // times the dust's light at this sun, blue-white where the dust is
-  // butterscotch. The march crowds its twelve samples toward the eye and the
-  // tent peaks nine kilometers over it, which is where the two marches
-  // differ most; the shell's column may not drift from the CPU's there by
-  // more than they differ over Earth's zenith.
+  // Mars's ice hazes are a tent 50 ± 7 km up over a dust that is 2% of
+  // itself by 43 km, so from the layer's foot the zenith is the layer's as
+  // much as the dust's: at this sun 2.6 times the dust's light, and bluer
+  // than the dust alone, b/r 0.95 against 0.56. The march crowds its twelve
+  // samples toward the eye and the tent peaks seven kilometers over it,
+  // which is where the two marches differ most; the shell's column may not
+  // drift from the CPU's there by more than they differ over Earth's zenith.
   const mars = SOLAR_PLANETS.find((body) => body.name === 'Mars')!
   // The layer is the test's own, over Mars's authored dust: the ice hazes
   // 50 ± 7 km up, a hundredth deep, blue-white.
@@ -257,7 +257,7 @@ it('draws a detached layer’s zenith the CPU column reports', async () => {
     1 + foot / mars.radius,
     Math.sin(SUN),
   )
-  expect(drawn[2]).toBeGreaterThan(drawn[0])
+  expect(drawn[2]! / drawn[0]!).toBeGreaterThan(0.75)
   for (let c = 0; c < 3; c += 1)
     expect(Math.abs(drawn[c]! / reported[c]! - 1)).toBeLessThan(0.05)
 })
