@@ -1,4 +1,4 @@
-import { sensorRadiance } from './radiance.ts'
+import { sensorRadiance, stagedLight } from './radiance.ts'
 import {
   AddEquation,
   Color,
@@ -92,9 +92,9 @@ interface ElementSpec {
  * flare the eye reads as "photograph" is one it barely notices.
  */
 const ELEMENTS: readonly ElementSpec[] = [
-  // Tuned on the extended-range path, where the tone curve's shoulder lifts
-  // everything near white: what reads as restrained on an SDR capture was a
-  // furnace on an EDR display, which is where these were re-metered.
+  // Tuned on the extended-range path, where the tone curve lifts highlights
+  // into the display's headroom: what reads as restrained on an SDR capture
+  // was a furnace on an EDR display, which is where these were re-metered.
   { kind: 'glow', t: 0, size: 0.24, tint: [1, 1, 1], gain: 1.1 },
   { kind: 'streak', t: 0, size: 1.0, tint: [1, 0.95, 0.9], gain: 0.16 },
   { kind: 'disc', t: 0.38, size: 0.05, tint: [0.5, 0.9, 0.85], gain: 0.22 },
@@ -258,7 +258,10 @@ function elementMaterial(kind: ElementKind): {
   // An overlay: the quads hang twenty meters in front of the lens, and the
   // sensor must not take that for the distance of the sky behind the Sun.
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
-  material.colorNode = color.mul(profile).mul(intensity)
+  // Staged under Enhanced, unlike the disk: the ghosts were authored at the
+  // calibration, and a sunset that opens the camera by three stops would
+  // otherwise brighten every one of them eightfold.
+  material.colorNode = color.mul(profile).mul(intensity).mul(stagedLight)
   material.transparent = true
   /*
    * Additive in color, and **silent in alpha** — not `AdditiveBlending`.

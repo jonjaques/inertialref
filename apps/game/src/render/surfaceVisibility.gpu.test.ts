@@ -227,7 +227,11 @@ it.each(['ground', 'water', 'foam'] as const)(
         else expect(Math.max(...pixel.slice(0, 3))).toBeLessThan(1e-7)
       }
       // The real atmosphere still lights a surface just beyond the direct
-      // beam's terminator, independently of the visibility floor.
+      // beam's terminator, independently of the visibility floor. With the
+      // sun 5.7° down, a clear sky's light on the ground is a few lux against
+      // the day's 17 klx (`skylightLeft`); on this dark palette under a 0.4
+      // column that is a few millionths, measured 3·10⁻⁶ for the ground and
+      // 7·10⁻⁶ for the sea.
       const aired = { ...palette, airThickness: 0.4, terminator: 0.025 }
       terrain.setPalette(aired, RADIUS)
       water.setPalette(aired)
@@ -236,7 +240,7 @@ it.each(['ground', 'water', 'foam'] as const)(
         36,
         27,
       )
-      expect(Math.max(...twilight.slice(0, 3))).toBeGreaterThan(1e-5)
+      expect(Math.max(...twilight.slice(0, 3))).toBeGreaterThan(1e-6)
     } finally {
       setSceneExposure(gpu.renderer, null)
       mesh.geometry.dispose()

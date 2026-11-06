@@ -70,3 +70,70 @@ it('keeps Natural equal to the production ACES fit at SDR headroom', async () =>
       )
   }
 })
+
+it('spends the extended range on the star, not on the sky beside it', async () => {
+  const scale = uniform(1)
+  const graph = renderOutput(
+    vec4(vec3(1).mul(scale), 1),
+    CustomToneMapping,
+    LinearSRGBColorSpace,
+  )
+  const drawn = async (headroom: number, light: number): Promise<number> => {
+    installToneCurve(gpu.renderer, headroom).natural.value = 0
+    scale.value = light
+    const [r, g, b] = (await gpu.drawGraph(graph, { float: true })).at(20, 20)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  for (const headroom of [2, 16]) {
+    // Below the shoulder an HDR capture is the SDR one.
+    for (const light of [0.05, 0.3, 0.6])
+      expect(await drawn(headroom, light)).toBeCloseTo(await drawn(1, light), 6)
+    // The calibrated star disk takes the display's peak...
+    expect(await drawn(headroom, 8)).toBeGreaterThan(0.97 * headroom)
+    // ...and Earth's noon aureole three degrees off it, at 2.8 times the
+    // surface white, does not: the graded lift drew it at 0.85 of the peak
+    // on a 2× display, beside a disk at 0.98.
+    expect(await drawn(headroom, 2.8)).toBeLessThan(0.75 * headroom)
+    let previous = 0
+    for (let light = 0.25; light <= 64; light *= 1.25) {
+      const value = await drawn(headroom, light)
+      expect(value).toBeGreaterThanOrEqual(previous)
+      previous = value
+    }
+  }
+  installToneCurve(gpu.renderer, 1)
+})
+
+it('draws a light far past the display brighter than the glow around it, at its own hue', async () => {
+  // A 2° sun through the air is a deep orange at a hundred times the
+  // surface white; the aureole beside it a pale orange at three. Scaled down
+  // until its reddest channel fits, the disk drew at a luminance of 0.55
+  // beside an aureole at 0.79 — the brightest thing in the sky drawn as a
+  // dark spot in its own glow. A camera clips the disk toward white.
+  installToneCurve(gpu.renderer, 1).natural.value = 0
+  const scale = uniform(1)
+  const color = uniform(vec3(1))
+  const graph = renderOutput(
+    vec4(color.mul(scale), 1),
+    CustomToneMapping,
+    LinearSRGBColorSpace,
+  )
+  const drawn = async (rgb: readonly number[], light: number) => {
+    color.value.set(rgb[0]!, rgb[1]!, rgb[2]!)
+    scale.value =
+      light / (0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!)
+    return (await gpu.drawGraph(graph, { float: true })).at(20, 20).slice(0, 3)
+  }
+  const lum = ([r, g, b]: readonly number[]) =>
+    0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+  const disk = [1, 0.47, 0.07]
+  const aureole = [1, 0.75, 0.5]
+  const diskDrawn = await drawn(disk, 100)
+  const aureoleDrawn = await drawn(aureole, 3)
+  expect(lum(diskDrawn)).toBeGreaterThan(lum(aureoleDrawn))
+  expect(degreesApart(hue(diskDrawn), hue(disk))).toBeLessThan(0.05)
+  // Below the top of the curve nothing is bleached: a mid-tone keeps its
+  // saturation exactly.
+  const mid = await drawn(disk, 0.3)
+  expect(mid[1]! / mid[0]!).toBeCloseTo(0.47, 4)
+})

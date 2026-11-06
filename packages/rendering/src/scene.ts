@@ -23,7 +23,13 @@ import type {
 import { surfacePlacementPose } from '@inertialref/simulation'
 import { type BodyAppearance, type EntityId } from '@inertialref/universe'
 import { drawnAnchorRadius } from './ground.ts'
-import { atmosphereShellRatio, ringScales, sunkSphereRadius } from './datum.ts'
+import {
+  type AirHeights,
+  airHeights,
+  atmosphereShellRatio,
+  ringScales,
+  sunkSphereRadius,
+} from './datum.ts'
 import { terminatorFor } from './terrainPalette.ts'
 import {
   LOD_THRESHOLDS,
@@ -42,6 +48,9 @@ import { sunlightAt, stellarLuminance } from './photometry.ts'
  * of consequence, which is what keeps "how the universe works" out of component
  * lifecycles — and lets all of this be tested in Node.
  */
+
+/** The heights of a body with no haze: nothing to scatter. */
+export const NO_AIR: AirHeights = { rayleigh: 0, aerosol: 0 }
 
 export interface RenderBody {
   /** Incident stellar light relative to terrestrial sunlight, before albedo. */
@@ -63,6 +72,12 @@ export interface RenderBody {
    */
   readonly terminator: number
   readonly atmosphereScale: number
+  /**
+   * The gas's and the aerosol's scale heights in the same unit as
+   * `atmosphereScale`, which the scattering tables are baked in. Zero for a
+   * body with no haze.
+   */
+  readonly airHeights: AirHeights
   readonly trueRadius: Meters
   /**
    * Sidereal rotation period, seconds, negative for retrograde. A cloud
@@ -336,6 +351,16 @@ export function buildScene(
               body.radius,
               body.relief,
               body.appearance.haze.height,
+            ),
+      airHeights:
+        body.appearance.haze === null
+          ? NO_AIR
+          : airHeights(
+              body.radius,
+              body.relief,
+              body.appearance.haze.height,
+              body.atmosphereScaleHeight,
+              body.appearance.haze.aerosolHeight,
             ),
       trueRadius: body.radius,
       rotationPeriod: body.rotationPeriod,

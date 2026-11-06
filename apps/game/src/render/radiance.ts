@@ -1,6 +1,6 @@
 import { SURFACE_LUMINANCE } from '@inertialref/rendering'
 import type { NodeMaterial, Renderer } from 'three/webgpu'
-import { Fn, output, uniform, vec4 } from 'three/tsl'
+import { float, Fn, output, uniform, vec4 } from 'three/tsl'
 import { meterOverlay, motionOverlay, reactiveCoverage } from './sensorMrt.ts'
 
 /** Offscreen reflectance bakes remain reflectance; only the scene collects light. */
@@ -12,14 +12,13 @@ export const enhancedSky = uniform(0).onRenderUpdate(({ renderer }) =>
   renderer !== null && enhanced.get(renderer) === true ? 1 : 0,
 )
 /**
- * Enhanced's three-percent night-side fill is legibility, not measured light.
- * Ground and water share the resolved processing gate; photographic views and
- * reflectance bakes receive none. Atmospheric scattering remains independent.
- * Earthshine on Luna is about 2.6 × 10⁻⁴ of sunlight; three percent is an
- * authored floor that lets a night limb read against space at daylight exposure.
- * The scene's 0.16 ambient reaches hulls and props through different materials.
+ * The luminance of the air between the observer and space, in scene units:
+ * the zenith of whatever atmosphere the eye is inside, zero in a vacuum.
+ * Written once a frame by `Bodies`. Only Enhanced reads it — its lift of the
+ * faint sky has to be measured against the air in front of that sky; the
+ * photographic views add the two physically and let exposure decide.
  */
-export const visibilityAmbient = enhancedSky.mul(0.03)
+export const airLuminance = uniform(0)
 export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
   renderer === null ? 1 : (gains.get(renderer) ?? 1),
 )
@@ -27,6 +26,45 @@ export const sceneRadianceGain = uniform(1).onRenderUpdate(({ renderer }) =>
 export const integratedSkyGain = uniform(1).onRenderUpdate(({ renderer }) =>
   renderer === null ? 1 : (integratedGains.get(renderer) ?? 1),
 )
+
+/**
+ * Light Enhanced stages rather than measures — the composed galaxy, the
+ * night fill, the lens flare — held at the display level it was authored at
+ * when the exposure opens up in a darkening sky (`airAdaptation`). Under the
+ * calibration it is one; the photographic views measure everything, and it is
+ * one there too.
+ */
+export const stagedLight = enhancedSky
+  .greaterThan(0.5)
+  .select(integratedSkyGain, float(1))
+
+/**
+ * The daylight where the observer stands, in scene units: the sky overhead
+ * and the direct sun (`daylightOver`), or infinity outside any air. Written
+ * once a frame by `Bodies`, read by the sensor for `airAdaptation`. `depth`
+ * is how far down that air the eye stands, 1 on the ground and 0 at its top,
+ * which `airAdaptation` fades over.
+ */
+export const observerDaylight = { value: Number.POSITIVE_INFINITY, depth: 0 }
+
+/**
+ * Enhanced's three-percent night-side fill is legibility, not measured light.
+ * Ground and water share the resolved processing gate; photographic views and
+ * reflectance bakes receive none. Atmospheric scattering remains independent.
+ * Earthshine on Luna is about 2.6 × 10⁻⁴ of sunlight; three percent is an
+ * authored floor that lets a night limb read against space at daylight exposure.
+ * The scene's 0.16 ambient reaches hulls and props through different materials.
+ * Staged, so a dusk exposure does not take the floor up with it.
+ */
+export const visibilityAmbient = enhancedSky.mul(0.03).mul(stagedLight)
+
+/**
+ * `integratedSkyGain` for a sensor exposure `total`: the inverse of what the
+ * sensor multiplies the scene by, one at the calibration. The near field's
+ * lights carry it on the CPU (`CameraRig`), where the uniform cannot reach.
+ */
+export const integratedGainFor = (total: number | null): number =>
+  total === null ? 1 : 1 / (SURFACE_LUMINANCE * total)
 
 export function setSceneExposure(
   renderer: Renderer,
@@ -36,10 +74,7 @@ export function setSceneExposure(
 ): void {
   enhanced.set(renderer, pre !== null && processing === 'enhanced')
   gains.set(renderer, pre === null ? 1 : SURFACE_LUMINANCE * pre)
-  integratedGains.set(
-    renderer,
-    total === null ? 1 : 1 / (SURFACE_LUMINANCE * total),
-  )
+  integratedGains.set(renderer, integratedGainFor(total))
 }
 
 /**

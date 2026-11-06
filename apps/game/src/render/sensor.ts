@@ -110,6 +110,8 @@ export interface SensorFrame {
   readonly renderOrigin?: RenderOrigin | null
   readonly stagingLook?: boolean
   readonly pinned: number | null
+  /** `airAdaptation` stops for the air the eye stands in; zero in space. */
+  readonly airAdaptation?: number
   readonly headroom: number
   readonly motionBlur?: boolean
   readonly noiseTick?: number
@@ -372,6 +374,7 @@ export function createSensor(
           settings,
           state.adaptationTime ?? state.time,
           state.pinned,
+          state.airAdaptation ?? 0,
         )
         setSceneExposure(
           renderer,

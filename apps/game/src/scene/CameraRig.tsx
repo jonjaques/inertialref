@@ -9,6 +9,7 @@ import type {
 import { Vector3 } from 'three/webgpu'
 import { nearFieldLighting, verticalFovDegrees } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { integratedGainFor } from '../render/radiance.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /** Reused per frame; a light direction is not worth an allocation at 144 Hz. */
@@ -77,8 +78,16 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
       engine.cameraPolicy,
       (cinematic?.effects.calibratedLight ?? 0) > 0,
     )
-    if (ambient.current !== null) ambient.current.intensity = lighting.ambient
-    if (fill.current !== null) fill.current.intensity = lighting.fill
+    // Enhanced's near field is staged light, like `stagedLight` in the
+    // shaders: held at the calibration when a darkening sky opens the
+    // exposure, or a hull at civil dusk would be lit two thousandfold. Last
+    // frame's reading; the sensor draws after this.
+    const reading = engine.exposure
+    const staged =
+      reading?.processing === 'enhanced' ? integratedGainFor(reading.total) : 1
+    if (ambient.current !== null)
+      ambient.current.intensity = lighting.ambient * staged
+    if (fill.current !== null) fill.current.intensity = lighting.fill * staged
     if (scene === null) return
 
     /*
@@ -147,7 +156,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
     const star = scene.stars[0]
     if (light.current !== null)
       light.current.intensity =
-        4 * (engine.visibilityProcessing ? 1 : (star?.sunlight ?? 0))
+        4 * (engine.visibilityProcessing ? staged : (star?.sunlight ?? 0))
     if (star !== undefined && light.current !== null) {
       light.current.position.set(
         star.placement.position.x,

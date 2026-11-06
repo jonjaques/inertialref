@@ -1,8 +1,11 @@
 # ADR-0037: Enhanced composes the default sky; Automatic and Manual expose it photographically
 
-Status: accepted · 7 Sep 2026. Camera policy, processing and surface-light
-separation are implemented and verified. The camera plan records image and
-runtime acceptance, including the limits of each measurement.
+Status: accepted · 7 Sep 2026; amended 30 Oct 2026, the air in front of the
+sky is part of what Enhanced compresses, and Enhanced opens up for the
+daylight left in a darkening sky. Camera policy, processing and
+surface-light separation are implemented and verified. The camera plan
+records image and runtime acceptance, including the limits of each
+measurement.
 Supersedes the default-image preservation requirement in
 [ADR-0031](0031-the-sensor-response.md), the ordinary-view daylight omission
 policy in [ADR-0032](0032-the-stellar-field.md), and the bible's two-mode
@@ -74,6 +77,32 @@ A positive compensation brightens Automatic; it cannot add gain to Manual.
 Enhanced holds the 30,000 cd/m² surface calibration and declares its separate
 sky processing. Display peak and output negotiation do not select a mode.
 
+Standing inside an atmosphere, Enhanced opens up for the daylight that is
+left. In space the calibration is the point: the sun is the same sun wherever
+the ship is. On the ground the light itself goes away. Measured air puts a
+civil-dusk zenith near 0.65 cd/m², thirteen stops under a noon one, and at the
+calibration that sky drew black where a camera or an eye has opened by some
+ten stops. `airAdaptation` reads the daylight on a level surface at the eye
+(`daylightOver`: the sky overhead plus the direct sun through the air). It
+does nothing down to about 2,000 cd/m², so noon and every orbit keep the
+calibration. Below that it follows the light stop for stop, up to eleven, and
+then gives the stops back between the light of a −7° sun and astronomical
+night. The night sky — the stars, the Milky Way, a Moon with its relief — is
+then presented at the calibration it was composed at. A pinned or staged
+exposure ignores it. What Enhanced stages rather than measures is held at
+its display level while the exposure is open (`stagedLight`): the composed
+galaxy, the three-percent night fill, the lens flare, and the near field's
+key, fill and ambient, alongside the integrated stars, which already
+carried the inverse.
+
+The neutral look keeps a light's hue through the whole curve, and over its
+top 5% it rolls a saturated light toward white rather than down. Mixing
+toward the gray of its own luminance, only as far as its brightest channel
+needs, keeps both the luminance and the hue angle. Scaled down instead, a
+2° sun drew darker than its own aureole (0.55 against 0.79), where a camera
+clips the disk to a pale core. A star's darkened limb, below that top 5%,
+keeps the color it is drawn with.
+
 Enhanced compresses diffuse sky luminance before the scene's half-float
 conversion. The owned sky target retains physical V-anchored radiance in
 nW m⁻² sr⁻¹; the composition reads that radiance and applies a presentation
@@ -89,6 +118,24 @@ The diffuse gain is `2^23`, with a scene-luminance ceiling of `0.5` before the
 shared display response. The wider shoulder preserves contrast between faint
 background, dark lanes and bright star clouds. It changes no source radiance,
 physical cache or photographic exposure, and adds no passes or allocations.
+
+The air in front of the sky is part of the sky being compressed. Standing
+inside an atmosphere, the eye sees the field through the air's own light, and
+a lift measured against the field alone draws the galactic bulge through a
+noon sky, brighter than the air it is seen through. `Bodies` publishes the
+luminance of the zenith over the eye as `airLuminance`, from the shell's own
+march along one radial (`zenithSkyRadiance`, held to the drawn zenith on the
+GPU), and the composition adds it, lifted by the same gain, to the
+compression's denominator. In a vacuum the term is zero and the field is
+composed as above. Under a noon sky the field keeps its physical share of the
+air, which is nothing a display can show, and it returns as the air darkens
+through twilight. Integrated stars lose the eye's response to the same sky
+(`skyMagnitudeLoss`: 2.5 · 0.59 · log₁₀(1 + B/B_night) magnitudes, fitted to a
+6.5 limit under a moonless sky and −4 under a 5,000 cd/m² day). Both apply
+under Enhanced only; the photographic views add the air and the field
+physically and need neither. How bright that air is, and when it goes dark, is
+[ADR-0056](0056-the-air-is-measured-and-its-gain-is-pi.md)'s measurement, not
+a camera setting.
 
 Enhanced also owns the dark-body visibility lift, integrated star visibility
 and analytic solar core. Its near-field ambient and camera fill reach the hull

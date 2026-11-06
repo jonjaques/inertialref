@@ -59,6 +59,7 @@ import { seaWearOf } from './wear.ts'
 import { vertexMorphFactor } from './morph.ts'
 import { WAVE_OCTAVES } from './quality.ts'
 import { AIR_SCALE_HEIGHT, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
+import { skylightLeft } from './twilight.ts'
 import { landReflection, seaFrame, type SeaFrameNode } from './seaReflection.ts'
 
 /*
@@ -481,7 +482,7 @@ export function createWaterMaterial(): WaterMaterial {
       const diffuseLight = max(incidence, float(0))
         .mul(daylight)
         .mul(oneMinus(diffuse))
-        .add(skyColor.mul(diffuse).mul(saturate(incidence.add(0.25))))
+        .add(skyColor.mul(diffuse).mul(skylightLeft(incidence, 0.25)))
         .add(skyView.mul(visibilityAmbient))
         .mul(sunlight)
       const bodyLight = liquid.mul(diffuseLight)
@@ -506,7 +507,7 @@ export function createWaterMaterial(): WaterMaterial {
        */
       const skyLight = skyColor
         .mul(skyStrength)
-        .mul(saturate(incidence.add(0.15)))
+        .mul(skylightLeft(incidence, 0.15))
         .mul(0.9)
         .add(vec3(visibilityAmbient))
         .mul(sunlight)

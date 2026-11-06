@@ -3,10 +3,11 @@ import { useThree } from '@react-three/fiber'
 import { instanceIndex, varying } from 'three/tsl'
 import { createGalaxyField } from '@inertialref/universe'
 import { Group, Sprite, type WebGPURenderer } from 'three/webgpu'
-import { pixelsPerRadian } from '@inertialref/rendering'
+import { pixelsPerRadian, skyMagnitudeLoss } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { STAR_SPRITE_CEILING, type StarField } from '../engine/starSelection.ts'
 import { createStarfieldMaterial } from '../render/materials.ts'
+import { airLuminance } from '../render/radiance.ts'
 import {
   uploadStarfieldAppearance,
   type NamedStars,
@@ -150,6 +151,11 @@ export function Starfield({ engine }: { engine: GameEngine }) {
       (ppr * ppr) /
       (0.14661573215518503 * (material.size.value * engine.displayRatio) ** 2)
     material.integrated.value = visibility ? 1 : 0
+    // `Bodies` writes the air this frame or wrote it last frame; either is
+    // the same sky to the eye.
+    material.skyLoss.value = visibility
+      ? skyMagnitudeLoss(airLuminance.value)
+      : 0
     const resolved = new Set<number>()
     for (const star of scene.stars)
       if (star.placement.angularRadius * ppr > 0.75) {

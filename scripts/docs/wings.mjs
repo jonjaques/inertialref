@@ -209,6 +209,10 @@ export const WINGS = [
             'A long lens',
           ],
           [
+            'docs/adr/0056-the-air-is-measured-and-its-gain-is-pi.md',
+            'The air is measured',
+          ],
+          [
             'docs/adr/0057-a-gamepad-is-a-second-binding-on-every-action.md',
             'The gamepad',
           ],

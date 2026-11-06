@@ -1,8 +1,10 @@
 import { expect, it } from 'vitest'
 import fc from 'fast-check'
 import { PARSEC } from '@inertialref/shared'
+import { SURFACE_LUMINANCE } from './exposure.ts'
 import {
   enhancedStarVisibility,
+  skyMagnitudeLoss,
   STAR_VISIBILITY,
   stellarVisualIlluminance,
   stellarVisualMagnitude,
@@ -53,4 +55,34 @@ it('calibrates solar V light at ten parsecs and fades distant luminous stars', (
   )
   expect(far).toBeGreaterThan(STAR_VISIBILITY.faintMagnitude)
   expect(enhancedStarVisibility(far)).toBe(0)
+})
+
+it('takes ten and a half magnitudes between a moonless night and a clear day', () => {
+  // The eye's two operating points: about 6.5 under 2 × 10⁻⁴ cd/m², about
+  // −4 under 5,000 cd/m². The loss is measured against a vacuum, so the
+  // night sky costs log10(2) of the slope's own scale and no more.
+  const night = skyMagnitudeLoss(2e-4 / SURFACE_LUMINANCE)
+  const day = skyMagnitudeLoss(5000 / SURFACE_LUMINANCE)
+  expect(skyMagnitudeLoss(0)).toBe(0)
+  expect(night).toBeLessThan(0.5)
+  expect(6.5 - (day - night)).toBeCloseTo(-4, 1)
+  // Under Enhanced's own limit the noon sky leaves Sirius below a hundredth
+  // of its night visibility, which is the sky the eye sees.
+  expect(enhancedStarVisibility(-1.46 + day)).toBeLessThan(
+    enhancedStarVisibility(-1.46) / 100,
+  )
+})
+
+it('never gives a star back as the sky brightens', () => {
+  fc.assert(
+    fc.property(
+      fc.double({ min: 0, max: 10, noNaN: true }),
+      fc.double({ min: 0, max: 10, noNaN: true }),
+      (luminance, more) => {
+        const loss = skyMagnitudeLoss(luminance)
+        expect(loss).toBeGreaterThanOrEqual(0)
+        expect(skyMagnitudeLoss(luminance + more)).toBeGreaterThanOrEqual(loss)
+      },
+    ),
+  )
 })
