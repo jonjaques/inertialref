@@ -7,6 +7,7 @@ import {
   TERRAIN_DETAILS,
 } from '../render/quality.ts'
 import {
+  RENDER_GAMMA,
   RENDER_PICTURE,
   RENDER_LENS_FLARE,
   RENDER_SHIP,
@@ -66,6 +67,7 @@ export function GraphicsPanel({
   onNotice: (message: string) => void
 }) {
   const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
+  const [gamma, setGamma] = usePersistentState(RENDER_GAMMA)
   const [storedPicture, setPicture] = usePersistentState(RENDER_PICTURE)
   const picture = render.pictureOverride ?? storedPicture
   const pageOverride = render.pictureOverride != null
@@ -218,6 +220,29 @@ export function GraphicsPanel({
             rebuilding()
           }}
         />
+        {/*
+         * Display gamma. The tone curve is authored for one room and cannot
+         * know the viewer's, so where the midtones sit is theirs: a power on
+         * the displayed range up to white, and nothing above it, so a star's
+         * headroom and where a disk clips do not move. A uniform, so it
+         * takes effect on the next frame without rebuilding the sensor.
+         */}
+        <div>
+          <Row label="Gamma" value={gamma.toFixed(2)} />
+          <Slider
+            min={0.5}
+            max={2}
+            step={0.05}
+            value={[gamma]}
+            aria-label="Gamma"
+            aria-valuetext={gamma.toFixed(2)}
+            onValueChange={([value]) => {
+              if (value !== undefined) setGamma(value)
+            }}
+            onClick={releaseFocus}
+            className="min-w-0 py-2.5 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
+          />
+        </div>
       </Section>
 
       {/*

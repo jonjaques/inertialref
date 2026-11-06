@@ -102,8 +102,6 @@ export interface TerrainPalette {
    * under air is much closer to Lambert.
    */
   readonly lunarLambert: number
-  /** Half-width of the terminator, in cosine of the incidence angle. */
-  readonly terminator: number
 
   /** Whether wind can sort fines here at all, 0..1. */
   readonly aeolian: number
@@ -141,8 +139,7 @@ export interface TerrainPalette {
    */
   readonly sheet: number
 
-  /** What a low sun turns, and how much air there is to turn it. */
-  readonly sunsetTint: LinearRgb
+  /** How much air there is over the ground, 0..1 with Earth at 1. */
   readonly airThickness: number
   /**
    * What the sky over this ground is, as a **tint** of unit luminance.
@@ -158,15 +155,6 @@ export interface TerrainPalette {
    * reason anybody could name.
    */
   readonly skyColor: LinearRgb
-  /**
-   * The haze's own color, unnormalized — what the air *in front of* the ground
-   * looks like.
-   *
-   * A different job from `skyColor` and therefore a different field. That one
-   * is a tint on the light arriving at the surface and carries no brightness;
-   * this one is the aerial veil, and its value is the veil's own.
-   */
-  readonly hazeColor: LinearRgb
   /**
    * The archive's texture-set key for this body, or null.
    *
@@ -473,13 +461,8 @@ export function terrainPalette(body: Body): TerrainPalette {
     mineralHigh: { r: 1.1, g: 1.04, b: 0.93 },
 
     freshGain: 1.6,
-    // The same pair `tuningFor` gives the body material. A powder backscatters.
+    // The same split `tuningFor` gives the body material. A powder backscatters.
     lunarLambert: air > 0 ? 0.3 : 0.92,
-    terminator: terminatorFor(
-      grammar.air > 0,
-      body.surface.maxElevation,
-      body.radius,
-    ),
 
     // Wind needs air to blow and something loose to move. `dunes` is the
     // grammar's own answer to the second, from the archetype.
@@ -500,10 +483,8 @@ export function terrainPalette(body: Body): TerrainPalette {
     liquid: body.appearance.liquid,
     sheet: patchWater(body).seabed ? 1 : 0,
 
-    sunsetTint: body.appearance.haze?.limb ?? { r: 1, g: 1, b: 1 },
     airThickness: body.appearance.haze?.thickness ?? 0,
     skyColor: unitLuminance(body.appearance.haze?.color),
-    hazeColor: body.appearance.haze?.color ?? { r: 0, g: 0, b: 0 },
     textureKey: body.appearance.texture,
   }
 }

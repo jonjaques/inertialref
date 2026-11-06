@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LENS_PRESETS } from '@inertialref/rendering'
+import { DEFAULT_SENSOR_SETTINGS, LENS_PRESETS } from '@inertialref/rendering'
 import { TEST_CATALOG } from '@inertialref/universe'
 import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
 import { deg } from '@inertialref/shared'
@@ -20,7 +20,7 @@ const enhanced = {
   compensation: 0,
   rate: 1,
   range: { bright: 24, dark: 16 },
-  balance: 6500,
+  balance: DEFAULT_SENSOR_SETTINGS.balance,
 }
 
 function rig() {

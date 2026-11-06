@@ -59,7 +59,7 @@ export function atmosphereShellRatio(
   return (radius + hazeHeight) / sunkSphereRadius(radius, relief)
 }
 
-/** The air's two scale heights, in radii of the drawn sphere. */
+/** The air's two scale heights, in radii of the datum: sea level. */
 export interface AirHeights {
   /** The gas's: Rayleigh scattering. */
   readonly rayleigh: number
@@ -69,8 +69,15 @@ export interface AirHeights {
 
 /**
  * Where the scattering tables put the gas and the aerosol, as multiples of
- * the drawn sphere — the unit they are baked in, and the one that survives
- * distance compression.
+ * the datum — the unit they are baked in, with sea level at 1.
+ *
+ * The datum and not the drawn sphere, which is sunk under it: the air is
+ * measured from sea level however deep the renderer draws the sphere under
+ * the terrain. Baked over the sunk sphere, an observer on a beach stood
+ * 10 km up in the air — half of it over their head, a slate-gray zenith,
+ * and a setting sun that never reddened. The shell stops a ray at the drawn
+ * sphere and measures its air from the datum, and both radii scale together
+ * under distance compression, so each ratio survives the tier moving.
  *
  * `scaleHeight` is the atmosphere's own and `aerosolHeight` the haze's, both
  * in meters. A haze with no atmosphere record under it — none in Sol or the
@@ -79,17 +86,24 @@ export interface AirHeights {
  */
 export function airHeights(
   radius: number,
-  relief: number,
   hazeHeight: number,
   scaleHeight: number,
   aerosolHeight: number,
 ): AirHeights {
-  const sphere = sunkSphereRadius(radius, relief)
   const gas = scaleHeight > 0 ? scaleHeight : hazeHeight * 0.22
   return {
-    rayleigh: gas / sphere,
-    aerosol: (aerosolHeight > 0 ? aerosolHeight : gas) / sphere,
+    rayleigh: gas / radius,
+    aerosol: (aerosolHeight > 0 ? aerosolHeight : gas) / radius,
   }
+}
+
+/**
+ * The top of the air as a multiple of the datum: the ceiling the tables are
+ * baked to, in the unit `airHeights` is in. The shell mesh is drawn to
+ * `atmosphereShellRatio` of the sunk sphere, the same height over the body.
+ */
+export function airTopRatio(radius: number, hazeHeight: number): number {
+  return (radius + hazeHeight) / radius
 }
 
 /** Ring radii as they are authored: meters from the body's center. */

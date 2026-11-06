@@ -137,3 +137,32 @@ it('draws a light far past the display brighter than the glow around it, at its 
   const mid = await drawn(disk, 0.3)
   expect(mid[1]! / mid[0]!).toBeCloseTo(0.47, 4)
 })
+
+it('applies the display gamma up to white and leaves the headroom alone', async () => {
+  // A power on the displayed range up to white: a midtone at gamma 2 is the
+  // square root of itself at gamma 1. Above white is a star's headroom, and
+  // where a disk clips must not move with the viewer's room.
+  const tone = installToneCurve(gpu.renderer, 2)
+  tone.natural.value = 0
+  tone.gamma.value = 1
+  const scale = uniform(1)
+  const graph = renderOutput(
+    vec4(vec3(scale), 1),
+    CustomToneMapping,
+    LinearSRGBColorSpace,
+  )
+  const drawn = async (light: number, gamma: number) => {
+    scale.value = light
+    tone.gamma.value = gamma
+    return (await gpu.drawGraph(graph, { float: true })).at(20, 20)[1]!
+  }
+  const midtone = await drawn(0.18, 1)
+  expect(midtone).toBeGreaterThan(0.1)
+  expect(midtone).toBeLessThan(0.9)
+  expect(await drawn(0.18, 2)).toBeCloseTo(Math.sqrt(midtone), 4)
+  expect(await drawn(0.18, 0.5)).toBeCloseTo(midtone * midtone, 4)
+  const bright = await drawn(1000, 1)
+  expect(bright).toBeGreaterThan(1)
+  expect(await drawn(1000, 2)).toBeCloseTo(bright, 5)
+  tone.gamma.value = 1
+})

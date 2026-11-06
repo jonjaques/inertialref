@@ -8,7 +8,6 @@ import {
   type Texture,
 } from 'three/webgpu'
 import { getLogger, getTimer } from '@inertialref/shared'
-import { smoothstep } from '@inertialref/procedural'
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import { timingDetailed } from '../engine/browserTiming.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
@@ -20,8 +19,8 @@ import {
   bakeTransmittance,
   type HazeAuthoring,
   type ScatteringLut,
-  transmittanceFrom,
   zenithSkyRadiance,
+  type RenderBody,
 } from '@inertialref/rendering'
 import type { WorkerPool } from '@inertialref/workers'
 import { bakeAtmosphereTask } from './atmosphereTask.ts'
@@ -242,7 +241,7 @@ export function scatteringVia(
 
 /** Where an eye stands in one body's air, in the tables' own units. */
 export interface Standing {
-  /** Radius from the body's center; the tables' ground is 1. */
+  /** Radius from the body's center over sea level, which is 1; never under it. */
   readonly radius: number
   /** Unit render-space vector from the center through the eye. */
   readonly up: Vec3
@@ -257,10 +256,12 @@ export interface ShellGeometry {
 }
 
 /**
- * The eye the shell marches from, on the CPU: its altitude over sea level
- * near the ground, the stretched geometry by the top of the air, blended as
- * the shell's `standing` blends them. Null above the air, where there is no
- * sky overhead and nothing between the eye and a star.
+ * The eye the shell marches from, on the CPU: its radius over sea level in
+ * the space the shell works in, which is stretched along the spin axis for
+ * a giant's oblate shell and is the geometry for a round one. Clamped at sea
+ * level, because the air under the datum — over a sea that lies under it,
+ * in a basin — is sea-level air. Null above the air, where there is no sky
+ * overhead and nothing between the eye and a star.
  */
 export function standingIn(
   shell: ShellGeometry,
@@ -270,7 +271,7 @@ export function standingIn(
 ): Standing | null {
   const relative = Vec.sub(eye, center)
   const distance = Vec.length(relative)
-  if (distance === 0 || shell.innerRadius <= 0) return null
+  if (distance === 0 || shell.seaLevel <= 0) return null
   const stretch = 1 / Math.max(shell.flattening, 1e-3) - 1
   const stretched = Vec.length(
     Vec.add(
@@ -278,14 +279,12 @@ export function standingIn(
       Vec.scale(spinAxis, Vec.dot(relative, spinAxis) * stretch),
     ),
   )
-  const top = shell.outerRadius / shell.innerRadius
-  const altitude = distance / shell.seaLevel - 1
-  const blend = smoothstep(0, top - 1, altitude)
-  const radius =
-    (1 + Math.max(altitude, 0)) * (1 - blend) +
-    (stretched / shell.innerRadius) * blend
-  if (radius >= top) return null
-  return { radius, up: Vec.scale(relative, 1 / distance) }
+  const radius = stretched / shell.seaLevel
+  if (radius >= shell.outerRadius / shell.seaLevel) return null
+  return {
+    radius: Math.max(radius, 1),
+    up: Vec.scale(relative, 1 / distance),
+  }
 }
 
 /**
@@ -311,40 +310,21 @@ export function airOverhead(
 }
 
 /**
- * The daylight where a standing eye is, in scene units: the sky overhead —
- * `sky`, the caller's `airOverhead` — plus the sun that reaches the eye
- * through the air, each weighted by the sun's color. What `airAdaptation`
- * opens the exposure for, so it counts the direct sun — a high observer under
- * a thin, dark sky is still in full daylight, and opening up for the sky
- * alone would burn out the sunlit world below.
- *
- * The sun's incidence is taken against the eye's own horizon rather than the
- * local horizontal. From altitude the horizon dips — 7.8° at 60 km on Earth —
- * and a sun between the two lights the hull and the world in view through
- * an all but clear column, while a level surface at the eye sees none of it:
- * counted from the horizontal, the sky alone opens Enhanced by 10.8 stops at
- * 60 km with the sun 2° under it. At sea level the two horizons are one.
+ * One body's tables: from the pool when there is one — null until that bake
+ * lands, and the material draws a vacuum meanwhile, because a 40 ms bake
+ * inside a frame is the largest single thing an arrival would pay — and
+ * baked here when there is none. Cached after the first ask either way, so
+ * the shell, the sphere, the ground and the sea asking every frame share
+ * one lookup. Null for a body with no haze.
  */
-export function daylightOver(
-  scattering: AtmosphereScattering,
-  standing: Standing,
-  sun: Vec3 | null,
-  sunColor: Rgb,
-  sky: number,
-): number {
-  if (sun === null) return sky
-  const mu = Vec.dot(standing.up, sun)
-  const horizon = -Math.sqrt(
-    Math.max(0, 1 - 1 / (standing.radius * standing.radius)),
-  )
-  const incidence = mu - horizon
-  if (incidence <= 0) return sky
-  const [r, g, b] = transmittanceFrom(standing.radius, mu, scattering.recipe)
-  return (
-    sky +
-    incidence *
-      (0.2126 * r * sunColor.r +
-        0.7152 * g * sunColor.g +
-        0.0722 * b * sunColor.b)
-  )
+export function scatteringOf(
+  engine: { pool(): WorkerPool | null },
+  body: RenderBody,
+): AtmosphereScattering | null {
+  const haze = body.appearance.haze
+  if (haze === null) return null
+  const pool = engine.pool()
+  return pool === null
+    ? scatteringFor(haze, body.airTop, body.airHeights)
+    : scatteringVia(pool, haze, body.airTop, body.airHeights)
 }

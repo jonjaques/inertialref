@@ -688,14 +688,20 @@ a `u32` threshold, never when `toUnit(hash) < density`.
 **Never add a shading term to the ground without adding it to the sphere.**
 `render/terrain.ts` and `render/planet.ts` draw the same body on either side
 of the eight-pixel relief gate — the streamed ground below it, the archive's
-sphere above — so they share the lunar-Lambert split, the terminator and the
-published photograph, and a term on one side alone is a step at the switch a
-descent flies straight through. Measured across it: 3.1% apart in mean value
-on Mars, 1.5% on Earth. Three terms had to be matched to get there — skylight
-comes _out of_ the direct beam rather than beside it, the aerial veil the
-disk wears is carried by the ground as well because the shell only survives
-outside the silhouette, and where a photograph exists it supplies the albedo
-outright. Each was 15%, 48% and 9% of the drawn value on its own.
+sphere above — so they share the lunar-Lambert split and the published
+photograph, and a term on one side alone is a step at the switch a descent
+flies straight through. Measured across it: 3.1% apart in mean value on Mars,
+1.5% on Earth. The terminator is the one term they do not share. The ground
+carries the sun past the horizon by `√(2h/R)` of each point's own height,
+inside the airless disk's `BEAM_TERMINATOR`, and the sphere, which has no
+elevation to read, keeps the band its whole relief spans, 6° on Mars, so a
+descent near the terminator steps at the gate. Three terms had to be matched to get there — skylight
+comes _out of_ the direct beam rather than beside it, the air the disk is
+seen through is carried by the ground and the sea as well because the shell
+only survives outside the silhouette — one march through the shell's own
+tables in `render/air.ts`, so the far ground fades to the sky beside it —
+and where a photograph exists it supplies the albedo outright. Each was 15%,
+48% and 9% of the drawn value on its own.
 [ADR-0020](../adr/0020-the-face.md).
 
 ### Rule 60

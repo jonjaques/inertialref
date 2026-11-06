@@ -26,6 +26,7 @@ import { drawnAnchorRadius } from './ground.ts'
 import {
   type AirHeights,
   airHeights,
+  airTopRatio,
   atmosphereShellRatio,
   ringScales,
   sunkSphereRadius,
@@ -73,9 +74,15 @@ export interface RenderBody {
   readonly terminator: number
   readonly atmosphereScale: number
   /**
-   * The gas's and the aerosol's scale heights in the same unit as
-   * `atmosphereScale`, which the scattering tables are baked in. Zero for a
-   * body with no haze.
+   * The top of the air as a multiple of the datum — sea level at 1 — which
+   * is the unit the scattering tables are baked in. Not `atmosphereScale`:
+   * that is the shell mesh over the *drawn* sphere, which is sunk under the
+   * datum. One for a body with no haze.
+   */
+  readonly airTop: number
+  /**
+   * The gas's and the aerosol's scale heights in the same unit as `airTop`.
+   * Zero for a body with no haze.
    */
   readonly airHeights: AirHeights
   readonly trueRadius: Meters
@@ -352,12 +359,15 @@ export function buildScene(
               body.relief,
               body.appearance.haze.height,
             ),
+      airTop:
+        body.appearance.haze === null
+          ? 1
+          : airTopRatio(body.radius, body.appearance.haze.height),
       airHeights:
         body.appearance.haze === null
           ? NO_AIR
           : airHeights(
               body.radius,
-              body.relief,
               body.appearance.haze.height,
               body.atmosphereScaleHeight,
               body.appearance.haze.aerosolHeight,

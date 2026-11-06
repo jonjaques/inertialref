@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import { type Lens, LENS_PRESETS, exposureValue } from './lens.ts'
 import {
-  AIR_ADAPTATION,
-  airAdaptation,
   DEFAULT_SENSOR_SETTINGS,
+  meteredShare,
   ExposureMeter,
   exposureForLuminance,
   SURFACE_LUMINANCE,
@@ -387,75 +386,93 @@ it('trims an isolated hot pixel without discarding a resolved bright subject', (
   expect(actual.luminance).toBeCloseTo(expected.luminance, 12)
 })
 
-describe('Enhanced in a darkening sky', () => {
-  /** cd/m² on a level surface, as scene units. */
-  const lit = (candelas: number) => candelas / SURFACE_LUMINANCE
+describe('Enhanced inside an atmosphere', () => {
+  const calibration = exposureForLuminance(SURFACE_LUMINANCE)
+  const enhanced: SensorSettings = {
+    ...DEFAULT_SENSOR_SETTINGS,
+    mode: 'enhanced',
+  }
+  /** A dusk: every sample a thousandth of the surface white. */
+  const dusk = histogram(Array<number>(1000).fill(0.001))
+  /** A minute of frames on the ground, with the dusk in the meter. */
+  const settled = (settings: SensorSettings, meter = new ExposureMeter()) => {
+    meter.update(LENS_PRESETS.flight, settings, 0, null, 1)
+    meter.measure(dusk, 1, LENS_PRESETS.flight, settings)
+    let frame = meter.update(LENS_PRESETS.flight, settings, 0, null, 1)
+    for (let t = 0.5; t <= 60; t += 0.5)
+      frame = meter.update(LENS_PRESETS.flight, settings, t, null, 1)
+    return frame
+  }
 
-  it('keeps the calibration in daylight and in a vacuum', () => {
-    expect(airAdaptation(lit(20_000))).toBe(0)
-    expect(airAdaptation(lit(2_200))).toBe(0)
-    expect(airAdaptation(Number.POSITIVE_INFINITY)).toBe(0)
-    expect(airAdaptation(Number.NaN)).toBe(0)
+  it('holds the calibration above the air and meters inside it', () => {
+    expect(
+      resolveCameraPolicy(enhanced, LENS_PRESETS.flight, null, 0),
+    ).toMatchObject({
+      processing: 'enhanced',
+      exposure: 'fixed',
+      fixedEV: calibration,
+    })
+    expect(
+      resolveCameraPolicy(enhanced, LENS_PRESETS.flight, null, 1),
+    ).toMatchObject({
+      processing: 'enhanced',
+      exposure: 'metered',
+      fixedEV: null,
+      compensation: 0,
+    })
   })
 
-  it('opens about ten stops by the end of civil dusk, and gives them back by night', () => {
-    // Koomen's zenith at −6° is 0.65 cd/m²; a camera that holds the noon
-    // exposure draws that sky black. By astronomical night the composed sky
-    // is presented at the calibration it was composed at.
-    expect(airAdaptation(lit(1))).toBeGreaterThan(10)
-    expect(airAdaptation(lit(1))).toBeLessThanOrEqual(AIR_ADAPTATION.most)
-    expect(airAdaptation(lit(2e-4))).toBe(0)
-    expect(airAdaptation(0)).toBe(0)
-  })
-
-  it('moves continuously with the light, and never past its bound', () => {
-    fc.assert(
-      fc.property(
-        fc.double({ min: -36, max: 4, noNaN: true }),
-        fc.double({ min: 0, max: 0.05, noNaN: true }),
-        (stops, step) => {
-          const here = airAdaptation(2 ** stops)
-          const near = airAdaptation(2 ** (stops + step))
-          expect(here).toBeGreaterThanOrEqual(0)
-          expect(here).toBeLessThanOrEqual(AIR_ADAPTATION.most)
-          // Steepest where the fall to night is: most · 1.5 / log2(full/night)
-          // stops per stop of light, under 1.7.
-          expect(Math.abs(here - near)).toBeLessThanOrEqual(1.7 * step + 1e-9)
-        },
-      ),
-    )
-  })
-
-  it('fades to the calibration over the top of the air', () => {
-    // Leaving the air must not be a step in the exposure.
-    const dusk = lit(1)
-    expect(airAdaptation(dusk, 0)).toBe(0)
-    expect(airAdaptation(dusk, 0.2)).toBe(airAdaptation(dusk))
-    expect(airAdaptation(dusk, 1)).toBe(airAdaptation(dusk))
-    let previous = 0
-    for (let depth = 0; depth <= 0.2; depth += 0.01) {
-      const stops = airAdaptation(dusk, depth)
-      expect(stops).toBeGreaterThanOrEqual(previous - 1e-12)
-      previous = stops
-    }
-  })
-
-  it('opens Enhanced only, and never a pinned exposure', () => {
+  it('meters nothing for a pinned or a manual exposure, however deep the air', () => {
+    // The air opens Enhanced alone. A cutscene's pin is staging and holds its
+    // stops from the calibration; Manual is the lens, on the ground as in space.
     const lens = LENS_PRESETS.flight
-    const calibrated = exposureForLuminance(SURFACE_LUMINANCE)
-    expect(
-      resolveCameraPolicy(DEFAULT_SENSOR_SETTINGS, lens, null, 6).fixedEV,
-    ).toBe(calibrated - 6)
-    expect(
-      resolveCameraPolicy(DEFAULT_SENSOR_SETTINGS, lens, 0, 6).fixedEV,
-    ).toBe(calibrated)
+    expect(resolveCameraPolicy(enhanced, lens, 0, 1)).toMatchObject({
+      exposure: 'fixed',
+      fixedEV: calibration,
+    })
+    expect(resolveCameraPolicy(enhanced, lens, 6, 1).fixedEV).toBe(
+      calibration + 6,
+    )
     expect(
       resolveCameraPolicy(
         { ...DEFAULT_SENSOR_SETTINGS, mode: 'manual' },
         lens,
         null,
-        6,
-      ).fixedEV,
-    ).toBe(exposureValue(lens))
+        1,
+      ),
+    ).toMatchObject({ exposure: 'fixed', fixedEV: exposureValue(lens) })
+  })
+
+  it('agrees with Automatic about the light on the ground', () => {
+    const ground = settled(enhanced)
+    expect(ground.metered).toBe(true)
+    expect(ground.effectiveEV).toBeCloseTo(settled(automatic).effectiveEV, 9)
+    // The calibration drew this dusk black; the meter opens to the comfort
+    // range's floor, sixteen stops under the lens.
+    expect(calibration - ground.effectiveEV).toBeGreaterThan(16)
+  })
+
+  it('gives the meter its share over the top fifth of the air, and none above it', () => {
+    expect(meteredShare(0)).toBe(0)
+    expect(meteredShare(0.2)).toBe(1)
+    expect(meteredShare(1)).toBe(1)
+    let previous = 0
+    for (let depth = 0; depth <= 0.2; depth += 0.01) {
+      const share = meteredShare(depth)
+      expect(share).toBeGreaterThanOrEqual(previous - 1e-12)
+      previous = share
+    }
+    const meter = new ExposureMeter()
+    const open = settled(enhanced, meter).effectiveEV
+    const half = meter.update(LENS_PRESETS.flight, enhanced, 60.5, null, 0.1)
+    // Six digits: the meter underneath is still converging, by 5·10⁻⁸ a
+    // frame after a minute.
+    expect(half.effectiveEV).toBeCloseTo(
+      calibration + (open - calibration) * meteredShare(0.1),
+      6,
+    )
+    expect(
+      meter.update(LENS_PRESETS.flight, enhanced, 61, null, 0).effectiveEV,
+    ).toBeCloseTo(calibration, 9)
   })
 })

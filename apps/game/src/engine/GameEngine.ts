@@ -455,6 +455,13 @@ export class GameEngine {
   lensFlare = true
 
   /**
+   * The display gamma the sensor's output stage applies, bound to the
+   * persisted preference by `state/engineKnobs.ts` exactly as `lensFlare`
+   * is. A power on the range up to white; `render/tonemap.ts` has it.
+   */
+  gamma = 1
+
+  /**
    * What the surface may be turned down to, bound to the persisted preference
    * by `state/engineKnobs.ts` exactly as `lensFlare` is, and reachable from a
    * driving script as `engine.surfaceQuality = {...}`. The streamer reads

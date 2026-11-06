@@ -1,29 +1,22 @@
 import {
-  AEROSOL_ASYMMETRY,
   ATMOSPHERE_GAIN,
-  MULTI_SCATTER_HEIGHT,
-  MULTI_SCATTER_WIDTH,
   STAR_VISIBILITY,
   STELLAR_V_ZERO_ILLUMINANCE,
   SURFACE_LUMINANCE,
-  TRANSMITTANCE_HEIGHT,
-  TRANSMITTANCE_WIDTH,
 } from '@inertialref/rendering'
-import { integratedSkyGain, sensorRadiance } from './radiance.ts'
+import { createAirUniforms, marchAir } from './air.ts'
+import { enhancedSky, integratedSkyGain, sensorRadiance } from './radiance.ts'
 import type { StarProjection } from './starProjection.ts'
 import {
   AddEquation,
   BackSide,
   Color,
   CustomBlending,
-  DataTexture,
   InstancedBufferAttribute,
-  LinearFilter,
   MeshBasicNodeMaterial,
   OneFactor,
   OneMinusSrcAlphaFactor,
   PointsNodeMaterial,
-  RGBAFormat,
   SrcAlphaFactor,
   type Texture,
   type Node,
@@ -33,15 +26,12 @@ import {
 import {
   abs,
   cameraPosition,
-  clamp,
   cross,
   dot,
-  exp,
   float,
   Fn,
   instancedBufferAttribute,
   length,
-  Loop,
   log2,
   max,
   mix,
@@ -54,15 +44,12 @@ import {
   positionPrevious,
   positionWorld,
   pow,
-  saturate,
   smoothstep,
   sqrt,
   step,
-  texture,
   uniform,
   varying,
   uv,
-  vec2,
   vec3,
   vec4,
 } from 'three/tsl'
@@ -180,14 +167,13 @@ export interface AtmosphereMaterial {
   readonly material: MeshBasicNodeMaterial
   /** Body center in render space. Written every frame — the planet is orbiting. */
   readonly center: { value: Vector3 }
-  /** Render-space radius of the shell, and of the ground beneath it. */
+  /** Render-space radius of the shell, and of the drawn sphere a ray stops at. */
   readonly outerRadius: { value: number }
   readonly innerRadius: { value: number }
   /**
-   * Render-space radius of the ground under the eye: the datum, which the
-   * drawn sphere is sunk under, or a giant's spheroid along the eye's
-   * radial. An eye's altitude in the air is measured from here; see
-   * `standing`.
+   * Render-space radius of sea level — the datum, which the drawn sphere is
+   * sunk under. The air is measured from it, and it is the unit the tables
+   * are baked in.
    */
   readonly seaLevel: { value: number }
   /** Unit vector from the body toward its star, in render space. */
@@ -212,52 +198,6 @@ export interface AtmosphereMaterial {
 
 /** March samples through the shell. See the budget note in the doc comment. */
 const ATMOSPHERE_SAMPLES = 12
-
-const TRANSMITTANCE = [TRANSMITTANCE_WIDTH, TRANSMITTANCE_HEIGHT] as const
-const MULTI_SCATTER = [MULTI_SCATTER_WIDTH, MULTI_SCATTER_HEIGHT] as const
-
-/**
- * A table coordinate in [0, 1]² as the bake means it: 0 and 1 are the first
- * and last texels' centers, where the bake put its first and last samples.
- *
- * A sampler puts them at the texture's edges, half a texel further out, so a
- * bare read lands a quarter texel off the CPU's `sampleLut` midway across.
- * On Ψ's 32 columns that is a degree of sun, and through twilight a degree
- * is a factor of three in the sky.
- */
-function texelCentered(
-  coordinate: Node<'vec2'>,
-  [width, height]: readonly [number, number],
-): Node<'vec2'> {
-  return coordinate
-    .mul(vec2((width - 1) / width, (height - 1) / height))
-    .add(vec2(0.5 / width, 0.5 / height))
-}
-
-/*
- * 1×1 stand-ins so a shell whose tables have not arrived runs the identical
- * graph: full transmittance and no multiple scattering, with the scattering
- * coefficients defaulting to zero — a vacuum that draws nothing, rather than
- * one frame of some other planet's sky.
- *
- * Filtered like the tables they stand in for, or the graph is not identical
- * where it counts: `DataTexture` defaults to nearest, the WGSL builder reads a
- * nearest texture with `textureLoad` and no sampler, and the baked tables are
- * linear and read with `textureSample`. Two different programs — and the one
- * the shell is first compiled with is the one it keeps, because a value swap
- * rebuilds no WGSL, so a nearest stand-in leaves the real tables read at mip
- * 0 with no interpolation between their entries. The terrain stand-in has the
- * sharper version of the same trap — see `BLANK` in `terrain.ts`.
- */
-function lutPixel(r: number, g: number, b: number): DataTexture {
-  const map = new DataTexture(new Uint8Array([r, g, b, 255]), 1, 1, RGBAFormat)
-  map.magFilter = LinearFilter
-  map.minFilter = LinearFilter
-  map.needsUpdate = true
-  return map
-}
-const LUT_WHITE = /*@__PURE__*/ lutPixel(255, 255, 255)
-const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
 
 /**
  * The atmosphere, as the length of air a view ray actually crosses.
@@ -309,18 +249,9 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
   const spinAxis = uniform(new Vector3(0, 1, 0))
   const flattening = uniform(1)
 
-  // The recipe, as uniforms — coefficients per planet radius, matching the
-  // tables' units exactly; see `atmosphereRecipe` for where they come from.
-  const betaRayleigh = uniform(new Vector3(0, 0, 0))
-  const mieScatter = uniform(new Vector3(0, 0, 0))
-  const mieExtinction = uniform(new Vector3(0, 0, 0))
-  const ozone = uniform(new Vector3(0, 0, 0))
-  const ozonePeak = uniform(0)
-  const ozoneHalfWidth = uniform(1)
-  const hRayleigh = uniform(1)
-  const hMie = uniform(1)
-  const transmittanceLut = texture(LUT_WHITE)
-  const multiScatterLut = texture(LUT_BLACK)
+  // The recipe and its tables, as the uniforms every material that marches
+  // this body's air shares; see `air.ts`.
+  const air = createAirUniforms()
 
   /*
    * The intersection math below assumes spheres, and a giant is not one:
@@ -362,40 +293,34 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     )
 
     /*
-     * Planet-radius units from here down: the ground is 1, the shell top is
-     * `top`. This is the one scale that survives distance compression — both
-     * render radii are rescaled together whenever the LOD tier moves — and it
-     * is the unit the tables were baked in, so a LUT coordinate is just an
-     * altitude fraction and a cosine.
+     * Sea-level units from here down: the datum is 1, the shell top is `top`,
+     * and the drawn sphere — sunk under the datum so the terrain covers it,
+     * 9.9 km on Earth — is `ground`, under 1. Both render radii are rescaled
+     * together whenever the LOD tier moves, so the ratios survive distance
+     * compression, and the tables are baked in this unit, so a LUT coordinate
+     * is just an altitude fraction and a cosine.
+     *
+     * The air is measured from sea level and a ray is stopped at the drawn
+     * sphere, and the two are kept apart on purpose. Marched with the drawn
+     * sphere as its sea level, an observer on a beach stood 10 km up in the
+     * air: half of it over their head, a slate-gray zenith, and a setting
+     * sun that did not redden because the column that reddens it was below
+     * them. And a ray the shell meets the ground with is a short, dense,
+     * sunless path, far darker than the sky beside it, so the ground's
+     * horizon has to lie under every drawn surface — which sea level does
+     * not. A sea can sit under its datum, the far shore's by 211 m, and from
+     * 80 m over that water a shell that stopped at sea level stood its
+     * horizon 0.36° above the sea's: a black band five pixels tall between
+     * the water and the sky. The sunk sphere's horizon is under the terrain
+     * and the sea everywhere, so the rays it stops are rays they cover.
      */
-    const eyeUnits = eye.div(innerRadius)
-    const wallUnits = wall.div(innerRadius)
-    const top = outerRadius.div(innerRadius)
-    const shellHeight = max(top.sub(1), 1e-6)
+    const eyeUnits = eye.div(seaLevel)
+    const wallUnits = wall.div(seaLevel)
+    const top = outerRadius.div(seaLevel)
+    const ground = innerRadius.div(seaLevel)
 
     const rayDirection = normalize(wallUnits.sub(eyeUnits))
-
-    /*
-     * Where the eye stands in the air, which is not where the geometry puts
-     * it. The tables' ground is the drawn sphere, sunk under the datum so the
-     * terrain covers it — 9.9 km on Earth — and the stretch lifts an eye at
-     * high latitude by up to the 21 km the spherical terrain does not share.
-     * Marched from the geometry, an observer on a beach stands 10 to 30 km
-     * up: half the air over their head, a slate-gray zenith, and a setting
-     * sun that does not redden because the column that reddens it is below
-     * them. Near the ground the eye is put at its altitude over `seaLevel`
-     * instead, along its own radial — a giant's spheroid rather than the
-     * datum, since a giant has no spherical terrain to stand on; by the top of
-     * the air it is back where the shell is, so the limb an orbit sees does
-     * not move. `airOverhead` takes the same eye.
-     */
-    const altitude = length(eyeRelative).div(seaLevel).sub(1)
-    const standing = mix(
-      normalize(eyeUnits).mul(altitude.max(0).add(1)),
-      eyeUnits,
-      smoothstep(0, shellHeight, altitude),
-    )
-    const toCenter = standing.negate()
+    const toCenter = eyeUnits.negate()
 
     // Closest approach along the ray, and the impact parameter squared.
     // `|d × c|` with d a unit vector gives the perpendicular distance directly
@@ -405,7 +330,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     const impactSquared = max(length(cross(rayDirection, toCenter)).pow(2), 0)
 
     const halfOuter = sqrt(max(top.mul(top).sub(impactSquared), 0))
-    const halfInner = sqrt(max(float(1).sub(impactSquared), 0))
+    const halfInner = sqrt(max(ground.mul(ground).sub(impactSquared), 0))
 
     // Clamped at 0 so a camera already inside the air starts counting from
     // itself.
@@ -415,114 +340,49 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     // second step is load-bearing: without it, looking up from the ground
     // counts as "meets ground" because the backwards extension of the ray
     // does, and the zenith sky computes zero air.
-    const meetsGround = step(impactSquared, 1).mul(step(float(0), closest))
+    const meetsGround = step(impactSquared, ground.mul(ground)).mul(
+      step(float(0), closest),
+    )
     const far = mix(
       closest.add(halfOuter),
       max(closest.sub(halfInner), near),
       meetsGround,
     )
 
-    /*
-     * The march. Twelve midpoint samples between where the ray enters the air
-     * and where it leaves it (or lands). Per sample: exponential Rayleigh and
-     * aerosol densities — with the `(1 − h)` factor that takes both to exactly
-     * zero at the ceiling, kept identical to the bake so the tables and the
-     * march agree about where the air ends — view transmittance accumulated
-     * in-loop, sun transmittance and Ψ read from the tables at (altitude,
-     * sun-cosine).
-     */
     const sun = normalize(sunDirection)
-    const nu = dot(rayDirection, sun)
-    const phaseRayleigh = float(3 / (16 * Math.PI)).mul(nu.mul(nu).add(1))
-    const g = AEROSOL_ASYMMETRY
-    const phaseMie = float((1 - g * g) / (4 * Math.PI)).div(
-      pow(max(float(1 + g * g).sub(nu.mul(2 * g)), 1e-4), 1.5),
-    )
 
     /*
-     * The samples crowd toward the segment's lowest point, where its air is
-     * densest — the eye, looking up from the ground; the tangent point, on a
-     * limb seen from orbit — at the squares of an even spread on each side,
-     * as `marchSample` places the CPU's. Twelve spread evenly up a 120 km
-     * column put the first 5 km high and draw a noon zenith at 39% of its
-     * converged light: past e^−4 of Earth's aerosol, the part that makes
-     * most of a clear zenith under a high sun. Both branches are evaluated
-     * and `right` picks one, so each keeps its denominator off zero.
+     * Enhanced's limb from orbit. The physical limb is a line: Earth's gas
+     * falls off over 8.5 km, a seventh of a percent of the radius, two
+     * pixels on a disk four hundred across, and a camera's limb is that line
+     * and no more. The deep-space composite is where this project licenses
+     * a cheat (`art.md`), and the soft ring that wraps the disk on the home
+     * page is one. Outside the air, Enhanced adds the glow the gas would
+     * scatter if it fell off over `LIMB_HEIGHTS` times its height, gained
+     * `LIMB_GAIN` times — in the light it scatters and not in what it takes,
+     * so the limb's own line and the disk under it stay the physics and only
+     * the glow above them is the presentation. It comes in over ten shell
+     * heights up from the top of the air, so a ship climbing out keeps the
+     * sky it had, and the photographic views never see it.
      */
-    const span = max(far.sub(near), 0)
-    const perigee = clamp(closest.sub(near), 0, span)
-    const split = perigee.div(max(span, 1e-9))
-    const before = max(split, 1e-6)
-    const after = max(oneMinus(split), 1e-6)
-    const inscatter = vec3(0).toVar()
-    const opticalDepth = vec3(0).toVar()
-
-    Loop(ATMOSPHERE_SAMPLES, ({ i }) => {
-      const u = float(i).add(0.5).div(ATMOSPHERE_SAMPLES)
-      const right = step(split, u)
-      const toward = split.sub(u).div(before)
-      const away = u.sub(split).div(after)
-      const t = near.add(
-        mix(
-          perigee.sub(perigee.mul(toward.mul(toward))),
-          perigee.add(span.sub(perigee).mul(away.mul(away))),
-          right,
-        ),
-      )
-      const stepLength = mix(
-        perigee.mul(toward).mul(2).div(before),
-        span.sub(perigee).mul(away).mul(2).div(after),
-        right,
-      ).div(ATMOSPHERE_SAMPLES)
-      const point = standing.add(rayDirection.mul(t))
-      const radius = length(point)
-      const height = max(radius.sub(1), 0)
-      const height01 = saturate(height.div(shellHeight))
-      const fade = oneMinus(height01)
-      const densityR = exp(height.div(hRayleigh).negate()).mul(fade)
-      const densityM = exp(height.div(hMie).negate()).mul(fade)
-
-      // The ozone tent absorbs and scatters nothing; `densities` holds the
-      // same shape on the CPU.
-      const densityO = max(
-        float(1).sub(abs(height.sub(ozonePeak)).div(max(ozoneHalfWidth, 1e-9))),
-        0,
-      )
-      const extinction = betaRayleigh
-        .mul(densityR)
-        .add(mieExtinction.mul(densityM))
-        .add(ozone.mul(densityO))
-      const stepTau = extinction.mul(stepLength)
-      // Transmittance to the middle of this step: the half keeps the midpoint
-      // rule honest about its own sample's extinction.
-      const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
-
-      const muSun = dot(point, sun).div(max(radius, 1e-5))
-      const lutUv = vec2(muSun.add(1).mul(0.5), height01)
-      const sunT = transmittanceLut.sample(
-        texelCentered(lutUv, TRANSMITTANCE),
-      ).rgb
-      // ln Ψ, read geometrically; see `bakeMultipleScattering`. The stand-in
-      // reads as e⁰ = 1, against coefficients that are zero until the
-      // tables arrive, so it still draws a vacuum.
-      const psi = exp(
-        multiScatterLut.sample(texelCentered(lutUv, MULTI_SCATTER)).rgb,
-      )
-
-      const single = betaRayleigh
-        .mul(densityR)
-        .mul(phaseRayleigh)
-        .add(mieScatter.mul(densityM).mul(phaseMie))
-        .mul(sunT)
-      const multiple = psi.mul(
-        betaRayleigh.mul(densityR).add(mieScatter.mul(densityM)),
-      )
-      inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))
-      opticalDepth.addAssign(stepTau)
-    })
-
+    const shellHeight = max(top.sub(1), 1e-6)
+    const outside = smoothstep(
+      top,
+      top.add(shellHeight.mul(10)),
+      length(eyeUnits),
+    )
+    const { inscatter, transmittance } = marchAir(
+      air,
+      eyeUnits,
+      rayDirection,
+      near,
+      far,
+      sun,
+      ATMOSPHERE_SAMPLES,
+      outside.mul(enhancedSky),
+    )
     const radiance = inscatter.mul(sunColor).mul(ATMOSPHERE_GAIN)
-    const survives = exp(opticalDepth.negate())
+    const survives = transmittance
     const extinguished = oneMinus(
       survives.x.add(survives.y).add(survives.z).div(3),
     )
@@ -567,16 +427,7 @@ export function createAtmosphereMaterial(): AtmosphereMaterial {
     spinAxis,
     flattening,
     setScattering(recipe, transmittance, multiScatter) {
-      betaRayleigh.value.set(...recipe.betaRayleigh)
-      mieScatter.value.set(...recipe.mieScatter)
-      mieExtinction.value.set(...recipe.mieExtinction)
-      ozone.value.set(...recipe.ozone)
-      ozonePeak.value = recipe.ozonePeak
-      ozoneHalfWidth.value = recipe.ozoneHalfWidth
-      hRayleigh.value = recipe.hRayleigh
-      hMie.value = recipe.hMie
-      transmittanceLut.value = transmittance
-      multiScatterLut.value = multiScatter
+      air.set(recipe, transmittance, multiScatter)
     },
   }
 }

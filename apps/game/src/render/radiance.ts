@@ -30,22 +30,20 @@ export const integratedSkyGain = uniform(1).onRenderUpdate(({ renderer }) =>
 /**
  * Light Enhanced stages rather than measures — the composed galaxy, the
  * night fill, the lens flare — held at the display level it was authored at
- * when the exposure opens up in a darkening sky (`airAdaptation`). Under the
- * calibration it is one; the photographic views measure everything, and it is
- * one there too.
+ * when Enhanced meters inside an atmosphere and the exposure leaves the
+ * calibration (`meteredShare`). Under the calibration it is one; the
+ * photographic views measure everything, and it is one there too.
  */
 export const stagedLight = enhancedSky
   .greaterThan(0.5)
   .select(integratedSkyGain, float(1))
 
 /**
- * The daylight where the observer stands, in scene units: the sky overhead
- * and the direct sun (`daylightOver`), or infinity outside any air. Written
- * once a frame by `Bodies`, read by the sensor for `airAdaptation`. `depth`
- * is how far down that air the eye stands, 1 on the ground and 0 at its top,
- * which `airAdaptation` fades over.
+ * How far down its air the eye stands: 1 on the ground, 0 at the air's top
+ * and in a vacuum. Written once a frame by `Bodies`, read by the sensor,
+ * which meters Enhanced by its share of it (`meteredShare`).
  */
-export const observerDaylight = { value: Number.POSITIVE_INFINITY, depth: 0 }
+export const observerAir = { depth: 0 }
 
 /**
  * Enhanced's three-percent night-side fill is legibility, not measured light.

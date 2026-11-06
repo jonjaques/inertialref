@@ -28,6 +28,7 @@ import {
   parseAddress,
   regionAddress,
   SOL,
+  SOLAR_PLANETS,
   walkBodies,
 } from '@inertialref/universe'
 import { scatteringFor } from './atmosphereLuts.ts'
@@ -739,7 +740,8 @@ describe('a magma sea, on the ground and from orbit', () => {
     // The plain sea: the sheet's own color and glow, with no frame behind it.
     const water = createWaterMaterial()
     water.setQuality({ ...DEFAULT_WATER_QUALITY, frame: false })
-    water.setPalette(palette)
+    // Luna's radius, which only sets the air's unit; Luna has none.
+    water.setPalette(palette, 1_737_400)
     water.sunDirection.value.set(0, 0, -1)
     const mesh = seaDummy(water.material)
     for (const name of ['waterDepth', 'waterMorphDepth']) {
@@ -803,5 +805,65 @@ describe('a magma sea, on the ground and from orbit', () => {
   it('and nowhere the relief record says dry ground', async () => {
     const [red, green, blue] = await sphere([0.5, 0.5, 0])
     expect(Math.max(red, green, blue)).toBeLessThan(1e-4)
+  })
+})
+
+describe('the disk, seen through its own air', () => {
+  const earth = SOLAR_PLANETS.find((body) => body.name === 'Earth')!
+  const haze = earth.haze!
+  /** Earth's tables over the datum, as `Bodies` bakes them. */
+  const tables = () =>
+    scatteringFor(haze, 1 + haze.height / earth.radius, {
+      rayleigh: earth.atmosphere!.scaleHeight / earth.radius,
+      aerosol: haze.aerosolHeight / earth.radius,
+    })
+
+  /**
+   * The luminance at the center of a black disk seen at nadir from four
+   * radii out, under a sun behind the eye: whatever is drawn is the air's
+   * own light. `mesh` is the drawn sphere's radius in sea-level units — 1 on
+   * the datum, under it as the renderer sinks it.
+   */
+  async function veil(air: boolean, mesh = 1): Promise<number> {
+    const planet = createPlanetMaterial()
+    planet.baseColor.value.setRGB(0, 0, 0)
+    planet.sunDirection.value.set(0, 0, 1)
+    planet.seaLevel.value = 1
+    if (air) {
+      const baked = tables()
+      planet.air.set(baked.recipe, baked.transmittance, baked.multiScatter)
+    }
+    const disk = new Mesh(new SphereGeometry(mesh, 48, 32), planet.material)
+    const eye = new PerspectiveCamera(10, 1, 0.1, 100)
+    eye.position.set(0, 0, 4)
+    eye.updateMatrixWorld()
+    const pixels = await gpu.draw(staged(disk), eye, {
+      width: 8,
+      height: 8,
+      float: true,
+    })
+    planet.material.dispose()
+    const [red, green, blue] = pixels.at(4, 4)
+    return 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!
+  }
+
+  it('draws the air over a black surface, and nothing over a vacuum', async () => {
+    // The march is a `Loop`, and a `Loop` built outside a `Fn` is never
+    // emitted: the program compiles, logs nothing, and draws the disk through
+    // a vacuum. Earth's column at nadir under a high sun scatters a few
+    // percent of the surface white back at the eye; a vacuum scatters none.
+    expect(await veil(true)).toBeGreaterThan(0.01)
+    expect(await veil(false)).toBeLessThan(1e-6)
+  })
+
+  it('marches to the datum, not to the sunk sphere under it', async () => {
+    // The mesh is sunk under the datum, 9.9 km on Earth and a tenth of a
+    // radius at a flattened giant's pole, and the march holds everything
+    // under sea level at sea-level density — so a path marched to the mesh
+    // crossed that depth as air and the nadir veil doubled. Drawn on the
+    // datum and drawn a tenth of a radius under it, the disk is the same air.
+    const datum = await veil(true, 1)
+    const sunk = await veil(true, 0.9)
+    expect(Math.abs(sunk / datum - 1)).toBeLessThan(0.02)
   })
 })

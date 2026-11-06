@@ -148,13 +148,16 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   message on a channel the page console does not carry, and a planet that draws nothing.
 
 - **The ground and the sphere behind it are one body, so they shade alike.**
-  `render/terrain.ts` and `render/planet.ts` share the lunar-Lambert split, the
-  terminator and the archive's photograph. A descent crosses the eight-pixel gate
-  between them — 3.1% apart on Mars, 1.5% on Earth — so anything added to one side is
-  a step at the switch. The aerial veil is the case that proves it and the least
+  `render/terrain.ts` and `render/planet.ts` share the lunar-Lambert split and the
+  archive's photograph. A descent crosses the eight-pixel gate between them — 3.1%
+  apart on Mars, 1.5% on Earth — so anything added to one side is a step at the
+  switch. The terminator is the exception that steps today: the ground's is per
+  point, from its own height, and the sphere's spans the whole relief. The air is the case that proves it and the least
   obvious: the atmosphere shell is a back-side sphere, so it survives the depth
   test only _outside_ the silhouette, and everything the air does in front of
-  the ground happens in the surface material. Skylight comes _out of_ the direct
+  a surface happens in that surface's material — the sphere, the ground and
+  the sea all march the shell's own tables (`render/air.ts`), and the direct
+  beam arrives through the same table. Skylight comes _out of_ the direct
   beam rather than beside it, and where a photograph exists it supplies the
   albedo.
 

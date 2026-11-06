@@ -11,6 +11,7 @@ import {
 import {
   REFLECTANCE_CEILING,
   type SurfaceMaterial,
+  terminatorFor,
   terrainPalette,
 } from './terrainPalette.ts'
 
@@ -157,17 +158,25 @@ describe('the terrain palette', () => {
     expect(gray(palette.rock) / gray(palette.regolith)).toBeCloseTo(1.18, 2)
   })
 
-  it('widens the terminator by the relief the body actually has', () => {
+  it("widens the sphere's terminator by the relief the body actually has", () => {
     /*
      * A disk drawn from a photograph ends at 0.025 of a cosine because its
      * surface is smooth at the resolution of the map. Terrain is not: a peak of
-     * height `h` catches the sun `√(2h/R)` past the geometric shadow line.
+     * height `h` catches the sun `√(2h/R)` past the geometric shadow line. The
+     * sphere takes the body's whole relief; the ground carries each point past
+     * the horizon by its own height instead, so the palette carries no width.
      */
     const luna = find('Luna')
     const expected = Math.sqrt(
       (2 * luna.surface.maxElevation) / luna.surface.grammar.meanRadius,
     )
-    expect(terrainPalette(luna).terminator).toBeCloseTo(expected, 6)
+    expect(
+      terminatorFor(
+        luna.surface.grammar.air > 0,
+        luna.surface.maxElevation,
+        luna.radius,
+      ),
+    ).toBeCloseTo(expected, 6)
     expect(expected).toBeGreaterThan(0.025 * 3)
   })
 
@@ -185,21 +194,6 @@ describe('the terrain palette', () => {
     expect(terrainPalette(find('Venus')).evaporitic).toBe(0)
     expect(terrainPalette(find('Luna')).evaporitic).toBe(0)
     expect(terrainPalette(find('Earth')).evaporitic).toBeGreaterThan(0.5)
-  })
-
-  it('separates the sky it is lit by from the haze it is seen through', () => {
-    /*
-     * Two fields with two jobs. `skyColor` tints the light arriving at the
-     * surface and carries no brightness of its own; `hazeColor` is the aerial
-     * veil in front of it, and its value is the veil's.
-     */
-    const mars = terrainPalette(find('Mars'))
-    expect(mars.hazeColor).not.toEqual(mars.skyColor)
-    expect(terrainPalette(find('Luna')).hazeColor).toEqual({
-      r: 0,
-      g: 0,
-      b: 0,
-    })
   })
 
   it('carries the sky as a tint rather than as a brightness', () => {

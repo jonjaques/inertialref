@@ -1,4 +1,5 @@
 import { useThree } from '@react-three/fiber'
+import { scatteringOf } from '../render/atmosphereLuts.ts'
 import { useEffect, useMemo, useRef } from 'react'
 import { BufferAttribute, type Group, Mesh, type Scene } from 'three/webgpu'
 import { Quaternion as Q, Vec } from '@inertialref/spatial'
@@ -82,14 +83,18 @@ export function WaterPatches({
     water.setQuality(seaQualityFor(engine.surfaceQuality.sea))
     const material = water.material
     if (state.palette !== null && state.orientation !== null) {
-      water.setPalette(state.palette)
+      water.setPalette(state.palette, state.datumRadius)
       if (state.lens !== null) {
         const display = pixelAngle(state.lens.lens, state.lens.viewport)
         const perSample =
           state.lens.viewport.height / Math.max(1, gl.domElement.height)
         water.setPixelAngle(display * perSample)
       }
-      const key = engine.scene()?.stars[0]
+      const frame = engine.scene()
+      const key = frame?.stars[0]
+      const body = frame?.bodies.find(
+        (candidate) => candidate.address === state.bodyAddress,
+      )
       if (key !== undefined && state.center !== null) {
         const toStar = Vec.sub(key.placement.position, state.center)
         if (Vec.length(toStar) > 0) {
@@ -100,13 +105,14 @@ export function WaterPatches({
           water.sunDirection.value.set(local.x, local.y, local.z)
         }
         water.sunColor.value.setRGB(key.color.r, key.color.g, key.color.b)
-        const light =
-          engine
-            .scene()
-            ?.bodies.find((body) => body.address === state.bodyAddress)
-            ?.sunlight ?? key.sunlight
+        const light = body?.sunlight ?? key.sunlight
         water.sunIntensity.value = engine.visibilityProcessing ? 1 : light
       }
+      // The body's own air, as the ground beside the sheet takes it.
+      const tables = body === undefined ? null : scatteringOf(engine, body)
+      if (tables === null) water.air.clear()
+      else
+        water.air.set(tables.recipe, tables.transmittance, tables.multiScatter)
       water.setTime(engine.snapshot?.renderTime ?? 0)
     }
     const drawn = state.palette !== null && state.palette.sheet > 0

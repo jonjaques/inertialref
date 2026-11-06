@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { rootSeed } from '@inertialref/procedural'
-import { airHeights, atmosphereShellRatio } from '@inertialref/rendering'
+import { airHeights, airTopRatio } from '@inertialref/rendering'
 import {
   MILKY_WAY,
   TEST_CATALOG,
@@ -46,15 +46,10 @@ describe('the scattering prebake plan', () => {
       if (haze === null) continue
       asked += 1
       // The key the scene will compute at draw time: `buildScene`'s
-      // `atmosphereScale` and `airHeights`, which are these same calls.
-      const topRatio = atmosphereShellRatio(
-        body.radius,
-        body.surface.maxElevation,
-        haze.height,
-      )
+      // `airTop` and `airHeights`, which are these same calls.
+      const topRatio = airTopRatio(body.radius, haze.height)
       const heights = airHeights(
         body.radius,
-        body.surface.maxElevation,
         haze.height,
         body.atmosphere?.scaleHeight ?? 0,
         haze.aerosolHeight,

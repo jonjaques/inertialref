@@ -110,9 +110,14 @@ export interface SensorFrame {
   readonly renderOrigin?: RenderOrigin | null
   readonly stagingLook?: boolean
   readonly pinned: number | null
-  /** `airAdaptation` stops for the air the eye stands in; zero in space. */
-  readonly airAdaptation?: number
+  /**
+   * How far down its air the eye stands — 1 on the ground, 0 at the air's
+   * top and in space (`observerAir`). Enhanced meters by its share of it.
+   */
+  readonly depth?: number
   readonly headroom: number
+  /** The display gamma, `ToneCurveControls.gamma`; 1 when absent. */
+  readonly gamma?: number
   readonly motionBlur?: boolean
   readonly noiseTick?: number
 }
@@ -374,7 +379,7 @@ export function createSensor(
           settings,
           state.adaptationTime ?? state.time,
           state.pinned,
-          state.airAdaptation ?? 0,
+          state.depth ?? 0,
         )
         setSceneExposure(
           renderer,
@@ -434,6 +439,7 @@ export function createSensor(
           tone.wide.value = renderer.outputColorSpace === DISPLAY_P3 ? 1 : 0
           tone.headroom.value = Math.min(state.headroom, state.settings.peak)
           tone.shoulder.value = LOOK_SHOULDERS[reading.look]
+          tone.gamma.value = state.gamma ?? 1
         }
       }
       // R3F sets `toneMapping` after the factory resolves and `commitToneCurve`
@@ -522,7 +528,7 @@ export function createSensor(
                 )
               if (
                 accepted &&
-                current.settings.mode === 'automatic' &&
+                current.settings.mode !== 'manual' &&
                 current.pinned === null &&
                 current.settings.rate !== 0
               )

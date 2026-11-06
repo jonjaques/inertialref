@@ -39,8 +39,22 @@ times π, with nothing fitted.**
 - The gas falls off over the body's own `atmosphere.scaleHeight`, carried on
   `BodySnapshot.atmosphereScaleHeight`. The aerosol falls off over the haze's
   `aerosolHeight` and follows its `aerosolAngstrom` slope. `datum.ts`
-  converts both to radii of the drawn sphere (`airHeights`), once for
-  `buildScene` and once for the boot prebake, which key the bake identically.
+  converts both to radii of the datum (`airHeights`, `airTopRatio`), once
+  for `buildScene` and once for the boot prebake, which key the bake
+  identically. The datum and not the drawn sphere, which is sunk under it by
+  the body's relief: the air is measured from sea level, and the shell stops
+  a ray at the drawn sphere, whose horizon lies under every drawn surface.
+  Stopped at sea level instead, from 80 m over a sea that sits 211 m under
+  its datum, the shell's level horizon stood 0.36° over the sea's and the
+  rays between — short, dense and sunless — drew a black band five pixels
+  tall between the water and the sky.
+- The sphere, the ground and the sea are seen through the same air the shell
+  draws: `render/air.ts` holds the recipe and the tables as uniforms and one
+  march through them, and each surface is `T · surface + L` along the eye's
+  own path, from where it enters the air to the fragment. Their direct beam
+  arrives through the transmittance table's column for the point's altitude
+  and sun. Nothing authored stands between the far ground and the sky it
+  fades into.
 - Sol's hazes carry published values (below). A generated haze reads its
   values off the composition family its colors came from: a boundary layer,
   0.14 of the gas height at slope 1.3; dust mixed with the gas, at 0; or a
@@ -146,18 +160,23 @@ its budget.
 ## Consequences
 
 - The noon zenith sits at its physical ratio to the ground, a sixth to a
-  tenth of the surface white. Under [ADR-0037](0037-the-enhanced-camera.md)'s
-  calibration it renders as a deep slate blue over a bright desert: right
-  relative to the sunlit ground, and darker and grayer than a phone's
-  photograph, which meters for the scene, white-balances the sun to white,
-  and saturates. Through dusk Enhanced opens up for the light that is left
-  (ADR-0037), so civil dusk is the deep blue the measured air and ozone make,
-  rather than black.
+  tenth of the surface white. Inside the air Enhanced meters, as Automatic
+  does ([ADR-0037](0037-the-enhanced-camera.md)), and the default balance
+  draws the Sun white at 5,800 K, so a noon desert is a bright ground under
+  a blue sky — the sky a phone's photograph makes, less its saturation. Civil
+  dusk is the deep blue the measured air and ozone make, rather than black.
+- The far ground fades into the horizon sky, because it is veiled by the
+  same march that draws the sky. A sun under a point's own horizon lights
+  it with the table's transmittance for that geometry, which is none.
 - The sun is the brightest object in every sky. A 2° sun on Earth draws at
   1.7 times the surface white, twelve times the sky beside it, and the dusty
   generated shore's sun is a disk over its glow rather than a spot inside it.
-- Every atmosphere seen from orbit has a thinner, dimmer limb band. Six preset
-  plates moved, and the commit that took them names each.
+- Every atmosphere seen from orbit has the limb its air makes, a line two
+  pixels wide on a disk four hundred across. Under Enhanced, from outside
+  the air, the shell adds the glow the gas would scatter falling off over
+  three times its height, gained four times (ADR-0037): the soft ring the
+  home page wraps the disk in, as a presentation above the physics and not
+  in place of it.
 - Under 20° of sun the zenith runs bright: 1.6 times the CIE sky at 10°.
   The model has no ground bounce. By −15° the measured sky is mostly airglow
   and starlight, which the model does not draw, so there it falls short.
