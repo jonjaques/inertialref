@@ -31,6 +31,7 @@ import {
   surfaceTemperature,
 } from './grammar.ts'
 import {
+  GIANT_AEROSOL,
   hazeFor,
   type LiquidAppearance,
   liquidAppearance,
@@ -1210,7 +1211,7 @@ function proceduralAppearance(
   const palette = new Rng(deriveSeed(surface.seed, 'appearance'))
   const grammar = surface.grammar
   const hue = giant
-    ? { ...(KIND_HAZE[kind] ?? KIND_HAZE.rocky), aerosolScale: 1, angstrom: 0 }
+    ? { ...(KIND_HAZE[kind] ?? KIND_HAZE.rocky), ...GIANT_AEROSOL }
     : hazeFor(palette.fork('haze'), grammar)
   return {
     texture: null,

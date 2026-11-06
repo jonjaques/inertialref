@@ -7,10 +7,10 @@ import { exp, float, saturate } from 'three/tsl'
  * reflection of it, both of which ramp it from `horizon` at sunset.
  *
  * Above the horizon the ramp is the linear one the day was tuned on. Below
- * it, a linear ramp reached zero only around −14°, and at the end of civil
- * dusk still gave the ground a sixth of the day's sky: at a fixed exposure
- * that was a dim floor nobody saw, and once Enhanced opens the exposure for a
- * darkening sky it was a desert lit pale orange under a black zenith.
+ * it, a linear ramp reaches zero only around −14°, and at the end of civil
+ * dusk still gives the ground a sixth of the day's sky: at a fixed exposure
+ * that is a dim floor nobody sees, and once Enhanced opens the exposure for a
+ * darkening sky it is a desert lit pale orange under a black zenith.
  * Measured, a clear sky puts 10 to 25 klx of skylight on the ground by day,
  * 3.4 lx at −6° and 0.008 lx at −12°; against the middle of the day's range,
  * 17 klx, and continuing from the ramp's own sunset value,

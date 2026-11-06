@@ -19,6 +19,7 @@ import {
   DISK_THROUGH_AIR_CEILING,
   diskThroughAir,
   type RenderBody,
+  settingDiskCosine,
 } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import type { GameEngine } from '../engine/GameEngine.ts'
@@ -392,10 +393,14 @@ export function Bodies({
       readonly standing: Standing
       readonly daylight: number
     } | null
-    // What the air does to the star being drawn, set per star below.
-    let throughAir: readonly [number, number, number] | null = null
 
-    const draw = (key: string, body: RenderBody, star: Rgb | null): void => {
+    /** `throughAir` is what the air does to a star's disk, per channel. */
+    const draw = (
+      key: string,
+      body: RenderBody,
+      star: Rgb | null,
+      throughAir: readonly [number, number, number] | null = null,
+    ): void => {
       const appearance = body.appearance
       const visual = residency.draw(key, () =>
         materialize(
@@ -621,24 +626,27 @@ export function Bodies({
         ? airAdaptation(standingAir.daylight)
         : 0
     for (const star of scene.stars) {
-      throughAir =
+      const throughAir =
         standingAir === null
           ? null
           : diskThroughAir(
               standingAir.scattering.recipe,
               standingAir.standing.radius,
-              Vec.dot(
-                standingAir.standing.up,
-                Vec.normalize(
-                  Vec.sub(star.placement.position, scene.camera.position),
+              settingDiskCosine(
+                standingAir.standing.radius,
+                Vec.dot(
+                  standingAir.standing.up,
+                  Vec.normalize(
+                    Vec.sub(star.placement.position, scene.camera.position),
+                  ),
                 ),
+                star.placement.angularRadius,
               ),
               diskCompression(star, visibility),
               DISK_THROUGH_AIR_CEILING / 2 ** opened,
             )
-      draw(starKey(star), starAsBody(star, visibility), star.color)
+      draw(starKey(star), starAsBody(star, visibility), star.color, throughAir)
     }
-    throughAir = null
     airLuminance.value = overhead
     observerDaylight.value = standingAir?.daylight ?? Number.POSITIVE_INFINITY
     // How far down its air the eye stands, in the tables' own units.
