@@ -166,12 +166,15 @@ export interface HazeFamily {
    */
   readonly angstrom: number
   /**
-   * Where the aerosol is the sky, its measured extinction depth at 550 nm
-   * and its single-scattering albedo in its brightest channel; absent, the
-   * gas is the sky and the color is read as its spectrum. See
+   * Where the aerosol is the sky, its measured extinction depth at 550 nm;
+   * absent, the gas is the sky and the color is read as its spectrum. See
    * `HazeLayer.aerosolDepth`.
    */
   readonly aerosolDepth?: number
+  /**
+   * Where `aerosolDepth` is authored, the aerosol's single-scattering albedo
+   * in its brightest channel. See `HazeLayer.aerosolAlbedo`.
+   */
   readonly aerosolAlbedo?: number
   readonly weight: number
   readonly coldest: Kelvin
@@ -213,7 +216,8 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
     hottest: Infinity,
   },
   // Dust: butterscotch by day, blue at the terminator. The dust is the sky,
-  // at Mars's clear-season depth and albedo (ADR-0056): read as a gas, the
+  // at Mars's albedo and a depth of 0.4, inside the rovers' 0.3 to 1.0 and
+  // over Mars's own clear-season 0.3 (ADR-0056): read as a gas, the
   // butterscotch is a brown tint on the gas's column and a gray rim.
   {
     color: { r: 0.74, g: 0.56, b: 0.36 },
@@ -252,7 +256,7 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
     hottest: 170,
   },
   // Methane: a teal sky and a warm limb. Its aerosol is a photochemical
-  // haze, as Titan's is, and not a gray dust: gray, it whitened the teal
+  // haze, as Titan's is, and not a gray dust: gray, it whitens the teal
   // limb to a pale rim.
   {
     color: { r: 0.32, g: 0.7, b: 0.82 },
@@ -292,14 +296,15 @@ const HAZE_FAMILIES: readonly HazeFamily[] = [
 export function hazeFor(
   rng: Rng,
   grammar: SurfaceGrammar,
-): {
-  readonly color: LinearRgb
-  readonly limb: LinearRgb
-  readonly aerosolScale: number
-  readonly angstrom: number
-  readonly aerosolDepth?: number
-  readonly aerosolAlbedo?: number
-} {
+): Pick<
+  HazeFamily,
+  | 'color'
+  | 'limb'
+  | 'aerosolScale'
+  | 'angstrom'
+  | 'aerosolDepth'
+  | 'aerosolAlbedo'
+> {
   const temperature = grammar.groundTemperature
   const index = rng.weightedIndex(
     HAZE_FAMILIES.map((family) =>

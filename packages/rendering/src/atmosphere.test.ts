@@ -215,6 +215,43 @@ describe('multiple scattering', () => {
     }
   })
 
+  it('is converged under an opaque haze, where a step is its own sky', () => {
+    // Titan's authored haze, copied from `solar/bodies.ts` without its
+    // detached layer: 4.3 optical depths, so the first of sixteen steps
+    // crowded toward the ground holds several. Weighed by the midpoint's
+    // transmittance such a step keeps a few percent of its light, and the
+    // daylit table moves by 0.53 in ln Ψ as the steps are refined eightfold;
+    // taken as its integral it moves by 0.03.
+    const haze = {
+      color: { r: 0.95, g: 0.9, b: 0.74 },
+      limb: { r: 0.95, g: 0.92, b: 0.78 },
+      thickness: 2.7,
+      aerosolAngstrom: 1.5,
+      ozone: 0,
+      aerosolDepth: 4.3,
+      aerosolAlbedo: 0.95,
+    }
+    const radius = 2_574_700
+    const recipe = atmosphereRecipe(
+      haze,
+      (radius + 600_000) / radius,
+      airHeights(radius, 600_000, 21_000, 70_000),
+    )
+    const transmittance = bakeTransmittance(recipe)
+    const coarse = bakeMultipleScattering(recipe, transmittance)
+    const fine = bakeMultipleScattering(recipe, transmittance, 128)
+    for (let i = 0; i < coarse.data.length; i += 4) {
+      const x = (i / 4) % coarse.width
+      if ((x / (coarse.width - 1)) * 2 - 1 < 0) continue
+      for (let c = 0; c < 3; c += 1) {
+        const moved = Math.abs(
+          (coarse.data[i + c] as number) - (fine.data[i + c] as number),
+        )
+        expect(moved).toBeLessThan(0.05)
+      }
+    }
+  })
+
   it('vanishes with the atmosphere', () => {
     const vacuum = atmosphereRecipe(
       { ...EARTH_HAZE, thickness: 0 },
