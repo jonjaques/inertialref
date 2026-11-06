@@ -12450,6 +12450,45 @@ pad: no magnitude, and untrusted. Star Citizen's modifier layers: they take away
 the axes a hand shares with the modifier, so free look is the one layer, on the
 stick that has nothing else to do while the head turns.
 
+## The air stack, reviewed whole (6 Nov 2026)
+
+Seven pull requests on the air — #170, #171, #172, #179, #180, #181 and #182,
+landing together as stack 183 — reviewed one by one against the top of the
+stack, fixed from the bottom up, and merged upward branch into branch. A finding
+in code a later pull request replaced was dropped rather than fixed twice; what
+stays open is [the air's plan](design/plans/the-air.md). The owner landed
+Titan (#181) and the exoplanet families (#182), which the look council had not,
+and round six's arm for the glare under a hidden sun, split so the detached
+layer stayed with Titan. Six things the pass found that must not come back:
+
+- **A disk read at its center goes black while half of it is up.**
+  `transmittanceFrom` is zero once the center's ray meets the ground, and from a
+  beach a disk 0.01 of its radius over the horizon read 2048 : 26 : 0.017 and
+  0.01 under it nothing. `settingDiskCosine` eases the cosine across the band
+  the horizon cuts.
+- **A power taken over a floor division takes the floor's root too.**
+  `ORBIT_BEAM_HUE`'s half-power on the cleared beam was applied after dividing
+  by `ORBIT_BEAM_FLOOR`, so a beam 0.016 of the floor drew at 0.125 and lit the
+  night side's air beside a crescent, which the floor exists to stop.
+- **A merge that compiles can still undo the branch above it.** #180 held the
+  palette's `airThickness` to Earth's one; #181's ground and sea read the same
+  field past two columns to take the marched zenith, and under the ceiling
+  Titan's ten read as one. The merge had no textual conflict. A palette test
+  holds Titan past `LIMB_OWN_TO`.
+- **`(1 − e^−τ)/τ` in float32 cancels on a thin step.** A step of 10⁻⁷ came out
+  a fifth off and one under 3 × 10⁻⁸ as nothing, and a floor of 10⁻⁷ under τ
+  took a thinner step's light to nothing instead of to its length. The shader
+  takes the series under a hundredth of a depth (`stepShare`), as
+  `segmentTransmission` already did.
+- **A version holds for presentation, never for an intact draw.** #182 moved
+  three families' hazes and held `SYSTEM_ALGORITHM` because the draw was the
+  same draw, the reasoning Rule 5 rejects. It holds because a haze is
+  presentation nothing canonical reads, which rides along as `polarRadius`
+  did (ADR-0027), and `versions.ts` says so.
+- **`pnpm presets:compare` without `--all` photographs seven of thirteen.**
+  #180's comparison passed with titans-haze and centauri-daybreak moved 1.34%
+  and 1.71%; a change to the air moves the dark plates first.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
