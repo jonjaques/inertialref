@@ -228,7 +228,9 @@ its budget.
   violet family a high haze a quarter of a depth deep, violet sideways and
   rose toward the sun over a gas that keeps its blue. Methane's aerosol
   carries the photochemical slope. The families' weights, bounds and order
-  are untouched and the draw is the same draw.
+  are untouched, so every other draw is where it was; the version holds
+  because a haze is presentation, which rides along (ADR-0027,
+  `versions.ts`).
 - A sun within a degree or two of a sea-level horizon dims faster than the
   compression law, under the cap, until the ground takes it.
 - A bake costs 39 ms where it cost 22 on the development machine — the
