@@ -617,7 +617,5 @@ export function sunThrough(
     max(radius.sub(1), 0).div(max(air.top.sub(1), 1e-6)),
   )
   const muSun = dot(point, sun).div(max(radius, 1e-5))
-  return air.transmittance.sample(
-    texelCentered(vec2(muSun.add(1).mul(0.5), height01), TRANSMITTANCE),
-  ).rgb
+  return sunTableAt(air, muSun, height01)
 }

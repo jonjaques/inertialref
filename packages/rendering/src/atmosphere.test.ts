@@ -635,7 +635,7 @@ describe('the recipe', () => {
 })
 
 describe("Enhanced's limb", () => {
-  it('lifts nothing inside the air and everything ten shell heights above it', () => {
+  it(`lifts nothing inside the air and everything ${LIMB_FADE_HEIGHTS} shell heights above it`, () => {
     const top = 1.0157
     expect(limbLift(1, top)).toBe(0)
     expect(limbLift(top, top)).toBe(0)
@@ -708,22 +708,22 @@ describe("Enhanced's limb", () => {
         fc.double({ min: 0, max: 1, noNaN: true }),
         fc.double({ min: 1, max: 20, noNaN: true }),
         (top, lift, eye) => {
-          const reach = limbReach(top, lift, eye)
+          const reach = limbReach(top, lift, limbFalloff(eye))
           expect(reach).toBeGreaterThanOrEqual(top)
           expect(reach).toBeLessThanOrEqual(Math.max(LIMB_CEILING, top))
         },
       ),
     )
-    expect(limbReach(1.0157, 0, 4)).toBe(1.0157)
-    expect(limbReach(1.0157, 1, 4)).toBe(LIMB_CEILING)
+    expect(limbReach(1.0157, 0, limbFalloff(4))).toBe(1.0157)
+    expect(limbReach(1.0157, 1, limbFalloff(4))).toBe(LIMB_CEILING)
     // From a station the ceiling is the station's: four fall-offs of a
     // fifth of its height, which is under the ceiling from the Moon.
     const station = 1 + 313_000 / 6_371_000
-    expect(limbReach(1.0157, 1, station)).toBeCloseTo(
+    expect(limbReach(1.0157, 1, limbFalloff(station))).toBeCloseTo(
       1 + 4 * limbFalloff(station),
       12,
     )
     // An air already taller than the ceiling keeps its own top.
-    expect(limbReach(1.3, 1, 4)).toBe(1.3)
+    expect(limbReach(1.3, 1, limbFalloff(4))).toBe(1.3)
   })
 })

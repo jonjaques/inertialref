@@ -239,8 +239,8 @@ export const LIMB_AEROSOL = 0.25
  * air — two hundred kilometers on Earth, full by three hundred — so a ship
  * climbing out keeps the sky it had and has the ring by the altitude the
  * reference photographs were taken from: every limb photographed from a
- * station is photographed from four hundred kilometers, and at ten shell
- * heights the ring was a tenth of itself there.
+ * station is photographed from four hundred kilometers, and over ten shell
+ * heights the ring would be a tenth of itself there.
  */
 export const LIMB_FADE_HEIGHTS = 2
 
@@ -271,17 +271,20 @@ export function limbFalloff(eyeRatio: number): number {
 
 /**
  * Where the air ends for a lift: the air's own top at none, the ring's
- * ceiling for this eye at one — or the top, for an air that already
+ * ceiling for `falloff` at one — or the top, for an air that already
  * reaches past it — in datum units. The shell mesh is drawn to it, and the
  * march of the lifted gas stops at it, so the ring is never clipped by the
- * geometry that carries it.
+ * geometry that carries it. It takes the fall-off the shader is handed
+ * (`RenderBody.limbFalloff`) rather than the eye it came from: a mesh sized
+ * from a second derivation of that number is a mesh the shader's reach can
+ * outgrow, and the ring ends in a hard circle where they part.
  */
 export function limbReach(
   airTop: number,
   lift: number,
-  eyeRatio: number,
+  falloff: number,
 ): number {
-  const ceiling = 1 + LIMB_CEILING_FALLOFFS * limbFalloff(eyeRatio)
+  const ceiling = 1 + LIMB_CEILING_FALLOFFS * falloff
   return airTop + (Math.max(ceiling, airTop) - airTop) * lift
 }
 

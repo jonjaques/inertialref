@@ -111,12 +111,13 @@ async function skyToward(
   air.sunColor.value.setRGB(1, 1, 1)
   const eyeRatio = 1 + (ground.height ?? 2) / earth.radius
   const limb = ground.limb ?? limbLift(eyeRatio, top)
-  air.setLimb(limb, limbFalloff(eyeRatio))
+  const falloff = limbFalloff(eyeRatio)
+  air.setLimb(limb, falloff)
   expect(air.material.side).toBe(BackSide)
   const scene = new Scene()
   // The mesh grows to the limb's reach as `bodyUniforms` grows it.
   const shell = new Mesh(
-    new SphereGeometry(limbReach(top, limb, eyeRatio), 96, 64),
+    new SphereGeometry(limbReach(top, limb, falloff), 96, 64),
     air.material,
   )
   shell.scale.set(1, flattening, 1)
@@ -303,15 +304,16 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   // on a disk four hundred across. The home page wraps the disk in a soft
   // ring, and that is Enhanced's cheat from orbit: the same recipe stretched
   // a twenty-fifth of a radius tall, read through the same tables at the
-  // height the stretch maps to, with the aerosol's forward lobe and not its
-  // extinction. Forty kilometers over the limb, seen from four radii out,
-  // the physics has e^−4.7 of its sea-level gas and the stretched profile
-  // e^−0.16. Under a sun a degree and a half over that point's horizon,
-  // ahead of the eye, the stretched gas reads the table at 1.3 km, where
-  // the beam has crossed a horizon's worth of air and arrives red, and the
-  // lobe throws it forward; the physics reads the table at 40 km, where the
-  // beam arrives white and the gas scatters blue. The sky from a beach is
-  // the physics under either view.
+  // sample's height over the root of the stretch, with the aerosol's forward
+  // lobe and not its extinction. Forty kilometers over the limb, seen from
+  // four radii out, the physics has e^−4.7 of its sea-level gas and the
+  // stretched profile e^−0.16. Under a sun a degree and a half over that
+  // point's horizon, ahead of the eye, the stretched gas reads the table at
+  // 7.3 km — forty over the root of thirty — where the beam has crossed most
+  // of a horizon's air and arrives reddened, and the lobe throws it forward;
+  // the physics reads the table at 40 km, where the beam arrives white and
+  // the gas scatters blue. The sky from a beach is the physics under either
+  // view.
   const luminance = ([r, g, b]: readonly number[]) =>
     0.2126 * r! + 0.7152 * g! + 0.0722 * b!
   const limbRay = async (
@@ -419,30 +421,34 @@ it("draws the limb from orbit under Enhanced in the air's own colors, and nothin
   }
   const edgeRay = async (tangentMeters: number) => {
     const pre = 1 / 30_000
+    const tangent = 1 + tangentMeters / earth.radius
+    const eye = 4
+    const sine = tangent / eye
+    const cosine = Math.sqrt(1 - sine * sine)
+    const radial = new Vector3(cosine, sine, 0)
+    const sun = new Vector3(0, 0, 1)
+      .add(radial.clone().multiplyScalar(0.5))
+      .normalize()
+    const sphere = disk(sun)
     setSceneExposure(gpu.renderer, pre, pre, 'enhanced')
     try {
-      const tangent = 1 + tangentMeters / earth.radius
-      const eye = 4
-      const sine = tangent / eye
-      const cosine = Math.sqrt(1 - sine * sine)
-      const radial = new Vector3(cosine, sine, 0)
-      const sun = new Vector3(0, 0, 1)
-        .add(radial.clone().multiplyScalar(0.5))
-        .normalize()
       return luminance(
         await skyToward(
           new Vector3(sine, -cosine, 0),
           { height: (eye - 1) * earth.radius, fov: 0.05, sun },
-          disk(sun),
+          sphere,
         ),
       )
     } finally {
       setSceneExposure(gpu.renderer, null)
+      sphere.material.dispose()
     }
   }
   const inside = await edgeRay(-20_000)
   const outside = await edgeRay(20_000)
-  expect(Math.abs(inside / outside - 1)).toBeLessThan(0.3)
+  // A tenth: the shell and the sphere march the same chord at different
+  // sample counts, and the step between them is the seam this holds.
+  expect(Math.abs(inside / outside - 1)).toBeLessThan(0.1)
 
   const ground = async (enhanced: boolean) => {
     const pre = 1 / 30_000

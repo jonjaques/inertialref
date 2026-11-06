@@ -3,6 +3,7 @@ import {
   SURFACE_LUMINANCE,
   type RenderBody,
   LIMB_CEILING,
+  LIMB_CEILING_FALLOFFS,
 } from '@inertialref/rendering'
 import { Quaternion, vec3 } from '@inertialref/spatial'
 import {
@@ -256,6 +257,19 @@ describe('a mapped body', () => {
     )
     expect(outside.atmosphere!.outerRadius).toBe(top)
     expect(outside.atmosphere!.limb).toBe(1)
+    // Sized from the fall-off the shader is handed, not re-derived from the
+    // eye: a station's fall-off draws a station's ceiling at any distance.
+    const station = bodyUniforms(
+      body({ limb: 1, limbFalloff: 0.01 }),
+      FRAME,
+      NO_MAPS,
+      null,
+    )
+    expect(station.atmosphere!.scale.x).toBeCloseTo(
+      station.atmosphere!.seaLevel * (1 + LIMB_CEILING_FALLOFFS * 0.01),
+      6,
+    )
+    expect(station.atmosphere!.limbFalloff).toBe(0.01)
   })
 
   it('draws no shell at a point', () => {

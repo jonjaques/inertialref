@@ -534,13 +534,12 @@ export function bodyUniforms(
      * third. `limbReach` is the one formula, read again by the shader.
      */
     const seaLevel = body.trueRadius * placement.compression
-    const drawn = Math.max(
+    const mesh = Math.max(
       shell,
-      seaLevel *
-        limbReach(body.airTop, body.limb, placement.distance / body.trueRadius),
+      seaLevel * limbReach(body.airTop, body.limb, body.limbFalloff),
     )
     atmosphere = {
-      scale: giant ? oblate(drawn) : { x: drawn, y: drawn, z: drawn },
+      scale: giant ? oblate(mesh) : { x: mesh, y: mesh, z: mesh },
       outerRadius: shell,
       innerRadius: placement.scale * (giant ? 1 : shellFlattening),
       seaLevel,
