@@ -8,7 +8,7 @@ import {
   type Seconds,
   SECONDS_PER_DAY,
 } from '@inertialref/shared'
-import type { BodyFigure, BodyKind } from '../system.ts'
+import type { BodyFigure, BodyKind, HazeLayer } from '../system.ts'
 import { JOVIAN_MINOR, NEPTUNIAN_MINOR, SATURNIAN_MINOR } from './minorMoons.ts'
 import type { LinearRgb } from '../catalog/photometry.ts'
 
@@ -92,12 +92,7 @@ export interface SolarHaze {
   /** Its single-scattering albedo in its brightest channel. See `HazeLayer`. */
   readonly aerosolAlbedo?: number
   /** A detached layer of small particles high over the haze. See `HazeLayer`. */
-  readonly detached?: {
-    readonly center: number
-    readonly halfWidth: number
-    readonly depth: number
-    readonly color: LinearRgb
-  }
+  readonly detached?: HazeLayer['detached']
 }
 
 export interface SolarClouds {
@@ -360,11 +355,11 @@ const SATURNIAN: readonly SolarBody[] = [
     // reflects (1 − √(1 − a))/(1 + √(1 − a)) of each channel, which takes
     // 0.95 : 0.9 : 0.74 to Cassini's tan disk, and from the ground the same
     // particles compound to Huygens' orange-brown with little blue left in
-    // it. Authored as the look, the compounding made a red sky.
+    // it. Authored as the look, the compounding makes a red sky.
     haze: {
       // To the ceiling: the haze that the sun reaches past the body's
       // shadow when it is backlit is its top, 300 km and up, and a shell
-      // cut at 400 km lit a dim brown ring where Cassini's is gold.
+      // cut at 400 km lights a dim brown ring where Cassini's is gold.
       height: 600_000,
       color: { r: 0.95, g: 0.9, b: 0.74 },
       limb: { r: 0.95, g: 0.92, b: 0.78 },

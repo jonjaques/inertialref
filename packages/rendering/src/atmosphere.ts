@@ -580,12 +580,12 @@ function underPeak(
 /**
  * How much the air shows, with Earth at 1: the column's scattering depth
  * over Earth's, for the skylight the ground takes from its sky
- * (`terrainPalette`, which holds it to Earth's). It is `thickness` where the
- * gas is the sky, and the dust's depth where the dust is, past 1 for a dust
- * deeper than Earth's whole column: Mars's 0.3 scatters two decades more
- * than its gas, and a skylight read off the gas lights a Martian shadow at a
- * twentieth of its sky — the black pools under every ridge of a flat-lit
- * orange afternoon.
+ * (`terrainPalette`) and the lift's share of a limb (`limbShare`). It is
+ * `thickness` where the gas is the sky, and the dust's depth where the dust
+ * is, past 1 for a dust deeper than Earth's whole column: Mars's 0.3
+ * scatters two decades more than its gas, and a skylight read off the gas
+ * lights a Martian shadow at a twentieth of its sky — the black pools under
+ * every ridge of a flat-lit orange afternoon.
  */
 export function visibleThickness(haze: HazeAuthoring): number {
   const gas = TAU_RAYLEIGH_SUM * haze.thickness
@@ -700,20 +700,17 @@ function densities(
 
 /** The ozone tent at height `h`, 1 at its peak; the shader's is the same. */
 function ozoneDensity(h: number, recipe: AtmosphereRecipe): number {
-  return Math.max(
-    0,
-    1 - Math.abs(h - recipe.ozonePeak) / Math.max(recipe.ozoneHalfWidth, 1e-9),
-  )
+  return tent(h, recipe.ozonePeak, recipe.ozoneHalfWidth)
 }
 
 /** The detached layer's tent at height `h`, 1 at its peak; the shader's is the same. */
 function detachedDensity(h: number, recipe: AtmosphereRecipe): number {
-  return Math.max(
-    0,
-    1 -
-      Math.abs(h - recipe.detachedPeak) /
-        Math.max(recipe.detachedHalfWidth, 1e-9),
-  )
+  return tent(h, recipe.detachedPeak, recipe.detachedHalfWidth)
+}
+
+/** A tent in height, 1 at `peak` and nothing from `halfWidth` either side. */
+function tent(h: number, peak: number, halfWidth: number): number {
+  return Math.max(0, 1 - Math.abs(h - peak) / Math.max(halfWidth, 1e-9))
 }
 
 /**

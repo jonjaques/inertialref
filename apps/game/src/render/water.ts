@@ -45,12 +45,7 @@ import {
   vertexIndex,
 } from 'three/tsl'
 import type { LinearRgb } from '@inertialref/universe'
-import {
-  LIMB_OWN_FROM,
-  LIMB_OWN_TO,
-  OPEN_OCEAN,
-  type TerrainPalette,
-} from '@inertialref/rendering'
+import { OPEN_OCEAN, type TerrainPalette } from '@inertialref/rendering'
 import {
   asField,
   asVector,
@@ -64,7 +59,13 @@ import { NOISE_CELLS, noiseTexture } from './noiseTexture.ts'
 import { seaWearOf } from './wear.ts'
 import { vertexMorphFactor } from './morph.ts'
 import { WAVE_OCTAVES } from './quality.ts'
-import { BEAM_TERMINATOR, BLACK_RGB, paint, SKY_FRACTION } from './terrain.ts'
+import {
+  BEAM_TERMINATOR,
+  BLACK_RGB,
+  deepSky,
+  paint,
+  SKY_FRACTION,
+} from './terrain.ts'
 import {
   airToward,
   type AirUniforms,
@@ -460,8 +461,11 @@ export function createWaterMaterial(): WaterMaterial {
       // are made of; the beam alone crosses the column.
       const dayColor = sunColor.mul(sunIntensity)
       const sunlight = dayColor.mul(sunThrough(air, pointUnits, sun))
-      // Capped at one, as the ground caps it.
+      // Capped at one, as the ground caps it; under a deep air the sky is
+      // the marched zenith and leaves the beam whole, as the ground's does
+      // (`deepSky`).
       const diffuse = min(skyStrength.mul(SKY_FRACTION), 1)
+      const deep = deepSky(skyStrength)
 
       /* --- Fresnel ---------------------------------------------------------- */
 
@@ -511,15 +515,19 @@ export function createWaterMaterial(): WaterMaterial {
       const skyView = float(1)
       const diffuseLight = max(incidence, float(0))
         .mul(daylight)
-        .mul(oneMinus(diffuse))
+        .mul(oneMinus(diffuse.mul(oneMinus(deep))))
         .mul(sunlight)
         .add(
-          skyColor
-            .mul(diffuse)
-            .mul(skylightLeft(incidence, 0.25))
-            .add(skyView.mul(visibilityAmbient))
-            .mul(dayColor),
+          mix(
+            skyColor
+              .mul(diffuse)
+              .mul(skylightLeft(incidence, 0.25))
+              .mul(dayColor),
+            skyOverhead.mul(skyView),
+            deep,
+          ),
         )
+        .add(skyView.mul(visibilityAmbient).mul(dayColor))
       const bodyLight = liquid.mul(diffuseLight)
       // Without the frame the seabed is not seen, and what comes up through
       // the water is the water's own light.
@@ -541,11 +549,6 @@ export function createWaterMaterial(): WaterMaterial {
        * wave normal now, because the wave field is in this geometry.
        */
       // Under a deep air the sky is the marched zenith, as the ground's is.
-      const deep = smoothstep(
-        float(LIMB_OWN_FROM),
-        float(LIMB_OWN_TO),
-        skyStrength,
-      )
       const skyLight = mix(
         skyColor
           .mul(min(skyStrength, 1))

@@ -1358,26 +1358,24 @@ export function createTerrainMaterial(): TerrainMaterial {
     // a negative beam.
     const diffuse = min(skyStrength.mul(SKY_FRACTION), 1)
     const skyView = saturate(dot(shaded, up)).mul(0.5).add(0.5)
-    const direct = surfaceAlbedo
-      .mul(photometric)
-      .mul(daylight)
-      .mul(sunlight)
-      .mul(oneMinus(diffuse))
     /*
      * Past a few of Earth's columns the fraction is the whole beam and only
      * the tables know what the sky delivers: under Titan's four optical
      * depths the zenith is 1.4% of white and the beam e^−4.3 of itself, so a
-     * ground lit by the authored tan at a third of the sun stood cream under
-     * a near-black sky. There the sky is the zenith the camera marches each
-     * frame (`skyOverhead`), the irradiance of a uniform sky over π, which a
-     * sky that deep is. The two meet over the same columns the limb's lift
-     * leaves (`LIMB_OWN_FROM`).
+     * ground lit by the authored tan at a third of the sun stands cream under
+     * a near-black sky. There the sky is the marched zenith over the ground
+     * (`skyOverhead`), the irradiance of a uniform sky over π, which a sky
+     * that deep is (`deepSky`). That sky is not taken out of the beam: it is
+     * the tables' own light rather than a share of the beam's, and the beam
+     * already arrives through the tables' extinction. Taken out as well, the
+     * fraction leaves the ground no sun and no shading from it.
      */
-    const deep = smoothstep(
-      float(LIMB_OWN_FROM),
-      float(LIMB_OWN_TO),
-      skyStrength,
-    )
+    const deep = deepSky(skyStrength)
+    const direct = surfaceAlbedo
+      .mul(photometric)
+      .mul(daylight)
+      .mul(sunlight)
+      .mul(oneMinus(diffuse.mul(oneMinus(deep))))
     const thin = skyColor
       .mul(diffuse)
       .mul(skyView)
@@ -1640,6 +1638,16 @@ export const BEAM_TERMINATOR = 0.025
  * gives none.
  */
 export const SKY_FRACTION = 0.33
+
+/**
+ * How far a ground or a sea under `skyStrength` of Earth's columns takes its
+ * sky from the marched zenith (`skyOverhead`) instead of the authored tint:
+ * none under `LIMB_OWN_FROM`, all past `LIMB_OWN_TO`, the same columns over
+ * which the limb's lift leaves a haze to its own ring.
+ */
+export function deepSky(skyStrength: Node<'float'>): Node<'float'> {
+  return smoothstep(float(LIMB_OWN_FROM), float(LIMB_OWN_TO), skyStrength)
+}
 
 /*
  * A one-pixel white stand-in, so a body with no map runs the identical graph.

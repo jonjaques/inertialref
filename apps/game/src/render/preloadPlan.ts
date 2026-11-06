@@ -2,6 +2,7 @@ import {
   type AirHeights,
   airHeights,
   airTopRatio,
+  type DetachedHaze,
 } from '@inertialref/rendering'
 import type { StarSystem } from '@inertialref/universe'
 import { walkBodies } from '@inertialref/universe'
@@ -36,16 +37,7 @@ export interface HazeLike {
   readonly ozone: number
   readonly aerosolDepth?: number
   readonly aerosolAlbedo?: number
-  readonly detached?: {
-    readonly center: number
-    readonly halfWidth: number
-    readonly depth: number
-    readonly color: {
-      readonly r: number
-      readonly g: number
-      readonly b: number
-    }
-  }
+  readonly detached?: DetachedHaze
 }
 
 export interface ScatteringBake {

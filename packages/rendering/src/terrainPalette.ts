@@ -140,7 +140,10 @@ export interface TerrainPalette {
    */
   readonly sheet: number
 
-  /** How much air there is over the ground, 0..1 with Earth at 1. */
+  /**
+   * How much air there is over the ground, with Earth at 1 and no ceiling:
+   * Titan's haze is ten (`visibleThickness`).
+   */
   readonly airThickness: number
   /**
    * What the sky over this ground is, as a **tint** of unit luminance.

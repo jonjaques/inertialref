@@ -288,20 +288,10 @@ export function marchAir(
 
     // The ozone tent absorbs and scatters nothing; `densities` holds the
     // same shape on the CPU.
-    const densityO = max(
-      float(1).sub(
-        abs(height.sub(air.ozonePeak)).div(max(air.ozoneHalfWidth, 1e-9)),
-      ),
-      0,
-    )
+    const densityO = tentAt(height, air.ozonePeak, air.ozoneHalfWidth)
     // The detached layer's tent, the same shape on the CPU: small particles
     // that take gray and scatter their color with Rayleigh's phase.
-    const densityD = max(
-      float(1).sub(
-        abs(height.sub(air.detachedPeak)).div(max(air.detachedHalfWidth, 1e-9)),
-      ),
-      0,
-    )
+    const densityD = tentAt(height, air.detachedPeak, air.detachedHalfWidth)
     const scatterD = air.detachedScatter.mul(densityD)
     const extinction = air.betaRayleigh
       .mul(densityR)
@@ -344,6 +334,15 @@ export function marchAir(
   })
 
   return { inscatter, transmittance: exp(opticalDepth.negate()) }
+}
+
+/** A tent in height, 1 at `peak` and nothing from `halfWidth` either side. */
+function tentAt(
+  height: Node<'float'>,
+  peak: Node<'float'>,
+  halfWidth: Node<'float'>,
+): Node<'float'> {
+  return max(float(1).sub(abs(height.sub(peak)).div(max(halfWidth, 1e-9))), 0)
 }
 
 /**
