@@ -283,9 +283,20 @@ export function marchAir(
       .add(air.mieExtinction.mul(densityM))
       .add(air.ozone.mul(densityO))
     const stepTau = extinction.mul(stepLength)
-    // Transmittance to the middle of this step: the half keeps the midpoint
-    // rule honest about its own sample's extinction.
-    const viewT = exp(opticalDepth.add(stepTau.mul(0.5)).negate())
+    /*
+     * Transmittance to the start of this step, and the step's light as the
+     * integral over a step of constant density, (1 − e^−τ)/σ, rather than
+     * the midpoint's transmittance times the length. The two agree to a
+     * part in ten thousand at a step of 0.04 optical depths, which is
+     * Earth's; at a step of eleven — the first of twelve crowded toward a
+     * surface under Titan's haze — the midpoint rule keeps four percent of
+     * the light, so an opaque haze draws at half its albedo with a dark
+     * seam where its march meets the shell's at the silhouette.
+     */
+    const viewT = exp(opticalDepth.negate())
+    const stepLight = stepLength.mul(
+      oneMinus(exp(stepTau.negate())).div(max(stepTau, vec3(1e-7))),
+    )
 
     const muSun = dot(point, sun).div(max(radius, 1e-5))
     const tableT = sunTableAt(air, muSun, height01)
@@ -306,7 +317,7 @@ export function marchAir(
     const multiple = psi.mul(
       air.betaRayleigh.mul(densityR).add(air.mieScatter.mul(densityM)),
     )
-    inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLength))
+    inscatter.addAssign(viewT.mul(single.add(multiple)).mul(stepLight))
     opticalDepth.addAssign(stepTau)
   })
 

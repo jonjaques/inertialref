@@ -896,14 +896,17 @@ export function bakeMultipleScattering(
               (recipe.betaRayleigh[c] as number) * rayleigh +
               (recipe.mieExtinction[c] as number) * mie +
               (recipe.ozone[c] as number) * ozone
-            const view = Math.exp(
-              -((tau[c] as number) + extinction * step * 0.5),
-            )
+            const view = Math.exp(-(tau[c] as number))
+            const stepTau = extinction * step
+            // The step's light as the integral over constant density, as
+            // the shader's march takes it (`marchAir`).
+            const stepLight =
+              (step * -Math.expm1(-stepTau)) / Math.max(stepTau, 1e-7)
             luminance[c] =
               (luminance[c] as number) +
-              view * scatter * isotropic * (sunlight[c] as number) * step
-            transfer[c] = (transfer[c] as number) + view * scatter * step
-            tau[c] = (tau[c] as number) + extinction * step
+              view * scatter * isotropic * (sunlight[c] as number) * stepLight
+            transfer[c] = (transfer[c] as number) + view * scatter * stepLight
+            tau[c] = (tau[c] as number) + stepTau
           }
         }
       }
@@ -988,15 +991,18 @@ export function zenithSkyRadiance(
         scatterRayleigh +
         (recipe.mieExtinction[c] as number) * mie +
         (recipe.ozone[c] as number) * ozone
-      const view = Math.exp(-((depth[c] as number) + extinction * step * 0.5))
+      const view = Math.exp(-(depth[c] as number))
+      const stepTau = extinction * step
+      // The step's light as the integral over constant density (`marchAir`).
+      const stepLight = (step * -Math.expm1(-stepTau)) / Math.max(stepTau, 1e-7)
       const single =
         (scatterRayleigh * phaseRayleigh + scatterToward * phaseMie) *
         (sunlight[c] as number)
       const multiple = (psi[c] as number) * (scatterRayleigh + scatterMie)
       radiance[c] =
         (radiance[c] as number) +
-        view * (single + multiple) * step * ATMOSPHERE_GAIN
-      depth[c] = (depth[c] as number) + extinction * step
+        view * (single + multiple) * stepLight * ATMOSPHERE_GAIN
+      depth[c] = (depth[c] as number) + stepTau
     }
   }
   return radiance
