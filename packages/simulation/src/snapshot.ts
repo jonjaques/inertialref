@@ -21,6 +21,9 @@ import {
   bodyFrameId,
   type EntityId,
   formatAddress,
+  type OrbitalKind,
+  stationFixedFrameId,
+  stationFrameId,
   type UniverseAddress,
 } from '@inertialref/universe'
 import { TICK_DURATION } from './clock.ts'
@@ -137,6 +140,29 @@ export interface BodySnapshot {
   readonly figure: BodyFigure | null
 }
 
+/**
+ * An orbital placement at the snapshot's presentation instant: its `af:`
+ * pose, which is where it is and which way its own axes face.
+ */
+export interface StationSnapshot {
+  readonly id: EntityId
+  /** Its address, or null for a built station, which has none. */
+  readonly address: string | null
+  readonly name: string
+  readonly kind: OrbitalKind
+  /** The key the host maps to a model. */
+  readonly asset: string
+  /** The body or the system it goes round. */
+  readonly parent: string
+  readonly system: string
+  readonly radius: Meters
+  /** Its `a:` frame — the anchor a camera orbits. */
+  readonly frame: FrameId
+  readonly position: UniverseVector
+  /** The station's axes in universe axes: +X starboard, +Y zenith, −Z forward. */
+  readonly orientation: Quat
+}
+
 export interface StarSnapshot {
   readonly system: string
   readonly name: string
@@ -157,6 +183,7 @@ export interface WorldSnapshot {
   readonly entities: readonly EntitySnapshot[]
   readonly structures: readonly SnapshotStructure[]
   readonly bodies: readonly BodySnapshot[]
+  readonly stations: readonly StationSnapshot[]
   readonly stars: readonly StarSnapshot[]
   readonly events: readonly WorldEvent[]
   readonly stateHash: string
@@ -269,6 +296,7 @@ export function snapshot(
 
   const bodies: BodySnapshot[] = []
   const structures: SnapshotStructure[] = []
+  const stations: StationSnapshot[] = []
   const stars: StarSnapshot[] = []
   for (const system of world.loadedSystems()) {
     stars.push({
@@ -321,6 +349,32 @@ export function snapshot(
       for (const moon of body.moons) collect(moon)
     }
     for (const planet of system.planets) collect(planet)
+    /*
+     * At the presentation instant, as the bodies are, and for the same
+     * reason (Rule 38): at 7.66 km/s round Earth, a station placed at the tick
+     * sits up to 120 m from where the picture has it — more than the 99 m it
+     * spans.
+     */
+    for (const station of system.stations) {
+      const pose = world.frames.pose(
+        stationFixedFrameId(station.id),
+        renderTime,
+      )
+      stations.push({
+        id: station.id,
+        address:
+          station.address === null ? null : formatAddress(station.address),
+        name: station.name,
+        kind: station.kind,
+        asset: station.asset,
+        parent: formatAddress(station.parent),
+        system: system.id,
+        radius: station.radius,
+        frame: stationFrameId(station.id),
+        position: pose.position,
+        orientation: pose.orientation,
+      })
+    }
   }
 
   return {
@@ -336,6 +390,7 @@ export function snapshot(
       a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
     ),
     bodies,
+    stations,
     stars,
     events: world.events(16),
     stateHash: world.stateHash(),
