@@ -898,7 +898,20 @@ function listen(key: string, listener: (value: unknown) => void): () => void {
   }
 }
 
+/**
+ * The last value said for each key — what the mounted hooks hold.
+ *
+ * Storage is not the live value. A private window, or a browser with site data
+ * blocked, throws from `setItem`, and the hooks stay live through `announce`
+ * while nothing reaches disk; storage can also lag a value a hook holds when
+ * one write was refused and an earlier one was not. Anything that derives a
+ * new value from the current one outside a hook — `restoreFields` — derives it
+ * from this, and from storage only for a key nothing has said yet.
+ */
+const latest = new Map<string, unknown>()
+
 function announce(key: string, value: unknown): void {
+  latest.set(key, value)
   for (const listener of listeners.get(key) ?? []) listener(value)
 }
 
@@ -1190,11 +1203,20 @@ export function restoreFields<T extends object>(
   definition: Preference<T>,
   fields: readonly (keyof T)[],
 ): void {
-  const held = read(definition)
+  const held = (
+    latest.has(definition.key) ? latest.get(definition.key) : read(definition)
+  ) as T
   const next: T = { ...held }
   for (const field of fields) next[field] = definition.initial[field]
   if (!differs(next, definition.initial)) {
-    if (readRaw(definition.key) !== MISSING) resetPreference(definition)
+    // Removed when anything stored it, and said when anything holds it: with
+    // storage refusing writes there may be nothing on disk to remove and a
+    // live value on screen all the same.
+    if (
+      differs(held, definition.initial) ||
+      readRaw(definition.key) !== MISSING
+    )
+      resetPreference(definition)
     return
   }
   if (differs(next, held)) write(definition, next)
@@ -1209,7 +1231,24 @@ export function restoreFields<T extends object>(
  * is the comparison storage itself makes, and every value here is JSON.
  */
 export const differs = (value: unknown, initial: unknown): boolean =>
-  JSON.stringify(value) !== JSON.stringify(initial)
+  JSON.stringify(canonical(value)) !== JSON.stringify(canonical(initial))
+
+/**
+ * A value with every object's keys in one order, so two records that hold the
+ * same fields compare equal however they were built. A record imported from a
+ * file or migrated from an older shape carries its keys in the order it was
+ * written, and `JSON.stringify` is order-sensitive — so a record that was the
+ * default in every field compared as changed, and a restore left it pinned.
+ */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (typeof value !== 'object' || value === null) return value
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
+  )
+}
 
 /** The value a hook should hold for a key, given what storage now says. */
 function believe(key: string): unknown {

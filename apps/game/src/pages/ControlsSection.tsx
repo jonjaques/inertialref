@@ -321,6 +321,7 @@ export function ControlsSection() {
                     <span className="flex w-14 justify-end">
                       <Action
                         label="Unbind"
+                        name={`Unbind ${action.label}`}
                         title={`Take the key off ${action.label}`}
                         disabled={bound === null}
                         then={() => document.getElementById(key)}
@@ -331,6 +332,7 @@ export function ControlsSection() {
                     <span className="flex w-12 justify-end">
                       <Action
                         label="Reset"
+                        name={`Reset ${action.label}`}
                         title={`${action.label} back to its default`}
                         disabled={!changed}
                         then={() => document.getElementById(key)}

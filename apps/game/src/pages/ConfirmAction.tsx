@@ -45,6 +45,17 @@ export function ConfirmAction({
   onAct: () => void
 }) {
   const [asking, setAsking] = useState(false)
+  /*
+   * The question stands only while there is something to answer. A count can
+   * reach zero under an open question — a row's own reset below it, a capture
+   * that lands on its default, an import — and the question then read
+   * "Restore 0 settings?" with its verb still armed. It is closed in the
+   * render that sees it, React's own pattern for state that follows a prop,
+   * rather than by an effect, so no frame draws both; and closed rather than
+   * hidden, or a later change would bring the question back unasked.
+   */
+  if (asking && disabled) setAsking(false)
+  const open = asking && !disabled
   const id = useId()
   const element = (part: string): HTMLButtonElement | null =>
     document.getElementById(`${id}-${part}`) as HTMLButtonElement | null
@@ -59,11 +70,15 @@ export function ConfirmAction({
   return (
     <span className="flex flex-wrap items-center justify-end gap-1.5">
       <span id={`${id}-region`} aria-live="polite" className="sr-only">
-        {asking ? question : ''}
+        {open ? question : ''}
       </span>
-      {asking ? (
+      {open ? (
         <>
-          <span aria-hidden className="type-ui text-slate-300">
+          {/* The answers are described by the question as well as announced
+              with it: a polite announcement that coincides with the focus
+              moving to Keep is one screen readers often drop, and Keep read
+              without its question is a button with no meaning. */}
+          <span id={`${id}-question`} className="type-ui text-slate-300">
             {question}
           </span>
           <Action
@@ -71,6 +86,7 @@ export function ConfirmAction({
             label={act}
             tone="primary"
             title={actTitle}
+            describedBy={`${id}-question`}
             then={home}
             onClick={() => {
               onAct()
@@ -81,6 +97,7 @@ export function ConfirmAction({
             id={`${id}-keep`}
             label="Keep"
             title="Leave everything as it is"
+            describedBy={`${id}-question`}
             then={home}
             onClick={() => setAsking(false)}
           />

@@ -40,6 +40,8 @@ export function Action({
   className = '',
   id,
   then,
+  name,
+  describedBy,
 }: {
   label: string
   icon?: LucideIcon
@@ -58,6 +60,15 @@ export function Action({
    * `handFocus`, which this is.
    */
   then?: () => HTMLElement | null
+  /**
+   * The accessible name, where the visible word is one of many alike: a
+   * column of "Unbind" buttons is a hundred identical names to somebody
+   * tabbing down it. It must contain the visible word, so what a speech-input
+   * user says still reaches it (SC 2.5.3).
+   */
+  name?: string
+  /** The id of what describes this button, read after its name. */
+  describedBy?: string
 }) {
   return (
     <Button
@@ -67,6 +78,8 @@ export function Action({
       title={title ?? label}
       disabled={disabled}
       id={id}
+      aria-label={name}
+      aria-describedby={describedBy}
       onClick={(event) => {
         if (then === undefined) releaseFocus(event)
         else handFocus(event, then)

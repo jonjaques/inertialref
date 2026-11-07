@@ -1,5 +1,5 @@
 import fc from 'fast-check'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PICTURES } from '@inertialref/devtools'
 import { DEFAULT_SENSOR_SETTINGS, LENS_PRESETS } from '@inertialref/rendering'
 import { isBoolean, numberWithin, oneOf } from './accept.ts'
@@ -32,6 +32,7 @@ import {
   resetPreference,
   resetPreferences,
   restoreFields,
+  differs,
   SECTION_OPEN,
   subscribe,
   write,
@@ -558,6 +559,49 @@ describe('restoring some fields of a record', () => {
     expect(exportPreferences(stamp).preferences).not.toHaveProperty(
       'render.sensor',
     )
+  })
+
+  it('restores from the live value when the store refuses writes', () => {
+    // A private window throws from `setItem`; the panels stay live through the
+    // subscription while nothing reaches disk. A restore that read the record
+    // back from storage found the defaults there and did nothing at all.
+    const refusing = {
+      length: 0,
+      key: () => null,
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('storage is blocked')
+      },
+      removeItem: () => {},
+    }
+    vi.stubGlobal('window', { localStorage: refusing })
+    try {
+      const heard: unknown[] = []
+      const stop = subscribe(RENDER_SENSOR, (value) => heard.push(value))
+      write(RENDER_SENSOR, {
+        ...RENDER_SENSOR.initial,
+        mode: 'manual',
+        rate: 2,
+      })
+      // The lens panel's reset: the photograph's fields, not the person's.
+      restoreFields(RENDER_SENSOR, ['mode', 'look', 'compensation', 'balance'])
+      stop()
+      expect(heard.at(-1)).toEqual({ ...RENDER_SENSOR.initial, rate: 2 })
+    } finally {
+      vi.unstubAllGlobals()
+      // Said back to the default, so no later test inherits the live value.
+      resetPreference(RENDER_SENSOR)
+    }
+  })
+
+  it('treats a record in another key order as the same record', () => {
+    // A file or a migration writes fields in its own order; equal fields are
+    // equal whatever order they arrive in.
+    const shuffled = Object.fromEntries(
+      Object.entries(RENDER_SENSOR.initial).reverse(),
+    )
+    expect(differs(shuffled, RENDER_SENSOR.initial)).toBe(false)
+    expect(differs({ ...shuffled, rate: 3 }, RENDER_SENSOR.initial)).toBe(true)
   })
 
   it('writes nothing when the fields already were their defaults', () => {
