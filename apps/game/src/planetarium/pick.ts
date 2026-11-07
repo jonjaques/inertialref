@@ -61,6 +61,18 @@ export interface PickCandidate {
 export const PICK_SLOP = 24
 
 /**
+ * How far past a drawn spacecraft's disk it still wins a click, in pixels.
+ *
+ * Its own reach, a third of `PICK_SLOP`, because winning first is a stronger
+ * claim than being nearest: at the full slop a station a few pixels across
+ * took every click within a fingertip of it, and from far enough out that is
+ * most of the planet behind it. Eight pixels is enough to land on a truss.
+ */
+export const CRAFT_SLOP = 8
+
+const NONE: ReadonlySet<string> = new Set()
+
+/**
  * What the pointer is over, or `null`.
  *
  * The ordering rule is the interesting part. Sorting by distance alone means a
@@ -85,30 +97,36 @@ export const PICK_SLOP = 24
  * design question — `docs/design/planetarium.md` — and not something to change
  * here by adjusting a comparison.
  *
- * Spacecraft are the one exception, decided there too: one under the pointer
- * or within reach of it wins before any of this runs.
+ * Spacecraft are the one exception, decided there too: one whose model is on
+ * screen wins a click on it, or within `CRAFT_SLOP` of it, before any of this
+ * runs.
  */
 export function pick(
   candidates: readonly PickCandidate[],
   pointer: { readonly x: number; readonly y: number },
   slop: number = PICK_SLOP,
+  /** Spacecraft whose model is on screen, by address: `engine.stationsDrawn`. */
+  drawn: ReadonlySet<string> = NONE,
 ): PickCandidate | null {
   /*
-   * A spacecraft first, wherever the pointer is on it or within reach of it.
+   * A drawn spacecraft first, where the pointer is on it or within
+   * `CRAFT_SLOP` of it, whatever natural body is behind.
    *
    * The disk rule below gives every click on a station drawn against Earth
-   * to Earth: the pointer is inside both and Earth is larger, and a station a
-   * few pixels across is never the largest disk under anything. Unlike a moon
-   * over its planet, a spacecraft is reachable no other way from the sky, and
-   * it is always in front of what it is drawn against — one behind a body is
-   * no candidate at all. What it costs is that a click aimed at the planet
-   * within a fingertip of a station takes the station.
+   * to Earth: the pointer is inside both and Earth is larger, and a station is
+   * never the largest disk under anything. A drawn model is always in front of
+   * what it is drawn against — one behind a body is no candidate at all — so
+   * it wins there. A station that is only named has nothing on screen to aim
+   * at, and competes as a point does: inside a disk, the disk wins, as it
+   * does for a moon over its planet.
    */
   return (
     choose(
-      candidates.filter((candidate) => candidate.craft !== null),
+      candidates.filter(
+        (candidate) => candidate.craft !== null && drawn.has(candidate.address),
+      ),
       pointer,
-      slop,
+      CRAFT_SLOP,
     ) ?? choose(candidates, pointer, slop)
   )
 }
@@ -150,18 +168,31 @@ function choose(
  * A body below a pixel is still drawn as a point, which is why `pick` leaves
  * rubble clickable; a station below the point tier draws nothing, and an
  * empty-sky click beside Earth that selected it would be the sky lying the
- * other way. `shown` is what the scene drew, not what it was asked to: the
- * scene's `drawn` says a station is near enough and large enough, and the
- * model is 21.8 MB that may still be arriving, or may never.
+ * other way. `drawn` is what the scene drew, not what it was asked to: the
+ * scene's own `drawn` says a station is near enough and large enough, and the
+ * model is 21.8 MB that may still be arriving, or may never. A drawn model
+ * counts only where its disk meets the viewport: one just past the edge is
+ * drawn and unseen, and the slop would otherwise reach it.
  */
 export const clickable = (
   candidate: PickCandidate,
   named: ReadonlySet<string>,
-  shown: ReadonlySet<string>,
+  drawn: ReadonlySet<string>,
+  viewport: { readonly width: number; readonly height: number },
 ): boolean =>
   candidate.craft === null ||
-  shown.has(candidate.address) ||
-  named.has(candidate.address)
+  named.has(candidate.address) ||
+  (drawn.has(candidate.address) && meetsViewport(candidate, viewport))
+
+/** Whether any of a candidate's disk is inside the viewport. */
+const meetsViewport = (
+  candidate: PickCandidate,
+  viewport: { readonly width: number; readonly height: number },
+): boolean =>
+  candidate.x + candidate.radius >= 0 &&
+  candidate.x - candidate.radius <= viewport.width &&
+  candidate.y + candidate.radius >= 0 &&
+  candidate.y - candidate.radius <= viewport.height
 
 /**
  * Whether two labels overlap enough that drawing both is worse than one.

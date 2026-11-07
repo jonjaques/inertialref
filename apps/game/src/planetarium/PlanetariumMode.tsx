@@ -365,6 +365,7 @@ export function PlanetariumMode({
       const view = engine.view
       if (scene === null || view === null) return
       const size = { width: window.innerWidth, height: window.innerHeight }
+      const drawn = engine.stationsDrawn
       const hit = pick(
         projectScene(
           scene,
@@ -372,9 +373,11 @@ export function PlanetariumMode({
           size,
           engine.lens,
         ).filter((candidate) =>
-          clickable(candidate, named.current, engine.stationsDrawn),
+          clickable(candidate, named.current, drawn, size),
         ),
         point,
+        PICK_SLOP,
+        drawn,
       )
       if (hit !== null) focus(hit.address)
     },

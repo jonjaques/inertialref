@@ -312,40 +312,81 @@ describe('what a click may land on', () => {
     craft: { parent: 'earth', near: true },
   })
   const NONE: ReadonlySet<string> = new Set()
-  const SHOWN: ReadonlySet<string> = new Set(['iss'])
+  const DRAWN: ReadonlySet<string> = new Set(['iss'])
+  const VIEW = { width: 1000, height: 1000 }
 
   it('takes a spacecraft only while its model is on screen or its name is up', () => {
-    expect(clickable(iss, NONE, SHOWN)).toBe(true)
-    expect(clickable(iss, SHOWN, NONE)).toBe(true)
+    expect(clickable(iss, NONE, DRAWN, VIEW)).toBe(true)
+    expect(clickable(iss, DRAWN, NONE, VIEW)).toBe(true)
     // Near enough to be drawn and not drawn — the model still arriving, or
     // failed — is nothing on screen.
-    expect(clickable(iss, NONE, NONE)).toBe(false)
+    expect(clickable(iss, NONE, NONE, VIEW)).toBe(false)
     // A body below a pixel is still drawn as a point, so rubble stays
     // clickable whatever the label switches say.
     expect(
-      clickable(candidate({ address: 'bennu', kind: 'asteroid' }), NONE, NONE),
+      clickable(
+        candidate({ address: 'bennu', kind: 'asteroid' }),
+        NONE,
+        NONE,
+        VIEW,
+      ),
     ).toBe(true)
+  })
+
+  it('does not take a click for a drawn model just past the edge of the frame', () => {
+    // Drawn, and entirely outside the viewport: the slop reaches it from a
+    // click at the edge, and nothing of it can be seen.
+    const beyond = { ...iss, x: 1010, radius: 1.62 }
+    expect(clickable(beyond, NONE, DRAWN, VIEW)).toBe(false)
+    // Partly in the frame, it is something to aim at.
+    const across = { ...iss, x: 1005, radius: 10 }
+    expect(clickable(across, NONE, DRAWN, VIEW)).toBe(true)
   })
 
   it('selects nothing for a click on empty sky beside an unseen station', () => {
     const earth = candidate({ address: 'earth', x: 100, y: 100, radius: 20 })
-    const candidates = [earth, iss].filter((one) => clickable(one, NONE, NONE))
+    const candidates = [earth, iss].filter((one) =>
+      clickable(one, NONE, NONE, VIEW),
+    )
     expect(pick(candidates, { x: 500, y: 500 })).toBeNull()
   })
 
-  it('gives a station drawn against its planet the click, not the planet', () => {
+  it('gives a drawn station the click on it or right beside it, whatever is behind', () => {
     // The pointer is inside both disks and Earth's is far larger, which by the
     // disk rule alone gives every click on the station to Earth.
     const earth = candidate({ address: 'earth', x: 500, y: 500, radius: 400 })
-    expect(pick([earth, iss], { x: 505, y: 500 })?.address).toBe('iss')
-    // Within a fingertip of it, too: a station a few pixels across is aimed at,
-    // not hit.
-    expect(pick([earth, iss], { x: 520, y: 510 })?.address).toBe('iss')
-    // Beyond reach, the planet the pointer is on.
-    expect(pick([earth, iss], { x: 700, y: 700 })?.address).toBe('earth')
-    // And a moon over its planet keeps the disk rule it always had.
-    const moon = candidate({ address: 'moon', x: 505, y: 500, radius: 3 })
-    expect(pick([earth, moon], { x: 505, y: 500 })?.address).toBe('earth')
+    expect(pick([earth, iss], { x: 505, y: 500 }, 24, DRAWN)?.address).toBe(
+      'iss',
+    )
+    expect(pick([earth, iss], { x: 513, y: 500 }, 24, DRAWN)?.address).toBe(
+      'iss',
+    )
+    // Past its own reach, the planet the pointer is on.
+    expect(pick([earth, iss], { x: 520, y: 510 }, 24, DRAWN)?.address).toBe(
+      'earth',
+    )
+    // The rule is about what is in front, so a moon behind it loses the same.
+    const moon = candidate({ address: 'moon', x: 500, y: 500, radius: 40 })
+    expect(pick([moon, iss], { x: 505, y: 500 }, 24, DRAWN)?.address).toBe(
+      'iss',
+    )
+  })
+
+  it('leaves a planet its clicks when a station beside it is only named', () => {
+    // Earth seen from the Moon, 18 px across, with the ISS named on it and no
+    // model drawn: the station is a point, and inside a disk the disk wins.
+    const earth = candidate({ address: 'earth', x: 500, y: 500, radius: 9 })
+    const named = { ...iss, x: 505, radius: 0 }
+    expect(pick([earth, named], { x: 500, y: 500 }, 24, NONE)?.address).toBe(
+      'earth',
+    )
+    expect(pick([earth, named], { x: 505, y: 500 }, 24, NONE)?.address).toBe(
+      'earth',
+    )
+    // Off the disk, it is the nearest thing in reach, as any point is.
+    expect(pick([earth, named], { x: 507, y: 512 }, 24, NONE)?.address).toBe(
+      'iss',
+    )
   })
 })
 

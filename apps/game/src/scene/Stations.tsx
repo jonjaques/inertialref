@@ -1,6 +1,6 @@
 import { getLogger } from '@inertialref/shared'
 import { useThree } from '@react-three/fiber'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Group, type Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import {
@@ -42,6 +42,9 @@ export function Stations({ engine }: { engine: GameEngine }) {
   const failed = useMemo(() => new Set<string>(), [])
   // Reused across frames, for the reason `SurfaceStructures` gives.
   const present = useMemo(() => new Set<string>(), [])
+  // Unmounted, nothing is drawn: a click before the next mount's first frame
+  // must not read the last one's set.
+  useEffect(() => () => engine.stationsDrawn.clear(), [engine])
 
   useTimedFrame('stations', () => {
     // Rebuilt every frame from what is actually visible, for the click filter.

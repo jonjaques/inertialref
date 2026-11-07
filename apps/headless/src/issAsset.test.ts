@@ -427,6 +427,19 @@ describe('the shipped ISS', () => {
       'STBD_ALPHA_ROT',
     ])
     for (const rotor of rotors) expect(rotor.wings).toHaveLength(4)
+    // Distinct names, in the file and among the joints: the app finds each
+    // joint's node by name and the solver keys each angle by it, so a
+    // duplicate would turn one node and drop the other wing's angle.
+    const names = rotors.flatMap((rotor) => [
+      rotor.name,
+      ...rotor.wings.map((wing) => wing.name),
+    ])
+    expect(new Set(names).size).toBe(10)
+    for (const name of names)
+      expect(
+        iss.nodes.filter((node) => node.name === name),
+        name,
+      ).toHaveLength(1)
 
     const parentOf = new Map<number, number>()
     iss.nodes.forEach((node, index) => {

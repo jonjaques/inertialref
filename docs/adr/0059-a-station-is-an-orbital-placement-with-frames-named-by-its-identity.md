@@ -138,11 +138,12 @@ mast (`solarArrays.ts`).
   the 8, 18 and 40 a density allows, except a subject spacecraft, which goes
   first so the planet behind it cannot take its ring.
 - **A spacecraft is clicked only where it can be seen**: while its model is on
-  screen — what the scene drew, not what it asked for, so not while 21.8 MB is
-  still arriving — or its name is on the sky. A body below a pixel is still a
-  point; a station below the point tier draws nothing. Where one can take a
-  click it takes it first: the largest disk under the pointer wins otherwise,
-  and a station drawn against Earth is never the largest.
+  screen — what the scene drew inside the frame, so not while 21.8 MB is still
+  arriving — or its name is on the sky. A body below a pixel is still a point;
+  a station below the point tier draws nothing. A drawn model wins a click on
+  it or within 8 px of it, whatever is behind: the largest disk under the
+  pointer wins otherwise, and a station drawn against Earth is never the
+  largest. A station only named competes as a point does.
 - **Its orbit trace is context only for what it goes round**, as the rubble's
   is: drawn for Earth or the station, never from the Moon. The chip is
   _Spacecraft_, because _Satellites_ already means moons on the object panel.
