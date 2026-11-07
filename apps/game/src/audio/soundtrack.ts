@@ -117,6 +117,18 @@ const VOICE_UP = 1.5
 /** The fade on a pause, and on the game taking the music away. */
 const PAUSE_FADE = 0.3
 const AWAY_FADE = 1.2
+/**
+ * How long after the audio unlocks a toggle is not taken as a pause, in ms.
+ *
+ * The gesture that unlocks is very often the Play button or the play key
+ * itself, and it arrives twice: the unlock starts the music as the pointer
+ * or the key goes down, and the click or the key's action then reaches
+ * `toggle`, which finds the music started and would stop it again. Half a
+ * second covers a click held down; a deliberate pause that soon after a
+ * deliberate play is not something a listener does. An explicit `pause()` —
+ * the operating system's control, the harness — is never held back.
+ */
+const UNLOCK_GRACE = 500
 /** The fade a first track and a resume come up on. */
 const ENTRY_FADE = 2
 /** How far ahead of its transition the next track is loaded. */
@@ -200,6 +212,9 @@ export class Soundtrack {
    */
   #announced: { readonly deck: Deck; readonly track: SoundtrackTrack } | null =
     null
+  /** Inside `UNLOCK_GRACE` of the unlock: a toggle does not pause. */
+  #settling = false
+  #settleTimer: ReturnType<typeof setTimeout> | undefined
   #quietTimer: ReturnType<typeof setTimeout> | undefined
   #releaseTimer: ReturnType<typeof setTimeout> | undefined
   #reason: string | null = null
@@ -309,6 +324,11 @@ export class Soundtrack {
         .catch(() => {})
     }
     this.#unlocked = true
+    this.#settling = true
+    clearTimeout(this.#settleTimer)
+    this.#settleTimer = setTimeout(() => {
+      this.#settling = false
+    }, UNLOCK_GRACE)
     this.#reconcile()
   }
 
@@ -338,8 +358,12 @@ export class Soundtrack {
    */
   toggle(): void {
     const status = this.#store.getState().playback.status
-    if (status === 'playing' || status === 'loading') this.pause()
-    else this.play()
+    if (status === 'playing' || status === 'loading') {
+      // The unlocking press itself, arriving after its unlock started the
+      // music (`UNLOCK_GRACE`): it was a Play, and it has been answered.
+      if (this.#settling) return
+      this.pause()
+    } else this.play()
   }
 
   next(): void {

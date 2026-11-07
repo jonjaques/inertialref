@@ -392,9 +392,42 @@ describe('the soundtrack', () => {
     player.setPresence(HERE)
     player.unlock()
     expect(playback().status).toBe('loading')
+    // A Pause pressed after the unlocking gesture's own moment, which the
+    // next test is about.
+    vi.advanceTimersByTime(600)
     player.toggle()
     await settle()
     expect(elements.every((element) => element.paused)).toBe(true)
+    expect(playback().status).toBe('paused')
+  })
+
+  /*
+   * The first gesture is often Play itself: the press going down unlocks and
+   * starts the music, and its click — or the play key's action — reaches
+   * `toggle` a moment later. Taken as a pause, the music starts and stops.
+   */
+  it('takes the unlocking press as the start it was, not as a pause', async () => {
+    const { player, playback, active } = rig()
+    player.setPresence(HERE)
+    await settle()
+    player.unlock()
+    player.toggle()
+    await settle()
+    expect(playback().status).toBe('playing')
+    expect(active().paused).toBe(false)
+    // After the moment, a toggle is a pause again.
+    vi.advanceTimersByTime(600)
+    player.toggle()
+    expect(playback().status).toBe('paused')
+  })
+
+  it('never holds back an explicit pause, even in the unlock’s moment', async () => {
+    const { player, playback } = rig()
+    player.setPresence(HERE)
+    await settle()
+    player.unlock()
+    player.pause()
+    await settle()
     expect(playback().status).toBe('paused')
   })
 
