@@ -220,6 +220,10 @@ export const WINGS = [
             'docs/adr/0058-settings-hold-the-person-and-the-viewport-holds-its-instrument.md',
             'Settings and the viewport',
           ],
+          [
+            'docs/adr/0059-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md',
+            'Stations',
+          ],
         ],
       },
     ],
