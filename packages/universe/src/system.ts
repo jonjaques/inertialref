@@ -53,6 +53,7 @@ import { type SystemStub, systemSeedOf } from './galaxy.ts'
 import { SOL, solarSystem } from './solar/system.ts'
 import type { LinearRgb } from './catalog/photometry.ts'
 import type { CatalogPlanet } from './catalog/starCatalog.ts'
+import type { OrbitalPlacement } from './stations.ts'
 import { ROUNDING_RADIUS } from './rounding.ts'
 import { GENERATION_VERSIONS } from './versions.ts'
 
@@ -438,6 +439,11 @@ export interface StarSystem {
   readonly planets: readonly Body[]
   /** How many of `planets` are confirmed rather than projected. */
   readonly observedPlanets: number
+  /**
+   * What goes round its bodies and its star that is not a body: Sol's
+   * stations, from their element sets. In issue order within each parent.
+   */
+  readonly stations: readonly OrbitalPlacement[]
   readonly generation: Readonly<Record<string, number>>
 }
 
@@ -1703,6 +1709,13 @@ export function generateSystem(
     star,
     planets,
     observedPlanets: observed.length,
+    /*
+     * None yet. The outposts and automated installations
+     * `docs/design/content.md` plans for generated systems are the next
+     * source, and with them the content decision about what such a station
+     * reads as — not `observed`, and not `projected` either.
+     */
+    stations: [],
     generation: GENERATION_VERSIONS,
   }
 }
