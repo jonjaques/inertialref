@@ -21,6 +21,7 @@ import { useInputDevice, useKeymap } from '../input/useKeymap.ts'
 import { usePadLive } from '../input/usePadLive.ts'
 import { Section } from '../hud/Section.tsx'
 import { CONTROLS_PAD, usePersistentState } from '../state/preferences.ts'
+import { defaultPad } from './settingsDefaults.ts'
 
 /*
  * The controller: a picture of it, what each control does in each mode, and
@@ -64,10 +65,17 @@ export function ControllerSection() {
   const shown = live?.family ?? family
 
   const assign = (id: string, control: PadControl): void => {
-    setOverrides((held) => ({ ...held, [id]: control }))
+    // The act's own default is a return to it, not an override that copies
+    // it — the keyboard editor's rule, for the keyboard editor's reasons.
+    const home = control === defaultPad(id)
+    setOverrides((held) =>
+      home ? withoutOverride(held, id) : { ...held, [id]: control },
+    )
     setCapturing(null)
     const action = findAction(id)
-    const clash = clashesIn({ ...overrides, [id]: control }).get(id)
+    const clash = clashesIn(
+      home ? withoutOverride(overrides, id) : { ...overrides, [id]: control },
+    ).get(id)
     setSaid(
       clash === undefined
         ? `${action?.label ?? id} is now ${padLabel(control, shown)}`
@@ -150,14 +158,22 @@ export function ControllerSection() {
         capturing={capturing}
         onCapture={(id) => {
           setCapturing(id)
-          setSaid(null)
+          setSaid(
+            id === null
+              ? null
+              : `Press a control for ${findAction(id)?.label ?? id}, on the pad or on the picture.`,
+          )
         }}
         onUnbind={(id) => {
-          setOverrides((held) => ({ ...held, [id]: null }))
+          setOverrides((held) =>
+            defaultPad(id) === null
+              ? withoutOverride(held, id)
+              : { ...held, [id]: null },
+          )
           setCapturing(null)
           setSaid(`${findAction(id)?.label ?? id} has no control`)
         }}
-        onReset={(id) => setOverrides(({ [id]: _dropped, ...rest }) => rest)}
+        onReset={(id) => setOverrides((held) => withoutOverride(held, id))}
         onHover={setHovered}
       />
 
@@ -185,4 +201,13 @@ function clashesIn(
     }
   }
   return found
+}
+
+/** A binding table without one act's override, which is "the default". */
+function withoutOverride(
+  held: Readonly<Record<string, string | null>>,
+  id: string,
+): Readonly<Record<string, string | null>> {
+  const { [id]: _dropped, ...rest } = held
+  return rest
 }

@@ -8,6 +8,7 @@ import {
   RENDER_SURFACE,
   RENDER_THRUSTER_VARIATION,
   resetPreference,
+  restoreFields,
   usePersistentState,
 } from '../state/preferences.ts'
 
@@ -69,7 +70,7 @@ export function useDisplayDefaults(): DisplayDefaults {
   const [surface] = usePersistentState(RENDER_SURFACE)
   const [ship] = usePersistentState(RENDER_SHIP)
   const [thrusters] = usePersistentState(RENDER_THRUSTER_VARIATION)
-  const [sensor, setSensor] = usePersistentState(RENDER_SENSOR)
+  const [sensor] = usePersistentState(RENDER_SENSOR)
   const rows = {
     hdr: hdr !== RENDER_HDR.initial,
     peak: sensor.peak !== RENDER_SENSOR.initial.peak,
@@ -93,12 +94,7 @@ export function useDisplayDefaults(): DisplayDefaults {
     changed: Object.values(rows).filter(Boolean).length,
     restore: () => {
       for (const definition of WHOLE) resetPreference(definition)
-      setSensor((held) => ({
-        ...held,
-        peak: RENDER_SENSOR.initial.peak,
-        rate: RENDER_SENSOR.initial.rate,
-        range: RENDER_SENSOR.initial.range,
-      }))
+      restoreFields(RENDER_SENSOR, ['peak', 'rate', 'range'])
     },
   }
 }

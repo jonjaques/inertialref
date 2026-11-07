@@ -1,6 +1,10 @@
-import { CAMERA_MODES, DEFAULT_SENSOR_SETTINGS } from '@inertialref/rendering'
+import { CAMERA_MODES } from '@inertialref/rendering'
 import { Slider } from '@/components/ui/slider'
-import { RENDER_SENSOR, usePersistentState } from '../state/preferences.ts'
+import {
+  RENDER_SENSOR,
+  restoreFields,
+  usePersistentState,
+} from '../state/preferences.ts'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { Action } from './Action.tsx'
 import { releaseFocus } from './focus.ts'
@@ -22,7 +26,16 @@ import { Section } from './Section.tsx'
  * the peak luminance cap, rather than of one photograph. What stays is what a
  * picture is: the mode, the compensation, the white balance.
  */
-export function SensorSection() {
+export function SensorSection({
+  held = false,
+}: {
+  /**
+   * Whether a fixed Milky Way view holds the exposure. The Lens panel says so
+   * in its own words at its top, so the authored-exposure line below would be
+   * the same fact a second time.
+   */
+  held?: boolean
+}) {
   const [settings, set] = usePersistentState(RENDER_SENSOR)
   const exposure = useEngine(
     useShallow((snapshot) =>
@@ -105,7 +118,7 @@ export function SensorSection() {
           />
         </div>
       )}
-      {exposure?.override === 'staging' && (
+      {exposure?.override === 'staging' && !held && (
         <p className="type-ui text-pretty text-slate-300">
           Authored exposure is active. Your camera mode resumes when it ends.
         </p>
@@ -145,17 +158,18 @@ export function SensorSection() {
         </div>
       ))}
       <div className="flex justify-end">
+        {/* "Exposure", because it resets every row in this section and
+            not the mode alone. The peak and the comfort clamps are the
+            person's, in Settings, and stay as they were. */}
         <Action
-          label="Reset camera mode"
-          // The photograph's settings, not the person's: the peak and the
-          // comfort clamps are Settings' and stay as they were.
+          label="Reset exposure"
           onClick={() =>
-            set((held) => ({
-              ...DEFAULT_SENSOR_SETTINGS,
-              peak: held.peak,
-              rate: held.rate,
-              range: held.range,
-            }))
+            restoreFields(RENDER_SENSOR, [
+              'mode',
+              'look',
+              'compensation',
+              'balance',
+            ])
           }
         />
       </div>

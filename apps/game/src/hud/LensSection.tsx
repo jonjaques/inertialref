@@ -85,14 +85,17 @@ export function LensSection({
     lens.iso !== DEFAULT_LENS.iso
   return (
     <>
-      <SensorSection />
+      <SensorSection held={held} />
       <Section
         id="camera.lens"
         title="Lens"
         // After zoom — what the picture is actually taken at, and what every
         // reading in the Optics section is computed from. The glass alone reads
         // 19 mm beside an 8.5° field, which is two lenses on one panel.
-        trailing={`${effectiveFocalLength(camera.lens).toFixed(0)} mm${custom ? ' · custom' : ''}`}
+        // While a Milky Way view holds the optics the number here is the
+        // kept lens, and the Optics readings under it are the view's — so the
+        // heading says which, or the panel shows two lenses as one.
+        trailing={`${effectiveFocalLength(camera.lens).toFixed(0)} mm${held ? ' · kept' : custom ? ' · custom' : ''}`}
       >
         {/*
          * Label and reading on one line, the travel on the next.

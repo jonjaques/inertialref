@@ -90,9 +90,10 @@ export function GraphicsPanel({
   const { rows: changed } = useDisplayDefaults()
   const mode = render.output?.mode ?? null
   /*
-   * Whether the comfort clamps below drive anything. Automatic adapts unless
-   * this display cannot meter it (WebGL), in which case the camera falls back
-   * to the lens's own exposure and the clamps have nothing to clamp.
+   * Whether the comfort clamps below drive anything right now, which decides
+   * the line that says when they apply. Automatic adapts unless this display
+   * cannot meter it (WebGL), in which case the camera falls back to the lens's
+   * own exposure and the clamps have nothing to clamp.
    */
   const automaticAvailable = useEngine(
     (snapshot) => snapshot.exposure?.automaticAvailable,
@@ -167,24 +168,33 @@ export function GraphicsPanel({
             onChange={render.onPreference}
           />
         </SettingRow>
-        {mode === 'extended' && (
-          <SettingRow
+        {/*
+         * Drawn in every output mode, and live only where there is headroom to
+         * cap. Hidden under SDR, a peak chosen on an HDR display was a value
+         * the page's restore counted and reset while no row on the page showed
+         * it — a "restore 4 settings" beside three marks.
+         */}
+        <SettingRow
+          label="Peak luminance"
+          changed={changed.peak}
+          detail={
+            mode === 'extended'
+              ? 'How far above white the brightest highlight may reach on this display.'
+              : 'How far above white the brightest highlight may reach. Applies with extended HDR output.'
+          }
+        >
+          <SliderControl
             label="Peak luminance"
-            changed={changed.peak}
-            detail="How far above white the brightest highlight may reach on this display."
-          >
-            <SliderControl
-              label="Peak luminance"
-              min={1}
-              max={2}
-              step={0.05}
-              value={sensor.peak}
-              reading={`${sensor.peak.toFixed(2)}×`}
-              spoken={`${sensor.peak.toFixed(2)} times white`}
-              onChange={(peak) => setSensor((held) => ({ ...held, peak }))}
-            />
-          </SettingRow>
-        )}
+            min={1}
+            max={2}
+            step={0.05}
+            value={sensor.peak}
+            reading={`${sensor.peak.toFixed(2)}×`}
+            spoken={`${sensor.peak.toFixed(2)} times white`}
+            disabled={mode !== 'extended'}
+            onChange={(peak) => setSensor((held) => ({ ...held, peak }))}
+          />
+        </SettingRow>
         {/*
          * Display gamma. The tone curve is authored for one room and cannot
          * know the viewer's, so where the midtones sit is theirs: a power on
@@ -217,16 +227,18 @@ export function GraphicsPanel({
        * uncomfortable, so they are the person's and live here, beside the peak
        * cap — not in a Lens panel that opens one photograph at a time.
        *
-       * Drawn in every camera mode and disabled outside Automatic, with the
-       * reason: Enhanced composites rather than adapts and Manual is the lens,
-       * so in either a live slider would move nothing, and a hidden one would
-       * be a promise somebody could not find until they changed modes.
+       * Live in every camera mode, and the line says when they apply. The
+       * default mode is Enhanced, which composites rather than adapts; with
+       * the sliders disabled outside Automatic, setting a protection meant
+       * first switching modes in a viewport's panel — from the menu, not at
+       * all — which ties the person's choice back to the instrument this page
+       * exists to keep it apart from. A value set now is the one Automatic
+       * uses when it is chosen.
        */}
       <Section id="graphics.comfort" title="Comfort">
         {!adapting && (
           <p className="type-ui py-1 text-pretty text-slate-400">
-            These apply in the automatic camera mode, set in a viewport’s Lens
-            panel.
+            These apply in the automatic camera mode.
           </p>
         )}
         <SettingRow
@@ -241,7 +253,6 @@ export function GraphicsPanel({
             step={0.1}
             value={sensor.rate}
             reading={sensor.rate === 0 ? 'Hold' : `${sensor.rate.toFixed(1)}×`}
-            disabled={!adapting}
             onChange={(rate) => setSensor((held) => ({ ...held, rate }))}
           />
         </SettingRow>
@@ -257,7 +268,6 @@ export function GraphicsPanel({
             step={1}
             value={sensor.range.bright}
             reading={`${sensor.range.bright} EV`}
-            disabled={!adapting}
             onChange={(bright) =>
               setSensor((held) => ({
                 ...held,
@@ -278,7 +288,6 @@ export function GraphicsPanel({
             step={1}
             value={sensor.range.dark}
             reading={`${sensor.range.dark} EV`}
-            disabled={!adapting}
             onChange={(dark) =>
               setSensor((held) => ({ ...held, range: { ...held.range, dark } }))
             }

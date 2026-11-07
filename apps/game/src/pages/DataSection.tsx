@@ -3,14 +3,13 @@ import { Download, Upload } from 'lucide-react'
 import { Action } from '../hud/Action.tsx'
 import { Section } from '../hud/Section.tsx'
 import { SettingRow } from '../hud/SettingRow.tsx'
+import { ConfirmAction } from './ConfirmAction.tsx'
 import {
   exportPreferences,
   type ImportPlan,
   importPreferences,
   PERSONAL_PICTURES,
   planImport,
-  PREFERENCE_GROUPS,
-  REGISTRY,
   resetPreferences,
 } from '../state/preferences.ts'
 
@@ -51,7 +50,6 @@ export function DataSection({
   /** The parsed file, held between the preview and the apply. */
   const pending = useRef<unknown>(null)
   const [done, setDone] = useState<string | null>(null)
-  const [confirming, setConfirming] = useState(false)
 
   const save = (): void => {
     /*
@@ -217,43 +215,20 @@ export function DataSection({
           label="Reset everything"
           detail="Every setting back to its default — the display, the bindings, the layers and where the panels sit. Saved shots and saved games stay."
         >
-          {/* Confirmed in place rather than through a dialog, because this
-              page is already inside one and a dialog over a dialog is a scrim
-              over a scrim. The destructive label only appears once it has been
-              asked for, so the resting state cannot be pressed by accident. */}
-          {confirming ? (
-            <>
-              <Action
-                label="Yes, reset everything"
-                tone="primary"
-                title="Forget every setting this browser holds"
-                onClick={() => {
-                  resetPreferences([PERSONAL_PICTURES])
-                  setConfirming(false)
-                  setDone('every setting back to its default')
-                  onNotice('every setting back to its default')
-                }}
-              />
-              <Action
-                label="Keep them"
-                title="Leave everything as it is"
-                onClick={() => setConfirming(false)}
-              />
-            </>
-          ) : (
-            <Action
-              label="Reset everything"
-              title="Forget every setting this browser holds"
-              onClick={() => setConfirming(true)}
-            />
-          )}
+          <ConfirmAction
+            label="Reset everything"
+            title="Forget every setting this browser holds"
+            question="Reset every setting?"
+            act="Reset"
+            actTitle="Forget every setting this browser holds; saved shots stay"
+            onAct={() => {
+              resetPreferences([PERSONAL_PICTURES])
+              setDone('every setting back to its default')
+              onNotice('every setting back to its default')
+            }}
+          />
         </SettingRow>
       </Section>
-
-      <p className="type-micro px-2.5 text-slate-400">
-        {REGISTRY.length} settings in {PREFERENCE_GROUPS.length} groups, plus
-        each panel’s and each mode’s own.
-      </p>
     </div>
   )
 }

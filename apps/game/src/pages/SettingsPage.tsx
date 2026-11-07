@@ -66,7 +66,7 @@ const SECTIONS = [
     id: 'interface',
     title: 'Interface',
     icon: PanelsTopLeft,
-    about: 'The menu bar, where the panels go back to, and the hints.',
+    about: 'Where the menu bar sits, and where the panels go back to.',
   },
   {
     id: 'controls',

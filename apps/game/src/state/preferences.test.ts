@@ -31,6 +31,7 @@ import {
   REGISTRY,
   resetPreference,
   resetPreferences,
+  restoreFields,
   SECTION_OPEN,
   subscribe,
   write,
@@ -531,5 +532,40 @@ describe('a scoped reset', () => {
     resetPreferences([PERSONAL_PICTURES])
     expect(read(PLANETARIUM_LABELS)).toBe(true)
     expect(read(PERSONAL_PICTURES)).toEqual([shot])
+  })
+})
+
+describe('restoring some fields of a record', () => {
+  // `render.sensor` is a photograph's processing and a person's comfort in one
+  // record, and each settings surface restores only the fields it draws.
+  const comfort = ['peak', 'rate', 'range'] as const
+
+  it('keeps the fields it was not asked for', () => {
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode: 'manual', rate: 2 })
+    restoreFields(RENDER_SENSOR, comfort)
+    expect(read(RENDER_SENSOR)).toEqual({
+      ...RENDER_SENSOR.initial,
+      mode: 'manual',
+    })
+  })
+
+  it('removes the key when what remains is the default', () => {
+    // "Never chose" has to keep meaning the default, or a default that later
+    // moves skips everybody who restored once.
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, rate: 2 })
+    restoreFields(RENDER_SENSOR, comfort)
+    expect(read(RENDER_SENSOR)).toEqual(RENDER_SENSOR.initial)
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'render.sensor',
+    )
+  })
+
+  it('writes nothing when the fields already were their defaults', () => {
+    // Restoring the display page after changing only its gamma must not pin
+    // today's sensor defaults as a choice.
+    restoreFields(RENDER_SENSOR, comfort)
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'render.sensor',
+    )
   })
 })

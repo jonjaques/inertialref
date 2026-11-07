@@ -540,18 +540,28 @@ describe('the author’s instruments', () => {
         }),
       )
       write(RENDER_SENSOR, RENDER_SENSOR.initial)
-      // Drawn in every mode, so the promise can be found before the mode it
-      // applies in is chosen, and live only where it drives anything.
+      // Drawn and live in every mode: a person sets their protection before
+      // choosing the mode it applies in — from the menu there is no mode to
+      // choose — and the line says when it applies.
       for (const label of ['Adaptation rate', 'Bright range', 'Dark range']) {
         const thumb = new RegExp(
           `<span[^>]*role="slider"[^>]*aria-label="${label}"[^>]*>`,
         ).exec(markup)?.[0]
         expect(thumb, label).toBeDefined()
-        expect(thumb?.includes('data-disabled')).toBe(mode !== 'automatic')
+        expect(thumb?.includes('data-disabled'), label).toBe(false)
       }
       expect(markup.includes('These apply in the automatic camera mode')).toBe(
         mode !== 'automatic',
       )
+      // The peak is drawn whatever the output, and live only with headroom to
+      // cap: hidden, a changed peak was a value the page's restore counted
+      // while no row showed it. With no renderer yet there is no headroom.
+      const peak =
+        /<span[^>]*role="slider"[^>]*aria-label="Peak luminance"[^>]*>/.exec(
+          markup,
+        )?.[0]
+      expect(peak).toBeDefined()
+      expect(peak?.includes('data-disabled')).toBe(true)
     },
   )
 

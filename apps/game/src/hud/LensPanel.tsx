@@ -58,8 +58,8 @@ export function LensPanel({
         >
           The Milky Way view exposes through its own lens —{' '}
           {formatShutter(instrument.lens.shutter)} at f/
-          {instrument.lens.fStop}, ISO {instrument.lens.iso}. Yours is kept, and
-          comes back when you look at something else.
+          {instrument.lens.fStop}, ISO {instrument.lens.iso}. Your lens and
+          camera mode are kept, and come back when you look at something else.
         </p>
       )}
       <LensSection held={instrument !== null}>
@@ -91,7 +91,10 @@ export function LensPanel({
               max={100}
               step={5}
               value={[percent]}
-              disabled={!flare}
+              // Off with the flare in Settings, and while a Milky Way view
+              // holds the optics: its instrument draws no flare at all, so the
+              // slider would move nothing either way.
+              disabled={!flare || instrument !== null}
               // Named by the word above it, as the lens channels are; the
               // sentence that says what glare is goes in the description.
               aria-labelledby={id}

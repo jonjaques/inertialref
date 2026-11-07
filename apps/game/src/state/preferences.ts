@@ -1172,6 +1172,35 @@ export function resetPreference(definition: AnyPreference): void {
 }
 
 /**
+ * Some fields of a record preference back to their defaults, the rest kept.
+ *
+ * For a record two pages own between them: `render.sensor` is a photograph's
+ * processing and a person's comfort, and each side's restore must reach only
+ * the fields it draws. Built on `resetPreference`'s rule — when what remains is
+ * the default the key is removed rather than written, so "never chose" keeps
+ * meaning the default — and it writes nothing at all when the fields already
+ * were, so restoring gamma does not pin today's sensor defaults as a choice.
+ *
+ * The record is read from storage at the call rather than taken from a hook's
+ * render, which is what keeps it from composing against a captured snapshot
+ * (rule 43): every write a hook has committed is on disk by the time a person
+ * presses anything.
+ */
+export function restoreFields<T extends object>(
+  definition: Preference<T>,
+  fields: readonly (keyof T)[],
+): void {
+  const held = read(definition)
+  const next: T = { ...held }
+  for (const field of fields) next[field] = definition.initial[field]
+  if (!differs(next, definition.initial)) {
+    if (readRaw(definition.key) !== MISSING) resetPreference(definition)
+    return
+  }
+  if (differs(next, held)) write(definition, next)
+}
+
+/**
  * Whether a preference holds something other than its default.
  *
  * Structural rather than by reference, because the record-shaped preferences —

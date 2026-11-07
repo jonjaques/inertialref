@@ -21,8 +21,8 @@ const MODE_NAMES: Readonly<Record<Exclude<AppMode, 'menu'>, string>> = {
 }
 
 /**
- * The chrome around the scene: where the menu bar sits, where the panels go
- * back to, and the one hint that says how to look.
+ * The chrome around the scene: where the menu bar sits, and where the panels
+ * go back to, with the one hint that says how to look.
  *
  * Every row is a preference the build already keeps. The menu bar's
  * placement is chosen here and only here: it was a glyph on the bar itself —
@@ -63,6 +63,10 @@ export function InterfaceSection({
         </SettingRow>
       </Section>
 
+      {/*
+       * Where the panels go back to, and the one hint that introduces them:
+       * both are about the workspace a mode opens with, so one heading.
+       */}
       <Section id="settings.interface.panels" title="Panels">
         <SettingRow
           label="Layout"
@@ -87,15 +91,12 @@ export function InterfaceSection({
             }}
           />
         </SettingRow>
-      </Section>
-
-      <Section id="settings.interface.hints" title="Hints">
         <SettingRow
           label="Planetarium gestures"
           detail="The line over the scene that says how to orbit, zoom and focus. It leaves on the first gesture."
         >
           <Action
-            label={hinted ? 'Show again' : 'Showing'}
+            label="Show again"
             disabled={!hinted}
             title={
               hinted

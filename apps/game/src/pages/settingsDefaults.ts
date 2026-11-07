@@ -11,6 +11,8 @@ import {
   resetPreference,
   usePersistentState,
 } from '../state/preferences.ts'
+import { formatChord } from '../input/chord.ts'
+import { findAction } from '../input/keymap.ts'
 import type { AppMode } from './paths.ts'
 
 /**
@@ -29,11 +31,41 @@ export interface PageDefaults {
   readonly restore: () => void
 }
 
-/** The bindings: one row per act that has been rebound or unbound. */
+/** The chord an act ships with, as storage writes one, or null. */
+export const defaultChord = (id: string): string | null => {
+  const chord = findAction(id)?.chord ?? null
+  return chord === null ? null : formatChord(chord)
+}
+
+/** The pad control an act ships with, or null. */
+export const defaultPad = (id: string): string | null =>
+  findAction(id)?.pad ?? null
+
+/**
+ * Whether a stored binding is a change from the act's default.
+ *
+ * By value rather than by presence: an override that names the default chord
+ * is not a change anybody can see, and counting it put a mark and a "1" on a
+ * row whose key had been "rebound" to the key it already had. The editors
+ * also remove such an override when they would have written one.
+ */
+export const keyChanged = (
+  id: string,
+  stored: string | null | undefined,
+): boolean => stored !== undefined && stored !== defaultChord(id)
+
+export const padChanged = (
+  id: string,
+  stored: string | null | undefined,
+): boolean => stored !== undefined && stored !== defaultPad(id)
+
+/** The bindings: one row per act whose key differs from its default. */
 export function useKeyDefaults(): PageDefaults {
   const [overrides] = usePersistentState(CONTROLS_KEYMAP)
   return {
-    changed: Object.keys(overrides).length,
+    changed: Object.entries(overrides).filter(([id, stored]) =>
+      keyChanged(id, stored),
+    ).length,
     restore: () => resetPreference(CONTROLS_KEYMAP),
   }
 }
@@ -48,7 +80,9 @@ export function usePadDefaults(): PageDefaults {
     differs(tuning[field], CONTROLS_PAD_TUNING.initial[field]),
   ).length
   return {
-    changed: Object.keys(overrides).length + tuned,
+    changed:
+      Object.entries(overrides).filter(([id, stored]) => padChanged(id, stored))
+        .length + tuned,
     restore: () => {
       resetPreference(CONTROLS_PAD)
       resetPreference(CONTROLS_PAD_TUNING)

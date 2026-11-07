@@ -1,6 +1,7 @@
-import { RotateCcw, X } from 'lucide-react'
-import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { Action } from '../hud/Action.tsx'
+import { FOCUS_RING } from '../hud/focus.ts'
 import { SettingRow } from '../hud/SettingRow.tsx'
+import { padChanged } from '../pages/settingsDefaults.ts'
 import {
   ACTIONS,
   groupsOf,
@@ -9,7 +10,7 @@ import {
 } from './keymap.ts'
 import type { Callout } from './controllerLayout.ts'
 import { calloutOf } from './controllerLabels.ts'
-import type { PadFamily } from './padFamily.ts'
+import { type PadFamily, padLabel } from './padFamily.ts'
 import { PadGlyph } from './PadGlyph.tsx'
 
 /**
@@ -61,7 +62,8 @@ export function PadBindingList({
               const bound = bindings.get(action.id) ?? null
               const listening = capturing === action.id
               const clash = clashes.get(action.id)
-              const changed = overrides[action.id] !== undefined
+              const changed = padChanged(action.id, overrides[action.id])
+              const key = `pad-${action.id}`
               return (
                 <SettingRow
                   key={action.id}
@@ -72,7 +74,7 @@ export function PadBindingList({
                   }
                   detail={
                     clash === undefined ? undefined : (
-                      <span className="text-amber-300">
+                      <span id={`${key}-clash`} className="text-amber-300">
                         Shares its control with {clash}.
                       </span>
                     )
@@ -80,7 +82,18 @@ export function PadBindingList({
                 >
                   <button
                     type="button"
-                    aria-label={`Rebind ${action.label} on the controller`}
+                    id={key}
+                    // The control is in the name — the name is what a screen
+                    // reader tabbing down the column hears — and the clash,
+                    // when there is one, describes it.
+                    aria-label={
+                      listening
+                        ? `Press a control for ${action.label}`
+                        : `${action.label}: ${bound === null ? 'unbound' : padLabel(bound, family)}. Press to rebind`
+                    }
+                    aria-describedby={
+                      clash === undefined ? undefined : `${key}-clash`
+                    }
                     aria-pressed={listening}
                     onClick={() => onCapture(listening ? null : action.id)}
                     onFocus={() =>
@@ -113,33 +126,29 @@ export function PadBindingList({
                       <PadGlyph control={bound} family={family} />
                     )}
                   </button>
-                  <span className="flex shrink-0 items-center">
-                    <button
-                      type="button"
-                      aria-label={`Unbind ${action.label} on the controller`}
-                      title="Take the control off this act"
-                      disabled={bound === null}
-                      onClick={(event) => {
-                        releaseFocus(event)
-                        onUnbind(action.id)
-                      }}
-                      className={`flex size-7 items-center justify-center rounded text-slate-400 opacity-0 transition-[color,opacity] group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:text-sky-200 focus-visible:opacity-100 disabled:invisible ${FOCUS_RING}`}
-                    >
-                      <X aria-hidden className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Reset ${action.label} on the controller to its default`}
-                      title="Back to the default"
-                      disabled={!changed}
-                      onClick={(event) => {
-                        releaseFocus(event)
-                        onReset(action.id)
-                      }}
-                      className={`flex size-7 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-200 disabled:invisible ${FOCUS_RING}`}
-                    >
-                      <RotateCcw aria-hidden className="size-3.5" />
-                    </button>
+                  {/* The keyboard editor's two verbs, in the same slots and
+                      on the same rules — see `ControlsSection`. */}
+                  <span className="flex shrink-0 items-center gap-1">
+                    <span className="flex w-14 justify-end">
+                      <Action
+                        label="Unbind"
+                        title={`Take the control off ${action.label}`}
+                        disabled={bound === null}
+                        then={() => document.getElementById(key)}
+                        onClick={() => onUnbind(action.id)}
+                        className="opacity-0 transition-[color,border-color,background-color,opacity,scale] group-focus-within/row:opacity-100 group-hover/row:opacity-100 focus-visible:opacity-100 disabled:invisible pointer-coarse:opacity-100"
+                      />
+                    </span>
+                    <span className="flex w-12 justify-end">
+                      <Action
+                        label="Reset"
+                        title={`${action.label} back to its default`}
+                        disabled={!changed}
+                        then={() => document.getElementById(key)}
+                        onClick={() => onReset(action.id)}
+                        className="disabled:invisible"
+                      />
+                    </span>
                   </span>
                 </SettingRow>
               )

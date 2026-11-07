@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { RotateCcw, X } from 'lucide-react'
-import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { Action } from '../hud/Action.tsx'
+import { FOCUS_RING } from '../hud/focus.ts'
 import { SearchField } from '../hud/SearchField.tsx'
 import { SettingRow } from '../hud/SettingRow.tsx'
 import {
@@ -22,6 +22,7 @@ import {
 } from '../input/keymap.ts'
 import { useKeymap } from '../input/useKeymap.ts'
 import { CONTROLS_KEYMAP, usePersistentState } from '../state/preferences.ts'
+import { defaultChord, keyChanged } from './settingsDefaults.ts'
 
 /*
  * Rebinding, which `docs/design/ux.md` promises.
@@ -141,8 +142,19 @@ export function ControlsSection() {
     event.preventDefault()
     event.stopPropagation()
     const chord = formatChord(pressed)
-    const next = { ...overrides, [action.id]: chord }
-    setOverrides((held) => ({ ...held, [action.id]: chord }))
+    /*
+     * A press of the act's own default is a return to it, so the override goes
+     * rather than a copy of the default being stored: a copy is a row marked
+     * changed with nothing changed, and a binding frozen at today's default
+     * when the default later moves.
+     */
+    const home = chord === defaultChord(action.id)
+    const next = home
+      ? withoutOverride(overrides, action.id)
+      : { ...overrides, [action.id]: chord }
+    setOverrides((held) =>
+      home ? withoutOverride(held, action.id) : { ...held, [action.id]: chord },
+    )
     setCapturing(null)
     const taken = clashesIn(resolveBindings(next)).get(action.id) ?? null
     setSaid(
@@ -153,12 +165,17 @@ export function ControlsSection() {
   }
 
   const reset = (id: string): void => {
-    setOverrides(({ [id]: _dropped, ...rest }) => rest)
+    setOverrides((held) => withoutOverride(held, id))
     setCapturing(null)
   }
 
+  /** `null` is "deliberately nothing" — unless nothing is the default. */
   const unbind = (action: ActionDefinition): void => {
-    setOverrides((held) => ({ ...held, [action.id]: null }))
+    setOverrides((held) =>
+      defaultChord(action.id) === null
+        ? withoutOverride(held, action.id)
+        : { ...held, [action.id]: null },
+    )
     setCapturing(null)
     setSaid(`${action.label} has no key`)
   }
@@ -209,7 +226,8 @@ export function ControlsSection() {
               const bound = keyOf(action)
               const clash = clashes.get(action.id) ?? null
               const listening = capturing === action.id
-              const changed = overrides[action.id] !== undefined
+              const changed = keyChanged(action.id, overrides[action.id])
+              const key = `key-${action.id}`
               return (
                 <SettingRow
                   key={action.id}
@@ -227,7 +245,10 @@ export function ControlsSection() {
                           </span>
                         )}
                         {clash !== null && (
-                          <span className="block text-amber-300">
+                          <span
+                            id={`${key}-clash`}
+                            className="block text-amber-300"
+                          >
                             Shares its key with {clash.label}.
                           </span>
                         )}
@@ -237,10 +258,24 @@ export function ControlsSection() {
                 >
                   <button
                     type="button"
-                    aria-label={`Rebind ${action.label}`}
+                    id={key}
+                    // The binding is in the name, because the name is all a
+                    // screen reader tabbing down the column hears — "Rebind
+                    // Pause" said what the button does and not what the key
+                    // is. The clash, when there is one, describes it.
+                    aria-label={
+                      listening
+                        ? `Press a key for ${action.label}`
+                        : `${action.label}: ${bound ?? 'unbound'}. Press to rebind`
+                    }
+                    aria-describedby={
+                      clash === null ? undefined : `${key}-clash`
+                    }
                     onClick={() => {
                       setCapturing(action.id)
-                      setSaid(null)
+                      setSaid(
+                        `Press a key for ${action.label}. Escape keeps ${bound ?? 'it unbound'}.`,
+                      )
                     }}
                     onKeyDown={(event) =>
                       listening ? capture(action, event) : undefined
@@ -271,41 +306,38 @@ export function ControlsSection() {
                     {listening ? LISTENING : (bound ?? 'unbound')}
                   </button>
                   {/*
-                   * Two quiet verbs beside the key, in fixed slots so the key
-                   * column never moves: unbind, which writes the `null` a
-                   * deliberate "nothing" needs, and back to the default,
-                   * present only when there is a default to go back to.
-                   * Unbind shows under the pointer or the keyboard, not on
-                   * every row at rest — a hundred ×s down the edge of the
-                   * page read as a column of deletes.
+                   * Two verbs beside the key, in fixed slots so the key column
+                   * never moves, and words, because every control in a body is
+                   * a word here. Unbind writes the `null` a deliberate
+                   * "nothing" needs; it shows under the pointer and the
+                   * keyboard rather than on every row at rest, where a hundred
+                   * of them down the edge read as a column of deletes — and
+                   * always on a touch screen, which has no hover to ask with.
+                   * Reset is there only when there is a default to go back to.
+                   * Both hand a keyboard back to the key, since each takes
+                   * itself away.
                    */}
-                  <span className="flex shrink-0 items-center">
-                    <button
-                      type="button"
-                      aria-label={`Unbind ${action.label}`}
-                      title="Take the key off this act"
-                      disabled={bound === null}
-                      onClick={(event) => {
-                        releaseFocus(event)
-                        unbind(action)
-                      }}
-                      className={`flex size-7 items-center justify-center rounded text-slate-400 opacity-0 transition-[color,opacity] group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:text-sky-200 focus-visible:opacity-100 disabled:invisible ${FOCUS_RING}`}
-                    >
-                      <X aria-hidden className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Reset ${action.label} to its default`}
-                      title="Back to the default"
-                      disabled={!changed}
-                      onClick={(event) => {
-                        releaseFocus(event)
-                        reset(action.id)
-                      }}
-                      className={`flex size-7 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-200 disabled:invisible ${FOCUS_RING}`}
-                    >
-                      <RotateCcw aria-hidden className="size-3.5" />
-                    </button>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <span className="flex w-14 justify-end">
+                      <Action
+                        label="Unbind"
+                        title={`Take the key off ${action.label}`}
+                        disabled={bound === null}
+                        then={() => document.getElementById(key)}
+                        onClick={() => unbind(action)}
+                        className="opacity-0 transition-[color,border-color,background-color,opacity,scale] group-focus-within/row:opacity-100 group-hover/row:opacity-100 focus-visible:opacity-100 disabled:invisible pointer-coarse:opacity-100"
+                      />
+                    </span>
+                    <span className="flex w-12 justify-end">
+                      <Action
+                        label="Reset"
+                        title={`${action.label} back to its default`}
+                        disabled={!changed}
+                        then={() => document.getElementById(key)}
+                        onClick={() => reset(action.id)}
+                        className="disabled:invisible"
+                      />
+                    </span>
                   </span>
                 </SettingRow>
               )
@@ -348,4 +380,13 @@ function clashesIn(
     }
   }
   return found
+}
+
+/** A binding table without one act's override, which is "the default". */
+function withoutOverride(
+  held: Readonly<Record<string, string | null>>,
+  id: string,
+): Readonly<Record<string, string | null>> {
+  const { [id]: _dropped, ...rest } = held
+  return rest
 }

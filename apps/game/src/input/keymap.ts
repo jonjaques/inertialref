@@ -400,7 +400,10 @@ export const ACTIONS: readonly ActionDefinition[] = [
    * last panel in the menu was the one panel no key reached.
    */
   press('panel.8', 'Eighth panel', 'Panels', 'global', chord('Digit8')),
-  press('panel.perf', 'Perf', 'Panels', 'global', chord('KeyP')),
+  // Named for what it opens rather than by the panel's short title: the
+  // editor's clash line reads "shares its key with …", and "Perf" there is a
+  // word only the author knows.
+  press('panel.perf', 'Performance panel', 'Panels', 'global', chord('KeyP')),
 
   /* ------------------------------- flight ------------------------------- */
   /*
