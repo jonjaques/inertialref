@@ -45,7 +45,7 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                                                                         |
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                                                                  |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
-| `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames, orbital placements (ADR-0059)                                                                  |
+| `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames, orbital placements (ADR-0060)                                                                  |
 | `simulation`    | 4     | done — clock, entities, flight, surface characters, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                        |
 | `protocol`      | 4     | done — validation combinators, wire and save schemas, bounded guide contracts                                                                                                                               |
 | `workers`       | 5     | done — typed tasks, ports, pool, seven shared tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                            |
@@ -12623,7 +12623,7 @@ the encode is deterministic: two builds wrote the same 104 files byte for byte.
 The International Space Station is a planetarium subject: an orbital placement
 on CelesTrak's element set, two analytic frames, NASA's IGOAL model with its
 arrays turned to the Sun every frame, and the planetarium's rules for a
-spacecraft. [ADR-0059](docs/adr/0059-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md)
+spacecraft. [ADR-0060](docs/adr/0060-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md)
 holds the decisions; this is what was measured on the way.
 
 **The plan's orbit was a kilometer low.** It quoted 6,796 km and 413–423 km up

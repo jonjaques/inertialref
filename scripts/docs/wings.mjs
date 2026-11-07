@@ -225,7 +225,7 @@ export const WINGS = [
             'The soundtrack',
           ],
           [
-            'docs/adr/0059-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md',
+            'docs/adr/0060-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md',
             'Stations',
           ],
         ],

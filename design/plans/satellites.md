@@ -3,7 +3,7 @@
 The first deliverable has landed: the International Space Station on its
 published orbit, drawn from NASA's own model with its arrays tracking the Sun,
 a planetarium subject the camera can focus, orbit, dolly in on and hold in the
-station's own axes. [ADR-0059](../../docs/adr/0059-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md)
+station's own axes. [ADR-0060](../../docs/adr/0060-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md)
 records what it decided — the orbital placement, the `a:` address, the `a:` and
 `af:` frames, the asset, and the planetarium's rules for a spacecraft.
 
@@ -105,7 +105,7 @@ for them, later:
 
 Rules 1–5 landed with the ISS — one class table, spacecraft names as a switch
 with a scope, a cap below every natural body, clicks only where something is
-seen, and the subject keeping its name ([ADR-0059](../../docs/adr/0059-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md)).
+seen, and the subject keeping its name ([ADR-0060](../../docs/adr/0060-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md)).
 One is left for ships:
 
 - **A crowd is one name.** Several ships within a few pixels collapse to the
@@ -116,7 +116,7 @@ One is left for ships:
 ## Phases
 
 The record, the picture and the planetarium — phases one to three — landed with
-[ADR-0059](../../docs/adr/0059-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md).
+[ADR-0060](../../docs/adr/0060-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md).
 What is left is phase four, each part its own plan: the hull eclipse; the
 proximity frame, pads and latching, with flight; built stations and their
 replication; ships as planetarium subjects.

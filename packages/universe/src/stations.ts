@@ -19,7 +19,7 @@ import type { BodyProvenance } from './system.ts'
  *
  * One record shape whatever produced it — Sol's catalog now, a generator and
  * a builder later — so every consumer reads the placement and never asks where
- * it came from. ADR-0059.
+ * it came from. ADR-0060.
  */
 
 /**

@@ -1,4 +1,4 @@
-# ADR-0059: A station is an orbital placement, addressed under what it goes round, with frames named by its identity
+# ADR-0060: A station is an orbital placement, addressed under what it goes round, with frames named by its identity
 
 Status: accepted · 7 Nov 2026. Extends [ADR-0004](0004-entity-addressing.md)'s
 grammar with the `a:` kind under [ADR-0009](0009-issue-ordinal-addressing.md)'s
