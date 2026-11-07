@@ -8,13 +8,13 @@
 
 The ranking points the same way. The five proposals with the highest return need no Playwright: a dark-plate noise measurement, a boot-ladder fix, a settle measurement two reviews fold into P24, and two documentation corrections. Playwright Test as a runner (P04) ranks 37th of 68. Its value is what its consumers make of it, and the cheapest of those consumers (P35, the shell project) needs only its base configuration.
 
-The first wave ran all five on the Mac mini, beside P01's lock module, P03's launch guard, P06's tests and X3's port allocator. #188 carries the code, and [The first wave, on the Mac mini](#the-first-wave-on-the-mac-mini) says what each step found.
+The first wave ran all five on the Mac mini, beside P01's lock module, P03's launch guard, P06's tests and X3's port allocator, and it measured X13's idle rig (G5). #188 carries the code, and [The first wave, on the Mac mini](#the-first-wave-on-the-mac-mini) says what each step found.
 
 ---
 
 ## What was measured
 
-Every figure in the tables below comes from one machine: Mac17,4, a fanless MacBook Air with the base Apple M5, 32 GB, macOS 27.2, and a single built-in Retina display. That is Jon's workstation, not the performance machine. The Mac mini's own figures, the first wave's GPU lane among them, are in [On the Mac mini](#on-the-mac-mini), and a proposal that cites one names its step.
+Every figure in the probe tables below (A–K and N1–N7) comes from one machine: Mac17,4, a fanless MacBook Air with the base Apple M5, 32 GB, macOS 27.2, and a single built-in Retina display. That is Jon's workstation, not the performance machine. The Mac mini's own figures, M1–M6 and the first wave's G1–G5, are in [On the Mac mini](#on-the-mac-mini). #188's Node-lane figures are in the proposal sections they answer, each naming its unit.
 
 **The performance machine is the Mac mini.** It is a Mac18,5 with the Apple M6 (12-core GPU), 32 GB and macOS 27.2, fan-cooled. Its main display is a 4K LG TV at 120 Hz, which reports a 1920×1080 UI (DPR 2) and sleeps after 10 idle minutes (`pmset` `displaysleep 10`), so an unattended run there meets a sleeping display. It runs Node v26.13.0 and Google Chrome 157.0.8103.39, the same versions as the Air. Playwright 1.62.1's Chrome for Testing 151.0.7922.34 and headless shell are installed there too, in `~/Library/Caches/ms-playwright`. The spike's raw evidence (the end of this plan) is in its main checkout as a copy of the Air's. Four things follow:
 
@@ -108,54 +108,54 @@ Further results behind the table:
 - **A headed rig there is not a 120 Hz rig.** drive.mjs puts its window at x=2400, past the mini's 1920-point desktop, and the off-screen window gets about 100 irregular frames a second whether the display sleeps or not. An on-screen window gets the panel and pays for it: N6 found headed `ir.gpu` 0.14 ms above headless on the Air's built-in panel, and M6 finds it 2.2× headless on the mini's 4K TV. The cause is unmeasured; compositing the 3840×2160 desktop is the candidate.
 - **What it does not establish.** M2 and M4 are one same-day pair, and M3 one session, against the 2% between-session target P48 sets. A stored baseline there waits on P48's repeated-session calibration.
 
-**The first wave's GPU lane.** Measured on the same machine later that day as G1–G5 ([The first wave, on the Mac mini](#the-first-wave-on-the-mac-mini)), at `830c243` (`origin/main` after the ISS merge), the dev build served by `pnpm dev:client`, except G3, which `presets:compare` serves itself. One step ran at a time. Thermal pressure read 0 before and after every run. G2 and G5 ran with nothing else working on the machine; G3 reports pixels, so it ran beside the Node lane, whose load reached 13.6.
+**The first wave's GPU lane.** Measured on the same machine later that day as G1–G5 ([The first wave, on the Mac mini](#the-first-wave-on-the-mac-mini)), at `830c243` (`origin/main` after the ISS merge), the dev build served by `pnpm dev:client`, except G3, which `presets:compare` serves itself. One step ran at a time. Thermal pressure read 0 before and after every run. G2 and G5 ran with nothing else working on the machine; G3 reports pixels, so it ran beside the Node lane, whose one-minute load average reached 13.6.
 
 | Step | Question                                             | Verdict | Number                                                                                                                                                                                              | Point                                              |
 | ---- | ---------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| G1   | A synthetic key from `--js` on a warm page           | works   | a `keydown` and `keyup` carrying `code: 'Backquote'` flip `ir.hud.debug.on`, dispatched on `window` or on `document`; the same pair with only `key` does nothing on either                          | earthrise 1600×900@1 · headed drive.mjs            |
+| G1   | A synthetic key from `--js` on a warm page           | works   | a `keydown` and `keyup` carrying `code: 'Backquote'` flip the stored `ir.hud.debug.on` preference, dispatched on `window` or on `document`; the same pair with only `key` does nothing on either    | earthrise 1600×900@1 · headed drive.mjs            |
 | G2   | Is a warm load an archive hit; what holds the settle | works   | warm relaunch and warm navigation hit the sky archive in 20 of 20 runs; warm settle 0.51–0.52 s at earthrise and 8.66–8.74 s at far-shore (medians), closed by `terrain.deposits`; one cold cluster | both, 1600×900@1 · headless, 5 runs an arm         |
 | G3   | Dark-plate self-noise, headed                        | works   | 0 px over 3% on all 13 pictures, the six dark ones included, on a wiped rig profile and on a persistent one; 52 of 52 captures settled                                                              | the 13 pictures, 480×320@1 · headed, display awake |
 | G4   | Dark-plate self-noise, headless                      | not run | G3 decided                                                                                                                                                                                          | —                                                  |
-| G5   | What an idle rig holds                               | works   | detached: GPU process 0.02% of a core and 0% GPU utilization, against 49% and 90% attached; about 1.9 GB of GPU-driver allocations, detached or held, until `--down`                                | far-shore 1600×900@1 · headed, display asleep      |
+| G5   | What an idle rig holds                               | works   | detached: GPU process 0.02% of a core and 0% GPU utilization, against 49% and 90% attached; about 2 GB of GPU-driver allocations, detached or held, until `--down`                                  | far-shore 1600×900@1 · headed, display asleep      |
 
 **Warm loads (G2).** Five runs an arm, interleaved, each through `launchPersistentContext`. A cold run starts on an empty profile directory. A warm relaunch is a new browser process on a profile in which the point has settled. A warm navigation is a new page's `goto` in a context that has settled it, which no earlier probe measured.
 
-| Point     | Arm             | Boot, median | Settle, median (range)    | Frames in settle | Last settle input                  |
-| --------- | --------------- | ------------ | ------------------------- | ---------------- | ---------------------------------- |
-| earthrise | cold            | 4,245 ms     | 12,306 ms (12,231–12,325) | 731              | `sky.pending`                      |
-| earthrise | warm relaunch   | 3,981 ms     | 522 ms (254–540)          | 31               | `terrain.deposits`, or none (3/10) |
-| earthrise | warm navigation | 3,883 ms     | 509 ms (256–538)          | 31               | `terrain.deposits`, or none        |
-| far-shore | cold            | 4,417 ms     | 12,296 ms (12,212–12,357) | 717              | `sky.pending`                      |
-| far-shore | warm relaunch   | 4,216 ms     | 8,743 ms (8,607–9,078)    | 519              | `terrain.deposits`                 |
-| far-shore | warm navigation | 4,141 ms     | 8,655 ms (8,525–9,076)    | 504              | `terrain.deposits`                 |
+| Point     | Arm             | Boot, median | Settle, median (range)    | Frames in settle | Last settle input                    |
+| --------- | --------------- | ------------ | ------------------------- | ---------------- | ------------------------------------ |
+| earthrise | cold            | 4,245 ms     | 12,306 ms (12,231–12,325) | 731              | `sky.pending`                        |
+| earthrise | warm relaunch   | 3,981 ms     | 522 ms (254–540)          | 31               | `terrain.deposits`, or none (1 of 5) |
+| earthrise | warm navigation | 3,883 ms     | 509 ms (256–538)          | 31               | `terrain.deposits`, or none (2 of 5) |
+| far-shore | cold            | 4,417 ms     | 12,296 ms (12,212–12,357) | 717              | `sky.pending`                        |
+| far-shore | warm relaunch   | 4,216 ms     | 8,743 ms (8,607–9,078)    | 519              | `terrain.deposits`                   |
+| far-shore | warm navigation | 4,141 ms     | 8,655 ms (8,525–9,076)    | 504              | `terrain.deposits`                   |
 
-A warm load restores the 512 cube before `booted`, and the terrain heightfield cache answers from disk: 374–417 of 417 tiles at earthrise, 1,194–1,218 of 1,218 at far-shore. Far-shore's deposit slope table ([ADR-0051](../../docs/adr/0051-a-rock-stands-on-the-drawn-ground.md)) is measured after every load, warm or cold, and lands 8.3–8.8 s after `booted`. So a warm context saves about 12 s at earthrise and about 3.6 s at far-shore. The cold settle at both points is the sky's final tier, quiet at 11.96–12.10 s, and the mini shows no second far-shore cluster.
+A warm load restores the 512 cube before `booted`, and the terrain heightfield cache answers from disk: 374–417 of 417 tiles at earthrise, 1,194–1,218 of 1,218 at far-shore. Far-shore's deposit slope table ([ADR-0051](../../docs/adr/0051-a-rock-stands-on-the-drawn-ground.md)) is measured after every load, warm or cold, and lands 8.3–8.8 s after `booted` warm and 9.0–9.4 s cold. So a warm context saves about 12 s at earthrise and about 3.6 s at far-shore. The cold settle at both points is the sky's final tier, quiet at 11.96–12.10 s, and the mini shows no second far-shore cluster.
 
-**The census (G3).** `pnpm presets:compare --all --twice` ran twice, first on a wiped rig profile and then on the profile the first run left, each in about 287 s, with the display held awake by `caffeinate -d`. Every picture read 0 px over 3% between its two captures, in both runs and across them. The zero holds at the 3% level, not at fuzz 0: far-shore has 134,197–137,280 of its 153,600 pixels differing by 1–4 of 255, and the Sol pictures 0–414 pixels by at most 4. The persistent profile restores only Sol skies, because the sky archive keeps two entries (`GALAXY_SKY_ARCHIVE_ENTRIES`, [`galaxySkyArchive.ts`](../../apps/game/src/render/galaxySkyArchive.ts):13) and the five generated-system pictures evict each other, so earthrise is the one direct pair of a bake against a restore, at 0 px. Against the committed JPEG plates at 8%, every picture reads 0–49 px except tau-ceti-moonrise at 124 and centauri-daybreak at 231, over `NOISE_FLOOR`: the mini's captures carry the TV's color profile.
+**The census (G3).** `compare.mjs --all --twice` ran twice, unedited, through an instrumented copy of `capture.mjs` that also read `ir.galaxy()` after each shot: first on a wiped rig profile, then on the profile the first run left, with the display held awake by `caffeinate -d`. Every picture read 0 px over 3% between its two captures, in both runs and across them. The zero holds at the 3% level, not at fuzz 0: far-shore has 134,197–137,280 of its 153,600 pixels differing by 1–4 of 255, and the Sol pictures 0–414 pixels by at most 4. The persistent profile restores only Sol skies, because the sky archive keeps two entries (`GALAXY_SKY_ARCHIVE_ENTRIES`, [`galaxySkyArchive.ts`](../../apps/game/src/render/galaxySkyArchive.ts):13) and the five pictures outside Sol evict each other, so earthrise is the one direct pair of a bake against a restore, at 0 px. Against the committed JPEG plates at 8%, computed offline from the saved captures, every picture reads 0–49 px except tau-ceti-moonrise at 124 and centauri-daybreak at 231, the one over `NOISE_FLOOR` (200). The inferred cause is the TV's color profile, which the mini's captures carry; no run separated it from the machine.
 
-**The idle rig (G5).** A drive.mjs rig on its own port, sampled once a second for 60 s in each state, with the display asleep throughout. CPU is from `ps`, as a share of one core. Utilization and driver allocations are from `ioreg -r -c AGXAccelerator`'s `PerformanceStatistics`.
+**The idle rig (G5).** A drive.mjs rig on its own port, sampled once a second for 60 s in each state, with the display asleep throughout. CPU is from `ps`, as a share of one core. Utilization and driver allocations are from `ioreg -r -c AGXAccelerator`'s `PerformanceStatistics`, as medians, and allocations in MiB. The GPU process's footprint is from `footprint`, which counts the process rather than the driver's allocations.
 
-| State          | GPU process | Renderer | GPU utilization | Driver allocations over baseline |
-| -------------- | ----------- | -------- | --------------- | -------------------------------- |
-| live, attached | 49.2%       | 78.2%    | 90.4%           | +2,218 MB                        |
-| idle, detached | 0.02%       | 1.07%    | 0%              | +1,869 MB                        |
-| held, attached | 1.07%       | 5.37%    | 0%              | +1,849 MB                        |
-| held, detached | 0.02%       | 0.80%    | 0%              | +1,883 MB                        |
-| after `--down` | —           | —        | 0%              | 0 (1,148 MB baseline)            |
+| State          | GPU process | Renderer | GPU utilization | Driver allocations over baseline, MiB |
+| -------------- | ----------- | -------- | --------------- | ------------------------------------- |
+| live, attached | 49.2%       | 78.2%    | 90%             | +2,218                                |
+| idle, detached | 0.02%       | 1.07%    | 0%              | +1,869                                |
+| held, attached | 1.07%       | 5.37%    | 0%              | +1,849                                |
+| held, detached | 0.02%       | 0.80%    | 0%              | +1,883                                |
+| after `--down` | —           | —        | 0%              | 0 (baseline 1,148)                    |
 
-Detached, the page rendered 4 frames in 66.7 s, so a hold adds nothing to a detached rig. Detached or held, the GPU process keeps a 2.0–2.2 GB footprint, about 1.6 GB of it graphics, and only `--down` returns the allocations. The hold is the engine's own `holdFrames()`, reached from a `--file` step by importing `/src/engine/frameHold.ts` from the dev server, with no engine change: the sim tick and the render calls stopped for the 154 s hold and resumed within 3 s of release.
+Detached, the page rendered at most 4 frames in 66.7 s, the re-attach included, so a hold adds nothing to a detached rig. Each state's first `ioreg` read after rendering stops is a stale 79–90%, the no-rig baseline's too, which is why the column is a median. Detached or held, the GPU process keeps a 2.0–2.2 GB footprint, about 1.6 GB of it graphics, and only `--down` returns the allocations. The hold is the engine's own `holdFrames()`, reached from a `--file` step by importing `/src/engine/frameHold.ts` from the dev server, with no engine change: the sim tick and the render calls stopped for the 154 s hold and resumed within 3 s of release.
 
-**The sandbox (N1).** A Claude Code worktree subagent there, in bypass-permissions mode with worktree isolation, created and removed a file in `git rev-parse --git-common-dir` through node's `openSync(…, 'wx')`. The harness's worktree guard refuses a `node -e` that runs git inside itself, so the path comes from a plain `git rev-parse` first.
+**The sandbox (unit N1).** A Claude Code worktree subagent there, in bypass-permissions mode with worktree isolation, created and removed a file in `git rev-parse --git-common-dir` through node's `openSync(…, 'wx')`. The harness's worktree guard refuses a `node -e` that runs git inside itself, so the path comes from a plain `git rev-parse` first.
 
 **What the first wave does not establish.** G3 is the mini's figure, on the TV's color profile; the Air's headed census is unmeasured. G5 ran with the display asleep, so whether a detached rig keeps rendering beside an awake display is unmeasured. Far-shore's 17–19 s settle cluster is the Air's, and the mini does not reproduce it.
 
 ### What was not run
 
 - **Hosted CI.** No browser ran on the hosted macOS or Linux runners. Every figure is about the Air, except the Mac mini's own.
-- **Dark plates headless.** No dark picture was captured headless, and headless plate parity was measured for 2 of the 13 pictures, both lit. Headed, all 13 were captured twice on the Mac mini (G3).
+- **Dark plates headless.** No dark picture was captured headless, and headless plate parity was measured for 2 of the 13 pictures, both lit. Headed, each of the 13 was captured four times on the Mac mini, twice in each of G3's two runs.
 - **drive.mjs headless.** drive.mjs has never launched headless. Every headless figure is Playwright-launched Chrome running with Playwright's switches.
 - **Occlusion.** Real occlusion of a headed Playwright window was not tested.
-- **Thin points.** far-shore at 2880×1800 was measured once. Most capability probes ran once per mode.
+- **Thin points.** far-shore at 2880×1800 was measured once on the Air; the Mac mini has 18 runs (M3). Most capability probes ran once per mode.
 - **Production per-frame cost.** It is unresolved because N7's interleaved session ran hot. Only the heap result is clean. No production-against-production A/B was run, and the DPR A/B ran on the dev build.
 - **The Chrome for Testing gap.** CfT 151 against Chrome 157 (probe D) was measured sequentially, with thermal state uncontrolled.
 - **`page.clock` off the main thread.** Probe H checked the main thread only. Worker clocks, GPU completion and the presentation watchdog under a paused clock were not probed.
@@ -164,7 +164,7 @@ Detached, the page rendered 4 frames in 66.7 s, so a hold adds nothing to a deta
 - **The thermal cause.** It was not measured, because `powermetrics` needs sudo.
 - **Attach paths.** None of these ran: `browser.bind()`, `connectOverCDP` to the rig's Chrome, `playwright-cli attach --cdp`.
 - **Device emulation.** None of these ran: `hasTouch` against `(pointer: coarse)`, pointer lock, `Emulation.setSafeAreaInsetsOverride`, the headless audio pipeline.
-- **Sandbox writes.** Whether the Codex and EnterWorktree sandboxes can write the git common directory was not checked. On the Mac mini a full-access T3 Code session can, and so can a Claude Code worktree subagent (N1).
+- **Sandbox writes.** Whether the Codex and EnterWorktree sandboxes can write the git common directory was not checked. On the Mac mini a full-access T3 Code session can, and so can a Claude Code worktree subagent (unit N1).
 - **Environment noise.** Every dev-server load logged three 504 "Outdated Optimize Dep", nine 404s and 3–15 502s (no Worker running). None of them stopped a boot.
 
 ---
@@ -353,7 +353,7 @@ Tabulate each picture's self-noise beside #180's deltas, then decide:
 
 **Review.** Both cross-reviews kept it and sharpened it. The dark exclusion in `compare.mjs` and ADR-0046 rests on a measurement taken before the settle protocol: 1,069–3,090 px at a 2.5 s wait, in the same CONTEXT.md entry that shows settling took the lit pictures from 7,939 px to 0 ([CONTEXT.md](../../CONTEXT.md):10483-10494). The headed arm alone may therefore show the dark plates are deterministic now, and the headless arm runs only if it does not. Each capture records `ir.galaxy()`'s archive hits, and the incumbent arm runs once more on a wiped profile. Its persistent profile can compare a bake with a restore, and the galaxy volume accumulates temporally (stride 8, [`GalaxyVolume.tsx`](../../apps/game/src/scene/GalaxyVolume.tsx):46), so a gap is not blamed on headedness by default. The two arms run interleaved or with a cool-down between them. It supersedes C3, which measures the headless half only and waits on P08.
 
-**Result (G3).** The headed arm decides it, on the Mac mini. Both runs read 0 px over 3% on all 13 pictures, the six dark ones included, against #180's 2,058 and 2,627 px; the rule applied was a ceiling of 515 px, a quarter of the smaller delta. So [`compare.mjs`](../../scripts/presets/compare.mjs) reports dark plates by default against a per-picture floor taken by `--twice`, the headless arm (G4) does not run, and C3 and P14 drop for this blind spot. The floor belongs to the machine that takes it: the mini's captures read centauri-daybreak 231 px from its committed plate at 8%, because they carry the TV's color profile. The Air's headed census is unmeasured.
+**Result (G3).** The headed arm decides it, on the Mac mini. Both runs read 0 px over 3% on all 13 pictures, the six dark ones included, against #180's roughly 2,060 and 2,630 px. "Well under" was a ceiling of 515 px, a quarter of the smaller delta. The decision is a change to [`compare.mjs`](../../scripts/presets/compare.mjs): dark plates reported by default against a per-picture floor taken by `--twice` (Phase 1). The headless arm (G4) does not run, and C3 and P14 drop for this blind spot. The floor belongs to the machine that takes it: the mini's captures read centauri-daybreak 231 px from its committed plate at 8%, with the TV's color profile the inferred cause. The Air's headed census is unmeasured.
 
 ### 2. C4: fix the boot ladder's renderer-mode commit race on its own
 
@@ -374,13 +374,13 @@ Tabulate each picture's self-noise beside #180's deltas, then decide:
 
 **Review.** Both cross-reviews kept it at lower value. No wrong-page reading is on record, and the exposure needs a commit slower than the 500 ms sleep. The window is wider than stated: any `--keep-storage` invocation whose URL differs from the booted page navigates without the `about:blank` hop. The test covers `--reload` as well, and it is the regression test P02 ports.
 
-**First wave (N2, #188).** Built, with three cases: the race, `--reload`'s forced boot, and the `loaderId === undefined` escape. The first two fail against the old file. The exposure is wider than either account above: `--reload` is exposed without `--keep-storage` too, because clearStorage runs only before the initial boot ([`drive.mjs`](../../scripts/drive.mjs):680) and the reboot at line 709 never clears. In the fake, the change adds one `Page.getFrameTree` per poll and no time.
+**First wave (unit N2, #188).** Built, with three cases: the race through `--reload`'s forced boot and through a `--keep-storage` run onto another URL, and the `loaderId === undefined` escape. The two race cases fail against `drivePage.mjs` at `830c243`. The exposure is wider than either account above: `--reload` is exposed without `--keep-storage` too, because [`drive.mjs`](../../scripts/drive.mjs) clears storage only before its initial boot, and its `reboot` never clears. In the fake, the change adds one `Page.getFrameTree` per poll and no time.
 
 ### 3. settle-attribution: find out what the 12-second cold settle waits on (vetoed by fit and completeness)
 
 It proposed a timeline of every settle input on cold and warm loads, on the premise that the galaxy tiles reading 0/1638 at both settles meant the cold settle is not the sky's progressive refinement. The premise does not hold. The cache reports `completedTiles` as 0 whenever nothing is pending ([`galaxyCache.ts`](../../apps/game/src/render/galaxyCache.ts):194), and the harness says so beside the readout ([`harness.ts`](../../packages/devtools/src/harness.ts):706-708). [perf.md](perf.md):266-271 already has the arithmetic: the final 512² tier is 1,536 tiles at two a submitted frame, about 12.8 s at 60 fps, against the measured 12.1–12.7 s. Probe B ran its success metric too: in one context, far-shore, a new galactic position, settled in 13.0 s after the earthrise reload's 0.52 s, so a warm settle is per position, not per context.
 
-**Kept as:** P24's first step. It reads `ir.galaxy()`'s archive hits on a warm load, and attributes far-shore's two settle clusters (12–13 s against 17–19 s), which the sky does not explain. G2 ran it on the Mac mini ([On the Mac mini](#on-the-mac-mini)). A warm load is an archive hit, and the mini settles far-shore cold in one cluster, so the second cluster is attributed on the Air, by a run that logs G2's per-input timeline.
+**Kept as:** P24's first step. It reads `ir.galaxy()`'s archive hits on a warm load, and attributes far-shore's two settle clusters (12–13 s against 17–19 s), which the sky does not explain. G2 ran it on the Mac mini ([On the Mac mini](#on-the-mac-mini)). A warm load is an archive hit, and the mini settles far-shore cold in one cluster, so the second cluster is the Air's to attribute: a run there that logs G2's per-input timeline answers it.
 
 ### 4. C2: write the fanless-Air thermal step into the perf plan and the driving card
 
@@ -409,7 +409,7 @@ The rule it implies: interleave base and candidate in one session, or idle 5 min
 
 **Review.** The onset and the recovery each rest on one observation at far-shore 1600×900@1, and the cause is inferred, so the text names the point and says so. Interleaving comes first in the rule. A six-boot series or a 13-plate pass runs 3–6 minutes and outlasts the onset, so idling between arms suits short arms only. Tagging past perf.md figures "possibly confounded" cannot be acted on, because no figure records its thermal state. The scope is one bullet in perf.md's "Caveats that shape these numbers" and one trap in driving.md and SKILL.md. The trap names the machine. The step is a fact about the fanless Air. The Mac mini held flat through 10 sustained minutes at two windows ([On the Mac mini](#on-the-mac-mini)), but that is one session at each, so the rule holds on both machines until P48's calibration gives a between-session spread.
 
-**First wave (N6, #188).** Written: a caveat in perf.md, trap 8 in driving.md and trap 12 in SKILL.md, each naming the Air. [`harness.md`](../../docs/guides/harness.md) carries no thermal note, which the review's scope leaves out.
+**First wave (unit N6, #188).** Written: a caveat in perf.md, trap 8 in driving.md and trap 12 in SKILL.md, each naming the Air. [`harness.md`](../../docs/guides/harness.md) carries no thermal note, which the review's scope leaves out.
 
 ### 5. C1: correct the rig documentation the probes disproved, now
 
@@ -443,7 +443,7 @@ Trap 10 states the measured cause. The keymap resolves chords from `event.code` 
 
 **Review.** [`driving.md`](../../docs/agents/driving.md) carries none of the three claims, so its part of the scope is empty. The false lines are `drive.mjs`:28-32 and SKILL.md's trap 10. An untrusted event resolves the chord but skips `useDevice('keyboard')` ([`keymapStore.ts`](../../apps/game/src/input/keymapStore.ts):489-493), so it is not what a real key press does, and an `isTrusted` hardening of the keymap would remove it without a sound. The new trap 10 says both and points at a trusted CDP key (P07). drive.mjs has no headless mode until P08, so its header gives the measured headless figures as Playwright-launched Chrome's, and P08 rewrites it again.
 
-**First wave (G1, N6, #188).** G1 ran the first step's check on the Mac mini. A `keydown` and `keyup` carrying `code: 'Backquote'` flip `ir.hud.debug.on` on a warm page, dispatched on `window` or on `document`; the same pair with only `key` does nothing on either. The keymap's one listener is on `window` ([`keymapStore.ts`](../../apps/game/src/input/keymapStore.ts):645-667), which a `document` dispatch reaches by bubbling, and `chordFromEvent` declines an empty `code` ([`chord.ts`](../../apps/game/src/input/chord.ts):117). N6 rewrote the header and trap 10 from that result.
+**First wave (G1, unit N6, #188).** G1 ran the first step's check on the Mac mini ([On the Mac mini](#on-the-mac-mini)): the stored preference flips on a warm page from a `code`-carrying event on `window` or on `document`, and a `key`-only event does nothing. The keymap's one listener is on `window` ([`keymapStore.ts`](../../apps/game/src/input/keymapStore.ts):645-667), which a `document` dispatch reaches by bubbling, and `chordFromEvent` declines an empty `code` ([`chord.ts`](../../apps/game/src/input/chord.ts):117). #188's trap 10 states that result, and its drive.mjs header states probes A, C and N4.
 
 ### 6. P03: a launch preset and an operating-point guard that fail closed
 
@@ -490,7 +490,7 @@ The headless shell with `--enable-unsafe-webgpu --use-angle=metal` also reaches 
 - Forced sRGB in 1.62.1 (`coreBundle.js`:34668): verified.
 - Headed HDR under `ignoreDefaultArgs`: unverified.
 
-**First wave (N5, #188).** The presets and the guard are built, with 28 Node tests over fixtures trimmed from the probe outputs, and wired into nothing. `dprCeiling` and `pictureDprFactor` import cleanly under Node's type stripping. [`gpuAdapter.mjs`](../../scripts/gpuAdapter.mjs)'s `SOFTWARE` pattern is not exported, and importing that file runs Dawn's adapter requests and can `process.exit`, so the guard reads the pattern from its source until a module with no side effects exports it. The drive.mjs half and the identity check are the second wave's.
+**First wave (unit N5, #188).** The presets and the guard are built, with Node tests over fixtures trimmed from the probe outputs, and wired into nothing. A caller's `ignoreDefaultArgs` adds to the preset's, so dropping one more default never restores forced sRGB, and the record names a point's system `sol`, `catalog` or `generated`: a catalog star such as HIP71683 is neither of the other two. `dprCeiling` and `pictureDprFactor` import cleanly under Node's type stripping. [`gpuAdapter.mjs`](../../scripts/gpuAdapter.mjs)'s `SOFTWARE` pattern is not exported, and importing that file runs Dawn's adapter requests and can `process.exit`, so the guard reads the pattern from its source until a module with no side effects exports it. The drive.mjs half and the identity check are the second wave's.
 
 ### 7. P06: tests for the strobe detector and trace readers before any transport moves
 
@@ -517,7 +517,7 @@ Each test is checked against a deliberate mutation of the line it guards. `trace
 - The only I/O is the per-pair count (`frameDiff.mjs`:111-135): verified.
 - The root suite includes `scripts/**/*.test.mjs` ([`vitest.config.ts`](../../vitest.config.ts):49): verified.
 
-**First wave (N3, #188).** Built. Line coverage is 100% for `frameDiff.mjs` and 95.65% for `traceFrames.mjs`, and both CLIs print byte-identical output in 32 of 34 recorded cases; the other two are crashes whose stack lines moved. 30 of 31 mutations of `frameDiff.mjs` fail a test. The survivor is `median`'s index, which takes the upper of the two middle values on an even count, so a five-frame run with one flash isolates nothing. No test pins it, because pinning it would hold a false negative, and changing it moves the detector's verdicts. The three test files add about 105 ms of test time.
+**First wave (unit N3, #188).** Built. Line coverage is 100% for `frameDiff.mjs` and 95.65% for `traceFrames.mjs`, and the extraction kept `traceFrames.mjs` and `timing.mjs` byte-identical in 32 of their 34 recorded cases; the other two are crashes whose stack lines moved. The review after it made both readers and `drive.mjs`'s `--cast` count fps as intervals over the span, so a short capture does not read above `TRUSTWORTHY_FPS`, and a trace with no readable frame exits 1 instead of reporting nothing strobes. 30 of 31 mutations of `frameDiff.mjs` fail a test. The survivor is `median`'s index, which takes the upper of the two middle values on an even count, so a five-frame run with one flash isolates nothing. No test pins it, because pinning it would hold a false negative, and changing it moves the detector's verdicts. The three test files add about 105 ms of test time.
 
 ### 8. P07: trusted key, click and drag steps in drive.mjs
 
@@ -622,13 +622,13 @@ Each test is checked against a deliberate mutation of the line it guards. `trace
 
 - **The module.** `scripts/gpuLock.mjs` exports `acquire(holder, {waitMs})` and `release()`. The lock is `$(git rev-parse --git-common-dir)/inertialref-gpu.lock`, which resolves to the main checkout's `.git` from every worktree (verified). It is created with `openSync(…, 'wx')` and holds `{pid, holder, cwd, worktree, startedAt, processStart}`.
 - **Staleness and release.** A lock is stale only when every process it names is gone: `ESRCH`, or a differing process start time, for the holder and for any Chrome it launched. A killed drive.mjs whose detached Chrome still renders is not stale. It is released on exit, SIGINT and SIGTERM, except by drive.mjs (below).
-- **Holders.** [`vitest.gpu.config.ts`](../../apps/game/vitest.gpu.config.ts) through `globalSetup` (the busiest, 605 calls in 30 days); presets capture, compare and plates; Playwright GPU projects, from which the shell project opts out; perf, bisect, soak and MCP runners. drive.mjs holds it from Chrome's launch until `--down` or Chrome's exit, because its Chrome is detached and outlives each invocation ([`drive.mjs`](../../scripts/drive.mjs):403-424). Releasing per invocation waits on X13's measurement and Jon's decision that an idle rig is not a GPU job.
+- **Holders.** [`vitest.gpu.config.ts`](../../apps/game/vitest.gpu.config.ts) through `globalSetup` (the busiest, 605 calls in 30 days); presets capture, compare and plates; Playwright GPU projects, from which the shell project opts out; perf, bisect, soak and MCP runners. drive.mjs holds it from Chrome's launch until `--down` or Chrome's exit, because its Chrome is detached and outlives each invocation ([`drive.mjs`](../../scripts/drive.mjs):403-424). Releasing per invocation waits on Jon's decision, on X13's figures (G5), that an idle rig is not a GPU job.
 - **Nested holders.** An outer holder hands its children the lock: `capturePlates` spawns drive.mjs for every capture ([`capture.mjs`](../../scripts/presets/capture.mjs):157-180), and a child that acquired on its own would refuse its parent. The parent passes a token that the lock file records, and a child whose token matches the file proceeds without acquiring. A token is not a bypass: one that does not match the file is refused like any other acquire. A child records the Chrome it launches in the same file, and the staleness rule above covers it, so the lock outlives a parent whose children leave Chrome up. The preset commands do: `plates.mjs` ends by saying `pnpm drive --down when finished` ([`plates.mjs`](../../scripts/presets/plates.mjs):94). The parent's own exit, normal or by signal, removes only its own entry.
 - **Failing and waiting.** By default an acquire fails fast, naming holder, pid, age and worktree. `--gpu-wait <s>` queues with a bound and reprints the holder every 10 s; it is not `--wait`, which is drive.mjs's ordered page delay in milliseconds ([`driveSteps.mjs`](../../scripts/driveSteps.mjs):111-116). The message says to wait or ask. It never says to `--down` another agent's rig, because that kills their session. There is no environment bypass.
 - **Long holders.** P18 holds the lock 25–30 min, P23 45–75 and P29 1–2 h. They follow a lease policy and run as attended blocks.
 - **Around the lock.** The Stop gate warns while it is held; a full check beside a rendering rig timed out at 300 s and passed in 179 s with the rig closed (CONTEXT.md:8469-8472). `pnpm gpu:who` names the holder. Acquisitions are appended to a log.
 
-**First step.** `gpuLock.mjs` and its tests (create, refuse, stale pid, pid reuse, release on signal, two child processes, a child carrying the holder's token, a holder dead while its Chrome lives, a parent exiting normally and by signal while its child's Chrome lives). Then `vitest.gpu.config.ts`. Before that wiring, probe whether the Codex and EnterWorktree sandboxes can create the file. A full-access T3 Code session on the Mac mini creates and removes it, and so does a Claude Code worktree subagent there (N1), once the path comes from a plain `git rev-parse`: the harness's worktree guard refuses a program that runs git inside itself. The Codex and EnterWorktree sandboxes are unprobed.
+**First step.** `gpuLock.mjs` and its tests (create, refuse, stale pid, pid reuse, release on signal, two child processes, a child carrying the holder's token, a holder dead while its Chrome lives, a parent exiting normally and by signal while its child's Chrome lives). Then `vitest.gpu.config.ts`. Before that wiring, probe whether the Codex and EnterWorktree sandboxes can create the file. A full-access T3 Code session on the Mac mini creates and removes it, and so does a Claude Code worktree subagent there (unit N1), once the path comes from a plain `git rev-parse`: the harness's worktree guard refuses a program that runs git inside itself. The Codex and EnterWorktree sandboxes are unprobed.
 
 **Success.**
 
@@ -646,7 +646,7 @@ Each test is checked against a deliberate mutation of the line it guards. `trace
 - drive.mjs records `chromePid` at spawn (`drive.mjs`:425-430): verified.
 - `process.kill(pid, 0)` liveness: training data.
 
-**First wave (N1, #188).** The module is built, with 19 tests over the first step's cases, and wired into nothing. Its shape for the second wave: a child joins through a token in `IR_GPU_LOCK_TOKEN`; `record(pid)` keeps the lock for a browser that outlives the process that launched it, and `forget(pid, {token})` is what `--down` calls, so `--down` is never refused; every change to a held lock runs under an edit mutex and lands by rename. A refusal returns in 34–47 ms, including the holder's spawn. `capture.mjs` spawns drive.mjs with no `env`, so the wiring merges the lock's environment into it. The process start time comes from `ps -o lstart=`, which ubuntu CI is the first to run on Linux.
+**First wave (unit N1, #188).** The module is built, with tests over the first step's cases, and wired into nothing. Its shape for the second wave: a child joins through a token in `IR_GPU_LOCK_TOKEN`; `record(pid)` keeps the lock for a browser that outlives the process that launched it, and `forget(pid, {token})` is what `--down` will call, so `--down` is never refused; every change to a held lock runs under an edit mutex and lands by rename. A refusal returns in 34–47 ms, including the holder's spawn. `capture.mjs` spawns drive.mjs with no `env`, so the wiring merges the lock's environment into it. A lock that declares another format version is refused as busy rather than reclaimed, because a worktree on another branch can run another revision of the module, and a lock this one cannot read is one it cannot prove gone. The process start time comes from `ps -o stat= -o lstart=`, and ubuntu CI ran the suite green on #188.
 
 ### 13. P43: PR media from one command
 
@@ -728,7 +728,7 @@ P03's guard fails closed on a software adapter. The boot timeout is 8 minutes, w
 
 **Review.** The feasibility review vetoes it. Its success metric is the overlap the standing rule forbids, `test:gpu` acquiring beside a live rig, and being wrong costs a macOS crash. GPU-process CPU near zero says nothing about the memory a held page keeps resident, which is the load behind the crashes. So the measurement covers resident GPU memory too, and whether an idle rig counts as a GPU job is then Jon's call. `ir.idle` has to be idempotent, because `frameHold` counts holds. The simpler alternative is drive.mjs closing Chrome after an idle timeout, at the cost of the warm attach.
 
-**Measured (G5).** On the Mac mini, with the display asleep ([On the Mac mini](#on-the-mac-mini)). The review's inference holds there: a detached rig renders nothing, 4 frames in 66.7 s, with its GPU process at 0.02% of a core, so a hold adds nothing to it. The memory does not follow. Detached or held, the rig keeps about 1.9 GB of GPU-driver allocations above the baseline, and only `--down` returns them, so the idle timeout is the alternative that frees it. `holdFrames()` is reachable from a `--file` step through the dev server's module graph, so the measurement needed no `ir.idle`. Whether a rig that submits no work and holds 1.9 GB is a GPU job is Jon's call.
+**Measured (G5).** On the Mac mini, with the display asleep ([On the Mac mini](#on-the-mac-mini)). The review's inference holds there: a detached rig renders almost nothing, at most 4 frames in 66.7 s, with its GPU process at 0.02% of a core, so a hold adds nothing to it. The memory does not follow. Detached or held, the rig keeps about 2 GB of GPU-driver allocations above the baseline, and only `--down` returns them, so the idle timeout is the alternative that frees it. `holdFrames()` is reachable from a `--file` step through the dev server's module graph, so the measurement needed no `ir.idle`. Whether a rig that submits no work and holds about 2 GB is a GPU job is Jon's call.
 
 ### 17. P37: the docs as a crawled site
 
@@ -850,7 +850,7 @@ For identity, `ir` exposes `BUILD_ID` ([`build.ts`](../../apps/game/src/build.ts
 
 **Review.** The allocator half is sound, and it targets a class the memory notes hit four times. The identity half needs more than `BUILD_ID`. It names a commit, any dirty tree reports `<sha>-dirty`, and parallel worktrees are cut from the same `origin/main`, so `BUILD_ID` alone cannot tell sibling trees apart. The served tree root in the mechanism is that review's correction. `pnpm dev` keeps 5173 and 8787 ([`dev.mjs`](../../scripts/dev.mjs):42-43), which AGENTS.md, CLAUDE.md, `t3.json` and the human workflow name. The allocator covers the drive, preset, Playwright and base roles. About 2 days.
 
-**First wave (N4, #188).** The allocator is built, in 16000–17199: six roles of 200 ports each, below both ephemeral ranges and above the highest bad port. A port is free only when a connection is refused on both 127.0.0.1 and ::1, because on macOS a bind to either succeeds beside a `0.0.0.0` listener. The core takes git's worktree list as well as the tree, because two trees started at once cannot tell each other apart by probing: with 200 slots, two trees collide 0.5% of the time, six 7.3% and nineteen 58.6%.
+**First wave (unit N4, #188).** The allocator is built, in 16000–17199: six roles of 200 ports each, below both ephemeral ranges and above the highest bad port. A port is free only when a connection fails at once on both 127.0.0.1 and ::1, because on macOS a bind to either succeeds beside a `0.0.0.0` listener. The core takes git's worktree list as well as the tree, because two trees started at once cannot tell each other apart by probing: with 200 slots, two trees collide 0.5% of the time, six 7.3% and nineteen 58.6%.
 
 ### 22. P19: `ir.environment()` and `ir.perf()`, one versioned perf record
 
@@ -951,9 +951,9 @@ Cold and warm runs are interleaved, because boot moves with the thermal step (4.
 
 **Success.** A cold-against-warm boot table with intervals, and the throttled lane against 4 s.
 
-**Risks.** The cold settle is the final sky tier: [perf.md](perf.md):266-271's 1,536 tiles at two a frame is about 12.8 s, against the measured 12.1–12.7 s. The 0/1638 reading at settle is the readout zeroing its count when nothing is pending (`galaxyCache.ts`:194), not evidence against it. The first step therefore confirms that a warm load is an archive hit, and attributes far-shore's slower settle cluster. Warming by reload already works today (0.5–1 s).
+**Risks.** The cold settle is the final sky tier: [perf.md](perf.md):266-271's 1,536 tiles at two a frame is about 12.8 s, against the measured 12.1–12.7 s. The 0/1638 reading at settle is the readout zeroing its count when nothing is pending (`galaxyCache.ts`:194), not evidence against it. The first step therefore confirms that a warm load is an archive hit, and attributes far-shore's slower settle cluster. Warming by reload already works at earthrise (0.5–1 s, probe B); at far-shore a warm load still waits 8.5–9.1 s on `terrain.deposits` (G2).
 
-**First step, on the Mac mini (G2).** A warm relaunch and a warm navigation are both archive hits, at both points. The mini shows no slower cluster to attribute: five cold far-shore runs settle in 12.2–12.4 s, closed by the sky. Warm, far-shore settles in 8.5–9.1 s, closed by `terrain.deposits`, which every load measures.
+**The first step's archive half, on the Mac mini (G2, dev build).** A warm relaunch and a warm navigation are both archive hits, at both points, and the mini shows no slower far-shore cluster to attribute. The production table of cold against warm boots is unmeasured.
 
 ### 26. C3: headless `presets:compare --all`, with measured dark-plate floors, on the existing rig (vetoed by completeness)
 
@@ -1160,9 +1160,9 @@ Separately, the skill records a trap: never run `npx playwright install chrome`,
 - The archives are IndexedDB: verified.
 - Chrome opens a cloned profile once the Singleton locks are removed: training data.
 
-**Review.** The fit review vetoes it. The sky archive holds two entries ([`galaxySkyArchive.ts`](../../apps/game/src/render/galaxySkyArchive.ts)), and the 13 pictures span five systems (SOL, HIP71683, HIP8102, P222_0_0_6, P222_1_0_9), so a template warmed across the point set keeps only the last two skies; it needs one template per system. A cloned profile also carries Chrome's GPU and Dawn shader caches, which move boot figures as well as settle. A `git describe` build id does not change with uncommitted edits, so a dirty-tree template outlives the edits that move its archive versions. The saving is real, about 12 s a run, and P04's worker-scoped context, ordered by system, gets most of it without a template store.
+**Review.** The fit review vetoes it. The sky archive holds two entries ([`galaxySkyArchive.ts`](../../apps/game/src/render/galaxySkyArchive.ts)), and the 13 pictures span five systems (SOL, HIP71683, HIP8102, P222_0_0_6, P222_1_0_9), so a template warmed across the point set keeps only the last two skies; it needs one template per system. A cloned profile also carries Chrome's GPU and Dawn shader caches, which move boot figures as well as settle. A `git describe` build id does not change with uncommitted edits, so a dirty-tree template outlives the edits that move its archive versions. The saving is real: about 12 s a run at earthrise and about 3.6 s at far-shore (G2), and P04's worker-scoped context, ordered by system, gets most of it without a template store.
 
-**Its premise, measured (G2).** A warm relaunch is an archive hit at both points, and earthrise settles warm in 0.25–0.54 s, inside the success metric's 1.5 s. Far-shore settles warm in 8.5–9.1 s, held by `terrain.deposits`, so a generated point cannot meet it.
+**Its premise, measured (G2).** A warm relaunch is an archive hit at both points, and earthrise settles warm within 0.25–0.54 s, at the settle protocol's 250 ms resolution and inside the success metric's 1.5 s. Far-shore, the one generated point measured, settles warm in 8.5–9.1 s, held by `terrain.deposits`, so a 1.5 s warm target does not hold there.
 
 ### 35. X12: refresh rate as an operating-point axis (vetoed by fit)
 
@@ -1238,7 +1238,7 @@ Rebinding rows are GPU-free and run in P35.
 - Green under `channel: 'chrome'`: measured (C).
 - The TypeScript loader resolves relative `.ts` imports into `packages/devtools` and `apps/game/src`: verified by a no-browser run, 2 passed in 330 ms. The `@/` alias needs config.
 - No `allowBuilds` entry needed: verified.
-- A warm profile after fresh navigation: unverified.
+- A warm profile after fresh navigation: measured on the Mac mini (G2), an archive hit at both points.
 
 ### 38. X5: a late pipeline-compile census
 
@@ -1352,7 +1352,7 @@ A contrast probe reads background luminance behind each `.hud-layer` text box on
 
 ### 46. P41: the cinema's reference loop, frame-exact (vetoed by fit)
 
-Parked `/cinema?t=` frames land exactly: 0 px between captures, against about 530 px for a verb seek. Twelve keyframes from the measured beats, compared tree against base in one session, give the cutscene a check with no third-party frames. A dump mode for the sibling `tng-inertial` checkout's `compare_render.py` serves only the main checkout. **Kept as:** the twelve keyframes folded into C3 or P14 as cases, about half a day.
+Parked `/cinema?t=` frames land exactly: 0 px between captures, against about 530 px for a verb seek. Twelve keyframes from the measured beats, compared tree against base in one session, give the cutscene a check with no third-party frames. A dump mode for the sibling `tng-inertial` checkout's `compare_render.py` serves only the main checkout. **Kept as:** the twelve keyframes as cases in `presets:compare`, since the census leaves neither C3 nor P14 to hold them, about half a day.
 
 ### 47. P28: `ir.knobs()` and `ir.setKnob()`, a quality-knob registry
 
@@ -1541,7 +1541,7 @@ MotionMark-style ramps over one knob, then a constrained search over three or fo
 
 ### 64. P11: ir-mcp, the harness as typed agent tools (vetoed by fit)
 
-A long-lived MCP server holds booted Chrome 157 pages and exposes `ir` verbs with schemas generated from `GameHarness`. It adds a third launcher with its own trap list. It holds the lock for an agent session unless it idles pages (X13). It amends `browser.md`, which is Jon's rule. WebMCP (`page.webmcp`, 1.64) is the alternative that keeps schemas beside the verbs. Agents' preference over the 80 ms CLI is unmeasured.
+A long-lived MCP server holds booted Chrome 157 pages and exposes `ir` verbs with schemas generated from `GameHarness`. It adds a third launcher with its own trap list. It holds the lock for an agent session unless Jon exempts an idle page (X13; G5 finds a held page keeps about 2 GB of driver allocations). It amends `browser.md`, which is Jon's rule. WebMCP (`page.webmcp`, 1.64) is the alternative that keeps schemas beside the verbs. Agents' preference over the 80 ms CLI is unmeasured.
 
 ### 65. P44: the guide over loopback WebRTC
 
@@ -1578,7 +1578,7 @@ Node-only work runs in parallel worktrees. GPU work runs one job at a time, on a
 
 The first wave runs on the Mac mini: `worktree-implementer` agents in parallel worktrees for the Node lane ([`/parallel`](../../.claude/skills/parallel/SKILL.md)), and one agent at a time in the GPU lane. No file belongs to two units in one wave. Until P01 is wired, the GPU lane's one agent is the lock, so no Node-lane unit runs `pnpm test:gpu`, a browser, drive.mjs or `presets:*`.
 
-**It ran on 7 November 2026.** The Node lane is #188, the six units collected in the order below onto `830c243`, with `pnpm check` green on the collected tree (20 stages, 3,649 tests). The GPU lane's figures are in [On the Mac mini](#on-the-mac-mini): G1 and G2 ran before the Node lane, G3 beside it, and G5 after every worker had exited. G4 did not run, because G3 decided. Until #188 merges, the second wave is cut from its branch, `feat/playwright-first-wave`.
+**It ran on 7 November 2026.** The Node lane is #188, the six units collected in the order below onto `830c243`, with `pnpm check` green on the collected tree. The GPU lane's figures are in [On the Mac mini](#on-the-mac-mini): G1 and G2 ran before the Node lane, G3 beside it, and G5 after every worker had exited. G4 did not run, because G3 decided. Until #188 merges, the second wave is cut from its branch, `feat/playwright-first-wave`.
 
 **Before any agent starts.**
 
@@ -1601,13 +1601,13 @@ The first wave runs on the Mac mini: `worktree-implementer` agents in parallel w
 
 **The GPU lane, one step at a time, in this order.** Every figure names the machine, the point, the build and the thermal state.
 
-| Step | Work                                                                                                                                            | Window                | Feeds                           |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------- |
-| G1   | C1's check: a `code`-carrying event from `--js` flips the stored `ir.hud.debug.on` preference on a warm page                                    | pixels                | N6's trap 10, which waits on it |
-| G2   | P24's first step: warm-load archive hits, and far-shore's two settle clusters                                                                   | quiet                 | P24, and X9's question          |
-| G3   | The census, headed: `pnpm presets:compare --all --twice` on HEAD, then once more on a wiped profile                                             | pixels, display awake | rank 1's decision               |
-| G4   | The census, headless, only if G3 does not decide: the 13 pictures twice in fresh Chrome 157 headless contexts at 480×320@1, by probe C's script | pixels                | C3 or P14                       |
-| G5   | X13's measurement: GPU-process CPU and resident GPU memory, live and held                                                                       | quiet                 | Jon's idle-rig decision         |
+| Step | Work                                                                                                                                            | Window                | Feeds                   |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------- |
+| G1   | C1's check: a `code`-carrying event from `--js` flips the stored `ir.hud.debug.on` preference on a warm page                                    | pixels                | N6's trap 10            |
+| G2   | P24's first step: warm-load archive hits, and far-shore's two settle clusters                                                                   | quiet                 | P24, and X9's question  |
+| G3   | The census, headed: `pnpm presets:compare --all --twice` on HEAD, on a wiped profile and on the profile it leaves                               | pixels, display awake | rank 1's decision       |
+| G4   | The census, headless, only if G3 does not decide: the 13 pictures twice in fresh Chrome 157 headless contexts at 480×320@1, by probe C's script | pixels                | C3 or P14               |
+| G5   | X13's measurement: GPU-process CPU and resident GPU memory, live and held                                                                       | quiet                 | Jon's idle-rig decision |
 
 **Collecting it.** In this order, each rebased onto the one before: N2, N3, N4, N1, N5, then N6 once G1 has reported.
 
@@ -1617,7 +1617,7 @@ The first wave runs on the Mac mini: `worktree-implementer` agents in parallel w
 
 **Phase 1 — the rig, hardened (weeks 2–3).**
 
-- Whether an idle rig counts as a GPU job, which is Jon's call on X13's figures (G5: no GPU work detached, about 1.9 GB held until `--down`).
+- Whether an idle rig counts as a GPU job, which is Jon's call on X13's figures (G5: almost no GPU work detached, about 2 GB held until `--down`).
 - P07 `--key` and `--click`, then P08's flag. Both edit drive.mjs or its steps, so they land one at a time.
 - P08's validation: flash page, retina strobe, 13 plates.
 - The census's change to `compare.mjs`: dark plates reported by default against a per-picture floor taken by `--twice` (rank 1, G3). C3 is not needed.
@@ -1648,7 +1648,7 @@ The first wave runs on the Mac mini: `worktree-implementer` agents in parallel w
 - P27's Node half, then X5 as its browser half.
 - P25 and X8.
 - P31.
-- P34, X1, X11's no-key half in P35, X7's retained half (a Node test of `dprCeiling` and one touch-point buffer assertion in P33), P36, P39, and P41's keyframes in C3.
+- P34, X1, X11's no-key half in P35, X7's retained half (a Node test of `dprCeiling` and one touch-point buffer assertion in P33), P36, P39, and P41's keyframes as `presets:compare` cases.
 - P42's full smoke, after P34. P14 is not scheduled, and the census did not call for it, so the smoke's plate leg is `presets:compare`, which by then reports the dark plates by default.
 
 **Phase 4 — each moonshot gated on a measurement.**
@@ -1670,24 +1670,24 @@ The first wave runs on the Mac mini: `worktree-implementer` agents in parallel w
 
 ## What the engine has to add
 
-| Addition                                                | Shape                                            | For                       | Constraint                                                 |
-| ------------------------------------------------------- | ------------------------------------------------ | ------------------------- | ---------------------------------------------------------- |
-| `ir.idle(on)`                                           | `RenderHost` → `holdFrames()`                    | X13, P01                  | a driver state, never set inside a measurement             |
-| Build identity                                          | `ir.build()` → `BUILD_ID` and the served tree    | X3, P03, P19, P39         | the tree root on the dev server only                       |
-| `ir.environment()`                                      | operating-point record                           | P19, P03                  | a readout: every field `?.`, never throws                  |
-| `ir.perf(opts)`                                         | `perf/1` record                                  | P19, P18                  | spans with frames running, then held passes, `ir.gpu` last |
-| Budgets and `TileProducerStats`                         | through host ports                               | P19                       | `packages/` may not import app code or name `performance`  |
-| `ir.perfPoints()`, `ir.perfPoint(id)`, `perfPoints.ts`  | registry over `PICTURES`                         | P20, X5, X7, X8, X12, P31 | no canonical write                                         |
-| `ir.whenBooted`, `whenSettled`, `whenFrames`            | promises                                         | P30, P02, P04             | no new timer; frame-end hook for `whenFrames`              |
-| `ir.quiescent()`, presentation digest                   | readout                                          | P30, P22                  | never writes, never stops a frame                          |
-| `ir.drawClasses()`, `ir.drawClass(id, visible)`         | `RenderHost`                                     | X8, P17                   | never a presentation switch                                |
-| `ir.knobs()`, `ir.setKnob()`, `engine.tuning`, `?tune=` | through `preferences.write`                      | P28, P29                  | P27 first; Jon's stance on a shipped `?tune=`              |
-| `ir.stepFrames(n, {dt, drain})`, `frameDelta()`         | `frameStep.ts` beside `frameHold.ts`             | P21, X12                  | touches the one wall-clock entry                           |
-| `ir.targets()`, `ir.readTarget(label)`                  | readback inside rAF while held                   | P17                       | a readout never changes the frame                          |
-| `ir.recording()`, `InputLog`, `pnpm sim --replay`       | `packages/simulation`                            | P40                       | canonical verbs only; an ADR for the format                |
-| `?census=gpu`                                           | wraps `createBuffer`, `createTexture`, `destroy` | P23                       | over-counts, never throws                                  |
-| Final-sky mark                                          | a Timer mark in `browserTiming.ts`               | P24                       | marks only in that file                                    |
-| Graphics-off `QUERY` switch                             | `paths.ts`                                       | P35, P36                  | a short ADR, only if the strike marker proves entangled    |
+| Addition                                                | Shape                                            | For                       | Constraint                                                                                                                                       |
+| ------------------------------------------------------- | ------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ir.idle(on)`                                           | `RenderHost` → `holdFrames()`                    | X13, P01                  | a driver state, never set inside a measurement; needed only if Jon exempts an idle rig, since a detached one already renders almost nothing (G5) |
+| Build identity                                          | `ir.build()` → `BUILD_ID` and the served tree    | X3, P03, P19, P39         | the tree root on the dev server only                                                                                                             |
+| `ir.environment()`                                      | operating-point record                           | P19, P03                  | a readout: every field `?.`, never throws                                                                                                        |
+| `ir.perf(opts)`                                         | `perf/1` record                                  | P19, P18                  | spans with frames running, then held passes, `ir.gpu` last                                                                                       |
+| Budgets and `TileProducerStats`                         | through host ports                               | P19                       | `packages/` may not import app code or name `performance`                                                                                        |
+| `ir.perfPoints()`, `ir.perfPoint(id)`, `perfPoints.ts`  | registry over `PICTURES`                         | P20, X5, X7, X8, X12, P31 | no canonical write                                                                                                                               |
+| `ir.whenBooted`, `whenSettled`, `whenFrames`            | promises                                         | P30, P02, P04             | no new timer; frame-end hook for `whenFrames`                                                                                                    |
+| `ir.quiescent()`, presentation digest                   | readout                                          | P30, P22                  | never writes, never stops a frame                                                                                                                |
+| `ir.drawClasses()`, `ir.drawClass(id, visible)`         | `RenderHost`                                     | X8, P17                   | never a presentation switch                                                                                                                      |
+| `ir.knobs()`, `ir.setKnob()`, `engine.tuning`, `?tune=` | through `preferences.write`                      | P28, P29                  | P27 first; Jon's stance on a shipped `?tune=`                                                                                                    |
+| `ir.stepFrames(n, {dt, drain})`, `frameDelta()`         | `frameStep.ts` beside `frameHold.ts`             | P21, X12                  | touches the one wall-clock entry                                                                                                                 |
+| `ir.targets()`, `ir.readTarget(label)`                  | readback inside rAF while held                   | P17                       | a readout never changes the frame                                                                                                                |
+| `ir.recording()`, `InputLog`, `pnpm sim --replay`       | `packages/simulation`                            | P40                       | canonical verbs only; an ADR for the format                                                                                                      |
+| `?census=gpu`                                           | wraps `createBuffer`, `createTexture`, `destroy` | P23                       | over-counts, never throws                                                                                                                        |
+| Final-sky mark                                          | a Timer mark in `browserTiming.ts`               | P24                       | marks only in that file                                                                                                                          |
+| Graphics-off `QUERY` switch                             | `paths.ts`                                       | P35, P36                  | a short ADR, only if the strike marker proves entangled                                                                                          |
 
 Some pieces need no engine change and live in fixtures:
 
@@ -1702,12 +1702,12 @@ WebMCP page tools registered from `harness.ts` are an experimental alternative t
 
 ## What would change the ranking
 
-Each of these answers would move proposals up or down:
+Each of these answers would move proposals up or down. The ranked table is scored before the first wave and is not re-scored; an answered item says which way it moves:
 
-- **P24's first step.** Answered on the Mac mini (G2). A warm load is an archive hit, so P04's worker-scoped context, ordered by system, saves about 12 s a run at earthrise, and P18 rises. At far-shore it saves about 3.6 s, because a warm settle still waits 8.5–9.1 s on `terrain.deposits`, so a suite at a generated point budgets about 9 s of settle warm and 12 s cold there. The slow cluster did not reproduce on the mini.
+- **P24's first step.** Answered on the Mac mini for the dev build (G2). A warm load is an archive hit, so P04's worker-scoped context, ordered by system, saves about 12 s a run at earthrise, and P18 rises. At far-shore it saves about 3.6 s, because a warm settle still waits 8.5–9.1 s on `terrain.deposits`, so a suite at far-shore budgets about 9 s of settle warm and 12 s cold on the mini. The slow cluster did not reproduce on the mini.
   - _If the Air's 17–19 s cluster is terrain:_ every suite at a generated point on the Air budgets 17–19 s of settle.
 - **The dark-plate census.** Answered on the Mac mini (G3). Headed self-noise is 0 px on every picture, well under #180's deltas, so a `compare.mjs` default change closes the blind spot in about a day, and C3 and P14 drop.
-- **X13 and the sandbox probe.** Answered in part. A held page does not free its GPU memory (G5), although a detached rig already spends no GPU time, so the question for Jon is whether a rig holding 1.9 GB with no work submitted is a GPU job. A Claude Code worktree subagent writes the git common directory (N1).
+- **X13 and the sandbox probe.** Answered in part. A held page does not free its GPU memory (G5), although a detached rig already spends no GPU time, so the question for Jon is whether a rig holding about 2 GB with no work submitted is a GPU job. A Claude Code worktree subagent writes the git common directory (unit N1).
   - _If Codex or EnterWorktree sessions cannot write it:_ P01 needs a different lock home before anything wires to it.
 - **P32 on the hosted runner.**
   - _If positive and repeatable:_ P14's comparator, P27's browser half and X5 move into CI.
@@ -1735,7 +1735,7 @@ Playwright and browser behavior:
 What the measurements did not cover:
 
 - Does the dev build's per-frame cost differ from production at a static stance? N7 resolved only heap.
-- What is far-shore's spread at 2880×1800 with N > 1?
+- What is far-shore's spread at 2880×1800 on the Air with N > 1? The mini's is CV 0.27% over 18 runs (M3).
 - Does `page.clock`'s 16 ms grid reproduce 60 Hz temporal defects, and do the watchdog, firstLight timers and worker heartbeats stay healthy under a paused clock?
 - What is the cross-build plate noise for commits that change no rendering? P16's plate mode rests on it.
 - Does a headless boot without `presentation=occluded` ever climb the watchdog? This decides whether P33's negative check can run headless.
@@ -1785,4 +1785,4 @@ The external sources below were read for the spike on 6 November 2026. Facts mar
 - [Clerk: testing authenticated flows with Playwright](https://github.com/clerk/clerk-docs/blob/main/docs/guides/development/testing/playwright/test-authenticated-flows.mdx)
 - [Vitest Browser Mode](https://github.com/vitest-dev/vitest/blob/main/docs/guide/browser/visual-regression-testing.md)
 
-**Raw evidence.** The probe scripts, their outputs, the noise-floor plans and `analyze.py` are untracked, in `.scratch/playwright-spike/` of the Air's main checkout, with the noise-floor runs under `perf-feasibility/`. The Mac mini's main checkout holds a copy at the same path. `bun install` there restores Playwright 1.62.1 from its `bun.lock`. It uses the cached Chrome for Testing 151 build, which both machines hold. Anything worth keeping becomes a tracked script under one of the proposals above. The first wave's GPU-lane outputs (G1–G5, each step's scripts, and the agents' structured results) are untracked too, in `.scratch/playwright-first-wave/` of the Mac mini's main checkout.
+**Raw evidence.** The probe scripts, their outputs, the noise-floor plans and `analyze.py` are untracked, in `.scratch/playwright-spike/` of the Air's main checkout, with the noise-floor runs under `perf-feasibility/`. The Mac mini's main checkout holds a copy at the same path. `bun install` there restores Playwright 1.62.1 from its `bun.lock`. It uses the cached Chrome for Testing 151 build, which both machines hold. Anything worth keeping becomes a tracked script under one of the proposals above. The first wave's GPU-lane outputs (G1, G2, G3 and G5, each step's scripts, and the agents' structured results) are untracked too, in `.scratch/playwright-first-wave/` of the Mac mini's main checkout.
