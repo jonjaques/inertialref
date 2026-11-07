@@ -12697,6 +12697,104 @@ sphere, taken as an occluder the way a body's disk is, removes the planet: at
 the 98 m floor it is 83.6° across with Earth's center behind it. So a station
 hides nothing. Proxima Centauri b clicks and describes as before.
 
+## Headless Chrome presents, a synthetic key fires, and the Air steps up 35% under load (7 Nov 2026)
+
+The Playwright research spike (pull request #187) probed the browser before
+choosing a runner, and three of its results contradicted the rig's own
+documentation. Its plan letters the probes A–K for capability, N1–N7 for the
+noise floor on the Air and M1–M6 on the Mac mini; G1 is the rig check run
+afterward. Unless a figure says otherwise it is the dev build, Google Chrome
+157.0.8103.39 through Playwright 1.62.1's `channel: 'chrome'` in new headless,
+`presentation=occluded` on every URL, and the MacBook Air (Mac17,4, fanless,
+base M5) at `29e2ed46`. The Mac mini is a Mac18,5 with the M6, fan-cooled. The
+two points are earthrise and the far-shore preset
+(`g:milky-way/s:P222_1_0_9/b:4`, a shore under a low sun outside Sol).
+
+**A headless compositor presents, and SwiftShader runs on macOS.** `drive.mjs`'s
+header said a headless one presents nothing and that SwiftShader has no macOS
+build to fall back to. Chrome 157 and Chrome for Testing 151 headless both
+get `apple`/`metal-3` with `timestamp-query` (probe A). A CDP screencast takes
+179–180 frames in 3 s headless and headed alike, where `recordVideo` is fixed
+at 25 fps (F), and the two lit pictures probed agree across launches and between
+headless and headed at AE 0 (C). Playwright's default headless shell is the one that falls back: its
+adapter is null and the game runs WebGL over SwiftShader, 67–79 s to boot and
+1 fps. `--enable-unsafe-webgpu` alone gives it SwiftShader's fallback adapter;
+with `--use-angle=metal` as well it reaches `metal-3`. The header keeps the
+window for the reasons that survive (pacing, the display's color profile, the
+guide's audio) and gives the headless figures as Playwright-launched Chrome's,
+because `drive.mjs` has never launched headless.
+
+**A synthetic key fires a binding when it carries `code`.** Trap 10 of the
+drive skill said a synthetic `KeyboardEvent` on `window` did not fire
+`chrome.instruments`. The keymap resolves a chord from `event.code`,
+`chordFromEvent` returns null for an empty one (`input/chord.ts`), and
+`handleKeyDown` accepts an untrusted event, skipping only
+`useDevice('keyboard')`. Probe E, headless at earthrise:
+`page.keyboard.press('Shift+KeyH')` took the DOM from 60 elements to 1,035, and
+a synthetic event carrying only `key` changed nothing. The rig check (G1) ran
+on the Mac mini at earthrise 1600×900@1 in the planetarium, on the dev build of
+`830c243`, against a warm `drive.mjs --keep-storage` page
+(`performance.timeOrigin` unchanged, no navigation), with thermal pressure 0
+before and after, and a keydown and its keyup per row:
+
+| target     | event                                            | `ir.hud.debug.on` | Instruments toggle            |
+| ---------- | ------------------------------------------------ | ----------------- | ----------------------------- |
+| `window`   | ``{key: '`', bubbles: true}``                    | unset → unset     | unchanged                     |
+| `window`   | ``{code: 'Backquote', key: '`', bubbles: true}`` | unset → `true`    | on; four panel toggles appear |
+| `document` | ``{code: 'Backquote', key: '`', bubbles: true}`` | `true` → `false`  | off; the four toggles go      |
+| `document` | ``{key: '`', bubbles: true}``                    | `false` → `false` | unchanged                     |
+
+The keymap's only keydown listener is on `window`, so the `document` dispatch
+reaches it by bubbling. An untrusted event is still not a key press: it does
+not hand the prompts and the cursor to the keyboard, and an `isTrusted` check in
+`handleKeyDown` would remove the route without a sound. The driver has no
+trusted key step. Not run: a `document` dispatch without `bubbles`, a dispatch
+on a focused element, and CDP's `Input.dispatchKeyEvent`.
+
+**The noise floor (N1, N4).** Five fresh-context runs per point, cool, at
+1600×900@1: `ir.gpu` as the minimum of three `ir.gpu(120)` calls has a CV of
+0.56% at far-shore and 1.56% at earthrise, and heap after GC 0.1%. Cool, the
+between-run variance at far-shore is near zero — 0.007 ms against 0.331
+within a run — so repeats in one context beat fresh contexts, each of which
+costs 29–40 s cool and 51–57 s stepped, mostly settle. Seven interleaved pairs
+of DPR 1 against 1.05 at far-shore, on the stepped machine: `ir.gpu` +0.88 ms
+(+6.5%), paired t = 25, sd(d) 0.093 ms on a 13.55 ms mean, which resolves
+0.85% at five pairs (95% confidence). rAF p95 moved 0.00 ms, because headless
+rAF is a fixed 60 Hz clock and detects nothing under the 16.7 ms budget. The
+CPU-only spans moved with the GPU: `Engine/snapshot` +28%, `Render/sensor`
++24%.
+
+**The fanless Air steps up about 35% after about 3.5 minutes of load (N5).** At
+far-shore 1600×900@1: `ir.gpu` 10.2 → 13.4–15.3 ms, settle 12–18 → 28–31 s,
+boot 5 → 7–8 s, main-thread task time 400 → 510–790 ms/s, and the CPU spans
+with them. Five idle minutes restored it, two cool sessions disagreed by 8%,
+and `pmset` recorded no thermal warning. Onset and recovery are one observation
+each, and the cause is inferred, because `powermetrics` needs sudo. A candidate
+measured against a stored baseline on this machine measures the room, so the
+rule — interleave first, idle between short arms only, name the thermal state
+— is a caveat in [perf](design/plans/perf.md#caveats-that-shape-these-numbers)
+and a trap in both driving cards.
+
+**The Mac mini held flat (M2, M3, M5)**, on N1's protocol at `521c494`, served
+by `pnpm dev:client`, with thermal pressure
+(`notifyutil -g com.apple.system.thermalpressurelevel`) 0 before and after every
+run. At far-shore 1600×900@1, 27 runs over 10.4 minutes: `ir.gpu` 6.79 ms
+against the Air's 10.2 cool, a CV of 0.76% leaving out one excursion, the last
+three runs within 0.1% of the first three. The excursion was runs 10 and 11,
+3.8–4.6 minutes in, at 7.03–7.77 ms and rising within each run, while a code
+review and citation scripts ran on the machine; the next 15 read 6.77–6.82 ms
+under the same load, and the cause is unattributed. At 1440×900@2 (buffer
+2880×1800), 18 runs over 10.4 minutes: 21.24 ms against the Air's 39.8, a CV of
+0.27%, the last three 0.19% below the first, rAF 41–42. That is one session at
+each window, not a between-session spread, so the rule holds there too. The
+headed rig there, off the 1920-point desktop at x=2400, gets 100.7–102.9 rAF/s
+with the display asleep and 98.6–100.7 awake, gaps to 16.8–18.2 ms, never the
+panel's 120.
+
+**Rejected:** marking perf.md's earlier figures "possibly confounded". None of
+them records its thermal state, so the mark could not be acted on; the rule
+asks it of every figure taken from here.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
