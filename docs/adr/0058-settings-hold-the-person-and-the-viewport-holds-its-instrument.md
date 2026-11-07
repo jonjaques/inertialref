@@ -48,9 +48,14 @@ has that viewport.**
   the panel names it, disables sliders that would move the kept lens, and the
   optics describe the lens in use.
 - **The sensor record is split by field, not by key.** Settings › Display draws
-  peak luminance and the comfort clamps, in every camera mode, disabled outside
-  Automatic with the reason. The Lens panel draws mode, compensation and white
-  balance. Each side's restore touches only its own fields.
+  peak luminance and the comfort clamps. The clamps are live in every camera
+  mode, with a line saying they apply in Automatic: the default mode is
+  Enhanced, and a protection that could only be set after switching modes in a
+  viewport would tie the person's choice back to the instrument. Peak luminance
+  is drawn under every output and live only with headroom to cap. The Lens
+  panel draws mode, compensation and white balance. Each side restores only its
+  own fields (`restoreFields`), and removes the key when what remains is the
+  default.
 - **The Camera panel is where the eye is**: the subject and its target, a Frame
   section that opens on the three verbs, and the ground.
 - **A settings page restores what it draws, and restoring removes the key.**

@@ -12507,8 +12507,17 @@ draws the line the settings page keeps from here on.
 dark ranges sit in `render.sensor` beside the camera mode, and moving the
 section moved them into a viewport panel — out of the one page a person who
 needs them would look in. Opus caught it. They are Settings › Display › Comfort,
-drawn in every camera mode and disabled outside Automatic with the reason, and
-the two halves of the record each restore only their own fields.
+live in every camera mode — disabled outside Automatic, as the first cut had
+them, a person could not set their protection before choosing the mode it
+applies in, and the default is Enhanced — and the two halves of the record
+each restore only their own fields, removing the key when what remains is the
+default.
+
+**Round two, on the implementation (8, 8 and 8 of 10).** A restore's in-place
+confirmation dropped a keyboard's focus at `<body>`; `ConfirmAction` hands it to
+Keep and back. The changed marks counted an override that named the act's own
+default; they compare with the defaults now, and a capture that lands on the
+default removes the override instead of storing a copy of it.
 
 **"Reset everything" deleted the saved shots.** `PERSONAL_PICTURES` is in the
 registry because that is where storage is, and the reset walked every key.
