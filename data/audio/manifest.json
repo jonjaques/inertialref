@@ -1,0 +1,3284 @@
+{
+  "generated": "2026-11-07",
+  "target": {
+    "integrated": -18,
+    "truePeak": -1
+  },
+  "tools": {
+    "ffmpeg": "ffmpeg version 9.0.2 Copyright (c) 2000-2026 the FFmpeg developers",
+    "aac": "AudioToolbox (aac_at)"
+  },
+  "tracks": [
+    {
+      "id": "stellardrone-red-giant",
+      "title": "Red Giant",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019183917/https://stellardrone.bandcamp.com/album/light-years",
+      "url": "https://archive.org/download/Stellardrone-LightYears/Stellardrone%20-%20Light%20Years%20-%2001%20Red%20Giant.flac",
+      "channel": "Internet Archive item Stellardrone-LightYears, a collector’s upload of the album’s FLAC. Each file was matched against the label’s own 320 kbps MP3 (item stasis017, uploaded by Energostatic Records); `verified` has the figures",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-red-giant.flac",
+        "sha256": "7c5a1d4a0b11527d24a419b5cb5a2a0de35efc812912c03de5dbf0bb3a619c8d",
+        "bytes": 15619924,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 638550,
+        "duration": 195.692,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 3.9
+        },
+        "spectrumFrames": 264,
+        "loudness": {
+          "integrated": -13.5,
+          "range": 16.6,
+          "truePeak": -1
+        }
+      },
+      "gain": {
+        "wanted": -4.5,
+        "applied": -4.5,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-red-giant.d311f97601.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 6332963,
+          "sha256": "d311f976012f5030aa1b1ea641ddea2de14c0ee7107b86572a0db46df8112d70",
+          "integrated": -18,
+          "truePeak": -5.5
+        },
+        {
+          "name": "music/stellardrone-red-giant.2f7e25d23c.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4177235,
+          "sha256": "2f7e25d23c96d5fd0b24ff9f88e3b4bd6db6cf4aa41af9d0ea9051003cfe33fc",
+          "integrated": -18,
+          "truePeak": -4.9
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-airglow",
+      "title": "Airglow",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019183917/https://stellardrone.bandcamp.com/album/light-years",
+      "url": "https://archive.org/download/Stellardrone-LightYears/Stellardrone%20-%20Light%20Years%20-%2002%20Airglow.flac",
+      "channel": "Internet Archive item Stellardrone-LightYears, a collector’s upload of the album’s FLAC. Each file was matched against the label’s own 320 kbps MP3 (item stasis017, uploaded by Energostatic Records); `verified` has the figures",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-airglow.flac",
+        "sha256": "6ce2ad85232ba778a5732e6b9320fe1d38bd6eed18a49e592949414154b8aca0",
+        "bytes": 24649520,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 622220,
+        "duration": 316.923,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 3.7
+        },
+        "spectrumFrames": 427,
+        "loudness": {
+          "integrated": -17.9,
+          "range": 11.3,
+          "truePeak": -0.9
+        }
+      },
+      "gain": {
+        "wanted": -0.1,
+        "applied": -0.4,
+        "capped": true
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-airglow.9cafa7b5ec.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 10339298,
+          "sha256": "9cafa7b5ec4f35f385969331a0568c53f7fa2eff1ee5d376643197c2025135e8",
+          "integrated": -18.3,
+          "truePeak": -1.2
+        },
+        {
+          "name": "music/stellardrone-airglow.38f39068eb.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 7386958,
+          "sha256": "38f39068eb10e2872aaf6c6df79c366ab7a857e57c0e876c394e12de36f2fe82",
+          "integrated": -18.3,
+          "truePeak": -1.1
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-comet-halley",
+      "title": "Comet Halley",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019183917/https://stellardrone.bandcamp.com/album/light-years",
+      "url": "https://archive.org/download/Stellardrone-LightYears/Stellardrone%20-%20Light%20Years%20-%2007%20Comet%20Halley.flac",
+      "channel": "Internet Archive item Stellardrone-LightYears, a collector’s upload of the album’s FLAC. Each file was matched against the label’s own 320 kbps MP3 (item stasis017, uploaded by Energostatic Records); `verified` has the figures",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-comet-halley.flac",
+        "sha256": "9f5cf366d5ad5374693a37d8ec0b7b9a6ed9c6bcb345d5bb9449886af072ce72",
+        "bytes": 22293195,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 802083,
+        "duration": 222.353,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 1
+        },
+        "spectrumFrames": 299,
+        "loudness": {
+          "integrated": -14.3,
+          "range": 12.4,
+          "truePeak": -0.9
+        }
+      },
+      "gain": {
+        "wanted": -3.7,
+        "applied": -3.7,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-comet-halley.aa13099cf4.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 7622419,
+          "sha256": "aa13099cf4883069eaece6a22126263093b8dd034173b94ff41b05b18b4fa487",
+          "integrated": -18.1,
+          "truePeak": -4.6
+        },
+        {
+          "name": "music/stellardrone-comet-halley.7f052d0a90.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 5134161,
+          "sha256": "7f052d0a90574dfb2707e828f20bf371f9d84c5468bd4c1e84ed771ab3585869",
+          "integrated": -18,
+          "truePeak": -4.2
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-ultra-deep-field",
+      "title": "Ultra Deep Field",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019183917/https://stellardrone.bandcamp.com/album/light-years",
+      "url": "https://archive.org/download/Stellardrone-LightYears/Stellardrone%20-%20Light%20Years%20-%2008%20Ultra%20Deep%20Field.flac",
+      "channel": "Internet Archive item Stellardrone-LightYears, a collector’s upload of the album’s FLAC. Each file was matched against the label’s own 320 kbps MP3 (item stasis017, uploaded by Energostatic Records); `verified` has the figures",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-ultra-deep-field.flac",
+        "sha256": "9b4dc3f636dd6bb9733fd3a3dc217ee7255c3d8f60e85e59abd2b659e82b31f0",
+        "bytes": 21818420,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 506187,
+        "duration": 344.828,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 2.1
+        },
+        "spectrumFrames": 464,
+        "loudness": {
+          "integrated": -13.9,
+          "range": 12.4,
+          "truePeak": -1
+        }
+      },
+      "gain": {
+        "wanted": -4.1,
+        "applied": -4.1,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-ultra-deep-field.7dc1475cee.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 11044147,
+          "sha256": "7dc1475ceed25d7f5c70bce1f60bfe78dc544e28068c87731365f13643bf23a2",
+          "integrated": -18,
+          "truePeak": -5.1
+        },
+        {
+          "name": "music/stellardrone-ultra-deep-field.96ca3ee982.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 7595252,
+          "sha256": "96ca3ee9825ac345c34df678053e49fefc9cdb14eb23a15ddefc8955cf5577e3",
+          "integrated": -18,
+          "truePeak": -5.1
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-messier-45",
+      "title": "Messier 45",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019183917/https://stellardrone.bandcamp.com/album/light-years",
+      "url": "https://archive.org/download/Stellardrone-LightYears/Stellardrone%20-%20Light%20Years%20-%2010%20Messier%2045.flac",
+      "channel": "Internet Archive item Stellardrone-LightYears, a collector’s upload of the album’s FLAC. Each file was matched against the label’s own 320 kbps MP3 (item stasis017, uploaded by Energostatic Records); `verified` has the figures",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-messier-45.flac",
+        "sha256": "5db0b080297e53ca20ffb8637335a719b07dc521c616359bfe05bc2a58183a95",
+        "bytes": 10300568,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 562716,
+        "duration": 146.441,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 6.4
+        },
+        "spectrumFrames": 197,
+        "loudness": {
+          "integrated": -14.9,
+          "range": 16.1,
+          "truePeak": -1
+        }
+      },
+      "gain": {
+        "wanted": -3.1,
+        "applied": -3.1,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-messier-45.ed889be99a.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 4769952,
+          "sha256": "ed889be99a5a03bb0a4a67a857c90064d9ede7c15b2c67a9652e2bc6806bcccd",
+          "integrated": -18,
+          "truePeak": -4.1
+        },
+        {
+          "name": "music/stellardrone-messier-45.738f9997c6.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3293319,
+          "sha256": "738f9997c66bc96620ccffc1e0664f47e3d1773dc3a1d1c73c8ac6bbcbe4a38f",
+          "integrated": -18,
+          "truePeak": -4.2
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-the-belt-of-orion",
+      "title": "The Belt of Orion",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019202013/https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "url": "https://archive.org/download/Stellardrone-InventTheUniverse/Stellardrone-01-TheBeltOfOrion.flac",
+      "channel": "Internet Archive item Stellardrone-InventTheUniverse, uploaded by the artist: the archive’s own lossless FLAC of his WAV original",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-the-belt-of-orion.flac",
+        "sha256": "68e12fd9135e21125ff7d895b0f21950a91e61d0676f8e54e0c5c2c0e7c139fb",
+        "bytes": 30929602,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 622887,
+        "duration": 397.241,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 3.5
+        },
+        "spectrumFrames": 535,
+        "loudness": {
+          "integrated": -14.2,
+          "range": 11.3,
+          "truePeak": -0.7
+        }
+      },
+      "gain": {
+        "wanted": -3.8,
+        "applied": -3.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-the-belt-of-orion.1e4ce23057.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 12826849,
+          "sha256": "1e4ce2305735d4c504f27da5314aaf77ecbe857cb32a3418929a6cf0e31d83f6",
+          "integrated": -18,
+          "truePeak": -4.5
+        },
+        {
+          "name": "music/stellardrone-the-belt-of-orion.f1512eaeab.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 9073390,
+          "sha256": "f1512eaeab3773da6d9cced14218809e55a451f3e54592ac6d80b0a802e05c33",
+          "integrated": -18,
+          "truePeak": -4.6
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-approaching-the-heliopause",
+      "title": "Approaching the Heliopause",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019202013/https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "url": "https://archive.org/download/Stellardrone-InventTheUniverse/Stellardrone-04-ApproachingTheHeliopause.flac",
+      "channel": "Internet Archive item Stellardrone-InventTheUniverse, uploaded by the artist: the archive’s own lossless FLAC of his WAV original",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-approaching-the-heliopause.flac",
+        "sha256": "13c9794f7935ed14e8006d365326328b12d9dd130a0130301023c97635fc5dca",
+        "bytes": 27320917,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 659236,
+        "duration": 331.546,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 11.7
+        },
+        "spectrumFrames": 446,
+        "loudness": {
+          "integrated": -17,
+          "range": 12.5,
+          "truePeak": -4
+        }
+      },
+      "gain": {
+        "wanted": -1,
+        "applied": -1,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-approaching-the-heliopause.d300003943.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 10594156,
+          "sha256": "d300003943b25bc8d142d21b87f332cdfd8af326f363bb6236029e924bb1acb8",
+          "integrated": -18,
+          "truePeak": -5
+        },
+        {
+          "name": "music/stellardrone-approaching-the-heliopause.8a16aceb43.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 7439105,
+          "sha256": "8a16aceb433524e8dee73cc16f0e854a24ccab27ee4dfd1d98591b2d5072594b",
+          "integrated": -18,
+          "truePeak": -5.1
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-pale-blue-dot",
+      "title": "Pale Blue Dot",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019202013/https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "url": "https://archive.org/download/Stellardrone-InventTheUniverse/Stellardrone-06-PaleBlueDot.flac",
+      "channel": "Internet Archive item Stellardrone-InventTheUniverse, uploaded by the artist: the archive’s own lossless FLAC of his WAV original",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-pale-blue-dot.flac",
+        "sha256": "aa98849171220081e0c595307b4fdcea2e1b68000e53b1d74ceea949a580281d",
+        "bytes": 14264972,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 306175,
+        "duration": 372.727,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 13.2
+        },
+        "spectrumFrames": 502,
+        "loudness": {
+          "integrated": -19.7,
+          "range": 17.9,
+          "truePeak": -5.7
+        }
+      },
+      "gain": {
+        "wanted": 1.7,
+        "applied": 1.7,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-pale-blue-dot.1771de4881.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 10601948,
+          "sha256": "1771de48811219a4370064bc869b63cde67eb35e289c6160f48ad4967cd52f45",
+          "integrated": -18,
+          "truePeak": -4
+        },
+        {
+          "name": "music/stellardrone-pale-blue-dot.972006918d.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 8300136,
+          "sha256": "972006918d54fd5c3dad0d21776812bf9f74df4a699a116e4f1143428fd0f7f9",
+          "integrated": -18,
+          "truePeak": -3.9
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-the-earth-is-blue",
+      "title": "The Earth Is Blue",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/on-a-beam-of-light",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019170434/https://stellardrone.bandcamp.com/album/on-a-beam-of-light",
+      "url": "https://archive.org/download/OnABeamOfLight/Stellardrone-02-TheEarthIsBlue.flac",
+      "channel": "Internet Archive item OnABeamOfLight, uploaded by the artist: the archive’s own lossless FLAC of his WAV original",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-the-earth-is-blue.flac",
+        "sha256": "45e8aa15c63a759dbb4a20970ba6fee1750a96303e9ebc5659204c526d16f31c",
+        "bytes": 30058776,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 466027,
+        "duration": 516,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 3.5
+        },
+        "spectrumFrames": 695,
+        "loudness": {
+          "integrated": -18,
+          "range": 5.6,
+          "truePeak": -2.8
+        }
+      },
+      "gain": {
+        "wanted": 0,
+        "applied": 0,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-the-earth-is-blue.06a6ec65d3.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 16273457,
+          "sha256": "06a6ec65d31d9c48b5dd4fc875bcc27a9a75e4ff3e3014de7d4b4cb24e5025fd",
+          "integrated": -18,
+          "truePeak": -2.8
+        },
+        {
+          "name": "music/stellardrone-the-earth-is-blue.1b9f33cf70.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 11285342,
+          "sha256": "1b9f33cf70d4347d3db68643be2cd7182b0994dcc9c58b7e6a6c3dfa0ce721f0",
+          "integrated": -18,
+          "truePeak": -3
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-fermi-paradox",
+      "title": "Fermi Paradox",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/on-a-beam-of-light",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019170434/https://stellardrone.bandcamp.com/album/on-a-beam-of-light",
+      "url": "https://archive.org/download/OnABeamOfLight/Stellardrone-07-FermiParadox.flac",
+      "channel": "Internet Archive item OnABeamOfLight, uploaded by the artist: the archive’s own lossless FLAC of his WAV original",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-fermi-paradox.flac",
+        "sha256": "3e1acb28b145c0b091b854301d8e459bb89a397259204e5bc11f9186cca9996c",
+        "bytes": 48040187,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 873354,
+        "duration": 440.052,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 2
+        },
+        "spectrumFrames": 592,
+        "loudness": {
+          "integrated": -12.1,
+          "range": 7.5,
+          "truePeak": 0.2
+        }
+      },
+      "gain": {
+        "wanted": -5.9,
+        "applied": -5.9,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-fermi-paradox.0cb451cb32.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 14890653,
+          "sha256": "0cb451cb32b21c1626e909804447fa78549608e0bbb999460da7cbc9d2efe42b",
+          "integrated": -18,
+          "truePeak": -5.6
+        },
+        {
+          "name": "music/stellardrone-fermi-paradox.f7ed79cc26.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 9721467,
+          "sha256": "f7ed79cc26fa28f1437ff6afafc82259b3b0835f1f1d5b367ffb801576bb45f1",
+          "integrated": -18,
+          "truePeak": -4.8
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-cosmic-sunrise",
+      "title": "Cosmic Sunrise",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/sublime",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019180637/https://stellardrone.bandcamp.com/album/sublime",
+      "url": "https://archive.org/download/Stellardrone-Sublime/Stellardrone-03-CosmicSunrise.flac",
+      "channel": "Internet Archive item Stellardrone-Sublime, uploaded by the artist: the archive’s own lossless FLAC of his WAV original",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-cosmic-sunrise.flac",
+        "sha256": "5504360e99c713f4cfb3019c0ec5f9b83e444785d4ff260787efd7dbe8063a7e",
+        "bytes": 24746562,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 639286,
+        "duration": 309.677,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 3.9
+        },
+        "spectrumFrames": 417,
+        "loudness": {
+          "integrated": -15.7,
+          "range": 7.3,
+          "truePeak": -2.9
+        }
+      },
+      "gain": {
+        "wanted": -2.3,
+        "applied": -2.3,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-cosmic-sunrise.6586fdcec0.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 10174061,
+          "sha256": "6586fdcec082bfe64b10f79ea939052e41a81d4216b560b6b6a73f899e1b445e",
+          "integrated": -18,
+          "truePeak": -5.2
+        },
+        {
+          "name": "music/stellardrone-cosmic-sunrise.87f5438bce.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 6717916,
+          "sha256": "87f5438bceb0dd37cd760b089a1566db5f53de115e4c4ae3162ddb750cc9afaa",
+          "integrated": -18,
+          "truePeak": -5.2
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-milky-way",
+      "title": "Milky Way",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/sublime",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019180637/https://stellardrone.bandcamp.com/album/sublime",
+      "url": "https://archive.org/download/Stellardrone-Sublime/Stellardrone-04-MilkyWay.flac",
+      "channel": "Internet Archive item Stellardrone-Sublime, uploaded by the artist: the archive’s own lossless FLAC of his WAV original",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-milky-way.flac",
+        "sha256": "d234d77914e3ad0c72cac303c450151cc16b429c422f3f1b976566d6ef86c186",
+        "bytes": 51866483,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 795678,
+        "duration": 521.481,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 5.7
+        },
+        "spectrumFrames": 702,
+        "loudness": {
+          "integrated": -15.2,
+          "range": 6.9,
+          "truePeak": -3
+        }
+      },
+      "gain": {
+        "wanted": -2.8,
+        "applied": -2.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-milky-way.19204fe7c7.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 17074870,
+          "sha256": "19204fe7c70fadf1b7035d776416d63a2345f28033e2d731287bdd93319dcf0d",
+          "integrated": -18,
+          "truePeak": -5.8
+        },
+        {
+          "name": "music/stellardrone-milky-way.1c460b4a91.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 11604256,
+          "sha256": "1c460b4a91da988512a1026c53b49d02be040e025ac92c4cb298b7841d3a9674",
+          "integrated": -18,
+          "truePeak": -5.5
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-billions-and-billions",
+      "title": "Billions and Billions",
+      "artist": "Stellardrone",
+      "license": "cc-by-4.0",
+      "licensor": "https://stellardrone.bandcamp.com/album/a-moment-of-stillness",
+      "statement": "Bandcamp license block: “some rights reserved”, linking https://creativecommons.org/licenses/by/4.0/; the artist’s bio on the same page: “Releasing all albums for free and promoting free sharing of digital copies. (CC BY 4.0)”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261019202858/https://stellardrone.bandcamp.com/album/a-moment-of-stillness",
+      "url": "https://archive.org/download/AMomentOfStillness/Stellardrone-02-BillionsAndBillions.flac",
+      "channel": "Internet Archive item AMomentOfStillness, uploaded by the artist: the archive’s own lossless FLAC of his WAV original",
+      "note": "First published BY-NC-ND 3.0; see the comment above the Stellardrone releases in apps/ingest/src/audioSources.ts.",
+      "master": {
+        "file": "stellardrone-billions-and-billions.flac",
+        "sha256": "0ac7e5d9b8749b8adb6790c19d54fa95cb15118b4d59064b1bda1f7300217099",
+        "bytes": 23915611,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 609156,
+        "duration": 314.082,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 5
+        },
+        "spectrumFrames": 423,
+        "loudness": {
+          "integrated": -15.4,
+          "range": 10.6,
+          "truePeak": -3
+        }
+      },
+      "gain": {
+        "wanted": -2.6,
+        "applied": -2.6,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/stellardrone-billions-and-billions.581933792c.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 10320019,
+          "sha256": "581933792c83fec703ee8820fc03dceecec7257fa2a14ca1ef45edc97e0e80f6",
+          "integrated": -18,
+          "truePeak": -5.5
+        },
+        {
+          "name": "music/stellardrone-billions-and-billions.c0df862262.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 7108970,
+          "sha256": "c0df86226258768ca95a0ecd436e075aa71faa054a9792240f0322d24cf25a6d",
+          "integrated": -18,
+          "truePeak": -5.3
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-one",
+      "title": "Cylinder One",
+      "artist": "Chris Zabriskie",
+      "license": "cc-by-4.0",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "statement": "“All of my music is free to use in creative projects under the Creative Commons Attribution 4.0 license.” (https://chriszabriskie.com/use/); the album page: “The songs on this album are free to use in creative projects under a Creative Commons Attribution license.”, with the JSON-LD license https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261027061638/https://chriszabriskie.com/cylinders/",
+      "url": "https://archive.org/download/chris-zabriskie-complete-discography/Chris%20Zabriskie%20-%20Cylinders/Chris%20Zabriskie%20-%20Cylinders%20-%2001%20Cylinder%20One.flac",
+      "channel": "Internet Archive item chris-zabriskie-complete-discography, a collector’s upload of the album’s FLAC. Each file was matched against the artist’s own AAC on audio.chriszabriskie.com; `verified` has the figures",
+      "gated": "His own FLAC, through Bandcamp’s name-your-price download.",
+      "note": "On claims: “If you receive a copyright claim on my music, it did not come from me. Please contact me right away.”",
+      "master": {
+        "file": "chris-zabriskie-cylinder-one.flac",
+        "sha256": "f4a7eacdcc0be1886cf42b37d141795cf8088dcc4747ac8a4d7c8d154c8ded91",
+        "bytes": 9407641,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 427361,
+        "duration": 176.107,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 0.6
+        },
+        "spectrumFrames": 237,
+        "loudness": {
+          "integrated": -17.2,
+          "range": 17.9,
+          "truePeak": -2.3
+        }
+      },
+      "gain": {
+        "wanted": -0.8,
+        "applied": -0.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/chris-zabriskie-cylinder-one.f4a855cf21.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5554067,
+          "sha256": "f4a855cf210e3fd667784b45caadf7b8572f98a3297246c98d5a05177c7d086f",
+          "integrated": -18,
+          "truePeak": -3.1
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-one.145ca29364.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4194468,
+          "sha256": "145ca2936414c5d46e5e2d89c7aed9a938ccefcbbff735e0f48dcabe31c8dbcf",
+          "integrated": -18,
+          "truePeak": -3.3
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-two",
+      "title": "Cylinder Two",
+      "artist": "Chris Zabriskie",
+      "license": "cc-by-4.0",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "statement": "“All of my music is free to use in creative projects under the Creative Commons Attribution 4.0 license.” (https://chriszabriskie.com/use/); the album page: “The songs on this album are free to use in creative projects under a Creative Commons Attribution license.”, with the JSON-LD license https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261027061638/https://chriszabriskie.com/cylinders/",
+      "url": "https://archive.org/download/chris-zabriskie-complete-discography/Chris%20Zabriskie%20-%20Cylinders/Chris%20Zabriskie%20-%20Cylinders%20-%2002%20Cylinder%20Two.flac",
+      "channel": "Internet Archive item chris-zabriskie-complete-discography, a collector’s upload of the album’s FLAC. Each file was matched against the artist’s own AAC on audio.chriszabriskie.com; `verified` has the figures",
+      "gated": "His own FLAC, through Bandcamp’s name-your-price download.",
+      "note": "On claims: “If you receive a copyright claim on my music, it did not come from me. Please contact me right away.”",
+      "master": {
+        "file": "chris-zabriskie-cylinder-two.flac",
+        "sha256": "5804515ce564a41a10fae347a9065e001411fca9e8476c583d5089319b01bbe5",
+        "bytes": 13541742,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 475510,
+        "duration": 227.827,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 1.2
+        },
+        "spectrumFrames": 307,
+        "loudness": {
+          "integrated": -16.2,
+          "range": 12.7,
+          "truePeak": -0.2
+        }
+      },
+      "gain": {
+        "wanted": -1.8,
+        "applied": -1.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/chris-zabriskie-cylinder-two.99efc5400c.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 7464643,
+          "sha256": "99efc5400c0551e96b1e25b96e8541f2ef620c453facc071ee4c5768e340d779",
+          "integrated": -18,
+          "truePeak": -2
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-two.bfb72a8a4d.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 5120757,
+          "sha256": "bfb72a8a4d2afcc401f078f167d076538dd4ad3914fecb2a79145827064cb2c3",
+          "integrated": -18,
+          "truePeak": -2.1
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-four",
+      "title": "Cylinder Four",
+      "artist": "Chris Zabriskie",
+      "license": "cc-by-4.0",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "statement": "“All of my music is free to use in creative projects under the Creative Commons Attribution 4.0 license.” (https://chriszabriskie.com/use/); the album page: “The songs on this album are free to use in creative projects under a Creative Commons Attribution license.”, with the JSON-LD license https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261027061638/https://chriszabriskie.com/cylinders/",
+      "url": "https://archive.org/download/chris-zabriskie-complete-discography/Chris%20Zabriskie%20-%20Cylinders/Chris%20Zabriskie%20-%20Cylinders%20-%2004%20Cylinder%20Four.flac",
+      "channel": "Internet Archive item chris-zabriskie-complete-discography, a collector’s upload of the album’s FLAC. Each file was matched against the artist’s own AAC on audio.chriszabriskie.com; `verified` has the figures",
+      "gated": "His own FLAC, through Bandcamp’s name-your-price download.",
+      "note": "On claims: “If you receive a copyright claim on my music, it did not come from me. Please contact me right away.”",
+      "master": {
+        "file": "chris-zabriskie-cylinder-four.flac",
+        "sha256": "66a99310755645bf6d90e6ea25f0e227092b3b87d28abfb84b328d877759db6f",
+        "bytes": 9391016,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 425157,
+        "duration": 176.707,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 0.6
+        },
+        "spectrumFrames": 238,
+        "loudness": {
+          "integrated": -13.6,
+          "range": 4.6,
+          "truePeak": -0.2
+        }
+      },
+      "gain": {
+        "wanted": -4.4,
+        "applied": -4.4,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/chris-zabriskie-cylinder-four.b4b53a93ab.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 4559414,
+          "sha256": "b4b53a93ab58330af6013357ffd9684d31c4b97ceccf51fa4b998ecd548de50b",
+          "integrated": -18,
+          "truePeak": -4.6
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-four.17ea430c09.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3676962,
+          "sha256": "17ea430c099b653679eac367538e4fb31534bf841aecf0e1c897d3ff771e1d28",
+          "integrated": -18,
+          "truePeak": -4.6
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-five",
+      "title": "Cylinder Five",
+      "artist": "Chris Zabriskie",
+      "license": "cc-by-4.0",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "statement": "“All of my music is free to use in creative projects under the Creative Commons Attribution 4.0 license.” (https://chriszabriskie.com/use/); the album page: “The songs on this album are free to use in creative projects under a Creative Commons Attribution license.”, with the JSON-LD license https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261027061638/https://chriszabriskie.com/cylinders/",
+      "url": "https://archive.org/download/chris-zabriskie-complete-discography/Chris%20Zabriskie%20-%20Cylinders/Chris%20Zabriskie%20-%20Cylinders%20-%2005%20Cylinder%20Five.flac",
+      "channel": "Internet Archive item chris-zabriskie-complete-discography, a collector’s upload of the album’s FLAC. Each file was matched against the artist’s own AAC on audio.chriszabriskie.com; `verified` has the figures",
+      "gated": "His own FLAC, through Bandcamp’s name-your-price download.",
+      "note": "On claims: “If you receive a copyright claim on my music, it did not come from me. Please contact me right away.”",
+      "master": {
+        "file": "chris-zabriskie-cylinder-five.flac",
+        "sha256": "b58d17d40dd7e261cfa340956d5f35d20489880a5fec4e1acca1969286447a87",
+        "bytes": 9618300,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 443409,
+        "duration": 173.533,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 0.5
+        },
+        "spectrumFrames": 234,
+        "loudness": {
+          "integrated": -12.9,
+          "range": 9.4,
+          "truePeak": -0.3
+        }
+      },
+      "gain": {
+        "wanted": -5.1,
+        "applied": -5.1,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/chris-zabriskie-cylinder-five.1b56be616d.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5227610,
+          "sha256": "1b56be616d55448a22f840e67c6afec2e9cb2355a02f328c92bdf0243b7cb94f",
+          "integrated": -18,
+          "truePeak": -5.4
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-five.2fe14db3cb.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4033722,
+          "sha256": "2fe14db3cbc3f24e549da1c3a38eb727812283db8266153f050ade5e4b7326bd",
+          "integrated": -18,
+          "truePeak": -5.3
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-seven",
+      "title": "Cylinder Seven",
+      "artist": "Chris Zabriskie",
+      "license": "cc-by-4.0",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "statement": "“All of my music is free to use in creative projects under the Creative Commons Attribution 4.0 license.” (https://chriszabriskie.com/use/); the album page: “The songs on this album are free to use in creative projects under a Creative Commons Attribution license.”, with the JSON-LD license https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261027061638/https://chriszabriskie.com/cylinders/",
+      "url": "https://archive.org/download/chris-zabriskie-complete-discography/Chris%20Zabriskie%20-%20Cylinders/Chris%20Zabriskie%20-%20Cylinders%20-%2007%20Cylinder%20Seven.flac",
+      "channel": "Internet Archive item chris-zabriskie-complete-discography, a collector’s upload of the album’s FLAC. Each file was matched against the artist’s own AAC on audio.chriszabriskie.com; `verified` has the figures",
+      "gated": "His own FLAC, through Bandcamp’s name-your-price download.",
+      "note": "On claims: “If you receive a copyright claim on my music, it did not come from me. Please contact me right away.”",
+      "master": {
+        "file": "chris-zabriskie-cylinder-seven.flac",
+        "sha256": "91aa9453b72e141b7fc4fff5cd6feb6fbe65ef30a3f44471a8085dd78f1ce869",
+        "bytes": 34254923,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 514943,
+        "duration": 532.173,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 8.2
+        },
+        "spectrumFrames": 716,
+        "loudness": {
+          "integrated": -15.2,
+          "range": 6.8,
+          "truePeak": -0.2
+        }
+      },
+      "gain": {
+        "wanted": -2.8,
+        "applied": -2.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/chris-zabriskie-cylinder-seven.c91d0a548e.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 17554115,
+          "sha256": "c91d0a548e965437643cad0fa87148d6a7928a80aa9e5a6ff025dc126f819132",
+          "integrated": -18,
+          "truePeak": -3
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-seven.5d86844803.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 11778522,
+          "sha256": "5d86844803012ea6c6fc66155cb77a908be41611a310651e7463dbed1a4e6329",
+          "integrated": -18,
+          "truePeak": -2
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-eight",
+      "title": "Cylinder Eight",
+      "artist": "Chris Zabriskie",
+      "license": "cc-by-4.0",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "statement": "“All of my music is free to use in creative projects under the Creative Commons Attribution 4.0 license.” (https://chriszabriskie.com/use/); the album page: “The songs on this album are free to use in creative projects under a Creative Commons Attribution license.”, with the JSON-LD license https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261027061638/https://chriszabriskie.com/cylinders/",
+      "url": "https://archive.org/download/chris-zabriskie-complete-discography/Chris%20Zabriskie%20-%20Cylinders/Chris%20Zabriskie%20-%20Cylinders%20-%2008%20Cylinder%20Eight.flac",
+      "channel": "Internet Archive item chris-zabriskie-complete-discography, a collector’s upload of the album’s FLAC. Each file was matched against the artist’s own AAC on audio.chriszabriskie.com; `verified` has the figures",
+      "gated": "His own FLAC, through Bandcamp’s name-your-price download.",
+      "note": "On claims: “If you receive a copyright claim on my music, it did not come from me. Please contact me right away.”",
+      "master": {
+        "file": "chris-zabriskie-cylinder-eight.flac",
+        "sha256": "df9ee99003b9003a188c190a4d4f293c531e7837616405296da847aaa3789ba7",
+        "bytes": 25244802,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 595958,
+        "duration": 338.88,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 3.6
+        },
+        "spectrumFrames": 456,
+        "loudness": {
+          "integrated": -12.1,
+          "range": 2.6,
+          "truePeak": -0.2
+        }
+      },
+      "gain": {
+        "wanted": -5.9,
+        "applied": -5.9,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/chris-zabriskie-cylinder-eight.b9c893714e.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 11145762,
+          "sha256": "b9c893714e44ac9a6bbbc9beee28bacec6f014ab14386cefb7ab546dcbcd98a4",
+          "integrated": -18,
+          "truePeak": -6.1
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-eight.469c3f68a2.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 7203499,
+          "sha256": "469c3f68a217fc32733894eade692d2b49efa45e8eb49ed8b6df636b37995505",
+          "integrated": -18,
+          "truePeak": -6.1
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-nine",
+      "title": "Cylinder Nine",
+      "artist": "Chris Zabriskie",
+      "license": "cc-by-4.0",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "statement": "“All of my music is free to use in creative projects under the Creative Commons Attribution 4.0 license.” (https://chriszabriskie.com/use/); the album page: “The songs on this album are free to use in creative projects under a Creative Commons Attribution license.”, with the JSON-LD license https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261027061638/https://chriszabriskie.com/cylinders/",
+      "url": "https://archive.org/download/chris-zabriskie-complete-discography/Chris%20Zabriskie%20-%20Cylinders/Chris%20Zabriskie%20-%20Cylinders%20-%2009%20Cylinder%20Nine.flac",
+      "channel": "Internet Archive item chris-zabriskie-complete-discography, a collector’s upload of the album’s FLAC. Each file was matched against the artist’s own AAC on audio.chriszabriskie.com; `verified` has the figures",
+      "gated": "His own FLAC, through Bandcamp’s name-your-price download.",
+      "note": "On claims: “If you receive a copyright claim on my music, it did not come from me. Please contact me right away.”",
+      "master": {
+        "file": "chris-zabriskie-cylinder-nine.flac",
+        "sha256": "da26fc210472ff46f1f67f73eeafe4863d78fdf6b93c73d613253fbac2e8a992",
+        "bytes": 16101722,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 399018,
+        "duration": 322.827,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 0.5
+        },
+        "spectrumFrames": 435,
+        "loudness": {
+          "integrated": -15.6,
+          "range": 18.1,
+          "truePeak": -0.6
+        }
+      },
+      "gain": {
+        "wanted": -2.4,
+        "applied": -2.4,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/chris-zabriskie-cylinder-nine.4c4f94fbc2.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 9349649,
+          "sha256": "4c4f94fbc2bdef09b7fdc215b7b8bd5b109460da974eb255c9680778ce7ef78c",
+          "integrated": -17.9,
+          "truePeak": -3
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-nine.58ed62afae.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 7173576,
+          "sha256": "58ed62afae9a9620533d409d5c7d8b5aa11f9ee95fbc0118ce03b28bc29d0d97",
+          "integrated": -17.9,
+          "truePeak": -3.1
+        }
+      ]
+    },
+    {
+      "id": "the-ghost-of-an-alien-always-looking-up",
+      "title": "Always Looking Up",
+      "artist": "The Ghost of an Alien",
+      "license": "cc-by-4.0",
+      "licensor": "https://archive.org/details/Dust-Time-Gravity",
+      "statement": "Item page: “Usage Attribution 4.0 International”, linking http://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://archive.org/download/Dust-Time-Gravity/06%20-%20Always%20Looking%20Up.flac",
+      "channel": "Internet Archive item Dust-Time-Gravity, uploaded by the label, Vacant Twelve, which is the artist’s own: the original FLAC",
+      "master": {
+        "file": "the-ghost-of-an-alien-always-looking-up.flac",
+        "sha256": "de9ba98041f2e484dd651bf9243dbd10df25bca2374b4788d05cf82bec8a0eeb",
+        "bytes": 43720486,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 630584,
+        "duration": 554.666,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 6.1
+        },
+        "spectrumFrames": 747,
+        "loudness": {
+          "integrated": -17.5,
+          "range": 18,
+          "truePeak": -3
+        }
+      },
+      "gain": {
+        "wanted": -0.5,
+        "applied": -0.5,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/the-ghost-of-an-alien-always-looking-up.1e391ec964.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 18311391,
+          "sha256": "1e391ec964627fbb95202b31eafdfc1308b6afd76d3dd87a0fcc72f1e96eb217",
+          "integrated": -18,
+          "truePeak": -3.5
+        },
+        {
+          "name": "music/the-ghost-of-an-alien-always-looking-up.a4b61c06a4.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 10801029,
+          "sha256": "a4b61c06a4b19c2a23c27b0d8fcd8fcfa8e033bfc98e7a47048f6f226d3caea1",
+          "integrated": -18,
+          "truePeak": -3.4
+        }
+      ]
+    },
+    {
+      "id": "the-ghost-of-an-alien-polar-distance-displaced",
+      "title": "Polar Distance Displaced",
+      "artist": "The Ghost of an Alien",
+      "license": "cc-by-4.0",
+      "licensor": "https://archive.org/details/Dust-Time-Gravity",
+      "statement": "Item page: “Usage Attribution 4.0 International”, linking http://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://archive.org/download/Dust-Time-Gravity/04%20-%20Polar%20Distance%20Displaced.flac",
+      "channel": "Internet Archive item Dust-Time-Gravity, uploaded by the label, Vacant Twelve, which is the artist’s own: the original FLAC",
+      "master": {
+        "file": "the-ghost-of-an-alien-polar-distance-displaced.flac",
+        "sha256": "52ed448fdd05ee90431325e2f4d3eda89c6fa6e1e81338254cfd14fc9251ff34",
+        "bytes": 38515073,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 593879,
+        "duration": 518.827,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 1.4
+        },
+        "spectrumFrames": 699,
+        "loudness": {
+          "integrated": -19.8,
+          "range": 7.9,
+          "truePeak": -3
+        }
+      },
+      "gain": {
+        "wanted": 1.8,
+        "applied": 1.7,
+        "capped": true
+      },
+      "delivered": [
+        {
+          "name": "music/the-ghost-of-an-alien-polar-distance-displaced.da9a967c7d.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 16940715,
+          "sha256": "da9a967c7d4b333843b52e33127ede5e200192d02b9ab9c347df894c8af85004",
+          "integrated": -18.1,
+          "truePeak": -1.3
+        },
+        {
+          "name": "music/the-ghost-of-an-alien-polar-distance-displaced.7cd8fb15d5.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 9713252,
+          "sha256": "7cd8fb15d54eaac24a33be1e9c2076e1cfb060ac48bb0f3c95588643ef28f203",
+          "integrated": -18.1,
+          "truePeak": -1.2
+        }
+      ]
+    },
+    {
+      "id": "the-ghost-of-an-alien-drifting-further-and-further",
+      "title": "Drifting Further And Further",
+      "artist": "The Ghost of an Alien",
+      "license": "cc-by-4.0",
+      "licensor": "https://archive.org/details/Dust-Time-Gravity",
+      "statement": "Item page: “Usage Attribution 4.0 International”, linking http://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://archive.org/download/Dust-Time-Gravity/07%20-%20Drifting%20Further%20And%20Further.flac",
+      "channel": "Internet Archive item Dust-Time-Gravity, uploaded by the label, Vacant Twelve, which is the artist’s own: the original FLAC",
+      "master": {
+        "file": "the-ghost-of-an-alien-drifting-further-and-further.flac",
+        "sha256": "d8ee2e2b7db1960facea1ead1fc27f4dba654aef447bbd665fa95d48e5f30ae1",
+        "bytes": 42318307,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 555009,
+        "duration": 609.983,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 1.1
+        },
+        "spectrumFrames": 821,
+        "loudness": {
+          "integrated": -19.1,
+          "range": 11.5,
+          "truePeak": -3
+        }
+      },
+      "gain": {
+        "wanted": 1.1,
+        "applied": 1.1,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/the-ghost-of-an-alien-drifting-further-and-further.db3d3a86bd.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 20127291,
+          "sha256": "db3d3a86bd78c1b79912a4b8619e826a7f1db59b7c9281a463401135816ce972",
+          "integrated": -18,
+          "truePeak": -1.9
+        },
+        {
+          "name": "music/the-ghost-of-an-alien-drifting-further-and-further.d39b4148a0.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 11816732,
+          "sha256": "d39b4148a063a1e1a7aab014c38cbf29e461870a1e388d7df51276de82d9a379",
+          "integrated": -18,
+          "truePeak": -1.9
+        }
+      ]
+    },
+    {
+      "id": "synth-thetic-cosmic-navigation",
+      "title": "Cosmic Navigation",
+      "artist": "Synth-thetic",
+      "license": "cc0",
+      "licensor": "https://opengameart.org/content/cosmic-navigation",
+      "statement": "“License(s): CC0”; “CC0 / Public Domain. No Rights Reserved. Free to use however you like with no attribution required.”",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20260830075249/https://opengameart.org/content/cosmic-navigation",
+      "url": "https://opengameart.org/sites/default/files/cosmic_navigation.flac",
+      "channel": "OpenGameArt, the author’s own submission: FLAC, 24-bit 48 kHz",
+      "note": "The full version. The page also offers a seamless loop of it, which a playlist does not need.",
+      "master": {
+        "file": "synth-thetic-cosmic-navigation.flac",
+        "sha256": "16cb8764aed637306a7e3d8f911c748ce70f7d2b954beebf2cad3d21d5887661",
+        "bytes": 24951659,
+        "codec": "flac",
+        "rate": 48000,
+        "channels": 2,
+        "bits": 24,
+        "bitrate": 1128555,
+        "duration": 176.875,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 10
+        },
+        "spectrumFrames": 259,
+        "loudness": {
+          "integrated": -20.6,
+          "range": 7.8,
+          "truePeak": -4.8
+        }
+      },
+      "gain": {
+        "wanted": 2.6,
+        "applied": 2.6,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/synth-thetic-cosmic-navigation.abf31d4b4c.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 6096165,
+          "sha256": "abf31d4b4cc2b1e45ae8fd969760223beae444d466b3a85e741207018cba2c7a",
+          "integrated": -18,
+          "truePeak": -2.2
+        },
+        {
+          "name": "music/synth-thetic-cosmic-navigation.1f8826e92c.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3736259,
+          "sha256": "1f8826e92c40a87786e58fcd3f0be1200b97b7dfd7bf7e20b4d8f38cdfd87a49",
+          "integrated": -18,
+          "truePeak": -2
+        }
+      ]
+    },
+    {
+      "id": "synth-thetic-steller-dreams",
+      "title": "Steller Dreams",
+      "artist": "Synth-thetic",
+      "license": "cc0",
+      "licensor": "https://opengameart.org/content/steller-dreams",
+      "statement": "“License(s): CC0”; “CC0 / Public Domain. No Rights Reserved. Free to use however you like with no attribution required.”",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://opengameart.org/sites/default/files/steller_dreams.flac",
+      "channel": "OpenGameArt, the author’s own submission: FLAC, 24-bit 48 kHz",
+      "note": "The title is the author's spelling.",
+      "master": {
+        "file": "synth-thetic-steller-dreams.flac",
+        "sha256": "dc8a1f0e494b84b6b2124ed66201dfc353b4121c234473db43b6fa7df43f8d88",
+        "bytes": 25429459,
+        "codec": "flac",
+        "rate": 48000,
+        "channels": 2,
+        "bits": 24,
+        "bitrate": 1324450,
+        "duration": 153.6,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 16.6
+        },
+        "spectrumFrames": 225,
+        "loudness": {
+          "integrated": -25.8,
+          "range": 5.6,
+          "truePeak": -11.7
+        }
+      },
+      "gain": {
+        "wanted": 7.8,
+        "applied": 7.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/synth-thetic-steller-dreams.ab9a329d4f.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5234004,
+          "sha256": "ab9a329d4f61f868ace3bce5fa653f318c42c0f9036884b7e6a8437d448d5842",
+          "integrated": -18,
+          "truePeak": -3.9
+        },
+        {
+          "name": "music/synth-thetic-steller-dreams.4e6b37eeeb.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3416255,
+          "sha256": "4e6b37eeebf7d2dc19f7321de5bf3c8b121c58131f7e8023d93689989442b0d5",
+          "integrated": -18,
+          "truePeak": -3.8
+        }
+      ]
+    },
+    {
+      "id": "lee-rosevere-how-i-used-to-see-the-stars",
+      "title": "How I Used To See The Stars",
+      "artist": "Lee Rosevere",
+      "license": "cc-by-4.0",
+      "licensor": "https://freemusicarchive.org/music/lee-rosevere/music-for-podcasts-ambient/how-i-used-to-see-the-stars/",
+      "statement": "How I Used To See The Stars by Lee Rosevere is licensed under a Attribution 4.0 International License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261031183152/https://freemusicarchive.org/music/lee-rosevere/music-for-podcasts-ambient",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/eEYSeYrvxmNBOn3pjtVTDKSOb2q42FmporS3JT9e.mp3",
+      "channel": "Free Music Archive: the file its player streams, 320 kbps MP3. Its Download button needs a sign-in",
+      "note": "No statement about Content ID either way was found on his pages.",
+      "master": {
+        "file": "lee-rosevere-how-i-used-to-see-the-stars.mp3",
+        "sha256": "bc7fb9ba5b7bac44fa5f24a12bd1754aaca1761c54ded520f1d730f1c0d54ca3",
+        "bytes": 11225337,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 280.633,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 20096,
+          "drop": 37.9
+        },
+        "spectrumFrames": 378,
+        "loudness": {
+          "integrated": -14.5,
+          "range": 8.4,
+          "truePeak": 0
+        }
+      },
+      "gain": {
+        "wanted": -3.5,
+        "applied": -3.5,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/lee-rosevere-how-i-used-to-see-the-stars.94f53f908b.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 9074102,
+          "sha256": "94f53f908b6a81ee981f035af686a65f5d3b763a6ab034ddc080433f74d939ac",
+          "integrated": -18,
+          "truePeak": -3.5
+        },
+        {
+          "name": "music/lee-rosevere-how-i-used-to-see-the-stars.4afdde460d.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 6752441,
+          "sha256": "4afdde460d6a050922fff343bea8dbbc924aa4e943591bf0ea8c78527d3fb56b",
+          "integrated": -18,
+          "truePeak": -3.5
+        }
+      ]
+    },
+    {
+      "id": "lee-rosevere-universe-calling",
+      "title": "Universe Calling",
+      "artist": "Lee Rosevere",
+      "license": "cc-by-4.0",
+      "licensor": "https://freemusicarchive.org/music/lee-rosevere/music-for-podcasts-ambient/universe-calling/",
+      "statement": "Universe Calling by Lee Rosevere is licensed under a Attribution 4.0 International License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261031183152/https://freemusicarchive.org/music/lee-rosevere/music-for-podcasts-ambient",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/o4BD6iHmcVhLvdC4fvjYIIFH0uWC4kgEPIeCiSLg.mp3",
+      "channel": "Free Music Archive: the file its player streams, 320 kbps MP3. Its Download button needs a sign-in",
+      "note": "No statement about Content ID either way was found on his pages.",
+      "master": {
+        "file": "lee-rosevere-universe-calling.mp3",
+        "sha256": "887870f68826c64599ea48ea433a1dbba8e4e53e1970eb4bc0f7f0555c5d2586",
+        "bytes": 7598497,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 189.962,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 20160,
+          "drop": 44.9
+        },
+        "spectrumFrames": 253,
+        "loudness": {
+          "integrated": -15.8,
+          "range": 8.1,
+          "truePeak": 0
+        }
+      },
+      "gain": {
+        "wanted": -2.2,
+        "applied": -2.2,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/lee-rosevere-universe-calling.1b8fdc41a3.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 6022012,
+          "sha256": "1b8fdc41a3fe4264cb4b2edcdd574c3d36d363d388e18f2828e2f577cef0dbd9",
+          "integrated": -18,
+          "truePeak": -2.2
+        },
+        {
+          "name": "music/lee-rosevere-universe-calling.099fdd5afc.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4417755,
+          "sha256": "099fdd5afcd3bdbf0cbe8e38aed99d3dd33bffef83e466c6edb8cf58b3efc4ce",
+          "integrated": -18,
+          "truePeak": -2.1
+        }
+      ]
+    },
+    {
+      "id": "doc-and-lena-selyanina-neptune",
+      "title": "Neptune",
+      "artist": "Doc & Lena Selyanina",
+      "license": "cc-by-3.0",
+      "licensor": "https://archive.org/details/mt018",
+      "statement": "Item page: “Usage Attribution 3.0”; the label’s own MP3 tag: “Released on 23rd January 2008 under Creative Commons 3.0 Attribution License.”",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://archive.org/download/mt018/02_-_Neptune.mp3",
+      "channel": "Internet Archive item uploaded by the label, Musictrade: its own VBR MP3 (LAME, --alt-preset extreme)",
+      "gated": "The label released 24-bit FLAC by torrent only; not pursued.",
+      "master": {
+        "file": "doc-and-lena-selyanina-neptune.mp3",
+        "sha256": "8106311d37f32aa2d3bb2f444a104895ec202586efdb67053e7faec8ad7de3e7",
+        "bytes": 27002880,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 211344,
+        "duration": 1021.975,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 19218,
+          "drop": 44.8
+        },
+        "spectrumFrames": 1376,
+        "loudness": {
+          "integrated": -16,
+          "range": 16.7,
+          "truePeak": -0.1
+        }
+      },
+      "gain": {
+        "wanted": -2,
+        "applied": -2,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/doc-and-lena-selyanina-neptune.976dfa9dd6.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 33782267,
+          "sha256": "976dfa9dd664212ee44527f9eb0402b2cd6ec96ef9d0979fdbd0b735c5a19fae",
+          "integrated": -18,
+          "truePeak": -2.1
+        },
+        {
+          "name": "music/doc-and-lena-selyanina-neptune.1fcc060c26.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 22458928,
+          "sha256": "1fcc060c2635fcfd875610cfd0dff311708ff13f3055d09345d8f8b7873f9749",
+          "integrated": -18,
+          "truePeak": -2.2
+        }
+      ]
+    },
+    {
+      "id": "doc-and-lena-selyanina-mir",
+      "title": "Mir",
+      "artist": "Doc & Lena Selyanina",
+      "license": "cc-by-3.0",
+      "licensor": "https://archive.org/details/DocLenaSelyanina-SongsOfVastnessmt027",
+      "statement": "Item metadata: license http://creativecommons.org/licenses/by/3.0/, on the label’s own upload",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://archive.org/download/DocLenaSelyanina-SongsOfVastnessmt027/04_-_Mir.mp3",
+      "channel": "Internet Archive item uploaded by the label, Musictrade: its own VBR MP3 (LAME, --alt-preset extreme)",
+      "note": "The label calls it “a meditative space ambient track”.",
+      "master": {
+        "file": "doc-and-lena-selyanina-mir.mp3",
+        "sha256": "c3c566aa80886feb5490a9d7a9c102b713835fd93050bdfcfb9d860f582822cc",
+        "bytes": 23799695,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 212138,
+        "duration": 897.365,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 19084,
+          "drop": 37.7
+        },
+        "spectrumFrames": 1208,
+        "loudness": {
+          "integrated": -14.5,
+          "range": 11.1,
+          "truePeak": 0
+        }
+      },
+      "gain": {
+        "wanted": -3.5,
+        "applied": -3.5,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/doc-and-lena-selyanina-mir.6d44b1f257.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 29484858,
+          "sha256": "6d44b1f257facab602106c46533ccdcaa5e28bfdd4d0e89de4bef3d93e647005",
+          "integrated": -18,
+          "truePeak": -3.5
+        },
+        {
+          "name": "music/doc-and-lena-selyanina-mir.fa5f067a67.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 21406220,
+          "sha256": "fa5f067a67e993421f0f2243032a4c081503b746a7ffe27e447a26270f8e575d",
+          "integrated": -18,
+          "truePeak": -3.5
+        }
+      ]
+    },
+    {
+      "id": "brylie-star-song",
+      "title": "BCO – Star Song (deep space tranquility)",
+      "artist": "brylie",
+      "license": "cc-by-4.0",
+      "licensor": "https://opengameart.org/content/bco-star-song-deep-space-tranquility",
+      "statement": "“License(s): CC-BY 4.0”; the artist’s Bandcamp links https://creativecommons.org/licenses/by/4.0/ for the same recording",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20251118032247/https://opengameart.org/content/bco-star-song-deep-space-tranquility",
+      "url": "https://opengameart.org/sites/default/files/bco-starsong-2021-02-17.flac",
+      "channel": "OpenGameArt, the author’s own submission (Brylie Christopher Oxley): FLAC",
+      "master": {
+        "file": "brylie-star-song.flac",
+        "sha256": "550a5806245e49e98f1e17cecc122486252076f1f0115453593bdb252813f834",
+        "bytes": 16610620,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 16,
+        "bitrate": 603092,
+        "duration": 220.339,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 7.1
+        },
+        "spectrumFrames": 297,
+        "loudness": {
+          "integrated": -19.5,
+          "range": 14.1,
+          "truePeak": -1
+        }
+      },
+      "gain": {
+        "wanted": 1.5,
+        "applied": -0.3,
+        "capped": true
+      },
+      "delivered": [
+        {
+          "name": "music/brylie-star-song.9e03bf64b5.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 7240083,
+          "sha256": "9e03bf64b5219fa7b204c0fdc78861802ce5d3d3ee0c8403560db6173be46a0e",
+          "integrated": -19.8,
+          "truePeak": -1.3
+        },
+        {
+          "name": "music/brylie-star-song.841ae31df2.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4998873,
+          "sha256": "841ae31df25a82e86896b2e13d096bb2bc3ba0b2bf43c12c7adff25880527953",
+          "integrated": -19.8,
+          "truePeak": -1.3
+        }
+      ]
+    },
+    {
+      "id": "brylie-2021-07-10",
+      "title": "bco – 2021-07-10",
+      "artist": "brylie",
+      "license": "cc-by-4.0",
+      "licensor": "https://opengameart.org/content/bco-2021-07-10",
+      "statement": "“License(s): CC-BY 4.0”; the artist’s Bandcamp links https://creativecommons.org/licenses/by/4.0/ for the same recording",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://opengameart.org/sites/default/files/bco-2021-07-10.flac",
+      "channel": "OpenGameArt, the author’s own submission (Brylie Christopher Oxley): FLAC",
+      "note": "The author describes it as an ambient melody drifting across space. 24-bit.",
+      "master": {
+        "file": "brylie-2021-07-10.flac",
+        "sha256": "b5f3f4b265c854d4752ab46c10f302c7bceca273383206301e50a3a984610619",
+        "bytes": 60643277,
+        "codec": "flac",
+        "rate": 44100,
+        "channels": 2,
+        "bits": 24,
+        "bitrate": 1404714,
+        "duration": 345.37,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 4
+        },
+        "spectrumFrames": 465,
+        "loudness": {
+          "integrated": -18.1,
+          "range": 14.1,
+          "truePeak": -1.1
+        }
+      },
+      "gain": {
+        "wanted": 0.1,
+        "applied": -0.2,
+        "capped": true
+      },
+      "delivered": [
+        {
+          "name": "music/brylie-2021-07-10.ae70d122a6.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 12162353,
+          "sha256": "ae70d122a6de6690f4abdc37202263448b6b33ccf03e18a2d0ca38979a54f324",
+          "integrated": -18.3,
+          "truePeak": -1.3
+        },
+        {
+          "name": "music/brylie-2021-07-10.53011f031b.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 7340155,
+          "sha256": "53011f031b9a057bface2b94843b08569c9dd04fec3e69347352b0634b5ad614",
+          "integrated": -18.3,
+          "truePeak": -1.3
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-1",
+      "title": "Lullabies For The End Of The World #1",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-1/",
+      "statement": "Lullabies For The End Of The World #1 by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20260827224619/https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/8RwpuRIdNOdkazzkaujnrvXrcDybVrGYRfdYItKD.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-lullabies-for-the-end-of-the-world-1.mp3",
+        "sha256": "f875477bd79039f6b69c09ce1685cc01b22a2e98c89efffeca9a84000e8caa4a",
+        "bytes": 6595363,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 164.844,
+        "lossless": false,
+        "cutoff": {
+          "frequency": null,
+          "drop": 13.3
+        },
+        "spectrumFrames": 242,
+        "loudness": {
+          "integrated": -17.2,
+          "range": 6.4,
+          "truePeak": -1.5
+        }
+      },
+      "gain": {
+        "wanted": -0.8,
+        "applied": -0.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-1.312c38d111.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5460692,
+          "sha256": "312c38d111ef57fed4b52f5a29a5906cb26dacff562611a16d8a8c0cade80d91",
+          "integrated": -18,
+          "truePeak": -2.3
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-1.ff0fb9ca2c.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3671459,
+          "sha256": "ff0fb9ca2c44946bba769da35594de3ece7e688c24776c54e31634a3a2a62af7",
+          "integrated": -18,
+          "truePeak": -2.4
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-2",
+      "title": "Lullabies For The End Of The World #2",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-2/",
+      "statement": "Lullabies For The End Of The World #2 by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20260827224619/https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/HEbOg2oJyXLOL7DcCJvIICTxz6YqPegW0PyGZ8vp.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-lullabies-for-the-end-of-the-world-2.mp3",
+        "sha256": "560c94fee94f90490ab922560c783b9da0c1362f6a4ac1a2e8cd62360a9f0e91",
+        "bytes": 5760163,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 143.964,
+        "lossless": false,
+        "cutoff": {
+          "frequency": null,
+          "drop": 9.3
+        },
+        "spectrumFrames": 211,
+        "loudness": {
+          "integrated": -14.1,
+          "range": 5.8,
+          "truePeak": 0
+        }
+      },
+      "gain": {
+        "wanted": -3.9,
+        "applied": -3.9,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-2.ac6cd2d252.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 4768672,
+          "sha256": "ac6cd2d252d9b0a4ddc0acfae66fcd46eda5958a1065007959ef556da391869c",
+          "integrated": -18,
+          "truePeak": -3.9
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-2.15f97971c9.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3299926,
+          "sha256": "15f97971c95c5f431f2828b459439cce3620311a9d269376e8b01ba587be1c71",
+          "integrated": -18,
+          "truePeak": -3.9
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-3",
+      "title": "Lullabies For The End Of The World #3",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-3/",
+      "statement": "Lullabies For The End Of The World #3 by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20260827224619/https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/l6ZWkm9tTlgersj9RkAJE40646fNo9x3UJrAr4UP.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-lullabies-for-the-end-of-the-world-3.mp3",
+        "sha256": "5b8c4aaf252b4dce198abac40b7d1b7ea172875a7ca62d5954fde2a310c2d742",
+        "bytes": 7732963,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 193.284,
+        "lossless": false,
+        "cutoff": {
+          "frequency": null,
+          "drop": 15.7
+        },
+        "spectrumFrames": 283,
+        "loudness": {
+          "integrated": -15.6,
+          "range": 6,
+          "truePeak": -0.2
+        }
+      },
+      "gain": {
+        "wanted": -2.4,
+        "applied": -2.4,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-3.59d8c3c6e2.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 6404065,
+          "sha256": "59d8c3c6e2a8379df2f066337017bdc76c1506bfbc08550e54f10ca97748dc69",
+          "integrated": -18,
+          "truePeak": -2.5
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-3.3e77920391.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4085632,
+          "sha256": "3e77920391562453bcdf35f8a70692263beb93f0dd3b73eeaa6646e4e6f7188a",
+          "integrated": -18,
+          "truePeak": -2.5
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-4",
+      "title": "Lullabies For The End Of The World #4",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-4/",
+      "statement": "Lullabies For The End Of The World #4 by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20260827224619/https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/C5VONRgbqSGJG0zP0pPW1blqAVBaK9C20EQrF3UU.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-lullabies-for-the-end-of-the-world-4.mp3",
+        "sha256": "4ccc5147700b2c882a38e27c51aa3813a0c8972e175c1c04c6a831b7ed94717b",
+        "bytes": 6776803,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 169.38,
+        "lossless": false,
+        "cutoff": {
+          "frequency": null,
+          "drop": 15.9
+        },
+        "spectrumFrames": 248,
+        "loudness": {
+          "integrated": -17.6,
+          "range": 9.2,
+          "truePeak": -0.1
+        }
+      },
+      "gain": {
+        "wanted": -0.4,
+        "applied": -1.2,
+        "capped": true
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-4.52112b5a53.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5540069,
+          "sha256": "52112b5a53fb35c3c93336f8d1e9ab54239d16d855a14a9f6f9414b9574dedcf",
+          "integrated": -18.8,
+          "truePeak": -1.4
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-4.4dde43e4aa.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3788154,
+          "sha256": "4dde43e4aa2fc4ca0fd551b8866886a4b2fe1564c84c7007cc2a5bf20f90d238",
+          "integrated": -18.8,
+          "truePeak": -1.3
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-5",
+      "title": "Lullabies For The End Of The World #5",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-5/",
+      "statement": "Lullabies For The End Of The World #5 by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20260827224619/https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/QQ7qGFBa7XvQ4zoITcak0W3PPq4CIDuJpXDtb8BB.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-lullabies-for-the-end-of-the-world-5.mp3",
+        "sha256": "d92076e65945f9703f99c45741cf09118c1a5d8bec54e1a1245f513f9f3134ed",
+        "bytes": 5799523,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 144.948,
+        "lossless": false,
+        "cutoff": {
+          "frequency": null,
+          "drop": 17.8
+        },
+        "spectrumFrames": 213,
+        "loudness": {
+          "integrated": -15.1,
+          "range": 4.5,
+          "truePeak": 0
+        }
+      },
+      "gain": {
+        "wanted": -2.9,
+        "applied": -2.9,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-5.c820c14c85.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 4808300,
+          "sha256": "c820c14c8595f7c483e745c3c30381532e1151ead45151bb0d739306546f97a8",
+          "integrated": -18,
+          "truePeak": -2.8
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-5.8fccc9e6f6.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3118304,
+          "sha256": "8fccc9e6f630016f5d14d449b7b5df600a451f39d8c9400806b90c7442736514",
+          "integrated": -18,
+          "truePeak": -2.6
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-old-age",
+      "title": "Old Age",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-1/old-age/",
+      "statement": "Old Age by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20240914124651/https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-1",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/H6qP6CfBExLpo6O88Ii7E2WhzU0CI3klrE95FIxM.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-old-age.mp3",
+        "sha256": "6931b7ae6e4f247132b7425977cb71cc6692af9ce7dc6141e7e382746407af75",
+        "bytes": 8557645,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 213.9,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 20484,
+          "drop": 45.4
+        },
+        "spectrumFrames": 314,
+        "loudness": {
+          "integrated": -12.2,
+          "range": 5,
+          "truePeak": 0.3
+        }
+      },
+      "gain": {
+        "wanted": -5.8,
+        "applied": -5.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-old-age.ad8c92cee2.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 7085835,
+          "sha256": "ad8c92cee21fcc10101f2060c31a4547c94ef3fd4856b64fa83a2de2acb98fa6",
+          "integrated": -18,
+          "truePeak": -5.5
+        },
+        {
+          "name": "music/holiznacc0-old-age.4afb4471f8.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3977290,
+          "sha256": "4afb4471f854bee73c11bb285bd70fd52c2cfc18d8934a647f4d8a13d30a612b",
+          "integrated": -18,
+          "truePeak": -4.6
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-street-names",
+      "title": "Street Names",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-2/street-names/",
+      "statement": "Street Names by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20240914124646/https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-2",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/gpJhOdSsQGabjtoXYifAqHDHJqPQ52nAyTUyR8qt.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-street-names.mp3",
+        "sha256": "7a0dcc6dd46cd40a504a53e3ae2715837bdec38e86efd5fe82bdbef1fc0e9f1d",
+        "bytes": 8642083,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 216.012,
+        "lossless": false,
+        "cutoff": {
+          "frequency": null,
+          "drop": 24.2
+        },
+        "spectrumFrames": 317,
+        "loudness": {
+          "integrated": -10.3,
+          "range": 2.3,
+          "truePeak": 0.1
+        }
+      },
+      "gain": {
+        "wanted": -7.7,
+        "applied": -7.7,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-street-names.73a754d55e.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 7095206,
+          "sha256": "73a754d55e997771429e66f227cc2753f28586caebeab990bf2b935be17c9406",
+          "integrated": -18,
+          "truePeak": -7.6
+        },
+        {
+          "name": "music/holiznacc0-street-names.996d1a4ed4.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4696670,
+          "sha256": "996d1a4ed4f46d1a9494a93defafdf62689ef7d7e21700f7a345788c21787cd2",
+          "integrated": -18,
+          "truePeak": -7.2
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-night-driving",
+      "title": "Night Driving",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-3/night-driving/",
+      "statement": "Night Driving by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20240914125049/https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-3",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/JesQEh2spMciE2gCLo9rt2EvNxugIvK4SVS2kJE5.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-night-driving.mp3",
+        "sha256": "a0ca6a568ad101fac8a12d94679f10b4011e8c05941b5dd7fc13770fcfae598d",
+        "bytes": 5255245,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 131.34,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 20543,
+          "drop": 51.9
+        },
+        "spectrumFrames": 193,
+        "loudness": {
+          "integrated": -12.6,
+          "range": 8.1,
+          "truePeak": 1
+        }
+      },
+      "gain": {
+        "wanted": -5.4,
+        "applied": -5.4,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-night-driving.26e7a34852.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 4315865,
+          "sha256": "26e7a34852681a86021b3e1d6cf7c0d128f000726de74753e8a6b46f08e301ee",
+          "integrated": -18,
+          "truePeak": -4.6
+        },
+        {
+          "name": "music/holiznacc0-night-driving.a7733f3cee.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 2594521,
+          "sha256": "a7733f3ceea720367dae3645aa88a7187c99bd3b8203c2d15fd4200509275525",
+          "integrated": -18,
+          "truePeak": -4.3
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-quiet-houses",
+      "title": "Quiet Houses",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-3/quiet-houses/",
+      "statement": "Quiet Houses by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20240914125049/https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-3",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/ovBx5OO8N5hBE3mgGOo5f4AvYOhus0axzaWFs2LL.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "master": {
+        "file": "holiznacc0-quiet-houses.mp3",
+        "sha256": "fc1c22deaa9b6097bd9da8ba19dc8e2475b93594ee79b61ba00151ceaf2c8525",
+        "bytes": 8040205,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 200.964,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 20549,
+          "drop": 49.4
+        },
+        "spectrumFrames": 295,
+        "loudness": {
+          "integrated": -11.9,
+          "range": 7.5,
+          "truePeak": 0.3
+        }
+      },
+      "gain": {
+        "wanted": -6.1,
+        "applied": -6.1,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-quiet-houses.3df24823ad.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 6638955,
+          "sha256": "3df24823ad481a87de326522ecaa190d5e3df510486b454956ca9464142e1be1",
+          "integrated": -18,
+          "truePeak": -5.7
+        },
+        {
+          "name": "music/holiznacc0-quiet-houses.9968814dce.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4193409,
+          "sha256": "9968814dceaee2b0df3c9f90d98b0d09e61c5aaef6646b7bf74b5323e42bf5ac",
+          "integrated": -18,
+          "truePeak": -5.1
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-orbs-in-a-photo",
+      "title": "Orbs In A Photo",
+      "artist": "HoliznaCC0",
+      "license": "cc0",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/public-domain-lofi/orbs-in-a-photo-lofi-chill-mp3/",
+      "statement": "Orbs In A Photo ( LoFi , Chill ).mp3 by HoliznaCC0 is licensed under a CC0 1.0 Universal License.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20261010050223/https://freemusicarchive.org/music/holiznacc0/public-domain-lofi",
+      "url": "https://files.freemusicarchive.org/storage-freemusicarchive-org/tracks/8VYwiA4OCIwhSUIblz3LrYKmMwjbm0kqXE1ex72s.mp3",
+      "channel": "Free Music Archive: the file its player streams, about 320 kbps MP3. Its Download button needs a sign-in",
+      "note": "FMA titles it “Orbs In A Photo ( LoFi , Chill ).mp3”; the tags are dropped here.",
+      "master": {
+        "file": "holiznacc0-orbs-in-a-photo.mp3",
+        "sha256": "c756c55fdf759298283a88a005540b51665864cdc56ab1b7e27349351d270945",
+        "bytes": 8800525,
+        "codec": "mp3",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 219.972,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 20420,
+          "drop": 41.8
+        },
+        "spectrumFrames": 322,
+        "loudness": {
+          "integrated": -14.1,
+          "range": 11.4,
+          "truePeak": 0.1
+        }
+      },
+      "gain": {
+        "wanted": -3.9,
+        "applied": -3.9,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/holiznacc0-orbs-in-a-photo.101492bff9.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 7309849,
+          "sha256": "101492bff9718b966cad5b65a1d890b42c8e37c3b4c10a57329ee32d3a950ff7",
+          "integrated": -18,
+          "truePeak": -3.7
+        },
+        {
+          "name": "music/holiznacc0-orbs-in-a-photo.fb8e9be21f.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4573779,
+          "sha256": "fb8e9be21fccebda9b633ecd9ba3b0794b2958612e8f7ee9ed8ef4e084ddae06",
+          "integrated": -18,
+          "truePeak": -3
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-whispers-in-the-dark",
+      "title": "Whispers in the Dark",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/whispers-in-the-dark/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/; FMA: “Whispers In The Dark by Purrple Cat is licensed under a Attribution 4.0 International License.”; his own Internet Archive item: “Usage Attribution 4.0 International”",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://archive.org/download/purrplecat-whispers-in-the-dark/Whispers%20In%20The%20Dark.mp3",
+      "channel": "Internet Archive item purrplecat-whispers-in-the-dark, uploaded by the artist: byte-identical to the file FMA streams",
+      "master": {
+        "file": "purrple-cat-whispers-in-the-dark.mp3",
+        "sha256": "8c344b41a070a30d7500bafc5dd3a9f4d34b13f2170ab3923ac812d95a19bef6",
+        "bytes": 6981223,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 320000,
+        "duration": 174.433,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 20074,
+          "drop": 35.1
+        },
+        "spectrumFrames": 235,
+        "loudness": {
+          "integrated": -14.4,
+          "range": 6.2,
+          "truePeak": -0.3
+        }
+      },
+      "gain": {
+        "wanted": -3.6,
+        "applied": -3.6,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-whispers-in-the-dark.60f215b809.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5745379,
+          "sha256": "60f215b8090a759c2a61ec0e57cfd0c04f25fa5b368c37a5404d5c08d0d24bd5",
+          "integrated": -18,
+          "truePeak": -3.9
+        },
+        {
+          "name": "music/purrple-cat-whispers-in-the-dark.6750de0458.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3971449,
+          "sha256": "6750de045831eabc996b72fb71f509cd84c4148481432b6c69e0b379269d4f55",
+          "integrated": -18,
+          "truePeak": -3.7
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-take-me-to-the-moon",
+      "title": "Take Me to the Moon",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/memories/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/memories/04-take-me-to-the-moon.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-take-me-to-the-moon.mp3",
+        "sha256": "270a3ac3ac77c230ed4b72695177bd5519fbd26fe30774917b46e6b307ddd1a5",
+        "bytes": 5261641,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 217.234,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18788,
+          "drop": 39.3
+        },
+        "spectrumFrames": 293,
+        "loudness": {
+          "integrated": -15.9,
+          "range": 6.9,
+          "truePeak": -0.3
+        }
+      },
+      "gain": {
+        "wanted": -2.1,
+        "applied": -2.1,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-take-me-to-the-moon.2cb40f7751.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 7067734,
+          "sha256": "2cb40f77511ab1c45b7bd3b73701b5e71d65bcc0251c533b5c7529af156a7450",
+          "integrated": -18,
+          "truePeak": -2.4
+        },
+        {
+          "name": "music/purrple-cat-take-me-to-the-moon.aa71f5d4da.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4800935,
+          "sha256": "aa71f5d4da14090b31e6d271a7362f17b72e534f0da6dfe4345f578f4d83a923",
+          "integrated": -18,
+          "truePeak": -2.3
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-still-of-the-night",
+      "title": "Still of the Night",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/sleep-tight/03-still-of-the-night.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-still-of-the-night.mp3",
+        "sha256": "a8fd33734e3afc3e15491cd16d9b49af8235d186cf150a819c900fb47f4d7e0b",
+        "bytes": 3922241,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 160.42,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18836,
+          "drop": 41.6
+        },
+        "spectrumFrames": 216,
+        "loudness": {
+          "integrated": -17.5,
+          "range": 6.1,
+          "truePeak": -0.6
+        }
+      },
+      "gain": {
+        "wanted": -0.5,
+        "applied": -1,
+        "capped": true
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-still-of-the-night.73e87c3261.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5255175,
+          "sha256": "73e87c3261689dba041d7bc932db51b0d39889baa9c6a26a2f0eb593fdf18698",
+          "integrated": -18.5,
+          "truePeak": -1.6
+        },
+        {
+          "name": "music/purrple-cat-still-of-the-night.a142c2077d.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3371326,
+          "sha256": "a142c2077d9a1d06f59888212c536b814a5c52b091edbff6576fee5c2399d51f",
+          "integrated": -18.5,
+          "truePeak": -1.4
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-dream-state",
+      "title": "Dream State",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/sleep-tight/06-dream-state.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-dream-state.mp3",
+        "sha256": "f6bfb2ad78c9c9513883bb1d8a6a1781605ccd3c67e220d7e168fa3eba1bcb5b",
+        "bytes": 3608138,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 147.354,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18809,
+          "drop": 37.1
+        },
+        "spectrumFrames": 199,
+        "loudness": {
+          "integrated": -13.8,
+          "range": 9.2,
+          "truePeak": -0.2
+        }
+      },
+      "gain": {
+        "wanted": -4.2,
+        "applied": -4.2,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-dream-state.7bad8ff7f1.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 4747564,
+          "sha256": "7bad8ff7f1d7135dbc0cdf6ad888e4a69d0ea935bec9afe96620eb40641e2ba2",
+          "integrated": -18,
+          "truePeak": -4.4
+        },
+        {
+          "name": "music/purrple-cat-dream-state.04e22b86ae.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3347098,
+          "sha256": "04e22b86aeb94cb8a870466dd7bf76c924ef827a7e74b8d9dee316e71cb1e7e2",
+          "integrated": -18,
+          "truePeak": -4
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-night-light",
+      "title": "Night Light",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/sleep-tight/08-night-light.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-night-light.mp3",
+        "sha256": "b0fa9e3a0b7c2fcb651bac054b32f7f519b4881cd6d9fb6b4d2ba2adcbff361f",
+        "bytes": 5256360,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 216.008,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18831,
+          "drop": 43.7
+        },
+        "spectrumFrames": 290,
+        "loudness": {
+          "integrated": -16.3,
+          "range": 5.8,
+          "truePeak": -0.5
+        }
+      },
+      "gain": {
+        "wanted": -1.7,
+        "applied": -1.7,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-night-light.6bcc7d2ea8.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 7062281,
+          "sha256": "6bcc7d2ea88d5b819e434d7cc148ec1976d8b6b538c1d248b0231d65ae7dffc4",
+          "integrated": -18,
+          "truePeak": -2.2
+        },
+        {
+          "name": "music/purrple-cat-night-light.6709f3c947.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4710254,
+          "sha256": "6709f3c947de25472a8d7ced4e4abd08e5829af6fb92ff84aac7234cb5420028",
+          "integrated": -18,
+          "truePeak": -2.1
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-astral-projection",
+      "title": "Astral Projection",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/sleep-tight/12-astral-projection.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-astral-projection.mp3",
+        "sha256": "bd91fe33e7ce7676e10d7033b93bc63920e9fd772a3fc2e8055c58bf7b9b9893",
+        "bytes": 4537268,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 186.057,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18815,
+          "drop": 46.3
+        },
+        "spectrumFrames": 251,
+        "loudness": {
+          "integrated": -15.2,
+          "range": 10,
+          "truePeak": -0.4
+        }
+      },
+      "gain": {
+        "wanted": -2.8,
+        "applied": -2.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-astral-projection.fa342b03cb.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 6075318,
+          "sha256": "fa342b03cbe735f938fe99d1e996f82ce14004bc28396ad6beb6f045b83277a3",
+          "integrated": -18,
+          "truePeak": -3.2
+        },
+        {
+          "name": "music/purrple-cat-astral-projection.12b5f7463a.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3964565,
+          "sha256": "12b5f7463a70badb3dc08b4635e7d246b0266b469b5e40449d0f6130da241cfc",
+          "integrated": -18,
+          "truePeak": -3
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-weightless",
+      "title": "Weightless",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/sleep-tight/14-weightless.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-weightless.mp3",
+        "sha256": "a32e999f4c61b2e0c737c6012e4d0f1fbcf7e1a6ca79a179fbb1139a72584198",
+        "bytes": 4741016,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 194.552,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18782,
+          "drop": 40.9
+        },
+        "spectrumFrames": 262,
+        "loudness": {
+          "integrated": -15.6,
+          "range": 5.6,
+          "truePeak": -0.4
+        }
+      },
+      "gain": {
+        "wanted": -2.4,
+        "applied": -2.4,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-weightless.9bfb3bc7f5.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 6408012,
+          "sha256": "9bfb3bc7f58b1a3eaa02e758d5d81c07c43260242e86e466e7b69ad003ac8da7",
+          "integrated": -18,
+          "truePeak": -2.8
+        },
+        {
+          "name": "music/purrple-cat-weightless.2fc760174d.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4233951,
+          "sha256": "2fc760174d9a62f4ca1230de3adbf88b3e6b90cbb53e761bf07a52d6742353c3",
+          "integrated": -18,
+          "truePeak": -2.8
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-insomnia",
+      "title": "Insomnia",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/city-nights-3/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/city-nights-3/07-insomnia.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-insomnia.mp3",
+        "sha256": "d5da7a6b83a2f900e3a3dda9403db6ce56c78c416ff457ba647d603bacc13cb5",
+        "bytes": 4369865,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 179.132,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18852,
+          "drop": 46
+        },
+        "spectrumFrames": 241,
+        "loudness": {
+          "integrated": -14.8,
+          "range": 8,
+          "truePeak": -0.4
+        }
+      },
+      "gain": {
+        "wanted": -3.2,
+        "applied": -3.2,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-insomnia.606abe7124.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5848987,
+          "sha256": "606abe712474675194f1f4246369bad19182ec51f660e6fe3e2cdb4f95376650",
+          "integrated": -18,
+          "truePeak": -3.6
+        },
+        {
+          "name": "music/purrple-cat-insomnia.f01e2dbcbb.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4132558,
+          "sha256": "f01e2dbcbbd455aae075c785dcce119cfa7f4390323016616d34555aacd4efb4",
+          "integrated": -18,
+          "truePeak": -3.4
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-3-a-m-radio",
+      "title": "3 A.M. Radio",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/city-nights-3/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/city-nights-3/12-3-a-m-radio.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-3-a-m-radio.mp3",
+        "sha256": "a723e315d3d5053677c7a19a770abedca8705394dd100a6607097a8bd2b4ba36",
+        "bytes": 4397455,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 180.292,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18809,
+          "drop": 48.3
+        },
+        "spectrumFrames": 243,
+        "loudness": {
+          "integrated": -12.4,
+          "range": 5.8,
+          "truePeak": -0.3
+        }
+      },
+      "gain": {
+        "wanted": -5.6,
+        "applied": -5.6,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-3-a-m-radio.e3533db714.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 5943998,
+          "sha256": "e3533db71446cce194cf592526a7fed2ec70acd0c4b7c40321e39a67e55345d8",
+          "integrated": -18,
+          "truePeak": -5.8
+        },
+        {
+          "name": "music/purrple-cat-3-a-m-radio.fd707e7124.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 3974202,
+          "sha256": "fd707e7124ce21e4ff32cecf8977d564e99b095bab77bf45f496c7ca982b29d1",
+          "integrated": -18,
+          "truePeak": -5.5
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-starry-night",
+      "title": "Starry Night",
+      "artist": "Purrple Cat",
+      "license": "cc-by-4.0",
+      "licensor": "https://freelofi.com/albums/city-nights-3/",
+      "statement": "freelofi.com, the artist’s own site: “CC BY 4.0”, “No Content ID”, “Credit is the only price”; the record’s schema.org license is https://creativecommons.org/licenses/by/4.0/",
+      "checked": "2026-11-06",
+      "snapshot": null,
+      "url": "https://purrplecat-audio.pages.dev/audio/city-nights-3/14-starry-night.mp3",
+      "channel": "purrplecat-audio.pages.dev, the file host behind freelofi.com: 192 kbps MP3, the only format it serves",
+      "master": {
+        "file": "purrple-cat-starry-night.mp3",
+        "sha256": "31bac23fb8332bb791f30d7c43f6ae8c51589f4ac9f374898f4cf06024f05323",
+        "bytes": 5072668,
+        "codec": "mp3",
+        "rate": 44100,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 192000,
+        "duration": 208.415,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 18809,
+          "drop": 49.8
+        },
+        "spectrumFrames": 281,
+        "loudness": {
+          "integrated": -15.2,
+          "range": 4.4,
+          "truePeak": -0.3
+        }
+      },
+      "gain": {
+        "wanted": -2.8,
+        "applied": -2.8,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/purrple-cat-starry-night.165fe46895.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 6758585,
+          "sha256": "165fe468954ebe9f6c97f371882839f4f7594c06077b48818a2639b6d124b9d3",
+          "integrated": -18,
+          "truePeak": -3.2
+        },
+        {
+          "name": "music/purrple-cat-starry-night.f99a761d28.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 4818656,
+          "sha256": "f99a761d2836874e84ff996ba25c63940a6f74e0e9db33eb295de13a3fccb66e",
+          "integrated": -18,
+          "truePeak": -3
+        }
+      ]
+    },
+    {
+      "id": "parker-solar-probe-venus",
+      "title": "Venus’s ionosphere, heard by Parker Solar Probe",
+      "artist": "Parker Solar Probe · FIELDS",
+      "license": "public-domain",
+      "licensor": "https://svs.gsfc.nasa.gov/13847/",
+      "statement": "“All of our content is in the public domain (unless otherwise noted), meaning that it is free to download, use, and redistribute for whatever purposes you see fit.” (https://svs.gsfc.nasa.gov/help/). The item credits no music or other licensed content.",
+      "checked": "2026-11-06",
+      "snapshot": "http://web.archive.org/web/20260511142130/https://svs.gsfc.nasa.gov/13847/",
+      "url": "https://svs.gsfc.nasa.gov/vis/a010000/a013800/a013847/13847_Parker_Venus.mp4",
+      "channel": "NASA SVS: the visualization’s 1080p MP4. The master is its audio stream, copied out without re-encoding",
+      "master": {
+        "file": "parker-solar-probe-venus.m4a",
+        "sha256": "4b99aec9058d576d8a523fd98cfc98889381591a88933453c6e762a267122115",
+        "bytes": 1896168,
+        "codec": "aac",
+        "rate": 48000,
+        "channels": 2,
+        "bits": null,
+        "bitrate": 317375,
+        "duration": 47.533,
+        "lossless": false,
+        "cutoff": {
+          "frequency": 16670,
+          "drop": 35
+        },
+        "spectrumFrames": 66,
+        "loudness": {
+          "integrated": -11.9,
+          "range": 6.1,
+          "truePeak": -0.3
+        }
+      },
+      "gain": {
+        "wanted": -6.1,
+        "applied": -6.1,
+        "capped": false
+      },
+      "delivered": [
+        {
+          "name": "music/parker-solar-probe-venus.3775b3f9c6.m4a",
+          "encoder": "AudioToolbox AAC-LC, constrained VBR",
+          "bytes": 1697126,
+          "sha256": "3775b3f9c62f94a98e56cd06b22661b2fc5c5cac35fdaa7619caae60ba56010b",
+          "integrated": -18,
+          "truePeak": -6.3
+        },
+        {
+          "name": "music/parker-solar-probe-venus.b1d0278789.webm",
+          "encoder": "libopus, VBR",
+          "bytes": 1015825,
+          "sha256": "b1d0278789ca5b6e493a3256d6fcad4a5f00a209abcd5c746dff412f49f53247",
+          "integrated": -18,
+          "truePeak": -6.1
+        }
+      ]
+    }
+  ],
+  "held": [
+    {
+      "id": "parker-solar-probe-magnetometer-br",
+      "title": "Parker Solar Probe’s magnetic field near the Sun, radial",
+      "artist": "Parker Solar Probe · FIELDS",
+      "license": "cc0",
+      "licensor": "https://cdaweb.gsfc.nasa.gov/audification_examples/",
+      "statement": "“Unless otherwise noted, the content, data, documentation, code, and related materials associated with HDRL, SDAC, and SPDF and its services is public domain and made available with a Creative Commons Zero (CC0) dedication.” (https://spdf.gsfc.nasa.gov/data_use_policy.html)",
+      "checked": "2026-11-06",
+      "url": "https://cdaweb.gsfc.nasa.gov/audification_examples/PSP_FLD_L2_MAG_RTN_2020_0129_19-23_Br.wav",
+      "channel": "NASA Goddard’s Space Physics Data Facility: CDAWeb’s own audification example, a 22 kHz WAV",
+      "held": "Its peaks reach full scale at −35 LUFS integrated, so a gain-only master would play it 18 LU under the rest of the soundtrack. Whether to compress a data audification to fix that is a decision, not a step in this pipeline.",
+      "master": {
+        "file": "parker-solar-probe-magnetometer-br.wav",
+        "sha256": "9c68e5bf589ca9a92e41e04ad368116e9f0cd93556dfb0a5f66e74f3ba97c6a5",
+        "bytes": 4218782,
+        "codec": "pcm_s16le",
+        "rate": 22000,
+        "channels": 1,
+        "bits": 16,
+        "bitrate": 352000,
+        "duration": 95.88,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 0
+        },
+        "spectrumFrames": 65,
+        "loudness": {
+          "integrated": -35.2,
+          "range": 6.9,
+          "truePeak": 0
+        }
+      }
+    },
+    {
+      "id": "parker-solar-probe-magnetometer-bt",
+      "title": "Parker Solar Probe’s magnetic field near the Sun, tangential",
+      "artist": "Parker Solar Probe · FIELDS",
+      "license": "cc0",
+      "licensor": "https://cdaweb.gsfc.nasa.gov/audification_examples/",
+      "statement": "“Unless otherwise noted, the content, data, documentation, code, and related materials associated with HDRL, SDAC, and SPDF and its services is public domain and made available with a Creative Commons Zero (CC0) dedication.” (https://spdf.gsfc.nasa.gov/data_use_policy.html)",
+      "checked": "2026-11-06",
+      "url": "https://cdaweb.gsfc.nasa.gov/audification_examples/PSP_FLD_L2_MAG_RTN_2020_0129_19-23_Bt.wav",
+      "channel": "NASA Goddard’s Space Physics Data Facility: CDAWeb’s own audification example, a 22 kHz WAV",
+      "held": "One component of the same four hours plays; the radial one. Captured so that choosing another is an edit, not a download.",
+      "master": {
+        "file": "parker-solar-probe-magnetometer-bt.wav",
+        "sha256": "b3c2832d1faf5e57dc69687423c78a136faacaf3710043e853bf04676c57289b",
+        "bytes": 4218782,
+        "codec": "pcm_s16le",
+        "rate": 22000,
+        "channels": 1,
+        "bits": 16,
+        "bitrate": 352000,
+        "duration": 95.88,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 0
+        },
+        "spectrumFrames": 65,
+        "loudness": {
+          "integrated": -30.7,
+          "range": 9.5,
+          "truePeak": 0
+        }
+      }
+    },
+    {
+      "id": "parker-solar-probe-magnetometer-bn",
+      "title": "Parker Solar Probe’s magnetic field near the Sun, normal",
+      "artist": "Parker Solar Probe · FIELDS",
+      "license": "cc0",
+      "licensor": "https://cdaweb.gsfc.nasa.gov/audification_examples/",
+      "statement": "“Unless otherwise noted, the content, data, documentation, code, and related materials associated with HDRL, SDAC, and SPDF and its services is public domain and made available with a Creative Commons Zero (CC0) dedication.” (https://spdf.gsfc.nasa.gov/data_use_policy.html)",
+      "checked": "2026-11-06",
+      "url": "https://cdaweb.gsfc.nasa.gov/audification_examples/PSP_FLD_L2_MAG_RTN_2020_0129_19-23_Bn.wav",
+      "channel": "NASA Goddard’s Space Physics Data Facility: CDAWeb’s own audification example, a 22 kHz WAV",
+      "held": "One component of the same four hours plays; the radial one. Captured so that choosing another is an edit, not a download.",
+      "master": {
+        "file": "parker-solar-probe-magnetometer-bn.wav",
+        "sha256": "0a36d5a64a3ad06e2f6ec93679555a52d1df8c59fd5ab5f8b3125edaf0b9bd87",
+        "bytes": 4218782,
+        "codec": "pcm_s16le",
+        "rate": 22000,
+        "channels": 1,
+        "bits": 16,
+        "bitrate": 352000,
+        "duration": 95.88,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 0
+        },
+        "spectrumFrames": 65,
+        "loudness": {
+          "integrated": -30.8,
+          "range": 9.1,
+          "truePeak": 0
+        }
+      }
+    },
+    {
+      "id": "shuttle-launch-in-cabin",
+      "title": "A Space Shuttle launch, recorded in the cabin",
+      "artist": "NASA",
+      "license": "public-domain",
+      "licensor": "https://archive.org/details/NasaAudioHighlightReels",
+      "statement": "Item metadata: license http://creativecommons.org/publicdomain/mark/1.0/ (“Usage Public Domain Mark 1.0”), uploaded by a nasa.gov account and crediting the Houston Audio Control Room at JSC",
+      "checked": "2026-11-06",
+      "url": "https://archive.org/download/NasaAudioHighlightReels/Launch-Sound_Shuttle-Launch-IN-CABIN-FINALIZED.flac",
+      "channel": "Internet Archive item NasaAudioHighlightReels, uploaded by NASA: the archive’s lossless FLAC of the 24-bit WAV original",
+      "held": "Captured and not shipped. Nobody has listened for crew voices, and an identifiable voice carries publicity rights that public domain does not clear.",
+      "master": {
+        "file": "shuttle-launch-in-cabin.flac",
+        "sha256": "aec9e2ec554ce1bf16246a06aa74e858e7ab5907f9c94bdd9f368a0de1a6866a",
+        "bytes": 33974308,
+        "codec": "flac",
+        "rate": 48000,
+        "channels": 2,
+        "bits": 24,
+        "bitrate": 1619064,
+        "duration": 167.871,
+        "lossless": true,
+        "cutoff": {
+          "frequency": null,
+          "drop": 19.1
+        },
+        "spectrumFrames": 246,
+        "loudness": {
+          "integrated": -11.1,
+          "range": 17.4,
+          "truePeak": 0.8
+        }
+      }
+    }
+  ],
+  "heldBack": [
+    {
+      "id": "r-mars-wind",
+      "title": "Perseverance Rover’s SuperCam Records Wind on Mars (sol 4)",
+      "producer": "JPL/Caltech (credit also names LANL, CNES, CNRS, ISAE-Supaero)",
+      "terms": "Sounds from Beyond: 'For sound file use policy, please see Media Usage Guidelines.' Guidelines: 'The NASA Insignia, Logotype, identifiers, and imagery are not in the public domain. The use of the Insignia, Logotype and NASA identifiers is protected by law, and imagery is made available for use consistent with Media Usage Guidelines.' 'NASA content – images, audio, video, and media files used in the rendition of 3-dimensional models, such as texture maps and polygon data in any format – generally are not subject to copyright in the United States. You may use this material for educational or informational purposes, including photo collections, textbooks, public exhibits, computer graphical simulations and Internet Web pages. This general permission extends to personal Web pages.' 'News outlets, schools, and text-book authors may use NASA content without needing explicit permission, subject to compliance with these guidelines. NASA content used in a factual manner that does not imply endorsement may be used without needing explicit permission. NASA should be acknowledged as the source of the material. NASA occasionally uses copyright-protected material of third parties with permission on its website. Those images will be marked identified as copyright protected with the name of the copyright holder. NASA’s use does not convey any rights to others to use the same material. Those wishing to use copyright protected material of third parties must contact the copyright holder directly.' Commercial use: 'If the NASA material is to be used for commercial purposes, including advertisements, it must not explicitly or implicitly convey NASA’s endorsement of commercial goods or services.'",
+      "termsUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "page": "https://www.nasa.gov/sounds-from-beyond/",
+      "credit": "NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero",
+      "why": "Made by JPL, which Caltech operates, so it is not a U.S. Government work; NASA's guidelines say only 'generally are not subject to copyright', and the credit names non-NASA partners.",
+      "url": "https://www.nasa.gov/wp-content/uploads/2024/05/scam-mic-sol004-run001.wav"
+    },
+    {
+      "id": "r-mars-devil",
+      "title": "NASA’s Perseverance Records a Martian Dust Devil (sol 215)",
+      "producer": "JPL/Caltech (credit also names LANL, CNES, CNRS, INTA-CSIC, Space Science Institute, ISAE-Supaero)",
+      "terms": "Same NASA media guidelines text as r-mars-wind (the Sounds from Beyond page says 'For sound file use policy, please see Media Usage Guidelines.').",
+      "termsUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "page": "https://www.nasa.gov/sounds-from-beyond/",
+      "credit": "NASA/JPL-Caltech/LANL/CNES/CNRS/INTA-CSIC/Space Science Institute/ISAE-Supaero",
+      "why": "JPL/Caltech work with non-NASA partners in the credit; no explicit public domain statement.",
+      "url": "https://www.nasa.gov/wp-content/uploads/2024/05/pia25657.wav"
+    },
+    {
+      "id": "r-mars-laser",
+      "title": "First Acoustic Recording of Laser Shots on Mars (sol 12)",
+      "producer": "JPL/Caltech (credit also names LANL, CNES, CNRS, ISAE-Supaero)",
+      "terms": "Same NASA media guidelines text as r-mars-wind; the science.nasa.gov page carries no separate terms.",
+      "termsUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "page": "https://science.nasa.gov/resource/first-acoustic-recording-of-laser-shots-on-mars/",
+      "credit": "NASA/JPL-Caltech/LANL/CNES/CNRS/ISAE-Supaero",
+      "why": "JPL/Caltech work with non-NASA partners in the credit; no explicit public domain statement.",
+      "url": "https://www.nasa.gov/wp-content/uploads/2024/05/scam-mic-sol012-run001.wav"
+    },
+    {
+      "id": "r-insight-dinks",
+      "title": "“Dinks and donks” from InSight’s seismometer (sol 226)",
+      "producer": "Not JPL alone: NASA's 2019 release says 'Charalambous and Nobuaki Fuji of Institut de Physique du Globe de Paris provided the audio samples for this story', Charalambous being 'an InSight science team member at Imperial College London'. SEIS was provided by CNES with the principal investigator at IPGP.",
+      "terms": "Same NASA media guidelines text as r-mars-wind.",
+      "termsUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "page": "https://www.nasa.gov/sounds-from-beyond/",
+      "credit": null,
+      "why": "The audio samples came from scientists at Imperial College London and IPGP on a JPL mission; no explicit public domain statement.",
+      "url": "https://www.nasa.gov/wp-content/uploads/2015/01/Cropped-Dinks-and-Donks-sample.wav"
+    },
+    {
+      "id": "r-juno-gan",
+      "title": "Audio of Juno’s Ganymede Flyby (PIA25030)",
+      "producer": "JPL/Caltech with SwRI and the University of Iowa (Waves instrument)",
+      "terms": "Same NASA media guidelines text as r-mars-wind.",
+      "termsUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "page": "https://science.nasa.gov/photojournal/audio-of-junos-ganymede-flyby/",
+      "credit": "NASA/JPL-Caltech/SwRI/Univ of Iowa",
+      "why": "JPL/Caltech, SwRI and University of Iowa work; no explicit public domain statement.",
+      "url": "https://www.nasa.gov/wp-content/uploads/2024/05/e2-wave-ganymede-flyby-compressed.wav"
+    },
+    {
+      "id": "r-cas-rings",
+      "title": "The Sound of Science: Comparison of Cassini Ring Crossings (PIA21446)",
+      "producer": "JPL/Caltech and the University of Iowa (RPWS)",
+      "terms": "Same NASA media guidelines text as r-mars-wind.",
+      "termsUrl": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+      "page": "https://science.nasa.gov/photojournal/the-sound-of-science-comparison-of-cassini-ring-crossings/",
+      "credit": "NASA/JPL-Caltech/University of Iowa",
+      "why": "JPL/Caltech and University of Iowa work; no explicit public domain statement.",
+      "url": "https://science.nasa.gov/photojournal/the-sound-of-science-comparison-of-cassini-ring-crossings/"
+    },
+    {
+      "id": "r-v2-jup",
+      "title": "Voyager-2 PWS: Arrival at Jupiter (July 2, 1979, 15:56–16:45)",
+      "producer": "University of Iowa, Radio and Plasma Wave Group",
+      "terms": "Item page: 'The audio and video are available under a Creative Commons Attribution 3.0 Unported License, with clear citation.' Citation page: 'The audio files found at this site are available under a Creative Commons Attribution 4.0 International License.' 'You have our permission to use or adapt any of these audio files for use in creative or artistic works, but please acknowledge us as the source of the orignial audio. A preferred citation for either commercial or non-commercial works would be: Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/' 'Check the details associated with individual audio clips. If you need a shorter version, we suggest: Original audio from space-audio.org' 'This license is recinded if you attempt to claim copyright to our material. If you attempt to claim copyright to our content, you must remove all such content from all of your platforms.'",
+      "termsUrl": "https://space.physics.uiowa.edu/plasma-wave/space-audio/citation.html",
+      "page": "https://space.physics.uiowa.edu/plasma-wave/voyager/v2pws_jupiter_arrival.html",
+      "credit": "Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/",
+      "why": "A University of Iowa work under a Creative Commons Attribution license; the item page says CC BY 3.0 Unported while the citation page says CC BY 4.0.",
+      "url": "https://space.physics.uiowa.edu/plasma-wave/voyager/v2pws_jupiter_arrival.html"
+    },
+    {
+      "id": "r-jov-chorus",
+      "title": "Jupiter Chorus (Voyager 1, March 5, 1979)",
+      "producer": "University of Iowa, Radio and Plasma Wave Group",
+      "terms": "Item page: 'Audio clips freely licensed.' (links to the citation page). Citation page: same text as r-v2-jup, CC BY 4.0.",
+      "termsUrl": "https://space.physics.uiowa.edu/plasma-wave/space-audio/citation.html",
+      "page": "https://space.physics.uiowa.edu/plasma-wave/space-audio/sounds/JupiterChorus/JovianChorus.html",
+      "credit": "Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/",
+      "why": "University of Iowa work under CC BY 4.0.",
+      "url": "https://space.physics.uiowa.edu/plasma-wave/space-audio/sounds/JupiterChorus/JovianChorus.html"
+    },
+    {
+      "id": "r-cas-skr",
+      "title": "The Eerie Sounds of Saturn's Radio Emissions (Cassini RPWS, SKR-03-324.wav, 73 s)",
+      "producer": "University of Iowa (Cassini RPWS team; the page is signed by Bill Kurth, RPWS Deputy Principal Investigator)",
+      "terms": "Item page: 'The audio files found at this site are available under a Creative Commons Attribution 3.0 Unported License.' Citation page: same text as r-v2-jup, CC BY 4.0.",
+      "termsUrl": "https://space.physics.uiowa.edu/plasma-wave/space-audio/citation.html",
+      "page": "https://space.physics.uiowa.edu/plasma-wave/space-audio/cassini/SKR1/",
+      "credit": "Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/",
+      "why": "University of Iowa work under a Creative Commons Attribution license; the item page says CC BY 3.0 Unported, the citation page CC BY 4.0.",
+      "url": "https://space.physics.uiowa.edu/plasma-wave/space-audio/cassini/SKR1/"
+    },
+    {
+      "id": "r-earth-chorus",
+      "title": "Earth Chorus (Injun 3)",
+      "producer": "University of Iowa; the page says 'This example is from the University of Iowa Injun 3 spacecraft.'",
+      "terms": "Item page: 'Audio clips freely licensed.' (links to the citation page). Citation page: same text as r-v2-jup, CC BY 4.0.",
+      "termsUrl": "https://space.physics.uiowa.edu/plasma-wave/space-audio/citation.html",
+      "page": "https://space.physics.uiowa.edu/plasma-wave/space-audio/sounds/EarthChorus/EarthChorus.html",
+      "credit": "Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/",
+      "why": "University of Iowa work, from a University of Iowa spacecraft, under CC BY 4.0.",
+      "url": "https://space.physics.uiowa.edu/plasma-wave/space-audio/sounds/EarthChorus/earchor.mp3"
+    },
+    {
+      "id": "r-earth-whistlers",
+      "title": "Earth Whistlers (Injun 3)",
+      "producer": "University of Iowa; the page says 'This example is from the University of Iowa Injun 3 spacecraft.'",
+      "terms": "Item page: 'Audio clips freely licensed.' (links to the citation page). Citation page: same text as r-v2-jup, CC BY 4.0.",
+      "termsUrl": "https://space.physics.uiowa.edu/plasma-wave/space-audio/citation.html",
+      "page": "https://space.physics.uiowa.edu/plasma-wave/space-audio/sounds/EarthWhistlers/EarthWhistlers.html",
+      "credit": "Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/",
+      "why": "University of Iowa work, from a University of Iowa spacecraft, under CC BY 4.0.",
+      "url": "https://space.physics.uiowa.edu/plasma-wave/space-audio/sounds/EarthWhistlers/ewhist.mp3"
+    },
+    {
+      "id": "r-v1-ism",
+      "title": "Voyager 1 PWS electron plasma oscillations beyond the heliopause",
+      "producer": "University of Iowa, Radio and Plasma Wave Group",
+      "terms": "Item page: 'Audio clips freely licensed.' (links to the citation page) and '© The University of Iowa 2013. All rights reserved.' for the page itself. Citation page: same text as r-v2-jup, CC BY 4.0.",
+      "termsUrl": "https://space.physics.uiowa.edu/plasma-wave/space-audio/citation.html",
+      "page": "https://space.physics.uiowa.edu/plasma-wave/voyager/v1pws_interstellar_epo.html",
+      "credit": "Original space audio recordings provided courtesy of NASA and The University of Iowa. https://space-audio.org/",
+      "why": "University of Iowa work under CC BY 4.0.",
+      "url": "https://space.physics.uiowa.edu/plasma-wave/voyager/v1pws_interstellar_epo.mp4"
+    }
+  ]
+}

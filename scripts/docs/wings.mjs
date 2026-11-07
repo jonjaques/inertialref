@@ -221,6 +221,10 @@ export const WINGS = [
             'Settings and the viewport',
           ],
           [
+            'docs/adr/0059-the-planetarium-plays-music-anyone-may-share.md',
+            'The soundtrack',
+          ],
+          [
             'docs/adr/0059-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md',
             'Stations',
           ],

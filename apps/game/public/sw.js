@@ -6,10 +6,21 @@
  * unhashed media is cache-first within one build. Other public files use
  * stale-while-revalidate. Live state and explicit cache bypasses go to network.
  * This file is copied verbatim, so the build id arrives on the script URL.
+ *
+ * The soundtrack is its own case. A track the player chose to keep lives in
+ * `inertialref-music`, which the page writes and no build ever deletes: the
+ * names are content-addressed, so a kept file can never be a stale one. An
+ * `<audio>` element asks for byte ranges, and Safari refuses to play at all
+ * unless a range is answered with a 206 — so a kept track is answered by
+ * slicing the stored file, never by handing back the whole stored 200, which
+ * is how an offline audio app usually breaks. A track nobody kept goes to the
+ * network exactly as asked, and nothing of it is stored here.
  */
 const BUILD = new URL(self.location.href).searchParams.get('build') ?? 'dev'
 const CACHE_PREFIX = 'inertialref-'
 const CACHE = `${CACHE_PREFIX}${BUILD}`
+// Keep in step with apps/game/src/audio/offline.ts, which writes it.
+const MUSIC_CACHE = `${CACHE_PREFIX}music`
 const PRECACHE = [
   '/',
   '/play/solo',
@@ -23,6 +34,7 @@ const PRECACHE = [
 const isLive = (pathname) =>
   pathname === '/api' || pathname.startsWith('/api/') || pathname === '/ws'
 const isImmutable = (pathname) => pathname.startsWith('/assets/')
+const isMusic = (pathname) => pathname.startsWith('/media/music/')
 const isShell = (response) =>
   (response.headers.get('content-type') ?? '').startsWith('text/html')
 const canStore = (response) =>
@@ -33,9 +45,12 @@ const canStore = (response) =>
 /** Queries select client state; each pathname has one prerendered document. */
 const navigationKey = (url) =>
   `${url.origin}${url.pathname.replace(/\/+$/, '') || '/'}`
+// The music cache shares the prefix and is not a build: never retired, and
+// never the "previous build" a hashed asset is inherited from.
 const pastBuilds = async () =>
   (await caches.keys()).filter(
-    (key) => key.startsWith(CACHE_PREFIX) && key !== CACHE,
+    (key) =>
+      key.startsWith(CACHE_PREFIX) && key !== CACHE && key !== MUSIC_CACHE,
   )
 
 // Storage denial or quota pressure must not turn a successful fetch into an
@@ -126,6 +141,79 @@ async function fetchAndStore(request, background) {
   return response
 }
 
+/**
+ * A `Range` header against a length: `{ start, end }` inclusive, `null` for a
+ * header that does not apply (answered with the whole file, as RFC 9110 asks
+ * of a range that does not parse), or `'unsatisfiable'` for one that starts
+ * past the end. Only the first range of a list is honored; no media element
+ * sends more than one.
+ */
+function byteRange(header, size) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec((header.split(',')[0] ?? '').trim())
+  if (match === null) return null
+  const [, first, last] = match
+  if (first === '' && last === '') return null
+  if (first === '') {
+    const suffix = Number(last)
+    if (suffix === 0) return 'unsatisfiable'
+    return { start: Math.max(0, size - suffix), end: size - 1 }
+  }
+  const start = Number(first)
+  if (last !== '' && Number(last) < start) return null
+  if (start >= size) return 'unsatisfiable'
+  return {
+    start,
+    end: last === '' ? size - 1 : Math.min(Number(last), size - 1),
+  }
+}
+
+/**
+ * A soundtrack request: from the kept copy when there is one, sliced to the
+ * range asked for, and otherwise from the network untouched.
+ *
+ * The stored body is read as a Blob, which every engine backs with the cache's
+ * own file rather than with memory, so a slice of a 30 MB track costs the
+ * slice. `fetch(request)` keeps the `Range` header, which the Worker answers
+ * from R2 with a real 206.
+ */
+async function music(request) {
+  const kept = await read(request.url, MUSIC_CACHE)
+  if (kept === undefined) return fetch(request)
+  const header = request.headers.get('range')
+  if (header === null) return kept
+  const body = await kept.blob()
+  const type = kept.headers.get('content-type') ?? 'application/octet-stream'
+  const range = byteRange(header, body.size)
+  if (range === 'unsatisfiable') {
+    return new Response(null, {
+      status: 416,
+      headers: {
+        'content-range': `bytes */${body.size}`,
+        'accept-ranges': 'bytes',
+      },
+    })
+  }
+  if (range === null) {
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'content-type': type,
+        'content-length': String(body.size),
+        'accept-ranges': 'bytes',
+      },
+    })
+  }
+  return new Response(body.slice(range.start, range.end + 1), {
+    status: 206,
+    headers: {
+      'content-type': type,
+      'content-length': String(range.end - range.start + 1),
+      'content-range': `bytes ${range.start}-${range.end}/${body.size}`,
+      'accept-ranges': 'bytes',
+    },
+  })
+}
+
 async function navigation(request, url, background) {
   const key = navigationKey(url)
   let response
@@ -151,6 +239,15 @@ async function navigation(request, url, background) {
 self.addEventListener('fetch', (event) => {
   const request = event.request
   const url = new URL(request.url)
+  // Before the range bail-out below, because a track's ranges are the point.
+  if (
+    request.method === 'GET' &&
+    url.origin === self.location.origin &&
+    isMusic(url.pathname)
+  ) {
+    event.respondWith(music(request))
+    return
+  }
   if (
     request.method !== 'GET' ||
     url.origin !== self.location.origin ||

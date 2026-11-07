@@ -1,2 +1,5 @@
 *.glb filter=lfs diff=lfs merge=lfs -text
 *.blend filter=lfs diff=lfs merge=lfs -text
+# The soundtrack's masters, in whatever format each licensor published:
+# FLAC, WAV, MP3, Ogg. `.lfsconfig` keeps them out of every default fetch.
+data/audio/masters/** filter=lfs diff=lfs merge=lfs -text

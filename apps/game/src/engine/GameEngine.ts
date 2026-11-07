@@ -7,6 +7,7 @@ import type {
   GalaxyRenderReport,
   ObserverPose,
   GuideHostPort,
+  SoundtrackHostPort,
 } from '@inertialref/devtools'
 import type { SensorDiagnostics } from '../render/sensor.ts'
 import { DEFAULT_PICTURE, type Picture } from '../render/picture.ts'
@@ -314,6 +315,12 @@ export class GameEngine {
   readonly harness: GameHarness
   /** Supplied only while the Planetarium owns its lazy guide. */
   guide: GuideHostPort | null = null
+  /**
+   * The soundtrack player, as the harness reads it. Supplied by the app's
+   * soundtrack runtime for as long as it is mounted; presentation only, and
+   * nothing the simulation reads.
+   */
+  soundtrack: SoundtrackHostPort | null = null
   /**
    * Watching a cutscene, as one object.
    *
@@ -1011,6 +1018,7 @@ export class GameEngine {
           return this.sensorDiagnostics?.picture ?? null
         },
         guide: () => this.guide,
+        soundtrack: () => this.soundtrack,
         scene: () => this.#scene,
         frameStats: () => this.frameStats(),
         // No renderer, a renderer under the boot cover, or the cover lifted.

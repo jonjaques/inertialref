@@ -2,10 +2,13 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { type Location, MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
+import { licenseOf } from '@inertialref/protocol'
 import { shellPaths } from '../../astro/siteRoutes.ts'
+import { SOUNDTRACK } from '../audio/catalog.ts'
 import {
   ABOUT,
   AUTH_CALLBACK,
+  CREDITS,
   HOME,
   isOverlayPath,
   KEYS,
@@ -24,6 +27,15 @@ import {
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { AccountPage } from './AccountPage.tsx'
 import { OverlayRoutes } from './OverlayRoutes.tsx'
+
+/** Text as React writes it into markup, with its five characters escaped. */
+const escaped = (text: string): string =>
+  text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#x27;')
 
 /*
  * The routed dialogs, in Node, with no DOM — the same bargain `hud/hud.test.ts`
@@ -153,10 +165,26 @@ describe('the routed dialogs', () => {
   })
 
   it('falls back rather than 404ing on a section it has never heard of', () => {
-    // `/settings/audio` from a future build, or a typo. Opening settings is a
-    // better answer than opening nothing.
-    const markup = at(settingsSection('audio'))
+    // A section from a future build, or a typo. Opening settings is a better
+    // answer than opening nothing.
+    const markup = at(settingsSection('telemetry'))
     expect(markup).toContain('Lens flare')
+  })
+
+  it('draws the audio page: the levels, the soundtrack and the whole list', () => {
+    const markup = at(settingsSection('audio'))
+    expect(markup).toContain('aria-label="Repeat"')
+    expect(markup).toContain('Play the soundtrack')
+    // Every track has a row, by name, with a switch and a handle a keyboard
+    // can reach — the reordering is not a pointer-only gesture.
+    for (const track of SOUNDTRACK.tracks) {
+      expect(markup).toContain(`aria-label="Play “${escaped(track.title)}”"`)
+      expect(markup).toContain(`Move “${escaped(track.title)}”, position`)
+    }
+    // Server-rendered with no Cache Storage, so it says so instead of drawing
+    // keep switches that cannot work.
+    expect(markup).toContain('keeps nothing for offline here')
+    expect(markup).toContain(`href="${CREDITS}"`)
   })
 
   it('renders the informational pages', () => {
@@ -166,6 +194,24 @@ describe('the routed dialogs', () => {
     expect(about).toContain('Pre-alpha')
     expect(about).toContain('Source on GitHub')
     expect(about).toContain('href="https://github.com/jonjaques/inertialref"')
+    expect(about).toContain(`href="${CREDITS}"`)
+  })
+
+  /*
+   * CC BY's credit is the work, the creator, the license and the change, and
+   * the catalog line carries all four; the page has to print it whole, with
+   * the license and the source a click away, for every track the game plays.
+   */
+  it('credits every track it plays, with its license and its source', () => {
+    const credits = at(CREDITS)
+    expect(credits).toContain('>Credits</h1>')
+    expect(isOverlayPath(CREDITS)).toBe(true)
+    expect(shellPaths).toContain(CREDITS)
+    for (const track of SOUNDTRACK.tracks) {
+      expect(credits).toContain(escaped(track.credit))
+      expect(credits).toContain(`href="${licenseOf(track).url}"`)
+      expect(credits).toContain(`href="${escaped(track.licensor)}"`)
+    }
   })
 
   it('draws the account pages as pages of the menu, never as dialogs', () => {

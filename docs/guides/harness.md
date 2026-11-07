@@ -815,6 +815,25 @@ capture procedure in [Driving](../agents/driving.md#session-lifetime).
 
 ---
 
+## The soundtrack
+
+```js
+ir.soundtrackStatus() // state, track, position, upcoming, context, and why not
+ir.soundtrack('next') // the panel's verbs: play, pause, next, previous, card
+ir.soundtrack('seek', 120) // seconds into the current track
+ir.soundtrack('select', 'stellardrone-red-giant') // jump the queue to a track
+ir.soundtrack('cue', 'lofi') // a category, or a track id, over the crossfade
+```
+
+The rig has no ears, so this is how a run proves the player does what its panel
+claims: a track id that changes after `next`, a position that advances, a
+`state` that reads `waiting` until a gesture and `playing` after it. `context` is
+the `AudioContext`'s own state, `none` until the first gesture builds the graph.
+Both answer `available: false` outside a build with the player mounted, and the
+player plays only in the Planetarium, so a status read anywhere else says `off`.
+
+---
+
 ## Scenarios
 
 ```js

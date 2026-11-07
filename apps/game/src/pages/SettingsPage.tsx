@@ -5,12 +5,14 @@ import {
   Keyboard,
   MonitorCog,
   PanelsTopLeft,
+  Volume2,
   type LucideIcon,
 } from 'lucide-react'
 import type { HudRenderState } from '../hud/controls.ts'
 import { useDisplayDefaults } from '../hud/displayDefaults.ts'
 import { GraphicsPanel } from '../hud/GraphicsPanel.tsx'
 import { FOCUS_RING } from '../hud/focus.ts'
+import { AudioSection } from './AudioSection.tsx'
 import { ControllerSection } from './ControllerSection.tsx'
 import { ControlsSection } from './ControlsSection.tsx'
 import { DataSection } from './DataSection.tsx'
@@ -20,6 +22,7 @@ import { modeForPath, settingsSection } from './paths.ts'
 import { RestoreDefaults } from './RestoreDefaults.tsx'
 import {
   type PageDefaults,
+  useAudioDefaults,
   useInterfaceDefaults,
   useKeyDefaults,
   usePadDefaults,
@@ -61,6 +64,13 @@ const SECTIONS = [
     icon: MonitorCog,
     about:
       'What the display is asked to draw. Every change applies as it is made.',
+  },
+  {
+    id: 'audio',
+    title: 'Audio',
+    icon: Volume2,
+    about:
+      'What the game plays and how loud. The soundtrack plays in the Planetarium.',
   },
   {
     id: 'interface',
@@ -118,7 +128,7 @@ export function SettingsPage({
    */
   const { keep, background } = useOverlay()
   // An unknown section falls back rather than 404s: the URL is hand-typed, and
-  // `/settings/audio` from a future build should open settings, not nothing.
+  // a section from a future build should open settings, not nothing.
   const active =
     SECTIONS.find((entry) => entry.id === section) ??
     SECTIONS.find((entry) => entry.id === DEFAULT_SECTION)!
@@ -131,11 +141,13 @@ export function SettingsPage({
    * defaults is how somebody finds the one change they cannot remember making.
    */
   const display = useDisplayDefaults()
+  const audio = useAudioDefaults()
   const chrome = useInterfaceDefaults()
   const keys = useKeyDefaults()
   const pad = usePadDefaults()
   const defaults: Readonly<Partial<Record<SectionId, PageDefaults>>> = {
     display,
+    audio,
     interface: chrome,
     controls: keys,
     controller: pad,
@@ -211,6 +223,7 @@ export function SettingsPage({
         {active.id === 'display' && (
           <GraphicsPanel render={render} onNotice={onNotice} />
         )}
+        {active.id === 'audio' && <AudioSection />}
         {active.id === 'interface' && (
           <InterfaceSection
             mode={background === null ? null : modeForPath(background.pathname)}

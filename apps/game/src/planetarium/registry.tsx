@@ -1,6 +1,15 @@
 import { Suspense } from 'react'
 import { LazyGuidePanel as GuidePanel } from '../tour/LazyGuidePanel.tsx'
-import { Aperture, AudioLines, Eye, Image, Sun, Video } from 'lucide-react'
+import {
+  Aperture,
+  AudioLines,
+  Eye,
+  Image,
+  Music,
+  Sun,
+  Video,
+} from 'lucide-react'
+import { SoundtrackPanel } from '../audio/SoundtrackPanel.tsx'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import { LensPanel } from '../hud/LensPanel.tsx'
 import { Neighborhood, StarBody } from '../icons/index.tsx'
@@ -145,6 +154,26 @@ export function planetariumPanels(
       defaultOpen: false,
       hint: 'Names, orbit paths and the ship',
       render: () => <ViewPanel {...context} />,
+    },
+    {
+      id: 'soundtrack',
+      title: 'Soundtrack',
+      /*
+       * A note, not the waveform: `AudioLines` is the guide's, a voice
+       * speaking, and the two panels sit side by side at the end of the menu.
+       * The credits card that rises when a track starts carries this glyph
+       * too, so the card and the panel that brings it back read as one thing.
+       */
+      icon: Music,
+      zone: 'right',
+      /*
+       * Closed on arrival. The music plays without it and the card credits
+       * each track as it starts; the panel is for changing what plays, which
+       * a first look at the sky has not asked to do.
+       */
+      defaultOpen: false,
+      hint: 'What is playing, what is next, and how loud',
+      render: () => <SoundtrackPanel />,
     },
     /*
      * Last, and suppressed for anybody not granted it. A private alpha's panel

@@ -1,5 +1,9 @@
 import { isPicture, MAX_PICTURES, type Picture } from '@inertialref/devtools'
-import { GUIDE_VOICES } from '@inertialref/protocol'
+import {
+  GUIDE_VOICES,
+  SOUNDTRACK_CATEGORIES,
+  type SoundtrackCategory,
+} from '@inertialref/protocol'
 import { useEffect, useRef, useState } from 'react'
 import { useHydrated } from './hydration.ts'
 import {
@@ -58,6 +62,7 @@ import {
 } from '../render/picture.ts'
 import { type TimingLevel, TIMING_LEVELS } from '../engine/browserTiming.ts'
 import { DEFAULT_SHIP, SHIP_IDS } from '../render/ships.ts'
+import { type Repeat, REPEATS } from '../audio/playlist.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   isSurfaceQuality,
@@ -109,6 +114,7 @@ const PREFIX = 'ir.hud.'
  */
 export const PREFERENCE_GROUPS = [
   'display',
+  'audio',
   'camera',
   'controls',
   'planetarium',
@@ -529,6 +535,155 @@ export const PLANETARIUM_GUIDE_VOICE = define<string>({
   accept: oneOf([...GUIDE_VOICES]),
 })
 
+/* ------------------------------------------------------------------------ */
+/* audio                                                                     */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * The levels are slider positions, not gains. `audio/levels.ts` squares a
+ * position into a gain, which is what makes halfway sound like halfway; a
+ * stored gain would make a slider read back at the wrong place on every
+ * reload.
+ */
+export const AUDIO_MASTER = define({
+  key: 'audio.master',
+  group: 'audio',
+  what: 'the volume of everything the game plays',
+  initial: 0.8,
+  accept: numberWithin(0, 1),
+})
+
+export const AUDIO_MUSIC = define({
+  key: 'audio.music',
+  group: 'audio',
+  what: 'the soundtrack’s volume',
+  initial: 0.7,
+  accept: numberWithin(0, 1),
+})
+
+export const AUDIO_MONO = define({
+  key: 'audio.mono',
+  group: 'audio',
+  what: 'both channels mixed into one',
+  initial: false,
+  accept: isBoolean,
+})
+
+export const MUSIC_ENABLED = define({
+  key: 'music.enabled',
+  group: 'audio',
+  what: 'whether the soundtrack plays',
+  initial: true,
+  accept: isBoolean,
+})
+
+export const MUSIC_SHUFFLE = define({
+  key: 'music.shuffle',
+  group: 'audio',
+  what: 'the playlist in a random order',
+  initial: true,
+  accept: isBoolean,
+})
+
+export const MUSIC_REPEAT = define<Repeat>({
+  key: 'music.repeat',
+  group: 'audio',
+  what: 'what happens at the end of the playlist',
+  initial: 'all',
+  accept: oneOf(REPEATS),
+})
+
+export const MUSIC_CROSSFADE = define({
+  key: 'music.crossfade',
+  group: 'audio',
+  what: 'how long one track takes to become the next',
+  initial: 6,
+  accept: numberWithin(0, 12),
+})
+
+/**
+ * The playlist's order, as track ids.
+ *
+ * Ids rather than positions: a later build adds and drops tracks, and an
+ * order of positions would shuffle everybody's arrangement the day it did.
+ * `audio/playlist.ts` places a track the order does not name after the ones
+ * it does, and skips an id the catalog no longer has.
+ */
+export const MUSIC_ORDER = define<readonly string[]>({
+  key: 'music.order',
+  group: 'audio',
+  what: 'the order of the playlist',
+  initial: [],
+  accept: arrayOf(isString),
+})
+
+export const MUSIC_DISABLED = define<readonly string[]>({
+  key: 'music.disabled',
+  group: 'audio',
+  what: 'tracks taken out of the playlist',
+  initial: [],
+  accept: arrayOf(isString),
+})
+
+/**
+ * Categories taken out of the playlist.
+ *
+ * The ones switched off rather than the ones switched on, so a category a
+ * later build adds arrives switched on. Signals starts off: it is radio from
+ * spacecraft, not music, and somebody should choose to hear it between the
+ * tracks rather than meet it there.
+ */
+export const MUSIC_MUTED_CATEGORIES = define<readonly SoundtrackCategory[]>({
+  key: 'music.mutedCategories',
+  group: 'audio',
+  what: 'categories taken out of the playlist',
+  initial: ['signals'],
+  accept: arrayOf(oneOf(SOUNDTRACK_CATEGORIES)),
+})
+
+export const MUSIC_CARD = define({
+  key: 'music.card',
+  group: 'audio',
+  what: 'the credits card when a track begins',
+  initial: true,
+  accept: isBoolean,
+})
+
+export const MUSIC_BACKGROUND = define({
+  key: 'music.background',
+  group: 'audio',
+  what: 'whether the soundtrack keeps playing in a hidden tab',
+  initial: false,
+  accept: isBoolean,
+})
+
+/**
+ * Where the soundtrack resumes after a reload: a track and a second.
+ *
+ * A preference for the reason `planetarium.hinted` is one — it is the
+ * listener's state, it should survive a reload, and this file is the one
+ * place allowed to keep anything. Written when a track starts, on a pause,
+ * and as the page goes away; never on the playhead's own clock.
+ */
+export const MUSIC_RESUME = define<{
+  readonly id: string
+  readonly at: number
+} | null>({
+  key: 'music.resume',
+  group: 'audio',
+  what: 'where the soundtrack resumes',
+  initial: null,
+  accept: (
+    value,
+  ): value is { readonly id: string; readonly at: number } | null =>
+    value === null ||
+    (typeof value === 'object' &&
+      typeof (value as { id?: unknown }).id === 'string' &&
+      typeof (value as { at?: unknown }).at === 'number' &&
+      Number.isFinite((value as { at: number }).at) &&
+      (value as { at: number }).at >= 0),
+})
+
 export const NAVIGATOR_RADIUS = define<string>({
   key: 'planetarium.catalog.radius',
   group: 'planetarium',
@@ -660,6 +815,19 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_SURFACE,
   RENDER_SHIP,
   RENDER_THRUSTER_VARIATION,
+  AUDIO_MASTER,
+  AUDIO_MUSIC,
+  AUDIO_MONO,
+  MUSIC_ENABLED,
+  MUSIC_SHUFFLE,
+  MUSIC_REPEAT,
+  MUSIC_CROSSFADE,
+  MUSIC_ORDER,
+  MUSIC_DISABLED,
+  MUSIC_MUTED_CATEGORIES,
+  MUSIC_CARD,
+  MUSIC_BACKGROUND,
+  MUSIC_RESUME,
   CAMERA_LENS,
   PERSONAL_PICTURES,
   CONTROLS_KEYMAP,
