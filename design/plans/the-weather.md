@@ -159,13 +159,16 @@ thing. A plate is a preset — an address, a framing, a lens and a held instant
   water spread evenly, τ 10, lets through 0.0045% of it. Anything that stands
   for unresolved cloud — a coarse level, a far texel, a fine scale faded under
   warp — carries a cloud fraction and an in-cloud optical depth, and mixes
-  once per represented layer. Within a layer a ray is in the cloudy fraction
-  or out of it for its whole crossing, so its in-cloud depth accumulates
-  across steps and mixes at the layer's exit, `T = (1 − c) + c·e^(−τ_in)`;
-  between layers the overlap is random and the transmittances multiply. Mixed
-  at every step instead, a half-clear layer at τ 20 crossed in two steps lets
-  through 0.25 rather than 0.5. This is the maximum-random overlap of climate
-  models.
+  once per represented segment: one layer's crossing of one column. Inside a
+  segment a ray is in the cloudy fraction or out of it for the whole
+  crossing, so the depth and the light it meets in cloud accumulate across
+  steps, and both mix at the segment's exit by the largest fraction the
+  crossing met: `T = (1 − c) + c·e^(−τ_in)`, and the cloud's light enters as
+  `c·L_in`. Between segments the overlap is random and the transmittances
+  multiply, so a grazing ray that crosses many columns of one layer mixes at
+  each. Mixed at every step instead, a half-clear layer at τ 20 crossed in two
+  steps lets through 0.25 rather than 0.5. This is the maximum-random overlap
+  of climate models.
 - **Fields are sums, never a nearest.** A cyclone, a cell or a front
   contributes through a kernel that reaches zero inside its margin, and a
   sample sums every contributor in reach (rule 11). A cellular noise's
@@ -336,12 +339,14 @@ function at two resolutions. A level fades across its boundary as a terrain
 patch morphs into its parent. Cells a kilometer across are the noise's, not a
 map's.
 
-Each holds twelve quantities in three RGBA8 textures: the three levels' cloud
-fraction and in-cloud optical depth, log-encoded; the low level's convective
-share and the high level's ice share; the rain rate and the deep-convection
-rate; and the wind's two components. A level's base and top derive from its
-genus and the climate and are not stored. The clipmap carries a fourth
-texture for the ground's wetness (§7.3). The far atlas holds each of three
+Each holds sixteen channels in four RGBA8 textures: the three levels' cloud
+fraction, their in-cloud optical depth, log-encoded, and their convective
+share, cumuliform against stratiform; the middle level's ice share; the rain
+rate and the deep-convection rate; the wind's two components; and two spare,
+which the clipmap spends on the ground's wetness and its puddles (§7.3). A
+level's genus — and with it its height profile, its base and its top — is
+read from its convective share, the deep-convection rate and the climate, and
+is not stored. The far atlas holds each of three
 layers' fraction, in-cloud depth, base and top in one RGBA8, its heights
 quantized over that level's own range; the local volume holds in-cloud
 density and cloud fraction (§3) in RG8.
@@ -355,16 +360,16 @@ The sizes are targets; phase 0 measures them.
 
 | Resource                       | Size                                      | A texel on Earth | Memory  | Refresh                                           |
 | ------------------------------ | ----------------------------------------- | ---------------- | ------- | ------------------------------------------------- |
-| Weather cube                   | 6 × 512², three RGBA8                     | 19.5 km          | 18.9 MB | As `t` moves a texel; a face a frame after a jump |
+| Weather cube                   | 6 × 512², four RGBA8                      | 19.5 km          | 25.2 MB | As `t` moves a texel; a face a frame after a jump |
 | Clipmap                        | 6 levels × 256², four RGBA8               | 250 m to 8 km    | 6.3 MB  | Toroidally, by what the eye's footprint crosses   |
 | Far atlas (§5.4)               | 6 × 256², three layers of RGBA8           | 39 km            | 4.7 MB  | Progressively                                     |
 | Local volume (§5.2)            | 3 levels × 256² × 32, RG8                 | 50 m to 800 m    | 12.6 MB | Progressively, by level                           |
 | Sun's optical depth (§6.1)     | 3 × 512² RGBA16F, or a grid               | —                | 6.3 MB  | A slice a frame                                   |
 | Reflection probe (§6.5)        | 256² octahedral RGBA16F                   | —                | 0.5 MB  | Progressively                                     |
-| History, trace and depth curve | ½ RGBA16F + RG16F twice; ¼ trace; ½ curve | —                | 18 MB   | Every frame                                       |
+| History, trace and depth knots | ½ RGBA16F + RG16F twice; ¼ trace; ¼ knots | —                | 18 MB   | Every frame                                       |
 | Noise                          | 128³ and 32³ R8                           | —                | 2 MiB   | Once, at boot                                     |
 
-About 70 MB at 1080p. Under an eye moving 8 km/s in orbit, the finest clipmap
+About 76 MB at 1080p. Under an eye moving 8 km/s in orbit, the finest clipmap
 level, 64 km across in 250 m texels, rewrites about half a column a frame.
 
 ---
@@ -460,12 +465,14 @@ fill it — and nothing large ships.
   every sample, at that sample's own radius. The shortcut uses the angle
   between the sun and the view, which is fixed along a ray: it accumulates
   first-order light without its phase, per class of scatterer — cloud
-  droplets, ice, rain, and on Mars dust — weighted by each sample's
-  scattering and the light reaching it, beside that light's mean effective
-  radius, and fetches each class's phase once at the end of the ray. A mean
-  radius draws a sharper glory than a mix of radii does, an error toward the
-  crisp case photographs record; phase 1 accepts the shortcut against
-  mixed-radius cases, and a few radius bins per class are its fallback.
+  droplets, ice, rain, and on Mars dust — beside that light's mean effective
+  radius, each sample weighted by its whole contribution: its scattering, the
+  light reaching it and its transmittance to the eye, which a front-to-back
+  march carries for nothing. It fetches each class's phase once at the end of
+  the ray. A mean radius draws a sharper glory than a mix of radii does, an
+  error toward the crisp case photographs record; phase 1 accepts the
+  shortcut against mixed-radius cases, and a few radius bins per class are its
+  fallback.
 - **The tables.** The droplets' is Lorenz–Mie over angle and effective
   radius, at a fixed distribution width per class — the glory and the corona
   survive only a narrow one — convolved with the star's disk at its own
@@ -627,12 +634,15 @@ What draws after the composite splits in two. Instruments, the flare and other
 lens effects read nothing. World transparency — rings, plumes, entry traces,
 near rain — needs the cloud's transmittance to its own depth, which the span's
 total and its two ends cannot give through two clouds with clear air between
-them. So the trace writes a short curve of transmittance by depth per
-reconstructed pixel, a few knots, and the light in front of a depth is taken
-as that depth's share of the span's opacity. An additive plume is dimmed by
-the transmittance in front of it; an alpha-blended ring is blended under the
-in-scattered light in front of it, which its blend must not darken. Phase 0
-puts a transparent object between two cloud layers.
+them. So the trace writes, at its own resolution, four knots of a curve by
+depth, each holding the transmittance in front of it and the light the cloud
+scatters in front of it. The transmittance alone cannot say where that light
+came from: a lit cloud in front of a dark one and a dark one in front of a lit
+one draw the same curve. An additive plume is dimmed by the transmittance in
+front of it; an alpha-blended ring is blended under the light in front of it,
+which its blend must not darken. Phase 0 puts a transparent object between
+two independently lit cloud layers, lit in front and dark behind, and the
+reverse.
 
 Under temporal FSR the composite runs at render resolution before the
 upscaler and writes the cloud's opacity into `reactive`, where ADR-0044 puts
@@ -658,9 +668,9 @@ summed through the local volume: Nubis³ reports 0.1–0.2 ms every eight frames
 for its grid and 40% off its render time. takram marches its cascades every
 frame, three of them, 512² at its defaults, and that is the reason not to
 draw them whole: an alpha WebGPU port's own benchmarks put the WebGL
-original's shadow pass at 3.8–4.7 ms of an 8.3 ms frame at 1280×720 on an M4
-Mac mini under Chrome 154, and the port's at 6.5–8.0 ms of 11.4, figures the
-file asks to be re-measured rather than extrapolated
+original's shadow pass at 3.8–4.7 ms of 7.4–9.7 ms frames at 1280×720 on an
+M4 Mac mini under Chrome 154, and the port's at 6.5–8.0 ms of 11.4–13.4,
+figures the file asks to be re-measured rather than extrapolated
 ([three-clouds-webgpu, `docs/BENCHMARKS.md`](https://github.com/johnfewell/three-clouds-webgpu/blob/main/docs/BENCHMARKS.md)).
 Past the last cascade or the grid, the far atlas carries the sun's
 transmittance. Under warp the shadow may lag the clouds it falls from.
@@ -736,7 +746,9 @@ transmittance, marched from the eye through the clipmap and refreshed
 progressively — stands in front of the air's sky in `render/water.ts`'s
 reflected term. From orbit and far off, where one center is wrong — the reason
 §13 declines a cached dome — the reflected ray reads the far atlas where it
-crosses the cloud layer, which keeps the parallax a probe would lose. A sea
+crosses the cloud layer, which keeps the parallax a probe would lose. That
+read is a lit evaluation of three slabs a sea fragment, from the atlas and the
+sun's optical depth, not one fetch, and §9 carries it. A sea
 under an overcast is the deck's gray, and a lake under broken cloud holds the
 nearer clouds at the clipmap's resolution. A GPU test holds the reflected deck
 and the deck the trace draws to one radiance, and the overcast-over-water
@@ -907,9 +919,10 @@ and a cloud pass is texture-bound where spike 2's march was arithmetic. Phase
 | History at ½                     | Every frame             | ≤ 0.3 ms           | RDR2's reconstruction, 0.232 ms on a PS4                                      |
 | Composite, and the split         | Every frame             | ≤ 0.3 ms           | The air's march to `t₁` a reconstructed pixel; the split's tile store unknown |
 | Shadowed air                     | Every frame             | ≤ 0.3 ms           | One shadow tap per air sample; four per terrain fragment                      |
+| The sea's far reflection         | Every frame, on the sea | ≤ 0.1 ms           | Three lit slabs of the atlas a sea fragment                                   |
 | Near rain                        | While it rains          | ≤ 0.5 ms           | ~2×10⁵ instanced streaks                                                      |
-| **On the ground, dry / in rain** |                         | **≤ 2.8 / 3.3 ms** |                                                                               |
-| **From orbit**                   |                         | **≤ 1.5 ms**       | A thin shell, coarse levels, early exits on the tops                          |
+| **On the ground, dry / in rain** |                         | **≤ 2.9 / 3.4 ms** |                                                                               |
+| **From orbit**                   |                         | **≤ 1.6 ms**       | A thin shell, coarse levels, early exits on the tops                          |
 
 The ground's held GPU cost is 12.4 ms at 1080p today. That is not headroom
 under vsync — the frame's rAF already runs at 16.67 ms with a p95 of 17.4 —
