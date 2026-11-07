@@ -433,8 +433,11 @@ export function stepTarget(
 ): string | null {
   const here = rows.find((row) => row.address === current)
   if (here === undefined) return null
+  // Everything under the star, stations included: the ISS is one of Earth's
+  // satellites to a pad as it is to the tree, in orbital order — inside the
+  // Moon — and the Spacecraft chip is how a reader steps past it.
   const ordered = orbitalOrder(
-    rows.filter((row) => row.kind === 'body' && row.system === here.system),
+    rows.filter((row) => row.kind !== 'system' && row.system === here.system),
   )
   if (step === 'parent')
     return here.kind === 'system' || here.parent === null ? null : here.parent

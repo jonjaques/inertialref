@@ -3,7 +3,13 @@ import { OptionGroup } from '../hud/OptionGroup.tsx'
 import { Section } from '../hud/Section.tsx'
 import { SwitchRow } from '../hud/SwitchRow.tsx'
 import { Asteroid } from '../icons/index.tsx'
-import { LABEL_DENSITIES, ORBIT_SCOPES, SCOPE_LABELS } from './layers.ts'
+import {
+  LABEL_DENSITIES,
+  ORBIT_SCOPES,
+  SCOPE_LABELS,
+  SPACECRAFT_SCOPE_LABELS,
+  SPACECRAFT_SCOPES,
+} from './layers.ts'
 import type { PlanetariumContext } from './context.ts'
 
 /*
@@ -35,6 +41,8 @@ export function ViewPanel({
   onLabelDensity,
   labelMinor,
   onLabelMinor,
+  labelSpacecraft,
+  onLabelSpacecraft,
   orbits,
   onOrbits,
   orbitScope,
@@ -87,6 +95,27 @@ export function ViewPanel({
               on={labelMinor}
               onChange={onLabelMinor}
             />
+            {/* Three ways rather than a switch: a station near the eye is
+                the thing being looked at, and one across the sky is a name
+                on a planet nobody asked to have captioned. */}
+            <div className="flex flex-col gap-1">
+              <span className="type-ui text-slate-400">Spacecraft</span>
+              <OptionGroup
+                label="Which spacecraft are named"
+                value={labelSpacecraft}
+                values={SPACECRAFT_SCOPES}
+                labels={SPACECRAFT_SCOPE_LABELS}
+                className="self-start"
+                onChange={onLabelSpacecraft}
+              />
+              <p className="type-ui text-pretty text-slate-400">
+                {labelSpacecraft === 'nearby'
+                  ? 'The subject, what goes round it, and anything within 2,000 km.'
+                  : labelSpacecraft === 'all'
+                    ? 'Every spacecraft in view.'
+                    : 'None but the subject.'}
+              </p>
+            </div>
           </div>
         )}
 

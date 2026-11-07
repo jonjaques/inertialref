@@ -260,7 +260,9 @@ export class Maneuvers {
       currentSystemOf(world, this.#host.player()),
     )
     if (target.kind !== 'body')
-      throw new Error(`${address ?? ''} names a system; shots frame a body`)
+      throw new Error(
+        `${address ?? ''} names a ${target.kind === 'station' ? 'station' : 'system'}; shots frame a body`,
+      )
     const system = world.loadSystem(target.system)
     const body = findBody(
       system,
@@ -359,6 +361,12 @@ export class Maneuvers {
       world.galaxy,
       currentSystemOf(world, this.#host.player()),
     )
+    // A ship near a station flies in the station's frame, which is the
+    // proximity rule landing brings; until then there is nowhere to put it.
+    if (target.kind === 'station')
+      throw new Error(
+        `${target.text} is a station; ships are not sent to one yet`,
+      )
     const system = world.loadSystem(target.system)
 
     if (target.kind === 'body') {

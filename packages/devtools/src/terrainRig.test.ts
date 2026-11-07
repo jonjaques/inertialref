@@ -680,6 +680,25 @@ describe('the terrain verbs on a body with no ground', () => {
     expect(harness.sites('s:SOL/b:2')).toHaveLength(10)
   })
 
+  it('answer a station as they answer a giant, named or on screen', () => {
+    // Something to look at with no ground under it. Its address names no
+    // body, and refusing it as one hands the guide an address error to read.
+    const session = live()
+    const { harness } = session
+    const iss = 's:SOL/b:2/a:0'
+    expect(harness.sites(iss)).toEqual([])
+    expect(() => harness.descend(iss)).toThrow(
+      'International Space Station has no surface to descend to',
+    )
+    // With no address the verbs are about the thing on screen, and the
+    // station is that thing — not the ship's world, as it is for a star.
+    harness.look(iss, { ease: false })
+    expect(harness.sites()).toEqual([])
+    expect(() => harness.descend()).toThrow(
+      'International Space Station has no surface to descend to',
+    )
+  })
+
   it('take the same addresses every other verb takes', () => {
     // One resolver. `parseAddress` alone accepts only the galaxy-qualified
     // form, which made these two the only verbs in the console with their own

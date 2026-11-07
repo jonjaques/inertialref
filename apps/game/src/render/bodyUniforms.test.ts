@@ -43,7 +43,7 @@ function body(overrides: Partial<RenderBody> = {}): RenderBody {
     sunlight: 0.5,
     address: 'sol/3',
     name: 'Earth',
-    kind: 'terrestrial',
+    kind: 'rocky',
     placement: {
       position: vec3(0, 0, 0),
       scale: 6.4e6,

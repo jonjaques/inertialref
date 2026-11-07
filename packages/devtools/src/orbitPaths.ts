@@ -1,13 +1,20 @@
-import type { Meters } from '@inertialref/shared'
+import type { Meters, Seconds } from '@inertialref/shared'
 import { type FrameId, UV, type UniverseVector } from '@inertialref/spatial'
-import { solveKepler } from '@inertialref/physics'
+import {
+  type OrbitalElements,
+  orbitalPeriod,
+  solveKepler,
+} from '@inertialref/physics'
 import type { World } from '@inertialref/simulation'
 import {
   type BodyKind,
   bodyFrameId,
   formatAddress,
-  isDebris,
+  objectClass,
+  type OrbitalKind,
+  placementMu,
   type StarSystem,
+  stationFrameId,
   walkBodies,
 } from '@inertialref/universe'
 
@@ -36,7 +43,10 @@ import {
  * tail is behind a body that is somewhere else on the curve.
  */
 
-/** One body's path, in universe coordinates, starting at where it is now. */
+/**
+ * One body's path, or one station's, in universe coordinates, starting at
+ * where it is now.
+ */
 export interface OrbitPath {
   readonly address: string
   readonly name: string
@@ -48,7 +58,10 @@ export interface OrbitPath {
    * nearer, at Jupiter's range. See `placement.ts`.
    */
   readonly radius: Meters
-  /** How deep in the moon hierarchy: 1 for a planet, 2 for a moon. */
+  /**
+   * How deep in the moon hierarchy: 1 for a planet, 2 for a moon, and a
+   * station one deeper than what it goes round.
+   */
   readonly depth: number
   /**
    * What is on this orbit, so a host can decide whether the trace is context.
@@ -58,9 +71,10 @@ export interface OrbitPath {
    * dwarf planets, asteroids and comets in Sol it is a cage of a hundred and
    * twenty-nine lines
    * across the frame, and Bennu is somewhere behind it. `kind` is what lets a
-   * host draw the worlds and leave the rubble out.
+   * host draw the worlds and leave the rubble out — and the stations, which
+   * are context only for what they go round.
    */
-  readonly kind: BodyKind
+  readonly kind: BodyKind | OrbitalKind
   /** Closed: the last point is one full period on, which is the first again. */
   readonly points: readonly UniverseVector[]
   /**
@@ -89,9 +103,10 @@ export interface OrbitPathOptions {
 /**
  * Every orbit in a system, traced.
  *
- * Returned in the order `walkBodies` issues, which is issue order rather than
- * orbital order — see ADR-0009. A caller that wants them sorted for display
- * sorts them; this is not the place to bake in a display decision.
+ * The bodies in the order `walkBodies` issues them, which is issue order
+ * rather than orbital order — see ADR-0009 — and then the stations. A caller
+ * that wants them sorted for display sorts them; this is not the place to
+ * bake in a display decision.
  */
 export function orbitPaths(
   world: World,
@@ -102,21 +117,13 @@ export function orbitPaths(
   const now = world.clock.time
   const paths: OrbitPath[] = []
 
-  for (const body of walkBodies(system)) {
-    const period = body.orbitalPeriod
-    if (!Number.isFinite(period) || period <= 0) continue
-    if (
-      options.maxPeriodSeconds !== undefined &&
-      period > options.maxPeriodSeconds
-    )
-      continue
-
-    const frame = bodyFrameId(body.address)
-    if (!world.frames.has(frame)) continue
-    const parent = world.frames.get(frame).parent
-    if (parent === null) continue
-
-    const anchor = world.frames.pose(parent, now).position
+  const sweep = (
+    frame: FrameId,
+    parent: FrameId,
+    anchor: UniverseVector,
+    elements: OrbitalElements,
+    period: Seconds,
+  ): readonly UniverseVector[] => {
     const points: UniverseVector[] = []
     /*
      * Sampled uniformly in *eccentric anomaly*, not in time.
@@ -136,7 +143,7 @@ export function orbitPaths(
      * constant arc length instead — the same 96 samples, spread along the
      * curve rather than along the clock.
      */
-    const { eccentricity, meanAnomalyAtEpoch, epoch } = body.elements
+    const { eccentricity, meanAnomalyAtEpoch, epoch } = elements
     /*
      * The sweep starts at the body's *own* eccentric anomaly, not at
      * periapsis, because the first sample has to be where the body is now —
@@ -157,14 +164,70 @@ export function orbitPaths(
       // The offset in universe axes, re-hung on where the primary is *now*.
       points.push(UV.translate(anchor, UV.difference(here, primary)))
     }
+    return points
+  }
 
+  for (const body of walkBodies(system)) {
+    const period = body.orbitalPeriod
+    if (!Number.isFinite(period) || period <= 0) continue
+    if (
+      options.maxPeriodSeconds !== undefined &&
+      period > options.maxPeriodSeconds
+    )
+      continue
+
+    const frame = bodyFrameId(body.address)
+    if (!world.frames.has(frame)) continue
+    const parent = world.frames.get(frame).parent
+    if (parent === null) continue
+
+    const anchor = world.frames.pose(parent, now).position
     paths.push({
       address: formatAddress(body.address),
       name: body.name,
       radius: body.radius,
       kind: body.kind,
       depth: body.address.kind === 'body' ? body.address.body.length : 1,
-      points,
+      points: sweep(frame, parent, anchor, body.elements, period),
+      parent,
+      anchor,
+    })
+  }
+
+  /*
+   * A station's trace is its `a:` frame against its parent's, swept the same
+   * way. The frame is the only description of where the station goes — the
+   * same elements, `G(M + m)` and equatorial tilt the snapshot reads — so the
+   * curve cannot drift off the station drawn on it. An orbit law with no
+   * elements stops this compiling, which is the decision it will need.
+   */
+  for (const station of system.stations) {
+    const { elements } = station.orbit
+    const period = orbitalPeriod(
+      placementMu(system, station),
+      elements.semiMajorAxis,
+    )
+    if (
+      options.maxPeriodSeconds !== undefined &&
+      period > options.maxPeriodSeconds
+    )
+      continue
+
+    const frame = stationFrameId(station.id)
+    if (!world.frames.has(frame)) continue
+    const parent = world.frames.get(frame).parent
+    if (parent === null) continue
+
+    const anchor = world.frames.pose(parent, now).position
+    paths.push({
+      address:
+        station.address === null ? station.id : formatAddress(station.address),
+      name: station.name,
+      radius: station.radius,
+      kind: station.kind,
+      depth:
+        station.parent.kind === 'body' ? station.parent.body.length + 1 : 1,
+      points: sweep(frame, parent, anchor, elements, period),
       parent,
       anchor,
     })
@@ -207,9 +270,14 @@ export interface OrbitScopeContext {
  * small body's orbit is drawn when it *is* the subject or goes round it, and not
  * merely because it shares a primary.
  *
- * The nine dwarf planets stay: `isDebris` is asteroids and comets only, and
- * hiding Pluto costs the one trace a planetarium is most often opened for —
- * with Neptune selected, where the two orbits cross.
+ * The nine dwarf planets stay: the `minor` class is asteroids and comets
+ * only, and hiding Pluto costs the one trace a planetarium is most often
+ * opened for — with Neptune selected, where the two orbits cross.
+ *
+ * A station follows the rubble's rule, for the same reason at a different
+ * scale: the ISS's trace is the subject's context when Earth or the ISS is
+ * the subject, and a 6,800 km ring round Earth seen from the Moon is a line
+ * across the planet the Moon is being looked at against.
  *
  * `scope: 'all'` is the deliberate way to ask for the cage. From outside a
  * system it is the picture, the whole architecture of the place at once; from
@@ -225,8 +293,14 @@ export function visibleOrbits(
     (path) =>
       path.parent === context.focus ||
       (path.parent === context.grandparent &&
-        (!isDebris(path.kind) || path.address === context.subject)),
+        (!onlyRoundItsOwn(path.kind) || path.address === context.subject)),
   )
+}
+
+/** Whether an orbit is context only for what it goes round. See above. */
+const onlyRoundItsOwn = (kind: OrbitPath['kind']): boolean => {
+  const of = objectClass(kind)
+  return of === 'minor' || of === 'spacecraft'
 }
 
 /**

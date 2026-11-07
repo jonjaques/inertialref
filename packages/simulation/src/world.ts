@@ -50,6 +50,7 @@ import {
   installSurfaceFrame,
   installSystemFrames,
   MILKY_WAY,
+  parseStationFrameId,
   parseSurfaceFrameId,
   parseAddress,
   supportCeiling,
@@ -742,6 +743,16 @@ export class World implements FlightWorld {
    */
   ensureFrame(id: FrameId): boolean {
     if (this.frames.has(id)) return true
+    // A station's frames install with its system, so the id names the system
+    // to load and nothing has to be minted. Loading comes first because it is
+    // how the station's existence is known — a system's stations are part of
+    // what generating it produces — so an id for one never issued leaves its
+    // system loaded and answers false, as a surface frame on no body does.
+    const station = parseStationFrameId(id)
+    if (station !== null) {
+      this.loadSystem(station.address.system)
+      return this.frames.has(id)
+    }
     // The grammar belongs to `universe`, beside the formatter that mints it.
     // Re-deriving it here meant the `-0` idempotency guard had no counterpart
     // on the load path, which is where a landed save is restored.

@@ -41,11 +41,12 @@ pixels.
 | `ir.summary()`         | one line: tick, hash, frame, speed, systems                       |
 | `ir.status()`          | everything the debug overlay shows, structured                    |
 | `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
-| `ir.dossier(address)`  | one star or one body as a page of astronomy                       |
+| `ir.dossier(address)`  | one star, body or station as a page of astronomy                  |
 | `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
 | `ir.picture(debug?)`   | reconstruction dimensions, history, allocations and GPU timings   |
 | `ir.lens()`            | the camera as an instrument — mm, f-stop, depth of field, EV      |
 | `ir.bodies(system?)`   | flat listing of a system's bodies with addresses                  |
+| `ir.stations(system?)` | a system's stations: parent, reach, perigee, apogee and period    |
 | `ir.systemsNearby(ly)` | nearest star systems, catalog and procedural                      |
 | `ir.logs(n)`           | recent structured log records                                     |
 
@@ -532,7 +533,8 @@ is singular. A world that drains names four more off its drainage graph
 largest tributary, where it meets the sea, and the largest lake — each stood
 on the water the field draws. On a body with no solid surface `ir.sites` returns an empty list:
 a giant's parameters run through the survey without complaint, but every row
-would be a place `ir.visit` refuses to stand.
+would be a place `ir.visit` refuses to stand. A station gets the same empty
+list and the same refusal from `ir.descend`, named or as the subject on screen.
 
 The height is set outright rather than eased, which is what makes a plate loop
 work: each `ir.visit` is the frame you asked for, with nothing settling in

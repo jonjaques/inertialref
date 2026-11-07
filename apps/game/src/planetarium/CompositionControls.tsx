@@ -33,6 +33,7 @@ export function CompositionControls(context: PlanetariumContext) {
     useShallow((snapshot) => ({
       has: snapshot.observer?.target != null,
       isStar: snapshot.observer?.target?.kind === 'star',
+      isStation: snapshot.observer?.target?.kind === 'station',
     })),
   )
   const disabled = !subject.has
@@ -51,7 +52,9 @@ export function CompositionControls(context: PlanetariumContext) {
             <button
               key={composition.id}
               type="button"
-              disabled={disabled}
+              // Every composition is solved against a world's disk, and the
+              // observatory refuses each one for a station.
+              disabled={disabled || subject.isStation}
               title={composition.why}
               onClick={(event) => {
                 releaseFocus(event)
@@ -116,6 +119,14 @@ export function CompositionControls(context: PlanetariumContext) {
           // sixteen presses that all do the same thing.
           <p className="type-ui mt-1.5 text-pretty text-slate-400">
             A star is always full, so on one of these only the distance changes.
+          </p>
+        )}
+        {subject.isStation && (
+          // Said once, for the same reason, and the rows below still work: the
+          // light swings round a station as round anything the Sun is on.
+          <p className="type-ui mt-1.5 text-pretty text-slate-400">
+            Compositions frame a world’s disk and ground, and a station has
+            neither. The light and the distance still work.
           </p>
         )}
       </div>

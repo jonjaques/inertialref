@@ -8,6 +8,7 @@ import {
   GRAVITATIONAL_CONSTANT,
   JUPITER_MASS,
   JUPITER_RADIUS,
+  formatReading,
   type Kilograms,
   kilometers,
   LIGHT_YEAR,
@@ -25,7 +26,13 @@ import {
   SOLAR_RADIUS,
   STEFAN_BOLTZMANN,
 } from '@inertialref/shared'
-import { apoapsis, normalizeAngle, periapsis } from '@inertialref/physics'
+import {
+  apoapsis,
+  normalizeAngle,
+  type OrbitalElements,
+  orbitalPeriod,
+  periapsis,
+} from '@inertialref/physics'
 import type { World } from '@inertialref/simulation'
 import {
   archetypeName,
@@ -40,10 +47,13 @@ import {
   hasSolidSurface,
   insolation,
   isDebris,
+  type OrbitalPlacement,
   isHabitable,
   isPlanetKind,
+  type ObjectKind,
   orbitalOrder,
   parseSpectralType,
+  placementMu,
   type ReliefSource,
   type Star,
   type StarSystem,
@@ -52,7 +62,7 @@ import {
   volumetricMeanRadius,
   walkBodies,
 } from '@inertialref/universe'
-import { currentSystemOf, resolveDestination } from './travel.ts'
+import { currentSystemOf, resolveDestination, stationAt } from './travel.ts'
 import type { Host } from './host.ts'
 
 /*
@@ -155,8 +165,8 @@ export interface Satellite {
 export interface Dossier {
   readonly address: string
   readonly name: string
-  /** `star`, or the body's own class. Decides the glyph and the header line. */
-  readonly kind: 'star' | BodyKind
+  /** `star`, the body's own class, or the placement's kind. Decides the glyph and the header line. */
+  readonly kind: ObjectKind
   /** `Fourth planet of Sol`, `Ice giant`, `G-type main sequence star`. */
   readonly classification: string
   readonly provenance: BodyProvenance
@@ -225,8 +235,144 @@ export function dossier(
   }
 
   if (resolved.kind === 'system') return starDossier(world, system)
+  if (resolved.kind === 'station') {
+    const station = stationAt(system, resolved.address)
+    return station === undefined
+      ? null
+      : stationDossier(world, system, station, time)
+  }
   const body = findBody(system, resolved.address)
   return body === undefined ? null : bodyDossier(world, system, body, time)
+}
+
+/* ------------------------------------------------------------------------- */
+/* A station                                                                  */
+/* ------------------------------------------------------------------------- */
+
+/** How a station holds itself, as a row. Exhaustive over `Attitude`. */
+function attitudeFact(station: OrbitalPlacement, parent: string): Fact {
+  switch (station.attitude.kind) {
+    case 'nadir':
+      return {
+        label: 'Attitude',
+        value: 'Local vertical',
+        note: `nose along its orbit, keel toward ${parent}`,
+      }
+  }
+}
+
+/**
+ * What a station is, as a page: what it weighs and how far it reaches, how
+ * it holds itself, and the orbit it keeps over the body it goes round.
+ *
+ * Heights are over the parent's equatorial radius, which is how a station's
+ * orbit is quoted and the only reading of it a reader can check: the ISS's
+ * 6,797 km semi-major axis says nothing a person recognizes, and 414 to
+ * 424 km up does.
+ */
+function stationDossier(
+  world: World,
+  system: StarSystem,
+  station: OrbitalPlacement,
+  time: Seconds,
+): Dossier {
+  const parent =
+    station.parent.kind === 'body'
+      ? findBodyAt(system, station.parent.body)
+      : undefined
+  const parentName = parent?.name ?? system.star.name
+  const parentRadius = parent?.radius ?? system.star.radius
+  const elements = station.orbit.elements
+  const once = orbitalPeriod(
+    placementMu(system, station),
+    elements.semiMajorAxis,
+  )
+  const low = periapsis(elements) - parentRadius
+  const high = apoapsis(elements) - parentRadius
+  const groups: FactGroup[] = [
+    {
+      id: 'station.physical',
+      title: 'The Station',
+      facts: [
+        {
+          label: 'Mass',
+          value: `${round(station.mass / 1000, 1)} t`,
+          note: `${exponential(station.mass)} kg`,
+        },
+        {
+          label: 'Reach',
+          value: formatReading(station.radius),
+          note: 'from its center, at any array angle',
+        },
+        attitudeFact(station, parentName),
+      ],
+    },
+    {
+      id: 'station.orbit',
+      title: 'Orbit',
+      facts: [
+        {
+          label: 'Height',
+          value:
+            formatReading(low) === formatReading(high)
+              ? formatReading(low)
+              : `${formatReading(low)} – ${formatReading(high)}`,
+          note: `over ${parentName}’s equator`,
+        },
+        { label: 'Orbital period', value: period(once) },
+        {
+          label: 'Semi-major axis',
+          value: kilometers(elements.semiMajorAxis),
+        },
+        {
+          label: 'Eccentricity',
+          value: round(elements.eccentricity, 5),
+          note: eccentricityWord(elements.eccentricity),
+        },
+        {
+          label: 'Inclination',
+          value: `${round(radiansToDegrees(elements.inclination), 3)}°`,
+          note: `to ${parentName}’s equator`,
+        },
+        {
+          label: 'Mean orbital speed',
+          value: `${significant(
+            (2 * Math.PI * elements.semiMajorAxis) / once / 1000,
+          )} km/s`,
+        },
+        nextPeriapsis('Next perigee', elements, once, time),
+      ],
+    },
+    {
+      id: 'station.record',
+      title: 'Record',
+      facts: [
+        {
+          label: 'Also known as',
+          value: station.designations.join(' · '),
+        },
+      ],
+    },
+  ]
+  return {
+    address:
+      station.address === null ? station.id : formatAddress(station.address),
+    name: station.name,
+    kind: station.kind,
+    classification: `Space station of ${parentName}`,
+    provenance: station.provenance,
+    summary: `Station going round ${parentName} once every ${period(
+      once,
+    )}, between ${formatReading(low)} and ${formatReading(high)} up.`,
+    system: { id: system.id, name: system.name },
+    primary:
+      parent === undefined
+        ? { address: `g:${world.galaxy}/s:${system.id}`, name: system.name }
+        : { address: formatAddress(parent.address), name: parent.name },
+    groups,
+    satellites: [],
+    pendingCount: countPending(groups),
+  }
 }
 
 /** Fields still waiting on an observation, across the whole page. */
@@ -737,15 +883,9 @@ function orbitGroup(
    * a countdown in days does not sawtooth — but two answers to "when is now" in
    * one mode is how the third site got it wrong.
    */
-  const rate = (2 * Math.PI) / body.orbitalPeriod
-  const anomaly = normalizeAngle(
-    elements.meanAnomalyAtEpoch + rate * (time - elements.epoch),
+  facts.push(
+    nextPeriapsis('Next periapsis', elements, body.orbitalPeriod, time),
   )
-  facts.push({
-    label: 'Next periapsis',
-    value: period((2 * Math.PI - anomaly) / rate),
-    note: `${round((anomaly / (2 * Math.PI)) * 100, 1)}% through this orbit`,
-  })
   facts.push({
     label: 'Sphere of influence',
     value: kilometers(body.sphereOfInfluence),
@@ -765,6 +905,27 @@ function orbitGroup(
   )
 
   return { id: 'body.orbit', title: 'Orbit', facts }
+}
+
+/**
+ * The time to the next periapsis, and how far through this orbit it is: one
+ * reading for a body's page and a station's, under the word each uses.
+ */
+function nextPeriapsis(
+  label: string,
+  elements: OrbitalElements,
+  once: Seconds,
+  time: Seconds,
+): Fact {
+  const rate = (2 * Math.PI) / once
+  const anomaly = normalizeAngle(
+    elements.meanAnomalyAtEpoch + rate * (time - elements.epoch),
+  )
+  return {
+    label,
+    value: period((2 * Math.PI - anomaly) / rate),
+    note: `${round((anomaly / (2 * Math.PI)) * 100, 1)}% through this orbit`,
+  }
 }
 
 function rotationGroup(body: Body, year: Seconds): FactGroup {

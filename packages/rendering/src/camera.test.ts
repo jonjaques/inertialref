@@ -46,6 +46,7 @@ function sceneWith(
     entities: [],
     terrainCandidates: [],
     structures: [],
+    stations: [],
   }
 }
 

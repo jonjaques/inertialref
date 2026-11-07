@@ -10,6 +10,8 @@ import { type Brand, invariant } from '@inertialref/shared'
  *   g:milky-way/s:HIP71683
  *   g:milky-way/s:HIP71683/b:2         third planet
  *   g:milky-way/s:HIP71683/b:2.0       its first moon
+ *   g:milky-way/s:HIP71683/b:2/a:0     the first artificial satellite of it
+ *   g:milky-way/s:HIP71683/a:0         one going round the star itself
  *   g:milky-way/s:HIP71683/b:2/r:3.6.12.44    a surface region
  *   g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7  a generated object in it
  *
@@ -130,6 +132,28 @@ export type UniverseAddress =
       readonly region: RegionAddress
       readonly index: number
     }
+  | {
+      /**
+       * Something built that goes round a body or a star: a station, an
+       * observatory.
+       *
+       * Its own kind rather than a deeper body index, because `b:2.1` would
+       * make it a moon, and every path that walks moons — gravity, terrain,
+       * the census — would need an exception for a thing with no mass that
+       * pulls and no ground.
+       *
+       * Derived things only — the catalog's and the generator's. A station
+       * somebody builds takes an id its authority mints instead: two issuers
+       * in one ordinal space collide the first time the catalog appends.
+       */
+      readonly kind: 'satellite'
+      readonly galaxy: GalaxyId
+      readonly system: SystemId
+      /** The body it goes round, or null for one going round the star. */
+      readonly body: readonly number[] | null
+      /** Issue ordinal in its parent's satellite manifest (ADR-0009). */
+      readonly satellite: number
+    }
 
 export const galaxyAddress = (galaxy: GalaxyId): UniverseAddress => ({
   kind: 'galaxy',
@@ -188,6 +212,27 @@ export const objectOf = (
   }
 }
 
+export const satelliteOf = (
+  parent: UniverseAddress,
+  satellite: number,
+): UniverseAddress => {
+  invariant(
+    parent.kind === 'body' || parent.kind === 'system',
+    'Satellites belong to bodies and systems',
+  )
+  invariant(
+    Number.isInteger(satellite) && satellite >= 0 && satellite < 4096,
+    `Bad satellite index ${satellite}`,
+  )
+  return {
+    kind: 'satellite',
+    galaxy: parent.galaxy,
+    system: parent.system,
+    body: parent.kind === 'body' ? parent.body : null,
+    satellite,
+  }
+}
+
 /* ------------------------------------------------------------------------- */
 /* Text form                                                                  */
 /* ------------------------------------------------------------------------- */
@@ -224,6 +269,11 @@ function format(address: UniverseAddress): string {
   if (address.kind === 'galaxy') return parts.join('/')
   parts.push(`s:${address.system}`)
   if (address.kind === 'system') return parts.join('/')
+  if (address.kind === 'satellite') {
+    if (address.body !== null) parts.push(`b:${address.body.join('.')}`)
+    parts.push(`a:${address.satellite}`)
+    return parts.join('/')
+  }
   parts.push(`b:${address.body.join('.')}`)
   if (address.kind === 'body') return parts.join('/')
   parts.push(`r:${formatRegion(address.region)}`)
@@ -258,6 +308,7 @@ export function parseAddress(text: string): UniverseAddress {
   let body: number[] | null = null
   let region: RegionAddress | null = null
   let index: number | null = null
+  let satellite: number | null = null
 
   for (const segment of segments) {
     const colon = segment.indexOf(':')
@@ -292,13 +343,36 @@ export function parseAddress(text: string): UniverseAddress {
         invariant(INTEGER_PATTERN.test(value), `Bad object index ${value}`)
         index = Number.parseInt(value, 10)
         break
+      case 'a':
+        invariant(INTEGER_PATTERN.test(value), `Bad satellite index ${value}`)
+        satellite = Number.parseInt(value, 10)
+        break
       default:
         invariant(false, `Unknown address segment tag "${tag}" in ${text}`)
     }
   }
 
   invariant(galaxy !== null, `Address must start with a galaxy: ${text}`)
+  // Stricter than the other segments, which a missing parent drops silently:
+  // `g:milky-way/a:0` read as the galaxy would be a search result that opens
+  // the galaxy when it was asked for a station, with nothing to say why.
+  invariant(
+    satellite === null || system !== null,
+    `A satellite needs the system it is in: ${text}`,
+  )
   if (system === null) return { kind: 'galaxy', galaxy }
+  if (satellite !== null) {
+    invariant(
+      region === null && index === null,
+      `A satellite has no surface to hold a region: ${text}`,
+    )
+    return satelliteOf(
+      body === null
+        ? systemAddress(galaxy, system)
+        : bodyAddress(galaxy, system, body),
+      satellite,
+    )
+  }
   if (body === null) return { kind: 'system', galaxy, system }
   if (region === null) return bodyAddress(galaxy, system, body)
   if (index === null) return { kind: 'region', galaxy, system, body, region }
@@ -321,8 +395,12 @@ export function addressLabels(address: UniverseAddress): readonly string[] {
   if (address.kind === 'galaxy') return labels
   labels.push(`s:${address.system}`)
   if (address.kind === 'system') return labels
-  for (const index of address.body) labels.push(`b:${index}`)
+  for (const index of address.body ?? []) labels.push(`b:${index}`)
   if (address.kind === 'body') return labels
+  if (address.kind === 'satellite') {
+    labels.push(`a:${address.satellite}`)
+    return labels
+  }
   labels.push(`r:${formatRegion(address.region)}`)
   if (address.kind === 'region') return labels
   labels.push(`o:${address.index}`)
@@ -344,6 +422,10 @@ export function parentAddress(
         : bodyAddress(address.galaxy, address.system, address.body.slice(0, -1))
     case 'region':
       return bodyAddress(address.galaxy, address.system, address.body)
+    case 'satellite':
+      return address.body === null
+        ? { kind: 'system', galaxy: address.galaxy, system: address.system }
+        : bodyAddress(address.galaxy, address.system, address.body)
     case 'object':
       return {
         kind: 'region',

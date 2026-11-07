@@ -5,10 +5,13 @@ import {
   bodyFixedFrameId,
   type Body,
   bodyFrameId,
+  entityIdForAddress,
   findBody,
   directionToGeodetic,
   geodeticDirection,
   parseAddress,
+  stationFixedFrameId,
+  stationFrameId,
   systemFrameId,
   type StarSystem,
   systemId,
@@ -16,6 +19,7 @@ import {
 } from '@inertialref/universe'
 import {
   type FrameId,
+  type Quat,
   Quaternion as Q,
   UV,
   type UniverseVector,
@@ -30,6 +34,7 @@ import {
   type Lens,
   LENS_PRESETS,
   MAX_OBSERVER_DISTANCE,
+  MIN_DISTANCE_RADII,
   MIN_STANCE_HEIGHT,
   verticalFov,
   verticalFovDegrees,
@@ -455,6 +460,218 @@ describe('the observatory', () => {
     expect(status.altitude).toBeGreaterThan(0)
     expect(status.altitudeText).toMatch(/\d/)
     expect(status.state.distance).toBeLessThan(AU)
+  })
+})
+
+describe('a station as a subject', () => {
+  /*
+   * An anchor and a radius, like any subject: the `a:` frame to orbit and the
+   * bounding sphere to keep 1.5 of outside. The two things a body has that a
+   * station must not are ground to stand on and a composition to frame, and
+   * the one thing a station has that a body does not is a basis of its own.
+   */
+  const ISS = 'g:milky-way/s:SOL/b:2/a:0'
+  const id = entityIdForAddress(parseAddress(ISS))
+
+  // 360° in 92.95 minutes — CelesTrak's 15.49214228 rev/day — is 3.87° a minute.
+  const PER_MINUTE = (2 * Math.PI) / (1440 / 15.49214228)
+
+  /** The angle between two orientations, radians. */
+  const turn = (a: Quat, b: Quat): number =>
+    2 *
+    Math.acos(
+      Math.min(1, Math.abs(a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w)),
+    )
+
+  /** The camera's offset from the station, in universe axes and its own. */
+  const offsets = (session: Session, pose: ObserverPose) => {
+    const time = session.world.clock.renderTime
+    const center = originOf(session, stationFrameId(id))
+    const axes = session.world.frames.pose(
+      stationFixedFrameId(id),
+      time,
+    ).orientation
+    const offset = UV.difference(pose.position, center)
+    return {
+      offset,
+      axes,
+      local: Q.rotateInverse(axes, offset),
+      facing: Q.multiply(Q.conjugate(axes), pose.orientation),
+    }
+  }
+
+  /** A minute of simulated time, in the frames a browser would draw it in. */
+  const minute = (session: Session, ir: GameHarness): void => {
+    for (let i = 0; i < 60; i += 1) {
+      session.world.advance(1 / 60)
+      ir.observerSample(1 / 60)
+    }
+  }
+
+  it('resolves to its own frame and its bounding sphere, and has no ground', () => {
+    const { harness: ir, session } = harness()
+    const before = session.world.stateHash()
+    const status = ir.look(ISS, { ease: false })
+    expect(status.target).toMatchObject({
+      address: ISS,
+      name: 'International Space Station',
+      kind: 'station',
+      frame: stationFrameId(id),
+      radius: 65.3,
+    })
+    expect(status.hold).toBe('space')
+
+    // Dollied in as far as it goes: the orbit arm's floor, and the surface
+    // arm never engages, because a station has no ground under half a radius.
+    ir.observatory.zoomNotches(-400)
+    for (let i = 0; i < 600; i += 1) ir.observerSample(1 / 60)
+    const near = ir.observatory.status()
+    expect(near.state.distance).toBeCloseTo(MIN_DISTANCE_RADII * 65.3, 6)
+    expect(near.surface).toBeNull()
+    expect(ir.observatory.standing).toBe(false)
+    expect(() => ir.visit(ISS)).toThrow()
+    expect(() => ir.compose('portrait')).toThrow(/not a world/)
+    expect(ir.observatory.target?.address).toBe(ISS)
+    // A view, not a place: nothing the camera did reached the simulation.
+    expect(session.world.stateHash()).toBe(before)
+  })
+
+  it('holds space, and the station turns under it once an orbit', () => {
+    const { harness: ir, session } = harness()
+    ir.look(ISS, { ease: false })
+    ir.timeWarp(60)
+    const start = offsets(session, posed(ir.observerSample(0)))
+    minute(session, ir)
+    const later = offsets(session, posed(ir.observerSample(0)))
+    expect(turn(start.axes, later.axes)).toBeCloseTo(PER_MINUTE, 3)
+    // The camera's direction in space has not moved with it.
+    expect(
+      Vec.length(Vec.sub(later.offset, start.offset)) /
+        Vec.length(start.offset),
+    ).toBeLessThan(1e-6)
+  })
+
+  it('turns with the station once held, and lets go without a jump', () => {
+    const { harness: ir, session } = harness()
+    ir.look(ISS, { ease: false })
+    ir.timeWarp(60)
+    minute(session, ir)
+    const loose = posed(ir.observerSample(0))
+    expect(ir.observatory.holdStation(true).hold).toBe('station')
+    // Taking the hold moves nothing.
+    expect(posed(ir.observerSample(0))).toEqual(loose)
+
+    const held = offsets(session, loose)
+    minute(session, ir)
+    const after = offsets(session, posed(ir.observerSample(0)))
+    // In the station's own axes the camera has not moved, and it faces the
+    // same way; in space it has turned the station's 3.87°.
+    expect(
+      Vec.length(Vec.sub(after.local, held.local)) / Vec.length(held.local),
+    ).toBeLessThan(1e-6)
+    expect(turn(after.facing, held.facing)).toBeLessThan(1e-6)
+    expect(turn(after.axes, held.axes)).toBeCloseTo(PER_MINUTE, 3)
+
+    const holding = posed(ir.observerSample(0))
+    expect(ir.observatory.holdStation(false).hold).toBe('space')
+    expect(posed(ir.observerSample(0))).toEqual(holding)
+
+    // A view, not a place: a twin session run through the same two minutes
+    // with no camera at all ends in the same state.
+    const twin = harness()
+    twin.harness.timeWarp(60)
+    for (let i = 0; i < 120; i += 1) twin.session.world.advance(1 / 60)
+    expect(session.world.stateHash()).toBe(twin.session.world.stateHash())
+  })
+
+  it('hands the rotation between a hold and a companion, never both', () => {
+    // The hold is the second producer of the basis rotation beside a tracked
+    // companion's, and the two are exclusive (Rule 31: one camera).
+    const { harness: ir } = harness()
+    ir.look(ISS, { ease: false })
+    ir.observatory.holdStation(true)
+    const tracking = ir.target('g:milky-way/s:SOL/b:2')
+    expect(tracking.tracking?.name).toBe('Earth')
+    expect(tracking.hold).toBe('space')
+    const holding = ir.observatory.holdStation(true)
+    expect(holding.tracking).toBeNull()
+    expect(holding.hold).toBe('station')
+    // And another subject is another basis: the hold does not follow it.
+    expect(ir.look('s:SOL/b:2', { ease: false }).hold).toBeNull()
+    expect(() => ir.observatory.holdStation(true)).toThrow(/Choose a station/)
+  })
+
+  it('keeps a hold when a companion that is not there is cleared', () => {
+    const { harness: ir, session } = harness()
+    ir.look(ISS, { ease: false })
+    ir.timeWarp(60)
+    ir.observatory.holdStation(true)
+    minute(session, ir)
+    const before = posed(ir.observerSample(0))
+    const held = offsets(session, before)
+    // The console's "stop following", with nothing followed: the hold is the
+    // live producer, and clearing the other one moves nothing.
+    const cleared = ir.target(null)
+    expect(cleared.hold).toBe('station')
+    expect(cleared.tracking).toBeNull()
+    expect(posed(ir.observerSample(0))).toEqual(before)
+    // And it is still a hold: a minute on, the camera has not moved in the
+    // station's axes.
+    minute(session, ir)
+    const after = offsets(session, posed(ir.observerSample(0)))
+    expect(
+      Vec.length(Vec.sub(after.local, held.local)) / Vec.length(held.local),
+    ).toBeLessThan(1e-6)
+    // A companion that is there is still released, and leaves space held.
+    ir.target('g:milky-way/s:SOL/b:2')
+    const released = ir.target(null)
+    expect(released.tracking).toBeNull()
+    expect(released.hold).toBe('space')
+  })
+
+  it('refuses a hold or a composition without touching a motion in progress', () => {
+    // A refusal changes nothing: the running motion keeps running and the
+    // mutation revision a host diffs against stays where it was. So does a
+    // hold request for the basis already held.
+    const { harness: ir } = harness()
+    const eye = ir.observatory
+    const recipe = {
+      durationSeconds: 30,
+      azimuthDelta: 0.2,
+      elevationDelta: 0,
+      distanceFactor: 1,
+    }
+    ir.look('s:SOL/b:2', { ease: false })
+    expect(eye.startMotion(recipe)).toBe(true)
+    const revision = eye.mutationRevision
+    expect(() => eye.holdStation(true)).toThrow(/Choose a station/)
+    expect(eye.mutationRevision).toBe(revision)
+    expect(eye.status().motion?.durationSeconds).toBe(30)
+
+    ir.look(ISS, { ease: false })
+    expect(eye.startMotion(recipe)).toBe(true)
+    const again = eye.mutationRevision
+    expect(() => ir.compose('portrait')).toThrow(/not a world/)
+    expect(eye.holdStation(false).hold).toBe('space')
+    expect(eye.mutationRevision).toBe(again)
+    expect(eye.status().motion?.durationSeconds).toBe(30)
+  })
+
+  it('behaves as it always has at Proxima Centauri, which has no station', () => {
+    // The operating point outside Sol: a body subject, no hold to offer, and
+    // the orbit arm's floor at 1.5 of the planet's radius as before.
+    const { harness: ir } = harness()
+    ir.loadSystem('HIP70890')
+    const status = ir.look('s:HIP70890/b:0', { ease: false })
+    expect(status.target?.kind).toBe('planet')
+    expect(status.hold).toBeNull()
+    expect(() => ir.observatory.holdStation(true)).toThrow(/Choose a station/)
+    ir.observatory.zoomNotches(-400)
+    for (let i = 0; i < 600; i += 1) ir.observerSample(1 / 60)
+    expect(ir.observatory.status().state.distance).toBeCloseTo(
+      MIN_DISTANCE_RADII * (status.target?.radius ?? 0),
+      0,
+    )
   })
 })
 

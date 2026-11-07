@@ -1,13 +1,18 @@
 import {
   angularRadius,
+  BASELINE_VIEWPORT,
   LENS_PRESETS,
+  lodThresholds,
+  modelDrawn,
   verticalFov,
   type Lens,
+  type Viewport,
 } from '@inertialref/rendering'
 import { Quaternion as Q, UV, Vec, type Vec3 } from '@inertialref/spatial'
 import {
   bodyFrameId,
   formatAddress,
+  stationFrameId,
   systemFrameId,
   walkBodies,
 } from '@inertialref/universe'
@@ -82,6 +87,11 @@ export interface ViewOptions {
   readonly lens?: Lens
   /** Width over height of the frame. Headlessly, the 16:9 default window. */
   readonly aspect?: number
+  /**
+   * The display pixels the frame lands on, for the point tier a station is
+   * listed above. Headlessly, the baseline viewport.
+   */
+  readonly viewport?: Viewport
   readonly limit?: number
 }
 
@@ -116,6 +126,8 @@ interface Candidate {
   readonly x: number
   readonly y: number
   readonly lit: number
+  /** Whether its disk hides what is behind it: a body's does, a station's does not. */
+  readonly occludes: boolean
 }
 
 export function describeView(
@@ -164,6 +176,14 @@ export function describeView(
   const star = world.frames.pose(systemFrameId(system.id), time).position
   const toStarFrom = (position: typeof star): Vec3 =>
     Vec.normalize(UV.difference(star, position))
+  // The fraction of a sphere at `position` the eye sees lit.
+  const litFrom = (position: typeof star): number =>
+    (1 +
+      Vec.dot(
+        toStarFrom(position),
+        Vec.normalize(UV.difference(pose.position, position)),
+      )) /
+    2
   const candidates: Candidate[] = []
   const consider = (
     name: string,
@@ -172,6 +192,7 @@ export function describeView(
     position: typeof star,
     radius: number,
     lit: number,
+    occludes = true,
   ): void => {
     const relative = UV.difference(position, pose.position)
     const range = Vec.length(relative)
@@ -197,6 +218,7 @@ export function describeView(
       x,
       y,
       lit,
+      occludes,
     })
   }
   consider(
@@ -214,15 +236,43 @@ export function describeView(
     } catch {
       continue
     }
-    const toEye = Vec.normalize(UV.difference(pose.position, position))
-    const phase = Vec.dot(toStarFrom(position), toEye)
     consider(
       body.name,
       formatAddress(body.address),
       body.kind,
       position,
       body.radius,
-      (1 + phase) / 2,
+      litFrom(position),
+    )
+  }
+  /*
+   * A station where the scene draws its model, by the scene's own rule, and
+   * nowhere else: below the point tier nothing of it is on screen, and a guide
+   * told of it points at empty sky. Lit as a sphere would be, which is coarse
+   * for a truss and right about which side faces the star.
+   *
+   * Its sphere hides nothing. It holds every angle of the arrays and is mostly
+   * space, and from above the station Earth's center is behind it: as an
+   * occluder it would take the planet out of a frame the planet fills.
+   */
+  const thresholds = lodThresholds(lens, options.viewport ?? BASELINE_VIEWPORT)
+  for (const station of system.stations) {
+    let position: typeof star
+    try {
+      position = world.frames.pose(stationFrameId(station.id), time).position
+    } catch {
+      continue
+    }
+    const range = Vec.length(UV.difference(position, pose.position))
+    if (!modelDrawn(station.radius, range, thresholds)) continue
+    consider(
+      station.name,
+      station.address === null ? station.id : formatAddress(station.address),
+      station.kind,
+      position,
+      station.radius,
+      litFrom(position),
+      false,
     )
   }
   // A body behind a nearer disk is not on screen, whatever its projection
@@ -231,6 +281,7 @@ export function describeView(
   const visible: Candidate[] = []
   for (const candidate of candidates) {
     const hidden = visible.some((nearer) => {
+      if (!nearer.occludes) return false
       const separation = Math.acos(
         Math.min(
           1,
