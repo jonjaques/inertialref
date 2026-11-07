@@ -371,7 +371,9 @@ export function PlanetariumMode({
           view.camera as PerspectiveCamera,
           size,
           engine.lens,
-        ).filter((candidate) => clickable(candidate, named.current)),
+        ).filter((candidate) =>
+          clickable(candidate, named.current, engine.stationsDrawn),
+        ),
         point,
       )
       if (hit !== null) focus(hit.address)

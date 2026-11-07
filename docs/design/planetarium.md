@@ -519,10 +519,16 @@ first of all: a station a few pixels across in front of the planet it is drawn
 against would otherwise lose its name and its ring to the planet every time the
 camera looked down on it.
 
-A spacecraft takes a click only while its model is drawn or its name is on the
-sky. A body below a pixel is still drawn as a point, which is why rubble stays
-clickable; a station below the point tier draws nothing, and a click on empty
-sky beside Earth selects nothing rather than something invisible.
+A spacecraft takes a click only while its model is on screen or its name is on
+the sky. A body below a pixel is still drawn as a point, which is why rubble
+stays clickable; a station below the point tier draws nothing, and a click on
+empty sky beside Earth selects nothing rather than something invisible. On
+screen means what the scene drew: the model is fetched on first sight and is
+nothing until it arrives. Where a spacecraft can take a click it takes it
+first. The largest disk under the pointer wins otherwise, and a station drawn
+against Earth is never the largest, so one under the pointer or within reach of
+it wins before the disk rule runs — at the cost of a click aimed at the planet
+within a fingertip of the station.
 
 Names behind a solid body are removed before decluttering and picking. The
 visibility test follows the camera-to-body ray in physical coordinates, so

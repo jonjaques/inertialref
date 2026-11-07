@@ -1,3 +1,4 @@
+import { getLogger } from '@inertialref/shared'
 import { useThree } from '@react-three/fiber'
 import { useMemo } from 'react'
 import { Group, type Scene } from 'three/webgpu'
@@ -10,6 +11,8 @@ import {
 import { loadSurfaceModel } from '../render/surfaceModels.ts'
 import { warmCompile, warmRenderer } from '../render/warmup.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
+
+const log = getLogger('game.stations')
 
 /**
  * The stations the scene draws, with their arrays turned to the Sun.
@@ -41,6 +44,8 @@ export function Stations({ engine }: { engine: GameEngine }) {
   const present = useMemo(() => new Set<string>(), [])
 
   useTimedFrame('stations', () => {
+    // Rebuilt every frame from what is actually visible, for the click filter.
+    engine.stationsDrawn.clear()
     const view = engine.scene()
     if (view === null) return
     present.clear()
@@ -57,12 +62,12 @@ export function Stations({ engine }: { engine: GameEngine }) {
         const key = `${station.id}:${station.asset}`
         if (pending.has(key) || failed.has(key)) continue
         pending.add(key)
-        void loadSurfaceModel(station.asset, anisotropy).then(
-          async (template) => {
+        void (async () => {
+          try {
+            const template = await loadSurfaceModel(station.asset, anisotropy)
+            // The loader remembers a failure; so does this pass, or it would
+            // resolve the cached null once per frame for nothing.
             if (template === null) {
-              // The loader remembers the failure; so does this pass, or it
-              // would resolve the cached null once per frame for nothing.
-              pending.delete(key)
               failed.add(key)
               return
             }
@@ -75,7 +80,6 @@ export function Stations({ engine }: { engine: GameEngine }) {
               camera,
               scene: scene as Scene,
             })
-            pending.delete(key)
             const current = engine
               .scene()
               ?.stations.find((one) => one.id === station.id)
@@ -86,13 +90,25 @@ export function Stations({ engine }: { engine: GameEngine }) {
               rig: stationRig(group),
             })
             root.add(group)
-          },
-        )
+          } catch (cause) {
+            // A compile that throws leaves nothing to draw. Remembered as a
+            // failure, or the key stays pending and the station never loads,
+            // with nothing said.
+            failed.add(key)
+            log.warn('station model failed', {
+              asset: station.asset,
+              cause: String(cause),
+            })
+          } finally {
+            pending.delete(key)
+          }
+        })()
         continue
       }
       const group = instance.group
       group.visible = station.drawn
       if (!station.drawn) continue
+      engine.stationsDrawn.add(station.address)
       const { position } = station.placement
       group.position.set(position.x, position.y, position.z)
       group.quaternion.set(

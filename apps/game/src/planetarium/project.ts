@@ -150,11 +150,7 @@ export function projectScene(
       station.kind,
       station.placement.position,
       station.placement.scale,
-      {
-        parent: station.parent,
-        near: !station.placement.compressed,
-        drawn: station.drawn,
-      },
+      { parent: station.parent, near: !station.placement.compressed },
     )
   }
   return candidates

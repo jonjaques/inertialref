@@ -67,9 +67,9 @@ it('hides a background moon while keeping a foreground transit and the selected 
 
 it('projects a station with what the spacecraft rules read, and hides it behind its planet', () => {
   /*
-   * The facts the name and click rules need and a body never raises: what it
-   * goes round, whether the eye is inside 2,000 km of it, and whether its
-   * model is drawn. Behind Earth it is no candidate at all, as a moon is not.
+   * The facts the name rule needs and a body never raises: what it goes
+   * round, and whether the eye is inside 2,000 km of it. Behind Earth it is no
+   * candidate at all, as a moon is not.
    */
   const origin = createRenderOrigin(UV.fromMeters(0, 0, 0))
   const earth = {
@@ -118,11 +118,10 @@ it('projects a station with what the spacecraft rules read, and hides it behind 
   )
   const close = candidates.find((c) => c.address === 'close')
   expect(close?.kind).toBe('station')
-  expect(close?.craft).toEqual({ parent: 'earth', near: true, drawn: true })
+  expect(close?.craft).toEqual({ parent: 'earth', near: true })
   expect(candidates.find((c) => c.address === 'far')?.craft).toEqual({
     parent: 'earth',
     near: false,
-    drawn: false,
   })
   expect(candidates.find((c) => c.address === 'hidden')).toBeUndefined()
   expect(candidates.find((c) => c.address === 'earth')?.craft).toBeNull()

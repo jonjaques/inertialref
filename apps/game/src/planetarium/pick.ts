@@ -27,20 +27,18 @@ export interface PickCandidate {
    */
   readonly kind: ObjectKind
   /**
-   * What the spacecraft rules read, or null for a star or a natural body.
+   * What the spacecraft name rule reads, or null for a star or a natural body.
    *
-   * A spacecraft is named nearby and clickable only where something of it is
-   * on screen (`names.ts`, `clickable`), and both rules need facts no body
-   * raises: what it goes round, whether the eye is inside the near field of
-   * it, and whether its model is drawn at all.
+   * A spacecraft is named nearby (`names.ts`), and that needs facts no body
+   * raises: what it goes round, and whether the eye is inside the near field
+   * of it. Its being non-null is also what `pick` and `clickable` read a
+   * spacecraft by.
    */
   readonly craft: {
     /** What it goes round, by the address the observatory resolves. */
     readonly parent: string
     /** Whether the eye is inside the uncompressed shell of it: 2,000 km. */
     readonly near: boolean
-    /** Whether its model is drawn: near, and above the point tier. */
-    readonly drawn: boolean
   } | null
   /** Screen position, CSS pixels, origin top-left. */
   readonly x: number
@@ -86,11 +84,40 @@ export const PICK_SLOP = 24
  * satellites is the way to reach it. Whether that is the right trade is a
  * design question — `docs/design/planetarium.md` — and not something to change
  * here by adjusting a comparison.
+ *
+ * Spacecraft are the one exception, decided there too: one under the pointer
+ * or within reach of it wins before any of this runs.
  */
 export function pick(
   candidates: readonly PickCandidate[],
   pointer: { readonly x: number; readonly y: number },
   slop: number = PICK_SLOP,
+): PickCandidate | null {
+  /*
+   * A spacecraft first, wherever the pointer is on it or within reach of it.
+   *
+   * The disk rule below gives every click on a station drawn against Earth
+   * to Earth: the pointer is inside both and Earth is larger, and a station a
+   * few pixels across is never the largest disk under anything. Unlike a moon
+   * over its planet, a spacecraft is reachable no other way from the sky, and
+   * it is always in front of what it is drawn against — one behind a body is
+   * no candidate at all. What it costs is that a click aimed at the planet
+   * within a fingertip of a station takes the station.
+   */
+  return (
+    choose(
+      candidates.filter((candidate) => candidate.craft !== null),
+      pointer,
+      slop,
+    ) ?? choose(candidates, pointer, slop)
+  )
+}
+
+/** The disk the pointer is inside, largest first, else the nearest in reach. */
+function choose(
+  candidates: readonly PickCandidate[],
+  pointer: { readonly x: number; readonly y: number },
+  slop: number,
 ): PickCandidate | null {
   let inside: PickCandidate | null = null
   let nearest: PickCandidate | null = null
@@ -119,17 +146,21 @@ export function pick(
 /**
  * Whether a candidate may take a click at all.
  *
- * A spacecraft only while its model is drawn or its name is on the sky. A body
- * below a pixel is still drawn as a point, which is why `pick` leaves rubble
- * clickable; a station below the point tier draws nothing, and an empty-sky
- * click beside Earth that selected it would be the sky lying the other way.
+ * A spacecraft only while its model is on screen or its name is on the sky.
+ * A body below a pixel is still drawn as a point, which is why `pick` leaves
+ * rubble clickable; a station below the point tier draws nothing, and an
+ * empty-sky click beside Earth that selected it would be the sky lying the
+ * other way. `shown` is what the scene drew, not what it was asked to: the
+ * scene's `drawn` says a station is near enough and large enough, and the
+ * model is 21.8 MB that may still be arriving, or may never.
  */
 export const clickable = (
   candidate: PickCandidate,
   named: ReadonlySet<string>,
+  shown: ReadonlySet<string>,
 ): boolean =>
   candidate.craft === null ||
-  candidate.craft.drawn ||
+  shown.has(candidate.address) ||
   named.has(candidate.address)
 
 /**

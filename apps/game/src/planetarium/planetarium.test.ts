@@ -303,35 +303,49 @@ describe('picking', () => {
 })
 
 describe('what a click may land on', () => {
-  const craft = (drawn: boolean) =>
-    candidate({
-      address: 'iss',
-      kind: 'station',
-      x: 505,
-      y: 500,
-      craft: { parent: 'earth', near: false, drawn },
-    })
+  const iss = candidate({
+    address: 'iss',
+    kind: 'station',
+    x: 505,
+    y: 500,
+    radius: 3,
+    craft: { parent: 'earth', near: true },
+  })
+  const NONE: ReadonlySet<string> = new Set()
+  const SHOWN: ReadonlySet<string> = new Set(['iss'])
 
-  it('takes a spacecraft only while its model is drawn or its name is up', () => {
-    expect(clickable(craft(true), new Set())).toBe(true)
-    expect(clickable(craft(false), new Set())).toBe(false)
-    expect(clickable(craft(false), new Set(['iss']))).toBe(true)
+  it('takes a spacecraft only while its model is on screen or its name is up', () => {
+    expect(clickable(iss, NONE, SHOWN)).toBe(true)
+    expect(clickable(iss, SHOWN, NONE)).toBe(true)
+    // Near enough to be drawn and not drawn — the model still arriving, or
+    // failed — is nothing on screen.
+    expect(clickable(iss, NONE, NONE)).toBe(false)
     // A body below a pixel is still drawn as a point, so rubble stays
     // clickable whatever the label switches say.
     expect(
-      clickable(candidate({ address: 'bennu', kind: 'asteroid' }), new Set()),
+      clickable(candidate({ address: 'bennu', kind: 'asteroid' }), NONE, NONE),
     ).toBe(true)
   })
 
-  it('selects nothing for a click on empty sky beside an undrawn station', () => {
-    // The station below the point tier, five pixels from the click and
-    // unnamed: nothing on screen is there, so nothing is picked.
+  it('selects nothing for a click on empty sky beside an unseen station', () => {
     const earth = candidate({ address: 'earth', x: 100, y: 100, radius: 20 })
-    const candidates = [earth, craft(false)].filter((one) =>
-      clickable(one, new Set()),
-    )
+    const candidates = [earth, iss].filter((one) => clickable(one, NONE, NONE))
     expect(pick(candidates, { x: 500, y: 500 })).toBeNull()
-    expect(pick([earth, craft(true)], { x: 500, y: 500 })?.address).toBe('iss')
+  })
+
+  it('gives a station drawn against its planet the click, not the planet', () => {
+    // The pointer is inside both disks and Earth's is far larger, which by the
+    // disk rule alone gives every click on the station to Earth.
+    const earth = candidate({ address: 'earth', x: 500, y: 500, radius: 400 })
+    expect(pick([earth, iss], { x: 505, y: 500 })?.address).toBe('iss')
+    // Within a fingertip of it, too: a station a few pixels across is aimed at,
+    // not hit.
+    expect(pick([earth, iss], { x: 520, y: 510 })?.address).toBe('iss')
+    // Beyond reach, the planet the pointer is on.
+    expect(pick([earth, iss], { x: 700, y: 700 })?.address).toBe('earth')
+    // And a moon over its planet keeps the disk rule it always had.
+    const moon = candidate({ address: 'moon', x: 505, y: 500, radius: 3 })
+    expect(pick([earth, moon], { x: 505, y: 500 })?.address).toBe('earth')
   })
 })
 

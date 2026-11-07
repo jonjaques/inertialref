@@ -40,7 +40,7 @@ const station = (
   at(address, x, {
     kind: 'station',
     radius: 2,
-    craft: { parent, near, drawn: near },
+    craft: { parent, near },
   })
 
 const CONTEXT: NameContext = {
