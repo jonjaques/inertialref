@@ -28,9 +28,10 @@ import { orbitalAsset, type OrbitalPlacement } from '../stations.ts'
  * and the game's Earth is not on the real ephemeris — so both are drawn from
  * the station's own seed, as a moon's are.
  *
- * GP elements are SGP4 mean elements. Read as Kepler elements they put the
- * station within a kilometer of where SGP4 would, which is far inside anything
- * a planetarium can show of an orbit whose node is drawn.
+ * GP elements are SGP4 mean elements, not osculating ones, so read as Kepler
+ * elements they do not put the station where SGP4 would. Nothing here asks
+ * them to: with the node and the anomaly drawn from the seed, what is kept is
+ * the orbit's size, shape and tilt.
  */
 
 export interface SolarStation {
@@ -83,8 +84,9 @@ export const SOLAR_STATIONS: readonly SolarStation[] = Object.freeze([ISS])
  *
  * `parentMass` is the body's — or the star's, for a station going round it —
  * because the semi-major axis comes from the published mean motion against
- * `G(M + m)` of the pair: the moons' convention, and what makes the period in
- * the game the published one to the last digit of the element set.
+ * `G(M + m)` of the pair: the moons' convention. The period in the game is
+ * then one over the element set's mean motion by construction, which is that
+ * number and not the real station's anomalistic or nodal period.
  */
 export function solarStation(
   systemSeed: Seed,

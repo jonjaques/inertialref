@@ -70,10 +70,11 @@ describe('the station record', () => {
     expect(iss.radius).toBe(orbitalAsset('iss')!.radius)
   })
 
-  it('derives the semi-major axis that keeps the published period', () => {
+  it('derives the semi-major axis whose period is one over the mean motion', () => {
     const mu = GRAVITATIONAL_CONSTANT * (earth.mass + iss.mass)
     const { semiMajorAxis: a, eccentricity: e } = iss.orbit.elements
-    // 1440 / mean motion minutes, to the last digit the element set carries.
+    // 1440 / mean motion minutes: the derivation's round trip, which is the
+    // element set's number rather than the real station's measured period.
     expect(orbitalPeriod(mu, a) / 60).toBeCloseTo(
       SECONDS_PER_DAY / 60 / 15.49214228,
       9,

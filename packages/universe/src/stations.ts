@@ -48,9 +48,9 @@ export type OrbitLaw = {
 /**
  * How a placement turns.
  *
- * `nadir` is local vertical, local horizontal: forward along the orbital
- * motion, the keel toward the parent, the right side opposite the orbit
- * normal. The ISS flies that way (`+XVV`). An inertially fixed telescope and a
+ * `nadir` is local vertical, local horizontal: forward along the track — the
+ * velocity less its radial part — the keel toward the parent, the right side
+ * opposite the orbit normal. The ISS flies that way (`+XVV`). An inertially fixed telescope and a
  * spinning station are the next members; each is analytic, as an orbit is.
  */
 export type Attitude = { readonly kind: 'nadir' }

@@ -83,10 +83,12 @@ planetarium it is a subject like any other, an anchor and a radius.**
 | `a:<id>`  | the parent's `b:` (or the system's) | Centered on the station in the parent's equatorial axes, translating along the orbit and not turning: the moon's orbit evaluator reused |
 | `af:<id>` | `a:<id>`                            | The station's own axes, turning with its attitude, angular velocity included. Contact, docking and pads will hang off it                |
 
-- `nadir` is local vertical, local horizontal: forward along the velocity, the
-  keel toward the parent, the right side opposite the orbit normal — `+XVV`,
-  how the ISS flies. Its angular velocity is `(r × v) / |r|²`, so it turns once
-  an orbit.
+- `nadir` is local vertical, local horizontal: forward along the track — the
+  velocity less its radial part, which leans off the horizontal by the
+  flight-path angle — the keel toward the parent, the right side opposite the
+  orbit normal: `+XVV`, how the ISS flies. Its angular velocity is
+  `(r × v) / |r|²`, the rate the radius vector sweeps at, so it turns once an
+  orbit and keeps the keel on the parent's center through an eccentric one.
 - **The ids are `a:@<address>` and `af:@<address>`**, by the placement's
   `EntityId`, with `parseStationFrameId` beside the formatter. The parser
   accepts only an id that is the canonical one for its address, so a ship saved
@@ -135,9 +137,12 @@ mast (`solarArrays.ts`).
   Spacecraft are placed after every natural body inside a cap of 2, 4 and 8 of
   the 8, 18 and 40 a density allows, except a subject spacecraft, which goes
   first so the planet behind it cannot take its ring.
-- **A spacecraft is clicked only where it can be seen**: while its model is
-  drawn or its name is on the sky. A body below a pixel is still a point; a
-  station below the point tier draws nothing.
+- **A spacecraft is clicked only where it can be seen**: while its model is on
+  screen — what the scene drew, not what it asked for, so not while 21.8 MB is
+  still arriving — or its name is on the sky. A body below a pixel is still a
+  point; a station below the point tier draws nothing. Where one can take a
+  click it takes it first: the largest disk under the pointer wins otherwise,
+  and a station drawn against Earth is never the largest.
 - **Its orbit trace is context only for what it goes round**, as the rubble's
   is: drawn for Earth or the station, never from the Moon. The chip is
   _Spacecraft_, because _Satellites_ already means moons on the object panel.
@@ -200,6 +205,9 @@ untextured or not openly licensed.
   face by face, so bytes run out first.
 - Seen from the station's own altitude, Earth's cloud map shows its texels; the
   backdrop was made for distances a planetarium usually keeps.
+- The station is drawn in every mode, flight included, and nothing contacts it:
+  a ship near Earth flies through it until proximity flight and its contact
+  test exist.
 - Proximity flight, pads, latching, built stations and their replication, and
   ships as subjects each have their own plan (`design/plans/satellites.md`).
 
