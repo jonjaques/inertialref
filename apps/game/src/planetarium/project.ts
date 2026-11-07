@@ -29,7 +29,8 @@ import type { PickCandidate } from './pick.ts'
 const scratch = new Vector3()
 
 /**
- * Everything nameable on screen, nearest-first within each kind.
+ * Everything nameable on screen, nearest-first within each kind: bodies, then
+ * stars, then stations.
  *
  * Screen radius is computed from the *rendered* geometry — the placed scale
  * over the distance to the camera — rather than from `placement.angularRadius`,
@@ -67,9 +68,10 @@ export function projectScene(
   const add = (
     address: string,
     name: string,
-    kind: string,
+    kind: PickCandidate['kind'],
     position: { x: number; y: number; z: number },
     worldRadius: number,
+    craft: PickCandidate['craft'] = null,
   ): void => {
     scratch.set(position.x, position.y, position.z)
     const range = scratch.distanceTo(camera.position)
@@ -83,6 +85,7 @@ export function projectScene(
       address,
       name,
       kind,
+      craft,
       x: (scratch.x * 0.5 + 0.5) * size.width,
       y: (1 - (scratch.y * 0.5 + 0.5)) * size.height,
       radius: range > 0 ? (worldRadius / range) * perRadian : 0,
@@ -124,6 +127,30 @@ export function projectScene(
       'star',
       star.placement.position,
       star.placement.scale,
+    )
+  }
+  /*
+   * Every station in the scene, drawn or not: whether one is named and
+   * whether it takes a click are the label layer's and the pick filter's
+   * questions, and both need it projected to ask them. Hidden behind its
+   * planet the way a moon is, by the same occluders.
+   */
+  for (const station of scene.stations) {
+    if (
+      occludedAt(
+        physicalViewPosition(scene, station.placement),
+        occluders,
+        station.address,
+      )
+    )
+      continue
+    add(
+      station.address,
+      station.name,
+      station.kind,
+      station.placement.position,
+      station.placement.scale,
+      { parent: station.parent, near: !station.placement.compressed },
     )
   }
   return candidates

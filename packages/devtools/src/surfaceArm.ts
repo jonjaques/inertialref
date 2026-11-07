@@ -92,7 +92,7 @@ export interface SurfacePose {
 export interface SurfaceTarget {
   readonly address: string
   readonly name: string
-  readonly kind: 'star' | 'planet' | 'moon'
+  readonly kind: 'star' | 'planet' | 'moon' | 'station'
   /** Meters. A star's own radius, a body's equatorial radius. */
   readonly radius: Meters
 }

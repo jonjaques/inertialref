@@ -48,7 +48,11 @@ import {
   reviveTuning,
 } from '../input/padTuning.ts'
 import { isLens, reviveLens } from '../hud/controls.ts'
-import { isLabelDensity, isOrbitScope } from '../planetarium/layers.ts'
+import {
+  isLabelDensity,
+  isOrbitScope,
+  isSpacecraftScope,
+} from '../planetarium/layers.ts'
 import { ALL_CLASSES, RADII } from '../planetarium/kinds.ts'
 import { type OutputPreference, OUTPUT_PREFERENCES } from '../render/output.ts'
 import {
@@ -65,7 +69,7 @@ import {
   type SurfaceQuality,
 } from '../render/quality.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
-import type { LabelDensity } from '../planetarium/layers.ts'
+import type { LabelDensity, SpacecraftScope } from '../planetarium/layers.ts'
 
 /*
  * Every preference this build keeps, declared once.
@@ -468,6 +472,14 @@ export const PLANETARIUM_LABEL_MINOR = define({
   accept: isBoolean,
 })
 
+export const PLANETARIUM_LABEL_SPACECRAFT = define<SpacecraftScope>({
+  key: 'planetarium.labelSpacecraft',
+  group: 'planetarium',
+  what: 'which spacecraft take a name slot',
+  initial: 'nearby',
+  accept: isSpacecraftScope,
+})
+
 export const PLANETARIUM_ORBITS = define({
   key: 'planetarium.orbits',
   group: 'planetarium',
@@ -824,6 +836,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   PLANETARIUM_LABELS,
   PLANETARIUM_LABEL_DENSITY,
   PLANETARIUM_LABEL_MINOR,
+  PLANETARIUM_LABEL_SPACECRAFT,
   PLANETARIUM_ORBITS,
   PLANETARIUM_ORBIT_SCOPE,
   PLANETARIUM_SHIP,

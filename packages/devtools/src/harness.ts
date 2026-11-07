@@ -45,11 +45,13 @@ import {
   geodeticDirection,
   hasSolidSurface,
   isLandable,
+  placementMu,
   systemId,
   type SystemId,
   surveySites,
   walkBodies,
 } from '@inertialref/universe'
+import { apoapsis, orbitalPeriod, periapsis } from '@inertialref/physics'
 import {
   captureSave,
   parseSave,
@@ -469,6 +471,51 @@ export class GameHarness {
       auFromStar: body.elements.semiMajorAxis / AU,
       moons: body.moons.length,
     }))
+  }
+
+  /**
+   * Stations of a loaded system, as a flat listing: the address `ir.look`
+   * takes, what each goes round, how far it reaches, and the orbit it keeps,
+   * in heights over the parent's equator as a station's orbit is quoted.
+   */
+  stations(system?: string): readonly {
+    address: string
+    name: string
+    kind: string
+    parent: string
+    radiusM: number
+    perigeeKm: number
+    apogeeKm: number
+    periodMinutes: number
+  }[] {
+    const target = this.world.system(
+      (system as SystemId | undefined) ??
+        (this.world.loadedSystems()[0]?.id as SystemId),
+    )
+    if (target === undefined) return []
+    return target.stations.map((station) => {
+      const { elements } = station.orbit
+      const parent =
+        station.parent.kind === 'body'
+          ? findBody(target, station.parent.body)
+          : undefined
+      const floor = parent?.radius ?? target.star.radius
+      return {
+        address:
+          station.address === null
+            ? station.id
+            : formatAddress(station.address),
+        name: station.name,
+        kind: station.kind,
+        parent: parent?.name ?? target.star.name,
+        radiusM: station.radius,
+        perigeeKm: (periapsis(elements) - floor) / 1000,
+        apogeeKm: (apoapsis(elements) - floor) / 1000,
+        periodMinutes:
+          orbitalPeriod(placementMu(target, station), elements.semiMajorAxis) /
+          60,
+      }
+    })
   }
 
   /* --------------------------------------------------------------------- */
@@ -1689,7 +1736,7 @@ export class GameHarness {
       '  ir.summary()                  one-line state',
       '  ir.status()                   full structured state',
       '  ir.inspect(id?)               one entity, in detail',
-      '  ir.dossier(address)           one star or body, as a page of astronomy',
+      '  ir.dossier(address)           one star, body or station, as a page of astronomy',
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation,throttle}) / ir.throttle(0..1) / ir.hold()',
@@ -1700,6 +1747,7 @@ export class GameHarness {
       '  ir.goTo(target)               a system id or a body address; does the right thing',
       '  ir.loadSystem(id)             generate a system without traveling to it',
       '  ir.bodies() / ir.systemsNearby(ly)',
+      '  ir.stations(system?)          stations of a loaded system: parent, reach, perigee, apogee, period',
       '  ir.orbit(address, altitudeKm) / ir.land(address, latDeg, lonDeg)',
       '  ir.shot(name, address?)       frame a camera bookmark: ' +
         SHOTS.map((s) => s.id).join(', '),

@@ -45,7 +45,7 @@ planetarium at 0.37 ms of engine (ADR-0025).
 | `spatial`       | 1     | done — UniverseVector, frame graph, floating origin                                                                                                                                                         |
 | `procedural`    | 1     | done — PRNG, hierarchical seeds, noise, algorithm versions                                                                                                                                                  |
 | `physics`       | 2     | done — Kepler, rigid body, atmosphere, thrusters, universal-variable propagation for any conic (ADR-0025)                                                                                                   |
-| `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames                                                                                                 |
+| `universe`      | 3     | done — addressing, volume and sky catalogs, versioned luminosity population and dust field, terrain, frames, orbital placements (ADR-0060)                                                                  |
 | `simulation`    | 4     | done — clock, entities, flight, surface characters, streaming, snapshots, rails for a coasting entity with a jumped frame (ADR-0025)                                                                        |
 | `protocol`      | 4     | done — validation combinators, wire and save schemas, bounded guide contracts                                                                                                                               |
 | `workers`       | 5     | done — typed tasks, ports, pool, seven shared tasks, the `HeightfieldSource` port the pool implements (ADR-0023)                                                                                            |
@@ -12617,6 +12617,68 @@ draws. On the settings page a handle moved down by the keyboard kept focus, the
 case where React moves the focused node and would drop it, and the live region
 said where the track landed. **Nobody has listened to the set end to end**, and
 the encode is deterministic: two builds wrote the same 104 files byte for byte.
+
+## The ISS goes round Earth, and the plates against main were behind the machine (7 Nov 2026)
+
+The International Space Station is a planetarium subject: an orbital placement
+on CelesTrak's element set, two analytic frames, NASA's IGOAL model with its
+arrays turned to the Sun every frame, and the planetarium's rules for a
+spacecraft. [ADR-0060](docs/adr/0060-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md)
+holds the decisions; this is what was measured on the way.
+
+**The plan's orbit was a kilometer low.** It quoted 6,796 km and 413–423 km up
+"by Kepler's third law against the game's Earth μ", and that rule gives
+6,797.16 km, 414.11 km at perigee and 423.93 km at apogee over the equatorial
+radius. The test holds the rule's figures.
+
+**The model.** The source is 95.9 MB and 2,707,621 triangles under a root scale
+of −0.002582 on all three axes — a mirror: shown as published, the starboard
+truss points at nadir. Seven nodes are mirrored under the root, and Blender's
+apply turns their faces with the transform (normal agreement −0.99 before,
++0.99 after). 359,970 triangles survive, but the source is mapped face by face
+at 2.09 vertices a triangle and smoothing moved that by nothing, so bytes run
+out before triangles: float vertices were 36.4 MB, and 432,000 triangles
+quantized were 25.1 MB against the 25 MiB a static asset may be. With
+`KHR_mesh_quantization` the file is 21.8 MB; three r185's WebGPU backend pads
+the three-component formats to four with no decoder. The truss atlas and the
+array blankets are 1024 px in the source, so the plan's 2K for them was never
+there to keep. The swept reach is 65.29 m (61.35 m at rest), and the record says
+65.3.
+
+**The plates, at 1600×900 in daylight** — the instant the station is nearest
+the subsolar point, about 5,269 s after J2000 on the game's clock: the station
+drawn whole at 213 m (surface tier), a truss and arrays at 2 km and 20 km
+(sphere), and nothing at 300 km, where it is below the point tier — the boundary
+is about 217 km for a 65 m sphere at the flight lens — and its name keeps the
+ring on the trace. From the anti-sun side the arrays show their gold backs.
+Held, the station's axes turned 38.68° in ten minutes against 38.73° at the mean
+rate, the 0.14% being an eccentricity of 0.0007, and the station and Earth's
+limb did not move in the frame. Proxima Centauri lists no station and frames
+Proxima b as before.
+
+**Four of seven lit plates "moved" against the committed plates** — Blue Marble
+567 px, the rings 304, raking Mars 322, Tau Ceti dusk 1,114 — as diffuse grain
+with peaks of 33 to 36 of 255. Against `fffa02dd`, the merge base, built and
+photographed through the same rig, all thirteen pictures move by 0 px. The tree
+is pixel-identical to the base, so the four are the committed plates against
+this machine, not this branch: a recapture somebody owes.
+
+**`observatory.ts` went past the complexity cap** at 92.08 against 91 with the
+hold written inline, from 89.53; cyclomatic 150 to 159. Comments do not count —
+a copy with them stripped scored the same. What a hold is moved to
+`stationHold.ts`, and the observatory is at 90.66.
+
+**Rejected:** a window left blended for the Cupola (its 65% panes sit in the
+material that draws the whole module, over an interior the model does not have;
+composited over black, they are the dark glass photographs show); a subject
+spacecraft placed after the planets in the declutter (from above, Earth's name
+lands on the station's and the subject loses its ring); a second camera for the
+hold (the observatory's basis rotation already has a producer, the tracked
+companion, and the hold is a second one, exclusive with it).
+
+**`deg()` brands a number; it does not convert one.** A bound written
+`toBeGreaterThan(deg(3.8))` compared 0.0675 rad against 3.8 and failed for a
+turn that was right.
 
 ## Known gaps
 

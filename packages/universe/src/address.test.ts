@@ -16,6 +16,7 @@ import {
   parseAddress,
   regionAddress,
   regionOf,
+  satelliteOf,
   systemAddress,
   systemId,
   type UniverseAddress,
@@ -30,6 +31,20 @@ const anyAddress: fc.Arbitrary<UniverseAddress> = fc.oneof(
   fc
     .array(fc.integer({ min: 0, max: 4095 }), { minLength: 1, maxLength: 3 })
     .map((path) => bodyAddress(GALAXY, SYSTEM, path)),
+  fc
+    .tuple(
+      // An empty path is a station going round the star itself.
+      fc.array(fc.integer({ min: 0, max: 4095 }), { maxLength: 2 }),
+      fc.integer({ min: 0, max: 4095 }),
+    )
+    .map(([path, index]) =>
+      satelliteOf(
+        path.length === 0
+          ? systemAddress(GALAXY, SYSTEM)
+          : bodyAddress(GALAXY, SYSTEM, path),
+        index,
+      ),
+    ),
   fc
     .record({
       path: fc.array(fc.integer({ min: 0, max: 4095 }), {
@@ -70,6 +85,12 @@ describe('UniverseAddress', () => {
         ),
       ),
     ).toBe('g:milky-way/s:HIP71683/b:2/r:3.6.12.44/o:7')
+    expect(
+      formatAddress(satelliteOf(bodyAddress(GALAXY, SYSTEM, [2]), 0)),
+    ).toBe('g:milky-way/s:HIP71683/b:2/a:0')
+    expect(formatAddress(satelliteOf(systemAddress(GALAXY, SYSTEM), 3))).toBe(
+      'g:milky-way/s:HIP71683/a:3',
+    )
   })
 
   it('round-trips through text (property)', () => {
@@ -90,6 +111,47 @@ describe('UniverseAddress', () => {
     )
     expect(() => parseAddress('g:milky-way/s:S/b:2/r:9.6.1.1')).toThrow(
       /cube face/,
+    )
+    // A station with no system under it is refused rather than read as the
+    // galaxy, and one with a region is refused rather than read as ground.
+    expect(() => parseAddress('g:milky-way/a:0')).toThrow(/needs the system/)
+    expect(() => parseAddress('g:milky-way/s:SOL/b:2/a:0/r:0.1.0.0')).toThrow(
+      /no surface/,
+    )
+    expect(() => parseAddress('g:milky-way/s:SOL/b:2/a:x')).toThrow(
+      /Bad satellite index/,
+    )
+  })
+
+  it('hangs a satellite off the body or the star it goes round', () => {
+    const station = satelliteOf(bodyAddress(GALAXY, SYSTEM, [2]), 1)
+    expect(formatAddress(parentAddress(station) as UniverseAddress)).toBe(
+      'g:milky-way/s:HIP71683/b:2',
+    )
+    const deep = satelliteOf(systemAddress(GALAXY, SYSTEM), 0)
+    expect(formatAddress(parentAddress(deep) as UniverseAddress)).toBe(
+      'g:milky-way/s:HIP71683',
+    )
+    expect(addressLabels(deep)).toEqual(['g:milky-way', 's:HIP71683', 'a:0'])
+    expect(() => satelliteOf(galaxyAddress(GALAXY), 0)).toThrow(
+      /belong to bodies and systems/,
+    )
+    // The seed path is the address, and it descends from the body's: a
+    // station's draws are the body's seed with one more label, so building it
+    // cannot move anything the body itself draws.
+    const seed = rootSeed('test')
+    const planetSeed = derivePath(
+      seed,
+      addressLabels(bodyAddress(GALAXY, SYSTEM, [2])),
+    )
+    expect(addressLabels(station)).toEqual([
+      'g:milky-way',
+      's:HIP71683',
+      'b:2',
+      'a:1',
+    ])
+    expect(derivePath(seed, addressLabels(station))).toEqual(
+      derivePath(planetSeed, ['a:1']),
     )
   })
 

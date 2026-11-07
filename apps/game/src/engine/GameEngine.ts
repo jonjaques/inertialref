@@ -844,6 +844,17 @@ export class GameEngine {
   stagedHull: LoadedShip | null = null
 
   /**
+   * The stations whose model the scene drew last frame, by address.
+   *
+   * Written by `Stations` and read by the planetarium's click filter, on the
+   * engine for the reason `hull` is. A spacecraft takes a click only while
+   * something of it is on screen, and the scene's `drawn` says only that a
+   * station is near enough and large enough to be: between first sight and a
+   * 21.8 MB model arriving, or after a load that failed, nothing is there.
+   */
+  readonly stationsDrawn = new Set<string>()
+
+  /**
    * The model `stagedHull` is loaded against: the script's prop while a
    * playing scene names one, the Rocinante the Mars pad fixture parks beside
    * its walker, and null for the player's own hull.

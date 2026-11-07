@@ -275,6 +275,56 @@ describe('a star’s record', () => {
   })
 })
 
+describe('a station’s record', () => {
+  it('is a station of the body it goes round, in the figures it is published in', () => {
+    /*
+     * Heights over the parent's equatorial radius, because that is how a
+     * station's orbit is quoted and the one reading a reader can check — the
+     * 6,797 km axis says nothing a person recognizes, and 414 to 424 km up
+     * does. The period is CelesTrak's 15.49214228 rev/day, 92.95 minutes, at
+     * three figures.
+     */
+    const live = session()
+    const page = live.harness.dossier('s:SOL/b:2/a:0') as Dossier
+    expect(page).toMatchObject({
+      name: 'International Space Station',
+      kind: 'station',
+      classification: 'Space station of Earth',
+      provenance: 'observed',
+      primary: { address: 'g:milky-way/s:SOL/b:2', name: 'Earth' },
+      satellites: [],
+      pendingCount: 0,
+    })
+    expect(page.groups.map((group) => group.id)).toEqual([
+      'station.physical',
+      'station.orbit',
+      'station.record',
+    ])
+    expect(valueOf(page, 'Height')).toBe('414 km – 424 km')
+    expect(valueOf(page, 'Orbital period')).toBe('93.0 min')
+    expect(valueOf(page, 'Semi-major axis')).toBe('6,797 km')
+    expect(valueOf(page, 'Inclination')).toBe('51.632°')
+    expect(valueOf(page, 'Mean orbital speed')).toBe('7.66 km/s')
+    expect(valueOf(page, 'Mass')).toBe('419.7 t')
+    expect(valueOf(page, 'Reach')).toBe('65.3 m')
+    expect(valueOf(page, 'Attitude')).toBe('Local vertical')
+    expect(valueOf(page, 'Also known as')).toBe('ISS · 1998-067A · 25544')
+    expect(page.summary).toBe(
+      'Station going round Earth once every 93.0 min, between 414 km and 424 km up.',
+    )
+  })
+
+  it('is among the pages the survey can reach, and Proxima has none', () => {
+    // So the vocabulary and gap checks over `everyPage` read it too.
+    const live = session()
+    const pages = [...everyPage(live)]
+    expect(pages).toContain('g:milky-way/s:SOL/b:2/a:0')
+    expect(pages.some((address) => address.includes('/a:'))).toBe(true)
+    live.harness.loadSystem('HIP70890')
+    expect(live.harness.stations('HIP70890')).toEqual([])
+  })
+})
+
 describe('the derivations', () => {
   it('gives Earth its own surface gravity', () => {
     expect(gravity(EARTH_MASS, EARTH_RADIUS)).toBeCloseTo(9.82, 1)

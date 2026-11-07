@@ -34,6 +34,7 @@ import type {
 import { GENERATION_VERSIONS } from '../versions.ts'
 import { SOLAR_PLANETS, type SolarBody } from './bodies.ts'
 import { SOLAR_SMALL_BODIES } from './smallBodies.ts'
+import { SOLAR_STATIONS, solarStation } from './stations.ts'
 
 /*
  * Sol, built from measurements rather than from a seed.
@@ -407,6 +408,24 @@ export function solarSystem(
         planet.semiMajorAxis,
       ),
   )
+  /*
+   * After the bodies, from seeds of their own: a station's seed is its
+   * address below the system, so its draws touch nothing a body draws, and
+   * its orbit needs only its parent's `mu`.
+   */
+  const stations = SOLAR_STATIONS.map((station) => {
+    // Walked here rather than through `findBody`, which lives in the module
+    // that imports this one to build Sol.
+    let parent: Body | undefined
+    let level: readonly Body[] = planets
+    for (const index of station.parent) {
+      parent = level[index]
+      if (parent === undefined)
+        throw new Error(`${station.name} goes round no body in ${stub.name}`)
+      level = parent.moons
+    }
+    return solarStation(seed, galaxy, stub.id, station, parent?.mu ?? star.mu)
+  })
   return {
     id: stub.id,
     address: systemAddress(galaxy, stub.id),
@@ -419,6 +438,7 @@ export function solarSystem(
     // distinction is what the 2006 IAU vote was about, and this field is the
     // one place in the codebase where the answer matters.
     observedPlanets: SOLAR_PLANETS.length,
+    stations,
     generation: GENERATION_VERSIONS,
   }
 }

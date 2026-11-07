@@ -1,5 +1,10 @@
-import type { Radians, Seconds } from '@inertialref/shared'
-import { stateVectorAt } from '@inertialref/physics'
+import {
+  GRAVITATIONAL_CONSTANT,
+  invariant,
+  type Radians,
+  type Seconds,
+} from '@inertialref/shared'
+import { type OrbitalElements, stateVectorAt } from '@inertialref/physics'
 import {
   type FrameGraph,
   type FrameId,
@@ -13,13 +18,16 @@ import {
   vec3,
 } from '@inertialref/spatial'
 import {
+  type EntityId,
+  entityIdForAddress,
   formatAddress,
   isSystemId,
   parseAddress,
   type SystemId,
   type UniverseAddress,
 } from './address.ts'
-import type { Body, StarSystem } from './system.ts'
+import type { OrbitalPlacement } from './stations.ts'
+import { type Body, findBody, type StarSystem } from './system.ts'
 import { type BodyFixedDirection, surfaceRadius } from './terrain.ts'
 
 /*
@@ -37,6 +45,13 @@ import { type BodyFixedDirection, surfaceRadius } from './terrain.ts'
  *   bf:…  body-*fixed* — spins with the body. Anything bolted to the surface.
  *   sf:…  surface — a local tangent frame at one latitude/longitude, +Y up.
  *         This is where meter-scale gameplay happens.
+ *
+ * And two per orbital placement, named by its identity alone:
+ *
+ *   a:…   centered on the station, in its parent's equatorial axes — the
+ *         moon's orbit evaluator, translating and not turning.
+ *   af:…  the station's own axes, turning with its attitude. What a pad, a
+ *         docking port and a contact test hang off.
  */
 
 export const systemFrameId = (system: SystemId): FrameId =>
@@ -176,6 +191,51 @@ export function parseSurfaceFrameId(id: FrameId): {
 }
 
 /**
+ * A station's own frames, named by its identity and nothing else.
+ *
+ * The identity is the placement's id — `@<address>` for a derived station —
+ * so one formatter serves every source a placement can come from, and a ship
+ * saved or replicated "in `af:<id>`" names a frame any client can rebuild
+ * from the string. A frame id that carried the orbit, or the parent, would
+ * describe a frame the id does not determine.
+ */
+export const stationFrameId = (station: EntityId): FrameId =>
+  frameId(`a:${station}`)
+export const stationFixedFrameId = (station: EntityId): FrameId =>
+  frameId(`af:${station}`)
+
+/**
+ * Read a station frame id back to the station it names, or null for any
+ * other frame.
+ *
+ * Beside the formatters for the reason `parseSurfaceFrameId` is beside its
+ * own. Only a derived station's id parses today — `@` and a satellite
+ * address — because that is the only kind there is; a minted id joins it with
+ * the first built station.
+ */
+export function parseStationFrameId(id: FrameId): {
+  readonly station: EntityId
+  readonly address: Extract<UniverseAddress, { kind: 'satellite' }>
+  readonly fixed: boolean
+} | null {
+  const fixed = id.startsWith('af:')
+  if (!fixed && !id.startsWith('a:')) return null
+  const station = id.slice(fixed ? 3 : 2) as EntityId
+  if (!station.startsWith('@')) return null
+  let address: UniverseAddress
+  try {
+    address = parseAddress(station.slice(1))
+  } catch {
+    return null
+  }
+  // One spelling per frame: a second text for the same address would name a
+  // second frame the graph has never heard of.
+  return address.kind === 'satellite' && entityIdForAddress(address) === station
+    ? { station, address, fixed }
+    : null
+}
+
+/**
  * Orbit evaluator for a body about a primary with gravitational parameter `mu`.
  *
  * `mu` is `G(M + m)`, not `G·M`, and callers pass it that way. The relative
@@ -195,13 +255,13 @@ export function parseSurfaceFrameId(id: FrameId): {
  * flattened Uranus's near-polar satellite system onto the ecliptic.
  */
 function orbitEvaluator(
-  body: Body,
+  elements: OrbitalElements,
   primaryMu: number,
   planeTilt: Radians,
 ): (t: Seconds) => LocalPose {
   if (planeTilt === 0) {
     return (t) => {
-      const { position, velocity } = stateVectorAt(body.elements, primaryMu, t)
+      const { position, velocity } = stateVectorAt(elements, primaryMu, t)
       return {
         position,
         orientation: Q.IDENTITY,
@@ -212,7 +272,7 @@ function orbitEvaluator(
   }
   const tilt = Q.fromAxisAngle(vec3(1, 0, 0), planeTilt)
   return (t) => {
-    const { position, velocity } = stateVectorAt(body.elements, primaryMu, t)
+    const { position, velocity } = stateVectorAt(elements, primaryMu, t)
     return {
       position: Q.rotate(tilt, position),
       // The frame's axes are the parent's equatorial ones, so a satellite's
@@ -240,6 +300,126 @@ function spinEvaluator(body: Body): (t: Seconds) => LocalPose {
     orientation: Q.multiply(tilt, Q.fromAxisAngle(vec3(0, 1, 0), rate * t)),
     velocity: Vec.ZERO,
     angularVelocity: Q.rotate(tilt, vec3(0, rate, 0)),
+  })
+}
+
+/**
+ * Attitude evaluator for local vertical, local horizontal: the `af:` frame
+ * within its `a:` frame.
+ *
+ * `stateVectorAt`'s position and velocity are already in the `a:` frame's
+ * axes — the parent's equatorial ones, which the orbit evaluator erects with
+ * its tilt and applies to the frame's position alone — so the basis is built
+ * from them as they come: zenith along `r`, starboard against the orbit
+ * normal `r × v`, and back against the transverse direction rather than
+ * against `v`, which leans off the horizontal by up to the eccentricity in
+ * radians and would leave the three not quite orthogonal.
+ *
+ * The turn is `(r × v) / |r|²`, the rate the radius vector sweeps at: exactly
+ * what keeps the keel on the parent's center through an eccentric orbit, and
+ * the orbital rate on a circular one.
+ */
+function nadirEvaluator(
+  elements: OrbitalElements,
+  mu: number,
+): (t: Seconds) => LocalPose {
+  return (t) => {
+    const { position: r, velocity: v } = stateVectorAt(elements, mu, t)
+    const momentum = Vec.cross(r, v)
+    const up = Vec.normalize(r)
+    const normal = Vec.normalize(momentum)
+    return {
+      position: Vec.ZERO,
+      orientation: Q.fromBasis(
+        Vec.negate(normal),
+        up,
+        Vec.negate(Vec.cross(normal, up)),
+      ),
+      velocity: Vec.ZERO,
+      angularVelocity: Vec.scale(momentum, 1 / Vec.dot(r, r)),
+    }
+  }
+}
+
+/** The pose law for a placement's attitude. Exhaustive over `Attitude`. */
+function attitudeEvaluator(
+  placement: OrbitalPlacement,
+  mu: number,
+): (t: Seconds) => LocalPose {
+  switch (placement.attitude.kind) {
+    case 'nadir':
+      return nadirEvaluator(placement.orbit.elements, mu)
+  }
+}
+
+/** The body a placement goes round, or undefined when it goes round the star. */
+function placementParent(
+  system: StarSystem,
+  placement: OrbitalPlacement,
+): Body | undefined {
+  if (placement.parent.kind !== 'body') return undefined
+  const parent = findBody(system, placement.parent.body)
+  invariant(
+    parent !== undefined,
+    `${placement.name} goes round nothing in ${system.name}`,
+  )
+  return parent
+}
+
+/**
+ * `G(M + m)` of a placement and what it goes round: the parameter its frame
+ * is run on, as a moon's is. The period a page quotes and the trace a
+ * planetarium draws read it here, so neither can disagree with where the
+ * frame puts the station.
+ */
+export function placementMu(
+  system: StarSystem,
+  placement: OrbitalPlacement,
+): number {
+  const parent = placementParent(system, placement)
+  return (
+    (parent?.mu ?? system.star.mu) + GRAVITATIONAL_CONSTANT * placement.mass
+  )
+}
+
+/**
+ * Install a station's two frames under its parent's, which must already be
+ * installed.
+ *
+ * The parent's axial tilt erects the equator its elements are measured from.
+ * A station going round the star takes the system frame and no tilt, as a
+ * planet does.
+ */
+function installStation(
+  graph: FrameGraph,
+  system: StarSystem,
+  placement: OrbitalPlacement,
+): void {
+  const frame = stationFrameId(placement.id)
+  if (graph.has(frame)) return
+  const parent = placementParent(system, placement)
+  const mu = placementMu(system, placement)
+  graph.define({
+    id: frame,
+    parent:
+      parent === undefined
+        ? systemFrameId(system.id)
+        : bodyFrameId(parent.address),
+    kind: 'orbit',
+    anchor: {
+      kind: 'dynamic',
+      evaluate: orbitEvaluator(
+        placement.orbit.elements,
+        mu,
+        parent?.axialTilt ?? 0,
+      ),
+    },
+  })
+  graph.define({
+    id: stationFixedFrameId(placement.id),
+    parent: frame,
+    kind: 'orbit',
+    anchor: { kind: 'dynamic', evaluate: attitudeEvaluator(placement, mu) },
   })
 }
 
@@ -282,7 +462,11 @@ export function installSystemFrames(
         kind: 'body',
         anchor: {
           kind: 'dynamic',
-          evaluate: orbitEvaluator(body, primaryMu + body.mu, planeTilt),
+          evaluate: orbitEvaluator(
+            body.elements,
+            primaryMu + body.mu,
+            planeTilt,
+          ),
         },
       })
       graph.define({
@@ -300,12 +484,23 @@ export function installSystemFrames(
 
   for (const planet of system.planets)
     installBody(planet, systemFrame, system.star.mu, 0)
+  // After every body, because each hangs off its parent's frame.
+  for (const station of system.stations) installStation(graph, system, station)
 }
 
 export function uninstallSystemFrames(
   graph: FrameGraph,
   system: StarSystem,
 ): void {
+  // Stations first: `FrameGraph.remove` refuses a frame that still has
+  // children, and a station's frames are children of a body's.
+  for (const station of system.stations) {
+    for (const frame of [
+      stationFixedFrameId(station.id),
+      stationFrameId(station.id),
+    ])
+      if (graph.has(frame)) graph.remove(frame)
+  }
   const removeBody = (body: Body): void => {
     for (const moon of body.moons) removeBody(moon)
     if (graph.has(bodyFixedFrameId(body.address)))

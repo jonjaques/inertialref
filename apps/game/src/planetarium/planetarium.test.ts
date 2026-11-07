@@ -13,7 +13,14 @@ import {
   spread,
   wheelNotches,
 } from './gestures.ts'
-import { declutter, pick, PICK_SLOP, type PickCandidate } from './pick.ts'
+import {
+  clickable,
+  declutter,
+  declutterTiers,
+  pick,
+  PICK_SLOP,
+  type PickCandidate,
+} from './pick.ts'
 
 /*
  * The two halves of the planetarium that are not the camera: what an input
@@ -27,6 +34,7 @@ const candidate = (
 ): PickCandidate => ({
   name: over.address,
   kind: 'rocky',
+  craft: null,
   x: 0,
   y: 0,
   radius: 0,
@@ -294,8 +302,141 @@ describe('picking', () => {
   })
 })
 
+describe('what a click may land on', () => {
+  const iss = candidate({
+    address: 'iss',
+    kind: 'station',
+    x: 505,
+    y: 500,
+    radius: 3,
+    craft: { parent: 'earth', near: true },
+  })
+  const NONE: ReadonlySet<string> = new Set()
+  const DRAWN: ReadonlySet<string> = new Set(['iss'])
+  const VIEW = { width: 1000, height: 1000 }
+
+  it('takes a spacecraft only while its model is on screen or its name is up', () => {
+    expect(clickable(iss, NONE, DRAWN, VIEW)).toBe(true)
+    expect(clickable(iss, DRAWN, NONE, VIEW)).toBe(true)
+    // Near enough to be drawn and not drawn — the model still arriving, or
+    // failed — is nothing on screen.
+    expect(clickable(iss, NONE, NONE, VIEW)).toBe(false)
+    // A body below a pixel is still drawn as a point, so rubble stays
+    // clickable whatever the label switches say.
+    expect(
+      clickable(
+        candidate({ address: 'bennu', kind: 'asteroid' }),
+        NONE,
+        NONE,
+        VIEW,
+      ),
+    ).toBe(true)
+  })
+
+  it('does not take a click for a drawn model just past the edge of the frame', () => {
+    // Drawn, and entirely outside the viewport: the slop reaches it from a
+    // click at the edge, and nothing of it can be seen.
+    const beyond = { ...iss, x: 1010, radius: 1.62 }
+    expect(clickable(beyond, NONE, DRAWN, VIEW)).toBe(false)
+    // Partly in the frame, it is something to aim at.
+    const across = { ...iss, x: 1005, radius: 10 }
+    expect(clickable(across, NONE, DRAWN, VIEW)).toBe(true)
+  })
+
+  it('selects nothing for a click on empty sky beside an unseen station', () => {
+    const earth = candidate({ address: 'earth', x: 100, y: 100, radius: 20 })
+    const candidates = [earth, iss].filter((one) =>
+      clickable(one, NONE, NONE, VIEW),
+    )
+    expect(pick(candidates, { x: 500, y: 500 })).toBeNull()
+  })
+
+  it('gives a drawn station the click on it or right beside it, whatever is behind', () => {
+    // The pointer is inside both disks and Earth's is far larger, which by the
+    // disk rule alone gives every click on the station to Earth.
+    const earth = candidate({ address: 'earth', x: 500, y: 500, radius: 400 })
+    expect(pick([earth, iss], { x: 505, y: 500 }, 24, DRAWN)?.address).toBe(
+      'iss',
+    )
+    expect(pick([earth, iss], { x: 513, y: 500 }, 24, DRAWN)?.address).toBe(
+      'iss',
+    )
+    // Past its own reach, the planet the pointer is on.
+    expect(pick([earth, iss], { x: 520, y: 510 }, 24, DRAWN)?.address).toBe(
+      'earth',
+    )
+    // The rule is about what is in front, so a moon behind it loses the same.
+    const moon = candidate({ address: 'moon', x: 500, y: 500, radius: 40 })
+    expect(pick([moon, iss], { x: 505, y: 500 }, 24, DRAWN)?.address).toBe(
+      'iss',
+    )
+  })
+
+  it('leaves a planet its clicks when a station beside it is only named', () => {
+    // Earth seen from the Moon, 18 px across, with the ISS named on it and no
+    // model drawn: the station is a point, and inside a disk the disk wins.
+    const earth = candidate({ address: 'earth', x: 500, y: 500, radius: 9 })
+    const named = { ...iss, x: 505, radius: 0 }
+    expect(pick([earth, named], { x: 500, y: 500 }, 24, NONE)?.address).toBe(
+      'earth',
+    )
+    expect(pick([earth, named], { x: 505, y: 500 }, 24, NONE)?.address).toBe(
+      'earth',
+    )
+    // Off the disk, it is the nearest thing in reach, as any point is.
+    expect(pick([earth, named], { x: 507, y: 512 }, 24, NONE)?.address).toBe(
+      'iss',
+    )
+  })
+})
+
 describe('label decluttering', () => {
   const spacing = { x: 90, y: 16 }
+
+  it('never lets a later tier take an earlier tier’s slot', () => {
+    // The planet's name is placed before the stations' wherever it falls in
+    // its own tier, and a tier spends no more than its own cap.
+    const kept = declutterTiers(
+      [
+        { labels: [{ x: 100, y: 100, id: 'planet' }], cap: Infinity },
+        {
+          labels: [
+            { x: 110, y: 102, id: 'on-the-planet' },
+            { x: 400, y: 100, id: 'one' },
+            { x: 700, y: 100, id: 'two' },
+            { x: 1000, y: 100, id: 'three' },
+          ],
+          cap: 2,
+        },
+      ],
+      spacing,
+      10,
+    )
+    expect(kept.map((label) => label.id)).toEqual(['planet', 'one', 'two'])
+    // And every tier together spends no more than the shared limit.
+    expect(
+      declutterTiers(
+        [
+          {
+            labels: [
+              { x: 0, y: 0 },
+              { x: 200, y: 0 },
+            ],
+            cap: Infinity,
+          },
+          {
+            labels: [
+              { x: 400, y: 0 },
+              { x: 600, y: 0 },
+            ],
+            cap: 2,
+          },
+        ],
+        spacing,
+        3,
+      ),
+    ).toHaveLength(3)
+  })
 
   it('keeps the first of an overlapping pair', () => {
     // Greedy in the caller's order, so the caller's ordering is the priority.

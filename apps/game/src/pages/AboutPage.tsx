@@ -82,6 +82,21 @@ export function AboutPage() {
         </p>
 
         <p className="text-slate-400">
+          The International Space Station adapts the IGOAL model by NASA/JSC’s
+          Integrated Graphics, Operations, and Analysis Laboratory, from{' '}
+          <a
+            href="https://github.com/nasa/NASA-3D-Resources/tree/master/3D%20Models/International%20Space%20Station%20(ISS)%20(D)%20(IGOAL)"
+            target="_blank"
+            rel="noreferrer"
+            className={`rounded text-sky-300 hover:text-sky-200 ${FOCUS_RING}`}
+          >
+            NASA 3D Resources
+          </a>
+          , simplified for real time and with its insignia, flags and logos
+          removed. NASA does not endorse this project.
+        </p>
+
+        <p className="text-slate-400">
           The Planetarium’s soundtrack is music its artists share under Creative
           Commons licenses, and radio from spacecraft. Every track, its artist
           and its license are in{' '}
