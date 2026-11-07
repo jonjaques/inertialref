@@ -251,15 +251,17 @@ describe('the shell, against real listeners', () => {
   it('hands out the next candidate past a port a real listener holds', async () => {
     // Anything on this machine may hold a port in the band, so the tree is one
     // whose own port is bindable here; the search keeps it deterministic.
+    // The candidate after it has to be free as well, or the probe rightly
+    // skips that one too and the answer is a third port.
     for (let i = 0; i < 50; i++) {
       const tree = `/work/shell-${i}`
       const port = portFor('static', tree)
+      const next = portFor('static', tree, { taken: [port] })
+      if (await listening(next)) continue
       const server = await listenOn('127.0.0.1', port).catch(() => null)
       if (server === null) continue
       try {
-        expect(await freePort('static', { tree, trees: [] })).toBe(
-          portFor('static', tree, { taken: [port] }),
-        )
+        expect(await freePort('static', { tree, trees: [] })).toBe(next)
       } finally {
         await close(server)
       }
