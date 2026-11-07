@@ -96,7 +96,7 @@ Measured on 7 November 2026 on the Mac18,5, at `521c494` (the dev build of `orig
 | M3    | Sustained load, 10.4 min, 18 runs                   | works   | `ir.gpu` 21.24 ms (the Air: 39.8), CV 0.27%; last three 0.19% below the first three; rAF 41–42; buffer 2880×1800; pressure 0                         | far-shore 1440×900@2 |
 | M4    | A second session after M3                           | works   | 11 runs over 4 min: median `ir.gpu` 6.777 ms against M2's 6.782 (−0.07%), CV 0.23%, after about 25 minutes of load                                   | far-shore 1600×900@1 |
 | M5    | drive.mjs headed, window at x=2400                  | partial | 100.7–102.9 rAF/s with the display asleep, 98.6–100.7 awake, gaps to 16.8–18.2 ms, never 120; one `ir.gpu(120)` a run, 6.81 and 6.93 ms, as headless | far-shore 1600×900@1 |
-| M6    | Playwright headed, on screen, display awake, 2 runs | partial | `ir.gpu` min of three 14.86 ms in both runs, 2.2× headless; rAF 47.8–48.3; settle 16.7–18.4 s                                                        | far-shore 1600×900@1 |
+| M6    | Playwright headed, on screen, display awake, 2 runs | partial | `ir.gpu` min of three 14.87 and 14.86 ms, 2.2× headless; rAF 47.8–48.3; settle 16.7–18.4 s                                                           | far-shore 1600×900@1 |
 
 Further results behind the table:
 
