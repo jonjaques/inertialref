@@ -211,6 +211,22 @@ ceiling puts Luna's at 0.003 ly and a star's at 0.3 ly, so "zoom out until the
 neighboring stars appear" — the single most planetarium-shaped gesture there is
 — would work at a star and refuse at a moon, for a reason no player could infer.
 
+### Around a station
+
+A station is a subject like any other: an anchor and a radius. The anchor is
+its `a:` frame, centered on it and not turning, and the radius is the sphere its
+model fits inside at any array angle, so the orbit arm's floor is 1.5 of that —
+98 m for the ISS — and there is no surface arm under it.
+
+By default the camera holds a direction in space and the station turns under it
+once an orbit, as a planet does. **Turn with the station**, in the Camera panel
+and offered only while the subject is a station, holds the station's own axes
+instead: the station stands still in the frame and Earth stays below, which is
+the view a docking approach wants. It is a second producer of the basis
+rotation a tracked companion already drives, never a second camera, and the
+two are exclusive — taking either folds the other's turn into the basis first,
+so the picture does not jump.
+
 ### Fly-to is a move, not a cut
 
 Selecting a new target keeps the orbit angles and moves only the distance. The
@@ -370,8 +386,11 @@ re-derived from the target on every render rather than stored — a set of _open
 addresses freezes it, so flying to Proxima would leave Sol as the expanded one.
 What is stored is the set of systems the reader has changed.
 
-**The classes.** Six chips: stars, planets, moons, dwarfs, asteroids, comets.
-Turning off the rubble is the single most useful press in the panel. An empty
+**The classes.** Seven chips: stars, planets, moons, dwarfs, asteroids, comets,
+spacecraft. Turning off the rubble is the single most useful press in the panel.
+The chips read `objectClass`, the one table the names on the sky, the click
+filter and the orbit traces also read; what each of them selects stays its own,
+because what is listed and what is written on the sky are different questions. An empty
 selection means _everything_, because a filter whose worst state is an empty
 list that looks exactly like a failed survey is a control with a trap in it. A
 star whose own class is off stays when something under it survived, and a moon
@@ -489,6 +508,37 @@ lists them: a sky captioned with six provisional designations and no planets.
 Minor bodies are therefore a switch of their own. A dwarf planet is not in that
 class, for the same reason its orbit is drawn.
 
+**Spacecraft are a switch of their own as well, with a scope.** _Nearby_, the
+default, names the subject, the companion it is tracked against, whatever goes
+round the subject, and anything within 2,000 km of the eye, which is the
+uncompressed shell; _All_ names every one in view; _Off_ names none but the
+subject. They enter the declutter after every natural body, inside a cap of
+their own within the density — 2, 4 and 8 of the 8, 18 and 40 — so a cluster at
+a station cannot take a planet's name. A spacecraft that is the subject goes
+first of all: a station a few pixels across in front of the planet it is drawn
+against would otherwise lose its name and its ring to the planet every time the
+camera looked down on it.
+
+A spacecraft takes a click only while its model is on screen or its name is on
+the sky. A body below a pixel is still drawn as a point, which is why rubble
+stays clickable; a station below the point tier draws nothing, and a click on
+empty sky beside Earth selects nothing rather than something invisible. On
+screen means what the scene drew, inside the frame: the model is fetched on
+first sight and is nothing until it arrives, and one just past the edge is
+drawn and unseen.
+
+A drawn model wins a click on it, or within 8 px of it, whatever is behind. The
+largest disk under the pointer wins otherwise, and a station drawn against
+Earth is never the largest; a drawn model is always in front, since one behind
+a body is no candidate at all. "On it" is measured against the triangles the
+frame drew, through the camera that drew them. A spacecraft's disk is its
+bounding sphere, which holds every angle its arrays can reach and is mostly
+space: framed, the ISS's covers most of the frame and the station a fraction of
+it, and a click on Earth between two wings is the planet's. So in the disk rule
+every spacecraft is a point — inside a disk the disk wins, as it does for a moon
+over its planet — and an ISS named on a distant Earth never takes the planet's
+clicks.
+
 Names behind a solid body are removed before decluttering and picking. The
 visibility test follows the camera-to-body ray in physical coordinates, so
 radius-dependent render compression cannot bring a hidden moon's name in
@@ -515,10 +565,13 @@ shows on screen:
   system seen from inside, is a dozen ellipses edge-on — a fan of near-straight
   lines that says nothing. That was written when a star's children were eight
   planets; Sol has sixty-seven now, and drawn all at once they are a hundred and
-  twenty-nine lines with the subject somewhere behind them. So an asteroid, a comet or
-  a dwarf planet's orbit is drawn when it **is** the subject or goes round it,
-  and the planets stay — "where is this relative to the planets" is the question
-  a planetarium exists to answer, and eight ellipses answer it. **`Scope: all`
+  twenty-nine lines with the subject somewhere behind them. So an asteroid's or a
+  comet's orbit is drawn when it **is** the subject or goes round it, and so is a
+  station's — a 6,800 km ring round Earth, seen from the Moon, is a line across
+  the planet the Moon is being looked at against. The planets and the dwarf
+  planets stay: "where is this relative to the planets" is the question a
+  planetarium exists to answer, eight ellipses answer it, and Pluto's crossing
+  of Neptune's is the trace most often opened for. **`Scope: all`
   is the deliberate way to ask for the cage** — from outside a system it is the
   picture, the whole architecture of the place at once, and from inside it is a
   fan of edge-on lines. Which is why it is a switch a reader throws rather than

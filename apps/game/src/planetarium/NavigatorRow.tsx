@@ -73,7 +73,7 @@ export function NavigatorRow({
   onExpand?: () => void
   onFocus: () => void
 }) {
-  const Glyph = iconForKind(row.bodyKind)
+  const Glyph = iconForKind(row.objectKind)
   const tint = starColor(row.color)
   const foldable = expanded !== undefined && onExpand !== undefined
   const Chevron = expanded === true ? ChevronDown : ChevronRight

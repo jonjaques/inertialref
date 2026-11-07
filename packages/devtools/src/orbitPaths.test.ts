@@ -6,9 +6,10 @@ import {
   Vec,
 } from '@inertialref/spatial'
 import {
-  type BodyKind,
   bodyFrameId,
+  entityIdForAddress,
   parseAddress,
+  stationFrameId,
   systemId,
   TEST_CATALOG,
 } from '@inertialref/universe'
@@ -62,9 +63,13 @@ describe('orbit traces', () => {
 
     for (const path of paths) {
       const address = parseAddress(path.address)
-      if (address.kind !== 'body') throw new Error('not a body address')
+      // A body's frame by its address, a station's by the id it derives.
+      const frame =
+        address.kind === 'satellite'
+          ? stationFrameId(entityIdForAddress(address))
+          : bodyFrameId(address)
       const actual = session.world.frames.pose(
-        bodyFrameId(address),
+        frame,
         session.world.clock.time,
       ).position
       // A meter, against orbits of 1e11 m: this is the analytic solution
@@ -125,6 +130,32 @@ describe('orbit traces', () => {
     expect(Math.abs(widest / major - 1)).toBeLessThan(0.01)
   })
 
+  it('traces the station round Earth, from the frame it is drawn by', () => {
+    /*
+     * Hung off Earth's frame like the Moon's, a level deeper than a planet,
+     * and the ellipse the station's own elements describe: the widest chord
+     * is its major axis to within the sampling, as Earth's is to its year.
+     */
+    const { session, paths } = traces()
+    const iss = paths.find((path) => path.kind === 'station')
+    const record = session.world.system(systemId('SOL'))?.stations[0]
+    if (iss === undefined || record === undefined)
+      throw new Error('the fixture has no station')
+    expect(iss).toMatchObject({
+      address: 'g:milky-way/s:SOL/b:2/a:0',
+      name: 'International Space Station',
+      depth: 2,
+      radius: 65.3,
+      parent: bodyFrameId(parseAddress('g:milky-way/s:SOL/b:2')),
+    })
+    let widest = 0
+    for (const a of iss.points) {
+      for (const b of iss.points) widest = Math.max(widest, UV.distance(a, b))
+    }
+    const major = 2 * record.orbit.elements.semiMajorAxis
+    expect(Math.abs(widest / major - 1)).toBeLessThan(0.01)
+  })
+
   it('honors the sample count and the period filter', () => {
     expect(traces({ samples: 12 }).paths[0]?.points).toHaveLength(13)
     // One Earth year. Everything outside Earth's orbit drops out, which is
@@ -153,7 +184,7 @@ describe('which orbits are worth drawing', () => {
   const path = (
     address: string,
     parent: string,
-    kind: BodyKind = 'rocky',
+    kind: OrbitPath['kind'] = 'rocky',
   ): OrbitPath =>
     ({ address, parent, kind, name: address }) as unknown as OrbitPath
 
@@ -201,6 +232,38 @@ describe('which orbits are worth drawing', () => {
     expect(visibleOrbits(all, onBennu).map((one) => one.address)).toContain(
       's:SOL/b:44',
     )
+  })
+
+  it('draws a station’s orbit for what it goes round, never for a sibling', () => {
+    /*
+     * A 6,800 km ring round Earth is the subject's context when Earth or the
+     * station is the subject. From the Moon it is a line drawn across the
+     * planet the Moon is being looked at against, which is the rubble's case
+     * at a smaller scale.
+     */
+    const EARTH = 'f:s:SOL/b:2' as FrameId
+    const moon = path('s:SOL/b:2.0', EARTH, 'moon')
+    const iss = path('s:SOL/b:2/a:0', EARTH, 'station')
+    const family = [earth, mars, moon, iss]
+    const kept = (
+      focus: string,
+      grandparent: FrameId,
+      subject: string,
+    ): readonly string[] =>
+      visibleOrbits(family, {
+        focus: focus as FrameId,
+        grandparent,
+        subject,
+        scope: 'context',
+      }).map((one) => one.address)
+
+    expect(kept(EARTH, SUN, 's:SOL/b:2')).toContain('s:SOL/b:2/a:0')
+    expect(kept('f:s:SOL/b:2.0', EARTH, 's:SOL/b:2.0')).not.toContain(
+      's:SOL/b:2/a:0',
+    )
+    const onStation = kept('a:@s:SOL/b:2/a:0', EARTH, 's:SOL/b:2/a:0')
+    expect(onStation).toContain('s:SOL/b:2/a:0')
+    expect(onStation).toContain('s:SOL/b:2.0')
   })
 
   it('draws everything on `all`, and everything when nothing is focused', () => {

@@ -76,7 +76,7 @@ export function ObjectPanel({ engine, target, focus }: PlanetariumContext) {
     )
   }
 
-  const Glyph = iconForKind(page.kind === 'star' ? null : page.kind)
+  const Glyph = iconForKind(page.kind)
 
   return (
     <div className="flex flex-col gap-2">

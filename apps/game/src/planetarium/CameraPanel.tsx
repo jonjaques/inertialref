@@ -1,5 +1,5 @@
 import { TargetControls } from './TargetControls.tsx'
-import { Compass } from 'lucide-react'
+import { Compass, Satellite } from 'lucide-react'
 import { formatReading, wholeDegrees } from '@inertialref/shared'
 import { compassDegrees, MIN_STANCE_HEIGHT } from '@inertialref/rendering'
 import { Action } from '../hud/Action.tsx'
@@ -70,6 +70,7 @@ export function CameraPanel(context: PlanetariumContext) {
         yaw: status.look?.yaw ?? 0,
         look: status.look?.pitch ?? 0,
         aimed: status.aimed === true,
+        hold: status.hold,
       }
     }),
   )
@@ -209,6 +210,23 @@ export function CameraPanel(context: PlanetariumContext) {
               onChange={onFreeLook}
               title={lookTitle}
             />
+            {/*
+             * Which basis the orbit holds round a station, offered only while
+             * the subject is one. Off, the camera keeps a direction in space
+             * and the station turns under it once an orbit, as a planet does;
+             * on, it turns with the station's own axes, which is the view a
+             * docking approach wants. One camera either way: the hold is the
+             * observatory's basis rotation, not a second producer of the eye.
+             */}
+            {eye.hold !== null && (
+              <SwitchRow
+                icon={Satellite}
+                label="Turn with the station"
+                detail="Hold its own axes, so it stands still with its world below."
+                on={eye.hold === 'station'}
+                onChange={(on) => observatory.holdStation(on)}
+              />
+            )}
           </Section>
         )
       )}

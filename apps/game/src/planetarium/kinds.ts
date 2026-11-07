@@ -1,5 +1,5 @@
-import { Globe, type LucideIcon } from 'lucide-react'
-import { type BodyKind, isPlanetKind } from '@inertialref/universe'
+import { Globe, type LucideIcon, Satellite } from 'lucide-react'
+import { type ObjectKind, objectClass } from '@inertialref/universe'
 import type { TravelTarget } from '@inertialref/devtools'
 import {
   Asteroid,
@@ -28,14 +28,16 @@ import {
  */
 
 /**
- * The glyph for a body's class.
+ * The glyph for each kind of thing the catalog lists.
  *
  * A terrestrial planet is Lucide's own `Globe` rather than a tenth icon in
  * `icons/index.tsx`: a circle with a meridian and an equator already *is* the
  * drawing of a world with a surface, and it is drawn by the same hand as the
- * rest of the set. See that file's header for where the line is.
+ * rest of the set. See that file's header for where the line is. A station is
+ * Lucide's `Satellite` for the same reason: panels on a truss is the drawing.
  */
-const KIND_ICON: Readonly<Record<BodyKind, LucideIcon>> = {
+const KIND_ICON: Readonly<Record<ObjectKind, LucideIcon>> = {
+  star: StarBody,
   rocky: Globe,
   ice: IceWorld,
   'gas-giant': GasGiant,
@@ -44,25 +46,23 @@ const KIND_ICON: Readonly<Record<BodyKind, LucideIcon>> = {
   dwarf: DwarfPlanet,
   asteroid: Asteroid,
   comet: Comet,
+  station: Satellite,
 }
 
-/** The glyph for anything the catalog can list, star or body. */
-export const iconForKind = (kind: BodyKind | null): LucideIcon =>
-  // `?? StarBody` is unreachable against the table above, which is exhaustive
-  // by its `Record<BodyKind, …>` type. It is here because `noUncheckedIndexedAccess`
-  // is on and the alternative is a non-null assertion, which would also be the
-  // thing that stopped compiling if a ninth class were added.
-  kind === null ? StarBody : (KIND_ICON[kind] ?? StarBody)
+/** The glyph for anything the catalog can list. */
+export const iconForKind = (kind: ObjectKind): LucideIcon => KIND_ICON[kind]
 
 /**
  * A filter the catalog offers, as a chip.
  *
- * Six rather than nine, and the grouping is the one a person browsing actually
- * makes: the four planet classes are one chip because "show me the planets" is
- * a question and "show me the ice giants but not the gas giants" is not. The
- * three that are separate — dwarfs, asteroids, comets — are separate because
- * they are fifty-nine of Sol's sixty-six bodies, and hiding them is the single
- * most useful thing this control does.
+ * Seven rather than ten, and the grouping is the one a person browsing
+ * actually makes: the four planet classes are one chip because "show me the
+ * planets" is a question and "show me the ice giants but not the gas giants"
+ * is not. Asteroids and comets are one class and two chips, because they are
+ * fifty-nine of Sol's sixty-seven bodies and hiding one kind of rubble without
+ * the other is a question a reader does ask. *Spacecraft* rather than
+ * *Satellites*, which the object panel already uses for moons; it is stations
+ * now and ships when ships are subjects.
  */
 export interface ObjectClass {
   readonly id: string
@@ -72,50 +72,56 @@ export interface ObjectClass {
 }
 
 /*
- * `isPlanetKind` from `universe`, which owns the taxonomy. Its table is a
- * `Record<BodyKind, boolean>`, so a ninth class fails to compile there and has
- * to be classified; the `||` chain this replaces would have kept compiling and
- * silently answered `false`, hiding the new class behind the Planets chip.
+ * `objectClass` from `universe`, which owns the taxonomy. Its table is a
+ * `Record` over every kind, so a ninth body class or a second placement kind
+ * fails to compile there and has to be classified; an `||` chain of kinds here
+ * would keep compiling and silently answer `false`, hiding the new kind behind
+ * every chip.
  */
-const isPlanet = (kind: BodyKind | null): boolean =>
-  kind !== null && isPlanetKind(kind)
+const classOf = (row: TravelTarget) => objectClass(row.objectKind)
 
 export const OBJECT_CLASSES: readonly ObjectClass[] = [
   {
     id: 'stars',
     label: 'Stars',
     icon: StarBody,
-    accepts: (row) => row.kind === 'system',
+    accepts: (row) => classOf(row) === 'star',
   },
   {
     id: 'planets',
     label: 'Planets',
     icon: Globe,
-    accepts: (row) => isPlanet(row.bodyKind),
+    accepts: (row) => classOf(row) === 'planet',
   },
   {
     id: 'moons',
     label: 'Moons',
     icon: MoonBody,
-    accepts: (row) => row.bodyKind === 'moon',
+    accepts: (row) => classOf(row) === 'moon',
   },
   {
     id: 'dwarfs',
     label: 'Dwarfs',
     icon: DwarfPlanet,
-    accepts: (row) => row.bodyKind === 'dwarf',
+    accepts: (row) => classOf(row) === 'dwarf',
   },
   {
     id: 'asteroids',
     label: 'Asteroids',
     icon: Asteroid,
-    accepts: (row) => row.bodyKind === 'asteroid',
+    accepts: (row) => row.objectKind === 'asteroid',
   },
   {
     id: 'comets',
     label: 'Comets',
     icon: Comet,
-    accepts: (row) => row.bodyKind === 'comet',
+    accepts: (row) => row.objectKind === 'comet',
+  },
+  {
+    id: 'spacecraft',
+    label: 'Spacecraft',
+    icon: Satellite,
+    accepts: (row) => classOf(row) === 'spacecraft',
   },
 ]
 

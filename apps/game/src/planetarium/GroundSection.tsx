@@ -52,6 +52,12 @@ export function GroundSection({
         A star has no surface to stand on.
       </p>
     )
+  if (eye.kind === 'station')
+    return (
+      <p className="type-ui text-pretty text-slate-400">
+        A station has no ground to stand on. Pick the world it goes round.
+      </p>
+    )
   // `null` is "the survey has not run yet", which is one frame after every
   // target change; `[]` is "this body has no sites". Drawing the empty state
   // for the first put "nowhere to stand" on screen for a body with six.

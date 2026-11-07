@@ -23,6 +23,7 @@ import {
   PLANETARIUM_FLARE,
   PLANETARIUM_LABEL_DENSITY,
   PLANETARIUM_LABEL_MINOR,
+  PLANETARIUM_LABEL_SPACECRAFT,
   PLANETARIUM_LABELS,
   PLANETARIUM_ORBIT_SCOPE,
   PLANETARIUM_ORBITS,
@@ -43,7 +44,8 @@ import { timeCommands } from '../hud/time.ts'
 import { DropHandle } from './DropHandle.tsx'
 import { acceptsRow } from './kinds.ts'
 import { stepTarget } from './navigator.ts'
-import { pick, PICK_SLOP } from './pick.ts'
+import { modelNear } from '../render/modelNear.ts'
+import { clickable, CRAFT_SLOP, pick, PICK_SLOP } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
 import { useObserverInput } from './useObserverInput.ts'
@@ -103,6 +105,17 @@ export function PlanetariumMode({
   const [labelMinor, setLabelMinor] = usePersistentState(
     PLANETARIUM_LABEL_MINOR,
   )
+  const [labelSpacecraft, setLabelSpacecraft] = usePersistentState(
+    PLANETARIUM_LABEL_SPACECRAFT,
+  )
+  // The companion a subject is tracked against keeps its name under the
+  // spacecraft switch's `nearby`, as the subject does.
+  const companion = useEngine(
+    (snapshot) => snapshot.observer?.tracking?.address ?? null,
+  )
+  // What the label layer last put on the sky, for the pick filter. See
+  // `clickable`.
+  const named = useRef<ReadonlySet<string>>(new Set())
   const [orbitScope, setOrbitScope] = usePersistentState(
     PLANETARIUM_ORBIT_SCOPE,
   )
@@ -314,6 +327,8 @@ export function PlanetariumMode({
     onLabelDensity: setLabelDensity,
     labelMinor,
     onLabelMinor: setLabelMinor,
+    labelSpacecraft,
+    onLabelSpacecraft: setLabelSpacecraft,
     orbits,
     onOrbits: setOrbits,
     orbitScope,
@@ -344,6 +359,10 @@ export function PlanetariumMode({
    * pass happens every frame, so caching one for the other would mean a hit
    * test against positions from the last frame — off by however far the camera
    * moved, which during an ease is most of the screen.
+   *
+   * A drawn spacecraft is tested against its own triangles, through the
+   * camera that drew them, for whether the click is on it: its disk is a
+   * bounding sphere, and a click on Earth between two wings is inside it.
    */
   const onPick = useCallback(
     (point: { x: number; y: number }) => {
@@ -351,15 +370,22 @@ export function PlanetariumMode({
       const view = engine.view
       if (scene === null || view === null) return
       const size = { width: window.innerWidth, height: window.innerHeight }
-      const hit = pick(
-        projectScene(
-          scene,
-          view.camera as PerspectiveCamera,
-          size,
-          engine.lens,
-        ),
-        point,
+      const camera = view.camera as PerspectiveCamera
+      const drawn = engine.stationsDrawn
+      const candidates = projectScene(scene, camera, size, engine.lens).filter(
+        (candidate) => clickable(candidate, named.current, drawn, size),
       )
+      const under = new Set<string>()
+      for (const candidate of candidates) {
+        const model =
+          candidate.craft === null ? undefined : drawn.get(candidate.address)
+        if (
+          model !== undefined &&
+          modelNear(model, camera, point, size, CRAFT_SLOP)
+        )
+          under.add(candidate.address)
+      }
+      const hit = pick(candidates, point, PICK_SLOP, under)
       if (hit !== null) focus(hit.address)
     },
     [engine, focus],
@@ -469,7 +495,10 @@ export function PlanetariumMode({
         enabled={drawLabels}
         density={labelDensity}
         minor={labelMinor}
+        spacecraft={labelSpacecraft}
         target={target}
+        companion={companion}
+        named={named}
       />
 
       {/* Somewhere to stand, and the arc that says where. Chrome, so the plate

@@ -99,6 +99,33 @@ export function compressDistance(distance: Meters): Meters {
 }
 
 /**
+ * Whether something of `radius` at `distance` from the eye is placed in true
+ * meters: its surface inside `NEAR_LIMIT`, not its center — `placeAt` says
+ * why the surface.
+ */
+export const nearField = (radius: Meters, distance: Meters): boolean =>
+  distance === 0 || Math.max(0, distance - radius) <= NEAR_LIMIT
+
+/**
+ * Whether a metric model of `radius` is drawn from `distance`: in the near
+ * field, and above the point tier.
+ *
+ * A compressed placement would shrink a model toward the eye as `placeAt`
+ * shrinks a sphere, and below the point tier there is nothing of a hundred
+ * meters of truss to see. One definition, because two things ask it: the
+ * scene, for whether a station's model is drawn, and the guide's description
+ * of the view, for whether a station is on screen to be named — a guide told
+ * of a station the frame does not draw points at empty sky.
+ */
+export const modelDrawn = (
+  radius: Meters,
+  distance: Meters,
+  thresholds?: LodThresholds,
+): boolean =>
+  nearField(radius, distance) &&
+  selectLod(radius, distance, thresholds) !== 'point'
+
+/**
  * Place a body, as seen from `eye`.
  *
  * `eye` is the camera's position **in render space** — `toRenderSpace(origin,
@@ -158,7 +185,7 @@ export function placeAt(
   // Using the surface distance also makes the transition continuous: at the
   // boundary the factor is exactly 1, so a planet does not pop as you arrive.
   const surfaceDistance = Math.max(0, distance - radius)
-  if (surfaceDistance <= NEAR_LIMIT || distance === 0) {
+  if (nearField(radius, distance)) {
     // `fromOrigin`, not `eye + offset`: the near field is untouched by any of
     // this, and reconstructing it through the eye would round a value that is
     // currently exact. Terrain patches are placed straight off the origin

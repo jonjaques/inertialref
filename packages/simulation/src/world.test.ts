@@ -22,6 +22,7 @@ import {
   bodyFixedDirection,
   bodyFixedFrameId,
   bodyFrameId,
+  stationFixedFrameId,
   surfaceRadius,
   systemFrameId,
   systemId,
@@ -808,6 +809,28 @@ describe('streaming', () => {
     expect(world.system(SOL)).toBeUndefined()
     world.loadSystem(SOL)
     expect(JSON.stringify(world.system(SOL))).toBe(before)
+  })
+
+  it('rebuilds a station’s frames from the id alone', () => {
+    // What a save or a peer holding a ship "in af:<id>" hands a fresh world:
+    // the string, and nothing else.
+    const world = new World({ seed: 'inertialref' })
+    const fixed = stationFixedFrameId('@g:milky-way/s:SOL/b:2/a:0' as EntityId)
+    expect(world.frames.has(fixed)).toBe(false)
+    expect(world.ensureFrame(fixed)).toBe(true)
+    const station = world.system(SOL)?.stations[0]
+    expect(station?.name).toBe('International Space Station')
+    const pose = world.frames.pose(fixed, 1_000)
+    const earth = world.frames.pose(bodyFrameId(station!.parent), 1_000)
+    expect(UV.distance(pose.position, earth.position)).toBeGreaterThan(6.7e6)
+    // A station the manifest never issued names no frame to rebuild.
+    expect(
+      world.ensureFrame(
+        stationFixedFrameId('@g:milky-way/s:SOL/b:2/a:7' as EntityId),
+      ),
+    ).toBe(false)
+    world.unloadSystem(SOL)
+    expect(world.frames.has(fixed)).toBe(false)
   })
 })
 

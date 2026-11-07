@@ -21,7 +21,12 @@ import type {
   WorldSnapshot,
 } from '@inertialref/simulation'
 import { surfacePlacementPose } from '@inertialref/simulation'
-import { type BodyAppearance, type EntityId } from '@inertialref/universe'
+import {
+  type BodyAppearance,
+  type BodyKind,
+  type EntityId,
+  type OrbitalKind,
+} from '@inertialref/universe'
 import { drawnAnchorRadius } from './ground.ts'
 import {
   type AirHeights,
@@ -39,7 +44,7 @@ import {
   type LodTier,
   starColor,
 } from './lod.ts'
-import { placeAt, type RenderPlacement } from './placement.ts'
+import { modelDrawn, placeAt, type RenderPlacement } from './placement.ts'
 import { sunlightAt, stellarLuminance } from './photometry.ts'
 
 /*
@@ -59,7 +64,8 @@ export interface RenderBody {
   readonly sunlight: number
   readonly address: string
   readonly name: string
-  readonly kind: string
+  /** The body's class, or `star` for a star drawn through this path (`starAsBody`). */
+  readonly kind: BodyKind | 'star'
   readonly placement: RenderPlacement
   readonly orientation: Quat
   readonly hasAtmosphere: boolean
@@ -227,6 +233,7 @@ export interface RenderScene {
   readonly stars: readonly RenderStar[]
   readonly entities: readonly RenderEntity[]
   readonly structures: readonly RenderStructure[]
+  readonly stations: readonly RenderStation[]
   /** Bodies close enough to want streamed terrain, nearest first. */
   readonly terrainCandidates: readonly RenderBody[]
 }
@@ -239,6 +246,34 @@ export interface RenderStructure {
   readonly assetId: string
   readonly position: Vec3
   readonly orientation: Quat
+}
+
+/**
+ * An orbital placement, as the frame sees it.
+ *
+ * Listed whether or not it is drawn, because a name and a pick can want it
+ * where its model does not: the label policy and the hit test read `drawn`
+ * and decide for themselves.
+ */
+export interface RenderStation {
+  readonly id: string
+  /** What the observatory resolves: the address, or the id of a built station. */
+  readonly address: string
+  readonly name: string
+  readonly kind: OrbitalKind
+  readonly asset: string
+  /** The body or the system it goes round. */
+  readonly parent: string
+  /** About the eye, with its bounding radius, as a body is placed. */
+  readonly placement: RenderPlacement
+  readonly orientation: Quat
+  /** Whether the model is worth drawing, by `modelDrawn`. */
+  readonly drawn: boolean
+  /**
+   * Toward its own star, in the station's axes, or null with no star loaded:
+   * what the arrays turn to.
+   */
+  readonly sun: Vec3 | null
 }
 
 /** Bodies smaller than this angular radius are dropped entirely. */
@@ -502,6 +537,37 @@ export function buildScene(
     })
   }
 
+  const stations: RenderStation[] = snapshot.stations.map((station) => {
+    // About the eye (Rule 28), with the bounding radius: the same placement a
+    // body gets, so a station inside the near field is true meters from the
+    // origin and the label layer and the hit test project it as they do one.
+    const placement = placeAt(
+      origin,
+      station.position,
+      station.radius,
+      eyeRender,
+      thresholds,
+    )
+    const star = snapshot.stars.find((one) => one.system === station.system)
+    const toStar =
+      star === undefined ? null : UV.difference(star.position, station.position)
+    return {
+      id: station.id,
+      address: station.address ?? station.id,
+      name: station.name,
+      kind: station.kind,
+      asset: station.asset,
+      parent: station.parent,
+      placement,
+      orientation: orientationToRenderSpace(origin, station.orientation),
+      drawn: modelDrawn(station.radius, placement.distance, thresholds),
+      sun:
+        toStar === null || Vec.length(toStar) === 0
+          ? null
+          : Q.rotateInverse(station.orientation, Vec.normalize(toStar)),
+    }
+  })
+
   // From the *snapshot's* body positions, not the placed ones: placement
   // compresses distance, and while that leaves the direction intact it is
   // not a property worth depending on from over here.
@@ -540,6 +606,7 @@ export function buildScene(
     stars,
     entities,
     structures,
+    stations,
     terrainCandidates,
   }
 }

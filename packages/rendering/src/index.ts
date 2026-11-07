@@ -30,6 +30,7 @@ export * from './terrainSelect.ts'
 export * from './thrusters.ts'
 export * from './thrusterVisuals.ts'
 export * from './shape.ts'
+export * from './solarArrays.ts'
 
 export * from './galaxyView.ts'
 export * from './galaxyJourney.ts'

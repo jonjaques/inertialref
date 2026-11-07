@@ -1,3 +1,5 @@
+import type { ObjectKind } from '@inertialref/universe'
+
 /*
  * Choosing what a click meant.
  *
@@ -13,7 +15,7 @@ export interface PickCandidate {
   readonly address: string
   readonly name: string
   /**
-   * The body's class, or `star`.
+   * `star`, the body's class, or the placement's kind.
    *
    * Carried so the label layer can thin by *what a thing is* rather than only
    * by where it lands. Sol has ninety-two asteroids and comets and eighteen
@@ -23,7 +25,25 @@ export interface PickCandidate {
    * at a position, and refusing to select a rock because a switch is off would
    * make the sky lie about what is clickable.
    */
-  readonly kind: string
+  readonly kind: ObjectKind
+  /**
+   * What the spacecraft name rule reads, or null for a star or a natural body.
+   *
+   * A spacecraft is named nearby (`names.ts`), and that needs facts no body
+   * raises: what it goes round, and whether the eye is inside the near field
+   * of it. Its being non-null is also what `pick` and `clickable` read a
+   * spacecraft by.
+   *
+   * A spacecraft's `radius` is its bounding sphere's, which holds every angle
+   * its arrays can reach: the extent of a label's ring, never a shape to be
+   * inside.
+   */
+  readonly craft: {
+    /** What it goes round, by the address the observatory resolves. */
+    readonly parent: string
+    /** Whether the eye is inside the uncompressed shell of it: 2,000 km. */
+    readonly near: boolean
+  } | null
   /** Screen position, CSS pixels, origin top-left. */
   readonly x: number
   readonly y: number
@@ -43,6 +63,20 @@ export interface PickCandidate {
  * threshold.
  */
 export const PICK_SLOP = 24
+
+/**
+ * How far from a drawn spacecraft's model it still wins a click, in pixels.
+ *
+ * Its own reach, a third of `PICK_SLOP`, because winning first is a stronger
+ * claim than being nearest: at the full slop a station a few pixels across
+ * takes every click within a fingertip of it, and from far enough out that is
+ * most of the planet behind it. Eight pixels is enough to land on a truss.
+ * Measured from the triangles the frame drew, not from the bounding sphere,
+ * by the caller (`render/modelNear.ts`).
+ */
+export const CRAFT_SLOP = 8
+
+const NONE: ReadonlySet<string> = new Set()
 
 /**
  * What the pointer is over, or `null`.
@@ -68,11 +102,55 @@ export const PICK_SLOP = 24
  * satellites is the way to reach it. Whether that is the right trade is a
  * design question — `docs/design/planetarium.md` — and not something to change
  * here by adjusting a comparison.
+ *
+ * Spacecraft are the one exception, decided there too. A spacecraft's disk is
+ * its bounding sphere, which is mostly space, so in this rule it is a point
+ * and never something the pointer is inside. One whose model is drawn wins a
+ * click on the model, or within `CRAFT_SLOP` of it, before any of this runs.
  */
 export function pick(
   candidates: readonly PickCandidate[],
   pointer: { readonly x: number; readonly y: number },
   slop: number = PICK_SLOP,
+  /**
+   * Drawn spacecraft whose model is within `CRAFT_SLOP` of the pointer, by
+   * address: what the caller measured against the triangles on screen.
+   */
+  under: ReadonlySet<string> = NONE,
+): PickCandidate | null {
+  /*
+   * A drawn spacecraft first, where its model is under the pointer, whatever
+   * natural body is behind.
+   *
+   * The disk rule below gives every click on a station drawn against Earth
+   * to Earth: the pointer is inside both and Earth is larger, and a station is
+   * never the largest disk under anything. A drawn model is always in front of
+   * what it is drawn against — one behind a body is no candidate at all — so
+   * it wins there, and only there. Its sphere covers the gaps between its
+   * wings and Earth through them, and a click aimed at the planet past the
+   * truss is the planet's.
+   */
+  return (
+    choose(
+      candidates.filter(
+        (candidate) => candidate.craft !== null && under.has(candidate.address),
+      ),
+      pointer,
+      Number.POSITIVE_INFINITY,
+    ) ?? choose(candidates, pointer, slop, bodyDisk)
+  )
+}
+
+/** A body's disk; a spacecraft, as a point. */
+const bodyDisk = (candidate: PickCandidate): number =>
+  candidate.craft === null ? candidate.radius : 0
+
+/** The disk the pointer is inside, largest first, else the nearest in reach. */
+function choose(
+  candidates: readonly PickCandidate[],
+  pointer: { readonly x: number; readonly y: number },
+  slop: number,
+  disk: (candidate: PickCandidate) => number = (candidate) => candidate.radius,
 ): PickCandidate | null {
   let inside: PickCandidate | null = null
   let nearest: PickCandidate | null = null
@@ -84,12 +162,12 @@ export function pick(
       candidate.x - pointer.x,
       candidate.y - pointer.y,
     )
-    if (distance <= candidate.radius) {
-      if (inside === null || candidate.radius > inside.radius)
-        inside = candidate
+    const radius = disk(candidate)
+    if (distance <= radius) {
+      if (inside === null || radius > disk(inside)) inside = candidate
       continue
     }
-    if (distance <= slop + candidate.radius && distance < nearestDistance) {
+    if (distance <= slop + radius && distance < nearestDistance) {
       nearestDistance = distance
       nearest = candidate
     }
@@ -97,6 +175,40 @@ export function pick(
 
   return inside ?? nearest
 }
+
+/**
+ * Whether a candidate may take a click at all.
+ *
+ * A spacecraft only while its model is on screen or its name is on the sky.
+ * A body below a pixel is still drawn as a point, which is why `pick` leaves
+ * rubble clickable; a station below the point tier draws nothing, and an
+ * empty-sky click beside Earth that selected it would be the sky lying the
+ * other way. `drawn` is what the scene drew, not what it was asked to: the
+ * scene's own `drawn` says a station is near enough and large enough, and the
+ * model is 21.8 MB that may still be arriving, or may never. A drawn model
+ * counts only where its disk meets the viewport: one just past the edge is
+ * drawn and unseen, and the slop would otherwise reach it.
+ */
+export const clickable = (
+  candidate: PickCandidate,
+  named: ReadonlySet<string>,
+  /** Spacecraft whose model is on screen: `engine.stationsDrawn`. */
+  drawn: { has(address: string): boolean },
+  viewport: { readonly width: number; readonly height: number },
+): boolean =>
+  candidate.craft === null ||
+  named.has(candidate.address) ||
+  (drawn.has(candidate.address) && meetsViewport(candidate, viewport))
+
+/** Whether any of a candidate's disk is inside the viewport. */
+const meetsViewport = (
+  candidate: PickCandidate,
+  viewport: { readonly width: number; readonly height: number },
+): boolean =>
+  candidate.x + candidate.radius >= 0 &&
+  candidate.x - candidate.radius <= viewport.width &&
+  candidate.y + candidate.radius >= 0 &&
+  candidate.y - candidate.radius <= viewport.height
 
 /**
  * Whether two labels overlap enough that drawing both is worse than one.
@@ -129,11 +241,35 @@ export function declutter<T extends { readonly x: number; readonly y: number }>(
   spacing: { readonly x: number; readonly y: number },
   limit: number,
 ): T[] {
+  return declutterTiers([{ labels, cap: limit }], spacing, limit)
+}
+
+/**
+ * `declutter` in tiers, for names that may never take a slot from the ones
+ * before them.
+ *
+ * Each tier is placed after every tier before it, has to clear every name
+ * those kept, and spends at most its own `cap` of the shared `limit`. One
+ * greedy pass over the concatenation is the same order and the wrong rule: a
+ * cluster of spacecraft at a station would spend the budget the planet behind
+ * them was owed whenever the planet's name landed later in the list.
+ */
+export function declutterTiers<
+  T extends { readonly x: number; readonly y: number },
+>(
+  tiers: readonly { readonly labels: readonly T[]; readonly cap: number }[],
+  spacing: { readonly x: number; readonly y: number },
+  limit: number,
+): T[] {
   const kept: T[] = []
-  for (const label of labels) {
-    if (kept.length >= limit) break
-    if (kept.some((other) => collides(label, other, spacing))) continue
-    kept.push(label)
+  for (const tier of tiers) {
+    let spent = 0
+    for (const label of tier.labels) {
+      if (kept.length >= limit || spent >= tier.cap) break
+      if (kept.some((other) => collides(label, other, spacing))) continue
+      kept.push(label)
+      spent += 1
+    }
   }
   return kept
 }
