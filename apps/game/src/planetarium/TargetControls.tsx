@@ -1,6 +1,7 @@
 'use no memo'
 import { useState } from 'react'
 import { Crosshair, Scan, X } from 'lucide-react'
+import { GALAXY_VIEWS } from '@inertialref/rendering'
 import { formatAddress, walkBodies } from '@inertialref/universe'
 import { Input } from '@/components/ui/input'
 import { Action } from '../hud/Action.tsx'
@@ -32,6 +33,7 @@ export function TargetControls({ engine, onNotice }: PlanetariumContext) {
       system: state.observer?.target?.system,
       target: state.observer?.tracking?.name,
       standing: state.observer?.surface != null,
+      galaxy: state.observer?.galaxyView ?? null,
     })),
   )
   const system =
@@ -51,13 +53,23 @@ export function TargetControls({ engine, onNotice }: PlanetariumContext) {
     <div className="mb-1.5 flex flex-col gap-1.5 border-b border-slate-800 pb-2">
       <div className="flex items-baseline justify-between gap-3">
         <span className="type-ui shrink-0 text-slate-400">
-          {view.standing ? 'Standing on' : 'Orbiting'}
+          {view.galaxy !== null
+            ? 'Viewing'
+            : view.standing
+              ? 'Standing on'
+              : 'Orbiting'}
         </span>
         <span className="type-ui truncate text-slate-200">
-          {view.name ?? 'Nothing yet'}
+          {view.galaxy !== null
+            ? `The Milky Way, ${GALAXY_VIEWS[view.galaxy].label.toLowerCase()}`
+            : (view.name ?? 'Nothing yet')}
         </span>
       </div>
+      {/* A target is a second body in the subject's system, so with no
+          subject — a Milky Way view, or nothing picked yet — there is no
+          system for the field to search, and the field is not drawn. */}
       {!view.standing &&
+        view.name !== undefined &&
         (view.target ? (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="type-ui shrink-0 text-slate-400">Target</span>
