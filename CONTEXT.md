@@ -264,6 +264,22 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **A playlist drag downward ended after one row.** The editor reordered its
+  rows live under the pointer; React reorders keyed rows by moving their DOM
+  nodes, and a node moved while it holds pointer capture loses it. Dragging up
+  moves the _other_ rows, so it worked, and every drag down was cancelled at
+  the first slot. The rows now keep their DOM order until the drop and step
+  aside through `translate`; `reorder.test.ts` holds what a drag draws equal to
+  what its drop commits, and trusted CDP drags in Chrome — three rows down,
+  three up, ten down — each landed (7 Nov 2026).
+- **An authentic lossless copy failed authentication at 22.05 kHz.** MP3's
+  1105-sample decoder delay is half a sample at that rate, and the residual
+  read −16 dB against a true match's −35 to −63. Compare at the native rate
+  (6 Nov 2026, below).
+- **The end of a playlist stuck.** One flag meant both "crossfading" and "the
+  end was handled", and it stayed set after the last track, so Play from the
+  end did nothing. `soundtrack.test.ts` plays to the end and back (6 Nov 2026,
+  below).
 - **The ground row of Ψ marched through the planet.** A ray aimed down from
   r = 1 starts on the sphere, so `distanceToSphere` takes the far root, and the
   bake integrated a chord of rock at the surface's density as sunlit air. At
@@ -12541,6 +12557,66 @@ at seven while the planetarium has eight panels with the guide, so the last
 panel in the menu had no key; `panel.8` is Digit8. The 105 keymap labels were
 Title Case in source, against rule 51, and they are the row labels of the
 controls page — they are sentence case.
+
+## The Planetarium plays music, and half a sample faked a forgery (6 Nov 2026)
+
+The Planetarium has a soundtrack: fifty-two tracks, 251 minutes, under CC0, the
+Public Domain Mark and CC BY only
+([ADR-0059](docs/adr/0059-the-planetarium-plays-music-anyone-may-share.md),
+[spike 6](docs/spikes.md#6--licensed-music-and-spacecraft-audio)). The masters
+are 954 MB of LFS that no default fetch touches; the 104 delivery files, AAC
+and Opus, are 819.4 MB in R2, served by the Worker with a 206. A dock panel, a
+settings page with the whole playlist, `/credits`, a card per track, the Media
+Session and a cache for kept tracks sit around one player.
+
+**Comparing a FLAC with the licensor's MP3 at 22.05 kHz called an authentic
+copy a different master.** A third party's lossless file is used only after it
+matches the licensor's own lossy one, and the first pass resampled both to
+22.05 kHz to save time. MP3's decoder delay is 1105 samples at 44.1 kHz, which
+is 552.5 at 22.05 — half a sample no integer lag can align — and the residual
+read −16 dB, the figure for a different recording. At the native rate the same
+pair correlates at ≥ 0.99984 with a residual of −35 to −63 dB and a constant
+25.06 ms offset. Compare at the rate the files were made at.
+
+**The player's end-of-track trigger shared a flag with the crossfade.**
+`#crossfading` doubled as "the end has been handled", so after the last track
+of a playlist with repeat off it stayed set, and Play from the end did nothing.
+`#ended` holds the track whose end was handled and a seek clears it. The same
+afternoon, a playlist with nothing playable reported `paused`: the reconcile
+started a deck that was still loading, its error advanced the queue, and an
+empty candidate list read as the playlist ending. A deck now says when it is
+`ready`, only a ready deck is sounded, and an advance with no candidates says
+why instead.
+
+**Cloudflare's static assets ignore `Range`.** Measured on production: a ranged
+GET answers 200 with the whole body, and the assets refuse files over 25 MiB
+where the longest track is 32.2 MiB. The files are `bundled: false` entries in
+the media table, and the build strips `dist/media/music` so a deploy from a
+machine that ran the audio pipeline matches Workers Builds (rule 67).
+
+**A credit that ends on a bare domain ran into the change notice** —
+"chriszabriskie.com Modified: level lowered…". The join adds a stop where the
+licensor's line has none, and the catalog test reads every credit as two
+sentences.
+
+**Tried and rejected.** React DnD for the playlist: the settings page opens over
+the Planetarium, whose dock already runs the HTML5 backend, and that backend
+refuses a second instance on the window; pointer capture on the handle works
+under a finger too. A limiter to land every track on −18 LUFS: six tracks sit
+under it instead, capped by the true-peak ceiling. A pause under the guide's
+voice: the music ducks 12 dB while a guide session is live, because a tour that
+stopped the music for every exchange would lurch.
+
+**Measured in Chrome** (the drive rig, 1600×900, `pnpm dev`): before a gesture
+`ir.soundtrackStatus()` read `waiting` with the first track loaded and the
+context `suspended`; four seconds after one it read `playing`, the context
+`running`, at 3.78 s, and 6.70 s three seconds later; `next` changed the track
+and raised the card. The card first sat bottom left, on top of the drop handle,
+and moved to the top edge between the panes, where nothing in the Planetarium
+draws. On the settings page a handle moved down by the keyboard kept focus, the
+case where React moves the focused node and would drop it, and the live region
+said where the track landed. **Nobody has listened to the set end to end**, and
+the encode is deterministic: two builds wrote the same 104 files byte for byte.
 
 ## Known gaps
 

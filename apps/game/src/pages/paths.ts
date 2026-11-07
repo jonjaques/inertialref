@@ -76,6 +76,16 @@ export const settingsSection = (section: string): string =>
 export const ABOUT = '/about'
 
 /**
+ * Who made the music, and under what license.
+ *
+ * A page with an address rather than a paragraph of the About page: most of
+ * the soundtrack is CC BY, whose credit has to name the work, the creator,
+ * the license and the change, for fifty-odd tracks — and a credit somebody
+ * can link to is the one a licensor can check.
+ */
+export const CREDITS = '/credits'
+
+/**
  * The keys sheet.
  *
  * A dialog with an address, like the settings sections, and for the same
@@ -159,6 +169,7 @@ export function isOverlayPath(pathname: string): boolean {
     pathname === SETTINGS ||
     pathname.startsWith(`${SETTINGS}/`) ||
     pathname === ABOUT ||
+    pathname === CREDITS ||
     pathname === KEYS ||
     pathname === AUTH_CALLBACK
   )

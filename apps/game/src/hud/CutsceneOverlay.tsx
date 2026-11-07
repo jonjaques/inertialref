@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getLogger } from '@inertialref/shared'
 import type { CinematicTextState, GameEngine } from '../engine/GameEngine.ts'
+import { onActivation } from '../audio/activation.ts'
 import { soundtrackCandidates, soundtrackFor } from './cutsceneAudio.ts'
 import { labelStyle, textStyle } from './cutsceneText.ts'
 import { useAction, useKeyContext } from '../input/useKeymap.ts'
@@ -37,25 +38,6 @@ const log = getLogger('game.cutscene')
 
 /** How closely the audio element tracks the reference clock, seconds. */
 const AUDIO_TOLERANCE = 0.08
-
-/**
- * The events that carry a user activation, on every engine that has one.
- *
- * Broader than it looks like it needs to be, and deliberately: the spec's list
- * of activation-triggering events and WebKit's are not the same list, and this
- * is the one place where guessing wrong costs the whole feature rather than a
- * frame. `pointerdown` covers mouse and touch where Pointer Events are the
- * primary input path; `touchend` and `mousedown` cover the engines that set
- * their gesture flag on the legacy event instead. All of them are harmless
- * duplicates — the primer is idempotent.
- */
-const GESTURES = [
-  'pointerdown',
-  'mousedown',
-  'touchend',
-  'keydown',
-  'click',
-] as const
 
 export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
   // Structure state only: which cutscene's text set is mounted. Polled slowly
@@ -210,9 +192,10 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
    * on the library card, and an element that mounts in response to that click
    * has already missed it.
    *
-   * The listeners come off on the first `play()` that resolves, and not before:
-   * a refusal has to be able to try the next gesture. Capture phase, so a
-   * handler that stops propagation cannot take the activation with it.
+   * The subscription comes off on the first `play()` that resolves, and not
+   * before: a refusal has to be able to try the next gesture. The gestures
+   * themselves, and why the list is as broad as it is, are
+   * `audio/activation.ts`, which the soundtrack's unlock shares.
    *
    * What this cannot fix is the iOS ring/silent switch, which mutes an
    * `<audio>` element by policy and is not a thing a page is allowed to ask
@@ -220,10 +203,7 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
    */
   useEffect(() => {
     let unlocked = false
-    const remove = (): void => {
-      for (const type of GESTURES)
-        document.removeEventListener(type, prime, true)
-    }
+    let remove = (): void => {}
     const prime = (): void => {
       const element = audio.current
       if (unlocked || element === null) return
@@ -250,14 +230,14 @@ export function CutsceneOverlay({ engine }: { engine: GameEngine }) {
             element.currentTime = 0
           }
           // A refusal is not news here — it is the ordinary answer for a gesture
-          // that reached this before the file finished loading. The listeners
-          // stay on, and the next gesture tries again.
+          // that reached this before the file finished loading. The
+          // subscription stays, and the next gesture tries again.
         },
         () => {},
       )
     }
-    for (const type of GESTURES) document.addEventListener(type, prime, true)
-    return remove
+    remove = onActivation(prime)
+    return () => remove()
   }, [engine])
 
   // The per-frame writes. A rAF loop of its own rather than `useFrame`

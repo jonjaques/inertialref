@@ -23,6 +23,7 @@ const OBJECT: MediaObject = {
   key: 'dropbox/tng-intro.mp3',
   type: 'audio/mpeg',
   what: 'the cutscene reference audio',
+  bundled: true,
 }
 
 const SIZE = 2_747_091

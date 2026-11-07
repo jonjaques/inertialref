@@ -4,6 +4,7 @@ import {
   AUTH_CALLBACK,
   CATALOG,
   CINEMA,
+  CREDITS,
   HOME,
   KEYS,
   PLANETARIUM,
@@ -26,6 +27,7 @@ export const shellPaths = [
   AUTH_CALLBACK,
   CATALOG,
   CINEMA,
+  CREDITS,
   KEYS,
   PLANETARIUM,
   PLAY_MULTIPLAYER,
@@ -42,8 +44,14 @@ export const shellPaths = [
    * the display page. A section with no file here is the Worker's 404 page on
    * a cold visit, not the fallback `SettingsPage` gives an unknown section.
    */
-  ...['display', 'interface', 'controls', 'controller', 'data', 'camera'].map(
-    settingsSection,
-  ),
+  ...[
+    'display',
+    'audio',
+    'interface',
+    'controls',
+    'controller',
+    'data',
+    'camera',
+  ].map(settingsSection),
   ...CUTSCENES.map((script) => cinemaScene(script.id)),
 ]

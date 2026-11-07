@@ -71,6 +71,7 @@ import {
   SETTINGS,
 } from './pages/paths.ts'
 import { SceneView } from './scene/SceneView.tsx'
+import { SoundtrackRuntime } from './audio/SoundtrackRuntime.tsx'
 import { publishRuntime } from './runtimeState.ts'
 import { runtimeFailure } from './runtimeFailure.ts'
 import {
@@ -796,6 +797,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
               <TrackOverlay engine={engine} />
             </ErrorBoundary>
           </div>
+          {/* The soundtrack: the player's joints to the app, and the credits
+            card it raises when a track begins. Its own boundary, because a
+            soundtrack that throws must cost the music and nothing else. */}
+          <ErrorBoundary what="the soundtrack">
+            <SoundtrackRuntime engine={engine} mode={mode} />
+          </ErrorBoundary>
           {/* A notice echoes what was asked for, and one of the things that can
             be asked for is whatever was typed into the address field. Bounded
             so a paste is a truncated sentence rather than a band across the

@@ -1,10 +1,13 @@
+import { Link } from 'react-router'
 import { BookOpen, TerminalSquare } from 'lucide-react'
 import { BUILD_ID } from '../build.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { Github, StellarSpan } from '../icons/index.tsx'
 import { SITE } from '../site.ts'
 import { OverlayPage } from './OverlayPage.tsx'
+import { CREDITS } from './paths.ts'
 import { Reference } from './Reference.tsx'
+import { useOverlay } from './useOverlay.ts'
 
 /*
  * What this is.
@@ -27,6 +30,8 @@ const FACTS: readonly (readonly [string, string])[] = [
 ]
 
 export function AboutPage() {
+  // Inside the dialog, so the hop to the credits keeps the mode behind it.
+  const { keep } = useOverlay()
   return (
     <OverlayPage title="About" subtitle={SITE.tagline}>
       <div className="flex flex-col gap-3">
@@ -74,6 +79,20 @@ export function AboutPage() {
           </a>
           , with a modified silhouette, neutral materials, and original rigging
           and animation. NASA does not endorse this project.
+        </p>
+
+        <p className="text-slate-400">
+          The Planetarium’s soundtrack is music its artists share under Creative
+          Commons licenses, and radio from spacecraft. Every track, its artist
+          and its license are in{' '}
+          <Link
+            to={CREDITS}
+            state={keep}
+            className={`rounded text-sky-300 hover:text-sky-200 ${FOCUS_RING}`}
+          >
+            the credits
+          </Link>
+          .
         </p>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pt-1">

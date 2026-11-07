@@ -1,0 +1,8 @@
+---
+globs: apps/game/src/audio/**,apps/ingest/src/audio*.ts,apps/ingest/src/loudness*.ts,apps/ingest/src/spectrum*.ts,data/audio/**,packages/protocol/src/soundtrack*.ts,apps/game/public/sw.js
+alwaysApply: false
+---
+
+Apply the canonical soundtrack rule:
+
+@.claude/rules/soundtrack.md

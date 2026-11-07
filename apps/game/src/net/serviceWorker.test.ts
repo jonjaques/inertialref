@@ -30,21 +30,36 @@ interface FakeRequest {
   readonly method: string
   readonly mode: string
   readonly cache: string
-  readonly headers: { has: (name: string) => boolean }
+  readonly headers: {
+    has: (name: string) => boolean
+    get: (name: string) => string | null
+  }
 }
 
 const request = (
   path: string,
   overrides: Partial<Omit<FakeRequest, 'headers'>> & {
-    readonly range?: boolean
+    /** `true` for some range; a string for exactly that `Range` header. */
+    readonly range?: boolean | string
   } = {},
-): FakeRequest => ({
-  url: path.startsWith('http') ? path : `${ORIGIN}${path}`,
-  method: overrides.method ?? 'GET',
-  mode: overrides.mode ?? 'no-cors',
-  cache: overrides.cache ?? 'default',
-  headers: { has: (name) => name === 'range' && overrides.range === true },
-})
+): FakeRequest => {
+  const range =
+    overrides.range === true
+      ? 'bytes=0-'
+      : typeof overrides.range === 'string'
+        ? overrides.range
+        : null
+  return {
+    url: path.startsWith('http') ? path : `${ORIGIN}${path}`,
+    method: overrides.method ?? 'GET',
+    mode: overrides.mode ?? 'no-cors',
+    cache: overrides.cache ?? 'default',
+    headers: {
+      has: (name) => name === 'range' && range !== null,
+      get: (name) => (name === 'range' ? range : null),
+    },
+  }
+}
 
 /**
  * A response the worker considers worth storing.
@@ -75,6 +90,8 @@ interface Harness {
   storageFails: boolean
   /** Per-cache contents, keyed by cache name then request URL. */
   readonly stores: Map<string, Map<string, unknown>>
+  /** Every request the worker handed to the network, in order. */
+  readonly fetched: (FakeRequest | string)[]
 }
 
 function loadServiceWorker(
@@ -90,6 +107,7 @@ function loadServiceWorker(
     clientUrls: [],
     storageFails: false,
     stores: new Map(),
+    fetched: [],
   }
 
   const self = {
@@ -153,8 +171,13 @@ function loadServiceWorker(
 
   // The file is a script, not a module, so this is how it gets evaluated with
   // its globals replaced. Everything it reaches for is a parameter here.
-  new Function('self', 'caches', 'fetch', SOURCE)(self, caches, () =>
-    Promise.resolve().then(answer),
+  new Function('self', 'caches', 'fetch', SOURCE)(
+    self,
+    caches,
+    (req: FakeRequest | string) => {
+      harness.fetched.push(req)
+      return Promise.resolve().then(answer)
+    },
   )
   return harness
 }
@@ -503,3 +526,138 @@ async function lifecycle(sw: Harness, name: string): Promise<void> {
   sw.listeners.get(name)!({ waitUntil: (p: Promise<unknown>) => (pending = p) })
   await pending
 }
+
+describe('the soundtrack', () => {
+  const TRACK = '/media/music/stellardrone-airglow.0123456789.m4a'
+  const BYTES = Uint8Array.from({ length: 10 }, (_, index) => index)
+
+  /** A worker with one kept track, ten bytes long, in the music cache. */
+  const keeping = () => {
+    const sw = loadServiceWorker(() => okResponse('audio/mp4'))
+    sw.stores.set(
+      'inertialref-music',
+      new Map([
+        [
+          `${ORIGIN}${TRACK}`,
+          new Response(new Blob([BYTES]), {
+            headers: { 'content-type': 'audio/mp4' },
+          }),
+        ],
+      ]),
+    )
+    return sw
+  }
+
+  const answer = async (
+    sw: Harness,
+    range: string,
+  ): Promise<{ status: number; range: string | null; body: number[] }> => {
+    const response = (await settle(sw, request(TRACK, { range }))) as Response
+    return {
+      status: response.status,
+      range: response.headers.get('content-range'),
+      body: [...new Uint8Array(await response.arrayBuffer())],
+    }
+  }
+
+  /*
+   * The case the music branch of the worker exists for. Stepping aside for a
+   * request with a `Range` header, as every other path does, sends a kept
+   * track to a network that is not there; and answering with the stored 200
+   * is a track Safari will not play, online or off.
+   */
+  it('answers a kept track’s range with a 206 of exactly those bytes', async () => {
+    expect(await answer(keeping(), 'bytes=2-5')).toEqual({
+      status: 206,
+      range: 'bytes 2-5/10',
+      body: [2, 3, 4, 5],
+    })
+  })
+
+  it('answers the probe Safari opens with', async () => {
+    expect(await answer(keeping(), 'bytes=0-1')).toEqual({
+      status: 206,
+      range: 'bytes 0-1/10',
+      body: [0, 1],
+    })
+  })
+
+  it('answers an open-ended and a suffix range', async () => {
+    expect(await answer(keeping(), 'bytes=7-')).toMatchObject({
+      range: 'bytes 7-9/10',
+      body: [7, 8, 9],
+    })
+    expect(await answer(keeping(), 'bytes=-3')).toMatchObject({
+      range: 'bytes 7-9/10',
+      body: [7, 8, 9],
+    })
+    // A range that runs past the end is the rest of the file, not an error.
+    expect(await answer(keeping(), 'bytes=8-99')).toMatchObject({
+      range: 'bytes 8-9/10',
+      body: [8, 9],
+    })
+  })
+
+  it('answers a range past the end with 416 and the length', async () => {
+    expect(await answer(keeping(), 'bytes=10-')).toEqual({
+      status: 416,
+      range: 'bytes */10',
+      body: [],
+    })
+  })
+
+  it('answers a range it cannot parse with the whole file', async () => {
+    expect(await answer(keeping(), 'bytes=5-2')).toMatchObject({
+      status: 200,
+      body: [...BYTES],
+    })
+  })
+
+  it('hands back the kept file itself to a plain GET', async () => {
+    const sw = keeping()
+    const kept = sw.stores.get('inertialref-music')?.get(`${ORIGIN}${TRACK}`)
+    expect(await settle(sw, request(TRACK))).toBe(kept)
+    expect(sw.fetched).toEqual([])
+  })
+
+  it('sends a track nobody kept to the network as asked, and stores none of it', async () => {
+    const response = okResponse('audio/mp4')
+    const sw = loadServiceWorker(() => response)
+    const asked = request(TRACK, { range: 'bytes=0-' })
+    expect(await settle(sw, asked)).toBe(response)
+    expect(sw.fetched).toEqual([asked])
+    expect(sw.put).toEqual([])
+    // Nor a plain GET, which the page's own download makes.
+    await settle(sw, request(TRACK))
+    expect(sw.put).toEqual([])
+  })
+
+  it('never retires the music cache or inherits a build’s assets from it', async () => {
+    const sw = loadServiceWorker(() => {
+      throw new Error('offline')
+    })
+    sw.cacheKeys = [
+      'inertialref-ancient',
+      'inertialref-previous',
+      `inertialref-${BUILD}`,
+      'inertialref-music',
+    ]
+    await lifecycle(sw, 'activate')
+    expect(sw.deleted).toEqual(['inertialref-ancient'])
+    // `inertialref-music` is the newest cache here, and a hashed asset is
+    // inherited from the newest *build* — which it is not.
+    sw.stores.set(
+      'inertialref-music',
+      new Map([[`${ORIGIN}/assets/chunk.js`, new Response('not a build')]]),
+    )
+    sw.stores.set(
+      'inertialref-previous',
+      new Map([[`${ORIGIN}/assets/chunk.js`, new Response('previous build')]]),
+    )
+    const inherited = (await settle(
+      sw,
+      request('/assets/chunk.js'),
+    )) as Response
+    expect(await inherited.text()).toBe('previous build')
+  })
+})

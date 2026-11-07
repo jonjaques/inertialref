@@ -5,6 +5,7 @@
  *     pnpm media:pull            fetch what is missing (part of `pnpm build`)
  *     pnpm media:pull --force    fetch it again even if it is already here
  *     pnpm media:push            upload the local copy back to R2
+ *     pnpm media:push music/     upload only the soundtrack, skipping what R2 has
  *
  * **Why any of this exists.** The cutscene is cut against a piece of music, and
  * the music is somebody else's. Its use here is a fair-use claim the project is
@@ -23,6 +24,13 @@
  *
  * **So this must not fail a build.** `--optional` is what `pnpm build` passes.
  * Without credentials it says so once and exits 0.
+ *
+ * **The soundtrack is pushed and never pulled.** `pnpm audio:build` writes its
+ * files under `apps/game/public/media/music/`, and they are `bundled: false` in
+ * the table: hours of music copied into every build would be uploaded with
+ * every deploy and would break the static asset store's 25 MiB limit on the
+ * long pieces, and an `<audio>` element asks for byte ranges, which only the
+ * bucket answers. So the Worker serves them from R2 and this only uploads them.
  */
 import { spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
@@ -34,6 +42,8 @@ import { MEDIA, MEDIA_BUCKET } from '../apps/server/src/media.ts'
 const ROOT = new URL('../', import.meta.url)
 
 const TIMEOUT_MS = 120_000
+/** Where every soundtrack key lives in the bucket: a key is its file's name. */
+const SOUNDTRACK_PREFIX = 'music/'
 
 /**
  * Where a pulled object lands, which is `public/` and therefore `dist/`.
@@ -142,6 +152,8 @@ const bytes = async (path) => (await stat(path).catch(() => null))?.size ?? 0
 async function pull({ force, optional }) {
   const missing = []
   for (const item of MEDIA) {
+    // The soundtrack is served from the bucket; see the header.
+    if (!item.bundled) continue
     const file = there(localPath(item))
     const size = await bytes(file)
     if (size > 0 && !force) {
@@ -187,13 +199,81 @@ async function pull({ force, optional }) {
   process.exitCode = 1
 }
 
-async function push() {
-  for (const item of MEDIA) {
+/**
+ * The keys and sizes R2 already holds under a prefix, or null if it would not
+ * say.
+ *
+ * Only the soundtrack's keys are read from it, and they can trust the answer:
+ * their names are content-addressed, so a key that is present with the same
+ * size is the same file, and a re-encode is a new key rather than an
+ * overwrite. That turns pushing one new track into one upload rather than
+ * every track again.
+ *
+ * The API's envelope puts the list under `result`; the CLI may print the
+ * envelope or the list alone, so both are read. Anything else means push
+ * everything, which is slower and never wrong.
+ */
+async function stored(prefix) {
+  const result = await cf([
+    'r2',
+    'objects',
+    'list',
+    '--bucket-name',
+    MEDIA_BUCKET,
+    '--prefix',
+    prefix,
+    '--per-page',
+    '1000',
+  ])
+  if (!result.ok) return null
+  const text = result.output
+  const from = text.search(/[[{]/)
+  if (from < 0) return null
+  try {
+    const parsed = JSON.parse(text.slice(from))
+    const list = Array.isArray(parsed) ? parsed : parsed?.result
+    if (!Array.isArray(list)) return null
+    return new Map(
+      list
+        .filter((entry) => typeof entry?.key === 'string')
+        .map((entry) => [entry.key, Number(entry.size)]),
+    )
+  } catch {
+    return null
+  }
+}
+
+async function push({ only }) {
+  const wanted = MEDIA.filter(
+    (item) => only === undefined || item.name.startsWith(only),
+  )
+  if (wanted.length === 0) {
+    console.error(`media: nothing under "${only}" to upload`)
+    process.exitCode = 1
+    return
+  }
+  // Asked whatever the prefix, so a bare `media:push` does not upload every
+  // track again; trusted only for the soundtrack's content-addressed keys —
+  // a `dropbox/` key is overwritten in place, and its size proves nothing.
+  const present = wanted.some((item) => !item.bundled)
+    ? ((await stored(SOUNDTRACK_PREFIX)) ?? new Map())
+    : new Map()
+  let uploaded = 0
+  for (const item of wanted) {
     const file = there(localPath(item))
-    if ((await bytes(file)) === 0) {
-      console.error(`media: nothing at ${localPath(item)} to upload`)
+    const size = await bytes(file)
+    if (size === 0) {
+      console.error(
+        `media: nothing at ${localPath(item)} to upload${
+          item.bundled ? '' : ' — run `pnpm audio:build` first'
+        }`,
+      )
       process.exitCode = 1
       return
+    }
+    if (!item.bundled && present.get(item.key) === size) {
+      console.log(`media: r2://${MEDIA_BUCKET}/${item.key} is already there`)
+      continue
     }
     console.log(
       `media: uploading ${localPath(item)} to r2://${MEDIA_BUCKET}/${item.key}`,
@@ -215,7 +295,11 @@ async function push() {
       process.exitCode = 1
       return
     }
+    uploaded += 1
   }
+  console.log(
+    `media: ${uploaded} uploaded, ${wanted.length - uploaded} already there`,
+  )
 }
 
 const command = process.argv[2] ?? 'pull'
@@ -225,7 +309,10 @@ if (command === 'pull') {
     optional: process.argv.includes('--optional'),
   })
 } else if (command === 'push') {
-  await push()
+  const only = process.argv[3]
+  await push({
+    only: only === undefined || only.startsWith('-') ? undefined : only,
+  })
 } else {
   console.error(
     `media: unknown command "${command}" — expected pull or push.\n` +

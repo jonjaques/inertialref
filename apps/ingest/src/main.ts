@@ -20,6 +20,7 @@ import {
 import { buildTextures } from './textures.ts'
 import { buildSolarReference } from './solarReference.ts'
 import { buildShapes } from './shapes.ts'
+import { buildAudio, fetchMasters, reportMasters } from './audio.ts'
 
 /*
  * The ingest.
@@ -544,9 +545,18 @@ try {
     await solar(refresh)
   } else if (command === 'shapes') {
     await shapes(refresh)
+  } else if (command === 'audio:fetch') {
+    console.log('soundtrack masters')
+    await fetchMasters(root)
+  } else if (command === 'audio:build') {
+    await buildAudio(root, {
+      spectrograms: process.argv.includes('--spectrograms'),
+    })
+  } else if (command === 'audio:report') {
+    await reportMasters(root)
   } else {
     console.error(
-      `unknown command "${command}"\n\n  fetch     download the catalog sources into .data/raw\n  report    build the catalog and print, without writing\n  build     build the catalog and write data/catalog\n  textures  build the planetary surface maps into data/textures\n  solar     refresh data/reference/solar-system.json from JPL\n  shapes    build the measured shape models into data/shapes\n\n  --refresh  re-download rather than using the cache`,
+      `unknown command "${command}"\n\n  fetch         download the catalog sources into .data/raw\n  report        build the catalog and print, without writing\n  build         build the catalog and write data/catalog\n  textures      build the planetary surface maps into data/textures\n  solar         refresh data/reference/solar-system.json from JPL\n  shapes        build the measured shape models into data/shapes\n  audio:fetch   download and verify the soundtrack masters in data/audio/masters\n  audio:build   encode the soundtrack and write data/audio\n  audio:report  measure the soundtrack masters and print\n\n  --refresh       re-download rather than using the cache\n  --spectrograms  audio:build also draws every master's spectrogram into .data/audio/review`,
     )
     process.exit(2)
   }

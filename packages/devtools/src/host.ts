@@ -130,6 +130,69 @@ export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
   usage: NO_GUIDE_USAGE,
 })
 
+/**
+ * What the soundtrack is doing, as one code a script can compare against.
+ * `absent` is a host with no soundtrack — the headless runner, a test.
+ */
+export type SoundtrackState =
+  | 'absent'
+  | 'off'
+  | 'waiting'
+  | 'loading'
+  | 'playing'
+  | 'paused'
+  | 'unavailable'
+
+/** The soundtrack, as a driver reads it. Plain data, so it survives JSON. */
+export interface SoundtrackStatus {
+  readonly available: boolean
+  readonly state: SoundtrackState
+  readonly track: {
+    readonly id: string
+    readonly title: string
+    readonly artist: string
+    readonly category: string
+  } | null
+  /** Seconds into the current track, and its length. */
+  readonly position: number
+  readonly duration: number
+  /** What plays next, by id, nearest first. */
+  readonly upcoming: readonly string[]
+  readonly crossfading: boolean
+  /** Whether the game is holding the music down for a scene of its own. */
+  readonly ducked: boolean
+  /** The `AudioContext`'s own state, or `none` before the first gesture built one. */
+  readonly context: string
+  /** How many tracks are kept on this device. */
+  readonly kept: number
+  /** Why nothing is playing, when that is the state. */
+  readonly reason: string | null
+}
+
+/** What a driver may ask of the soundtrack. */
+export type SoundtrackVerb =
+  'play' | 'pause' | 'next' | 'previous' | 'seek' | 'select' | 'cue' | 'card'
+
+export interface SoundtrackHostPort {
+  status(): SoundtrackStatus
+  /** `seek` takes seconds, `select` a track id, `cue` a track id or a category. */
+  command(verb: SoundtrackVerb, argument?: string | number): SoundtrackStatus
+}
+
+export const UNAVAILABLE_SOUNDTRACK: SoundtrackStatus = Object.freeze({
+  available: false,
+  state: 'absent',
+  track: null,
+  position: 0,
+  duration: 0,
+  upcoming: [],
+  crossfading: false,
+  ducked: false,
+  context: 'none',
+  kept: 0,
+  reason: null,
+})
+
 export interface TerrainCacheReport {
   readonly available: boolean
   readonly activity: HeightfieldCacheStats | null
@@ -160,6 +223,8 @@ export interface RenderHost {
   clearTerrainCache(): Promise<void>
   /** The active mode supplies this lazy adapter; a headless host need not. */
   guide?(): GuideHostPort | null
+  /** The soundtrack player, which only a browser host has. */
+  soundtrack?(): SoundtrackHostPort | null
   scene(): RenderScene | null
   frameStats(): FrameStats | null
   /**
@@ -296,6 +361,7 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
       (async () => ({ available: false, activity: null, storage: null })),
     clearTerrainCache: overrides.clearTerrainCache ?? (async () => {}),
     guide: overrides.guide ?? (() => null),
+    soundtrack: overrides.soundtrack ?? (() => null),
     scene: overrides.scene ?? (() => null),
     frameStats: overrides.frameStats ?? (() => null),
     boot: overrides.boot ?? (() => 'booted'),

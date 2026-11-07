@@ -1,4 +1,8 @@
 import {
+  AUDIO_MASTER,
+  AUDIO_MONO,
+  AUDIO_MUSIC,
+  type AnyPreference,
   CONTROLS_KEYMAP,
   CONTROLS_PAD,
   CONTROLS_PAD_TUNING,
@@ -8,6 +12,15 @@ import {
   DOCK_LAYOUT,
   DOCK_PANES,
   DOCK_PLACEMENT,
+  MUSIC_BACKGROUND,
+  MUSIC_CARD,
+  MUSIC_CROSSFADE,
+  MUSIC_DISABLED,
+  MUSIC_ENABLED,
+  MUSIC_MUTED_CATEGORIES,
+  MUSIC_ORDER,
+  MUSIC_REPEAT,
+  MUSIC_SHUFFLE,
   resetPreference,
   usePersistentState,
 } from '../state/preferences.ts'
@@ -149,4 +162,53 @@ export function resetWorkspace(mode: Exclude<AppMode, 'menu'>): void {
   resetPreference(DOCK_FLOATS.of(mode))
   resetPreference(DOCK_COLLAPSED.of(mode))
   resetPreference(DOCK_PANES.of(mode))
+}
+
+/**
+ * The audio page's settings: the levels, the soundtrack's switches, the
+ * categories, and the playlist's order and its switched-off tracks.
+ *
+ * Not where the soundtrack resumes (`music.resume`): that is where the
+ * listener *was*, not a choice they made, and a restore that also restarted
+ * the track would be undoing something nobody set. Nor what is kept offline,
+ * which is files rather than a preference, and has its own remove.
+ */
+const AUDIO_SETTINGS: readonly AnyPreference[] = [
+  AUDIO_MASTER,
+  AUDIO_MUSIC,
+  AUDIO_MONO,
+  MUSIC_ENABLED,
+  MUSIC_SHUFFLE,
+  MUSIC_REPEAT,
+  MUSIC_CROSSFADE,
+  MUSIC_CARD,
+  MUSIC_BACKGROUND,
+  MUSIC_MUTED_CATEGORIES,
+  MUSIC_ORDER,
+  MUSIC_DISABLED,
+]
+
+export function useAudioDefaults(): PageDefaults {
+  const values = [
+    usePersistentState(AUDIO_MASTER)[0],
+    usePersistentState(AUDIO_MUSIC)[0],
+    usePersistentState(AUDIO_MONO)[0],
+    usePersistentState(MUSIC_ENABLED)[0],
+    usePersistentState(MUSIC_SHUFFLE)[0],
+    usePersistentState(MUSIC_REPEAT)[0],
+    usePersistentState(MUSIC_CROSSFADE)[0],
+    usePersistentState(MUSIC_CARD)[0],
+    usePersistentState(MUSIC_BACKGROUND)[0],
+    usePersistentState(MUSIC_MUTED_CATEGORIES)[0],
+    usePersistentState(MUSIC_ORDER)[0],
+    usePersistentState(MUSIC_DISABLED)[0],
+  ]
+  return {
+    changed: AUDIO_SETTINGS.filter((preference, index) =>
+      differs(values[index], preference.initial),
+    ).length,
+    restore: () => {
+      for (const preference of AUDIO_SETTINGS) resetPreference(preference)
+    },
+  }
 }

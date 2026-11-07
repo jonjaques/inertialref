@@ -26,6 +26,7 @@ export function SliderControl({
   describedBy,
   disabled = false,
   onChange,
+  onCommit,
 }: {
   /** The slider's name, as the row's label says it. */
   label: string
@@ -41,6 +42,14 @@ export function SliderControl({
   describedBy?: string
   disabled?: boolean
   onChange: (value: number) => void
+  /**
+   * The value where a drag ended, or after each key press.
+   *
+   * For a slider whose every intermediate value costs something — a playhead,
+   * where each position is a seek and each seek is a range request — so it
+   * can draw the drag from `onChange` and act once, here.
+   */
+  onCommit?: (value: number) => void
 }) {
   return (
     <div className="flex w-full min-w-0 items-center gap-3 @lg:w-64">
@@ -56,6 +65,13 @@ export function SliderControl({
         onValueChange={([next]) => {
           if (next !== undefined) onChange(next)
         }}
+        onValueCommit={
+          onCommit === undefined
+            ? undefined
+            : ([next]) => {
+                if (next !== undefined) onCommit(next)
+              }
+        }
         onClick={releaseFocus}
         className="min-w-0 flex-1 py-2.5 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
       />

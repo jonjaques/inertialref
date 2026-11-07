@@ -1,0 +1,2350 @@
+{
+  "version": 1,
+  "generated": "2026-11-07",
+  "target": {
+    "integrated": -18,
+    "truePeak": -1
+  },
+  "tracks": [
+    {
+      "id": "stellardrone-red-giant",
+      "title": "Red Giant",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Light Years",
+      "year": 2013,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Red Giant” by Stellardrone, from Light Years (2013). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 4.5 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "modified": "level lowered 4.5 dB, re-encoded as AAC and Opus",
+      "duration": 195.698,
+      "cues": {
+        "start": 2.42,
+        "end": 192.875
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.5
+      },
+      "contour": [
+        -70, -61, -54, -48, -42, -41, -37, -35, -33, -31, -29, -26, -23, -21,
+        -21, -24, -22, -21, -19, -18, -20, -18, -17, -17, -18, -19, -18, -18,
+        -17, -18, -17, -16, -16, -16, -16, -16, -16, -17, -16, -17, -16, -15,
+        -16, -16, -16, -16, -16, -15, -18, -21, -21, -22, -22, -24, -24, -26,
+        -28, -31, -33, -35, -38, -44, -51, -61
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-red-giant.d311f97601.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 6332963,
+          "sha256": "d311f976012f5030aa1b1ea641ddea2de14c0ee7107b86572a0db46df8112d70",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-red-giant.2f7e25d23c.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4177235,
+          "sha256": "2f7e25d23c96d5fd0b24ff9f88e3b4bd6db6cf4aa41af9d0ea9051003cfe33fc",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-airglow",
+      "title": "Airglow",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Light Years",
+      "year": 2013,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Airglow” by Stellardrone, from Light Years (2013). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 0.4 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "modified": "level lowered 0.4 dB, re-encoded as AAC and Opus",
+      "duration": 316.929,
+      "cues": {
+        "start": 0,
+        "end": 315.588
+      },
+      "loudness": {
+        "integrated": -18.3,
+        "truePeak": -1.2
+      },
+      "contour": [
+        -63, -55, -49, -44, -40, -35, -32, -31, -27, -26, -23, -20, -21, -20,
+        -20, -19, -17, -19, -18, -18, -18, -17, -19, -18, -18, -22, -24, -28,
+        -24, -25, -24, -24, -20, -16, -16, -17, -16, -17, -16, -16, -17, -16,
+        -17, -16, -16, -16, -15, -16, -15, -16, -16, -16, -18, -20, -21, -21,
+        -20, -22, -21, -22, -24, -27, -37, -51
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-airglow.9cafa7b5ec.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 10339298,
+          "sha256": "9cafa7b5ec4f35f385969331a0568c53f7fa2eff1ee5d376643197c2025135e8",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-airglow.38f39068eb.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 7386958,
+          "sha256": "38f39068eb10e2872aaf6c6df79c366ab7a857e57c0e876c394e12de36f2fe82",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-comet-halley",
+      "title": "Comet Halley",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Light Years",
+      "year": 2013,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Comet Halley” by Stellardrone, from Light Years (2013). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 3.7 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "modified": "level lowered 3.7 dB, re-encoded as AAC and Opus",
+      "duration": 222.354,
+      "cues": {
+        "start": 0,
+        "end": 221.103
+      },
+      "loudness": {
+        "integrated": -18.1,
+        "truePeak": -4.6
+      },
+      "contour": [
+        -59, -49, -45, -40, -35, -33, -30, -28, -25, -23, -21, -18, -18, -19,
+        -18, -18, -19, -18, -18, -19, -18, -18, -18, -18, -17, -18, -18, -18,
+        -18, -17, -17, -18, -18, -18, -18, -18, -17, -17, -17, -16, -17, -17,
+        -16, -17, -18, -17, -16, -17, -16, -17, -17, -16, -17, -20, -20, -21,
+        -22, -24, -27, -30, -34, -40, -47, -59
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-comet-halley.aa13099cf4.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 7622419,
+          "sha256": "aa13099cf4883069eaece6a22126263093b8dd034173b94ff41b05b18b4fa487",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-comet-halley.7f052d0a90.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 5134161,
+          "sha256": "7f052d0a90574dfb2707e828f20bf371f9d84c5468bd4c1e84ed771ab3585869",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-ultra-deep-field",
+      "title": "Ultra Deep Field",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Light Years",
+      "year": 2013,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Ultra Deep Field” by Stellardrone, from Light Years (2013). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 4.1 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "modified": "level lowered 4.1 dB, re-encoded as AAC and Opus",
+      "duration": 344.84,
+      "cues": {
+        "start": 1.208,
+        "end": 341.787
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.1
+      },
+      "contour": [
+        -56, -42, -39, -35, -34, -29, -28, -27, -26, -23, -21, -22, -20, -19,
+        -18, -19, -18, -17, -17, -19, -18, -17, -17, -19, -18, -18, -16, -19,
+        -18, -18, -16, -18, -18, -18, -16, -16, -17, -18, -16, -16, -17, -18,
+        -16, -16, -16, -18, -16, -16, -16, -18, -17, -17, -17, -19, -18, -19,
+        -23, -24, -26, -28, -33, -35, -44, -54
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-ultra-deep-field.7dc1475cee.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 11044147,
+          "sha256": "7dc1475ceed25d7f5c70bce1f60bfe78dc544e28068c87731365f13643bf23a2",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-ultra-deep-field.96ca3ee982.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 7595252,
+          "sha256": "96ca3ee9825ac345c34df678053e49fefc9cdb14eb23a15ddefc8955cf5577e3",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-messier-45",
+      "title": "Messier 45",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Light Years",
+      "year": 2013,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Messier 45” by Stellardrone, from Light Years (2013). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 3.1 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/light-years",
+      "modified": "level lowered 3.1 dB, re-encoded as AAC and Opus",
+      "duration": 146.448,
+      "cues": {
+        "start": 3.576,
+        "end": 145.094
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -4.1
+      },
+      "contour": [
+        -70, -70, -67, -61, -56, -52, -48, -44, -41, -37, -34, -32, -30, -28,
+        -26, -25, -24, -23, -23, -23, -23, -22, -21, -20, -19, -19, -19, -19,
+        -19, -19, -18, -18, -17, -17, -17, -17, -16, -15, -15, -15, -16, -15,
+        -16, -16, -15, -15, -16, -16, -16, -17, -17, -18, -18, -19, -20, -22,
+        -25, -28, -31, -32, -37, -43, -48, -54
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-messier-45.ed889be99a.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 4769952,
+          "sha256": "ed889be99a5a03bb0a4a67a857c90064d9ede7c15b2c67a9652e2bc6806bcccd",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-messier-45.738f9997c6.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3293319,
+          "sha256": "738f9997c66bc96620ccffc1e0664f47e3d1773dc3a1d1c73c8ac6bbcbe4a38f",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-the-belt-of-orion",
+      "title": "The Belt of Orion",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Invent the Universe",
+      "year": 2010,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“The Belt of Orion” by Stellardrone, from Invent the Universe (2010). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 3.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "modified": "level lowered 3.8 dB, re-encoded as AAC and Opus",
+      "duration": 397.247,
+      "cues": {
+        "start": 0.869,
+        "end": 392.658
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -4.5
+      },
+      "contour": [
+        -53, -41, -35, -31, -28, -25, -24, -24, -23, -23, -23, -23, -22, -22,
+        -22, -22, -22, -22, -22, -22, -22, -22, -21, -21, -20, -17, -16, -17,
+        -17, -16, -16, -15, -16, -16, -15, -16, -17, -17, -16, -15, -16, -15,
+        -14, -14, -16, -16, -16, -16, -16, -17, -17, -18, -18, -18, -19, -21,
+        -22, -24, -26, -29, -34, -40, -51, -66
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-the-belt-of-orion.1e4ce23057.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 12826849,
+          "sha256": "1e4ce2305735d4c504f27da5314aaf77ecbe857cb32a3418929a6cf0e31d83f6",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-the-belt-of-orion.f1512eaeab.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 9073390,
+          "sha256": "f1512eaeab3773da6d9cced14218809e55a451f3e54592ac6d80b0a802e05c33",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-approaching-the-heliopause",
+      "title": "Approaching the Heliopause",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Invent the Universe",
+      "year": 2010,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Approaching the Heliopause” by Stellardrone, from Invent the Universe (2010). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 1.0 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "modified": "level lowered 1.0 dB, re-encoded as AAC and Opus",
+      "duration": 331.558,
+      "cues": {
+        "start": 1.484,
+        "end": 326.829
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5
+      },
+      "contour": [
+        -61, -49, -43, -37, -32, -29, -27, -24, -23, -24, -24, -25, -25, -22,
+        -22, -22, -21, -21, -22, -21, -21, -21, -22, -23, -22, -20, -20, -19,
+        -20, -20, -20, -20, -19, -17, -15, -15, -15, -15, -15, -15, -16, -16,
+        -15, -15, -15, -15, -16, -15, -15, -16, -15, -15, -16, -15, -16, -19,
+        -21, -23, -26, -29, -32, -37, -47, -63
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-approaching-the-heliopause.d300003943.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 10594156,
+          "sha256": "d300003943b25bc8d142d21b87f332cdfd8af326f363bb6236029e924bb1acb8",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-approaching-the-heliopause.8a16aceb43.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 7439105,
+          "sha256": "8a16aceb433524e8dee73cc16f0e854a24ccab27ee4dfd1d98591b2d5072594b",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-pale-blue-dot",
+      "title": "Pale Blue Dot",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Invent the Universe",
+      "year": 2010,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Pale Blue Dot” by Stellardrone, from Invent the Universe (2010). CC BY 4.0. stellardrone.bandcamp.com. Modified: level raised 1.7 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/invent-the-universe",
+      "modified": "level raised 1.7 dB, re-encoded as AAC and Opus",
+      "duration": 372.75,
+      "cues": {
+        "start": 0.745,
+        "end": 369.525
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -4
+      },
+      "contour": [
+        -49, -43, -43, -38, -33, -33, -33, -26, -27, -30, -22, -23, -29, -19,
+        -20, -27, -18, -18, -24, -17, -16, -20, -17, -15, -18, -17, -15, -16,
+        -19, -15, -16, -20, -15, -15, -22, -15, -15, -23, -16, -16, -24, -17,
+        -16, -22, -26, -18, -20, -29, -19, -20, -29, -20, -22, -29, -22, -22,
+        -28, -25, -23, -26, -25, -23, -26, -46
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-pale-blue-dot.1771de4881.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 10601948,
+          "sha256": "1771de48811219a4370064bc869b63cde67eb35e289c6160f48ad4967cd52f45",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-pale-blue-dot.972006918d.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 8300136,
+          "sha256": "972006918d54fd5c3dad0d21776812bf9f74df4a699a116e4f1143428fd0f7f9",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-the-earth-is-blue",
+      "title": "The Earth Is Blue",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "On A Beam Of Light",
+      "year": 2009,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“The Earth Is Blue” by Stellardrone, from On A Beam Of Light (2009). CC BY 4.0. stellardrone.bandcamp.com. Modified: level unchanged, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/on-a-beam-of-light",
+      "modified": "level unchanged, re-encoded as AAC and Opus",
+      "duration": 516.017,
+      "cues": {
+        "start": 0,
+        "end": 510.043
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.8
+      },
+      "contour": [
+        -42, -27, -24, -20, -20, -20, -19, -19, -18, -19, -19, -18, -20, -20,
+        -20, -20, -17, -18, -18, -16, -17, -17, -16, -16, -17, -16, -16, -17,
+        -16, -17, -18, -19, -17, -16, -17, -16, -16, -18, -17, -16, -18, -18,
+        -17, -20, -20, -20, -18, -19, -19, -19, -19, -19, -16, -17, -18, -16,
+        -18, -20, -20, -19, -22, -26, -31, -52
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-the-earth-is-blue.06a6ec65d3.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 16273457,
+          "sha256": "06a6ec65d31d9c48b5dd4fc875bcc27a9a75e4ff3e3014de7d4b4cb24e5025fd",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-the-earth-is-blue.1b9f33cf70.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 11285342,
+          "sha256": "1b9f33cf70d4347d3db68643be2cd7182b0994dcc9c58b7e6a6c3dfa0ce721f0",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-fermi-paradox",
+      "title": "Fermi Paradox",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "On A Beam Of Light",
+      "year": 2009,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Fermi Paradox” by Stellardrone, from On A Beam Of Light (2009). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 5.9 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/on-a-beam-of-light",
+      "modified": "level lowered 5.9 dB, re-encoded as AAC and Opus",
+      "duration": 440.065,
+      "cues": {
+        "start": 0,
+        "end": 436.333
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.6
+      },
+      "contour": [
+        -58, -50, -45, -40, -36, -33, -29, -25, -23, -22, -22, -22, -22, -21,
+        -21, -21, -21, -20, -20, -20, -20, -20, -20, -20, -18, -18, -18, -18,
+        -18, -18, -18, -18, -18, -18, -18, -18, -18, -17, -17, -17, -16, -16,
+        -17, -16, -16, -16, -17, -16, -17, -17, -16, -16, -17, -16, -16, -16,
+        -15, -15, -18, -19, -25, -36, -51, -64
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-fermi-paradox.0cb451cb32.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 14890653,
+          "sha256": "0cb451cb32b21c1626e909804447fa78549608e0bbb999460da7cbc9d2efe42b",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-fermi-paradox.f7ed79cc26.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 9721467,
+          "sha256": "f7ed79cc26fa28f1437ff6afafc82259b3b0835f1f1d5b367ffb801576bb45f1",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-cosmic-sunrise",
+      "title": "Cosmic Sunrise",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Sublime",
+      "year": 2010,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Cosmic Sunrise” by Stellardrone, from Sublime (2010). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 2.3 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/sublime",
+      "modified": "level lowered 2.3 dB, re-encoded as AAC and Opus",
+      "duration": 309.685,
+      "cues": {
+        "start": 0.612,
+        "end": 308.199
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.2
+      },
+      "contour": [
+        -48, -27, -19, -19, -24, -19, -19, -21, -19, -19, -21, -19, -17, -20,
+        -19, -18, -19, -19, -17, -19, -19, -17, -17, -19, -17, -17, -19, -16,
+        -16, -17, -17, -16, -17, -17, -16, -16, -18, -15, -16, -18, -16, -16,
+        -17, -16, -16, -18, -17, -17, -17, -18, -17, -19, -22, -19, -19, -22,
+        -21, -22, -25, -24, -27, -32, -38, -47
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-cosmic-sunrise.6586fdcec0.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 10174061,
+          "sha256": "6586fdcec082bfe64b10f79ea939052e41a81d4216b560b6b6a73f899e1b445e",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-cosmic-sunrise.87f5438bce.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 6717916,
+          "sha256": "87f5438bceb0dd37cd760b089a1566db5f53de115e4c4ae3162ddb750cc9afaa",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-milky-way",
+      "title": "Milky Way",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "Sublime",
+      "year": 2010,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Milky Way” by Stellardrone, from Sublime (2010). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 2.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/sublime",
+      "modified": "level lowered 2.8 dB, re-encoded as AAC and Opus",
+      "duration": 521.497,
+      "cues": {
+        "start": 1.104,
+        "end": 519.657
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.8
+      },
+      "contour": [
+        -49, -37, -31, -25, -24, -20, -18, -18, -18, -19, -19, -18, -18, -18,
+        -18, -18, -18, -18, -18, -17, -17, -17, -18, -17, -17, -17, -17, -17,
+        -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -18, -18, -17,
+        -18, -18, -18, -19, -19, -18, -18, -18, -18, -19, -18, -17, -18, -19,
+        -17, -19, -21, -24, -28, -34, -43, -61
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-milky-way.19204fe7c7.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 17074870,
+          "sha256": "19204fe7c70fadf1b7035d776416d63a2345f28033e2d731287bdd93319dcf0d",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-milky-way.1c460b4a91.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 11604256,
+          "sha256": "1c460b4a91da988512a1026c53b49d02be040e025ac92c4cb298b7841d3a9674",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "stellardrone-billions-and-billions",
+      "title": "Billions and Billions",
+      "artist": "Stellardrone",
+      "performer": null,
+      "release": "A Moment Of Stillness",
+      "year": 2011,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Billions and Billions” by Stellardrone, from A Moment Of Stillness (2011). CC BY 4.0. stellardrone.bandcamp.com. Modified: level lowered 2.6 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://stellardrone.bandcamp.com/album/a-moment-of-stillness",
+      "modified": "level lowered 2.6 dB, re-encoded as AAC and Opus",
+      "duration": 314.096,
+      "cues": {
+        "start": 1.01,
+        "end": 313.393
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.5
+      },
+      "contour": [
+        -60, -44, -39, -36, -33, -28, -28, -27, -25, -22, -22, -23, -21, -19,
+        -19, -19, -18, -16, -18, -18, -17, -16, -18, -18, -17, -17, -18, -18,
+        -17, -17, -18, -18, -18, -16, -17, -18, -17, -16, -18, -18, -17, -16,
+        -18, -19, -17, -16, -17, -18, -17, -16, -17, -17, -17, -16, -17, -17,
+        -17, -17, -20, -23, -26, -28, -37, -48
+      ],
+      "files": [
+        {
+          "name": "music/stellardrone-billions-and-billions.581933792c.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 10320019,
+          "sha256": "581933792c83fec703ee8820fc03dceecec7257fa2a14ca1ef45edc97e0e80f6",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/stellardrone-billions-and-billions.c0df862262.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 7108970,
+          "sha256": "c0df86226258768ca95a0ecd436e075aa71faa054a9792240f0322d24cf25a6d",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-one",
+      "title": "Cylinder One",
+      "artist": "Chris Zabriskie",
+      "performer": null,
+      "release": "Cylinders",
+      "year": 2014,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Cylinder One” by Chris Zabriskie. From the album Cylinders. Licensed under Creative Commons Attribution 4.0 (creativecommons.org/licenses/by/4.0/). chriszabriskie.com. Modified: level lowered 0.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "modified": "level lowered 0.8 dB, re-encoded as AAC and Opus",
+      "duration": 176.123,
+      "cues": {
+        "start": 0,
+        "end": 176.107
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.1
+      },
+      "contour": [
+        -70, -22, -21, -30, -27, -19, -19, -29, -26, -16, -21, -31, -19, -19,
+        -27, -22, -16, -20, -34, -20, -16, -20, -29, -19, -15, -21, -25, -18,
+        -19, -24, -24, -16, -17, -28, -17, -18, -26, -30, -22, -16, -19, -18,
+        -26, -16, -19, -33, -18, -14, -18, -28, -23, -17, -21, -32, -18, -17,
+        -22, -28, -23, -17, -22, -30, -41, -48
+      ],
+      "files": [
+        {
+          "name": "music/chris-zabriskie-cylinder-one.f4a855cf21.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5554067,
+          "sha256": "f4a855cf210e3fd667784b45caadf7b8572f98a3297246c98d5a05177c7d086f",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-one.145ca29364.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4194468,
+          "sha256": "145ca2936414c5d46e5e2d89c7aed9a938ccefcbbff735e0f48dcabe31c8dbcf",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-two",
+      "title": "Cylinder Two",
+      "artist": "Chris Zabriskie",
+      "performer": null,
+      "release": "Cylinders",
+      "year": 2014,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Cylinder Two” by Chris Zabriskie. From the album Cylinders. Licensed under Creative Commons Attribution 4.0 (creativecommons.org/licenses/by/4.0/). chriszabriskie.com. Modified: level lowered 1.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "modified": "level lowered 1.8 dB, re-encoded as AAC and Opus",
+      "duration": 227.834,
+      "cues": {
+        "start": 0,
+        "end": 227.827
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2
+      },
+      "contour": [
+        -29, -22, -27, -23, -25, -27, -24, -29, -23, -25, -19, -23, -25, -24,
+        -22, -20, -23, -18, -25, -17, -18, -23, -23, -19, -17, -19, -17, -22,
+        -17, -19, -17, -19, -16, -18, -16, -19, -15, -17, -14, -19, -15, -17,
+        -15, -19, -16, -17, -16, -16, -16, -15, -22, -19, -22, -19, -21, -17,
+        -18, -15, -16, -23, -26, -29, -23, -28
+      ],
+      "files": [
+        {
+          "name": "music/chris-zabriskie-cylinder-two.99efc5400c.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 7464643,
+          "sha256": "99efc5400c0551e96b1e25b96e8541f2ef620c453facc071ee4c5768e340d779",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-two.bfb72a8a4d.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 5120757,
+          "sha256": "bfb72a8a4d2afcc401f078f167d076538dd4ad3914fecb2a79145827064cb2c3",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-four",
+      "title": "Cylinder Four",
+      "artist": "Chris Zabriskie",
+      "performer": null,
+      "release": "Cylinders",
+      "year": 2014,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Cylinder Four” by Chris Zabriskie. From the album Cylinders. Licensed under Creative Commons Attribution 4.0 (creativecommons.org/licenses/by/4.0/). chriszabriskie.com. Modified: level lowered 4.4 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "modified": "level lowered 4.4 dB, re-encoded as AAC and Opus",
+      "duration": 176.727,
+      "cues": {
+        "start": 0,
+        "end": 176.707
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -4.6
+      },
+      "contour": [
+        -70, -19, -20, -21, -21, -21, -18, -17, -18, -19, -18, -16, -17, -18,
+        -17, -18, -18, -18, -20, -18, -16, -17, -18, -19, -20, -17, -17, -17,
+        -17, -19, -19, -19, -17, -18, -17, -18, -20, -17, -16, -17, -17, -16,
+        -17, -17, -18, -21, -17, -18, -19, -17, -18, -19, -17, -16, -17, -20,
+        -21, -17, -21, -29, -23, -21, -25, -36
+      ],
+      "files": [
+        {
+          "name": "music/chris-zabriskie-cylinder-four.b4b53a93ab.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 4559414,
+          "sha256": "b4b53a93ab58330af6013357ffd9684d31c4b97ceccf51fa4b998ecd548de50b",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-four.17ea430c09.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3676962,
+          "sha256": "17ea430c099b653679eac367538e4fb31534bf841aecf0e1c897d3ff771e1d28",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-five",
+      "title": "Cylinder Five",
+      "artist": "Chris Zabriskie",
+      "performer": null,
+      "release": "Cylinders",
+      "year": 2014,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Cylinder Five” by Chris Zabriskie. From the album Cylinders. Licensed under Creative Commons Attribution 4.0 (creativecommons.org/licenses/by/4.0/). chriszabriskie.com. Modified: level lowered 5.1 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "modified": "level lowered 5.1 dB, re-encoded as AAC and Opus",
+      "duration": 173.546,
+      "cues": {
+        "start": 0,
+        "end": 173.533
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.4
+      },
+      "contour": [
+        -70, -22, -21, -16, -18, -19, -15, -19, -17, -15, -20, -17, -16, -21,
+        -16, -20, -21, -19, -22, -16, -16, -17, -16, -18, -15, -17, -19, -16,
+        -21, -21, -24, -26, -20, -23, -16, -15, -18, -16, -22, -20, -18, -20,
+        -16, -22, -19, -23, -20, -18, -21, -16, -17, -21, -15, -16, -23, -21,
+        -24, -21, -21, -23, -19, -24, -21, -24
+      ],
+      "files": [
+        {
+          "name": "music/chris-zabriskie-cylinder-five.1b56be616d.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5227610,
+          "sha256": "1b56be616d55448a22f840e67c6afec2e9cb2355a02f328c92bdf0243b7cb94f",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-five.2fe14db3cb.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4033722,
+          "sha256": "2fe14db3cbc3f24e549da1c3a38eb727812283db8266153f050ade5e4b7326bd",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-seven",
+      "title": "Cylinder Seven",
+      "artist": "Chris Zabriskie",
+      "performer": null,
+      "release": "Cylinders",
+      "year": 2014,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Cylinder Seven” by Chris Zabriskie. From the album Cylinders. Licensed under Creative Commons Attribution 4.0 (creativecommons.org/licenses/by/4.0/). chriszabriskie.com. Modified: level lowered 2.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "modified": "level lowered 2.8 dB, re-encoded as AAC and Opus",
+      "duration": 532.178,
+      "cues": {
+        "start": 0,
+        "end": 532.173
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3
+      },
+      "contour": [
+        -25, -21, -21, -18, -17, -17, -19, -19, -19, -22, -20, -19, -21, -18,
+        -18, -16, -16, -16, -20, -19, -19, -18, -18, -21, -19, -18, -20, -21,
+        -16, -17, -18, -17, -17, -17, -17, -18, -18, -18, -17, -16, -20, -22,
+        -19, -19, -19, -20, -17, -16, -19, -17, -17, -18, -18, -16, -16, -16,
+        -16, -16, -17, -19, -23, -19, -20, -19
+      ],
+      "files": [
+        {
+          "name": "music/chris-zabriskie-cylinder-seven.c91d0a548e.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 17554115,
+          "sha256": "c91d0a548e965437643cad0fa87148d6a7928a80aa9e5a6ff025dc126f819132",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-seven.5d86844803.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 11778522,
+          "sha256": "5d86844803012ea6c6fc66155cb77a908be41611a310651e7463dbed1a4e6329",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-eight",
+      "title": "Cylinder Eight",
+      "artist": "Chris Zabriskie",
+      "performer": null,
+      "release": "Cylinders",
+      "year": 2014,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Cylinder Eight” by Chris Zabriskie. From the album Cylinders. Licensed under Creative Commons Attribution 4.0 (creativecommons.org/licenses/by/4.0/). chriszabriskie.com. Modified: level lowered 5.9 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "modified": "level lowered 5.9 dB, re-encoded as AAC and Opus",
+      "duration": 338.895,
+      "cues": {
+        "start": 0,
+        "end": 338.88
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -6.1
+      },
+      "contour": [
+        -23, -20, -20, -20, -19, -19, -19, -19, -19, -20, -19, -19, -19, -19,
+        -18, -19, -18, -18, -18, -17, -17, -18, -18, -18, -18, -18, -18, -18,
+        -17, -17, -18, -17, -17, -18, -17, -17, -17, -18, -18, -18, -17, -17,
+        -18, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -18, -18, -18,
+        -19, -18, -19, -19, -19, -19, -20, -23
+      ],
+      "files": [
+        {
+          "name": "music/chris-zabriskie-cylinder-eight.b9c893714e.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 11145762,
+          "sha256": "b9c893714e44ac9a6bbbc9beee28bacec6f014ab14386cefb7ab546dcbcd98a4",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-eight.469c3f68a2.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 7203499,
+          "sha256": "469c3f68a217fc32733894eade692d2b49efa45e8eb49ed8b6df636b37995505",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "chris-zabriskie-cylinder-nine",
+      "title": "Cylinder Nine",
+      "artist": "Chris Zabriskie",
+      "performer": null,
+      "release": "Cylinders",
+      "year": 2014,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Cylinder Nine” by Chris Zabriskie. From the album Cylinders. Licensed under Creative Commons Attribution 4.0 (creativecommons.org/licenses/by/4.0/). chriszabriskie.com. Modified: level lowered 2.4 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://chriszabriskie.com/cylinders/",
+      "modified": "level lowered 2.4 dB, re-encoded as AAC and Opus",
+      "duration": 322.827,
+      "cues": {
+        "start": 0,
+        "end": 307.981
+      },
+      "loudness": {
+        "integrated": -17.9,
+        "truePeak": -3
+      },
+      "contour": [
+        -29, -16, -23, -18, -19, -18, -19, -22, -16, -23, -18, -23, -16, -20,
+        -19, -17, -20, -17, -24, -16, -23, -18, -20, -17, -19, -21, -16, -22,
+        -17, -24, -16, -22, -19, -18, -19, -17, -22, -16, -23, -16, -21, -17,
+        -20, -20, -17, -22, -21, -29, -22, -30, -28, -32, -31, -35, -40, -38,
+        -47, -44, -57, -53, -67, -67, -70, -70
+      ],
+      "files": [
+        {
+          "name": "music/chris-zabriskie-cylinder-nine.4c4f94fbc2.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 9349649,
+          "sha256": "4c4f94fbc2bdef09b7fdc215b7b8bd5b109460da974eb255c9680778ce7ef78c",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/chris-zabriskie-cylinder-nine.58ed62afae.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 7173576,
+          "sha256": "58ed62afae9a9620533d409d5c7d8b5aa11f9ee95fbc0118ce03b28bc29d0d97",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "the-ghost-of-an-alien-always-looking-up",
+      "title": "Always Looking Up",
+      "artist": "The Ghost of an Alien",
+      "performer": null,
+      "release": "Dust. Time.. Gravity",
+      "year": 2016,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Always Looking Up” by The Ghost of an Alien, from Dust. Time.. Gravity (Vacant Twelve, 2016). CC BY 4.0. Modified: level lowered 0.5 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://archive.org/details/Dust-Time-Gravity",
+      "modified": "level lowered 0.5 dB, re-encoded as AAC and Opus",
+      "duration": 554.678,
+      "cues": {
+        "start": 0,
+        "end": 553.288
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.5
+      },
+      "contour": [
+        -21, -15, -15, -16, -17, -19, -16, -16, -17, -17, -18, -16, -15, -17,
+        -17, -17, -17, -15, -17, -18, -16, -17, -14, -17, -17, -16, -18, -15,
+        -16, -19, -30, -30, -34, -32, -33, -33, -31, -33, -32, -31, -35, -28,
+        -25, -22, -26, -23, -20, -23, -28, -29, -27, -28, -30, -30, -25, -26,
+        -30, -20, -21, -26, -28, -29, -27, -22
+      ],
+      "files": [
+        {
+          "name": "music/the-ghost-of-an-alien-always-looking-up.1e391ec964.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 18311391,
+          "sha256": "1e391ec964627fbb95202b31eafdfc1308b6afd76d3dd87a0fcc72f1e96eb217",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/the-ghost-of-an-alien-always-looking-up.a4b61c06a4.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 10801029,
+          "sha256": "a4b61c06a4b19c2a23c27b0d8fcd8fcfa8e033bfc98e7a47048f6f226d3caea1",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "the-ghost-of-an-alien-polar-distance-displaced",
+      "title": "Polar Distance Displaced",
+      "artist": "The Ghost of an Alien",
+      "performer": null,
+      "release": "Dust. Time.. Gravity",
+      "year": 2016,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Polar Distance Displaced” by The Ghost of an Alien, from Dust. Time.. Gravity (Vacant Twelve, 2016). CC BY 4.0. Modified: level raised 1.7 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://archive.org/details/Dust-Time-Gravity",
+      "modified": "level raised 1.7 dB, re-encoded as AAC and Opus",
+      "duration": 518.827,
+      "cues": {
+        "start": 0,
+        "end": 518.826667
+      },
+      "loudness": {
+        "integrated": -18.1,
+        "truePeak": -1.3
+      },
+      "contour": [
+        -19, -22, -17, -20, -20, -22, -18, -21, -18, -22, -16, -20, -19, -23,
+        -18, -21, -16, -19, -15, -17, -17, -20, -16, -18, -17, -21, -17, -21,
+        -20, -22, -18, -21, -18, -21, -17, -20, -20, -20, -18, -19, -17, -14,
+        -16, -14, -18, -17, -17, -17, -19, -17, -17, -18, -20, -18, -19, -18,
+        -20, -21, -20, -15, -19, -19, -20, -24
+      ],
+      "files": [
+        {
+          "name": "music/the-ghost-of-an-alien-polar-distance-displaced.da9a967c7d.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 16940715,
+          "sha256": "da9a967c7d4b333843b52e33127ede5e200192d02b9ab9c347df894c8af85004",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/the-ghost-of-an-alien-polar-distance-displaced.7cd8fb15d5.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 9713252,
+          "sha256": "7cd8fb15d54eaac24a33be1e9c2076e1cfb060ac48bb0f3c95588643ef28f203",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "the-ghost-of-an-alien-drifting-further-and-further",
+      "title": "Drifting Further And Further",
+      "artist": "The Ghost of an Alien",
+      "performer": null,
+      "release": "Dust. Time.. Gravity",
+      "year": 2016,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Drifting Further And Further” by The Ghost of an Alien, from Dust. Time.. Gravity (Vacant Twelve, 2016). CC BY 4.0. Modified: level raised 1.1 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://archive.org/details/Dust-Time-Gravity",
+      "modified": "level raised 1.1 dB, re-encoded as AAC and Opus",
+      "duration": 609.988,
+      "cues": {
+        "start": 0,
+        "end": 609.983
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -1.9
+      },
+      "contour": [
+        -19, -19, -18, -17, -18, -17, -18, -19, -18, -16, -16, -16, -17, -19,
+        -18, -18, -19, -17, -17, -19, -18, -18, -18, -15, -16, -18, -18, -18,
+        -20, -19, -17, -14, -20, -19, -19, -20, -13, -19, -19, -20, -19, -17,
+        -14, -20, -18, -21, -19, -21, -17, -15, -23, -19, -25, -24, -25, -25,
+        -23, -21, -25, -31, -29, -31, -30, -38
+      ],
+      "files": [
+        {
+          "name": "music/the-ghost-of-an-alien-drifting-further-and-further.db3d3a86bd.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 20127291,
+          "sha256": "db3d3a86bd78c1b79912a4b8619e826a7f1db59b7c9281a463401135816ce972",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/the-ghost-of-an-alien-drifting-further-and-further.d39b4148a0.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 11816732,
+          "sha256": "d39b4148a063a1e1a7aab014c38cbf29e461870a1e388d7df51276de82d9a379",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "synth-thetic-cosmic-navigation",
+      "title": "Cosmic Navigation",
+      "artist": "Synth-thetic",
+      "performer": null,
+      "release": "OpenGameArt",
+      "year": 2026,
+      "category": "ambient",
+      "license": "cc0",
+      "credit": "“Cosmic Navigation” by Synth-thetic (opengameart.org). CC0. Modified: level raised 2.6 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://opengameart.org/content/cosmic-navigation",
+      "modified": "level raised 2.6 dB, re-encoded as AAC and Opus",
+      "duration": 176.896,
+      "cues": {
+        "start": 0,
+        "end": 168.661
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.2
+      },
+      "contour": [
+        -70, -24, -20, -16, -18, -22, -20, -19, -22, -22, -18, -19, -21, -18,
+        -19, -23, -21, -18, -20, -21, -18, -17, -18, -18, -17, -20, -20, -18,
+        -18, -20, -16, -13, -15, -17, -17, -16, -21, -21, -18, -19, -20, -18,
+        -17, -17, -16, -15, -19, -22, -17, -15, -16, -16, -15, -17, -20, -18,
+        -20, -26, -34, -44, -53, -62, -70, -70
+      ],
+      "files": [
+        {
+          "name": "music/synth-thetic-cosmic-navigation.abf31d4b4c.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 6096165,
+          "sha256": "abf31d4b4cc2b1e45ae8fd969760223beae444d466b3a85e741207018cba2c7a",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/synth-thetic-cosmic-navigation.1f8826e92c.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3736259,
+          "sha256": "1f8826e92c40a87786e58fcd3f0be1200b97b7dfd7bf7e20b4d8f38cdfd87a49",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "synth-thetic-steller-dreams",
+      "title": "Steller Dreams",
+      "artist": "Synth-thetic",
+      "performer": null,
+      "release": "OpenGameArt",
+      "year": 2025,
+      "category": "ambient",
+      "license": "cc0",
+      "credit": "“Steller Dreams” by Synth-thetic (opengameart.org). CC0. Modified: level raised 7.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://opengameart.org/content/steller-dreams",
+      "modified": "level raised 7.8 dB, re-encoded as AAC and Opus",
+      "duration": 153.6,
+      "cues": {
+        "start": 0,
+        "end": 153.6
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.9
+      },
+      "contour": [
+        -70, -23, -18, -16, -16, -18, -18, -17, -18, -21, -19, -16, -16, -17,
+        -17, -17, -18, -21, -19, -17, -18, -19, -19, -17, -19, -22, -20, -17,
+        -17, -19, -18, -17, -18, -21, -18, -16, -16, -16, -17, -16, -17, -21,
+        -19, -17, -17, -18, -18, -17, -19, -22, -20, -17, -18, -19, -19, -18,
+        -19, -22, -20, -16, -16, -19, -23, -28
+      ],
+      "files": [
+        {
+          "name": "music/synth-thetic-steller-dreams.ab9a329d4f.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5234004,
+          "sha256": "ab9a329d4f61f868ace3bce5fa653f318c42c0f9036884b7e6a8437d448d5842",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/synth-thetic-steller-dreams.4e6b37eeeb.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3416255,
+          "sha256": "4e6b37eeebf7d2dc19f7321de5bf3c8b121c58131f7e8023d93689989442b0d5",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "lee-rosevere-how-i-used-to-see-the-stars",
+      "title": "How I Used To See The Stars",
+      "artist": "Lee Rosevere",
+      "performer": null,
+      "release": "Music For Podcasts – Ambient",
+      "year": 2023,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“How I Used To See The Stars” by Lee Rosevere, from Music For Podcasts – Ambient (2023). CC BY 4.0. freemusicarchive.org. Modified: level lowered 3.5 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/lee-rosevere/music-for-podcasts-ambient/how-i-used-to-see-the-stars/",
+      "modified": "level lowered 3.5 dB, re-encoded as AAC and Opus",
+      "duration": 280.636,
+      "cues": {
+        "start": 0,
+        "end": 277.537
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.5
+      },
+      "contour": [
+        -29, -24, -26, -25, -24, -23, -23, -19, -19, -20, -19, -19, -20, -19,
+        -19, -19, -19, -18, -19, -19, -19, -18, -18, -18, -18, -18, -18, -18,
+        -18, -18, -17, -17, -17, -16, -17, -17, -16, -16, -16, -17, -16, -15,
+        -15, -16, -16, -16, -15, -16, -16, -18, -18, -18, -19, -19, -19, -19,
+        -19, -18, -19, -20, -23, -25, -26, -40
+      ],
+      "files": [
+        {
+          "name": "music/lee-rosevere-how-i-used-to-see-the-stars.94f53f908b.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 9074102,
+          "sha256": "94f53f908b6a81ee981f035af686a65f5d3b763a6ab034ddc080433f74d939ac",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/lee-rosevere-how-i-used-to-see-the-stars.4afdde460d.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 6752441,
+          "sha256": "4afdde460d6a050922fff343bea8dbbc924aa4e943591bf0ea8c78527d3fb56b",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "lee-rosevere-universe-calling",
+      "title": "Universe Calling",
+      "artist": "Lee Rosevere",
+      "performer": null,
+      "release": "Music For Podcasts – Ambient",
+      "year": 2023,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“Universe Calling” by Lee Rosevere, from Music For Podcasts – Ambient (2023). CC BY 4.0. freemusicarchive.org. Modified: level lowered 2.2 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/lee-rosevere/music-for-podcasts-ambient/universe-calling/",
+      "modified": "level lowered 2.2 dB, re-encoded as AAC and Opus",
+      "duration": 189.962,
+      "cues": {
+        "start": 0,
+        "end": 183.493
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.2
+      },
+      "contour": [
+        -70, -21, -23, -22, -22, -22, -23, -22, -24, -23, -20, -19, -18, -18,
+        -17, -20, -17, -18, -18, -19, -19, -19, -19, -18, -19, -17, -19, -17,
+        -19, -18, -18, -18, -18, -18, -18, -16, -15, -17, -17, -17, -16, -19,
+        -16, -17, -16, -19, -22, -15, -20, -16, -16, -20, -19, -15, -18, -16,
+        -16, -20, -17, -28, -37, -33, -46, -70
+      ],
+      "files": [
+        {
+          "name": "music/lee-rosevere-universe-calling.1b8fdc41a3.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 6022012,
+          "sha256": "1b8fdc41a3fe4264cb4b2edcdd574c3d36d363d388e18f2828e2f577cef0dbd9",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/lee-rosevere-universe-calling.099fdd5afc.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4417755,
+          "sha256": "099fdd5afcd3bdbf0cbe8e38aed99d3dd33bffef83e466c6edb8cf58b3efc4ce",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "doc-and-lena-selyanina-neptune",
+      "title": "Neptune",
+      "artist": "Doc & Lena Selyanina",
+      "performer": null,
+      "release": "Cosmic Lullabies",
+      "year": 2008,
+      "category": "ambient",
+      "license": "cc-by-3.0",
+      "credit": "“Neptune” by Doc & Lena Selyanina, from Cosmic Lullabies (Musictrade MT018, 2008). CC BY 3.0. Modified: level lowered 2.0 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://archive.org/details/mt018",
+      "modified": "level lowered 2.0 dB, re-encoded as AAC and Opus",
+      "duration": 1021.98,
+      "cues": {
+        "start": 0,
+        "end": 1021.975
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.1
+      },
+      "contour": [
+        -28, -22, -21, -20, -21, -19, -18, -22, -21, -34, -22, -19, -19, -23,
+        -24, -26, -20, -21, -21, -26, -24, -22, -19, -18, -21, -16, -15, -15,
+        -19, -18, -16, -17, -16, -17, -17, -17, -17, -17, -20, -32, -33, -31,
+        -31, -26, -16, -17, -15, -16, -15, -14, -16, -15, -20, -20, -17, -19,
+        -23, -25, -28, -22, -19, -23, -26, -33
+      ],
+      "files": [
+        {
+          "name": "music/doc-and-lena-selyanina-neptune.976dfa9dd6.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 33782267,
+          "sha256": "976dfa9dd664212ee44527f9eb0402b2cd6ec96ef9d0979fdbd0b735c5a19fae",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/doc-and-lena-selyanina-neptune.1fcc060c26.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 22458928,
+          "sha256": "1fcc060c2635fcfd875610cfd0dff311708ff13f3055d09345d8f8b7873f9749",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "doc-and-lena-selyanina-mir",
+      "title": "Mir",
+      "artist": "Doc & Lena Selyanina",
+      "performer": null,
+      "release": "Songs of Vastness",
+      "year": 2010,
+      "category": "ambient",
+      "license": "cc-by-3.0",
+      "credit": "“Mir” by Doc & Lena Selyanina, from Songs of Vastness (Musictrade MT027, 2010). CC BY 3.0. Modified: level lowered 3.5 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://archive.org/details/DocLenaSelyanina-SongsOfVastnessmt027",
+      "modified": "level lowered 3.5 dB, re-encoded as AAC and Opus",
+      "duration": 897.382,
+      "cues": {
+        "start": 0,
+        "end": 895.412
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.5
+      },
+      "contour": [
+        -16, -21, -26, -18, -19, -24, -22, -15, -15, -13, -18, -16, -17, -20,
+        -23, -18, -17, -15, -15, -19, -18, -16, -14, -16, -16, -18, -17, -17,
+        -20, -17, -21, -22, -18, -17, -18, -23, -18, -21, -20, -22, -21, -22,
+        -20, -24, -18, -17, -22, -24, -24, -25, -25, -23, -21, -17, -17, -24,
+        -22, -15, -17, -16, -16, -18, -24, -39
+      ],
+      "files": [
+        {
+          "name": "music/doc-and-lena-selyanina-mir.6d44b1f257.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 29484858,
+          "sha256": "6d44b1f257facab602106c46533ccdcaa5e28bfdd4d0e89de4bef3d93e647005",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/doc-and-lena-selyanina-mir.fa5f067a67.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 21406220,
+          "sha256": "fa5f067a67e993421f0f2243032a4c081503b746a7ffe27e447a26270f8e575d",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "brylie-star-song",
+      "title": "BCO – Star Song (deep space tranquility)",
+      "artist": "brylie",
+      "performer": null,
+      "release": "OpenGameArt",
+      "year": 2021,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“BCO – Star Song (deep space tranquility)” by brylie (Brylie Christopher Oxley). CC BY 4.0. opengameart.org. Modified: level lowered 0.3 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://opengameart.org/content/bco-star-song-deep-space-tranquility",
+      "modified": "level lowered 0.3 dB, re-encoded as AAC and Opus",
+      "duration": 220.357,
+      "cues": {
+        "start": 0,
+        "end": 220.339
+      },
+      "loudness": {
+        "integrated": -19.8,
+        "truePeak": -1.3
+      },
+      "contour": [
+        -48, -33, -29, -26, -28, -25, -19, -18, -19, -17, -22, -29, -29, -30,
+        -24, -16, -14, -17, -13, -18, -25, -26, -28, -22, -19, -18, -17, -15,
+        -20, -26, -25, -25, -26, -20, -19, -21, -19, -21, -25, -26, -26, -26,
+        -18, -15, -14, -16, -21, -23, -27, -28, -27, -21, -19, -24, -22, -22,
+        -25, -25, -24, -25, -25, -26, -33, -41
+      ],
+      "files": [
+        {
+          "name": "music/brylie-star-song.9e03bf64b5.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 7240083,
+          "sha256": "9e03bf64b5219fa7b204c0fdc78861802ce5d3d3ee0c8403560db6173be46a0e",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/brylie-star-song.841ae31df2.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4998873,
+          "sha256": "841ae31df25a82e86896b2e13d096bb2bc3ba0b2bf43c12c7adff25880527953",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "brylie-2021-07-10",
+      "title": "bco – 2021-07-10",
+      "artist": "brylie",
+      "performer": null,
+      "release": "OpenGameArt",
+      "year": 2021,
+      "category": "ambient",
+      "license": "cc-by-4.0",
+      "credit": "“bco – 2021-07-10” by brylie (Brylie Christopher Oxley). CC BY 4.0. opengameart.org. Modified: level lowered 0.2 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://opengameart.org/content/bco-2021-07-10",
+      "modified": "level lowered 0.2 dB, re-encoded as AAC and Opus",
+      "duration": 345.374,
+      "cues": {
+        "start": 0,
+        "end": 345.37
+      },
+      "loudness": {
+        "integrated": -18.3,
+        "truePeak": -1.3
+      },
+      "contour": [
+        -36, -21, -27, -20, -25, -23, -26, -24, -25, -24, -22, -22, -22, -25,
+        -24, -27, -19, -25, -20, -26, -23, -26, -20, -25, -21, -23, -18, -21,
+        -19, -16, -17, -16, -19, -13, -18, -17, -21, -16, -21, -16, -19, -15,
+        -18, -15, -18, -17, -15, -17, -20, -21, -15, -19, -14, -20, -15, -21,
+        -18, -20, -15, -18, -16, -26, -36, -46
+      ],
+      "files": [
+        {
+          "name": "music/brylie-2021-07-10.ae70d122a6.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 12162353,
+          "sha256": "ae70d122a6de6690f4abdc37202263448b6b33ccf03e18a2d0ca38979a54f324",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/brylie-2021-07-10.53011f031b.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 7340155,
+          "sha256": "53011f031b9a057bface2b94843b08569c9dd04fec3e69347352b0634b5ad614",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-1",
+      "title": "Lullabies For The End Of The World #1",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Lullabies For The End Of The World",
+      "year": 2026,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Lullabies For The End Of The World #1” by HoliznaCC0, from Lullabies For The End Of The World (2026). CC0. Modified: level lowered 0.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-1/",
+      "modified": "level lowered 0.8 dB, re-encoded as AAC and Opus",
+      "duration": 164.843,
+      "cues": {
+        "start": 0,
+        "end": 161.572
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.3
+      },
+      "contour": [
+        -70, -24, -24, -23, -18, -18, -18, -18, -18, -19, -18, -18, -18, -18,
+        -16, -17, -17, -17, -18, -18, -18, -18, -19, -18, -18, -18, -18, -16,
+        -17, -18, -22, -24, -25, -18, -18, -18, -18, -18, -18, -18, -17, -18,
+        -18, -16, -17, -17, -17, -18, -18, -18, -18, -19, -18, -18, -18, -18,
+        -16, -17, -17, -21, -23, -29, -42, -57
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-1.312c38d111.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5460692,
+          "sha256": "312c38d111ef57fed4b52f5a29a5906cb26dacff562611a16d8a8c0cade80d91",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-1.ff0fb9ca2c.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3671459,
+          "sha256": "ff0fb9ca2c44946bba769da35594de3ece7e688c24776c54e31634a3a2a62af7",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-2",
+      "title": "Lullabies For The End Of The World #2",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Lullabies For The End Of The World",
+      "year": 2026,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Lullabies For The End Of The World #2” by HoliznaCC0, from Lullabies For The End Of The World (2026). CC0. Modified: level lowered 3.9 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-2/",
+      "modified": "level lowered 3.9 dB, re-encoded as AAC and Opus",
+      "duration": 143.957,
+      "cues": {
+        "start": 0,
+        "end": 143.253
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.9
+      },
+      "contour": [
+        -70, -24, -23, -22, -23, -23, -22, -23, -21, -22, -18, -17, -18, -17,
+        -18, -17, -17, -16, -17, -18, -17, -18, -17, -18, -18, -17, -17, -16,
+        -17, -19, -18, -19, -18, -20, -18, -18, -18, -18, -18, -17, -18, -18,
+        -18, -18, -17, -17, -16, -17, -18, -17, -18, -17, -18, -17, -17, -17,
+        -16, -18, -18, -18, -19, -18, -24, -46
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-2.ac6cd2d252.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 4768672,
+          "sha256": "ac6cd2d252d9b0a4ddc0acfae66fcd46eda5958a1065007959ef556da391869c",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-2.15f97971c9.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3299926,
+          "sha256": "15f97971c95c5f431f2828b459439cce3620311a9d269376e8b01ba587be1c71",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-3",
+      "title": "Lullabies For The End Of The World #3",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Lullabies For The End Of The World",
+      "year": 2026,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Lullabies For The End Of The World #3” by HoliznaCC0, from Lullabies For The End Of The World (2026). CC0. Modified: level lowered 2.4 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-3/",
+      "modified": "level lowered 2.4 dB, re-encoded as AAC and Opus",
+      "duration": 193.28,
+      "cues": {
+        "start": 0,
+        "end": 193.28
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.5
+      },
+      "contour": [
+        -39, -24, -26, -26, -22, -21, -22, -20, -19, -19, -19, -19, -19, -19,
+        -18, -16, -16, -17, -17, -16, -17, -17, -16, -16, -18, -18, -17, -18,
+        -18, -16, -16, -17, -17, -16, -17, -18, -20, -21, -22, -22, -21, -22,
+        -21, -19, -19, -19, -19, -19, -19, -19, -16, -16, -17, -17, -16, -17,
+        -17, -17, -16, -18, -18, -17, -17, -22
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-3.59d8c3c6e2.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 6404065,
+          "sha256": "59d8c3c6e2a8379df2f066337017bdc76c1506bfbc08550e54f10ca97748dc69",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-3.3e77920391.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4085632,
+          "sha256": "3e77920391562453bcdf35f8a70692263beb93f0dd3b73eeaa6646e4e6f7188a",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-4",
+      "title": "Lullabies For The End Of The World #4",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Lullabies For The End Of The World",
+      "year": 2026,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Lullabies For The End Of The World #4” by HoliznaCC0, from Lullabies For The End Of The World (2026). CC0. Modified: level lowered 1.2 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-4/",
+      "modified": "level lowered 1.2 dB, re-encoded as AAC and Opus",
+      "duration": 169.387,
+      "cues": {
+        "start": 0,
+        "end": 167.291
+      },
+      "loudness": {
+        "integrated": -18.8,
+        "truePeak": -1.4
+      },
+      "contour": [
+        -70, -24, -24, -23, -23, -24, -24, -24, -23, -19, -19, -18, -18, -19,
+        -20, -20, -19, -16, -18, -20, -21, -20, -18, -17, -15, -18, -20, -21,
+        -16, -17, -19, -19, -15, -14, -16, -19, -17, -16, -16, -19, -15, -15,
+        -17, -20, -21, -20, -21, -20, -23, -24, -22, -18, -20, -23, -25, -22,
+        -20, -19, -17, -21, -26, -29, -32, -42
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-4.52112b5a53.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5540069,
+          "sha256": "52112b5a53fb35c3c93336f8d1e9ab54239d16d855a14a9f6f9414b9574dedcf",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-4.4dde43e4aa.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3788154,
+          "sha256": "4dde43e4aa2fc4ca0fd551b8866886a4b2fe1564c84c7007cc2a5bf20f90d238",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-lullabies-for-the-end-of-the-world-5",
+      "title": "Lullabies For The End Of The World #5",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Lullabies For The End Of The World",
+      "year": 2026,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Lullabies For The End Of The World #5” by HoliznaCC0, from Lullabies For The End Of The World (2026). CC0. Modified: level lowered 2.9 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/lullabies-for-the-end-of-the-world/lullabies-for-the-end-of-the-world-5/",
+      "modified": "level lowered 2.9 dB, re-encoded as AAC and Opus",
+      "duration": 144.939,
+      "cues": {
+        "start": 0,
+        "end": 144.938667
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.8
+      },
+      "contour": [
+        -70, -20, -19, -18, -19, -20, -19, -21, -24, -20, -18, -17, -18, -18,
+        -18, -16, -16, -18, -19, -18, -18, -17, -18, -18, -18, -16, -16, -18,
+        -20, -17, -19, -19, -19, -18, -19, -20, -19, -19, -23, -21, -19, -17,
+        -18, -18, -18, -16, -16, -18, -20, -18, -18, -17, -18, -18, -18, -16,
+        -16, -18, -20, -18, -18, -19, -25, -36
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-5.c820c14c85.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 4808300,
+          "sha256": "c820c14c8595f7c483e745c3c30381532e1151ead45151bb0d739306546f97a8",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-lullabies-for-the-end-of-the-world-5.8fccc9e6f6.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3118304,
+          "sha256": "8fccc9e6f630016f5d14d449b7b5df600a451f39d8c9400806b90c7442736514",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-old-age",
+      "title": "Old Age",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Only In The Milky Way Part 1",
+      "year": 2022,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Old Age” by HoliznaCC0, from Only In The Milky Way Part 1 (2022). CC0. Modified: level lowered 5.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-1/old-age/",
+      "modified": "level lowered 5.8 dB, re-encoded as AAC and Opus",
+      "duration": 213.909,
+      "cues": {
+        "start": 0,
+        "end": 213.9
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.5
+      },
+      "contour": [
+        -40, -25, -22, -21, -18, -17, -18, -18, -18, -18, -17, -18, -18, -18,
+        -18, -18, -18, -18, -18, -18, -17, -18, -17, -18, -18, -18, -18, -18,
+        -18, -18, -18, -18, -17, -18, -18, -18, -18, -17, -18, -18, -18, -18,
+        -18, -18, -18, -18, -18, -17, -18, -17, -18, -18, -18, -18, -18, -18,
+        -18, -18, -22, -26, -29, -33, -38, -45
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-old-age.ad8c92cee2.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 7085835,
+          "sha256": "ad8c92cee21fcc10101f2060c31a4547c94ef3fd4856b64fa83a2de2acb98fa6",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-old-age.4afb4471f8.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3977290,
+          "sha256": "4afb4471f854bee73c11bb285bd70fd52c2cfc18d8934a647f4d8a13d30a612b",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-street-names",
+      "title": "Street Names",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Only In The Milky Way Part 2",
+      "year": 2022,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Street Names” by HoliznaCC0, from Only In The Milky Way Part 2 (2022). CC0. Modified: level lowered 7.7 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-2/street-names/",
+      "modified": "level lowered 7.7 dB, re-encoded as AAC and Opus",
+      "duration": 216.021,
+      "cues": {
+        "start": 0,
+        "end": 215.125
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -7.6
+      },
+      "contour": [
+        -62, -49, -32, -31, -28, -26, -19, -18, -18, -18, -18, -18, -18, -18,
+        -18, -18, -18, -17, -17, -17, -18, -18, -18, -17, -18, -18, -18, -18,
+        -18, -18, -18, -18, -18, -18, -18, -18, -18, -18, -18, -18, -17, -18,
+        -17, -18, -18, -18, -17, -18, -18, -18, -18, -18, -18, -18, -18, -19,
+        -19, -20, -28, -50, -55, -58, -63, -69
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-street-names.73a754d55e.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 7095206,
+          "sha256": "73a754d55e997771429e66f227cc2753f28586caebeab990bf2b935be17c9406",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-street-names.996d1a4ed4.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4696670,
+          "sha256": "996d1a4ed4f46d1a9494a93defafdf62689ef7d7e21700f7a345788c21787cd2",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-night-driving",
+      "title": "Night Driving",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Only In The Milky Way Part 3",
+      "year": 2022,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Night Driving” by HoliznaCC0, from Only In The Milky Way Part 3 (2022). CC0. Modified: level lowered 5.4 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-3/night-driving/",
+      "modified": "level lowered 5.4 dB, re-encoded as AAC and Opus",
+      "duration": 131.349,
+      "cues": {
+        "start": 0,
+        "end": 131.34
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -4.6
+      },
+      "contour": [
+        -70, -33, -25, -22, -21, -18, -17, -18, -17, -17, -17, -17, -18, -17,
+        -18, -17, -18, -18, -17, -17, -17, -17, -17, -17, -18, -18, -20, -20,
+        -20, -20, -17, -18, -17, -17, -17, -17, -18, -17, -17, -18, -17, -18,
+        -17, -17, -17, -17, -18, -17, -18, -18, -18, -20, -20, -21, -20, -20,
+        -24, -25, -26, -30, -32, -35, -39, -44
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-night-driving.26e7a34852.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 4315865,
+          "sha256": "26e7a34852681a86021b3e1d6cf7c0d128f000726de74753e8a6b46f08e301ee",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-night-driving.a7733f3cee.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 2594521,
+          "sha256": "a7733f3ceea720367dae3645aa88a7187c99bd3b8203c2d15fd4200509275525",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-quiet-houses",
+      "title": "Quiet Houses",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Only In The Milky Way Part 3",
+      "year": 2022,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Quiet Houses” by HoliznaCC0, from Only In The Milky Way Part 3 (2022). CC0. Modified: level lowered 6.1 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/only-in-the-milky-way-part-3/quiet-houses/",
+      "modified": "level lowered 6.1 dB, re-encoded as AAC and Opus",
+      "duration": 200.96,
+      "cues": {
+        "start": 0,
+        "end": 199.523
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.7
+      },
+      "contour": [
+        -40, -27, -24, -25, -19, -17, -17, -18, -17, -17, -18, -17, -17, -17,
+        -17, -17, -17, -17, -17, -17, -18, -17, -17, -17, -17, -17, -17, -20,
+        -24, -22, -24, -23, -24, -23, -21, -18, -17, -17, -18, -17, -17, -18,
+        -17, -17, -17, -17, -17, -17, -17, -17, -18, -17, -17, -17, -17, -17,
+        -17, -18, -24, -27, -32, -39, -47, -63
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-quiet-houses.3df24823ad.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 6638955,
+          "sha256": "3df24823ad481a87de326522ecaa190d5e3df510486b454956ca9464142e1be1",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-quiet-houses.9968814dce.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4193409,
+          "sha256": "9968814dceaee2b0df3c9f90d98b0d09e61c5aaef6646b7bf74b5323e42bf5ac",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "holiznacc0-orbs-in-a-photo",
+      "title": "Orbs In A Photo",
+      "artist": "HoliznaCC0",
+      "performer": null,
+      "release": "Public Domain Lofi",
+      "year": 2024,
+      "category": "lofi",
+      "license": "cc0",
+      "credit": "“Orbs In A Photo” by HoliznaCC0, from Public Domain Lofi (2024). CC0. Modified: level lowered 3.9 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freemusicarchive.org/music/holiznacc0/public-domain-lofi/orbs-in-a-photo-lofi-chill-mp3/",
+      "modified": "level lowered 3.9 dB, re-encoded as AAC and Opus",
+      "duration": 219.968,
+      "cues": {
+        "start": 0,
+        "end": 219.968
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.7
+      },
+      "contour": [
+        -51, -35, -29, -28, -28, -28, -22, -17, -17, -18, -17, -18, -18, -18,
+        -17, -18, -17, -18, -18, -16, -17, -18, -17, -18, -18, -18, -18, -18,
+        -17, -18, -18, -18, -25, -28, -24, -17, -17, -18, -17, -18, -18, -18,
+        -17, -18, -17, -18, -18, -16, -17, -18, -17, -18, -18, -18, -18, -18,
+        -17, -18, -18, -18, -26, -28, -28, -31
+      ],
+      "files": [
+        {
+          "name": "music/holiznacc0-orbs-in-a-photo.101492bff9.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 7309849,
+          "sha256": "101492bff9718b966cad5b65a1d890b42c8e37c3b4c10a57329ee32d3a950ff7",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/holiznacc0-orbs-in-a-photo.fb8e9be21f.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4573779,
+          "sha256": "fb8e9be21fccebda9b633ecd9ba3b0794b2958612e8f7ee9ed8ef4e084ddae06",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-whispers-in-the-dark",
+      "title": "Whispers in the Dark",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "Whispers in the Dark",
+      "year": 2019,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Whispers in the Dark” by Purrple Cat, from Whispers in the Dark (2019). CC BY 4.0. freelofi.com. Modified: level lowered 3.6 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/whispers-in-the-dark/",
+      "modified": "level lowered 3.6 dB, re-encoded as AAC and Opus",
+      "duration": 174.452,
+      "cues": {
+        "start": 0,
+        "end": 174.433
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.9
+      },
+      "contour": [
+        -70, -24, -21, -19, -19, -18, -19, -19, -19, -17, -17, -17, -18, -16,
+        -16, -17, -18, -17, -17, -17, -18, -17, -16, -17, -18, -18, -19, -21,
+        -18, -20, -19, -21, -18, -19, -16, -17, -17, -18, -17, -17, -18, -18,
+        -16, -17, -17, -18, -17, -16, -17, -18, -18, -22, -19, -19, -19, -21,
+        -19, -19, -23, -26, -26, -29, -42, -46
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-whispers-in-the-dark.60f215b809.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5745379,
+          "sha256": "60f215b8090a759c2a61ec0e57cfd0c04f25fa5b368c37a5404d5c08d0d24bd5",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-whispers-in-the-dark.6750de0458.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3971449,
+          "sha256": "6750de045831eabc996b72fb71f509cd84c4148481432b6c69e0b379269d4f55",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-take-me-to-the-moon",
+      "title": "Take Me to the Moon",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "Memories",
+      "year": 2025,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Take Me to the Moon” by Purrple Cat, from Memories (2025). CC BY 4.0. freelofi.com. Modified: level lowered 2.1 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/memories/",
+      "modified": "level lowered 2.1 dB, re-encoded as AAC and Opus",
+      "duration": 217.246,
+      "cues": {
+        "start": 0,
+        "end": 215.782
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.4
+      },
+      "contour": [
+        -43, -29, -27, -22, -22, -22, -19, -18, -19, -19, -18, -18, -17, -17,
+        -17, -17, -17, -16, -17, -17, -17, -19, -19, -18, -18, -18, -18, -18,
+        -18, -18, -19, -20, -17, -16, -17, -17, -17, -16, -16, -17, -17, -16,
+        -19, -19, -18, -19, -18, -18, -18, -18, -18, -19, -19, -20, -19, -21,
+        -21, -23, -20, -19, -22, -20, -22, -36
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-take-me-to-the-moon.2cb40f7751.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 7067734,
+          "sha256": "2cb40f77511ab1c45b7bd3b73701b5e71d65bcc0251c533b5c7529af156a7450",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-take-me-to-the-moon.aa71f5d4da.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4800935,
+          "sha256": "aa71f5d4da14090b31e6d271a7362f17b72e534f0da6dfe4345f578f4d83a923",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-still-of-the-night",
+      "title": "Still of the Night",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "Sleep Tight",
+      "year": 2025,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Still of the Night” by Purrple Cat, from Sleep Tight (2025). CC BY 4.0. freelofi.com. Modified: level lowered 1.0 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "modified": "level lowered 1.0 dB, re-encoded as AAC and Opus",
+      "duration": 160.427,
+      "cues": {
+        "start": 0,
+        "end": 160.42
+      },
+      "loudness": {
+        "integrated": -18.5,
+        "truePeak": -1.6
+      },
+      "contour": [
+        -70, -30, -24, -23, -20, -20, -20, -19, -18, -17, -17, -16, -17, -17,
+        -17, -18, -17, -16, -16, -17, -17, -18, -21, -19, -21, -19, -20, -20,
+        -21, -21, -19, -20, -19, -19, -20, -18, -18, -17, -18, -17, -16, -18,
+        -17, -18, -17, -17, -16, -17, -18, -19, -21, -19, -21, -20, -19, -21,
+        -21, -21, -19, -21, -20, -19, -21, -29
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-still-of-the-night.73e87c3261.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5255175,
+          "sha256": "73e87c3261689dba041d7bc932db51b0d39889baa9c6a26a2f0eb593fdf18698",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-still-of-the-night.a142c2077d.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3371326,
+          "sha256": "a142c2077d9a1d06f59888212c536b814a5c52b091edbff6576fee5c2399d51f",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-dream-state",
+      "title": "Dream State",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "Sleep Tight",
+      "year": 2025,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Dream State” by Purrple Cat, from Sleep Tight (2025). CC BY 4.0. freelofi.com. Modified: level lowered 4.2 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "modified": "level lowered 4.2 dB, re-encoded as AAC and Opus",
+      "duration": 147.377,
+      "cues": {
+        "start": 0,
+        "end": 147.354
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -4.4
+      },
+      "contour": [
+        -70, -37, -30, -25, -23, -25, -23, -20, -19, -17, -17, -18, -18, -17,
+        -18, -19, -17, -17, -18, -18, -17, -17, -19, -17, -17, -18, -18, -17,
+        -19, -22, -18, -17, -18, -18, -17, -17, -18, -16, -17, -18, -18, -17,
+        -18, -18, -17, -17, -18, -18, -17, -17, -18, -17, -17, -18, -18, -17,
+        -20, -26, -28, -30, -35, -40, -42, -48
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-dream-state.7bad8ff7f1.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 4747564,
+          "sha256": "7bad8ff7f1d7135dbc0cdf6ad888e4a69d0ea935bec9afe96620eb40641e2ba2",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-dream-state.04e22b86ae.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3347098,
+          "sha256": "04e22b86aeb94cb8a870466dd7bf76c924ef827a7e74b8d9dee316e71cb1e7e2",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-night-light",
+      "title": "Night Light",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "Sleep Tight",
+      "year": 2025,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Night Light” by Purrple Cat, from Sleep Tight (2025). CC BY 4.0. freelofi.com. Modified: level lowered 1.7 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "modified": "level lowered 1.7 dB, re-encoded as AAC and Opus",
+      "duration": 216.015,
+      "cues": {
+        "start": 0,
+        "end": 214.608
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.2
+      },
+      "contour": [
+        -41, -29, -25, -22, -21, -20, -20, -19, -18, -18, -19, -19, -18, -18,
+        -17, -17, -18, -18, -17, -16, -16, -16, -15, -16, -19, -22, -19, -19,
+        -19, -18, -18, -19, -18, -18, -18, -18, -18, -18, -17, -18, -18, -18,
+        -17, -16, -16, -16, -15, -17, -19, -21, -19, -19, -19, -19, -18, -19,
+        -18, -19, -19, -18, -18, -23, -31, -42
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-night-light.6bcc7d2ea8.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 7062281,
+          "sha256": "6bcc7d2ea88d5b819e434d7cc148ec1976d8b6b538c1d248b0231d65ae7dffc4",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-night-light.6709f3c947.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4710254,
+          "sha256": "6709f3c947de25472a8d7ced4e4abd08e5829af6fb92ff84aac7234cb5420028",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-astral-projection",
+      "title": "Astral Projection",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "Sleep Tight",
+      "year": 2025,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Astral Projection” by Purrple Cat, from Sleep Tight (2025). CC BY 4.0. freelofi.com. Modified: level lowered 2.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "modified": "level lowered 2.8 dB, re-encoded as AAC and Opus",
+      "duration": 186.061,
+      "cues": {
+        "start": 0,
+        "end": 185.546
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.2
+      },
+      "contour": [
+        -70, -33, -28, -26, -24, -24, -21, -18, -18, -18, -17, -17, -18, -18,
+        -18, -18, -17, -18, -19, -17, -18, -17, -17, -18, -17, -17, -18, -17,
+        -17, -17, -20, -18, -18, -18, -18, -17, -18, -18, -18, -18, -17, -19,
+        -19, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -17, -20, -24,
+        -26, -29, -31, -34, -37, -42, -46, -52
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-astral-projection.fa342b03cb.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 6075318,
+          "sha256": "fa342b03cbe735f938fe99d1e996f82ce14004bc28396ad6beb6f045b83277a3",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-astral-projection.12b5f7463a.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3964565,
+          "sha256": "12b5f7463a70badb3dc08b4635e7d246b0266b469b5e40449d0f6130da241cfc",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-weightless",
+      "title": "Weightless",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "Sleep Tight",
+      "year": 2025,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Weightless” by Purrple Cat, from Sleep Tight (2025). CC BY 4.0. freelofi.com. Modified: level lowered 2.4 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/sleep-tight/",
+      "modified": "level lowered 2.4 dB, re-encoded as AAC and Opus",
+      "duration": 194.56,
+      "cues": {
+        "start": 0,
+        "end": 194.046
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -2.8
+      },
+      "contour": [
+        -39, -24, -23, -21, -21, -23, -23, -20, -21, -21, -21, -19, -18, -17,
+        -17, -18, -18, -18, -16, -17, -17, -18, -18, -18, -17, -16, -17, -18,
+        -17, -17, -16, -17, -18, -18, -17, -17, -18, -18, -18, -16, -17, -17,
+        -18, -18, -17, -17, -16, -17, -18, -17, -17, -16, -17, -20, -19, -19,
+        -18, -20, -20, -19, -17, -18, -19, -25
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-weightless.9bfb3bc7f5.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 6408012,
+          "sha256": "9bfb3bc7f58b1a3eaa02e758d5d81c07c43260242e86e466e7b69ad003ac8da7",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-weightless.2fc760174d.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4233951,
+          "sha256": "2fc760174d9a62f4ca1230de3adbf88b3e6b90cbb53e761bf07a52d6742353c3",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-insomnia",
+      "title": "Insomnia",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "City Nights 3",
+      "year": 2026,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Insomnia” by Purrple Cat, from City Nights 3 (2026). CC BY 4.0. freelofi.com. Modified: level lowered 3.2 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/city-nights-3/",
+      "modified": "level lowered 3.2 dB, re-encoded as AAC and Opus",
+      "duration": 179.142,
+      "cues": {
+        "start": 0,
+        "end": 178.495
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.6
+      },
+      "contour": [
+        -70, -30, -27, -24, -24, -22, -19, -20, -19, -19, -19, -17, -16, -17,
+        -17, -17, -17, -16, -15, -17, -18, -17, -17, -17, -17, -16, -17, -16,
+        -15, -17, -16, -20, -23, -23, -22, -23, -19, -18, -17, -17, -17, -18,
+        -17, -17, -17, -16, -17, -17, -15, -16, -17, -17, -21, -23, -22, -22,
+        -23, -20, -19, -19, -22, -21, -23, -30
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-insomnia.606abe7124.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5848987,
+          "sha256": "606abe712474675194f1f4246369bad19182ec51f660e6fe3e2cdb4f95376650",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-insomnia.f01e2dbcbb.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4132558,
+          "sha256": "f01e2dbcbbd455aae075c785dcce119cfa7f4390323016616d34555aacd4efb4",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-3-a-m-radio",
+      "title": "3 A.M. Radio",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "City Nights 3",
+      "year": 2026,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“3 A.M. Radio” by Purrple Cat, from City Nights 3 (2026). CC BY 4.0. freelofi.com. Modified: level lowered 5.6 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/city-nights-3/",
+      "modified": "level lowered 5.6 dB, re-encoded as AAC and Opus",
+      "duration": 180.303,
+      "cues": {
+        "start": 0,
+        "end": 179.492
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -5.8
+      },
+      "contour": [
+        -70, -18, -18, -18, -18, -18, -18, -17, -17, -17, -17, -17, -18, -17,
+        -18, -17, -17, -18, -17, -17, -18, -17, -17, -17, -17, -17, -17, -17,
+        -17, -17, -17, -18, -17, -17, -18, -17, -17, -18, -17, -17, -18, -17,
+        -17, -17, -17, -17, -17, -17, -18, -17, -17, -18, -22, -23, -22, -22,
+        -23, -23, -23, -22, -22, -22, -23, -33
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-3-a-m-radio.e3533db714.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 5943998,
+          "sha256": "e3533db71446cce194cf592526a7fed2ec70acd0c4b7c40321e39a67e55345d8",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-3-a-m-radio.fd707e7124.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 3974202,
+          "sha256": "fd707e7124ce21e4ff32cecf8977d564e99b095bab77bf45f496c7ca982b29d1",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "purrple-cat-starry-night",
+      "title": "Starry Night",
+      "artist": "Purrple Cat",
+      "performer": null,
+      "release": "City Nights 3",
+      "year": 2026,
+      "category": "lofi",
+      "license": "cc-by-4.0",
+      "credit": "“Starry Night” by Purrple Cat, from City Nights 3 (2026). CC BY 4.0. freelofi.com. Modified: level lowered 2.8 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://freelofi.com/albums/city-nights-3/",
+      "modified": "level lowered 2.8 dB, re-encoded as AAC and Opus",
+      "duration": 208.422,
+      "cues": {
+        "start": 0,
+        "end": 207.587
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -3.2
+      },
+      "contour": [
+        -35, -24, -22, -21, -21, -20, -19, -19, -18, -18, -18, -18, -18, -17,
+        -17, -16, -17, -18, -17, -17, -17, -18, -19, -18, -18, -17, -18, -19,
+        -18, -18, -18, -17, -18, -17, -17, -17, -16, -17, -18, -17, -17, -17,
+        -18, -19, -18, -17, -18, -18, -19, -18, -18, -18, -17, -19, -20, -20,
+        -19, -18, -19, -20, -20, -18, -18, -24
+      ],
+      "files": [
+        {
+          "name": "music/purrple-cat-starry-night.165fe46895.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 6758585,
+          "sha256": "165fe468954ebe9f6c97f371882839f4f7594c06077b48818a2639b6d124b9d3",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/purrple-cat-starry-night.f99a761d28.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 4818656,
+          "sha256": "f99a761d2836874e84ff996ba25c63940a6f74e0e9db33eb295de13a3fccb66e",
+          "bitrate": 160000
+        }
+      ]
+    },
+    {
+      "id": "parker-solar-probe-venus",
+      "title": "Venus’s ionosphere, heard by Parker Solar Probe",
+      "artist": "Parker Solar Probe · FIELDS",
+      "performer": null,
+      "release": "NASA Scientific Visualization Studio 13847",
+      "year": 2021,
+      "category": "signals",
+      "license": "public-domain",
+      "credit": "Parker Solar Probe’s FIELDS instrument at Venus, July 2020; sonified by NASA’s Scientific Visualization Studio. Public domain. Modified: level lowered 6.1 dB, re-encoded as AAC and Opus.",
+      "licensor": "https://svs.gsfc.nasa.gov/13847/",
+      "modified": "level lowered 6.1 dB, re-encoded as AAC and Opus",
+      "duration": 47.552,
+      "cues": {
+        "start": 0,
+        "end": 44.898
+      },
+      "loudness": {
+        "integrated": -18,
+        "truePeak": -6.3
+      },
+      "contour": [
+        -70, -70, -70, -70, -19, -19, -19, -19, -19, -19, -19, -19, -19, -20,
+        -20, -20, -20, -20, -20, -19, -17, -17, -17, -17, -18, -18, -17, -16,
+        -16, -15, -14, -14, -15, -15, -15, -15, -16, -16, -16, -17, -17, -17,
+        -18, -18, -19, -20, -20, -21, -21, -21, -21, -21, -21, -21, -21, -21,
+        -21, -21, -21, -21, -22, -24, -26, -34
+      ],
+      "files": [
+        {
+          "name": "music/parker-solar-probe-venus.3775b3f9c6.m4a",
+          "type": "audio/mp4; codecs=\"mp4a.40.2\"",
+          "bytes": 1697126,
+          "sha256": "3775b3f9c62f94a98e56cd06b22661b2fc5c5cac35fdaa7619caae60ba56010b",
+          "bitrate": 256000
+        },
+        {
+          "name": "music/parker-solar-probe-venus.b1d0278789.webm",
+          "type": "audio/webm; codecs=\"opus\"",
+          "bytes": 1015825,
+          "sha256": "b1d0278789ca5b6e493a3256d6fcad4a5f00a209abcd5c746dff412f49f53247",
+          "bitrate": 160000
+        }
+      ]
+    }
+  ]
+}
