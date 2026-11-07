@@ -45,6 +45,7 @@ const tell = (message) => process.stdout.write(JSON.stringify(message) + '\\n')
 if (plan.go !== undefined) {
   tell({ waiting: process.pid })
   while (!existsSync(plan.go)) await new Promise((resolve) => setTimeout(resolve, 1))
+  await new Promise((resolve) => setTimeout(resolve, plan.delay ?? 0))
 }
 let lock
 try {
@@ -350,14 +351,42 @@ describe('the GPU lock', () => {
     },
   )
 
-  it.each(['free', 'stale'])(
-    'lets exactly one of two racing processes take a %s lock',
-    async (start) => {
-      if (start === 'stale')
+  it.each([
+    ['a free lock', async () => 0],
+    [
+      'a stale lock',
+      async () => {
         writeLock([{ pid: await deadPid(), processStart: null }])
+        return 0
+      },
+    ],
+    /*
+     * The interleaving a reclaim has to survive: the second racer reads the
+     * stale lock, and by the time it has judged it, the first has deleted it
+     * and created its own. A lock naming a hundred reused pids makes the
+     * judgment a hundred `ps` calls long, and the second racer starts half a
+     * judgment late, measured here so the margins scale with the machine.
+     * Deleting without re-reading takes the first racer's lock and makes two
+     * holders.
+     */
+    [
+      'a stale lock one racer judges after the other replaced it',
+      async () => {
+        const reused = { pid: process.pid, processStart: 'Thu Jan 1 1970' }
+        writeLock(Array.from({ length: 100 }, () => reused))
+        const begun = process.hrtime.bigint()
+        for (let i = 0; i < 10; i += 1) startOf(process.pid)
+        const perPs = Number(process.hrtime.bigint() - begun) / 1e6 / 10
+        return Math.round((100 * perPs) / 2)
+      },
+    ],
+  ])(
+    'lets exactly one of two racing processes take %s',
+    async (_what, setup) => {
+      const delay = await setup()
       const go = path.join(dir, 'go')
-      const racers = ['racer-a', 'racer-b'].map((name) =>
-        holder({ holder: name, hold: true, go }),
+      const racers = [0, delay].map((wait, i) =>
+        holder({ holder: `racer-${i}`, hold: true, go, delay: wait }),
       )
       await Promise.all(racers.map((racer) => racer.said('waiting')))
       writeFileSync(go, '')
