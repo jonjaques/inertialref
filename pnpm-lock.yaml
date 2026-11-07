@@ -434,6 +434,9 @@ importers:
       '@inertialref/procedural':
         specifier: workspace:*
         version: link:../../packages/procedural
+      '@inertialref/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@inertialref/rendering':
         specifier: workspace:*
         version: link:../../packages/rendering

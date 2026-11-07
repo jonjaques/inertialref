@@ -1,0 +1,14 @@
+# Read by git-lfs from the repository root; a setting in git config wins.
+#
+# The soundtrack's masters are an archive, not an input to anything a clone
+# runs. The game plays the delivery files from the site's R2 bucket, the
+# catalog that describes them is committed, and no test or build step reads a
+# master. LFS bandwidth is metered on the repository owner, and every Workers
+# Build and every CI cache miss clones with LFS, so a default fetch that
+# included a gigabyte of FLAC would spend the month's free allowance within
+# days. Fetch them when re-mastering; `--exclude=''` is required, because a
+# command-line `--include` replaces only the include list, not this one:
+#
+#     git lfs pull --include='data/audio/masters/**' --exclude=''
+[lfs]
+	fetchexclude = data/audio/masters/**
