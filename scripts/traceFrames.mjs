@@ -40,7 +40,10 @@ export function readTrace(raw) {
       ? gunzipSync(raw).toString('utf8')
       : raw.toString('utf8')
   const parsed = JSON.parse(text)
-  return Array.isArray(parsed) ? parsed : parsed.traceEvents
+  if (Array.isArray(parsed)) return parsed
+  // Anything else carries no events, and reads as a trace without frames
+  // rather than as a TypeError from the filter.
+  return Array.isArray(parsed?.traceEvents) ? parsed.traceEvents : []
 }
 
 /** The composited frames, in the order they were shown. */
@@ -82,6 +85,27 @@ export async function traceFrames(
     return 1
   }
 
+  /*
+   * The frames and their instants, from the same shots. A Screenshot without
+   * a snapshot string is not a frame, and leaving it in the timestamps or the
+   * file numbering would put frame N of the report in some other file, and
+   * every instant after it on the wrong frame. Microseconds in the trace,
+   * seconds everywhere the analysis reports a rate.
+   */
+  const frames = []
+  for (const shot of shots) {
+    const data = shot.args?.snapshot ?? shot.args?.data?.snapshot
+    if (typeof data === 'string') frames.push({ data, at: shot.ts / 1e6 })
+  }
+  // With no frame there is nothing to difference, and the quiet verdict that
+  // would follow reads as an all-clear.
+  if (frames.length === 0) {
+    stderr.write(
+      `none of ${shots.length} Screenshot events carries a snapshot, so there is no frame to read\n`,
+    )
+    return 1
+  }
+
   /* The page the trace was taken of, which is half of what makes it reproducible. */
   const started = events.find((e) => e.name === 'TracingStartedInBrowser')
   const frame = started?.args?.data?.frames?.[0]
@@ -91,18 +115,18 @@ export async function traceFrames(
   await mkdir(out, { recursive: true })
 
   const paths = []
-  for (const [i, shot] of shots.entries()) {
-    const data = shot.args?.snapshot ?? shot.args?.data?.snapshot
-    if (typeof data !== 'string') continue
+  for (const [i, { data }] of frames.entries()) {
     const file = path.join(out, `${String(i).padStart(4, '0')}.jpg`)
     await writeFile(file, Buffer.from(data, 'base64'))
     paths.push(file)
   }
 
-  // Microseconds in the trace, seconds everywhere the analysis reports a rate.
-  const timestamps = shots.map((s) => s.ts / 1e6)
+  const timestamps = frames.map((one) => one.at)
   const span = timestamps[timestamps.length - 1] - timestamps[0]
-  const fps = span > 0 ? paths.length / span : 0
+  // Intervals over the span, not frames: six frames 20 ms apart are 50 fps,
+  // and counting frames calls them 60, which on a short trace lifts a
+  // subsampled capture over the rate `reportFrames` trusts.
+  const fps = span > 0 ? (paths.length - 1) / span : 0
 
   const { stdout: identified } = await promisify(execFile)('magick', [
     'identify',

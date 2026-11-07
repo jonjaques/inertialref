@@ -603,7 +603,9 @@ async function cast(wire, n) {
   }
   const at = frames.map((f) => f.at)
   const span = at.length > 1 ? at[at.length - 1] - at[0] : 0
-  const fps = span > 0 ? at.length / span : 0
+  // Intervals over the span, as `traceFrames.mjs` counts them: n frames
+  // bound n − 1 intervals, and counting frames overstates a short cast.
+  const fps = span > 0 ? (at.length - 1) / span : 0
   const analysis = await analyzeFrames(paths, at)
   // The map is the answer to "where", which the counts never give. Only
   // for the first isolated frame: one picture makes the point and a

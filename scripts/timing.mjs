@@ -234,7 +234,7 @@ const isProfileReport = (dump) =>
 function fromDump(dump) {
   const list = Array.isArray(dump)
     ? dump
-    : Array.isArray(dump.entries)
+    : Array.isArray(dump?.entries)
       ? dump.entries
       : []
   return list.map((one) => ({
@@ -300,7 +300,9 @@ export async function timing(
   const parsed = JSON.parse(text)
 
   // Only something that is neither form of trace can be a profile report.
-  const entries = Array.isArray(parsed.traceEvents)
+  // `?.` because `null` is a JSON file too, and it should read as one with no
+  // entries rather than end the command in a TypeError.
+  const entries = Array.isArray(parsed?.traceEvents)
     ? fromTrace(parsed.traceEvents)
     : Array.isArray(parsed) && isTraceEvent(parsed[0])
       ? fromTrace(parsed)

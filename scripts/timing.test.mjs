@@ -287,9 +287,12 @@ describe('timing', () => {
     })
   })
 
-  it('blames the timing level for a trace that carries no entries', async () => {
+  it.each([
+    ['a trace that carries no entries', '{"traceEvents":[]}'],
+    ['a file that is JSON null', 'null'],
+  ])('blames the timing level for %s', async (_, contents) => {
     const io = capture()
-    expect(await timing([file('empty.json', '{"traceEvents":[]}')], io)).toBe(1)
+    expect(await timing([file('empty.json', contents)], io)).toBe(1)
     expect(io.text.err).toBe(
       'no timing entries.\n' +
         'A trace only carries them if the page was at ?timing=trace (or full)\n' +

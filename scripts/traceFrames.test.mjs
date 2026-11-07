@@ -126,6 +126,60 @@ describe('traceFrames', () => {
     })
   })
 
+  it('fails on Screenshot events that carry no snapshot, rather than reporting a quiet run', async () => {
+    const input = file(
+      'blank.json',
+      JSON.stringify({
+        traceEvents: [
+          { name: 'Screenshot', ph: 'O', ts: 1, args: {} },
+          { name: 'Screenshot', ph: 'O', ts: 2, args: {} },
+        ],
+      }),
+    )
+    const out = path.join(TMP, 'blank')
+    mkdirSync(out)
+    writeFileSync(path.join(out, '0000.jpg'), 'a frame from another trace')
+    const io = capture()
+    expect(await traceFrames([input, out], io)).toBe(1)
+    expect(io.text).toEqual({
+      out: '',
+      err: 'none of 2 Screenshot events carries a snapshot, so there is no frame to read\n',
+    })
+    // Nothing was read, so nothing was cleared.
+    expect(readdirSync(out)).toEqual(['0000.jpg'])
+  })
+
+  it('reads a file with no events as a trace without frames', async () => {
+    expect(readTrace(Buffer.from('{}'))).toEqual([])
+    expect(readTrace(Buffer.from('null'))).toEqual([])
+  })
+
+  it('numbers and times the frames it kept, past a Screenshot with no snapshot', async () => {
+    const out = path.join(TMP, 'gap')
+    const io = capture()
+    const traceEvents = [
+      shot(1_000_000, BLACK),
+      { name: 'Screenshot', ph: 'O', ts: 1_010_000, args: {} },
+      shot(1_020_000, WHITE),
+      shot(1_040_000, BLACK),
+    ]
+    const code = await traceFrames(
+      [file('gap.json', JSON.stringify({ traceEvents })), out],
+      { ...io, changed: async () => 0 },
+    )
+    expect(code).toBe(0)
+    expect(readdirSync(out).sort()).toEqual([
+      '0000.jpg',
+      '0001.jpg',
+      '0002.jpg',
+    ])
+    expect(readFileSync(path.join(out, '0001.jpg'))).toEqual(
+      Buffer.from(WHITE, 'base64'),
+    )
+    expect(io.text.out).toContain('3 frames at ')
+    expect(io.text.out).toContain('0.04s (50.0 fps)')
+  })
+
   it('writes every frame over whatever a longer trace left, and reports a quiet run', async () => {
     const out = path.join(TMP, 'quiet')
     mkdirSync(out)
@@ -149,7 +203,7 @@ describe('traceFrames', () => {
     expect(io.text).toEqual({
       out:
         'url: http://localhost:5173/?shot\n' +
-        `3 frames at ${size}, 0.04s (75.0 fps) -> ${relative(out)}\n` +
+        `3 frames at ${size}, 0.04s (50.0 fps) -> ${relative(out)}\n` +
         'frames 3, quiet pair 0 px\n' +
         'no isolated frames — nothing strobes, or the camera is moving and this cannot tell\n',
       err: '',
@@ -177,7 +231,7 @@ describe('traceFrames', () => {
     // white clears the 3% threshold everywhere.
     expect(io.text).toEqual({
       out:
-        `6 frames at 8x8, 0.10s (60.0 fps) -> ${relative(out)}\n` +
+        `6 frames at 8x8, 0.10s (50.0 fps) -> ${relative(out)}\n` +
         'frames 6, quiet pair 0 px\n' +
         '1 events over 1 isolated frames, every ? frames\n' +
         '  frame 3: 230400 px against its neighbors, 0 px between them\n' +
