@@ -82,18 +82,21 @@ export const SOLAR_STATIONS: readonly SolarStation[] = Object.freeze([ISS])
 /**
  * One station, as a placement.
  *
- * `parentMass` is the body's — or the star's, for a station going round it —
- * because the semi-major axis comes from the published mean motion against
- * `G(M + m)` of the pair: the moons' convention. The period in the game is
- * then one over the element set's mean motion by construction, which is that
- * number and not the real station's anomalistic or nodal period.
+ * `parentMu` is the body's `mu` — or the star's, for a station going round
+ * it — because the semi-major axis comes from the published mean motion
+ * against `G(M + m)` of the pair: the moons' convention. Summed exactly as
+ * `placementMu` sums it, so the axis is solved against the parameter the frame
+ * runs on; from the parent's mass instead, the two agree only while every
+ * parent's `mu` is its mass times G. The period in the game is then one over
+ * the element set's mean motion by construction, which is that number and not
+ * the real station's anomalistic or nodal period.
  */
 export function solarStation(
   systemSeed: Seed,
   galaxy: GalaxyId,
   system: SystemId,
   station: SolarStation,
-  parentMass: Kilograms,
+  parentMu: number,
 ): OrbitalPlacement {
   const parent =
     station.parent.length === 0
@@ -113,7 +116,7 @@ export function solarStation(
   const node = rng.range(0, 2 * Math.PI)
   const anomaly = rng.range(0, 2 * Math.PI)
 
-  const mu = GRAVITATIONAL_CONSTANT * (parentMass + station.mass)
+  const mu = parentMu + GRAVITATIONAL_CONSTANT * station.mass
   const meanMotion = (station.meanMotion * 2 * Math.PI) / SECONDS_PER_DAY
   const elements: OrbitalElements = {
     semiMajorAxis: Math.cbrt(mu / (meanMotion * meanMotion)),

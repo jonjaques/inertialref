@@ -29,6 +29,7 @@ import {
 import {
   apoapsis,
   normalizeAngle,
+  type OrbitalElements,
   orbitalPeriod,
   periapsis,
 } from '@inertialref/physics'
@@ -288,10 +289,6 @@ function stationDossier(
   )
   const low = periapsis(elements) - parentRadius
   const high = apoapsis(elements) - parentRadius
-  const rate = (2 * Math.PI) / once
-  const anomaly = normalizeAngle(
-    elements.meanAnomalyAtEpoch + rate * (time - elements.epoch),
-  )
   const groups: FactGroup[] = [
     {
       id: 'station.physical',
@@ -343,11 +340,7 @@ function stationDossier(
             (2 * Math.PI * elements.semiMajorAxis) / once / 1000,
           )} km/s`,
         },
-        {
-          label: 'Next perigee',
-          value: period((2 * Math.PI - anomaly) / rate),
-          note: `${round((anomaly / (2 * Math.PI)) * 100, 1)}% through this orbit`,
-        },
+        nextPeriapsis('Next perigee', elements, once, time),
       ],
     },
     {
@@ -890,15 +883,9 @@ function orbitGroup(
    * a countdown in days does not sawtooth — but two answers to "when is now" in
    * one mode is how the third site got it wrong.
    */
-  const rate = (2 * Math.PI) / body.orbitalPeriod
-  const anomaly = normalizeAngle(
-    elements.meanAnomalyAtEpoch + rate * (time - elements.epoch),
+  facts.push(
+    nextPeriapsis('Next periapsis', elements, body.orbitalPeriod, time),
   )
-  facts.push({
-    label: 'Next periapsis',
-    value: period((2 * Math.PI - anomaly) / rate),
-    note: `${round((anomaly / (2 * Math.PI)) * 100, 1)}% through this orbit`,
-  })
   facts.push({
     label: 'Sphere of influence',
     value: kilometers(body.sphereOfInfluence),
@@ -918,6 +905,27 @@ function orbitGroup(
   )
 
   return { id: 'body.orbit', title: 'Orbit', facts }
+}
+
+/**
+ * The time to the next periapsis, and how far through this orbit it is: one
+ * reading for a body's page and a station's, under the word each uses.
+ */
+function nextPeriapsis(
+  label: string,
+  elements: OrbitalElements,
+  once: Seconds,
+  time: Seconds,
+): Fact {
+  const rate = (2 * Math.PI) / once
+  const anomaly = normalizeAngle(
+    elements.meanAnomalyAtEpoch + rate * (time - elements.epoch),
+  )
+  return {
+    label,
+    value: period((2 * Math.PI - anomaly) / rate),
+    note: `${round((anomaly / (2 * Math.PI)) * 100, 1)}% through this orbit`,
+  }
 }
 
 function rotationGroup(body: Body, year: Seconds): FactGroup {

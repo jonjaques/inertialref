@@ -1,5 +1,6 @@
 import { AU, formatReading, LIGHT_YEAR, type Meters } from '@inertialref/shared'
 import { UV, type UniverseVector } from '@inertialref/spatial'
+import { apoapsis, periapsis } from '@inertialref/physics'
 import type { World } from '@inertialref/simulation'
 import {
   type Body,
@@ -440,9 +441,9 @@ function describeStation(
   station: OrbitalPlacement,
   parentRadius: Meters,
 ): string {
-  const { semiMajorAxis: a, eccentricity: e } = station.orbit.elements
-  const low = formatReading(a * (1 - e) - parentRadius)
-  const high = formatReading(a * (1 + e) - parentRadius)
+  const { elements } = station.orbit
+  const low = formatReading(periapsis(elements) - parentRadius)
+  const high = formatReading(apoapsis(elements) - parentRadius)
   return `${station.kind} · ${formatReading(station.radius)} · ${
     low === high ? low : `${low} – ${high}`
   } up`

@@ -51,7 +51,7 @@ import {
   surveySites,
   walkBodies,
 } from '@inertialref/universe'
-import { orbitalPeriod } from '@inertialref/physics'
+import { apoapsis, orbitalPeriod, periapsis } from '@inertialref/physics'
 import {
   captureSave,
   parseSave,
@@ -491,7 +491,7 @@ export class GameHarness {
     )
     if (target === undefined) return []
     return target.stations.map((station) => {
-      const { semiMajorAxis: a, eccentricity: e } = station.orbit.elements
+      const { elements } = station.orbit
       const parent =
         station.parent.kind === 'body'
           ? findBody(target, station.parent.body)
@@ -506,9 +506,11 @@ export class GameHarness {
         kind: station.kind,
         parent: parent?.name ?? target.star.name,
         radiusM: station.radius,
-        perigeeKm: (a * (1 - e) - floor) / 1000,
-        apogeeKm: (a * (1 + e) - floor) / 1000,
-        periodMinutes: orbitalPeriod(placementMu(target, station), a) / 60,
+        perigeeKm: (periapsis(elements) - floor) / 1000,
+        apogeeKm: (apoapsis(elements) - floor) / 1000,
+        periodMinutes:
+          orbitalPeriod(placementMu(target, station), elements.semiMajorAxis) /
+          60,
       }
     })
   }
