@@ -32,6 +32,7 @@ import {
   usePersistentState,
 } from '../state/preferences.ts'
 import { useChromeHidden } from '../hud/chrome.ts'
+import { useCompact, useCoarsePointer } from '../hud/viewport.ts'
 import { useInputDevice, useKeyLabel } from '../input/useKeymap.ts'
 import { useEngine } from '../state/engineStore.ts'
 import { QUERY, CATALOG, PRESETS } from '../pages/paths.ts'
@@ -136,6 +137,8 @@ export function PlanetariumMode({
   // The sheet's own chord, so the hint cannot name a key the editor has moved.
   const keysLabel = useKeyLabel('chrome.keys')
   const chromeHidden = useChromeHidden()
+  const compact = useCompact()
+  const touch = useCoarsePointer()
   const drawLabels = useEngine((snapshot) => snapshot.presentation.labels)
   /*
    * Whether the camera is on the ground, sampled with the rest of the status.
@@ -438,9 +441,24 @@ export function PlanetariumMode({
          * rather than an introduction, which is why it is a preference and not
          * session state.
          */
-        <p className="type-ui pointer-events-none absolute bottom-20 left-1/2 -translate-x-1/2 text-balance text-slate-400">
-          drag to orbit · wheel to dolly · click to focus · {keysLabel ?? '?'}{' '}
-          for keys
+        /*
+         * Said for the hand that is holding it. A finger has no wheel and no
+         * keys to ask about, and "wheel to dolly · ? for keys" on a phone was
+         * two instructions out of four that could not be followed.
+         *
+         * At the top edge in the compact arrangement: the bottom there is the
+         * nav bar, the sheet it raises and the standing handle above it, and
+         * the line sat across the handle's label. On a desktop it stays over
+         * the menu, centered, where the eye already goes for "what can I do".
+         */
+        <p
+          className={`type-ui pointer-events-none absolute left-1/2 max-w-[calc(100%-1.5rem)] -translate-x-1/2 text-center text-balance text-slate-400 ${
+            compact ? 'top-3' : 'bottom-20'
+          }`}
+        >
+          {touch
+            ? 'drag to orbit · pinch to zoom · tap to focus'
+            : `drag to orbit · wheel to dolly · click to focus · ${keysLabel ?? '?'} for keys`}
         </p>
       )}
 

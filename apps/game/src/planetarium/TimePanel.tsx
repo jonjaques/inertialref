@@ -57,17 +57,29 @@ export function TimePanel(context: PlanetariumContext) {
             {at.date}
           </span>
         </div>
-        <p className="type-micro truncate text-slate-400">{localZone()}</p>
+        {/*
+         * Which clock this is, beside the zone it is read in. The planetarium
+         * shows the simulation's clock until a date, "now" or a picture gives
+         * it one of its own — and that one still runs, pauses and warps, so
+         * whether the clock is *held* and whether it is *running* are two
+         * different facts. The source is said here; the transport says the
+         * other.
+         */}
+        <p className="type-micro truncate text-slate-400">
+          {localZone()} · {world.held ? 'custom time' : 'simulation time'}
+        </p>
       </div>
 
       <PictureTime {...context} />
       {world.held && (
-        <div className="flex items-center gap-2">
-          <span className="type-ui text-slate-400">Custom time</span>
+        <div className="flex items-center justify-between gap-2 rounded border border-slate-800/80 bg-slate-900/40 py-1 pr-1 pl-2">
+          <span className="type-ui min-w-0 text-pretty text-slate-300">
+            This view keeps its own time.
+          </span>
           <Action
-            label="Reset"
+            label="Follow simulation"
             icon={RotateCcw}
-            title="Return to the simulation clock"
+            title="Show the simulation's clock again"
             onClick={() => engine.harness.observatory.setTime(null)}
           />
         </div>

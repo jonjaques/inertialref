@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Action } from '../hud/Action.tsx'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { attempt } from '../hud/notice.ts'
-import { Section } from '../hud/Section.tsx'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { CAMERA_LENS, usePersistentState } from '../state/preferences.ts'
 import type { PlanetariumContext } from './context.ts'
@@ -39,12 +38,14 @@ export function CompositionControls(context: PlanetariumContext) {
   const disabled = !subject.has
 
   return (
-    <div className="flex flex-col gap-1">
-      <Section
-        id="planetarium.presets.compositions"
-        title="Compositions"
-        trailing={`${COMPOSITIONS.length}`}
-      >
+    <div className="flex flex-col gap-3">
+      {/*
+       * One heading's worth of tools, in three runs with a word over the
+       * second and third rather than a collapsible each: a heading inside a
+       * heading is a click to reach a click, and the three are read together
+       * — a framing, then the light on it, then a step back from it.
+       */}
+      <div className="flex flex-col">
         <div className="grid grid-cols-3 gap-1.5">
           {COMPOSITIONS.map((composition) => (
             <button
@@ -117,9 +118,10 @@ export function CompositionControls(context: PlanetariumContext) {
             A star is always full, so on one of these only the distance changes.
           </p>
         )}
-      </Section>
+      </div>
 
-      <Section id="planetarium.presets.phase" title="Light">
+      <div className="flex flex-col gap-1">
+        <h4 className="type-ui text-slate-400">Light</h4>
         <div className="flex flex-wrap gap-1">
           {PHASES.map((phase) => (
             <Button
@@ -145,9 +147,10 @@ export function CompositionControls(context: PlanetariumContext) {
               'A star is the light. Phase needs something it shines on.'
             : 'Swings the camera around the terminator. The framing does not change.'}
         </p>
-      </Section>
+      </div>
 
-      <Section id="planetarium.presets.scale" title="Step Back">
+      <div className="flex flex-col gap-1">
+        <h4 className="type-ui text-slate-400">Step back</h4>
         <div className="flex flex-wrap gap-1">
           <Action
             label="1 AU"
@@ -170,7 +173,7 @@ export function CompositionControls(context: PlanetariumContext) {
           Fixed distances, not framings. One AU from Jupiter is a planet in the
           frame; one AU from Sol is most of the inner system.
         </p>
-      </Section>
+      </div>
     </div>
   )
 }

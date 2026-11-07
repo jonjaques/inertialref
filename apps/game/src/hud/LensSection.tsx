@@ -22,11 +22,11 @@ const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
 /**
  * The four things a lens is, as four sliders.
  *
- * One component, drawn in two places — the planetarium's Camera panel and
- * `/settings/camera` — because the lens is a persisted preference and two
- * copies of a control for one preference is how a build ends up with two
- * sliders that disagree. The same argument `GraphicsPanel` makes about the
- * graphics knobs, applied to the instrument they are knobs on.
+ * One component, drawn by the Lens panel in every mode that has a viewport
+ * (`LensPanel`) — and nowhere else, because the lens is a persisted preference
+ * and two copies of a control for one preference is how a build ends up with
+ * two sliders that disagree. The lens is the viewport's instrument, so it is
+ * set beside the picture it shapes rather than on a page that cannot show it.
  *
  * A lens rather than an angle, and the four channels are the argument: an angle
  * has no aperture, no focus and no exposure, and `docs/design/art.md` commits to
@@ -37,15 +37,25 @@ const DEFAULT_FOV_DEG = verticalFovDegrees(DEFAULT_LENS)
  * canvas remounting under an HDR change.
  */
 export function LensSection({
+  held = false,
   children,
 }: {
+  /**
+   * Whether another instrument owns the lens on screen.
+   *
+   * A fixed Milky Way view exposes through its own declared lens and keeps
+   * this one aside until it is left (`engine.lens`, rule 32). The sliders still
+   * read the kept lens, and they are disabled rather than live: moving one
+   * would change a lens the picture is not taken through, which reads as a
+   * control that does nothing.
+   */
+  held?: boolean
   /**
    * A fifth row, in the same three columns.
    *
    * The planetarium's glare is one: an aperture's own artifact, so it is a
-   * lens channel rather than a section of its own — and it is not on
-   * `/settings/camera`, because a preference page that offered it would be
-   * offering a second writer of a value only the planetarium holds.
+   * lens channel rather than a section of its own — and only the planetarium
+   * draws it, because only the planetarium holds an amount of it.
    */
   children?: ReactNode
 }) {
@@ -110,6 +120,7 @@ export function LensSection({
                 camera={camera}
                 labeledBy={`${id}-${channel}`}
                 describedBy={`${id}-${channel}-about`}
+                disabled={held}
               />
             </div>
           ))}
@@ -119,12 +130,13 @@ export function LensSection({
             label="Reset lens"
             title={`Back to the ${DEFAULT_FOV_DEG.toFixed(0)}° default — ${DEFAULT_LENS.focalLength.toFixed(1)} mm, no zoom, f/${DEFAULT_LENS.fStop.toFixed(1)}, focused at infinity`}
             disabled={
-              camera.lens.focalLength === DEFAULT_LENS.focalLength &&
-              camera.lens.zoom === DEFAULT_LENS.zoom &&
-              camera.lens.fStop === DEFAULT_LENS.fStop &&
-              camera.lens.focus === DEFAULT_LENS.focus &&
-              camera.lens.shutter === DEFAULT_LENS.shutter &&
-              camera.lens.iso === DEFAULT_LENS.iso
+              held ||
+              (camera.lens.focalLength === DEFAULT_LENS.focalLength &&
+                camera.lens.zoom === DEFAULT_LENS.zoom &&
+                camera.lens.fStop === DEFAULT_LENS.fStop &&
+                camera.lens.focus === DEFAULT_LENS.focus &&
+                camera.lens.shutter === DEFAULT_LENS.shutter &&
+                camera.lens.iso === DEFAULT_LENS.iso)
             }
             onClick={() => camera.onLens(DEFAULT_LENS)}
           />

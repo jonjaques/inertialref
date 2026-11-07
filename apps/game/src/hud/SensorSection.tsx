@@ -8,7 +8,13 @@ import { OptionGroup } from './OptionGroup.tsx'
 import { Row } from './Row.tsx'
 import { Section } from './Section.tsx'
 
-/** The selected camera mode and the controls that affect its picture. */
+/**
+ * The selected camera mode and the controls that affect its picture.
+ *
+ * "Exposure" over the section, because that is what every row in it sets —
+ * how the light that reaches the sensor becomes a picture — and it is the
+ * word a photographer looks for first in a panel called Lens.
+ */
 export function SensorSection() {
   const [settings, set] = usePersistentState(RENDER_SENSOR)
   const exposure = useEngine(
@@ -88,7 +94,7 @@ export function SensorSection() {
     },
   ]
   return (
-    <Section id="camera.sensor" title="Canopy" trailing={settings.mode}>
+    <Section id="camera.sensor" title="Exposure" trailing={settings.mode}>
       <div className="flex flex-col gap-2">
         <span className="type-ui text-slate-300">Camera mode</span>
         <OptionGroup
