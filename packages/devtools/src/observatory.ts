@@ -568,7 +568,15 @@ export class Observatory {
     }
   }
 
-  /** Target a companion while keeping the current orbit anchor and composition. */
+  /**
+   * Target a companion while keeping the current orbit anchor and composition.
+   *
+   * `null` lets go of a companion and of nothing else. A station hold is the
+   * other producer of the same rotation, and settling with no companion to
+   * release folds the hold's turn into the basis and drops it: the console's
+   * "stop following" would end a hold nobody asked to end, and the Camera
+   * panel's switch would flip off under the person holding it.
+   */
   track(address: string | null): ObserverStatus {
     this.#changed()
     const target = address === null ? null : this.#resolve(address)
@@ -586,7 +594,7 @@ export class Observatory {
         throw new Error('Choose another body in this system.')
       this.#pair(this.#target, target, this.time)
     }
-    this.#settleTransform()
+    if (target !== null || this.#tracking !== null) this.#settleTransform()
     this.#tracking =
       target === null ? null : { target, referenceTime: this.time }
     this.#phaseOrbit = null

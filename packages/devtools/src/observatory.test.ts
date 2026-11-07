@@ -601,6 +601,34 @@ describe('a station as a subject', () => {
     expect(() => ir.observatory.holdStation(true)).toThrow(/Choose a station/)
   })
 
+  it('keeps a hold when a companion that is not there is cleared', () => {
+    const { harness: ir, session } = harness()
+    ir.look(ISS, { ease: false })
+    ir.timeWarp(60)
+    ir.observatory.holdStation(true)
+    minute(session, ir)
+    const before = posed(ir.observerSample(0))
+    const held = offsets(session, before)
+    // The console's "stop following", with nothing followed: the hold is the
+    // live producer, and clearing the other one moves nothing.
+    const cleared = ir.target(null)
+    expect(cleared.hold).toBe('station')
+    expect(cleared.tracking).toBeNull()
+    expect(posed(ir.observerSample(0))).toEqual(before)
+    // And it is still a hold: a minute on, the camera has not moved in the
+    // station's axes.
+    minute(session, ir)
+    const after = offsets(session, posed(ir.observerSample(0)))
+    expect(
+      Vec.length(Vec.sub(after.local, held.local)) / Vec.length(held.local),
+    ).toBeLessThan(1e-6)
+    // A companion that is there is still released, and leaves space held.
+    ir.target('g:milky-way/s:SOL/b:2')
+    const released = ir.target(null)
+    expect(released.tracking).toBeNull()
+    expect(released.hold).toBe('space')
+  })
+
   it('refuses a hold or a composition without touching a motion in progress', () => {
     // A refusal changes nothing: the running motion keeps running and the
     // mutation revision a host diffs against stays where it was. So does a
