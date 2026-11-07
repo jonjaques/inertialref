@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { RotateCcw, Search, X } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { RotateCcw, X } from 'lucide-react'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
+import { SearchField } from '../hud/SearchField.tsx'
 import { SettingRow } from '../hud/SettingRow.tsx'
 import {
   chordFromEvent,
@@ -166,34 +166,13 @@ export function ControlsSection() {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <label className="flex h-8 min-w-0 flex-1 basis-56 items-center gap-1.5 rounded border border-slate-700/60 bg-slate-900/60 px-2 transition-colors focus-within:border-sky-500/60">
-          <Search aria-hidden className="size-3.5 shrink-0 text-slate-400" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Find an act or a key"
-            aria-label="Find an act or a key"
-            autoComplete="off"
-            spellCheck={false}
-            // `md:type-readout` beside the bare step: the Input base carries
-            // `md:text-sm`, which only merges against an equally modified
-            // class. `lib/utils.ts` has the whole story.
-            className="type-ui md:type-ui h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
-          />
-          {query !== '' && (
-            <button
-              type="button"
-              aria-label="Clear the search"
-              onClick={(event) => {
-                releaseFocus(event)
-                setQuery('')
-              }}
-              className={`-mr-1 flex size-6 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-200 ${FOCUS_RING}`}
-            >
-              <X aria-hidden className="size-3" />
-            </button>
-          )}
-        </label>
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          label="Find an act or a key"
+          placeholder="Find an act or a key"
+          className="flex-1 basis-56"
+        />
         {/* The capture announces here rather than only changing a button's
             text: a control that reports its result in a label a screen reader
             has already read past is a control that reported nothing. */}

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { PICTURES, type Picture } from '@inertialref/devtools'
-import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { OverlayPage } from '../pages/OverlayPage.tsx'
@@ -10,7 +9,9 @@ import { SavedPictures } from './SavedPictures.tsx'
 import { PictureCard } from './PictureCard.tsx'
 import { SharePicture } from './SharePicture.tsx'
 import { pictureLink, presetLink, withPictureLink } from './presetUrl.ts'
+import { FOCUS_RING } from '../hud/focus.ts'
 import { describeCause } from '../hud/notice.ts'
+import { SearchField } from '../hud/SearchField.tsx'
 
 export function PresetsPage({ engine }: { engine: GameEngine }) {
   const [params] = useSearchParams()
@@ -38,10 +39,33 @@ export function PresetsPage({ engine }: { engine: GameEngine }) {
       <Tabs
         defaultValue={params.get('capture') === '1' ? 'current' : 'included'}
       >
-        <TabsList variant="line" aria-label="Preset library">
-          <TabsTrigger value="included">Included</TabsTrigger>
-          <TabsTrigger value="saved">Saved</TabsTrigger>
-          <TabsTrigger value="current">Current view</TabsTrigger>
+        {/*
+         * The settings page's tab row, through the registry's tabs: the label
+         * step, an underline in the structural accent on the current one, and
+         * the row's hairline under all three. The registry's own line variant
+         * drew a 14px medium label and a foreground-white underline — a second
+         * tab language in the one interface that has two dialogs with tabs.
+         */}
+        <TabsList
+          variant="line"
+          aria-label="Preset library"
+          className="-mx-4 -mt-3 mb-1 w-auto justify-start gap-1 border-b border-slate-800 px-3 py-0 group-data-[orientation=horizontal]/tabs:h-auto"
+        >
+          {(
+            [
+              ['included', 'Included'],
+              ['saved', 'Saved'],
+              ['current', 'Current view'],
+            ] as const
+          ).map(([value, label]) => (
+            <TabsTrigger
+              key={value}
+              value={value}
+              className={`type-label h-10 flex-none rounded-none px-2.5 text-slate-400 transition-colors group-data-[orientation=horizontal]/tabs:after:inset-x-2 group-data-[orientation=horizontal]/tabs:after:-bottom-px after:rounded-full after:bg-sky-400 hover:text-slate-200 focus-visible:ring-0 data-[state=active]:text-sky-200 ${FOCUS_RING}`}
+            >
+              {label}
+            </TabsTrigger>
+          ))}
         </TabsList>
         {notice && (
           <p
@@ -52,11 +76,11 @@ export function PresetsPage({ engine }: { engine: GameEngine }) {
           </p>
         )}
         <TabsContent value="included" className="flex flex-col gap-3">
-          <Input
-            aria-label="Find included preset"
-            placeholder="Find a planet, moon, or shot"
+          <SearchField
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={setQuery}
+            label="Find included preset"
+            placeholder="Find a planet, moon, or shot"
           />
           {sharing !== null && (
             <div className="border-b border-slate-800 pb-3">
