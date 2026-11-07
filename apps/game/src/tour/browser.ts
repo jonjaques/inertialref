@@ -69,6 +69,9 @@ export function createGuideRuntime(
           window.innerHeight > 0
             ? window.innerWidth / window.innerHeight
             : 16 / 9,
+        // What the scene's point tier is measured against, so the guide
+        // lists a station exactly where the frame draws one.
+        viewport: () => engine.lensView()?.viewport ?? null,
         ready: () => {
           const renderer = engine.gl?.renderer
           const scene = engine.scene()

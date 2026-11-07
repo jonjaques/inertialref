@@ -16,7 +16,7 @@ import {
   type GuideToolOutput,
   type TourCameraMotion,
 } from '@inertialref/protocol'
-import type { Lens } from '@inertialref/rendering'
+import type { Lens, Viewport } from '@inertialref/rendering'
 import { radiansToDegrees } from '@inertialref/shared'
 import type { WorldQuery } from '@inertialref/universe'
 import { instantSeconds, pictureInstant } from './scene.ts'
@@ -71,6 +71,8 @@ export interface GuideExecutorOptions {
   readonly ready?: () => boolean
   readonly lens?: () => Lens
   readonly aspect?: () => number
+  /** The display pixels the scene draws into, or null before its first frame. */
+  readonly viewport?: () => Viewport | null
 }
 
 interface Pending {
@@ -172,6 +174,7 @@ export class GuideExecutor {
     return describeView(this.#harness, {
       lens: this.#options.lens?.(),
       aspect: this.#options.aspect?.(),
+      viewport: this.#options.viewport?.() ?? undefined,
     })
   }
 

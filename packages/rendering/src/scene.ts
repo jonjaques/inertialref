@@ -44,7 +44,7 @@ import {
   type LodTier,
   starColor,
 } from './lod.ts'
-import { placeAt, type RenderPlacement } from './placement.ts'
+import { modelDrawn, placeAt, type RenderPlacement } from './placement.ts'
 import { sunlightAt, stellarLuminance } from './photometry.ts'
 
 /*
@@ -267,12 +267,7 @@ export interface RenderStation {
   /** About the eye, with its bounding radius, as a body is placed. */
   readonly placement: RenderPlacement
   readonly orientation: Quat
-  /**
-   * Whether the model is worth drawing: uncompressed and above the point
-   * tier. A compressed placement would shrink a metric model toward the eye
-   * as `placeAt` shrinks a sphere, and below the point tier there is nothing
-   * of a hundred meters of truss to see.
-   */
+  /** Whether the model is worth drawing, by `modelDrawn`. */
   readonly drawn: boolean
   /**
    * Toward its own star, in the station's axes, or null with no star loaded:
@@ -565,7 +560,7 @@ export function buildScene(
       parent: station.parent,
       placement,
       orientation: orientationToRenderSpace(origin, station.orientation),
-      drawn: !placement.compressed && placement.tier !== 'point',
+      drawn: modelDrawn(station.radius, placement.distance, thresholds),
       sun:
         toStar === null || Vec.length(toStar) === 0
           ? null
