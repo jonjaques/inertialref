@@ -332,7 +332,7 @@ Tabulate each picture's self-noise beside #180's deltas, then decide:
 
 ### 3. settle-attribution: find out what the 12-second cold settle waits on (vetoed by fit and completeness)
 
-It proposed a timeline of every settle input on cold and warm loads, on the premise that the galaxy tiles reading 0/1638 at both settles meant the cold settle is not the sky's progressive refinement. The premise does not hold. The cache reports `completedTiles` as 0 whenever nothing is pending ([`galaxyCache.ts`](../../apps/game/src/render/galaxyCache.ts):194), and the harness says so beside the readout ([`harness.ts`](../../packages/devtools/src/harness.ts):657-659). [perf.md](perf.md):266-271 already has the arithmetic: the final 512² tier is 1,536 tiles at two a submitted frame, about 12.8 s at 60 fps, against the measured 12.1–12.7 s. Probe B ran its success metric too: in one context, far-shore, a new galactic position, settled in 13.0 s after the earthrise reload's 0.52 s, so a warm settle is per position, not per context.
+It proposed a timeline of every settle input on cold and warm loads, on the premise that the galaxy tiles reading 0/1638 at both settles meant the cold settle is not the sky's progressive refinement. The premise does not hold. The cache reports `completedTiles` as 0 whenever nothing is pending ([`galaxyCache.ts`](../../apps/game/src/render/galaxyCache.ts):194), and the harness says so beside the readout ([`harness.ts`](../../packages/devtools/src/harness.ts):706-708). [perf.md](perf.md):266-271 already has the arithmetic: the final 512² tier is 1,536 tiles at two a submitted frame, about 12.8 s at 60 fps, against the measured 12.1–12.7 s. Probe B ran its success metric too: in one context, far-shore, a new galactic position, settled in 13.0 s after the earthrise reload's 0.52 s, so a warm settle is per position, not per context.
 
 **Kept as:** P24's first step. It reads `ir.galaxy()`'s archive hits on a warm load, and attributes far-shore's two settle clusters (12–13 s against 17–19 s), which the sky does not explain.
 
@@ -381,7 +381,7 @@ Agents follow those lines every day, and correcting them does not wait on P04, P
 
 Trap 10 states the measured cause. The keymap resolves chords from `event.code` and accepts untrusted events ([`keymapStore.ts`](../../apps/game/src/input/keymapStore.ts):489-493). So `dispatchEvent(new KeyboardEvent('keydown', {code: 'Backquote', bubbles: true}))` from `--js` works, and a `key`-only event does nothing. The text is written in the present tense, and a `/context-log` entry carries the probe figures.
 
-**First step.** Draft the new trap 10 from probe E. Then check that `drive.mjs --keep-storage --js` with a `code`-carrying event flips the instruments on a warm page. The readout is the stored preference, `localStorage['ir.hud.debug.on']` ([`preferences.ts`](../../apps/game/src/state/preferences.ts):103, 709-715), which is a storage key and not a field of `ir`. That check is one GPU job.
+**First step.** Draft the new trap 10 from probe E. Then check that `drive.mjs --keep-storage --js` with a `code`-carrying event flips the instruments on a warm page. The readout is the stored preference, `localStorage['ir.hud.debug.on']` ([`preferences.ts`](../../apps/game/src/state/preferences.ts):107, 721-727), which is a storage key and not a field of `ir`. That check is one GPU job.
 
 **Success.** `rg` finds no sentence in `scripts/`, `.claude/` or `docs/agents/` making any of the three claims, and `docs:build` passes.
 
@@ -666,7 +666,7 @@ P03's guard fails closed on a software adapter. The boot timeout is 8 minutes, w
 - `test:gpu` acquires the lock beside an idle rig.
 - The next attach takes under 150 ms, and its first `--shot` matches one taken before idling (AE 0 at 3%).
 
-**Risks.** A long hold lands in the next frame's delta. Presentation integrates `min(0.1, delta)` (`GameEngine.ts`:1519), so it should not jump (inferred). Whether an idle held page counts as GPU-heavy for the crash rule: unverified.
+**Risks.** A long hold lands in the next frame's delta. Presentation integrates `min(0.1, delta)` (`GameEngine.ts`:1533), so it should not jump (inferred). Whether an idle held page counts as GPU-heavy for the crash rule: unverified.
 
 **Claims.** Nothing steps or renders while held: verified.
 
@@ -787,7 +787,7 @@ For identity, `ir` exposes `BUILD_ID` ([`build.ts`](../../apps/game/src/build.ts
 
 **Claims.**
 
-- `BUILD_ID` is compiled in and shown on the About page (`AboutPage.tsx`:129, `NetworkSection.tsx`:70): verified.
+- `BUILD_ID` is compiled in and shown on the About page (`AboutPage.tsx`:144, `NetworkSection.tsx`:70): verified.
 - Vite's `define` applies in dev: training data.
 
 **Review.** The allocator half is sound, and it targets a class the memory notes hit four times. The identity half needs more than `BUILD_ID`. It names a commit, any dirty tree reports `<sha>-dirty`, and parallel worktrees are cut from the same `origin/main`, so `BUILD_ID` alone cannot tell sibling trees apart. The served tree root in the mechanism is that review's correction. `pnpm dev` keeps 5173 and 8787 ([`dev.mjs`](../../scripts/dev.mjs):42-43), which AGENTS.md, CLAUDE.md, `t3.json` and the human workflow name. The allocator covers the drive, preset, Playwright and base roles. About 2 days.
@@ -809,7 +809,7 @@ For identity, `ir` exposes `BUILD_ID` ([`build.ts`](../../apps/game/src/build.ts
 - `TileProducerStats`, which needs a new host path.
 - Browser version, thermal state, refresh rate, and the lock holder at start.
 
-`ir.perf({gpuReps: 4, gpuFrames: 120, discardFirst: true, passes: true, profileMs: 2000})` is a measurement, not a readout. Its order is fixed: spans first, sampled while frames run, because `ir.profile` observes the frame loop that a hold would stop; then `ir.passes` and `ir.gpu`, which hold frames ([`harness.ts`](../../packages/devtools/src/harness.ts):1599-1620), with `ir.gpu` last. It returns `{schema: 'perf/1', point, environment, frame, spans, late, gpu, passes, counters}`. `scripts/perf/sample.mjs` adds forced-GC heap and fails closed on a fallback adapter.
+`ir.perf({gpuReps: 4, gpuFrames: 120, discardFirst: true, passes: true, profileMs: 2000})` is a measurement, not a readout. Its order is fixed: spans first, sampled while frames run, because `ir.profile` observes the frame loop that a hold would stop; then `ir.passes` and `ir.gpu`, which hold frames ([`harness.ts`](../../packages/devtools/src/harness.ts):1649-1670), with `ir.gpu` last. It returns `{schema: 'perf/1', point, environment, frame, spans, late, gpu, passes, counters}`. `scripts/perf/sample.mjs` adds forced-GC heap and fails closed on a fallback adapter.
 
 **First step.** `ir.environment()` with buffer, origin, build and adapter, tested against a fake `RenderHost`.
 
@@ -1110,7 +1110,7 @@ Separately, the skill records a trap: never run `npx playwright install chrome`,
 
 **Risks.** It waits on P21 for the rates a display does not give. The Air's panel being 60 Hz is training data. The Mac mini's panel is 120 Hz by `system_profiler`, but its off-screen rig runs at about 100 irregular rAF/s (M5). A headed cast there is a run above 64 Hz with no P21, not a 120 Hz one.
 
-**Review.** The fit review vetoes it. The motivating defect showed at 60 Hz: the sawtooth beat "at 60 fps against a 64 Hz tick" ([CONTEXT.md](../../CONTEXT.md):3480-3482), so a refresh-rate axis is not what would have caught it, and the success metric is met at 60 Hz alone. The regime 60 Hz never reaches is a frame with no tick, which only a rate above 64 Hz produces. [`world.test.ts`](../../packages/simulation/src/world.test.ts):119 already holds the universe equal at 60 and 144 Hz. A Node property test over `dt` for the presentation residual answers the rest in about a day, without a browser or P21. A headed `--cast` on the Mac mini is the browser check for the regime with no tick in a frame, at no build cost; the veto stands for the axis, not for that cast.
+**Review.** The fit review vetoes it. The motivating defect showed at 60 Hz: the sawtooth beat "at 60 fps against a 64 Hz tick" ([CONTEXT.md](../../CONTEXT.md):3480-3482), so a refresh-rate axis is not what would have caught it, and the success metric is met at 60 Hz alone. The regime 60 Hz never reaches is a frame with no tick, which only a rate above 64 Hz produces. [`world.test.ts`](../../packages/simulation/src/world.test.ts):120 already holds the universe equal at 60 and 144 Hz. A Node property test over `dt` for the presentation residual answers the rest in about a day, without a browser or P21. A headed `--cast` on the Mac mini is the browser check for the regime with no tick in a frame, at no build cost; the veto stands for the axis, not for that cast.
 
 ### 36. P34: input correctness specs
 
@@ -1453,7 +1453,7 @@ An engine verb advances N presented frames at a fixed `dt`, with real span timin
 
 ### 59. P40: recorded input replay
 
-An `InputLog` in `packages/simulation` is fed by the world's input verbs (`setControl`, `setThrottle`, `setFlightAssist`, `killRotation`; `world.ts`:829-867). `pnpm sim --replay` replays it against `stateHash`, under a fast-check property test. A browser spec records a 30 s flight with real keys through `ir.recording()` and checks the Node replay matches. This closes the roadmap's ["Replay and reconciliation"](../../docs/roadmap.md) gap. About 90% of it is engine work, and headless saves suffice as starting states. **First step:** the recorder over the four verbs in `openSession` and the round-trip property.
+An `InputLog` in `packages/simulation` is fed by the world's input verbs (`setControl`, `setThrottle`, `setFlightAssist`, `killRotation`; `world.ts`:840-878). `pnpm sim --replay` replays it against `stateHash`, under a fast-check property test. A browser spec records a 30 s flight with real keys through `ir.recording()` and checks the Node replay matches. This closes the roadmap's ["Replay and reconciliation"](../../docs/roadmap.md) gap. About 90% of it is engine work, and headless saves suffice as starting states. **First step:** the recorder over the four verbs in `openSession` and the round-trip property.
 
 ### 60. P49: Playwright Test Agents, fenced to the DOM shell (vetoed by all three reviews)
 
