@@ -1194,10 +1194,11 @@ export function resetPreference(definition: AnyPreference): void {
  * meaning the default — and it writes nothing at all when the fields already
  * were, so restoring gamma does not pin today's sensor defaults as a choice.
  *
- * The record is read from storage at the call rather than taken from a hook's
- * render, which is what keeps it from composing against a captured snapshot
- * (rule 43): every write a hook has committed is on disk by the time a person
- * presses anything.
+ * The record is the last value announced for the key — what the mounted hooks
+ * hold — and storage only for a key nothing has said. Not a hook's render,
+ * which would compose against a captured snapshot (rule 43); and not storage
+ * first, because storage is not the live value: a private window refuses
+ * every write while the panels stay live through the subscription.
  */
 export function restoreFields<T extends object>(
   definition: Preference<T>,
