@@ -71,7 +71,9 @@ describe('analyzeFrames', () => {
     // floor is 600: a 500 px departure reads 600 against its neighbors.
     const departing = (px) =>
       analyze(run(30, { noise: 100, departure: (i) => (i === 12 ? px : 0) }))
-    expect((await departing(500)).isolated).toEqual([])
+    const below = await departing(500)
+    expect(below.quiet).toBe(100)
+    expect(below.isolated).toEqual([])
     expect((await departing(501)).isolated).toEqual([
       { frame: 12, changed: 601, skip: 100 },
     ])
