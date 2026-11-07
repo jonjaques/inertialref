@@ -69,6 +69,20 @@ export function LensSection({
     (sensor.mode === 'automatic' && automaticAvailable === false)
   const camera: CameraState = { lens, onLens: setLens }
   const id = useId()
+  /*
+   * Whether the lens is the one flight starts with. Presets fit their own lens
+   * and write it here — this is the one lens the planetarium and the ship
+   * share — so after "The Rings" the ship flies at the preset's focal length.
+   * Saying so on the heading, and making the way back the primary verb, is
+   * what keeps that from being a lens nobody remembers choosing.
+   */
+  const custom =
+    lens.focalLength !== DEFAULT_LENS.focalLength ||
+    lens.zoom !== DEFAULT_LENS.zoom ||
+    lens.fStop !== DEFAULT_LENS.fStop ||
+    lens.focus !== DEFAULT_LENS.focus ||
+    lens.shutter !== DEFAULT_LENS.shutter ||
+    lens.iso !== DEFAULT_LENS.iso
   return (
     <>
       <SensorSection />
@@ -78,7 +92,7 @@ export function LensSection({
         // After zoom — what the picture is actually taken at, and what every
         // reading in the Optics section is computed from. The glass alone reads
         // 19 mm beside an 8.5° field, which is two lenses on one panel.
-        trailing={`${effectiveFocalLength(camera.lens).toFixed(0)} mm`}
+        trailing={`${effectiveFocalLength(camera.lens).toFixed(0)} mm${custom ? ' · custom' : ''}`}
       >
         {/*
          * Label and reading on one line, the travel on the next.
@@ -129,15 +143,8 @@ export function LensSection({
           <Action
             label="Reset lens"
             title={`Back to the ${DEFAULT_FOV_DEG.toFixed(0)}° default — ${DEFAULT_LENS.focalLength.toFixed(1)} mm, no zoom, f/${DEFAULT_LENS.fStop.toFixed(1)}, focused at infinity`}
-            disabled={
-              held ||
-              (camera.lens.focalLength === DEFAULT_LENS.focalLength &&
-                camera.lens.zoom === DEFAULT_LENS.zoom &&
-                camera.lens.fStop === DEFAULT_LENS.fStop &&
-                camera.lens.focus === DEFAULT_LENS.focus &&
-                camera.lens.shutter === DEFAULT_LENS.shutter &&
-                camera.lens.iso === DEFAULT_LENS.iso)
-            }
+            tone={custom && !held ? 'primary' : 'normal'}
+            disabled={held || !custom}
             onClick={() => camera.onLens(DEFAULT_LENS)}
           />
         </div>

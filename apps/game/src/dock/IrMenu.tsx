@@ -19,7 +19,6 @@ import { DOCS, HOME, overlayState, SETTINGS } from '../pages/paths.ts'
 import { MenuToggle } from './MenuToggle.tsx'
 import { drawn, type PanelGroup } from './panels.ts'
 import type { DockPlacement } from './placement.ts'
-import { PlacementMenu } from './PlacementMenu.tsx'
 import { isOpen, type Workspace } from './useWorkspace.ts'
 import { holdWayHome, WAY_HOME } from './wayHome.ts'
 
@@ -40,8 +39,8 @@ import { holdWayHome, WAY_HOME } from './wayHome.ts'
  *
  * Read left to right it answers three questions in the order they are asked:
  * *where am I* (the mark and the mode), *what can I see* (the panes and the
- * panels), *what else is there* (the documentation, the settings, the bar
- * itself, and who is signed in). Attached, the third group moves to the far
+ * panels), *what else is there* (the documentation, the settings, and who
+ * is signed in). Attached, the third group moves to the far
  * end — a full-width bar with everything packed against its left edge is a
  * floating one with a strip of empty ground beside it.
  */
@@ -54,7 +53,6 @@ export function IrMenu({
   revealed,
   onReveal,
   placement,
-  onPlace,
 }: {
   /** The name of the place, beside the mark. */
   mode: string
@@ -63,8 +61,12 @@ export function IrMenu({
   /** Which guarded groups are currently disclosed, by group id. */
   revealed: ReadonlySet<string>
   onReveal: (group: string) => void
+  /**
+   * Where the bar is drawn. Chosen in Settings › Interface: a placement is
+   * picked once, and a glyph for it on the one piece of chrome that is always
+   * on screen was a permanent control for a decision nobody makes twice.
+   */
   placement: DockPlacement
-  onPlace: (placement: DockPlacement) => void
 }) {
   const location = useLocation()
   const attached = placement !== 'floating'
@@ -243,8 +245,6 @@ export function IrMenu({
             </TooltipTrigger>
             <TooltipContent side={side}>Settings</TooltipContent>
           </Tooltip>
-
-          <PlacementMenu placement={placement} onPlace={onPlace} side={side} />
 
           {/*
            * Who is flying, last: the one control here that is about the person

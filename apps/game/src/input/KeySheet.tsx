@@ -44,9 +44,15 @@ export function KeySheet({
       {groups.map(({ group, rows }) => (
         <section key={group} className="break-inside-avoid">
           <h3 className="type-label mb-1 text-sky-400/80">{group}</h3>
+          {/* The key column has a floor rather than sizing to its own run:
+              each group is its own grid, so `auto` gave every group a
+              different column and the acts jumped sideways from one heading
+              to the next. */}
           <dl
             className={`grid gap-x-3 gap-y-0.5 ${
-              padded ? 'grid-cols-[auto_auto_1fr]' : 'grid-cols-[auto_1fr]'
+              padded
+                ? 'grid-cols-[minmax(5.5rem,auto)_auto_1fr]'
+                : 'grid-cols-[minmax(5.5rem,auto)_1fr]'
             }`}
           >
             {rows.map(({ action, label, pad }) => (

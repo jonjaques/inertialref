@@ -24,6 +24,7 @@ import {
   resolvePicture,
 } from '../render/picture.ts'
 import { SHIP_IDS, SHIP_LABELS } from '../render/ships.ts'
+import { useEngine } from '../state/engineStore.ts'
 import type { HudRenderState } from './controls.ts'
 import { useDisplayDefaults } from './displayDefaults.ts'
 import { OptionGroup } from './OptionGroup.tsx'
@@ -88,6 +89,15 @@ export function GraphicsPanel({
   )
   const { rows: changed } = useDisplayDefaults()
   const mode = render.output?.mode ?? null
+  /*
+   * Whether the comfort clamps below drive anything. Automatic adapts unless
+   * this display cannot meter it (WebGL), in which case the camera falls back
+   * to the lens's own exposure and the clamps have nothing to clamp.
+   */
+  const automaticAvailable = useEngine(
+    (snapshot) => snapshot.exposure?.automaticAvailable,
+  )
+  const adapting = sensor.mode === 'automatic' && automaticAvailable !== false
   /*
    * Whether `auto` guessed something other than the obvious.
    *
@@ -196,6 +206,82 @@ export function GraphicsPanel({
             reading={gamma.toFixed(2)}
             spoken={gamma.toFixed(2)}
             onChange={setGamma}
+          />
+        </SettingRow>
+      </Section>
+
+      {/*
+       * The exposure's comfort clamps: how fast Automatic follows a change in
+       * brightness and how far it may swing. `PRODUCT.md` promises them to
+       * somebody for whom interstellar dark into a star filling the frame is
+       * uncomfortable, so they are the person's and live here, beside the peak
+       * cap — not in a Lens panel that opens one photograph at a time.
+       *
+       * Drawn in every camera mode and disabled outside Automatic, with the
+       * reason: Enhanced composites rather than adapts and Manual is the lens,
+       * so in either a live slider would move nothing, and a hidden one would
+       * be a promise somebody could not find until they changed modes.
+       */}
+      <Section id="graphics.comfort" title="Comfort">
+        {!adapting && (
+          <p className="type-ui py-1 text-pretty text-slate-400">
+            These apply in the automatic camera mode, set in a viewport’s Lens
+            panel.
+          </p>
+        )}
+        <SettingRow
+          label="Adaptation rate"
+          changed={changed.rate}
+          detail="How fast the exposure follows a change in brightness. Zero holds it."
+        >
+          <SliderControl
+            label="Adaptation rate"
+            min={0}
+            max={4}
+            step={0.1}
+            value={sensor.rate}
+            reading={sensor.rate === 0 ? 'Hold' : `${sensor.rate.toFixed(1)}×`}
+            disabled={!adapting}
+            onChange={(rate) => setSensor((held) => ({ ...held, rate }))}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Bright range"
+          changed={changed.bright}
+          detail="How many stops the exposure may close for a bright scene."
+        >
+          <SliderControl
+            label="Bright range"
+            min={0}
+            max={32}
+            step={1}
+            value={sensor.range.bright}
+            reading={`${sensor.range.bright} EV`}
+            disabled={!adapting}
+            onChange={(bright) =>
+              setSensor((held) => ({
+                ...held,
+                range: { ...held.range, bright },
+              }))
+            }
+          />
+        </SettingRow>
+        <SettingRow
+          label="Dark range"
+          changed={changed.dark}
+          detail="How many stops the exposure may open in the dark."
+        >
+          <SliderControl
+            label="Dark range"
+            min={0}
+            max={24}
+            step={1}
+            value={sensor.range.dark}
+            reading={`${sensor.range.dark} EV`}
+            disabled={!adapting}
+            onChange={(dark) =>
+              setSensor((held) => ({ ...held, range: { ...held.range, dark } }))
+            }
           />
         </SettingRow>
       </Section>

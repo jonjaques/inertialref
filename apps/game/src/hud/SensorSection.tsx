@@ -14,6 +14,13 @@ import { Section } from './Section.tsx'
  * "Exposure" over the section, because that is what every row in it sets —
  * how the light that reaches the sensor becomes a picture — and it is the
  * word a photographer looks for first in a panel called Lens.
+ *
+ * **The comfort clamps are not here.** How fast Automatic adapts, and how far
+ * it may swing bright or dark, are the protections `PRODUCT.md` promises
+ * somebody for whom a star filling the frame after interstellar dark is
+ * uncomfortable — a property of the person, kept in Settings › Display beside
+ * the peak luminance cap, rather than of one photograph. What stays is what a
+ * picture is: the mode, the compensation, the white balance.
  */
 export function SensorSection() {
   const [settings, set] = usePersistentState(RENDER_SENSOR)
@@ -50,36 +57,6 @@ export function SensorSection() {
             reading: `${settings.compensation >= 0 ? '+' : ''}${settings.compensation.toFixed(1)} EV`,
             change: (compensation: number) =>
               set((held) => ({ ...held, compensation })),
-          },
-          {
-            label: 'Adaptation rate',
-            value: settings.rate,
-            min: 0,
-            max: 4,
-            step: 0.1,
-            reading:
-              settings.rate === 0 ? 'Hold' : `${settings.rate.toFixed(1)}×`,
-            change: (rate: number) => set((held) => ({ ...held, rate })),
-          },
-          {
-            label: 'Bright range',
-            value: settings.range.bright,
-            min: 0,
-            max: 32,
-            step: 1,
-            reading: `+${settings.range.bright} EV`,
-            change: (bright: number) =>
-              set((held) => ({ ...held, range: { ...held.range, bright } })),
-          },
-          {
-            label: 'Dark range',
-            value: settings.range.dark,
-            min: 0,
-            max: 24,
-            step: 1,
-            reading: `−${settings.range.dark} EV`,
-            change: (dark: number) =>
-              set((held) => ({ ...held, range: { ...held.range, dark } })),
           },
         ]
       : []),
@@ -123,7 +100,7 @@ export function SensorSection() {
             Automatic needs WebGPU. This view uses the manual lens exposure.
           </p>
           <Action
-            label="Use Manual"
+            label="Use manual"
             onClick={() => set((held) => ({ ...held, mode: 'manual' }))}
           />
         </div>
@@ -170,8 +147,15 @@ export function SensorSection() {
       <div className="flex justify-end">
         <Action
           label="Reset camera mode"
+          // The photograph's settings, not the person's: the peak and the
+          // comfort clamps are Settings' and stay as they were.
           onClick={() =>
-            set((held) => ({ ...DEFAULT_SENSOR_SETTINGS, peak: held.peak }))
+            set((held) => ({
+              ...DEFAULT_SENSOR_SETTINGS,
+              peak: held.peak,
+              rate: held.rate,
+              range: held.range,
+            }))
           }
         />
       </div>

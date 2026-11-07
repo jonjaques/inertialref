@@ -19,17 +19,21 @@ import {
  * record of several rows — the picture is anti-aliasing, scale and sharpness —
  * and "restore 1 setting" over three changed rows is a count nobody can check.
  *
- * **The sensor is restored by one field.** `render.sensor` holds the camera's
- * processing — its mode, its exposure clamps, its white balance — and the
- * display's peak luminance in one record, and only the last is on this page.
- * Resetting the record would undo a camera mode chosen in a viewport's own
- * Lens panel from a page that never showed it.
+ * **The sensor is restored by the fields this page draws.** `render.sensor`
+ * holds a photograph's processing — its mode, its compensation, its white
+ * balance — beside the person's comfort clamps and peak luminance, in one
+ * record, and only the second half is on this page. Resetting the record
+ * would undo a camera mode chosen in a viewport's own Lens panel from a page
+ * that never showed it.
  */
 export interface DisplayDefaults {
   readonly rows: {
     readonly hdr: boolean
     readonly peak: boolean
     readonly gamma: boolean
+    readonly rate: boolean
+    readonly bright: boolean
+    readonly dark: boolean
     readonly aa: boolean
     readonly scale: boolean
     readonly sharpness: boolean
@@ -70,6 +74,9 @@ export function useDisplayDefaults(): DisplayDefaults {
     hdr: hdr !== RENDER_HDR.initial,
     peak: sensor.peak !== RENDER_SENSOR.initial.peak,
     gamma: gamma !== RENDER_GAMMA.initial,
+    rate: sensor.rate !== RENDER_SENSOR.initial.rate,
+    bright: sensor.range.bright !== RENDER_SENSOR.initial.range.bright,
+    dark: sensor.range.dark !== RENDER_SENSOR.initial.range.dark,
     aa: picture.aa !== RENDER_PICTURE.initial.aa,
     scale: picture.scale !== RENDER_PICTURE.initial.scale,
     sharpness: picture.sharpness !== RENDER_PICTURE.initial.sharpness,
@@ -86,7 +93,12 @@ export function useDisplayDefaults(): DisplayDefaults {
     changed: Object.values(rows).filter(Boolean).length,
     restore: () => {
       for (const definition of WHOLE) resetPreference(definition)
-      setSensor((held) => ({ ...held, peak: RENDER_SENSOR.initial.peak }))
+      setSensor((held) => ({
+        ...held,
+        peak: RENDER_SENSOR.initial.peak,
+        rate: RENDER_SENSOR.initial.rate,
+        range: RENDER_SENSOR.initial.range,
+      }))
     },
   }
 }

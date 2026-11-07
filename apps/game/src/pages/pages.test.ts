@@ -130,7 +130,7 @@ describe('the routed dialogs', () => {
     // the half that could not exist while the bindings were string literals in
     // five files.
     const controls = at(settingsSection('controls'))
-    expect(controls).toContain('Flight Assist')
+    expect(controls).toContain('Flight assist')
     // In the keymap's own groups, under a heading that says where they work —
     // not a flat list with the context appended to every label.
     expect(controls).toContain('aria-label="Time"')
@@ -140,7 +140,7 @@ describe('the routed dialogs', () => {
     // callouts name the flight acts on the pad's controls before any pad has
     // been seen.
     const pad = at(settingsSection('controller'))
-    expect(pad).toContain('Kill Rotation')
+    expect(pad).toContain('Kill rotation')
     expect(pad).toContain('Thrust · Translate')
   })
 

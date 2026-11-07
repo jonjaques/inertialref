@@ -1,5 +1,6 @@
 import { Camera, Library } from 'lucide-react'
 import { PICTURES } from '@inertialref/devtools'
+import { COMPOSITIONS } from '@inertialref/rendering'
 import { Action } from '../hud/Action.tsx'
 import { Section } from '../hud/Section.tsx'
 import type { PlanetariumContext } from './context.ts'
@@ -16,11 +17,11 @@ const QUICK_SHOTS = ['earthrise', 'centauri-daybreak', 'far-shore']
  *
  * The thumbnails lead because they are the answer this panel gives without
  * being asked — a visitor who has not found anything to look at yet is one
- * press from Earthrise. The compositions sit under one heading with the light
- * and the step back beside them: all three move the camera relative to the
- * current subject in one press, and three collapsible headings nested inside
- * a fourth was two clicks to reach the sixteen thumbnails this panel is
- * proudest of.
+ * press from Earthrise. The compositions follow, open, under one heading with
+ * the light and the step back beside them: all three move the camera relative
+ * to the current subject in one press, and three collapsible headings nested
+ * inside a fourth, closed, was two clicks to reach the sixteen thumbnails this
+ * panel is proudest of. The Milky Way is the one section closed on arrival.
  */
 export function PresetsPanel(context: PlanetariumContext) {
   return (
@@ -51,10 +52,13 @@ export function PresetsPanel(context: PlanetariumContext) {
           onClick={() => context.managePresets(true)}
         />
       </div>
+      {/* Open on arrival: the compositions are the panel's second answer and
+          the most particular thing this mode does, and a reader who wants
+          the room folds it once — the choice persists. */}
       <Section
         id="planetarium.presets.framing-tools"
         title="Compose"
-        defaultOpen={false}
+        trailing={`${COMPOSITIONS.length}`}
       >
         <CompositionControls {...context} />
       </Section>

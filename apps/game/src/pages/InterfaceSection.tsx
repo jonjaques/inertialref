@@ -2,7 +2,7 @@ import { Action } from '../hud/Action.tsx'
 import { OptionGroup } from '../hud/OptionGroup.tsx'
 import { Section } from '../hud/Section.tsx'
 import { SettingRow } from '../hud/SettingRow.tsx'
-import { DOCK_PLACEMENTS } from '../dock/placement.ts'
+import { DOCK_PLACEMENTS, PLACEMENT_LABEL } from '../dock/placement.ts'
 import {
   DOCK_PLACEMENT,
   PLANETARIUM_HINTED,
@@ -11,13 +11,6 @@ import {
 } from '../state/preferences.ts'
 import type { AppMode } from './paths.ts'
 import { resetWorkspace, WORKSPACE_MODES } from './settingsDefaults.ts'
-
-/** The chips. `PLACEMENT_LABEL` is a sentence for a menu item; these sit in a row. */
-const PLACEMENT_CHIPS = {
-  floating: 'Floating',
-  top: 'Top edge',
-  bottom: 'Bottom edge',
-} as const
 
 /** What each workspace is called on the button that resets it. */
 const MODE_NAMES: Readonly<Record<Exclude<AppMode, 'menu'>, string>> = {
@@ -31,12 +24,11 @@ const MODE_NAMES: Readonly<Record<Exclude<AppMode, 'menu'>, string>> = {
  * The chrome around the scene: where the menu bar sits, where the panels go
  * back to, and the one hint that says how to look.
  *
- * Every row is a preference the build already keeps and nothing here is a
- * setting that only exists on this page. The menu bar's placement was a glyph
- * on the bar itself — a permanent control on the one piece of chrome that is
- * always on screen, for a choice somebody makes once — and the layouts were
- * reachable only through "reset everything", which also took the bindings
- * and the lens with it.
+ * Every row is a preference the build already keeps. The menu bar's
+ * placement is chosen here and only here: it was a glyph on the bar itself —
+ * a permanent control on the one piece of chrome that is always on screen,
+ * for a choice somebody makes once — and the layouts were reachable only
+ * through "reset everything", which also took the bindings and the lens.
  *
  * `mode` is the mode behind the dialog, read from the overlay's background
  * rather than from the path: this page opens over the menu as readily as over
@@ -65,7 +57,7 @@ export function InterfaceSection({
             label="Menu bar position"
             value={placement}
             values={DOCK_PLACEMENTS}
-            labels={PLACEMENT_CHIPS}
+            labels={PLACEMENT_LABEL}
             onChange={setPlacement}
           />
         </SettingRow>
