@@ -27,9 +27,8 @@ import { useSurveySites } from './useSurveySites.ts'
  * back from it. **Ground** is the sites, the descent and the heading, and
  * below the floor it is where the pose readouts go.
  *
- * What the eye looks *through* is the Lens panel's (`hud/LensPanel.tsx`). It
- * was the back half of this one — four sections under the pose — and the
- * split is by question: this panel is "where am I looking from", that one is
+ * What the eye looks *through* is the Lens panel's (`hud/LensPanel.tsx`), and
+ * the split is by question: this panel is "where am I looking from", that one is
  * "through what", and the one-tap framings that answer "show me a crescent"
  * are the Presets panel's. Layers are the View panel's, by what a control
  * changes: a layer changes pixels the scene does not own, and the camera
@@ -75,6 +74,9 @@ export function CameraPanel(context: PlanetariumContext) {
     }),
   )
 
+  // One string out of the snapshot, as `LensPanel` reads it.
+  const galaxy = useEngine((snapshot) => snapshot.observer?.galaxyView ?? null)
+
   const lookTitle = useActionTitle(
     'observe.freeLook',
     'Turn the head with a drag and the arrow keys, instead of orbiting',
@@ -114,10 +116,14 @@ export function CameraPanel(context: PlanetariumContext) {
     <div className="flex flex-col gap-1">
       <TargetControls {...context} />
 
+      {/* A Milky Way view has no subject either, and the line above has
+          just named what is on screen — "nothing selected" under it would
+          contradict the panel's own heading. */}
       {eye === null ? (
         <p className="type-ui px-1 py-2 text-pretty text-slate-400">
-          Nothing selected. Click something in the sky, or pick a row in the
-          navigator.
+          {galaxy === null
+            ? 'Nothing selected. Click something in the sky, or pick a row in the navigator.'
+            : 'The view holds its own framing. Pick something in the navigator to frame it instead.'}
         </p>
       ) : (
         !standing && (

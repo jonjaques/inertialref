@@ -89,9 +89,9 @@ export function planetariumPanels(
       title: 'Camera',
       /*
        * The scene camera — the movie camera every engine's editor draws for
-       * the eye in a scene — and not the aperture, which is the Lens panel's
-       * now that the glass has a panel of its own. A still camera would have
-       * read as "take a picture", which is the Presets panel's save.
+       * the eye in a scene — and not the aperture, which is the Lens panel's,
+       * because the glass is a panel of its own. A still camera would read
+       * as "take a picture", which is the Presets panel's save.
        */
       icon: Video,
       zone: 'right',

@@ -28,7 +28,7 @@ export function SettingRow({
   label,
   detail,
   changed = false,
-  labelId,
+  detailId,
   onHover,
   children,
 }: {
@@ -37,8 +37,12 @@ export function SettingRow({
   detail?: ReactNode
   /** Whether the value differs from the preference's default. */
   changed?: boolean
-  /** For a control that names itself through `aria-labelledby`. */
-  labelId?: string
+  /**
+   * The detail's id, for a control that points `aria-describedby` at it. The
+   * line is visible beside the control, and a screen reader on the control
+   * hears it only through that reference.
+   */
+  detailId?: string
   /**
    * The pointer entering and leaving the row — for a page with a picture of
    * the thing being set, where the row being read lights its part of it.
@@ -61,12 +65,14 @@ export function SettingRow({
         />
       )}
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span id={labelId} className="type-ui text-slate-200">
+        <span className="type-ui text-slate-200">
           {label}
           {changed && <span className="sr-only"> (changed)</span>}
         </span>
         {detail !== undefined && (
-          <span className="type-ui text-pretty text-slate-400">{detail}</span>
+          <span id={detailId} className="type-ui text-pretty text-slate-400">
+            {detail}
+          </span>
         )}
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2 @lg:justify-end">

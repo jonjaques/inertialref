@@ -132,7 +132,7 @@ export const PAGES: readonly PageMeta[] = [
     path: SETTINGS,
     title: 'Settings',
     description:
-      'Camera, display and simulation settings — the lens, antialiasing, HDR output and the flare, over whatever is running.',
+      'Display, interface and control settings — HDR output, antialiasing, the flare, the menu bar and every binding, over whatever is running.',
     index: false,
   },
   {

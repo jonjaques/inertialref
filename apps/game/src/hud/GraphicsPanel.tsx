@@ -236,9 +236,15 @@ export function GraphicsPanel({
        * uses when it is chosen.
        */}
       <Section id="graphics.comfort" title="Comfort">
+        {/* Two reasons they can be idle, and they want different words: in
+            Automatic on a renderer that cannot meter (WebGL), "these apply in
+            the automatic mode" is said to somebody already in it. The second
+            sentence is the exposure section's own, so the two pages agree. */}
         {!adapting && (
           <p className="type-ui py-1 text-pretty text-slate-400">
-            These apply in the automatic camera mode.
+            {sensor.mode === 'automatic'
+              ? 'These apply in the automatic camera mode, which needs WebGPU. This view uses the manual lens exposure.'
+              : 'These apply in the automatic camera mode.'}
           </p>
         )}
         <SettingRow

@@ -21,7 +21,7 @@ import { useInputDevice, useKeymap } from '../input/useKeymap.ts'
 import { usePadLive } from '../input/usePadLive.ts'
 import { Section } from '../hud/Section.tsx'
 import { CONTROLS_PAD, usePersistentState } from '../state/preferences.ts'
-import { defaultPad } from './settingsDefaults.ts'
+import { defaultPad, withoutOverride } from './settingsDefaults.ts'
 
 /*
  * The controller: a picture of it, what each control does in each mode, and
@@ -201,13 +201,4 @@ function clashesIn(
     }
   }
   return found
-}
-
-/** A binding table without one act's override, which is "the default". */
-function withoutOverride(
-  held: Readonly<Record<string, string | null>>,
-  id: string,
-): Readonly<Record<string, string | null>> {
-  const { [id]: _dropped, ...rest } = held
-  return rest
 }

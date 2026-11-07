@@ -534,6 +534,32 @@ describe('a scoped reset', () => {
     expect(read(PLANETARIUM_LABELS)).toBe(true)
     expect(read(PERSONAL_PICTURES)).toEqual([shot])
   })
+
+  it('resets a value that is live but never reached storage', () => {
+    // Site data blocked: `setItem` throws, the hooks stay live through the
+    // subscription, and storage has no key for the reset to find.
+    vi.stubGlobal('window', {
+      localStorage: {
+        length: 0,
+        key: () => null,
+        getItem: () => null,
+        setItem: () => {
+          throw new Error('storage is blocked')
+        },
+        removeItem: () => {},
+      },
+    })
+    const heard: unknown[] = []
+    const stop = subscribe(PLANETARIUM_LABELS, (value) => heard.push(value))
+    try {
+      write(PLANETARIUM_LABELS, false)
+      resetPreferences()
+      expect(heard).toEqual([false, true])
+    } finally {
+      stop()
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('restoring some fields of a record', () => {

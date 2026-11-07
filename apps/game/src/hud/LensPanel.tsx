@@ -15,12 +15,12 @@ import { OpticsSection } from './OpticsSection.tsx'
  * glass, and what the two of them resolve to.
  *
  * A panel of its own, in every mode with a viewport — the planetarium and the
- * flight modes register the same component, as they do the Navigator. It was
- * the back half of the planetarium's Camera panel, under the pose, the aim
- * and the ground, and a copy of its sliders on `/settings/camera` was flight's
- * only way to it. The lens is set beside the picture it shapes: a page that
- * opens over the menu could not show the picture, and a panel nobody opens
- * until they want it costs a glyph in the menu and nothing else.
+ * flight modes register the same component, as they do the Navigator. The
+ * lens is set beside the picture it shapes: a settings page opens over the
+ * menu as readily as over a mode and cannot show the picture, a section under
+ * the Camera panel's pose is a scroll past the verbs that panel is opened
+ * for, and a panel nobody opens until they want it costs a glyph in the menu
+ * and nothing else. ADR-0058 has the alternatives.
  *
  * `glare` is the planetarium's, and only it passes one: it is how much of the
  * flare's ghost-and-streak stack a photograph shows, which is a choice about

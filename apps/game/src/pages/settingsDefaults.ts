@@ -48,16 +48,41 @@ export const defaultPad = (id: string): string | null =>
  * is not a change anybody can see, and counting it put a mark and a "1" on a
  * row whose key had been "rebound" to the key it already had. The editors
  * also remove such an override when they would have written one.
+ *
+ * Only for an act this build has. An override stored under an id the table
+ * does not carry draws no row, and counting it puts a "1" on the tab and in
+ * the restore question with no mark anywhere on the page to match it.
  */
 export const keyChanged = (
   id: string,
   stored: string | null | undefined,
-): boolean => stored !== undefined && stored !== defaultChord(id)
+): boolean =>
+  stored !== undefined &&
+  findAction(id) !== undefined &&
+  stored !== defaultChord(id)
 
 export const padChanged = (
   id: string,
   stored: string | null | undefined,
-): boolean => stored !== undefined && stored !== defaultPad(id)
+): boolean =>
+  stored !== undefined &&
+  findAction(id) !== undefined &&
+  stored !== defaultPad(id)
+
+/**
+ * A binding table without one act's override, which is "the default".
+ *
+ * Shared by both editors, because the keyboard's and the pad's records are the
+ * same shape, and in both a press of an act's own default, a reset, and an
+ * unbind of an act that ships unbound all mean this.
+ */
+export function withoutOverride(
+  held: Readonly<Record<string, string | null>>,
+  id: string,
+): Readonly<Record<string, string | null>> {
+  const { [id]: _dropped, ...rest } = held
+  return rest
+}
 
 /** The bindings: one row per act whose key differs from its default. */
 export function useKeyDefaults(): PageDefaults {

@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { Vibrate } from 'lucide-react'
 import { Action } from '../hud/Action.tsx'
 import { OptionGroup } from '../hud/OptionGroup.tsx'
@@ -72,6 +73,7 @@ export function PadTuningSection({
 }) {
   const [tuning, setTuning] = usePersistentState(CONTROLS_PAD_TUNING)
   const store = useKeymap()
+  const id = useId()
   const set = <K extends keyof PadTuning>(field: K, value: PadTuning[K]) =>
     setTuning((held) => ({ ...held, [field]: value }))
 
@@ -84,10 +86,12 @@ export function PadTuningSection({
             key={field}
             label={label}
             detail={about}
+            detailId={`${id}-${field}-about`}
             changed={tuning[field] !== DEFAULT_TUNING[field]}
           >
             <SliderControl
               label={label}
+              describedBy={`${id}-${field}-about`}
               min={range.min}
               max={range.max}
               step={range.step}

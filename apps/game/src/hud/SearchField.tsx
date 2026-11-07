@@ -7,10 +7,10 @@ import { FOCUS_RING, releaseFocus } from './focus.ts'
  * A field that narrows a list: a glyph, the text, and a way to clear it.
  *
  * One component for the navigator, the key editor and the preset library,
- * because three hand-written copies had drifted three ways — one set its
- * placeholder at the registry's 16 px beside 11 px readouts, one had no clear
- * control, one had no glyph — and a reader who has learned one search field
- * here should not have to learn the next.
+ * because hand-written copies drift — the registry's `Input` sets its
+ * placeholder at 16 px beside 11 px readouts, and a copy that forgets the
+ * clear control or the glyph is a second kind of field — and a reader who has
+ * learned one search field here should not have to learn the next.
  *
  * The frame is a `<label>`, so the glyph and the padding are part of the hit
  * area and focus is drawn on the frame (`focus-within`) rather than as a ring

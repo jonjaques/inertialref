@@ -25,10 +25,11 @@ const MODE_NAMES: Readonly<Record<Exclude<AppMode, 'menu'>, string>> = {
  * go back to, with the one hint that says how to look.
  *
  * Every row is a preference the build already keeps. The menu bar's
- * placement is chosen here and only here: it was a glyph on the bar itself —
- * a permanent control on the one piece of chrome that is always on screen,
- * for a choice somebody makes once — and the layouts were reachable only
- * through "reset everything", which also took the bindings and the lens.
+ * placement is chosen here and only here: a glyph for it on the bar itself
+ * would be a permanent control on the one piece of chrome that is always on
+ * screen, for a choice somebody makes once. The layouts reset per mode here
+ * because the data page's "reset everything" also takes the bindings and the
+ * display, which is far more than putting the panels back.
  *
  * `mode` is the mode behind the dialog, read from the overlay's background
  * rather than from the path: this page opens over the menu as readily as over

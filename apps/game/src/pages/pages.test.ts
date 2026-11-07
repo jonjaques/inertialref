@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { type Location, MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
+import { shellPaths } from '../../astro/siteRoutes.ts'
 import {
   ABOUT,
   AUTH_CALLBACK,
@@ -113,6 +114,13 @@ describe('the routed dialogs', () => {
     // And the lens is not one of them: it is the viewport's instrument, set
     // from the Lens panel beside the picture it shapes.
     expect(markup).not.toContain(`href="${settingsSection('camera')}"`)
+    // A link somebody sends is a cold visit, and a cold visit is a file:
+    // a tab whose route Astro does not prerender is the Worker's 404 page.
+    const tabs = [...markup.matchAll(/href="(\/settings\/[^"]+)"/g)].map(
+      (match) => match[1],
+    )
+    expect(tabs.length).toBeGreaterThan(0)
+    for (const tab of tabs) expect(shellPaths).toContain(tab)
   })
 
   it('opens the section the URL names', () => {

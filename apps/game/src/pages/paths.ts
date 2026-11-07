@@ -167,7 +167,7 @@ export function isOverlayPath(pathname: string): boolean {
 /**
  * Which dialog *surface* a path belongs to — `AnimatePresence`'s key.
  *
- * `/settings/camera` and `/settings/display` are one panel showing different
+ * `/settings/display` and `/settings/controls` are one panel showing different
  * content, so they share a key and the panel never re-enters between them.
  * Anything that is not a dialog is the absence of one, which is the state the
  * `null` fallback route renders.

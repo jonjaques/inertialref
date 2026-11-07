@@ -23,6 +23,7 @@ export function SliderControl({
   value,
   reading,
   spoken,
+  describedBy,
   disabled = false,
   onChange,
 }: {
@@ -36,6 +37,8 @@ export function SliderControl({
   reading: string
   /** What a screen reader says for it, when the reading is a unit glyph. */
   spoken?: string
+  /** The id of the row's detail — `SettingRow`'s `detailId`. */
+  describedBy?: string
   disabled?: boolean
   onChange: (value: number) => void
 }) {
@@ -48,6 +51,7 @@ export function SliderControl({
         value={[value]}
         disabled={disabled}
         aria-label={label}
+        aria-describedby={describedBy}
         aria-valuetext={spoken ?? reading}
         onValueChange={([next]) => {
           if (next !== undefined) onChange(next)

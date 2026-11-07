@@ -192,10 +192,10 @@ export interface PreferenceFamily<T> {
    * One member of the family.
    *
    * `initial` may be overridden per member, which is the one thing a family
-   * cannot say once: every section in the app opens except the Camera panel's
-   * Optics, which is a page of derived readings rather than controls and is the
-   * section a first visit should not have to scroll past. A second family for
-   * one section would be two prefixes over one key space.
+   * cannot say once: most sections open, and the few that start closed — the
+   * Lens panel's Optics, a page of derived readings rather than controls, is
+   * the model — are sections a first visit should not have to scroll past. A
+   * second family for those would be two prefixes over one key space.
    */
   readonly of: (id: string, initial?: T) => Preference<T>
 }
@@ -1163,7 +1163,15 @@ export function importPreferences(data: unknown): ImportPlan {
  */
 export function resetPreferences(keep: readonly AnyPreference[] = []): void {
   const kept = new Set(keep.map((definition) => definition.key))
-  const keys = storedKeys().filter((key) => !kept.has(key))
+  /*
+   * What storage holds and what the hooks hold, because the two differ where
+   * storage refuses writes (`latest`): a browser with site data blocked keeps
+   * every change live and nothing on disk, and a reset that walked storage
+   * alone found nothing to put back.
+   */
+  const keys = [...new Set([...storedKeys(), ...latest.keys()])].filter(
+    (key) => !kept.has(key),
+  )
   // Clear obsolete keys before resolving defaults, or a migration restores
   // the preference while reset is still removing its source.
   for (const key of keys) removeRaw(key)

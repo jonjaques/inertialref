@@ -40,11 +40,14 @@ export function Section({
   /**
    * Whether it opens the first time it is ever drawn.
    *
-   * Every section in the app opens, and the Camera panel's Optics is the one
-   * that does not: it is eight derived readings rather than controls, and a
-   * planetarium panel whose first screen is the Airy disk is describing the
-   * instrument to somebody who came to look at Saturn. It still persists like
-   * the rest, so opening it once is a decision that sticks.
+   * Most sections open, and a few do not, each because its first screen
+   * answers a question a first visit has not asked: the Lens panel's Optics is
+   * eight derived readings rather than controls, and a panel whose first
+   * screen is the Airy disk is describing the instrument to somebody who came
+   * to look at Saturn; the Camera panel's Ground is six site cards for a
+   * session that may never land; the Milky Way is the far end of what the
+   * presets do. Each still persists like the rest, so opening it once is a
+   * decision that sticks.
    */
   defaultOpen?: boolean
   children: ReactNode

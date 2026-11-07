@@ -22,7 +22,11 @@ import {
 } from '../input/keymap.ts'
 import { useKeymap } from '../input/useKeymap.ts'
 import { CONTROLS_KEYMAP, usePersistentState } from '../state/preferences.ts'
-import { defaultChord, keyChanged } from './settingsDefaults.ts'
+import {
+  defaultChord,
+  keyChanged,
+  withoutOverride,
+} from './settingsDefaults.ts'
 
 /*
  * Rebinding, which `docs/design/ux.md` promises.
@@ -382,13 +386,4 @@ function clashesIn(
     }
   }
   return found
-}
-
-/** A binding table without one act's override, which is "the default". */
-function withoutOverride(
-  held: Readonly<Record<string, string | null>>,
-  id: string,
-): Readonly<Record<string, string | null>> {
-  const { [id]: _dropped, ...rest } = held
-  return rest
 }
