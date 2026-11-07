@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -330,6 +331,48 @@ describe('the GPU lock', () => {
     writeLock([{ pid: process.pid, processStart: 'Thu Jan 1 00:00:00 1970' }])
     const lock = await acquire('test:gpu', { path: file() })
     expect(read().token).toBe(lock.token)
+  })
+
+  it('refuses a lock in another format version rather than judging it stale', async () => {
+    // A worktree on another branch can run another revision of the module
+    // against the same file. Its processes cannot be named here, so a lock
+    // older than the grace is still not this revision's to delete.
+    const foreign = `${JSON.stringify({ version: 2, token: 'x', entries: [] })}\n`
+    writeFileSync(file(), foreign)
+    const past = Date.now() / 1000 - 60
+    utimesSync(file(), past, past)
+    const error = await acquire('test:gpu', { path: file() }).catch((e) => e)
+    expect(error).toBeInstanceOf(GpuLockError)
+    expect(error.code).toBe('busy')
+    expect(error.message).toContain('format version 2')
+    expect(readFileSync(file(), 'utf8')).toBe(foreign)
+  })
+
+  /*
+   * A clock stepped back after a file was written leaves its mtime in the
+   * future. Both waits spin synchronously, so a regression hangs the process
+   * that takes the lock; it runs as a holder, which the test's timeout and
+   * `afterEach` can end.
+   */
+  it.each([
+    ['a torn lock', () => writeFileSync(file(), '')],
+    [
+      'a dead mutex beside a stale lock',
+      async () => {
+        writeLock([{ pid: await deadPid(), processStart: null }])
+        writeFileSync(`${file()}.edit`, '')
+        return `${file()}.edit`
+      },
+    ],
+  ])('reclaims %s whose mtime is in the future', async (_what, setup) => {
+    const target = (await setup()) ?? file()
+    const future = Date.now() / 1000 + 3600
+    utimesSync(target, future, future)
+    const job = holder({ holder: 'test:gpu', hold: true })
+    expect(await job.said('acquired')).toBe(job.child.pid)
+    expect(pids(read())).toEqual([job.child.pid])
+    job.child.stdin.end()
+    await job.closed
   })
 
   it.each([

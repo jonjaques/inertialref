@@ -40,6 +40,9 @@ import path from 'node:path'
 export const TOKEN_ENV = 'IR_GPU_LOCK_TOKEN'
 
 const NAME = 'inertialref-gpu.lock'
+/** The file's format. Every worktree of the clone shares the one file, and a
+ *  worktree on another branch can run another revision of this module. */
+const VERSION = 1
 /** An edit is a read and a rename, and a create is an open and one write, so a
  *  mutex or an unreadable lock older than this belongs to a process that died
  *  inside one. */
@@ -163,16 +166,23 @@ const entry = (pid, role, holder) => ({
 const sleepSync = (ms) =>
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 
+/*
+ * The distance from the file's mtime, in either direction. A clock stepped
+ * back after the file was written leaves its mtime in the future, and a
+ * signed age there stays under the grace for as long as the step: an
+ * unreadable lock would read as `opening` and a dead mutex as held, and both
+ * waits spin synchronously, so no `waitMs` can end them.
+ */
 const ageOf = (file) => {
   try {
-    return Date.now() - statSync(file).mtimeMs
+    return Math.abs(Date.now() - statSync(file).mtimeMs)
   } catch {
     return 0
   }
 }
 
-/** The file's text and the lock it parses to, which is null for a file torn
- *  or empty; null for no file at all. */
+/** The file's text, the lock it parses to, which is null for a file torn or
+ *  empty, and the format version it declares; null for no file at all. */
 function load(file) {
   let text
   try {
@@ -181,26 +191,36 @@ function load(file) {
     if (error.code === 'ENOENT') return null
     throw unwritable(file, error)
   }
+  let parsed
   try {
-    const lock = JSON.parse(text)
-    return { text, lock: Array.isArray(lock?.processes) ? lock : null }
+    parsed = JSON.parse(text)
   } catch {
-    return { text, lock: null }
+    return { text, lock: null, version: null }
   }
+  const version = typeof parsed?.version === 'number' ? parsed.version : null
+  const lock =
+    version === VERSION && Array.isArray(parsed.processes) ? parsed : null
+  return { text, lock, version }
 }
 
 /**
- * What is at `file`: nothing, a lock held by a live process, a stale one, or
- * one being written. `openSync('wx')` and the write after it are two calls, so
- * a reader can find the file empty between them; that is a job taking the
- * lock, not a dead one, until it has stayed unreadable past the grace. An
- * unreadable lock names no process, so past the grace every process it names
- * is gone.
+ * What is at `file`: nothing, a lock held by a live process, a stale one, one
+ * being written, or one in another format. `openSync('wx')` and the write
+ * after it are two calls, so a reader can find the file empty between them;
+ * that is a job taking the lock, not a dead one, until it has stayed
+ * unreadable past the grace. An unreadable lock names no process, so past the
+ * grace every process it names is gone.
+ *
+ * A lock that declares another version is not unreadable: it is a worktree on
+ * another branch, whose processes this revision cannot name and so cannot
+ * prove gone. Judged stale, it would be deleted under a job that is running.
  */
 function inspect(file) {
   const found = load(file)
   if (found === null) return { kind: 'free' }
-  const { text, lock } = found
+  const { text, lock, version } = found
+  if (version !== null && version !== VERSION)
+    return { kind: 'foreign', text, version }
   if (lock === null)
     return { kind: ageOf(file) < GRACE_MS ? 'opening' : 'stale', text }
   const live = lock.processes.filter(running)
@@ -285,7 +305,7 @@ function create(file, holder) {
     /* not inside a checkout */
   }
   const lock = {
-    version: 1,
+    version: VERSION,
     token: randomBytes(16).toString('hex'),
     holder,
     pid: process.pid,
@@ -325,7 +345,16 @@ const held = new Map()
  * Another listener means someone else owns the process's response.
  */
 const onSignal = (signal) => {
-  release()
+  // A release that throws must not keep the process alive past its signal,
+  // and an exception thrown from here would end it with exit code 1 rather
+  // than the signal its parent sent. What a failed release leaves is stale
+  // once this process is gone.
+  try {
+    release()
+  } catch (error) {
+    process.stderr.write(`gpuLock: ${error.message}\n`)
+  }
+  for (const each of SIGNALS) process.removeListener(each, listeners[each])
   if (process.listenerCount(signal) === 0) process.kill(process.pid, signal)
 }
 const listeners = Object.fromEntries(
@@ -388,6 +417,12 @@ const elapsed = (ms) => {
 /** Who has the GPU, for a person deciding whether to wait. Never names
  *  `--down`: that is another agent's rig, and closing it ends their session. */
 function describe(file, found) {
+  if (found.kind === 'foreign')
+    return (
+      `the GPU lock ${file} is format version ${found.version}, and this checkout's ` +
+      `gpuLock.mjs reads version ${VERSION}. A worktree on another branch may hold it, ` +
+      'so this job does not judge it stale; a job on that branch does.'
+    )
   if (found.lock === undefined)
     return `the GPU lock ${file} changed hands while this job tried to take it.`
   const { lock, live } = found
@@ -421,6 +456,7 @@ function attempt(file, holder, token) {
       continue
     }
     tries += 1
+    if (found.kind === 'foreign') return { busy: found }
     if (
       found.kind === 'held' &&
       token !== undefined &&
