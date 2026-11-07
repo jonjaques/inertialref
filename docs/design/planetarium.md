@@ -181,8 +181,9 @@ is the lens's own pixel angle, so the ground under the pointer follows the
 pointer. A constant radians-per-pixel swings the frame through three of its own
 field-widths at 8× zoom, which is a gesture nobody can aim.
 
-**Zoom, dolly and framing are three acts, and the Camera panel has three
-controls.** Zoom multiplies the focal length: it magnifies and changes no
+**Zoom, dolly and framing are three acts, and each has its own control.** The
+dolly and the framing are the Camera panel's, and the zoom is the Lens panel's,
+with the glass it multiplies. Zoom multiplies the focal length: it magnifies and changes no
 parallax, so the limb does not turn and the moons do not shift against the disk.
 A dolly moves the camera and changes all of that. Framing is a solve — the
 standoff that makes the subject fill a stated fraction of the frame at whatever
@@ -304,14 +305,22 @@ records the aiming model and its limits.
 Everything is a **panel**, and every panel is dockable — see
 [ux](ux.md#dockable-panels).
 
-| Panel         | Answers                                                                  |
-| ------------- | ------------------------------------------------------------------------ |
-| **Navigator** | Where can I go? Find it by name, fold the systems, filter the classes    |
-| **Object**    | What is this? The record — physical, orbit, rotation, air, light         |
-| **Camera**    | The eye: where it looks from, where it stands, and what it looks through |
-| **View**      | What is drawn over the sky — names, orbit paths, the ship                |
-| **Presets**   | Quick shots, the preset library dialog, and composition tools            |
-| **Time**      | Pause, warp, and what the clock is actually delivering                   |
+| Panel         | Answers                                                                     |
+| ------------- | --------------------------------------------------------------------------- |
+| **Navigator** | Where can I go? Find it by name, fold the systems, filter the classes       |
+| **Time**      | When? Pause, warp, set a date, and what the clock is actually delivering    |
+| **Object**    | What is this? The record — physical, orbit, rotation, air, light            |
+| **Presets**   | Show me something good: quick shots, the library, compositions, the light   |
+| **Camera**    | Where is the eye? The subject and its target, the framing, the ground       |
+| **Lens**      | Through what? Exposure, the lens channels and glare, and the derived optics |
+| **View**      | What is drawn over the sky — names, orbit paths, the ship                   |
+
+The order is the menu's, and the menu reads like the screen: the left pane's
+panels first and the right pane's after, so the glyphs on the left half of the
+bar open what appears on the left of the frame and the number keys count across
+it the same way. Lens and View arrive closed — both are already what a first
+view wants — and in the right pane Presets comes before Camera, so the quick
+shots are on screen on arrival rather than under the fold.
 
 The split between **Camera** and **View** is by what a control _changes_. A
 layer changes pixels the scene does not own — names, traces, the ship — and the
@@ -319,18 +328,30 @@ camera changes the picture itself. That is also why glare is a lens channel and
 not a layer: what an aperture does to a bright source is a property of the
 instrument, and at zero it is the sky with no optics in front of it.
 
+The split between **Camera** and **Lens** is by question: where the eye is,
+and what it looks through. The Lens panel is the same component in flight,
+registered there as the Navigator is, and it is the lens's only home — the
+settings page holds the person's choices, not a viewport's instrument
+([ADR-0058](../adr/0058-settings-hold-the-person-and-the-viewport-holds-its-instrument.md)).
+While a fixed Milky Way view holds the lens, the panel says so, and its sliders
+wait rather than move a lens the picture is not taken through. The exposure's
+comfort clamps are the person's and are in Settings › Display; the Lens panel
+keeps what is a photograph's — the camera mode, the compensation, the white
+balance.
+
 The camera's own readings — range, altitude, how much of the frame the subject
 fills, the two orbit angles — are **not** in the object panel. They are facts
 about where you are standing rather than about the thing being looked at, and on
-a page about Mars they read as a debugger. They are on the Camera panel, beside
-the lens they describe.
+a page about Mars they read as a debugger. They are on the Camera panel, under
+the three verbs that move them.
 
 **The two arms are two sections of one panel, not two panels.** The camera is in
 exactly one of them at a time, so a panel per arm is a panel that is entirely
 disabled whenever the camera is in the other — nine dead controls under a
-heading reading "in orbit". Descending is a camera act either way: **Orbit**
-carries the pose above the floor, **Ground** carries the sites, the descent and
-the heading below it, and only one of the two is drawn.
+heading reading "in orbit". Descending is a camera act either way: **Frame**
+carries the pose above the floor — Fit, Closer and Farther, the readings they
+move, the head's offset and the way back from it — and **Ground** carries the
+sites, the descent and the heading below it.
 
 ### The navigator
 
@@ -417,8 +438,10 @@ bodies, and a list is not a place to put them.
 The dock offers three quick shots and opens the full library at
 `/planetarium/presets`. This is a child route: the planetarium, camera, and
 photographic clock stay mounted beneath it. The dialog has Included, Saved,
-and Current view tabs. Composition tools and galaxy views are collapsed in
-the dock until requested.
+and Current view tabs. Under the quick shots the panel carries the
+compositions, open, with the light and the step back beside them — one press
+each, relative to whatever is under the camera — and the Milky Way views,
+collapsed until requested.
 
 Current view captures the camera, orbit anchor, target, photographic time,
 full lens and camera processing when the tab opens. Name and save it, copy its JSON, copy a link, or download

@@ -3,7 +3,9 @@
 Status: accepted · 2026-08-28 · amended by [ADR-0055](0055-a-long-lens-refines-what-its-frame-can-reach.md): the
 long end of the lens is 11.4°, and Earthrise takes the field it solves · the
 gamepad is [ADR-0057](0057-a-gamepad-is-a-second-binding-on-every-action.md),
-built on the action ids this names as its seam
+built on the action ids this names as its seam · the lens controls are a panel
+of their own in every mode with a viewport, and not on the settings page:
+[ADR-0058](0058-settings-hold-the-person-and-the-viewport-holds-its-instrument.md)
 
 ## Context
 

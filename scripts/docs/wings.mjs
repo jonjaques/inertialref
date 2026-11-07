@@ -216,6 +216,10 @@ export const WINGS = [
             'docs/adr/0057-a-gamepad-is-a-second-binding-on-every-action.md',
             'The gamepad',
           ],
+          [
+            'docs/adr/0058-settings-hold-the-person-and-the-viewport-holds-its-instrument.md',
+            'Settings and the viewport',
+          ],
         ],
       },
     ],

@@ -36,7 +36,7 @@ clicking.
 | `/planetarium?at=…`                                  | [The planetarium](planetarium.md)                                    | `planetarium` |
 | `/cinema`, `/cinema/:id`                             | [The cinema player](cinema.md)                                       | `cinema`      |
 | `/docs`, `/docs/*`                                   | The documentation, over a masthead framed on a real body             | `docs`        |
-| `/settings/:section?`                                | Display, camera, controls, data                                      | _a dialog_    |
+| `/settings/:section?`                                | Display, interface, controls, controller, data                       | _a dialog_    |
 | `/keys`                                              | Every binding this build has                                         | _a dialog_    |
 | `/about`                                             | What this is                                                         | _a dialog_    |
 | `/sign-in`, `/sign-up`, `/profile`, `/auth/callback` | Accounts ⬜                                                          | _a dialog_    |
@@ -349,8 +349,10 @@ not punish having one.
 | **HOTAS / HOSAS**    | Full 6-DoF binding | Direct axis binding, no emulation layer, per-device profiles. **Chromium only** — see below                                                              |
 
 **Everything is rebindable, including modifier layers**, and the editor is
-`/settings/controls`: a row per act, press it to capture the next chord, a
-conflict named in place, reset per row and for all. Every label in the interface
+`/settings/controls`: the acts in the keymap's own groups, under headings that
+say where each group works, a filter that finds an act by its name or its key,
+press a row to capture the next chord, a conflict named in place, unbind and
+reset per row, and restore for the page. Every label in the interface
 that names a key reads the live chord for the act rather than a string, so a
 rebind reaches the keys sheet, the panel tooltips and the screen reader in the
 same commit that stores it. `?` opens the sheet from any mode.

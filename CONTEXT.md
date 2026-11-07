@@ -12489,6 +12489,50 @@ layer stayed with Titan. Six things the pass found that must not come back:
   #180's comparison passed with titans-haze and centauri-daybreak moved 1.34%
   and 1.71%; a change to the air moves the dark plates first.
 
+## The lens leaves settings, and a council reads the plan (6 Nov 2026)
+
+The planetarium and settings interfaces were reorganized around one question per
+panel, and the plan for it went to three reviewers — Claude Opus, GPT Sol and
+Muse Wonder — before any code, scoring 7, 8 and 7 of 10. What they changed, and
+what was kept against them, is the useful half.
+
+**The lens had two homes and flight had neither.** `/settings/camera` drew the
+planetarium's own `LensSection`, so a focal length was set over a 70% scrim —
+or over the menu, against no picture — and flight's workspace registered only
+the Navigator, so the settings copy was the pilot's one way to the lens. It is a
+Lens panel in both modes now; [ADR-0058](docs/adr/0058-settings-hold-the-person-and-the-viewport-holds-its-instrument.md)
+draws the line the settings page keeps from here on.
+
+**The comfort clamps nearly went with it.** Adaptation rate and the bright and
+dark ranges sit in `render.sensor` beside the camera mode, and moving the
+section moved them into a viewport panel — out of the one page a person who
+needs them would look in. Opus caught it. They are Settings › Display › Comfort,
+drawn in every camera mode and disabled outside Automatic with the reason, and
+the two halves of the record each restore only their own fields.
+
+**"Reset everything" deleted the saved shots.** `PERSONAL_PICTURES` is in the
+registry because that is where storage is, and the reset walked every key.
+Sol caught it. `resetPreferences(keep)` keeps them; the test fails with `keep`
+ignored.
+
+**Rejected on review:** moving the compositions into Camera (they move the
+camera relative to the subject, which is how the code works and not how anyone
+looks for a crescent — all three said so); a left rail in the settings dialog
+(it takes 11rem from the controller's page, whose callouts then fall below the
+smallest label size); a target verb inside the navigator's rows (a second
+control inside a single-tab-stop ARIA tree).
+
+**Kept against advice:** the gutter mark on a changed setting, which all three
+would have cut on cost and noise — it draws nothing until a value differs, and
+the per-row comparison it needs is the one the page's restore needs anyway.
+
+The settings dialog sized itself to each section and re-centered under the
+pointer on every tab; it is one frame now. The planetarium's number keys stopped
+at seven while the planetarium has eight panels with the guide, so the last
+panel in the menu had no key; `panel.8` is Digit8. The 105 keymap labels were
+Title Case in source, against rule 51, and they are the row labels of the
+controls page — they are sentence case.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
