@@ -14,7 +14,7 @@
  * the main process leaves the lock to the workers still running. A SIGKILL
  * runs nothing, and leaves the workers unrecorded.
  */
-import { acquire, parseWait } from './gpuLock.mjs'
+import { GpuLockError, acquire, parseWait } from './gpuLock.mjs'
 
 /**
  * A bounded wait for the lock, in seconds: `IR_GPU_WAIT=120 pnpm test:gpu`.
@@ -42,4 +42,27 @@ export async function holdForSuite({ env = process.env, path, say } = {}) {
   return () => lock.release()
 }
 
-export default () => holdForSuite()
+/**
+ * The hold, or the refusal as the run's whole output. vitest reports a throw
+ * from a globalSetup as "No test files found" with the include pattern, then
+ * as an unhandled error with the lock serialized under it, which sends a
+ * reader to the config rather than to the holder. No worker exists yet, so
+ * ending the process here leaves nothing behind. Anything but the lock's own
+ * refusal is a fault, and vitest reports it.
+ */
+export async function suiteSetup({
+  write = (text) => process.stderr.write(text),
+  exit = process.exit,
+  ...options
+} = {}) {
+  try {
+    return await holdForSuite(options)
+  } catch (error) {
+    if (!(error instanceof GpuLockError)) throw error
+    write(`\n${error.message}\n`)
+    exit(1)
+  }
+}
+
+// vitest passes the test project as the first argument; nothing here reads it.
+export default () => suiteSetup()

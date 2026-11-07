@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { release } from './gpuLock.mjs'
-import { holdForSuite } from './gpuSuiteLock.mjs'
+import { holdForSuite, suiteSetup } from './gpuSuiteLock.mjs'
 
 const MODULE = new URL('./gpuLock.mjs', import.meta.url).href
 const SUITE = new URL('./gpuSuiteLock.mjs', import.meta.url).href
@@ -138,6 +138,37 @@ describe("pnpm test:gpu's hold on the GPU lock", () => {
     expect(read()).toMatchObject({ holder: 'test:gpu', pid: process.pid })
     teardown()
     expect(existsSync(file())).toBe(false)
+  })
+
+  /*
+   * vitest reports a throw from globalSetup as "No test files found", with
+   * the include pattern, then the error with the lock serialized under it:
+   * a reader is sent to the config. The refusal is the whole answer.
+   */
+  it('ends the run with the refusal alone, and passes any other failure to vitest', async () => {
+    await otherJob('drive.mjs (port 9333)')
+    const written = []
+    const exits = []
+    const outcome = await suiteSetup({
+      path: file(),
+      env: {},
+      write: (text) => written.push(text),
+      exit: (code) => exits.push(code),
+    })
+    expect(outcome).toBeUndefined()
+    expect(exits).toEqual([1])
+    expect(written.join('')).toMatch(
+      /^\nGPU busy\. drive\.mjs \(port 9333\) has held the GPU[^]*queues for it\.\n$/,
+    )
+    await expect(
+      suiteSetup({
+        path: file(),
+        env: { IR_GPU_WAIT: '2m' },
+        write: (text) => written.push(text),
+        exit: (code) => exits.push(code),
+      }),
+    ).rejects.toThrow('IR_GPU_WAIT takes seconds')
+    expect(exits).toEqual([1])
   })
 
   it('leaves the lock to its fork workers when a timeout ends it with SIGTERM', async () => {
