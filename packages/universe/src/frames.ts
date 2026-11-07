@@ -352,13 +352,43 @@ function attitudeEvaluator(
   }
 }
 
+/** The body a placement goes round, or undefined when it goes round the star. */
+function placementParent(
+  system: StarSystem,
+  placement: OrbitalPlacement,
+): Body | undefined {
+  if (placement.parent.kind !== 'body') return undefined
+  const parent = findBody(system, placement.parent.body)
+  invariant(
+    parent !== undefined,
+    `${placement.name} goes round nothing in ${system.name}`,
+  )
+  return parent
+}
+
+/**
+ * `G(M + m)` of a placement and what it goes round: the parameter its frame
+ * is run on, as a moon's is. The period a page quotes and the trace a
+ * planetarium draws read it here, so neither can disagree with where the
+ * frame puts the station.
+ */
+export function placementMu(
+  system: StarSystem,
+  placement: OrbitalPlacement,
+): number {
+  const parent = placementParent(system, placement)
+  return (
+    (parent?.mu ?? system.star.mu) + GRAVITATIONAL_CONSTANT * placement.mass
+  )
+}
+
 /**
  * Install a station's two frames under its parent's, which must already be
  * installed.
  *
- * `G(M + m)` of the pair, as a moon's orbit is run on, and the parent's axial
- * tilt erects the equator its elements are measured from. A station going
- * round the star takes the system frame and no tilt, as a planet does.
+ * The parent's axial tilt erects the equator its elements are measured from.
+ * A station going round the star takes the system frame and no tilt, as a
+ * planet does.
  */
 function installStation(
   graph: FrameGraph,
@@ -367,16 +397,8 @@ function installStation(
 ): void {
   const frame = stationFrameId(placement.id)
   if (graph.has(frame)) return
-  const parent =
-    placement.parent.kind === 'body'
-      ? findBody(system, placement.parent.body)
-      : undefined
-  invariant(
-    placement.parent.kind === 'system' || parent !== undefined,
-    `${placement.name} goes round nothing in ${system.name}`,
-  )
-  const mu =
-    (parent?.mu ?? system.star.mu) + GRAVITATIONAL_CONSTANT * placement.mass
+  const parent = placementParent(system, placement)
+  const mu = placementMu(system, placement)
   graph.define({
     id: frame,
     parent:

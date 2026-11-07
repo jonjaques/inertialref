@@ -21,7 +21,12 @@ import type {
   WorldSnapshot,
 } from '@inertialref/simulation'
 import { surfacePlacementPose } from '@inertialref/simulation'
-import { type BodyAppearance, type EntityId } from '@inertialref/universe'
+import {
+  type BodyAppearance,
+  type BodyKind,
+  type EntityId,
+  type OrbitalKind,
+} from '@inertialref/universe'
 import { drawnAnchorRadius } from './ground.ts'
 import {
   type AirHeights,
@@ -59,7 +64,8 @@ export interface RenderBody {
   readonly sunlight: number
   readonly address: string
   readonly name: string
-  readonly kind: string
+  /** The body's class, or `star` for a star drawn through this path (`starAsBody`). */
+  readonly kind: BodyKind | 'star'
   readonly placement: RenderPlacement
   readonly orientation: Quat
   readonly hasAtmosphere: boolean
@@ -254,7 +260,7 @@ export interface RenderStation {
   /** What the observatory resolves: the address, or the id of a built station. */
   readonly address: string
   readonly name: string
-  readonly kind: string
+  readonly kind: OrbitalKind
   readonly asset: string
   /** The body or the system it goes round. */
   readonly parent: string

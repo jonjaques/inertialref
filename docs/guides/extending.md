@@ -182,12 +182,14 @@ entry — which is the point. `DENSITY`, `KIND_COLOR`, `KIND_ALBEDO`,
 
 Two things the type system does **not** catch and that a new kind has to answer:
 
-- **Is it a world or is it rubble?** `isDebris` and `isPlanetKind` in
-  `packages/universe` are the typed partition, and the display sites, the orbit
-  traces and `observedPlanets` all read them. These were three separate
-  `Set<string>` literals in three files once, and a ninth kind would have
-  compiled against all of them and landed in the wrong half of each while both
-  tests kept passing.
+- **Is it a world or is it rubble?** `objectClass` in
+  `packages/universe/src/objectClass.ts` is the typed table — a planet, a moon,
+  a dwarf, a minor body, or a spacecraft for a placement — and `isDebris` and
+  `isPlanetKind` read it. The navigator's chips, the names on the sky, the click
+  filter, the orbit traces and `observedPlanets` all sort by it. These were
+  three separate `Set<string>` literals in three files once, and a ninth kind
+  would have compiled against all of them and landed in the wrong half of each
+  while both tests kept passing.
 - **Is it round?** A kind whose members fall below `ROUNDING_RADIUS` needs a
   `figure` — see [ADR-0013](../adr/0013-measured-figures.md). `figure: null`
   means round, not unknown.

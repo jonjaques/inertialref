@@ -17,6 +17,7 @@ import {
   type BodyAppearance,
   type Body,
   type BodyFigure,
+  type BodyKind,
   bodyFixedFrameId,
   bodyFrameId,
   type EntityId,
@@ -112,7 +113,7 @@ export interface EntitySnapshot {
 export interface BodySnapshot {
   readonly address: string
   readonly name: string
-  readonly kind: string
+  readonly kind: BodyKind
   readonly radius: Meters
   /** Polar radius. Smaller than `radius` for anything that spins. */
   readonly polarRadius: Meters

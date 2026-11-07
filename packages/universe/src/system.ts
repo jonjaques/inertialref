@@ -53,6 +53,7 @@ import { type SystemStub, systemSeedOf } from './galaxy.ts'
 import { SOL, solarSystem } from './solar/system.ts'
 import type { LinearRgb } from './catalog/photometry.ts'
 import type { CatalogPlanet } from './catalog/starCatalog.ts'
+import { objectClass } from './objectClass.ts'
 import type { OrbitalPlacement } from './stations.ts'
 import { ROUNDING_RADIUS } from './rounding.ts'
 import { GENERATION_VERSIONS } from './versions.ts'
@@ -2123,52 +2124,16 @@ export const isLandable = (body: Body): boolean =>
  * A planetarium draws a subject's siblings to show where it sits, which was
  * unambiguous while a star's children were eight planets. Sol has sixty-six,
  * and fifty-nine of them are rubble — drawn all at once they are a cage of a
- * hundred and twenty-nine lines with the subject somewhere behind it.
- *
- * A `Record<BodyKind, boolean>` rather than a `Set<string>`, and exported
- * rather than written out at each site, because it was written out at three:
- * `RUBBLE` in `GameEngine`, `WORLD_KINDS` in `universe.test.ts` and
- * `PLANET_KINDS` in `ingest.test.ts`, all untyped string sets. A ninth
- * `BodyKind` compiled against every one of them and landed silently in the
- * wrong half of all three. Against this table it is a type error.
- *
- * A dwarf is *not* debris. Pluto, Ceres, Eris, Haumea and Makemake are the
- * bodies a planetarium user most wants context for — "where does Pluto's orbit
- * cross Neptune's" is the question the 2006 vote was about — and there are nine
- * of them, not fifty-nine.
+ * hundred and twenty-nine lines with the subject somewhere behind it. The
+ * class table is `objectClass.ts`, which every reader that sorts by class
+ * shares.
  */
-const DEBRIS: Readonly<Record<BodyKind, boolean>> = {
-  rocky: false,
-  ice: false,
-  'gas-giant': false,
-  'ice-giant': false,
-  moon: false,
-  dwarf: false,
-  asteroid: true,
-  comet: true,
-}
+export const isDebris = (kind: BodyKind): boolean =>
+  objectClass(kind) === 'minor'
 
-/** Whether a body's orbit is rubble rather than context. See `DEBRIS`. */
-export const isDebris = (kind: BodyKind): boolean => DEBRIS[kind]
-
-/**
- * The classes that are planets, which since 2006 is a question about roundness
- * *and* about having cleared the neighborhood. `system.planets` holds every
- * body orbiting the star, so this is what separates the eight from the rest.
- */
-const PLANET: Readonly<Record<BodyKind, boolean>> = {
-  rocky: true,
-  ice: true,
-  'gas-giant': true,
-  'ice-giant': true,
-  moon: false,
-  dwarf: false,
-  asteroid: false,
-  comet: false,
-}
-
-/** Whether a body is a planet by the IAU definition. See `PLANET`. */
-export const isPlanetKind = (kind: BodyKind): boolean => PLANET[kind]
+/** Whether a body is a planet by the IAU definition. See `objectClass.ts`. */
+export const isPlanetKind = (kind: BodyKind): boolean =>
+  objectClass(kind) === 'planet'
 
 /**
  * How many of a system's bodies are planets.
