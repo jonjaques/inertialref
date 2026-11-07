@@ -31,6 +31,9 @@ const ARTWORK: MediaImage[] = [
 /** How far the seek-backward and seek-forward controls move. */
 const SEEK_STEP = 10
 
+/** A playhead move between two publishes larger than playback makes, seconds. */
+const SEEK_JUMP = 2
+
 export function bindMediaSession(
   player: Soundtrack,
   store: SoundtrackStore,
@@ -70,9 +73,15 @@ export function bindMediaSession(
 
   let shownTrack: string | null = null
   let shownStatus = ''
+  let lastPosition = 0
   const unsubscribe = store.subscribe((state) => {
     const { trackId, status, position, duration } = state.playback
     const track = trackById(trackId)
+    // A seek is a jump in the playhead between two publishes, which arrive
+    // about four times a second while it plays; it changes neither the track
+    // nor the status, and the platform's extrapolation cannot know it.
+    const sought = Math.abs(position - lastPosition) > SEEK_JUMP
+    lastPosition = position
     if (trackId !== shownTrack) {
       shownTrack = trackId
       session.metadata =
@@ -87,7 +96,7 @@ export function bindMediaSession(
     }
     const playing = status === 'playing'
     const next = status === 'off' ? 'none' : playing ? 'playing' : 'paused'
-    if (`${next}:${trackId}` !== shownStatus) {
+    if (`${next}:${trackId}` !== shownStatus || sought) {
       shownStatus = `${next}:${trackId}`
       session.playbackState = next
       if (track !== null && duration > 0 && 'setPositionState' in session) {

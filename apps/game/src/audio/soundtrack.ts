@@ -141,6 +141,14 @@ interface Preload {
   readonly id: string
   readonly deck: Deck
   readonly ready: Promise<boolean>
+  /**
+   * The queue the preload was drawn from, and the queue it leads to. At the
+   * end of a shuffled cycle the next queue is a fresh random draw, and a
+   * second draw at the transition would almost never name the track this one
+   * buffered.
+   */
+  readonly from: Queue
+  readonly next: Queue
 }
 
 export class Soundtrack {
@@ -168,13 +176,30 @@ export class Soundtrack {
   /**
    * The track whose ending has already started the next one.
    *
-   * Its own field rather than `#crossfading`, which it once was: when the
-   * ending finds nothing to follow it — repeat off, last track — no crossfade
-   * begins, and a flag shared with the crossfade stayed set, so the track
-   * played out and its `ended` thought a fade was already handling it.
-   * Cleared by a seek, which can put the ending ahead of the playhead again.
+   * Its own field rather than a reading of `#crossfading`: when the ending
+   * finds nothing to follow it — repeat off, last track — no crossfade
+   * begins, and a flag shared with the crossfade would stay set, so the track
+   * would play out with its `ended` believing a fade was already handling it.
+   * Cleared by a seek, which can put the ending ahead of the playhead again,
+   * and by the swap to the next deck — repeat-one and a one-track playlist
+   * play the same track object again, and a stale mark would hold it at its
+   * end.
    */
   #ended: SoundtrackTrack | null = null
+  /** The generation of the `#change` whose incoming load is in flight. */
+  #changing: number | null = null
+  /**
+   * The active deck is fading out on its way to a pause. It is still playing,
+   * so a return before the pause lands has to fade it back up itself: the
+   * resume path starts only a deck that is paused.
+   */
+  #quieting = false
+  /**
+   * The deck and track the card was last raised for. A resume after a pause,
+   * a scene or a hidden tab is not a track beginning.
+   */
+  #announced: { readonly deck: Deck; readonly track: SoundtrackTrack } | null =
+    null
   #quietTimer: ReturnType<typeof setTimeout> | undefined
   #releaseTimer: ReturnType<typeof setTimeout> | undefined
   #reason: string | null = null
@@ -233,7 +258,7 @@ export class Soundtrack {
    *
    * A duck rather than a pause, unlike a scene: a cutscene brings a track of
    * its own, and two pieces of music at once is a clash, but a guide speaking
-   * over music held well down is a radio programme — and stopping the music
+   * over music held well down is a radio program — and stopping the music
    * for every exchange would make a tour lurch between silence and sound.
    */
   setVoice(live: boolean): void {
@@ -304,8 +329,16 @@ export class Soundtrack {
     this.#reconcile()
   }
 
+  /**
+   * Pause what is playing or loading; play anything else.
+   *
+   * Keyed to the published status, which is what the panel's button draws,
+   * rather than to whether an element is sounding: a track still loading has
+   * no sounding element, and a Pause pressed then would otherwise be a Play.
+   */
   toggle(): void {
-    if (this.#sounding()) this.pause()
+    const status = this.#store.getState().playback.status
+    if (status === 'playing' || status === 'loading') this.pause()
     else this.play()
   }
 
@@ -425,11 +458,6 @@ export class Soundtrack {
     )
   }
 
-  #sounding(): boolean {
-    const deck = this.#activeDeck()
-    return deck !== null && deck.playing && !this.#held
-  }
-
   /** Bring what is playing into line with what should be. */
   #reconcile(): void {
     const wanted = this.#wanted()
@@ -439,6 +467,14 @@ export class Soundtrack {
       return
     }
     clearTimeout(this.#quietTimer)
+    if (this.#quieting) {
+      // Wanted again inside the fade-out — a pause undone at once, a scene or
+      // a hidden tab that lasted under a second. The deck never paused, so the
+      // resume below would not start it, and it would play on at silence.
+      this.#quieting = false
+      const deck = this.#activeDeck()
+      if (deck !== null && deck.playing) deck.fade(1, ENTRY_FADE)
+    }
     if (!this.#unlocked) {
       // Load the first track now, so the first gesture starts it at once.
       this.#ensureLoaded()
@@ -460,9 +496,11 @@ export class Soundtrack {
     const deck = this.#activeDeck()
     if (deck === null || !deck.playing) return
     deck.fade(0, seconds)
+    this.#quieting = true
     clearTimeout(this.#quietTimer)
     this.#quietTimer = setTimeout(() => {
       if (this.#wanted() && !this.#held) return
+      this.#quieting = false
       deck.pause()
       this.persist()
       this.#publish()
@@ -532,6 +570,8 @@ export class Soundtrack {
       return false
     }
     const generation = this.#generation
+    // A start is a track beginning, even on a deck that played it before.
+    if (this.#announced?.deck === deck) this.#announced = null
     this.#publish({ status: kind === 'start' ? 'loading' : undefined })
     try {
       const ready = await deck.load(track, fileUrl(file), at)
@@ -567,7 +607,9 @@ export class Soundtrack {
       return
     }
     deck.fade(1, fade)
-    this.#announce(deck)
+    // The first sound of this track on this deck, or a resume of it.
+    if (this.#announced?.deck !== deck || this.#announced.track !== deck.track)
+      this.#announce(deck)
     this.#publish()
   }
 
@@ -583,13 +625,19 @@ export class Soundtrack {
       this.#unavailable()
       return
     }
-    const next = nextQueue(
-      this.#queue,
-      this.#candidates(),
-      this.#settings,
-      this.#host.random,
-      reason,
-    )
+    // An ending follows the preload's own draw while the queue it was drawn
+    // from still stands; a skip, or a queue changed since, draws again.
+    const preload = this.#preload
+    const next =
+      reason === 'ended' && preload !== null && preload.from === this.#queue
+        ? preload.next
+        : nextQueue(
+            this.#queue,
+            this.#candidates(),
+            this.#settings,
+            this.#host.random,
+            reason,
+          )
     if (next === null) {
       // The playlist ran out with repeat off: hold, and say so.
       this.#held = true
@@ -612,6 +660,14 @@ export class Soundtrack {
     if (track === null) return
     const generation = ++this.#generation
     const [outgoing, incoming] = this.#decksInPlay()
+    // A release still pending from the last crossfade is for `incoming`, the
+    // deck this change is about to load: firing mid-load, it would drop the
+    // change — a second Next inside the first one's fade.
+    if (this.#releaseTimer !== undefined) {
+      clearTimeout(this.#releaseTimer)
+      this.#releaseTimer = undefined
+      this.#crossfading = false
+    }
     const at = cue.at ?? track.cues.start
     const preloaded =
       this.#preload !== null &&
@@ -621,55 +677,80 @@ export class Soundtrack {
         ? this.#preload.ready
         : null
     this.#preload = null
+    // Until the swap, `incoming` is still the idle deck, and the outgoing
+    // deck's `timeupdate` would otherwise preload the track after this one
+    // onto it, superseding this load.
+    this.#changing = generation
     void (async () => {
-      const ready =
-        preloaded !== null
-          ? await preloaded
-          : await this.#loadIncoming(incoming, track, at)
-      if (!ready || generation !== this.#generation) return
-      if (!this.#wanted() || this.#held || !this.#unlocked) {
-        // Staged, not sounding: the swap happens and the next Play starts it.
-        outgoing.release()
-        this.#active = this.#active === 0 ? 1 : 0
-        this.#publish()
-        return
-      }
-      const left =
-        outgoing.track === null
-          ? 0
-          : outgoing.track.cues.end - outgoing.position
-      const fade =
-        reason === 'cue' && cue.fade !== undefined
-          ? cue.fade
-          : transitionSeconds(
-              this.#settings.crossfade,
-              Math.max(0, left),
-              track.cues.end - track.cues.start,
-              reason === 'ended' ? null : SKIP_FADE,
-            )
       try {
-        await incoming.start()
-      } catch {
-        this.#publish()
-        return
-      }
-      if (generation !== this.#generation) return
-      this.#active = this.#active === 0 ? 1 : 0
-      incoming.fade(1, fade)
-      outgoing.fade(0, fade)
-      this.#crossfading = fade > 0
-      clearTimeout(this.#releaseTimer)
-      this.#releaseTimer = setTimeout(
-        () => {
-          if (this.#activeDeck() !== outgoing) outgoing.release()
-          this.#crossfading = false
+        const ready =
+          preloaded !== null
+            ? await preloaded
+            : await this.#loadIncoming(incoming, track, at)
+        if (generation !== this.#generation) return
+        if (!ready) {
+          // A preload that failed marked the track failed in its own catch,
+          // but passing over it is this transition's to do, as
+          // `#loadIncoming` does for a load of its own.
+          if (preloaded !== null && this.#failed.has(track.id))
+            this.#advance('skip')
+          return
+        }
+        if (!this.#wanted() || this.#held || !this.#unlocked) {
+          // Staged, not sounding: the swap happens and the next Play starts it.
+          outgoing.release()
+          this.#swap()
           this.#publish()
-        },
-        fade * 1000 + 100,
-      )
-      this.#announce(incoming)
-      this.#publish()
+          return
+        }
+        const left =
+          outgoing.track === null
+            ? 0
+            : outgoing.track.cues.end - outgoing.position
+        const fade =
+          reason === 'cue' && cue.fade !== undefined
+            ? cue.fade
+            : transitionSeconds(
+                this.#settings.crossfade,
+                Math.max(0, left),
+                track.cues.end - track.cues.start,
+                reason === 'ended' ? null : SKIP_FADE,
+              )
+        try {
+          await incoming.start()
+        } catch {
+          this.#publish()
+          return
+        }
+        if (generation !== this.#generation) return
+        this.#swap()
+        // Sounding now, so a fade-out still running toward a pause is over.
+        this.#quieting = false
+        clearTimeout(this.#quietTimer)
+        incoming.fade(1, fade)
+        outgoing.fade(0, fade)
+        this.#crossfading = fade > 0
+        this.#releaseTimer = setTimeout(
+          () => {
+            this.#releaseTimer = undefined
+            if (this.#activeDeck() !== outgoing) outgoing.release()
+            this.#crossfading = false
+            this.#publish()
+          },
+          fade * 1000 + 100,
+        )
+        this.#announce(incoming)
+        this.#publish()
+      } finally {
+        if (this.#changing === generation) this.#changing = null
+      }
     })()
+  }
+
+  /** Make the other deck the active one. Its ending has not begun. */
+  #swap(): void {
+    this.#active = this.#active === 0 ? 1 : 0
+    this.#ended = null
   }
 
   async #loadIncoming(
@@ -695,29 +776,32 @@ export class Soundtrack {
 
   /** Load the next track on the idle deck, ahead of its transition. */
   #preloadNext(): void {
-    if (this.#preload !== null) return
+    // A change in flight is loading the idle deck already.
+    if (this.#preload !== null || this.#changing !== null) return
+    const from = this.#queue
     const next = nextQueue(
-      this.#queue,
+      from,
       this.#candidates(),
       this.#settings,
       this.#host.random,
       'ended',
     )
-    const id = next === null ? null : currentOf(next)
+    if (next === null) return
+    const id = currentOf(next)
     const track = this.track(id)
-    if (track === null || id === currentOf(this.#queue)) return
+    if (track === null || id === currentOf(from)) return
     const [, idle] = this.#decksInPlay()
     const file = playableFile(track, this.#host.canPlay)
     if (file === null) return
-    this.#preload = {
-      id: track.id,
-      deck: idle,
-      ready: idle.load(track, fileUrl(file), track.cues.start).catch(() => {
+    const ready: Promise<boolean> = idle
+      .load(track, fileUrl(file), track.cues.start)
+      .catch(() => {
         this.#fail(track, 'network')
-        this.#preload = null
+        // Only this preload's own slot: a later one may hold it by now.
+        if (this.#preload?.ready === ready) this.#preload = null
         return false
-      }),
-    }
+      })
+    this.#preload = { id: track.id, deck: idle, ready, from, next }
   }
 
   #dropPreload(): void {
@@ -825,12 +909,17 @@ export class Soundtrack {
     )
   }
 
-  /** A track has started: the card, and the place a reload resumes. */
+  /**
+   * A track has started: the card, and the place a reload resumes — the
+   * deck's own position, which is the track's start unless this is a reload
+   * resuming partway through.
+   */
   #announce(deck: Deck): void {
     const track = deck.track
     if (track === null) return
+    this.#announced = { deck, track }
     this.#reason = null
-    this.#host.writeResume({ id: track.id, at: track.cues.start })
+    this.#host.writeResume({ id: track.id, at: deck.position })
     this.#store.setState((held) => ({
       card: { trackId: track.id, serial: (held.card?.serial ?? 0) + 1 },
     }))
@@ -857,9 +946,7 @@ export class Soundtrack {
               ? 'paused'
               : deck !== null && deck.playing
                 ? 'playing'
-                : track === null
-                  ? 'loading'
-                  : 'loading')
+                : 'loading')
     const playback: PlaybackSnapshot = {
       status,
       trackId: track?.id ?? currentOf(this.#queue),

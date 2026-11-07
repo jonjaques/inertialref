@@ -729,7 +729,7 @@ statement say what a file is. The spectrum only catches a lie.
 The masters span **−25.8 to −10.3 LUFS integrated, 15.5 LU** — a shuffle from
 one to the next would have been a jump nobody could set a volume for. A single
 gain per track, toward −18 LUFS under a −1 dBTP ceiling, brings the delivered set
-to **−19.8 to −17.9, 1.9 LU**, every file at or under −1.2 dBTP. Six tracks sit
+to **−19.8 to −17.9, 1.9 LU**, every file at or under −1.1 dBTP. Six tracks sit
 under the target because the ceiling caps their gain. No compressor and no
 limiter touched any of them.
 

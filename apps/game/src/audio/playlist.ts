@@ -238,7 +238,8 @@ export function jumpQueue(
  * switched off, plus whatever was newly switched on — `before` is the
  * playable list the draw was made from, which is what tells a track switched
  * on apart from one that already played this cycle. In order, the cycle runs
- * on from the current track's place in the new arrangement.
+ * on from the current track's place in the new arrangement, or, for a current
+ * track just switched off, from its place in `before`.
  */
 export function reconcileQueue(
   queue: Queue,
@@ -251,7 +252,9 @@ export function reconcileQueue(
   random: Random,
 ): Queue {
   const current = currentOf(queue)
-  if (!shuffle) return { played: queue.played, upcoming: after(ids, current) }
+  if (!shuffle) {
+    return { played: queue.played, upcoming: runOn(ids, before, current) }
+  }
   const others = ids.filter((id) => id !== current)
   if (!wasShuffled) {
     return { played: queue.played, upcoming: shuffled(others, random, current) }
@@ -264,6 +267,27 @@ export function reconcileQueue(
     played: queue.played,
     upcoming: [...kept, ...shuffled(added, random)],
   }
+}
+
+/**
+ * The ordered cycle after `current` in `ids`.
+ *
+ * A current track that `ids` no longer holds — the one just switched off —
+ * has no place in it to run on from, and `after` would start the cycle again
+ * from the top. Its place is found in `before` instead: the cycle resumes at
+ * the first track after it there that is still in `ids`, and ends where
+ * nothing after it is.
+ */
+function runOn(
+  ids: readonly string[],
+  before: readonly string[],
+  current: string | null,
+): readonly string[] {
+  if (current === null || ids.includes(current) || !before.includes(current))
+    return after(ids, current)
+  const valid = new Set(ids)
+  const following = after(before, current).find((id) => valid.has(id))
+  return following === undefined ? [] : ids.slice(ids.indexOf(following))
 }
 
 /* ------------------------------------------------------------------------- */

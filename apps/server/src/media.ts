@@ -158,8 +158,8 @@ export function mediaFor(name: string): MediaObject | null {
  * What R2 hands back after a ranged `get`.
  *
  * Restated here rather than imported from `@cloudflare/workers-types` so this
- * module keeps its "no imports" property — `scripts/media.mjs` loads it under
- * plain Node, where those types do not exist.
+ * module imports only its data and that data's decoder — `scripts/media.mjs`
+ * loads it under plain Node, where those types do not exist.
  *
  * **All three fields are optional, and that is the correction rather than a
  * convenience.** The published `R2Range` is a union of three exclusive shapes,

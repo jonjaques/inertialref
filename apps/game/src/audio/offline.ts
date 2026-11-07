@@ -130,12 +130,19 @@ export class OfflineLibrary {
       const reader = response.body.getReader()
       const chunks: Uint8Array[] = []
       let received = 0
+      let shown = 0
       for (;;) {
         const { done, value } = await reader.read()
         if (done) break
         chunks.push(value)
         received += value.byteLength
-        this.#progress(file.name, Math.min(0.99, received / file.bytes))
+        // A percent at a time: a chunk is tens of kilobytes, and every write
+        // re-renders the settings page's fifty-row list around the switch.
+        const fraction = Math.min(0.99, received / file.bytes)
+        if (fraction - shown >= 0.01) {
+          shown = fraction
+          this.#progress(file.name, fraction)
+        }
       }
       if (received !== file.bytes) {
         throw new Error(

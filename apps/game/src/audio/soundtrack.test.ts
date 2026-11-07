@@ -66,9 +66,11 @@ const HERE: Presence = { here: true, scene: false, away: false }
 function rig({
   settings = {},
   resume = null,
+  random = () => 0.5,
 }: {
   settings?: Partial<SoundtrackSettings>
   resume?: { id: string; at: number } | null
+  random?: () => number
 } = {}) {
   const store = createSoundtrackStore()
   const context = new FakeContext()
@@ -83,7 +85,7 @@ function rig({
       return element as unknown as HTMLAudioElement
     },
     canPlay: (type) => (type === AAC ? 'probably' : ''),
-    random: () => 0.5,
+    random,
     online: () => state.online,
     kept: (name) => kept.has(name),
     readResume: () => state.resume,
@@ -97,7 +99,23 @@ function rig({
   /** The element holding the current track. */
   const active = (): FakeElement =>
     elements.find((element) => element.src === url(playback().trackId ?? ''))!
-  return { player, store, context, elements, state, kept, playback, active }
+  /**
+   * The gain a deck routes `element` through. The mixer's five buses are
+   * built first, then each deck's element and its gain, in that order.
+   */
+  const gainOf = (element: FakeElement) =>
+    context.gains[5 + elements.indexOf(element)]!.gain
+  return {
+    player,
+    store,
+    context,
+    elements,
+    state,
+    kept,
+    playback,
+    active,
+    gainOf,
+  }
 }
 
 /** A rig that is playing its first track. */
@@ -353,5 +371,119 @@ describe('the soundtrack', () => {
     )!
     expect(master.gain.value).toBeCloseTo(0.25)
     expect(master.channelCount).toBe(1)
+  })
+
+  it('fades back up when a pause is undone inside its own fade', async () => {
+    const { player, active, playback, gainOf } = await playing()
+    const element = active()
+    player.pause()
+    vi.advanceTimersByTime(100)
+    expect(element.paused).toBe(false)
+    player.play()
+    await settle()
+    vi.advanceTimersByTime(1_000)
+    expect(element.paused).toBe(false)
+    expect(gainOf(element).value).toBe(1)
+    expect(playback().status).toBe('playing')
+  })
+
+  it('pauses a track that is still loading', async () => {
+    const { player, playback, elements } = rig()
+    player.setPresence(HERE)
+    player.unlock()
+    expect(playback().status).toBe('loading')
+    player.toggle()
+    await settle()
+    expect(elements.every((element) => element.paused)).toBe(true)
+    expect(playback().status).toBe('paused')
+  })
+
+  it('raises the card when a track begins, not when it resumes', async () => {
+    const { player, store } = await playing()
+    const serial = store.getState().card?.serial
+    player.pause()
+    vi.advanceTimersByTime(400)
+    player.play()
+    await settle()
+    expect(store.getState().card?.serial).toBe(serial)
+  })
+
+  it('plays a repeated track again and again, not twice', async () => {
+    const { active, playback } = await playing({ settings: { repeat: 'one' } })
+    for (let round = 0; round < 3; round += 1) {
+      const element = active()
+      element.advance(285 - element.currentTime)
+      await settle()
+      vi.advanceTimersByTime(6_200)
+      expect(playback().trackId).toBe('a')
+      expect(active()).not.toBe(element)
+      expect(active().paused).toBe(false)
+    }
+  })
+
+  it('plays a track picked near the end of another, not the one after it', async () => {
+    const { player, active, playback } = await playing()
+    const first = active()
+    first.advance(270) // inside the preload window of a's ending
+    await settle()
+    player.select('d')
+    // The outgoing deck keeps reporting while the pick loads.
+    first.advance(0.25)
+    await settle()
+    expect(playback().trackId).toBe('d')
+    expect(active().paused).toBe(false)
+  })
+
+  it('takes a second skip inside the first one’s fade', async () => {
+    const { player, playback } = await playing()
+    player.next()
+    await settle()
+    vi.advanceTimersByTime(1_000)
+    player.next()
+    // The first skip's release comes due while the second one loads.
+    vi.advanceTimersByTime(400)
+    await settle()
+    expect(playback().trackId).toBe('c')
+    expect(playback().status).toBe('playing')
+  })
+
+  it('passes over a preloaded track that fails at its transition', async () => {
+    const { active, playback } = await playing()
+    broken.set(url('b'), 4)
+    const first = active()
+    first.advance(265) // the preload of b starts
+    first.advance(20) // and the fade is due before it has answered
+    await settle(16)
+    expect(playback().trackId).toBe('c')
+    expect(playback().status).toBe('playing')
+  })
+
+  it('crossfades into the track it preloaded at the end of a shuffled cycle', async () => {
+    let state = 3
+    const random = (): number => {
+      state = (state * 48_271) % 2_147_483_647
+      return state / 2_147_483_647
+    }
+    const { player, active, elements, playback } = await playing({
+      settings: { shuffle: true },
+      random,
+    })
+    // Spend the cycle, so the next track comes from a fresh draw.
+    for (let i = 0; i < 3; i += 1) {
+      player.next()
+      await settle()
+      vi.advanceTimersByTime(1_400)
+    }
+    expect(playback().upcoming).toEqual([])
+    const playingNow = active()
+    playingNow.advance(270)
+    await settle()
+    const idle = elements.find((element) => element !== playingNow)!
+    const preloaded = idle.src
+    expect(preloaded).not.toBe('')
+    playingNow.advance(15)
+    await settle()
+    expect(active()).toBe(idle)
+    expect(idle.src).toBe(preloaded)
   })
 })

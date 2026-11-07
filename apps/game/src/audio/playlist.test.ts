@@ -372,6 +372,32 @@ describe('reconcileQueue', () => {
     expect([...next.upcoming].sort()).toEqual(list.filter((id) => id !== 't2'))
   })
 
+  it('runs on from the place of a current track just switched off', () => {
+    const list = ids(5)
+    const queue = startQueue(list, false, seeded(2), 't2')
+    const without = list.filter((id) => id !== 't2')
+    expect(
+      reconcileQueue(
+        queue,
+        without,
+        list,
+        { shuffle: false, wasShuffled: false },
+        seeded(2),
+      ).upcoming,
+    ).toEqual(['t3', 't4'])
+    // The last track switched off ends the cycle rather than restarting it.
+    const last = startQueue(list, false, seeded(2), 't4')
+    expect(
+      reconcileQueue(
+        last,
+        list.filter((id) => id !== 't4'),
+        list,
+        { shuffle: false, wasShuffled: false },
+        seeded(2),
+      ).upcoming,
+    ).toEqual([])
+  })
+
   it('runs on in order from the current track’s new place', () => {
     const list = ids(5)
     const queue = startQueue(list, true, seeded(2), 't1')

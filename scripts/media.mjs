@@ -42,6 +42,8 @@ import { MEDIA, MEDIA_BUCKET } from '../apps/server/src/media.ts'
 const ROOT = new URL('../', import.meta.url)
 
 const TIMEOUT_MS = 120_000
+/** Where every soundtrack key lives in the bucket: a key is its file's name. */
+const SOUNDTRACK_PREFIX = 'music/'
 
 /**
  * Where a pulled object lands, which is `public/` and therefore `dist/`.
@@ -201,10 +203,11 @@ async function pull({ force, optional }) {
  * The keys and sizes R2 already holds under a prefix, or null if it would not
  * say.
  *
- * Only the soundtrack asks, and it can trust the answer: its names are
- * content-addressed, so a key that is present with the same size is the same
- * file, and a re-encode is a new key rather than an overwrite. That turns
- * pushing one new track into one upload rather than every track again.
+ * Only the soundtrack's keys are read from it, and they can trust the answer:
+ * their names are content-addressed, so a key that is present with the same
+ * size is the same file, and a re-encode is a new key rather than an
+ * overwrite. That turns pushing one new track into one upload rather than
+ * every track again.
  *
  * The API's envelope puts the list under `result`; the CLI may print the
  * envelope or the list alone, so both are read. Anything else means push
@@ -249,8 +252,12 @@ async function push({ only }) {
     process.exitCode = 1
     return
   }
-  const present =
-    only === undefined ? new Map() : ((await stored(only)) ?? new Map())
+  // Asked whatever the prefix, so a bare `media:push` does not upload every
+  // track again; trusted only for the soundtrack's content-addressed keys —
+  // a `dropbox/` key is overwritten in place, and its size proves nothing.
+  const present = wanted.some((item) => !item.bundled)
+    ? ((await stored(SOUNDTRACK_PREFIX)) ?? new Map())
+    : new Map()
   let uploaded = 0
   for (const item of wanted) {
     const file = there(localPath(item))
@@ -264,7 +271,7 @@ async function push({ only }) {
       process.exitCode = 1
       return
     }
-    if (present.get(item.key) === size) {
+    if (!item.bundled && present.get(item.key) === size) {
       console.log(`media: r2://${MEDIA_BUCKET}/${item.key} is already there`)
       continue
     }

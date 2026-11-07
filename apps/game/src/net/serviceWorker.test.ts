@@ -561,9 +561,9 @@ describe('the soundtrack', () => {
   }
 
   /*
-   * The regression this branch exists for. The worker used to step aside for
-   * any request with a `Range` header, which sent a kept track to a network
-   * that is not there; and a worker that answered with the stored 200 instead
+   * The case the music branch of the worker exists for. Stepping aside for a
+   * request with a `Range` header, as every other path does, sends a kept
+   * track to a network that is not there; and answering with the stored 200
    * is a track Safari will not play, online or off.
    */
   it('answers a kept track’s range with a 206 of exactly those bytes', async () => {

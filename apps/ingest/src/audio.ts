@@ -780,7 +780,9 @@ async function buildTrack(
       delivered.push({ encoding, path, loudness: measured.summary })
     }
     const worst = Math.max(...delivered.map((one) => one.loudness.truePeak))
-    if (worst <= TARGET.truePeak) break
+    // Not on the last attempt: `gain` is what the credit, the contour and the
+    // manifest report as applied, and these files are encoded at it.
+    if (worst <= TARGET.truePeak || attempt === 1) break
     gain = round(gain - (worst - TARGET.truePeak) - 0.1, 2)
   }
 
@@ -1063,7 +1065,7 @@ export async function buildAudio(
   ${tracks.length} tracks, ${minutes.toFixed(1)} minutes, ${(bytes / 1e6).toFixed(1)} MB delivered in ${DELIVERY}/
   ${capped.length === 0 ? 'every track reached the target' : `held under the target by the true-peak ceiling (*): ${capped.join(', ')}`}
   catalog, manifest and LICENSE.md written to ${OUTPUT}/
-  publish the delivery files with \`pnpm media:push\``)
+  publish the delivery files with \`pnpm media:push music/\``)
 }
 
 /** A number as prose prints it: the sign is U+2212, which a hyphen is not. */
