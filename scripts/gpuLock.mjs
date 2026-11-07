@@ -17,7 +17,10 @@
  * because it outlives the holder (drive.mjs's detached Chrome). It is stale
  * only when every one of them is gone, so a killed rig whose Chrome still
  * renders keeps it, and a holder's exit — normal, SIGINT or SIGTERM — removes
- * only its own entry. Anything that cannot prove a process gone counts it
+ * only its own entry. A holder whose GPU work runs in its own children
+ * (`keepChildren`: vitest's main process, whose fork workers hold the
+ * devices) leaves the lock to the ones still running when it ends without
+ * releasing. Anything that cannot prove a process gone counts it
  * alive, and a lock that cannot be created refuses the job: a GPU job never
  * starts unlocked, and there is no environment switch that lets one.
  */
@@ -337,6 +340,54 @@ function create(file, holder) {
 
 /** Lock path to token, for every lock this process has an entry in. */
 const held = new Map()
+/** Lock path to holder, for the locks whose GPU work runs in this process's
+ *  own children (`keepChildren`). */
+const parents = new Map()
+
+/** This process's live children; none when `pgrep` cannot say. */
+function children() {
+  try {
+    return execFileSync('pgrep', ['-P', String(process.pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .trim()
+      .split('\n')
+      .map(Number)
+      .filter((pid) => Number.isInteger(pid) && pid > 0)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * The holder ending without having released: a signal, or an exit that came
+ * first. A holder that asked for `keepChildren` leaves the lock to whichever
+ * of its children still run, then drops its own entry as a release does.
+ * vitest's fork workers are the case: they hold the Dawn devices, and they
+ * outlive a SIGTERM of the main process by seconds, so a lock released with
+ * the main process alone would let the next job start beside them. A
+ * recording that fails still releases; what it leaves is stale once the
+ * children are gone.
+ */
+function abandon() {
+  try {
+    const kids = parents.size > 0 ? children() : []
+    for (const [file, holder] of parents) {
+      const token = held.get(file)
+      if (token !== undefined && kids.length > 0)
+        edit(file, token, (lock) =>
+          kids.reduce(
+            (next, pid) => adding(entry(pid, 'child', holder))(next),
+            lock,
+          ),
+        )
+    }
+  } catch (error) {
+    process.stderr.write(`gpuLock: ${error.message}\n`)
+  }
+  release()
+}
 
 /**
  * Re-raised once this listener is gone, because a listener replaces Node's
@@ -350,7 +401,7 @@ const onSignal = (signal) => {
   // than the signal its parent sent. What a failed release leaves is stale
   // once this process is gone.
   try {
-    release()
+    abandon()
   } catch (error) {
     process.stderr.write(`gpuLock: ${error.message}\n`)
   }
@@ -361,12 +412,13 @@ const listeners = Object.fromEntries(
   SIGNALS.map((signal) => [signal, () => onSignal(signal)]),
 )
 
-function hold(file, token, holder, joined) {
+function hold(file, token, holder, joined, keepChildren) {
   if (held.size === 0) {
-    process.on('exit', release)
+    process.on('exit', abandon)
     for (const signal of SIGNALS) process.on(signal, listeners[signal])
   }
   held.set(file, token)
+  if (keepChildren) parents.set(file, holder)
   return {
     path: file,
     token,
@@ -385,8 +437,9 @@ function releaseOne(file) {
   const token = held.get(file)
   if (token === undefined) return
   held.delete(file)
+  parents.delete(file)
   if (held.size === 0) {
-    process.removeListener('exit', release)
+    process.removeListener('exit', abandon)
     for (const signal of SIGNALS)
       process.removeListener(signal, listeners[signal])
   }
@@ -480,7 +533,7 @@ export function parseWait(seconds, source) {
  * past the grace, so the wait is bounded. A few rounds absorb the other races
  * — a create that loses, a reclaim another process got to first.
  */
-function attempt(file, holder, token) {
+function attempt(file, holder, token, keepChildren) {
   for (let tries = 0; tries < 4;) {
     const found = inspect(file)
     if (found.kind === 'opening') {
@@ -495,7 +548,7 @@ function attempt(file, holder, token) {
       found.lock.token === token
     ) {
       if (edit(file, token, adding(entry(process.pid, 'holder', holder))))
-        return { lock: hold(file, token, holder, true) }
+        return { lock: hold(file, token, holder, true, keepChildren) }
       continue
     }
     if (found.kind === 'held') return { busy: found }
@@ -505,7 +558,7 @@ function attempt(file, holder, token) {
     }
     const created = create(file, holder)
     if (created !== null)
-      return { lock: hold(file, created.token, holder, false) }
+      return { lock: hold(file, created.token, holder, false, keepChildren) }
   }
   return { busy: inspect(file) }
 }
@@ -523,6 +576,8 @@ function attempt(file, holder, token) {
  * @param {number} [options.pollMs]
  * @param {number} [options.reprintMs]
  * @param {string} [options.hint]  the caller's own way to queue, as the refusal's last line
+ * @param {boolean} [options.keepChildren]  ended by a signal, or by an exit
+ *   before its release, this process leaves the lock to its live children
  * @param {(line: string) => void} [options.say]
  */
 export async function acquire(
@@ -534,13 +589,14 @@ export async function acquire(
     pollMs = 500,
     reprintMs = 10_000,
     hint,
+    keepChildren = false,
     say = (line) => process.stderr.write(`${line}\n`),
   } = {},
 ) {
   const begun = Date.now()
   let printed = -Infinity
   for (;;) {
-    const got = attempt(file, holder, token)
+    const got = attempt(file, holder, token, keepChildren)
     if (got.lock !== undefined) return got.lock
     const now = Date.now()
     if (now - begun >= waitMs) {

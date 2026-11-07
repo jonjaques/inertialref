@@ -33,8 +33,9 @@ const SLEEPER = 'setInterval(() => {}, 1e9)'
  * One holder program, run as a process of its own, so the lock is held by a
  * pid a test can signal and kill rather than by the vitest worker. The plan in
  * its environment says what it does once it holds the lock: launch a detached
- * Chrome stand-in and record it, run a nested child under its token, then hold
- * until stdin closes or exit at once. The barrier is polled asynchronously: a
+ * Chrome stand-in and record it, start a worker of its own as vitest starts a
+ * fork, run a nested child under its token, then hold until stdin closes —
+ * releasing first, as a teardown does, or not — or exit at once. The barrier is polled asynchronously: a
  * pipe to the parent is asynchronous on macOS, so a synchronous spin would sit
  * on the `waiting` line the test is waiting for.
  */
@@ -52,7 +53,7 @@ if (plan.go !== undefined) {
 }
 let lock
 try {
-  lock = await acquire(plan.holder, { path: plan.path, waitMs: plan.waitMs ?? 0, pollMs: 20, say: () => {} })
+  lock = await acquire(plan.holder, { path: plan.path, waitMs: plan.waitMs ?? 0, pollMs: 20, keepChildren: plan.keepChildren, say: () => {} })
 } catch (error) {
   tell({ busy: error.message, code: error.code })
   process.exit(1)
@@ -64,6 +65,10 @@ if (plan.chrome) {
   lock.record(chrome.pid)
   tell({ chrome: chrome.pid })
 }
+if (plan.worker) {
+  const worker = spawn(process.execPath, ['-e', ${JSON.stringify(SLEEPER)}, process.argv[1], 'worker'], { stdio: 'ignore' })
+  tell({ worker: worker.pid })
+}
 if (plan.child !== undefined) {
   const child = spawn(process.execPath, [...process.execArgv, process.argv[1]], {
     env: { ...process.env, ...lock.env, GPU_LOCK_PLAN: JSON.stringify(plan.child) },
@@ -73,7 +78,10 @@ if (plan.child !== undefined) {
 }
 tell({ ready: process.pid })
 if (plan.hold) {
-  process.stdin.on('end', () => process.exit(0))
+  process.stdin.on('end', () => {
+    if (plan.releaseFirst) lock.release()
+    process.exit(0)
+  })
   process.stdin.resume()
 }
 `
@@ -202,6 +210,7 @@ function holder(plan, env = {}) {
     for (const line of lines) {
       const message = JSON.parse(line)
       if (message.chrome !== undefined) standIns.add(message.chrome)
+      if (message.worker !== undefined) standIns.add(message.worker)
       messages.push(message)
     }
     const woken = waiters
@@ -500,6 +509,61 @@ describe('the GPU lock', () => {
     await gone(chrome)
     const lock = await acquire('test:gpu', { path: file() })
     expect(read()).toMatchObject({ pid: process.pid, token: lock.token })
+  })
+
+  /*
+   * vitest's main process holds the lock for `pnpm test:gpu`, and its fork
+   * workers hold the Dawn devices. A fork outlives a SIGTERM or SIGKILL of
+   * the main process by seconds — about 20 s, running a 30 s test — so a
+   * holder ended without its teardown has to leave the lock to them.
+   */
+  it.each([
+    ['SIGTERM', 'SIGTERM'],
+    ['SIGINT', 'SIGINT'],
+    ['an exit before its release', null],
+  ])(
+    'keeps the lock for the workers of a holder ended by %s',
+    async (_how, signal) => {
+      const job = holder({
+        holder: 'test:gpu',
+        keepChildren: true,
+        worker: true,
+        hold: true,
+      })
+      const worker = await job.said('worker')
+      await job.said('ready')
+      if (signal === null) job.child.stdin.end()
+      else job.child.kill(signal)
+      expect(await job.closed).toEqual(
+        signal === null ? { code: 0, signal: null } : { code: null, signal },
+      )
+      expect(pids(read())).toEqual([worker])
+      const error = await acquire('test:gpu', { path: file() }).catch((e) => e)
+      expect(error.code).toBe('busy')
+      expect(error.message).toContain(
+        `pid ${worker} (child, recorded by test:gpu)`,
+      )
+      process.kill(worker, 'SIGKILL')
+      await gone(worker)
+      const lock = await acquire('test:gpu', { path: file() })
+      expect(read().token).toBe(lock.token)
+    },
+  )
+
+  it('lets go entirely when the holder releases before it exits, whatever its workers do', async () => {
+    const job = holder({
+      holder: 'test:gpu',
+      keepChildren: true,
+      worker: true,
+      hold: true,
+      releaseFirst: true,
+    })
+    const worker = await job.said('worker')
+    await job.said('ready')
+    job.child.stdin.end()
+    expect(await job.closed).toEqual({ code: 0, signal: null })
+    expect(existsSync(file())).toBe(false)
+    expect(exists(worker)).toBe(true)
   })
 
   it.each([
