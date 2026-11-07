@@ -1,6 +1,6 @@
 import { formatShutter } from './controls.ts'
 import { formatReading } from '@inertialref/shared'
-import { lensReadout } from '@inertialref/rendering'
+import { GALAXY_VIEWS, lensReadout } from '@inertialref/rendering'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { CAMERA_LENS, usePersistentState } from '../state/preferences.ts'
 import { Row } from './Row.tsx'
@@ -32,7 +32,16 @@ export function OpticsSection() {
         : { auto: snapshot.exposure.auto, metered: snapshot.exposure.metered },
     ),
   )
-  const [lens] = usePersistentState(CAMERA_LENS)
+  const [kept] = usePersistentState(CAMERA_LENS)
+  /*
+   * The optics the picture is taken through, which is not always the kept
+   * lens: a fixed Milky Way view exposes through its own (`engine.lens`), and
+   * a readout of the lens set aside would describe a picture nobody is
+   * looking at. The view's id is a string, so this re-renders when the
+   * instrument changes and at no other time.
+   */
+  const galaxy = useEngine((snapshot) => snapshot.observer?.galaxyView ?? null)
+  const lens = galaxy === null ? kept : GALAXY_VIEWS[galaxy].lens
   /*
    * The viewport the derived readouts are resolved against, and only it.
    *

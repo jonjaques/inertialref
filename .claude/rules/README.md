@@ -67,6 +67,7 @@ every touch of its directory, and the thing it is competing with for attention i
 | `site.md`        | the document head, `public/`, the brand pipeline, analytics           |
 | `documents.md`   | markdown under `docs/` or `design/`, `STYLE.md`, the docs build       |
 | `timing.md`      | the timing seam, the sink, the budgets or the profile report          |
+| `soundtrack.md`  | the player, the audio pipeline, `data/audio`, or the service worker   |
 
 ## Shared reasoning and Codex
 

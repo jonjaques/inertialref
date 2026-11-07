@@ -1,6 +1,7 @@
 import {
   ABOUT,
   CINEMA,
+  CREDITS,
   DOCS,
   HOME,
   KEYS,
@@ -108,6 +109,13 @@ export const PAGES: readonly PageMeta[] = [
     index: true,
   },
   {
+    path: CREDITS,
+    title: 'Credits',
+    description:
+      'Every track the Planetarium plays: who made it, the license it is shared under, where it came from, and what this build changed.',
+    index: true,
+  },
+  {
     path: PLAY_SOLO,
     title: 'Solo Flight',
     description:
@@ -132,7 +140,7 @@ export const PAGES: readonly PageMeta[] = [
     path: SETTINGS,
     title: 'Settings',
     description:
-      'Camera, display and simulation settings — the lens, antialiasing, HDR output and the flare, over whatever is running.',
+      'Display, audio, interface and control settings — HDR output, the flare, the soundtrack and its playlist, the menu bar and every binding.',
     index: false,
   },
   {

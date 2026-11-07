@@ -595,7 +595,8 @@ Two nested levels, and no more.
   `shadow-2xl`.
 - **Sub-container:** `slate-900/40`, 1px `slate-800/80` border, `0.25rem` radius,
   `0.5rem 0.25rem` padding. Used for the destination list, the selection
-  summary, and each settings row.
+  summary, and a notice inside a panel. A settings row is not one: it is a
+  line, below.
 - **Internal padding:** `0.5rem` on panel content; `0.25rem 0.5rem` on rows.
 
 ### Navigation
@@ -667,6 +668,28 @@ value in `slate-300` that truncates or breaks, `gap-3` between. The whole
 readout surface of the interface is this component repeated, which is exactly
 why face rather than color carries the distinction — forty rows in one face
 have one texture and the eye has nothing to catch on.
+
+### Setting row
+
+The unit a settings page is made of, and the author's Graphics panel with it
+(`hud/SettingRow.tsx`). The label — `type-ui` in `slate-200` — and one line
+saying what the setting does or costs sit on the left; the control sits in one
+right-hand column, so every option group, slider and switch on a page is found
+in the same place; a `slate-800/70` hairline separates a row from the next. No
+frame around each row: three framed geometries for one kind of thing was the
+defect this replaced.
+
+**The container decides the arrangement, not the viewport.** Below 32rem of
+container the control drops under its label and takes the width — the 19rem
+dock panel — and at or above it the two sit side by side. A slider is its
+travel and a fixed-width reading after it (`hud/SliderControl.tsx`), so a value
+that grows a digit does not move the travel under the pointer.
+
+**A value that differs from its default draws a bar in the gutter**, 2px of
+`sky-400/80` beside the label — the editor's modified-line mark, a line rather
+than a dot because the system has two circles and neither is this. It draws
+nothing until something changes, and then it shows what the page's "restore
+defaults" would undo; it carries "(changed)" for a screen reader.
 
 ### Flight Strip (signature)
 
@@ -771,6 +794,18 @@ scene the page claims to be running over. Dropping to 55% without one barely
 registers — on the extended-range path the canvas carries a sunlit planet well
 above diffuse white, so 45% of that is still about diffuse white. **A scrim over
 this scene is read against what is behind it, never against a swatch.**
+
+**A page with sections is one frame, the same size on every section.**
+Settings is `56rem` wide and the smaller of `44rem` and the space there is tall
+(`OverlayPage`'s `fixed`), with its sections as a row of tabs across the top
+and the section scrolling under them. Sized to its content, every tab press
+resized the dialog and re-centered it under the pointer. The tabs are the
+`type-label` step with a `sky-400` underline on the current one and a hairline
+under the row — the preset library's tabs are the same row — and they stay a
+row rather than a rail down the side, because a rail taken from the
+controller's page sets its callouts below the smallest label size there is.
+Each section has a "restore defaults" scoped to the rows it draws, asked
+twice, with the count in the question and on the tab.
 
 A page is the one place the crosshair may be covered; it is transient and
 addressable, and both Escape and the browser's back button leave it.

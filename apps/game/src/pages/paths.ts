@@ -76,6 +76,16 @@ export const settingsSection = (section: string): string =>
 export const ABOUT = '/about'
 
 /**
+ * Who made the music, and under what license.
+ *
+ * A page with an address rather than a paragraph of the About page: most of
+ * the soundtrack is CC BY, whose credit has to name the work, the creator,
+ * the license and the change, for fifty-odd tracks — and a credit somebody
+ * can link to is the one a licensor can check.
+ */
+export const CREDITS = '/credits'
+
+/**
  * The keys sheet.
  *
  * A dialog with an address, like the settings sections, and for the same
@@ -159,6 +169,7 @@ export function isOverlayPath(pathname: string): boolean {
     pathname === SETTINGS ||
     pathname.startsWith(`${SETTINGS}/`) ||
     pathname === ABOUT ||
+    pathname === CREDITS ||
     pathname === KEYS ||
     pathname === AUTH_CALLBACK
   )
@@ -167,7 +178,7 @@ export function isOverlayPath(pathname: string): boolean {
 /**
  * Which dialog *surface* a path belongs to — `AnimatePresence`'s key.
  *
- * `/settings/camera` and `/settings/display` are one panel showing different
+ * `/settings/display` and `/settings/controls` are one panel showing different
  * content, so they share a key and the panel never re-enters between them.
  * Anything that is not a dialog is the absence of one, which is the state the
  * `null` fallback route renders.

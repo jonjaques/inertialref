@@ -264,6 +264,22 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **A playlist drag downward ended after one row.** The editor reordered its
+  rows live under the pointer; React reorders keyed rows by moving their DOM
+  nodes, and a node moved while it holds pointer capture loses it. Dragging up
+  moves the _other_ rows, so it worked, and every drag down was cancelled at
+  the first slot. The rows now keep their DOM order until the drop and step
+  aside through `translate`; `reorder.test.ts` holds what a drag draws equal to
+  what its drop commits, and trusted CDP drags in Chrome — three rows down,
+  three up, ten down — each landed (7 Nov 2026).
+- **An authentic lossless copy failed authentication at 22.05 kHz.** MP3's
+  1105-sample decoder delay is half a sample at that rate, and the residual
+  read −16 dB against a true match's −35 to −63. Compare at the native rate
+  (6 Nov 2026, below).
+- **The end of a playlist stuck.** One flag meant both "crossfading" and "the
+  end was handled", and it stayed set after the last track, so Play from the
+  end did nothing. `soundtrack.test.ts` plays to the end and back (6 Nov 2026,
+  below).
 - **The ground row of Ψ marched through the planet.** A ray aimed down from
   r = 1 starts on the sphere, so `distanceToSphere` takes the far root, and the
   bake integrated a chord of rock at the surface's density as sunlit air. At
@@ -12488,6 +12504,119 @@ layer stayed with Titan. Six things the pass found that must not come back:
 - **`pnpm presets:compare` without `--all` photographs seven of thirteen.**
   #180's comparison passed with titans-haze and centauri-daybreak moved 1.34%
   and 1.71%; a change to the air moves the dark plates first.
+
+## The lens leaves settings, and a council reads the plan (6 Nov 2026)
+
+The planetarium and settings interfaces were reorganized around one question per
+panel, and the plan for it went to three reviewers — Claude Opus, GPT Sol and
+Muse Wonder — before any code, scoring 7, 8 and 7 of 10. What they changed, and
+what was kept against them, is the useful half.
+
+**The lens had two homes and flight had neither.** `/settings/camera` drew the
+planetarium's own `LensSection`, so a focal length was set over a 70% scrim —
+or over the menu, against no picture — and flight's workspace registered only
+the Navigator, so the settings copy was the pilot's one way to the lens. It is a
+Lens panel in both modes now; [ADR-0058](docs/adr/0058-settings-hold-the-person-and-the-viewport-holds-its-instrument.md)
+draws the line the settings page keeps from here on.
+
+**The comfort clamps nearly went with it.** Adaptation rate and the bright and
+dark ranges sit in `render.sensor` beside the camera mode, and moving the
+section moved them into a viewport panel — out of the one page a person who
+needs them would look in. Opus caught it. They are Settings › Display › Comfort,
+live in every camera mode — disabled outside Automatic, as the first cut had
+them, a person could not set their protection before choosing the mode it
+applies in, and the default is Enhanced — and the two halves of the record
+each restore only their own fields, removing the key when what remains is the
+default.
+
+**Round two, on the implementation (8, 8 and 8 of 10).** A restore's in-place
+confirmation dropped a keyboard's focus at `<body>`; `ConfirmAction` hands it to
+Keep and back. The changed marks counted an override that named the act's own
+default; they compare with the defaults now, and a capture that lands on the
+default removes the override instead of storing a copy of it.
+
+**"Reset everything" deleted the saved shots.** `PERSONAL_PICTURES` is in the
+registry because that is where storage is, and the reset walked every key.
+Sol caught it. `resetPreferences(keep)` keeps them; the test fails with `keep`
+ignored.
+
+**Rejected on review:** moving the compositions into Camera (they move the
+camera relative to the subject, which is how the code works and not how anyone
+looks for a crescent — all three said so); a left rail in the settings dialog
+(it takes 11rem from the controller's page, whose callouts then fall below the
+smallest label size); a target verb inside the navigator's rows (a second
+control inside a single-tab-stop ARIA tree).
+
+**Kept against advice:** the gutter mark on a changed setting, which all three
+would have cut on cost and noise — it draws nothing until a value differs, and
+the per-row comparison it needs is the one the page's restore needs anyway.
+
+The settings dialog sized itself to each section and re-centered under the
+pointer on every tab; it is one frame now. The planetarium's number keys stopped
+at seven while the planetarium has eight panels with the guide, so the last
+panel in the menu had no key; `panel.8` is Digit8. The 105 keymap labels were
+Title Case in source, against rule 51, and they are the row labels of the
+controls page — they are sentence case.
+
+## The Planetarium plays music, and half a sample faked a forgery (6 Nov 2026)
+
+The Planetarium has a soundtrack: fifty-two tracks, 251 minutes, under CC0, the
+Public Domain Mark and CC BY only
+([ADR-0059](docs/adr/0059-the-planetarium-plays-music-anyone-may-share.md),
+[spike 6](docs/spikes.md#6--licensed-music-and-spacecraft-audio)). The masters
+are 954 MB of LFS that no default fetch touches; the 104 delivery files, AAC
+and Opus, are 819.4 MB in R2, served by the Worker with a 206. A dock panel, a
+settings page with the whole playlist, `/credits`, a card per track, the Media
+Session and a cache for kept tracks sit around one player.
+
+**Comparing a FLAC with the licensor's MP3 at 22.05 kHz called an authentic
+copy a different master.** A third party's lossless file is used only after it
+matches the licensor's own lossy one, and the first pass resampled both to
+22.05 kHz to save time. MP3's decoder delay is 1105 samples at 44.1 kHz, which
+is 552.5 at 22.05 — half a sample no integer lag can align — and the residual
+read −16 dB, the figure for a different recording. At the native rate the same
+pair correlates at ≥ 0.99984 with a residual of −35 to −63 dB and a constant
+25.06 ms offset. Compare at the rate the files were made at.
+
+**The player's end-of-track trigger shared a flag with the crossfade.**
+`#crossfading` doubled as "the end has been handled", so after the last track
+of a playlist with repeat off it stayed set, and Play from the end did nothing.
+`#ended` holds the track whose end was handled and a seek clears it. The same
+afternoon, a playlist with nothing playable reported `paused`: the reconcile
+started a deck that was still loading, its error advanced the queue, and an
+empty candidate list read as the playlist ending. A deck now says when it is
+`ready`, only a ready deck is sounded, and an advance with no candidates says
+why instead.
+
+**Cloudflare's static assets ignore `Range`.** Measured on production: a ranged
+GET answers 200 with the whole body, and the assets refuse files over 25 MiB
+where the longest track is 32.2 MiB. The files are `bundled: false` entries in
+the media table, and the build strips `dist/media/music` so a deploy from a
+machine that ran the audio pipeline matches Workers Builds (rule 67).
+
+**A credit that ends on a bare domain ran into the change notice** —
+"chriszabriskie.com Modified: level lowered…". The join adds a stop where the
+licensor's line has none, and the catalog test reads every credit as two
+sentences.
+
+**Tried and rejected.** React DnD for the playlist: the settings page opens over
+the Planetarium, whose dock already runs the HTML5 backend, and that backend
+refuses a second instance on the window; pointer capture on the handle works
+under a finger too. A limiter to land every track on −18 LUFS: six tracks sit
+under it instead, capped by the true-peak ceiling. A pause under the guide's
+voice: the music ducks 12 dB while a guide session is live, because a tour that
+stopped the music for every exchange would lurch.
+
+**Measured in Chrome** (the drive rig, 1600×900, `pnpm dev`): before a gesture
+`ir.soundtrackStatus()` read `waiting` with the first track loaded and the
+context `suspended`; four seconds after one it read `playing`, the context
+`running`, at 3.78 s, and 6.70 s three seconds later; `next` changed the track
+and raised the card. The card first sat bottom left, on top of the drop handle,
+and moved to the top edge between the panes, where nothing in the Planetarium
+draws. On the settings page a handle moved down by the keyboard kept focus, the
+case where React moves the focused node and would drop it, and the live region
+said where the track landed. **Nobody has listened to the set end to end**, and
+the encode is deterministic: two builds wrote the same 104 files byte for byte.
 
 ## Known gaps
 

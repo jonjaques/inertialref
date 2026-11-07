@@ -2,9 +2,13 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { type Location, MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
+import { licenseOf } from '@inertialref/protocol'
+import { shellPaths } from '../../astro/siteRoutes.ts'
+import { SOUNDTRACK } from '../audio/catalog.ts'
 import {
   ABOUT,
   AUTH_CALLBACK,
+  CREDITS,
   HOME,
   isOverlayPath,
   KEYS,
@@ -23,6 +27,15 @@ import {
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { AccountPage } from './AccountPage.tsx'
 import { OverlayRoutes } from './OverlayRoutes.tsx'
+
+/** Text as React writes it into markup, with its five characters escaped. */
+const escaped = (text: string): string =>
+  text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#x27;')
 
 /*
  * The routed dialogs, in Node, with no DOM — the same bargain `hud/hud.test.ts`
@@ -99,7 +112,7 @@ describe('the routed dialogs', () => {
     const markup = at(SETTINGS)
     // The panels are the workspace's own components rather than a second copy,
     // so their own strings are the proof that the page reached them.
-    expect(markup).toContain('Lens Flare')
+    expect(markup).toContain('Lens flare')
     // Title case in source — `type-title` does not shout for us.
     expect(markup).toContain('>Settings</h1>')
     // The design's claim about this page, stated on the page.
@@ -109,30 +122,69 @@ describe('the routed dialogs', () => {
     expect(markup).toContain('lucide-x')
     expect(markup).toContain('aria-label="Close · Escape"')
     // Sections are routes, so each one is a real link somebody can send.
-    expect(markup).toContain(`href="${settingsSection('camera')}"`)
+    expect(markup).toContain(`href="${settingsSection('interface')}"`)
+    // And the lens is not one of them: it is the viewport's instrument, set
+    // from the Lens panel beside the picture it shapes.
+    expect(markup).not.toContain(`href="${settingsSection('camera')}"`)
+    // A link somebody sends is a cold visit, and a cold visit is a file:
+    // a tab whose route Astro does not prerender is the Worker's 404 page.
+    const tabs = [...markup.matchAll(/href="(\/settings\/[^"]+)"/g)].map(
+      (match) => match[1],
+    )
+    expect(tabs.length).toBeGreaterThan(0)
+    for (const tab of tabs) expect(shellPaths).toContain(tab)
   })
 
   it('opens the section the URL names', () => {
     // The reason sections are routes at all: "turn off the lens flare" is much
     // easier to answer with a link than with three sentences of navigation.
-    expect(at(settingsSection('camera'))).toContain('65°')
+    expect(at(settingsSection('interface'))).toContain(
+      'aria-label="Menu bar position"',
+    )
+    // A link to the camera section from before the lens left settings opens
+    // the display page, and nothing on it is a lens.
+    const camera = at(settingsSection('camera'))
+    expect(camera).toContain('Lens flare')
+    expect(camera).not.toContain('Focal length')
     // A row per action, from the one table — and the chord beside it, which is
     // the half that could not exist while the bindings were string literals in
     // five files.
-    expect(at(settingsSection('controls'))).toContain('Flight Assist')
+    const controls = at(settingsSection('controls'))
+    expect(controls).toContain('Flight assist')
+    // In the keymap's own groups, under a heading that says where they work —
+    // not a flat list with the context appended to every label.
+    expect(controls).toContain('aria-label="Time"')
+    expect(controls).toContain('in the planetarium')
+    expect(controls).not.toContain(' · global')
     // The controller's page is drawn from the same table: the picture's
     // callouts name the flight acts on the pad's controls before any pad has
     // been seen.
     const pad = at(settingsSection('controller'))
-    expect(pad).toContain('Kill Rotation')
+    expect(pad).toContain('Kill rotation')
     expect(pad).toContain('Thrust · Translate')
   })
 
   it('falls back rather than 404ing on a section it has never heard of', () => {
-    // `/settings/audio` from a future build, or a typo. Opening settings is a
-    // better answer than opening nothing.
+    // A section from a future build, or a typo. Opening settings is a better
+    // answer than opening nothing.
+    const markup = at(settingsSection('telemetry'))
+    expect(markup).toContain('Lens flare')
+  })
+
+  it('draws the audio page: the levels, the soundtrack and the whole list', () => {
     const markup = at(settingsSection('audio'))
-    expect(markup).toContain('Lens Flare')
+    expect(markup).toContain('aria-label="Repeat"')
+    expect(markup).toContain('Play the soundtrack')
+    // Every track has a row, by name, with a switch and a handle a keyboard
+    // can reach — the reordering is not a pointer-only gesture.
+    for (const track of SOUNDTRACK.tracks) {
+      expect(markup).toContain(`aria-label="Play “${escaped(track.title)}”"`)
+      expect(markup).toContain(`Move “${escaped(track.title)}”, position`)
+    }
+    // Server-rendered with no Cache Storage, so it says so instead of drawing
+    // keep switches that cannot work.
+    expect(markup).toContain('keeps nothing for offline here')
+    expect(markup).toContain(`href="${CREDITS}"`)
   })
 
   it('renders the informational pages', () => {
@@ -142,6 +194,24 @@ describe('the routed dialogs', () => {
     expect(about).toContain('Pre-alpha')
     expect(about).toContain('Source on GitHub')
     expect(about).toContain('href="https://github.com/jonjaques/inertialref"')
+    expect(about).toContain(`href="${CREDITS}"`)
+  })
+
+  /*
+   * CC BY's credit is the work, the creator, the license and the change, and
+   * the catalog line carries all four; the page has to print it whole, with
+   * the license and the source a click away, for every track the game plays.
+   */
+  it('credits every track it plays, with its license and its source', () => {
+    const credits = at(CREDITS)
+    expect(credits).toContain('>Credits</h1>')
+    expect(isOverlayPath(CREDITS)).toBe(true)
+    expect(shellPaths).toContain(CREDITS)
+    for (const track of SOUNDTRACK.tracks) {
+      expect(credits).toContain(escaped(track.credit))
+      expect(credits).toContain(`href="${licenseOf(track).url}"`)
+      expect(credits).toContain(`href="${escaped(track.licensor)}"`)
+    }
   })
 
   it('draws the account pages as pages of the menu, never as dialogs', () => {

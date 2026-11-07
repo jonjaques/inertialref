@@ -1,5 +1,9 @@
 import { isPicture, MAX_PICTURES, type Picture } from '@inertialref/devtools'
-import { GUIDE_VOICES } from '@inertialref/protocol'
+import {
+  GUIDE_VOICES,
+  SOUNDTRACK_CATEGORIES,
+  type SoundtrackCategory,
+} from '@inertialref/protocol'
 import { useEffect, useRef, useState } from 'react'
 import { useHydrated } from './hydration.ts'
 import {
@@ -54,6 +58,7 @@ import {
 } from '../render/picture.ts'
 import { type TimingLevel, TIMING_LEVELS } from '../engine/browserTiming.ts'
 import { DEFAULT_SHIP, SHIP_IDS } from '../render/ships.ts'
+import { type Repeat, REPEATS } from '../audio/playlist.ts'
 import {
   DEFAULT_SURFACE_QUALITY,
   isSurfaceQuality,
@@ -105,6 +110,7 @@ const PREFIX = 'ir.hud.'
  */
 export const PREFERENCE_GROUPS = [
   'display',
+  'audio',
   'camera',
   'controls',
   'planetarium',
@@ -192,10 +198,10 @@ export interface PreferenceFamily<T> {
    * One member of the family.
    *
    * `initial` may be overridden per member, which is the one thing a family
-   * cannot say once: every section in the app opens except the Camera panel's
-   * Optics, which is a page of derived readings rather than controls and is the
-   * section a first visit should not have to scroll past. A second family for
-   * one section would be two prefixes over one key space.
+   * cannot say once: most sections open, and the few that start closed — the
+   * Lens panel's Optics, a page of derived readings rather than controls, is
+   * the model — are sections a first visit should not have to scroll past. A
+   * second family for those would be two prefixes over one key space.
    */
   readonly of: (id: string, initial?: T) => Preference<T>
 }
@@ -517,6 +523,155 @@ export const PLANETARIUM_GUIDE_VOICE = define<string>({
   accept: oneOf([...GUIDE_VOICES]),
 })
 
+/* ------------------------------------------------------------------------ */
+/* audio                                                                     */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * The levels are slider positions, not gains. `audio/levels.ts` squares a
+ * position into a gain, which is what makes halfway sound like halfway; a
+ * stored gain would make a slider read back at the wrong place on every
+ * reload.
+ */
+export const AUDIO_MASTER = define({
+  key: 'audio.master',
+  group: 'audio',
+  what: 'the volume of everything the game plays',
+  initial: 0.8,
+  accept: numberWithin(0, 1),
+})
+
+export const AUDIO_MUSIC = define({
+  key: 'audio.music',
+  group: 'audio',
+  what: 'the soundtrack’s volume',
+  initial: 0.7,
+  accept: numberWithin(0, 1),
+})
+
+export const AUDIO_MONO = define({
+  key: 'audio.mono',
+  group: 'audio',
+  what: 'both channels mixed into one',
+  initial: false,
+  accept: isBoolean,
+})
+
+export const MUSIC_ENABLED = define({
+  key: 'music.enabled',
+  group: 'audio',
+  what: 'whether the soundtrack plays',
+  initial: true,
+  accept: isBoolean,
+})
+
+export const MUSIC_SHUFFLE = define({
+  key: 'music.shuffle',
+  group: 'audio',
+  what: 'the playlist in a random order',
+  initial: true,
+  accept: isBoolean,
+})
+
+export const MUSIC_REPEAT = define<Repeat>({
+  key: 'music.repeat',
+  group: 'audio',
+  what: 'what happens at the end of the playlist',
+  initial: 'all',
+  accept: oneOf(REPEATS),
+})
+
+export const MUSIC_CROSSFADE = define({
+  key: 'music.crossfade',
+  group: 'audio',
+  what: 'how long one track takes to become the next',
+  initial: 6,
+  accept: numberWithin(0, 12),
+})
+
+/**
+ * The playlist's order, as track ids.
+ *
+ * Ids rather than positions: a later build adds and drops tracks, and an
+ * order of positions would shuffle everybody's arrangement the day it did.
+ * `audio/playlist.ts` places a track the order does not name after the ones
+ * it does, and skips an id the catalog no longer has.
+ */
+export const MUSIC_ORDER = define<readonly string[]>({
+  key: 'music.order',
+  group: 'audio',
+  what: 'the order of the playlist',
+  initial: [],
+  accept: arrayOf(isString),
+})
+
+export const MUSIC_DISABLED = define<readonly string[]>({
+  key: 'music.disabled',
+  group: 'audio',
+  what: 'tracks taken out of the playlist',
+  initial: [],
+  accept: arrayOf(isString),
+})
+
+/**
+ * Categories taken out of the playlist.
+ *
+ * The ones switched off rather than the ones switched on, so a category a
+ * later build adds arrives switched on. Signals starts off: it is radio from
+ * spacecraft, not music, and somebody should choose to hear it between the
+ * tracks rather than meet it there.
+ */
+export const MUSIC_MUTED_CATEGORIES = define<readonly SoundtrackCategory[]>({
+  key: 'music.mutedCategories',
+  group: 'audio',
+  what: 'categories taken out of the playlist',
+  initial: ['signals'],
+  accept: arrayOf(oneOf(SOUNDTRACK_CATEGORIES)),
+})
+
+export const MUSIC_CARD = define({
+  key: 'music.card',
+  group: 'audio',
+  what: 'the credits card when a track begins',
+  initial: true,
+  accept: isBoolean,
+})
+
+export const MUSIC_BACKGROUND = define({
+  key: 'music.background',
+  group: 'audio',
+  what: 'whether the soundtrack keeps playing in a hidden tab',
+  initial: false,
+  accept: isBoolean,
+})
+
+/**
+ * Where the soundtrack resumes after a reload: a track and a second.
+ *
+ * A preference for the reason `planetarium.hinted` is one — it is the
+ * listener's state, it should survive a reload, and this file is the one
+ * place allowed to keep anything. Written when a track starts, on a pause,
+ * and as the page goes away; never on the playhead's own clock.
+ */
+export const MUSIC_RESUME = define<{
+  readonly id: string
+  readonly at: number
+} | null>({
+  key: 'music.resume',
+  group: 'audio',
+  what: 'where the soundtrack resumes',
+  initial: null,
+  accept: (
+    value,
+  ): value is { readonly id: string; readonly at: number } | null =>
+    value === null ||
+    (typeof value === 'object' &&
+      typeof (value as { id?: unknown }).id === 'string' &&
+      typeof (value as { at?: unknown }).at === 'number' &&
+      Number.isFinite((value as { at: number }).at) &&
+      (value as { at: number }).at >= 0),
+})
+
 export const NAVIGATOR_RADIUS = define<string>({
   key: 'planetarium.catalog.radius',
   group: 'planetarium',
@@ -648,6 +803,19 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_SURFACE,
   RENDER_SHIP,
   RENDER_THRUSTER_VARIATION,
+  AUDIO_MASTER,
+  AUDIO_MUSIC,
+  AUDIO_MONO,
+  MUSIC_ENABLED,
+  MUSIC_SHUFFLE,
+  MUSIC_REPEAT,
+  MUSIC_CROSSFADE,
+  MUSIC_ORDER,
+  MUSIC_DISABLED,
+  MUSIC_MUTED_CATEGORIES,
+  MUSIC_CARD,
+  MUSIC_BACKGROUND,
+  MUSIC_RESUME,
   CAMERA_LENS,
   PERSONAL_PICTURES,
   CONTROLS_KEYMAP,
@@ -898,7 +1066,20 @@ function listen(key: string, listener: (value: unknown) => void): () => void {
   }
 }
 
+/**
+ * The last value said for each key — what the mounted hooks hold.
+ *
+ * Storage is not the live value. A private window, or a browser with site data
+ * blocked, throws from `setItem`, and the hooks stay live through `announce`
+ * while nothing reaches disk; storage can also lag a value a hook holds when
+ * one write was refused and an earlier one was not. Anything that derives a
+ * new value from the current one outside a hook — `restoreFields` — derives it
+ * from this, and from storage only for a key nothing has said yet.
+ */
+const latest = new Map<string, unknown>()
+
 function announce(key: string, value: unknown): void {
+  latest.set(key, value)
   for (const listener of listeners.get(key) ?? []) listener(value)
 }
 
@@ -1139,13 +1320,111 @@ export function importPreferences(data: unknown): ImportPlan {
   return plan
 }
 
-/** Forget everything, and put every mounted hook back to its default. */
-export function resetPreferences(): void {
-  const keys = storedKeys()
+/**
+ * Forget everything, and put every mounted hook back to its default.
+ *
+ * `keep` is for what the registry holds that is not a setting. Personal shots
+ * are stored here because this is where storage is, but they are something a
+ * person made rather than something they chose — and a "reset settings" that
+ * deleted a library of saved pictures would be the one reset in the app that
+ * cannot be undone by choosing again.
+ */
+export function resetPreferences(keep: readonly AnyPreference[] = []): void {
+  const kept = new Set(keep.map((definition) => definition.key))
+  /*
+   * What storage holds and what the hooks hold, because the two differ where
+   * storage refuses writes (`latest`): a browser with site data blocked keeps
+   * every change live and nothing on disk, and a reset that walked storage
+   * alone found nothing to put back.
+   */
+  const keys = [...new Set([...storedKeys(), ...latest.keys()])].filter(
+    (key) => !kept.has(key),
+  )
   // Clear obsolete keys before resolving defaults, or a migration restores
   // the preference while reset is still removing its source.
   for (const key of keys) removeRaw(key)
   for (const key of keys) announce(key, believe(key))
+}
+
+/**
+ * One preference back to its default, the way `resetPreferences` puts all of
+ * them back: by removing what is stored rather than by writing the default.
+ *
+ * The difference is the one `usePersistentState` keeps on mount. An absent key
+ * means "never chose", and only somebody who never chose follows a default
+ * that later moves — a section's "restore defaults" that wrote every default
+ * out would turn each of them into a choice nobody made.
+ */
+export function resetPreference(definition: AnyPreference): void {
+  removeRaw(definition.key)
+  announce(definition.key, resolve(definition))
+}
+
+/**
+ * Some fields of a record preference back to their defaults, the rest kept.
+ *
+ * For a record two pages own between them: `render.sensor` is a photograph's
+ * processing and a person's comfort, and each side's restore must reach only
+ * the fields it draws. Built on `resetPreference`'s rule — when what remains is
+ * the default the key is removed rather than written, so "never chose" keeps
+ * meaning the default — and it writes nothing at all when the fields already
+ * were, so restoring gamma does not pin today's sensor defaults as a choice.
+ *
+ * The record is the last value announced for the key — what the mounted hooks
+ * hold — and storage only for a key nothing has said. Not a hook's render,
+ * which would compose against a captured snapshot (rule 43); and not storage
+ * first, because storage is not the live value: a private window refuses
+ * every write while the panels stay live through the subscription.
+ */
+export function restoreFields<T extends object>(
+  definition: Preference<T>,
+  fields: readonly (keyof T)[],
+): void {
+  const held = (
+    latest.has(definition.key) ? latest.get(definition.key) : read(definition)
+  ) as T
+  const next: T = { ...held }
+  for (const field of fields) next[field] = definition.initial[field]
+  if (!differs(next, definition.initial)) {
+    // Removed when anything stored it, and said when anything holds it: with
+    // storage refusing writes there may be nothing on disk to remove and a
+    // live value on screen all the same.
+    if (
+      differs(held, definition.initial) ||
+      readRaw(definition.key) !== MISSING
+    )
+      resetPreference(definition)
+    return
+  }
+  if (differs(next, held)) write(definition, next)
+}
+
+/**
+ * Whether a preference holds something other than its default.
+ *
+ * Structural rather than by reference, because the record-shaped preferences —
+ * the picture, the surface, the sensor — come back from storage as fresh
+ * objects that are equal to their defaults and never identical to them. JSON
+ * is the comparison storage itself makes, and every value here is JSON.
+ */
+export const differs = (value: unknown, initial: unknown): boolean =>
+  JSON.stringify(canonical(value)) !== JSON.stringify(canonical(initial))
+
+/**
+ * A value with every object's keys in one order, so two records that hold the
+ * same fields compare equal however they were built. A record imported from a
+ * file or migrated from an older shape carries its keys in the order it was
+ * written, and `JSON.stringify` is order-sensitive — so a record that was the
+ * default in every field compared as changed, and a restore left it pinned.
+ */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (typeof value !== 'object' || value === null) return value
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonical((value as Record<string, unknown>)[key])]),
+  )
 }
 
 /** The value a hook should hold for a key, given what storage now says. */

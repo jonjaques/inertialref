@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useRef, useState } from 'react'
-import { Search, SlidersHorizontal, Telescope, X } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import { SlidersHorizontal, Telescope } from 'lucide-react'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { SearchField } from '../hud/SearchField.tsx'
 import { useTravelTargets } from '../hud/useTravelTargets.ts'
 import { FOCUS_RING, releaseFocus } from '../hud/focus.ts'
 import { attempt } from '../hud/notice.ts'
@@ -261,36 +261,16 @@ export function NavigatorPanel({
   return (
     <div ref={root} className="flex min-h-0 flex-col gap-2">
       <div className="flex items-center gap-1.5">
-        <label className="flex min-w-0 flex-1 items-center gap-1.5 rounded border border-slate-700/60 bg-slate-900/60 px-2 transition-colors focus-within:border-sky-500/60">
-          <Search aria-hidden className="size-3 shrink-0 text-slate-400" />
-          <Input
-            ref={field}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={onFieldKeyDown}
-            placeholder="Name or address"
-            aria-label="Search the navigator"
-            autoComplete="off"
-            spellCheck={false}
-            // `md:type-readout` beside the bare step: the Input base carries
-            // `md:text-sm`, which only merges against an equally modified
-            // class. `lib/utils.ts` has the whole story.
-            className="type-readout md:type-readout h-7 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 dark:bg-transparent"
-          />
-          {searching && (
-            <button
-              type="button"
-              aria-label="Clear the search"
-              onClick={(event) => {
-                releaseFocus(event)
-                setQuery('')
-              }}
-              className={`-mr-1 flex size-6 shrink-0 items-center justify-center rounded text-slate-400 transition-colors hover:text-sky-300 ${FOCUS_RING}`}
-            >
-              <X aria-hidden className="size-3" />
-            </button>
-          )}
-        </label>
+        <SearchField
+          value={query}
+          onChange={setQuery}
+          label="Search the navigator"
+          placeholder="Name or address"
+          mono
+          inputRef={field}
+          onKeyDown={onFieldKeyDown}
+          className="flex-1"
+        />
         {/*
          * The filters are behind a toggle, and the toggle *says when they are
          * on*. Six chips and a radius row is 60 px of chrome above a list, and
@@ -316,7 +296,7 @@ export function NavigatorPanel({
             onCatalog?.()
           }}
           hidden={onCatalog === undefined}
-          className={`flex size-7 shrink-0 items-center justify-center rounded border border-slate-700 bg-slate-800/60 text-slate-400 transition-colors hover:border-sky-500/60 hover:text-sky-200 ${FOCUS_RING}`}
+          className={`flex size-8 shrink-0 items-center justify-center rounded border border-slate-700 bg-slate-800/60 text-slate-400 transition-colors hover:border-sky-500/60 hover:text-sky-200 ${FOCUS_RING}`}
         >
           <Telescope aria-hidden className="size-3.5" />
         </button>
@@ -333,7 +313,7 @@ export function NavigatorPanel({
             releaseFocus(event)
             setFiltering((held) => !held)
           }}
-          className={`flex size-7 shrink-0 items-center justify-center rounded border transition-colors ${FOCUS_RING} ${
+          className={`flex size-8 shrink-0 items-center justify-center rounded border transition-colors ${FOCUS_RING} ${
             filtering || narrowed
               ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
               : 'border-slate-700 bg-slate-800/60 text-slate-400 hover:border-sky-500/60 hover:text-sky-200'

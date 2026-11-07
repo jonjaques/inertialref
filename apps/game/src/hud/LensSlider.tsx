@@ -29,6 +29,7 @@ export function LensSlider({
   camera,
   labeledBy,
   describedBy,
+  disabled = false,
 }: {
   channel: LensChannelId
   camera: CameraState
@@ -36,6 +37,8 @@ export function LensSlider({
   labeledBy: string
   /** The id of the element carrying the channel's `description`. */
   describedBy: string
+  /** Another instrument owns the lens on screen; see `LensSection`'s `held`. */
+  disabled?: boolean
 }) {
   const spec = LENS_CHANNELS[channel]
   return (
@@ -44,6 +47,7 @@ export function LensSlider({
       max={LENS_SLIDER_STEPS}
       step={1}
       value={[Math.round(spec.scrub(camera.lens) * LENS_SLIDER_STEPS)]}
+      disabled={disabled}
       // Named by the word on screen, so what a reader hears and what a
       // speech-input user says are the same — "Shutter", not "Exposure time,
       // seconds" (SC 2.5.3). The longer sentence is the description.

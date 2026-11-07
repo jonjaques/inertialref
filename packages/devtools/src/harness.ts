@@ -151,8 +151,11 @@ import {
   type GuideStatus,
   type GuideTraceEntry,
   type Host,
+  type SoundtrackStatus,
+  type SoundtrackVerb,
   type TerrainCacheReport,
   UNAVAILABLE_GUIDE,
+  UNAVAILABLE_SOUNDTRACK,
 } from './host.ts'
 
 /*
@@ -1659,6 +1662,26 @@ export class GameHarness {
     return this.#host.render.guide?.()?.ask(text.trim()) ?? UNAVAILABLE_GUIDE
   }
 
+  /** The soundtrack, read without starting it. */
+  soundtrackStatus(): SoundtrackStatus {
+    return this.#host.render.soundtrack?.()?.status() ?? UNAVAILABLE_SOUNDTRACK
+  }
+
+  /**
+   * Move the soundtrack the way its panel would: `play`, `pause`, `next`,
+   * `previous`, `seek` (seconds), `select` (a track id), `cue` (a track id or
+   * a category, with the listener's crossfade) or `card` (raise the credits).
+   */
+  soundtrack(
+    verb: SoundtrackVerb,
+    argument?: string | number,
+  ): SoundtrackStatus {
+    return (
+      this.#host.render.soundtrack?.()?.command(verb, argument) ??
+      UNAVAILABLE_SOUNDTRACK
+    )
+  }
+
   /** Text help, so the console is discoverable without reading this file. */
   help(): string {
     return [
@@ -1701,6 +1724,8 @@ export class GameHarness {
       '  ir.guideStatus()              inspect the active Planetarium guide without starting it',
       '  ir.guideTrace(enabled?)        recent 200 messages; true logs to console, false stops',
       '  await ir.guideAsk(text)        ask the active guide through its bounded runtime',
+      '  ir.soundtrackStatus()         what the soundtrack is playing, and why not when it is not',
+      "  ir.soundtrack(verb, arg?)     'play' 'pause' 'next' 'previous' 'seek' s 'select' id 'cue' id|category 'card'",
       '  ir.look(target)               planetarium: move the camera, not the ship',
       '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',
       '  ir.compose(id)                a named composition, camera only',

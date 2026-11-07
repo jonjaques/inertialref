@@ -1,19 +1,36 @@
 import { sessionHeaders } from '../account/token.ts'
+import { setVoice } from '../audio/voice.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { GuideExecutor } from './executor.ts'
 import { LiveConnection } from './media.ts'
 import { textureSetReady } from '../render/planetTextures.ts'
 import { CAMERA_LENS, subscribe } from '../state/preferences.ts'
 import { ViewReadiness } from './readiness.ts'
-import { GuideRuntime } from './runtime.ts'
+import { type GuideActivity, GuideRuntime } from './runtime.ts'
 import type { GuideAccessOwner } from './verdict.ts'
+
+/**
+ * The session states in which the visitor is listening to the guide, or about
+ * to: the soundtrack ducks for these. Not `paused`, which is the visitor
+ * taking time to look, and not `offline`.
+ */
+const VOICED: ReadonlySet<GuideActivity['state']> = new Set([
+  'connecting',
+  'listening',
+  'speaking',
+  'thinking',
+  'searching',
+  'moving',
+  'visitor-camera',
+  'ending',
+])
 
 /** Host clocks and media begin only after an explicit guide action. */
 export function createGuideRuntime(
   engine: GameEngine,
   access: GuideAccessOwner,
 ): GuideRuntime {
-  return new GuideRuntime({
+  const runtime = new GuideRuntime({
     access: () => access.current(),
     now: () => Date.now(),
     localTime: () =>
@@ -124,4 +141,14 @@ export function createGuideRuntime(
       return () => window.removeEventListener('pagehide', handler)
     },
   })
+  /*
+   * For the runtime's lifetime, which is the page's: the soundtrack ducks
+   * while a session is live (`audio/voice.ts`), and the subscription is the
+   * one place that knows both what the guide is doing and what that means
+   * for the music.
+   */
+  runtime.subscribe(() =>
+    setVoice('guide', VOICED.has(runtime.getSnapshot().activity.state)),
+  )
+  return runtime
 }

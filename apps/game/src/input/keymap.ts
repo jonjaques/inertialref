@@ -283,21 +283,21 @@ function look(
   hint: string,
 ): readonly ActionDefinition[] {
   return [
-    press(`${prefix}.lookLeft`, 'Look Left', group, context, null, {
+    press(`${prefix}.lookLeft`, 'Look left', group, context, null, {
       held: true,
       pad: `${stick}.left`,
       hint,
     }),
-    press(`${prefix}.lookRight`, 'Look Right', group, context, null, {
+    press(`${prefix}.lookRight`, 'Look right', group, context, null, {
       held: true,
       pad: `${stick}.right`,
     }),
-    press(`${prefix}.lookUp`, 'Look Up', group, context, null, {
+    press(`${prefix}.lookUp`, 'Look up', group, context, null, {
       held: true,
       pad: `${stick}.up`,
       invert: 'look',
     }),
-    press(`${prefix}.lookDown`, 'Look Down', group, context, null, {
+    press(`${prefix}.lookDown`, 'Look down', group, context, null, {
       held: true,
       pad: `${stick}.down`,
       invert: 'look',
@@ -325,23 +325,23 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('time.faster', 'Faster', 'Time', 'global', chord('BracketRight'), {
     pad: 'right',
   }),
-  press('time.normal', 'Real Time', 'Time', 'global', chord('Backslash'), {
+  press('time.normal', 'Real time', 'Time', 'global', chord('Backslash'), {
     hint: 'back to one second per second',
   }),
 
   press('session.save', 'Save', 'Session', 'global', chord('F5')),
   press('session.load', 'Load', 'Session', 'global', chord('F9')),
 
-  press('nav.goTo', 'Go To', 'Session', 'global', chord('Slash'), {
+  press('nav.goTo', 'Go to', 'Session', 'global', chord('Slash'), {
     hint: 'focus the navigator’s search, which takes a name, a near miss of one, or anything an address does',
   }),
 
-  press('chrome.panes', 'Both Panes', 'Screen', 'global', chord('KeyH'), {
+  press('chrome.panes', 'Both panes', 'Screen', 'global', chord('KeyH'), {
     hint: 'clear both panes, or bring them back',
   }),
   press(
     'chrome.all',
-    'All Chrome',
+    'All chrome',
     'Screen',
     'global',
     chord('KeyH', { shift: true }),
@@ -351,7 +351,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'chrome.instruments',
-    'The Instruments',
+    'The instruments',
     'Screen',
     'global',
     chord('Backquote'),
@@ -359,7 +359,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'chrome.keys',
-    'The Keys',
+    'The keys',
     'Screen',
     'global',
     chord('Slash', { shift: true }),
@@ -367,7 +367,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'sensor.response',
-    'Camera Mode',
+    'Camera mode',
     'Screen',
     'global',
     chord('KeyV', { shift: true }),
@@ -382,19 +382,64 @@ export const ACTIONS: readonly ActionDefinition[] = [
    * of controls a pad cannot reach. Unbound on the keyboard because the
    * keyboard has Tab, which is the platform's and is not rebindable.
    */
-  press('chrome.focus', 'The Panels', 'Screen', 'global', null, {
+  press('chrome.focus', 'The panels', 'Screen', 'global', null, {
     pad: 'select',
     hint: 'move into the panels, so the d-pad and the bottom button work them; the right button comes back out',
   }),
 
-  press('panel.1', 'First Panel', 'Panels', 'global', chord('Digit1')),
-  press('panel.2', 'Second Panel', 'Panels', 'global', chord('Digit2')),
-  press('panel.3', 'Third Panel', 'Panels', 'global', chord('Digit3')),
-  press('panel.4', 'Fourth Panel', 'Panels', 'global', chord('Digit4')),
-  press('panel.5', 'Fifth Panel', 'Panels', 'global', chord('Digit5')),
-  press('panel.6', 'Sixth Panel', 'Panels', 'global', chord('Digit6')),
-  press('panel.7', 'Seventh Panel', 'Panels', 'global', chord('Digit7')),
-  press('panel.perf', 'Perf', 'Panels', 'global', chord('KeyP')),
+  press('panel.1', 'First panel', 'Panels', 'global', chord('Digit1')),
+  press('panel.2', 'Second panel', 'Panels', 'global', chord('Digit2')),
+  press('panel.3', 'Third panel', 'Panels', 'global', chord('Digit3')),
+  press('panel.4', 'Fourth panel', 'Panels', 'global', chord('Digit4')),
+  press('panel.5', 'Fifth panel', 'Panels', 'global', chord('Digit5')),
+  press('panel.6', 'Sixth panel', 'Panels', 'global', chord('Digit6')),
+  press('panel.7', 'Seventh panel', 'Panels', 'global', chord('Digit7')),
+  /*
+   * Nine, because the planetarium has nine panels when the guide is granted,
+   * and a number key assigned by position runs out silently: the last panel
+   * in the menu was the one panel no key reached.
+   */
+  press('panel.8', 'Eighth panel', 'Panels', 'global', chord('Digit8')),
+  press('panel.9', 'Ninth panel', 'Panels', 'global', chord('Digit9')),
+  // Named for what it opens rather than by the panel's short title: the
+  // editor's clash line reads "shares its key with …", and "Perf" there is a
+  // word only the author knows.
+  press('panel.perf', 'Performance panel', 'Panels', 'global', chord('KeyP')),
+
+  /*
+   * The soundtrack, from anywhere. Global because the music is: it plays
+   * across the Planetarium's panels and dialogs, and a key that worked only
+   * with the right panel open would be a key nobody could find. M and N are
+   * free in every context, and the operating system's own media keys reach
+   * the player through the Media Session instead (`audio/mediaSession.ts`).
+   */
+  press(
+    'music.toggle',
+    'Play or pause',
+    'Soundtrack',
+    'global',
+    chord('KeyM'),
+    {
+      hint: 'the soundtrack, wherever it is playing',
+    },
+  ),
+  press('music.next', 'Next track', 'Soundtrack', 'global', chord('KeyN')),
+  press(
+    'music.previous',
+    'Previous track',
+    'Soundtrack',
+    'global',
+    chord('KeyN', { shift: true }),
+    { hint: 'or the start of this one, once it has played a few seconds' },
+  ),
+  press(
+    'music.card',
+    'What is playing',
+    'Soundtrack',
+    'global',
+    chord('KeyM', { shift: true }),
+    { hint: 'the title and the credit, for a few seconds' },
+  ),
 
   /* ------------------------------- flight ------------------------------- */
   /*
@@ -405,32 +450,32 @@ export const ACTIONS: readonly ActionDefinition[] = [
    * freedom, and roll is the one that goes digital, because a roll is the
    * axis a pilot holds at full rate rather than trims.
    */
-  press('flight.fore', 'Thrust Ahead', 'Flight', 'flight', chord('KeyW'), {
+  press('flight.fore', 'Thrust ahead', 'Flight', 'flight', chord('KeyW'), {
     held: true,
     pad: 'ls.up',
     hint: 'the thrusters, not the drive — a nudge, for docking and station-keeping',
   }),
-  press('flight.aft', 'Thrust Astern', 'Flight', 'flight', chord('KeyS'), {
+  press('flight.aft', 'Thrust astern', 'Flight', 'flight', chord('KeyS'), {
     held: true,
     pad: 'ls.down',
   }),
-  press('flight.left', 'Translate Left', 'Flight', 'flight', chord('KeyA'), {
+  press('flight.left', 'Translate left', 'Flight', 'flight', chord('KeyA'), {
     held: true,
     pad: 'ls.left',
   }),
-  press('flight.right', 'Translate Right', 'Flight', 'flight', chord('KeyD'), {
+  press('flight.right', 'Translate right', 'Flight', 'flight', chord('KeyD'), {
     held: true,
     pad: 'ls.right',
   }),
-  press('flight.up', 'Translate Up', 'Flight', 'flight', chord('KeyR'), {
+  press('flight.up', 'Translate up', 'Flight', 'flight', chord('KeyR'), {
     held: true,
     pad: 'r2',
   }),
-  press('flight.down', 'Translate Down', 'Flight', 'flight', chord('KeyF'), {
+  press('flight.down', 'Translate down', 'Flight', 'flight', chord('KeyF'), {
     held: true,
     pad: 'l2',
   }),
-  press('flight.pitchUp', 'Pitch Up', 'Flight', 'flight', chord('ArrowUp'), {
+  press('flight.pitchUp', 'Pitch up', 'Flight', 'flight', chord('ArrowUp'), {
     held: true,
     yieldsToFocus: true,
     pad: 'rs.up',
@@ -438,30 +483,30 @@ export const ACTIONS: readonly ActionDefinition[] = [
   }),
   press(
     'flight.pitchDown',
-    'Pitch Down',
+    'Pitch down',
     'Flight',
     'flight',
     chord('ArrowDown'),
     { held: true, yieldsToFocus: true, pad: 'rs.down', invert: 'pitch' },
   ),
-  press('flight.yawLeft', 'Yaw Left', 'Flight', 'flight', chord('ArrowLeft'), {
+  press('flight.yawLeft', 'Yaw left', 'Flight', 'flight', chord('ArrowLeft'), {
     held: true,
     yieldsToFocus: true,
     pad: 'rs.left',
   }),
   press(
     'flight.yawRight',
-    'Yaw Right',
+    'Yaw right',
     'Flight',
     'flight',
     chord('ArrowRight'),
     { held: true, yieldsToFocus: true, pad: 'rs.right' },
   ),
-  press('flight.rollLeft', 'Roll Left', 'Flight', 'flight', chord('KeyQ'), {
+  press('flight.rollLeft', 'Roll left', 'Flight', 'flight', chord('KeyQ'), {
     held: true,
     pad: 'l1',
   }),
-  press('flight.rollRight', 'Roll Right', 'Flight', 'flight', chord('KeyE'), {
+  press('flight.rollRight', 'Roll right', 'Flight', 'flight', chord('KeyE'), {
     held: true,
     pad: 'r1',
   }),
@@ -473,7 +518,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
    * more of it. Two more slam it, because a pilot who wants the drive off
    * wants it off now and not in twenty presses.
    */
-  press('flight.throttleUp', 'Throttle Up', 'Flight', 'flight', chord('KeyT'), {
+  press('flight.throttleUp', 'Throttle up', 'Flight', 'flight', chord('KeyT'), {
     repeats: true,
     // The d-pad, as in Kerbal Space Program's pad layout: the sticks and the
     // bumpers are already the six axes, and a setting that is walked rather
@@ -483,7 +528,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   }),
   press(
     'flight.throttleDown',
-    'Throttle Down',
+    'Throttle down',
     'Flight',
     'flight',
     chord('KeyG'),
@@ -491,14 +536,14 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'flight.throttleFull',
-    'Full Burn',
+    'Full burn',
     'Flight',
     'flight',
     chord('KeyT', { shift: true }),
   ),
   press(
     'flight.throttleCut',
-    'Cut the Drive',
+    'Cut the drive',
     'Flight',
     'flight',
     chord('KeyG', { shift: true }),
@@ -506,13 +551,13 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   // A stick press for the assist, as Star Citizen puts its decoupled toggle:
   // the face buttons are the acts taken often, and this is not one.
-  press('flight.assist', 'Flight Assist', 'Flight', 'flight', chord('KeyZ'), {
+  press('flight.assist', 'Flight assist', 'Flight', 'flight', chord('KeyZ'), {
     pad: 'l3',
   }),
-  press('flight.kill', 'Kill Rotation', 'Flight', 'flight', chord('KeyX'), {
+  press('flight.kill', 'Kill rotation', 'Flight', 'flight', chord('KeyX'), {
     pad: 'south',
   }),
-  press('flight.view', 'Camera View', 'Flight', 'flight', chord('KeyV'), {
+  press('flight.view', 'Camera view', 'Flight', 'flight', chord('KeyV'), {
     pad: 'r3',
     hint: 'chase the ship, or stand off and orbit it — drag to look or orbit, wheel to dolly',
   }),
@@ -530,7 +575,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
    * blink is a recenter, which is the act a pilot who has been looking around
    * wants next.
    */
-  press('flight.freeLook', 'Free Look', 'Flight', 'flight', null, {
+  press('flight.freeLook', 'Free look', 'Flight', 'flight', null, {
     held: true,
     pad: 'east',
     hint: 'hold to turn the head with the steering stick; tap to look ahead again',
@@ -549,7 +594,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   /* ---------------------------- planetarium ----------------------------- */
   press(
     'observe.left',
-    'Orbit Left',
+    'Orbit left',
     'Planetarium',
     'planetarium',
     chord('ArrowLeft'),
@@ -557,7 +602,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'observe.right',
-    'Orbit Right',
+    'Orbit right',
     'Planetarium',
     'planetarium',
     chord('ArrowRight'),
@@ -565,7 +610,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'observe.up',
-    'Orbit Up',
+    'Orbit up',
     'Planetarium',
     'planetarium',
     chord('ArrowUp'),
@@ -573,7 +618,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'observe.down',
-    'Orbit Down',
+    'Orbit down',
     'Planetarium',
     'planetarium',
     chord('ArrowDown'),
@@ -581,7 +626,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'observe.in',
-    'Dolly In',
+    'Dolly in',
     'Planetarium',
     'planetarium',
     chord('Equal'),
@@ -597,7 +642,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   ),
   press(
     'observe.out',
-    'Dolly Out',
+    'Dolly out',
     'Planetarium',
     'planetarium',
     chord('Minus'),
@@ -617,25 +662,25 @@ export const ACTIONS: readonly ActionDefinition[] = [
    * — the Elite galaxy map's, Starfield's star map's and SpaceEngine's
    * crosshair — and the bumpers and the d-pad walk the system as a tree.
    */
-  press('observe.swingLeft', 'Swing Left', 'Planetarium', 'planetarium', null, {
+  press('observe.swingLeft', 'Swing left', 'Planetarium', 'planetarium', null, {
     held: true,
     pad: 'rs.left',
     hint: 'orbit for as long as it is held, at a rate the lens scales; standing, it looks',
   }),
   press(
     'observe.swingRight',
-    'Swing Right',
+    'Swing right',
     'Planetarium',
     'planetarium',
     null,
     { held: true, pad: 'rs.right' },
   ),
-  press('observe.swingUp', 'Swing Up', 'Planetarium', 'planetarium', null, {
+  press('observe.swingUp', 'Swing up', 'Planetarium', 'planetarium', null, {
     held: true,
     pad: 'rs.up',
     invert: 'look',
   }),
-  press('observe.swingDown', 'Swing Down', 'Planetarium', 'planetarium', null, {
+  press('observe.swingDown', 'Swing down', 'Planetarium', 'planetarium', null, {
     held: true,
     pad: 'rs.down',
     invert: 'look',
@@ -647,18 +692,18 @@ export const ACTIONS: readonly ActionDefinition[] = [
     'ls',
     'turn the head off the subject without moving the camera',
   ),
-  press('observe.approach', 'Close In', 'Planetarium', 'planetarium', null, {
+  press('observe.approach', 'Close in', 'Planetarium', 'planetarium', null, {
     held: true,
     pad: 'r2',
     hint: 'move toward the subject for as long as it is held — harder is faster',
   }),
-  press('observe.retreat', 'Pull Back', 'Planetarium', 'planetarium', null, {
+  press('observe.retreat', 'Pull back', 'Planetarium', 'planetarium', null, {
     held: true,
     pad: 'l2',
   }),
   press(
     'observe.pick',
-    'Choose the Center',
+    'Choose the center',
     'Planetarium',
     'planetarium',
     null,
@@ -667,13 +712,13 @@ export const ACTIONS: readonly ActionDefinition[] = [
       hint: 'look at whatever is under the reticle — the pad’s click',
     },
   ),
-  press('observe.center', 'Look Ahead', 'Planetarium', 'planetarium', null, {
+  press('observe.center', 'Look ahead', 'Planetarium', 'planetarium', null, {
     pad: 'east',
     hint: 'turn the head back to the subject',
   }),
   press(
     'observe.previous',
-    'Previous Body',
+    'Previous body',
     'Planetarium',
     'planetarium',
     null,
@@ -682,21 +727,21 @@ export const ACTIONS: readonly ActionDefinition[] = [
       hint: 'the next one in, round the same primary',
     },
   ),
-  press('observe.next', 'Next Body', 'Planetarium', 'planetarium', null, {
+  press('observe.next', 'Next body', 'Planetarium', 'planetarium', null, {
     pad: 'r1',
     hint: 'the next one out, round the same primary',
   }),
-  press('observe.parent', 'Its Primary', 'Planetarium', 'planetarium', null, {
+  press('observe.parent', 'Its primary', 'Planetarium', 'planetarium', null, {
     pad: 'up',
     hint: 'from a moon to its planet, from a planet to its star',
   }),
-  press('observe.child', 'Its Satellites', 'Planetarium', 'planetarium', null, {
+  press('observe.child', 'Its satellites', 'Planetarium', 'planetarium', null, {
     pad: 'down',
     hint: 'from a star to its first planet, from a planet to its first moon',
   }),
   press(
     'observe.freeLook',
-    'Free Look',
+    'Free look',
     'Planetarium',
     'planetarium',
     chord('KeyL'),
@@ -725,7 +770,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
   }),
   press(
     'stand.leave',
-    'Back to Orbit',
+    'Back to orbit',
     'Standing',
     'standing',
     chord('Backspace'),
@@ -737,33 +782,33 @@ export const ACTIONS: readonly ActionDefinition[] = [
    * translation keys, which is deliberate: a hand that knows the ship knows
    * the stance, and the two contexts are never live together.
    */
-  press('stand.forward', 'Fly Forward', 'Standing', 'standing', chord('KeyW'), {
+  press('stand.forward', 'Fly forward', 'Standing', 'standing', chord('KeyW'), {
     held: true,
     shiftScales: true,
     pad: 'ls.up',
     hint: 'along the heading; hold Shift for fast',
   }),
-  press('stand.back', 'Fly Back', 'Standing', 'standing', chord('KeyS'), {
+  press('stand.back', 'Fly back', 'Standing', 'standing', chord('KeyS'), {
     held: true,
     shiftScales: true,
     pad: 'ls.down',
   }),
-  press('stand.left', 'Fly Left', 'Standing', 'standing', chord('KeyA'), {
+  press('stand.left', 'Fly left', 'Standing', 'standing', chord('KeyA'), {
     held: true,
     shiftScales: true,
     pad: 'ls.left',
   }),
-  press('stand.right', 'Fly Right', 'Standing', 'standing', chord('KeyD'), {
+  press('stand.right', 'Fly right', 'Standing', 'standing', chord('KeyD'), {
     held: true,
     shiftScales: true,
     pad: 'ls.right',
   }),
-  press('stand.rise', 'Fly Up', 'Standing', 'standing', chord('KeyE'), {
+  press('stand.rise', 'Fly up', 'Standing', 'standing', chord('KeyE'), {
     held: true,
     shiftScales: true,
     pad: 'r2',
   }),
-  press('stand.lower', 'Fly Down', 'Standing', 'standing', chord('KeyQ'), {
+  press('stand.lower', 'Fly down', 'Standing', 'standing', chord('KeyQ'), {
     held: true,
     shiftScales: true,
     pad: 'l2',
@@ -773,7 +818,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
    * the six keys above; a pad has no modifier to read, so fast is a held
    * action of its own on the stick press every free camera puts its sprint on.
    */
-  press('stand.fast', 'Fly Fast', 'Standing', 'standing', null, {
+  press('stand.fast', 'Fly fast', 'Standing', 'standing', null, {
     held: true,
     pad: 'l3',
     hint: 'hold for fast, as Shift does on the keys',
@@ -886,7 +931,7 @@ export const ACTIONS: readonly ActionDefinition[] = [
     yieldsToFocus: true,
     pad: 'south',
   }),
-  press('cinema.back', 'Step Back', 'Cinema', 'cinema', chord('ArrowLeft'), {
+  press('cinema.back', 'Step back', 'Cinema', 'cinema', chord('ArrowLeft'), {
     shiftScales: true,
     yieldsToFocus: true,
     pad: 'left',
@@ -894,18 +939,18 @@ export const ACTIONS: readonly ActionDefinition[] = [
   }),
   press(
     'cinema.forward',
-    'Step Forward',
+    'Step forward',
     'Cinema',
     'cinema',
     chord('ArrowRight'),
     { shiftScales: true, yieldsToFocus: true, pad: 'right' },
   ),
-  press('cinema.library', 'The Library', 'Cinema', 'cinema', chord('Escape'), {
+  press('cinema.library', 'The library', 'Cinema', 'cinema', chord('Escape'), {
     pad: 'east',
   }),
 
   /* -------------------------------- docs -------------------------------- */
-  press('docs.search', 'Search the Docs', 'Reading', 'docs', chord('Slash'), {
+  press('docs.search', 'Search the docs', 'Reading', 'docs', chord('Slash'), {
     hint: 'the reading room’s own search, in place of the catalog’s',
   }),
 
