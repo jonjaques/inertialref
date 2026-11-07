@@ -95,6 +95,13 @@ describe('the role ranges', () => {
       'the roles are vite, drive, preview, base, bisect, static',
     )
   })
+
+  it('refuses an empty tree root, which every caller would hash alike', () => {
+    expect(() => portFor('vite', '')).toThrow('A tree root is a non-empty path')
+    expect(() => portFor('vite', '/work/a', { trees: [''] })).toThrow(
+      'A tree root is a non-empty path',
+    )
+  })
 })
 
 describe('portFor, the pure core', () => {
