@@ -625,12 +625,13 @@ export class Observatory {
    * the picture does not jump either way.
    */
   holdStation(on: boolean): ObserverStatus {
-    this.#changed()
-    if (on === (this.#hold !== null)) return this.status()
-    // Refused before anything settles, so a refusal changes nothing.
+    // Refused, or already so, before anything changes: either leaves a
+    // running motion and the mutation revision where they were.
     const hold = on
       ? holdOn(this.galaxyInstrument ? null : this.#target, this.time)
       : null
+    if (on === (this.#hold !== null)) return this.status()
+    this.#changed()
     this.#settleTransform()
     this.#hold = hold
     return this.status()
@@ -1274,12 +1275,13 @@ export class Observatory {
    * for exactly this reason before the surface arm existed to receive them.
    */
   compose(id: string): ObserverStatus {
-    this.#changed()
-    // Before anything is reset: a refusal leaves the camera where it was.
+    // Before anything changes: a refusal leaves the camera, a running motion
+    // and the mutation revision where they were.
     if (this.#target?.kind === 'station')
       throw new Error(
         `${this.#target.name} is not a world a composition can frame`,
       )
+    this.#changed()
     this.track(null)
     this.#basis = Q.IDENTITY
     const composition = findComposition(id)
@@ -1610,7 +1612,7 @@ export class Observatory {
       galaxyView: this.#galaxyView,
       target: this.#target,
       tracking: this.#tracking?.target ?? null,
-      hold: holdReading(this.#target, this.#hold),
+      hold: holdReading(this.#target, this.#hold, this.galaxyInstrument),
       state: { ...this.#state, distance },
       desired: { ...this.#desired, distance: this.#desired.distance * scale },
       look: this.#look,

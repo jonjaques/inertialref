@@ -601,6 +601,34 @@ describe('a station as a subject', () => {
     expect(() => ir.observatory.holdStation(true)).toThrow(/Choose a station/)
   })
 
+  it('refuses a hold or a composition without touching a motion in progress', () => {
+    // A refusal changes nothing: the running motion keeps running and the
+    // mutation revision a host diffs against stays where it was. So does a
+    // hold request for the basis already held.
+    const { harness: ir } = harness()
+    const eye = ir.observatory
+    const recipe = {
+      durationSeconds: 30,
+      azimuthDelta: 0.2,
+      elevationDelta: 0,
+      distanceFactor: 1,
+    }
+    ir.look('s:SOL/b:2', { ease: false })
+    expect(eye.startMotion(recipe)).toBe(true)
+    const revision = eye.mutationRevision
+    expect(() => eye.holdStation(true)).toThrow(/Choose a station/)
+    expect(eye.mutationRevision).toBe(revision)
+    expect(eye.status().motion?.durationSeconds).toBe(30)
+
+    ir.look(ISS, { ease: false })
+    expect(eye.startMotion(recipe)).toBe(true)
+    const again = eye.mutationRevision
+    expect(() => ir.compose('portrait')).toThrow(/not a world/)
+    expect(eye.holdStation(false).hold).toBe('space')
+    expect(eye.mutationRevision).toBe(again)
+    expect(eye.status().motion?.durationSeconds).toBe(30)
+  })
+
   it('behaves as it always has at Proxima Centauri, which has no station', () => {
     // The operating point outside Sol: a body subject, no hold to offer, and
     // the orbit arm's floor at 1.5 of the planet's radius as before.

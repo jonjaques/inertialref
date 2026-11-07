@@ -58,13 +58,15 @@ export function holdOn(
 /**
  * Which basis the camera holds round its subject, as the status reports it:
  * null unless the subject is a station, whose anchor is the only one a hold
- * can be taken on.
+ * can be taken on — and null under a galaxy instrument, which owns the pose
+ * and refuses a hold, so the Camera panel never offers a switch that throws.
  */
 export const holdReading = (
   target: { readonly frame: FrameId } | null,
   hold: StationHold | null,
+  galaxyInstrument: boolean,
 ): 'space' | 'station' | null =>
-  target === null || holdFor(target.frame, 0) === null
+  galaxyInstrument || target === null || holdFor(target.frame, 0) === null
     ? null
     : hold === null
       ? 'space'
