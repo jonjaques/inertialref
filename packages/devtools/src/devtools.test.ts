@@ -536,7 +536,7 @@ describe('travel targets', () => {
     // And the structured field the catalog's glyph and filters read, which has
     // no display string to hide a record inside.
     expect(sirius?.spectralType).toMatch(/^A/)
-    expect(sirius?.bodyKind).toBeNull()
+    expect(sirius?.objectKind).toBe('star')
     expect(sirius?.color).not.toBeNull()
   })
 
@@ -557,7 +557,7 @@ describe('travel targets', () => {
     expect(rows.map((row) => row.name)).toEqual(['Earth', 'Sol', 'Sirius'])
     expect(rows[0]).toMatchObject({
       kind: 'body',
-      bodyKind: 'rocky',
+      objectKind: 'rocky',
       loaded: true,
       parent: 'g:milky-way/s:SOL',
     })
@@ -630,6 +630,87 @@ describe('travel targets', () => {
     }
     expect(targets.some((t) => t.provenance === 'projected')).toBe(true)
     session.dispose()
+  })
+
+  it('lists a station under the body it goes round, by every name it has', () => {
+    /*
+     * A row of its own kind, one under Earth and carrying Earth as its parent
+     * and its own axis, so the tree folds it among Earth's satellites inside
+     * the Moon; and a reader who types the catalog number reaches it as surely
+     * as one who types the name.
+     */
+    const { harness: ir } = harness()
+    const stations = ir
+      .targets({ lightYears: 0 })
+      .filter((row) => row.kind === 'station')
+    expect(stations).toHaveLength(1)
+    const iss = stations[0]
+    expect(iss).toMatchObject({
+      address: 'g:milky-way/s:SOL/b:2/a:0',
+      name: 'International Space Station',
+      objectKind: 'station',
+      system: 'SOL',
+      depth: 2,
+      parent: 'g:milky-way/s:SOL/b:2',
+      landable: false,
+      provenance: 'observed',
+      radius: 65.3,
+    })
+    // Over the equatorial radius, as a station's orbit is quoted.
+    expect(iss?.detail).toBe('station · 65.3 m · 414 km – 424 km up')
+
+    const names = ir
+      .searchEntries()
+      .filter((entry) => entry.address === iss?.address)
+      .map((entry) => entry.text)
+    expect(names).toEqual([
+      'International Space Station',
+      'ISS',
+      '1998-067A',
+      '25544',
+    ])
+    // The canonical form, the listing's, and one relative to the system the
+    // player is in all come back as the same row.
+    const rows = ir.rowsFor([
+      'g:milky-way/s:SOL/b:2/a:0',
+      's:SOL/b:2/a:0',
+      'b:2/a:0',
+    ])
+    expect(rows.map((row) => row.address)).toEqual([
+      iss?.address,
+      iss?.address,
+      iss?.address,
+    ])
+  })
+
+  it('lists no station at Proxima Centauri', () => {
+    // The operating point outside Sol: a catalog star with a planet and no
+    // station, where every row is the body listing it was before stations.
+    const { harness: ir } = harness()
+    ir.loadSystem('HIP70890')
+    const proxima = ir
+      .targets({ lightYears: 6 })
+      .filter((row) => row.system === 'HIP70890')
+    expect(proxima.some((row) => row.kind === 'body')).toBe(true)
+    expect(proxima.some((row) => row.kind === 'station')).toBe(false)
+    expect(ir.stations('HIP70890')).toEqual([])
+  })
+
+  it('reports a station’s orbit in the figures it is published in', () => {
+    // CelesTrak's mean motion is 15.49214228 rev/day, which is 92.95 minutes;
+    // the heights are over Earth's equatorial radius.
+    const { harness: ir } = harness()
+    const [iss, ...rest] = ir.stations()
+    expect(rest).toEqual([])
+    expect(iss).toMatchObject({
+      address: 'g:milky-way/s:SOL/b:2/a:0',
+      kind: 'station',
+      parent: 'Earth',
+      radiusM: 65.3,
+    })
+    expect(iss?.periodMinutes).toBeCloseTo(1440 / 15.49214228, 3)
+    expect(iss?.perigeeKm).toBeCloseTo(414.11, 1)
+    expect(iss?.apogeeKm).toBeCloseTo(423.93, 1)
   })
 
   it('keeps a system listed after the player has left its survey radius', () => {
@@ -802,6 +883,8 @@ describe('going places', () => {
     expect(() => ir.goTo('')).toThrow(/No destination/)
     expect(() => ir.goTo('g:milky-way')).toThrow(/galaxy/)
     expect(() => ir.goTo('g:milky-way/s:SOL/b:99')).toThrow(/No body/)
+    // A camera can be put on a station; a ship cannot be sent to one yet.
+    expect(() => ir.goTo('s:SOL/b:2/a:0')).toThrow(/station/)
   })
 })
 

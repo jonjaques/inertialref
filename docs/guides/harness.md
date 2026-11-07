@@ -41,11 +41,12 @@ pixels.
 | `ir.summary()`         | one line: tick, hash, frame, speed, systems                       |
 | `ir.status()`          | everything the debug overlay shows, structured                    |
 | `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
-| `ir.dossier(address)`  | one star or one body as a page of astronomy                       |
+| `ir.dossier(address)`  | one star, body or station as a page of astronomy                  |
 | `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
 | `ir.picture(debug?)`   | reconstruction dimensions, history, allocations and GPU timings   |
 | `ir.lens()`            | the camera as an instrument — mm, f-stop, depth of field, EV      |
 | `ir.bodies(system?)`   | flat listing of a system's bodies with addresses                  |
+| `ir.stations(system?)` | a system's stations: parent, reach, perigee, apogee and period    |
 | `ir.systemsNearby(ly)` | nearest star systems, catalog and procedural                      |
 | `ir.logs(n)`           | recent structured log records                                     |
 

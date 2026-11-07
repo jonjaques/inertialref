@@ -77,6 +77,13 @@ import { pairFrame } from './tracking.ts'
 import type { PictureFraming } from './pictures.ts'
 import { dragSensitivityOf } from './dragSensitivity.ts'
 import { currentSystemOf, resolveDestination } from './travel.ts'
+import {
+  heldBasis,
+  holdOn,
+  holdReading,
+  type StationHold,
+  stationSubject,
+} from './stationHold.ts'
 import type { Host } from './host.ts'
 import { HeldTime } from './heldTime.ts'
 import {
@@ -139,17 +146,25 @@ export interface ObserverPose {
   readonly orientation: Quat
 }
 
-/** What the camera is looking at, once an address has been resolved. */
+/**
+ * What the camera is looking at, once an address has been resolved.
+ *
+ * An anchor and a radius, whatever the subject is: a frame to orbit the
+ * origin of and a sphere about it the camera keeps 1.5 of outside. A star, a
+ * body and a station all answer with a frame; a ship will answer with an
+ * entity beside it, which is why nothing here asks what kind of thing holds
+ * the frame.
+ */
 export interface ObserverTarget {
-  /** Text address — a system (`s:SOL`) or a body (`s:SOL/b:2`). */
+  /** Text address — a system (`s:SOL`), a body (`s:SOL/b:2`), a station (`s:SOL/b:2/a:0`). */
   readonly address: string
   readonly name: string
-  readonly kind: 'star' | 'planet' | 'moon'
+  readonly kind: 'star' | 'planet' | 'moon' | 'station'
   /** The system this target belongs to, for the star-direction lookup. */
   readonly system: SystemId
   /** The frame whose origin the camera orbits. */
   readonly frame: FrameId
-  /** Meters. A star's own radius, a body's equatorial radius. */
+  /** Meters. A star's own radius, a body's equatorial radius, a station's bounding sphere. */
   readonly radius: Meters
   /** One line of description for a panel header. */
   readonly detail: string
@@ -185,6 +200,11 @@ export interface ObserverStatus {
   readonly galaxyView: GalaxyView | null
   readonly target: ObserverTarget | null
   readonly tracking: ObserverTarget | null
+  /**
+   * Which basis the camera holds around a station — a direction in space or
+   * the station's own axes — and null when the subject is not a station.
+   */
+  readonly hold: 'space' | 'station' | null
   readonly state: ObserverState
   /** Where the head is turned, relative to what the pose aims at. */
   readonly look: LookOffset
@@ -476,6 +496,9 @@ export class Observatory {
     this.#state = this.#desired = { ...framing.state }
     this.#look = { ...framing.look }
     this.#basis = framing.basis ?? Q.IDENTITY
+    // A picture records the turn it was taken at, not a hold: restored, it
+    // holds a direction in space from exactly that pose.
+    this.#hold = null
     this.#tracking =
       framing.tracking === undefined
         ? null
@@ -490,6 +513,8 @@ export class Observatory {
   #target: ObserverTarget | null = null
   #basis: Quat = Q.IDENTITY
   #tracking: { target: ObserverTarget; referenceTime: number } | null = null
+  /** Non-null while the camera holds a station's own axes. See `holdStation`. */
+  #hold: StationHold | null = null
 
   #pair(anchor: ObserverTarget, target: ObserverTarget, time: number) {
     const a = this.#host.world.frames.pose(anchor.frame, time)
@@ -501,6 +526,23 @@ export class Observatory {
   }
 
   #trackingTransform(): { rotation: Quat; scale: number } {
+    /*
+     * The station's turn since the hold began, applied to the whole orbit
+     * pose about the station's center: the second producer of this rotation
+     * beside a tracked companion's, and never a second camera (Rule 31). The
+     * two are exclusive — `holdStation` and `track` each bake the other's
+     * turn into the basis before taking over — so only one is live.
+     */
+    if (this.#hold !== null)
+      return {
+        rotation: heldBasis(
+          this.#host.world.frames,
+          this.#hold,
+          this.time,
+          this.#basis,
+        ),
+        scale: 1,
+      }
     const held = this.#tracking
     if (
       held === null ||
@@ -544,7 +586,23 @@ export class Observatory {
         throw new Error('Choose another body in this system.')
       this.#pair(this.#target, target, this.time)
     }
+    this.#settleTransform()
+    this.#tracking =
+      target === null ? null : { target, referenceTime: this.time }
+    this.#phaseOrbit = null
+    return this.status()
+  }
+
+  /**
+   * Fold whatever turn and scale the live producer has applied into the
+   * basis and the distances, and release it, so handing the rotation to the
+   * other producer — or to none — moves nothing on screen. The one place the
+   * two are made exclusive: each takes over only through here.
+   */
+  #settleTransform(): void {
     const transform = this.#trackingTransform()
+    this.#tracking = null
+    this.#hold = null
     this.#basis = transform.rotation
     this.#state = {
       ...this.#state,
@@ -554,9 +612,27 @@ export class Observatory {
       ...this.#desired,
       distance: this.#desired.distance * transform.scale,
     }
-    this.#tracking =
-      target === null ? null : { target, referenceTime: this.time }
-    this.#phaseOrbit = null
+  }
+
+  /**
+   * Hold the station's own axes, or let go and hold a direction in space.
+   *
+   * By default the camera keeps a direction in space and a station in nadir
+   * attitude turns under it once an orbit, as a planet turns under it. Held,
+   * it turns with the station's `af:` frame, so the station stands still in
+   * the frame and its parent stays below — the view a docking approach wants.
+   * Taking or releasing the hold settles the turn so far into the basis, so
+   * the picture does not jump either way.
+   */
+  holdStation(on: boolean): ObserverStatus {
+    this.#changed()
+    if (on === (this.#hold !== null)) return this.status()
+    // Refused before anything settles, so a refusal changes nothing.
+    const hold = on
+      ? holdOn(this.galaxyInstrument ? null : this.#target, this.time)
+      : null
+    this.#settleTransform()
+    this.#hold = hold
     return this.status()
   }
 
@@ -872,6 +948,7 @@ export class Observatory {
     this.#journey = null
     this.#target = target
     this.#tracking = null
+    this.#hold = null
     this.#basis = Q.IDENTITY
     this.#phaseOrbit = null
     // Focusing something else is leaving the ground. A stance names a latitude
@@ -955,6 +1032,7 @@ export class Observatory {
     this.#galaxyView = null
     this.#target = null
     this.#tracking = null
+    this.#hold = null
     this.#basis = Q.IDENTITY
     this.#phaseOrbit = null
     this.#surface.reset()
@@ -1197,6 +1275,11 @@ export class Observatory {
    */
   compose(id: string): ObserverStatus {
     this.#changed()
+    // Before anything is reset: a refusal leaves the camera where it was.
+    if (this.#target?.kind === 'station')
+      throw new Error(
+        `${this.#target.name} is not a world a composition can frame`,
+      )
     this.track(null)
     this.#basis = Q.IDENTITY
     const composition = findComposition(id)
@@ -1527,6 +1610,7 @@ export class Observatory {
       galaxyView: this.#galaxyView,
       target: this.#target,
       tracking: this.#tracking?.target ?? null,
+      hold: holdReading(this.#target, this.#hold),
       state: { ...this.#state, distance },
       desired: { ...this.#desired, distance: this.#desired.distance * scale },
       look: this.#look,
@@ -1702,6 +1786,8 @@ export class Observatory {
         detail: `${system.star.spectralType} · ${planetCount(system)} planets`,
       }
     }
+
+    if (resolved.kind === 'station') return stationSubject(system, resolved)
 
     // `TravelDestination` carries the address as the open union, and a region
     // or an object address resolves to the body containing it — so this is a

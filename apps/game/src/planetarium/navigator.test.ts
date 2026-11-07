@@ -12,7 +12,8 @@ import {
   searchRows,
   stepTarget,
 } from './navigator.ts'
-import { acceptsRow } from './kinds.ts'
+import { Satellite } from 'lucide-react'
+import { acceptsRow, ALL_CLASSES, iconForKind } from './kinds.ts'
 
 /*
  * The catalog's arrangement, without a world or a React tree.
@@ -36,7 +37,7 @@ const row = (
   landable: false,
   loaded: true,
   provenance: 'observed',
-  bodyKind: 'rocky',
+  objectKind: 'rocky',
   spectralType: null,
   color: null,
   radius: 1e6,
@@ -52,7 +53,7 @@ const star = (
   row({
     kind: 'system',
     depth: 0,
-    bodyKind: null,
+    objectKind: 'star',
     parent: null,
     semiMajorAxis: 0,
     color: { r: 1, g: 0.9, b: 0.8 },
@@ -105,8 +106,8 @@ describe('grouping a survey', () => {
       [
         star({ address: 's:SOL' }),
         row({ address: 's:SOL/b:0' }),
-        row({ address: 's:SOL/b:1', bodyKind: 'asteroid' }),
-        row({ address: 's:SOL/b:2', bodyKind: 'comet' }),
+        row({ address: 's:SOL/b:1', objectKind: 'asteroid' }),
+        row({ address: 's:SOL/b:2', objectKind: 'comet' }),
       ],
       ['stars', 'planets'],
     )
@@ -226,17 +227,30 @@ describe('the filter', () => {
      * discoverable from the empty list.
      */
     expect(acceptsRow(row({ address: 'a' }), [])).toBe(true)
-    expect(acceptsRow(row({ address: 'a', bodyKind: 'comet' }), [])).toBe(true)
+    expect(acceptsRow(row({ address: 'a', objectKind: 'comet' }), [])).toBe(
+      true,
+    )
   })
 
   it('separates the classes that share a chip from the ones that do not', () => {
-    const giant = row({ address: 'a', bodyKind: 'gas-giant' })
-    const rock = row({ address: 'b', bodyKind: 'rocky' })
-    const rubble = row({ address: 'c', bodyKind: 'asteroid' })
+    const giant = row({ address: 'a', objectKind: 'gas-giant' })
+    const rock = row({ address: 'b', objectKind: 'rocky' })
+    const rubble = row({ address: 'c', objectKind: 'asteroid' })
     expect(acceptsRow(giant, ['planets'])).toBe(true)
     expect(acceptsRow(rock, ['planets'])).toBe(true)
     expect(acceptsRow(rubble, ['planets'])).toBe(false)
     expect(acceptsRow(rubble, ['asteroids'])).toBe(true)
+  })
+
+  it('puts a station behind the Spacecraft chip and no other', () => {
+    // One taxonomy: the chip reads `objectClass`, as the names on the sky and
+    // the click filter do, so a station is a spacecraft in all three.
+    const iss = row({ address: 'a', kind: 'station', objectKind: 'station' })
+    expect(acceptsRow(iss, ['spacecraft'])).toBe(true)
+    for (const chip of ALL_CLASSES.filter((one) => one !== 'spacecraft'))
+      expect(acceptsRow(iss, [chip]), chip).toBe(false)
+    expect(acceptsRow(row({ address: 'b' }), ['spacecraft'])).toBe(false)
+    expect(iconForKind('station')).toBe(Satellite)
   })
 })
 
@@ -364,7 +378,7 @@ describe('flattenGroups', () => {
         system: 'A',
         parent: 's:A/b:0',
         depth: 2,
-        bodyKind: 'moon',
+        objectKind: 'moon',
         semiMajorAxis: 1e8,
       }),
       star({ address: 's:B', name: 'B' }),
@@ -447,7 +461,7 @@ describe('stepTarget', () => {
       name: 'Ceres',
       parent: 'SOL',
       semiMajorAxis: 2.77 * AU,
-      bodyKind: 'asteroid',
+      objectKind: 'asteroid',
     }),
     row({
       address: 'b:2.0',
@@ -475,10 +489,38 @@ describe('stepTarget', () => {
   })
 
   it('skips what the catalog filter has off, and steps away from a hidden body', () => {
-    const planets = (one: TravelTarget) => one.bodyKind !== 'asteroid'
+    const planets = (one: TravelTarget) => one.objectKind !== 'asteroid'
     expect(stepTarget(rows, 'b:4', 'next', planets)).toBe('b:0')
     expect(stepTarget(rows, 'b:9', 'next', planets)).toBe('b:0')
     expect(stepTarget(rows, 'b:9', 'previous', planets)).toBe('b:4')
+  })
+
+  it('steps onto a station among its parent’s satellites, inside the Moon', () => {
+    // The tree's own order: Earth's satellites by axis, so the ISS at
+    // 6,797 km comes before Luna, and the Spacecraft chip is how a pad steps
+    // past it.
+    const iss = row({
+      address: 'b:2/a:0',
+      name: 'ISS',
+      kind: 'station',
+      objectKind: 'station',
+      parent: 'b:2',
+      depth: 2,
+      semiMajorAxis: 6.797e6,
+    })
+    const crewed = [...rows, iss]
+    expect(stepTarget(crewed, 'b:2', 'child')).toBe('b:2/a:0')
+    expect(stepTarget(crewed, 'b:2/a:0', 'next')).toBe('b:2.0')
+    expect(stepTarget(crewed, 'b:2/a:0', 'parent')).toBe('b:2')
+    const natural = (one: TravelTarget) =>
+      acceptsRow(
+        one,
+        ALL_CLASSES.filter((chip) => chip !== 'spacecraft'),
+      )
+    expect(stepTarget(crewed, 'b:2', 'child', natural)).toBe('b:2.0')
+    expect(
+      groupBySystem(crewed, [])[0]?.bodies.map((one) => one.address),
+    ).toEqual(['b:0', 'b:2', 'b:2/a:0', 'b:2.0', 'b:4', 'b:9'])
   })
 
   it('has nowhere to step from a body it has no row for, or alone', () => {

@@ -3,7 +3,7 @@ import { UV, type UniverseVector } from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import {
   type Body,
-  type BodyKind,
+  type ObjectKind,
   type BodyProvenance,
   bodyFrameId,
   type CatalogStar,
@@ -15,8 +15,10 @@ import {
   type LinearRgb,
   type GalaxyId,
   isLandable,
+  type OrbitalPlacement,
   parseAddress,
   resolveSystem,
+  stationFrameId,
   type StarSystem,
   type SystemId,
   systemId,
@@ -45,7 +47,12 @@ import {
 
 /** A place the player can be sent, as a row of a listing. */
 export interface TravelTarget {
-  readonly kind: 'system' | 'body'
+  /**
+   * What the row is. A station is its own kind rather than a body with no
+   * class: it is a camera subject and a search result, and the class chips,
+   * the glyph and the tree all read it, but nothing that walks bodies may.
+   */
+  readonly kind: 'system' | 'body' | 'station'
   /** Text address — the same string generation, saves and logs key off. */
   readonly address: string
   readonly name: string
@@ -83,14 +90,15 @@ export interface TravelTarget {
    */
   readonly provenance: BodyProvenance
   /**
-   * The body's own class, or null on a system row.
+   * What the row is in the one taxonomy: `star` on a system row, the body's
+   * own class, or the placement's kind.
    *
-   * Structured rather than left inside `detail`, because two readers now branch
-   * on it and both were reduced to parsing a sentence: the catalog draws a glyph
-   * per class — a comet is not a circle — and its filter chips select by it.
-   * `detail` is a line of prose for a human and must stay free to be rewritten.
+   * Structured rather than left inside `detail`, because two readers branch on
+   * it: the catalog draws a glyph per kind — a comet is not a circle — and its
+   * filter chips select by `objectClass` of it. `detail` is a line of prose for
+   * a human and must stay free to be rewritten.
    */
-  readonly bodyKind: BodyKind | null
+  readonly objectKind: ObjectKind
   /** Spectral type on a system row, null on a body. */
   readonly spectralType: string | null
   /**
@@ -140,8 +148,8 @@ type ComparedField = Exclude<keyof TravelTarget, 'distance' | 'color'>
  * `[T] extends [...]`, in brackets, because a bare `T extends` distributes over
  * unions — and every field most at risk of being widened is already a union.
  * Distributed, `ByIdentity<Row | null>` is `never | true`, which is `true`, so
- * the guard passed exactly the three nullable fields it was written for
- * (`parent`, `spectralType`, `bodyKind`) and caught only the non-nullable ones.
+ * the guard passed exactly the nullable fields it was written for
+ * (`parent`, `spectralType`) and caught only the non-nullable ones.
  * The tuple makes the check a single non-distributive comparison.
  */
 type ByIdentity<T> = [T] extends [string | number | boolean | null | undefined]
@@ -173,7 +181,7 @@ const COMPARED: { [K in ComparedField]: ByIdentity<TravelTarget[K]> } = {
   landable: true,
   loaded: true,
   provenance: true,
-  bodyKind: true,
+  objectKind: true,
   spectralType: true,
   radius: true,
   semiMajorAxis: true,
@@ -365,7 +373,7 @@ export function travelTargets(
       landable: false,
       loaded: system !== undefined,
       provenance: star.provenance,
-      bodyKind: null,
+      objectKind: 'star',
       spectralType: star.spectralType,
       color: star.color,
       radius: system?.star.radius ?? 0,
@@ -377,9 +385,79 @@ export function travelTargets(
 
     for (const body of walkBodies(system))
       targets.push(bodyTarget(world, from, time, system, body))
+    // After the bodies: a station's row hangs off its parent's by `parent`,
+    // and the tree sorts it among the parent's satellites by its axis.
+    for (const station of system.stations)
+      targets.push(stationTarget(world, from, time, system, station))
   }
 
   return targets
+}
+
+/**
+ * One station, as a row: a subject the camera can hold and a name the search
+ * can find, under the body or the star it goes round.
+ */
+function stationTarget(
+  world: World,
+  from: UniverseVector,
+  time: number,
+  system: StarSystem,
+  station: OrbitalPlacement,
+): TravelTarget {
+  const position = world.frames.pose(stationFrameId(station.id), time).position
+  const distance = UV.distance(position, from)
+  const parent = station.parent
+  const parentBody =
+    parent.kind === 'body' ? findBody(system, parent.body) : undefined
+  return {
+    kind: 'station',
+    address:
+      station.address === null ? station.id : formatAddress(station.address),
+    name: station.name,
+    system: system.id,
+    // One under its parent: a moon's depth round a planet, a planet's round
+    // the star.
+    depth: parent.kind === 'body' ? parent.body.length + 1 : 1,
+    detail: describeStation(station, parentBody?.radius ?? system.star.radius),
+    distance,
+    distanceText: formatReading(distance),
+    landable: false,
+    loaded: true,
+    provenance: station.provenance,
+    objectKind: station.kind,
+    spectralType: null,
+    color: null,
+    radius: station.radius,
+    semiMajorAxis: station.orbit.elements.semiMajorAxis,
+    children: 0,
+    parent: formatAddress(parent),
+  }
+}
+
+/** A station's line: its kind, its size, and how high it flies over its parent. */
+function describeStation(
+  station: OrbitalPlacement,
+  parentRadius: Meters,
+): string {
+  const { semiMajorAxis: a, eccentricity: e } = station.orbit.elements
+  const low = formatReading(a * (1 - e) - parentRadius)
+  const high = formatReading(a * (1 + e) - parentRadius)
+  return `${station.kind} · ${formatReading(station.radius)} · ${
+    low === high ? low : `${low} – ${high}`
+  } up`
+}
+
+/** The station a satellite address names in its system, or undefined. */
+export function stationAt(
+  system: StarSystem,
+  address: UniverseAddress,
+): OrbitalPlacement | undefined {
+  const wanted = formatAddress(address)
+  return system.stations.find(
+    (station) =>
+      station.address !== null && formatAddress(station.address) === wanted,
+  )
 }
 
 /**
@@ -422,7 +500,7 @@ function bodyTarget(
     // The body's own, not its system's: Sol is observed and Ganymede is
     // observed, but every moon of a catalog star is currently a projection.
     provenance: body.provenance,
-    bodyKind: body.kind,
+    objectKind: body.kind,
     spectralType: null,
     color: null,
     radius: body.radius,
@@ -477,7 +555,7 @@ function systemTarget(
     landable: false,
     loaded: system !== undefined,
     provenance: 'projected',
-    bodyKind: null,
+    objectKind: 'star',
     spectralType: system?.star.spectralType ?? stub.spectralType,
     color: system?.star.color ?? stub.color,
     radius: system?.star.radius ?? 0,
@@ -525,7 +603,14 @@ export function targetsFor(
       continue
     }
     const system = world.system(destination.system)
-    if (system === undefined || destination.address.kind !== 'body') continue
+    if (system === undefined) continue
+    if (destination.kind === 'station') {
+      const station = stationAt(system, destination.address)
+      if (station !== undefined)
+        rows.push(stationTarget(world, from, time, system, station))
+      continue
+    }
+    if (destination.address.kind !== 'body') continue
     const body = findBody(system, destination.address.body)
     if (body === undefined) continue
     rows.push(bodyTarget(world, from, time, system, body))
@@ -579,6 +664,14 @@ export function searchEntries(world: World): readonly SearchEntry[] {
     }
     for (const body of walkBodies(system))
       entries.push({ address: formatAddress(body.address), text: body.name })
+    // By name and by every designation — `ISS`, `1998-067A`, `25544` — so a
+    // search finds a station by whatever a reader calls it.
+    for (const station of system.stations) {
+      if (station.address === null) continue
+      const address = formatAddress(station.address)
+      for (const text of [station.name, ...station.designations])
+        entries.push({ address, text })
+    }
   }
   return entries
 }
@@ -634,7 +727,7 @@ function catalogStarTarget(
     // Everything the catalog holds is a star somebody has observed. That is
     // what being in it means.
     provenance: 'observed' as const,
-    bodyKind: null,
+    objectKind: 'star',
     spectralType: formatSpectralType(star.spectralType),
     color: system?.star.color ?? star.physical.color,
     radius: system?.star.radius ?? 0,
@@ -705,13 +798,21 @@ export type TravelDestination =
       /** Canonical text form, which is what the driving verbs take. */
       readonly text: string
     }
+  | {
+      /** A station: somewhere a camera can be put, and nowhere a ship can be sent yet. */
+      readonly kind: 'station'
+      readonly system: SystemId
+      readonly address: Extract<UniverseAddress, { kind: 'satellite' }>
+      readonly text: string
+    }
 
 /**
  * Turn anything worth typing into a destination.
  *
  * Accepts the canonical form (`g:milky-way/s:SOL/b:2`), the galaxy-less form a
  * listing shows (`s:SOL/b:2`), a bare catalog designation (`HIP71683`) and a
- * body relative to where the player already is (`b:2.0`). `parseAddress` itself
+ * body or a station relative to where the player already is (`b:2.0`,
+ * `b:2/a:0`). `parseAddress` itself
  * deliberately refuses all but the first — it is the strict boundary for
  * generation and save files, and loosening it there would mean an address whose
  * meaning depends on who is asking. That ambiguity is fine *here*, at a debug
@@ -731,7 +832,7 @@ export function resolveDestination(
 
   let full = trimmed
   if (!full.startsWith('g:')) {
-    const relativeToSystem = /^[bro]:/.test(full)
+    const relativeToSystem = /^[broa]:/.test(full)
     if (relativeToSystem) {
       if (currentSystem === null) {
         throw new Error(
@@ -772,6 +873,13 @@ export function resolveDestination(
         text: formatAddress(body),
       }
     }
+    case 'satellite':
+      return {
+        kind: 'station',
+        system: address.system,
+        address,
+        text: formatAddress(address),
+      }
     default:
       throw new Error(
         `"${trimmed}" names a galaxy, which is not somewhere you can be sent`,
