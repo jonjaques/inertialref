@@ -143,6 +143,28 @@ For anything about how the app is _served_ — asset headers, the SPA fallback, 
 worker — point the driver at `pnpm preview` on 8787 instead: `pnpm preview` in one shell,
 then `--url http://localhost:8787/`.
 
+## One GPU job at a time
+
+Two overlapping GPU jobs have crashed macOS twice, so every GPU job takes one lock:
+`pnpm test:gpu`, every `drive.mjs` rig, and `presets:compare` and `presets:plates`. It
+is `$(git rev-parse --git-common-dir)/inertialref-gpu.lock`, one file for every worktree
+of the clone; [`scripts/gpuLock.mjs`](../../../scripts/gpuLock.mjs) says how it is held.
+
+- **A rig holds it from before its Chrome launches until `--down`**, because the Chrome
+  is detached and is a GPU job whether or not an invocation is driving it. A later call
+  on the same `--port` joins it. A call on another port, and `pnpm test:gpu`, are refused
+  while it is up, so `--down` when finished is what lets the next job run.
+- **A refusal is a stop.** It names the holder, its pid, its age and its worktree. Wait
+  for it, or ask whoever is working in that checkout. Never `--down` a rig you did not
+  start, because that ends someone else's session, and never delete the lock file.
+- **`--gpu-wait <s>` queues** for up to that many seconds and starts within one
+  half-second poll of the holder letting go. It is seconds, unlike `--wait`. The preset
+  commands take the same flag; `pnpm test:gpu` takes `IR_GPU_WAIT=<s>`.
+- **`--down` is never refused.** It closes the Chrome, waits for it to exit, then drops it
+  from the lock. `--status` names whoever holds the GPU.
+- **A preset command takes the lock once**, and every `drive.mjs` it spawns joins under
+  its token. The rig it leaves keeps the lock until `--down`, and the command says so.
+
 ## Documents before enhancement
 
 `--document` waits for HTML readiness instead of a renderer.

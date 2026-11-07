@@ -12795,6 +12795,74 @@ panel's 120.
 them records its thermal state, so the mark could not be acted on; the rule
 asks it of every figure taken from here.
 
+## Every GPU job takes the lock, and a vitest fork outlives the process that holds it (7 Nov 2026)
+
+P01's wiring, the second wave's first unit, stacked on #188. The lock built
+in the first wave (`scripts/gpuLock.mjs`) is now taken by `pnpm test:gpu`
+through the GPU config's `globalSetup` (`scripts/gpuSuiteLock.mjs`), by
+`drive.mjs` from before its Chrome launches until `--down`
+(`scripts/driveLock.mjs`), and once by `presets:compare` and
+`presets:plates`, whose `drive.mjs` children join under the token in their
+environment. The skill's "One GPU job at a time" is the working rule.
+
+**A vitest fork outlives its main process.** The suite's holder is vitest's
+main process and the Dawn devices are in its fork workers. In a probe under
+vitest 5.0.5 on the Mac mini, with a 30 s test running, a fork ran about 20 s
+past a SIGKILL of the main process, and was
+still running 4 s after a SIGTERM that ended the main process within 1 s.
+Released with the main process's own entry, the lock would have let the next
+job start beside a worker mid-file, which is the overlap it exists to stop. A
+holder that takes the lock with `keepChildren` records the children `pgrep -P`
+still finds when it ends by SIGINT, SIGTERM or an exit before its release, and
+the lock is stale only once they are gone. vitest's teardown releases
+explicitly, so a finished suite leaves no lock. A SIGKILL runs no handler and
+still leaves the workers unrecorded.
+
+**Joining takes the live token, whichever it is.** A rig invocation can be
+handed two tokens, its port's session's and a parent's in
+`IR_GPU_LOCK_TOKEN`, and either can be stale: a session outlives a Chrome that
+died, and a shell can carry a token from a finished command. Offering the
+parent's unchecked had a rig refused by the lock its own Chrome held, so the
+one offered is the one `holding()` reads in the live file. `--down` drops
+Chrome from the lock only after Chrome has exited, because a queued job starts
+within one poll of the drop.
+
+**vitest misreports a refused `globalSetup`.** The first refused run exited 1
+in 0.42 s and named the rig, then printed "No test files found, exiting with
+code 1" with the include pattern, a stack and the lock serialized. The first
+line sends a reader to the config's glob. The setup now writes the lock's own
+refusal and exits 1 itself; no worker exists yet.
+
+**Checked on the Mac mini** (Mac18,5, M6), display asleep, thermal pressure 0
+throughout, served by `pnpm dev:client`: the first two checks at `5a5e836`, the
+rest at `376d002`, which added the clean refusal. The times are what the
+checks observed, not measurements. `pnpm test:gpu` with no lock: 52 files and
+232 tests pass, and no lock file is left. Beside a rig on 9333 it exits 1 in
+0.40 s with the refusal alone, and a rig on 9334 is refused in 0.15 s with no
+Chrome, profile or session created. A `--keep-storage` attach joins under the
+rig's token. Queued under `IR_GPU_WAIT=180`, the suite took the lock 417 ms
+after `--down` removed it, inside one 500 ms poll, then passed.
+`presets:compare earthrise` held one token across both captures' children and
+Chrome, refused `test:gpu` in 0.62 s while it ran, and left the lock to the
+Chrome until `--down`. A SIGKILLed `drive.mjs` left its dead entry beside its
+live Chrome and the lock held; with the Chrome ended, `holding()` read the file
+as nobody and the next `test:gpu` reclaimed it. A rig's first boot against a
+cold dev server ran out of budget while Vite re-optimized its dependencies and
+reloaded twice; the second boot took 3.6 s.
+
+**Rejected:** a lock path from the environment, for tests, because pointing a
+job at a different file is a bypass by another name; tests pass `path`
+instead. A unit test that lets `capturePlates` spawn `drive.mjs`, because it
+would launch Chrome from the root suite; the preset wiring is checked on the
+real rig.
+
+**Not done:** `pnpm gpu:who`, the acquisition log, the Stop gate's warning
+while the lock is held, the lease policy for long holders, and an idle-rig
+exemption, which is Jon's call on G5's figures. The module's two gaps from
+#188's review stand: two waiters breaking one stale edit mutex can both
+enter, and `acquire` is not re-entrant within one process, so nothing here
+calls it twice in one.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

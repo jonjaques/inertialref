@@ -199,6 +199,21 @@ containing both `--js` and `--down` closes Chrome without evaluating the script.
 The same applies to `--file` and `--shot`. Finish the inspection batch, then
 call `node scripts/drive.mjs --port <port> --down` for that rig.
 
+### One GPU job at a time
+
+Every GPU job on the machine takes one lock, in the clone's git common
+directory, because two at once have crashed macOS:
+[`scripts/gpuLock.mjs`](../../scripts/gpuLock.mjs). A rig holds it from before
+its Chrome launches until `--down` has closed that Chrome, and a later call on
+the same `--port` joins it. Beside a rig, `pnpm test:gpu` and a rig on another
+port are refused at once, with the holder's name, pid, age and worktree. A
+refusal means wait or ask whoever is working in that checkout; never `--down`
+a rig you did not start. `--gpu-wait <seconds>` queues instead, and
+`pnpm test:gpu` takes `IR_GPU_WAIT=<seconds>`. `--down` is never refused, and
+`--status` names the holder. The
+[`drive` skill](../../.claude/skills/drive/SKILL.md#one-gpu-job-at-a-time) has
+the preset commands' part.
+
 These are the browser, not bugs in the clock, and the driver handles the first
 three; they are here because they explain what it is doing:
 
