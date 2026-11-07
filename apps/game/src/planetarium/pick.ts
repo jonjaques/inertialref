@@ -65,7 +65,7 @@ export const PICK_SLOP = 24
  *
  * Its own reach, a third of `PICK_SLOP`, because winning first is a stronger
  * claim than being nearest: at the full slop a station a few pixels across
- * took every click within a fingertip of it, and from far enough out that is
+ * takes every click within a fingertip of it, and from far enough out that is
  * most of the planet behind it. Eight pixels is enough to land on a truss.
  */
 export const CRAFT_SLOP = 8

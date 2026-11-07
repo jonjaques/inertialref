@@ -10,11 +10,10 @@ import type { BodyKind } from './system.ts'
  * written on the sky are different questions, so the selections stay separate
  * and the table does not.
  *
- * A `Record` over every kind rather than a set of strings at each site, for the
- * reason `isDebris` was first made a table: three untyped sets of rubble
- * classes compiled against a ninth `BodyKind` and put it silently in the wrong
- * half of all three. Here a new body class or a new placement kind is a type
- * error until it is given a class.
+ * A `Record` over every kind rather than a set of strings at each site: an
+ * untyped set compiles against a ninth `BodyKind` and puts it silently in the
+ * wrong half of every copy. Here a new body class or a new placement kind is
+ * a type error until it is given a class.
  */
 
 /** Anything the planetarium can list, name or pick, by its own kind. */

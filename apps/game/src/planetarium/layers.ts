@@ -17,7 +17,7 @@ import { oneOf } from '../state/accept.ts'
  * Three steps rather than a slider, because the useful settings are not a
  * continuum: they are "the eight things that matter", "a readable sky", and
  * "caption everything, I am looking for something specific". A slider would
- * make the reader find those three by feel. The counts are in `SkyLabels.tsx`,
+ * make the reader find those three by feel. The counts are in `names.ts`,
  * where the declutter that spends them is.
  */
 export type LabelDensity = 'sparse' | 'normal' | 'dense'

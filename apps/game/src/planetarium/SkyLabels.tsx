@@ -221,7 +221,7 @@ export function SkyLabels({
               style={{ transform: 'translate(-50%, -24px)' }}
             >
               <span
-                /* Bounded, because catalog names are not. `declutter` spaces
+                /* Bounded, because catalog names are not. `names.ts` spaces
                    labels 96 px apart and a designation longer than that would
                    quietly overlap the neighbor it was spaced away from. */
                 style={selected ? undefined : { textShadow: HALO }}
