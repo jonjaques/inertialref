@@ -530,9 +530,14 @@ drawn and unseen.
 A drawn model wins a click on it, or within 8 px of it, whatever is behind. The
 largest disk under the pointer wins otherwise, and a station drawn against
 Earth is never the largest; a drawn model is always in front, since one behind
-a body is no candidate at all. A station that is only named competes as a point
-does — inside a disk the disk wins, as it does for a moon over its planet — so
-an ISS named on a distant Earth never takes the planet's clicks.
+a body is no candidate at all. "On it" is measured against the triangles the
+frame drew, through the camera that drew them. A spacecraft's disk is its
+bounding sphere, which holds every angle its arrays can reach and is mostly
+space: framed, the ISS's covers most of the frame and the station a fraction of
+it, and a click on Earth between two wings is the planet's. So in the disk rule
+every spacecraft is a point — inside a disk the disk wins, as it does for a moon
+over its planet — and an ISS named on a distant Earth never takes the planet's
+clicks.
 
 Names behind a solid body are removed before decluttering and picking. The
 visibility test follows the camera-to-body ray in physical coordinates, so

@@ -143,7 +143,9 @@ mast (`solarArrays.ts`).
   a station below the point tier draws nothing. A drawn model wins a click on
   it or within 8 px of it, whatever is behind: the largest disk under the
   pointer wins otherwise, and a station drawn against Earth is never the
-  largest. A station only named competes as a point does.
+  largest. "On it" is the triangles the frame drew, not the bounding sphere,
+  which holds every angle of the arrays and is mostly space; in the disk rule
+  every spacecraft is a point.
 - **Its orbit trace is context only for what it goes round**, as the rubble's
   is: drawn for Earth or the station, never from the Moon. The chip is
   _Spacecraft_, because _Satellites_ already means moons on the object panel.

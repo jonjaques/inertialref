@@ -12680,6 +12680,23 @@ companion, and the hold is a second one, exclusive with it).
 `toBeGreaterThan(deg(3.8))` compared 0.0675 rad against 3.8 and failed for a
 turn that was right.
 
+**A station's bounding sphere is neither a click target nor an occluder.** It
+holds every angle of the arrays and is mostly space. From 220 m above at noon
+its circle is 210 px in radius, and the station covers 285 of the 952 points of
+a 12 px grid inside it. Clicks won by the circle sent a click on Earth between
+the wings to the ISS, so a click is now tested against the drawn triangles in
+screen space, clipped to the near plane (`render/modelNear.ts`). On the 359,970
+triangles headlessly it costs 0.01 ms far from the station and 8.6 ms at worst
+warm (14 ms on the first click). At zero reach it agrees with three's
+`Raycaster` on all 1,125 sample pixels. In the browser a click in the gap by the
+starboard arrays, 106 px from the middle of a circle 217 px in radius, selects Earth, at
+2 ms, and a click on the modules selects the station. The guide's
+`describe_view`, which listed no station at all, now lists one where
+`modelDrawn`, the scene's own rule, says the model is drawn. There the same
+sphere, taken as an occluder the way a body's disk is, removes the planet: at
+the 98 m floor it is 83.6° across with Earth's center behind it. So a station
+hides nothing. Proxima Centauri b clicks and describes as before.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

@@ -533,7 +533,8 @@ is singular. A world that drains names four more off its drainage graph
 largest tributary, where it meets the sea, and the largest lake — each stood
 on the water the field draws. On a body with no solid surface `ir.sites` returns an empty list:
 a giant's parameters run through the survey without complaint, but every row
-would be a place `ir.visit` refuses to stand.
+would be a place `ir.visit` refuses to stand. A station gets the same empty
+list and the same refusal from `ir.descend`, named or as the subject on screen.
 
 The height is set outright rather than eased, which is what makes a plate loop
 work: each `ir.visit` is the frame you asked for, with nothing settling in
