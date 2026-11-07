@@ -126,7 +126,7 @@ export const ORBITAL_ASSETS: readonly OrbitalAssetDefinition[] = Object.freeze([
      * is set by the outboard wings sweeping round their masts. 61.4 m with the
      * arrays as the model leaves them.
      */
-    radius: 65.5,
+    radius: 65.3,
     pads: Object.freeze([]),
   }),
 ])
