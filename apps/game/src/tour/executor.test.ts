@@ -249,6 +249,14 @@ describe('every guide tool runs through the harness without touching the world',
     expect(
       await run({ name: 'stand_at', subject: 'Saturn', site: 'summit' }),
     ).toMatchObject({ status: 'rejected' })
+    // A station has no ground either, and is refused in the same words: the
+    // model reads out what a tool says, and an address error is not a sentence.
+    expect(
+      await run({ name: 'stand_at', subject: 'ISS', site: 'summit' }),
+    ).toEqual({
+      status: 'rejected',
+      reason: 'International Space Station has no solid surface to stand on.',
+    })
     const stood = await run({
       name: 'stand_at',
       subject: 'Mars',

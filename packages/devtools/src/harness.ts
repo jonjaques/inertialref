@@ -45,6 +45,7 @@ import {
   geodeticDirection,
   hasSolidSurface,
   isLandable,
+  type OrbitalPlacement,
   placementMu,
   systemId,
   type SystemId,
@@ -95,6 +96,7 @@ import {
   type SearchEntry,
   searchEntries,
   searchIndexVersion,
+  stationAt,
   type TravelTarget,
   type TravelTargetOptions,
 } from './travel.ts'
@@ -641,10 +643,10 @@ export class GameHarness {
     )
     if (resolved.kind !== 'body' || resolved.address.kind !== 'body')
       return { address: target, sun: null, phase: null, lit: true }
-    const body = this.#requireBody(target)
-    const at = body.address
-    if (at.kind !== 'body')
+    const body = this.#terrainSubject(target)
+    if (body.kind === 'station' || body.address.kind !== 'body')
       return { address: target, sun: null, phase: null, lit: true }
+    const at = body.address
     const text = formatAddress(at)
     const time = this.observatory.time
     const status = this.observatory.status()
@@ -1333,6 +1335,7 @@ export class GameHarness {
    * derives from `body.surface`, which every body carries — Jupiter included —
    * so without the filter here the Ground section draws six clickable cards for
    * ground that `visit` refuses, and each of them throws out of an onClick.
+   * Empty on a station too, which has no surface to survey.
    */
   sites(address?: string): readonly {
     id: string
@@ -1345,12 +1348,12 @@ export class GameHarness {
     sun: number
     region: string
   }[] {
-    const body = this.#requireBody(address)
+    const body = this.#terrainSubject(address)
     // The observatory's own gate: a giant's SurfaceParameters run through the
     // survey without complaint, but every row would be a place `visit` refuses
     // to stand — six clickable throws in the Ground section. An empty list is
     // the answer the panel draws an honest empty state for.
-    if (!hasSolidSurface(body)) return []
+    if (body.kind === 'station' || !hasSolidSurface(body)) return []
     /*
      * The sun over each place, so a caller choosing where to stand can choose
      * the lit one. Survey order is kept — the panel's rows are named places
@@ -1466,11 +1469,11 @@ export class GameHarness {
     address?: string,
     options: DescentOptions = {},
   ): DescentReport & { readonly text: string } {
-    const body = this.#requireBody(address)
+    const body = this.#terrainSubject(address)
     // The refusal `visit` makes, made here too: a probe that reports a descent
     // onto a giant describes ground the camera declines to stand on, and the
     // report reads as a measurement rather than a place that does not exist.
-    if (!hasSolidSurface(body)) {
+    if (body.kind === 'station' || !hasSolidSurface(body)) {
       throw new Error(`${body.name} has no surface to descend to`)
     }
     /*
@@ -1859,8 +1862,15 @@ export class GameHarness {
    * on it: a system address is not a body, so the third fallback is what the
    * caller meant. Without that the ship's body was unreachable whenever the
    * camera happened to be holding a sun.
+   *
+   * A station comes back as itself. It is the one subject that is neither a
+   * body nor a system — something on screen with no ground under it — so the
+   * verbs answer it as they answer a giant, `sites` with no places and
+   * `descend` with its refusal. Refusing it as an address that names no body
+   * hands the guide's `stand_at` the words `g:milky-way/s:SOL/b:2/a:0 is not a
+   * body address`, and the model reads out what a tool says.
    */
-  #requireBody(address?: string): Body {
+  #terrainSubject(address?: string): Body | OrbitalPlacement {
     const looking = this.observatory.target
     const text =
       address ??
@@ -1872,6 +1882,14 @@ export class GameHarness {
       this.world.galaxy,
       currentSystemOf(this.world, this.#host.player()),
     )
+    if (resolved.kind === 'station') {
+      const station = stationAt(
+        this.world.loadSystem(resolved.system),
+        resolved.address,
+      )
+      if (station === undefined) throw new Error(`No station at ${text}`)
+      return station
+    }
     if (resolved.kind !== 'body' || resolved.address.kind !== 'body')
       throw new Error(`${text} is not a body address`)
     const system = this.world.loadSystem(resolved.system)
