@@ -25,11 +25,23 @@
  *    alone appears seconds earlier, and a probe on it screenshots an unlit
  *    canvas. The driver names no field and no markup of the app's own, so a
  *    rename there cannot turn a cold boot into twelve silent seconds.
- *  - A real window, not `--headless`. Not for the adapter — headless Chrome keeps
- *    the physical GPU on macOS, measured as `apple` / `metal-3` with and without
- *    a window, because SwiftShader has no macOS build to fall back to — but
- *    because `--cast` records what a compositor presented, and a headless one
- *    presents nothing. For a shader question that needs no compositor at all,
+ *  - A real window, not `--headless`, and neither the adapter nor the cast is
+ *    the reason. Chrome 157 in new headless, as Playwright launches it, keeps
+ *    `apple` / `metal-3` with `timestamp-query`, screencasts 179–180 frames in
+ *    3 s, and photographs the two lit plates probed identically to headed
+ *    (AE 0); the browser that falls back to SwiftShader is Playwright's
+ *    default headless shell.
+ *    This file has never launched headless, so those are that browser's
+ *    figures and not this file's. The window holds for three things. Pacing:
+ *    headless rAF is a fixed 60 Hz clock — a DPR change that raised `ir.gpu`
+ *    6.5% moved rAF p95 by 0.00 ms — while a headed page follows its window,
+ *    about 60 Hz on the MacBook Air and about 100 irregular frames a second
+ *    for this one, off the desktop at x=2400, on the Mac mini's 120 Hz panel.
+ *    The extended-range path, which needs a display's color profile:
+ *    `(dynamic-range: high)` matches under one and not under forced sRGB. And
+ *    the guide's voice, whose level clock needs an audio pipeline that an
+ *    off-screen window does not have, so a listening session moves the window
+ *    on screen. For a shader question that needs no compositor at all,
  *    one `*.gpu.test.ts` named on the command line answers in a second or two
  *    without this file; the whole `pnpm test:gpu` suite is eighteen, nearly all
  *    of it the terrain kernel.

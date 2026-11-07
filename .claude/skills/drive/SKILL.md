@@ -372,10 +372,21 @@ handles the first three — they are here because they explain what it is doing.
    reads exactly like a broken streamer and is the gate working. `ir.visit(addr, {site:
 'summit', height: 2})` **in the planetarium** is what makes it stream; check
    `ir.terrain().visited` before concluding anything about ground.
-10. **There is no key-press step, and a synthetic `KeyboardEvent` is not a substitute.**
-    Dispatching one on `window` did not fire `chrome.instruments`, and the driver exposes
-    no `Input.dispatchKeyEvent`. Reach a keyboard affordance through the preference it
-    toggles or the harness verb behind it — never by faking the event and believing the
+10. **There is no trusted key-press step, and a synthetic `KeyboardEvent` fires a binding
+    only when it carries `code`.** The keymap resolves a chord from `event.code`, declines
+    an empty one, and accepts untrusted events (`handleKeyDown` in
+    `apps/game/src/input/keymapStore.ts`). On a warm earthrise page (`--keep-storage`), a
+    `--js` step dispatching
+    ``new KeyboardEvent('keydown', {code: 'Backquote', key: '`', bubbles: true})`` and its
+    `keyup` fires `chrome.instruments` from `window` or from `document`, which reaches the
+    keymap's one listener on `window` by bubbling: `localStorage['ir.hud.debug.on']` flips
+    and the Instruments toggle follows. The same pair with only ``key: '`'`` changes
+    nothing on either target. It is still not a key press. An untrusted event skips
+    `useDevice('keyboard')`, so the prompts and the cursor are not handed to the keyboard,
+    and an `isTrusted` check in the keymap would remove the route without a sound; the
+    driver exposes no `Input.dispatchKeyEvent`. Prefer the preference a binding toggles or
+    the harness verb behind it, and when the binding itself is the subject, read its effect
+    back — the stored preference, the toggle's `aria-pressed` — rather than believing the
     silence.
 11. **`--shot` cannot carry a color space.** `Page.captureScreenshot` writes an 8-bit PNG
     with no `iCCP`, `cHRM`, `sRGB` or `cICP` chunk, so every viewer reads it as sRGB and an
