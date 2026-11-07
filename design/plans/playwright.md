@@ -4,7 +4,7 @@
 
 1. **The warm attach.** drive.mjs attaches to an already booted page in about 80 ms. A Playwright process pays 64–429 ms to launch, 4.1–5.0 s to reach `booted`, and 12.2 s of fresh-profile settle at earthrise. Claude Code sessions called the driver 493 times in 30 days, about 16 a day, and Codex sessions 694 times between 4 and 24 September. Each of those calls would pay the boot and the settle again.
 2. **The lever is new headless, not Playwright.** Chrome 157 in new headless gives pixel-identical plates across launches (AE 0 at fuzz 0), a 60 fps screencast, and the Metal adapter with `timestamp-query`. drive.mjs can launch it itself (P08). Playwright's own defaults pick worse browsers. Its default headless shell lands on WebGL over SwiftShader: 67 s to boot, 1 fps. Its bundled Chrome for Testing 151 spends 2–5× Chrome 157's GPU time per frame.
-3. **A performance gate has to be interleaved in one session.** Five interleaved pairs resolve 0.85% of `ir.gpu` (95% confidence). On this fanless MacBook Air, though, every figure steps up about 35% after about 3.5 minutes of load. A candidate measured against a stored baseline would be measuring the room.
+3. **A performance gate has to be interleaved in one session.** Five interleaved pairs resolve 0.85% of `ir.gpu` (95% confidence). On the fanless MacBook Air that took these figures, though, every figure steps up about 35% after about 3.5 minutes of load. A candidate measured against a stored baseline would be measuring the room. The fan-cooled M6 Mac mini is the machine for performance work, and how large its step is has not been measured.
 
 The ranking points the same way. The five proposals with the highest return need no Playwright: a dark-plate noise measurement, a boot-ladder fix, a settle measurement two reviews fold into P24, and two documentation corrections. Playwright Test as a runner (P04) ranks 37th of 68. Its value is what its consumers make of it, and the cheapest of those consumers (P35, the shell project) needs only its base configuration.
 
@@ -12,7 +12,16 @@ The ranking points the same way. The five proposals with the highest return need
 
 ## What was measured
 
-All figures come from one machine: Mac17,4, a fanless MacBook Air with the base Apple M5, 32 GB, macOS 27.2, and a single built-in Retina display. The browser is Google Chrome 157.0.8103.39 through Playwright 1.62.1's `channel: 'chrome'` unless a row says otherwise. Node is v26.13.0. The target is the Astro dev server (dev React) at `29e2ed46`, except N7. Every URL carries `presentation=occluded`. Readiness is `ir.status().boot === 'booted'`, polled every 100 ms. Settle is two consecutive ok `ir.settled()` answers 250 ms apart, as in [`driveSteps.mjs`](../../scripts/driveSteps.mjs).
+All figures come from one machine: Mac17,4, a fanless MacBook Air with the base Apple M5, 32 GB, macOS 27.2, and a single built-in Retina display. That is Jon's workstation, not the performance machine.
+
+**The performance machine is the Mac mini, and nothing here was measured on it.** It is a Mac18,5 with the Apple M6 (12-core GPU), 32 GB and macOS 27.2, fan-cooled. Its main display is a 4K LG TV at 120 Hz, which reports a 1920×1080 UI (DPR 2). It runs Node v26.13.0 and Google Chrome 157.0.8103.39, the same versions as the Air. Four things follow:
+
+- Its fan should shrink or remove the Air's thermal step. That is an expectation. P48's first step measures it.
+- A headed rig there presents at 120 Hz, so every frame interval has an 8.3 ms budget against the 64 Hz tick, and some frames carry no tick. Headless rAF stays a 60 Hz virtual clock on any machine.
+- A full-screen window there is a 3840×2160 buffer. Terrain selection is measured in display pixels, so a full-window figure from the mini does not compare with one from the Air. The fixed sizes below, such as 1600×900@1, do.
+- One GPU job at a time holds there too, because the rule is about the GPU, not the room.
+
+The browser is Google Chrome 157.0.8103.39 through Playwright 1.62.1's `channel: 'chrome'` unless a row says otherwise. Node is v26.13.0. The target is the Astro dev server (dev React) at `29e2ed46`, except N7. Every URL carries `presentation=occluded`. Readiness is `ir.status().boot === 'booted'`, polled every 100 ms. Settle is two consecutive ok `ir.settled()` answers 250 ms apart, as in [`driveSteps.mjs`](../../scripts/driveSteps.mjs).
 
 The two operating points:
 
@@ -331,7 +340,7 @@ The rule it implies: interleave base and candidate in one session, or idle 5 min
 - The step and its recovery: measured (N5).
 - No mention of thermal, throttling or fanless in the four documents: checked.
 
-**Review.** The onset and the recovery each rest on one observation at far-shore 1600×900@1, and the cause is inferred, so the text names the point and says so. Interleaving comes first in the rule. A six-boot series or a 13-plate pass runs 3–6 minutes and outlasts the onset, so idling between arms suits short arms only. Tagging past perf.md figures "possibly confounded" cannot be acted on, because no figure records its thermal state. The scope is one bullet in perf.md's "Caveats that shape these numbers" and one trap in driving.md and SKILL.md.
+**Review.** The onset and the recovery each rest on one observation at far-shore 1600×900@1, and the cause is inferred, so the text names the point and says so. Interleaving comes first in the rule. A six-boot series or a 13-plate pass runs 3–6 minutes and outlasts the onset, so idling between arms suits short arms only. Tagging past perf.md figures "possibly confounded" cannot be acted on, because no figure records its thermal state. The scope is one bullet in perf.md's "Caveats that shape these numbers" and one trap in driving.md and SKILL.md. The trap names the machine. The step is a fact about the fanless Air; the Mac mini's figure is measured before the rule relaxes there, and until then the rule holds on both.
 
 ### 5. C1: correct the rig documentation the probes disproved, now
 
@@ -345,7 +354,7 @@ Agents follow those lines every day, and correcting them does not wait on P04, P
 
 **Mechanism.** The drive.mjs header keeps the window, with the reasons that hold:
 
-- Pacing is real only headed, because headless rAF is a fixed 60 Hz clock (N1, N4).
+- Pacing is real only headed, because headless rAF is a fixed 60 Hz clock (N1, N4). Headed pacing follows the display: 60 Hz on the Air, 120 Hz on the Mac mini.
 - The extended-range path needs the display profile (probe A).
 - The guide needs an audio pipeline.
 
@@ -1066,7 +1075,7 @@ Separately, the skill records a trap: never run `npx playwright install chrome`,
 
 ### 35. X12: refresh rate as an operating-point axis (vetoed by fit)
 
-**Pitch.** The worst escaped temporal defect, the vibrating moons of Mars, was a relationship between the 64 Hz tick and the frame. Every rig presents at about 60 Hz. Players on high-refresh displays present at 120 or 144.
+**Pitch.** The worst escaped temporal defect, the vibrating moons of Mars, was a relationship between the 64 Hz tick and the frame. The Air's rigs present at about 60 Hz. The Mac mini's display runs at 120 Hz, and players on high-refresh displays present at 120 or 144.
 
 **Mechanism.** P20 points gain `refreshHz`. P21's `stepFrames(n, {dt: 1/refreshHz})` drives the frame sequence, and the temporal assertions run at 60, 120 and 144 Hz from one settled stance.
 
@@ -1074,9 +1083,9 @@ Separately, the skill records a trap: never run `npx playwright install chrome`,
 
 **Success.** On the commit before the camera-a-tick-behind fix, the Phobos residual exceeds 1 px at one of the three rates. On HEAD it is under 1 px at all three.
 
-**Risks.** It waits on P21. This panel being 60 Hz is training data.
+**Risks.** It waits on P21 for the rates a display does not give. The Air's panel being 60 Hz is training data. The Mac mini's 120 Hz is read from `system_profiler`, so a headed cast there is a 120 Hz run with no P21.
 
-**Review.** The fit review vetoes it. The motivating defect showed at 60 Hz: the sawtooth beat "at 60 fps against a 64 Hz tick" ([CONTEXT.md](../../CONTEXT.md):3464-3466), so a refresh-rate axis is not what would have caught it, and the success metric is met at 60 Hz alone. The regime 60 Hz never reaches is a frame with no tick, which only a rate above 64 Hz produces. [`world.test.ts`](../../packages/simulation/src/world.test.ts):119 already holds the universe equal at 60 and 144 Hz. A Node property test over `dt` for the presentation residual answers the rest in about a day, without a browser or P21.
+**Review.** The fit review vetoes it. The motivating defect showed at 60 Hz: the sawtooth beat "at 60 fps against a 64 Hz tick" ([CONTEXT.md](../../CONTEXT.md):3464-3466), so a refresh-rate axis is not what would have caught it, and the success metric is met at 60 Hz alone. The regime 60 Hz never reaches is a frame with no tick, which only a rate above 64 Hz produces. [`world.test.ts`](../../packages/simulation/src/world.test.ts):119 already holds the universe equal at 60 and 144 Hz. A Node property test over `dt` for the presentation residual answers the rest in about a day, without a browser or P21. A headed `--cast` on the Mac mini is the browser check for the regime with no tick in a frame, at no build cost; the veto stands for the axis, not for that cast.
 
 ### 36. P34: input correctness specs
 
@@ -1189,13 +1198,13 @@ The browser half comes after P04: `renderer.info` draw calls, warm-up totals, wo
 
 **Risks.** `ir.passes` CV is 7.8–12.8%, and throttled CPU spans need about 10 pairs. The report says so. One review sizes it at 2 days.
 
-### 41. P48: move the perf lab off the fanless workstation
+### 41. P48: move the perf lab off the fanless workstation, onto the Mac mini
 
-**Pitch and mechanism.** A fan-cooled Apple Silicon box runs as a self-hosted runner labeled `gpu-perf`, with runner concurrency 1 plus P01. It runs P18 on labeled PRs, P23 nightly and the plates, and makes absolute baselines and change-point detection possible. `gpu-probe.yml` already names third-party GPU runners, RunsOn and machine.dev, so a Linux T4 probe needs no Team plan.
+**Pitch and mechanism.** The fan-cooled M6 Mac mini runs the perf lab, first as the machine Jon's deep performance runs use and then as a self-hosted runner labeled `gpu-perf`, with runner concurrency 1 plus P01. It runs P18 on labeled PRs, P23 nightly and the plates, and makes absolute baselines and change-point detection possible once its A/A spread is known. `gpu-probe.yml` already names third-party GPU runners, RunsOn and machine.dev, so a Linux T4 probe needs no Team plan.
 
-**First step.** Write down the A/A spread target before anyone buys hardware: under 2% between sessions at far-shore 1600×900@1, against 8% cool and 35% hot here.
+**First step.** On the mini, a 10-minute A/A at far-shore 1600×900@1, against the Air's 8% cool and 35% hot. The target is under 2% between sessions. Below it, stored baselines become usable there; above it, the mini interleaves like the Air.
 
-**Risks.** The purchase is Jon's decision. A self-hosted runner on a public repository is a fork-PR risk, and label-gating is necessary but not sufficient.
+**Risks.** The scores in the ranked table assume a hardware purchase, and the hardware exists, so the effort and risk overstate this proposal; it is not re-scored. The mini is fan-cooled but compact, and whether it throttles under a 45–75 minute tour is not known. A self-hosted runner on a public repository is a fork-PR risk, and label-gating is necessary but not sufficient. The runner is Jon's decision.
 
 ### 42. P12: Vitest Browser Mode, rejected as the rig's runner (vetoed by fit and completeness)
 
@@ -1339,7 +1348,7 @@ One local Firefox runtime case asserts `booted`, or a named refusal, within 60 s
 
 ### 52. P26: a nightly paired perf series (vetoed by fit)
 
-A nightly P18 against the last nightly's commit, chained by ratio and anchored weekly, behind gates for idle time, AC power, load and the lock. It catches drift below any one PR's detectable effect. It runs unattended GPU load on Jon's only workstation, crosses Chrome's silent updates (X2), and depends on a launch agent that is an ask rule. **Revisit:** with P48.
+A nightly P18 against the last nightly's commit, chained by ratio and anchored weekly, behind gates for idle time, AC power, load and the lock. It catches drift below any one PR's detectable effect. On the Air it runs unattended GPU load on Jon's workstation. It crosses Chrome's silent updates (X2), and depends on a launch agent that is an ask rule. **Revisit:** on the Mac mini, with P48.
 
 ### 53. X7: handheld and compact operating points for the running game (vetoed by fit)
 
@@ -1534,7 +1543,7 @@ The two measurements need only P01's first slice, which lands on day 2, and the 
 - P47 stages 2 and 3.
 - P44 after its audio check.
 - P11.
-- P48 and P26 on Jon's decision.
+- P48's A/A on the Mac mini before Jon's deep performance run, then P26 there on Jon's decision.
 - P12, P10 and P49 as lines in P04's ADR.
 
 ---
@@ -1590,7 +1599,9 @@ Each of these answers would move proposals up or down:
 - **Probe D's interleaved rerun (P42's first step).**
   - _If the gap is the version:_ a pinned CfT at stable's version becomes the measurement browser.
   - _If it is the build:_ P03 warns on version changes and nothing pins.
-- **P48 hardware.** Absolute baselines, P26's nightly, P23's soak and P29's tuner become routine. That is Jon's purchase.
+- **P48's A/A on the Mac mini.**
+  - _If the spread is under 2%:_ absolute baselines, P26's nightly, P23's soak and P29's tuner become routine there, and P48 rises well above its scored rank, which assumed a purchase.
+  - _If the mini also steps:_ it interleaves like the Air, and P48 is a quieter room, not a baseline store.
 - **Adoption.** If agents keep calling drive.mjs 16 times a day after P04 ships, P11 and P10 stay at the bottom. If specs displace it, P10's reconsider criterion applies.
 - **Playwright 1.65.** A clean probe-set rerun moves the pin to the version tested against Chrome 157, and brings the `-exclusive-` lock and `send` timeouts.
 
@@ -1617,6 +1628,8 @@ Repository and machine:
 
 - Where do the suites live: an `apps/` workspace or `scripts/browser/`? `tests/browser/` is covered by no workspace and no tsconfig.
 - Does `ProcessInfo.thermalState` move at the 35% step?
+- Does the Mac mini step at all under sustained rig load, and at what onset?
+- Does a headed rig on the mini hold 120 Hz at far-shore and earthrise, or does it drop to 60 under load?
 - What retention budget applies under `.data` for traces (6.7–15.4 MB per 5 s), profiles, templates, casts and bisect worktrees? No proposal sets one. Traces and storage state that carry a Clerk session never leave the machine.
 
 ---
