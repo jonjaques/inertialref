@@ -50,23 +50,20 @@ import { summarizeProfile } from '../packages/devtools/src/profile.ts'
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const DEFAULT_INPUT = path.join(ROOT, '.data/drive/trace.json')
 
-const { values, positionals } = parseArgs({
-  allowPositionals: true,
-  options: {
-    /** `InertialRef` (default), a track group's name, or `all`. */
-    group: { type: 'string', default: 'InertialRef' },
-    /** One track only — `Engine`, `Terrain`, `Render`, `Workers`, `Tasks`, `Boot`. */
-    track: { type: 'string' },
-    /** Rows in the table. The JSON always carries every span. */
-    top: { type: 'string', default: '20' },
-    /** Where a frame stops being jitter. Matches `engine/perfBudgets.ts`. */
-    late: { type: 'string', default: '25' },
-    /** Per thread as well as overall, which is how the worker tracks read. */
-    threads: { type: 'boolean', default: false },
-    json: { type: 'boolean', default: false },
-    help: { type: 'boolean', default: false },
-  },
-})
+const OPTIONS = {
+  /** `InertialRef` (default), a track group's name, or `all`. */
+  group: { type: 'string', default: 'InertialRef' },
+  /** One track only — `Engine`, `Terrain`, `Render`, `Workers`, `Tasks`, `Boot`. */
+  track: { type: 'string' },
+  /** Rows in the table. The JSON always carries every span. */
+  top: { type: 'string', default: '20' },
+  /** Where a frame stops being jitter. Matches `engine/perfBudgets.ts`. */
+  late: { type: 'string', default: '25' },
+  /** Per thread as well as overall, which is how the worker tracks read. */
+  threads: { type: 'boolean', default: false },
+  json: { type: 'boolean', default: false },
+  help: { type: 'boolean', default: false },
+}
 
 const HELP = `node scripts/timing.mjs [file] [options]
 
@@ -89,30 +86,6 @@ Record one with:
        --js "ir.visit('g:milky-way/s:SOL/b:2',{site:'summit',height:2})" \\
        --wait 5000 --trace 3000`
 
-if (values.help) {
-  console.log(HELP)
-  process.exit(0)
-}
-
-const input = positionals[0] ?? DEFAULT_INPUT
-const raw = await readFile(input).catch(() => null)
-if (raw === null) {
-  process.stderr.write(
-    `cannot read ${path.relative(ROOT, input)}\n` +
-      `record one with: node scripts/drive.mjs --trace 3000 (see --help)\n`,
-  )
-  process.exit(1)
-}
-
-// Sniffed rather than taken from the extension, exactly as `traceFrames.mjs`
-// does: DevTools' download button hands out `.json.gz` and its file-system
-// export hands out `.json`, and a reporter renames neither.
-const text =
-  raw[0] === 0x1f && raw[1] === 0x8b
-    ? gunzipSync(raw).toString('utf8')
-    : raw.toString('utf8')
-const parsed = JSON.parse(text)
-
 /*
  * Three shapes reach here and only one of them announces itself.
  *
@@ -129,28 +102,13 @@ const parsed = JSON.parse(text)
 const isTraceEvent = (one) =>
   typeof one === 'object' && one !== null && typeof one.ph === 'string'
 
-const entries = Array.isArray(parsed.traceEvents)
-  ? fromTrace(parsed.traceEvents)
-  : Array.isArray(parsed) && isTraceEvent(parsed[0])
-    ? fromTrace(parsed)
-    : fromDump(parsed)
-
-if (entries.length === 0) {
-  process.stderr.write(
-    'no timing entries.\n' +
-      'A trace only carries them if the page was at ?timing=trace (or full)\n' +
-      'while it was recording — the level is off by default, deliberately.\n',
-  )
-  process.exit(1)
-}
-
 /**
  * A `--trace` recording, or a DevTools export.
  *
  * Rebased to the earliest entry and converted to milliseconds, so the numbers
  * read like the ones the page reports rather than like a machine uptime.
  */
-function fromTrace(events) {
+export function fromTrace(events) {
   const found = []
 
   for (const event of events) {
@@ -256,32 +214,24 @@ function fromTrace(events) {
 }
 
 /**
- * A bare `ir.timing.drain()` array, or an object that wraps one.
+ * An `ir.profile()` report, which is not a dump.
  *
- * **Not an `ir.profile()` report.** That report is already the output of
- * `summarizeProfile` and carries no raw entries at all — its `entries` field is
- * the *count*, a number — so there is nothing here to re-aggregate. A reader
- * that tested `Array.isArray(dump.entries)` fell through to an empty list and
- * printed "no timing entries", which pointed at the level rather than at the
- * file; `--json` output has the same shape, so the script could not read its
- * own. Say what the file is instead.
+ * That report is already the output of `summarizeProfile` and carries no raw
+ * entries at all — its `entries` field is the *count*, a number — so there is
+ * nothing here to re-aggregate. Read as a dump, it falls through to an empty
+ * list and prints "no timing entries", which points at the level rather than at
+ * the file; `--json` output has the same shape, so the script would not read
+ * its own. Say what the file is instead.
  */
+const isProfileReport = (dump) =>
+  !Array.isArray(dump) &&
+  typeof dump === 'object' &&
+  dump !== null &&
+  typeof dump.entries === 'number' &&
+  Array.isArray(dump.spans)
+
+/** A bare `ir.timing.drain()` array, or an object that wraps one. */
 function fromDump(dump) {
-  if (
-    !Array.isArray(dump) &&
-    typeof dump === 'object' &&
-    dump !== null &&
-    typeof dump.entries === 'number' &&
-    Array.isArray(dump.spans)
-  ) {
-    process.stderr.write(
-      `${path.relative(ROOT, input)} is an ir.profile() report — already summarized,\n` +
-        'and it does not carry the entries it was summarized from.\n' +
-        'Capture the entries themselves:\n' +
-        '  node scripts/drive.mjs --js "JSON.stringify(ir.timing.drain())" ...\n',
-    )
-    process.exit(1)
-  }
   const list = Array.isArray(dump)
     ? dump
     : Array.isArray(dump.entries)
@@ -294,21 +244,6 @@ function fromDump(dump) {
   }))
 }
 
-const wanted = entries.filter(
-  (one) =>
-    (values.group === 'all' || one.group === values.group) &&
-    (values.track === undefined || one.track === values.track),
-)
-
-if (wanted.length === 0) {
-  const groups = [...new Set(entries.map((one) => one.group))].sort()
-  const tracks = [...new Set(entries.map((one) => one.track))].sort()
-  process.stderr.write(
-    `nothing matched.\n  groups: ${groups.join(', ')}\n  tracks: ${tracks.join(', ')}\n`,
-  )
-  process.exit(1)
-}
-
 /*
  * Validated, because `??` does not catch a NaN and the report does not either.
  *
@@ -319,47 +254,143 @@ if (wanted.length === 0) {
  * `slice(0, NaN)` is empty and `length > NaN` is false, so the table and the
  * "… N more" line both vanish and it reads as a clean run.
  */
-const number = (raw, flag) => {
+const positive = (raw) => {
   const value = Number(raw)
-  if (!Number.isFinite(value) || value <= 0) {
-    process.stderr.write(`--${flag} wants a positive number, not "${raw}"\n`)
-    process.exit(1)
-  }
-  return value
+  return Number.isFinite(value) && value > 0 ? value : null
 }
 
-const options = {
-  droppedFrameMs: number(values.late, 'late'),
-  top: number(values.top, 'top'),
-}
-const report = summarizeProfile(wanted, options)
-
-if (values.json) {
-  process.stdout.write(`${JSON.stringify({ ...report, input }, null, 2)}\n`)
-  process.exit(0)
-}
-
-const threads = [...new Set(wanted.map((one) => one.thread))].sort()
-process.stdout.write(
-  `${path.relative(ROOT, input)} — ${wanted.length} entries, ` +
-    `${report.tracks.length} tracks, ${threads.length} threads\n\n`,
-)
-process.stdout.write(`${report.text}\n`)
-
-/*
- * Per thread, on request.
+/**
+ * The command, as a function of its command line.
  *
- * The default report pools them, which is right for the main thread's tracks
- * and wrong for the workers: four threads running the same task name pool into
- * one row whose mean is a mean over four cores. `--threads` is how you see that
- * one worker is doing all the work, which is the failure a pool is supposed to
- * prevent.
+ * `argv` is what follows the script name, and the return is the exit code, so a
+ * test runs the whole command without a child process.
  */
-if (values.threads) {
-  for (const thread of threads) {
-    const mine = wanted.filter((one) => one.thread === thread)
-    const tracks = [...new Set(mine.map((one) => one.track))].sort().join(', ')
-    process.stdout.write(`\n── thread ${thread} — ${tracks}\n`)
-    process.stdout.write(`${summarizeProfile(mine, options).text}\n`)
+export async function timing(
+  argv,
+  { stdout = process.stdout, stderr = process.stderr } = {},
+) {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    allowPositionals: true,
+    options: OPTIONS,
+  })
+
+  if (values.help) {
+    stdout.write(`${HELP}\n`)
+    return 0
   }
+
+  const input = positionals[0] ?? DEFAULT_INPUT
+  const raw = await readFile(input).catch(() => null)
+  if (raw === null) {
+    stderr.write(
+      `cannot read ${path.relative(ROOT, input)}\n` +
+        `record one with: node scripts/drive.mjs --trace 3000 (see --help)\n`,
+    )
+    return 1
+  }
+
+  // Sniffed rather than taken from the extension, exactly as `traceFrames.mjs`
+  // does: DevTools' download button hands out `.json.gz` and its file-system
+  // export hands out `.json`, and a reporter renames neither.
+  const text =
+    raw[0] === 0x1f && raw[1] === 0x8b
+      ? gunzipSync(raw).toString('utf8')
+      : raw.toString('utf8')
+  const parsed = JSON.parse(text)
+
+  // Only something that is neither form of trace can be a profile report.
+  const entries = Array.isArray(parsed.traceEvents)
+    ? fromTrace(parsed.traceEvents)
+    : Array.isArray(parsed) && isTraceEvent(parsed[0])
+      ? fromTrace(parsed)
+      : isProfileReport(parsed)
+        ? null
+        : fromDump(parsed)
+
+  if (entries === null) {
+    stderr.write(
+      `${path.relative(ROOT, input)} is an ir.profile() report — already summarized,\n` +
+        'and it does not carry the entries it was summarized from.\n' +
+        'Capture the entries themselves:\n' +
+        '  node scripts/drive.mjs --js "JSON.stringify(ir.timing.drain())" ...\n',
+    )
+    return 1
+  }
+
+  if (entries.length === 0) {
+    stderr.write(
+      'no timing entries.\n' +
+        'A trace only carries them if the page was at ?timing=trace (or full)\n' +
+        'while it was recording — the level is off by default, deliberately.\n',
+    )
+    return 1
+  }
+
+  const wanted = entries.filter(
+    (one) =>
+      (values.group === 'all' || one.group === values.group) &&
+      (values.track === undefined || one.track === values.track),
+  )
+
+  if (wanted.length === 0) {
+    const groups = [...new Set(entries.map((one) => one.group))].sort()
+    const tracks = [...new Set(entries.map((one) => one.track))].sort()
+    stderr.write(
+      `nothing matched.\n  groups: ${groups.join(', ')}\n  tracks: ${tracks.join(', ')}\n`,
+    )
+    return 1
+  }
+
+  const droppedFrameMs = positive(values.late)
+  if (droppedFrameMs === null) {
+    stderr.write(`--late wants a positive number, not "${values.late}"\n`)
+    return 1
+  }
+  const top = positive(values.top)
+  if (top === null) {
+    stderr.write(`--top wants a positive number, not "${values.top}"\n`)
+    return 1
+  }
+  const options = { droppedFrameMs, top }
+  const report = summarizeProfile(wanted, options)
+
+  if (values.json) {
+    stdout.write(`${JSON.stringify({ ...report, input }, null, 2)}\n`)
+    return 0
+  }
+
+  const threads = [...new Set(wanted.map((one) => one.thread))].sort()
+  stdout.write(
+    `${path.relative(ROOT, input)} — ${wanted.length} entries, ` +
+      `${report.tracks.length} tracks, ${threads.length} threads\n\n`,
+  )
+  stdout.write(`${report.text}\n`)
+
+  /*
+   * Per thread, on request.
+   *
+   * The default report pools them, which is right for the main thread's
+   * tracks and wrong for the workers: four threads running the same task name
+   * pool into one row whose mean is a mean over four cores. `--threads` is how
+   * you see that one worker is doing all the work, which is the failure a pool
+   * is supposed to prevent.
+   */
+  if (values.threads) {
+    for (const thread of threads) {
+      const mine = wanted.filter((one) => one.thread === thread)
+      const tracks = [...new Set(mine.map((one) => one.track))]
+        .sort()
+        .join(', ')
+      stdout.write(`\n── thread ${thread} — ${tracks}\n`)
+      stdout.write(`${summarizeProfile(mine, options).text}\n`)
+    }
+  }
+  return 0
 }
+
+// `import.meta.main` rather than `process.argv[1]` against this file's path:
+// run through a symlink, argv names the link and the loader resolved the
+// target, so the comparison is false and the command exits 0 having done
+// nothing.
+if (import.meta.main) process.exitCode = await timing(process.argv.slice(2))
