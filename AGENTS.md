@@ -117,6 +117,8 @@ any rule governing the files being changed.
 - **Never change what the site says about itself in only one place.** [Details](docs/agents/invariants.md#rule-63).
 - **Never load a third-party tag from the document head.** [Details](docs/agents/invariants.md#rule-64).
 - **Never let a readout change the frame or stop it.** [Details](docs/agents/invariants.md#rule-65).
+- **Never widen the soundtrack's license set.** [Details](docs/agents/invariants.md#rule-66).
+- **Never bundle the soundtrack.** [Details](docs/agents/invariants.md#rule-67).
 
 ## Finish the work
 

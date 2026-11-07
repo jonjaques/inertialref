@@ -203,7 +203,7 @@ flowchart TB
         DO2["<b>DO</b> partition s:HIP71683"]
         DO3["<b>DO</b> partition c:12,-3,7"]
         D1["<b>D1</b><br/>accounts · discovery credit<br/>catalog revisions · sync"]
-        R2["<b>R2</b><br/>inertialrefd-storage<br/><i>reference audio · material sets later</i>"]
+        R2["<b>R2</b><br/>inertialrefd-storage<br/><i>reference audio · the soundtrack · material sets later</i>"]
     end
 
     B -->|"GET /"| W
@@ -234,16 +234,16 @@ have sidestepped one real problem for free.
 
 ## What each Cloudflare primitive is for
 
-| Primitive              | Holds                                                         | Why this one and not another                                                                                                                                                                                       |
-| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Workers**            | The client bundle, the API, WebSocket upgrade routing         | Static asset requests are free and never reach the script. One deploy, one origin, one artifact.                                                                                                                   |
-| **Durable Objects**    | ⛔ nothing today; partition authorities are planned           | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics — the guide needed none, so the first one lands with multiplayer. |
-| **DO SQLite**          | Per-partition durable state, co-located with the authority    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                         |
-| **D1**                 | Account-scoped and globally-unique data                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                            |
-| **R2** ✅              | What the repository will not carry; biome material sets later | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned second tenant.        |
-| **Workers KV**         | ⛔ nothing                                                    | The catalog is 366 KB brotli across two files and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                          |
-| **Queues / Workflows** | ⛔ nothing yet                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                                        |
-| **Cloudflare Pages**   | ⛔ nothing                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                         |
+| Primitive              | Holds                                                         | Why this one and not another                                                                                                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Workers**            | The client bundle, the API, WebSocket upgrade routing         | Static asset requests are free and never reach the script. One deploy, one origin, one artifact.                                                                                                                                            |
+| **Durable Objects**    | ⛔ nothing today; partition authorities are planned           | A DO is a single-threaded, addressable, consistent island with its own SQLite. That is precisely the shape of a star system under patched conics — the guide needed none, so the first one lands with multiplayer.                          |
+| **DO SQLite**          | Per-partition durable state, co-located with the authority    | Transactional with the code that owns it. No network round trip. 10 GB per object, which is four orders of magnitude more than a partition will ever need.                                                                                  |
+| **D1**                 | Account-scoped and globally-unique data                       | Cross-partition queries and global uniqueness — "who discovered this first" — need one writer for the whole galaxy, not one per system.                                                                                                     |
+| **R2** ✅              | What the repository will not carry; biome material sets later | Zero egress fees. Today one bucket, `inertialrefd-storage`, holding the cutscene's reference audio and the Planetarium's soundtrack ([H-8](#h-8--r2-holds-what-the-repository-will-not-carry)). Material sets are the planned third tenant. |
+| **Workers KV**         | ⛔ nothing                                                    | The catalog is 366 KB brotli across two files and ships in the bundle ([spike 3](spikes.md#3--catalog-bundle-size)). There is no eventually-consistent read tier to fill.                                                                   |
+| **Queues / Workflows** | ⛔ nothing yet                                                | No asynchronous fan-out exists. Revisit if catalog revision publishing becomes a batch job.                                                                                                                                                 |
+| **Cloudflare Pages**   | ⛔ nothing                                                    | Workers static assets is the same capability inside the Worker that already has to exist. Two deploy targets for one site is one too many.                                                                                                  |
 
 ### Numbers, with their source
 
@@ -697,6 +697,24 @@ _bundled_ copy to exist. If it does not have one, the deploy still succeeds, the
 build log says so in one line, and the Worker serves the track from the bucket
 instead — which is the whole point of having both.
 
+**The soundtrack is the second tenant, and it is never bundled**
+([ADR-0059](adr/0059-the-planetarium-plays-music-anyone-may-share.md)). Its 104
+files are entries in the same table, generated from `data/audio/catalog.json`
+and marked `bundled: false`, so `media:pull` skips them and the Worker answers
+every request from the bucket, 206 for a range. Bundling them is not an option
+the platform offers: the longest is 32.2 MiB against the static assets' 25 MiB
+cap, Safari will not play `<audio>` from a server that answers a range with
+200, and every build would upload 820 MB. `pnpm audio:build` writes them into
+`apps/game/public/media/music/` for the dev server, and the build removes that
+directory from `dist` (`apps/game/astro.config.ts`) so a deploy from a machine
+that ran the pipeline carries what Workers Builds does.
+
+`pnpm media:push music/` uploads what the bucket does not already hold at the
+same size, and nothing else: the names are content-addressed, so a file that is
+there is the file. **Push before the deploy that ships a catalog.** The Worker
+allow-lists exactly what the committed catalog names, and a name the bucket does
+not hold is a 404 the player passes over as unplayable.
+
 ---
 
 ## The seams that already exist
@@ -813,6 +831,12 @@ The service worker uses the following policy:
   Older build caches are deleted. Unused files are not copied across every deploy.
 - `/media/*` uses cache-first within the current build. Its unhashed paths never
   inherit a previous build's contents. Range requests continue to use the network.
+- `/media/music/*` is the exception, and it is taken before the range rule. A
+  track the listener keeps is downloaded whole into `inertialref-music`, which no
+  build deletes — its names are content-addressed, so nothing in it can go
+  stale — and the worker answers every range of a kept track from there: a 206
+  slice, or a 416 for a range past its end. A track that is not kept goes to the
+  network, ranges and all.
 - Other public files use stale-while-revalidate in the current build's cache.
 
 The build id arrives on the registration URL and names `inertialref-${build}`.

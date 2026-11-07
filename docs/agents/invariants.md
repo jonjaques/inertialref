@@ -750,3 +750,30 @@ library's private field with `?.`, count an unknown quantity generously, log,
 and hand back whatever the caller can still use.
 [ADR-0022](../adr/0022-the-timeline.md),
 [ADR-0044](../adr/0044-the-sensor-reconstructs-the-display.md).
+
+### Rule 66
+
+**Never widen the soundtrack's license set.** `SOUNDTRACK_LICENSES` in
+`packages/protocol/src/soundtrack.ts` is CC0, the Public Domain Mark, CC BY 3.0
+and CC BY 4.0, because this repository is public and the site is static, and
+both hand every file they hold to anybody who asks. Every "royalty-free" library
+surveyed forbids exactly that. CC BY-SA is out because CC 4.0 § 1(a) makes music
+synchronized with moving images an adaptation; NC and ND, music registered in
+Content ID, and a work whose pages disagree about its license are out with it.
+A source enters `apps/ingest/src/audioSources.ts` with its licensor's own
+statement, verbatim and dated, read on the licensor's page rather than an
+aggregator's — four of the survey's picks failed that second reading.
+[ADR-0059](../adr/0059-the-planetarium-plays-music-anyone-may-share.md),
+[spike 6](../spikes.md#6--licensed-music-and-spacecraft-audio).
+
+### Rule 67
+
+**Never bundle the soundtrack.** Its files are `bundled: false` entries in
+`apps/server/src/media.ts`, generated from the committed catalog, and the build
+removes `dist/media/music` (`apps/game/astro.config.ts`). The static assets
+ignore `Range`, which Safari needs for `<audio>`, and refuse any file over
+25 MiB; the Worker answers from R2 with a 206. Push the files
+(`pnpm media:push music/`) before the deploy that ships a catalog naming them,
+or the player passes over every track the bucket lacks.
+[ADR-0059](../adr/0059-the-planetarium-plays-music-anyone-may-share.md),
+[hosting](../hosting.md#h-8--r2-holds-what-the-repository-will-not-carry).

@@ -1,6 +1,6 @@
 # Spikes
 
-Five questions that needed a **measurement rather than an opinion**. Each blocked
+Six questions that needed a **measurement rather than an opinion**. Each blocked
 something specific, each was small, and each is recorded here with the numbers
 that came back.
 
@@ -8,7 +8,7 @@ that came back.
 > _planned_ yet, because the answer was unknown and guessing it would have put a
 > number in a design document that nobody measured.
 
-**All five have been run.** Three came back clean, one came back with a result
+**All six have been run.** Three came back clean, two came back with a result
 that reverses a design assumption, and one is answered as far as software can
 answer it and is now waiting on hardware.
 
@@ -16,13 +16,14 @@ answer it and is now waiting on hardware.
 
 ## Status
 
-| #   | Spike                                                                  | Blocks | Status                                         | The number that mattered                                                            |
-| --- | ---------------------------------------------------------------------- | ------ | ---------------------------------------------- | ----------------------------------------------------------------------------------- |
-| 1   | [HDR display detection](#1--hdr-display-detection)                     | M2     | ✅ **Resolved — negative**                     | Three browsers, one display, `(dynamic-range: high)` = true, true, **false**        |
-| 2   | [TSL and the atmosphere integral](#2--tsl-and-the-atmosphere-integral) | M2     | ✅ **Resolved — positive**                     | **1.000×** against hand-written WGSL, pixel-identical                               |
-| 3   | [Catalog bundle size](#3--catalog-bundle-size)                         | M4     | ✅ **Resolved — positive**                     | 150 ly, 7,529 stars + 861 planets = **159 KB brotli**                               |
-| 4   | [Gaia and HYG attribution terms](#4--gaia-and-hyg-attribution-terms)   | M4     | ⚠️ **Resolved — reverses a decision**          | **Gaia is CC BY-NC 3.0 IGO**, not "open with attribution"                           |
-| 5   | [WebHID and Gamepad for HOTAS](#5--webhid-and-gamepad-for-hotas)       | M3     | 🟡 **Software answered, hardware outstanding** | WebHID: Chrome ✅, Safari ❌, Firefox ❌ · Gamepad caps at **16 axes / 32 buttons** |
+| #   | Spike                                                                          | Blocks         | Status                                         | The number that mattered                                                             |
+| --- | ------------------------------------------------------------------------------ | -------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1   | [HDR display detection](#1--hdr-display-detection)                             | M2             | ✅ **Resolved — negative**                     | Three browsers, one display, `(dynamic-range: high)` = true, true, **false**         |
+| 2   | [TSL and the atmosphere integral](#2--tsl-and-the-atmosphere-integral)         | M2             | ✅ **Resolved — positive**                     | **1.000×** against hand-written WGSL, pixel-identical                                |
+| 3   | [Catalog bundle size](#3--catalog-bundle-size)                                 | M4             | ✅ **Resolved — positive**                     | 150 ly, 7,529 stars + 861 planets = **159 KB brotli**                                |
+| 4   | [Gaia and HYG attribution terms](#4--gaia-and-hyg-attribution-terms)           | M4             | ⚠️ **Resolved — reverses a decision**          | **Gaia is CC BY-NC 3.0 IGO**, not "open with attribution"                            |
+| 5   | [WebHID and Gamepad for HOTAS](#5--webhid-and-gamepad-for-hotas)               | M3             | 🟡 **Software answered, hardware outstanding** | WebHID: Chrome ✅, Safari ❌, Firefox ❌ · Gamepad caps at **16 axes / 32 buttons**  |
+| 6   | [Licensed music and spacecraft audio](#6--licensed-music-and-spacecraft-audio) | The soundtrack | ⚠️ **Resolved — reverses a decision**          | **Every library surveyed forbids redistribution**; CC0, public domain and CC BY ship |
 
 Measured on 2026-08-19 on an Apple M5 MacBook (10-core GPU, Metal 3, built-in
 2880×1864 Liquid Retina — **not** an XDR display), macOS 26.5, against Chrome
@@ -651,6 +652,130 @@ source; none of it is a device test. Outstanding:
 
 **Run this on hardware before the promise goes in a README.** The software half
 says it is possible; the hardware half says whether it is pleasant.
+
+---
+
+## 6 · Licensed music and spacecraft audio
+
+|              |                                                                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------------------------------- |
+| **Blocks**   | The Planetarium's soundtrack ([ADR-0059](adr/0059-the-planetarium-plays-music-anyone-may-share.md))                   |
+| **Question** | Which music and spacecraft audio can a public repository and a static site ship, at what quality, and at what level?  |
+| **Answer**   | **CC0, public domain and CC BY, and nothing from a library.** Fifty-two tracks survive a second reading of the terms. |
+| **Lives in** | [`design/audio.md` § Music](design/audio.md#music), `apps/ingest/src/audioSources.ts`, `data/audio/manifest.json`     |
+
+Run 2026-11-06, in two passes: a survey that auditioned 42 clips with EBU R128
+measurements and read each licensor's terms, and a capture that downloaded the
+best original of every pick, re-read the terms, and measured what it kept.
+
+### The finding
+
+The audio bible budgeted **a licensed library plus targeted recording**. Every
+library surveyed — Sonniss, Pixabay, ZapSplat, Mixkit, 99Sounds, Shapeforms,
+Uppbeat, StreamBeats — licenses use _inside_ a production and forbids
+redistributing the files as files. A public repository does exactly that, and so
+does a static site: anybody can download what it serves. The licenses that
+survive are the ones that permit redistribution outright: **CC0, the
+public-domain mark, CC BY 3.0 and CC BY 4.0.**
+
+Three more were left out on purpose. **CC BY-SA**, because CC 4.0 § 1(a) makes
+music synchronized with moving images an adaptation, which would carry the
+share-alike onto whatever the game is judged to be. **Content ID registration**,
+because a player's video of the game would be claimed. **Pages whose labels
+disagree**, because the stricter one is the one to believe.
+
+### The second reading reversed four picks
+
+| Pick                                   | What the capture found                                                                                                                      | Verdict                  |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| Kevin MacLeod                          | incompetech's own page says the catalog is pre-registered in Content ID                                                                     | Out                      |
+| Satie, _Gymnopédies_ (Robin Alciatore) | The public-domain claim is an uploader's 2008 Commons template citing a site FAQ; the performer is an ASCAP member who sells the recordings | Out                      |
+| HoliznaCC0, "Dreams" and six others    | A second, royalty-free Bandcamp account sells them: "you can only use in non commercial projects at this price point"                       | Out                      |
+| Purrple Cat, _Above the Clouds_        | Bandcamp says CC BY-SA; the label's site and FMA say CC BY                                                                                  | Out                      |
+| HoliznaCC0, "Love" and "Moon Unit"     | CC0 on one page and CC BY on Bandcamp, which has no CC0 option to choose; either license would ship, but the pages disagree                 | Not captured; a decision |
+
+### The best original, proved
+
+| Master | Count | What it is                                                                                                |
+| ------ | ----: | --------------------------------------------------------------------------------------------------------- |
+| FLAC   |    27 | 44.1 kHz/16 and /24, 48 kHz/24. No spectral cliff in any of them                                          |
+| MP3    |    24 | The licensor's own file, where it offers no lossless one without a sign-in. 18 show the encoder's lowpass |
+| AAC    |     1 | NASA's own file for the Venus sonification                                                                |
+
+Where the lossless file sits behind an email form or a sign-in (Bandcamp's
+name-your-price, the Free Music Archive), it was not used; neither was a label's
+torrent-only 24-bit release. **A third party's lossless copy was used only after it
+matched the licensor's own lossy file**, by cross-correlation, a least-squares
+gain and the residual:
+
+- Stellardrone's _Light Years_ FLAC against the label's MP3: correlation
+  ≥ 0.99984, residual −35 to −63 dB, a constant 25.06 ms offset — the MP3
+  decoder's delay.
+- Chris Zabriskie's _Cylinders_ FLAC against his own M4A: correlation ≥ 0.9985,
+  residual −25 to −42 dB.
+
+**Compare at the native rate.** The first pass resampled to 22.05 kHz to save
+time, and the MP3 decoder's 1105-sample delay became half a sample there, which
+no integer lag can align: the residual read −16 dB and an authentic copy looked
+like a different master.
+
+**A missing cliff does not prove a lossless source.** Eighteen of the 24 MP3
+masters show their encoder's lowpass, 18.8 to 20.5 kHz and 35 to 52 dB down; six
+were encoded without one and show nothing. The codec and the licensor's
+statement say what a file is. The spectrum only catches a lie.
+
+### The level
+
+The masters span **−25.8 to −10.3 LUFS integrated, 15.5 LU** — a shuffle from
+one to the next would have been a jump nobody could set a volume for. A single
+gain per track, toward −18 LUFS under a −1 dBTP ceiling, brings the delivered set
+to **−19.8 to −17.9, 1.9 LU**, every file at or under −1.2 dBTP. Six tracks sit
+under the target because the ceiling caps their gain. No compressor and no
+limiter touched any of them.
+
+**The encode is deterministic.** Two builds wrote the same 104 files byte for
+byte, so a rebuild that changes nothing pushes nothing.
+
+### Delivery
+
+**Cloudflare's static assets ignore `Range`**: measured on production, a ranged
+GET answers 200 with the whole body, and the assets refuse any file over
+25 MiB, where the longest delivery file is 32.2 MiB. Safari will not play an
+`<audio>` source that answers a range with 200. The soundtrack is served from
+R2 through the Worker instead, which answers 206.
+
+### Spacecraft audio, read literally
+
+"Public domain" was taken as a statement on the page, not as an inference from
+who flew the instrument.
+
+- **Ships:** Parker Solar Probe's FIELDS instrument at Venus, sonified by NASA's
+  Scientific Visualization Studio, under the public-domain mark.
+- **Held back, with their terms verbatim** (`HELD_BACK`): six JPL/Caltech
+  recordings, whose credits name non-NASA partners and whose pages make no
+  public-domain statement, and six from the University of Iowa's plasma-wave
+  group, CC BY. For two of the six the item page says CC BY 3.0 and the citation
+  page CC BY 4.0.
+- **Captured and not shipped:** Parker's magnetometer audifications, at −30.7 to
+  −35.2 LUFS with full-scale spikes, so a gain that respects the ceiling leaves
+  them 14 to 18 LU under everything else; and a Shuttle launch recorded in the
+  cabin, which nobody has listened to for crew voices.
+
+### Still unmeasured
+
+- **Nobody has listened to the set.** Loudness, the cliff and the
+  authentication are measurements. Whether a track belongs under the sky is not.
+- **Stellardrone's history.** The albums were first published under CC BY-NC-ND
+  3.0 (the artist's own Internet Archive uploads, 2009–2011, and the
+  Energostatic label, 2013). Bandcamp now says CC BY 4.0, and the label no
+  longer exists. The shipped license is the one the artist's page states today.
+- **NASA's media guidelines were revised on 2026-10-27**, during the survey,
+  and now file their "generally not subject to copyright" paragraph under
+  non-commercial use. The Venus sonification does not rest on them: it ships on
+  the Scientific Visualization Studio's own statement that its content is in the
+  public domain unless otherwise noted, which is also what covers the
+  contractors in its credits. The JPL recordings, which would rest on the
+  guidelines, are among those held back.
 
 ---
 

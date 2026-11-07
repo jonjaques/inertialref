@@ -58,12 +58,17 @@ pnpm catalog:build --refresh   # ...re-downloading rather than using the cache
 pnpm textures:build            # surface maps into data/textures (1.5 GB in, 25 MB out)
 pnpm shapes:build              # measured shape models into data/shapes
 pnpm solar:fetch               # data/reference/solar-system.json, from JPL
+pnpm audio:fetch               # soundtrack masters into data/audio/masters, digest-checked
+pnpm audio:report              # measure every master and print, writing nothing
+pnpm audio:build               # encode and normalize; write data/audio's catalog, manifest, LICENSE.md
+pnpm audio:build --spectrograms  # ...and one spectrogram per master, in .data/audio/review
 
 pnpm dev:client                # Astro only
 pnpm dev:server                # cf dev on localhost:8787
 pnpm run deploy:worker         # build, then cf deploy
 pnpm media:pull                # reference audio from R2; not in git
 pnpm media:push
+pnpm media:push music/         # the soundtrack's delivery files, skipping what R2 holds
 ```
 
 **`pnpm dev` needs a `dist/` to exist, which a fresh worktree does not have.**
@@ -429,6 +434,22 @@ gitignored `apps/game/public/media/`, and the Worker's `MEDIA` binding serves
 it when a credential-less build did not. `/media/*` is an allow-list, never a
 key prefix. See [hosting](../hosting.md) H-8 for the two workerd traps around
 `R2Range`.
+
+**The soundtrack** is built by `apps/ingest` from masters in
+`data/audio/masters/`, which are Git LFS objects that no default fetch
+downloads (`.lfsconfig`): a clone, CI and Workers Builds never pay for 954 MB
+they do not use. To rebuild it, pull them first —
+`git lfs pull --include='data/audio/masters/**' --exclude=''` — or let
+`pnpm audio:fetch` download each from its licensor and check its digest. The
+build needs `ffmpeg` with AudioToolbox, so it runs on macOS; elsewhere it falls
+back to ffmpeg's own AAC encoder and says so in the manifest. Its outputs are
+`data/audio/catalog.json`, which the client and the Worker both import, the
+provenance in `manifest.json`, the credits in `LICENSE.md`, and the delivery
+files in gitignored `apps/game/public/media/music/`, which `pnpm dev` serves by
+range and `pnpm media:push music/` uploads. A source is added in
+`apps/ingest/src/audioSources.ts` with the licensor's statement verbatim; the
+catalog cannot represent a license other than CC0, public domain or CC BY
+([ADR-0059](../adr/0059-the-planetarium-plays-music-anyone-may-share.md)).
 
 **Three.js:** in `apps/game`, import `three/webgpu` and `three/tsl`, never
 `three`. `packages/*` may not import Three.js at all; `pnpm graph` enforces
