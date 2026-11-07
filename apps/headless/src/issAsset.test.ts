@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
+import {
+  arrayRotors,
+  JOINT_EXTRAS,
+  type JointTree,
+  sunTracking,
+} from '@inertialref/rendering'
+import { Quaternion as Q, Vec, vec3 } from '@inertialref/spatial'
 import { orbitalAsset } from '@inertialref/universe'
 
 /*
@@ -20,6 +28,7 @@ interface Node {
   translation?: Triple
   rotation?: [number, number, number, number]
   scale?: Triple
+  matrix?: number[]
   extras?: {
     joint?: { kind: string; axis: Triple; mast?: Triple; normal?: Triple }
   }
@@ -390,6 +399,97 @@ describe('the shipped ISS', () => {
         )
       }
     }
+  })
+
+  it('turns its arrays to the Sun through the reading the app gives it (property)', () => {
+    /*
+     * The shipped file's joints through `arrayRotors`, which is how the app's
+     * rig reads the loaded model, so a renamed extras key or a moved axis in
+     * the build script fails here rather than freezing the arrays on screen.
+     * The solver works in the station's axes, which holds only while nothing
+     * above an alpha joint, or between it and its wings, turns or scales.
+     */
+    const tree = (index: number): JointTree => {
+      const node = iss.nodes[index]!
+      return {
+        name: node.name ?? '',
+        joint: (node.extras as Record<string, unknown> | undefined)?.[
+          JOINT_EXTRAS
+        ],
+        children: (node.children ?? []).map(tree),
+      }
+    }
+    const rotors = iss.scenes[iss.scene ?? 0]!.nodes.flatMap((root) =>
+      arrayRotors(tree(root)),
+    )
+    expect(rotors.map((rotor) => rotor.name).sort()).toEqual([
+      'PORT_ALPHA_ROT',
+      'STBD_ALPHA_ROT',
+    ])
+    for (const rotor of rotors) expect(rotor.wings).toHaveLength(4)
+
+    const parentOf = new Map<number, number>()
+    iss.nodes.forEach((node, index) => {
+      for (const child of node.children ?? []) parentOf.set(child, index)
+    })
+    const indexOf = (name: string): number =>
+      iss.nodes.findIndex((node) => node.name === name)
+    const holdsAxes = (index: number): void => {
+      const node = iss.nodes[index]!
+      expect(node.rotation ?? [0, 0, 0, 1], node.name).toEqual([0, 0, 0, 1])
+      expect(node.scale ?? [1, 1, 1], node.name).toEqual([1, 1, 1])
+      expect(node.matrix, node.name).toBeUndefined()
+    }
+    /** `from` and its ancestors, up to `to` or the scene root, nearest first. */
+    const lineage = (from: number, to?: number): number[] => {
+      const chain: number[] = []
+      for (
+        let at: number | undefined = from;
+        at !== undefined && at !== to;
+        at = parentOf.get(at)
+      )
+        chain.push(at)
+      return chain
+    }
+    for (const rotor of rotors) {
+      const alpha = indexOf(rotor.name)
+      for (const at of lineage(alpha)) holdsAxes(at)
+      for (const wing of rotor.wings) {
+        const chain = lineage(indexOf(wing.name), alpha)
+        // Under its own alpha joint, so it turns with it.
+        expect(parentOf.get(chain.at(-1)!), wing.name).toBe(alpha)
+        for (const at of chain) holdsAxes(at)
+      }
+    }
+
+    const direction = fc
+      .tuple(
+        fc.double({ min: -1, max: 1, noNaN: true }),
+        fc.double({ min: -1, max: 1, noNaN: true }),
+        fc.double({ min: -1, max: 1, noNaN: true }),
+      )
+      .map(([x, y, z]) => vec3(x, y, z))
+      .filter((v) => Vec.length(v) > 0.1)
+      .map((v) => Vec.normalize(v))
+    fc.assert(
+      fc.property(direction, (sun) => {
+        const angles = sunTracking(sun, rotors)
+        for (const rotor of rotors) {
+          const alpha = Q.fromAxisAngle(
+            Vec.normalize(rotor.axis),
+            angles.get(rotor.name)!,
+          )
+          for (const wing of rotor.wings) {
+            const beta = Q.fromAxisAngle(
+              Vec.normalize(wing.axis),
+              angles.get(wing.name)!,
+            )
+            const cells = Q.rotate(alpha, Q.rotate(beta, wing.normal))
+            expect(Vec.dot(Vec.normalize(cells), sun)).toBeCloseTo(1, 9)
+          }
+        }
+      }),
+    )
   })
 
   it('holds the record’s bounding radius to the mesh’s own, to 1%, at any joint angle', () => {

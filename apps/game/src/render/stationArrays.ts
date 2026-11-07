@@ -1,6 +1,12 @@
 import type { Object3D } from 'three/webgpu'
-import { type ArrayRotor, sunTracking } from '@inertialref/rendering'
-import { type Vec3, vec3 } from '@inertialref/spatial'
+import {
+  type ArrayRotor,
+  arrayRotors,
+  JOINT_EXTRAS,
+  type JointTree,
+  sunTracking,
+} from '@inertialref/rendering'
+import type { Vec3 } from '@inertialref/spatial'
 
 /*
  * A station model's solar-array joints, found in the loaded glTF and turned to
@@ -12,13 +18,6 @@ import { type Vec3, vec3 } from '@inertialref/spatial'
  * axis-angle in its own axes, which are its parent's at rest.
  */
 
-interface JointExtras {
-  readonly kind: 'alpha' | 'beta'
-  readonly axis: readonly [number, number, number]
-  readonly mast?: readonly [number, number, number]
-  readonly normal?: readonly [number, number, number]
-}
-
 /** The joints of one loaded station, and what the solver reads them as. */
 export interface StationRig {
   readonly rotors: readonly ArrayRotor[]
@@ -28,48 +27,33 @@ export interface StationRig {
   >
 }
 
-const toVec = ([x, y, z]: readonly [number, number, number]): Vec3 =>
-  vec3(x, y, z)
-
-function jointOf(object: Object3D): JointExtras | null {
-  const joint = (object.userData as { joint?: JointExtras }).joint
-  return joint === undefined ? null : joint
-}
+/** Three's objects in the shape `arrayRotors` reads, extras and all. */
+const treeOf = (object: Object3D): JointTree => ({
+  name: object.name,
+  joint: (object.userData as Record<string, unknown>)[JOINT_EXTRAS],
+  children: object.children.map(treeOf),
+})
 
 /**
- * The rotors under `root`: each alpha joint with the beta joints it carries.
- * A model with no joints — anything but the ISS today — has an empty rig.
+ * The rotors under `root`, read by `arrayRotors` — the reading the asset test
+ * applies to the shipped file — and the object each joint's name turns. A
+ * model with no joints, anything but the ISS today, has an empty rig.
  */
 export function stationRig(root: Object3D): StationRig {
-  const rotors: ArrayRotor[] = []
-  const nodes = new Map<string, { object: Object3D; axis: Vec3 }>()
+  const rotors = arrayRotors(treeOf(root))
+  const named = new Map<string, Object3D>()
   root.traverse((object) => {
-    const joint = jointOf(object)
-    if (joint?.kind !== 'alpha' || joint.mast === undefined) return
-    const wings: ArrayRotor['wings'][number][] = []
-    object.traverse((child) => {
-      const wing = jointOf(child)
-      if (
-        child === object ||
-        wing?.kind !== 'beta' ||
-        wing.normal === undefined
-      )
-        return
-      wings.push({
-        name: child.name,
-        axis: toVec(wing.axis),
-        normal: toVec(wing.normal),
-      })
-      nodes.set(child.name, { object: child, axis: toVec(wing.axis) })
-    })
-    rotors.push({
-      name: object.name,
-      axis: toVec(joint.axis),
-      mast: toVec(joint.mast),
-      wings,
-    })
-    nodes.set(object.name, { object, axis: toVec(joint.axis) })
+    if (!named.has(object.name)) named.set(object.name, object)
   })
+  const nodes = new Map<string, { object: Object3D; axis: Vec3 }>()
+  const keep = (name: string, axis: Vec3): void => {
+    const object = named.get(name)
+    if (object !== undefined) nodes.set(name, { object, axis })
+  }
+  for (const rotor of rotors) {
+    keep(rotor.name, rotor.axis)
+    for (const wing of rotor.wings) keep(wing.name, wing.axis)
+  }
   return { rotors, nodes }
 }
 

@@ -11,9 +11,8 @@ import { Quaternion as Q, Vec, type Vec3 } from '@inertialref/spatial'
  * them, any direction.
  *
  * Arithmetic and nothing else, so it can be tested in Node: the joints'
- * axes, masts and rest normals come from the model (`asset.extras` and each
- * joint node's own extras), and the host sets the node rotations this hands
- * back. A wing faces the Sun exactly when its mast is perpendicular to the
+ * axes, masts and rest normals come from each joint node's own extras in the
+ * model, and the host sets the node rotations this hands back. A wing faces the Sun exactly when its mast is perpendicular to the
  * Sun, so alpha puts the masts there and beta turns each blanket's face round
  * the mast to meet it.
  */
@@ -90,4 +89,93 @@ export function sunTracking(
     }
   }
   return angles
+}
+
+/** How a joint turns, as the build script writes it into a node's extras. */
+interface JointExtras {
+  readonly kind: 'alpha' | 'beta'
+  readonly axis: readonly [number, number, number]
+  readonly mast?: readonly [number, number, number]
+  readonly normal?: readonly [number, number, number]
+}
+
+/**
+ * The key a joint's extras sit under: `extras.joint` in the glTF, which
+ * GLTFLoader hands over as `userData.joint`. One spelling for the app that
+ * turns the joints and the asset test that reads the shipped file.
+ */
+export const JOINT_EXTRAS = 'joint'
+
+/** A model's node tree as far as the arrays care: names, joints and children. */
+export interface JointTree {
+  readonly name: string
+  /** The node's `JOINT_EXTRAS` value, whatever it is; read by `arrayRotors`. */
+  readonly joint: unknown
+  readonly children: readonly JointTree[]
+}
+
+const triple = (value: unknown): value is readonly [number, number, number] =>
+  Array.isArray(value) &&
+  value.length === 3 &&
+  value.every((n) => typeof n === 'number' && Number.isFinite(n))
+
+const jointOf = (value: unknown): JointExtras | null => {
+  if (typeof value !== 'object' || value === null) return null
+  const joint = value as Partial<Record<keyof JointExtras, unknown>>
+  if (joint.kind !== 'alpha' && joint.kind !== 'beta') return null
+  if (!triple(joint.axis)) return null
+  return {
+    kind: joint.kind,
+    axis: joint.axis,
+    ...(triple(joint.mast) ? { mast: joint.mast } : {}),
+    ...(triple(joint.normal) ? { normal: joint.normal } : {}),
+  }
+}
+
+const vec = ([x, y, z]: readonly [number, number, number]): Vec3 => ({
+  x,
+  y,
+  z,
+})
+
+/**
+ * The rotors in a model's node tree: each alpha joint with a mast, and every
+ * beta joint with a rest normal beneath it.
+ *
+ * One reading of the extras for both sides of the seam — the app walks Three's
+ * objects into this shape and the asset test walks the shipped file's nodes —
+ * so a renamed key or a moved axis in the build script fails a test instead of
+ * freezing the arrays in the app. A model with no joints has no rotors.
+ */
+export function arrayRotors(root: JointTree): ArrayRotor[] {
+  const rotors: ArrayRotor[] = []
+  const wingsUnder = (node: JointTree, into: ArrayWing[]): void => {
+    for (const child of node.children) {
+      const joint = jointOf(child.joint)
+      if (joint?.kind === 'beta' && joint.normal !== undefined)
+        into.push({
+          name: child.name,
+          axis: vec(joint.axis),
+          normal: vec(joint.normal),
+        })
+      wingsUnder(child, into)
+    }
+  }
+  const visit = (node: JointTree): void => {
+    const joint = jointOf(node.joint)
+    if (joint?.kind === 'alpha' && joint.mast !== undefined) {
+      const wings: ArrayWing[] = []
+      wingsUnder(node, wings)
+      rotors.push({
+        name: node.name,
+        axis: vec(joint.axis),
+        mast: vec(joint.mast),
+        wings,
+      })
+      return
+    }
+    for (const child of node.children) visit(child)
+  }
+  visit(root)
+  return rotors
 }
