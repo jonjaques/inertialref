@@ -23,6 +23,7 @@ const PANEL_KEYS: readonly ActionId[] = [
   'panel.6',
   'panel.7',
   'panel.8',
+  'panel.9',
 ]
 
 export interface WorkspaceKeyOptions {

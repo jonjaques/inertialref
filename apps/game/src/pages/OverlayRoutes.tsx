@@ -2,10 +2,11 @@ import { AnimatePresence } from 'motion/react'
 import { Route, Routes, useLocation } from 'react-router'
 import type { HudRenderState } from '../hud/controls.ts'
 import { AboutPage } from './AboutPage.tsx'
+import { CreditsPage } from './CreditsPage.tsx'
 import { KeysPage } from './KeysPage.tsx'
 import { AuthCallbackPage } from './AuthCallbackPage.tsx'
 import { overlaySurface } from './paths.ts'
-import { ABOUT, KEYS, AUTH_CALLBACK, SETTINGS } from './paths.ts'
+import { ABOUT, CREDITS, KEYS, AUTH_CALLBACK, SETTINGS } from './paths.ts'
 import { SettingsPage } from './SettingsPage.tsx'
 
 /**
@@ -19,7 +20,7 @@ interface OverlayRouteProps {
 }
 
 /**
- * The dialogs: settings, about, the keys, the auth callback.
+ * The dialogs: settings, about, the credits, the keys, the auth callback.
  *
  * `AnimatePresence` is what gives one an exit animation — React Router swaps
  * the subtree, and without something holding the outgoing tree mounted there is
@@ -56,6 +57,7 @@ export function OverlayRoutes({ render, onNotice }: OverlayRouteProps) {
           element={<SettingsPage render={render} onNotice={onNotice} />}
         />
         <Route path={ABOUT} element={<AboutPage />} />
+        <Route path={CREDITS} element={<CreditsPage />} />
         <Route path={KEYS} element={<KeysPage />} />
         <Route path={AUTH_CALLBACK} element={<AuthCallbackPage />} />
         <Route path="*" element={null} />

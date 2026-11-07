@@ -395,15 +395,51 @@ export const ACTIONS: readonly ActionDefinition[] = [
   press('panel.6', 'Sixth panel', 'Panels', 'global', chord('Digit6')),
   press('panel.7', 'Seventh panel', 'Panels', 'global', chord('Digit7')),
   /*
-   * An eighth, because the planetarium has eight panels when the guide is
-   * granted, and a number key assigned by position runs out silently: the
-   * last panel in the menu was the one panel no key reached.
+   * Nine, because the planetarium has nine panels when the guide is granted,
+   * and a number key assigned by position runs out silently: the last panel
+   * in the menu was the one panel no key reached.
    */
   press('panel.8', 'Eighth panel', 'Panels', 'global', chord('Digit8')),
+  press('panel.9', 'Ninth panel', 'Panels', 'global', chord('Digit9')),
   // Named for what it opens rather than by the panel's short title: the
   // editor's clash line reads "shares its key with …", and "Perf" there is a
   // word only the author knows.
   press('panel.perf', 'Performance panel', 'Panels', 'global', chord('KeyP')),
+
+  /*
+   * The soundtrack, from anywhere. Global because the music is: it plays
+   * across the Planetarium's panels and dialogs, and a key that worked only
+   * with the right panel open would be a key nobody could find. M and N are
+   * free in every context, and the operating system's own media keys reach
+   * the player through the Media Session instead (`audio/mediaSession.ts`).
+   */
+  press(
+    'music.toggle',
+    'Play or pause',
+    'Soundtrack',
+    'global',
+    chord('KeyM'),
+    {
+      hint: 'the soundtrack, wherever it is playing',
+    },
+  ),
+  press('music.next', 'Next track', 'Soundtrack', 'global', chord('KeyN')),
+  press(
+    'music.previous',
+    'Previous track',
+    'Soundtrack',
+    'global',
+    chord('KeyN', { shift: true }),
+    { hint: 'or the start of this one, once it has played a few seconds' },
+  ),
+  press(
+    'music.card',
+    'What is playing',
+    'Soundtrack',
+    'global',
+    chord('KeyM', { shift: true }),
+    { hint: 'the title and the credit, for a few seconds' },
+  ),
 
   /* ------------------------------- flight ------------------------------- */
   /*
