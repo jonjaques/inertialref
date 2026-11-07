@@ -167,6 +167,43 @@ describe('boot', () => {
     expect(reads).toBe(3)
     expect(p.notes).toEqual(['document ready in 1.5 s'])
   })
+
+  // Neither entry clears storage first, so the navigation leaves a booted page
+  // rather than about:blank, and that page answers `booted` until it is gone.
+  // `--reload`, and `--fresh` under `--keep-storage`, are a forced boot on a
+  // page already showing the url; `--keep-storage` onto another url is the
+  // unforced one.
+  it.each([
+    ['--reload', true, here],
+    ['--keep-storage onto another url', false, '/'],
+  ])(
+    'waits in renderer mode for the navigation’s own loader: %s',
+    async (_, force, at) => {
+      // The old page is booted throughout. The frame tree reports its loader
+      // for the first 600 ms, so the 500 ms poll reads it and the 1000 ms one
+      // reads the navigation's.
+      const p = page()
+      const { send, sent } = chrome(
+        ladder({ ready: [true], here: [at], boot: ['booted'] }),
+        { frameLoader: () => (p.now() < 600 ? 'L1' : 'L2') },
+      )
+      await boot(send, { force }, p)
+      expect(p.notes).toEqual(['renderer ready in 1.0 s'])
+      expect(sent.filter((m) => m === 'Page.getFrameTree')).toHaveLength(2)
+    },
+  )
+
+  it('takes a navigation that reports no loader as committed', async () => {
+    const { send: scripted } = chrome(
+      ladder({ ready: [true], here: ['/'], boot: ['booted'] }),
+      { frameLoader: () => 'L1' },
+    )
+    const send = async (method, params) =>
+      method === 'Page.navigate' ? {} : scripted(method, params)
+    const p = page()
+    await boot(send, { force: true }, p)
+    expect(p.notes).toEqual(['renderer ready in 0.5 s'])
+  })
 })
 
 describe('clearStorage', () => {

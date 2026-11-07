@@ -117,10 +117,13 @@ export async function boot(send, { force }, page) {
   const started = now()
   for (let i = 0; ; i += 1) {
     await sleep(500)
-    // navigate acknowledges before the new document commits. The old page's
-    // readyState can still be complete, so match the navigation's loader first.
+    // navigate acknowledges before the new document commits, and until then
+    // every probe answers for the page being left: its readyState is complete,
+    // and a booted one reads `booted`. `--reload` leaves a booted page, and so
+    // does any `--keep-storage` run that navigates, `--fresh` or onto another
+    // URL, because neither takes clearStorage's about:blank hop. So both modes
+    // match the navigation's loader first.
     const committed =
-      !document ||
       navigation.loaderId === undefined ||
       (await send('Page.getFrameTree')).frameTree.frame.loaderId ===
         navigation.loaderId
