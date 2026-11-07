@@ -38,6 +38,34 @@ export const LABEL_DENSITIES: readonly LabelDensity[] = [
  */
 export const isLabelDensity = oneOf(LABEL_DENSITIES)
 
+/**
+ * Which spacecraft take a name.
+ *
+ * A switch of its own, as minor bodies are, because the question is different
+ * from density: a station is a hundred meters across and the sky it hangs in
+ * is a planet's, so naming every one in view is a list of hardware over a
+ * world. `nearby` is the subject's own, what goes round it, the companion it is
+ * tracked against, and anything inside the near field of the eye; `off` names
+ * none but the subject, which keeps its name whatever this says.
+ */
+export type SpacecraftScope = 'nearby' | 'all' | 'off'
+
+export const SPACECRAFT_SCOPES: readonly SpacecraftScope[] = [
+  'nearby',
+  'all',
+  'off',
+]
+
+export const SPACECRAFT_SCOPE_LABELS: Readonly<
+  Record<SpacecraftScope, string>
+> = {
+  nearby: 'Nearby',
+  all: 'All',
+  off: 'Off',
+}
+
+export const isSpacecraftScope = oneOf(SPACECRAFT_SCOPES)
+
 /** See `engine/presentation.ts` § `OrbitScope` for what the two mean. */
 export const ORBIT_SCOPES: readonly OrbitScope[] = ['context', 'all']
 

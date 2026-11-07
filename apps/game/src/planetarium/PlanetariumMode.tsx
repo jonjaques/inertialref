@@ -23,6 +23,7 @@ import {
   PLANETARIUM_FLARE,
   PLANETARIUM_LABEL_DENSITY,
   PLANETARIUM_LABEL_MINOR,
+  PLANETARIUM_LABEL_SPACECRAFT,
   PLANETARIUM_LABELS,
   PLANETARIUM_ORBIT_SCOPE,
   PLANETARIUM_ORBITS,
@@ -43,7 +44,7 @@ import { timeCommands } from '../hud/time.ts'
 import { DropHandle } from './DropHandle.tsx'
 import { acceptsRow } from './kinds.ts'
 import { stepTarget } from './navigator.ts'
-import { pick, PICK_SLOP } from './pick.ts'
+import { clickable, pick, PICK_SLOP } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
 import { useObserverInput } from './useObserverInput.ts'
@@ -103,6 +104,17 @@ export function PlanetariumMode({
   const [labelMinor, setLabelMinor] = usePersistentState(
     PLANETARIUM_LABEL_MINOR,
   )
+  const [labelSpacecraft, setLabelSpacecraft] = usePersistentState(
+    PLANETARIUM_LABEL_SPACECRAFT,
+  )
+  // The companion a subject is tracked against keeps its name under the
+  // spacecraft switch's `nearby`, as the subject does.
+  const companion = useEngine(
+    (snapshot) => snapshot.observer?.tracking?.address ?? null,
+  )
+  // What the label layer last put on the sky, for the pick filter. See
+  // `clickable`.
+  const named = useRef<ReadonlySet<string>>(new Set())
   const [orbitScope, setOrbitScope] = usePersistentState(
     PLANETARIUM_ORBIT_SCOPE,
   )
@@ -314,6 +326,8 @@ export function PlanetariumMode({
     onLabelDensity: setLabelDensity,
     labelMinor,
     onLabelMinor: setLabelMinor,
+    labelSpacecraft,
+    onLabelSpacecraft: setLabelSpacecraft,
     orbits,
     onOrbits: setOrbits,
     orbitScope,
@@ -357,7 +371,7 @@ export function PlanetariumMode({
           view.camera as PerspectiveCamera,
           size,
           engine.lens,
-        ),
+        ).filter((candidate) => clickable(candidate, named.current)),
         point,
       )
       if (hit !== null) focus(hit.address)
@@ -469,7 +483,10 @@ export function PlanetariumMode({
         enabled={drawLabels}
         density={labelDensity}
         minor={labelMinor}
+        spacecraft={labelSpacecraft}
         target={target}
+        companion={companion}
+        named={named}
       />
 
       {/* Somewhere to stand, and the arc that says where. Chrome, so the plate

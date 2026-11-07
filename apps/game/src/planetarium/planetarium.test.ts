@@ -13,7 +13,14 @@ import {
   spread,
   wheelNotches,
 } from './gestures.ts'
-import { declutter, pick, PICK_SLOP, type PickCandidate } from './pick.ts'
+import {
+  clickable,
+  declutter,
+  declutterTiers,
+  pick,
+  PICK_SLOP,
+  type PickCandidate,
+} from './pick.ts'
 
 /*
  * The two halves of the planetarium that are not the camera: what an input
@@ -27,6 +34,7 @@ const candidate = (
 ): PickCandidate => ({
   name: over.address,
   kind: 'rocky',
+  craft: null,
   x: 0,
   y: 0,
   radius: 0,
@@ -294,8 +302,86 @@ describe('picking', () => {
   })
 })
 
+describe('what a click may land on', () => {
+  const craft = (drawn: boolean) =>
+    candidate({
+      address: 'iss',
+      kind: 'station',
+      x: 505,
+      y: 500,
+      craft: { parent: 'earth', near: false, drawn },
+    })
+
+  it('takes a spacecraft only while its model is drawn or its name is up', () => {
+    expect(clickable(craft(true), new Set())).toBe(true)
+    expect(clickable(craft(false), new Set())).toBe(false)
+    expect(clickable(craft(false), new Set(['iss']))).toBe(true)
+    // A body below a pixel is still drawn as a point, so rubble stays
+    // clickable whatever the label switches say.
+    expect(
+      clickable(candidate({ address: 'bennu', kind: 'asteroid' }), new Set()),
+    ).toBe(true)
+  })
+
+  it('selects nothing for a click on empty sky beside an undrawn station', () => {
+    // The station below the point tier, five pixels from the click and
+    // unnamed: nothing on screen is there, so nothing is picked.
+    const earth = candidate({ address: 'earth', x: 100, y: 100, radius: 20 })
+    const candidates = [earth, craft(false)].filter((one) =>
+      clickable(one, new Set()),
+    )
+    expect(pick(candidates, { x: 500, y: 500 })).toBeNull()
+    expect(pick([earth, craft(true)], { x: 500, y: 500 })?.address).toBe('iss')
+  })
+})
+
 describe('label decluttering', () => {
   const spacing = { x: 90, y: 16 }
+
+  it('never lets a later tier take an earlier tier’s slot', () => {
+    // The planet's name is placed before the stations' wherever it falls in
+    // its own tier, and a tier spends no more than its own cap.
+    const kept = declutterTiers(
+      [
+        { labels: [{ x: 100, y: 100, id: 'planet' }], cap: Infinity },
+        {
+          labels: [
+            { x: 110, y: 102, id: 'on-the-planet' },
+            { x: 400, y: 100, id: 'one' },
+            { x: 700, y: 100, id: 'two' },
+            { x: 1000, y: 100, id: 'three' },
+          ],
+          cap: 2,
+        },
+      ],
+      spacing,
+      10,
+    )
+    expect(kept.map((label) => label.id)).toEqual(['planet', 'one', 'two'])
+    // And every tier together spends no more than the shared limit.
+    expect(
+      declutterTiers(
+        [
+          {
+            labels: [
+              { x: 0, y: 0 },
+              { x: 200, y: 0 },
+            ],
+            cap: Infinity,
+          },
+          {
+            labels: [
+              { x: 400, y: 0 },
+              { x: 600, y: 0 },
+            ],
+            cap: 2,
+          },
+        ],
+        spacing,
+        3,
+      ),
+    ).toHaveLength(3)
+  })
 
   it('keeps the first of an overlapping pair', () => {
     // Greedy in the caller's order, so the caller's ordering is the priority.

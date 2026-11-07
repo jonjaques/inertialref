@@ -1,3 +1,5 @@
+import type { ObjectKind } from '@inertialref/universe'
+
 /*
  * Choosing what a click meant.
  *
@@ -13,7 +15,7 @@ export interface PickCandidate {
   readonly address: string
   readonly name: string
   /**
-   * The body's class, or `star`.
+   * `star`, the body's class, or the placement's kind.
    *
    * Carried so the label layer can thin by *what a thing is* rather than only
    * by where it lands. Sol has ninety-two asteroids and comets and eighteen
@@ -23,7 +25,23 @@ export interface PickCandidate {
    * at a position, and refusing to select a rock because a switch is off would
    * make the sky lie about what is clickable.
    */
-  readonly kind: string
+  readonly kind: ObjectKind
+  /**
+   * What the spacecraft rules read, or null for a star or a natural body.
+   *
+   * A spacecraft is named nearby and clickable only where something of it is
+   * on screen (`names.ts`, `clickable`), and both rules need facts no body
+   * raises: what it goes round, whether the eye is inside the near field of
+   * it, and whether its model is drawn at all.
+   */
+  readonly craft: {
+    /** What it goes round, by the address the observatory resolves. */
+    readonly parent: string
+    /** Whether the eye is inside the uncompressed shell of it: 2,000 km. */
+    readonly near: boolean
+    /** Whether its model is drawn: near, and above the point tier. */
+    readonly drawn: boolean
+  } | null
   /** Screen position, CSS pixels, origin top-left. */
   readonly x: number
   readonly y: number
@@ -99,6 +117,22 @@ export function pick(
 }
 
 /**
+ * Whether a candidate may take a click at all.
+ *
+ * A spacecraft only while its model is drawn or its name is on the sky. A body
+ * below a pixel is still drawn as a point, which is why `pick` leaves rubble
+ * clickable; a station below the point tier draws nothing, and an empty-sky
+ * click beside Earth that selected it would be the sky lying the other way.
+ */
+export const clickable = (
+  candidate: PickCandidate,
+  named: ReadonlySet<string>,
+): boolean =>
+  candidate.craft === null ||
+  candidate.craft.drawn ||
+  named.has(candidate.address)
+
+/**
  * Whether two labels overlap enough that drawing both is worse than one.
  *
  * A planetarium draws a name against everything it can see, and in a system
@@ -129,11 +163,35 @@ export function declutter<T extends { readonly x: number; readonly y: number }>(
   spacing: { readonly x: number; readonly y: number },
   limit: number,
 ): T[] {
+  return declutterTiers([{ labels, cap: limit }], spacing, limit)
+}
+
+/**
+ * `declutter` in tiers, for names that may never take a slot from the ones
+ * before them.
+ *
+ * Each tier is placed after every tier before it, has to clear every name
+ * those kept, and spends at most its own `cap` of the shared `limit`. One
+ * greedy pass over the concatenation is the same order and the wrong rule: a
+ * cluster of spacecraft at a station would spend the budget the planet behind
+ * them was owed whenever the planet's name landed later in the list.
+ */
+export function declutterTiers<
+  T extends { readonly x: number; readonly y: number },
+>(
+  tiers: readonly { readonly labels: readonly T[]; readonly cap: number }[],
+  spacing: { readonly x: number; readonly y: number },
+  limit: number,
+): T[] {
   const kept: T[] = []
-  for (const label of labels) {
-    if (kept.length >= limit) break
-    if (kept.some((other) => collides(label, other, spacing))) continue
-    kept.push(label)
+  for (const tier of tiers) {
+    let spent = 0
+    for (const label of tier.labels) {
+      if (kept.length >= limit || spent >= tier.cap) break
+      if (kept.some((other) => collides(label, other, spacing))) continue
+      kept.push(label)
+      spent += 1
+    }
   }
   return kept
 }

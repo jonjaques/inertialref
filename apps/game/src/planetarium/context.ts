@@ -5,7 +5,7 @@ import type { Picture } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { TimeCommands } from '../hud/time.ts'
 import type { OrbitScope } from '../engine/presentation.ts'
-import type { LabelDensity } from './layers.ts'
+import type { LabelDensity, SpacecraftScope } from './layers.ts'
 
 /*
  * What every planetarium panel is handed.
@@ -43,6 +43,9 @@ export interface PlanetariumContext {
   /** Whether asteroids and comets are worth one of those slots. */
   readonly labelMinor: boolean
   readonly onLabelMinor: (on: boolean) => void
+  /** Which spacecraft are worth one: nearby, all, or none but the subject. */
+  readonly labelSpacecraft: SpacecraftScope
+  readonly onLabelSpacecraft: (scope: SpacecraftScope) => void
   readonly orbits: boolean
   readonly onOrbits: (on: boolean) => void
   /** The subject's context, or every orbit in the system. */
