@@ -239,6 +239,23 @@ three; they are here because they explain what it is doing:
 7. **`--serve` cannot start a dev server in a worktree that has never built** —
    `cf dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
    or build once. [development](../guides/development.md) § Commands.
+8. **The MacBook Air steps every figure up about 35% after about 3.5 minutes
+   of load.** It is fanless (Mac17,4, base M5). At the far-shore preset,
+   1600×900 at DPR 1, in Chrome 157 headless on the dev build, `ir.gpu` goes
+   from 10.2 ms to 13.4–15.3, settle from 12–18 s to 28–31 and boot from 5 s
+   to 7–8, and five idle minutes bring it back. Two cool sessions still
+   disagree by 8%, and `pmset` records no warning. Onset and recovery each rest
+   on one observation at that point, and the cause is inferred, because
+   `powermetrics` needs sudo. So compare base and candidate **interleaved in
+   one session** first. Idling five minutes between arms suits a short arm
+   only: a six-boot series or a thirteen-plate pass runs 3–6 minutes and
+   outlasts the onset. Name the thermal state of every figure: cool, or how
+   many minutes under load, and on the Mac mini
+   `notifyutil -g com.apple.system.thermalpressurelevel` before and after. The
+   fan-cooled Mac mini (Mac18,5, M6) held `ir.gpu` flat through 10.4 sustained
+   minutes at far-shore 1600×900@1 and 1440×900@2, thermal pressure 0
+   throughout, but that is one session at each window, so the rule holds there
+   too until repeated sessions give a between-session spread.
 
 Default readiness is `ir.status().boot`: `drawing` once a renderer exists,
 `booted` once the boot cover lifts. The bare harness appears seconds earlier,
@@ -314,6 +331,19 @@ suite's side.
 number below is a dev-build number; both are real and only one is about a
 player. `pnpm preview` on 8787 is the shipped one, and it is worth re-measuring
 anything that lands in a design document there.
+
+**Name the thermal state.** On the fanless MacBook Air a figure taken after a
+few minutes of load is a figure about a different machine; trap 8 above has the
+step and the rule.
+
+**A headless frame interval detects nothing under the 16.7 ms budget, and a
+CPU span is not a control for a GPU change.** Headless rAF is a fixed 60 Hz
+clock: a DPR change from 1 to 1.05 at far-shore on the Air raised `ir.gpu`
+6.5% across seven interleaved pairs and moved rAF p95 by 0.00 ms. The same
+change raised the CPU-only spans `Engine/snapshot` 28% and `Render/sensor`
+24%: on the Air's M5 the CPU spans move with GPU load. Read `ir.gpu`
+for a GPU question; a CPU span that moves beside a GPU change is not, by that
+alone, CPU work.
 
 **Name the operating point, and prefer two.** A figure measured at one is a
 figure about that point. The four that recur, all dev build, 1600×900 at DPR 1

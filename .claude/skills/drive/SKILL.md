@@ -399,6 +399,21 @@ handles the first three — they are here because they explain what it is doing.
     never a fixed one, or a standard-output frame is re-tagged as P3 — and Chrome writes the
     profile on export. `render.hdr` in `localStorage` (`ir.hud.render.hdr`, JSON) is what
     forces the other mode, and it is per Chrome profile, so it is per `--port`.
+12. **The MacBook Air steps every figure up about 35% after about 3.5 minutes of load.**
+    It is fanless (Mac17,4, base M5). At the far-shore preset, 1600×900 at DPR 1, in
+    Chrome 157 headless on the dev build, `ir.gpu` goes from 10.2 ms to 13.4–15.3, settle
+    from 12–18 s to 28–31 and boot from 5 s to 7–8, and five idle minutes bring it back.
+    Two cool sessions still disagree by 8%, and `pmset` records no warning. Onset and
+    recovery each rest on one observation at that point, and the cause is inferred,
+    because `powermetrics` needs sudo. So compare base and candidate **interleaved in one
+    session** first. Idling five minutes between arms suits a short arm only: a six-boot
+    series or a thirteen-plate pass runs 3–6 minutes and outlasts the onset. Name the
+    thermal state of every figure: cool, or how many minutes under load, and on the Mac
+    mini `notifyutil -g com.apple.system.thermalpressurelevel` before and after. The
+    fan-cooled Mac mini (Mac18,5, M6) held `ir.gpu` flat through 10.4 sustained minutes
+    at far-shore 1600×900@1 and 1440×900@2, thermal pressure 0 throughout, but that is
+    one session at each window, so the rule holds there too until repeated sessions give
+    a between-session spread.
 
 Readiness is `ir.status().boot` — `drawing` once a renderer exists, `booted` once the
 cover lifts — not the bare presence of `window.ir`, which appears seconds earlier, so a
@@ -430,7 +445,15 @@ settle, then measure. It cuts both ways: trap 6 is this seen from the test suite
 
 **Say which build**: dev React is ~5× shipped. **Name the operating point, and prefer
 two** — a figure measured at one is a figure about that point, which is the mistake that
-reached an ADR before an audit caught it.
+reached an ADR before an audit caught it. **Name the thermal state** too; trap 12 is why.
+
+**A headless frame interval detects nothing under the 16.7 ms budget, and a CPU span is
+not a control for a GPU change.** Headless rAF is a fixed 60 Hz clock: a DPR change from 1
+to 1.05 at far-shore on the Air raised `ir.gpu` 6.5% across seven interleaved pairs and
+moved rAF p95 by 0.00 ms. The same change raised the CPU-only spans `Engine/snapshot` 28%
+and `Render/sensor` 24%: on the Air's M5 the CPU spans move with GPU load. Read `ir.gpu`
+for a GPU question; a CPU span that moves beside a GPU change is not, by that alone, CPU
+work.
 
 **`?workers=N`** overrides the pool size (bounded at sixteen). It is how the ceiling in
 `engine/browserWorker.ts` was chosen: land, converge twenty seconds, and read `jobs/s`,
