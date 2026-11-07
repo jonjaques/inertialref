@@ -124,9 +124,9 @@ thing. A plate is a preset — an address, a framing, a lens and a held instant
   (rule 15), and nothing depends on what was evaluated first (rule 4). That is
   what lets a preset hold its weather, a scrub land on the right sky and two
   clients see the same one, for nothing. The caches between the field and the
-  frame — the maps, the volume, the shadow, the history — may lag it: after a
-  cut or a scrub they rebuild, and under warp they may run behind, because a
-  picture at 100,000× is a time-lapse, not a measurement.
+  frame — the maps, the volume, the shadow, the history, the wetness — may lag
+  it: after a cut or a scrub they rebuild, and under warp they may run behind,
+  because a picture at 100,000× is a time-lapse, not a measurement.
 - **Nothing in the weather is canonical.** It enters no hash and spends no
   version; like a haze, it rides along (ADR-0027). If wind or lightning ever
   acts on a ship, the CPU form of that one quantity becomes canonical then,
@@ -158,9 +158,14 @@ thing. A plate is a preset — an address, a framing, a lens and a held instant
   clear and half at optical depth 20 lets half the light through; the same
   water spread evenly, τ 10, lets through 0.0045% of it. Anything that stands
   for unresolved cloud — a coarse level, a far texel, a fine scale faded under
-  warp — carries a cloud fraction and an in-cloud optical depth and mixes
-  transmittances, `T = (1 − c) + c·e^(−τ)`, as climate models do under the
-  independent column approximation.
+  warp — carries a cloud fraction and an in-cloud optical depth, and mixes
+  once per represented layer. Within a layer a ray is in the cloudy fraction
+  or out of it for its whole crossing, so its in-cloud depth accumulates
+  across steps and mixes at the layer's exit, `T = (1 − c) + c·e^(−τ_in)`;
+  between layers the overlap is random and the transmittances multiply. Mixed
+  at every step instead, a half-clear layer at τ 20 crossed in two steps lets
+  through 0.25 rather than 0.5. This is the maximum-random overlap of climate
+  models.
 - **Fields are sums, never a nearest.** A cyclone, a cell or a front
   contributes through a kernel that reaches zero inside its margin, and a
   sample sums every contributor in reach (rule 11). A cellular noise's
@@ -211,9 +216,10 @@ decommissioned in September 2026
 Level 3 (CC0) is the alternate.
 
 ISCCP sees each column from above, so a type under higher cover is
-undercounted. The field takes random overlap between the three levels: a
-type seen at `c_seen` under cover `c_above` stands at
-`c_seen / (1 − c_above)`.
+undercounted. Between the three levels the overlap is random (§3): a type
+seen at `c_seen` under cover `c_above` stands at `c_seen / (1 − c_above)`.
+Where `c_above` passes 0.9 — the Southern Ocean overcast — that ratio
+diverges and the lower level takes its zonal mean for the month instead.
 
 The diurnal phase is measured too. Rain over land peaks at 15–18 local solar
 time and over open ocean at 06–09
@@ -317,20 +323,28 @@ in four with its onset in Ls 185–315
 measured τ past 10.7 in 2018. The air's tables bake a haze's dust as a
 constant, so a storm is extra dust in the volume — albedo 0.70–0.95, radii
 1.4–1.8 µm ([Wolff](https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2009JE003350))
-— over the haze the tables carry. Dust devils at Gusev are 2–276 m wide
-([Greeley 2006](https://doi.org/10.1029/2006je002743)), each an analytic
-column.
+— over the haze the tables carry, scattering through its own phase class
+(§5.3).
 
 ### 4.8 The maps, and what feeds them
 
 The field is evaluated into maps the GPU reads, never per sample. A
-cube-sphere weather map over the whole body carries synoptic coverage —
-three levels' cloud fraction and in-cloud optical depth, genus weights, base
-and top heights, rain rate and wind — and a clipmap of the same quantities is
-centered under the eye, finer by levels, so the field a walker stands under
-and the one a pilot sees from orbit are one function at two resolutions. A
-level fades across its boundary as a terrain patch morphs into its parent.
-Cells a kilometer across are the noise's, not a map's.
+cube-sphere weather map over the whole body carries synoptic coverage, and a
+clipmap of the same quantities is centered under the eye, finer by levels, so
+the field a walker stands under and the one a pilot sees from orbit are one
+function at two resolutions. A level fades across its boundary as a terrain
+patch morphs into its parent. Cells a kilometer across are the noise's, not a
+map's.
+
+Each holds twelve quantities in three RGBA8 textures: the three levels' cloud
+fraction and in-cloud optical depth, log-encoded; the low level's convective
+share and the high level's ice share; the rain rate and the deep-convection
+rate; and the wind's two components. A level's base and top derive from its
+genus and the climate and are not stored. The clipmap carries a fourth
+texture for the ground's wetness (§7.3). The far atlas holds each of three
+layers' fraction, in-cloud depth, base and top in one RGBA8, its heights
+quantized over that level's own range; the local volume holds in-cloud
+density and cloud fraction (§3) in RG8.
 
 The terrain feeds the maps: elevation and its slope against the wind give
 cloud on the windward side, clearing in the lee and a lenticular over a peak,
@@ -339,18 +353,18 @@ cloud is that rule on Mars.
 
 The sizes are targets; phase 0 measures them.
 
-| Resource                   | Size                             | A texel on Earth | Memory  | Refresh                                           |
-| -------------------------- | -------------------------------- | ---------------- | ------- | ------------------------------------------------- |
-| Weather cube               | 6 × 512², two RGBA8              | 19.5 km          | 12.6 MB | As `t` moves a texel; a face a frame after a jump |
-| Clipmap                    | 6 levels × 256², two RGBA8       | 250 m to 8 km    | 3.1 MB  | Toroidally, by what the eye's footprint crosses   |
-| Far atlas (§5.4)           | 6 × 256², three layers           | 39 km            | 4.7 MB  | Progressively                                     |
-| Local volume (§5.2)        | 3 levels × 256² × 32, R8         | 50 m to 800 m    | 6.3 MB  | Progressively, by level                           |
-| Sun's optical depth (§6.1) | 3 × 512² RGBA16F, or a grid      | —                | 6.3 MB  | A slice a frame                                   |
-| Reflection cache (§6.5)    | 256² octahedral RGBA16F          | —                | 0.5 MB  | Progressively                                     |
-| History and trace          | ½ RGBA16F + RG16F twice; ¼ trace | —                | 14 MB   | Every frame                                       |
-| Noise                      | 128³ and 32³ R8                  | —                | 2 MiB   | Once, at boot                                     |
+| Resource                       | Size                                      | A texel on Earth | Memory  | Refresh                                           |
+| ------------------------------ | ----------------------------------------- | ---------------- | ------- | ------------------------------------------------- |
+| Weather cube                   | 6 × 512², three RGBA8                     | 19.5 km          | 18.9 MB | As `t` moves a texel; a face a frame after a jump |
+| Clipmap                        | 6 levels × 256², four RGBA8               | 250 m to 8 km    | 6.3 MB  | Toroidally, by what the eye's footprint crosses   |
+| Far atlas (§5.4)               | 6 × 256², three layers of RGBA8           | 39 km            | 4.7 MB  | Progressively                                     |
+| Local volume (§5.2)            | 3 levels × 256² × 32, RG8                 | 50 m to 800 m    | 12.6 MB | Progressively, by level                           |
+| Sun's optical depth (§6.1)     | 3 × 512² RGBA16F, or a grid               | —                | 6.3 MB  | A slice a frame                                   |
+| Reflection probe (§6.5)        | 256² octahedral RGBA16F                   | —                | 0.5 MB  | Progressively                                     |
+| History, trace and depth curve | ½ RGBA16F + RG16F twice; ¼ trace; ½ curve | —                | 18 MB   | Every frame                                       |
+| Noise                          | 128³ and 32³ R8                           | —                | 2 MiB   | Once, at boot                                     |
 
-About 50 MB at 1080p. Under an eye moving 8 km/s in orbit, the finest clipmap
+About 70 MB at 1080p. Under an eye moving 8 km/s in orbit, the finest clipmap
 level, 64 km across in 250 m texels, rewrites about half a column a frame.
 
 ---
@@ -426,14 +440,11 @@ fill it — and nothing large ships.
   faster under a temporal filter than a Bayer phase or a hash
   ([Wolfe 2022](https://research.nvidia.com/publication/2022-07_spatiotemporal-blue-noise-masks)).
 - **A step's light is its integral** over constant density,
-  `(1 − e^(−σΔ))/σ`, as the air's is (ADR-0056). The exponential of a
-  jittered optical-depth estimate overestimates transmittance; Peters'
-  jackknife estimator reduces that bias, but it wants two independent
-  estimates and handles signed ones
-  ([2025](https://momentsingraphics.de/SiggraphAsia2025.html)), so it is a
-  phase 0 experiment against the march's own convergence, not a drop-in.
+  `(1 − e^(−σΔ))/σ`, as the air's is (ADR-0056). A layer's partial cover
+  mixes once at the layer's exit (§3), and a GPU test holds a layer's
+  transmittance unchanged as its steps are split.
 - **Detail fades by footprint**, to a cloud fraction and an in-cloud depth
-  rather than to a mean density (§3).
+  rather than to a mean density.
 - **Every read inside the loop names its level.** three turns WGSL's
   derivative-uniformity check off outside Firefox, so a plain `sample()` in a
   loop compiles on Chrome with an undefined result. `.level(0)`, held by a GPU
@@ -445,54 +456,64 @@ fill it — and nothing large ships.
   sample's altitude (`sunThrough`) and through the cloud: two to four light
   taps over the first kilometer, and the sun's optical depth (§6.1) past
   them.
-- **First-order scattering reads Mie.** The angle between the sun and the
-  view is fixed along a ray; the droplets are not. So the march accumulates
+- **First-order scattering reads Mie.** The reference evaluates the phase at
+  every sample, at that sample's own radius. The shortcut uses the angle
+  between the sun and the view, which is fixed along a ray: it accumulates
   first-order light without its phase, per class of scatterer — cloud
-  droplets, rain — together with each class's transmittance-weighted
-  effective radius, and the end of the ray fetches each class's phase once,
-  at that radius. The table is Lorenz–Mie over angle, effective radius and
-  the size distribution's width — the glory and the corona survive only a
-  narrow distribution — convolved with the star's disk at its own angular
-  radius: 0.53° from Earth, 0.35° from Mars, whatever a generated world's sun
-  subtends. Rain's entry, at a size parameter near 6,000, is geometric optics
-  with Airy's correction rather than a Mie series. The table carries the
-  forward peak and the silver lining, and the cloudbow, fogbow, glory and
-  corona with them (§8.1). Jendersie and d'Eon's HG–Draine blend matches the
-  forward half of the Mie phase function, 95% of its energy, and "fails to
-  produce the weak back-scattering peaks that lead to fogbow and glory
-  features" (their §2,
+  droplets, ice, rain, and on Mars dust — weighted by each sample's
+  scattering and the light reaching it, beside that light's mean effective
+  radius, and fetches each class's phase once at the end of the ray. A mean
+  radius draws a sharper glory than a mix of radii does, an error toward the
+  crisp case photographs record; phase 1 accepts the shortcut against
+  mixed-radius cases, and a few radius bins per class are its fallback.
+- **The tables.** The droplets' is Lorenz–Mie over angle and effective
+  radius, at a fixed distribution width per class — the glory and the corona
+  survive only a narrow one — convolved with the star's disk at its own
+  angular diameter: 0.53° from Earth, 0.35° from Mars, whatever a generated
+  world's sun subtends. Ice is a severely roughened aggregate's bulk phase by
+  effective diameter
+  ([Baum 2014](https://doi.org/10.1016/j.jqsrt.2014.02.029)), which carries
+  no halos; rain's, at a size parameter near 6,000, is geometric optics with
+  Airy's correction rather than a Mie series. Together they carry the forward
+  peak and the silver lining, and the cloudbow, fogbow, glory and corona with
+  them (§8.1). Jendersie and d'Eon's HG–Draine blend matches the forward half
+  of the Mie phase function, 95% of its energy, and "fails to produce the
+  weak back-scattering peaks that lead to fogbow and glory features" (their
+  §2,
   [2023](https://research.nvidia.com/labs/rtr/approximate-mie/publications/approximate-mie.pdf)).
-  The table is computed offline and committed as generated data, as the sky's
-  calibration is.
+  The tables are computed offline and committed as generated data, as the
+  sky's calibration is.
 - **Higher orders are a measured choice.** Wrenninge's octaves scale
   extinction, scattering and anisotropy by `aⁱ`, `bⁱ` and `cⁱ`
   ([2013](https://fpsunflower.github.io/ckulla/data/oz_volumes.pdf)), and
   their sum does not conserve energy: a thin wisp gains `Σbⁱ`, 1.5 times its
-  light at two octaves. So they are fitted to the slab reference of phase 0,
+  light at two octaves. So they are fitted to the slab reference of phase 1,
   with no octave's contribution above its attenuation
   ([Frostbite](https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/s2016_pbs_frostbite_sky_clouds.pdf)).
   The alternative is that reference itself as the renderer's term: slab
   transport tabulated by optical depth and the sun's and the view's cosines
   ([Bouthors 2008](https://hal.archives-ouvertes.fr/inria-00333007)), which
-  is more physical wherever a cloud is a slab. Phase 0 decides, and a deck may
-  take one where a cumulus takes the other. The octaves carry the HG–Draine
-  blend.
+  is more physical wherever a cloud is a slab. A deck may take one where a
+  cumulus takes the other. The octaves carry the HG–Draine blend.
 - **The dark edge is a photograph's, and may be declared.** Where a fitted
   transport leaves a cumulus's sunward edges as bright as its core, against
   every photograph of one, a declared term may darken them, judged against
   photographs.
 - **The sky lights the cloud** through an irradiance table baked beside Ψ —
-  sky irradiance by height and sun — occluded by the column over the sample.
-  The ground under it lights the base with its own albedo and irradiance,
-  occluded by the column below. The same table is what the ground's skylight
-  wants (§6.2).
-- **The moon is a second beam.** Its irradiance by phase — about 0.25 lx at
-  full, three orders over airglow — through the same transmittance table at
-  the moon's direction, in the march's light and the ground's, the sea's and
-  the sphere's alike (rule 59). Under it the clouds take two light taps and
-  no second shadow; the ground takes the cloud column's transmittance from
-  the far atlas. Beside it, a city lights a cloud's base from below (§6.6),
-  and lightning lights a cloud from inside (§7.4).
+  sky irradiance by height and sun — occluded by the column over the sample:
+  the clipmap's near the eye and the far atlas's beyond, per layer above the
+  sample. The ground under it lights the base with its own albedo and
+  irradiance, occluded by the column below. The same table is what the
+  ground's skylight wants (§6.2).
+- **The moon is a second beam**, with first-order accumulators of its own per
+  class at its own phase angle — one more fetch per class a ray. Its
+  irradiance by phase is about 0.25 lx at full, three orders over airglow,
+  through the same transmittance table at the moon's direction, in the
+  march's light and the ground's, the sea's and the sphere's alike
+  (rule 59). Under it the clouds take two light taps and no second shadow,
+  and the ground takes the cloud column's transmittance, from the clipmap
+  near and the far atlas beyond. Beside it, a city lights a cloud's base from
+  below (§6.6), and lightning lights a cloud from inside (§7.4).
 
 ### 5.4 The far field is a coarse march
 
@@ -503,14 +524,15 @@ field is therefore a coarser march of the same field, not a lookup.
 
 The candidate is a three-layer atlas, a cube-sphere of texels baked
 progressively from the field: for each of the low, middle and high levels, a
-base and a top height, a cloud fraction and an in-cloud optical depth, and the
-mean and mean square of the visible depth, so a texel occludes terrain partly
-rather than at one depth (Ghost of Yōtei's depth moments,
-[2025](https://blog.playstation.com/2025/10/23/ghost-of-yotei-tech-deep-dive/)).
-A far ray marches the atlas as slabs, mixing each layer's transmittance by its
-fraction. The two alternatives are the local volume's coarse levels carried
-out to the planet, and density and light cached on spheres at the layers'
-heights
+base and a top height, a cloud fraction and an in-cloud optical depth. A far
+ray marches the atlas as slabs, mixing each layer's transmittance by its
+fraction once per layer (§3), and accumulates along itself the mean and mean
+square of its visible depth, so the composite occludes terrain by a
+distribution of depths rather than one. Those are Ghost of Yōtei's depth
+moments, and they are a camera ray's, not a column's
+([2025](https://blog.playstation.com/2025/10/23/ghost-of-yotei-tech-deep-dive/)).
+The two alternatives are the local volume's coarse levels carried out to the
+planet, and density and light cached on spheres at the layers' heights
 ([Weinrauch 2023](https://diglib.eg.org/items/2668054e-618d-4fb8-bbf7-d079a3ed4e75)).
 Phase 0 chooses with the cases a slab test cannot see: cirrus over cumulus,
 broken cumulus, an anvil, and a grazing ray at sunset, each drawn by the fine
@@ -518,9 +540,10 @@ march and by the far one at the handover footprint.
 
 The two cross-fade by pixel footprint, with hysteresis, and never by
 altitude, so a zoom and a descent cross one band by one rule. Baking the far
-representation from the volume rather than authoring it beside the volume is
-what lets the two agree — the art direction's third continuity item. The
-sphere's cloud material, the deck mesh and the 0.4% lift retire with the map.
+representation from the field the march reads, rather than authoring it beside
+the volume, is what lets the two agree — the art direction's third continuity
+item. The deck mesh, its map and the 0.4% lift retire, and the sphere's cloud
+material becomes the far march for a body the trace does not serve (§5.5).
 
 ### 5.5 Temporal reconstruction
 
@@ -547,11 +570,11 @@ The template is `GalaxyTemporalVolume`, plus what a cloud adds.
   half-resolution pixel traced at fewer steps for the same budget, after a
   cut, a scrub, a resize, a jump in presentation time, or once the camera or
   the wind moves a sample farther than the history can follow. A lightning
-  flash is added in the composite, outside the history, so a stroke does not
+  flash is lit in the composite, outside the history, so a stroke does not
   land on a quarter of the pixels.
 - **One body's volume a frame.** The trace serves the body the eye is in, or
   the largest by footprint; any other clouded body in the frame draws its far
-  atlas in its sphere material.
+  march in its sphere material.
 - **Convergence is part of settling.** `pictureEpoch` resets the history,
   and `ir.settled()` waits out its phases, the shadow's slices and the cache
   levels in view before a plate is taken.
@@ -564,45 +587,60 @@ enters cloud to where the scene's depth or the layer's top stops it — and
 inside it integrates the air and the cloud together. With `T_c` the cloud's
 transmittance over the span, `L_j` the light the air and the cloud scatter
 together inside it, and `L_a(0, t)` the air's own light from the eye to `t`,
-through the tables every surface reads, the result is
+the result is
 
 ```
 out = T_c · scene  +  L_a(0, t₀)  +  T_a(0, t₀) · L_j  −  T_c · L_a(0, t₁)
 ```
 
-— exact for any cloud inside the span, with no division. Its limit as the
-span shrinks to one depth is the thin-layer form,
-`T_c·scene + T_a1·L_c + (1 − T_c)·L_a1`. The joint march carries the air's
-light inside the span at a coarser step than the cloud's; phase 0 measures the
-thin form's error against the joint one on a near cloud, a lit gap and a far
-cloud in one frame, at sunset and in fog, and the thin form is used only
-where the measurement allows it. Near the eye the trace stops at each
+exact for any cloud inside the span, with no division, on two conditions.
+The air in the formula is the air the scene already carries: the surfaces'
+own march (`marchAir`) to `t₁`, split at `t₀`, through the same tables and
+the same cloud taps (§6.3), with a quadrature residual against each surface's
+four-sample march that phase 0 measures on the scene as built. And the
+scene's transmittance is the air's: under Enhanced from orbit a surface takes
+`clearedFromOrbit`, which mixes its transmittance toward one, so there the
+identity holds approximately, and phase 0 bounds it with Enhanced on. Its
+limit as the span shrinks to one depth is the thin-layer form,
+`T_c·scene + T_a1·L_c + (1 − T_c)·L_a1`; the thin form is used only where
+phase 0's measurement — a near cloud, a lit gap and a far cloud in one frame,
+at sunset and in fog — allows it. Near the eye the trace stops at each
 low-resolution pixel's own scene depth and the upsample takes the
-nearest-depth sample, so a hull ten meters off inside a cloud is veiled by ten
-meters of it, not by the deck's average.
+nearest-depth sample, so a hull ten meters off inside a cloud is veiled by
+ten meters of it, not by the deck's average.
 
 The composite comes after everything a cloud can stand in front of — the
 ground, the sea, the sphere, the shell, the sun's disk — and before the
-overlays. The sea is transparent and draws after every opaque
-(`render/water.ts`), and `SeaFrameNode` copies the frame before it, so a
-composite at the sea's split would paint the sea over the clouds. The
-composite needs a split of its own after the sea, or two scene passes. On a
-tiled GPU each split stores and reloads every sample of every attachment
-(`render/seaReflection.ts`), and phase 0 measures both forms at both display
-sizes. The sea writes the depth the trace stops at, or the trace clips at the
-sheet.
+overlays. The sea is transparent and draws after every opaque, and it writes
+the depth the trace stops at (`render/water.ts`). The sea's split is a copy,
+not a hook: `SeaFrameNode` reaches the backend's encoder to copy the frame
+mid-pass (`render/seaReflection.ts`), and three's `PassNode` exposes no point
+at which a trace, a history and a composite could run between the sea and the
+world's transparency. So the two candidates are two scene passes —
+everything a cloud can stand in front of, then the overlays over the
+composite — and a hand-rolled sequence that ends the pass after the sea, runs
+the cloud passes and resumes it. On a tiled GPU each split stores and reloads
+every sample of every attachment, and phase 0 measures both forms at both
+display sizes.
 
 What draws after the composite splits in two. Instruments, the flare and other
 lens effects read nothing. World transparency — rings, plumes, entry traces,
-near rain — reads the cloud's transmittance to its own depth from the trace's
-span, so a plume inside a cloud is dimmed by the cloud in front of it.
+near rain — needs the cloud's transmittance to its own depth, which the span's
+total and its two ends cannot give through two clouds with clear air between
+them. So the trace writes a short curve of transmittance by depth per
+reconstructed pixel, a few knots, and the light in front of a depth is taken
+as that depth's share of the span's opacity. An additive plume is dimmed by
+the transmittance in front of it; an alpha-blended ring is blended under the
+in-scattered light in front of it, which its blend must not darken. Phase 0
+puts a transparent object between two cloud layers.
 
 Under temporal FSR the composite runs at render resolution before the
 upscaler and writes the cloud's opacity into `reactive`, where ADR-0044 puts
-the deck's alpha. Where the cloud dominates — `T_c` under a half — it writes
-the cloud's own motion, the camera's with the body's turn and the wind's, into
-`velocity`, which otherwise carries the ground's. Under Enhanced from orbit,
-the air in front of a cloud takes `clearedFromOrbit` as a surface's does.
+the deck's alpha. It blends the cloud's own motion — the camera's with the
+body's turn and the wind's — into `velocity` by the cloud's opacity, with no
+threshold for an edge to flip across from frame to frame. Under Enhanced from
+orbit, the air in front of a cloud takes `clearedFromOrbit` as a surface's
+does.
 
 ---
 
@@ -617,14 +655,15 @@ optical depth along the sun's ray — UE5's Beer shadow map
 — centered on the eye's footprint, scrolled as it moves and refreshed a slice
 a frame. Or a grid around the eye holding the optical depth toward the sun,
 summed through the local volume: Nubis³ reports 0.1–0.2 ms every eight frames
-for its grid and 40% off its render time. takram's cascades are three 512²
-maps marched 50 steps every frame, and the reason not to draw them whole: an
-alpha WebGPU port of takram's clouds
-([John Fewell's three-clouds-webgpu](https://sloptoronto.ca/CREDITS.md))
-reports them at about 3.7 ms on an Apple GPU, and about 7 ms of an 11 ms frame
-at 720p, both unverified here. Past the last cascade or the grid, the far
-atlas carries the sun's transmittance. Under warp the shadow may lag the
-clouds it falls from.
+for its grid and 40% off its render time. takram marches its cascades every
+frame, three of them, 512² at its defaults, and that is the reason not to
+draw them whole: an alpha WebGPU port's own benchmarks put the WebGL
+original's shadow pass at 3.8–4.7 ms of an 8.3 ms frame at 1280×720 on an M4
+Mac mini under Chrome 154, and the port's at 6.5–8.0 ms of 11.4, figures the
+file asks to be re-measured rather than extrapolated
+([three-clouds-webgpu, `docs/BENCHMARKS.md`](https://github.com/johnfewell/three-clouds-webgpu/blob/main/docs/BENCHMARKS.md)).
+Past the last cascade or the grid, the far atlas carries the sun's
+transmittance. Under warp the shadow may lag the clouds it falls from.
 
 One function reads it, `cloudSunlight(point)`, and the ground, the sea and
 the sphere call it alike (rule 59), as do the hull's key light, the march's
@@ -642,7 +681,7 @@ two-stream form that carries the sun's cosine (delta-Eddington,
 because a low sun reflects more off a deck than a high one; and the light the
 ground returns to the base and the base sends back, `1/(1 − A·R_base)`, which
 is what brightens an overcast over snow. The deck's optical depth over a
-point is the far atlas's column.
+point is the column's — the clipmap's near the eye, the far atlas's beyond.
 
 The oracle is a seeded Monte Carlo column in Node — the air's gas and aerosol,
 a deck, a ground of chosen albedo — at three sun elevations and two albedos.
@@ -660,10 +699,13 @@ and the deep sky read from one zenith under the eye
 The air's light has two halves, and a cloud dims both. Each sample of
 `marchAir` multiplies its single-scattered sun by `cloudSunlight` at the
 sample, and its multiple-scattered light, Ψ — baked for a clear sky — by the
-column's diffuse transmittance there. Dimming only the first leaves the air
-under a storm bright and washes the shafts out. That is the dark air under a
-storm, crepuscular rays through gaps, and a towering cumulus's shadow laid
-across the twilight sky.
+diffuse transmittance of the column above the sample, the clipmap's near the
+eye and the atlas's beyond. Dimming only the first leaves the air under a
+storm bright and washes the shafts out. That is the dark air under a storm,
+crepuscular rays through gaps, and a towering cumulus's shadow laid across
+the twilight sky. The composite's air takes the identical taps (§5.6), or its
+subtraction leaves the shadowed air's residual as a band around every cloud;
+a GPU test holds the two to one value.
 
 The taps are cheap and not free: four per terrain fragment, on a Retina ground
 that already misses vsync, and phase 2 measures them A/B. Jittered per pixel
@@ -688,13 +730,17 @@ composite.
 
 ### 6.5 What the sea reflects
 
-The sea and a wet ground reflect a sky with weather in it. A directional cache
-around the eye — an octahedral map of the clouds' radiance and transmittance,
-refreshed progressively from the far atlas — stands in front of the air's sky
-in `render/water.ts`'s reflected term, read along the reflected ray, so a sea
-under an overcast is the deck's gray and a lake under broken cloud holds the
-clouds. A GPU test holds the reflected deck and the deck the trace draws to
-one radiance, and the overcast-over-water picture is its plate.
+The sea and a wet ground reflect a sky with weather in it, by two reads. Near
+the eye a probe — an octahedral map of the clouds' radiance and
+transmittance, marched from the eye through the clipmap and refreshed
+progressively — stands in front of the air's sky in `render/water.ts`'s
+reflected term. From orbit and far off, where one center is wrong — the reason
+§13 declines a cached dome — the reflected ray reads the far atlas where it
+crosses the cloud layer, which keeps the parallax a probe would lose. A sea
+under an overcast is the deck's gray, and a lake under broken cloud holds the
+nearer clouds at the clipmap's resolution. A GPU test holds the reflected deck
+and the deck the trace draws to one radiance, and the overcast-over-water
+picture is its plate.
 
 ### 6.6 Night
 
@@ -756,11 +802,12 @@ sand, from 15% to 7.5–9% for clay soil and from 35% to 15–25% for concrete
 ([1956](https://journals.ametsoc.org/downloadpdf/view/journals/bams/37/4/1520-0477-37_4_142.pdf)).
 Puddles take F0 = 0.02 and a flat normal in the terrain's concavities below a
 flood level, with ripples while it rains, and reflect the clouds through §6.5.
-Wetness is the rain's own history in closed form,
-`W(t) = ∫ R(t′)·e^(−(t−t′)/τ) dt′`, sampled from the weather at a few past
-instants with a longer τ for puddles, so a jump rebuilds nothing. The sea under
-rain loses the sharpness of its glint. The ground, the sea and the sphere take
-wetness alike (rule 59).
+Wetness is the rain's own history, carried as a channel of the clipmap that
+gains with the rain each refresh sees and dries over a time constant, longer
+for puddles. After a jump it is rebuilt from the field at a few past instants,
+so the ground is right a few frames after a scrub rather than at once. The sea
+under rain loses the sharpness of its glint. The ground, the sea and the
+sphere take wetness alike (rule 59).
 
 ### 7.4 Lightning
 
@@ -773,10 +820,11 @@ and 44 ± 5 a second over the Earth, ten times more over land
 ([Christian 2003](https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2002JD002347)).
 Each is integrated over the shutter's interval, so a long exposure catches the
 whole flash. From orbit a flash lights 60–70% of its cell's top, and that is
-the picture to build first. Inside a cloud the flash is an emitter the
-primary march reads, added in the composite outside the history, as
-Guerrilla's and Far Cry 6's are. The channel comes after: a walk turning 16° a
-segment on average from its seed, which matches digitized strokes
+the picture to build first. Inside a cloud the flash's light is evaluated in
+the composite, from the cloud's depth and transmittance at the pixel, outside
+the history, as Guerrilla's and Far Cry 6's are. The channel comes after: a
+walk turning 16° a segment on average from its seed, which matches digitized
+strokes
 ([Glassner](https://www.glassner.com/wp-content/uploads/2014/04/CG-CGA-PDF-00-03-The-Digital-Ceraunoscope-1-Mar00.pdf)),
 its width the sensor's point-spread function
 ([Kim & Lin](https://gamma.cs.unc.edu/LIGHTNING/lightning.pdf)). A first
@@ -800,10 +848,10 @@ over colder water, each from the climate and the diurnal clock. The march's
 ### 8.1 Bows, glories and coronae
 
 A bow, a glory and a corona are features of the phase function, so drawing
-first-order light through the tabulated Mie phase draws each where it
-physically occurs, from orbit to the ground, with no overlay. A fogbow from
-droplets under 50 µm is a broad white bow at 30–45°; a glory's red rings stand
-at 24/r, 37/r, 56/r and 76/r degrees for r in µm
+first-order light through the tabulated phases draws each where it physically
+occurs, from orbit to the ground, with no overlay. A fogbow from droplets
+under 50 µm is a broad white bow at 30–45°; a glory's red rings stand at
+24/r, 37/r, 56/r and 76/r degrees for r in µm
 ([Laven](https://philiplaven.com/p2c1.html)); a corona's at 16/r, 31/r and
 47/r; mixed droplet sizes near the sun make iridescence. A rain shaft's drops,
 near a millimeter, carry the primary bow at 40–42°, the secondary ten degrees
@@ -812,7 +860,7 @@ supernumeraries under a millimeter
 ([Practical Meteorology](https://www.eoas.ubc.ca/books/Practical_Meteorology/prmet/Ch22-Optics.pdf)).
 Over a deck the ship's umbra ends about 107 hull lengths away, and past it the
 glory alone marks its antisolar point. A GPU test puts the glory's first ring
-and the primary bow at their measured angles for the table's radii.
+and the primary bow at their measured angles for the tables' radii.
 
 ### 8.2 Airglow
 
@@ -845,23 +893,23 @@ any emitter is calibrated against either.
 
 These are targets. Their basis is published figures on other hardware —
 takram on an M3 Max, RDR2 on a PS4 — and none of them transfers: an M3 Max
-has two to three times this M5's 153 GB/s, a step is four reads and not one, and a
-cloud pass is texture-bound where spike 2's march was arithmetic. Phase 0
-replaces each with the M5's own.
+has two to three times this M5's 153 GB/s, a step is four reads and not one,
+and a cloud pass is texture-bound where spike 2's march was arithmetic. Phase
+0 replaces each with the M5's own.
 
-| Pass                             | Rate                    | 1080p target       | Borrowed basis                                                              |
-| -------------------------------- | ----------------------- | ------------------ | --------------------------------------------------------------------------- |
-| Maps, clipmap and the max-mip    | As `t` and the eye move | ≤ 0.05 ms          | Splatted cyclones; arithmetic per texel                                     |
-| Far atlas and reflection cache   | Progressive             | ≤ 0.1 ms           | GT7 amortizes its sky dome over 32–64 frames                                |
-| Local volume, if baked           | Progressive             | ≤ 0.2 ms           | Nubis³'s grid, 0.1–0.2 ms every eight frames on a PS5                       |
-| Sun's optical depth              | A slice a frame         | ≤ 0.3 ms           | RDR2's shadow, 0.156 ms on a PS4                                            |
-| Trace at ¼ × ¼                   | Every frame             | ≤ 1.2 ms           | takram's sixteenth at 4K on an M3 Max is about 1.4 ms of its 32 ms          |
-| History at ½                     | Every frame             | ≤ 0.3 ms           | RDR2's reconstruction, 0.232 ms on a PS4                                    |
-| Composite, and the split         | Every frame             | ≤ 0.3 ms           | One `airToward` a reconstructed pixel; the split's store and reload unknown |
-| Shadowed air                     | Every frame             | ≤ 0.3 ms           | One shadow tap per air sample; four per terrain fragment                    |
-| Near rain                        | While it rains          | ≤ 0.5 ms           | ~2×10⁵ instanced streaks                                                    |
-| **On the ground, dry / in rain** |                         | **≤ 2.8 / 3.3 ms** |                                                                             |
-| **From orbit**                   |                         | **≤ 1.5 ms**       | A thin shell, coarse levels, early exits on the tops                        |
+| Pass                             | Rate                    | 1080p target       | Borrowed basis                                                                |
+| -------------------------------- | ----------------------- | ------------------ | ----------------------------------------------------------------------------- |
+| Maps, clipmap and the max-mip    | As `t` and the eye move | ≤ 0.05 ms          | Splatted cyclones; arithmetic per texel                                       |
+| Far atlas and reflection probe   | Progressive             | ≤ 0.1 ms           | GT7 amortizes its sky dome over 32–64 frames                                  |
+| Local volume, if baked           | Progressive             | ≤ 0.2 ms           | Nubis³'s grid, 0.1–0.2 ms every eight frames on a PS5                         |
+| Sun's optical depth              | A slice a frame         | ≤ 0.3 ms           | RDR2's shadow, 0.156 ms on a PS4                                              |
+| Trace at ¼ × ¼                   | Every frame             | ≤ 1.2 ms           | takram's sixteenth at 4K on an M3 Max is about 1.4 ms of its 32 ms            |
+| History at ½                     | Every frame             | ≤ 0.3 ms           | RDR2's reconstruction, 0.232 ms on a PS4                                      |
+| Composite, and the split         | Every frame             | ≤ 0.3 ms           | The air's march to `t₁` a reconstructed pixel; the split's tile store unknown |
+| Shadowed air                     | Every frame             | ≤ 0.3 ms           | One shadow tap per air sample; four per terrain fragment                      |
+| Near rain                        | While it rains          | ≤ 0.5 ms           | ~2×10⁵ instanced streaks                                                      |
+| **On the ground, dry / in rain** |                         | **≤ 2.8 / 3.3 ms** |                                                                               |
+| **From orbit**                   |                         | **≤ 1.5 ms**       | A thin shell, coarse levels, early exits on the tops                          |
 
 The ground's held GPU cost is 12.4 ms at 1080p today. That is not headroom
 under vsync — the frame's rAF already runs at 16.67 ms with a p95 of 17.4 —
@@ -879,15 +927,15 @@ Earth and on a generated world, never in Sol alone.
 
 Each phase lands green on its own, with its pictures and its numbers.
 
-| Phase | Lands                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | **Feasibility, with the real passes.** Placeholder density through the maps, the cache, the sun's optical depth, the trace, the history, the composite and the reflection cache, in their final places. The references: the slab against adding-doubling (Prahl's [`ad`](https://omlc.org/software/ad/)) and a seeded Monte Carlo slab; the Monte Carlo column (§6.2); the furnace (a uniform sky, albedo one, no sun: the radiance is the sky's at any density); step convergence; a path-traced isolated cumulus with the Mie phase. The Mie table, generated offline. A sweep of fetches a second: rays, steps and reads a step, R8 against RGBA8. The scene unit settled | §9's targets carry the M5's figures at 1080p and Retina — steady, on a reset frame, in memory and in cold compile — across a broken-cloud horizon, inside a cloud, two decks, a rapid scrub and two clouded bodies in one frame. The composite's placement, the far field, the cache and the sun's optical depth are each chosen against their alternatives, with the reason. The glory's first ring sits at its radius                                   |
-| 1     | **The volume on a generated wet world**, on analytic weather: the genus density, the march, the Mie table, the higher orders, the irradiance table, the history, the composite, the far field and the reflection cache. Earth keeps its deck                                                                                                                                                                                                                                                                                                                                                                                                                                 | The slab within 5% of adding-doubling for τ 5–50 at three sun elevations; the furnace within 2%; the isolated cumulus beside its path-traced reference with neither silver lining nor edge missing; each genus's column optical depth in its ISCCP classes; fair weather, inside, over the deck and cumulus from orbit taken; the art direction's descent recording through a deck with no frame that steps; casts at reentry speed; §9 met at both sizes |
-| 2     | **The shadow and the light**: `cloudSunlight` in the ground, the sea, the sphere, the hull and the flare; the energy balance under a deck; both halves of the shadowed air                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | One cloud shadow at the descent gate, within 1%; downward light under a deck within 10% of the Monte Carlo column at three sun elevations and two albedos; overcast over water and underlit at dusk taken; the air's two skylight defects closed                                                                                                                                                                                                          |
-| 3     | **Earth**: ISCCP-H with the overlap rule, the diurnal clock and orography. The deck, its map and its lift retire                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Global cover 0.67 ± 0.03, every 10° zonal band within 0.05 of MODIS, each ISCCP type's optical-depth histogram; the whole face, the limb at dusk and the anvils judged against EPIC and the ISS by the look council                                                                                                                                                                                                                                       |
-| 4     | **Storms**: cyclones (the comma first), rain shafts, near rain, wet ground, lightning (from orbit first), fog, the warp fade                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | 80–90 tropical cyclones a year over ten simulated years, 72% northern, each turning by its hemisphere; visibility under rain and fog within the measured σ–R and Koschmieder relations; the rain picture judged against photographs; near rain at 50 mm/h within its target; casts through a storm                                                                                                                                                        |
-| 5     | **The night**: the moon, cities under cloud, airglow                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | The night from orbit taken; airglow's zenith within 30% of Benn and Ellison's measured share of La Palma's dark sky; the `night-side` preset re-scored                                                                                                                                                                                                                                                                                                    |
-| 6     | **Mars**: the aphelion belt, the polar hoods, the Arsia Mons cloud, dust storms and devils                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Mars's picture judged against Mars Express and MARCI                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Phase | Lands                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | **Feasibility.** Placeholder density through the real passes — the maps, the cache, the sun's optical depth, the trace, the history, the composite — in their final places. A sweep of fetches a second: rays, steps and reads a step, R8 against RGBA8. The four choices: the composite's placement, the far field, the cache and the sun's optical depth. The thin form's error on the scene as built, with Enhanced off and on. A transparent object between two cloud layers. The Mie table, generated offline. The scene unit settled | §9's targets carry the M5's figures at 1080p and Retina — steady, on a reset frame, in memory and in cold compile — across a broken-cloud horizon, inside a cloud, two decks, a rapid scrub and two clouded bodies in one frame. Each of the four choices is made against its alternatives, with the reason. The glory's first ring sits at its radius in the table                                                                                                                                                                                                                          |
+| 1     | **The volume on a generated wet world**, on analytic weather: the references — the slab against adding-doubling (Prahl's [`ad`](https://omlc.org/software/ad/)) and a seeded Monte Carlo slab, the furnace (a uniform sky, albedo one, no sun: the radiance is the sky's at any density), step convergence, a path-traced isolated cumulus — then the genus density, the march, the phase tables, the higher orders, the irradiance table, the history, the composite, the far field and the reflection probe. Earth keeps its deck        | The slab within 5% of adding-doubling for τ 5–50 at three sun elevations; the furnace within 2%; a layer's transmittance unchanged as its steps are split; the isolated cumulus beside its path-traced reference with neither silver lining nor edge missing, and the shortcut's glory beside the per-sample reference on mixed radii; each genus's column optical depth in its ISCCP classes; fair weather, inside, over the deck and cumulus from orbit taken; the art direction's descent recording through a deck with no frame that steps; casts at reentry speed; §9 met at both sizes |
+| 2     | **The shadow and the light**: `cloudSunlight` in the ground, the sea, the sphere, the hull and the flare; the energy balance under a deck and its Monte Carlo column; both halves of the shadowed air                                                                                                                                                                                                                                                                                                                                      | One cloud shadow at the descent gate, within 1%; the composite's air and the surfaces' at one value under a cloud's shadow; downward light under a deck within 10% of the Monte Carlo column at three sun elevations and two albedos; overcast over water and underlit at dusk taken; the air's two skylight defects closed                                                                                                                                                                                                                                                                  |
+| 3     | **Earth**: ISCCP-H with the overlap rule, the diurnal clock and orography. The deck, its map and its lift retire                                                                                                                                                                                                                                                                                                                                                                                                                           | Global cover 0.67 ± 0.03, every 10° zonal band within 0.05 of MODIS, each ISCCP type's optical-depth histogram; the whole face, the limb at dusk and the anvils judged against EPIC and the ISS by the look council                                                                                                                                                                                                                                                                                                                                                                          |
+| 4     | **Storms**: cyclones (the comma first), rain shafts, near rain, wet ground, lightning (from orbit first), fog, the warp fade                                                                                                                                                                                                                                                                                                                                                                                                               | 80–90 tropical cyclones a year over ten simulated years, 72% northern, each turning by its hemisphere; visibility under rain and fog within the measured σ–R and Koschmieder relations; the rain picture judged against photographs; near rain at 50 mm/h within its target; casts through a storm                                                                                                                                                                                                                                                                                           |
+| 5     | **The night**: the moon, cities under cloud, airglow                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | The night from orbit taken; airglow's zenith within 30% of Benn and Ellison's measured share of La Palma's dark sky; the `night-side` preset re-scored                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 6     | **Mars**: the aphelion belt, the polar hoods, the Arsia Mons cloud, dust storms                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Mars's picture judged against Mars Express and MARCI                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 Phase 0 goes first because every figure in §9 is borrowed. A generated world
 takes the volume before Earth does because it has no clouds to lose; Earth
@@ -903,7 +951,8 @@ function of time because that is what makes presets, scrubs and two clients
 agree for free (§3). The picture converges to the field and may lag it under
 warp. The default native picture keeps its own cloud history, since it has no
 reconstruction to borrow one from (§5.5). The far field is baked from the
-volume, never authored beside it (§5.4). Earth keeps its deck until phase 3.
+field the march reads, never authored beside it (§5.4). Earth keeps its deck
+until phase 3.
 
 **Open:**
 
@@ -916,7 +965,7 @@ volume, never authored beside it (§5.4). Earth keeps its deck until phase 3.
    surface temperature by latitude and season, a lapse rate and a tropopause.
    Snow, ice clouds over a freezing level and a generated world's condensate
    wait on it (§14); the drag model's isothermal air stays either way.
-3. **WebGL draws the far atlas alone**, declared, as it declares Manual in
+3. **WebGL draws the far march alone**, declared, as it declares Manual in
    place of Automatic — recommended over no clouds at all.
 4. **The record grows for later work**: a pole direction for calendar seasons
    and the polar phenomena, a magnetic dipole for aurora, condensables for
@@ -931,9 +980,11 @@ volume, never authored beside it (§5.4). Earth keeps its deck until phase 3.
   any weather, and a volume sized by the drawing buffer would add two and a
   half times the 1080p cost. The ray budget is the guard, and phase 0
   measures it first.
-- **A split costs a tile store.** Every split of the scene pass stores and
-  reloads every multisampled attachment, and the composite adds one; at
-  Retina that may cost more than the trace.
+- **A split costs a tile store, and a hand-rolled one reaches under three.**
+  Every split of the scene pass stores and reloads every multisampled
+  attachment, and the composite adds one; at Retina that may cost more than
+  the trace. A sequence that ends and resumes `PassNode`'s pass reaches below
+  its public surface, which is the code a three upgrade breaks first.
 - **The far field's handover.** Where the far march takes over, any
   disagreement with the fine one is a band, and the visible failures are
   blackrack's fade band and KSP2's surface vanishing from orbit. The handover
@@ -972,21 +1023,22 @@ volume, never authored beside it (§5.4). Earth keeps its deck until phase 3.
 | Nubis³'s voxel clouds ([2023](<https://advances.realtimerendering.com/s2023/Nubis%20Cubed%20(Advances%202023).pdf>))                                                                                                                                                                                                                                                                                                                                                                                           | **Split.** Its authored voxels do not fit a procedural planet; its baked density, its occupancy bound and its summed optical-depth grid do, and phase 0 measures them                                                                                           |
 | Beer–powder, a max of two lobes (Nubis 2017)                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | **Declined.** A max of normalized lobes integrates above one; a declared dark-edge term, judged against photographs, replaces powder where the transport misses it                                                                                              |
 | Octave multiple scattering ([Wrenninge](https://fpsunflower.github.io/ckulla/data/oz_volumes.pdf)) and slab transport ([Bouthors 2008](https://hal.archives-ouvertes.fr/inria-00333007))                                                                                                                                                                                                                                                                                                                       | **A measured choice.** Octaves fitted to the slab, or the slab's own table, per kind of cloud                                                                                                                                                                   |
-| HG–Draine ([Jendersie & d'Eon](https://research.nvidia.com/labs/rtr/approximate-mie/))                                                                                                                                                                                                                                                                                                                                                                                                                         | **Adopted for the higher orders**; tabulated Mie for the first, which carries the bows and the glory the blend omits                                                                                                                                            |
+| HG–Draine ([Jendersie & d'Eon](https://research.nvidia.com/labs/rtr/approximate-mie/))                                                                                                                                                                                                                                                                                                                                                                                                                         | **Adopted for the higher orders**; tabulated phases for the first, which carry the bows and the glory the blend omits                                                                                                                                           |
+| Bulk ice phases ([Baum 2014](https://doi.org/10.1016/j.jqsrt.2014.02.029))                                                                                                                                                                                                                                                                                                                                                                                                                                     | **Adopted** for the ice class: a severely roughened aggregate, with no halos                                                                                                                                                                                    |
 | Neural transport ([RPNN](https://jannovak.info/publications/DeepScattering/index.html), [MRPNN](https://sites.cs.ucsb.edu/~lingqi/publications/paper_mrpnn.pdf), [neural relighting at HPG 2026](https://www.highperformancegraphics.org/2026/_assets/slides/environmental_volumetric_neural_shading_of_clouds_for_real-time_rendering.pdf))                                                                                                                                                                   | **Declined.** RPNN generalizes from tens of training clouds but takes seconds to minutes an image; MRPNN takes 5 ms for one cloud with a uniform albedo on an RTX 2080; the HPG 2026 relighting works on meshes with triplane features, not a procedural planet |
 | Beer shadow cascades (UE5, takram)                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | **A candidate, sliced**, against the summed grid                                                                                                                                                                                                                |
 | Froxels ([Wronski](https://advances.realtimerendering.com/s2014/wronski/bwronski_volumetric_fog_siggraph2014.pdf), Frostbite 2015, UE5, IO Interactive's Smolder 2026)                                                                                                                                                                                                                                                                                                                                         | **A candidate for the near field**: fog, rain mist and shafts near the eye                                                                                                                                                                                      |
 | Epipolar sampling ([DiligentFX](https://github.com/DiligentGraphics/DiligentFX/blob/master/PostProcess/EpipolarLightScattering/README.md))                                                                                                                                                                                                                                                                                                                                                                     | **A candidate for shafts** in the smooth air, not for the clouds themselves                                                                                                                                                                                     |
 | Textured shells ([SpaceEngine](https://spaceengine.org/manual/making-addons/creating-a-planet/))                                                                                                                                                                                                                                                                                                                                                                                                               | **What retires**                                                                                                                                                                                                                                                |
 | A volume near and a 2D layer far ([blackrack](https://www.patreon.com/blackrack/posts/true-volumetric-139879553), [KSP2](https://kerbalspaceprogram.com/news/developer-insights-22-skys-the-limit))                                                                                                                                                                                                                                                                                                            | **Adopted in kind**: a far march over a baked atlas, crossed by footprint rather than altitude, as blackrack's fifth release bakes its layer from its volume                                                                                                    |
-| Depth moments ([Ghost of Yōtei](https://blog.playstation.com/2025/10/23/ghost-of-yotei-tech-deep-dive/)), layered spherical caches ([Weinrauch 2023](https://diglib.eg.org/items/2668054e-618d-4fb8-bbf7-d079a3ed4e75))                                                                                                                                                                                                                                                                                        | **Depth moments adopted** in the atlas; the spherical caches are its alternative                                                                                                                                                                                |
-| A cached sky dome ([GT7](https://s3.amazonaws.com/gran-turismo.com/pdi_publications/GDC2023_GT7_SKY_RENDERING.pdf))                                                                                                                                                                                                                                                                                                                                                                                            | **Declined.** One dome from one center does not survive a camera between orbit and the ground                                                                                                                                                                   |
+| Depth moments ([Ghost of Yōtei](https://blog.playstation.com/2025/10/23/ghost-of-yotei-tech-deep-dive/)), layered spherical caches ([Weinrauch 2023](https://diglib.eg.org/items/2668054e-618d-4fb8-bbf7-d079a3ed4e75))                                                                                                                                                                                                                                                                                        | **Depth moments adopted** on the far march's rays; the spherical caches are the atlas's alternative                                                                                                                                                             |
+| A cached sky dome ([GT7](https://s3.amazonaws.com/gran-turismo.com/pdi_publications/GDC2023_GT7_SKY_RENDERING.pdf))                                                                                                                                                                                                                                                                                                                                                                                            | **Declined.** One dome from one center does not survive a camera between orbit and the ground; the sea's probe serves only near the eye                                                                                                                         |
 | Live weather data (Flight Simulator's Meteoblue, X-Plane's GRIB)                                                                                                                                                                                                                                                                                                                                                                                                                                               | **Declined.** The simulation's instant is not today; the climatology is the measured part                                                                                                                                                                       |
 | Sparse convolution ([Lagae 2010](https://www-sop.inria.fr/reves/Basilic/2010/LLCDDELPZ10/LLCDDELPZ10STARPNF.pdf)), bounded advection ([Neyret 2003](http://evasion.imag.fr/Publications/2003/Ney03/neyret161.pdf))                                                                                                                                                                                                                                                                                             | **Adopted.** Together they are weather as a function of time                                                                                                                                                                                                    |
 | Spatiotemporal blue noise ([Wolfe 2022](https://research.nvidia.com/publication/2022-07_spatiotemporal-blue-noise-masks))                                                                                                                                                                                                                                                                                                                                                                                      | **Adopted** for the trace's jitter                                                                                                                                                                                                                              |
-| Jackknife transmittance ([Peters 2025](https://momentsingraphics.de/SiggraphAsia2025.html))                                                                                                                                                                                                                                                                                                                                                                                                                    | **An experiment** in phase 0                                                                                                                                                                                                                                    |
 | Rain streaks by exposure ([Garg & Nayar](https://www.cs.columbia.edu/CAVE/publications/pdfs/Garg_IJCV07.pdf)), wet surfaces ([Lagarde](https://seblagarde.wordpress.com/2013/04/14/water-drop-3b-physically-based-wet-surfaces/))                                                                                                                                                                                                                                                                              | **Adopted**                                                                                                                                                                                                                                                     |
 | [takram three-geospatial](https://github.com/takram-design-engineering/three-geospatial) (MIT)                                                                                                                                                                                                                                                                                                                                                                                                                 | **Read, not vendored.** GLSL with local weather and no view from space, which its README lists as planned; its constants are the starting points cited above                                                                                                    |
+| [three-clouds-webgpu](https://github.com/johnfewell/three-clouds-webgpu) (MIT, alpha)                                                                                                                                                                                                                                                                                                                                                                                                                          | **Read.** A TSL port of takram's clouds, and its benchmarks are the only published Apple figures for this recipe; it asks for them to be re-measured, not extrapolated                                                                                          |
 
 ---
 
@@ -1005,7 +1057,7 @@ here so the next plan starts from it.
   horizontal-column crystals ([HaloRay](https://github.com/naavis/haloray)) —
   and a bright 22° halo stands in about 6% of cirrus hours
   ([Sassen 2003](https://doi.org/10.1364/ao.42.000332)). They follow cirrus
-  that already reads right.
+  that already reads right; the ice class's roughened aggregates carry none.
 - **The rest of the upper air is the air's.** Noctilucent clouds are a sheet
   at 82.7 km seen at solar depressions of 6–16° between 50° and 65° of
   latitude in summer
@@ -1022,6 +1074,14 @@ here so the next plan starts from it.
   and Genetti's footprint-times-deposition volume draws it from inside or
   outside the air
   ([2010](https://lawlor.cs.uaf.edu/~olawlor/papers/2010/aurora/lawlor_aurora_2010.pdf)).
+- **Dust devils** at Gusev are 2–276 m wide
+  ([Greeley 2006](https://doi.org/10.1029/2006je002743)), each an analytic
+  column; Mars's picture is its ice clouds and its dust front first.
+- **Jackknife transmittance**
+  ([Peters 2025](https://momentsingraphics.de/SiggraphAsia2025.html)) reduces
+  the bias of the exponential of a jittered optical-depth estimate, but wants
+  two independent estimates and handles signed ones; it is worth trying only
+  if a bias survives the march's step convergence.
 - **The wet window** is the sensor's, declared like its glare: drops pushed by
   gravity and the apparent wind, a drop `d` in front of a lens focused at `D`
   averaging a footprint `D/(D+d)·f/N`
