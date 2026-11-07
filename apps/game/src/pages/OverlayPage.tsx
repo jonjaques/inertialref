@@ -16,6 +16,7 @@ export function OverlayPage({
   wide = false,
   modal = false,
   fill = false,
+  fixed = false,
   children,
 }: {
   title: string
@@ -35,6 +36,16 @@ export function OverlayPage({
    * avoid.
    */
   fill?: boolean
+  /**
+   * One size for every route the dialog is drawn at.
+   *
+   * For a dialog whose sections are routes. Sized to its content, every section
+   * change resized the panel and re-centered it under the pointer — the nav
+   * the pointer had just pressed jumped a hundred pixels, so the next press
+   * landed on whatever had moved into its place. Implies `fill`: the frame is
+   * fixed, so the body is what scrolls.
+   */
+  fixed?: boolean
   children: ReactNode
 }) {
   const { close, background } = useOverlay()
@@ -76,7 +87,7 @@ export function OverlayPage({
       // The panel takes focus on open, so it draws the system's hairline when
       // a keyboard opened it — not Chrome's own ring, which is brighter than
       // any neutral in the palette — and nothing when a pointer did.
-      className={`type-body flex max-h-[calc(100%-4rem)] ${wide ? 'w-[56rem]' : 'w-[34rem]'} max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl ${FOCUS_RING}`}
+      className={`type-body flex max-h-[calc(100%-4rem)] ${fixed ? 'h-[44rem]' : ''} ${wide ? 'w-[56rem]' : 'w-[34rem]'} max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-lg border border-slate-700/60 bg-slate-950/85 text-slate-300 shadow-xl ${FOCUS_RING}`}
       initial={hydrated ? { opacity: 0, y: 8 } : false}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8 }}
@@ -121,7 +132,9 @@ export function OverlayPage({
       </header>
       <div
         className={`min-h-0 px-4 py-3 ${
-          fill ? 'flex flex-1 flex-col overflow-hidden' : 'overflow-y-auto'
+          fill || fixed
+            ? 'flex flex-1 flex-col overflow-hidden'
+            : 'overflow-y-auto'
         }`}
       >
         {children}

@@ -1,10 +1,13 @@
 import { useRef, useState } from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { Download, Upload } from 'lucide-react'
 import { Action } from '../hud/Action.tsx'
+import { Section } from '../hud/Section.tsx'
+import { SettingRow } from '../hud/SettingRow.tsx'
 import {
   exportPreferences,
   type ImportPlan,
   importPreferences,
+  PERSONAL_PICTURES,
   planImport,
   PREFERENCE_GROUPS,
   REGISTRY,
@@ -26,13 +29,24 @@ import {
  * they have no business in a save, and syncing them needs an account this build
  * does not require anybody to have. A JSON file is the offline-first answer and
  * it works in the case that matters, which is moving to a second machine.
+ *
+ * **The reset keeps the planetarium's saved shots.** They are stored with the
+ * preferences because that is where this app keeps things, but a shot is
+ * something a person made rather than a setting they chose, and a "reset
+ * settings" that deleted a library of pictures would be the one reset here
+ * that choosing again cannot undo. The export still carries them.
  */
 
 /** What the downloaded file is called. Dated, because people keep several. */
 const filename = (stamp: string): string =>
   `inertialref-settings-${stamp.slice(0, 10)}.json`
 
-export function DataSection() {
+export function DataSection({
+  onNotice,
+}: {
+  /** Say what a press did, through the notice the shell flashes. */
+  onNotice: (message: string) => void
+}) {
   const [plan, setPlan] = useState<ImportPlan | null>(null)
   /** The parsed file, held between the preview and the apply. */
   const pending = useRef<unknown>(null)
@@ -95,117 +109,118 @@ export function DataSection() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-pretty text-slate-400">
-        Settings live in this browser and go nowhere else. A file is how they
-        reach a second machine.
-      </p>
-
-      <div className="flex flex-wrap items-center gap-1">
-        <Action
+    <div className="@container flex flex-col gap-2">
+      <Section id="settings.data.transfer" title="Move to another browser">
+        <SettingRow
           label="Export"
-          tone="primary"
-          title="Download every setting you have changed, as JSON"
-          onClick={save}
-        />
-        {/* The ring is drawn by `focus-within`, not `FOCUS_RING`.
-            A `<label>` never takes focus, so `focus-visible:` on it can never
-            match — the only focusable node here is the `sr-only` input, which
-            is a clipped pixel. Without this the Import control is the one thing
-            on the page a keyboard user cannot see themselves standing on. */}
-        <label className="type-ui inline-flex h-7 cursor-pointer items-center rounded border border-slate-700 bg-slate-800/60 px-2 text-slate-300 transition-colors hover:border-sky-500/60 hover:text-sky-200 focus-within:outline focus-within:outline-1 focus-within:outline-sky-400">
-          Import
-          <input
-            type="file"
-            accept="application/json,.json"
-            className="sr-only"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              // The value is cleared so choosing the same file twice fires
-              // again — a `change` that does not change is no event at all, and
-              // "import, look at the preview, cancel, import again" is the
-              // ordinary way somebody uses this.
-              event.target.value = ''
-              if (file !== undefined) void preview(file)
-            }}
+          detail="Every setting you have changed, and your saved shots, as one JSON file."
+        >
+          <Action
+            label="Export"
+            icon={Download}
+            tone="primary"
+            title="Download every setting you have changed, as JSON"
+            onClick={save}
           />
-        </label>
-        {done !== null && (
-          <span aria-live="polite" className="text-sky-300/80">
-            {done}
-          </span>
-        )}
-      </div>
-
-      {plan !== null && (
-        <div className="flex flex-col gap-2 rounded border border-slate-800 bg-slate-900/40 p-2">
-          <h3 className="type-label text-sky-400/80">
-            {plan.entries.length === 0
-              ? 'Not a settings file'
-              : `${plan.applied} to apply, ${plan.dropped} dropped`}
-          </h3>
-          {/*
-           * The preview, before anything changes. A file from another build
-           * carries keys this one has never heard of and values it will not
-           * believe, and the honest thing is to say which — "2 dropped" with no
-           * list is a dialog nobody can act on.
-           */}
-          {plan.entries.length > 0 && (
-            <dl className="grid max-h-48 grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 overflow-y-auto">
-              {plan.entries.map((entry) => (
-                <div
-                  key={entry.key}
-                  className="col-span-2 grid grid-cols-subgrid"
-                >
-                  <dt className="truncate text-slate-400" title={entry.key}>
-                    {entry.what}
-                  </dt>
-                  <dd
-                    className={
-                      entry.applied ? 'text-sky-300/80' : 'text-amber-400/90'
-                    }
-                  >
-                    {entry.applied ? 'apply' : (entry.reason ?? 'dropped')}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-          <div className="flex flex-wrap gap-1">
-            <Action
-              label="Apply"
-              tone="primary"
-              disabled={plan.applied === 0}
-              title="Write these settings, live — nothing reloads"
-              onClick={apply}
-            />
-            <Action
-              label="Cancel"
-              title="Leave everything as it is"
-              onClick={() => {
-                pending.current = null
-                setPlan(null)
+        </SettingRow>
+        <SettingRow
+          label="Import"
+          detail="Read a settings file. Nothing changes until you have seen what it holds."
+        >
+          {/* The ring is drawn by `focus-within`, not `FOCUS_RING`.
+              A `<label>` never takes focus, so `focus-visible:` on it can never
+              match — the only focusable node here is the `sr-only` input, which
+              is a clipped pixel. Without this the Import control is the one
+              thing on the page a keyboard user cannot see themselves on. */}
+          <label className="type-ui inline-flex min-h-6 cursor-pointer items-center gap-1.5 rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-slate-300 transition-colors focus-within:outline focus-within:outline-1 focus-within:outline-sky-400 hover:border-sky-500/60 hover:text-sky-200">
+            <Upload aria-hidden className="size-3.5" />
+            Import
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                // The value is cleared so choosing the same file twice fires
+                // again — a `change` that does not change is no event at all,
+                // and "import, look at the preview, cancel, import again" is
+                // the ordinary way somebody uses this.
+                event.target.value = ''
+                if (file !== undefined) void preview(file)
               }}
             />
-          </div>
-        </div>
-      )}
+          </label>
+        </SettingRow>
+        {done !== null && (
+          <p aria-live="polite" className="type-ui py-1 text-sky-300/90">
+            {done}
+          </p>
+        )}
 
-      <div className="border-t border-slate-800 pt-3">
-        <h3 className="type-label mb-1 flex items-center gap-1.5 text-amber-400/90">
-          <AlertTriangle aria-hidden className="size-3" />
-          Reset
-        </h3>
-        <p className="mb-1.5 text-pretty text-slate-400">
-          Every setting back to its default: the lens, the layers, the key
-          bindings and where the panels sit. Saved games are stored separately
-          and are untouched.
-        </p>
-        <div className="flex flex-wrap items-center gap-1">
-          {/* Confirmed in place rather than through a dialog, because this page
-              is already inside one and a dialog over a dialog is a scrim over a
-              scrim. The destructive label only appears once it has been asked
-              for, so the resting state cannot be pressed by accident. */}
+        {plan !== null && (
+          <div className="mt-1 flex flex-col gap-2 rounded border border-slate-800 bg-slate-900/40 p-2.5">
+            <h3 className="type-label text-sky-400/80">
+              {plan.entries.length === 0
+                ? 'Not a settings file'
+                : `${plan.applied} to apply, ${plan.dropped} dropped`}
+            </h3>
+            {/*
+             * The preview, before anything changes. A file from another build
+             * carries keys this one has never heard of and values it will not
+             * believe, and the honest thing is to say which — "2 dropped" with
+             * no list is a dialog nobody can act on.
+             */}
+            {plan.entries.length > 0 && (
+              <dl className="type-ui grid max-h-48 grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 overflow-y-auto">
+                {plan.entries.map((entry) => (
+                  <div
+                    key={entry.key}
+                    className="col-span-2 grid grid-cols-subgrid"
+                  >
+                    <dt className="truncate text-slate-400" title={entry.key}>
+                      {entry.what}
+                    </dt>
+                    <dd
+                      className={
+                        entry.applied ? 'text-sky-300/90' : 'text-amber-300'
+                      }
+                    >
+                      {entry.applied ? 'apply' : (entry.reason ?? 'dropped')}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            <div className="flex flex-wrap gap-1">
+              <Action
+                label="Apply"
+                tone="primary"
+                disabled={plan.applied === 0}
+                title="Write these settings, live — nothing reloads"
+                onClick={apply}
+              />
+              <Action
+                label="Cancel"
+                title="Leave everything as it is"
+                onClick={() => {
+                  pending.current = null
+                  setPlan(null)
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </Section>
+
+      <Section id="settings.data.reset" title="Start over">
+        <SettingRow
+          label="Reset everything"
+          detail="Every setting back to its default — the display, the bindings, the layers and where the panels sit. Saved shots and saved games stay."
+        >
+          {/* Confirmed in place rather than through a dialog, because this
+              page is already inside one and a dialog over a dialog is a scrim
+              over a scrim. The destructive label only appears once it has been
+              asked for, so the resting state cannot be pressed by accident. */}
           {confirming ? (
             <>
               <Action
@@ -213,9 +228,10 @@ export function DataSection() {
                 tone="primary"
                 title="Forget every setting this browser holds"
                 onClick={() => {
-                  resetPreferences()
+                  resetPreferences([PERSONAL_PICTURES])
                   setConfirming(false)
                   setDone('every setting back to its default')
+                  onNotice('every setting back to its default')
                 }}
               />
               <Action
@@ -226,17 +242,17 @@ export function DataSection() {
             </>
           ) : (
             <Action
-              label="Reset Everything"
+              label="Reset everything"
               title="Forget every setting this browser holds"
               onClick={() => setConfirming(true)}
             />
           )}
-        </div>
-      </div>
+        </SettingRow>
+      </Section>
 
-      <p className="type-micro text-slate-400">
+      <p className="type-micro px-2.5 text-slate-400">
         {REGISTRY.length} settings in {PREFERENCE_GROUPS.length} groups, plus
-        the per-panel and per-mode ones.
+        each panel’s and each mode’s own.
       </p>
     </div>
   )

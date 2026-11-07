@@ -1,9 +1,8 @@
-import { useId } from 'react'
 import { Vibrate } from 'lucide-react'
-import { Slider } from '@/components/ui/slider'
 import { Action } from '../hud/Action.tsx'
-import { releaseFocus } from '../hud/focus.ts'
 import { OptionGroup } from '../hud/OptionGroup.tsx'
+import { SettingRow } from '../hud/SettingRow.tsx'
+import { SliderControl } from '../hud/SliderControl.tsx'
 import { SwitchRow } from '../hud/SwitchRow.tsx'
 import {
   CONTROLS_PAD_TUNING,
@@ -73,64 +72,80 @@ export function PadTuningSection({
 }) {
   const [tuning, setTuning] = usePersistentState(CONTROLS_PAD_TUNING)
   const store = useKeymap()
-  const id = useId()
   const set = <K extends keyof PadTuning>(field: K, value: PadTuning[K]) =>
     setTuning((held) => ({ ...held, [field]: value }))
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col">
       {SLIDERS.map(({ field, label, about, format }) => {
         const range = TUNING_RANGES[field]
         return (
-          <div key={field} className="flex flex-col">
-            <div className="flex items-baseline justify-between gap-3">
-              <span id={`${id}-${field}`} className="type-ui text-slate-400">
-                {label}
-              </span>
-              <span className="type-readout text-slate-300">
-                {format(tuning[field])}
-              </span>
-              <span id={`${id}-${field}-about`} hidden>
-                {about}
-              </span>
-            </div>
-            <Slider
+          <SettingRow
+            key={field}
+            label={label}
+            detail={about}
+            changed={tuning[field] !== DEFAULT_TUNING[field]}
+          >
+            <SliderControl
+              label={label}
               min={range.min}
               max={range.max}
               step={range.step}
-              value={[tuning[field]]}
-              aria-labelledby={`${id}-${field}`}
-              aria-describedby={`${id}-${field}-about`}
-              aria-valuetext={format(tuning[field])}
-              onValueChange={([next]) => {
-                if (next !== undefined) set(field, next)
-              }}
-              onClick={releaseFocus}
-              className="min-w-0 flex-1 py-2.5 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
+              value={tuning[field]}
+              reading={format(tuning[field])}
+              onChange={(next) => set(field, next)}
             />
-          </div>
+          </SettingRow>
         )
       })}
       <SwitchRow
+        divided
         label="Invert look"
-        detail="stick back looks up"
+        detail="Stick back looks up."
+        changed={tuning.invertLook !== DEFAULT_TUNING.invertLook}
         on={tuning.invertLook}
         onChange={(on) => set('invertLook', on)}
       />
       <SwitchRow
+        divided
         label="Invert pitch"
-        detail="stick back lifts the nose, as in an aircraft"
+        detail="Stick back lifts the nose, as in an aircraft."
+        changed={tuning.invertPitch !== DEFAULT_TUNING.invertPitch}
         on={tuning.invertPitch}
         onChange={(on) => set('invertPitch', on)}
       />
       <SwitchRow
+        divided
         label="Vibration"
-        detail="the drive, and the acts that change the ship"
+        detail="The drive, and the acts that change the ship."
+        changed={tuning.vibration !== DEFAULT_TUNING.vibration}
         on={tuning.vibration}
         onChange={(on) => set('vibration', on)}
       />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="type-ui text-slate-400">Button prompts</span>
+      {/* Its own row rather than a button inside the switch's: the switch
+          row is a `<label>`, and a second control inside a label is content
+          the element does not allow. */}
+      <SettingRow
+        label="Test vibration"
+        detail={
+          rumbles
+            ? 'A short rumble at the strength the drive uses.'
+            : 'The pad in hand has no motors, or none is connected.'
+        }
+      >
+        <Action
+          icon={Vibrate}
+          label="Test"
+          title="Rumble the controller for a moment"
+          disabled={!tuning.vibration || !rumbles}
+          onClick={() => store.pad?.rumble(0.8, 0.6, 300)}
+        />
+      </SettingRow>
+      <SettingRow
+        label="Button prompts"
+        detail="Whose glyphs the interface draws. Automatic follows the pad in hand."
+        changed={tuning.prompts !== DEFAULT_TUNING.prompts}
+      >
         <OptionGroup
           label="Button prompts"
           value={tuning.prompts}
@@ -138,21 +153,7 @@ export function PadTuningSection({
           labels={PROMPT_LABELS}
           onChange={(prompts) => set('prompts', prompts)}
         />
-      </div>
-      <div className="flex justify-end gap-2">
-        <Action
-          icon={Vibrate}
-          label="Test vibration"
-          title="Rumble the controller for a moment"
-          disabled={!tuning.vibration || !rumbles}
-          onClick={() => store.pad?.rumble(0.8, 0.6, 300)}
-        />
-        <Action
-          label="Reset"
-          title="The deadzone, curve, speed and switches back to their defaults"
-          onClick={() => setTuning(DEFAULT_TUNING)}
-        />
-      </div>
+      </SettingRow>
     </div>
   )
 }

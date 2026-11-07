@@ -324,7 +324,7 @@ describe('the author’s instruments', () => {
     )
     write(RENDER_LENS_FLARE, RENDER_LENS_FLARE.initial)
     write(RENDER_THRUSTER_VARIATION, RENDER_THRUSTER_VARIATION.initial)
-    expect(graphics).toContain('Lens Flare')
+    expect(graphics).toContain('Lens flare')
     const variation = graphics
       .split('<label')
       .find((row) => row.includes('Thruster variation'))
@@ -424,7 +424,7 @@ describe('the author’s instruments', () => {
         onNotice: () => {},
       }),
     )
-    expect(graphics).toContain('1600×900 of 1600×900')
+    expect(graphics).toContain('Draws 1600×900 for a 1600×900 display.')
     expect(graphics).toContain('Temporal needs WebGPU.')
     const temporal = graphics.match(
       /<button[^>]*title="Needs WebGPU"[^>]*>Temporal<\/button>/,
@@ -467,7 +467,7 @@ describe('the author’s instruments', () => {
         onNotice: () => {},
       }),
     )
-    expect(graphics).toContain('1066×600 of 1600×900')
+    expect(graphics).toContain('Draws 1066×600 for a 1600×900 display.')
     expect(graphics).toContain(
       'The page link sets this picture for this visit.',
     )
@@ -493,7 +493,7 @@ describe('the author’s instruments', () => {
         onNotice: () => {},
       }),
     )
-    expect(graphics).toContain('3200×1800 of 1600×900')
+    expect(graphics).toContain('Draws 3200×1800 for a 1600×900 display.')
     const reduced =
       graphics.match(
         /<button[^>]*title="Supersampling uses native scale"[^>]*>/g,
@@ -548,8 +548,8 @@ describe('the author’s instruments', () => {
     // A switch is named by its label alone; the sentence under it describes.
     const flare = markup
       .split('<label')
-      .find((row) => row.includes('Lens Flare'))
-    const labelId = /id="([^"]+)"[^>]*>Lens Flare</.exec(flare ?? '')?.[1]
+      .find((row) => row.includes('Lens flare'))
+    const labelId = /id="([^"]+)"[^>]*>Lens flare</.exec(flare ?? '')?.[1]
     expect(flare).toContain(`aria-labelledby="${labelId}"`)
   })
 

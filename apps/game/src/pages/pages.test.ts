@@ -99,7 +99,7 @@ describe('the routed dialogs', () => {
     const markup = at(SETTINGS)
     // The panels are the workspace's own components rather than a second copy,
     // so their own strings are the proof that the page reached them.
-    expect(markup).toContain('Lens Flare')
+    expect(markup).toContain('Lens flare')
     // Title case in source — `type-title` does not shout for us.
     expect(markup).toContain('>Settings</h1>')
     // The design's claim about this page, stated on the page.
@@ -109,17 +109,33 @@ describe('the routed dialogs', () => {
     expect(markup).toContain('lucide-x')
     expect(markup).toContain('aria-label="Close · Escape"')
     // Sections are routes, so each one is a real link somebody can send.
-    expect(markup).toContain(`href="${settingsSection('camera')}"`)
+    expect(markup).toContain(`href="${settingsSection('interface')}"`)
+    // And the lens is not one of them: it is the viewport's instrument, set
+    // from the Lens panel beside the picture it shapes.
+    expect(markup).not.toContain(`href="${settingsSection('camera')}"`)
   })
 
   it('opens the section the URL names', () => {
     // The reason sections are routes at all: "turn off the lens flare" is much
     // easier to answer with a link than with three sentences of navigation.
-    expect(at(settingsSection('camera'))).toContain('65°')
+    expect(at(settingsSection('interface'))).toContain(
+      'aria-label="Menu bar position"',
+    )
+    // A link to the camera section from before the lens left settings opens
+    // the display page, and nothing on it is a lens.
+    const camera = at(settingsSection('camera'))
+    expect(camera).toContain('Lens flare')
+    expect(camera).not.toContain('Focal length')
     // A row per action, from the one table — and the chord beside it, which is
     // the half that could not exist while the bindings were string literals in
     // five files.
-    expect(at(settingsSection('controls'))).toContain('Flight Assist')
+    const controls = at(settingsSection('controls'))
+    expect(controls).toContain('Flight Assist')
+    // In the keymap's own groups, under a heading that says where they work —
+    // not a flat list with the context appended to every label.
+    expect(controls).toContain('aria-label="Time"')
+    expect(controls).toContain('in the planetarium')
+    expect(controls).not.toContain(' · global')
     // The controller's page is drawn from the same table: the picture's
     // callouts name the flight acts on the pad's controls before any pad has
     // been seen.
@@ -132,7 +148,7 @@ describe('the routed dialogs', () => {
     // `/settings/audio` from a future build, or a typo. Opening settings is a
     // better answer than opening nothing.
     const markup = at(settingsSection('audio'))
-    expect(markup).toContain('Lens Flare')
+    expect(markup).toContain('Lens flare')
   })
 
   it('renders the informational pages', () => {

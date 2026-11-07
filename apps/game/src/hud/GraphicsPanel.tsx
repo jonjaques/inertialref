@@ -1,5 +1,3 @@
-import { Slider } from '@/components/ui/slider'
-import { Mountain, Sparkles } from 'lucide-react'
 import { OUTPUT_PREFERENCES } from '../render/output.ts'
 import {
   GROUND_DETAILS,
@@ -25,19 +23,18 @@ import {
   pictureUpscales,
   resolvePicture,
 } from '../render/picture.ts'
-import { PictureRow } from './PictureRow.tsx'
 import { SHIP_IDS, SHIP_LABELS } from '../render/ships.ts'
 import type { HudRenderState } from './controls.ts'
+import { useDisplayDefaults } from './displayDefaults.ts'
 import { OptionGroup } from './OptionGroup.tsx'
 import { Section } from './Section.tsx'
-import { SurfaceRow } from './SurfaceRow.tsx'
+import { SettingRow } from './SettingRow.tsx'
+import { SliderControl } from './SliderControl.tsx'
 import { SwitchRow } from './SwitchRow.tsx'
-import { Row } from './Row.tsx'
-import { releaseFocus } from './focus.ts'
 
 /*
- * The ship's hull, the render-feature switches, and the extended-range
- * override.
+ * What the display is asked to draw: the output range, the picture's
+ * reconstruction, the lens flare, the surface's levers, and the ship's hull.
  *
  * The panel exists for the shape of the problem: a rendering feature under
  * visual iteration needs an off switch, both to see a before/after without
@@ -47,15 +44,16 @@ import { releaseFocus } from './focus.ts'
  * `state/engineKnobs.ts` carries each to the plain engine field the frame
  * loop reads; nothing here re-renders per frame.
  *
- * The knobs are read from their definitions rather than handed down. The
- * panel is drawn in two places — the dock and `/settings/display` — and one
- * definition per knob is what keeps those from being two anti-aliasing
- * switches that could drift apart.
+ * Drawn in two places — the author's dock and `/settings/display` — from one
+ * definition per knob, which is what keeps those from being two anti-aliasing
+ * switches that could drift apart. The rows are `SettingRow`s, whose container
+ * query puts each control beside its label on the page and under it in the
+ * 19rem panel, so the two places are one layout read at two widths.
  *
- * The HDR override moved here from the transport strip, where it was the one
- * control on a row of *verbs* that was a preference. It is a rendering setting
- * and this is the rendering panel; that it rebuilds the renderer to take effect
- * is a fact about the property, not a reason to keep it beside `save`.
+ * Ordered as a display menu reads: what reaches the screen first (range,
+ * peak, gamma), then how the picture is reconstructed, then what is drawn into
+ * it. The ship's hull is last because it is a choice about the scene rather
+ * than about the display, and it is here because it is visual and nothing else.
  */
 
 export function GraphicsPanel({
@@ -81,10 +79,6 @@ export function GraphicsPanel({
           render.displaySize.width,
           render.displaySize.height,
         )
-  const scaleDetail =
-    dimensions === null
-      ? 'Render size appears when the display is ready.'
-      : `${dimensions.render.width}×${dimensions.render.height} of ${dimensions.display.width}×${dimensions.display.height}`
   const rebuilding = (): void => onNotice('rebuilding the sensor')
   const [surface, setSurface] = usePersistentState(RENDER_SURFACE)
   const [sensor, setSensor] = usePersistentState(RENDER_SENSOR)
@@ -92,6 +86,7 @@ export function GraphicsPanel({
   const [thrusterVariation, setThrusterVariation] = usePersistentState(
     RENDER_THRUSTER_VARIATION,
   )
+  const { rows: changed } = useDisplayDefaults()
   const mode = render.output?.mode ?? null
   /*
    * Whether `auto` guessed something other than the obvious.
@@ -104,9 +99,268 @@ export function GraphicsPanel({
    * repeating the resolved mode is noise.
    */
   const resolved = render.preference === 'auto' ? mode : null
+  const encoding =
+    render.output === null
+      ? 'Starting'
+      : `${render.output.gamut === 'display-p3' ? 'Display P3' : 'sRGB'} · ${mode === 'extended' ? 'extended HDR' : 'SDR'}`
+  const linkSets = (): string | undefined =>
+    pageOverride ? 'Set by the page link' : undefined
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="@container flex flex-col gap-2">
+      <Section
+        id="graphics.output"
+        title="Output"
+        trailing={mode ?? 'starting'}
+      >
+        {/*
+         * The ask and the answer, on one row.
+         *
+         * The group is the ask. The line under it is what the renderer came
+         * back with — the gamut and the range actually in use, with a pip that
+         * says whether `auto` reached extended — because the override exists
+         * for the case where `auto` is wrong, and a control that could not show
+         * what `auto` chose could not show that it was.
+         */}
+        <SettingRow
+          label="HDR output"
+          changed={changed.hdr}
+          detail={
+            <span className="flex flex-col gap-0.5">
+              <span>
+                {render.preference === 'extended' && mode === 'standard'
+                  ? 'Extended HDR is unavailable here, so this display uses SDR.'
+                  : 'Extended adds luminance headroom above white.'}{' '}
+                Changing it rebuilds the renderer.
+              </span>
+              <span className="flex items-center gap-1.5 text-slate-300">
+                {/* A non-text indicator, held to 3:1 like the connection pip
+                    rather than to the 4.5:1 the ink beside it meets. */}
+                <span
+                  aria-hidden
+                  className={`size-1.5 shrink-0 rounded-full ${
+                    mode === 'extended' ? 'bg-emerald-400' : 'bg-slate-400'
+                  }`}
+                />
+                <span className="type-readout">
+                  {encoding}
+                  {resolved !== null && ' · chosen by auto'}
+                </span>
+              </span>
+            </span>
+          }
+        >
+          <OptionGroup
+            label="HDR output"
+            value={render.preference}
+            values={OUTPUT_PREFERENCES}
+            onChange={render.onPreference}
+          />
+        </SettingRow>
+        {mode === 'extended' && (
+          <SettingRow
+            label="Peak luminance"
+            changed={changed.peak}
+            detail="How far above white the brightest highlight may reach on this display."
+          >
+            <SliderControl
+              label="Peak luminance"
+              min={1}
+              max={2}
+              step={0.05}
+              value={sensor.peak}
+              reading={`${sensor.peak.toFixed(2)}×`}
+              spoken={`${sensor.peak.toFixed(2)} times white`}
+              onChange={(peak) => setSensor((held) => ({ ...held, peak }))}
+            />
+          </SettingRow>
+        )}
+        {/*
+         * Display gamma. The tone curve is authored for one room and cannot
+         * know the viewer's, so where the midtones sit is theirs: a power on
+         * the displayed range up to white, and nothing above it, so a star's
+         * headroom and where a disk clips do not move. A uniform, so it takes
+         * effect on the next frame without rebuilding the sensor.
+         */}
+        <SettingRow
+          label="Gamma"
+          changed={changed.gamma}
+          detail="Where the midtones sit. Raise it in a bright room; 1.00 is the curve as authored."
+        >
+          <SliderControl
+            label="Gamma"
+            min={0.5}
+            max={2}
+            step={0.05}
+            value={gamma}
+            reading={gamma.toFixed(2)}
+            spoken={gamma.toFixed(2)}
+            onChange={setGamma}
+          />
+        </SettingRow>
+      </Section>
+
+      <Section id="graphics.picture" title="Picture">
+        {pageOverride && (
+          <p className="type-ui py-1 text-pretty text-slate-400">
+            The page link sets this picture for this visit.
+          </p>
+        )}
+        <SettingRow
+          label="Anti-aliasing"
+          changed={changed.aa}
+          detail={
+            webgl
+              ? 'Temporal needs WebGPU.'
+              : 'Temporal rebuilds edges across frames. Supersampling draws twice the width and height.'
+          }
+        >
+          <OptionGroup
+            label="Anti-aliasing"
+            value={picture.aa}
+            values={PICTURE_AA}
+            labels={PICTURE_LABELS.aa}
+            disabled={(aa) =>
+              linkSets() ??
+              (webgl && aa === 'temporal' ? 'Needs WebGPU' : undefined)
+            }
+            onChange={(aa) => {
+              setPicture((held) => ({
+                ...held,
+                aa,
+                scale: aa === 'supersample' ? 'native' : held.scale,
+              }))
+              rebuilding()
+            }}
+            className="max-w-full flex-wrap"
+          />
+        </SettingRow>
+        <SettingRow
+          label="Render scale"
+          changed={changed.scale}
+          detail={`${
+            dimensions === null
+              ? 'The render size appears when the display is ready.'
+              : `Draws ${dimensions.render.width}×${dimensions.render.height} for a ${dimensions.display.width}×${dimensions.display.height} display.`
+          }${webgl ? ' Reduced scales need WebGPU.' : picture.aa === 'supersample' ? ' Supersampling draws at native scale.' : ''}`}
+        >
+          <OptionGroup
+            label="Render scale"
+            value={picture.scale}
+            values={PICTURE_SCALES}
+            labels={PICTURE_LABELS.scale}
+            disabled={(scale) =>
+              linkSets() ??
+              (scale !== 'native' && webgl
+                ? 'Needs WebGPU'
+                : scale !== 'native' && picture.aa === 'supersample'
+                  ? 'Supersampling uses native scale'
+                  : undefined)
+            }
+            onChange={(scale) => {
+              setPicture((held) => ({
+                ...held,
+                scale: held.aa === 'supersample' ? 'native' : scale,
+              }))
+              rebuilding()
+            }}
+            className="max-w-full flex-wrap"
+          />
+        </SettingRow>
+        <SettingRow
+          label="Sharpness"
+          changed={changed.sharpness}
+          detail="Sharpens rebuilt edges. Applies to temporal anti-aliasing and reduced render scales."
+        >
+          <OptionGroup
+            label="Sharpness"
+            value={picture.sharpness}
+            values={PICTURE_SHARPNESS}
+            labels={PICTURE_LABELS.sharpness}
+            disabled={() =>
+              linkSets() ??
+              (!pictureUpscales(resolvedPicture)
+                ? 'Choose temporal anti-aliasing or a reduced render scale'
+                : undefined)
+            }
+            onChange={(sharpness) => {
+              setPicture((held) => ({ ...held, sharpness }))
+              rebuilding()
+            }}
+          />
+        </SettingRow>
+      </Section>
+
+      <Section id="graphics.effects" title="Effects">
+        {/*
+         * The flare everywhere, on or off. How much of its ghost-and-streak
+         * stack a picture shows is the planetarium Lens panel's glare, which is
+         * a choice about one photograph; this is whether there is a flare to
+         * choose an amount of, in every mode.
+         */}
+        <SwitchRow
+          divided
+          label="Lens flare"
+          detail="The glow, ghosts and streaks a bright star throws through the lens, in every mode."
+          changed={changed.flare}
+          on={lensFlare}
+          onChange={setLensFlare}
+        />
+      </Section>
+
+      {/*
+       * The surface's levers. Each is one measured cost with a name on it
+       * rather than a rung of a quality ladder — `render/quality.ts` says what
+       * each step spends — and none rebuilds anything: the frame loop reads the
+       * record and the materials compare before they write.
+       */}
+      <Section id="graphics.surface" title="Surface">
+        <SettingRow
+          label="Terrain"
+          changed={changed.terrain}
+          detail="How large a ground cell may grow on screen before it is refined."
+        >
+          <OptionGroup
+            label="Terrain"
+            value={surface.terrain}
+            values={TERRAIN_DETAILS}
+            onChange={(terrain) => setSurface((held) => ({ ...held, terrain }))}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Ground detail"
+          changed={changed.ground}
+          detail="The fine relief drawn inside each cell. Lean keeps the coarsest."
+        >
+          <OptionGroup
+            label="Ground detail"
+            value={surface.ground}
+            values={GROUND_DETAILS}
+            onChange={(ground) => setSurface((held) => ({ ...held, ground }))}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Sea"
+          changed={changed.sea}
+          detail="Full refracts the seabed and mirrors the land. Plain reflects the sky. Flat has no waves."
+        >
+          <OptionGroup
+            label="Sea"
+            value={surface.sea}
+            values={SEA_DETAILS}
+            onChange={(sea) => setSurface((held) => ({ ...held, sea }))}
+          />
+        </SettingRow>
+        <SwitchRow
+          divided
+          label="Rocks"
+          detail="The scattered stones on the ground."
+          changed={changed.rocks}
+          on={surface.rocks}
+          onChange={(rocks) => setSurface((held) => ({ ...held, rocks }))}
+        />
+      </Section>
+
       {/*
        * Which hull the ship is drawn as.
        *
@@ -117,255 +371,27 @@ export function GraphicsPanel({
        * the planetarium; the debug cone stands in until the chosen one loads.
        */}
       <Section id="graphics.ship" title="Ship">
-        <div className="rounded border border-slate-800/80 bg-slate-900/40 p-1.5">
+        <SettingRow
+          label="Hull"
+          changed={changed.ship}
+          detail="The ship flight draws, and the planetarium when its ship layer is on."
+        >
           <OptionGroup
-            label="Ship"
-            className="w-full [&>*]:flex-1"
+            label="Hull"
             value={ship}
             values={SHIP_IDS}
             labels={SHIP_LABELS}
             onChange={setShip}
           />
-        </div>
+        </SettingRow>
         <SwitchRow
-          bordered
+          divided
           label="Thruster variation"
           detail="Uneven valve timing and tiny settling puffs. Visual only."
+          changed={changed.thrusters}
           on={thrusterVariation}
           onChange={setThrusterVariation}
         />
-      </Section>
-
-      <Section id="graphics.features" title="Features">
-        <SwitchRow
-          bordered
-          icon={Sparkles}
-          label="Lens Flare"
-          detail="ghosts, streak and glow when the star is in frame"
-          on={lensFlare}
-          onChange={setLensFlare}
-        />
-      </Section>
-
-      <Section id="graphics.picture" title="Picture">
-        {pageOverride && (
-          <p className="type-ui text-slate-400">
-            The page link sets this picture for this visit.
-          </p>
-        )}
-        <PictureRow
-          label="Anti-aliasing"
-          detail={
-            webgl
-              ? 'Temporal needs WebGPU.'
-              : 'Temporal reconstructs edges across frames. Supersampling draws twice the display width and height.'
-          }
-          value={picture.aa}
-          values={PICTURE_AA}
-          labels={PICTURE_LABELS.aa}
-          disabled={(aa) =>
-            pageOverride
-              ? 'Set by the page link'
-              : webgl && aa === 'temporal'
-                ? 'Needs WebGPU'
-                : undefined
-          }
-          onChange={(aa) => {
-            setPicture((held) => ({
-              ...held,
-              aa,
-              scale: aa === 'supersample' ? 'native' : held.scale,
-            }))
-            rebuilding()
-          }}
-        />
-        <PictureRow
-          label="Render scale"
-          detail={`${scaleDetail}${webgl ? ' · Reduced scales need WebGPU.' : picture.aa === 'supersample' ? ' · Supersampling uses native scale.' : ''}`}
-          value={picture.scale}
-          values={PICTURE_SCALES}
-          labels={PICTURE_LABELS.scale}
-          disabled={(scale) =>
-            pageOverride
-              ? 'Set by the page link'
-              : scale !== 'native' && webgl
-                ? 'Needs WebGPU'
-                : scale !== 'native' && picture.aa === 'supersample'
-                  ? 'Supersampling uses native scale'
-                  : undefined
-          }
-          onChange={(scale) => {
-            setPicture((held) => ({
-              ...held,
-              scale: held.aa === 'supersample' ? 'native' : scale,
-            }))
-            rebuilding()
-          }}
-        />
-        <PictureRow
-          label="Sharpness"
-          detail="Sharpens reconstructed edges. Applies to temporal anti-aliasing and reduced render scales."
-          value={picture.sharpness}
-          values={PICTURE_SHARPNESS}
-          labels={PICTURE_LABELS.sharpness}
-          disabled={() =>
-            pageOverride
-              ? 'Set by the page link'
-              : !pictureUpscales(resolvedPicture)
-                ? 'Choose temporal anti-aliasing or a reduced render scale'
-                : undefined
-          }
-          onChange={(sharpness) => {
-            setPicture((held) => ({ ...held, sharpness }))
-            rebuilding()
-          }}
-        />
-        {/*
-         * Display gamma. The tone curve is authored for one room and cannot
-         * know the viewer's, so where the midtones sit is theirs: a power on
-         * the displayed range up to white, and nothing above it, so a star's
-         * headroom and where a disk clips do not move. A uniform, so it
-         * takes effect on the next frame without rebuilding the sensor.
-         */}
-        <div>
-          <Row label="Gamma" value={gamma.toFixed(2)} />
-          <Slider
-            min={0.5}
-            max={2}
-            step={0.05}
-            value={[gamma]}
-            aria-label="Gamma"
-            aria-valuetext={gamma.toFixed(2)}
-            onValueChange={([value]) => {
-              if (value !== undefined) setGamma(value)
-            }}
-            onClick={releaseFocus}
-            className="min-w-0 py-2.5 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
-          />
-        </div>
-      </Section>
-
-      {/*
-       * The surface's levers. Each is one measured cost with a name on it
-       * rather than a rung of a quality ladder — `render/quality.ts` says what
-       * each step spends — and none rebuilds anything: the frame loop reads the
-       * record and the materials compare before they write.
-       */}
-      <Section id="graphics.surface" title="Surface">
-        <SurfaceRow
-          label="Terrain"
-          detail="how many pixels a ground cell may cover before it is refined"
-          value={surface.terrain}
-          values={TERRAIN_DETAILS}
-          onChange={(terrain) => setSurface((held) => ({ ...held, terrain }))}
-        />
-        <SurfaceRow
-          label="Ground detail"
-          detail="the per-pixel octaves under a mesh cell; lean keeps the coarse one"
-          value={surface.ground}
-          values={GROUND_DETAILS}
-          onChange={(ground) => setSurface((held) => ({ ...held, ground }))}
-        />
-        <SurfaceRow
-          label="Sea"
-          detail="full refracts the seabed and mirrors the land; plain reflects the sky; flat has no waves"
-          value={surface.sea}
-          values={SEA_DETAILS}
-          onChange={(sea) => setSurface((held) => ({ ...held, sea }))}
-        />
-        <SwitchRow
-          bordered
-          icon={Mountain}
-          label="Rocks"
-          detail="the instanced scatter on the ground"
-          on={surface.rocks}
-          onChange={(rocks) => setSurface((held) => ({ ...held, rocks }))}
-        />
-      </Section>
-
-      <Section
-        id="graphics.output"
-        title="HDR output"
-        trailing={mode ?? 'starting'}
-      >
-        {/*
-         * One control, three states, and what came back underneath it.
-         *
-         * This was a `Row` pair — preference above, resolved below — plus a
-         * button that cycled. Three problems in one section: reaching a
-         * specific state cost up to three presses and three renderer rebuilds;
-         * the two rows read as two settings rather than as an ask and an
-         * answer; and the resolved mode was stated even when it could not
-         * possibly disagree. The group is the ask. The line under it is the
-         * answer, and it only appears when there is one worth reading.
-         */}
-        <div className="rounded border border-slate-800/80 bg-slate-900/40 p-1.5">
-          <OptionGroup
-            label="HDR output"
-            className="w-full [&>*]:flex-1"
-            value={render.preference}
-            values={OUTPUT_PREFERENCES}
-            onChange={render.onPreference}
-          />
-          {/* Wrapping rather than truncating: the resolved state and the note
-              share a 19rem column and neither is expendable, so they take two
-              lines when they do not fit on one. */}
-          <p className="type-ui mt-1.5 flex flex-wrap items-center gap-x-1.5 text-slate-400">
-            {resolved !== null && (
-              <>
-                {/* A non-text indicator, held to 3:1 like the connection pip
-                    rather than to the 4.5:1 the ink beside it meets. */}
-                <span
-                  aria-hidden
-                  className={`size-1.5 shrink-0 rounded-full ${
-                    resolved === 'extended' ? 'bg-emerald-400' : 'bg-slate-400'
-                  }`}
-                />
-                <span className="shrink-0 text-slate-300">
-                  auto → {resolved}
-                </span>
-                <span aria-hidden className="text-slate-700">
-                  ·
-                </span>
-              </>
-            )}
-            <span>rebuilds the renderer</span>
-          </p>
-        </div>
-        <Row
-          label="Encoding"
-          value={
-            render.output === null
-              ? 'Starting'
-              : `${render.output.gamut === 'display-p3' ? 'Display P3' : 'sRGB'} · ${mode === 'extended' ? 'Extended HDR' : 'SDR'}`
-          }
-        />
-        <p className="type-ui text-pretty text-slate-400">
-          {render.preference === 'extended' && mode === 'standard'
-            ? 'Extended HDR is unavailable here. This display uses SDR.'
-            : 'Display P3 widens the color gamut. Extended HDR adds luminance headroom.'}
-        </p>
-        {mode === 'extended' && (
-          <div>
-            <Row
-              label="Peak luminance"
-              value={`${sensor.peak.toFixed(2)}× white`}
-            />
-            <Slider
-              min={1}
-              max={2}
-              step={0.05}
-              value={[sensor.peak]}
-              aria-label="Peak luminance"
-              aria-valuetext={`${sensor.peak.toFixed(2)} times white`}
-              onValueChange={([peak]) => {
-                if (peak !== undefined) setSensor((held) => ({ ...held, peak }))
-              }}
-              onClick={releaseFocus}
-              className="min-w-0 py-2.5 [&_[data-slot=slider-thumb]]:size-3.5 [&_[data-slot=slider-track]]:h-1.5"
-            />
-          </div>
-        )}
       </Section>
     </div>
   )

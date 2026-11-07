@@ -1,5 +1,6 @@
 import fc from 'fast-check'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { PICTURES } from '@inertialref/devtools'
 import { DEFAULT_SENSOR_SETTINGS, LENS_PRESETS } from '@inertialref/rendering'
 import { isBoolean, numberWithin, oneOf } from './accept.ts'
 import {
@@ -18,6 +19,7 @@ import {
   exportPreferences,
   FAMILIES,
   importPreferences,
+  PERSONAL_PICTURES,
   PLANETARIUM_FLARE,
   PLANETARIUM_LABELS,
   planImport,
@@ -27,8 +29,10 @@ import {
   RENDER_SENSOR,
   RENDER_THRUSTER_VARIATION,
   REGISTRY,
+  resetPreference,
   resetPreferences,
   SECTION_OPEN,
+  subscribe,
   write,
 } from './preferences.ts'
 
@@ -494,5 +498,38 @@ describe('an import', () => {
   it('rejects a class list naming something no chip answers to', () => {
     expect(NAVIGATOR_CLASSES.accept(['stars'])).toBe(true)
     expect(NAVIGATOR_CLASSES.accept(['stars', 'wormholes'])).toBe(false)
+  })
+})
+
+describe('a scoped reset', () => {
+  it('removes one preference rather than writing its default', () => {
+    write(PLANETARIUM_LABELS, false)
+    write(CONTROLS_KEYMAP, { 'time.pause': 'KeyP' })
+    const heard: unknown[] = []
+    const stop = subscribe(PLANETARIUM_LABELS, (value) => heard.push(value))
+    resetPreference(PLANETARIUM_LABELS)
+    stop()
+    // A mounted hook hears the default through the subscription an import
+    // reaches it by, so a settings page's "restore defaults" is live.
+    expect(heard).toEqual([true])
+    expect(read(PLANETARIUM_LABELS)).toBe(true)
+    // Absent rather than stored as the default: only somebody who never chose
+    // follows a default that later moves.
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'planetarium.labels',
+    )
+    // And the reset reached nothing it was not named.
+    expect(read(CONTROLS_KEYMAP)).toEqual({ 'time.pause': 'KeyP' })
+  })
+
+  it('keeps the saved shots when every setting is reset', () => {
+    // A shot is something somebody made, not a setting they chose; the data
+    // page's "reset everything" says they stay, and this is that claim.
+    const shot = PICTURES[0]!
+    write(PERSONAL_PICTURES, [shot])
+    write(PLANETARIUM_LABELS, false)
+    resetPreferences([PERSONAL_PICTURES])
+    expect(read(PLANETARIUM_LABELS)).toBe(true)
+    expect(read(PERSONAL_PICTURES)).toEqual([shot])
   })
 })

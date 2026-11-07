@@ -1139,14 +1139,48 @@ export function importPreferences(data: unknown): ImportPlan {
   return plan
 }
 
-/** Forget everything, and put every mounted hook back to its default. */
-export function resetPreferences(): void {
-  const keys = storedKeys()
+/**
+ * Forget everything, and put every mounted hook back to its default.
+ *
+ * `keep` is for what the registry holds that is not a setting. Personal shots
+ * are stored here because this is where storage is, but they are something a
+ * person made rather than something they chose — and a "reset settings" that
+ * deleted a library of saved pictures would be the one reset in the app that
+ * cannot be undone by choosing again.
+ */
+export function resetPreferences(keep: readonly AnyPreference[] = []): void {
+  const kept = new Set(keep.map((definition) => definition.key))
+  const keys = storedKeys().filter((key) => !kept.has(key))
   // Clear obsolete keys before resolving defaults, or a migration restores
   // the preference while reset is still removing its source.
   for (const key of keys) removeRaw(key)
   for (const key of keys) announce(key, believe(key))
 }
+
+/**
+ * One preference back to its default, the way `resetPreferences` puts all of
+ * them back: by removing what is stored rather than by writing the default.
+ *
+ * The difference is the one `usePersistentState` keeps on mount. An absent key
+ * means "never chose", and only somebody who never chose follows a default
+ * that later moves — a section's "restore defaults" that wrote every default
+ * out would turn each of them into a choice nobody made.
+ */
+export function resetPreference(definition: AnyPreference): void {
+  removeRaw(definition.key)
+  announce(definition.key, resolve(definition))
+}
+
+/**
+ * Whether a preference holds something other than its default.
+ *
+ * Structural rather than by reference, because the record-shaped preferences —
+ * the picture, the surface, the sensor — come back from storage as fresh
+ * objects that are equal to their defaults and never identical to them. JSON
+ * is the comparison storage itself makes, and every value here is JSON.
+ */
+export const differs = (value: unknown, initial: unknown): boolean =>
+  JSON.stringify(value) !== JSON.stringify(initial)
 
 /** The value a hook should hold for a key, given what storage now says. */
 function believe(key: string): unknown {
