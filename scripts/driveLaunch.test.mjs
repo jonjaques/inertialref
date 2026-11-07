@@ -184,6 +184,20 @@ describe('the launch presets', () => {
     ])
   })
 
+  it('adds a caller’s dropped defaults to the preset’s, so display keeps its color profile', () => {
+    expect(
+      launchOptions('display', { ignoreDefaultArgs: ['--hide-scrollbars'] })
+        .ignoreDefaultArgs,
+    ).toEqual(['--force-color-profile=srgb', '--hide-scrollbars'])
+    expect(
+      launchOptions('sdr', { ignoreDefaultArgs: ['--hide-scrollbars'] })
+        .ignoreDefaultArgs,
+    ).toEqual(['--hide-scrollbars'])
+    expect(
+      launchOptions('display', { ignoreDefaultArgs: true }).ignoreDefaultArgs,
+    ).toBe(true)
+  })
+
   it('refuses a preset that is not one, naming the two there are', () => {
     expect(() => launchOptions('hdr')).toThrow(/sdr, display/)
   })
@@ -299,12 +313,20 @@ describe('the operating point after boot', () => {
     expect(point.dynamicRangeHigh).toBe(true)
   })
 
-  it('names the system, Sol at earthrise and generated at far-shore', async () => {
+  it('names the system, Sol at earthrise, generated at far-shore and catalog at a real star', async () => {
     const [earthrise, farShore] = N1.runs
     expect(earthrise.id).toMatch(/^earthrise/)
     expect(farShore.id).toMatch(/^far-shore/)
     expect((await asserted(fromRun(earthrise))).system).toBe('sol')
     expect((await asserted(fromRun(farShore))).system).toBe('generated')
+    // A catalog star is neither: Alpha Centauri A by its Hipparcos number, a
+    // red dwarf by Gliese's, and a population id beside the legacy one.
+    for (const [system, kind] of [
+      ['HIP71683', 'catalog'],
+      ['GJ1061', 'catalog'],
+      ['Q3_a_1_0_2', 'generated'],
+    ])
+      expect((await asserted(page({ system }))).system).toBe(kind)
     // With no harness to ask, the URL's `address`, as the spike's `lib.mjs`
     // wrote each point's.
     const unbooted = (search) =>

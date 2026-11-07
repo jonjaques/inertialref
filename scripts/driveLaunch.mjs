@@ -121,7 +121,19 @@ export function launchOptions(
   const options = { ...base, ...overrides }
   // Fresh arrays, because Playwright is handed these and the presets are frozen.
   options.args = [...(base.args ?? []), ...(overrides.args ?? [])]
-  if (Array.isArray(options.ignoreDefaultArgs))
+  // Both lists add up. Replacing the preset's would let a caller dropping one
+  // more default put back the forced sRGB `display` exists to drop, and
+  // nothing after boot refuses a page without the extended range. A boolean
+  // from the caller is a whole answer and stands.
+  if (
+    Array.isArray(base.ignoreDefaultArgs) &&
+    Array.isArray(overrides.ignoreDefaultArgs)
+  )
+    options.ignoreDefaultArgs = [
+      ...base.ignoreDefaultArgs,
+      ...overrides.ignoreDefaultArgs,
+    ]
+  else if (Array.isArray(options.ignoreDefaultArgs))
     options.ignoreDefaultArgs = [...options.ignoreDefaultArgs]
   if (!comparison) refuseForeignBrowser(options)
   return options
@@ -305,11 +317,19 @@ export async function assertOperatingPoint(
     backend: reading.backend,
     dynamicRangeHigh: reading.dynamicRangeHigh,
     picture: reading.picture,
-    system:
-      reading.system === null
-        ? null
-        : reading.system === 'SOL'
-          ? 'sol'
-          : 'generated',
+    system: systemKind(reading.system),
   }
+}
+
+/*
+ * Sol, a catalog star, or a generated system, by the id's own shape. A
+ * generated id is `P` or `Q` and base-36 fields joined by underscores
+ * (`galaxy.ts`, `galaxy/population.ts`); a catalog id is `HIP…`, `GJ…`, `HD…`,
+ * `HR…` or `HYG…`, upper case and alphanumeric (`catalog/identity.ts`), so it
+ * never carries one. A plate at Alpha Centauri is a real star's, not a seed's.
+ */
+function systemKind(system) {
+  if (system === null) return null
+  if (system === 'SOL') return 'sol'
+  return /^[PQ][0-9a-z]*_/.test(system) ? 'generated' : 'catalog'
 }
