@@ -48,7 +48,7 @@ export function subjectView<B extends { readonly address: string }>(
     readonly kind: string
   },
   bodyReady: (body: B) => boolean,
-  stationsDrawn: ReadonlySet<string>,
+  stationsDrawn: { has(address: string): boolean },
 ): { present: boolean; assets: boolean } {
   const body = scene.bodies.find((one) => one.address === target.address)
   const station = scene.stations.find((one) => one.address === target.address)

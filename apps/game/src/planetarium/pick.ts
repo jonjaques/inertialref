@@ -33,6 +33,10 @@ export interface PickCandidate {
    * raises: what it goes round, and whether the eye is inside the near field
    * of it. Its being non-null is also what `pick` and `clickable` read a
    * spacecraft by.
+   *
+   * A spacecraft's `radius` is its bounding sphere's, which holds every angle
+   * its arrays can reach: the extent of a label's ring, never a shape to be
+   * inside.
    */
   readonly craft: {
     /** What it goes round, by the address the observatory resolves. */
@@ -61,12 +65,14 @@ export interface PickCandidate {
 export const PICK_SLOP = 24
 
 /**
- * How far past a drawn spacecraft's disk it still wins a click, in pixels.
+ * How far from a drawn spacecraft's model it still wins a click, in pixels.
  *
  * Its own reach, a third of `PICK_SLOP`, because winning first is a stronger
  * claim than being nearest: at the full slop a station a few pixels across
  * takes every click within a fingertip of it, and from far enough out that is
  * most of the planet behind it. Eight pixels is enough to land on a truss.
+ * Measured from the triangles the frame drew, not from the bounding sphere,
+ * by the caller (`render/modelNear.ts`).
  */
 export const CRAFT_SLOP = 8
 
@@ -97,45 +103,54 @@ const NONE: ReadonlySet<string> = new Set()
  * design question — `docs/design/planetarium.md` — and not something to change
  * here by adjusting a comparison.
  *
- * Spacecraft are the one exception, decided there too: one whose model is on
- * screen wins a click on it, or within `CRAFT_SLOP` of it, before any of this
- * runs.
+ * Spacecraft are the one exception, decided there too. A spacecraft's disk is
+ * its bounding sphere, which is mostly space, so in this rule it is a point
+ * and never something the pointer is inside. One whose model is drawn wins a
+ * click on the model, or within `CRAFT_SLOP` of it, before any of this runs.
  */
 export function pick(
   candidates: readonly PickCandidate[],
   pointer: { readonly x: number; readonly y: number },
   slop: number = PICK_SLOP,
-  /** Spacecraft whose model is on screen, by address: `engine.stationsDrawn`. */
-  drawn: ReadonlySet<string> = NONE,
+  /**
+   * Drawn spacecraft whose model is within `CRAFT_SLOP` of the pointer, by
+   * address: what the caller measured against the triangles on screen.
+   */
+  under: ReadonlySet<string> = NONE,
 ): PickCandidate | null {
   /*
-   * A drawn spacecraft first, where the pointer is on it or within
-   * `CRAFT_SLOP` of it, whatever natural body is behind.
+   * A drawn spacecraft first, where its model is under the pointer, whatever
+   * natural body is behind.
    *
    * The disk rule below gives every click on a station drawn against Earth
    * to Earth: the pointer is inside both and Earth is larger, and a station is
    * never the largest disk under anything. A drawn model is always in front of
    * what it is drawn against — one behind a body is no candidate at all — so
-   * it wins there. A station that is only named has nothing on screen to aim
-   * at, and competes as a point does: inside a disk, the disk wins, as it
-   * does for a moon over its planet.
+   * it wins there, and only there. Its sphere covers the gaps between its
+   * wings and Earth through them, and a click aimed at the planet past the
+   * truss is the planet's.
    */
   return (
     choose(
       candidates.filter(
-        (candidate) => candidate.craft !== null && drawn.has(candidate.address),
+        (candidate) => candidate.craft !== null && under.has(candidate.address),
       ),
       pointer,
-      CRAFT_SLOP,
-    ) ?? choose(candidates, pointer, slop)
+      Number.POSITIVE_INFINITY,
+    ) ?? choose(candidates, pointer, slop, bodyDisk)
   )
 }
+
+/** A body's disk; a spacecraft, as a point. */
+const bodyDisk = (candidate: PickCandidate): number =>
+  candidate.craft === null ? candidate.radius : 0
 
 /** The disk the pointer is inside, largest first, else the nearest in reach. */
 function choose(
   candidates: readonly PickCandidate[],
   pointer: { readonly x: number; readonly y: number },
   slop: number,
+  disk: (candidate: PickCandidate) => number = (candidate) => candidate.radius,
 ): PickCandidate | null {
   let inside: PickCandidate | null = null
   let nearest: PickCandidate | null = null
@@ -147,12 +162,12 @@ function choose(
       candidate.x - pointer.x,
       candidate.y - pointer.y,
     )
-    if (distance <= candidate.radius) {
-      if (inside === null || candidate.radius > inside.radius)
-        inside = candidate
+    const radius = disk(candidate)
+    if (distance <= radius) {
+      if (inside === null || radius > disk(inside)) inside = candidate
       continue
     }
-    if (distance <= slop + candidate.radius && distance < nearestDistance) {
+    if (distance <= slop + radius && distance < nearestDistance) {
       nearestDistance = distance
       nearest = candidate
     }
@@ -177,7 +192,8 @@ function choose(
 export const clickable = (
   candidate: PickCandidate,
   named: ReadonlySet<string>,
-  drawn: ReadonlySet<string>,
+  /** Spacecraft whose model is on screen: `engine.stationsDrawn`. */
+  drawn: { has(address: string): boolean },
   viewport: { readonly width: number; readonly height: number },
 ): boolean =>
   candidate.craft === null ||

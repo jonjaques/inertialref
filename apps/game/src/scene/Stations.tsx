@@ -111,7 +111,7 @@ export function Stations({ engine }: { engine: GameEngine }) {
       const group = instance.group
       group.visible = station.drawn
       if (!station.drawn) continue
-      engine.stationsDrawn.add(station.address)
+      engine.stationsDrawn.set(station.address, group)
       const { position } = station.placement
       group.position.set(position.x, position.y, position.z)
       group.quaternion.set(

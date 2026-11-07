@@ -44,7 +44,8 @@ import { timeCommands } from '../hud/time.ts'
 import { DropHandle } from './DropHandle.tsx'
 import { acceptsRow } from './kinds.ts'
 import { stepTarget } from './navigator.ts'
-import { clickable, pick, PICK_SLOP } from './pick.ts'
+import { modelNear } from '../render/modelNear.ts'
+import { clickable, CRAFT_SLOP, pick, PICK_SLOP } from './pick.ts'
 import { projectScene } from './project.ts'
 import { SkyLabels } from './SkyLabels.tsx'
 import { useObserverInput } from './useObserverInput.ts'
@@ -358,6 +359,10 @@ export function PlanetariumMode({
    * pass happens every frame, so caching one for the other would mean a hit
    * test against positions from the last frame — off by however far the camera
    * moved, which during an ease is most of the screen.
+   *
+   * A drawn spacecraft is tested against its own triangles, through the
+   * camera that drew them, for whether the click is on it: its disk is a
+   * bounding sphere, and a click on Earth between two wings is inside it.
    */
   const onPick = useCallback(
     (point: { x: number; y: number }) => {
@@ -365,20 +370,22 @@ export function PlanetariumMode({
       const view = engine.view
       if (scene === null || view === null) return
       const size = { width: window.innerWidth, height: window.innerHeight }
+      const camera = view.camera as PerspectiveCamera
       const drawn = engine.stationsDrawn
-      const hit = pick(
-        projectScene(
-          scene,
-          view.camera as PerspectiveCamera,
-          size,
-          engine.lens,
-        ).filter((candidate) =>
-          clickable(candidate, named.current, drawn, size),
-        ),
-        point,
-        PICK_SLOP,
-        drawn,
+      const candidates = projectScene(scene, camera, size, engine.lens).filter(
+        (candidate) => clickable(candidate, named.current, drawn, size),
       )
+      const under = new Set<string>()
+      for (const candidate of candidates) {
+        const model =
+          candidate.craft === null ? undefined : drawn.get(candidate.address)
+        if (
+          model !== undefined &&
+          modelNear(model, camera, point, size, CRAFT_SLOP)
+        )
+          under.add(candidate.address)
+      }
+      const hit = pick(candidates, point, PICK_SLOP, under)
       if (hit !== null) focus(hit.address)
     },
     [engine, focus],

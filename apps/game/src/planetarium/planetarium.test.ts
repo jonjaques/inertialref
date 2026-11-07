@@ -351,18 +351,16 @@ describe('what a click may land on', () => {
     expect(pick(candidates, { x: 500, y: 500 })).toBeNull()
   })
 
-  it('gives a drawn station the click on it or right beside it, whatever is behind', () => {
+  it('gives a drawn station the click its model is under, whatever is behind', () => {
     // The pointer is inside both disks and Earth's is far larger, which by the
-    // disk rule alone gives every click on the station to Earth.
+    // disk rule alone gives every click on the station to Earth. `under` is
+    // the caller's answer, from the triangles on screen.
     const earth = candidate({ address: 'earth', x: 500, y: 500, radius: 400 })
     expect(pick([earth, iss], { x: 505, y: 500 }, 24, DRAWN)?.address).toBe(
       'iss',
     )
-    expect(pick([earth, iss], { x: 513, y: 500 }, 24, DRAWN)?.address).toBe(
-      'iss',
-    )
-    // Past its own reach, the planet the pointer is on.
-    expect(pick([earth, iss], { x: 520, y: 510 }, 24, DRAWN)?.address).toBe(
+    // The model not under it, the planet the pointer is on.
+    expect(pick([earth, iss], { x: 505, y: 500 }, 24, NONE)?.address).toBe(
       'earth',
     )
     // The rule is about what is in front, so a moon behind it loses the same.
@@ -370,6 +368,22 @@ describe('what a click may land on', () => {
     expect(pick([moon, iss], { x: 505, y: 500 }, 24, DRAWN)?.address).toBe(
       'iss',
     )
+  })
+
+  it('gives Earth a click between the wings, inside the station’s sphere', () => {
+    // Framed, the ISS's bounding circle covers most of the frame and the
+    // station itself a fraction of it. Off the model, the circle is no
+    // target: the click goes to the planet seen past the truss.
+    const framed = { ...iss, x: 500, y: 500, radius: 450 }
+    const earth = candidate({ address: 'earth', x: 500, y: 1400, radius: 1100 })
+    expect(pick([earth, framed], { x: 640, y: 700 }, 24, NONE)?.address).toBe(
+      'earth',
+    )
+    // Against empty sky the same click selects nothing.
+    expect(pick([framed], { x: 640, y: 700 }, 24, NONE)).toBeNull()
+    // A station a few pixels across against black sky is still a point a
+    // fingertip can land on, as a body is.
+    expect(pick([iss], { x: 520, y: 510 }, 24, NONE)?.address).toBe('iss')
   })
 
   it('leaves a planet its clicks when a station beside it is only named', () => {

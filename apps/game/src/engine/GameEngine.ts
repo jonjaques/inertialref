@@ -844,15 +844,18 @@ export class GameEngine {
   stagedHull: LoadedShip | null = null
 
   /**
-   * The stations whose model the scene drew last frame, by address.
+   * The stations whose model the scene drew last frame, by address, and the
+   * model it drew.
    *
-   * Written by `Stations` and read by the planetarium's click filter, on the
-   * engine for the reason `hull` is. A spacecraft takes a click only while
-   * something of it is on screen, and the scene's `drawn` says only that a
-   * station is near enough and large enough to be: between first sight and a
-   * 21.8 MB model arriving, or after a load that failed, nothing is there.
+   * Written by `Stations` and read by the planetarium's click, on the engine
+   * for the reason `hull` is. A spacecraft takes a click only while something
+   * of it is on screen, and the scene's `drawn` says only that a station is
+   * near enough and large enough to be: between first sight and a 21.8 MB
+   * model arriving, or after a load that failed, nothing is there. The model
+   * is what the click is tested against, triangle by triangle
+   * (`render/modelNear.ts`), because its bounding sphere is mostly space.
    */
-  readonly stationsDrawn = new Set<string>()
+  readonly stationsDrawn = new Map<string, Object3D>()
 
   /**
    * The model `stagedHull` is loaded against: the script's prop while a
