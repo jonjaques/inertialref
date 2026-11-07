@@ -24,6 +24,12 @@
  * caller chose, and never whatever answers on 5173: that port is any
  * project's dev server, and a driver pointed at another repository's Vite
  * waits its whole boot budget for a renderer that never appears.
+ *
+ * Every capture runs under the caller's one hold on the machine's GPU lock.
+ * Each drive.mjs child takes the lock on its own, and one that acquired
+ * rather than joined would be refused by its own parent; the token in the
+ * child's environment is what makes it join. The Chrome the first child
+ * launches keeps the lock after the command exits, until `--down`.
  */
 import { existsSync, mkdirSync, openSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
@@ -136,6 +142,7 @@ export async function serve(tree, port, log) {
  * @param {string} options.port        the driver's CDP port; keys its Chrome profile
  * @param {string} options.out         directory the files land in
  * @param {readonly {id: string, why: string}[]} options.pictures
+ * @param {{env: Record<string, string>}} options.lock  the caller's GPU lock, from `takeGpu`
  * @param {'jpg' | 'png'} [options.extension]  jpg for a committed plate, png to difference
  * @param {(line: string) => void} [options.say]
  * @returns {Promise<Map<string, {file: string, settled: boolean, settleMs: number | null, light: object}>>}
@@ -145,9 +152,14 @@ export async function capturePlates({
   port,
   out,
   pictures,
+  lock,
   extension = 'jpg',
   say = console.log,
 }) {
+  if (lock?.env === undefined)
+    throw new Error(
+      "capturePlates runs under its caller's GPU lock; take it with takeGpu first",
+    )
   /**
    * One driver invocation, its step results parsed from `--json`.
    *
@@ -177,7 +189,11 @@ export async function capturePlates({
           '--json',
           ...args,
         ],
-        { stdio: ['ignore', 'pipe', 'inherit'], cwd: ROOT },
+        {
+          stdio: ['ignore', 'pipe', 'inherit'],
+          cwd: ROOT,
+          env: { ...process.env, ...lock.env },
+        },
       )
       let text = ''
       child.stdout.on('data', (chunk) => {
