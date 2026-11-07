@@ -417,6 +417,8 @@ const elapsed = (ms) => {
 /** Who has the GPU, for a person deciding whether to wait. Never names
  *  `--down`: that is another agent's rig, and closing it ends their session. */
 function describe(file, found) {
+  if (found.kind === 'opening')
+    return `the GPU lock ${file} is being taken by a job that has not written its name yet.`
   if (found.kind === 'foreign')
     return (
       `the GPU lock ${file} is format version ${found.version}, and this checkout's ` +
@@ -439,6 +441,36 @@ function describe(file, found) {
       `(pid ${lock.pid}${exited}), from ${lock.worktree ?? lock.cwd}.`,
     ...(others.length > 0 ? [`It is held for ${others.join(', ')}.`] : []),
   ].join('\n')
+}
+
+/**
+ * Who holds the GPU, without taking it: `--status`, and a caller choosing
+ * which of the tokens it was handed to join with. Null when nothing live
+ * holds it. A stale lock is left for the next acquire to reclaim, because a
+ * read that deleted one would race the edit mutex it does not take.
+ *
+ * @returns {{token: string | null, text: string} | null}
+ */
+export function holding({ path: file = lockPath() } = {}) {
+  const found = inspect(file)
+  if (found.kind === 'free' || found.kind === 'stale') return null
+  return { token: found.lock?.token ?? null, text: describe(file, found) }
+}
+
+/**
+ * `--gpu-wait <s>` or `IR_GPU_WAIT`, as the milliseconds `acquire` takes.
+ * Seconds, because a bound on a queue is minutes and drive.mjs's `--wait` is
+ * already milliseconds of page delay. A plain count only: `1e3` and `5s` are
+ * what a person types expecting a unit, and either read as a number is a wait
+ * a thousand times, or nothing like, what was meant. Unset or empty is no wait.
+ */
+export function parseWait(seconds, source) {
+  if (seconds === undefined || seconds === '') return 0
+  if (!/^\d+(\.\d+)?$/.test(seconds))
+    throw new Error(
+      `${source} takes seconds to wait for the GPU, as a plain number, not '${seconds}'`,
+    )
+  return Math.round(Number(seconds) * 1000)
 }
 
 /**
@@ -490,6 +522,7 @@ function attempt(file, holder, token) {
  * @param {string} [options.token]  a parent's token; `IR_GPU_LOCK_TOKEN` by default
  * @param {number} [options.pollMs]
  * @param {number} [options.reprintMs]
+ * @param {string} [options.hint]  the caller's own way to queue, as the refusal's last line
  * @param {(line: string) => void} [options.say]
  */
 export async function acquire(
@@ -500,6 +533,7 @@ export async function acquire(
     token = process.env[TOKEN_ENV],
     pollMs = 500,
     reprintMs = 10_000,
+    hint,
     say = (line) => process.stderr.write(`${line}\n`),
   } = {},
 ) {
@@ -515,7 +549,8 @@ export async function acquire(
       throw new GpuLockError(
         `GPU busy. ${describe(file, got.busy)}${waited}\n` +
           'One GPU job runs on this machine at a time. Wait for it to finish, ' +
-          `or ask whoever is working in that checkout.\nLock: ${file}`,
+          `or ask whoever is working in that checkout.\nLock: ${file}` +
+          (hint === undefined ? '' : `\n${hint}`),
         { code: 'busy', lock: got.busy.lock ?? null },
       )
     }

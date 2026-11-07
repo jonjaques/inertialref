@@ -17,8 +17,10 @@ import {
   TOKEN_ENV,
   acquire,
   forget,
+  holding,
   lockPath,
   release,
+  parseWait,
 } from './gpuLock.mjs'
 
 /** Every process a test starts carries this in its argv, so `pgrep -f` can
@@ -557,6 +559,64 @@ describe('the GPU lock', () => {
       expect(line).toContain(`pid ${pid}`)
       expect(line).not.toContain('--down')
     }
+  })
+
+  it('names the holder without taking the lock, and reads a free or stale one as nobody', async () => {
+    expect(holding({ path: file() })).toBeNull()
+    // A read reclaims nothing: deleting a stale lock outside the edit mutex
+    // is the race the mutex exists to close.
+    writeLock([{ pid: await deadPid(), processStart: null }])
+    const stale = readFileSync(file(), 'utf8')
+    expect(holding({ path: file() })).toBeNull()
+    expect(readFileSync(file(), 'utf8')).toBe(stale)
+    // Between a create's open and its write the file is empty, and inside the
+    // grace that is a job taking the lock, not nobody.
+    writeFileSync(file(), '')
+    expect(holding({ path: file() })).toEqual({
+      token: null,
+      text: expect.stringContaining('being taken'),
+    })
+    rmSync(file())
+
+    const other = holder({ holder: 'presets:compare', hold: true })
+    const pid = await other.said('acquired')
+    const before = readFileSync(file(), 'utf8')
+    const held = holding({ path: file() })
+    expect(held.token).toBe(read().token)
+    expect(held.text).toContain('presets:compare')
+    expect(held.text).toContain(`pid ${pid}`)
+    expect(held.text).toContain(ROOT)
+    expect(held.text).not.toContain('--down')
+    expect(readFileSync(file(), 'utf8')).toBe(before)
+  })
+
+  it('reads a wait in seconds, and refuses anything that is not a count of them', () => {
+    expect(parseWait(undefined, '--gpu-wait')).toBe(0)
+    expect(parseWait('', 'IR_GPU_WAIT')).toBe(0)
+    expect(parseWait('0', '--gpu-wait')).toBe(0)
+    expect(parseWait('90', '--gpu-wait')).toBe(90_000)
+    expect(parseWait('2.5', '--gpu-wait')).toBe(2_500)
+    // `1e3` and `5s` are the two a person types expecting a unit: refused, so
+    // a wait is never a thousand times what was meant.
+    for (const bad of ['-1', 'ten', '1e3', '5s', 'Infinity', ' '])
+      expect(() => parseWait(bad, 'IR_GPU_WAIT')).toThrow(
+        new RegExp(`IR_GPU_WAIT takes seconds.*'${bad}'`),
+      )
+  })
+
+  it("puts the caller's way to queue in a refusal, and never --down", async () => {
+    const other = holder({ holder: 'drive.mjs (port 9333)', hold: true })
+    await other.said('acquired')
+    const error = await acquire('test:gpu', {
+      path: file(),
+      hint: 'IR_GPU_WAIT=<seconds> pnpm test:gpu queues for it.',
+    }).catch((e) => e)
+    expect(error.code).toBe('busy')
+    expect(error.message).toContain('drive.mjs (port 9333)')
+    expect(error.message.split('\n').at(-1)).toBe(
+      'IR_GPU_WAIT=<seconds> pnpm test:gpu queues for it.',
+    )
+    expect(error.message).not.toContain('--down')
   })
 
   it('gives up when waitMs runs out, still naming the holder', async () => {
