@@ -15,6 +15,7 @@ import {
 import { SOUNDTRACK } from './catalog.ts'
 import { arrange, moveTrack, withMember } from './playlist.ts'
 import { PlaylistRow } from './PlaylistRow.tsx'
+import { landing, shiftOf } from './reorder.ts'
 import { useSoundtrack } from './soundtrackStore.ts'
 
 /*
@@ -35,11 +36,18 @@ import { useSoundtrack } from './soundtrackStore.ts'
  * the pointer leaves the row — which a drag down a fifty-row list does on
  * every frame.
  *
+ * **Nothing is reordered until the drop.** The rows keep their DOM order for
+ * the whole drag: the ones the dragged track passes step aside by its height
+ * through `translate`, and the dragged row follows the pointer through a
+ * `translate` of its own, written straight to its node so that a move is not
+ * a render of fifty rows. Reordering live is the obvious way and it broke
+ * every drag downward after one row — React moves a keyed node to reorder it,
+ * and a node moved while it holds pointer capture loses it (`reorder.ts`).
+ * The order commits once, on release, after capture has ended.
+ *
  * Where a dragged track would land is measured against the rows as they stood
- * when the drag began, in the scroller's content coordinates. The list is
- * drawn in the order the drop would produce while the drag is live, so the
- * rows move as the pointer does; measuring against the live layout instead
- * would measure the preview against itself and oscillate between two slots.
+ * when the drag began, in the scroller's content coordinates, so scrolling
+ * during the drag keeps the row under the pointer.
  */
 
 /** How close to the scroller's edge a drag scrolls it, and by how much a move. */
@@ -53,6 +61,10 @@ interface Drag {
   readonly over: number
   /** Each row's midpoint at the start, in the scroller's content coordinates. */
   readonly mids: readonly number[]
+  /** The dragged row's height, which is how far each row it passes moves. */
+  readonly height: number
+  /** Where the pointer went down, in the same coordinates as `mids`. */
+  readonly start: number
   readonly scroller: HTMLElement | null
 }
 
@@ -85,10 +97,17 @@ export function PlaylistEditor() {
 
   const tracks = arrange(SOUNDTRACK.tracks, order)
   const ids = tracks.map((track) => track.id)
-  const drawn =
-    drag === null
-      ? tracks
-      : arrange(tracks, moveTrack(ids, drag.from, drag.over))
+
+  // Each row numbered by where it is drawn, which during a drag is where the
+  // drop will put it: a list held mid-drag reads 1, 2, 3, not 1, 3, 4, 2.
+  const slots = drag === null ? ids : moveTrack(ids, drag.from, drag.over)
+
+  /** The dragged row's own offset, cleared before the drop's render. */
+  const follow = (id: string, offset: number | null): void => {
+    const node = rows.current.get(id)
+    if (node !== undefined)
+      node.style.translate = offset === null ? '' : `0 ${offset}px`
+  }
 
   /** Move a track to `to` and say so. Through the updater, never the snapshot. */
   const move = (id: string, to: number): void => {
@@ -140,7 +159,16 @@ export function PlaylistEditor() {
     })
     event.currentTarget.setPointerCapture(event.pointerId)
     const from = ids.indexOf(id)
-    setDrag({ id, from, over: from, mids, scroller })
+    const height = rows.current.get(id)?.getBoundingClientRect().height ?? 0
+    setDrag({
+      id,
+      from,
+      over: from,
+      mids,
+      height,
+      start: event.clientY + offset,
+      scroller,
+    })
   }
 
   const onMove = (event: PointerEvent<HTMLButtonElement>): void => {
@@ -152,17 +180,25 @@ export function PlaylistEditor() {
         drag.scroller?.scrollBy(0, STEP)
     }
     const y = event.clientY + scrolled(drag.scroller)
-    // The landing index is the count of *other* rows the pointer is below.
-    let over = 0
-    drag.mids.forEach((mid, index) => {
-      if (index !== drag.from && mid < y) over += 1
-    })
+    // Kept within the list: past either end it is a move to that end, and a
+    // row drawn outside the list would be a row the list no longer contains.
+    const top = (drag.mids[0] ?? 0) - (drag.mids[drag.from] ?? 0)
+    const bottom = (drag.mids.at(-1) ?? 0) - (drag.mids[drag.from] ?? 0)
+    follow(drag.id, Math.min(bottom, Math.max(top, y - drag.start)))
+    const over = landing(drag.mids, drag.from, y)
     if (over !== drag.over) setDrag({ ...drag, over })
   }
 
   const onUp = (): void => {
     if (drag === null) return
+    // In this one event, so the offset and the reorder reach the same frame.
+    follow(drag.id, null)
     if (drag.over !== drag.from) move(drag.id, drag.over)
+    setDrag(null)
+  }
+
+  const onCancel = (): void => {
+    if (drag !== null) follow(drag.id, null)
     setDrag(null)
   }
 
@@ -174,11 +210,17 @@ export function PlaylistEditor() {
         end.
       </p>
       <ol className="flex flex-col" aria-label="Playlist">
-        {drawn.map((track, index) => (
+        {tracks.map((track, index) => (
           <PlaylistRow
             key={track.id}
             track={track}
-            position={index + 1}
+            position={slots.indexOf(track.id) + 1}
+            shift={
+              drag === null
+                ? 0
+                : shiftOf(index, drag.from, drag.over, drag.height)
+            }
+            settling={drag !== null && drag.id !== track.id}
             on={!disabled.includes(track.id)}
             categoryOn={!muted.includes(track.category)}
             playing={track.id === playing}
@@ -199,7 +241,7 @@ export function PlaylistEditor() {
             onHandleDown={(event) => onDown(track.id, event)}
             onHandleMove={onMove}
             onHandleUp={onUp}
-            onHandleCancel={() => setDrag(null)}
+            onHandleCancel={onCancel}
           />
         ))}
       </ol>

@@ -264,6 +264,14 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **A playlist drag downward ended after one row.** The editor reordered its
+  rows live under the pointer; React reorders keyed rows by moving their DOM
+  nodes, and a node moved while it holds pointer capture loses it. Dragging up
+  moves the _other_ rows, so it worked, and every drag down was cancelled at
+  the first slot. The rows now keep their DOM order until the drop and step
+  aside through `translate`; `reorder.test.ts` holds what a drag draws equal to
+  what its drop commits, and trusted CDP drags in Chrome — three rows down,
+  three up, ten down — each landed (7 Nov 2026).
 - **An authentic lossless copy failed authentication at 22.05 kHz.** MP3's
   1105-sample decoder delay is half a sample at that rate, and the residual
   read −16 dB against a true match's −35 to −63. Compare at the native rate

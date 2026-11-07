@@ -23,6 +23,8 @@ import { KeepToggle } from './KeepToggle.tsx'
 export function PlaylistRow({
   track,
   position,
+  shift,
+  settling,
   on,
   categoryOn,
   playing,
@@ -40,6 +42,14 @@ export function PlaylistRow({
   track: SoundtrackTrack
   /** One-based, in the order drawn. */
   position: number
+  /**
+   * Pixels this row is moved by while another is dragged past it. The DOM
+   * order holds until the drop (`reorder.ts` says why), so this is how the
+   * row makes room.
+   */
+  shift: number
+  /** A drag is on and this row is not the dragged one: its shift eases. */
+  settling: boolean
   on: boolean
   categoryOn: boolean
   playing: boolean
@@ -59,9 +69,15 @@ export function PlaylistRow({
   return (
     <li
       ref={rowRef}
+      // Two writers of `translate`, never on one row: React sets it on the rows
+      // making room, and the editor writes the dragged row's offset to its
+      // node — a row whose shift is zero, so React never touches it there.
+      style={shift === 0 ? undefined : { translate: `0 ${shift}px` }}
       className={`flex min-h-11 items-center gap-2 border-b border-slate-800/70 py-1 pr-1 last:border-b-0 ${
-        dragging ? 'rounded bg-sky-500/10 ring-1 ring-sky-500/40' : ''
-      }`}
+        dragging
+          ? 'relative z-10 rounded bg-slate-900 shadow-lg ring-1 ring-sky-500/50'
+          : ''
+      } ${settling ? 'transition-[translate] duration-150 ease-out motion-reduce:transition-none' : ''}`}
     >
       <button
         ref={handleRef}
