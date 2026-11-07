@@ -127,6 +127,18 @@ export interface LensChannel {
  * component.
  */
 export const formatShutter = (seconds: number): string => {
+  // A long exposure in minutes, the unit a photographer states it in: the
+  // Milky Way views integrate for 2,400 and 600 seconds, and "2400.0 s" is a
+  // number to be divided before it says anything. From ten minutes, where a
+  // tenth of a minute is within a percent; under it, whole seconds, because
+  // a tenth of a minute at one minute is a seventh of a stop.
+  if (seconds >= 600) {
+    const minutes = seconds / 60
+    return Number.isInteger(minutes)
+      ? `${minutes} min`
+      : `${minutes.toFixed(1)} min`
+  }
+  if (seconds >= 60) return `${Math.round(seconds)} s`
   if (seconds >= 1) return `${seconds.toFixed(1)} s`
   const denominator = Math.round(1 / seconds)
   // The slider is continuous, so 0.4 s is reachable, and "1/3 s" for it is a
@@ -294,9 +306,10 @@ export interface CameraState {
    *
    * A lens is seven fields and a slider changes one, so every write here is
    * derived from the lens before it. `camera.lens` is one hook's captured
-   * value and `camera.lens` is held by up to four at once — `LensSection` in
-   * the dock *and* at `/settings/camera`, plus Optics and the presets — so the
-   * snapshot a handler closed over can be a write behind the store.
+   * value and `camera.lens` is held by several at once — `LensSection` in the
+   * Lens panel, Optics beside it, the composition and galaxy-journey controls,
+   * and the engine's own binding — so the snapshot a handler closed over can
+   * be a write behind the store.
    */
   readonly onLens: (lens: Lens | ((held: Lens) => Lens)) => void
 }

@@ -13,7 +13,14 @@ const VIEWS = Object.keys(GALAXY_VIEWS) as GalaxyView[]
 export function GalaxySection({ engine, onNotice }: PlanetariumContext) {
   const selected = useEngine((s) => s.observer?.galaxyView ?? null)
   return (
-    <Section id="planetarium.presets.galaxy" title="Milky Way">
+    // Closed on arrival, as the compositions are: a long exposure from
+    // thirty kiloparsecs out is the far end of what this mode does, and the
+    // panel's first screen is for the near one.
+    <Section
+      id="planetarium.presets.galaxy"
+      title="Milky Way"
+      defaultOpen={false}
+    >
       <div className="grid grid-cols-2 gap-1.5">
         {VIEWS.map((id) => (
           <Action

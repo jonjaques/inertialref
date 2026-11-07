@@ -1,7 +1,8 @@
 import { Suspense } from 'react'
 import { LazyGuidePanel as GuidePanel } from '../tour/LazyGuidePanel.tsx'
-import { Aperture, Eye, Image, Sun, AudioLines } from 'lucide-react'
+import { Aperture, AudioLines, Eye, Image, Sun, Video } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
+import { LensPanel } from '../hud/LensPanel.tsx'
 import { Neighborhood, StarBody } from '../icons/index.tsx'
 import type { PlanetariumContext } from './context.ts'
 import { CameraPanel } from './CameraPanel.tsx'
@@ -24,6 +25,15 @@ import { ViewPanel } from './ViewPanel.tsx'
  * how it is being shown to you. That is the arrangement a session actually
  * uses — pick something from the catalog on the left, read it on the right —
  * and it means the two panes are never both about the same question.
+ *
+ * **The order is the menu's, and the menu reads like the screen.** The left
+ * pane's panels come first and the right pane's after, so the glyphs on the
+ * left half of the bar open what appears on the left of the frame, and the
+ * number keys count across the screen the same way. Within the right pane the
+ * order is the order of the questions: what is this, show me something good,
+ * where am I looking from, through what, and what is drawn over it — which
+ * also puts the preset thumbnails above the fold on arrival, where a pane of
+ * Object, Camera and then Presets left them under it at 1600×900.
  */
 export function planetariumPanels(
   context: PlanetariumContext,
@@ -45,6 +55,14 @@ export function planetariumPanels(
       ),
     },
     {
+      id: 'time',
+      title: 'Time',
+      icon: Sun,
+      zone: 'left',
+      hint: 'The clock — pause it, warp it, set it',
+      render: () => <TimePanel {...context} />,
+    },
+    {
       id: 'object',
       title: 'Object',
       // A body, not a reticle. `Crosshair` is the *aiming* glyph and this
@@ -56,21 +74,55 @@ export function planetariumPanels(
       render: () => <ObjectPanel {...context} />,
     },
     {
+      id: 'presets',
+      title: 'Presets',
+      // A picture, because the top tier of this panel is one: the thumbnails
+      // are captures rather than drawings. `Layers` was right while the panel
+      // was compositions alone and says nothing about a fixture.
+      icon: Image,
+      zone: 'right',
+      hint: 'Pictures, compositions and the light, one press each',
+      render: () => <PresetsPanel {...context} />,
+    },
+    {
       id: 'camera',
       title: 'Camera',
       /*
+       * The scene camera — the movie camera every engine's editor draws for
+       * the eye in a scene — and not the aperture, which is the Lens panel's,
+       * because the glass is a panel of its own. A still camera would read
+       * as "take a picture", which is the Presets panel's save.
+       */
+      icon: Video,
+      zone: 'right',
+      hint: 'Where the eye is, and how it holds the subject',
+      render: () => <CameraPanel {...context} />,
+    },
+    {
+      id: 'lens',
+      title: 'Lens',
+      /*
        * The aperture — the glyph `GraphicsPanel` argues it must not have, for
        * exactly the reason it belongs here. An aperture is the one thing in an
-       * optical system this panel is actually about, and the panel that carries
-       * anti-aliasing and the extended-range output is about what the *display*
-       * is asked to show. In a bar read by shape and position, the two of them
-       * signed over to the same idea was two buttons that looked like they did
-       * each other's job.
+       * optical system this panel is about, and the panel that carries
+       * anti-aliasing and the extended-range output is about what the
+       * *display* is asked to show.
        */
       icon: Aperture,
       zone: 'right',
-      hint: 'The eye — where it looks from, and through what',
-      render: () => <CameraPanel {...context} />,
+      /*
+       * Closed on arrival, as View is. The lens is already the one a first
+       * view wants, and a panel of eight sliders opened over a first look at
+       * Earth is the instrument describing itself to somebody who came to look
+       * at the planet.
+       */
+      defaultOpen: false,
+      hint: 'What the picture is taken through — the glass and the exposure',
+      render: () => (
+        <LensPanel
+          glare={{ amount: context.flare, onAmount: context.onFlare }}
+        />
+      ),
     },
     {
       id: 'view',
@@ -81,8 +133,7 @@ export function planetariumPanels(
       icon: Eye,
       zone: 'right',
       /*
-       * Closed on arrival, and it is the only one of the mode's own panels that
-       * is.
+       * Closed on arrival.
        *
        * Five switches, every one of them persisted and every one already at the
        * setting a first view wants — names on, paths on, minor bodies and the
@@ -94,25 +145,6 @@ export function planetariumPanels(
       defaultOpen: false,
       hint: 'Names, orbit paths and the ship',
       render: () => <ViewPanel {...context} />,
-    },
-    {
-      id: 'presets',
-      title: 'Presets',
-      // A picture, because the top tier of this panel is one: the thumbnails
-      // are captures rather than drawings. `Layers` was right while the panel
-      // was compositions alone and says nothing about a fixture.
-      icon: Image,
-      zone: 'right',
-      hint: 'Pictures, compositions, the light and the way out',
-      render: () => <PresetsPanel {...context} />,
-    },
-    {
-      id: 'time',
-      title: 'Time',
-      icon: Sun,
-      zone: 'left',
-      hint: 'The clock — pause it, warp it, read it',
-      render: () => <TimePanel {...context} />,
     },
     /*
      * Last, and suppressed for anybody not granted it. A private alpha's panel

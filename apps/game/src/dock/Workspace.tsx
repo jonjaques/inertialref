@@ -72,7 +72,7 @@ export function Workspace({
    * controls is what is *rendered*, which is `visiblePanels` below.
    */
   const workspace = useWorkspace(id, allPanels(groups))
-  const [placement, setPlacement] = usePersistentState(DOCK_PLACEMENT)
+  const [placement] = usePersistentState(DOCK_PLACEMENT)
   const visible = visiblePanels(groups, dev.open)
   const byId = new Map(visible.map((panel) => [panel.id, panel]))
   /*
@@ -166,7 +166,6 @@ export function Workspace({
           revealed={dev.open ? DEV_REVEALED : NO_GROUPS}
           onReveal={() => dev.onOpenChange(!dev.open)}
           placement={placement}
-          onPlace={setPlacement}
         />
       </div>
     </DockProvider>

@@ -324,7 +324,7 @@ describe('the author’s instruments', () => {
     )
     write(RENDER_LENS_FLARE, RENDER_LENS_FLARE.initial)
     write(RENDER_THRUSTER_VARIATION, RENDER_THRUSTER_VARIATION.initial)
-    expect(graphics).toContain('Lens Flare')
+    expect(graphics).toContain('Lens flare')
     const variation = graphics
       .split('<label')
       .find((row) => row.includes('Thruster variation'))
@@ -424,7 +424,7 @@ describe('the author’s instruments', () => {
         onNotice: () => {},
       }),
     )
-    expect(graphics).toContain('1600×900 of 1600×900')
+    expect(graphics).toContain('Draws 1600×900 for a 1600×900 display.')
     expect(graphics).toContain('Temporal needs WebGPU.')
     const temporal = graphics.match(
       /<button[^>]*title="Needs WebGPU"[^>]*>Temporal<\/button>/,
@@ -467,7 +467,7 @@ describe('the author’s instruments', () => {
         onNotice: () => {},
       }),
     )
-    expect(graphics).toContain('1066×600 of 1600×900')
+    expect(graphics).toContain('Draws 1066×600 for a 1600×900 display.')
     expect(graphics).toContain(
       'The page link sets this picture for this visit.',
     )
@@ -493,7 +493,7 @@ describe('the author’s instruments', () => {
         onNotice: () => {},
       }),
     )
-    expect(graphics).toContain('3200×1800 of 1600×900')
+    expect(graphics).toContain('Draws 3200×1800 for a 1600×900 display.')
     const reduced =
       graphics.match(
         /<button[^>]*title="Supersampling uses native scale"[^>]*>/g,
@@ -518,11 +518,52 @@ describe('the author’s instruments', () => {
     expect(markup.includes('aria-label="Exposure compensation"')).toBe(
       mode === 'automatic',
     )
-    expect(markup.includes('aria-label="Adaptation rate"')).toBe(
-      mode === 'automatic',
-    )
+    // The comfort clamps are the person's, on the display page, in every
+    // mode — never the lens's, where a second slider would be a second writer
+    // of a value the display page restores.
+    expect(markup.includes('aria-label="Adaptation rate"')).toBe(false)
     expect(markup).toContain('aria-label="White balance"')
   })
+
+  it.each(CAMERA_MODES)(
+    'keeps the comfort clamps on the display page in the %s camera',
+    (mode) => {
+      write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode })
+      const markup = renderToStaticMarkup(
+        createElement(GraphicsPanel, {
+          render: {
+            preference: 'auto' as const,
+            output: null,
+            onPreference: () => {},
+          },
+          onNotice: () => {},
+        }),
+      )
+      write(RENDER_SENSOR, RENDER_SENSOR.initial)
+      // Drawn and live in every mode: a person sets their protection before
+      // choosing the mode it applies in — from the menu there is no mode to
+      // choose — and the line says when it applies.
+      for (const label of ['Adaptation rate', 'Bright range', 'Dark range']) {
+        const thumb = new RegExp(
+          `<span[^>]*role="slider"[^>]*aria-label="${label}"[^>]*>`,
+        ).exec(markup)?.[0]
+        expect(thumb, label).toBeDefined()
+        expect(thumb?.includes('data-disabled'), label).toBe(false)
+      }
+      expect(markup.includes('These apply in the automatic camera mode')).toBe(
+        mode !== 'automatic',
+      )
+      // The peak is drawn whatever the output, and live only with headroom to
+      // cap: hidden, a changed peak was a value the page's restore counted
+      // while no row showed it. With no renderer yet there is no headroom.
+      const peak =
+        /<span[^>]*role="slider"[^>]*aria-label="Peak luminance"[^>]*>/.exec(
+          markup,
+        )?.[0]
+      expect(peak).toBeDefined()
+      expect(peak?.includes('data-disabled')).toBe(true)
+    },
+  )
 
   it('names every switch and slider thumb in the graphics and lens panels', () => {
     write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode: 'manual' })
@@ -548,8 +589,8 @@ describe('the author’s instruments', () => {
     // A switch is named by its label alone; the sentence under it describes.
     const flare = markup
       .split('<label')
-      .find((row) => row.includes('Lens Flare'))
-    const labelId = /id="([^"]+)"[^>]*>Lens Flare</.exec(flare ?? '')?.[1]
+      .find((row) => row.includes('Lens flare'))
+    const labelId = /id="([^"]+)"[^>]*>Lens flare</.exec(flare ?? '')?.[1]
     expect(flare).toContain(`aria-labelledby="${labelId}"`)
   })
 
@@ -571,7 +612,7 @@ describe('the author’s instruments', () => {
       createElement(KeymapProvider, null, createElement(LensSection)),
     )
     expect(markup).toContain('Automatic needs WebGPU')
-    expect(markup).toContain('Use Manual')
+    expect(markup).toContain('Use manual')
     expect(namedSlider(markup, 'Shutter')).toBe(true)
     expect(namedSlider(markup, 'Gain')).toBe(true)
     expect(markup).not.toContain('aria-label="Adaptation rate"')

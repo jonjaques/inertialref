@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { FOCUS_RING, releaseFocus } from './focus.ts'
+import { FOCUS_RING, handFocus, releaseFocus } from './focus.ts'
 
 /*
  * The dock's push button: shadcn/ui's `Button`, with the two things it cannot
@@ -38,6 +38,10 @@ export function Action({
   title,
   tone = 'normal',
   className = '',
+  id,
+  then,
+  name,
+  describedBy,
 }: {
   label: string
   icon?: LucideIcon
@@ -48,6 +52,23 @@ export function Action({
   tone?: keyof typeof TONE
   /** Placement in whatever row it sits in, which is the caller's business. */
   className?: string
+  id?: string
+  /**
+   * Where a keyboard's focus goes after a press that takes this button away —
+   * a confirmation that replaces the button that asked for it. A pointer
+   * click hands focus back to the flight loop exactly as without it; see
+   * `handFocus`, which this is.
+   */
+  then?: () => HTMLElement | null
+  /**
+   * The accessible name, where the visible word is one of many alike: a
+   * column of "Unbind" buttons is a hundred identical names to somebody
+   * tabbing down it. It must contain the visible word, so what a speech-input
+   * user says still reaches it (SC 2.5.3).
+   */
+  name?: string
+  /** The id of what describes this button, read after its name. */
+  describedBy?: string
 }) {
   return (
     <Button
@@ -56,8 +77,12 @@ export function Action({
       size="xs"
       title={title ?? label}
       disabled={disabled}
+      id={id}
+      aria-label={name}
+      aria-describedby={describedBy}
       onClick={(event) => {
-        releaseFocus(event)
+        if (then === undefined) releaseFocus(event)
+        else handFocus(event, then)
         onClick?.()
       }}
       /*

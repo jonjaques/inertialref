@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Action } from '../hud/Action.tsx'
 import { OptionGroup } from '../hud/OptionGroup.tsx'
 import { ControllerDiagram } from '../input/ControllerDiagram.tsx'
 import type { Callout } from '../input/controllerLayout.ts'
@@ -22,6 +21,7 @@ import { useInputDevice, useKeymap } from '../input/useKeymap.ts'
 import { usePadLive } from '../input/usePadLive.ts'
 import { Section } from '../hud/Section.tsx'
 import { CONTROLS_PAD, usePersistentState } from '../state/preferences.ts'
+import { defaultPad, withoutOverride } from './settingsDefaults.ts'
 
 /*
  * The controller: a picture of it, what each control does in each mode, and
@@ -65,10 +65,17 @@ export function ControllerSection() {
   const shown = live?.family ?? family
 
   const assign = (id: string, control: PadControl): void => {
-    setOverrides((held) => ({ ...held, [id]: control }))
+    // The act's own default is a return to it, not an override that copies
+    // it — the keyboard editor's rule, for the keyboard editor's reasons.
+    const home = control === defaultPad(id)
+    setOverrides((held) =>
+      home ? withoutOverride(held, id) : { ...held, [id]: control },
+    )
     setCapturing(null)
     const action = findAction(id)
-    const clash = clashesIn({ ...overrides, [id]: control }).get(id)
+    const clash = clashesIn(
+      home ? withoutOverride(overrides, id) : { ...overrides, [id]: control },
+    ).get(id)
     setSaid(
       clash === undefined
         ? `${action?.label ?? id} is now ${padLabel(control, shown)}`
@@ -100,20 +107,16 @@ export function ControllerSection() {
       : calloutOf(listeningTo)
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 flex-1 text-pretty text-slate-400">
-          {pads > 0 && live !== null
-            ? `${familyName(live.family)} connected. Press a row’s control, then a control on the pad or on the picture.`
-            : 'No controller yet. Browsers show one only after a button on it is pressed, so press any button.'}
-        </p>
-        <Action
-          label="Reset All"
-          title="Every controller binding back to its default"
-          disabled={Object.keys(overrides).length === 0}
-          onClick={() => setOverrides({})}
-        />
-      </div>
+    <div className="@container flex flex-col gap-3">
+      {/* Whether a pad is here, which is live and changes what the page is
+          for: with one connected, a press on it rebinds; without, the browser
+          has not shown it to the page yet. Restoring the defaults is the
+          page header's, beside the other pages' own. */}
+      <p className="type-ui text-pretty text-slate-300">
+        {pads > 0 && live !== null
+          ? `${familyName(live.family)} connected. Press a row’s control, then a control on the pad or on the picture.`
+          : 'No controller yet. Browsers show one only after a button on it is pressed, so press any button.'}
+      </p>
 
       <OptionGroup
         label="Mode"
@@ -142,7 +145,7 @@ export function ControllerSection() {
       {/* Announced here as well as on the row, for the reason the keyboard
           editor gives: a result reported only in a label a screen reader has
           already read past is a result reported to nobody. */}
-      <p aria-live="polite" className="min-h-4 text-sky-300/80">
+      <p aria-live="polite" className="type-ui min-h-4 text-sky-300/90">
         {said}
       </p>
 
@@ -155,9 +158,22 @@ export function ControllerSection() {
         capturing={capturing}
         onCapture={(id) => {
           setCapturing(id)
-          setSaid(null)
+          setSaid(
+            id === null
+              ? null
+              : `Press a control for ${findAction(id)?.label ?? id}, on the pad or on the picture.`,
+          )
         }}
-        onReset={(id) => setOverrides(({ [id]: _dropped, ...rest }) => rest)}
+        onUnbind={(id) => {
+          setOverrides((held) =>
+            defaultPad(id) === null
+              ? withoutOverride(held, id)
+              : { ...held, [id]: null },
+          )
+          setCapturing(null)
+          setSaid(`${findAction(id)?.label ?? id} has no control`)
+        }}
+        onReset={(id) => setOverrides((held) => withoutOverride(held, id))}
         onHover={setHovered}
       />
 

@@ -1,6 +1,10 @@
-import { CAMERA_MODES, DEFAULT_SENSOR_SETTINGS } from '@inertialref/rendering'
+import { CAMERA_MODES } from '@inertialref/rendering'
 import { Slider } from '@/components/ui/slider'
-import { RENDER_SENSOR, usePersistentState } from '../state/preferences.ts'
+import {
+  RENDER_SENSOR,
+  restoreFields,
+  usePersistentState,
+} from '../state/preferences.ts'
 import { useEngine, useShallow } from '../state/engineStore.ts'
 import { Action } from './Action.tsx'
 import { releaseFocus } from './focus.ts'
@@ -8,8 +12,30 @@ import { OptionGroup } from './OptionGroup.tsx'
 import { Row } from './Row.tsx'
 import { Section } from './Section.tsx'
 
-/** The selected camera mode and the controls that affect its picture. */
-export function SensorSection() {
+/**
+ * The selected camera mode and the controls that affect its picture.
+ *
+ * "Exposure" over the section, because that is what every row in it sets —
+ * how the light that reaches the sensor becomes a picture — and it is the
+ * word a photographer looks for first in a panel called Lens.
+ *
+ * **The comfort clamps are not here.** How fast Automatic adapts, and how far
+ * it may swing bright or dark, are the protections `PRODUCT.md` promises
+ * somebody for whom a star filling the frame after interstellar dark is
+ * uncomfortable — a property of the person, kept in Settings › Display beside
+ * the peak luminance cap, rather than of one photograph. What stays is what a
+ * picture is: the mode, the compensation, the white balance.
+ */
+export function SensorSection({
+  held = false,
+}: {
+  /**
+   * Whether a fixed Milky Way view holds the exposure. The Lens panel says so
+   * in its own words at its top, so the authored-exposure line below would be
+   * the same fact a second time.
+   */
+  held?: boolean
+}) {
   const [settings, set] = usePersistentState(RENDER_SENSOR)
   const exposure = useEngine(
     useShallow((snapshot) =>
@@ -45,36 +71,6 @@ export function SensorSection() {
             change: (compensation: number) =>
               set((held) => ({ ...held, compensation })),
           },
-          {
-            label: 'Adaptation rate',
-            value: settings.rate,
-            min: 0,
-            max: 4,
-            step: 0.1,
-            reading:
-              settings.rate === 0 ? 'Hold' : `${settings.rate.toFixed(1)}×`,
-            change: (rate: number) => set((held) => ({ ...held, rate })),
-          },
-          {
-            label: 'Bright range',
-            value: settings.range.bright,
-            min: 0,
-            max: 32,
-            step: 1,
-            reading: `+${settings.range.bright} EV`,
-            change: (bright: number) =>
-              set((held) => ({ ...held, range: { ...held.range, bright } })),
-          },
-          {
-            label: 'Dark range',
-            value: settings.range.dark,
-            min: 0,
-            max: 24,
-            step: 1,
-            reading: `−${settings.range.dark} EV`,
-            change: (dark: number) =>
-              set((held) => ({ ...held, range: { ...held.range, dark } })),
-          },
         ]
       : []),
     {
@@ -88,7 +84,7 @@ export function SensorSection() {
     },
   ]
   return (
-    <Section id="camera.sensor" title="Canopy" trailing={settings.mode}>
+    <Section id="camera.sensor" title="Exposure" trailing={settings.mode}>
       <div className="flex flex-col gap-2">
         <span className="type-ui text-slate-300">Camera mode</span>
         <OptionGroup
@@ -117,12 +113,12 @@ export function SensorSection() {
             Automatic needs WebGPU. This view uses the manual lens exposure.
           </p>
           <Action
-            label="Use Manual"
+            label="Use manual"
             onClick={() => set((held) => ({ ...held, mode: 'manual' }))}
           />
         </div>
       )}
-      {exposure?.override === 'staging' && (
+      {exposure?.override === 'staging' && !held && (
         <p className="type-ui text-pretty text-slate-300">
           Authored exposure is active. Your camera mode resumes when it ends.
         </p>
@@ -162,10 +158,18 @@ export function SensorSection() {
         </div>
       ))}
       <div className="flex justify-end">
+        {/* "Exposure", because it resets every row in this section and
+            not the mode alone. The peak and the comfort clamps are the
+            person's, in Settings, and stay as they were. */}
         <Action
-          label="Reset camera mode"
+          label="Reset exposure"
           onClick={() =>
-            set((held) => ({ ...DEFAULT_SENSOR_SETTINGS, peak: held.peak }))
+            restoreFields(RENDER_SENSOR, [
+              'mode',
+              'look',
+              'compensation',
+              'balance',
+            ])
           }
         />
       </div>

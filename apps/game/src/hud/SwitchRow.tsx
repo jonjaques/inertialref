@@ -40,7 +40,8 @@ export function SwitchRow({
   icon: Icon,
   on,
   onChange,
-  bordered = false,
+  divided = false,
+  changed = false,
   disabled = false,
   title,
 }: {
@@ -50,8 +51,14 @@ export function SwitchRow({
   icon?: LucideIcon
   on: boolean
   onChange: (on: boolean) => void
-  /** A framed row, for panels that are a list of switches and nothing else. */
-  bordered?: boolean
+  /**
+   * A row in a list of settings: a hairline under it rather than a frame
+   * around it, in the same geometry as `SettingRow`, so a switch and an option
+   * group on one page put their controls in one column.
+   */
+  divided?: boolean
+  /** Differs from its default — the gutter mark `SettingRow` draws. */
+  changed?: boolean
   /**
    * Shown, dimmed, and not operable.
    *
@@ -69,14 +76,21 @@ export function SwitchRow({
     <label
       htmlFor={id}
       title={title ?? detail}
-      className={`flex min-h-9 items-center gap-2.5 rounded py-1.5 transition-colors ${
+      className={`relative flex min-h-9 items-center gap-2.5 transition-colors ${
         disabled ? 'cursor-default opacity-45' : 'cursor-pointer'
       } ${
-        bordered
-          ? 'border border-slate-800/80 bg-slate-900/40 px-2 hover:border-sky-500/40'
-          : 'px-1 hover:text-slate-200'
+        divided
+          ? 'border-b border-slate-800/70 py-2.5 pl-2.5 last:border-b-0'
+          : 'rounded px-1 py-1.5 hover:text-slate-200'
       }`}
     >
+      {divided && changed && (
+        <span
+          aria-hidden
+          title="Changed from the default"
+          className="absolute top-3 bottom-3 left-0 w-0.5 rounded-full bg-sky-400/80"
+        />
+      )}
       {Icon !== undefined && (
         <Icon
           aria-hidden
@@ -99,9 +113,10 @@ export function SwitchRow({
       <span className="flex min-w-0 flex-1 flex-col">
         <span
           id={`${id}-label`}
-          className={`type-ui ${on ? 'text-sky-200' : 'text-slate-300'}`}
+          className={`type-ui ${on ? 'text-sky-200' : divided ? 'text-slate-200' : 'text-slate-300'}`}
         >
           {label}
+          {divided && changed && <span className="sr-only"> (changed)</span>}
         </span>
         {detail !== undefined && (
           // Sans and wrapping, not the panel's inherited mono and not

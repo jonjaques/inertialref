@@ -133,6 +133,9 @@ describe('the lens channels', () => {
     expect(formatShutter(1 / 60)).toBe('1/60 s')
     expect(formatShutter(1 / 48)).toBe('1/48 s')
     expect(formatShutter(1)).toBe('1.0 s')
+    // The Milky Way's long exposures, in the unit they are stated in.
+    expect(formatShutter(2400)).toBe('40 min')
+    expect(formatShutter(90)).toBe('90 s')
     expect(formatShutter(0.4)).toBe('0.40 s')
     expect(formatShutter(0.9)).not.toBe('1/1 s')
     // Whatever the channel produces, the reading is within the formatter's own
@@ -143,7 +146,9 @@ describe('the lens channels', () => {
       const text = formatShutter(shutter)
       const shown = text.startsWith('1/')
         ? 1 / Number(text.slice(2, -2))
-        : Number(text.slice(0, -2))
+        : text.endsWith(' min')
+          ? Number(text.slice(0, -4)) * 60
+          : Number(text.slice(0, -2))
       expect(Math.abs(Math.log2(shown / shutter)), text).toBeLessThan(0.05)
     }
   })

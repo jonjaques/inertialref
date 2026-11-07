@@ -1,13 +1,21 @@
+import { Aperture } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { LensPanel } from '../hud/LensPanel.tsx'
 import { Neighborhood } from '../icons/index.tsx'
 import { NavigatorPanel } from '../planetarium/NavigatorPanel.tsx'
 
 /**
  * What a flight mode contributes to its workspace.
  *
- * One panel, and the fact that it is the *same* panel the planetarium draws is
- * the point. There were two navigators: the Catalog, which looked, and the
+ * Two panels, and the fact that both are the *same* panels the planetarium
+ * draws is the point. The Lens is the viewport's instrument in every mode
+ * that has one — set beside the picture it shapes, which a settings page
+ * opened over the menu could not show — so flight registers it rather than
+ * reaching it through a copy elsewhere. It has no glare: how much of the
+ * flare a photograph shows is the planetarium's choice about a picture.
+ *
+ * The Navigator's case is the older one. There were two navigators: the Catalog, which looked, and the
  * author's Navigate panel, which traveled — and in the planetarium Navigate's
  * Go to, Orbit and Land teleported a ship nobody could see, so the panel
  * appeared to do nothing, while in flight it was the only way to go anywhere at
@@ -42,6 +50,15 @@ export function flightPanels(
           onNotice={onNotice}
         />
       ),
+    },
+    {
+      id: 'lens',
+      title: 'Lens',
+      icon: Aperture,
+      zone: 'right',
+      defaultOpen: false,
+      hint: 'What the picture is taken through — the glass and the exposure',
+      render: () => <LensPanel />,
     },
   ]
 }

@@ -23,12 +23,10 @@ import { TelemetryPanel } from './TelemetryPanel.tsx'
  * right, so a telemetry-and-navigate session opens with one on each side and
  * nothing overlapping.
  *
- * The camera is not among them any more, and its absence is the phase's own
- * argument. The aperture, the focus and the exposure were reached by pressing
- * the console key, in the mode whose entire subject is looking — so the eye
- * moved to a planetarium panel of its own, and `/settings/camera` keeps the
- * lens section because a lens is a persisted preference and the same component
- * draws it.
+ * The camera is not among them. The aperture, the focus and the exposure are
+ * the viewport's instrument, so they are the Lens panel (`hud/LensPanel.tsx`)
+ * that the planetarium and flight each register beside the picture it shapes,
+ * rather than something reached by pressing the console key.
  *
  * A panel that was never a tab: `controls`. The transport strip under the
  * old dock header held the clock, the attitude helpers and the save slot, and

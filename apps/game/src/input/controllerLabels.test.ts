@@ -15,7 +15,7 @@ describe('calloutLabels', () => {
     const flight = calloutLabels(resolvePadBindings(), live('flight'))
     expect(flight.get('ls')).toBe('Thrust · Translate')
     expect(flight.get('rs')).toBe('Pitch · Yaw')
-    expect(flight.get('south')).toBe('Kill Rotation')
+    expect(flight.get('south')).toBe('Kill rotation')
     expect(flight.get('west')).toBe('Pause')
   })
 
@@ -24,7 +24,7 @@ describe('calloutLabels', () => {
     const ground = calloutLabels(resolvePadBindings(), live('standing'))
     expect(orbit.get('ls')).toBe('Look')
     expect(ground.get('ls')).toBe('Fly')
-    expect(ground.get('east')).toBe('Back to Orbit')
+    expect(ground.get('east')).toBe('Back to orbit')
   })
 
   it('follows a rebind, and says nothing for a control that means nothing', () => {
@@ -32,7 +32,7 @@ describe('calloutLabels', () => {
       resolvePadBindings({ 'flight.kill': 'touchpad' }),
       live('flight'),
     )
-    expect(moved.get('touchpad')).toBe('Kill Rotation')
+    expect(moved.get('touchpad')).toBe('Kill rotation')
     expect(moved.get('south')).toBeNull()
   })
 })

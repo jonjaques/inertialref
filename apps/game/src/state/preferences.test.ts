@@ -1,5 +1,6 @@
 import fc from 'fast-check'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { PICTURES } from '@inertialref/devtools'
 import { DEFAULT_SENSOR_SETTINGS, LENS_PRESETS } from '@inertialref/rendering'
 import { isBoolean, numberWithin, oneOf } from './accept.ts'
 import {
@@ -18,6 +19,7 @@ import {
   exportPreferences,
   FAMILIES,
   importPreferences,
+  PERSONAL_PICTURES,
   PLANETARIUM_FLARE,
   PLANETARIUM_LABELS,
   planImport,
@@ -27,8 +29,12 @@ import {
   RENDER_SENSOR,
   RENDER_THRUSTER_VARIATION,
   REGISTRY,
+  resetPreference,
   resetPreferences,
+  restoreFields,
+  differs,
   SECTION_OPEN,
+  subscribe,
   write,
 } from './preferences.ts'
 
@@ -494,5 +500,142 @@ describe('an import', () => {
   it('rejects a class list naming something no chip answers to', () => {
     expect(NAVIGATOR_CLASSES.accept(['stars'])).toBe(true)
     expect(NAVIGATOR_CLASSES.accept(['stars', 'wormholes'])).toBe(false)
+  })
+})
+
+describe('a scoped reset', () => {
+  it('removes one preference rather than writing its default', () => {
+    write(PLANETARIUM_LABELS, false)
+    write(CONTROLS_KEYMAP, { 'time.pause': 'KeyP' })
+    const heard: unknown[] = []
+    const stop = subscribe(PLANETARIUM_LABELS, (value) => heard.push(value))
+    resetPreference(PLANETARIUM_LABELS)
+    stop()
+    // A mounted hook hears the default through the subscription an import
+    // reaches it by, so a settings page's "restore defaults" is live.
+    expect(heard).toEqual([true])
+    expect(read(PLANETARIUM_LABELS)).toBe(true)
+    // Absent rather than stored as the default: only somebody who never chose
+    // follows a default that later moves.
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'planetarium.labels',
+    )
+    // And the reset reached nothing it was not named.
+    expect(read(CONTROLS_KEYMAP)).toEqual({ 'time.pause': 'KeyP' })
+  })
+
+  it('keeps the saved shots when every setting is reset', () => {
+    // A shot is something somebody made, not a setting they chose; the data
+    // page's "reset everything" says they stay, and this is that claim.
+    const shot = PICTURES[0]!
+    write(PERSONAL_PICTURES, [shot])
+    write(PLANETARIUM_LABELS, false)
+    resetPreferences([PERSONAL_PICTURES])
+    expect(read(PLANETARIUM_LABELS)).toBe(true)
+    expect(read(PERSONAL_PICTURES)).toEqual([shot])
+  })
+
+  it('resets a value that is live but never reached storage', () => {
+    // Site data blocked: `setItem` throws, the hooks stay live through the
+    // subscription, and storage has no key for the reset to find.
+    vi.stubGlobal('window', {
+      localStorage: {
+        length: 0,
+        key: () => null,
+        getItem: () => null,
+        setItem: () => {
+          throw new Error('storage is blocked')
+        },
+        removeItem: () => {},
+      },
+    })
+    const heard: unknown[] = []
+    const stop = subscribe(PLANETARIUM_LABELS, (value) => heard.push(value))
+    try {
+      write(PLANETARIUM_LABELS, false)
+      resetPreferences()
+      expect(heard).toEqual([false, true])
+    } finally {
+      stop()
+      vi.unstubAllGlobals()
+    }
+  })
+})
+
+describe('restoring some fields of a record', () => {
+  // `render.sensor` is a photograph's processing and a person's comfort in one
+  // record, and each settings surface restores only the fields it draws.
+  const comfort = ['peak', 'rate', 'range'] as const
+
+  it('keeps the fields it was not asked for', () => {
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, mode: 'manual', rate: 2 })
+    restoreFields(RENDER_SENSOR, comfort)
+    expect(read(RENDER_SENSOR)).toEqual({
+      ...RENDER_SENSOR.initial,
+      mode: 'manual',
+    })
+  })
+
+  it('removes the key when what remains is the default', () => {
+    // "Never chose" has to keep meaning the default, or a default that later
+    // moves skips everybody who restored once.
+    write(RENDER_SENSOR, { ...RENDER_SENSOR.initial, rate: 2 })
+    restoreFields(RENDER_SENSOR, comfort)
+    expect(read(RENDER_SENSOR)).toEqual(RENDER_SENSOR.initial)
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'render.sensor',
+    )
+  })
+
+  it('restores from the live value when the store refuses writes', () => {
+    // A private window throws from `setItem`; the panels stay live through the
+    // subscription while nothing reaches disk. A restore that read the record
+    // back from storage found the defaults there and did nothing at all.
+    const refusing = {
+      length: 0,
+      key: () => null,
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('storage is blocked')
+      },
+      removeItem: () => {},
+    }
+    vi.stubGlobal('window', { localStorage: refusing })
+    try {
+      const heard: unknown[] = []
+      const stop = subscribe(RENDER_SENSOR, (value) => heard.push(value))
+      write(RENDER_SENSOR, {
+        ...RENDER_SENSOR.initial,
+        mode: 'manual',
+        rate: 2,
+      })
+      // The lens panel's reset: the photograph's fields, not the person's.
+      restoreFields(RENDER_SENSOR, ['mode', 'look', 'compensation', 'balance'])
+      stop()
+      expect(heard.at(-1)).toEqual({ ...RENDER_SENSOR.initial, rate: 2 })
+    } finally {
+      vi.unstubAllGlobals()
+      // Said back to the default, so no later test inherits the live value.
+      resetPreference(RENDER_SENSOR)
+    }
+  })
+
+  it('treats a record in another key order as the same record', () => {
+    // A file or a migration writes fields in its own order; equal fields are
+    // equal whatever order they arrive in.
+    const shuffled = Object.fromEntries(
+      Object.entries(RENDER_SENSOR.initial).reverse(),
+    )
+    expect(differs(shuffled, RENDER_SENSOR.initial)).toBe(false)
+    expect(differs({ ...shuffled, rate: 3 }, RENDER_SENSOR.initial)).toBe(true)
+  })
+
+  it('writes nothing when the fields already were their defaults', () => {
+    // Restoring the display page after changing only its gamma must not pin
+    // today's sensor defaults as a choice.
+    restoreFields(RENDER_SENSOR, comfort)
+    expect(exportPreferences(stamp).preferences).not.toHaveProperty(
+      'render.sensor',
+    )
   })
 })

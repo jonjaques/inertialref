@@ -17,8 +17,9 @@
 export const DOCK_PLACEMENTS = ['floating', 'top', 'bottom'] as const
 export type DockPlacement = (typeof DOCK_PLACEMENTS)[number]
 
+/** What each placement is called on the settings page's option chips. */
 export const PLACEMENT_LABEL: Readonly<Record<DockPlacement, string>> = {
   floating: 'Floating',
-  top: 'Attached to the top',
-  bottom: 'Attached to the bottom',
+  top: 'Top edge',
+  bottom: 'Bottom edge',
 }
