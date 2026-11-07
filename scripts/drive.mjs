@@ -48,7 +48,10 @@
  *
  * The expensive thing here is boot — about five seconds of shader warm and body
  * build, on top of the dev server's own start. So Chrome is left running
- * between invocations. Each call starts with clean local storage and cookies;
+ * between invocations, and it holds the machine's GPU lock from before it
+ * launches until `--down` has closed it (`driveLock.mjs`): a detached Chrome
+ * is a GPU job whether or not an invocation is driving it, and two GPU jobs at
+ * once have crashed macOS. Each call starts with clean local storage and cookies;
  * --keep-storage opts into attaching to the booted page instead of reloading
  * it: measured, 6 s cold against 80 ms warm. Most of that cold figure
  * is the dev server and Chrome rather than the page — `?presentation=occluded`
@@ -72,7 +75,17 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driveUrl } from './driveUrl.mjs'
 import { castFrames, connect, drainLogs, evaluate, traceFor } from './cdp.mjs'
+import {
+  RIG,
+  closeChrome,
+  gpuLine,
+  keep,
+  readSession,
+  sessionPath,
+  takeGpu,
+} from './driveLock.mjs'
 import { boot, clearStorage } from './drivePage.mjs'
+import { parseWait } from './gpuLock.mjs'
 import {
   checkSteps,
   jsonReport,
@@ -84,9 +97,6 @@ import {
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
-/** Where shots land when the path has no directory in it, and where the rig
- *  records what it started. `.data/` is git-ignored; nothing here is source. */
-const RIG = path.join(ROOT, '.data/drive')
 /** Longest edge a cast frame is captured at; see `castFrames`. */
 const CAST_PX = 1280
 
@@ -120,6 +130,8 @@ const OPTIONS = {
   /** Start `pnpm dev` when nothing answers `--url`; `--no-serve` to fail
    *  instead, which `allowNegative` gives for free. */
   serve: { type: 'boolean', default: true },
+  /** Seconds to queue for the GPU lock; not `--wait`, the page delay in ms. */
+  'gpu-wait': { type: 'string' },
   /** Longest edge of a written shot, in pixels; 0 keeps the native capture. */
   'max-px': { type: 'string', default: '1568' },
   /** JPEG quality, for a `--shot` whose path ends in `.jpg`. */
@@ -212,6 +224,9 @@ Session flags:
   --block-url <glob> block matching requests before navigation; repeat for more.
                      Pair with --document to inspect a failed runtime startup.
   --no-serve         fail instead of starting \`pnpm dev\` when nothing answers
+  --gpu-wait <s>     queue up to <s> seconds for the machine's GPU lock instead
+                     of failing at once while another job holds it. Seconds,
+                     unlike --wait
   --max-px <n>       longest edge of a written shot, default 1568; 0 for native
   --quality <n>      JPEG quality, default 88
   --json             one JSON object of every step result, instead of lines
@@ -219,12 +234,16 @@ Session flags:
 
 Lifecycle:
 
-  --status           what this rig has running
+  --status           what this rig has running, and who holds the GPU
   --print-url        print the resolved URL without starting Chrome or a server
-  --down             close the Chrome and the dev server this rig started
+  --down             close the Chrome and the dev server this rig started, and
+                     release the GPU lock its Chrome held; never refused
 
-Chrome stays up between invocations. Each call clears local storage and cookies
-and reboots the page unless --keep-storage is given. --down when finished.
+Chrome stays up between invocations, and holds the machine's GPU lock until
+--down: one GPU job runs at a time, so pnpm test:gpu and every other rig wait
+for it. A later call on the same --port joins that lock. Each call clears local
+storage and cookies and reboots the page unless --keep-storage is given. --down
+when finished.
 
 Photographic fixtures (session flags, before all measurement steps):
 
@@ -294,7 +313,7 @@ const SERVE = values.serve === true
 const JAVASCRIPT = values.javascript === true
 const DOCUMENT = values.document === true || !JAVASCRIPT
 const BLOCKED_URLS = values['block-url'] ?? []
-const STATE = path.join(RIG, `session-${PORT}.json`)
+const STATE = sessionPath(PORT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -316,11 +335,7 @@ const script = planSteps(tokens)
 
 /* ------------------------------------------------------------------ rig ---- */
 
-async function readState() {
-  return await readFile(STATE, 'utf8')
-    .then((text) => JSON.parse(text))
-    .catch(() => null)
-}
+const readState = () => readSession(PORT)
 
 /** A patch, merged over what is already recorded rather than replacing it, so
  *  a pid written the moment its process was spawned survives the fuller write
@@ -388,7 +403,13 @@ async function serve(state) {
   )
 }
 
-async function launchChrome(state) {
+/**
+ * The rig's Chrome, attached to or launched, and held under the invocation's
+ * GPU lock either way. A Chrome up from a drive.mjs that predates the lock has
+ * no token in its session, so the lock this invocation took becomes the one
+ * that holds it.
+ */
+async function launchChrome(state, gpu) {
   const up = await fetch(`http://127.0.0.1:${PORT}/json/version`).catch(
     () => null,
   )
@@ -409,7 +430,13 @@ async function launchChrome(state) {
           `node scripts/drive.mjs --port ${PORT} --down first`,
       )
     }
-    return state.chromePid ?? null
+    const pid = state.chromePid ?? null
+    if (pid === null)
+      process.stderr.write(
+        `Chrome on port ${PORT} has no recorded pid, so the GPU lock holds for it only while this invocation runs\n`,
+      )
+    keep(gpu, pid)
+    return pid
   }
   if (!existsSync(CHROME)) throw new Error(`no Chrome at ${CHROME}`)
   const child = spawn(
@@ -436,9 +463,18 @@ async function launchChrome(state) {
   child.unref()
   // Same reason as the dev server above: a Chrome that never opens its
   // debugging port is still a Chrome, and `--down` can only kill what it knows.
+  // The lock records it first, because a Chrome the lock does not name renders
+  // unlocked from the moment this invocation exits.
+  try {
+    keep(gpu, child.pid)
+  } catch (error) {
+    process.kill(child.pid, 'SIGTERM')
+    throw error
+  }
   await writeState({
     chromePid: child.pid ?? null,
     colorProfile: COLOR_PROFILE,
+    gpuToken: gpu.token,
   })
   for (let i = 0; i < 80; i += 1) {
     await sleep(500)
@@ -549,23 +585,29 @@ async function down() {
     say(`nothing recorded for port ${PORT}`)
     return
   }
-  if (alive(state.chromePid)) {
-    process.kill(state.chromePid, 'SIGTERM')
-    say(`closed Chrome (pid ${state.chromePid})`)
-  }
-  if (state.startedServer === true && alive(state.serverPid)) {
-    // `dev.mjs` is a group leader (`detached`, in serve()) that starts vite and
-    // `cf dev` in groups of their own, so the signal reaches them through its
-    // SIGTERM handler, which relays to both. The fallback is for a recorded pid
-    // that leads no group.
-    try {
-      process.kill(-state.serverPid, 'SIGTERM')
-    } catch {
-      process.kill(state.serverPid, 'SIGTERM')
+  try {
+    // Never refused by the lock: this takes nothing, it only drops the
+    // Chrome it closes, once that Chrome has exited.
+    const { closed, released } = await closeChrome(state.chromePid, {
+      token: state.gpuToken,
+    })
+    if (closed) say(`closed Chrome (pid ${state.chromePid})`)
+    if (released) say('released its hold on the GPU lock')
+  } finally {
+    if (state.startedServer === true && alive(state.serverPid)) {
+      // `dev.mjs` is a group leader (`detached`, in serve()) that starts vite
+      // and `cf dev` in groups of their own, so the signal reaches them
+      // through its SIGTERM handler, which relays to both. The fallback is for
+      // a recorded pid that leads no group.
+      try {
+        process.kill(-state.serverPid, 'SIGTERM')
+      } catch {
+        process.kill(state.serverPid, 'SIGTERM')
+      }
+      say(`stopped pnpm dev (pid ${state.serverPid})`)
     }
-    say(`stopped pnpm dev (pid ${state.serverPid})`)
+    await rm(STATE, { force: true })
   }
-  await rm(STATE, { force: true })
 }
 
 async function status() {
@@ -584,6 +626,7 @@ async function status() {
           ? `started by this rig, pid ${state.serverPid ?? '?'}`
           : 'not started by this rig'
       }`,
+      `gpu       ${gpuLine(state).replaceAll('\n', '\n          ')}`,
     ].join('\n'),
   )
 }
@@ -648,21 +691,30 @@ async function trace(wire, ms) {
 async function main() {
   if (values.down === true) return await down()
   if (values.status === true) return await status()
+  const gpuWait = parseWait(values['gpu-wait'], '--gpu-wait')
   checkSteps(script, {
     userGesture: values['user-gesture'] === true,
     javascript: JAVASCRIPT,
   })
 
   const prior = (await readState()) ?? {}
+  // The lock before anything it guards, so a refusal starts no dev server and
+  // no Chrome. A later call on this port joins under the session's token.
+  const gpu = await takeGpu(`drive.mjs (port ${PORT})`, {
+    state: prior,
+    waitMs: gpuWait,
+    hint: '--gpu-wait <seconds> queues for it.',
+  })
   const wasServing = await answers(URL_)
   const serverPid = await serve(prior)
-  const chromePid = await launchChrome(prior)
+  const chromePid = await launchChrome(prior, gpu)
   await writeState({
     port: PORT,
     url: URL_,
     chromePid,
     serverPid,
     startedServer: prior.startedServer === true || !wasServing,
+    gpuToken: gpu.token,
   })
 
   const ws = new WebSocket(await pageTarget())
