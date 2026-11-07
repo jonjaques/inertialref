@@ -4,7 +4,7 @@ import { GuideExecutor } from './executor.ts'
 import { LiveConnection } from './media.ts'
 import { textureSetReady } from '../render/planetTextures.ts'
 import { CAMERA_LENS, subscribe } from '../state/preferences.ts'
-import { ViewReadiness } from './readiness.ts'
+import { subjectView, ViewReadiness } from './readiness.ts'
 import { GuideRuntime } from './runtime.ts'
 import type { GuideAccessOwner } from './verdict.ts'
 
@@ -64,21 +64,18 @@ export function createGuideRuntime(
             document.visibilityState !== 'visible'
           )
             return false
-          const body = scene.bodies.find(
-            (candidate) => candidate.address === target.address,
-          )
-          const star = scene.stars.some(
-            (candidate) => candidate.system === target.system,
-          )
           return readiness.ready({
             renderer,
             revision: engine.harness.observatory.mutationRevision,
             frame: renderer.info.frame,
-            present: body !== undefined || (target.kind === 'star' && star),
-            assets:
-              body === undefined ||
-              (textureSetReady(body.appearance.texture) &&
-                textureSetReady(body.rings?.texture ?? null)),
+            ...subjectView(
+              scene,
+              target,
+              (body) =>
+                textureSetReady(body.appearance.texture) &&
+                textureSetReady(body.rings?.texture ?? null),
+              engine.stationsDrawn,
+            ),
           })
         },
       })
