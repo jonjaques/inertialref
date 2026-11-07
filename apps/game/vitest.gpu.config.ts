@@ -52,6 +52,19 @@ export default defineConfig({
      */
     setupFiles: ['apps/game/src/render/gpuSetup.ts'],
     /*
+     * The machine's GPU lock, taken in vitest's main process before any
+     * worker exists and released after the last file has finished. Two GPU
+     * jobs at once have crashed macOS, and this is the job agents run most:
+     * beside a drive.mjs rig or another worktree's suite it fails at once,
+     * naming the holder, and `IR_GPU_WAIT=<seconds>` queues for it instead.
+     * `scripts/gpuSuiteLock.mjs` has the rest. Absolute, unlike the two
+     * paths above, so knip resolves it from this workspace as vitest does
+     * from the root, and neither has to be told twice.
+     */
+    globalSetup: [
+      fileURLToPath(new URL('../../scripts/gpuSuiteLock.mjs', import.meta.url)),
+    ],
+    /*
      * Processes, not threads. Dawn is a native addon holding a Metal device,
      * and a worker thread sharing the addon with its siblings is a question
      * nobody needs answered by a test run.
