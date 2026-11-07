@@ -1,0 +1,25 @@
+{
+  "mode": "chrome-headless",
+  "version": "157.0.8103.39",
+  "adapter": {
+    "adapter": {
+      "vendor": "apple",
+      "architecture": "metal-3",
+      "device": "",
+      "description": "",
+      "isFallbackAdapter": false
+    },
+    "game": {
+      "gamut": "srgb",
+      "backend": "webgpu",
+      "mode": "standard",
+      "preference": "standard",
+      "headroom": 1,
+      "capability": {
+        "webgpu": true,
+        "dynamicRangeHigh": false,
+        "extendedCanvas": true
+      }
+    }
+  }
+}

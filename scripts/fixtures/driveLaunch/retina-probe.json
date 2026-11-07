@@ -1,0 +1,28 @@
+{
+  "version": "157.0.8103.39",
+  "mode": "chrome-headless",
+  "runs": [
+    {
+      "id": "earthrise-1440x900@2",
+      "w": 1440,
+      "h": 900,
+      "dpr": 2,
+      "env": {
+        "devicePixelRatio": 2,
+        "canvas": [2880, 1800],
+        "backend": "webgpu"
+      }
+    },
+    {
+      "id": "far-shore-1440x900@2",
+      "w": 1440,
+      "h": 900,
+      "dpr": 2,
+      "env": {
+        "devicePixelRatio": 2,
+        "canvas": [2880, 1800],
+        "backend": "webgpu"
+      }
+    }
+  ]
+}
