@@ -507,6 +507,7 @@ interface ProbeOptions {
   readonly sky?: boolean
   readonly sun?: (field: CloudMediumFn) => CloudSunFn
   readonly air?: CloudAirFn
+  readonly phase?: CloudPhaseNodes
   /** A far march past the handover, composed as the trace composes it. */
   readonly far?: CloudFarFn
   /** March the medium as the volume, skipping where `bound` is zero to `exit`. */
@@ -548,7 +549,7 @@ function probe(
       brickExit: skip === undefined ? null : (s) => skip.exit(s),
       sweep: field,
     },
-    phase: CLOUD_STAND_INS.phase(),
+    phase: options.phase ?? CLOUD_STAND_INS.phase(),
     medium: field,
     sun: sun(field),
     ...(options.air === undefined ? {} : { air: options.air }),
@@ -785,13 +786,21 @@ describe('the march’s edge cases', () => {
     ].every(Number.isFinite)
 
   it('writes finite outputs where no cloud is lit', async () => {
-    // No first-order light anywhere: the mean radius is 0/0, and must not
-    // reach the phase table.
+    /*
+     * No first-order light anywhere: the mean radius is 0/0, and must not
+     * reach the phase table. The stand-in phase never reads its radius, so
+     * this one does, as a table's coordinate would: a NaN radius is a NaN
+     * phase, whose product with no light is NaN, not 0.
+     */
+    const reading: CloudPhaseNodes = {
+      droplets: (_nu, radius) => vec3(radius.mul(0).add(ISOTROPIC)),
+    }
     const uniforms = createCloudUniforms()
     placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
     const unlit = probe(uniforms, slabMedium([{ ...SLAB, sigma: 0.002 }]), {
       sun: (field) =>
         testSun(field, CLOUD_STAND_INS.sunDepth('grid'), float(0)),
+      phase: reading,
     })
     const [shaded] = await unlit([{ direction: [0, 1, 0] }])
     expect(finite(shaded!)).toBe(true)
