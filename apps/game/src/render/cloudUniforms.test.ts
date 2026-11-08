@@ -245,6 +245,22 @@ describe('the cloud uniforms', () => {
     expect(uniforms.trace.frame.value).toBe(5)
   })
 
+  it('hold the jitter at the lever’s index while it is set, and step it with the frame otherwise', () => {
+    const uniforms = createCloudUniforms()
+    const held = { ...DEFAULT_CLOUD_LEVERS, jitterFrame: 3 }
+    for (const frameIndex of [41, 42, 2 ** 32 + 7]) {
+      uniforms.write(cloudFrame({ levers: held, frameIndex }))
+      expect(uniforms.trace.frame.value, `frame ${frameIndex}`).toBe(3)
+    }
+    // Wrapped as the frame's own index is: a u32 past 2³² starts over.
+    uniforms.write(
+      cloudFrame({ levers: { ...held, jitterFrame: 2 ** 32 + 9 } }),
+    )
+    expect(uniforms.trace.frame.value).toBe(9)
+    uniforms.write(cloudFrame({ frameIndex: 42 }))
+    expect(uniforms.trace.frame.value).toBe(42)
+  })
+
   it('size the trace and hand over at the footprint', () => {
     const uniforms = createCloudUniforms()
     uniforms.write(
