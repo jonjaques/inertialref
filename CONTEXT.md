@@ -13268,6 +13268,46 @@ lock's home in the clone's `.git`, and #188 keeps the home and documents the
 remedy, full access or a profile that grants write on `<clone>/.git`, rather
 than moving the lock out of `.git`.
 
+## The tour keeps pacing itself (8 Nov 2026)
+
+Phase 1 of `design/plans/the-guide.md`: findings 5 to 9 of the November
+council. [ADR-0042](docs/adr/0042-the-guide-speaks-in-one-voice.md) holds
+the rules under "the browser starts backend work" and "a meter that cannot
+hear", [ADR-0041](docs/adr/0041-the-guide-requests-the-view.md) the move's
+deadline and the host-reported takeover. What the plan's fixes got wrong, and
+what the tests taught.
+
+**A held prompt beats a queued one.** The plan's fix for the lost linger was
+to keep retrying `start()` the way the deferred arrival does. The deferred
+arrival's note is already on the wire when it is deferred, which is why the
+backend read "continue the tour" inside the visitor's question. The runtime
+holds the prompt's _text_ and sends it only at a tick the loop can start on,
+so a prompt a question overtakes was never sent. The resume prompt and the
+failed-arrival prompt use the same hold; the arrival failure prompts rather
+than merely queues, because a note the next response reads is a tour that
+waits for the visitor to speak, which is the stall this phase removes.
+
+**The sub-floor rule is keyed to the last reading, not to the arming.** The
+first draft required one sub-floor sample _after_ the beat was armed. The
+runtime samples the level before it arms the beat in the same tick, so a
+narration that began on the next tick was taken for the filler and every
+beat in the runtime suite read silent at 8 s. The clock remembers whether
+its most recent sample was loud: a voice sounding then must break once; one
+already quiet is heard from its next word.
+
+**The voice's delegation is the cue to stand down, not the backend's
+response.** A quiet prompt held through the visitor's question has to be
+dropped when they ask for something. The loop reports a delegation on
+`session.delegation.created`, the voice's own event, and a test that modeled
+the question as a bare backend response kept the prompt and sent it after
+the answer. The fake carries the event; the test emits it.
+
+**The off-screen rig now holds instead of advancing.** With no audio
+pipeline a rig session's meter is not `ok`, so the tour holds at its first
+linger rather than falling back to the clock's start timeout.
+`ir.guideStatus().meter` says so, and `docs/roadmap.md` says the listen is
+with the window on screen.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

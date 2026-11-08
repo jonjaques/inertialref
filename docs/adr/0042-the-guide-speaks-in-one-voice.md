@@ -3,7 +3,7 @@
 Status: accepted · 14 Sep 2026; authorization amended 29 Sep 2026 by
 [ADR-0048](0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md),
 where an account grant replaces the shared password; the loop's bounds
-added 7 Nov 2026. Supersedes the two-model
+added 7 Nov 2026 and the tour's pacing 8 Nov 2026. Supersedes the two-model
 narration, the controlled clips, the application socket, and the Durable
 Object session store of [ADR-0041](0041-the-guide-requests-the-view.md); keeps
 that ADR's execution boundary.
@@ -79,10 +79,28 @@ output and transcripts are data and never become an instruction.
   floor and quiet below it. Output audio streams continuously, so the level is
   the only signal, and the clock waits for speech to _begin_ after the terminal
   response before it measures silence, because Live fills the wait for backend
-  work with an acknowledgment. The numbers are measured, not derived: silence
+  work with an acknowledgment. That acknowledgment is often still sounding
+  when the terminal response lands, so a voice sounding at the last reading
+  has to break once before a loud sample is the beat's; a beat that began on
+  the filler's tail settled on the gap before the narration and prompted the
+  next stop over it. The numbers are measured, not derived: silence
   decodes to exact zero and speech reads 0.005 to 0.2, so the floor is 0.003;
   the voice pauses up to 2.3 seconds between the sentences of one narration, so
-  a beat is quiet after 2.5 seconds, counted from the last word.
+  a beat is quiet after 2.5 seconds, counted from the last word. The analyser
+  reads 8,192 samples, 171 ms at 48 kHz, so every 100 ms read overlaps the
+  last; at 2,048 it heard 43 % of the audio.
+
+- **A meter that cannot hear holds the tour; it never advances it.** Exact
+  zero is what silence decodes to, and also what a suspended audio context,
+  an ended track, or an analyser left on a track the provider replaced reads,
+  so the connection binds every remote track, reads the context's state on
+  every ask, and reports whether the level is a measurement: `ok`,
+  `unmeasured`, `suspended`, `ended`, or `stuck` when the output transcript
+  has flowed for 8 s with the level at exact zero throughout — the transcript
+  being the one witness to the voice that does not depend on the meter. A
+  beat that reads silent on a meter that is not `ok` holds the linger and
+  listens again once the meter can hear; `ir.guideStatus().meter` says why a
+  tour is holding.
 
 - **The browser starts backend work only while no chain is in flight and the
   visitor is quiet.** A message queued into an open chain is read by that
@@ -90,7 +108,19 @@ output and transcripts are data and never become an instruction.
   lands inside an open chain is queued and prompted at the first tick after the
   chain closes, or dropped once the view has moved on. A correction releases
   the same way: a move that returns at once leaves the backend idle when the
-  utterance ends, and the new delegation supersedes the pending one.
+  utterance ends, and the new delegation supersedes the pending one. Every
+  other prompt the browser means to start is held the same way rather than
+  queued on refusal: the quiet prompt after a linger, the resume of a tour a
+  pause interrupted, the failure of a move that never arrived. Nothing reaches
+  the wire until the loop can start on it, so a prompt the visitor's question
+  overtakes is dropped rather than read inside the question as "continue the
+  tour". A pause that interrupts a tour — a linger in any phase, a held
+  prompt, a deferred arrival, a pending move, or a chain whose camera calls
+  the pause refuses — is repaired on resume by prompting the backend from the
+  view as it stands, because the voice is told the visitor is back and cannot
+  continue a tour without a delegation. A takeover queues its block before it
+  cancels the pending calls, because canceling the last one continues the
+  chain, and a continuation that ran ahead of the block read only "canceled".
 
 - **Queries run together; the camera runs one at a time.** `parallel_tool_calls`
   is enabled, and the loop executes the query tools of one response beside each
@@ -177,7 +207,9 @@ The pure loop, executor, and clock are tested with one fake data channel
 (`apps/game/src/tour/liveFake.ts`) that replays the phase-0 event shapes,
 refuses an event off the allow list as the real connection does, and plays
 the provider's refusals, failures and cut-offs on request, so the beat, the
-correction, the deferred arrival, the one-move-per-turn guard, pause, end,
+correction, the deferred arrival, the held prompts, the paused tour, the
+meter that cannot hear, the filler's tail, the move that never arrives, the
+lens takeover, the one-move-per-turn guard, pause, end,
 and every recovery above are covered without a provider, and a misspelled
 event fails a test rather than a session. The browser names provider events only in its adapter
 — `channel.ts`, `loop.ts` and `media.ts` — and the runtime speaks in verbs

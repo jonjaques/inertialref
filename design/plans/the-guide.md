@@ -117,68 +117,19 @@ loop bounds its own work", and the numbers are kept here only by reference.
 
 ### The tour stops pacing itself
 
-5. **A linger that ends while the visitor is speaking is lost, and a pause
-   strands the stop.** `runtime.ts:660-661` sets `#linger` to null and then
-   calls `loop.prompt`, whose refusal — the visitor is speaking, or a chain
-   is open — is discarded; the quiet block is queued as state and nothing
-   ever starts the response, so the tour stops until the visitor says
-   something, and when they do, the backend reads "continue the tour" inside
-   their question. Pause has the same shape: `pause()` cancels the linger
-   (and, pressed after `linger` returns but before the words are spoken,
-   throws away a beat the voice finishes behind the mute), and `resume()`
-   sends the voice an instruction to "continue from where things were" that
-   the voice cannot act on without a delegation, so a paused tour never
-   continues on its own (reproduced, zero responses after resume). Fix:
-   keep a pending continuation until `start()` accepts it, the way the
-   deferred arrival already is; hold an explicit paused beat; on resume,
-   prompt the backend from a fresh scene when a tour was running. (Two
-   seats; confirmed.)
-6. **A silent meter is permission to advance.** `media.ts:268-287` binds the
-   analyser once, to the first remote stream, swallows a failed
-   `context.resume()` and never reads `context.state` again; a suspended
-   context or a replaced track reads exact zero. `clock.ts:90-106` then
-   resolves every beat `silent` at the 8 s start timeout and
-   `runtime.ts:644-653` starts the quiet count — while the narration is
-   still playing. Nothing on the panel or in `ir.guideStatus` says why the
-   tour is dragging. Beside it, the meter's 2,048-sample window at 48 kHz is
-   43 ms read every 100 ms, so it sees 43 % of the audio; `fftSize: 8192`
-   covers the interval at no cost. Fix: tell "quiet" from "no measurement"
-   (context state, track `readyState`, a stuck-at-zero watchdog), rebind on
-   every new track, hold automatic advancement while the meter is
-   unhealthy, report the health in diagnostics. (Four seats.)
-7. **The filler's tail can be the beat.** `runtime.ts:644` arms
-   `waitForBeat({ since: now })` at the tick the chain closes, and
-   `clock.ts:102` starts with `spoke = lastLoudAt >= since`. Live's
-   acknowledgment ("let me check…") is often still sounding when
-   `response.completed` arrives; one overlapping sample makes `spoke` true
-   at once, the filler ends, the narration begins 2.6 s later, the beat
-   settles `spoken` on the gap, the linger runs, and the quiet prompt fires
-   while the words are still being spoken, so the next `go_to` cuts them
-   off. The recordings did not show it and nothing guards it. Fix: require
-   at least one sub-floor sample after `since` before a loud sample counts
-   as the beat's speech. (One seat and this spike.)
-8. **An arrival has no failure deadline.** `executor.ts:288-305` clears
-   `#pending` only on arrival, a target mismatch, a takeover, a cancel or a
-   new move, and `ready()` can stay false for good — a texture set that
-   never finishes loading, a model that fails. Scenario: "Moving to X"
-   indefinitely, the backend told `moving` and never told otherwise, no
-   linger ever started. ADR-0041's "never a timer" is about the arrival
-   signal, not about reporting a failure. Fix: a 45 s deadline that clears
-   the pending move, holds the camera, and queues "The camera did not arrive
-   at X" as a developer note. (Two seats.)
-9. **A lens change announces a takeover the executor never hears, and a
-   takeover tells the models in the wrong order.** `browser.ts:104`
-   subscribes the lens preference to the runtime's takeover callback;
-   `runtime.ts` `#takeover` cancels the loop's pending calls and tells both
-   models the visitor has the camera, but `executor.cancel()` is not called,
-   so the pending arrival and the owned motion stay: the visitor changes the
-   lens during a guide move, "You have the camera" appears, the move lands,
-   the arrival is published, and the narration restarts. In the same
-   method `cancelPending` runs before the takeover block is queued, so the
-   continuation it can trigger through `loop.ts:414` reads only "canceled"
-   and gets the view a response later. Fix: route every takeover through the
-   executor's cancellation, and queue the block before canceling. (Two
-   seats; confirmed.)
+Findings 5 to 9 landed: a prompt the loop cannot start is held and sent at
+the first tick it can be, or dropped when a question, a move, a takeover or
+a pause overtakes it; a pause that interrupts a tour prompts the backend on
+resume from the view as it stands; the meter reports whether it measures
+and a beat that reads silent on a meter that cannot hear holds the tour;
+the filler's tail is not the beat's speech; a move that has not arrived at
+45 s is canceled, held and reported; and a lens change reaches the
+executor's cancellation, with the takeover block queued before the calls
+are canceled. The rules are in
+[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) under "the
+browser starts backend work" and "a meter that cannot hear", and in
+[ADR-0041](../../docs/adr/0041-the-guide-requests-the-view.md) for the
+deadline and the host-reported takeover.
 
 ### The transport dies in ways the runtime does not see
 
@@ -558,7 +509,6 @@ themselves measures the stall.
 
 | Phase | Lands                                                                                                                                                                                                                                                                                                                                                                                             | Done when                                                                                                                                                                                                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1     | **The tour keeps pacing.** Findings 5–9: a pending continuation held until accepted, a paused beat and a resume that prompts, a meter that knows it is unhealthy and sees the whole interval, a sub-floor sample before a beat's speech counts, an arrival deadline, a takeover that reaches the executor in the right order                                                                      | Runtime tests for the lost linger, the paused tour, the dead meter, the filler overlap, the stuck arrival and the lens takeover; one listen with the window on screen confirms a tour still beats                                                                                                                                                |
 | 2     | **The transport survives.** Findings 10–14: a grace period on `disconnected`, the channel's own `close` and `error`, the microphone's `ended`, a resume whose status follows the capture, teardown on `pagehide`, a loud oversized frame                                                                                                                                                          | A test per path on a small host fake for `media.ts`; a drive-rig session that drops the network for five seconds and keeps the conversation                                                                                                                                                                                                      |
 | 3     | **Consent and the recorder** (§4): the D1 binding and its four tables, the consent route and the events route, the panel's switch and disclosure, the recorder at the channel boundary, the export script, the weekly sweep; the `$ai_*` events through the relay and `TELEMETRY_TRANSCRIPTS` replaced by the row; ADR-0042's "sees nothing of the conversation" and ADR-0061's exception amended | A session opted in replays through `scripts/tour/replay.mjs` from the export and its trace arrives at the relay's capture path; a session opted out writes no row and sends no sentence; an opt-out mid-session refuses the next batch; the Worker tests cover the consent check without Clerk; `tool_calls` answers the refusal question in SQL |
 | 4     | **The bounds** — findings 15–18: a daily per-account limiter, a client usage ceiling, `cancelPending` on pause, a greeting and a pause that do not accumulate, the context ratio in diagnostics, one search handle per call, a note for a superseded move, the ADR's sentence on what the allow list protects                                                                                     | Worker tests for the limiter; loop tests for the pause and the parallel searches; a two-hour drive-rig session whose usage ratio is read from `ir.guideStatus`                                                                                                                                                                                   |
@@ -567,7 +517,7 @@ themselves measures the stall.
 
 Phase 3 needs none of 1–2 to compile and both to be worth reading; phases
 1 and 2 are each a day, and the council's first three recommendations agree
-on their order. Phase 0, the loop, is landed. A fresh council round reviews each phase's pull
+on their order. Phases 0 and 1, the loop and the pacing, are landed. A fresh council round reviews each phase's pull
 request, not this page.
 
 ---
