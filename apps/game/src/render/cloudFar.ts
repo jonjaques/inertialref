@@ -27,7 +27,15 @@ import type { CloudUniforms } from './cloudUniforms.ts'
 export { FAR_BLOCK, FAR_STEPS_A_LAYER } from './cloudFarAtlas.ts'
 
 export interface CloudFarField extends CloudResource {
-  /** The march past the handover, for the body these uniforms describe. Level-0 reads. */
+  /**
+   * The march past the handover, for the body these uniforms describe.
+   * Level-0 reads. It declares variables and loops where it is called, so it
+   * is called inside a kernel's or a material's `Fn`, and its result is read
+   * in the block it was called in: called inside an `If` and read after it,
+   * the result names variables out of scope, which the stand-in's far
+   * function, declaring none, never shows. With `from` at or past the span's
+   * end it returns the empty result itself, so it needs no branch around it.
+   */
   readonly far: CloudFarFn
 }
 

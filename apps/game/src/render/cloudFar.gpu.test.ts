@@ -900,6 +900,28 @@ describe('a uniform slab', () => {
     },
   )
 
+  it.each(KINDS)(
+    'marched by the %s from past the span’s end is the empty result, so it needs no branch around it',
+    async (kind) => {
+      const place = steep(5000, [-1, -0.5])
+      const built = build(kind, slab(THICK[kind] / THICKNESS), place)
+      await bake(built)
+      const result = await march(
+        built,
+        place.probes.map((direction) => ({ direction, from: 1e7 })),
+      )
+      for (const got of result) {
+        expect(got.from).toBeGreaterThan(got.end)
+        expect(got.transmittance).toBe(1)
+        expect(got.light).toEqual([0, 0, 0])
+        expect(got.air).toEqual([0, 0, 0])
+        expect(got.mean).toBe(got.from)
+        expect(got.deviation).toBe(0)
+      }
+      built.field.dispose()
+    },
+  )
+
   /*
    * The fine march may stop anywhere inside a layer, so the far march takes
    * only what is left of it: the atlas by clipping its shells to the span,
