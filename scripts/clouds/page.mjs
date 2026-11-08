@@ -17,15 +17,29 @@
  * out at 120 s (`scripts/cdp.mjs`), and five A/B pairs in one evaluation take
  * about three minutes, so a pair is two steps, one a side, run in order in one
  * invocation and one boot. A side is a settle of at most `SETTLE_CAP` frames
- * and three reads of `ir.gpu(120)`: under a minute at 50 ms a frame.
+ * and three reads of `ir.gpu(135)`: under 25 s at 50 ms a frame.
  */
 import { histogramStats } from './diff.mjs'
 
-/** One `ir.passes` read stays under one query set's 2,048 passes, at most 40 frames. */
-export const PASS_LIMIT = Object.freeze({ passes: 2000, frames: 40 })
+/*
+ * Every read spans whole cycles of the far bake, which draws one of its 45
+ * blocks a frame (`FAR_CYCLE`, `cloudFarAtlas.ts`) and whose blocks cost what
+ * the layer rows under them hold: at far-shore over fair-cumulus, 2.6–2.9 ms
+ * for a block of the first layer's rows and 0–0.13 ms for each of the 27 over
+ * the two layers the scenario does not have (measured, one frame a read). A
+ * read of 120 frames carries 30 blocks past its two cycles, ±0.15 ms by
+ * where the cursor stood, and a read of 4 frames inside the 27 cheap ones
+ * reads the bake as nothing.
+ */
+const FAR_CYCLE = 45
+/**
+ * One `ir.passes` read stays under one query set's 2,048 passes and spans one
+ * far cycle; a frame of more than 44 passes cannot, and is read as far as fits.
+ */
+export const PASS_LIMIT = Object.freeze({ passes: 2000, frames: FAR_CYCLE })
 /** Frames a side waits for the report's settle: past the far atlas's 45-frame cycle. */
 export const SETTLE_CAP = 240
-const GPU_READS = { reads: 3, n: 120 }
+const GPU_READS = { reads: 3, n: 3 * FAR_CYCLE }
 const MARK = 'clouds on'
 
 /**
