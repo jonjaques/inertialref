@@ -496,7 +496,7 @@ describe('the page steps', () => {
     const page = fakePage()
     const side = await send(page, run, 'candidate:0')
     expect(side.ms).toBe(5)
-    expect(page.calls.gpu).toEqual([120, 120, 120])
+    expect(page.calls.gpu).toEqual([135, 135, 135])
     // Four frames first, so a report from before the levers moved is not read.
     expect(side.settled).toBe(5)
     expect(page.calls.levers.at(-1)).toMatchObject({
@@ -513,8 +513,8 @@ describe('the page steps', () => {
 
   it('size the timeline read from the frame’s own pass count', async () => {
     for (const [perFrame, frames] of [
-      // A frame of today's passes and the winner's eight is under the cap.
-      [35, 40],
+      // A frame of today's passes and the winner's eight reads one far cycle.
+      [35, 45],
       [82, 24],
       [2001, 1],
     ]) {
@@ -652,7 +652,7 @@ describe('the page steps', () => {
     expect(await send(page, sweep, `cell:${cell}`)).toMatchObject({
       accepted: true,
       trace: { ms: 1.2 },
-      frames: 40,
+      frames: 45,
     })
 
     const residual = ALL.error.find((r) => r.mode === 'automatic')
