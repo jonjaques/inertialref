@@ -25,7 +25,7 @@ import {
 
 /*
  * The evidence, trimmed from the Playwright spike's `.scratch/playwright-spike`
- * to the fields read here (ADR-0061, and CONTEXT.md's 7 Nov 2026 entry
+ * to the fields read here (ADR-0062, and CONTEXT.md's 7 Nov 2026 entry
  * "Headless Chrome presents"):
  *
  *   modes-chrome-headless.json        out/modes-chrome-headless.json — probe A,

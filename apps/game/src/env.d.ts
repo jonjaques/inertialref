@@ -12,10 +12,12 @@
  * anything Vite substitutes is in the bundle and is readable by anyone.
  */
 interface ImportMetaEnv {
-  /** GA4 measurement id, `G-XXXXXXXXXX`. See `src/analytics.ts`. */
-  readonly VITE_GA_MEASUREMENT_ID?: string
   /** Clerk's publishable key, `pk_…`. See `src/account/accounts.ts`. */
   readonly PUBLIC_CLERK_PUBLISHABLE_KEY?: string
+  /** PostHog's public project token, `phc_…`. See `src/telemetry/consent.ts`. */
+  readonly PUBLIC_POSTHOG_PROJECT_TOKEN?: string
+  /** PostHog's ingest host, `https://us.i.posthog.com`. See `src/telemetry/client.ts`. */
+  readonly PUBLIC_POSTHOG_HOST?: string
 }
 
 interface ImportMeta {

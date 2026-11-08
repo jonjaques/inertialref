@@ -48,7 +48,9 @@ export function SavedPictures({
     setPasting(false)
   }
   return (
-    <div className="flex flex-col gap-3">
+    // `ph-sensitive`: the labels are what the visitor typed, and autocapture
+    // and replay take an element's text unless told not to.
+    <div className="ph-sensitive flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
         <Action
           label="Import file"

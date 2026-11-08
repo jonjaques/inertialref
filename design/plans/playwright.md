@@ -8,7 +8,7 @@
 
 The ranking points the same way. The five proposals with the highest return need no Playwright: a dark-plate noise measurement, a boot-ladder fix, a settle measurement two reviews fold into P24, and two documentation corrections. Playwright Test as a runner (P04) ranks 37th of 68. Its value is what its consumers make of it, and the cheapest of those consumers (P35, the shell project) needs only its base configuration.
 
-The first wave ran all five on the Mac mini, beside P01's lock module, P03's launch guard, P06's tests and X3's port allocator, and it measured X13's idle rig (G5). #188 carries the code, and [The first wave, on the Mac mini](#the-first-wave-on-the-mac-mini) says what each step found. The second wave wired the lock into every GPU job and the guard and the served tree into every drive.mjs entry, and those decisions are [ADR-0061](../../docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md).
+The first wave ran all five on the Mac mini, beside P01's lock module, P03's launch guard, P06's tests and X3's port allocator, and it measured X13's idle rig (G5). #188 carries the code, and [The first wave, on the Mac mini](#the-first-wave-on-the-mac-mini) says what each step found. The second wave wired the lock into every GPU job and the guard and the served tree into every drive.mjs entry, and those decisions are [ADR-0062](../../docs/adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md).
 
 ---
 
@@ -447,7 +447,7 @@ Trap 10 states the measured cause. The keymap resolves chords from `event.code` 
 
 ### 6. P03: a launch preset and an operating-point guard that fail closed
 
-**Landed (#188).** The two presets, the refusal of every other browser before launch, and `assertOperatingPoint` are [ADR-0061](../../docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md), whose context carries the three wrong-browser modes this proposal was ranked on. Every drive.mjs boot, attach and `--reload` runs the guard before a step, and `--status` reads it again.
+**Landed (#188).** The two presets, the refusal of every other browser before launch, and `assertOperatingPoint` are [ADR-0062](../../docs/adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md), whose context carries the three wrong-browser modes this proposal was ranked on. Every drive.mjs boot, attach and `--reload` runs the guard before a step, and `--status` reads it again.
 
 **What remains.**
 
@@ -581,7 +581,7 @@ Each test is checked against a deliberate mutation of the line it guards. `trace
 
 ### 12. P01: one machine-wide GPU lock that every GPU job takes
 
-**Landed (#188).** The lock, its three holders — `pnpm test:gpu`, drive.mjs from Chrome's launch to `--down`, and the preset commands under one acquisition — and the refusal's terms are [ADR-0061](../../docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md). On the Mac mini, with a rig up, `pnpm test:gpu` in another worktree was refused in 0.40–0.62 s naming it, and under `IR_GPU_WAIT` started within one 500 ms poll of `--down`; `presets:compare`'s nested captures ran under its one acquisition while a suite beside them was refused; a SIGKILLed holder whose Chrome still ran kept the lock, and was reclaimed once that Chrome was gone. Codex's workspace-write sandbox cannot write the file, so a Codex thread does GPU work with full access or a profile that grants write on `<clone>/.git` (the drive skill).
+**Landed (#188).** The lock, its three holders — `pnpm test:gpu`, drive.mjs from Chrome's launch to `--down`, and the preset commands under one acquisition — and the refusal's terms are [ADR-0062](../../docs/adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md). On the Mac mini, with a rig up, `pnpm test:gpu` in another worktree was refused in 0.40–0.62 s naming it, and under `IR_GPU_WAIT` started within one 500 ms poll of `--down`; `presets:compare`'s nested captures ran under its one acquisition while a suite beside them was refused; a SIGKILLed holder whose Chrome still ran kept the lock, and was reclaimed once that Chrome was gone. Codex's workspace-write sandbox cannot write the file, so a Codex thread does GPU work with full access or a profile that grants write on `<clone>/.git` (the drive skill).
 
 **What remains.**
 
@@ -590,7 +590,7 @@ Each test is checked against a deliberate mutation of the line it guards. `trace
 - Around the lock. The Stop gate warns while it is held, because a full check beside a rendering rig timed out at 300 s and passed in 179 s with the rig closed (CONTEXT.md:8477-8480). `pnpm gpu:who` names the holder. Acquisitions are appended to a log, which is what can show no overlap in 30 days, and two Playwright GPU runs are shown to serialize.
 - Whether an idle rig counts as a GPU job, which is Jon's call on X13's figures (Phase 1).
 - The EnterWorktree sandbox is unprobed.
-- The module's known gaps, in ADR-0061's consequences: two waiters that both find a dead edit mutex can both enter it, `acquire` is not re-entrant within one process, and a SIGKILL of vitest's main process leaves its fork workers unrecorded while they run.
+- The module's known gaps, in ADR-0062's consequences: two waiters that both find a dead edit mutex can both enter it, `acquire` is not re-entrant within one process, and a SIGKILL of vitest's main process leaves its fork workers unrecorded while they run.
 
 ### 13. P43: PR media from one command
 
@@ -779,7 +779,7 @@ No proposal owns the mechanism.
 
 **Mechanism.** `scripts/ports.mjs` defines `portFor(role, tree)` as the role's base plus a hash of `git rev-parse --show-toplevel`, mod 200. The roles are vite, drive, preview, base, bisect and static. It skips 5173, 8787, 9333 and the bad-port list, and probes both `127.0.0.1` and `::1`. It is a tested pure core with a thin I/O shell.
 
-The identity half landed in #188 and is [ADR-0061](../../docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md)'s: `ir.build()` answers `BUILD_ID` and, on the dev server only, the root of the tree it serves, and drive.mjs refuses a page another checkout serves, naming both trees and how to serve this one.
+The identity half landed in #188 and is [ADR-0062](../../docs/adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md)'s: `ir.build()` answers `BUILD_ID` and, on the dev server only, the root of the tree it serves, and drive.mjs refuses a page another checkout serves, naming both trees and how to serve this one.
 
 **What remains.** The allocator is wired into nothing. Each role takes its port from `portFor` as its command is next touched: drive.mjs's `--port`, the preset commands' servers, compare's base, then Playwright's `webServer`. Two gaps in the identity half stay open: a foreign Vite running a build older than `ir.build()` reads `identity unchecked` and is accepted, and the check runs after the boot, so a refused run still pays one.
 

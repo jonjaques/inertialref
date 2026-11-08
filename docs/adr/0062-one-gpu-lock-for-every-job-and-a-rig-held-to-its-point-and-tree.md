@@ -1,4 +1,4 @@
-# ADR-0061: Every GPU job holds one lock, and a rig is held to the point and the tree it asked for
+# ADR-0062: Every GPU job holds one lock, and a rig is held to the point and the tree it asked for
 
 Status: accepted · 7 Nov 2026. The rig's half of the Playwright plan's opening
 phase (P01, P03 and X3's identity half); the plan keeps the work these leave.

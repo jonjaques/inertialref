@@ -164,3 +164,42 @@ export class GuideChannel {
  */
 export const isOutputTranscript = (event: LiveServerEvent): boolean =>
   event.type === 'session.output_transcript.delta'
+
+/** A fragment of what the visitor said, as the provider transcribed it. */
+export const visitorTranscript = (event: LiveServerEvent): string | null =>
+  event.type === 'session.input_transcript.delta' &&
+  typeof event.delta === 'string'
+    ? event.delta
+    : null
+
+/** What one sent event added to the conversation the backend reads. */
+export type GuideConversationEntry =
+  | {
+      readonly kind: 'message'
+      readonly role: 'developer' | 'user'
+      readonly text: string
+    }
+  | {
+      readonly kind: 'output'
+      readonly callId: string
+      /** The tool's answer, as the JSON text the model reads. */
+      readonly output: string
+    }
+
+/**
+ * The conversation entry a sent event carries, or null for the events that
+ * steer the voice or the session instead.
+ */
+export const conversationEntry = (
+  event: GuideClientEvent,
+): GuideConversationEntry | null => {
+  if (event.type !== 'response.item.create') return null
+  const { item } = event
+  if (item.type === 'function_call_output')
+    return { kind: 'output', callId: item.call_id, output: item.output }
+  return {
+    kind: 'message',
+    role: item.role,
+    text: item.content.map((part) => part.text).join(''),
+  }
+}

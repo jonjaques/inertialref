@@ -81,8 +81,9 @@ table is one of those three, not drift.
 | Compile-ahead goes through one recipe                                                         | [Rendering](../concepts/rendering.md)                                                                                  |
 | Do not edit files `pnpm brand` writes                                                         | [Development](../guides/development.md)                                                                                |
 | Site metadata is duplicated on purpose                                                        | [Hosting](../hosting.md) · [Development](../guides/development.md)                                                     |
-| Third-party tags load through the analytics module                                            | [Hosting](../hosting.md)                                                                                               |
+| Telemetry goes through one module, behind the gate                                            | [ADR-0061](../adr/0061-telemetry-is-posthog.md)                                                                        |
 | A readout neither changes the frame nor stops it                                              | [ADR-0022](../adr/0022-the-timeline.md) · [ADR-0044](../adr/0044-the-sensor-reconstructs-the-display.md)               |
+| GPU work holds the machine's GPU lock                                                         | [ADR-0062](../adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md) · [Driving](driving.md)     |
 
 When a defect exposes a missing invariant, add the rule to `AGENTS.md`, a
 one-liner under `.claude/rules/`, a row here, and a regression test that can
@@ -730,8 +731,16 @@ shared head that scrapers read.
 
 ### Rule 64
 
-**Never load a third-party tag from the document head.** `src/analytics.ts` is
-the gate: production build, canonical host, no Global Privacy Control.
+**Never load a third-party tag from the document head, and never reach PostHog
+except through `src/telemetry/client.ts`.** `telemetry/consent.ts` is the
+gate — a production build with a token, on the canonical host or a Workers
+preview, never against Global Privacy Control or from a driven browser — and
+the visitor's switches in `state/preferences.ts` are the second one. A call
+site that imports posthog-js itself skips both, and a static import puts the
+SDK in the chunk boot waits on
+([ADR-0061](../adr/0061-telemetry-is-posthog.md)). The guide's `$ai_*` events
+carry what was said only under `TELEMETRY_TRANSCRIPTS`, and every URL leaves
+through `telemetry/sanitize.ts`.
 
 ### Rule 65
 
@@ -789,4 +798,4 @@ only under its parent's token. A refusal is a stop: wait (`--gpu-wait`,
 `IR_GPU_WAIT`) or ask, and never `--down` a rig another session started,
 delete the lock file or borrow a token from it. There is no switch that skips
 it, and a lock that cannot be written refuses the job.
-[ADR-0061](../adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md), the drive skill's § One GPU job at a time.
+[ADR-0062](../adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md), the drive skill's § One GPU job at a time.

@@ -41,11 +41,50 @@ export type GuideLoopChannel = Pick<
   'note' | 'ask' | 'answer' | 'respond'
 >
 
+/** Where an answered call came from, and how long it ran on `now`. */
+export interface GuideCallContext {
+  /** The response that made the call, when the item could be matched to one. */
+  readonly responseId: string | null
+  readonly durationMs: number
+}
+
+/** A call one response made, as the provider sent it. */
+export interface GuideResponseCall {
+  readonly callId: string
+  readonly name: string
+  readonly arguments: string
+}
+
+/**
+ * One backend response as the loop saw it. For observability: nothing reads
+ * it to decide anything.
+ */
+export interface GuideResponseRecord {
+  readonly id: string
+  readonly model: string | null
+  readonly outcome: 'completed' | 'failed' | 'incomplete'
+  /** From the response's creation to its outcome, on `now`. */
+  readonly durationMs: number
+  /** The text it returned, which is what the voice is given to say. */
+  readonly text: string
+  readonly calls: readonly GuideResponseCall[]
+  /** The provider's count for this one response; null when it sent none. */
+  readonly usage: Omit<GuideUsage, 'voiceSeconds' | 'responses'> | null
+}
+
 export interface GuideLoopOptions {
   readonly now: () => number
   readonly execute: (call: GuideCall) => Promise<GuideToolOutput>
   /** After a call has been answered, whatever the outcome. */
-  readonly onExecuted?: (call: GuideCall, output: GuideToolOutput) => void
+  readonly onExecuted?: (
+    call: GuideCall,
+    output: GuideToolOutput,
+    context: GuideCallContext,
+  ) => void
+  /** A response began: what the conversation queued so far is what it reads. */
+  readonly onResponseStarted?: (id: string) => void
+  /** A response ended — once, however many times the provider says so. */
+  readonly onResponseEnded?: (response: GuideResponseRecord) => void
   /** A delegation the voice started, not one the browser prompted. */
   readonly onDelegation?: () => void
   readonly onError?: (code: string, message: string) => void
@@ -59,6 +98,8 @@ export interface GuideLoopOptions {
 interface OpenResponse {
   readonly id: string
   readonly delegationId: string | null
+  readonly createdAt: number
+  readonly model: string | null
   completed: boolean
   /** Every call this response made, answered or not. */
   readonly callIds: string[]
@@ -281,15 +322,19 @@ export class GuideLoop {
     switch (nested.type) {
       case 'response.created': {
         this.#continuing = false
-        if (id !== null && !this.#responses.has(id))
+        if (id !== null && !this.#responses.has(id)) {
           this.#responses.set(id, {
             id,
             delegationId,
+            createdAt: this.#options.now(),
+            model: typeof response?.model === 'string' ? response.model : null,
             completed: false,
             callIds: [],
             continued: false,
             text: '',
           })
+          this.#options.onResponseStarted?.(id)
+        }
         this.#options.onChange?.()
         return
       }
@@ -349,6 +394,8 @@ export class GuideLoop {
       case 'response.incomplete': {
         if (id === null) return
         const open = this.#responses.get(id)
+        // A redelivered outcome finds the row already completed.
+        const ending = open?.completed === false ? open : undefined
         if (open !== undefined) open.completed = true
         const usage = record(response?.usage)
         if (usage !== null && !this.#counted.has(id)) {
@@ -369,6 +416,8 @@ export class GuideLoop {
           for (const [key, row] of this.#responses)
             if (row.completed && this.#responses.size > 32)
               this.#responses.delete(key)
+        if (ending !== undefined)
+          this.#ended(ending, nested.type, response, usage)
         this.#continueIfAnswered(id)
         this.#options.onChange?.()
         return
@@ -378,6 +427,43 @@ export class GuideLoop {
     }
   }
 
+  #ended(
+    open: OpenResponse,
+    type: 'response.completed' | 'response.failed' | 'response.incomplete',
+    response: Raw | null,
+    usage: Raw | null,
+  ): void {
+    const report = this.#options.onResponseEnded
+    if (report === undefined) return
+    const details = record(usage?.input_tokens_details)
+    report({
+      id: open.id,
+      model: typeof response?.model === 'string' ? response.model : open.model,
+      outcome:
+        type === 'response.completed'
+          ? 'completed'
+          : type === 'response.failed'
+            ? 'failed'
+            : 'incomplete',
+      durationMs: Math.max(0, this.#options.now() - open.createdAt),
+      text: open.text,
+      calls: open.callIds.flatMap((callId) => {
+        const call = this.#calls.get(callId)
+        return call === undefined
+          ? []
+          : [{ callId, name: call.name, arguments: call.arguments }]
+      }),
+      usage:
+        usage === null
+          ? null
+          : {
+              inputTokens: count(usage.input_tokens),
+              cachedTokens: count(details?.cached_tokens),
+              outputTokens: count(usage.output_tokens),
+            },
+    })
+  }
+
   #open(delegationId: string | null): OpenResponse | undefined {
     const rows = [...this.#responses.values()].filter((row) => !row.completed)
     return rows.find((row) => row.delegationId === delegationId) ?? rows.at(-1)
@@ -385,6 +471,7 @@ export class GuideLoop {
 
   async #run(call: PendingCall): Promise<void> {
     if (this.#stopped || call.answered) return
+    const startedAt = this.#options.now()
     const decoded = decodeGuideCall(call.name, call.arguments)
     let output: GuideToolOutput
     let decodedCall: GuideCall | null = null
@@ -403,7 +490,11 @@ export class GuideLoop {
     if (this.#stopped || call.answered) return
     call.answered = true
     this.#output(call.callId, output)
-    if (decodedCall !== null) this.#options.onExecuted?.(decodedCall, output)
+    if (decodedCall !== null)
+      this.#options.onExecuted?.(decodedCall, output, {
+        responseId: call.responseId,
+        durationMs: Math.max(0, this.#options.now() - startedAt),
+      })
   }
 
   #output(callId: string, output: GuideToolOutput): void {

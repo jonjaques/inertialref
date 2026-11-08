@@ -1,5 +1,6 @@
 import type { WorkerInbound, WorkerOutbound } from '@inertialref/protocol'
 import { QUERY } from '../pages/paths.ts'
+import { reportFailure } from '../telemetry/client.ts'
 import type { WorkerPort } from '@inertialref/workers'
 
 /*
@@ -18,6 +19,26 @@ export function createBrowserWorkerPort(): WorkerPort {
       name: 'inertialref-universe',
     },
   )
+
+  /*
+   * A throw the worker did not catch. Job failures come back as `WorkerFailure`
+   * messages and are the pool's to handle; this is everything else, which
+   * otherwise reaches DevTools and nowhere. A module worker's `error` event
+   * reaches the page with `error: null` — the Error object stays in the
+   * worker — so the report is rebuilt from the message and the location. A
+   * worker script that fails to load fires a plain `Event` instead, with no
+   * message and no location, so every field is read as possibly absent.
+   */
+  worker.addEventListener('error', (event: Event) => {
+    const { message, filename, lineno, colno } = event as Partial<ErrorEvent>
+    const error = new Error(message || 'The universe worker failed')
+    error.name = 'UniverseWorkerError'
+    reportFailure('worker', error, {
+      worker_file: filename?.split('/').at(-1) ?? '',
+      worker_line: lineno ?? null,
+      worker_column: colno ?? null,
+    })
+  })
 
   return {
     post(message: WorkerInbound, transfer: readonly ArrayBufferLike[] = []) {
