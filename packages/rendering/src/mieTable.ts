@@ -2,12 +2,14 @@ import { MIE_DROPLETS } from './mieDroplets.generated.ts'
 
 /*
  * The droplets' Lorenz–Mie phase table: its type, the decoder of the
- * generated file, and the CPU reads the GPU's lookup is held to.
+ * generated file (`apps/ingest/src/mieTable.ts` writes it), and the CPU reads
+ * the GPU's lookup is held to.
  *
  * The angular axis is dense at both ends — θ_i = (π/2)(1 − cos(π·i/(n − 1)))
  * puts 0° and 180° on texel centers — because both ends carry the structure:
  * the forward peak and the corona at one, the glory's rings at the other,
- * 2.4° wide for a 10 µm drop. The radius axis is logarithmic, rows 9.4% apart.
+ * the first of them 1.9° out for a 10 µm cloud in red, where the texels are
+ * 0.057° apart. The radius axis is logarithmic, rows 9.4% apart.
  */
 
 export interface MieTable {
@@ -34,7 +36,9 @@ export interface MieTable {
   }[]
   /**
    * Per row: the red band's first glory ring, degrees from the antisolar
-   * point, found on the series at full angular resolution by the generator.
+   * point — the first maximum of p(π − ψ) after its first minimum past ψ = 0 —
+   * found by the generator on the series at 0.005° steps, finer than the
+   * table's own texels there.
    */
   readonly gloryRed: readonly number[]
 }
