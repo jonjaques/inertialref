@@ -244,3 +244,30 @@ export function gpuLine(state, { path: file } = {}) {
   const ours = held.token !== null && held.token === state?.gpuToken
   return `${ours ? 'held for this rig' : 'held by another job'}. ${held.text}`
 }
+
+/**
+ * The line a command that drove the rig on `port` ends with, whether it
+ * finished or threw. The Chrome it left up holds the GPU lock until
+ * `--down`, and a command that failed partway has left that Chrome up just
+ * the same: every other worktree's suite and rig is refused until someone
+ * closes it, and the error is all the person sees. Null when no Chrome of
+ * that session is up, or the live lock is not held under its token.
+ *
+ * @param {string | number} port
+ * @param {object} [options]
+ * @param {string} [options.rig]   where sessions live; `.data/drive` by default
+ * @param {string} [options.path]  the lock file; the shared one by default
+ */
+export async function rigLeft(port, { rig, path: file } = {}) {
+  const state = await readSession(port, rig)
+  const who = identify(state?.chromePid, state?.chromeStart)
+  if (who !== 'same' && who !== 'unknown') return null
+  let held
+  try {
+    held = holding({ path: file })
+  } catch {
+    return null
+  }
+  if (held?.token == null || held.token !== state.gpuToken) return null
+  return `The rig on port ${port} holds the GPU lock until node scripts/drive.mjs --port ${port} --down.`
+}

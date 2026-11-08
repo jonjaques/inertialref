@@ -18,6 +18,7 @@ import {
   keep,
   launched,
   readSession,
+  rigLeft,
   sessionPath,
   takeGpu,
 } from './driveLock.mjs'
@@ -391,6 +392,32 @@ describe('the rig and the GPU lock', () => {
     expect(theirs).toMatch(/^held by another job\. drive\.mjs \(port 9400\)/)
     expect(theirs).toContain(`pid ${rig.chrome}`)
     expect(theirs).not.toContain('--down')
+  })
+
+  it('says a rig left up holds the lock, for a command that drove it, and nothing when none does', async () => {
+    const rig = path.join(dir, 'drive')
+    mkdirSync(rig)
+    const left = () => rigLeft(9400, { rig, path: file() })
+    const session = (fields) =>
+      writeFileSync(sessionPath(9400, rig), `${JSON.stringify(fields)}\n`)
+    expect(await left()).toBeNull()
+    const up = await rigLeftUp()
+    session({
+      chromePid: up.chrome,
+      chromeStart: startOf(up.chrome),
+      gpuToken: up.token,
+    })
+    expect(await left()).toBe(
+      'The rig on port 9400 holds the GPU lock until node scripts/drive.mjs --port 9400 --down.',
+    )
+    // A session whose token is not the live lock's claims nothing.
+    session({ chromePid: up.chrome, gpuToken: 'f'.repeat(32) })
+    expect(await left()).toBeNull()
+    // Nor does one whose Chrome has exited, which leaves the lock stale.
+    session({ chromePid: up.chrome, gpuToken: up.token })
+    process.kill(up.chrome, 'SIGKILL')
+    for (let i = 0; i < 100 && exists(up.chrome); i += 1) await sleep(20)
+    expect(await left()).toBeNull()
   })
 
   it('reads a session by port, and none for a port no rig has used', async () => {

@@ -50,7 +50,7 @@ import {
   PLATE_HEIGHT,
   PLATE_WIDTH,
 } from '../../packages/devtools/src/pictures.ts'
-import { readSession, takeGpu } from '../driveLock.mjs'
+import { readSession, rigLeft, takeGpu } from '../driveLock.mjs'
 import { parseWait } from '../gpuLock.mjs'
 import { PLATES, plateName } from './check.mjs'
 import { capturePlates, serve } from './capture.mjs'
@@ -445,9 +445,6 @@ try {
             `pnpm presets:plates <id> accepts a move on purpose.`,
     )
   }
-  say(
-    `The rig on port ${values.port} holds the GPU lock until node scripts/drive.mjs --port ${values.port} --down.`,
-  )
   if (moved.length > 0) process.exitCode = 1
 } finally {
   // This command's own entry; the rig's Chrome keeps the lock until `--down`.
@@ -461,4 +458,9 @@ try {
       say(`could not remove ${base.tree}: ${String(cause)}`)
     }
   }
+  // Here, not after the report: a run that threw partway has left the rig's
+  // Chrome up holding the lock all the same. On stderr, so --json stays one
+  // object.
+  const left = await rigLeft(values.port)
+  if (left !== null) console.error(left)
 }

@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { PICTURES } from '../../packages/devtools/src/pictures.ts'
-import { readSession, takeGpu } from '../driveLock.mjs'
+import { readSession, rigLeft, takeGpu } from '../driveLock.mjs'
 import { parseWait } from '../gpuLock.mjs'
 import { PLATES } from './check.mjs'
 import { capturePlates, serve } from './capture.mjs'
@@ -103,13 +103,14 @@ try {
     lock: gpu,
     extension: 'jpg',
   })
+  console.log(
+    `\n${pictures.length} plate${pictures.length === 1 ? '' : 's'} in ${path.relative(ROOT, PLATES)}.`,
+  )
 } finally {
   // This command's own entry; the rig's Chrome keeps the lock until `--down`.
   gpu.release()
   stop?.()
+  // Here, so a capture that threw says it as well: its rig is up all the same.
+  const left = await rigLeft(values.port)
+  if (left !== null) console.error(left)
 }
-
-console.log(
-  `\n${pictures.length} plate${pictures.length === 1 ? '' : 's'} in ${path.relative(ROOT, PLATES)}. ` +
-    `The rig on port ${values.port} holds the GPU lock until node scripts/drive.mjs --port ${values.port} --down.`,
-)
