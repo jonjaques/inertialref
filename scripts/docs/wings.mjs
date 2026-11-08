@@ -228,6 +228,7 @@ export const WINGS = [
             'docs/adr/0060-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md',
             'Stations',
           ],
+          ['docs/adr/0061-telemetry-is-posthog.md', 'Telemetry'],
         ],
       },
     ],

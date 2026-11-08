@@ -8,10 +8,10 @@ import { bindings, defineConfig } from 'cf/config'
  *
  * Nothing in this file may ever be a credential — it is committed. Secrets are
  * declared with `bindings.secret()` and their values set on the Worker, never
- * written as `bindings.text()`. The GA measurement id is not a credential and
- * is still not here: it is a *build* variable, set in Workers Builds, because
- * this repository is public and a fork should not measure into somebody else's
- * property. `apps/game/src/analytics.ts`.
+ * written as `bindings.text()`. The browser's PostHog project token is not a
+ * credential and is still not here: it is a *build* variable, set in Workers
+ * Builds, because this repository is public and a fork should not report into
+ * somebody else's project. `apps/game/src/telemetry/consent.ts`.
  */
 export default defineConfig(({ isPreview }) => {
   /*
@@ -68,8 +68,14 @@ export default defineConfig(({ isPreview }) => {
        *             slow or refused session shows where the time and the
        *             failure sat. `traces.enabled` turns tracing on regardless
        *             of the compatibility date.
-       *   persist — both stay queryable in the dashboard; a destination would
-       *             forward them somewhere else, and there is nowhere else yet.
+       *   persist — both stay queryable in the dashboard.
+       *   destinations — logs also go to PostHog Logs over OTLP, through the
+       *             account's `posthog-logs` destination (created with
+       *             `cf o11y destinations create`; its endpoint and bearer token
+       *             live on the destination, not here), so a Worker record and
+       *             the browser event that caused it share a search
+       *             (ADR-0061). A rebuilt account needs the destination
+       *             created again before this name means anything.
        *
        * Live: `pnpm --filter @inertialref/server run tail`.
        */
@@ -81,6 +87,7 @@ export default defineConfig(({ isPreview }) => {
           invocationLogs: true,
           headSamplingRate: 1,
           persist: true,
+          destinations: ['posthog-logs'],
         },
         traces: { enabled: true, headSamplingRate: 1, persist: true },
       },
@@ -169,6 +176,23 @@ export default defineConfig(({ isPreview }) => {
          * (`apps/game/.env.example`).
          */
         CLERK_SECRET_KEY: bindings.secret(),
+
+        /*
+         * Account deletion reaching PostHog (`src/clerkWebhook.ts`): the
+         * project the deletion is asked of. Not a credential — it opens
+         * nothing without a personal key — and committing it routes nothing
+         * of a fork's into this project, which is the reason the browser's
+         * project token is a build variable instead.
+         *
+         * The route's two secrets are deliberately not here.
+         * `CLERK_WEBHOOK_SIGNING_SECRET` and `POSTHOG_PERSON_DELETE_KEY` are
+         * production's alone: a Clerk webhook names one URL, a preview's
+         * changes with its branch, and a declared secret would fail every
+         * Previews Base upload for want of a value it has no use for. The
+         * route reads them through a widening of `Env` and answers 503
+         * without them.
+         */
+        POSTHOG_PROJECT_ID: bindings.text('719084'),
 
         /*
          * Allowances (`src/limits.ts`). Counted per location and settled

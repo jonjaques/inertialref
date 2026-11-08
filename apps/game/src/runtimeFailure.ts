@@ -1,12 +1,26 @@
 import { useSyncExternalStore } from 'react'
+import { bootFailed } from './telemetry/boot.ts'
+import { reportFailure } from './telemetry/client.ts'
 
 export interface RuntimeFailure {
   readonly kind: 'unsupported' | 'graphics' | 'runtime' | 'restart'
   readonly detail: string
 }
 
-/** The first failure survives later errors from the same broken device. */
-export function createRuntimeFailureStore() {
+/**
+ * The first failure survives later errors from the same broken device.
+ *
+ * `observe` hears every report, the first and the rest: telemetry wants the
+ * device loss that arrives after the validation error it caused, which the
+ * store rightly drops (`telemetry/failures.ts` holds the first for it).
+ */
+export function createRuntimeFailureStore(
+  observe?: (
+    kind: RuntimeFailure['kind'],
+    cause: unknown,
+    first: RuntimeFailure | null,
+  ) => void,
+) {
   let failure: RuntimeFailure | null = null
   const listeners = new Set<() => void>()
   return {
@@ -16,17 +30,28 @@ export function createRuntimeFailureStore() {
       return () => listeners.delete(listener)
     },
     report(kind: RuntimeFailure['kind'], cause: unknown) {
-      if (failure !== null) return
-      failure = {
-        kind,
-        detail: cause instanceof Error ? cause.message : String(cause),
-      }
+      const first =
+        failure === null
+          ? {
+              kind,
+              detail: cause instanceof Error ? cause.message : String(cause),
+            }
+          : null
+      if (first !== null) failure = first
+      observe?.(kind, cause, first)
+      if (first === null) return
       for (const listener of listeners) listener()
     },
   }
 }
 
-export const runtimeFailure = createRuntimeFailureStore()
+/** The page's store, reported to PostHog: `unsupported` is a boot event, not a defect. */
+export const runtimeFailure = createRuntimeFailureStore(
+  (kind, cause, first) => {
+    if (first !== null) bootFailed(first)
+    if (kind !== 'unsupported') reportFailure(kind, cause)
+  },
+)
 const serverSnapshot = (): null => null
 
 export function useRuntimeFailure(): RuntimeFailure | null {

@@ -9,6 +9,56 @@ function errorFrom(cause: unknown): Error {
   return new Error(String(detail))
 }
 
+/** The GPU's own error classes, whose names `telemetry/failures.ts` groups by. */
+const GPU_ERROR = /^GPU(Validation|OutOfMemory|Internal)Error$/
+
+/**
+ * An error named for what the GPU said, so error tracking can group it.
+ *
+ * `GPUError` is not an `Error`: it has a message and no stack, and once
+ * `errorFrom` wraps it, the class that said whether it was validation, memory
+ * or the driver is gone. A `GPUPipelineError` is a `DOMException` whose
+ * `reason` carries the same distinction. The message, which the runtime
+ * notice shows, is unchanged.
+ *
+ * An uncaptured error reaches `renderer.onError` as three.js's own record,
+ * `{ api, type, message, originalEvent }`, whose constructor is `Object`: the
+ * class is its `type` field there, and only an error scope or a pipeline hands
+ * over the GPU's object itself.
+ */
+export function graphicsError(cause: unknown): Error {
+  const named =
+    typeof cause === 'object' && cause !== null
+      ? (cause as { type?: unknown }).type
+      : undefined
+  const type =
+    typeof named === 'string'
+      ? named
+      : typeof cause === 'object' && cause !== null
+        ? (cause.constructor as { name?: string } | undefined)?.name
+        : undefined
+  let name: string | null = null
+  if (type !== undefined && GPU_ERROR.test(type)) name = type
+  else if (type === 'GPUPipelineError')
+    name =
+      (cause as { reason?: unknown }).reason === 'internal'
+        ? 'GPUInternalError'
+        : 'GPUValidationError'
+  if (name === null) return errorFrom(cause)
+  const error = new Error(errorFrom(cause).message, { cause })
+  error.name = name
+  return error
+}
+
+/** A lost device, with three.js's `reason` kept: `destroyed` is our own release. */
+export function deviceLostError(message: string, reason: unknown): Error {
+  const error = Object.assign(new Error(message), {
+    reason: typeof reason === 'string' ? reason : 'unknown',
+  })
+  error.name = 'GPUDeviceLost'
+  return error
+}
+
 /** Device loss and uncaptured errors belong to the renderer that receives them. */
 export function watchRendererErrors(
   renderer: WebGPURenderer,
@@ -18,11 +68,11 @@ export function watchRendererErrors(
   const previousError = renderer.onError
   let active = true
   const report = (cause: unknown): void => {
-    if (active) fail(errorFrom(cause))
+    if (active) fail(graphicsError(cause))
   }
   const onLost: typeof previousLoss = (info) => {
     previousLoss.call(renderer, info)
-    report(info.message)
+    if (active) fail(deviceLostError(info.message, info.reason))
   }
   const onError = (info: unknown): void => {
     previousError.call(renderer, info as Parameters<typeof previousError>[0])
@@ -63,7 +113,7 @@ function watchWebGPU(
   const scopes: { render: boolean }[] = []
   let active = true
   const report = (cause: unknown): void => {
-    if (active) fail(errorFrom(cause))
+    if (active) fail(graphicsError(cause))
   }
   const markRender = (): void => {
     const scope = scopes.at(-1)

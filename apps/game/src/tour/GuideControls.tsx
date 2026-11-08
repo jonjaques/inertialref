@@ -1,11 +1,15 @@
 import { useSyncExternalStore } from 'react'
 import { Mic, Pause, Play, Square } from 'lucide-react'
 import { Action } from '../hud/Action.tsx'
+import { SurveyPrompt } from '../hud/SurveyPrompt.tsx'
+import { SwitchRow } from '../hud/SwitchRow.tsx'
 import { useActionTitle } from '../input/useKeymap.ts'
 import {
   PLANETARIUM_GUIDE_VOICE,
+  TELEMETRY_TRANSCRIPTS,
   usePersistentState,
 } from '../state/preferences.ts'
+import { SURVEYS } from '../telemetry/surveys.ts'
 import { connectionOf, type GuideRuntime, statusLine } from './runtime.ts'
 import type { GuideAccess } from './verdict.ts'
 
@@ -17,7 +21,8 @@ import type { GuideAccess } from './verdict.ts'
  * Start requests the microphone, posts the offer and shows Connecting until
  * the session starts; Pause becomes Resume and mutes both directions; End
  * closes the session and waits for its final usage. The one-line status and
- * the AI disclosure sit beneath. There is no plan, no transcript, no typed
+ * the AI disclosure sit beneath, with the transcript switch and, after a
+ * shared tour, its survey. There is no plan, no transcript, no typed
  * request box: the conversation is the interface, and a drive script asks
  * through `ir.guideAsk`.
  */
@@ -35,6 +40,9 @@ export function GuideControls({
     runtime.getSnapshot,
   )
   const [voice, setVoice] = usePersistentState(PLANETARIUM_GUIDE_VOICE)
+  const [transcripts, setTranscripts] = usePersistentState(
+    TELEMETRY_TRANSCRIPTS,
+  )
   const paused = state.activity.state === 'paused'
   const pauseTitle = useActionTitle(
     'guide.pause',
@@ -100,6 +108,26 @@ export function GuideControls({
             The guide is an AI voice. Starting sends your microphone to OpenAI,
             which holds the conversation and moves the camera through this app.
           </p>
+          {/* Beside the disclosure because it is the same question asked the
+              other way: where else what was said goes. Without it a tour
+              still reports its timing, its tools and its cost, never a
+              sentence (`tour/aiObservability.ts`). */}
+          <SwitchRow
+            label="Share transcripts"
+            detail="Send what you and the guide say to PostHog, to improve the guide. Kept for 30 days."
+            on={transcripts}
+            changed={transcripts !== TELEMETRY_TRANSCRIPTS.initial}
+            onChange={setTranscripts}
+          />
+          {/* Asked only of somebody who shared the tour it rates: a rating
+              beside a transcript says what went wrong, and one without a
+              transcript says only that something did. */}
+          {offline && transcripts && state.lastTour !== null && (
+            <SurveyPrompt
+              name={SURVEYS.tour}
+              subject={['tour_session_id', state.lastTour]}
+            />
+          )}
         </>
       )}
       {state.message && (

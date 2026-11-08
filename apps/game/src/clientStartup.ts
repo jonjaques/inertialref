@@ -1,5 +1,4 @@
 import { createConsoleSink, logHub } from '@inertialref/shared'
-import { startAnalytics } from './analytics.ts'
 import { BUILD_ID } from './build.ts'
 import { isTimingLevel, setTimingLevel } from './engine/browserTiming.ts'
 import { cacheStartupAssets } from './net/cacheStartupAssets.ts'
@@ -7,6 +6,12 @@ import { registerServiceWorker } from './net/registerServiceWorker.ts'
 import { QUERY } from './pages/paths.ts'
 import { installSchedulerYield } from './render/schedulerYield.ts'
 import { read, TIMING_LEVEL } from './state/preferences.ts'
+import { createTelemetrySink } from './telemetry/logSink.ts'
+import {
+  onFailureReported,
+  sendLog,
+  startTelemetry,
+} from './telemetry/client.ts'
 
 let started = false
 
@@ -19,11 +24,18 @@ export function startClient(): void {
   // animation frame cannot finish boot. Install before importing the scene.
   installSchedulerYield()
   logHub.addSink(createConsoleSink(console, 'info'))
+  startTelemetry()
+  // Warnings and errors to PostHog Logs as written, and the quiet records
+  // before a failure when one is reported (`telemetry/logSink.ts`).
+  const telemetrySink = createTelemetrySink(sendLog)
+  logHub.addSink(telemetrySink)
+  onFailureReported(() => telemetrySink.flushContext())
 
   // An effect inside App misses the catalog and renderer startup spans.
   const asked = new URLSearchParams(window.location.search).get(QUERY.timing)
-  setTimingLevel(isTimingLevel(asked) ? asked : read(TIMING_LEVEL))
-  startAnalytics()
+  const timingLevel = isTimingLevel(asked) ? asked : read(TIMING_LEVEL)
+  setTimingLevel(timingLevel)
+  sendLog('info', 'game client services started', { timing_level: timingLevel })
 
   // The readiness adapter also covers hydration after the load event. A
   // listener alone would miss registration on that first visit.

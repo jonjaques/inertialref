@@ -198,7 +198,12 @@ export function SkyLabels({
   if (!enabled) return null
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+    // `data-replay-block`: every label is rewritten every frame, which a
+    // session recording would store as a mutation storm over a black canvas.
+    <div
+      data-replay-block
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+    >
       {names.map(({ address, name }) => {
         const selected = address === target
         return (
