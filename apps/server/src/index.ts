@@ -22,6 +22,7 @@ import catalogManifest from '../../../data/catalog/manifest.json' with { type: '
 import { AccountUnavailableError } from './account.ts'
 import { accountStatus } from './grants.ts'
 import { allowed, RETRY_AFTER, sourceKey } from './limits.ts'
+import { relay } from './relay.ts'
 import { routeFor } from './routes.ts'
 import { type MediaStores, serveMedia } from './serveMedia.ts'
 import { serveTour } from './tour/routes.ts'
@@ -68,6 +69,10 @@ export default {
      * One allowance per address across the account route and the guide's,
      * because both ask Clerk who is calling, and Clerk's API has a rate limit
      * of its own that every visitor shares. Checked before any of that work.
+     *
+     * The relay is outside it on purpose. It asks nobody who is calling, so it
+     * spends none of Clerk's limit, and it carries every measured page's
+     * events: one visitor's burst would refuse their next account check.
      */
     if (
       (route.kind === 'account' || route.kind === 'tour') &&
@@ -120,6 +125,20 @@ export default {
           { error: `${SOCKET_PATH} is not implemented yet`, milestone: 'H4' },
           501,
         )
+
+      case 'relay': {
+        const { methods } = route.target
+        if (!methods.includes(request.method)) {
+          const allow = methods.join(', ')
+          return api({ error: `this relay path takes ${allow}` }, 405, {
+            allow,
+          })
+        }
+        return (
+          (await relay(request, route.target)) ??
+          api({ error: 'PostHog is unreachable' }, 502)
+        )
+      }
 
       case 'api-not-found':
         return api({ error: 'no such endpoint' }, 404)

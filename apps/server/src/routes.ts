@@ -4,18 +4,22 @@ import {
   GUIDE_PREFIX,
   HEALTH_PATH,
   MEDIA_PREFIX,
+  RELAY_PREFIX,
   SOCKET_PATH,
 } from '@inertialref/protocol'
 import { type MediaObject, mediaFor } from './media.ts'
+import { type RelayTarget, relayTarget } from './relay.ts'
 
 /*
  * Which handler a path belongs to.
  *
- * Separated from `index.ts` because it is the half with decisions in it and the
- * only half that can be tested in plain Node — `index.ts` imports
- * `cloudflare:workers` types and needs workerd to run. Durable Object tests
- * will need `@cloudflare/vitest-pool-workers` (and a Vitest bump) when there is
- * a Durable Object; routing does not, and should not wait for one.
+ * Separated from `index.ts` because it is the half with decisions in it, and a
+ * decision here is a pure function of the path, testable with no request, no
+ * `Env` and no binding. `index.ts` runs in plain Node too, as long as a test
+ * hands it an `Env` that holds whatever its route reaches (`relay.test.ts`).
+ * Durable Object tests will need `@cloudflare/vitest-pool-workers` (and a
+ * Vitest bump) when there is a Durable Object; routing does not, and should
+ * not wait for one.
  *
  * `runWorkerFirst` in cloudflare.config.ts means `asset` is normally unreachable —
  * a path that is not `/api`, `/api/*`, `/ws` or `/media/*` never wakes the
@@ -29,6 +33,7 @@ export type Route =
   | { readonly kind: 'health' }
   | { readonly kind: 'account' }
   | { readonly kind: 'socket' }
+  | { readonly kind: 'relay'; readonly target: RelayTarget }
   | { readonly kind: 'api-not-found' }
   | { readonly kind: 'media'; readonly object: MediaObject }
   | { readonly kind: 'media-not-found' }
@@ -42,6 +47,15 @@ export function routeFor(pathname: string): Route {
   if (pathname === HEALTH_PATH) return { kind: 'health' }
   if (pathname === ACCOUNT_PATH) return { kind: 'account' }
   if (pathname === SOCKET_PATH) return { kind: 'socket' }
+  /*
+   * PostHog, by allowlist (`relay.ts`). A path under the prefix that the
+   * allowlist does not name falls through to the API's 404 below, the same
+   * answer as any other unknown endpoint, rather than reaching PostHog.
+   */
+  if (pathname.startsWith(RELAY_PREFIX)) {
+    const target = relayTarget(pathname.slice(RELAY_PREFIX.length))
+    if (target !== null) return { kind: 'relay', target }
+  }
   /*
    * Anything else under /api is a 404 from the API, not a page.
    *
