@@ -26,6 +26,7 @@ function rig(options: { ready?: () => boolean } = {}) {
   let access: GuideAccess = { state: 'granted', voices: ['marin', 'cedar'] }
   let run: (() => void) | null = null
   let visibility: ((visible: boolean) => void) | null = null
+  let leave: (() => void) | null = null
   let executor: GuideExecutor | null = null
   const host: GuideHost = {
     access: () => access,
@@ -59,9 +60,15 @@ function rig(options: { ready?: () => boolean } = {}) {
       })
       return executor
     },
-    live: (onEvent) => {
-      fake.listen(onEvent)
+    live: (onEvent, _failure, onNotice) => {
+      fake.listen(onEvent, onNotice)
       return fake.live
+    },
+    leaving: (handler) => {
+      leave = handler
+      return () => {
+        leave = null
+      }
     },
     poll: (tick) => {
       run = tick
@@ -128,6 +135,7 @@ function rig(options: { ready?: () => boolean } = {}) {
       run?.()
     },
     hide: () => visibility?.(false),
+    leave: () => leave?.(),
     activity: () => runtime.getSnapshot().activity,
     developer: () => read.developer(fake.sent),
     outputs: () => read.outputs(fake.sent),
@@ -560,6 +568,92 @@ describe('the guide runtime', () => {
     await f.dispose()
   })
 
+  it('holds the tour while the peer finds its path again, and listens for the beat afresh', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    const before = f.creates()
+    f.tick()
+    f.speak(0.05)
+    f.advance(1000, 10)
+    f.fake.notify('reconnecting')
+    expect(f.activity()).toEqual({ state: 'reconnecting' })
+    expect(f.runtime.diagnostics()).toMatchObject({
+      state: 'reconnecting',
+      connection: 'connected',
+    })
+    // Twenty seconds of a silent track: the gap, not the end of the words.
+    f.speak(0)
+    f.advance(20_000, 200)
+    await f.settle()
+    expect(quietPrompts(f)).toHaveLength(0)
+    expect(f.creates()).toBe(before)
+    f.fake.notify('connected')
+    f.tick()
+    expect(f.activity()).toEqual({ state: 'listening' })
+    // The narration resumes and ends; the quiet counts from its last word.
+    f.speak(0.05)
+    f.advance(2000, 20)
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    f.advance(2700, 27)
+    expect(quietPrompts(f)).toHaveLength(1)
+    await f.dispose()
+  })
+
+  it('ends through the failure path when the page goes away', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.leave()
+    expect(connection(f.runtime)).toBe('offline')
+    expect(f.runtime.getSnapshot().message).toMatch(/left the page/)
+    expect(read.indexOf(f.sent, 'session.close')).toBeGreaterThan(-1)
+    f.session.dispose()
+  })
+
+  it('says it is listening once the microphone is live, and stays paused when none comes', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.runtime.pause()
+    const resuming = f.runtime.resume()
+    expect(f.activity()).toEqual({ state: 'paused' })
+    expect(read.indexOf(f.sent, 'session.input_audio.unmute')).toBe(-1)
+    await resuming
+    expect(f.activity()).toEqual({ state: 'listening' })
+    expect(read.indexOf(f.sent, 'session.input_audio.unmute')).toBeGreaterThan(
+      -1,
+    )
+    f.runtime.pause()
+    const unmutes = () =>
+      f.sent.filter((event) => event.type === 'session.input_audio.unmute')
+        .length
+    const before = unmutes()
+    f.fake.captureFailure('No microphone answered.')
+    await f.runtime.resume()
+    expect(f.activity()).toEqual({ state: 'paused' })
+    expect(f.runtime.diagnostics().microphone).toBe('muted')
+    expect(f.runtime.getSnapshot().message).toBe('No microphone answered.')
+    expect(unmutes()).toBe(before)
+    f.fake.captureFailure(null)
+    await f.runtime.resume()
+    expect(f.activity()).toEqual({ state: 'listening' })
+    expect(f.runtime.getSnapshot().message).toBeNull()
+    await f.dispose()
+  })
+
+  it('ends with the reason when the transport throws under a tick', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    ;(f.fake.live as { level: () => number }).level = () => {
+      throw new Error('The analyser is gone.')
+    }
+    f.tick()
+    expect(connection(f.runtime)).toBe('offline')
+    expect(f.runtime.getSnapshot().message).toBe('The analyser is gone.')
+    f.session.dispose()
+  })
+
   it('judges a meter stuck at zero while the voice produces words, until it reads anything', async () => {
     const f = rig()
     await f.runtime.start('marin')
@@ -585,7 +679,7 @@ describe('the guide runtime', () => {
     // behind the mute, and nothing would continue the tour.
     f.runtime.pause()
     f.advance(2000, 20)
-    f.runtime.resume()
+    await f.runtime.resume()
     expect(f.activity()).toEqual({ state: 'listening' })
     expect(f.appends('instructions').at(-1)).toMatch(/^The visitor resumed/)
     f.advance(100, 1)
@@ -601,7 +695,7 @@ describe('the guide runtime', () => {
     await f.runtime.start('marin')
     f.runtime.pause()
     f.advance(2000, 20)
-    f.runtime.resume()
+    await f.runtime.resume()
     f.advance(2000, 20)
     expect(f.creates()).toBe(0)
     expect(f.developer().some((text) => text.includes('has resumed'))).toBe(
@@ -732,7 +826,7 @@ describe('the guide runtime', () => {
     expect(f.fake.guideAudio.at(-1)).toBe(true)
     expect(read.indexOf(f.sent, 'session.input_audio.mute')).toBeGreaterThan(-1)
     expect(f.appends('instructions').at(-1)).toMatch(/^The visitor paused/)
-    f.runtime.resume()
+    await f.runtime.resume()
     expect(f.activity()).toEqual({ state: 'listening' })
     expect(f.fake.microphone.at(-1)).toBe(false)
     expect(read.indexOf(f.sent, 'session.input_audio.unmute')).toBeGreaterThan(
@@ -740,7 +834,7 @@ describe('the guide runtime', () => {
     )
     f.hide()
     expect(f.activity()).toEqual({ state: 'paused' })
-    f.runtime.resume()
+    await f.runtime.resume()
     f.runtime.pause()
     f.advance(180_000, 2)
     await f.settle()

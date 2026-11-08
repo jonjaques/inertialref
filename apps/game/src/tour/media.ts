@@ -90,6 +90,27 @@ export type LiveServerEvent = Readonly<Record<string, unknown>> & {
   readonly type: string
 }
 
+/**
+ * What the transport says about itself short of failing: the peer lost its
+ * path and has a few seconds to find it again, found it, lost the microphone
+ * for good, or cannot play the voice until a gesture. A failure ends the
+ * session; none of these does.
+ */
+export type TransportNotice =
+  'reconnecting' | 'connected' | 'microphone-lost' | 'playback-blocked'
+
+/**
+ * How long a peer may stay `disconnected` before the session is over.
+ * `disconnected` is the state WebRTC uses for a loss it expects to recover
+ * from — a Wi-Fi roam, a lid cycle, a burst of lost packets — and consent
+ * checks bring it back to `connected` on their own once packets flow. No
+ * ICE restart is attempted: that takes a new offer and answer, and the one
+ * SDP exchange the Worker makes is at session creation.
+ */
+const DISCONNECT_GRACE_MS = 10_000
+/** A frame over this is refused unread, and the refusal is a failure, not a silence. */
+const MAX_FRAME_CHARS = 65_536
+
 export class LiveConnection implements LiveTransport {
   #peer: RTCPeerConnection | null = null
   #channel: RTCDataChannel | null = null
@@ -118,18 +139,25 @@ export class LiveConnection implements LiveTransport {
   readonly #senders: RTCRtpSender[] = []
   readonly #retired = new WeakSet<MediaStreamTrack>()
   #guideMuted = false
+  /** The grace a `disconnected` peer is on; null while connected. */
+  #grace: ReturnType<typeof setTimeout> | null = null
+  /** `audio.play()` was refused; the next gesture through `muteGuide(false)` retries it. */
+  #playbackBlocked = false
 
   readonly #host: LiveHost
   readonly #onEvent: (event: LiveServerEvent) => void
   readonly #onFailure: (message: string) => void
+  readonly #onNotice: (notice: TransportNotice) => void
   constructor(
     host: LiveHost = liveHost,
     onEvent: (event: LiveServerEvent) => void = () => {},
     onFailure: (message: string) => void = () => {},
+    onNotice: (notice: TransportNotice) => void = () => {},
   ) {
     this.#host = host
     this.#onEvent = onEvent
     this.#onFailure = onFailure
+    this.#onNotice = onNotice
   }
 
   async prepare(): Promise<string> {
@@ -151,12 +179,15 @@ export class LiveConnection implements LiveTransport {
     const channel = peer.createDataChannel('oai-events')
     this.#channel = channel
     const message = (event: MessageEvent) => {
-      if (
-        this.#stopped ||
-        typeof event.data !== 'string' ||
-        event.data.length > 65536
-      )
+      if (this.#stopped || typeof event.data !== 'string') return
+      if (event.data.length > MAX_FRAME_CHARS) {
+        // Dropped in silence, a frame this size was a call the loop never
+        // learned of, and its chain hung for the rest of the session.
+        this.#onFailure(
+          'The voice connection sent more than the guide can read.',
+        )
         return
+      }
       let value: unknown
       try {
         value = JSON.parse(event.data)
@@ -183,23 +214,49 @@ export class LiveConnection implements LiveTransport {
     const track = (event: RTCTrackEvent) => {
       const stream = event.streams[0] ?? new MediaStream([event.track])
       audio.srcObject = stream
-      void audio
-        .play()
-        .catch(() => this.#onFailure('Audio playback is blocked.'))
+      void audio.play().catch(() => this.#playbackRefused())
       this.#listen(stream)
     }
     const connection = () => {
-      if (
-        peer.connectionState === 'failed' ||
-        peer.connectionState === 'disconnected'
-      )
-        this.#onFailure('The voice connection was interrupted.')
+      switch (peer.connectionState) {
+        case 'disconnected':
+          if (this.#grace !== null) return
+          this.#grace = setTimeout(() => {
+            this.#grace = null
+            this.#onFailure('The voice connection was lost.')
+          }, DISCONNECT_GRACE_MS)
+          this.#onNotice('reconnecting')
+          return
+        case 'connected':
+          // The first `connected` has no grace to clear and says nothing.
+          if (this.#grace === null) return
+          this.#clearGrace()
+          this.#onNotice('connected')
+          return
+        case 'failed':
+        case 'closed':
+          this.#clearGrace()
+          this.#onFailure('The voice connection was interrupted.')
+          return
+        default:
+          return
+      }
+    }
+    // The channel can close while the peer stays connected; from then every
+    // send throws, and without this nothing reported it.
+    const dropped = () => {
+      if (this.#stopped || this.#closed) return
+      this.#onFailure('The voice connection was interrupted.')
     }
     channel.addEventListener('message', message)
+    channel.addEventListener('close', dropped)
+    channel.addEventListener('error', dropped)
     peer.addEventListener('track', track)
     peer.addEventListener('connectionstatechange', connection)
     this.#release = () => {
       channel.removeEventListener('message', message)
+      channel.removeEventListener('close', dropped)
+      channel.removeEventListener('error', dropped)
       peer.removeEventListener('track', track)
       peer.removeEventListener('connectionstatechange', connection)
     }
@@ -207,6 +264,7 @@ export class LiveConnection implements LiveTransport {
       input.enabled = carrier !== null || !this.#micMuted
       const sender = peer.addTrack(input, stream)
       if (sender !== undefined) this.#senders.push(sender)
+      if (carrier === null) this.#watch(input, this.#captureRevision)
     }
     if (this.#micMuted) await this.muteMicrophone(true)
     const offer = await peer.createOffer()
@@ -420,6 +478,7 @@ export class LiveConnection implements LiveTransport {
     this.#stream = stream
     try {
       const tracks = stream.getTracks()
+      for (const track of tracks) this.#watch(track, revision)
       for (const [index, sender] of this.#senders.entries()) {
         const track = tracks[index] ?? null
         if (track !== null) track.enabled = true
@@ -438,7 +497,62 @@ export class LiveConnection implements LiveTransport {
 
   muteGuide(muted: boolean): void {
     this.#guideMuted = muted
-    if (this.#audio !== null) this.#audio.muted = muted
+    const audio = this.#audio
+    if (audio === null) return
+    audio.muted = muted
+    // An unmute arrives from the panel's Resume, a gesture, which is what a
+    // refused `play()` was waiting for; refusing the whole session over it
+    // asked for a new Start where one click would do.
+    if (!muted && this.#playbackBlocked) {
+      this.#playbackBlocked = false
+      void audio.play().catch(() => this.#playbackRefused())
+    }
+  }
+
+  #playbackRefused(): void {
+    if (this.#stopped) return
+    this.#playbackBlocked = true
+    this.#onNotice('playback-blocked')
+  }
+
+  #clearGrace(): void {
+    if (this.#grace === null) return
+    clearTimeout(this.#grace)
+    this.#grace = null
+  }
+
+  /**
+   * A capture track that ends on its own — the headset unplugged, the device
+   * taken by another app — is replaced from the default device, or reported
+   * when no device answers. A track this connection stopped is retired first
+   * and says nothing.
+   */
+  #watch(track: MediaStreamTrack, revision: number): void {
+    track.addEventListener(
+      'ended',
+      () => {
+        if (
+          this.#retired.has(track) ||
+          this.#stopped ||
+          this.#micMuted ||
+          revision !== this.#captureRevision ||
+          this.#resuming !== null
+        )
+          return
+        this.#retired.add(track)
+        this.#stream = null
+        const pending = this.#resumeCapture(revision)
+        this.#resuming = pending
+        void pending
+          .finally(() => {
+            if (this.#resuming === pending) this.#resuming = null
+          })
+          .catch(() => {
+            if (!this.#stopped) this.#onNotice('microphone-lost')
+          })
+      },
+      { once: true },
+    )
   }
 
   /**
@@ -477,6 +591,7 @@ export class LiveConnection implements LiveTransport {
     if (this.#stopped) return
     this.#stopped = true
     this.#captureRevision++
+    this.#clearGrace()
     this.#reject?.(new Error('The guide has ended.'))
     this.#closing?.(false)
     this.#release?.()

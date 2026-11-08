@@ -40,7 +40,7 @@ import type {
   SceneFacts,
 } from './executor.ts'
 import { GuideLoop } from './loop.ts'
-import type { LiveServerEvent } from './media.ts'
+import type { LiveServerEvent, TransportNotice } from './media.ts'
 import {
   arrivalBlock,
   arrivalFailedBlock,
@@ -96,6 +96,8 @@ import {
 export type GuideActivity =
   | { readonly state: 'offline' }
   | { readonly state: 'connecting' }
+  /** The peer lost its path; the transport gives it a few seconds to return before it is a failure. */
+  | { readonly state: 'reconnecting' }
   | { readonly state: 'listening' }
   | { readonly state: 'speaking' }
   | { readonly state: 'thinking' }
@@ -108,6 +110,7 @@ export type GuideActivity =
 
 const OFFLINE: GuideActivity = { state: 'offline' }
 const LISTENING: GuideActivity = { state: 'listening' }
+const RECONNECTING: GuideActivity = { state: 'reconnecting' }
 
 /** The one line under the controls. */
 export function statusLine(activity: GuideActivity): string {
@@ -116,6 +119,8 @@ export function statusLine(activity: GuideActivity): string {
       return 'Ready'
     case 'connecting':
       return 'Connecting'
+    case 'reconnecting':
+      return 'Reconnecting'
     case 'listening':
       return 'Listening'
     case 'speaking':
@@ -212,6 +217,7 @@ export interface GuideHost {
   live(
     onEvent: (event: LiveServerEvent) => void,
     onFailure: (message: string) => void,
+    onNotice: (notice: TransportNotice) => void,
   ): LiveConnectionPort
   poll(run: () => void): () => void
   visibility(changed: (visible: boolean) => void): () => void
@@ -291,6 +297,10 @@ export class GuideRuntime {
   /** A drag reports a takeover on every frame; the models hear about it once per gesture. */
   #takenOver = false
   #pausedAt: number | null = null
+  /** The peer is on its grace; the clock is not sampled, so a linger holds rather than reads the silence. */
+  #reconnecting = false
+  /** The resume whose capture is still coming; the status says paused until it lands. */
+  #resuming: Promise<void> | null = null
   #ending = false
   #traceEnabled = false
   #traceSequence = 0
@@ -406,6 +416,7 @@ export class GuideRuntime {
       const live = this.#host.live(
         (event) => this.#event(live, event),
         (reason) => this.#failure(live, reason),
+        (notice) => this.#notice(live, notice),
       )
       this.#live = live
       const channel = new GuideChannel(live, (event, id) => {
@@ -484,10 +495,16 @@ export class GuideRuntime {
       this.#visibilityRelease ??= this.#host.visibility((visible) => {
         if (!visible) this.pause()
       })
+      // The page is going away. The failure path rather than a bare stop:
+      // a page the back-forward cache restores would otherwise find the
+      // runtime connected over a dead transport, offering Pause and Resume
+      // against nothing.
       this.#leavingRelease ??=
         this.#host.leaving?.(() => {
+          const leaving = this.#live
           this.#channel?.close()
-          this.#live?.stop()
+          if (leaving !== null)
+            this.#failure(leaving, 'The guide ended when you left the page.')
         }) ?? null
       // The documented recipe: the instruction alone greeted in one of two
       // probe runs; with the commentary cue after it, every time.
@@ -526,15 +543,35 @@ export class GuideRuntime {
     recordEvent('tour paused')
   }
 
-  resume(): void {
+  async resume(): Promise<void> {
     const channel = this.#channel
     const executor = this.#executor
-    if (!this.#connected() || !this.#paused() || channel === null) return
+    if (
+      !this.#connected() ||
+      !this.#paused() ||
+      channel === null ||
+      this.#resuming !== null
+    )
+      return
+    const generation = this.#generation
     const pausedSeconds = (this.#host.now() - (this.#pausedAt ?? 0)) / 1000
+    // The status follows the capture: the guide says it is listening once
+    // the microphone is live, and a capture that fails leaves it paused with
+    // the reason, rather than listening with the provider's input open over
+    // a microphone that never came.
+    const resuming = channel.mute(false)
+    this.#resuming = resuming
+    try {
+      await resuming
+    } catch (cause) {
+      if (generation === this.#generation)
+        this.#update({ message: message(cause) })
+      return
+    } finally {
+      if (this.#resuming === resuming) this.#resuming = null
+    }
+    if (generation !== this.#generation || !this.#paused()) return
     this.#pausedAt = null
-    void channel.mute(false).catch((cause: unknown) => {
-      this.#update({ message: message(cause) })
-    })
     this.#instruct(channel, RESUME_INSTRUCTION)
     // The voice is told, and cannot act on it: continuing the tour takes a
     // delegation, and a paused tour never continued on its own. The backend
@@ -627,6 +664,43 @@ export class GuideRuntime {
     if (live !== this.#live || this.#ending) return
     this.#teardown('failed')
     this.#update({ activity: OFFLINE, voice: null, message: reason })
+  }
+
+  /** What the transport says of itself short of failing. */
+  #notice(live: LiveConnectionPort, notice: TransportNotice): void {
+    if (live !== this.#live || this.#ending || !this.#connected()) return
+    this.#record('note', { transport: notice })
+    switch (notice) {
+      case 'reconnecting':
+        this.#reconnecting = true
+        this.#refresh()
+        return
+      case 'connected': {
+        this.#reconnecting = false
+        // A beat the gap interrupted is listened for again: the quiet the
+        // clock would read across the gap is the gap, not the end of the
+        // words, and the narration may still be coming.
+        const linger = this.#linger
+        if (linger !== null && linger.phase === 'speech') {
+          this.#clock.cancel()
+          linger.phase = 'held'
+        }
+        this.#refresh()
+        return
+      }
+      case 'microphone-lost':
+        this.#update({
+          message:
+            'The microphone was disconnected. Pause and resume to use another.',
+        })
+        return
+      case 'playback-blocked':
+        this.#update({
+          message:
+            "The browser blocked the guide's audio. Pause and resume to hear it.",
+        })
+        return
+    }
   }
 
   async #execute(call: GuideCall): Promise<GuideToolOutput> {
@@ -732,6 +806,18 @@ export class GuideRuntime {
   /* ---------------------------------------------------------------------- */
 
   #tick(): void {
+    const live = this.#live
+    try {
+      this.#step()
+    } catch (cause) {
+      // A verb threw out of the tick — a channel closed under a prompt — and
+      // would throw again every 100 ms while the panel said "Listening".
+      if (live !== null) this.#failure(live, message(cause))
+    }
+  }
+
+  /** The scene as it stands, taken as the one the backend knows. */
+  #step(): void {
     if (!this.#connected()) return
     const executor = this.#executor
     const loop = this.#loop
@@ -739,9 +825,13 @@ export class GuideRuntime {
     if (executor === null || loop === null || live === null) return
     const now = this.#host.now()
     executor.poll()
-    const level = live.level()
-    if (level > 0) this.#voiceWordsSince = null
-    this.#clock.sample(level)
+    // A peer on its grace delivers no audio: the level is exact zero and no
+    // measurement, so the clock is not sampled and a linger holds where it is.
+    if (!this.#reconnecting) {
+      const level = live.level()
+      if (level > 0) this.#voiceWordsSince = null
+      this.#clock.sample(level)
+    }
     const revision = executor.viewRevision
     if (revision !== this.#sceneRevision) {
       this.#sceneRevision = revision
@@ -888,17 +978,19 @@ export class GuideRuntime {
     const activity: GuideActivity =
       current.state === 'paused'
         ? current
-        : executor?.searching
-          ? { state: 'searching' }
-          : executor?.pending !== null && executor?.pendingSubject
-            ? { state: 'moving', subject: executor.pendingSubject }
-            : this.#clock.speaking
-              ? { state: 'speaking' }
-              : loop?.inFlight
-                ? { state: 'thinking' }
-                : current.state === 'visitor-camera'
-                  ? current
-                  : LISTENING
+        : this.#reconnecting
+          ? RECONNECTING
+          : executor?.searching
+            ? { state: 'searching' }
+            : executor?.pending !== null && executor?.pendingSubject
+              ? { state: 'moving', subject: executor.pendingSubject }
+              : this.#clock.speaking
+                ? { state: 'speaking' }
+                : loop?.inFlight
+                  ? { state: 'thinking' }
+                  : current.state === 'visitor-camera'
+                    ? current
+                    : LISTENING
     if (!sameActivity(activity, current) || usage !== snapshot.usage)
       this.#update({ activity, usage })
   }
@@ -930,6 +1022,8 @@ export class GuideRuntime {
     this.#deferredArrival = null
     this.#pausedTour = false
     this.#voiceWordsSince = null
+    this.#reconnecting = false
+    this.#resuming = null
     this.#pollRelease?.()
     this.#pollRelease = null
     this.#visibilityRelease?.()

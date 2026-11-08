@@ -57,6 +57,8 @@ export type GuideState =
   | 'idle'
   /** A session, from the offer to the close. */
   | 'connecting'
+  /** The peer lost its path and has a few seconds to find it again. */
+  | 'reconnecting'
   | 'listening'
   | 'speaking'
   | 'thinking'

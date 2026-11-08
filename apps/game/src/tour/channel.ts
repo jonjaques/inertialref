@@ -135,17 +135,29 @@ export class GuideChannel {
    * track the browser has not yet replaced. The promise is the microphone's,
    * which is the one half that can fail on the visitor's side.
    */
-  mute(muted: boolean): Promise<void> {
-    const microphone = this.#transport.muteMicrophone(muted)
-    this.#transport.muteGuide(muted)
-    try {
-      this.#send({
-        type: muted ? 'session.input_audio.mute' : 'session.input_audio.unmute',
-      })
-    } catch {
-      /* A connection that cannot carry the mute is one the failure handler is about to report. */
+  async mute(muted: boolean): Promise<void> {
+    if (muted) {
+      const microphone = this.#transport.muteMicrophone(true)
+      this.#transport.muteGuide(true)
+      this.#quietly({ type: 'session.input_audio.mute' })
+      return microphone
     }
-    return microphone
+    // The provider's input opens after the microphone is live again, not
+    // before: told first, the voice took the silent carrier for the
+    // visitor's turn, and a capture that then failed had already been
+    // reported as listening.
+    await this.#transport.muteMicrophone(false)
+    this.#transport.muteGuide(false)
+    this.#quietly({ type: 'session.input_audio.unmute' })
+  }
+
+  /** A send whose failure the transport's failure handler is about to report. */
+  #quietly(event: GuideClientEvent): void {
+    try {
+      this.#send(event)
+    } catch {
+      /* A connection that cannot carry it is one the failure handler is about to report. */
+    }
   }
 
   /** Ask the provider to end the session; best effort, for a page going away. */

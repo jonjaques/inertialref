@@ -87,6 +87,21 @@ describe('the fake provider', () => {
       },
     ])
   })
+
+  it("opens the provider's input only once the microphone is live", async () => {
+    const fake = liveFake()
+    const channel = new GuideChannel(fake.live)
+    const types = () => fake.sent.map((event) => event.type)
+    const resuming = channel.mute(false)
+    expect(fake.microphone).toEqual([false])
+    expect(types()).toEqual([])
+    await resuming
+    expect(types()).toEqual(['session.input_audio.unmute'])
+    // A capture that fails leaves the input muted, and the caller told.
+    fake.captureFailure('No microphone answered.')
+    await expect(channel.mute(false)).rejects.toThrow('No microphone answered.')
+    expect(types()).toEqual(['session.input_audio.unmute'])
+  })
 })
 
 describe('the provider vocabulary', () => {

@@ -16,6 +16,7 @@ import type { GuideAccessOwner } from './verdict.ts'
  */
 const VOICED: ReadonlySet<GuideActivity['state']> = new Set([
   'connecting',
+  'reconnecting',
   'listening',
   'speaking',
   'thinking',
@@ -130,7 +131,8 @@ export function createGuideRuntime(
         },
       }
     },
-    live: (event, failure) => new LiveConnection(undefined, event, failure),
+    live: (event, failure, notice) =>
+      new LiveConnection(undefined, event, failure, notice),
     poll: (run) => {
       const timer = setInterval(run, 100)
       return () => clearInterval(timer)

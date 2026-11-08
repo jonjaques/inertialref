@@ -4,7 +4,7 @@ import {
   type GuideConversationItem,
   isGuideClientEvent,
 } from '@inertialref/protocol'
-import type { LiveServerEvent } from './media.ts'
+import type { LiveServerEvent, TransportNotice } from './media.ts'
 import type { LiveConnectionPort } from './runtime.ts'
 
 /*
@@ -28,8 +28,15 @@ export interface LiveFake {
   readonly live: LiveConnectionPort
   /** Every event sent, stamped, in order. */
   readonly sent: readonly SentEvent[]
-  /** Where server events go: the runtime's handler, set by `listen`. */
-  listen(onEvent: (event: LiveServerEvent) => void): void
+  /** Where server events and transport notices go: the runtime's handlers, set by `listen`. */
+  listen(
+    onEvent: (event: LiveServerEvent) => void,
+    onNotice?: (notice: TransportNotice) => void,
+  ): void
+  /** What the transport would report about itself: a lost path, a path regained, a microphone gone. */
+  notify(notice: TransportNotice): void
+  /** Make every later unmute's capture fail with this message; `null` lifts it. */
+  captureFailure(message: string | null): void
   /** Deliver one server event, as the data channel would. */
   emit(event: LiveServerEvent): void
   /** The answers `accept` was given, and the mutes asked for, in order. */
@@ -56,6 +63,8 @@ export function liveFake(): LiveFake {
   const microphone: boolean[] = []
   const guideAudio: boolean[] = []
   let onEvent: (event: LiveServerEvent) => void = () => {}
+  let onNotice: (notice: TransportNotice) => void = () => {}
+  let captureFails: string | null = null
   let sequence = 0
   let level = 0
   let health: GuideMeter = 'ok'
@@ -94,8 +103,13 @@ export function liveFake(): LiveFake {
     },
     level: () => level,
     meter: () => health,
+    // An unmute settles a tick later, as a capture does, so a test can see
+    // what the runtime says of itself while the microphone is still coming.
     muteMicrophone: async (muted) => {
       microphone.push(muted)
+      if (muted) return
+      await Promise.resolve()
+      if (captureFails !== null) throw new Error(captureFails)
     },
     muteGuide: (muted) => {
       guideAudio.push(muted)
@@ -124,9 +138,14 @@ export function liveFake(): LiveFake {
   return {
     live,
     sent,
-    listen: (handler) => {
+    listen: (handler, notices) => {
       onEvent = handler
+      onNotice = notices ?? (() => {})
       stopped = false
+    },
+    notify: (notice) => onNotice(notice),
+    captureFailure: (message) => {
+      captureFails = message
     },
     emit,
     accepted,
