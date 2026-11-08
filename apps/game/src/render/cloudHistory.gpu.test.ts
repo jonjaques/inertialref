@@ -288,6 +288,21 @@ const BLOCKED = [0.02, 0.03, 0.04] as const
 /** Km past every ray: the scene ends far beyond the deck, so nothing is occluded. */
 const SCENE_END = 60
 
+/*
+ * What the trace holds from orbit over fair-cumulus, measured there: a blob's
+ * opaque middle has no light the half column it is lit through lets out, and
+ * the blocked air of its whole span; the thin texels around it have light and
+ * blocked air that nearly cancel. The lattice is every third texel each way
+ * thin, the rest opaque.
+ */
+const LATTICE = {
+  thinLight: 5e-4,
+  thinAir: -7e-4,
+  thinT: 0.6,
+  opaqueAir: -0.04,
+  opaqueT: 0.02,
+} as const
+
 /** A deck fixed on the body: its plane over the first frame's eye, and a patch the wind carries. */
 interface Deck {
   /** Body-fixed unit: the first frame's vertical. */
@@ -424,6 +439,8 @@ class StandInTrace {
   readonly poison = uniform(new Vector2(-1, -1))
   /** ≥ 0: write each texel's own coordinates and this code instead of the deck. */
   readonly code = uniform(-1)
+  /** 1: write the lattice instead of the deck. */
+  readonly lattice = uniform(0)
   readonly kernel: ComputeNode
 
   constructor(uniforms: CloudUniforms) {
@@ -451,16 +468,36 @@ class StandInTrace {
             .add(vec3(...PATCH).mul(blob))
             .mul(this.gain.mul(wobble).mul(dot(this.ramp, screen).add(1)))
           const coded = this.code.greaterThanEqual(0)
+          const latticed = this.lattice.greaterThan(0.5)
+          const thin = texel.x
+            .mod(uint(3))
+            .equal(uint(1))
+            .and(texel.y.mod(uint(3)).equal(uint(1)))
           const at = vec2(texel)
           const light = select(
             coded,
             vec4(at, this.code, 0.5),
-            vec4(lit, float(0.7).sub(blob.mul(0.4))),
+            select(
+              latticed,
+              select(
+                thin,
+                vec4(vec3(LATTICE.thinLight), LATTICE.thinT),
+                vec4(0, 0, 0, LATTICE.opaqueT),
+              ),
+              vec4(lit, float(0.7).sub(blob.mul(0.4))),
+            ),
           )
           const air = select(
             coded,
             vec4(this.code.add(1), at, 1),
-            vec4(vec3(...BLOCKED).mul(this.gain), reach.div(1000)),
+            vec4(
+              select(
+                latticed,
+                vec3(select(thin, float(LATTICE.thinAir), LATTICE.opaqueAir)),
+                vec3(...BLOCKED).mul(this.gain),
+              ),
+              reach.div(1000),
+            ),
           )
           const depth = select(
             coded,
@@ -946,6 +983,39 @@ describe('a stationary scene', () => {
  * a frame through the body's axes, 0.2° off the spin axis, and the camera's
  * body-fixed basis turns 3 × 10⁻⁴ rad a frame with it.
  */
+describe('the clip', () => {
+  /*
+   * Each term stays inside the range the trace drew, past it by at most the
+   * window's reach: mean + 1.25σ of nine values lands 0.28 of their range
+   * past the extreme eight of them share. Interior pixels: at the image's
+   * edge the window extrapolates the lattice's step, which reaches farther.
+   */
+  const REACH = 1 + (1.25 * Math.sqrt(8) - 1) / 9
+  const EDGE = 4
+
+  it('holds the light and the blocked air each inside what the trace drew, where their sum nears zero beside an opaque cloud', async () => {
+    const rig = new Rig()
+    rig.trace.lattice.value = 1
+    try {
+      await rig.frames(40)
+      const { light, air } = await rig.read()
+      let brightest = 0
+      let darkest = 0
+      for (let y = EDGE; y < light.height - EDGE; y += 1)
+        for (let x = EDGE; x < light.width - EDGE; x += 1) {
+          const [r, g, b] = light.at(x, y)
+          brightest = Math.max(brightest, luminanceOf(r, g, b))
+          const [br, bg, bb] = air.at(x, y)
+          darkest = Math.min(darkest, luminanceOf(br, bg, bb))
+        }
+      expect(brightest).toBeLessThanOrEqual(LATTICE.thinLight * REACH)
+      expect(darkest).toBeGreaterThanOrEqual(LATTICE.opaqueAir * REACH)
+    } finally {
+      rig.dispose()
+    }
+  })
+})
+
 const SPIN = Vec.normalize(
   Vec.add(
     UP,

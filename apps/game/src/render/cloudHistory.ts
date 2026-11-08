@@ -411,25 +411,55 @@ function convergingKernel(
           .toVar()
 
         /*
-         * The clip: luminance of L_c + B and T_c, each held within 1.25
-         * deviations of the nine neighbors' bilinear current. The luminance
-         * is held by scaling both RGBs, which keeps the history's chroma; a
-         * history too dark to scale, or one the scale would turn negative,
-         * takes the current's RGB instead.
+         * The clip: the luminance of L_c, the luminance of B, and T_c, each
+         * held within 1.25 deviations of the nine neighbors' bilinear
+         * current. A term's luminance is held by scaling its RGB, which keeps
+         * its chroma; a history too dark to scale, or one the scale would turn
+         * negative, takes the current's RGB instead.
+         *
+         * L_c and B are held apart because they leave the composite with
+         * different weights — T'_a on L_c, T_a on B, and no B at all in the
+         * thin form — so their sum is no quantity the frame draws. Held as one
+         * sum, both take one factor, the held sum over the kept one, which has
+         * no bound where the kept sum sits near zero and the window far from
+         * it: beside an opaque cloud, whose B is the blocked air of its whole
+         * span, it reaches 79 from orbit over fair-cumulus, and the pair draws
+         * black through the identity and white through the thin form. Held
+         * apart, each stays inside the window of what its neighbors traced.
          */
-        const luminance = moments(
-          extrapolated(
-            grid.map((row) =>
-              row.map((record) =>
-                dot(record.light.rgb.add(record.air.rgb), LUMINANCE).toVar(),
+        const clip = (
+          term: (record: TraceRecord) => Node<'vec3'>,
+          previous: Node<'vec3'>,
+          fresh: Node<'vec3'>,
+        ): Node<'vec3'> => {
+          const window = moments(
+            extrapolated(
+              grid.map((row) =>
+                row.map((record) => dot(term(record), LUMINANCE).toVar()),
               ),
+              base,
+              last,
             ),
-            base,
-            last,
-          ),
-          wx,
-          wy,
-        )
+            wx,
+            wy,
+          )
+          const brightness = dot(previous, LUMINANCE).toVar()
+          const spread = window.deviation.mul(CLIP_WIDTH)
+          const held = clamp(
+            brightness,
+            window.mean.sub(spread),
+            window.mean.add(spread),
+          ).toVar()
+          const moved = held.notEqual(brightness)
+          const lit = abs(brightness).greaterThan(DARK)
+          const scale = held.div(select(lit, brightness, float(1))).toVar()
+          const replace = moved.and(lit.and(scale.greaterThanEqual(0)).not())
+          return select(
+            replace,
+            fresh,
+            previous.mul(select(moved, scale, float(1))),
+          )
+        }
         const transmittance = moments(
           extrapolated(
             grid.map((row) => row.map((record) => record.light.a)),
@@ -439,34 +469,19 @@ function convergingKernel(
           wx,
           wy,
         )
-        const brightness = dot(
-          kept.light.rgb.add(kept.air.rgb),
-          LUMINANCE,
-        ).toVar()
-        const spread = luminance.deviation.mul(CLIP_WIDTH)
-        const held = clamp(
-          brightness,
-          luminance.mean.sub(spread),
-          luminance.mean.add(spread),
-        ).toVar()
-        const moved = held.notEqual(brightness)
-        const lit = abs(brightness).greaterThan(DARK)
-        const scale = held.div(select(lit, brightness, float(1))).toVar()
-        const replace = moved.and(lit.and(scale.greaterThanEqual(0)).not())
-        const factor = select(moved, scale, float(1))
         const opacitySpread = transmittance.deviation.mul(CLIP_WIDTH)
         const clippedLight = vec4(
-          select(replace, current.light.rgb, kept.light.rgb.mul(factor)),
+          clip((record) => record.light.rgb, kept.light.rgb, current.light.rgb),
           clamp(
             kept.light.a,
             transmittance.mean.sub(opacitySpread),
             transmittance.mean.add(opacitySpread),
           ),
         )
-        const clippedAir = select(
-          replace,
+        const clippedAir = clip(
+          (record) => record.air.rgb,
+          kept.air.rgb,
           current.air.rgb,
-          kept.air.rgb.mul(factor),
         )
 
         const age = kept.depth.w
