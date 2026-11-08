@@ -120,16 +120,21 @@ export class PerfWindow {
  */
 export function startPerfWindow(metrics: FrameMetrics): () => void {
   if (!isReporting()) return () => {}
+  let leaving = false
   const window_ = new PerfWindow((properties) => {
     // The flag is a kill switch, not a rollout: absent (a first visit, or a
     // project without the flag) sends, and only an explicit `false` from
     // PostHog stops the most frequent event this client sends, without a
     // deploy. Read at send time, so a flag that loads after boot applies.
     if (featureFlag(PERF_WINDOW_FLAG) === false) return
-    recordEvent('perf window', properties)
+    recordEvent('perf window', properties, { leaving })
   })
   metrics.tap = (frame) => window_.sample(frame)
-  const leave = (): void => window_.flush()
+  const leave = (): void => {
+    leaving = true
+    window_.flush()
+    leaving = false
+  }
   window.addEventListener('pagehide', leave)
   return () => {
     window.removeEventListener('pagehide', leave)

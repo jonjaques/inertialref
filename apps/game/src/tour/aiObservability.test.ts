@@ -167,12 +167,16 @@ describe('the guide as AI traces', () => {
       tool_status: 'error',
     })
 
-    // A switch turned on mid-tour applies from the next event.
+    // A switch turned on mid-tour applies from the next event, and to no
+    // word said before it.
+    ai.sent({ kind: 'message', role: 'developer', text: 'Scene: Saturn.' })
+    ai.heard('Show me Titan.')
     consent(true)
     ai.responseStarted('resp_2')
     ai.responseEnded(response({ id: 'resp_2' }))
     expect(capture.mock.calls.at(-1)![1]).toMatchObject({
       guide_content: 'full',
+      $ai_input: [],
       $ai_output_choices: [{ content: 'Titan, behind the rings.' }],
     })
   })

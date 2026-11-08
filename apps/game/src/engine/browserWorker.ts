@@ -25,15 +25,18 @@ export function createBrowserWorkerPort(): WorkerPort {
    * messages and are the pool's to handle; this is everything else, which
    * otherwise reaches DevTools and nowhere. A module worker's `error` event
    * reaches the page with `error: null` — the Error object stays in the
-   * worker — so the report is rebuilt from the message and the location.
+   * worker — so the report is rebuilt from the message and the location. A
+   * worker script that fails to load fires a plain `Event` instead, with no
+   * message and no location, so every field is read as possibly absent.
    */
-  worker.addEventListener('error', (event: ErrorEvent) => {
-    const error = new Error(event.message || 'The universe worker failed')
+  worker.addEventListener('error', (event: Event) => {
+    const { message, filename, lineno, colno } = event as Partial<ErrorEvent>
+    const error = new Error(message || 'The universe worker failed')
     error.name = 'UniverseWorkerError'
     reportFailure('worker', error, {
-      worker_file: event.filename.split('/').at(-1) ?? '',
-      worker_line: event.lineno,
-      worker_column: event.colno,
+      worker_file: filename?.split('/').at(-1) ?? '',
+      worker_line: lineno ?? null,
+      worker_column: colno ?? null,
     })
   })
 

@@ -113,20 +113,15 @@ function load(): void {
       // outvote it. `reset` first, as the SDK asks, so nothing carries over.
       if (posthog.has_opted_out_capturing()) {
         posthog.reset()
+        registerSuperProperties(posthog)
         posthog.opt_in_capturing()
       }
-      posthog.register({
-        environment: env,
-        $app_namespace: 'inertialref',
-        $app_version: BUILD_ID,
-        ...context,
-      })
       client = posthog
       state = 'ready'
       const queued = waiting
       waiting = []
       // Identity first, so what was queued before it is attributed to it.
-      if (account !== undefined) reconcileAccount(posthog, account)
+      syncIdentity(posthog)
       for (const run of queued) attempt(run, posthog)
     },
     () => {
@@ -143,8 +138,12 @@ function decline(): void {
   if (client !== null) {
     attempt((posthog) => {
       posthog.stopSessionRecording()
-      posthog.opt_out_capturing()
+      // `reset` before the opt-out, never after: `reset` also clears the
+      // stored consent, so an opt-out written first is erased and the SDK
+      // goes on autocapturing clicks, page leaves, vitals and errors under the
+      // new anonymous id.
       posthog.reset()
+      posthog.opt_out_capturing()
     }, client)
   }
   state = 'declined'
@@ -159,10 +158,35 @@ function resume(): void {
   }
   state = 'ready'
   attempt((posthog) => {
+    // The decline's reset cleared the super properties; restored before the
+    // opt-in so the `$opt_in` it captures carries them.
+    registerSuperProperties(posthog)
     posthog.opt_in_capturing()
-    if (account !== undefined) reconcileAccount(posthog, account)
+    syncIdentity(posthog)
     replay(posthog, read(TELEMETRY_REPLAY))
   }, client)
+}
+
+/**
+ * What every event carries: the environment the dashboards filter previews
+ * out by, the version an exception resolves its release by, and the context
+ * registered since. Registered again after every `reset`, which clears them
+ * along with the identity.
+ */
+function registerSuperProperties(posthog: PostHog): void {
+  if (environment === null) return
+  posthog.register({
+    environment,
+    $app_namespace: 'inertialref',
+    $app_version: BUILD_ID,
+    ...context,
+  })
+}
+
+/** Reconcile the identity, then put back what a reset inside it cleared. */
+function syncIdentity(posthog: PostHog): void {
+  if (account !== undefined) reconcileAccount(posthog, account)
+  registerSuperProperties(posthog)
 }
 
 function replay(posthog: PostHog, on: boolean): void {
@@ -290,9 +314,26 @@ function withClient(run: Run): void {
     waiting.push(run)
 }
 
-/** One product event. Properties are categorical: never what a visitor typed. */
-export function recordEvent(event: string, properties?: Properties): void {
-  withClient((posthog) => posthog.capture(event, properties))
+/**
+ * One product event. Properties are categorical: never what a visitor typed.
+ *
+ * `leaving` is for an event sent from `pagehide`. The SDK flushes its batch
+ * queue from its own `pagehide` listener, registered at init and so ahead of
+ * any of ours, and an event queued after that flush waits for a timer the
+ * closing page never runs: it goes by beacon, now, instead.
+ */
+export function recordEvent(
+  event: string,
+  properties?: Properties,
+  { leaving = false }: { readonly leaving?: boolean } = {},
+): void {
+  withClient((posthog) =>
+    posthog.capture(
+      event,
+      properties,
+      leaving ? { transport: 'sendBeacon', send_instantly: true } : undefined,
+    ),
+  )
 }
 
 /**
@@ -404,8 +445,7 @@ export function loadSurveys(run: (surveys: readonly unknown[]) => void): void {
  */
 export function identifyAccount(userId: string | null): void {
   account = userId
-  if (client !== null && state === 'ready')
-    attempt((posthog) => reconcileAccount(posthog, userId), client)
+  if (client !== null && state === 'ready') attempt(syncIdentity, client)
 }
 
 /** The parts of the SDK identity is reconciled against. */

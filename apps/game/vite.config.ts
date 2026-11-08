@@ -243,13 +243,13 @@ function requireSourceMaps() {
 /**
  * Refuse an asset whose name a content blocker would block.
  *
- * Rollup names a shared chunk after one of the modules in it, and the shared
- * shell chunk once came out as `posthog.<hash>.js` — the chunk that holds the
- * preferences, the site record and every mode's first import. Content blockers
- * block URLs by vendor words (EasyPrivacy lists `posthog`, `analytics` and their
- * kin), so a visitor with one would have lost the whole shell, not only the
- * telemetry, and nothing in a test or a review would have shown it. The SDK's
- * own chunk is `module.<hash>.js` after its file, which is why that one passes.
+ * Rollup names a shared chunk after one of the modules in it, so the shared
+ * shell chunk — the preferences, the site record and every mode's first
+ * import — can come out named after a telemetry module. Content blockers block
+ * URLs by vendor words (EasyPrivacy lists `posthog`, `analytics` and their
+ * kin), so a visitor with one loses the whole shell, not only the telemetry,
+ * and nothing in a test or a review shows it. The SDK's own chunk is
+ * `module.<hash>.js` after its file, which is why that one passes.
  */
 const BLOCKED_NAME = /posthog|analytics|tracking|sentry/i
 

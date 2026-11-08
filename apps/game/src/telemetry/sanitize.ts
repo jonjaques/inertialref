@@ -29,14 +29,24 @@ const CAMPAIGN_KEYS: ReadonlySet<string> = new Set([
   'ref',
 ])
 
-/** Every event property that holds a URL of this site or of a referrer. */
+/**
+ * Every event property that holds a URL of this site or of a referrer. The
+ * session-entry pair is the address the session began at, which the SDK puts
+ * on every event of the session: a visit that began on a shared picture link
+ * would otherwise carry its label to the last click.
+ */
 const URL_PROPERTIES = [
   '$current_url',
   '$referrer',
   '$initial_current_url',
   '$initial_referrer',
   '$prev_pageview_pathname',
+  '$session_entry_url',
+  '$session_entry_referrer',
 ] as const
+
+/** The URLs inside each web vital's own record, `$web_vitals_<name>_event`. */
+const VITAL_URL_PROPERTIES = ['$current_url', 'navigationURL'] as const
 
 /** A URL with its campaign keys and nothing else after the path. */
 export function cleanUrl(href: string): string {
@@ -56,12 +66,47 @@ export function cleanUrl(href: string): string {
 
 type Bag = Record<string, unknown>
 
-function cleanBag(bag: Bag | undefined): void {
-  if (bag === undefined) return
-  for (const key of URL_PROPERTIES) {
+function cleanKeys(bag: Bag, keys: readonly string[]): void {
+  for (const key of keys) {
     const value = bag[key]
     if (typeof value === 'string') bag[key] = cleanUrl(value)
   }
+}
+
+function cleanBag(bag: Bag | undefined): void {
+  if (bag === undefined) return
+  cleanKeys(bag, URL_PROPERTIES)
+}
+
+const isBag = (value: unknown): value is Bag =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/*
+ * The two SDK events that carry a URL below the top level: each web vital's
+ * record, and the heatmap batch, which is keyed by `location.href` itself.
+ * Keys that clean to one address merge, so the points stay on their page.
+ */
+function cleanNested(properties: Bag | undefined): void {
+  if (properties === undefined) return
+  for (const [key, value] of Object.entries(properties))
+    if (
+      key.startsWith('$web_vitals_') &&
+      key.endsWith('_event') &&
+      isBag(value)
+    )
+      cleanKeys(value, VITAL_URL_PROPERTIES)
+  const heatmap = properties['$heatmap_data']
+  if (!isBag(heatmap)) return
+  const byPage: Bag = {}
+  for (const [href, points] of Object.entries(heatmap)) {
+    const page = cleanUrl(href)
+    const held = byPage[page]
+    byPage[page] =
+      Array.isArray(held) && Array.isArray(points)
+        ? [...(held as unknown[]), ...(points as unknown[])]
+        : points
+  }
+  properties['$heatmap_data'] = byPage
 }
 
 /** The part of a captured event `before_send` is handed that this edits. */
@@ -78,6 +123,7 @@ export interface CapturedShape {
  */
 export function sanitizeEvent<T extends CapturedShape>(event: T): T {
   cleanBag(event.properties)
+  cleanNested(event.properties)
   cleanBag(event.$set)
   cleanBag(event.$set_once)
   const nested = event.properties?.['$set_once']

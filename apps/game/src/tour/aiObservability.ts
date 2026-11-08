@@ -91,9 +91,16 @@ export class GuideAiObservability {
     this.#traces.clear()
   }
 
-  /** An entry the browser added to the conversation. */
+  /**
+   * An entry the browser added to the conversation.
+   *
+   * Held only while the visitor allows transcripts, here and in `heard`:
+   * consent is read again when the generation is sent, and words buffered
+   * before a switch turned on would otherwise leave with the first event
+   * after it.
+   */
   sent(entry: GuideConversationEntry | null): void {
-    if (entry === null) return
+    if (entry === null || !this.#transcripts()) return
     if (entry.kind === 'output')
       this.#pending.push({
         role: 'tool',
@@ -109,7 +116,7 @@ export class GuideAiObservability {
 
   /** A fragment of the visitor's transcribed speech. */
   heard(fragment: string): void {
-    this.#heard += fragment
+    if (this.#transcripts()) this.#heard += fragment
   }
 
   responseStarted(id: string): void {

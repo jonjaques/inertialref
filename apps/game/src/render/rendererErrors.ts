@@ -20,12 +20,23 @@ const GPU_ERROR = /^GPU(Validation|OutOfMemory|Internal)Error$/
  * or the driver is gone. A `GPUPipelineError` is a `DOMException` whose
  * `reason` carries the same distinction. The message, which the runtime
  * notice shows, is unchanged.
+ *
+ * An uncaptured error reaches `renderer.onError` as three.js's own record,
+ * `{ api, type, message, originalEvent }`, whose constructor is `Object`: the
+ * class is its `type` field there, and only an error scope or a pipeline hands
+ * over the GPU's object itself.
  */
 export function graphicsError(cause: unknown): Error {
-  const type =
+  const named =
     typeof cause === 'object' && cause !== null
-      ? (cause.constructor as { name?: string } | undefined)?.name
+      ? (cause as { type?: unknown }).type
       : undefined
+  const type =
+    typeof named === 'string'
+      ? named
+      : typeof cause === 'object' && cause !== null
+        ? (cause.constructor as { name?: string } | undefined)?.name
+        : undefined
   let name: string | null = null
   if (type !== undefined && GPU_ERROR.test(type)) name = type
   else if (type === 'GPUPipelineError')

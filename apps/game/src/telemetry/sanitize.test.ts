@@ -36,4 +36,35 @@ describe('what leaves the page in a URL', () => {
       $current_url: 'https://inertialref.app/settings',
     })
   })
+
+  it('cleans the session’s entry address and the URLs the SDK nests', () => {
+    const shared = 'https://inertialref.app/planetarium?shot=2&label=My+dog'
+    const event = sanitizeEvent({
+      properties: {
+        $session_entry_url: shared,
+        $session_entry_referrer: 'https://chat.example/room?id=7',
+        $web_vitals_LCP_event: {
+          value: 1200,
+          $current_url: shared,
+          navigationURL: shared,
+        },
+        $heatmap_data: {
+          [shared]: [{ x: 1 }],
+          'https://inertialref.app/planetarium?at=b:4.2': [{ x: 2 }],
+        },
+      },
+    })
+    expect(event.properties).toEqual({
+      $session_entry_url: 'https://inertialref.app/planetarium',
+      $session_entry_referrer: 'https://chat.example/room',
+      $web_vitals_LCP_event: {
+        value: 1200,
+        $current_url: 'https://inertialref.app/planetarium',
+        navigationURL: 'https://inertialref.app/planetarium',
+      },
+      $heatmap_data: {
+        'https://inertialref.app/planetarium': [{ x: 1 }, { x: 2 }],
+      },
+    })
+  })
 })

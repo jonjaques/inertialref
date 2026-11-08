@@ -1,5 +1,5 @@
 import { Input } from '@/components/ui/input'
-import type { SurveyQuestion } from '../telemetry/surveys.ts'
+import { ratingScores, type SurveyQuestion } from '../telemetry/surveys.ts'
 import { Action } from './Action.tsx'
 
 /** One survey question in the interface's own controls (`SurveyPrompt`). */
@@ -20,9 +20,7 @@ export function SurveyQuestionRow({
       {question.type === 'rating' && (
         <>
           <div className="flex flex-wrap gap-1">
-            {Array.from({ length: question.scale }, (_, i) =>
-              String(i + 1),
-            ).map((score) => (
+            {ratingScores(question.scale).map((score) => (
               <Action
                 key={score}
                 label={score}

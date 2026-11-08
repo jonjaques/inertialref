@@ -8,10 +8,10 @@ import { bindings, defineConfig } from 'cf/config'
  *
  * Nothing in this file may ever be a credential — it is committed. Secrets are
  * declared with `bindings.secret()` and their values set on the Worker, never
- * written as `bindings.text()`. The GA measurement id is not a credential and
- * is still not here: it is a *build* variable, set in Workers Builds, because
- * this repository is public and a fork should not measure into somebody else's
- * property. `apps/game/src/analytics.ts`.
+ * written as `bindings.text()`. The browser's PostHog project token is not a
+ * credential and is still not here: it is a *build* variable, set in Workers
+ * Builds, because this repository is public and a fork should not report into
+ * somebody else's project. `apps/game/src/telemetry/consent.ts`.
  */
 export default defineConfig(({ isPreview }) => {
   /*

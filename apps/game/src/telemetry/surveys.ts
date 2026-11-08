@@ -103,6 +103,9 @@ export function parseSurvey(raw: unknown): Survey | null {
   const id = text(s['id'])
   const name = text(s['name'])
   if (id === '' || name === '' || s['type'] !== 'api') return null
+  // Running is launched and not stopped, the SDK's own `isSurveyRunning`:
+  // the endpoint lists drafts too, which have no start date yet.
+  if (text(s['start_date']) === '') return null
   if (s['end_date'] !== null && s['end_date'] !== undefined) return null
   const rawQuestions = Array.isArray(s['questions']) ? s['questions'] : []
   const questions = rawQuestions.map(parseQuestion)
@@ -114,6 +117,16 @@ export function parseSurvey(raw: unknown): Survey | null {
     iteration: typeof iteration === 'number' ? iteration : null,
     questions: questions as SurveyQuestion[],
   }
+}
+
+/**
+ * The answers a rating question offers. A ten-point scale is PostHog's NPS,
+ * 0 to 10, which its results bucket into detractors, passives and promoters;
+ * every other scale starts at 1.
+ */
+export function ratingScores(scale: number): readonly string[] {
+  const first = scale === 10 ? 0 : 1
+  return Array.from({ length: scale - first + 1 }, (_, i) => String(first + i))
 }
 
 /** The launched survey with this name, once PostHog says; never on a page that reports nothing. */
