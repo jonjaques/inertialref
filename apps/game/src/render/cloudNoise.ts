@@ -1,5 +1,6 @@
 import { getLogger } from '@inertialref/shared'
 import {
+  type Data3DTexture,
   LinearFilter,
   type Node,
   NodeMaterial,
@@ -360,7 +361,7 @@ function noiseVolume(
   })
   // On the texture, not in the options: the base constructor applies them
   // to a plain `Texture` first, which has no R axis and warns.
-  volume.texture.wrapR = RepeatWrapping
+  ;(volume.texture as Data3DTexture).wrapR = RepeatWrapping
   return volume
 }
 
