@@ -569,6 +569,27 @@ describe('the served tree', () => {
   })
 
   /*
+   * The usual refusal is a sibling's Vite on 5173: drive.mjs starts no server
+   * of its own while the port answers, and `pnpm dev` refuses the taken port,
+   * so the remedy that works is a port of this tree's own. Naming the sibling
+   * with `--tree` gets past the refusal and drives the sibling as this tree,
+   * so the refusal never spells that flag with the sibling's path in it.
+   */
+  it('says how to serve the tree under test, and leaves --tree for another checkout', async () => {
+    const refusal = await assertServedTree(
+      page({ build: () => ({ id: BUILD, tree: SIBLING }) }),
+      TREE,
+    ).catch((error) => error)
+    expect(refusal.message).toBe(
+      `driveLaunch: the page is served from ${SIBLING}, not ${TREE}, the tree under test. ` +
+        `Serve the tree under test on a port of its own, \`pnpm dev:client --port <n>\` in ${TREE}, ` +
+        'and drive it with `--url http://localhost:<n>/ --no-serve`. ' +
+        '`--tree <path>` is for driving another checkout on purpose.',
+    )
+    expect(refusal.message).not.toContain(`--tree ${SIBLING}`)
+  })
+
+  /*
    * Unchecked rather than refused: a production build carries no filesystem
    * path, so every `--url` at `pnpm preview` on 8787 would be refused, and so
    * would every `presets:compare --base` at a commit older than the verb.

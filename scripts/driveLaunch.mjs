@@ -337,13 +337,21 @@ export function compareIdentity(
  * `ir.build()` read through `evaluate`, refused when another checkout serves
  * the page and returned as the verdict otherwise. drive.mjs runs it after
  * every boot and attach, before the first step.
+ *
+ * The refusal leads with a port of the tree's own, because the usual cause is
+ * a sibling's Vite on 5173: drive.mjs starts no server while the port answers,
+ * and `pnpm dev` refuses a taken one. `--tree` is spelled with a placeholder,
+ * never the served path: pasted, that path gets past the refusal and drives
+ * the sibling as the tree under test.
  */
 export async function assertServedTree(evaluate, tree, options) {
   const verdict = compareIdentity(await evaluate(BUILD_IDENTITY), tree, options)
   if (verdict.verdict === 'mismatch')
     throw new Error(
-      `driveLaunch: ${verdict.reason}, the tree under test. Serve that tree, ` +
-        `or name ${verdict.served} as the tree under test (drive.mjs --tree).`,
+      `driveLaunch: ${verdict.reason}, the tree under test. ` +
+        `Serve the tree under test on a port of its own, \`pnpm dev:client --port <n>\` in ${verdict.expected}, ` +
+        'and drive it with `--url http://localhost:<n>/ --no-serve`. ' +
+        '`--tree <path>` is for driving another checkout on purpose.',
     )
   return verdict
 }

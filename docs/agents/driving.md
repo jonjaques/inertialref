@@ -206,10 +206,15 @@ Vite on 5173 boots the same app under the same build id, because worktrees
 cut from one commit describe it alike. After every boot and every attach the
 driver reads `ir.build()` and holds the served tree against its own
 checkout's `git rev-parse --show-toplevel`. A page another checkout serves is
-refused before the first step, and the refusal names both trees. Pass
-`--tree <path>` when you serve another checkout on purpose. A production
-build names no tree, and neither does a build older than the verb, so both
-read `identity unchecked` and proceed: `--url` at `pnpm preview` on 8787 and
+refused before the first step, and the refusal names both trees. The usual
+cause is a sibling's Vite on 5173: while the port answers the driver starts no
+server, and `pnpm dev` refuses the taken port. Serve this checkout on a port of
+its own, `pnpm dev:client --port <n>`, and drive it with
+`--url http://localhost:<n>/ --no-serve`. Pass `--tree <path>` only when you
+mean to drive another checkout. Naming the sibling to get past a refusal
+drives the sibling and reports it as this tree. A production build names no
+tree, and neither does a build older than the verb, so both read
+`identity unchecked` and proceed: `--url` at `pnpm preview` on 8787 and
 `presets:compare --base` at an older commit. The preset commands pass the
 tree they serve and print which tree each set of plates came from. Trees
 compare after realpath, so a symlinked worktree, or `/tmp` against

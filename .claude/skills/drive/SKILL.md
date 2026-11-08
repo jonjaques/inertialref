@@ -147,10 +147,13 @@ then `--url http://localhost:8787/`.
 **A server on the port is not the tree.** A sibling worktree's Vite on 5173 boots the
 same app under the same build id. After every boot and attach the driver reads
 `ir.build()` and refuses a page another checkout serves, before the first step and
-naming both trees. `--tree <path>` names the checkout you serve on purpose; the
-default is the driver's own. A production build names no tree, and neither does a
-build older than the verb, so `pnpm preview` and an old `--base` read
-`identity unchecked` and proceed. The preset commands pass `--tree` themselves.
+naming both trees. When a sibling holds 5173, serve this tree on a port of its own,
+`pnpm dev:client --port <n>`, and pass `--url http://localhost:<n>/ --no-serve`.
+`--tree <path>` names a checkout you drive on purpose; the default is the driver's
+own, and naming the sibling to get past a refusal drives it as this tree. A
+production build names no tree, and neither does a build older than the verb, so
+`pnpm preview` and an old `--base` read `identity unchecked` and proceed. The preset
+commands pass `--tree` themselves.
 [driving.md](../../../docs/agents/driving.md#which-checkout-is-served) has the rest.
 
 ## One GPU job at a time
