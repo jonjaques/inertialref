@@ -12697,6 +12697,53 @@ sphere, taken as an occluder the way a body's disk is, removes the planet: at
 the 98 m floor it is 83.6° across with Earth's center behind it. So a station
 hides nothing. Proxima Centauri b clicks and describes as before.
 
+## PostHog replaces the analytics tag, and the shell nearly took its name (7 Nov 2026)
+
+The game reports to PostHog now ([ADR-0061](docs/adr/0061-telemetry-is-posthog.md)):
+analytics, errors from where they are caught, the guide's tours as AI traces,
+logs, web vitals, a frame-time window, surveys, interface-only replay, crash
+reports, releases on deploy, and account deletion through a Clerk webhook. GA
+is gone.
+
+**The SDK won over a client of our own.** The research plan argued for about
+6 KB of hand-written client against posthog-js's 102 KB brotli. Every facet of
+that client is a wire format to reproduce, and PostHog's server accepts several
+of them silently when they are wrong: an exception that fails to deserialize is
+stored with `$cymbal_errors` and no issue, and an over-quota batch answers 200
+and is dropped. The SDK costs only a page that reports. In the production build
+it is `module.<hash>.js`, 344 KB raw and 98 KB brotli, reached only by a dynamic
+import behind the gate.
+
+**The shell chunk came out as `posthog.<hash>.js`.** Rollup names a shared chunk
+after one of its modules, and once the shell imported the telemetry module, the
+110 KB chunk holding the preferences, the site record and every mode's first
+import took that module's name. Content blockers refuse URLs by vendor words, so
+a visitor running one would have lost the whole shell, not only the reports, and
+no test or review would have shown it. The module is `telemetry/client.ts`, and
+`refuseBlockedAssetNames` in `apps/game/vite.config.ts` fails a build that emits
+an asset named for posthog, analytics, tracking or sentry.
+
+**The end-to-end check is a workers.dev name over local `cf dev`, behind TLS.**
+The gate reports only `inertialref.app` and `*.workers.dev`, so a local build
+reports nothing by design. The probe ran headless Chrome with
+`--host-resolver-rules` mapping `telemetry-e2e-inertialrefd.jaquers.workers.dev`
+to a self-signed TLS proxy in front of 8787. Plain HTTP fails before the page
+loads: `.dev` is HSTS-preloaded, Chrome upgrades the request, and the page that
+answers is an `ERR_SSL_PROTOCOL_ERROR`, on which every evaluation reads
+`isSecureContext: false` and no `navigator.gpu`, which looks like a gate bug and
+is not. Over TLS the relay carried remote config, `/flags`, OTLP logs, the
+surveys and every SDK extension with 200s, and project 719084 stored pageviews,
+page leaves, `mode entered`, the boot funnel, web vitals, a `perf window`
+(3,503 frames, p50 16.7 ms, p95 18.3 ms on an Apple GPU), the `perf-window`
+flag exposure, `survey shown` from a docs footer and an uncaught `$exception`
+grouped into an issue with no `$cymbal_errors`. Not exercised: a tour's `$ai_*`
+events, identify, replay, a crash report, and the Worker's log export.
+
+**A headful probe window lands on a person's desk.** `--window-position=2400,60`
+is off-screen on the Air's own display and on-screen with a monitor beside it,
+along with Chrome's warning bar for the resolver flag. The probe runs headless,
+which boots WebGPU on this machine.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
