@@ -29,6 +29,7 @@ import {
   systemId,
   walkBodies,
 } from '@inertialref/universe'
+import { scatteringOf } from './atmosphereLuts.ts'
 import { OVER_CLOUDS_LAYER } from './cloudLayers.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { type CloudSystem, createCloudSystem } from './cloudSystem.ts'
@@ -109,25 +110,54 @@ function earthAt(eye: number, compression: number): RenderBody {
   } as unknown as RenderBody
 }
 
-const sun: RenderStar = {
-  luminance: 1.6e9,
-  sunlight: 1,
-  system: 'SOL',
-  name: 'Sun',
-  placement: {
-    position: { x: -0.6e9, y: 1.2e9, z: 0.3e9 },
-    scale: 1e6,
-    compression: 1e-3,
-    distance: 1.5e11,
-    tier: 'billboard',
-    compressed: true,
-    angularRadius: 0.0047,
-  },
-  color: { r: 1, g: 0.96, b: 0.9 },
-  brightness: 1,
-} as unknown as RenderStar
+/**
+ * The key star at `position`, render meters. The frame's sun is the
+ * direction from the body's center to it, which `starToward` makes exact.
+ */
+function star(position: Vec3): RenderStar {
+  return {
+    luminance: 1.6e9,
+    sunlight: 1,
+    system: 'SOL',
+    name: 'Sun',
+    placement: {
+      position,
+      scale: 1e6,
+      compression: 1e-3,
+      distance: 1.5e11,
+      tier: 'billboard',
+      compressed: true,
+      angularRadius: 0.0047,
+    },
+    color: { r: 1, g: 0.96, b: 0.9 },
+    brightness: 1,
+  } as unknown as RenderStar
+}
 
-function renderScene(body: RenderBody, looking: Quat): RenderScene {
+/** Up and a little west of the eye: the star every test that names no sun stands under. */
+const STAR = { x: -0.6e9, y: 1.2e9, z: 0.3e9 }
+
+/**
+ * The star `toward` a body-fixed sun from `body`'s center: Earth sits
+ * unturned, so its own axes are the render's, and a star placed from the
+ * eye instead would tilt the sun by the eye's height over the star's
+ * distance, a degree from 20,000 km.
+ */
+function starToward(body: RenderBody, toward: Vec3): RenderStar {
+  const reach = 1e12 / Math.hypot(toward.x, toward.y, toward.z)
+  const center = body.placement.position
+  return star({
+    x: center.x + toward.x * reach,
+    y: center.y + toward.y * reach,
+    z: center.z + toward.z * reach,
+  })
+}
+
+function renderScene(
+  body: RenderBody,
+  looking: Quat,
+  sun: RenderStar,
+): RenderScene {
   return {
     camera: {
       position: { x: 0, y: 0, z: 0 },
@@ -158,6 +188,14 @@ export interface CloudRigOptions {
   readonly levers?: Partial<CloudLevers>
   /** The camera's orientation, render axes: up by default. */
   readonly looking?: Quat
+  /**
+   * Earth's own air, its haze's tables baked on the CPU as `scatteringOf`
+   * bakes them with no pool. None by default: the trace's blocked air and the
+   * composite's air are then exactly zero, which most tests want.
+   */
+  readonly air?: boolean
+  /** Toward the sun from Earth's center, render axes; up and a little west of the eye by default. */
+  readonly sun?: Vec3
 }
 
 export interface CloudRig {
@@ -215,7 +253,11 @@ export function cloudRig(
   }
   scene.updateMatrixWorld(true)
   const body = earthAt(eye, compression)
-  const view = renderScene(body, looking)
+  const view = renderScene(
+    body,
+    looking,
+    options.sun === undefined ? star(STAR) : starToward(body, options.sun),
+  )
   const lens = lensForFov(RIG_FOV)
   const rig = {
     levers: { ...DEFAULT_CLOUD_LEVERS, ...options.levers } as CloudLevers,
@@ -233,7 +275,8 @@ export function cloudRig(
       levers: rig.levers,
       scene: view,
       record: (address) => SOL.get(address) ?? null,
-      scattering: () => null,
+      scattering: (drawn) =>
+        options.air === true ? scatteringOf({ pool: () => null }, drawn) : null,
       renderTime: 50_000,
       visibility: false,
       pictureEpoch: 0,
