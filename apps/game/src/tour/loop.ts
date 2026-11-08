@@ -573,8 +573,14 @@ export class GuideLoop {
     } else {
       // A whole terminal answer restores the one re-prompt; a tool round does
       // not, or a retry that calls a tool before hitting the cap again would
-      // be retried without end.
-      if (kind === 'response.completed' && row.callIds.length === 0)
+      // be retried without end. Nor does the late completion of an abandoned
+      // response, which may land in the middle of a retry and is not an
+      // answer the retry gave.
+      if (
+        kind === 'response.completed' &&
+        row.callIds.length === 0 &&
+        !row.abandoned
+      )
         this.#reprompted = false
       this.#continueIfAnswered(row)
     }
@@ -643,9 +649,10 @@ export class GuideLoop {
    * its latest. Newest, because a response whose completion was lost stays
    * open until the bound closes it, and the item is the live response's.
    *
-   * For a call, a row already continued is never the one: its continuation
-   * is the response the call belongs to, and attaching the call to the row
-   * behind it would answer it without ever continuing it.
+   * For a call, nothing at or behind the newest continued row is the one:
+   * that continuation is the response the call belongs to, and a row behind
+   * it, a continued one or an older one whose completion was lost and is
+   * still open, would take the call and never be continued for it.
    */
   #find(
     delegationId: string | null,
@@ -655,7 +662,12 @@ export class GuideLoop {
     let latest: OpenResponse | undefined
     for (const row of this.#responses.values()) {
       if (row.delegationId !== delegationId) continue
-      if (!forCall || !row.continued) latest = row
+      if (forCall && row.continued) {
+        open = undefined
+        latest = undefined
+        continue
+      }
+      latest = row
       if (!row.completed && !row.abandoned) open = row
     }
     return open ?? latest

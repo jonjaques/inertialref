@@ -388,6 +388,49 @@ describe('the loop recovers', () => {
     expect(f.creates()).toBe(2)
   })
 
+  it('never hands a continuation’s early call to an older response whose completion was lost', async () => {
+    const f = rig()
+    // A response whose completion never arrives stays open until the bound.
+    f.created('resp_stale')
+    f.created('resp_a')
+    f.call('call_a', 'describe_view', '{}')
+    await f.settle()
+    f.completed('resp_a')
+    expect(f.creates()).toBe(1)
+    // The continuation's first call lands before its `response.created`;
+    // it belongs to the response that is coming, not to the stale row.
+    f.call('call_b', 'describe_view', '{}')
+    await f.settle()
+    expect(f.execute).toHaveBeenCalledTimes(2)
+    f.created('resp_b')
+    f.completed('resp_b')
+    expect(f.creates()).toBe(2)
+    expect(f.ended.mock.calls.at(-1)![0]).toMatchObject({
+      id: 'resp_b',
+      calls: [{ callId: 'call_b' }],
+    })
+  })
+
+  it('keeps the retry spent when an abandoned response completes in the middle of the retry', async () => {
+    const f = rig()
+    f.created('resp_old')
+    f.advance(91_000)
+    expect(f.loop.inFlight).toBe(false)
+    f.created('resp_1')
+    f.fake.emit(provider.responseIncomplete('resp_1', 'max_output_tokens'))
+    expect(f.creates()).toBe(1)
+    f.created('resp_2')
+    // The abandoned response's late completion is not a terminal answer.
+    f.completed('resp_old')
+    f.fake.emit(provider.responseIncomplete('resp_2', 'max_output_tokens'))
+    expect(f.creates()).toBe(1)
+    expect(f.loop.inFlight).toBe(false)
+    expect(f.errors).toHaveBeenCalledWith(
+      'max_output_tokens',
+      expect.any(String),
+    )
+  })
+
   it('reports a response adopted at its completion as started, so its trace exists', async () => {
     const f = rig()
     f.fake.emit(
