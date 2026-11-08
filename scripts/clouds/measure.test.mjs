@@ -36,6 +36,7 @@ import {
 import {
   AB_COLUMNS,
   PASS_LIMIT,
+  RADIANCE_FRAMES,
   figures,
   fitSweep,
   hitch,
@@ -588,10 +589,12 @@ describe('the page steps', () => {
     )
     const page = fakePage()
     const step = await send(page, ladder, 'radiance:0')
-    expect(page.calls.captures).toBe(2)
+    // Each side the mean of its captures, the first side's halves the floor.
+    expect(page.calls.captures).toBe(2 * RADIANCE_FRAMES)
     expect(step.extent).toEqual([2, 1])
     // 64 against 96 steps: the fake lights a texel by its budget.
     expect(step.difference).toEqual({ texels: 2, relative: 0.5 })
+    expect(step.floor).toEqual({ texels: 2, relative: 0 })
     // Each side: a reset frame under its levers, then the levers alone.
     const [a, b] = [ladder.comparisons[0].a, ladder.comparisons[0].b]
     expect(page.calls.levers).toEqual([
@@ -862,8 +865,16 @@ describe('the figures', () => {
     )
     const p = plan(gate)
     const values = [
-      { difference: { relative: 0.021, texels: 900 }, settled: [17, 17] },
-      { difference: { relative: 0.042, texels: 880 }, settled: [17, 20] },
+      {
+        difference: { relative: 0.021, texels: 900 },
+        floor: { relative: 0.004 },
+        settled: [17, 17],
+      },
+      {
+        difference: { relative: 0.042, texels: 880 },
+        floor: { relative: 0.005 },
+        settled: [17, 20],
+      },
     ]
     const row = {
       ...figures(gate, p, {
@@ -881,12 +892,14 @@ describe('the figures', () => {
     ])
     const lines = tables({ rows: [row] }).split('\n')
     expect(lines[0]).toBe(
-      '| Scenario | Size | Group | Lever | Comparison | radiance RMSE | under | passes | cloud texels | quiet |',
+      '| Scenario | Size | Group | Lever | Comparison | radiance RMSE | noise floor | under | passes | cloud texels | quiet |',
     )
     expect(lines[2]).toBe(
-      '| inside | retina | cache | volume | volume against field, cascades | 2.1% | 3.0% | yes | 900 | yes |',
+      '| inside | retina | cache | volume | volume against field, cascades | 2.1% | 0.4% | 3.0% | yes | 900 | yes |',
     )
-    expect(lines[3]).toMatch(/\| 4\.2% \| 3\.0% \| no \| 880 \| yes \|$/)
+    expect(lines[3]).toMatch(
+      /\| 4\.2% \| 0\.5% \| 3\.0% \| no \| 880 \| yes \|$/,
+    )
   })
 
   it('print the latest attempt of a run, which is the one a re-run left', () => {
