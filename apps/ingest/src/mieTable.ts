@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { cpus } from 'node:os'
 import { fileURLToPath } from 'node:url'
-import type { MieTableSource } from '@inertialref/rendering'
+import { AIR_BANDS, type MieTableSource } from '@inertialref/rendering'
 import {
   angularTable,
   efficiencies,
@@ -32,8 +32,8 @@ export const DROPLET_TABLE = {
   radiusMin: 2,
   radiusMax: 32,
   variance: 0.01,
-  /** nm: the air's bands (`atmosphere.ts`), so a channel is one wavelength in cloud and sky. */
-  bands: [680, 550, 440],
+  /** nm: the air's own, so a channel is one wavelength in cloud and sky. */
+  bands: AIR_BANDS,
   wavelengthsPerBand: 9,
   bandHalfWidth: 40,
 } as const
