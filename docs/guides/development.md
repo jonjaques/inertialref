@@ -189,9 +189,10 @@ without redirecting, so existing installations retain access to their
 origin-scoped saves and service worker. To
 check a build before trusting DNS, `pnpm --filter @inertialref/server run
 previews:deploy` deploys a Worker Preview named for the branch and prints its
-URL — every branch push does the same in Workers Builds; analytics and
-`<link rel="canonical">` name the custom domain, so a preview never counts as a
-visit.
+URL — every branch push does the same in Workers Builds. `<link rel="canonical">`
+names the custom domain, and telemetry reports a preview as
+`environment: preview`, which the PostHog project's test-account filter keeps
+out of its charts.
 
 ---
 
@@ -395,22 +396,19 @@ navigation. The sitemap comes from the emitted routes. Production public pages
 are pre-rendered; the Worker serves their HTML as static assets.
 [ADR-0039](../adr/0039-the-shell-before-the-scene.md) records the boundary.
 
-**Analytics** loads from `src/analytics.ts`, only in a production build, only
-on the canonical host, and only without Global Privacy Control. The
-measurement id is `VITE_GA_MEASUREMENT_ID` and is **not in the repository**.
-Workers Builds supplies it as a build variable. A deploy from this machine
-reads the same name from gitignored `apps/game/.env.production`; a real
-environment variable wins over the file. `apps/game/.env.example` documents
-the setup. Nothing secret may go in either place because every `VITE_*` value
-ships in the bundle.
-
-**PostHog** loads from `src/posthog.ts` behind the same gate, `isMeasured`,
-with `PUBLIC_POSTHOG_PROJECT_TOKEN` and `PUBLIC_POSTHOG_HOST` in place of the
-measurement id. It carries the product events, account identity, unhandled
-errors, three lifecycle logs and the guide's AI traces, which include what the
-visitor says to the guide. The SDK is a dynamic import after the gate, so an
-unmeasured page never fetches it; every call site goes through
-`src/posthog.ts`.
+**Telemetry** is PostHog ([ADR-0061](../adr/0061-telemetry-is-posthog.md)),
+through `src/telemetry/posthog.ts` and nothing else. `telemetry/consent.ts`
+decides whether a page reports: a production build with
+`PUBLIC_POSTHOG_PROJECT_TOKEN` and `PUBLIC_POSTHOG_HOST`, on `inertialref.app`
+or a Workers preview, never against Global Privacy Control or from a driven
+browser. `pnpm dev`, `pnpm preview` and the rig report nothing. The visitor's
+three switches live in `state/preferences.ts` and on Settings › Data. Both
+variables are **not in the repository**: Workers Builds supplies them as build
+variables, a deploy from this machine reads them from gitignored
+`apps/game/.env.production`, and a real environment variable wins over the
+file. `apps/game/.env.example` documents the setup. The SDK is a dynamic import
+after the gate. Reaching the project from an agent is the PostHog skills in
+`.claude/skills` and its MCP server with a read-only personal key.
 
 **Accounts** are Clerk's
 ([ADR-0048](../adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md))

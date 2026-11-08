@@ -4,7 +4,7 @@ paths:
   - 'apps/game/src/documentHead.ts'
   - 'apps/game/public/**'
   - 'apps/game/src/site.ts'
-  - 'apps/game/src/analytics.ts'
+  - 'apps/game/src/telemetry/**'
   - 'apps/game/src/pages/DocumentMeta.tsx'
   - 'design/brand/**'
   - 'scripts/brand/**'
@@ -32,11 +32,16 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
 - **`DocumentMeta.tsx` is the one place `location.pathname` is read raw.** It is about the
   URL, not about what is on screen. Everything deciding _what is rendered_ still goes
   through `resolvedLocation`.
-- **Never load a third-party tag from the document head.** `src/analytics.ts` gates on
-  production + canonical host + no Global Privacy Control, and `site.test.ts` states it.
-- **Never commit a measurement id or any other `VITE_*` value.** The repository is
-  public; `.env*` is gitignored and `apps/game/.env.example` is the documentation. The
-  real value is a Workers Builds build variable.
+- **Never load a third-party tag from the document head, and never import posthog-js
+  outside `telemetry/posthog.ts`.** `telemetry/consent.ts` gates on a production build
+  with a token, the canonical host or a Workers preview, no GPC/DNT and no
+  `navigator.webdriver`; `consent.test.ts` states it. ADR-0061.
+- **What was said to the guide goes only under `TELEMETRY_TRANSCRIPTS`, and every URL
+  leaves through `telemetry/sanitize.ts`.** Text a visitor typed sits under
+  `ph-sensitive` so autocapture and replay take the click and not the words.
+- **Never commit the PostHog token or any other build-time public value.** The
+  repository is public; `.env*` is gitignored and `apps/game/.env.example` is the
+  documentation. The real value is a Workers Builds build variable.
 - **`apps/game/public/media/` is gitignored and comes from R2** (`scripts/media.mjs`,
   `apps/server/src/media.ts`). Never commit anything into it. A build with no credentials
   is a site whose Worker serves the audio from the bucket instead — a supported outcome,
