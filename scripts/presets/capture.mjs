@@ -23,7 +23,10 @@
  * extension. Each tree a plate is taken from is served here, on a port the
  * caller chose, and never whatever answers on 5173: that port is any
  * project's dev server, and a driver pointed at another repository's Vite
- * waits its whole boot budget for a renderer that never appears.
+ * waits its whole boot budget for a renderer that never appears. A port the
+ * caller chose is still not evidence of a tree, so every driver is told which
+ * checkout its origin serves, and refuses a page another one serves before it
+ * photographs anything.
  *
  * Every capture runs under the caller's one hold on the machine's GPU lock.
  * Each drive.mjs child takes the lock on its own, and one that acquired
@@ -139,6 +142,7 @@ export async function serve(tree, port, log) {
 /**
  * @param {object} options
  * @param {string} options.origin      the server, e.g. http://localhost:5183
+ * @param {string} options.tree        the checkout that server serves, for drive.mjs's `--tree`
  * @param {string} options.port        the driver's CDP port; keys its Chrome profile
  * @param {string} options.out         directory the files land in
  * @param {readonly {id: string, why: string}[]} options.pictures
@@ -149,6 +153,7 @@ export async function serve(tree, port, log) {
  */
 export async function capturePlates({
   origin,
+  tree,
   port,
   out,
   pictures,
@@ -159,6 +164,12 @@ export async function capturePlates({
   if (lock?.env === undefined)
     throw new Error(
       "capturePlates runs under its caller's GPU lock; take it with takeGpu first",
+    )
+  // No default: this tree is the wrong answer for a `--base` origin, and a
+  // driver held to it refuses every plate there.
+  if (typeof tree !== 'string' || tree === '')
+    throw new Error(
+      'capturePlates needs the tree its origin serves, which each drive.mjs holds the page against',
     )
   /**
    * One driver invocation, its step results parsed from `--json`.
@@ -179,6 +190,8 @@ export async function capturePlates({
           '--no-serve',
           '--url',
           origin,
+          '--tree',
+          tree,
           '--width',
           String(PLATE_WIDTH),
           '--height',

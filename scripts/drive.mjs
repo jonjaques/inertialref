@@ -66,7 +66,7 @@
  * Steps run in the order they are written, so one process does a whole
  * verification. `--help` lists them.
  */
-import { execFile, spawn } from 'node:child_process'
+import { execFile, execFileSync, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, stat, writeFile, rm } from 'node:fs/promises'
 import { parseArgs, promisify } from 'node:util'
@@ -85,6 +85,7 @@ import {
   sessionPath,
   takeGpu,
 } from './driveLock.mjs'
+import { assertServedTree } from './driveLaunch.mjs'
 import { boot, clearStorage } from './drivePage.mjs'
 import { parseWait } from './gpuLock.mjs'
 import {
@@ -131,6 +132,8 @@ const OPTIONS = {
   /** Start `pnpm dev` when nothing answers `--url`; `--no-serve` to fail
    *  instead, which `allowNegative` gives for free. */
   serve: { type: 'boolean', default: true },
+  /** The checkout `--url` must be served from, when it is not this driver's. */
+  tree: { type: 'string' },
   /** Seconds to queue for the GPU lock; not `--wait`, the page delay in ms. */
   'gpu-wait': { type: 'string' },
   /** Longest edge of a written shot, in pixels; 0 keeps the native capture. */
@@ -225,6 +228,11 @@ Session flags:
   --block-url <glob> block matching requests before navigation; repeat for more.
                      Pair with --document to inspect a failed runtime startup.
   --no-serve         fail instead of starting \`pnpm dev\` when nothing answers
+  --tree <path>      the checkout --url must be served from; default this
+                     driver's own. After every boot and attach the page's
+                     ir.build() is held against it, and a page another
+                     checkout serves runs no step. A production build names
+                     no tree, and is unchecked
   --gpu-wait <s>     queue up to <s> seconds for the machine's GPU lock instead
                      of failing at once while another job holds it. Seconds,
                      unlike --wait
@@ -317,6 +325,28 @@ const BLOCKED_URLS = values['block-url'] ?? []
 const STATE = sessionPath(PORT)
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * The checkout the page must be served from: `--tree`, or this driver's own.
+ *
+ * A server answering `--url` is not evidence of a tree. A sibling worktree's
+ * Vite on 5173 boots the same app under the same build id, and is driven,
+ * photographed and measured as this one. git's root rather than `ROOT`, so
+ * the default is spelled the way the dev server spells the tree it reports;
+ * the comparison resolves symlinks either way.
+ */
+function treeUnderTest() {
+  if (values.tree !== undefined) return path.resolve(values.tree)
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    return ROOT
+  }
+}
 
 /**
  * Two channels, because they answer to different flags. `say` is what a step
@@ -767,6 +797,14 @@ async function main() {
 
   const run = (expression, userGesture) =>
     evaluate(send, expression, userGesture)
+  // After the boot or the attach and before the first step, so a page another
+  // checkout serves is refused before anything is read from it.
+  const identity = await assertServedTree(run, treeUnderTest())
+  note(
+    identity.verdict === 'match'
+      ? `served from ${identity.served} (build ${identity.id})`
+      : `identity unchecked: ${identity.reason}`,
+  )
   const results = await runSteps(script, {
     evaluate: run,
     userGesture: values['user-gesture'] === true,

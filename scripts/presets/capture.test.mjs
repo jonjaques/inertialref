@@ -32,3 +32,25 @@ describe('capturePlates and the GPU lock', () => {
     expect(existsSync(out)).toBe(false)
   })
 })
+
+/*
+ * Each drive.mjs child holds the page against the tree it is given, so a
+ * capture that named none would hold the base tree's page against this
+ * driver's own checkout and refuse every `--base` plate, or, given a default,
+ * hold it against the wrong one silently.
+ */
+describe('capturePlates and the served tree', () => {
+  it('refuses to drive anything without the tree its origin serves', async () => {
+    const out = path.join(dir, 'plates')
+    await expect(
+      capturePlates({
+        origin: 'http://127.0.0.1:9/',
+        port: '9',
+        out,
+        pictures: [],
+        lock: { env: {} },
+      }),
+    ).rejects.toThrow(/needs the tree its origin serves/)
+    expect(existsSync(out)).toBe(false)
+  })
+})

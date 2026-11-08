@@ -46,6 +46,18 @@ describe('drive.mjs and the GPU lock', () => {
     )
   })
 
+  it('takes --tree as a session flag, before anything starts', async () => {
+    const { code, stdout } = await run([
+      '--tree',
+      '/Users/agent/inertialref',
+      '--print-url',
+    ])
+    expect(code).toBe(0)
+    expect(stdout).toMatch(
+      /^http:\/\/127\.0\.0\.1:9\/\?presentation=occluded$/m,
+    )
+  })
+
   it("reads its own checkout's lock when the shell is outside every repository", async () => {
     const outside = mkdtempSync(path.join(tmpdir(), 'ir-drive-'))
     try {

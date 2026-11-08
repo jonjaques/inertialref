@@ -97,6 +97,7 @@ if (origin === undefined) {
 try {
   await capturePlates({
     origin,
+    tree: ROOT,
     port: values.port,
     out: PLATES,
     pictures,

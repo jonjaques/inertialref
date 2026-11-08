@@ -17,7 +17,9 @@
  *
  * Both trees are served by this script on ports of its own — never whatever
  * answers on 5173, which is any project's dev server — unless `--url` names a
- * server already serving this tree.
+ * server already serving this tree. Every capture is told which tree its
+ * server serves, the base worktree's or this one, and refuses a page another
+ * checkout serves.
  *
  * The reference is the committed plate unless `--base` names a commit. The
  * plates are the frames a reviewer last accepted — `pnpm presets:plates`
@@ -125,7 +127,7 @@ if (values.help) {
       'pnpm presets:compare [preset-id ...] [--base <ref>]',
       '',
       '  --base <ref>       photograph a baseline served from this commit instead of using the committed plates',
-      '  --url <origin>     a server already serving this tree; without it one is started on --tree-port',
+      '  --url <origin>     a server already serving this tree, which the driver checks; without it one is started on --tree-port',
       '  --port <n>         the driver CDP port, which keys its Chrome profile; default 9333',
       '  --tree-port <n>    the port this tree is served on; default 5183',
       '  --base-port <n>    the port the baseline is served on; default 5184',
@@ -343,6 +345,7 @@ try {
     say(`\nphotographing ${referenceLabel} on :${values['base-port']}`)
     reference = await capturePlates({
       origin: `http://localhost:${values['base-port']}`,
+      tree: base.tree,
       port: values.port,
       out: path.join(OUT, 'base'),
       pictures,
@@ -355,6 +358,7 @@ try {
     say(`\nphotographing the tree at ${origin}, the first time`)
     reference = await capturePlates({
       origin,
+      tree: ROOT,
       port: values.port,
       out: path.join(OUT, 'base'),
       pictures,
@@ -377,6 +381,7 @@ try {
   say(`\nphotographing the tree at ${origin}`)
   const head = await capturePlates({
     origin,
+    tree: ROOT,
     port: values.port,
     out: path.join(OUT, 'head'),
     pictures,
