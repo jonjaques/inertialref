@@ -12850,6 +12850,41 @@ as nobody and the next `test:gpu` reclaimed it. A rig's first boot against a
 cold dev server ran out of budget while Vite re-optimized its dependencies and
 reloaded twice; the second boot took 3.6 s.
 
+**The review's four defects, fixed with a test each.** The lock path came from
+`process.cwd()`. From a scratch thread outside every repository,
+`node <clone>/scripts/drive.mjs` found no common dir, and from inside another
+repository it took that repository's `.git/inertialref-gpu.lock`, which no job
+here checks. It now comes from the directory `gpuLock.mjs` is in. `--down`
+sent SIGTERM to the session's chromePid and SIGKILL 10 s later, and a session
+outlives a reboot, so the pid could name anything. The session now records
+`chromeStart`, the same `ps -o lstart=` reading the lock takes. A pid whose
+start differs is left running and only dropped from the lock. SIGKILL goes
+only to a start-time match, and a session with no start time gets SIGTERM
+alone. The preset commands printed the rig line from inside the try
+(compare) or after the finally (plates), so a capture that threw left a
+Chrome holding the lock with only the error on screen. The line now comes
+from the finally, on stderr, and only while that Chrome is up under the live
+token. With compare's rig up, a compare pointed at a URL nothing serves exits
+1 and prints the line. The pre-fix compare, run in the same state, exits 1
+without it. Taking over a rig an older driver left up had no test and no
+check. With the first wave's drive.mjs booting 9335 unlocked, this driver's
+first call attached to the same Chrome (pid unchanged) and took a fresh lock
+recording it. It wrote the token and start time into the session, `test:gpu`
+was refused naming that Chrome, and `--down` released the lock. The eight
+checks above re-ran at `b78b953` with the same outcomes.
+
+**Codex's workspace-write sandbox cannot take the lock.** Probed on the Mac
+mini with codex-cli 0.166.0's `codex sandbox --permission-profile :workspace`.
+Writing in the clone's `.git` is refused with EPERM from a linked worktree and
+from the main checkout. Codex keeps `.git`, and a worktree's resolved gitdir,
+read-only inside every writable root, and `acquire()` there fails closed. A
+legacy `writable_roots` entry changes nothing under the profile. A
+permissions profile granting `<clone>/.git` write works. Codex refuses a glob
+write grant for the lock's files alone, and exact paths cannot cover the edit's
+pid-named scratch file. So a Codex thread runs GPU work with full access or
+with that broader grant. The `EnterWorktree` session is unprobed, because
+making one creates a worktree.
+
 **Rejected:** a lock path from the environment, for tests, because pointing a
 job at a different file is a bypass by another name; tests pass `path`
 instead. A unit test that lets `capturePlates` spawn `drive.mjs`, because it
@@ -12861,7 +12896,8 @@ while the lock is held, the lease policy for long holders, and an idle-rig
 exemption, which is Jon's call on G5's figures. The module's two gaps from
 #188's review stand: two waiters breaking one stale edit mutex can both
 enter, and `acquire` is not re-entrant within one process, so nothing here
-calls it twice in one.
+calls it twice in one. Which of the two Codex remedies a thread uses is the
+host's configuration and Jon's call.
 
 ## Known gaps
 
