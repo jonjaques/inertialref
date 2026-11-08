@@ -1,5 +1,5 @@
 import type { FrameMetrics, FrameSample } from '../engine/frameMetrics.ts'
-import { featureFlag, isReporting, recordEvent } from './posthog.ts'
+import { featureFlag, isReporting, recordEvent } from './client.ts'
 
 /*
  * Frame time in the field, as a `perf window` event a minute.

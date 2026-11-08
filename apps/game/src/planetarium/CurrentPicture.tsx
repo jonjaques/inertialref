@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { describeCause } from '../hud/notice.ts'
-import { recordEvent } from '../telemetry/posthog.ts'
+import { recordEvent } from '../telemetry/client.ts'
 import { PERSONAL_PICTURES, usePersistentState } from '../state/preferences.ts'
 import { SharePicture } from './SharePicture.tsx'
 

@@ -4,7 +4,7 @@ import {
   recordEvent,
   recordPageview,
   startTelemetry,
-} from '../telemetry/posthog.ts'
+} from '../telemetry/client.ts'
 import { DocsContentContext } from '../docs/initialDocs.ts'
 import { docRoute } from '../docs/content.ts'
 import {

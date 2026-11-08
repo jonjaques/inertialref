@@ -33,7 +33,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter", `docs/hosting.md`, A
   URL, not about what is on screen. Everything deciding _what is rendered_ still goes
   through `resolvedLocation`.
 - **Never load a third-party tag from the document head, and never import posthog-js
-  outside `telemetry/posthog.ts`.** `telemetry/consent.ts` gates on a production build
+  outside `telemetry/client.ts`.** `telemetry/consent.ts` gates on a production build
   with a token, the canonical host or a Workers preview, no GPC/DNT and no
   `navigator.webdriver`; `consent.test.ts` states it. ADR-0061.
 - **What was said to the guide goes only under `TELEMETRY_TRANSCRIPTS`, and every URL

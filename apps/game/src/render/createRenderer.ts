@@ -1,7 +1,7 @@
 import { resolvePicture, type Picture } from './picture.ts'
 import { getLogger } from '@inertialref/shared'
 import { runtimeFailure } from '../runtimeFailure.ts'
-import { registerContext } from '../telemetry/posthog.ts'
+import { registerContext } from '../telemetry/client.ts'
 import {
   watchRendererErrors,
   watchRendererValidation,

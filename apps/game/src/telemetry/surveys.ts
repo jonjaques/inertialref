@@ -1,4 +1,4 @@
-import { loadSurveys, recordEvent } from './posthog.ts'
+import { loadSurveys, recordEvent } from './client.ts'
 
 /*
  * PostHog surveys in API mode: PostHog holds the questions and the answers,

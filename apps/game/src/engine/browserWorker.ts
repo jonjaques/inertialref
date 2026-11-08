@@ -1,6 +1,6 @@
 import type { WorkerInbound, WorkerOutbound } from '@inertialref/protocol'
 import { QUERY } from '../pages/paths.ts'
-import { reportFailure } from '../telemetry/posthog.ts'
+import { reportFailure } from '../telemetry/client.ts'
 import type { WorkerPort } from '@inertialref/workers'
 
 /*

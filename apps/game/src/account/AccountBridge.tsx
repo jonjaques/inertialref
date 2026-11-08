@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect } from 'react'
 import { useAuth } from '@clerk/react'
-import { identifyAccount } from '../telemetry/posthog.ts'
+import { identifyAccount } from '../telemetry/client.ts'
 import { AccountContext } from './accounts.ts'
 
 /**

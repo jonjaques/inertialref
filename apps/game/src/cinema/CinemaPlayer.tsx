@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { recordEvent } from '../telemetry/posthog.ts'
+import { recordEvent } from '../telemetry/client.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { FrameScrubber } from '../hud/FrameScrubber.tsx'

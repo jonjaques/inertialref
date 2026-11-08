@@ -2,7 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { publishRuntime } from './runtimeState.ts'
 import { runtimeFailure } from './runtimeFailure.ts'
 import { RuntimeNotice } from './RuntimeNotice.tsx'
-import { reportFailure } from './telemetry/posthog.ts'
+import { reportFailure } from './telemetry/client.ts'
 
 /** A renderer failure leaves the server-rendered pages and their router alive. */
 export class GameRuntimeBoundary extends Component<

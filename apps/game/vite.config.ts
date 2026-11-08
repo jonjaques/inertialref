@@ -241,6 +241,37 @@ function requireSourceMaps() {
 }
 
 /**
+ * Refuse an asset whose name a content blocker would block.
+ *
+ * Rollup names a shared chunk after one of the modules in it, and the shared
+ * shell chunk once came out as `posthog.<hash>.js` — the chunk that holds the
+ * preferences, the site record and every mode's first import. Content blockers
+ * block URLs by vendor words (EasyPrivacy lists `posthog`, `analytics` and their
+ * kin), so a visitor with one would have lost the whole shell, not only the
+ * telemetry, and nothing in a test or a review would have shown it. The SDK's
+ * own chunk is `module.<hash>.js` after its file, which is why that one passes.
+ */
+const BLOCKED_NAME = /posthog|analytics|tracking|sentry/i
+
+function refuseBlockedAssetNames() {
+  return {
+    name: 'inertialref:refuse-blocked-asset-names',
+    apply: 'build' as const,
+    writeBundle(_options: unknown, bundle: Record<string, OutputEntry>) {
+      const blocked = Object.keys(bundle).filter((name) =>
+        BLOCKED_NAME.test(name.split('/').at(-1) ?? ''),
+      )
+      if (blocked.length > 0)
+        throw new Error(
+          `${blocked.join(', ')}: a content blocker would refuse ` +
+            'this file by its name. Rename the module the chunk is named ' +
+            'after (vite.config.ts, refuseBlockedAssetNames).',
+        )
+    },
+  }
+}
+
+/**
  * Refuse to bundle a git-lfs pointer in place of a model.
  *
  * `render/shipModels.ts` pulls `data/models/*.glb` in through
@@ -305,6 +336,7 @@ export function gameVite(
     plugins: [
       requireRealModels(),
       requireSourceMaps(),
+      refuseBlockedAssetNames(),
       crashReportHeader(mode),
       ...(standalone ? [react()] : []),
       // React Compiler handles memoization, so components here do not hand-write

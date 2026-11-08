@@ -1,5 +1,5 @@
 import type { RuntimeFailure } from '../runtimeFailure.ts'
-import { recordEvent } from './posthog.ts'
+import { recordEvent } from './client.ts'
 
 /*
  * Boot, as a funnel: `boot started` → `boot completed` → `mode entered`.

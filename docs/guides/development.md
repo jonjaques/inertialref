@@ -397,7 +397,7 @@ are pre-rendered; the Worker serves their HTML as static assets.
 [ADR-0039](../adr/0039-the-shell-before-the-scene.md) records the boundary.
 
 **Telemetry** is PostHog ([ADR-0061](../adr/0061-telemetry-is-posthog.md)),
-through `src/telemetry/posthog.ts` and nothing else. `telemetry/consent.ts`
+through `src/telemetry/client.ts` and nothing else. `telemetry/consent.ts`
 decides whether a page reports: a production build with
 `PUBLIC_POSTHOG_PROJECT_TOKEN` and `PUBLIC_POSTHOG_HOST`, on `inertialref.app`
 or a Workers preview, never against Global Privacy Control or from a driven

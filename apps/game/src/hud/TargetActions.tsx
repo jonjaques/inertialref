@@ -1,6 +1,6 @@
 import { DEBUG_LANDING_SITE, type TravelTarget } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { recordEvent } from '../telemetry/posthog.ts'
+import { recordEvent } from '../telemetry/client.ts'
 import { Action } from './Action.tsx'
 
 /**

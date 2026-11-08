@@ -115,7 +115,7 @@ any rule governing the files being changed.
 - **Never hand-write a compile-ahead.** [Details](docs/agents/invariants.md#rule-61).
 - **Never edit a file `pnpm brand` writes.** [Details](docs/agents/invariants.md#rule-62).
 - **Never change what the site says about itself in only one place.** [Details](docs/agents/invariants.md#rule-63).
-- **Never load a third-party tag from the document head, and never reach PostHog except through `telemetry/posthog.ts`.** [Details](docs/agents/invariants.md#rule-64).
+- **Never load a third-party tag from the document head, and never reach PostHog except through `telemetry/client.ts`.** [Details](docs/agents/invariants.md#rule-64).
 - **Never let a readout change the frame or stop it.** [Details](docs/agents/invariants.md#rule-65).
 - **Never widen the soundtrack's license set.** [Details](docs/agents/invariants.md#rule-66).
 - **Never bundle the soundtrack.** [Details](docs/agents/invariants.md#rule-67).

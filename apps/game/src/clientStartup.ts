@@ -11,7 +11,7 @@ import {
   onFailureReported,
   sendLog,
   startTelemetry,
-} from './telemetry/posthog.ts'
+} from './telemetry/client.ts'
 
 let started = false
 

@@ -40,7 +40,7 @@ party nobody had told them about.
 ## Decision
 
 **PostHog is the one telemetry service, reached only through
-`apps/game/src/telemetry/posthog.ts`, loaded only after the page has decided it
+`apps/game/src/telemetry/client.ts`, loaded only after the page has decided it
 reports and the visitor has not said no, and sending what was said to the
 guide only with the visitor's explicit consent.**
 

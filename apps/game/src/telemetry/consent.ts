@@ -23,7 +23,7 @@ import { SITE } from '../site.ts'
  *      lands in the visitor numbers is a measurement of ourselves.
  *
  * The visitor's own switch (`TELEMETRY_USAGE`) is the fifth condition, and it
- * is applied by `posthog.ts` rather than here because it can change while the
+ * is applied by `client.ts` rather than here because it can change while the
  * page is open.
  */
 

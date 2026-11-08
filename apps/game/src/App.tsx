@@ -21,7 +21,7 @@ import { TrackOverlay } from './hud/TrackOverlay.tsx'
 import { useCoarsePointer, useDevicePixelRatio } from './hud/viewport.ts'
 import { bootFirstLight, bootRevealed } from './telemetry/boot.ts'
 import { startPerfWindow } from './telemetry/perf.ts'
-import { recordEvent } from './telemetry/posthog.ts'
+import { recordEvent } from './telemetry/client.ts'
 import { bindEngineKnobs } from './state/engineKnobs.ts'
 import {
   DEBUG_ON,

@@ -3,7 +3,7 @@ import { GameRuntimeBoundary } from './GameRuntimeBoundary.tsx'
 import { loadRuntime } from './runtimeLoader.ts'
 import { runtimeFailure, useRuntimeFailure } from './runtimeFailure.ts'
 import { RuntimeNotice } from './RuntimeNotice.tsx'
-import { sendLog } from './telemetry/posthog.ts'
+import { sendLog } from './telemetry/client.ts'
 
 export default function GameLoader() {
   const [runtime, setRuntime] = useState<Awaited<

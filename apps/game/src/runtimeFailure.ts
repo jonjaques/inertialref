@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { bootFailed } from './telemetry/boot.ts'
-import { reportFailure } from './telemetry/posthog.ts'
+import { reportFailure } from './telemetry/client.ts'
 
 export interface RuntimeFailure {
   readonly kind: 'unsupported' | 'graphics' | 'runtime' | 'restart'

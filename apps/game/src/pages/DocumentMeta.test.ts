@@ -20,7 +20,7 @@ vi.mock('react', async (original) => ({
     effects.push(effect)
   },
 }))
-vi.mock('../telemetry/posthog.ts', () => ({
+vi.mock('../telemetry/client.ts', () => ({
   recordPageview: pageView,
   recordEvent,
   startTelemetry,

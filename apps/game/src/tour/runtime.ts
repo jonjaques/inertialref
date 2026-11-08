@@ -22,7 +22,7 @@ import {
   recordAiEvent,
   recordEvent,
   reportFailure,
-} from '../telemetry/posthog.ts'
+} from '../telemetry/client.ts'
 import { GuideAiObservability } from './aiObservability.ts'
 import {
   conversationEntry,

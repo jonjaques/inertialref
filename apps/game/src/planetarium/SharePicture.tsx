@@ -4,7 +4,7 @@ import { encodePictures, type Picture } from '@inertialref/devtools'
 import { Action } from '../hud/Action.tsx'
 import { SwitchRow } from '../hud/SwitchRow.tsx'
 import { describeCause } from '../hud/notice.ts'
-import { recordEvent } from '../telemetry/posthog.ts'
+import { recordEvent } from '../telemetry/client.ts'
 import { pictureLink, presetLink } from './presetUrl.ts'
 import { downloadPictures } from './presetFiles.ts'
 

@@ -731,7 +731,7 @@ shared head that scrapers read.
 ### Rule 64
 
 **Never load a third-party tag from the document head, and never reach PostHog
-except through `src/telemetry/posthog.ts`.** `telemetry/consent.ts` is the
+except through `src/telemetry/client.ts`.** `telemetry/consent.ts` is the
 gate — a production build with a token, on the canonical host or a Workers
 preview, never against Global Privacy Control or from a driven browser — and
 the visitor's switches in `state/preferences.ts` are the second one. A call

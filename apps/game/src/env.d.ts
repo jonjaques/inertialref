@@ -16,7 +16,7 @@ interface ImportMetaEnv {
   readonly PUBLIC_CLERK_PUBLISHABLE_KEY?: string
   /** PostHog's public project token, `phc_…`. See `src/telemetry/consent.ts`. */
   readonly PUBLIC_POSTHOG_PROJECT_TOKEN?: string
-  /** PostHog's ingest host, `https://us.i.posthog.com`. See `src/telemetry/posthog.ts`. */
+  /** PostHog's ingest host, `https://us.i.posthog.com`. See `src/telemetry/client.ts`. */
   readonly PUBLIC_POSTHOG_HOST?: string
 }
 

@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { reportFailure } from '../telemetry/posthog.ts'
+import { reportFailure } from '../telemetry/client.ts'
 import { Action } from './Action.tsx'
 
 /*

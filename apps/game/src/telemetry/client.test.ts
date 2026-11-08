@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type IdentityPort, reconcileAccount } from './posthog.ts'
+import { type IdentityPort, reconcileAccount } from './client.ts'
 
 /** The SDK's persisted identity, and the calls made against it, in order. */
 function sdk(distinctId: string, identified: boolean) {
