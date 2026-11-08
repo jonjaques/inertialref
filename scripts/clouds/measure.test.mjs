@@ -314,6 +314,30 @@ describe('the command line', () => {
     ])
   })
 
+  it('holds every held comparison at another index when asked, and only at a whole one', () => {
+    const held = (argv) =>
+      parseOptions(argv)
+        .runs.flatMap((r) => r.comparisons ?? [r.identity, r.thin])
+        .flatMap((c) => (c.a === undefined ? [c] : [c.a, c.b]))
+        .map((set) => set.jitterFrame)
+        .filter((index) => index !== null)
+    // The cache gate's two held comparisons and the ten ladder steps, at
+    // each of three and two stances, on both sizes.
+    expect(held(['--batch', 'images'])).toEqual(Array(2 * 2 * 26).fill(0))
+    expect(held(['--batch', 'images', '--jitter-frame', '17'])).toEqual(
+      Array(2 * 2 * 26).fill(17),
+    )
+    expect(held(['--batch', 'error', '--jitter-frame', '5'])).toEqual(
+      Array(2 * 16).fill(5),
+    )
+    expect(parseOptions(['--batch', 'images']).held).toEqual(HELD)
+    for (const index of ['1.5', 'x', '', '9007199254740993'])
+      expect(
+        () => parseOptions(['--batch', 'images', '--jitter-frame', index]),
+        index,
+      ).toThrow(/whole number/)
+  })
+
   it('refuses before touching anything', () => {
     for (const argv of [
       [],
