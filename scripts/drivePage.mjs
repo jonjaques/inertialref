@@ -234,11 +234,26 @@ export async function holdPage(send, hold) {
  * reads a page it cannot evaluate as booted, so the guard can be the first
  * to read the next document. A second such read is refused: that page is not
  * reloading, it has no renderer.
+ *
+ * Both reads are held against the same recorded version, and a warning is
+ * said once per entry. Holding the second against the version the first read
+ * would lose it whenever the first died before the operating point was asked
+ * for, which is the navigation this re-entry is for.
  */
 export async function enter(send, { force }, page, hold) {
+  const said = new Set()
+  const warn = hold.warn ?? console.warn
+  const held = {
+    ...hold,
+    warn: (line) => {
+      if (said.has(line)) return
+      said.add(line)
+      warn(line)
+    },
+  }
   for (let entry = 0; ; entry += 1) {
     await boot(send, { force: force && entry === 0 }, page)
-    const { point, error, unbooted } = await read(send, hold)
+    const { point, error, unbooted } = await read(send, held)
     if (point !== undefined) {
       page.note(pointLine(point))
       return point

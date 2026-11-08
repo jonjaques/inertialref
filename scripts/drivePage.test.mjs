@@ -500,6 +500,42 @@ describe('enter', () => {
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0][0]).toContain(`156.0.7999.10 to ${CHROME}`)
   })
+
+  /*
+   * The page booted again is read against the same recorded version, so the
+   * change is said once per entry. Holding the second read against the
+   * version just read would not do: a first read whose context went away
+   * fails before the operating point is asked for, and never warned.
+   */
+  it('warns about a changed Chrome once, however many reads the entry takes', async () => {
+    const twice = vi.fn()
+    const reloading = rig([app({ renderer: false }), app()])
+    await enter(
+      reloading.send,
+      { force: true },
+      page(),
+      hold({ recorded: '156.0.7999.10', warn: twice }),
+    )
+    expect(reloading.reads()).toBe(2)
+    expect(twice).toHaveBeenCalledTimes(1)
+    const once = vi.fn()
+    // The context goes away at the operating point's read, which is the one
+    // the warning follows.
+    const live = app()
+    const gone = async (expression) => {
+      if (expression.includes('devicePixelRatio'))
+        throw new Error('Cannot find context with specified id')
+      return await live(expression)
+    }
+    const navigating = rig([gone, app()])
+    await enter(
+      navigating.send,
+      { force: true },
+      page(),
+      hold({ recorded: '156.0.7999.10', warn: once }),
+    )
+    expect(once).toHaveBeenCalledTimes(1)
+  })
 })
 
 /*
