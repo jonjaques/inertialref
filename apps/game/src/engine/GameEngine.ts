@@ -156,7 +156,7 @@ import {
 } from './terrainStreamer.ts'
 import { OrbitTraceCache } from './orbitTraces.ts'
 import { StarSurvey, type StarSurveyStatus } from './starSurvey.ts'
-import type { TerrainReport } from '@inertialref/devtools'
+import type { CloudRadiance, TerrainReport } from '@inertialref/devtools'
 
 /*
  * The engine.
@@ -734,6 +734,11 @@ export class GameEngine {
   rotationStop: (RotationStopCue & { readonly entity: EntityId }) | null = null
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
+  /**
+   * The cloud system's radiance capture on the chain on screen, set with it
+   * by `scene/Sensor.tsx`; null without one (`ir.cloudRadiance()`).
+   */
+  cloudRadiance: (() => Promise<CloudRadiance | null>) | null = null
   /** Temporal image history is presentation state, outside the world hash. */
   pictureEpoch = 0
   pictureDebug: PictureDebug = 'none'
@@ -1076,6 +1081,7 @@ export class GameEngine {
         clearTerrainCache: () => this.clearTerrainCache(),
         galaxyRender: () => this.galaxyRenderer?.() ?? null,
         clouds: () => this.sensorDiagnostics?.clouds ?? null,
+        cloudRadiance: () => this.cloudRadiance?.() ?? Promise.resolve(null),
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
         cameraProcessing: () => {

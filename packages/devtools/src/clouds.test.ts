@@ -5,6 +5,8 @@ import {
   CLOUD_SETTLE_FRAMES,
   cloudHistogramBin,
   cloudHistogramEdge,
+  type CloudRadiance,
+  cloudRadianceDifference,
   type CloudRenderReport,
   cloudReportIdle,
   cloudsSettled,
@@ -100,5 +102,119 @@ describe('the idle report', () => {
       reason: 'webgl',
       on: false,
     })
+  })
+})
+
+/** A capture over `width` × `height` texels from luminances and marks. */
+function capture(
+  width: number,
+  height: number,
+  luminance: readonly number[],
+  cloud: readonly number[],
+): CloudRadiance {
+  return {
+    width,
+    height,
+    luminance: Float32Array.from(luminance),
+    cloud: Uint8Array.from(cloud),
+  }
+}
+
+/** Two captures of one extent: luminances in scene units, and marks. */
+const pair = fc
+  .tuple(fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 12 }))
+  .chain(([width, height]) => {
+    const texels = width * height
+    const luminances = fc.array(
+      fc.float({ min: 0, max: 50, noNaN: true, noDefaultInfinity: true }),
+      { minLength: texels, maxLength: texels },
+    )
+    const marks = fc.array(fc.integer({ min: 0, max: 1 }), {
+      minLength: texels,
+      maxLength: texels,
+    })
+    return fc
+      .tuple(luminances, marks, luminances, marks)
+      .map(([la, ma, lb, mb]) => [
+        capture(width, height, la, ma),
+        capture(width, height, lb, mb),
+      ])
+  })
+
+describe('the radiance difference', () => {
+  it('is the RMS over the mean, over the texels either capture holds cloud at', () => {
+    // Texel 0 cloudy in a, 1 in b, 2 in neither: 3's difference is not counted.
+    const a = capture(2, 2, [1, 2, 3, 100], [1, 0, 0, 0])
+    const b = capture(2, 2, [3, 2, 3, 0], [0, 1, 0, 0])
+    const d = cloudRadianceDifference(a, b)
+    expect(d.texels).toBe(2)
+    expect(d.rmse).toBeCloseTo(Math.sqrt(4 / 2), 12)
+    expect(d.mean).toBeCloseTo((1 + 3 + 2 + 2) / 4, 12)
+    expect(d.relative).toBeCloseTo(Math.sqrt(2) / 2, 12)
+  })
+
+  it('is symmetric, zero between a capture and itself, and the same for both captures scaled alike', () => {
+    fc.assert(
+      fc.property(pair, fc.double({ min: 0.01, max: 100 }), ([a, b], k) => {
+        const ab = cloudRadianceDifference(a!, b!)
+        const ba = cloudRadianceDifference(b!, a!)
+        expect(ba).toEqual(ab)
+        const self = cloudRadianceDifference(a!, a!)
+        expect(self.rmse).toBe(0)
+        if (self.relative !== null) expect(self.relative).toBe(0)
+        const scale = (c: CloudRadiance) => ({
+          ...c,
+          luminance: c.luminance.map((v) => v * k),
+        })
+        const scaled = cloudRadianceDifference(scale(a!), scale(b!))
+        expect(scaled.texels).toBe(ab.texels)
+        if (ab.relative === null || scaled.relative === null)
+          expect(scaled.relative).toBe(ab.relative)
+        // Float32 luminances: scaling rounds each to its own 2⁻²⁴.
+        else expect(scaled.relative).toBeCloseTo(ab.relative, 4)
+      }),
+    )
+  })
+
+  it('reads nothing at a texel neither capture holds cloud at', () => {
+    fc.assert(
+      fc.property(
+        pair,
+        fc.float({ min: 0, max: 1e4, noNaN: true }),
+        ([a, b], v) => {
+          const clear = [...a!.cloud.keys()].find(
+            (i) => a!.cloud[i] === 0 && b!.cloud[i] === 0,
+          )
+          fc.pre(clear !== undefined)
+          const moved = { ...a!, luminance: Float32Array.from(a!.luminance) }
+          moved.luminance[clear!] = v
+          expect(cloudRadianceDifference(moved, b!)).toEqual(
+            cloudRadianceDifference(a!, b!),
+          )
+        },
+      ),
+    )
+  })
+
+  it('has no ratio where nothing holds cloud or nothing is lit', () => {
+    const dark = capture(1, 2, [0, 0], [1, 1])
+    expect(cloudRadianceDifference(dark, dark).relative).toBeNull()
+    const clear = capture(1, 2, [5, 6], [0, 0])
+    expect(cloudRadianceDifference(clear, clear)).toEqual({
+      texels: 0,
+      rmse: 0,
+      mean: 0,
+      relative: null,
+    })
+  })
+
+  it('refuses two captures of different extents, and a capture whose arrays are not its extent', () => {
+    const a = capture(2, 1, [1, 1], [1, 1])
+    expect(() =>
+      cloudRadianceDifference(a, capture(1, 2, [1, 1], [1, 1])),
+    ).toThrow(/differ in extent/)
+    expect(() =>
+      cloudRadianceDifference(a, capture(2, 1, [1, 1, 1], [1, 1])),
+    ).toThrow(/holds 3 luminances/)
   })
 })

@@ -15,6 +15,7 @@ import {
   uint,
 } from 'three/tsl'
 import { logHub, RingBufferSink } from '@inertialref/shared'
+import { cloudRadianceDifference } from '@inertialref/devtools'
 import type { CloudHistory } from './cloudHistory.ts'
 import {
   CLOUD_CACHES,
@@ -387,5 +388,52 @@ describe('the whole chain over a depth step', () => {
         else expect(end).toBeGreaterThan(0.85)
       })
     }
+  }, 60_000)
+})
+
+describe('the radiance capture', () => {
+  it('reads one frame for two asks, at the trace’s extent, cloud where the ceiling does not stop the trace', async () => {
+    set({ placement: 'split', cache: 'field', force: 'none', lightTaps: 2 })
+    frames(20)
+    const first = rig.system!.captureRadiance()
+    const second = rig.system!.captureRadiance()
+    rig.frame()
+    const [a, b] = await Promise.all([first, second])
+    expect(a).not.toBeNull()
+    expect(b).toBe(a)
+    const [width, height] = rig.system!.report.extents.trace
+    expect([a!.width, a!.height]).toEqual([width, height])
+    expect(cloudRadianceDifference(a!, b!)).toMatchObject({ rmse: 0 })
+    // Under the ceiling the trace stops 100 m up, under overcast's 300 m
+    // base, and holds no cloud; over it every texel looks into the deck.
+    const marked = (j: number): number =>
+      a!.cloud.subarray(j * width, (j + 1) * width).reduce((s, v) => s + v, 0)
+    expect(marked(0)).toBe(0)
+    expect(marked(height - 1)).toBe(width)
+    expect(a!.luminance.every(Number.isFinite)).toBe(true)
+  }, 60_000)
+
+  it('differs where the light differs: lightTaps 0 against 4', async () => {
+    const capture = async (lightTaps: 0 | 4) => {
+      set({ placement: 'split', cache: 'field', force: 'none', lightTaps })
+      frames(20)
+      const asked = rig.system!.captureRadiance()
+      rig.frame()
+      return (await asked)!
+    }
+    const none = await capture(0)
+    const four = await capture(4)
+    const difference = cloudRadianceDifference(none, four)
+    expect(difference.texels).toBeGreaterThan(0)
+    expect(difference.relative).toBeGreaterThan(0)
+    set({ lightTaps: 2 })
+  }, 60_000)
+
+  it('answers null on a frame that draws no clouds', async () => {
+    set({ on: false })
+    const asked = rig.system!.captureRadiance()
+    rig.frame()
+    await expect(asked).resolves.toBeNull()
+    set({ on: true })
   }, 60_000)
 })

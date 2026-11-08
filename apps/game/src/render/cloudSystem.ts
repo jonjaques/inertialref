@@ -9,6 +9,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
+  type CloudRadiance,
   type CloudRenderReport,
   cloudReportIdle,
   cloudsSettled,
@@ -29,6 +30,7 @@ import type { CloudLevers, CloudPlacement } from './cloudLevers.ts'
 import type { CloudBudget, CloudResource } from './cloudNodes.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
 import { CLOUD_PROFILE_HEIGHTS, CLOUD_PROFILE_ROWS } from './cloudProfile.ts'
+import { CloudRadianceMeter } from './cloudRadiance.ts'
 import { SUN_DEPTH_FRAME_CAP } from './cloudSunCascades.ts'
 import { CloudTrace } from './cloudTrace.ts'
 import type { SceneLayout } from './sceneLayout.ts'
@@ -74,8 +76,14 @@ export interface CloudSystem {
   readonly overPass: Node<'vec4'>
   beginFrame(inputs: CloudEngineInputs | null, sensor: CloudSensorState): void
   endFrame(): void
-  /** After `post.render`: the residual meter under composite 'residual'. */
+  /** After `post.render`: the residual meter under composite 'residual', and a radiance capture asked for. */
   afterFrame(renderer: WebGPURenderer): void
+  /**
+   * The next frame's radiance at the trace's texels, read back after it,
+   * with the texels the history holds cloud at: null on a frame that draws
+   * no clouds (`cloudRadiance.ts`).
+   */
+  captureRadiance(): Promise<CloudRadiance | null>
   resetHistory(): void
   /** Every pipeline any lever set draws with, and the noise baked; `progress` four times. */
   warm(progress?: () => void): Promise<void>
@@ -203,6 +211,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     depth: () => depth.texture,
   })
   const history = new CloudHistory(uniforms, () => trace.outputs)
+  const radiance = new CloudRadianceMeter(uniforms, () => history.outputs)
   const resources: readonly CloudResource[] = [
     ...field.bakes,
     depth,
@@ -371,6 +380,10 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     afterFrame(target) {
       if (frame?.levers.composite === 'residual')
         composite.measureResidual(target, scenePass.renderTarget)
+      radiance.measure(target, scenePass.renderTarget, frame !== null)
+    },
+    captureRadiance() {
+      return radiance.request()
     },
     resetHistory() {
       history.reset()
@@ -402,6 +415,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       disposed = true
       scene.remove(composite.passes, composite.split)
       composite.dispose()
+      radiance.dispose()
       field.dispose()
       for (const resource of [depth, trace, history]) resource.dispose()
       frame = null
