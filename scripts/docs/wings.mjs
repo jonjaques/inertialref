@@ -228,6 +228,10 @@ export const WINGS = [
             'docs/adr/0060-a-station-is-an-orbital-placement-with-frames-named-by-its-identity.md',
             'Stations',
           ],
+          [
+            'docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md',
+            'The GPU lock and the guard',
+          ],
         ],
       },
     ],

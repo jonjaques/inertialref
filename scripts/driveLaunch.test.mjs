@@ -25,7 +25,8 @@ import {
 
 /*
  * The evidence, trimmed from the Playwright spike's `.scratch/playwright-spike`
- * to the fields read here (design/plans/playwright.md, "What was measured"):
+ * to the fields read here (ADR-0061, and CONTEXT.md's 7 Nov 2026 entry
+ * "Headless Chrome presents"):
  *
  *   modes-chrome-headless.json        out/modes-chrome-headless.json — probe A,
  *                                     Chrome 157 new headless on Playwright's

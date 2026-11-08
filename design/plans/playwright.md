@@ -8,7 +8,7 @@
 
 The ranking points the same way. The five proposals with the highest return need no Playwright: a dark-plate noise measurement, a boot-ladder fix, a settle measurement two reviews fold into P24, and two documentation corrections. Playwright Test as a runner (P04) ranks 37th of 68. Its value is what its consumers make of it, and the cheapest of those consumers (P35, the shell project) needs only its base configuration.
 
-The first wave ran all five on the Mac mini, beside P01's lock module, P03's launch guard, P06's tests and X3's port allocator, and it measured X13's idle rig (G5). #188 carries the code, and [The first wave, on the Mac mini](#the-first-wave-on-the-mac-mini) says what each step found.
+The first wave ran all five on the Mac mini, beside P01's lock module, P03's launch guard, P06's tests and X3's port allocator, and it measured X13's idle rig (G5). #188 carries the code, and [The first wave, on the Mac mini](#the-first-wave-on-the-mac-mini) says what each step found. The second wave wired the lock into every GPU job and the guard and the served tree into every drive.mjs entry, and those decisions are [ADR-0061](../../docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md).
 
 ---
 
@@ -164,7 +164,7 @@ Detached, the page rendered at most 4 frames in 66.7 s, the re-attach included, 
 - **The thermal cause.** It was not measured, because `powermetrics` needs sudo.
 - **Attach paths.** None of these ran: `browser.bind()`, `connectOverCDP` to the rig's Chrome, `playwright-cli attach --cdp`.
 - **Device emulation.** None of these ran: `hasTouch` against `(pointer: coarse)`, pointer lock, `Emulation.setSafeAreaInsetsOverride`, the headless audio pipeline.
-- **Sandbox writes.** Whether the Codex and EnterWorktree sandboxes can write the git common directory was not checked. On the Mac mini a full-access T3 Code session can, and so can a Claude Code worktree subagent (unit N1).
+- **Sandbox writes.** Whether the EnterWorktree sandbox can write the git common directory was not checked. On the Mac mini a full-access T3 Code session can, and so can a Claude Code worktree subagent (unit N1). Codex's workspace-write sandbox cannot: the second wave probed it with `codex sandbox --permission-profile :workspace` (codex-cli 0.166.0), and a write in the clone's `.git` failed `EPERM` from a worktree and from the main checkout.
 - **Environment noise.** Every dev-server load logged three 504 "Outdated Optimize Dep", nine 404s and 3–15 502s (no Worker running). None of them stopped a boot.
 
 ---
@@ -325,7 +325,7 @@ A review's correction is folded into the mechanism where the correction is accep
 
 ### 1. dark-plate-noise-census: measure dark-plate self-noise headed and headless before choosing how to close the #180 blind spot
 
-**Pitch.** [CONTEXT.md](../../CONTEXT.md):12504-12506 records that #180's comparison passed with titans-haze and centauri-daybreak moved 1.34% and 1.71%. On a 480×320 plate that is about 2,060 and 2,630 px. That is the same order as the "thousands of pixels" that [`compare.mjs`](../../scripts/presets/compare.mjs):84-99 gives for headed star fields. One measurement says whether dark plates can be reported by default headed, or need headless determinism.
+**Pitch.** [CONTEXT.md](../../CONTEXT.md):12511-12513 records that #180's comparison passed with titans-haze and centauri-daybreak moved 1.34% and 1.71%. On a 480×320 plate that is about 2,060 and 2,630 px. That is the same order as the "thousands of pixels" that [`compare.mjs`](../../scripts/presets/compare.mjs):84-99 gives for headed star fields. One measurement says whether dark plates can be reported by default headed, or need headless determinism.
 
 **Mechanism.** Two runs of one tree under P01.
 
@@ -351,7 +351,7 @@ Tabulate each picture's self-noise beside #180's deltas, then decide:
 - Headed star fields differ between captures by thousands of pixels: verified as written in `compare.mjs`.
 - Headless earthrise, 55% of it below 12% gray, was AE 0 at fuzz 0 across launches: measured. That is partial evidence for dark pictures.
 
-**Review.** Both cross-reviews kept it and sharpened it. The dark exclusion in `compare.mjs` and ADR-0046 rests on a measurement taken before the settle protocol: 1,069–3,090 px at a 2.5 s wait, in the same CONTEXT.md entry that shows settling took the lit pictures from 7,939 px to 0 ([CONTEXT.md](../../CONTEXT.md):10483-10494). The headed arm alone may therefore show the dark plates are deterministic now, and the headless arm runs only if it does not. Each capture records `ir.galaxy()`'s archive hits, and the incumbent arm runs once more on a wiped profile. Its persistent profile can compare a bake with a restore, and the galaxy volume accumulates temporally (stride 8, [`GalaxyVolume.tsx`](../../apps/game/src/scene/GalaxyVolume.tsx):46), so a gap is not blamed on headedness by default. The two arms run interleaved or with a cool-down between them. It supersedes C3, which measures the headless half only and waits on P08.
+**Review.** Both cross-reviews kept it and sharpened it. The dark exclusion in `compare.mjs` and ADR-0046 rests on a measurement taken before the settle protocol: 1,069–3,090 px at a 2.5 s wait, in the same CONTEXT.md entry that shows settling took the lit pictures from 7,939 px to 0 ([CONTEXT.md](../../CONTEXT.md):10490-10501). The headed arm alone may therefore show the dark plates are deterministic now, and the headless arm runs only if it does not. Each capture records `ir.galaxy()`'s archive hits, and the incumbent arm runs once more on a wiped profile. Its persistent profile can compare a bake with a restore, and the galaxy volume accumulates temporally (stride 8, [`GalaxyVolume.tsx`](../../apps/game/src/scene/GalaxyVolume.tsx):46), so a gap is not blamed on headedness by default. The two arms run interleaved or with a cool-down between them. It supersedes C3, which measures the headless half only and waits on P08.
 
 **Result (G3).** The headed arm decides it, on the Mac mini. Both runs read 0 px over 3% on all 13 pictures, the six dark ones included, against #180's roughly 2,060 and 2,630 px. "Well under" was a ceiling of 515 px, a quarter of the smaller delta. The decision is a change to [`compare.mjs`](../../scripts/presets/compare.mjs): dark plates reported by default against a per-picture floor taken by `--twice` (Phase 1). The headless arm (G4) does not run, and C3 and P14 drop for this blind spot. The floor belongs to the machine that takes it: the mini's captures read centauri-daybreak 231 px from its committed plate at 8%, with the TV's color profile the inferred cause. The Air's headed census is unmeasured.
 
@@ -447,50 +447,15 @@ Trap 10 states the measured cause. The keymap resolves chords from `event.code` 
 
 ### 6. P03: a launch preset and an operating-point guard that fail closed
 
-**Pitch.** Three wrong-browser modes fail silently:
+**Landed (#188).** The two presets, the refusal of every other browser before launch, and `assertOperatingPoint` are [ADR-0061](../../docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md), whose context carries the three wrong-browser modes this proposal was ranked on. Every drive.mjs boot, attach and `--reload` runs the guard before a step, and `--status` reads it again.
 
-- The default headless shell: adapter null, WebGL over SwiftShader, 67 s boot, 1 fps.
-- Chrome for Testing 151: 2–5× the GPU time.
-- Forced sRGB: `dynamicRangeHigh` false.
+**What remains.**
 
-One module encodes the measured launch choices. One guard refuses anything else and stamps every result with its operating point.
-
-**Mechanism.** `scripts/driveLaunch.mjs` exports two presets:
-
-- `sdr`: `{channel: 'chrome', headless: true}`.
-- `display`: `{channel: 'chrome', headless: false, ignoreDefaultArgs: ['--force-color-profile=srgb']}`, plus a window position.
-
-Before launch, the preset refuses any browser but Chrome stable: `channel` unset, `'chromium'`, or an `executablePath` fails before a page opens, so the shell's 67 s boot is never waited out. A spec that compares browsers (P47 stage 1, X2's question) declares itself a comparison probe and is exempt from this check only.
-
-After boot, `assertOperatingPoint(evaluate)` checks the page through an `evaluate` port, so the same checks run over a Playwright page and over drive.mjs's socket. They are expressions, and they move into P02's expressions module when it lands:
-
-- `engine.gl.description.backend`.
-- The adapter is neither a fallback nor a match for [`gpuAdapter.mjs`](../../scripts/gpuAdapter.mjs):30's `SOFTWARE` pattern.
-- The drawing buffer equals viewport × `min(DPR, dprCeiling(coarse))` × `pictureDprFactor(picture)`, rounded as the renderer rounds it ([`App.tsx`](../../apps/game/src/App.tsx):419, 755, [`output.ts`](../../apps/game/src/render/output.ts):128-131, [`picture.ts`](../../apps/game/src/render/picture.ts):85-86). A plain viewport × DPR would fail a DPR-3 or coarse-pointer project by design, and a supersampled picture doubles the buffer.
-- The served build and tree match the tree under test (X3).
-
-The guard knows three operating-point kinds, `webgpu`, `fallback` and `shell`, so P35 and P47's fallback stage are not refused. It records `browser.version()` and warns when it changes. It does not refuse on a version floor, because Chrome stable updates itself. It returns `{origin, build, browser, viewport, DPR, buffer, adapter, backend, dynamicRangeHigh, picture, Sol or generated}` for `testInfo` annotations. drive.mjs runs the same guard after boot and prints it in `--status`. Once P19 lands, the in-page record is the source and the guard asserts against it, so there is one record.
-
-The headless shell with `--enable-unsafe-webgpu --use-angle=metal` also reaches Metal (probe A). It is not chosen, because players run Chrome stable.
-
-**First step.** Node tests for the guard's decisions over the probe outputs, with no browser.
-
-**Success.**
-
-- A spec with `channel` unset or set to `'chromium'` fails before launch, naming the browser.
-- The preset passes.
-- Every fixture and every drive.mjs boot runs the guard.
-
-**Risks.** three's `WebGPUBackend` keeps the adapter only as a local, so the engine's adapter is readable only through `device.adapterInfo` (training data). A fresh in-page `requestAdapter()` can answer differently from the device the engine holds. One review puts the effort at 1.5 days.
-
-**Claims.**
-
-- The default shell is on SwiftShader at about 1 fps: measured (A, B).
-- CfT 151 26.89 ms against Chrome 157 14.13 ms at far-shore: measured, sequentially.
-- Forced sRGB in 1.62.1 (`coreBundle.js`:34668): verified.
-- Headed HDR under `ignoreDefaultArgs`: unverified.
-
-**First wave (unit N5, #188).** The presets and the guard are built, with Node tests over fixtures trimmed from the probe outputs, and wired into nothing. A caller's `ignoreDefaultArgs` adds to the preset's, so dropping one more default never restores forced sRGB, and the record names a point's system `sol`, `catalog` or `generated`: a catalog star such as HIP71683 is neither of the other two. `dprCeiling` and `pictureDprFactor` import cleanly under Node's type stripping. [`gpuAdapter.mjs`](../../scripts/gpuAdapter.mjs)'s `SOFTWARE` pattern is not exported, and importing that file runs Dawn's adapter requests and can `process.exit`, so the guard reads the pattern from its source until a module with no side effects exports it. The drive.mjs half and the identity check are the second wave's.
+- The Playwright half: every fixture runs the guard and annotates `testInfo` with its record (P04), and the guard's expressions move into P02's module when it lands.
+- A comparison probe (P47 stage 1, X2's question) declares itself, and is exempt from the refusal before launch and from nothing else.
+- Once P19 lands, the in-page record is the source and the guard asserts against it, so there is one record.
+- [`gpuAdapter.mjs`](../../scripts/gpuAdapter.mjs) exports its `SOFTWARE` pattern from a module with no side effects. Until then the guard reads the pattern from that file's source, because importing it runs Dawn's adapter requests and can `process.exit`.
+- Chrome's version is recorded in the port's session, which `--down` deletes, so an update between a `--down` and the next launch is not warned about.
 
 ### 7. P06: tests for the strobe detector and trace readers before any transport moves
 
@@ -616,37 +581,16 @@ Each test is checked against a deliberate mutation of the line it guards. `trace
 
 ### 12. P01: one machine-wide GPU lock that every GPU job takes
 
-**Pitch.** Two overlapping GPU jobs have crashed macOS twice. The one-GPU-job rule lives only in agent memory. Playwright's test locks coordinate inside one run and cannot see `test:gpu` or drive.mjs ([test-parallel-js.md](https://github.com/microsoft/playwright/blob/v1.65.0/docs/src/test-parallel-js.md)).
+**Landed (#188).** The lock, its three holders — `pnpm test:gpu`, drive.mjs from Chrome's launch to `--down`, and the preset commands under one acquisition — and the refusal's terms are [ADR-0061](../../docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md). On the Mac mini, with a rig up, `pnpm test:gpu` in another worktree was refused in 0.40–0.62 s naming it, and under `IR_GPU_WAIT` started within one 500 ms poll of `--down`; `presets:compare`'s nested captures ran under its one acquisition while a suite beside them was refused; a SIGKILLed holder whose Chrome still ran kept the lock, and was reclaimed once that Chrome was gone. Codex's workspace-write sandbox cannot write the file, so a Codex thread does GPU work with full access or a profile that grants write on `<clone>/.git` (the drive skill).
 
-**Mechanism.**
+**What remains.**
 
-- **The module.** `scripts/gpuLock.mjs` exports `acquire(holder, {waitMs})` and `release()`. The lock is `$(git rev-parse --git-common-dir)/inertialref-gpu.lock`, which resolves to the main checkout's `.git` from every worktree (verified). It is created with `openSync(…, 'wx')` and holds `{pid, holder, cwd, worktree, startedAt, processStart}`.
-- **Staleness and release.** A lock is stale only when every process it names is gone: `ESRCH`, or a differing process start time, for the holder and for any Chrome it launched. A killed drive.mjs whose detached Chrome still renders is not stale. It is released on exit, SIGINT and SIGTERM, except by drive.mjs (below).
-- **Holders.** [`vitest.gpu.config.ts`](../../apps/game/vitest.gpu.config.ts) through `globalSetup` (the busiest, 605 calls in 30 days); presets capture, compare and plates; Playwright GPU projects, from which the shell project opts out; perf, bisect, soak and MCP runners. drive.mjs holds it from Chrome's launch until `--down` or Chrome's exit, because its Chrome is detached and outlives each invocation ([`drive.mjs`](../../scripts/drive.mjs):403-424). Releasing per invocation waits on Jon's decision, on X13's figures (G5), that an idle rig is not a GPU job.
-- **Nested holders.** An outer holder hands its children the lock: `capturePlates` spawns drive.mjs for every capture ([`capture.mjs`](../../scripts/presets/capture.mjs):157-180), and a child that acquired on its own would refuse its parent. The parent passes a token that the lock file records, and a child whose token matches the file proceeds without acquiring. A token is not a bypass: one that does not match the file is refused like any other acquire. A child records the Chrome it launches in the same file, and the staleness rule above covers it, so the lock outlives a parent whose children leave Chrome up. The preset commands do: `plates.mjs` ends by saying `pnpm drive --down when finished` ([`plates.mjs`](../../scripts/presets/plates.mjs):94). The parent's own exit, normal or by signal, removes only its own entry.
-- **Failing and waiting.** By default an acquire fails fast, naming holder, pid, age and worktree. `--gpu-wait <s>` queues with a bound and reprints the holder every 10 s; it is not `--wait`, which is drive.mjs's ordered page delay in milliseconds ([`driveSteps.mjs`](../../scripts/driveSteps.mjs):111-116). The message says to wait or ask. It never says to `--down` another agent's rig, because that kills their session. There is no environment bypass.
-- **Long holders.** P18 holds the lock 25–30 min, P23 45–75 and P29 1–2 h. They follow a lease policy and run as attended blocks.
-- **Around the lock.** The Stop gate warns while it is held; a full check beside a rendering rig timed out at 300 s and passed in 179 s with the rig closed (CONTEXT.md:8469-8472). `pnpm gpu:who` names the holder. Acquisitions are appended to a log.
-
-**First step.** `gpuLock.mjs` and its tests (create, refuse, stale pid, pid reuse, release on signal, two child processes, a child carrying the holder's token, a holder dead while its Chrome lives, a parent exiting normally and by signal while its child's Chrome lives). Then `vitest.gpu.config.ts`. Before that wiring, probe whether the Codex and EnterWorktree sandboxes can create the file. A full-access T3 Code session on the Mac mini creates and removes it, and so does a Claude Code worktree subagent there (unit N1), once the path comes from a plain `git rev-parse`: the harness's worktree guard refuses a program that runs git inside itself. The Codex and EnterWorktree sandboxes are unprobed.
-
-**Success.**
-
-- With a drive.mjs rig up in one worktree, `pnpm test:gpu` in another exits non-zero within 1 s naming it, or under `--gpu-wait` starts within one poll of `--down`.
-- `presets:compare`'s nested drive.mjs captures run under its one acquisition, and an unrelated job beside them is refused.
-- A SIGKILLed holder with no live Chrome is reclaimed. One whose Chrome still runs is not, and neither is the lock of a finished `presets:plates` whose rig is still up.
-- Two Playwright GPU runs serialize.
-- The acquisition log shows no overlap in 30 days.
-
-**Risks.** The lock sits in another checkout's `.git`. A harness that cannot write there loses every GPU command, so a failed create fails closed with a named cause. The scope is this project's checkouts. oMLX, Ollama, ComfyUI and Jon's own Chrome compete for the same GPU and are outside it.
-
-**Claims.**
-
-- `openSync 'wx'` is atomic on APFS: training data.
-- drive.mjs records `chromePid` at spawn (`drive.mjs`:425-430): verified.
-- `process.kill(pid, 0)` liveness: training data.
-
-**First wave (unit N1, #188).** The module is built, with tests over the first step's cases, and wired into nothing. Its shape for the second wave: a child joins through a token in `IR_GPU_LOCK_TOKEN`; `record(pid)` keeps the lock for a browser that outlives the process that launched it, and `forget(pid, {token})` is what `--down` will call, so `--down` is never refused; every change to a held lock runs under an edit mutex and lands by rename. A refusal returns in 34–47 ms, including the holder's spawn. `capture.mjs` spawns drive.mjs with no `env`, so the wiring merges the lock's environment into it. A lock that declares another format version is refused as busy rather than reclaimed, because a worktree on another branch can run another revision of the module, and a lock this one cannot read is one it cannot prove gone. The process start time comes from `ps -o stat= -o lstart=`, and ubuntu CI ran the suite green on #188.
+- More holders as they are built: Playwright's GPU projects, from which the shell project opts out (P04), and the perf, bisect, soak and MCP runners.
+- A lease policy for the long holders, which run as attended blocks: P18 holds the lock 25–30 min, P23 45–75 and P29 1–2 h.
+- Around the lock. The Stop gate warns while it is held, because a full check beside a rendering rig timed out at 300 s and passed in 179 s with the rig closed (CONTEXT.md:8477-8480). `pnpm gpu:who` names the holder. Acquisitions are appended to a log, which is what can show no overlap in 30 days, and two Playwright GPU runs are shown to serialize.
+- Whether an idle rig counts as a GPU job, which is Jon's call on X13's figures (Phase 1).
+- The EnterWorktree sandbox is unprobed.
+- The module's known gaps, in ADR-0061's consequences: two waiters that both find a dead edit mutex can both enter it, `acquire` is not re-entrant within one process, and a SIGKILL of vitest's main process leaves its fork workers unrecorded while they run.
 
 ### 13. P43: PR media from one command
 
@@ -835,20 +779,13 @@ No proposal owns the mechanism.
 
 **Mechanism.** `scripts/ports.mjs` defines `portFor(role, tree)` as the role's base plus a hash of `git rev-parse --show-toplevel`, mod 200. The roles are vite, drive, preview, base, bisect and static. It skips 5173, 8787, 9333 and the bad-port list, and probes both `127.0.0.1` and `::1`. It is a tested pure core with a thin I/O shell.
 
-For identity, `ir` exposes `BUILD_ID` ([`build.ts`](../../apps/game/src/build.ts):16) and the served tree's root. [`vite.config.ts`](../../apps/game/vite.config.ts):39-56 computes `BUILD_ID` from `git describe --always --dirty --abbrev=8`, which sibling worktrees cut from one `origin/main` share, so the root is what tells them apart. It comes from `git rev-parse --show-toplevel` on the dev server only, as a define that is empty in a production build or as a middleware header, because a shipped bundle must not carry a filesystem path. P03's guard compares both with the tree under test and refuses on a mismatch, naming both values.
+The identity half landed in #188 and is [ADR-0061](../../docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md)'s: `ir.build()` answers `BUILD_ID` and, on the dev server only, the root of the tree it serves, and drive.mjs refuses a page another checkout serves, naming both trees and how to serve this one.
 
-**First step.** `portFor` and its tests. Then `BUILD_ID` through `ir` and the drive.mjs comparison.
+**What remains.** The allocator is wired into nothing. Each role takes its port from `portFor` as its command is next touched: drive.mjs's `--port`, the preset commands' servers, compare's base, then Playwright's `webServer`. Two gaps in the identity half stay open: a foreign Vite running a build older than `ir.build()` reads `identity unchecked` and is accepted, and the check runs after the boot, so a refused run still pays one.
 
-**Success.** Two worktrees started at once get disjoint ports for every role. A rig pointed at a sibling worktree's server is refused, naming both trees.
+**Success.** Two worktrees started at once get disjoint ports for every role. The identity half's, a rig pointed at a sibling worktree's server refused and naming both trees, held on the Mac mini (#188).
 
-**Risks.** The build id reflects the tree's dirty state when the server started, not later edits. So the check proves which tree is served, not which edit.
-
-**Claims.**
-
-- `BUILD_ID` is compiled in and shown on the About page (`AboutPage.tsx`:144, `NetworkSection.tsx`:70): verified.
-- Vite's `define` applies in dev: training data.
-
-**Review.** The allocator half is sound, and it targets a class the memory notes hit four times. The identity half needs more than `BUILD_ID`. It names a commit, any dirty tree reports `<sha>-dirty`, and parallel worktrees are cut from the same `origin/main`, so `BUILD_ID` alone cannot tell sibling trees apart. The served tree root in the mechanism is that review's correction. `pnpm dev` keeps 5173 and 8787 ([`dev.mjs`](../../scripts/dev.mjs):42-43), which AGENTS.md, CLAUDE.md, `t3.json` and the human workflow name. The allocator covers the drive, preset, Playwright and base roles. About 2 days.
+**Review.** The allocator half is sound, and it targets a class the memory notes hit four times. `pnpm dev` keeps 5173 and 8787 ([`dev.mjs`](../../scripts/dev.mjs):42-43), which AGENTS.md, CLAUDE.md, `t3.json` and the human workflow name. The allocator covers the drive, preset, Playwright and base roles. About 2 days.
 
 **First wave (unit N4, #188).** The allocator is built, in 16000–17199: six roles of 200 ports each, below both ephemeral ranges and above the highest bad port. A port is free only when a connection fails at once on both 127.0.0.1 and ::1, because on macOS a bind to either succeeds beside a `0.0.0.0` listener. The core takes git's worktree list as well as the tree, because two trees started at once cannot tell each other apart by probing: with 200 slots, two trees collide 0.5% of the time, six 7.3% and nineteen 58.6%.
 
@@ -1176,7 +1113,7 @@ Separately, the skill records a trap: never run `npx playwright install chrome`,
 
 **Risks.** It waits on P21 for the rates a display does not give. The Air's panel being 60 Hz is training data. The Mac mini's panel is 120 Hz by `system_profiler`, but its off-screen rig runs at about 100 irregular rAF/s (M5). A headed cast there is a run above 64 Hz with no P21, not a 120 Hz one.
 
-**Review.** The fit review vetoes it. The motivating defect showed at 60 Hz: the sawtooth beat "at 60 fps against a 64 Hz tick" ([CONTEXT.md](../../CONTEXT.md):3480-3482), so a refresh-rate axis is not what would have caught it, and the success metric is met at 60 Hz alone. The regime 60 Hz never reaches is a frame with no tick, which only a rate above 64 Hz produces. [`world.test.ts`](../../packages/simulation/src/world.test.ts):120 already holds the universe equal at 60 and 144 Hz. A Node property test over `dt` for the presentation residual answers the rest in about a day, without a browser or P21. A headed `--cast` on the Mac mini is the browser check for the regime with no tick in a frame, at no build cost; the veto stands for the axis, not for that cast.
+**Review.** The fit review vetoes it. The motivating defect showed at 60 Hz: the sawtooth beat "at 60 fps against a 64 Hz tick" ([CONTEXT.md](../../CONTEXT.md):3487-3489), so a refresh-rate axis is not what would have caught it, and the success metric is met at 60 Hz alone. The regime 60 Hz never reaches is a frame with no tick, which only a rate above 64 Hz produces. [`world.test.ts`](../../packages/simulation/src/world.test.ts):120 already holds the universe equal at 60 and 144 Hz. A Node property test over `dt` for the presentation residual answers the rest in about a day, without a browser or P21. A headed `--cast` on the Mac mini is the browser check for the regime with no tick in a frame, at no build cost; the veto stands for the axis, not for that cast.
 
 ### 36. P34: input correctness specs
 
@@ -1396,7 +1333,7 @@ Parked `/cinema?t=` frames land exactly: 0 px between captures, against about 53
 
 **Risks.**
 
-- CONTEXT.md:12504-12506 records a comparison that passed while two dark plates moved. It does not record whether those moves were wanted.
+- CONTEXT.md:12511-12513 records a comparison that passed while two dark plates moved. It does not record whether those moves were wanted.
 - The incumbent is warm, and fresh contexts pay 12–20 s of cold settle each (28–31 s throttled), so wall time may get worse.
 - Moving capture changes who writes the committed plates, which needs a recapture and an ADR-0046 amendment.
 - C3 delivers the sensitivity with one recipe. One review puts parity at 6 days.
@@ -1468,7 +1405,7 @@ A nightly P18 against the last nightly's commit, chained by ratio and anchored w
 
 - Tours of 45–75 minutes belong to P48 hardware.
 - A `?census=gpu` wrapper over-counts and never throws.
-- The tour needs a DPR-2 revisit point, because the one leak that cost players reproduced only there (CONTEXT.md:778-783).
+- The tour needs a DPR-2 revisit point, because the one leak that cost players reproduced only there (CONTEXT.md:785-790).
 
 ### 55. P16: automated bisection over plates and GPU cost
 
@@ -1613,6 +1550,8 @@ The first wave runs on the Mac mini: `worktree-implementer` agents in parallel w
 
 **The second wave**, cut from the collected first, is one unit at a time because every piece edits drive.mjs: P01's wiring (`apps/game/vitest.gpu.config.ts`; drive.mjs, held from launch to `--down`; `scripts/presets/*.mjs`, one outer acquisition whose token each drive.mjs child carries), then X3's identity half (`ir.build()` with the dev-server tree root, and drive.mjs's comparison), then P03's drive.mjs half (`--status` runs the guard, whose identity check needs X3's). From then on the lock, not the lane's one agent, serializes GPU work.
 
+**It ran on 7 November 2026**, as three stacked pull requests, each implemented, reviewed by a second agent and fixed before the next was cut: #189 (the lock), #191 (the served tree) and #193 (the guard in drive.mjs), collected into #188 in that order. Every unit's first boot against a fresh dev server failed, eleven times in all, and it was the first wave's: C4's loader check refused the document a fresh Vite's own reload commits. #188 fixes it, and a cold `presets:compare --base` passes on its first run ([CONTEXT.md](../../CONTEXT.md), 7 Nov 2026).
+
 ### Later phases
 
 **Phase 1 — the rig, hardened (weeks 2–3).**
@@ -1673,7 +1612,6 @@ The first wave runs on the Mac mini: `worktree-implementer` agents in parallel w
 | Addition                                                | Shape                                            | For                       | Constraint                                                                                                                                       |
 | ------------------------------------------------------- | ------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `ir.idle(on)`                                           | `RenderHost` → `holdFrames()`                    | X13, P01                  | a driver state, never set inside a measurement; needed only if Jon exempts an idle rig, since a detached one already renders almost nothing (G5) |
-| Build identity                                          | `ir.build()` → `BUILD_ID` and the served tree    | X3, P03, P19, P39         | the tree root on the dev server only                                                                                                             |
 | `ir.environment()`                                      | operating-point record                           | P19, P03                  | a readout: every field `?.`, never throws                                                                                                        |
 | `ir.perf(opts)`                                         | `perf/1` record                                  | P19, P18                  | spans with frames running, then held passes, `ir.gpu` last                                                                                       |
 | Budgets and `TileProducerStats`                         | through host ports                               | P19                       | `packages/` may not import app code or name `performance`                                                                                        |
@@ -1707,8 +1645,8 @@ Each of these answers would move proposals up or down. The ranked table is score
 - **P24's first step.** Answered on the Mac mini for the dev build (G2). A warm load is an archive hit, so P04's worker-scoped context, ordered by system, saves about 12 s a run at earthrise, and P18 rises. At far-shore it saves about 3.6 s, because a warm settle still waits 8.5–9.1 s on `terrain.deposits`, so a suite at far-shore budgets about 9 s of settle warm and 12 s cold on the mini. The slow cluster did not reproduce on the mini.
   - _If the Air's 17–19 s cluster is terrain:_ every suite at a generated point on the Air budgets 17–19 s of settle.
 - **The dark-plate census.** Answered on the Mac mini (G3). Headed self-noise is 0 px on every picture, well under #180's deltas, so a `compare.mjs` default change closes the blind spot in about a day, and C3 and P14 drop.
-- **X13 and the sandbox probe.** Answered in part. A held page does not free its GPU memory (G5), although a detached rig already spends no GPU time, so the question for Jon is whether a rig holding about 2 GB with no work submitted is a GPU job. A Claude Code worktree subagent writes the git common directory (unit N1).
-  - _If Codex or EnterWorktree sessions cannot write it:_ P01 needs a different lock home before anything wires to it.
+- **X13 and the sandbox probe.** Answered in part. A held page does not free its GPU memory (G5), although a detached rig already spends no GPU time, so the question for Jon is whether a rig holding about 2 GB with no work submitted is a GPU job. A Claude Code worktree subagent writes the git common directory (unit N1), and Codex's workspace-write sandbox cannot (the second wave's probe). #188 keeps the lock's home and documents the remedy, full access or a permissions profile that grants write on `<clone>/.git`, rather than moving the lock, which is Jon's to confirm on review. EnterWorktree is unprobed.
+  - _If EnterWorktree sessions cannot write it either:_ the same remedy applies there, or the lock moves before more holders wire to it.
 - **P32 on the hosted runner.**
   - _If positive and repeatable:_ P14's comparator, P27's browser half and X5 move into CI.
   - _If negative:_ the roadmap row closes with a figure, and image comparison stays local.

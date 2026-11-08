@@ -13140,6 +13140,25 @@ the boot and 216–234 ms for the other four, wall clock per invocation, against
 26 ms for a bare `node -e 0`. The driver's header and the skill said 80 ms
 and about 0.1 s; they say about 0.2 s now.
 
+## The rig's three decisions are an ADR, and a new GPU runner takes the lock (7 Nov 2026)
+
+The lock, the guard and the served tree landed in the second wave, and Rule 47
+moves a landed phase's decisions out of its plan:
+[ADR-0061](docs/adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md)
+records them with the alternatives they beat, and the Playwright plan's P01,
+P03 and X3 sections keep only the work that remains. The lock is also an
+invariant an agent can break without reading the plan, by writing a GPU runner
+that never takes it, so it is Rule 68 in `AGENTS.md` and
+`docs/agents/invariants.md`; `.claude/rules/browser.md` carries the refusal's
+half. An advisory `flock` is the obvious alternative and does not fit: the lock
+must outlive the invocation that launched the rig's Chrome, and Node 26.13's
+`fs`, `fs/promises` and `FileHandle` expose no lock call at all.
+
+One trade is Jon's to confirm. Codex's workspace-write sandbox cannot write the
+lock's home in the clone's `.git`, and #188 keeps the home and documents the
+remedy, full access or a profile that grants write on `<clone>/.git`, rather
+than moving the lock out of `.git`.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

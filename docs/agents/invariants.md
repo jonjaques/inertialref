@@ -777,3 +777,16 @@ ignore `Range`, which Safari needs for `<audio>`, and refuse any file over
 or the player passes over every track the bucket lacks.
 [ADR-0059](../adr/0059-the-planetarium-plays-music-anyone-may-share.md),
 [hosting](../hosting.md#h-8--r2-holds-what-the-repository-will-not-carry).
+
+### Rule 68
+
+**Never start GPU work that does not hold the machine's GPU lock.** Two
+overlapping GPU jobs have crashed macOS twice, and no runner's own lock sees
+another runner. A new GPU runner takes the lock through
+`scripts/gpuLock.mjs`'s `acquire` before its first GPU work and keeps it, by
+`record` or `keepChildren`, until its last GPU process is gone; a child joins
+only under its parent's token. A refusal is a stop: wait (`--gpu-wait`,
+`IR_GPU_WAIT`) or ask, and never `--down` a rig another session started,
+delete the lock file or borrow a token from it. There is no switch that skips
+it, and a lock that cannot be written refuses the job.
+[ADR-0061](../adr/0061-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md), the drive skill's § One GPU job at a time.

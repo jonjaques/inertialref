@@ -3,7 +3,8 @@
  * other browser before launch, and a guard on the page after boot.
  *
  * Playwright's defaults pick browsers no player runs, and each fails without
- * saying so (design/plans/playwright.md, probes A–D):
+ * saying so (ADR-0061, and the probes in CONTEXT.md's 7 Nov 2026 entry
+ * "Headless Chrome presents"):
  *
  *  - no `channel`, headless, is its headless shell: no WebGPU adapter, so the
  *    game boots on WebGL over SwiftShader, in 67 s, at about 1 fps;
