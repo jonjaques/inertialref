@@ -127,9 +127,11 @@ const RUN = {
     )
     return { step, ms, settled, ...(report ?? {}) }
   },
+  // A reload is a boot, and the page it boots is held to its operating point
+  // again; the result carries that record.
   async reload({ step }, rig) {
-    await rig.reboot()
-    return { step }
+    const point = await rig.reboot()
+    return point === undefined ? { step } : { step, point }
   },
   async shot({ step, arg }, rig) {
     const shot = await rig.capture(String(arg))
@@ -204,6 +206,7 @@ export async function sampleFrames(evaluate, count, expression) {
 }
 
 /** What `--json` prints: every step result, the page errors after them, and
- *  which tree served the page, as `assertServedTree` judged it. */
-export const jsonReport = (results, errors, identity) =>
-  `${JSON.stringify(identity === undefined ? { results, errors } : { results, errors, identity }, null, 2)}\n`
+ *  the operating point the booted page was held to, its served tree beside
+ *  it where the preset commands read it. */
+export const jsonReport = (results, errors, point) =>
+  `${JSON.stringify(point === undefined ? { results, errors } : { results, errors, identity: point.identity, operatingPoint: point }, null, 2)}\n`

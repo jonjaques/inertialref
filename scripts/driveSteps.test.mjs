@@ -169,7 +169,10 @@ const fakeRig = (settled = [OK]) => {
     }),
     sample: async (n) => ({ frames: n, spans: { tiles: '1..4' }, samples: [] }),
     logs: () => ['log: hello'],
-    reboot: async () => calls.push(['reboot']),
+    reboot: async () => {
+      calls.push(['reboot'])
+      return { kind: 'webgpu', buffer: { width: 1600, height: 900 } }
+    },
     say: (line) => said.push(line),
     warn: (line) => warned.push(line),
   }
@@ -220,7 +223,10 @@ describe('runSteps', () => {
       },
       { step: 'sample', frames: 4, spans: { tiles: '1..4' }, samples: [] },
       { step: 'logs', lines: ['log: hello'] },
-      { step: 'reload' },
+      {
+        step: 'reload',
+        point: { kind: 'webgpu', buffer: { width: 1600, height: 900 } },
+      },
     ])
     expect(rig.said).toEqual([
       'js: 7',
@@ -307,7 +313,7 @@ describe('jsonReport', () => {
     )
   })
 
-  it('carries the served-tree verdict, so a caller reading --json can say which tree it photographed', () => {
+  it('carries the operating point and its served-tree verdict, so a caller reading --json can say what it photographed', () => {
     const identity = {
       verdict: 'match',
       id: 'c8aa32e',
@@ -315,10 +321,17 @@ describe('jsonReport', () => {
       expected: '/Users/agent/inertialref',
       reason: null,
     }
-    expect(JSON.parse(jsonReport([], [], identity))).toEqual({
+    const point = {
+      kind: 'webgpu',
+      browser: '157.0.8103.39',
+      buffer: { width: 1600, height: 900 },
+      identity,
+    }
+    expect(JSON.parse(jsonReport([], [], point))).toEqual({
       results: [],
       errors: [],
       identity,
+      operatingPoint: point,
     })
   })
 })

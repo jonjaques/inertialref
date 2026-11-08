@@ -65,6 +65,13 @@
  *
  * Steps run in the order they are written, so one process does a whole
  * verification. `--help` lists them.
+ *
+ * None runs until the page is held to its operating point (`enter` in
+ * `drivePage.mjs`, over `driveLaunch.mjs`'s guard), because the wrong point
+ * boots and answers like the right one. The presentation watchdog's remount
+ * rebuilds the canvas at 3200×1800 for a rig asking for 1600×900 at DPR 1, and
+ * every terrain figure taken over it is a retina figure under the default
+ * window's label.
  */
 import { execFile, execFileSync, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -85,8 +92,13 @@ import {
   sessionPath,
   takeGpu,
 } from './driveLock.mjs'
-import { assertServedTree } from './driveLaunch.mjs'
-import { boot, clearStorage } from './drivePage.mjs'
+import {
+  browserVersion,
+  clearStorage,
+  enter,
+  holdPage,
+  pointLine,
+} from './drivePage.mjs'
 import { parseWait } from './gpuLock.mjs'
 import {
   checkSteps,
@@ -243,7 +255,9 @@ Session flags:
 
 Lifecycle:
 
-  --status           what this rig has running, and who holds the GPU
+  --status           what this rig has running, who holds the GPU, and the
+                     attached page's operating point, read again by the guard
+                     a boot runs; non-zero when the guard refuses it
   --print-url        print the resolved URL without starting Chrome or a server
   --down             close the Chrome and the dev server this rig started, and
                      release the GPU lock its Chrome held; never refused
@@ -253,6 +267,14 @@ Chrome stays up between invocations, and holds the machine's GPU lock until
 for it. A later call on the same --port joins that lock. Each call clears local
 storage and cookies and reboots the page unless --keep-storage is given. --down
 when finished.
+
+Every boot, attach and --reload holds the page to its operating point before a
+step runs: a WebGPU renderer on a hardware adapter, a drawing buffer of the
+window × min(DPR, the pointer's ceiling) × the picture's supersampling, and the
+--tree checkout serving it; --document holds the DOM alone. A page that is not
+ends the invocation, non-zero, with the reason. Chrome's version is recorded and
+a change warned about, never refused. The record is a line of narration, the
+operatingPoint field of --json, and in full in --status.
 
 Photographic fixtures (session flags, before all measurement steps):
 
@@ -512,8 +534,8 @@ async function launchChrome(state, gpu) {
   throw new Error('Chrome did not open a debugging port')
 }
 
-async function pageTarget() {
-  for (let i = 0; i < 60; i += 1) {
+async function pageTarget(tries = 60) {
+  for (let i = 0; i < tries; i += 1) {
     const list = await fetch(`http://127.0.0.1:${PORT}/json/list`)
       .then((r) => r.json())
       .catch(() => [])
@@ -521,10 +543,18 @@ async function pageTarget() {
       list.find((t) => t.type === 'page' && String(t.url).startsWith('http')) ??
       list.find((t) => t.type === 'page' && t.url === 'about:blank')
     if (page?.webSocketDebuggerUrl) return page.webSocketDebuggerUrl
-    await sleep(500)
+    if (i + 1 < tries) await sleep(500)
   }
   throw new Error(`no page target on port ${PORT}`)
 }
+
+/** What `/json/version` says this port's Chrome is, or null with none up. */
+const chromeOnPort = () =>
+  fetch(`http://127.0.0.1:${PORT}/json/version`)
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+
+const warn = (line) => process.stderr.write(`${line}\n`)
 
 /* ---------------------------------------------------------------- steps ---- */
 
@@ -652,16 +682,60 @@ async function down() {
   }
 }
 
+/**
+ * The attached page's operating point, read fresh by the same guard a boot
+ * runs, without booting or emulating anything: the full record, or why none
+ * was read. It holds the page to the kind and the tree the rig was booted for,
+ * which the session recorded, unless `--tree` names another.
+ */
+async function statusPoint(state, browser) {
+  if (browser === null)
+    return { lines: [`not read: no Chrome listens on port ${PORT}`] }
+  const target = await pageTarget(1).catch(() => null)
+  if (target === null) return { lines: ['not read: Chrome has no page open'] }
+  const ws = new WebSocket(target)
+  await new Promise((resolve, reject) => {
+    ws.addEventListener('open', resolve, { once: true })
+    ws.addEventListener('error', reject, { once: true })
+  })
+  try {
+    const point = await holdPage(connect(ws).send, {
+      kind: state.kind ?? 'webgpu',
+      tree:
+        values.tree === undefined && typeof state.tree === 'string'
+          ? state.tree
+          : treeUnderTest(),
+      browser,
+      recorded: state.browser ?? null,
+      warn,
+    })
+    return {
+      lines: [pointLine(point), ...JSON.stringify(point, null, 2).split('\n')],
+    }
+  } catch (error) {
+    return { lines: [`refused: ${error.message}`], refused: true }
+  } finally {
+    ws.close()
+  }
+}
+
 async function status() {
   const state = (await readState()) ?? {}
-  const chrome = await fetch(`http://127.0.0.1:${PORT}/json/version`)
-    .then((r) => r.ok)
-    .catch(() => false)
+  const version = await chromeOnPort()
+  const browser = version === null ? null : browserVersion(version.Browser)
+  const recorded =
+    browser !== null &&
+    typeof state.browser === 'string' &&
+    state.browser !== browser
+      ? ` (the session recorded ${state.browser})`
+      : ''
+  const point = await statusPoint(state, browser)
   console.log(
     [
       `port      ${PORT}`,
       `url       ${URL_} ${(await answers(URL_)) ? '(answering)' : '(down)'}`,
-      `chrome    ${chrome ? `listening, pid ${state.chromePid ?? '?'}` : 'not running'}`,
+      `chrome    ${version !== null ? `listening, pid ${state.chromePid ?? '?'}` : 'not running'}`,
+      `browser   ${browser ?? 'not running'}${recorded}`,
       `profile   ${state.colorProfile ?? 'display'}`,
       `dev       ${
         state.startedServer === true
@@ -669,8 +743,12 @@ async function status() {
           : 'not started by this rig'
       }`,
       `gpu       ${gpuLine(state).replaceAll('\n', '\n          ')}`,
+      `point     ${point.lines.join('\n          ')}`,
     ].join('\n'),
   )
+  // A refusal is non-zero wherever the guard runs, so a script can ask
+  // --status whether the rig is still at its operating point.
+  if (point.refused === true) process.exitCode = 1
 }
 
 /** A cast written to `.data/drive/cast/`, differenced, and clipped, as the
@@ -762,6 +840,20 @@ async function main() {
     gpuToken: gpu.token,
   })
 
+  // Held against the version the session recorded, as a warning and never a
+  // refusal: Chrome stable updates itself, and a figure from one version does
+  // not compare with a figure from another.
+  const browser = browserVersion((await chromeOnPort())?.Browser)
+  const hold = {
+    // A document is the DOM, with no renderer asked for.
+    kind: DOCUMENT ? 'shell' : 'webgpu',
+    tree,
+    browser,
+    recorded: typeof prior.browser === 'string' ? prior.browser : null,
+    warn,
+  }
+  await writeState({ browser, kind: hold.kind, tree })
+
   const ws = new WebSocket(await pageTarget())
   await new Promise((resolve, reject) => {
     ws.addEventListener('open', resolve, { once: true })
@@ -789,7 +881,10 @@ async function main() {
   await send('Page.bringToFront')
   const page = { url: URL_, document: DOCUMENT, note, sleep, now: Date.now }
   if (values['keep-storage'] !== true) await clearStorage(send, page)
-  await boot(
+  // The boot or the attach, then the guard, before the first step: a page at
+  // another operating point, or served from another checkout, is refused
+  // before anything is read from it.
+  const point = await enter(
     send,
     {
       force:
@@ -799,6 +894,7 @@ async function main() {
           JSON.stringify(BLOCKED_URLS),
     },
     page,
+    hold,
   )
   // Record the controls only once this navigation succeeds. A failed boot
   // must not make the next warm attach trust a page from a different mode.
@@ -806,14 +902,6 @@ async function main() {
 
   const run = (expression, userGesture) =>
     evaluate(send, expression, userGesture)
-  // After the boot or the attach and before the first step, so a page another
-  // checkout serves is refused before anything is read from it.
-  const identity = await assertServedTree(run, tree)
-  note(
-    identity.verdict === 'match'
-      ? `served from ${identity.served} (build ${identity.id})`
-      : `identity unchecked: ${identity.reason}`,
-  )
   const results = await runSteps(script, {
     evaluate: run,
     userGesture: values['user-gesture'] === true,
@@ -825,9 +913,12 @@ async function main() {
     trace: (ms) => trace(wire, ms),
     sample: (n) => sampleFrames(run, n, String(values['sample-js'])),
     logs: () => drainLogs(events),
-    reboot: () => boot(send, { force: true }, page),
+    // The version this invocation read is the one a reload holds against,
+    // so a change is warned about once.
+    reboot: () =>
+      enter(send, { force: true }, page, { ...hold, recorded: browser }),
     say,
-    warn: (line) => process.stderr.write(`${line}\n`),
+    warn,
   })
 
   // Page errors are reported whether or not they were asked for. A driver that
@@ -836,7 +927,7 @@ async function main() {
   for (const line of trailing) process.stderr.write(`${line}\n`)
 
   if (values.json === true)
-    process.stdout.write(jsonReport(results, trailing, identity))
+    process.stdout.write(jsonReport(results, trailing, point))
   ws.close()
 }
 

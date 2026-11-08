@@ -1,11 +1,19 @@
 /*
  * The page under `scripts/drive.mjs`: clearing what a previous invocation left
- * in it, and the readiness ladder that decides when a boot is finished.
+ * in it, the readiness ladder that decides when a boot is finished, and the
+ * operating point a booted page is held to before any step reads it.
  *
- * Both take `send` and a `page` of `{ url, document, note, sleep, now }`, so
- * `drivePage.test.mjs` runs the ladder against a scripted Chrome.
+ * They take `send` and a `page` of `{ url, document, note, sleep, now }`, so
+ * `drivePage.test.mjs` runs the ladder and the guard against a scripted Chrome.
  */
+import { dprCeiling } from '../apps/game/src/render/output.ts'
+import { pictureDprFactor } from '../apps/game/src/render/picture.ts'
 import { evaluate } from './cdp.mjs'
+import {
+  OPERATING_POINT,
+  assertOperatingPoint,
+  assertServedTree,
+} from './driveLaunch.mjs'
 
 /**
  * `ir.status().boot`, or `booting` until the harness is there to ask.
@@ -149,3 +157,132 @@ export async function boot(send, { force }, page) {
   }
   note(`renderer ready in ${seconds()} s`)
 }
+
+/**
+ * The guard's read of the attached page, and whether a failure is a page with
+ * no app booted in it rather than a booted page that is wrong: a read whose
+ * context went away, which is a navigation, or an operating point with
+ * neither a backend nor a buffer.
+ *
+ * The served tree is asked first and alone, because its refusal says how to
+ * serve the tree under test, and as one item in the guard's list it would not.
+ */
+async function read(send, hold) {
+  let unbooted = false
+  const run = async (expression) => {
+    let value
+    try {
+      value = await evaluate(send, expression)
+    } catch (error) {
+      unbooted = true
+      throw error
+    }
+    if (
+      expression === OPERATING_POINT &&
+      value?.backend == null &&
+      value?.buffer == null
+    )
+      unbooted = true
+    return value
+  }
+  try {
+    await assertServedTree(run, hold.tree)
+    return { point: await assertOperatingPoint(run, hold) }
+  } catch (error) {
+    return { error, unbooted }
+  }
+}
+
+/**
+ * The attached page's operating point, read now and refused unless it is
+ * `hold.kind` and served from `hold.tree` (`driveLaunch.mjs`). `--status`
+ * asks this of a rig without booting it.
+ *
+ * @param {{kind: string, tree: string, browser: string,
+ *   recorded: string | null, warn: (line: string) => void}} hold
+ */
+export async function holdPage(send, hold) {
+  const { point, error } = await read(send, hold)
+  if (point === undefined) throw error
+  return point
+}
+
+/**
+ * `boot`, then `holdPage`, then the record in one line: what every entry to a
+ * page runs before a step, `--reload` among them.
+ *
+ * A page with nothing booted in it under the guard is booted once more,
+ * unforced, so a page that has finished is attached to. A fresh Vite reloads
+ * the page on its own once it has pre-bundled what the first load found,
+ * about four seconds in, which lands inside the boot ladder; the cover probe
+ * reads a page it cannot evaluate as booted, so the guard can be the first
+ * to read the next document. A second such read is refused: that page is not
+ * reloading, it has no renderer.
+ */
+export async function enter(send, { force }, page, hold) {
+  for (let entry = 0; ; entry += 1) {
+    await boot(send, { force: force && entry === 0 }, page)
+    const { point, error, unbooted } = await read(send, hold)
+    if (point !== undefined) {
+      page.note(pointLine(point))
+      return point
+    }
+    if (!unbooted || entry > 0) throw error
+    page.note('the page has no renderer under the guard, so it is booted again')
+  }
+}
+
+const size = ({ width, height }) => `${width}×${height}`
+
+/** The buffer against the window and the ratio the renderer built it at. */
+function bufferPhrase({
+  buffer,
+  expectedBuffer,
+  viewport,
+  dpr,
+  coarse,
+  picture,
+}) {
+  if (buffer === null) return 'no drawing buffer'
+  if (expectedBuffer === null)
+    return `buffer ${size(buffer)}, unchecked: the page names no picture`
+  const ceiling = dprCeiling(coarse)
+  const factor = pictureDprFactor(picture)
+  // Four places, because Chrome reports an asked-for 1.05 as
+  // 1.0499999523162842; the record keeps the ratio whole.
+  const parts = [
+    `buffer ${size(buffer)} for ${size(viewport)} at DPR ${Number(dpr.toFixed(4))}`,
+  ]
+  if (dpr > ceiling) parts.push(`capped at ${ceiling}`)
+  if (factor > 1) parts.push(`supersampled ×${factor}`)
+  return parts.join(', ')
+}
+
+/** The operating point `enter` returns, as the line drive.mjs narrates. */
+export function pointLine(point) {
+  const { kind, adapter, backend, dynamicRangeHigh, system, identity } = point
+  const renderer =
+    backend === null
+      ? 'no renderer'
+      : `${adapter === null ? 'no adapter' : `${adapter.vendor}/${adapter.architecture}`} on ${backend}`
+  const tree =
+    identity.verdict === 'match'
+      ? `served from ${identity.served} (build ${identity.id})`
+      : `identity unchecked: ${identity.reason}`
+  return `operating point (${kind}): ${[
+    renderer,
+    bufferPhrase(point),
+    `dynamic range ${dynamicRangeHigh ? 'high' : 'standard'}`,
+    `system ${system ?? 'none'}`,
+    tree,
+  ].join(', ')}`
+}
+
+/**
+ * The version Playwright's `browser.version()` reports, from the `Browser`
+ * field of Chrome's `/json/version`, which prefixes it with the product.
+ */
+export const browserVersion = (product) =>
+  typeof product === 'string'
+    ? product.replace(/^(?:Headless)?Chrome\//, '')
+    : 'unknown'

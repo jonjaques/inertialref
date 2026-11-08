@@ -46,6 +46,18 @@ describe('drive.mjs and the GPU lock', () => {
     )
   })
 
+  /*
+   * The guard runs fresh in --status, against the page the rig has attached;
+   * with no Chrome on the port there is no page, and the status says so
+   * rather than failing.
+   */
+  it('says in --status that no page was read when no Chrome listens', async () => {
+    const { code, stdout } = await run(['--status'])
+    expect(code).toBe(0)
+    expect(stdout).toMatch(/^browser {3}not running$/m)
+    expect(stdout).toMatch(/^point {5}not read: no Chrome listens on port 9$/m)
+  })
+
   it('takes --tree as a session flag, before anything starts', async () => {
     const { code, stdout } = await run([
       '--tree',
