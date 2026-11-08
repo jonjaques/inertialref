@@ -149,10 +149,19 @@ type CoverageOf = (layer: Layer) => {
  *
  *     d     = saturate(remap(n_b·p, 1 − c, 1, 0, 1)),  d = saturate(remap(d, n_d, 1, 0, 1))
  *     f     = smoothstep(cell/4, cell, footprint)       the unresolved share of a cell
- *     fraction = mix(1, c, f),   σ = mix(σ_k·d, σ_k·p̄, f)
+ *     fraction = mix(1, c, f),   fraction·σ = mix(σ_k·d, c·σ_k·p̄, f)
  *
  * with n_d = detail · erosion · (1 − smoothstep(cell/16, cell/4, footprint))
  * and its read skipped where that fade is 0.
+ *
+ * The two pictures of a cell — resolved, all of it at σ_k·d, and unresolved,
+ * a share c at σ_k·p̄ — are blended by their mean extinction, fraction × σ,
+ * which is what a step's transmittance follows. Blending σ and the fraction
+ * each on its own puts (1 − f)·f·σ_k·p̄ of cloud in a cell with no coverage,
+ * where the first picture holds no σ and the second no share: at the far
+ * bake's 400 m footprint on fair-cumulus's 1 km cells that phantom made the
+ * atlas 96–97% cloudy at every texel the cube held clear, and Earth opaque
+ * from orbit. Both ends of the blend are unchanged.
  */
 function recipe(
   deps: RecipeDeps,
@@ -183,11 +192,11 @@ function recipe(
       shaped.sub(erosion).div(max(float(1).sub(erosion), TINY)),
     )
     const unresolved = smoothstep(cell.div(4), cell, footprint)
-    return vec3(
-      mix(float(1), cover, unresolved),
-      layer.sigma.mul(mix(eroded, shape.y, unresolved)),
-      column,
+    const fraction = mix(float(1), cover, unresolved)
+    const extinction = layer.sigma.mul(
+      mix(eroded, cover.mul(shape.y), unresolved),
     )
+    return vec3(fraction, extinction.div(max(fraction, TINY)), column)
   }
   const values = select(
     layer.inside.greaterThan(0.5),
