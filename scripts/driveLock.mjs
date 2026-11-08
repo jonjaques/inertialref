@@ -83,6 +83,45 @@ export function keep(lock, pid) {
     )
 }
 
+/**
+ * Holds the lock for a Chrome already up on the port — an attach — and
+ * returns the session fields that record it. A session written by a
+ * drive.mjs from before the lock has no token, so the lock this invocation
+ * took becomes the one that holds that Chrome. A session with no pid names
+ * nothing to keep, and the lock then holds for the Chrome only while this
+ * invocation runs.
+ *
+ * @param {{record: (pid: number) => boolean, path: string}} lock
+ * @param {{chromePid?: number | null}} state  the port's session
+ */
+export function adopt(lock, state) {
+  const chromePid = state.chromePid ?? null
+  keep(lock, chromePid)
+  return { chromePid }
+}
+
+/**
+ * Holds the lock for a Chrome this invocation just spawned, and returns the
+ * session fields that record it. A Chrome the lock cannot record is ended
+ * here: it would render unlocked from the moment the invocation exits.
+ *
+ * @param {{record: (pid: number) => boolean, path: string, token: string}} lock
+ * @param {number} pid
+ */
+export function launched(lock, pid) {
+  try {
+    keep(lock, pid)
+  } catch (error) {
+    try {
+      process.kill(pid, 'SIGTERM')
+    } catch {
+      /* it never started, or has already exited */
+    }
+    throw error
+  }
+  return { chromePid: pid ?? null, gpuToken: lock.token }
+}
+
 /** EPERM is a live process under another user; anything else is gone. */
 const alive = (pid) => {
   if (!Number.isInteger(pid) || pid <= 0) return false

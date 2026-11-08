@@ -12,9 +12,11 @@ import path from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { TOKEN_ENV, acquire, release } from './gpuLock.mjs'
 import {
+  adopt,
   closeChrome,
   gpuLine,
   keep,
+  launched,
   readSession,
   sessionPath,
   takeGpu,
@@ -204,6 +206,62 @@ describe('the rig and the GPU lock', () => {
       `${JSON.stringify({ ...read(), token: 'e'.repeat(32) })}\n`,
     )
     expect(() => keep(lock, pid)).toThrow(/GPU lock .* no longer this rig's/)
+  })
+
+  it('takes over the Chrome of a rig that predates the lock, and holds for it until --down', async () => {
+    // What a drive.mjs from before the lock leaves on a port: a Chrome up,
+    // and a session naming it with no token.
+    const old = await chrome()
+    const state = { chromePid: old, colorProfile: null }
+    const lock = await takeGpu('drive.mjs (port 9400)', {
+      path: file(),
+      state,
+      env: {},
+    })
+    expect(lock.joined).toBe(false)
+    expect(adopt(lock, state)).toMatchObject({ chromePid: old })
+    expect(pids()).toEqual([process.pid, old])
+    // The invocation exits; the Chrome it took over keeps the lock.
+    lock.release()
+    expect(pids()).toEqual([old])
+    expect(gpuLine({ gpuToken: lock.token }, { path: file() })).toMatch(
+      /^held for this rig\./,
+    )
+    expect(
+      await closeChrome(old, { path: file(), token: lock.token }),
+    ).toMatchObject({ closed: true, released: true })
+    expect(existsSync(file())).toBe(false)
+  })
+
+  it('holds for an attach with no recorded pid only while the invocation runs', async () => {
+    const lock = await takeGpu('drive.mjs (port 9400)', {
+      path: file(),
+      env: {},
+    })
+    expect(adopt(lock, {})).toMatchObject({ chromePid: null })
+    expect(pids()).toEqual([process.pid])
+  })
+
+  it('ends a Chrome it launched that the lock will not record, rather than leave it rendering unlocked', async () => {
+    const lock = await takeGpu('drive.mjs (port 9400)', {
+      path: file(),
+      env: {},
+    })
+    const pid = await chrome()
+    expect(launched(lock, pid)).toMatchObject({
+      chromePid: pid,
+      gpuToken: lock.token,
+    })
+    expect(pids()).toEqual([process.pid, pid])
+    // Another lock where this one was, before the next launch records into it.
+    const next = await chrome()
+    writeFileSync(
+      file(),
+      `${JSON.stringify({ ...read(), token: 'e'.repeat(32) })}\n`,
+    )
+    expect(() => launched(lock, next)).toThrow(/no longer this rig's/)
+    for (let i = 0; i < 100 && exists(next); i += 1) await sleep(20)
+    expect(exists(next)).toBe(false)
   })
 
   it('closes the Chrome before releasing it, so the GPU is free when the lock says so', async () => {

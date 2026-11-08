@@ -77,9 +77,10 @@ import { driveUrl } from './driveUrl.mjs'
 import { castFrames, connect, drainLogs, evaluate, traceFor } from './cdp.mjs'
 import {
   RIG,
+  adopt,
   closeChrome,
   gpuLine,
-  keep,
+  launched,
   readSession,
   sessionPath,
   takeGpu,
@@ -403,12 +404,8 @@ async function serve(state) {
   )
 }
 
-/**
- * The rig's Chrome, attached to or launched, and held under the invocation's
- * GPU lock either way. A Chrome up from a drive.mjs that predates the lock has
- * no token in its session, so the lock this invocation took becomes the one
- * that holds it.
- */
+/** The rig's Chrome, attached to (`adopt`) or launched (`launched`), and held
+ *  under the invocation's GPU lock either way. */
 async function launchChrome(state, gpu) {
   const up = await fetch(`http://127.0.0.1:${PORT}/json/version`).catch(
     () => null,
@@ -430,13 +427,12 @@ async function launchChrome(state, gpu) {
           `node scripts/drive.mjs --port ${PORT} --down first`,
       )
     }
-    const pid = state.chromePid ?? null
-    if (pid === null)
+    const { chromePid } = adopt(gpu, state)
+    if (chromePid === null)
       process.stderr.write(
         `Chrome on port ${PORT} has no recorded pid, so the GPU lock holds for it only while this invocation runs\n`,
       )
-    keep(gpu, pid)
-    return pid
+    return chromePid
   }
   if (!existsSync(CHROME)) throw new Error(`no Chrome at ${CHROME}`)
   const child = spawn(
@@ -465,16 +461,9 @@ async function launchChrome(state, gpu) {
   // debugging port is still a Chrome, and `--down` can only kill what it knows.
   // The lock records it first, because a Chrome the lock does not name renders
   // unlocked from the moment this invocation exits.
-  try {
-    keep(gpu, child.pid)
-  } catch (error) {
-    process.kill(child.pid, 'SIGTERM')
-    throw error
-  }
   await writeState({
-    chromePid: child.pid ?? null,
+    ...launched(gpu, child.pid),
     colorProfile: COLOR_PROFILE,
-    gpuToken: gpu.token,
   })
   for (let i = 0; i < 80; i += 1) {
     await sleep(500)
