@@ -420,10 +420,10 @@ export class CloudSunCascades implements CloudResource, CloudSunDepthNodes {
   ): void {
     if (this.#disposed) return
     if (frame.levers.sunDepth !== 'cascades') {
-      this.#release()
+      this.#release(renderer)
       return
     }
-    this.#allocate()
+    this.#allocate(renderer)
     const { served } = frame
     const update = served.cascades
     // A first frame, a cut and a new picture leave nothing worth reading:
@@ -534,17 +534,27 @@ export class CloudSunCascades implements CloudResource, CloudSunDepthNodes {
   /* The resource                                                             */
   /* ----------------------------------------------------------------------- */
 
-  #allocate(): void {
+  #allocate(renderer: WebGPURenderer): void {
     this.#allocated = true
     if (this.#target.width === SUN_CASCADE_SIZE) return
-    this.#target.setSize(SUN_CASCADE_SIZE, SUN_CASCADE_SIZE, CASCADES)
+    this.#resize(renderer, SUN_CASCADE_SIZE)
     this.#forget()
   }
 
   /** Back to the 1 × 1 layers warming built against, holding nothing. */
-  #release(): void {
-    if (this.#target.width !== 1) this.#target.setSize(1, 1, CASCADES)
+  #release(renderer: WebGPURenderer): void {
+    if (this.#target.width !== 1) this.#resize(renderer, 1)
     this.#forget()
+  }
+
+  /*
+   * Allocated at once: three makes a resized target at its next binding,
+   * which a released candidate never has, and `textures()` lists only what
+   * is on the device.
+   */
+  #resize(renderer: WebGPURenderer, size: number): void {
+    this.#target.setSize(size, size, CASCADES)
+    renderer.initRenderTarget(this.#target)
   }
 
   #forget(): void {

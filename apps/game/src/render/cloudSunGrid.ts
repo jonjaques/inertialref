@@ -272,10 +272,10 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   ): void {
     if (this.#disposed) return
     if (frame.levers.sunDepth !== 'grid') {
-      this.#release()
+      this.#release(renderer)
       return
     }
-    this.#allocate()
+    this.#allocate(renderer)
     const { served } = frame
     const levelOne = served.volume.frames[1]
     const { boundaries, eye } = served.shells
@@ -396,16 +396,22 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     this.#pending = !this.#idle && (!whole || moved)
   }
 
-  #allocate(): void {
+  #allocate(renderer: WebGPURenderer): void {
     this.#allocated = true
     if (this.#target.width === WIDTH) return
     this.#target.setSize(WIDTH, HEIGHT, SLICES)
+    // At once: a resized target is made at its next binding, and a released
+    // candidate has none, so what `textures()` lists is always on the device.
+    renderer.initRenderTarget(this.#target)
     this.#forget()
   }
 
   /** Back to the 1 × 1 target warming built against, holding nothing. */
-  #release(): void {
-    if (this.#target.width !== 1) this.#target.setSize(1, 1, 1)
+  #release(renderer: WebGPURenderer): void {
+    if (this.#target.width !== 1) {
+      this.#target.setSize(1, 1, 1)
+      renderer.initRenderTarget(this.#target)
+    }
     this.#forget()
     this.#pending = false
   }
