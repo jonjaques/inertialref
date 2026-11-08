@@ -312,12 +312,17 @@ export async function statusPoint(
     return notRead(error)
   }
   const { send, close } = session
+  const metrics = {
+    width: state.width ?? fallback.width,
+    height: state.height ?? fallback.height,
+    dpr: state.dpr ?? fallback.dpr,
+  }
   const emulate = async () => {
     await send('Emulation.setFocusEmulationEnabled', { enabled: true })
     await send('Emulation.setDeviceMetricsOverride', {
-      width: state.width ?? fallback.width,
-      height: state.height ?? fallback.height,
-      deviceScaleFactor: state.dpr ?? fallback.dpr,
+      width: metrics.width,
+      height: metrics.height,
+      deviceScaleFactor: metrics.dpr,
       mobile: false,
     })
   }
@@ -332,6 +337,7 @@ export async function statusPoint(
       holdPage(send, {
         kind: state.kind ?? 'webgpu',
         tree,
+        metrics,
         browser,
         recorded: state.browser ?? null,
         warn,

@@ -452,6 +452,22 @@ describe('enter', () => {
     expect(never.reads()).toBe(2)
   })
 
+  it('refuses a page that does not report the window and ratio the rig set', async () => {
+    const dropped = rig([
+      app({ viewport: [1600, 933], dpr: 2, canvas: [3200, 1866] }),
+    ])
+    await expect(
+      enter(
+        dropped.send,
+        { force: true },
+        page(),
+        hold({ metrics: { width: 1600, height: 900, dpr: 1 } }),
+      ),
+    ).rejects.toThrow(
+      "the page's window is 1600×933 at DPR 2, not the 1600×900 at DPR 1 the rig set",
+    )
+  })
+
   it('does not boot again for a page that is booted and wrong', async () => {
     const wrong = rig([app({ canvas: [1600, 900], dpr: 2 })])
     await expect(
@@ -629,6 +645,17 @@ describe('statusPoint', () => {
       'not read: the page did not answer within 0.02 s',
     ])
     await closed
+  })
+
+  it('holds the page to the window it set', async () => {
+    const { open } = socket(
+      rig([app({ viewport: [1440, 900], dpr: 2, canvas: [2880, 1800] })]).send,
+    )
+    const read = await status(open)
+    expect(read.refused).toBe(true)
+    expect(read.lines[0]).toContain(
+      "the page's window is 1440×900 at DPR 2, not the 1600×900 at DPR 1 the rig set",
+    )
   })
 
   it('says why no page was read when the socket does not open', async () => {

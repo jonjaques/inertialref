@@ -271,9 +271,10 @@ storage and cookies and reboots the page unless --keep-storage is given. --down
 when finished.
 
 Every boot, attach and --reload holds the page to its operating point before a
-step runs: a WebGPU renderer on a hardware adapter, a drawing buffer of the
-window × min(DPR, the pointer's ceiling) × the picture's supersampling, and the
---tree checkout serving it; --document holds the DOM alone. A page that is not
+step runs: a WebGPU renderer on a hardware adapter, the --width, --height and
+--dpr reported back by the page, a drawing buffer of that window × min(DPR, the
+pointer's ceiling) × the picture's supersampling, and the --tree checkout
+serving it; --document holds the DOM and the window alone. A page that is not
 ends the invocation, non-zero, with the reason. Chrome's version is recorded and
 a change warned about, never refused. The record is a line of narration, the
 operatingPoint field of --json, and in full in --status.
@@ -890,6 +891,10 @@ async function main() {
     // A document is the DOM, with no renderer asked for.
     kind: DOCUMENT ? 'shell' : 'webgpu',
     tree,
+    // What `setDeviceMetricsOverride` below asks for, which the page must
+    // report back: a page whose emulation another session cleared draws a
+    // buffer that agrees with the window it was left at.
+    metrics: { width: WIDTH, height: HEIGHT, dpr: DPR },
     browser,
     recorded: typeof prior.browser === 'string' ? prior.browser : null,
     warn,

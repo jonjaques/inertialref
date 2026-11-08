@@ -762,6 +762,38 @@ describe('the drawing buffer', () => {
     })
   })
 
+  /*
+   * Chrome clears a page's device emulation when a session that set it
+   * closes, and between invocations the page is at the window's own size and
+   * ratio, 1600×933 at DPR 2 on the Mac mini. An app whose ratio follows,
+   * as Chrome 157's does under focus emulation, draws a buffer that agrees
+   * with that window, so the buffer rule alone passes a page at a point the
+   * rig never asked for.
+   */
+  it('holds the page’s window and ratio to the metrics the rig set, when it says what it set', async () => {
+    const dropped = () =>
+      page({ viewport: [1600, 933], dpr: 2, canvas: [3200, 1866] })
+    await expect(asserted(dropped())).resolves.toMatchObject({
+      buffer: { width: 3200, height: 1866 },
+    })
+    const metrics = { width: 1600, height: 900, dpr: 1 }
+    await expect(asserted(dropped(), { metrics })).rejects.toThrow(
+      "driveLaunch: not a webgpu operating point: the page's window is 1600×933 at DPR 2, not the 1600×900 at DPR 1 the rig set",
+    )
+    await expect(asserted(page(), { metrics })).resolves.toBeTruthy()
+    // Chrome keeps the ratio as a float32: an asked-for 1.05 reads back as
+    // 1.0499999523162842, and that is the ratio asked for.
+    const [, b] = N4.runs
+    await expect(
+      asserted(fromRun(b), {
+        metrics: { width: 1600, height: 900, dpr: 1.05 },
+      }),
+    ).resolves.toMatchObject({ buffer: { width: 1679, height: 944 } })
+    await expect(
+      asserted(fromRun(b), { metrics: { width: 1600, height: 900, dpr: 1 } }),
+    ).rejects.toThrow('at DPR 1.0499999523162842, not the 1600×900 at DPR 1')
+  })
+
   it('accepts exactly one buffer at any viewport and ratio', async () => {
     await fc.assert(
       fc.asyncProperty(

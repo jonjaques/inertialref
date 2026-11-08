@@ -280,6 +280,30 @@ function bufferRefusal(reading) {
   )
 }
 
+/*
+ * The page's own window and ratio against the ones the caller emulated. The
+ * buffer rule holds the canvas to the window the page reports, and a page
+ * whose emulation another session cleared or replaced reports that window
+ * just as faithfully: 1600×933 at DPR 2 on the Mac mini's display, which an
+ * app whose ratio follows draws at 3200×1866 and the buffer rule passes.
+ * Compared as float32, because Chrome keeps the ratio as one: an asked-for
+ * 1.05 reads back as 1.0499999523162842.
+ */
+function metricsRefusal(reading, metrics) {
+  if (metrics == null) return null
+  const { width, height } = reading.viewport
+  if (
+    width === metrics.width &&
+    height === metrics.height &&
+    Math.fround(reading.dpr) === Math.fround(metrics.dpr)
+  )
+    return null
+  return (
+    `the page's window is ${width}×${height} at DPR ${reading.dpr}, ` +
+    `not the ${metrics.width}×${metrics.height} at DPR ${metrics.dpr} the rig set`
+  )
+}
+
 const NO_TREE =
   'driveLaunch: the served tree is compared with the tree under test, and none was given'
 
@@ -369,13 +393,15 @@ export async function assertServedTree(evaluate, tree, options) {
   return verdict
 }
 
-function refusals(reading, expects, identity) {
+function refusals(reading, expects, identity, metrics) {
   const found = []
   if (expects.backend !== null && reading.backend !== expects.backend)
     found.push(
       `backend ${reading.backend ?? 'none'} where ${expects.backend} is required`,
     )
   if (expects.adapter) found.push(adapterRefusal(reading.adapter))
+  // Every kind: a DOM check at a window nobody asked for is at another point.
+  found.push(metricsRefusal(reading, metrics))
   if (expects.buffer) found.push(bufferRefusal(reading))
   // Every kind, `shell` included: a DOM check against another checkout's
   // markup is as wrong as a plate of it.
@@ -389,7 +415,10 @@ function refusals(reading, expects, identity) {
  * record for the test's annotations.
  *
  * `tree` is the checkout under test, which `compareIdentity` holds the page
- * against. `browser` is the version the caller launched — `browser.version()`, or
+ * against. `metrics`, when given, is the window and ratio the caller emulated
+ * — drive.mjs's `--width`, `--height` and `--dpr`, or a context's viewport and
+ * `deviceScaleFactor` — and the page must report them. `browser` is the
+ * version the caller launched — `browser.version()`, or
  * `Browser.getVersion` over CDP — and `recorded` the one it recorded last, or
  * null on a first run. A change is a warning through `warn`, never a refusal:
  * Chrome stable updates itself, and a version floor would refuse the browser
@@ -400,7 +429,14 @@ function refusals(reading, expects, identity) {
  */
 export async function assertOperatingPoint(
   evaluate,
-  { kind = 'webgpu', browser, tree, recorded = null, warn = console.warn } = {},
+  {
+    kind = 'webgpu',
+    browser,
+    tree,
+    metrics = null,
+    recorded = null,
+    warn = console.warn,
+  } = {},
 ) {
   const expects = KINDS[kind]
   if (expects === undefined)
@@ -419,7 +455,7 @@ export async function assertOperatingPoint(
         'a figure from one does not compare with a figure from the other',
     )
   const identity = compareIdentity(reading.identity, tree)
-  const found = refusals(reading, expects, identity)
+  const found = refusals(reading, expects, identity, metrics)
   if (found.length > 0)
     throw new Error(
       `driveLaunch: not a ${kind} operating point: ${found.join('; ')}`,
