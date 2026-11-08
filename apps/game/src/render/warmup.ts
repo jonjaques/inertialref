@@ -14,6 +14,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
+import { runQuadPasses } from './quadPass.ts'
 import type { SceneLayout } from './sceneLayout.ts'
 import { warmTargetFor } from './sceneTarget.ts'
 import { sensorMrt } from './sensorMrt.ts'
@@ -613,6 +614,38 @@ export function warmSensorPass(
     renderer.outputColorSpace = color
   }
   return Promise.all(compiles).then(() => undefined)
+}
+
+/**
+ * Build a quad pass's pipeline by drawing it once into its own target: the
+ * recipe for a target of fewer than four channels, which `warmSensorPass`
+ * cannot serve.
+ *
+ * `compileAsync` builds a program after an `await` (`getForRenderAsync`),
+ * by when the warm-up has put its target back, and the node builder takes
+ * a fragment's output type from the target bound then: `vec4` with none,
+ * where an R16F target's draw writes an `f32` and an RG8 one's a `vec2`. The
+ * program differs, so the pipeline does, and the first frame builds the one
+ * the warm-up owed — measured on the clouds' R16F depth copy, RG8 volume and
+ * R16F sun grid, where every four-channel bake built none. A draw binds the
+ * target for the whole of its build, which is synchronous: the stall at
+ * boot that the census exists to take there. Each pass draws its target's
+ * first slice, which whatever owns the target redraws before it reads.
+ */
+export function warmByDrawing(
+  renderer: WebGPURenderer,
+  quad: QuadMesh,
+  label: string,
+  passes: readonly WarmPass[],
+): void {
+  const material = quad.material
+  try {
+    runQuadPasses(renderer, quad, { linear: true }, (draw) => {
+      for (const pass of passes) draw(label, pass.target, pass.material)
+    })
+  } finally {
+    quad.material = material
+  }
 }
 
 /**
