@@ -232,6 +232,40 @@ describe('the field reads it through its nodes', () => {
         BYTE_BOUND,
       )
 
+    // And along the slices, which wrap by the texture's own R axis.
+    const x = center(5, BASE_PER_CELL)
+    const slices = await readNodes(
+      [
+        [x, y, seam],
+        [x, y, -seam],
+      ],
+      (p) => vec4(noise.nodes.base(p)),
+    )
+    const top = baseNoise({ x, y, z: center(127, BASE_PER_CELL) })
+    const bottom = baseNoise({ x, y, z: center(0, BASE_PER_CELL) })
+    for (let n = 0; n < 2; n += 1)
+      expect(Math.abs(slices[n * 4]! - (top + bottom) / 2)).toBeLessThanOrEqual(
+        BYTE_BOUND,
+      )
+
+    const detail = await readNodes(
+      [[center(3, DETAIL_PER_CELL), center(20, DETAIL_PER_CELL), 4]],
+      (p) => vec4(noise.nodes.detail(p)),
+    )
+    const near = detailNoise({
+      x: center(3, DETAIL_PER_CELL),
+      y: center(20, DETAIL_PER_CELL),
+      z: center(31, DETAIL_PER_CELL),
+    })
+    const far = detailNoise({
+      x: center(3, DETAIL_PER_CELL),
+      y: center(20, DETAIL_PER_CELL),
+      z: center(0, DETAIL_PER_CELL),
+    })
+    expect(Math.abs(detail[0]! - (near + far) / 2)).toBeLessThanOrEqual(
+      BYTE_BOUND,
+    )
+
     const curl = await readNodes([[1, center(64, 128), 0]], (p) =>
       vec4(noise.nodes.curl(p.xy), 0, 0),
     )

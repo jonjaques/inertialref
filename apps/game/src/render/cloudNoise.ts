@@ -345,7 +345,7 @@ function noiseVolume(
   size: number,
   format: typeof RedFormat | typeof RGBAFormat,
 ): RenderTarget3D {
-  return new RenderTarget3D(size, size, size, {
+  const volume = new RenderTarget3D(size, size, size, {
     format,
     type: UnsignedByteType,
     depthBuffer: false,
@@ -357,8 +357,11 @@ function noiseVolume(
     minFilter: LinearFilter,
     wrapS: RepeatWrapping,
     wrapT: RepeatWrapping,
-    wrapR: RepeatWrapping,
   })
+  // On the texture, not in the options: the base constructor applies them
+  // to a plain `Texture` first, which has no R axis and warns.
+  volume.texture.wrapR = RepeatWrapping
+  return volume
 }
 
 const LEVEL0 = /*@__PURE__*/ float(0)
