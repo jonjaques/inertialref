@@ -881,11 +881,17 @@ describe('the schedule', () => {
     test.volume.dispose()
   })
 
-  it('holds one level of each texture, and declares their bytes', async () => {
+  it('holds one level of each texture, declares their bytes, and builds no pipeline after its warm-up', async () => {
     const test = rig(field)
     expect(test.volume.bytes).toBe(0)
     await test.volume.warm(gpu.renderer)
+    const render = gpu.pipelinesBuilt()
+    const compute = gpu.computePipelinesBuilt()
     test.settle(eyeAt(EYE_HEIGHT))
+    // The slices and the bound drawn at their real size on pipelines the
+    // 1 × 1 targets warmed: a pipeline is the format's, not the size's.
+    expect(gpu.pipelinesBuilt()).toBe(render)
+    expect(gpu.computePipelinesBuilt()).toBe(compute)
     expect(test.volume.bytes).toBe(
       CLOUD_VOLUME_SIZE * CLOUD_VOLUME_SIZE * 3 * STACK * 2 + 64 * 64 * 24 * 4,
     )

@@ -857,7 +857,7 @@ describe('a candidate that moves', () => {
 /* ------------------------------------------------------------------------- */
 
 describe('the candidates as resources', () => {
-  it('hold one level of their texture, declare its bytes, and hold nothing once disposed', async () => {
+  it('hold one level of their texture, declare its bytes, build no pipeline after their warm-ups, and hold nothing once disposed', async () => {
     const backend = gpu.renderer.backend as unknown as {
       get(texture: object): { texture: GPUTexture }
     }
@@ -872,7 +872,12 @@ describe('the candidates as resources', () => {
       )
       expect(test.depth.bytes).toBe(0)
       await test.depth.warm(gpu.renderer)
+      await test.volume.warm(gpu.renderer)
+      const render = gpu.pipelinesBuilt()
+      const compute = gpu.computePipelinesBuilt()
       test.settle(eyeAt(300), sunAt(37.5))
+      expect(gpu.pipelinesBuilt()).toBe(render)
+      expect(gpu.computePipelinesBuilt()).toBe(compute)
       expect(test.depth.bytes).toBe(bytes)
       const textures = test.depth.textures()
       expect(textures).toHaveLength(1)
