@@ -232,7 +232,9 @@ const METAL = {
  * The app as the guard reads it, run in a context of its own: a renderer
  * whose canvas is `canvas` pixels, in a `viewport` at `dpr`, served from
  * `tree`. `renderer: false` is a document the app has not booted in yet,
- * which is what a page reloading under the guard answers. The adapter info is
+ * which is what a page reloading under the guard answers. `resize` is the
+ * canvas the next animation frame leaves, as a window just given the rig's
+ * metrics does. The adapter info is
  * a prototype's, as Chrome's is, so a probe that returned it whole would
  * return nothing.
  */
@@ -244,7 +246,9 @@ function app({
   tree = TREE,
   renderer = true,
   dynamicRangeHigh = true,
+  resize = null,
 } = {}) {
+  const domElement = { width: canvas[0], height: canvas[1] }
   const scope = {
     engine: renderer
       ? {
@@ -255,7 +259,7 @@ function app({
               capability: { dynamicRangeHigh },
             },
             renderer: {
-              domElement: { width: canvas[0], height: canvas[1] },
+              domElement,
               backend: { device: { adapterInfo: Object.create(METAL) } },
             },
           },
@@ -278,18 +282,27 @@ function app({
     devicePixelRatio: dpr,
     matchMedia: () => ({ matches: false }),
     URLSearchParams,
+    setTimeout,
+    requestAnimationFrame: (callback) => {
+      if (resize !== null) [domElement.width, domElement.height] = resize
+      setTimeout(callback, 0)
+    },
   }
   scope.window = scope
   const context = vm.createContext(scope)
-  return async (expression) =>
-    JSON.parse(JSON.stringify(await vm.runInContext(expression, context)))
+  // By value, as `returnByValue` answers; `undefined` arrives as no value.
+  return async (expression) => {
+    const value = await vm.runInContext(expression, context)
+    return value === undefined ? undefined : JSON.parse(JSON.stringify(value))
+  }
 }
 
 /**
  * A scripted Chrome whose boot probes answer from `ladder` and whose guard
  * reads answer from `pages`, one page per operating-point read: the guard's
- * two expressions are the ones that ask for `ir.build()`. The last page
- * repeats. `reads()` counts the operating-point reads.
+ * expressions are the ones that ask for `ir.build()` or wait on a frame. The
+ * last page repeats. `reads()` counts the operating-point reads, `frames()`
+ * the waits.
  */
 function rig(
   pages,
@@ -297,10 +310,15 @@ function rig(
 ) {
   const scripted = chrome(ladder(answers))
   let read = 0
+  let frames = 0
   const send = async (method, params = {}) => {
     const { expression = '' } = params
-    if (method !== 'Runtime.evaluate' || !expression.includes('ir?.build?.()'))
+    const guard =
+      expression.includes('ir?.build?.()') ||
+      expression.includes('requestAnimationFrame')
+    if (method !== 'Runtime.evaluate' || !guard)
       return scripted.send(method, params)
+    if (expression.includes('requestAnimationFrame')) frames += 1
     scripted.sent.push(method)
     const page = pages[Math.min(read, pages.length - 1)]
     // The operating point is the read that asks for the pixel ratio; the
@@ -309,7 +327,12 @@ function rig(
     const value = await page(expression)
     return { result: { value } }
   }
-  return { send, sent: scripted.sent, reads: () => read }
+  return {
+    send,
+    sent: scripted.sent,
+    reads: () => read,
+    frames: () => frames,
+  }
 }
 
 const hold = (options = {}) => ({
@@ -367,6 +390,35 @@ describe('enter', () => {
     expect(p.notes.some((line) => line.startsWith('operating point'))).toBe(
       false,
     )
+  })
+
+  /*
+   * Chrome drops an invocation's emulation when its socket closes, so between
+   * invocations the page sits at the window's own size, 1600×933 on the Mac
+   * mini, and a warm attach sets the rig's 1600×900 back. The canvas follows
+   * on the next frame; read at once, it is refused mid-resize.
+   */
+  it('reads the buffer after the frames that apply the rig’s window, so a warm attach is not refused mid-resize', async () => {
+    const here = '/planetarium?at=earth&presentation=occluded'
+    const warm = rig([app({ canvas: [1600, 933], resize: [1600, 900] })], {
+      ready: [true],
+      here: [here],
+    })
+    await expect(
+      enter(warm.send, { force: false }, page(), hold()),
+    ).resolves.toMatchObject({ buffer: { width: 1600, height: 900 } })
+    expect(warm.frames()).toBe(1)
+  })
+
+  it('waits on no frame for a document, whose scripts may be off', async () => {
+    const document = rig([app({ renderer: false })])
+    await enter(
+      document.send,
+      { force: true },
+      page(true),
+      hold({ kind: 'shell' }),
+    )
+    expect(document.frames()).toBe(0)
   })
 
   it('refuses a page another checkout serves with the way to serve this one', async () => {
@@ -436,7 +488,11 @@ describe('holdPage', () => {
   it('reads the attached page fresh, without booting it', async () => {
     const { send, sent } = rig([app({ dynamicRangeHigh: false })])
     const point = await holdPage(send, hold())
-    expect(sent).toEqual(['Runtime.evaluate', 'Runtime.evaluate'])
+    expect(sent).toEqual([
+      'Runtime.evaluate',
+      'Runtime.evaluate',
+      'Runtime.evaluate',
+    ])
     expect(point.dynamicRangeHigh).toBe(false)
   })
 })

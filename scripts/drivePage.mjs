@@ -158,6 +158,20 @@ export async function boot(send, { force }, page) {
   note(`renderer ready in ${seconds()} s`)
 }
 
+/*
+ * Two animation frames, or a second, whichever is first. Chrome drops an
+ * invocation's emulation when its socket closes, so between invocations the
+ * page sits at the window's own size and ratio, and the next invocation sets
+ * the rig's back: the canvas follows a frame or two later, and a buffer read
+ * at once is refused mid-resize. A ratio the app never took up does not
+ * follow, which is what is left to refuse. The timer is there because a
+ * window with no focus emulation runs no frame at all.
+ */
+const FRAMES = `new Promise((done) => {
+  setTimeout(done, 1000)
+  requestAnimationFrame(() => requestAnimationFrame(done))
+})`
+
 /**
  * The guard's read of the attached page, and whether a failure is a page with
  * no app booted in it rather than a booted page that is wrong: a read whose
@@ -187,6 +201,8 @@ async function read(send, hold) {
   }
   try {
     await assertServedTree(run, hold.tree)
+    // Not for a document, which checks no buffer and may have scripts off.
+    if (hold.kind !== 'shell') await run(FRAMES)
     return { point: await assertOperatingPoint(run, hold) }
   } catch (error) {
     return { error, unbooted }

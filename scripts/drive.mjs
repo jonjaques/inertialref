@@ -684,9 +684,15 @@ async function down() {
 
 /**
  * The attached page's operating point, read fresh by the same guard a boot
- * runs, without booting or emulating anything: the full record, or why none
- * was read. It holds the page to the kind and the tree the rig was booted for,
- * which the session recorded, unless `--tree` names another.
+ * runs, without navigating or booting: the full record, or why none was read.
+ * It holds the page to the kind, the tree and the window the rig was booted
+ * for, which the session recorded, unless `--tree` names another tree.
+ *
+ * The window is set again first, as every attach sets it. Chrome drops an
+ * invocation's emulation when its socket closes, so between invocations the
+ * page is at the window's own size and ratio — 1600×933 at DPR 2 on the Mac
+ * mini's display for a rig booted at 1600×900 at 1 — which is no rig's
+ * operating point. This socket's emulation goes the same way when it closes.
  */
 async function statusPoint(state, browser) {
   if (browser === null)
@@ -699,7 +705,15 @@ async function statusPoint(state, browser) {
     ws.addEventListener('error', reject, { once: true })
   })
   try {
-    const point = await holdPage(connect(ws).send, {
+    const { send } = connect(ws)
+    await send('Emulation.setFocusEmulationEnabled', { enabled: true })
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: state.width ?? WIDTH,
+      height: state.height ?? HEIGHT,
+      deviceScaleFactor: state.dpr ?? DPR,
+      mobile: false,
+    })
+    const point = await holdPage(send, {
       kind: state.kind ?? 'webgpu',
       tree:
         values.tree === undefined && typeof state.tree === 'string'
@@ -852,7 +866,15 @@ async function main() {
     recorded: typeof prior.browser === 'string' ? prior.browser : null,
     warn,
   }
-  await writeState({ browser, kind: hold.kind, tree })
+  // The window too, which `--status` sets again before it reads the page.
+  await writeState({
+    browser,
+    kind: hold.kind,
+    tree,
+    width: WIDTH,
+    height: HEIGHT,
+    dpr: DPR,
+  })
 
   const ws = new WebSocket(await pageTarget())
   await new Promise((resolve, reject) => {
