@@ -524,8 +524,13 @@ describe('build identity', () => {
     }).harness
     expect(ir.build()).toEqual(build)
     // A copy, so a console that edits the answer edits nothing it reports.
+    // Held against a copy taken first: the session keeps `build` itself, so a
+    // harness that handed it out would carry the edit into `build`, and
+    // `toEqual(build)` would compare that object with itself and pass.
+    const opened = { ...build }
     ;(ir.build() as { tree: string | null }).tree = null
-    expect(ir.build()).toEqual(build)
+    expect(ir.build()).toEqual(opened)
+    expect(build).toEqual(opened)
   })
 
   it('names neither where nothing built the host: the headless runner, a test', () => {
