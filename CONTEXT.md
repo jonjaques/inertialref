@@ -264,6 +264,13 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **Every boot against a fresh dev server ran out its hundred seconds.** The
+  boot ladder held the frame to the navigation's own loader so the page being
+  left could not answer `booted`, and a fresh Vite pre-bundles what the first
+  load imports and reloads the page on its own, so the document that boots
+  carries a third loader the check never matched. The ladder now waits for
+  any loader but the one it is leaving; `drivePage.test.mjs` boots through a
+  third loader in both modes (7 Nov 2026, below).
 - **A playlist drag downward ended after one row.** The editor reordered its
   rows live under the pointer; React reorders keyed rows by moving their DOM
   nodes, and a node moved while it holds pointer capture loses it. Dragging up
@@ -12899,7 +12906,7 @@ enter, and `acquire` is not re-entrant within one process, so nothing here
 calls it twice in one. Which of the two Codex remedies a thread uses is the
 host's configuration and Jon's call.
 
-## A rig knows which tree it serves, and a cold Vite still fails the first boot (7 Nov 2026)
+## A rig knows which tree it serves, and a cold Vite fails the first boot (7 Nov 2026)
 
 X3's identity half, the second wave's second unit, stacked on #189.
 `ir.build()` returns `BUILD_ID` and, on the dev server only, the served
@@ -12959,14 +12966,12 @@ server failed with "renderer never became ready": this worktree's 5173, the
 sibling's 5185, and compare's base on 5184 twice. Vite optimized its
 dependencies twice and reloaded the page twice inside the boot, and the app
 logged "Failed to fetch dynamically imported module: …/src/App.tsx".
-Whether that failed import or the ladder's check of the navigation's
-loader is what holds the boot short of ready is not established. The
-second boot on a warm cache came up in 3.3–4.1 s. `capture.mjs`'s warm-up assumes the reload comes
-after the boot, where `--wait 4000` covers it. compare deletes its base
-worktree at the end, so every `--base` run is cold and fails at the base's
-warm-up. The check above went through as `--keep` once, then `--keep` again
-on the kept worktree. The identity check runs after the boot and plays no
-part in it.
+The second boot on a warm cache came up in 3.3–4.1 s. compare deletes its
+base worktree at the end, so every `--base` run was cold and failed at the
+base's warm-up, and the check above went through as `--keep` once, then
+`--keep` again on the kept worktree. The identity check runs after the boot
+and plays no part in it. The cause is the ladder's check of the navigation's
+loader, and the entry on the cold dev server's reload, below, fixes it.
 
 **The review's four findings: three defects fixed with a test each, and one
 miscount.** The refusal ended "or name <served> as the tree under test
@@ -13092,6 +13097,41 @@ not overlap on this machine; the observer case rests on its unit case.
 **Not done:** the version record goes with the session at `--down`, so a
 Chrome that updated between a `--down` and the next launch is not warned
 about. A record that outlives the session would catch it.
+
+## A cold dev server's own reload is the document that boots, and the ladder refused it (7 Nov 2026)
+
+Every unit of the second wave reported the first boot against a fresh dev
+server failing with "renderer never became ready", eleven times in all, on
+5173, 5185 and compare's base on 5184, and called it a cold-Vite defect older
+than the wave. It was the first wave's. C4 made renderer mode wait, as document
+mode already did, for the frame tree to hold the loader `Page.navigate`
+returned, so a booted page being left could not answer `booted` for the page
+being entered. A fresh Vite pre-bundles what the first load imports and
+reloads the page on its own: on the Mac mini at `b37f7fb`, "optimized
+dependencies changed. reloading" at 3 s and again at 7 s into the boot. The
+document that boots is the reload's, with a loader that is neither the page
+left nor the navigation's, so the check never matched and the ladder ran
+out its 200 polls. G1, on `830c243` before C4, crossed the same two reloads
+and booted, because renderer mode then took any document as committed.
+
+The ladder now reads the frame's loader before it navigates and takes the
+commit as any other loader, or the navigation's own. A frame tree that
+cannot be read beforehand leaves the navigation's loader as the only sign.
+Matching only "not the old loader" was not enough for the scripted Chrome
+in `drivePage.test.mjs`, which reports one loader throughout, so the
+equality stays. The new case boots through a third loader in renderer and
+document mode, and both failed "never became ready" against the old check.
+
+On the Mac mini at `b37f7fb` with this change, display state not checked and
+no thermal warning recorded by `pmset`: with this worktree's `.vite` cache moved
+aside and `pnpm dev:client` started fresh, the first `drive.mjs` boot passed.
+It crossed both reloads, settled on the reloaded document (navigation type
+`reload`), passed the guard at 1600×900 at DPR 1 and was ready in 11.1 s.
+`pnpm presets:compare earthrise --base HEAD`, with no `--keep`, built a fresh
+base worktree, photographed both trees on their first boots, read 0 px over
+3% and exited 0 in 72 s. Its base worktree was removed afterward.
+`capture.mjs`'s `--wait 4000` warm-up stays: it covers a reload that lands
+after the boot.
 
 ## Known gaps
 
@@ -13260,7 +13300,3 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   client runs a separate starfield survey with its own radius and hysteresis.
   It is tested and left in place deliberately — wiring it into the frame loop
   changes what unloads mid-flight, which is a gameplay decision, not a cleanup.
-- **`presets:compare --base` fails on a cold base worktree.** A fresh Vite
-  optimizes and reloads inside the first boot, and the base's warm-up ends
-  "renderer never became ready". compare deletes the worktree after every run, so every `--base` run
-  is cold; `--keep`, twice, is the workaround. 7 Nov 2026 entry above.

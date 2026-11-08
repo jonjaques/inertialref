@@ -117,6 +117,21 @@ export async function boot(send, { force }, page) {
     )
     return
   }
+  // navigate acknowledges before the new document commits, and until then
+  // every probe answers for the page being left: its readyState is complete,
+  // and a booted one reads `booted`. `--reload` leaves a booted page, and so
+  // does any `--keep-storage` run that navigates, `--fresh` or onto another
+  // URL, because neither takes clearStorage's about:blank hop. So both modes
+  // wait for the frame to hold another loader than the one it is leaving.
+  // Not for the navigation's loader alone: a fresh Vite pre-bundles what the
+  // first load imports and reloads the page on its own, about four seconds
+  // in, and the document that boots carries a third loader, so waiting for
+  // the navigation's runs out the ladder on every cold dev server and every
+  // `presets:compare --base`. A frame tree that cannot be read beforehand
+  // leaves the navigation's loader as the only sign of the commit.
+  const loader = async () =>
+    (await send('Page.getFrameTree')).frameTree.frame.loaderId
+  const leaving = await loader().catch(() => undefined)
   // Always a full navigate, never HMR: a WebGPURenderer does not survive a
   // dozen hot reloads, and a tab that has had them draws its HUD with
   // no renderer under it — which reads as a rendering bug and is not one.
@@ -125,16 +140,12 @@ export async function boot(send, { force }, page) {
   const started = now()
   for (let i = 0; ; i += 1) {
     await sleep(500)
-    // navigate acknowledges before the new document commits, and until then
-    // every probe answers for the page being left: its readyState is complete,
-    // and a booted one reads `booted`. `--reload` leaves a booted page, and so
-    // does any `--keep-storage` run that navigates, `--fresh` or onto another
-    // URL, because neither takes clearStorage's about:blank hop. So both modes
-    // match the navigation's loader first.
-    const committed =
-      navigation.loaderId === undefined ||
-      (await send('Page.getFrameTree')).frameTree.frame.loaderId ===
-        navigation.loaderId
+    let committed = navigation.loaderId === undefined
+    if (!committed) {
+      const at = await loader()
+      committed =
+        at === navigation.loaderId || (leaving !== undefined && at !== leaving)
+    }
     if (committed && (await evaluate(send, READY).catch(() => false))) break
     if (i === COMMIT_POLLS)
       throw new Error(

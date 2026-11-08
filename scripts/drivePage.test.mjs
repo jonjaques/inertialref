@@ -169,14 +169,12 @@ describe('boot', () => {
   })
 
   it('waits in document mode for the navigation’s own loader to commit', async () => {
-    // The old document is complete until the new loader commits on the third read.
-    let reads = 0
-    const { send } = chrome(ladder({ ready: [true], here: ['/'] }), {
-      frameLoader: () => (++reads < 3 ? 'L1' : 'L2'),
-    })
+    // The old document is complete until the new loader commits on the third poll.
     const p = page(true)
+    const { send } = chrome(ladder({ ready: [true], here: ['/'] }), {
+      frameLoader: () => (p.now() < 1100 ? 'L1' : 'L2'),
+    })
     await boot(send, { force: true }, p)
-    expect(reads).toBe(3)
     expect(p.notes).toEqual(['document ready in 1.5 s'])
   })
 
@@ -201,7 +199,27 @@ describe('boot', () => {
       )
       await boot(send, { force }, p)
       expect(p.notes).toEqual(['renderer ready in 1.0 s'])
-      expect(sent.filter((m) => m === 'Page.getFrameTree')).toHaveLength(2)
+      const polls = sent.slice(sent.indexOf('Page.navigate'))
+      expect(polls.filter((m) => m === 'Page.getFrameTree')).toHaveLength(2)
+    },
+  )
+
+  // A fresh Vite pre-bundles what the first load imports and reloads the page
+  // on its own, about four seconds in, so the document that boots carries a
+  // third loader: neither the page left nor the navigation's.
+  it.each([
+    ['renderer', false, 'renderer ready in 1.0 s'],
+    ['document', true, 'document ready in 1.0 s'],
+  ])(
+    'takes the document a dev server’s own reload commits: %s mode',
+    async (_, document, line) => {
+      const p = page(document)
+      const { send } = chrome(
+        ladder({ ready: [true], here: ['/'], boot: ['booted'] }),
+        { frameLoader: () => (p.now() < 600 ? 'L1' : 'L3') },
+      )
+      await boot(send, { force: true }, p)
+      expect(p.notes).toEqual([line])
     },
   )
 
