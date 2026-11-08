@@ -228,6 +228,12 @@ interface Chain {
   dispose(): void
 }
 
+/**
+ * Pass A's name, which pass B hands back after its render: not the sensor's
+ * own 'scene', so a pass that put back a literal of its own would show.
+ */
+const PASS_A = 'pass A'
+
 /** The sensor's scene pass and the over pass, in a post quad's dependency sum. */
 function chain(scene: Scene): Chain {
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 1e10)
@@ -237,7 +243,7 @@ function chain(scene: Scene): Chain {
   // As `createSensor` configures its pass: the layout's samples, depth type,
   // MRT and formats, drawn once per render call.
   const scenePass = pass(scene, camera, { samples: layout.samples })
-  namePass(scenePass.renderTarget, 'scene')
+  namePass(scenePass.renderTarget, PASS_A)
   scenePass.renderTarget.depthTexture!.type =
     layout.depthType ?? scenePass.renderTarget.depthTexture!.type
   scenePass.setMRT(mrt)
@@ -492,12 +498,12 @@ describe.skipIf(!TIMESTAMPS)('the over pass on the pass timeline', () => {
       // `scene` again after every pass B.
       expect(both.passes.map((pass) => [pass.label, pass.count])).toEqual([
         ['post', 1],
-        ['scene', 1],
+        [PASS_A, 1],
         [SPLIT_LABEL, 1],
       ])
       frame.passes(false)
       const one = await timeline!.measure(draw, 2)
-      expect(one.passes.map((pass) => pass.label)).toEqual(['post', 'scene'])
+      expect(one.passes.map((pass) => pass.label)).toEqual(['post', PASS_A])
     } finally {
       stop()
       frame.dispose()

@@ -11,7 +11,7 @@ import {
 import { vec4 } from 'three/tsl'
 import { OVER_CLOUDS_LAYERS } from './cloudLayers.ts'
 import { SPLIT_LABEL } from './cloudSplit.ts'
-import { namePass } from './passTimeline.ts'
+import { namePass, passName } from './passTimeline.ts'
 
 /*
  * Placement A's second scene pass, pass B: the OVER layer drawn into the scene
@@ -35,13 +35,6 @@ import { namePass } from './passTimeline.ts'
  * dark, and every overlay would build a second, unlit pipeline on its first
  * pass-B frame.
  */
-
-/*
- * The name the sensor gives the scene target (`sensor.ts`), which the
- * timeline labels pass A by and offers no reader of: pass B takes
- * `SPLIT_LABEL` for its own render and hands this back after.
- */
-const SCENE_LABEL = 'scene'
 
 export class CloudOverPassNode extends TempNode<'vec4'> {
   static get type(): string {
@@ -87,6 +80,9 @@ export class CloudOverPassNode extends TempNode<'vec4'> {
     const mrt = renderer.getMRT()
     const autoClear = renderer.autoClear
     const mask = camera.layers.mask
+    // Pass B takes the target's name for its own render and hands back
+    // whatever pass A is called: the sensor's 'scene', or a test's own.
+    const named = passName(this.#target) ?? null
     namePass(this.#target, SPLIT_LABEL)
     try {
       camera.layers.mask = OVER_CLOUDS_LAYERS.mask
@@ -99,7 +95,7 @@ export class CloudOverPassNode extends TempNode<'vec4'> {
       renderer.autoClear = autoClear
       renderer.setMRT(mrt)
       renderer.setRenderTarget(target, face, mip)
-      namePass(this.#target, SCENE_LABEL)
+      namePass(this.#target, named)
     }
     return undefined
   }
