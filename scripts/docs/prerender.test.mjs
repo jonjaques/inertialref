@@ -86,6 +86,39 @@ describe('API HTML build policy', () => {
     )
   })
 
+  it('collapses the largest package into one rewrite once exact proxies pass the limit', () => {
+    const wide = {
+      '/docs/api': { kind: 'api-index' },
+      '/docs/api/universe': { kind: 'api-package' },
+      '/docs/api/spatial': { kind: 'api-package' },
+      '/docs/api/spatial/Vec3-abc': { kind: 'api-member' },
+      ...Object.fromEntries(
+        Array.from({ length: 2001 }, (_, i) => [
+          `/docs/api/universe/Symbol${i}`,
+          { kind: 'api-member' },
+        ]),
+      ),
+    }
+    const rules = docRedirects({ pages: wide, aliases, prerenderApi: false })
+      .split('\n')
+      .filter((line) => line !== '' && !line.startsWith('#'))
+    const splat = rules.indexOf('/docs/api/universe/* /docs/api 200')
+    expect(splat).toBeGreaterThan(
+      rules.indexOf('/docs/api/*.html /docs/api/:splat 301'),
+    )
+    expect(rules).toContain('/docs/api/universe /docs/api 200')
+    expect(rules).toContain('/docs/api/spatial/Vec3-abc /docs/api 200')
+    expect(rules).toContain(
+      '/docs/api/spatial/Vec3 /docs/api/spatial/Vec3-abc 301',
+    )
+    expect(
+      rules.some((line) => line.startsWith('/docs/api/universe/Symbol')),
+    ).toBe(false)
+    expect(
+      rules.filter((line) => !line.includes('*')).length,
+    ).toBeLessThanOrEqual(2000)
+  })
+
   it('fails before Cloudflare silently drops routes above its static rule limit', () => {
     const many = Object.fromEntries(
       Array.from({ length: 2001 }, (_, i) => [
