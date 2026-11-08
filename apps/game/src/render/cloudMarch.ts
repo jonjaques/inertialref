@@ -69,7 +69,8 @@ import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
  * gives, so the grid every later step falls on moves by up to that step from
  * frame to frame while the span is still covered from t₀ on. Starting the
  * first sample at t₀ + ξ·Δ instead drops the first ξ·Δ of every ray — up to
- * 50 m of a cloud's lit face, an optical depth of 3.4 in cumulus.
+ * 50 m of a cloud's lit face, an optical depth of 3.4 in cumulus. Through
+ * the volume, the first step after each empty brick takes it again.
  */
 
 export interface CloudMarchResult {
@@ -113,7 +114,7 @@ const STEP_FLOOR = 3
 const STEP_FLOOR_SLOPE = 60 / 16_000
 /** The march stops under 1% transmittance, counting the open segment's estimate. */
 const EXIT_TRANSMITTANCE = 0.01
-/** The air is sampled every eighth step and at each segment close. */
+/** The air is sampled every eighth step, and wherever a segment opens or closes. */
 const AIR_EVERY = 8
 /** The sky's light on a cloud, a placeholder: Ψ × σ_s × ½, isotropic (§5.10). */
 const SKY_SHARE = 0.5
@@ -253,6 +254,8 @@ function rayRegisters(ray: CloudRay, uniforms: CloudUniforms) {
     steps: float(0).toVar(),
     /** The schedule's last step, unscaled and unclipped: what the next grows from. */
     growth: float(STEP_FIRST).toVar(),
+    /** 1 until a medium step has taken the jitter: at the start, and after a skip. */
+    fresh: float(1).toVar(),
     closed: float(1).toVar(),
     first: vec3(0).toVar(),
     firstRadius: vec3(0).toVar(),
@@ -436,10 +439,10 @@ export function cloudMarch(
     If(
       r.front.lessThan(0).and(after.lessThanEqual(FRONT_TRANSMITTANCE)),
       () => {
-        const share = saturate(
+        const crossed = saturate(
           before.sub(FRONT_TRANSMITTANCE).div(max(before.sub(after), 1e-9)),
         )
-        r.front.assign(r.t.add(length.mul(share)))
+        r.front.assign(r.t.add(length.mul(crossed)))
       },
     )
     seg.through.mulAssign(through)
@@ -474,9 +477,12 @@ export function cloudMarch(
       outside,
     )
     const schedule = select(m.sigma.greaterThan(0), inside, outside)
-    const scaled = schedule.mul(select(r.steps.equal(0), jitter, float(1)))
+    const scaled = schedule.mul(
+      select(r.fresh.greaterThan(0), jitter, float(1)),
+    )
     next.assign(min(r.t.add(scaled), bound))
     r.growth.assign(schedule)
+    r.fresh.assign(0)
     If(seg.open.greaterThan(0).and(m.sigma.greaterThan(0)), () => {
       step(m, s, next.sub(r.t))
     })
@@ -509,8 +515,11 @@ export function cloudMarch(
       else
         If(skip.bound(s, body).lessThanEqual(0), () => {
           // Not a segment step and no light: the segment ends with the
-          // brick's cloud, and the schedule carries on where it was.
+          // brick's cloud, and the schedule carries on where it was. The
+          // first step after it takes the jitter again, or every ray would
+          // resume on the brick's face and the grid would stop moving.
           transition(seg.open.greaterThan(0), bool(false), s)
+          r.fresh.assign(1)
           next.assign(
             clamp(
               skip.exit(s, ray, body),

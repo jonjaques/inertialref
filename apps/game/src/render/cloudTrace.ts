@@ -184,8 +184,9 @@ function traceView(
   const body = uniforms.served
   const trace = uniforms.trace
   const pixel = texel.mul(uint(2)).add(uvec2(trace.phase))
-  // An offset from the history pixel's center, from the jitter at the pixel
-  // rather than at the texel, so it does not move with the first step's.
+  // An offset from the history pixel's center, drawn at the history pixel
+  // rather than at the texel, so the point inside the pixel and the share of
+  // the first step (the texel's draw) are not one number.
   const within = traceJitter(pixel, trace.frame).sub(0.5)
   const screen = traceScreen(pixel, within, trace.history)
   const direction = viewDirection(uniforms.camera, screen).toVar()
@@ -370,8 +371,8 @@ export class CloudTrace implements CloudResource {
 
   /**
    * Every kernel the trace dispatches, the counters' clear included: the
-   * warm-up's subject. Built on first ask, since a kernel binds what the
-   * deps hold and the deps may arrive filled in after construction.
+   * warm-up's subject. Built on first ask, so constructing a trace reads
+   * nothing of its deps, the depth copy's texture among them.
    */
   kernels(): readonly ComputeNode[] {
     if (this.#kernels === null) {
