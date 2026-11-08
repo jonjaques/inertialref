@@ -56,42 +56,90 @@ export const CUBE_FACES: readonly {
   },
 ]
 
-const notYet = (): never => {
-  throw new Error('not yet: WP1')
+/*
+ * The warp is u = tan(a·π/4): a is proportional to the angle from the face's
+ * center along each axis, so a texel's solid angle varies across a face by
+ * √2 — the least at an edge's midpoint, where one side is foreshortened — and
+ * not by the 5.2 of the plain gnomonic cube, whose corner texels are the
+ * smallest.
+ */
+const WARP = Math.PI / 4
+
+/** The face a direction belongs to, by `CUBE_FACES`' rule. */
+function faceOf(direction: Vec3): CubeFace {
+  const ax = Math.abs(direction.x)
+  const ay = Math.abs(direction.y)
+  const az = Math.abs(direction.z)
+  if (ax >= ay && ax >= az) return direction.x >= 0 ? 0 : 1
+  if (ay >= az) return direction.y >= 0 ? 2 : 3
+  return direction.z >= 0 ? 4 : 5
 }
+
+const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z
 
 /**
  * The face of a direction and its tangent-warped coordinates in [−1, 1]
  * (u = tan(a·π/4) on the face plane).
  */
-export function cubeFaceOf(_direction: Vec3): {
+export function cubeFaceOf(direction: Vec3): {
   readonly face: CubeFace
   readonly a: number
   readonly b: number
 } {
-  return notYet()
+  const face = faceOf(direction)
+  const { normal, a, b } = CUBE_FACES[face]!
+  const depth = dot(direction, normal)
+  // A zero vector has no face; the first face's center keeps it finite.
+  if (!(depth > 0)) return { face, a: 0, b: 0 }
+  return {
+    face,
+    a: Math.atan(dot(direction, a) / depth) / WARP,
+    b: Math.atan(dot(direction, b) / depth) / WARP,
+  }
 }
 
 /**
  * The unit direction at warped coordinates; |a|, |b| > 1 lands in the
  * neighbor's gutter texels, which is what the bake writes there.
  */
-export function cubeDirection(_face: CubeFace, _a: number, _b: number): Vec3 {
-  return notYet()
+export function cubeDirection(face: CubeFace, a: number, b: number): Vec3 {
+  const axes = CUBE_FACES[face]!
+  const u = Math.tan(a * WARP)
+  const v = Math.tan(b * WARP)
+  const x = axes.normal.x + axes.a.x * u + axes.b.x * v
+  const y = axes.normal.y + axes.a.y * u + axes.b.y * v
+  const z = axes.normal.z + axes.a.z * u + axes.b.z * v
+  const length = Math.hypot(x, y, z)
+  return { x: x / length, y: y / length, z: z / length }
 }
 
-/** The warped coordinate of texel `index` in a tile of `size` + 2·gutter texels. */
+/**
+ * The warped coordinate of texel `index` in a tile of `size` + 2·gutter
+ * texels: −1 + (2(index − gutter) + 1)/size, the center of the texel, so the
+ * gutter's first texel sits half a texel past the face's edge.
+ */
 export function cubeTexelCoordinate(
-  _size: number,
-  _gutter: number,
-  _index: number,
+  size: number,
+  gutter: number,
+  index: number,
 ): number {
-  return notYet()
+  return -1 + (2 * (index - gutter) + 1) / size
 }
 
+/**
+ * The side of a texel at a face's center and at its corner, meters on a
+ * sphere of `radius`: the two texels of a face that are square, by symmetry.
+ * Δa = 2/size spans an angle of (π/4)·Δa at the center and (π/4)·Δa·(2√2/3)
+ * at the corner, where the warp's stretch (1 + u²) meets the plane's
+ * foreshortening √(1 + v²)/(1 + u² + v²). 19.6 km at the center for Earth's
+ * radius and a 512-texel face. The center's is the largest side on the face;
+ * the smallest is along an edge at its midpoint, 1/√2 of it, in a texel that
+ * is not square.
+ */
 export function cubeTexelMeters(
-  _size: number,
-  _radius: number,
+  size: number,
+  radius: number,
 ): { readonly center: number; readonly corner: number } {
-  return notYet()
+  const center = (radius * WARP * 2) / size
+  return { center, corner: (center * 2 * Math.SQRT2) / 3 }
 }
