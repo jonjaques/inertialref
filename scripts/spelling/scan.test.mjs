@@ -43,6 +43,16 @@ describe('the spelling gate', () => {
     expect(result.status).toBe(1)
     expect(JSON.parse(result.stdout).map((row) => row.name)).toEqual(['colour'])
   })
+  it('permits a name an upstream API spells its own way', () => {
+    const result = check(
+      'export const context = { createAnalyser: () => null, colourise: () => null }',
+      ['--check', '--json'],
+    )
+    expect(result.status).toBe(1)
+    expect(JSON.parse(result.stdout).map((row) => row.name)).toEqual([
+      'colourise',
+    ])
+  })
   it('permits prose examples', () => {
     const result = check(
       "export const color = 1; export const example = 'colour'",
