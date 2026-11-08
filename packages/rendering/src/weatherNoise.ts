@@ -221,7 +221,7 @@ const smoothstep = (edge0: number, edge1: number, x: number): number => {
  * n_b > 1 − c). Left as it is, the value spans a third of [0, 1] and every
  * coverage under a half draws nearly nothing.
  */
-const BASE_SPREAD = [0.52, 0.82] as const
+export const BASE_NOISE_SPREAD = [0.52, 0.82] as const
 
 /**
  * The curl of a tiling 2D potential at a point of the unit square, which is
@@ -253,7 +253,7 @@ export function curlNoise(u: number, v: number): readonly [number, number] {
  * The shape is Hillaire's Perlin–Worley, remap(perlin, fbm − 1, 1, 0, 1): a
  * three-octave Perlin billow (four lattice cells a period, two base cells a
  * cell) dilated by a three-octave Worley FBM (8, 16 and 32 cells a period,
- * weighted 0.625, 0.25 and 0.125), then spread over [0, 1] (`BASE_SPREAD`).
+ * weighted 0.625, 0.25 and 0.125), then spread over [0, 1] (`BASE_NOISE_SPREAD`).
  */
 export function baseNoiseWide(
   cells: Vec3,
@@ -279,7 +279,12 @@ export function baseNoiseWide(
   const fbm = 0.625 * near + 0.25 * mid + 0.125 * far
   const low = fbm - 1
   const shape = clamp((perlin01 - low) / (1 - low), 0, 1)
-  return [smoothstep(BASE_SPREAD[0], BASE_SPREAD[1], shape), near, mid, far]
+  return [
+    smoothstep(BASE_NOISE_SPREAD[0], BASE_NOISE_SPREAD[1], shape),
+    near,
+    mid,
+    far,
+  ]
 }
 
 /** The base shape at a point in base-cell units, in [0, 1]. */
