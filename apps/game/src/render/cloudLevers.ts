@@ -82,6 +82,14 @@ export interface CloudLevers {
   readonly sweepReads: (typeof SWEEP_READS)[number]
   readonly sweepExtra: CloudSweepExtra
   readonly noiseFormat: (typeof NOISE_FORMATS)[number]
+  /**
+   * The trace's jitter held at this frame index; null, the default, steps it
+   * with the frame. A measurement lever: held, a held still repeats every
+   * four frames, the interleave's cycle, so two images differ by the lever
+   * under test alone. In the system's GPU rig two frames four apart differ
+   * by 1.7% under the moving jitter, against a ladder's 1% (§8.7).
+   */
+  readonly jitterFrame: number | null
   /** Force the served body, and a second clouded one, by address. */
   readonly served: string | null
   readonly second: string | null
@@ -119,6 +127,7 @@ export const DEFAULT_CLOUD_LEVERS: CloudLevers = Object.freeze({
   sweepReads: 0,
   sweepExtra: 'none',
   noiseFormat: 'r8',
+  jitterFrame: null,
   served: null,
   second: null,
   deck: 'auto',
@@ -157,6 +166,8 @@ const FIELDS: Readonly<Record<keyof CloudLevers, (value: unknown) => boolean>> =
     sweepReads: oneOf(SWEEP_READS),
     sweepExtra: oneOf(CLOUD_SWEEP_EXTRAS),
     noiseFormat: oneOf(NOISE_FORMATS),
+    jitterFrame: (value) =>
+      value === null || (Number.isSafeInteger(value) && (value as number) >= 0),
     served: address,
     second: address,
     deck: oneOf(DECKS),

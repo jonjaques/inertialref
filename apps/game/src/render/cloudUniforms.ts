@@ -470,7 +470,10 @@ function writeTrace(uniforms: CloudTraceUniforms, frame: CloudFrame): void {
   )
   setVector2(uniforms.render.value, extents.render.width, extents.render.height)
   // A u32 wraps; a frame index past it starts the jitter's sequence over.
-  setNumber(uniforms.frame, frame.frameIndex >>> 0)
+  // `jitterFrame` holds the jitter alone: the interleave and every cache's
+  // schedule still step with `frameIndex`, so a held still keeps filling all
+  // four phases and repeats itself every four frames.
+  setNumber(uniforms.frame, (levers.jitterFrame ?? frame.frameIndex) >>> 0)
   const pixelAngle = frame.camera.pixelAngle
   setNumber(
     uniforms.farDistance,

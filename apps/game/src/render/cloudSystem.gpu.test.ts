@@ -429,6 +429,36 @@ describe('the radiance capture', () => {
     set({ lightTaps: 2 })
   }, 60_000)
 
+  /*
+   * A held still with the jitter held traces one sample pattern every frame,
+   * and the history takes each pixel's fresh sample every fourth frame, so the
+   * frame repeats every four: two captures sixteen frames apart are one
+   * image to the bit. Under the moving jitter the same two hold the history's
+   * means of different samples.
+   */
+  it('reads a held still twice sixteen frames apart as one image with the jitter held, and as two with it moving', async () => {
+    const pair = async (jitterFrame: number | null) => {
+      set({ placement: 'split', cache: 'field', lightTaps: 2, jitterFrame })
+      set({ force: 'reset' })
+      rig.frame()
+      set({ force: 'none' })
+      frames(40)
+      const first = rig.system!.captureRadiance()
+      rig.frame()
+      const a = (await first)!
+      frames(15)
+      const second = rig.system!.captureRadiance()
+      rig.frame()
+      return cloudRadianceDifference(a, (await second)!)
+    }
+    const held = await pair(0)
+    const moving = await pair(null)
+    expect(held.texels).toBeGreaterThan(0)
+    expect(held.rmse).toBe(0)
+    expect(moving.texels).toBeGreaterThan(0)
+    expect(moving.rmse).toBeGreaterThan(0)
+  }, 60_000)
+
   it('answers null on a frame that draws no clouds', async () => {
     set({ on: false })
     const asked = rig.system!.captureRadiance()
