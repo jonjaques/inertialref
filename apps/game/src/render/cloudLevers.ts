@@ -205,3 +205,25 @@ export function cloudResetKey(levers: CloudLevers): string {
     levers.second,
   ])
 }
+
+/**
+ * Whether a body's cloud deck hides this frame: every deck under `deck:
+ * 'hidden'`, which is how Earth's A/B prices the deck it replaces (§8.3),
+ * and the served body's whenever the clouds are on, read off the last
+ * frame's report — a frame late, which the volume hides.
+ */
+export function deckYields(
+  levers: CloudLevers,
+  served: string | null,
+  address: string,
+): boolean {
+  return levers.deck === 'hidden' || (levers.on && served === address)
+}
+
+/**
+ * Whether the frame is one scene list around the composite (placement B and
+ * the empty split): the staged sky before it, the orbit traces after it.
+ */
+export function splitOrders(levers: CloudLevers): boolean {
+  return levers.on && levers.placement !== 'passes'
+}

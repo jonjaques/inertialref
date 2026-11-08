@@ -9,6 +9,7 @@ import {
   sunVisibility,
 } from '../render/flareMath.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
@@ -27,7 +28,13 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
   // for good — seven quads with nothing left inside them. R3F removes the
   // primitive from the scene on unmount; the handful of GPU objects live as
   // long as the renderer, like the starfield's do.
-  const flare = useMemo(createLensFlare, [])
+  // Marked where it is made, under `?clouds=1`, so its warm-up compiles it
+  // where placement A draws it: over the clouds, in pass B.
+  const flare = useMemo(() => {
+    const made = createLensFlare()
+    if (engine.cloudsAvailable) markOverClouds(made.group)
+    return made
+  }, [engine])
 
   useEffect(() => {
     warmAtMount({

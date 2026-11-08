@@ -54,10 +54,12 @@ import {
 } from './render/terrainProducer.ts'
 import { warmAtMount } from './render/warmup.ts'
 import {
+  type CanvasProps,
   commitToneCurve,
   createRenderer,
   releaseRenderer,
 } from './render/createRenderer.ts'
+import { OVER_CLOUDS_LAYER } from './render/cloudLayers.ts'
 import {
   dprCeiling,
   type OutputPreference,
@@ -101,6 +103,26 @@ import {
  */
 
 let singleton: GameEngine | null = null
+
+/**
+ * The canvas's renderer factory, resolving the cloud system's chunk beside
+ * the renderer under `?clouds=1`. R3F awaits the factory before it mounts a
+ * child, so the sensor's first chain is built with the system, and its
+ * warm-up is in the boot census, rather than rebuilt for it a frame later.
+ */
+function withClouds(
+  engine: GameEngine,
+  factory: ReturnType<ReturnType<typeof createRendererLifetime>['factory']>,
+): (props: CanvasProps) => ReturnType<typeof factory> {
+  return async (props) => {
+    const [renderer, chunk] = await Promise.all([
+      factory(props),
+      import('./render/cloudSystem.ts'),
+    ])
+    engine.cloudSystemFactory = chunk.createCloudSystem
+    return renderer
+  }
+}
 
 function engineInstance(catalog: StarCatalog): GameEngine {
   if (singleton !== null) return singleton
@@ -254,6 +276,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     new URLSearchParams(window.location.search).get(QUERY.picture),
   )
   const [pictureOverride] = useState(() => parsePictureQuery(pictureQuery))
+  // The page's lifetime: the cloud system is built for it or not at all.
+  const [cloudsRequested] = useState(
+    () => new URLSearchParams(window.location.search).get(QUERY.clouds) === '1',
+  )
   const picture = pictureOverride ?? storedPicture
   const pictureDiagnostic =
     pictureOverride !== null && pictureQuery?.startsWith('bilinear:')
@@ -763,7 +789,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // what the browser can output, builds a `WebGPURenderer` around the
         // answer and awaits `init()`; R3F awaits the promise, so nothing draws
         // against a half-built backend. See `render/createRenderer.ts`.
-        gl={lifetime.factory(hdr, picture)}
+        gl={
+          cloudsRequested
+            ? withClouds(engine, lifetime.factory(hdr, picture))
+            : lifetime.factory(hdr, picture)
+        }
         // The factory chooses a depth convention that preserves this range.
         camera={{ fov: DEFAULT_FOV_DEG, near: 0.05, far: 1e10 }}
         // The device ratio capped by what kind of machine this is, times the
@@ -780,6 +810,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           // The perf overlay's GPU measurement submits its own frames, and this
           // is the only place R3F offers the scene and camera to submit them with.
           engine.view = { scene: state.scene, camera: state.camera }
+          // Before any boot warm-up compiles against it: `compileAsync`
+          // drops an object whose layers the camera does not test, so a
+          // mark it learned of later would leave every overlay compiling at
+          // its first drawn frame.
+          if (cloudsRequested) state.camera.layers.enable(OVER_CLOUDS_LAYER)
         }}
       >
         <SceneView

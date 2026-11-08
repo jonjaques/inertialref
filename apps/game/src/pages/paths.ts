@@ -350,6 +350,14 @@ export const QUERY = {
    * profile.
    */
   output: 'output',
+  /**
+   * Every mode: `1` builds the cloud system for the page's lifetime — its
+   * chunk, its warmed pipelines, the overlays' layer marks — and draws
+   * nothing until a script sets `engine.clouds.on`. A diagnostic like
+   * `producer`, and the only way in: without it not one cloud object exists,
+   * so no plate, comparison or ledger run can move.
+   */
+  clouds: 'clouds',
 } as const
 
 /**

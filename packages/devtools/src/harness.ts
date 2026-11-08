@@ -1,4 +1,5 @@
 import type { PassReport } from './passReport.ts'
+import type { CloudRenderReport } from './clouds.ts'
 import type { PictureReport } from './pictureReport.ts'
 import { GENERATION_VERSIONS, type WorldQuery } from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
@@ -1542,6 +1543,11 @@ export class GameHarness {
     return this.#host.render.terrain()
   }
 
+  /** The cloud system's report, or null: no `?clouds=1`, or nothing drawing. */
+  clouds(): CloudRenderReport | null {
+    return this.#host.render.clouds()
+  }
+
   /**
    * One body per surface archetype, found rather than written down.
    *
@@ -1813,6 +1819,7 @@ export class GameHarness {
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  the live streamer, and the rocks on it',
+      "  ir.clouds()                   the clouds' report under ?clouds=1: levers, frame, caches, bytes, steps",
       '  await ir.terrainCache()        persisted terrain hits, misses and storage',
       '  await ir.clearTerrainCache()   discard regenerable terrain, retaining saves',
       '  ir.picture(debug?)            reconstruction sizes, history and GPU passes',

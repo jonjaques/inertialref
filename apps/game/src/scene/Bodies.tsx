@@ -63,6 +63,8 @@ import {
 import { airLuminance, observerAir, skyOverhead } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
+import { deckYields } from '../render/cloudLevers.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
 import { createBodyResidency } from './bodyResidency.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
@@ -317,6 +319,13 @@ export function Bodies({
     const visibility = engine.visibilityProcessing
     if (scene === null || container === null) return
     residency.begin()
+    // Under `?clouds=1` alone: without it no lever is read and no deck moves.
+    const clouds = engine.cloudsAvailable ? engine.clouds : null
+    // The report is built when read, so only when a deck can yield to it.
+    const served =
+      clouds?.on === true
+        ? (engine.sensorDiagnostics?.clouds?.served ?? null)
+        : null
 
     const geometryFor = (angle: number): SphereGeometry =>
       (
@@ -360,6 +369,8 @@ export function Bodies({
         ringMaterial = createRingMaterial()
         ringMesh = new Mesh(rings, ringMaterial.material)
         ringMesh.renderOrder = 2
+        // World transparency over the clouds, in placement A's pass B.
+        if (engine.cloudsAvailable) markOverClouds(ringMesh)
         container.add(ringMesh)
       }
 
@@ -532,7 +543,10 @@ export function Bodies({
       /* --- the cloud deck ------------------------------------------------- */
       if (visual.clouds !== null && visual.cloudMaterial !== null) {
         const values = uniforms.clouds
-        visual.clouds.visible = values !== null
+        // A traced body shows no deck: the clouds are its weather now.
+        visual.clouds.visible =
+          values !== null &&
+          (clouds === null || !deckYields(clouds, served, body.address))
         if (values !== null) {
           visual.clouds.position.copy(visual.mesh.position)
           visual.clouds.quaternion.copy(quaternion)
