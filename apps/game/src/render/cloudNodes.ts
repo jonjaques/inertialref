@@ -120,8 +120,15 @@ export interface CloudPhaseNodes {
 export interface CloudFarResult {
   /** L_c over [from, end], relative to `from`. */
   readonly light: Node<'vec3'>
-  /** B over [from, end], with the class's beam (§5.11). */
+  /** B over [from, end], with the class's beam (§5.11), against the far march's own cloud alone. */
   readonly air: Node<'vec3'>
+  /**
+   * L_a over [from, end], relative to `from`, with the class's beam: the air
+   * light the march samples whatever cloud is in front of it. What lets the
+   * caller hide it behind the cloud the fine march already crossed, which
+   * `air`, taken from `from` on, cannot see.
+   */
+  readonly airLight: Node<'vec3'>
   readonly transmittance: Node<'float'>
   /** Meters. */
   readonly depthMean: Node<'float'>
@@ -522,6 +529,7 @@ export const CLOUD_STAND_INS = {
     return (_ray, from) => ({
       light: vec3(cloudStandInBinding(atlas, '2d')),
       air: vec3(0),
+      airLight: vec3(0),
       transmittance: float(1),
       depthMean: from,
       depthDeviation: float(0),

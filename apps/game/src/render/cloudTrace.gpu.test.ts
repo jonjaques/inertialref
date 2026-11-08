@@ -850,6 +850,7 @@ describe('past the fine march', () => {
     return {
       light: vec3(oneMinus(through).mul(LIGHT_PER_OPACITY)),
       air: vec3(0),
+      airLight: vec3(0),
       transmittance: through,
       depthMean: enter.add(mean),
       depthDeviation: sqrt(max(square.sub(mean.mul(mean)), 0)),
@@ -907,6 +908,51 @@ describe('past the fine march', () => {
     expect(relative(result.transmittance, through)).toBeLessThanOrEqual(MARCH)
     expectLight(result, 1 - through)
     expect(Math.abs(result.reproject - wholeMean)).toBeLessThan(1e-2)
+  })
+
+  it('takes out of B the far air the slab it crossed hides, which the far march cannot see', async () => {
+    /*
+     * A clear far field holding air light alone, behind the slab, in an air
+     * that carries no light of its own: all of B is then the far air the
+     * slab hides, T_a·(T − 1)·L_far. The far march's own blocked air is
+     * taken from where it starts, against its own cloud, and holds none of
+     * it; summed alone, a nearly opaque near cloud lets the whole far air
+     * through.
+     */
+    const airLight = [0.3, 0.2, 0.1] as const
+    const clear: CloudFarFn = (_ray, from) => ({
+      light: vec3(0),
+      air: vec3(0),
+      airLight: vec3(...airLight),
+      transmittance: float(1),
+      depthMean: from,
+      depthDeviation: float(0),
+    })
+    const dark: CloudAirFn = () => ({
+      extinction: vec3(0),
+      single: vec3(0),
+      multiple: vec3(0),
+    })
+    const uniforms = createCloudUniforms()
+    // A layer the medium leaves empty carries the span past the handover.
+    placeBody(uniforms, {
+      eye: 0,
+      layers: [
+        [SLAB.base, SLAB.top],
+        [3000, 4000],
+      ],
+    })
+    uniforms.trace.farDistance.value = 2000
+    const slab = slabMedium([{ ...SLAB, sigma }])
+    const march = probe(uniforms, slab, { far: clear, air: dark })
+    const [result] = await march([{ direction: [0, 1, 0], jitter: 0.3 }])
+    expect(result!.stopped).toBe(2000)
+    expect(relative(result!.transmittance, through)).toBeLessThanOrEqual(MARCH)
+    result!.air.forEach((band, c) => {
+      expect(relative(band, (through - 1) * airLight[c]!)).toBeLessThanOrEqual(
+        MARCH,
+      )
+    })
   })
 
   it('skips an empty brick of the volume to its exit, and loses no cloud', async () => {

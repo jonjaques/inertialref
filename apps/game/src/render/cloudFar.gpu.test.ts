@@ -312,6 +312,7 @@ interface Probe {
 interface Marched {
   readonly light: readonly [number, number, number]
   readonly air: readonly [number, number, number]
+  readonly airLight: readonly [number, number, number]
   readonly transmittance: number
   readonly mean: number
   readonly deviation: number
@@ -322,7 +323,7 @@ interface Marched {
 }
 
 const PROBE_IN = 5
-const PROBE_OUT = 12
+const PROBE_OUT = 15
 
 /** The far march for each probe, in one kernel: `cloudRay` gives the span, the far field marches it. */
 async function march(
@@ -368,6 +369,9 @@ async function march(
         ray.start,
         ray.end,
         start,
+        result.airLight.x,
+        result.airLight.y,
+        result.airLight.z,
       ]
       values.forEach((value, k) => {
         into.element(to.add(k)).assign(value)
@@ -387,6 +391,7 @@ async function march(
       start: v[9]!,
       end: v[10]!,
       from: v[11]!,
+      airLight: [v[12]!, v[13]!, v[14]!],
     }
   })
 }
@@ -1241,6 +1246,51 @@ describe('the blocked air', () => {
         expect(
           Math.abs(dim!.light[c]! / sky!.light[c]! / beam[c]! - 1),
         ).toBeLessThanOrEqual(1e-4)
+      built.field.dispose()
+    },
+  )
+
+  it.each(KINDS)(
+    'the %s hands back the air light it walked, by the class’s beam, whatever cloud is in front of it',
+    async (kind) => {
+      /*
+       * With no extinction the air's light over a stretch is its beam times
+       * the stretch, so the march's sum over its steps and gaps is exact
+       * however they fall, and it holds only where the stretches tile
+       * [from, end] once each. The caller hides this behind the cloud the
+       * fine march crossed; B, against the far march's own cloud, is a share
+       * of it.
+       */
+      const place: Placement = {
+        eye: 5000,
+        sun: UP,
+        layers: [[LAYER.base, LAYER.top]],
+        cleared: 1,
+      }
+      const built = build(kind, slab(THICK[kind] / THICKNESS), place, {
+        air: beamAir,
+      })
+      built.body.air.transmittance.value = table
+      await bake(built)
+      const direction = toward(-0.8, 1)
+      const [sky, surface] = await march(built, [
+        { direction, sky: true },
+        { direction, sky: false },
+      ])
+      const radius = built.body.datumRadius.value
+      for (const [got, colors] of [
+        [sky!, beam],
+        [surface!, surfaceBeam],
+      ] as const) {
+        const walked = (got.end - got.from) / radius
+        for (let c = 0; c < 3; c += 1) {
+          expect(
+            Math.abs(got.airLight[c]! / (colors[c]! * walked) - 1),
+          ).toBeLessThanOrEqual(1e-4)
+          expect(got.air[c]!).toBeLessThan(0)
+          expect(-got.air[c]!).toBeLessThan(got.airLight[c]!)
+        }
+      }
       built.field.dispose()
     },
   )

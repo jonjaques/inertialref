@@ -552,6 +552,7 @@ export class FarMarch {
   readonly #transmittance = float(1).toVar()
   readonly #airThrough = vec3(1).toVar()
   readonly #blocked = vec3(0).toVar()
+  readonly #airLight = vec3(0).toVar()
   readonly #light = [vec3(0).toVar(), vec3(0).toVar(), vec3(0).toVar()]
   readonly #weight = float(0).toVar()
   readonly #mean: F
@@ -632,6 +633,7 @@ export class FarMarch {
     this.#blocked.addAssign(
       light.mul(this.#transmittance.mul(cloudSeen).sub(1)),
     )
+    this.#airLight.addAssign(light)
     return tau
   }
 
@@ -700,6 +702,7 @@ export class FarMarch {
     return {
       light,
       air: this.#blocked,
+      airLight: this.#airLight,
       transmittance: this.#transmittance,
       depthMean: this.#mean,
       depthDeviation: select(

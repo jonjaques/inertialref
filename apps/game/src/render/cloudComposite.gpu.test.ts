@@ -884,6 +884,7 @@ describe('the second body', () => {
     const far: CloudFarFn = (_ray, from) => ({
       light: vec3(0.1),
       air: vec3(0),
+      airLight: vec3(0),
       transmittance: float(0.5),
       depthMean: from,
       depthDeviation: float(0),
