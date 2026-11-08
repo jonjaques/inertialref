@@ -12,6 +12,7 @@ import { vec3 } from 'three/tsl'
 import { rootSeed } from '@inertialref/procedural'
 import {
   DEFAULT_SENSOR_SETTINGS,
+  type Extent,
   lensForFov,
   type RenderBody,
   type RenderScene,
@@ -32,7 +33,12 @@ import {
 import { scatteringOf } from './atmosphereLuts.ts'
 import { OVER_CLOUDS_LAYER } from './cloudLayers.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
-import { type CloudSystem, createCloudSystem } from './cloudSystem.ts'
+import type { CloudFrameInputs } from './cloudFrame.ts'
+import {
+  type CloudEngineInputs,
+  type CloudSystem,
+  createCloudSystem,
+} from './cloudSystem.ts'
 import type { GpuSession } from './gpuHarness.ts'
 import { DEFAULT_PICTURE, type Picture } from './picture.ts'
 import { sensorRadiance } from './radiance.ts'
@@ -63,6 +69,8 @@ function solRecords(): Map<string, Body> {
 const SOL = /*@__PURE__*/ solRecords()
 export const RIG_EARTH = 'g:milky-way/s:SOL/b:2'
 const earth = SOL.get(RIG_EARTH)!
+/** Meters: Earth's datum, the record's own, for geometry a test forms on the CPU. */
+export const RIG_EARTH_RADIUS = earth.radius
 
 /** The vertical field the camera and the lens share. */
 export const RIG_FOV = 60
@@ -174,6 +182,69 @@ function renderScene(
   } as unknown as RenderScene
 }
 
+/** Where the rig stands over Earth, and its sun. */
+export interface RigStance {
+  /** Meters over the datum. */
+  readonly eye: number
+  readonly compression?: number
+  /** The camera's orientation, render axes. */
+  readonly looking: Quat
+  /** Toward the sun from Earth's center, render axes; the rig's own star when absent. */
+  readonly sun?: Vec3
+  /** Earth's own air; none when absent (see `CloudRigOptions.air`). */
+  readonly air?: boolean
+}
+
+/**
+ * The engine's half of a frame's inputs at a stance: what `scene/Sensor.tsx`
+ * hands the system, with Earth's record and a render body placed about the
+ * eye at the render origin.
+ */
+export function rigEngineInputs(
+  stance: RigStance,
+  levers: CloudLevers,
+): CloudEngineInputs {
+  const body = earthAt(stance.eye, stance.compression ?? 1)
+  const lens = lensForFov(RIG_FOV)
+  return {
+    levers,
+    scene: renderScene(
+      body,
+      stance.looking,
+      stance.sun === undefined ? star(STAR) : starToward(body, stance.sun),
+    ),
+    record: (address) => SOL.get(address) ?? null,
+    scattering: (drawn) =>
+      stance.air === true ? scatteringOf({ pool: () => null }, drawn) : null,
+    renderTime: 50_000,
+    visibility: false,
+    pictureEpoch: 0,
+    historyKey: 'rig',
+    camera: { position: { x: 0, y: 0, z: 0 }, quaternion: stance.looking },
+    lens,
+  }
+}
+
+/**
+ * A frame's whole inputs at a stance, the sensor's fields filled in as the
+ * system fills them: photographic processing, `css` the render's extent, a
+ * sixtieth of a second. What an instrument builds frames from without a
+ * sensor (`cloudFrame(rigFrameInputs(…), previous)`).
+ */
+export function rigFrameInputs(
+  stance: RigStance,
+  levers: CloudLevers,
+  css: Extent,
+): CloudFrameInputs {
+  return {
+    ...rigEngineInputs(stance, levers),
+    enhanced: false,
+    css,
+    render: css,
+    delta: 1 / 60,
+  }
+}
+
 export interface CloudRigOptions {
   /** Meters over the datum; 100 by default, under overcast's 300 m base. */
   readonly eye?: number
@@ -252,12 +323,13 @@ export function cloudRig(
     disposables.push(geometry, material)
   }
   scene.updateMatrixWorld(true)
-  const body = earthAt(eye, compression)
-  const view = renderScene(
-    body,
+  const stance: RigStance = {
+    eye,
+    compression,
     looking,
-    options.sun === undefined ? star(STAR) : starToward(body, options.sun),
-  )
+    ...(options.sun === undefined ? {} : { sun: options.sun }),
+    ...(options.air === undefined ? {} : { air: options.air }),
+  }
   const lens = lensForFov(RIG_FOV)
   const rig = {
     levers: { ...DEFAULT_CLOUD_LEVERS, ...options.levers } as CloudLevers,
@@ -271,22 +343,7 @@ export function cloudRig(
     // their meters' readbacks landing alike.
     pinned: 0,
     noiseTick: 0,
-    clouds: {
-      levers: rig.levers,
-      scene: view,
-      record: (address) => SOL.get(address) ?? null,
-      scattering: (drawn) =>
-        options.air === true ? scatteringOf({ pool: () => null }, drawn) : null,
-      renderTime: 50_000,
-      visibility: false,
-      pictureEpoch: 0,
-      historyKey: 'rig',
-      camera: {
-        position: { x: 0, y: 0, z: 0 },
-        quaternion: looking,
-      },
-      lens,
-    },
+    clouds: rigEngineInputs(stance, rig.levers),
   })
   const sensor = createSensor(
     renderer,
