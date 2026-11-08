@@ -40,6 +40,9 @@ export const PASS_LIMIT = Object.freeze({ passes: 2000, frames: FAR_CYCLE })
 /** Frames a side waits for the report's settle: past the far atlas's 45-frame cycle. */
 export const SETTLE_CAP = 240
 const GPU_READS = { reads: 3, n: 3 * FAR_CYCLE }
+/** Captures a radiance side averages, and the frames it waits past the settle first: see the `radiance` step. */
+export const RADIANCE_FRAMES = 64
+const RADIANCE_CONVERGE = 32
 const MARK = 'clouds on'
 
 /**
@@ -239,24 +242,62 @@ export async function cloudStep(step) {
        * Each side from a reset: maxSteps and lightTaps move no reset key, so
        * a history settled under one value and carried into the next blends
        * the two, and the capture would read some of the other's light.
+       *
+       * Each side the mean of `step.frames` captures. One capture carries the
+       * trace's jitter through the history, whose average correlates over
+       * about 32 frames: at far-shore, two frames apart differ by 3.5%, two
+       * means of 16 by 2.6%, of 32 by 0.54% and of 64 by 0.44% (measured),
+       * against thresholds of 3% and 1%. The first side's two halves give the
+       * floor the figure stands on. The means start `step.converge` frames
+       * past the settle: the settle releases 16 frames after the reset, while
+       * each pixel's mean gains samples until the 32nd, and captured from the
+       * 16th the halves differ by 2.1% where a converged page's differ by
+       * 0.54%.
        */
+      const mean = (shots) => {
+        const { width, height } = shots[0]
+        const luminance = new Float32Array(width * height)
+        const cloud = new Uint8Array(width * height)
+        for (const shot of shots)
+          for (let i = 0; i < luminance.length; i += 1) {
+            luminance[i] += shot.luminance[i] / shots.length
+            cloud[i] |= shot.cloud[i]
+          }
+        return { width, height, luminance, cloud }
+      }
       const capture = async (levers) => {
         set({ ...levers, force: 'reset' })
         await frame()
         await frame()
         set(levers)
         const settled = await settle(step.settleCap)
-        return { settled, shot: await ir.cloudRadiance() }
+        for (let i = 0; i < step.converge; i += 1) await frame()
+        const shots = []
+        for (let i = 0; i < step.frames; i += 1) {
+          const shot = await ir.cloudRadiance()
+          if (shot === null) return { settled, shots: null }
+          shots.push(shot)
+        }
+        return { settled, shots }
       }
       const a = await capture(step.a)
       const b = await capture(step.b)
+      if (a.shots === null || b.shots === null)
+        return {
+          settled: [a.settled, b.settled],
+          extent: null,
+          difference: null,
+          floor: null,
+        }
+      const half = a.shots.length >> 1
       return {
         settled: [a.settled, b.settled],
-        extent: a.shot === null ? null : [a.shot.width, a.shot.height],
-        difference:
-          a.shot === null || b.shot === null
-            ? null
-            : ir.cloudRadianceDifference(a.shot, b.shot),
+        extent: [a.shots[0].width, a.shots[0].height],
+        difference: ir.cloudRadianceDifference(mean(a.shots), mean(b.shots)),
+        floor: ir.cloudRadianceDifference(
+          mean(a.shots.slice(0, half)),
+          mean(a.shots.slice(half)),
+        ),
       }
     },
     boot() {
@@ -383,10 +424,17 @@ const STEPS = {
     js('verify', { kind: 'verify', levers: run.levers, ...at }),
     flag('shot', '--shot', shots.still),
   ],
-  // One step a comparison, two captures each, under the DevTools timeout.
+  // One step a comparison, its two sides' means under the DevTools timeout.
   radiance: (run) =>
     run.comparisons.map((c, i) =>
-      js(`radiance:${i}`, { kind: 'radiance', a: c.a, b: c.b, ...at }),
+      js(`radiance:${i}`, {
+        kind: 'radiance',
+        a: c.a,
+        b: c.b,
+        frames: RADIANCE_FRAMES,
+        converge: RADIANCE_CONVERGE,
+        ...at,
+      }),
     ),
 }
 
@@ -561,6 +609,7 @@ const READ = {
           name: c.name,
           threshold: c.threshold,
           relative: r?.difference?.relative ?? null,
+          floor: r?.floor?.relative ?? null,
           texels: r?.difference?.texels ?? null,
           settled: r?.settled ?? null,
           extent: r?.extent ?? null,
@@ -846,6 +895,7 @@ const RADIANCE_COLUMNS = [
   ['Lever', (d) => d.label],
   ['Comparison', (d) => d.name],
   ['radiance RMSE', (d) => pct(d.relative)],
+  ['noise floor', (d) => pct(d.floor)],
   ['under', (d) => pct(d.threshold)],
   [
     'passes',
