@@ -162,3 +162,72 @@ export function cloudReportIdle(
     residual: null,
   }
 }
+
+/**
+ * One frame's radiance at the trace's texels, read back after the frame
+ * (`ir.cloudRadiance()`): the scene as drawn with the clouds composited in,
+ * as the scene target holds it over the scene's radiance gain, and which
+ * texels hold cloud. Row-major from the image's top, as the trace counts
+ * its texels.
+ */
+export interface CloudRadiance {
+  readonly width: number
+  readonly height: number
+  /** Rec. 709 luminance a texel, scene units. */
+  readonly luminance: Float32Array
+  /** 1 where the history holds cloud there: T_c under 0.999, or any light. */
+  readonly cloud: Uint8Array
+}
+
+/** Two captures' difference over the texels either holds cloud at. */
+export interface CloudRadianceDifference {
+  /** Texels either capture holds cloud at: what the figures are taken over. */
+  readonly texels: number
+  /** RMS of the luminance difference there, scene units. */
+  readonly rmse: number
+  /** The two captures' mean luminance there. */
+  readonly mean: number
+  /**
+   * rmse / mean: §8.7's radiance RMSE over cloud texels. Null with no cloud
+   * texel or no light there, where a ratio would say nothing.
+   */
+  readonly relative: number | null
+}
+
+/**
+ * The radiance difference §8.7's cache gate and the quality ladders read:
+ * the RMS of the luminance difference over every texel where either capture
+ * holds cloud, over the two captures' mean luminance there. Symmetric, so
+ * neither capture is the reference. Two captures of different extents are
+ * refused: their texels are not one another's.
+ */
+export function cloudRadianceDifference(
+  a: CloudRadiance,
+  b: CloudRadiance,
+): CloudRadianceDifference {
+  if (a.width !== b.width || a.height !== b.height)
+    throw new Error(
+      `the captures differ in extent: ${a.width} × ${a.height} against ${b.width} × ${b.height}`,
+    )
+  const count = a.width * a.height
+  for (const capture of [a, b])
+    if (capture.luminance.length !== count || capture.cloud.length !== count)
+      throw new Error(
+        `a capture of ${capture.width} × ${capture.height} holds ${capture.luminance.length} luminances and ${capture.cloud.length} marks`,
+      )
+  let texels = 0
+  let squares = 0
+  let sum = 0
+  for (let i = 0; i < count; i += 1) {
+    if (a.cloud[i] === 0 && b.cloud[i] === 0) continue
+    const la = a.luminance[i]!
+    const lb = b.luminance[i]!
+    texels += 1
+    squares += (la - lb) * (la - lb)
+    sum += la + lb
+  }
+  if (texels === 0) return { texels, rmse: 0, mean: 0, relative: null }
+  const rmse = Math.sqrt(squares / texels)
+  const mean = sum / (2 * texels)
+  return { texels, rmse, mean, relative: mean > 0 ? rmse / mean : null }
+}

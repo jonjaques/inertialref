@@ -22,7 +22,7 @@ import {
 } from './pictureProcessing.ts'
 import type { TerrainReport } from './descent.ts'
 import type { GalaxyRenderReport } from './galaxy.ts'
-import type { CloudRenderReport } from './clouds.ts'
+import type { CloudRadiance, CloudRenderReport } from './clouds.ts'
 import type { TimingPort } from './profile.ts'
 
 /*
@@ -273,6 +273,12 @@ export interface RenderHost {
    */
   clouds(): CloudRenderReport | null
   /**
+   * The cloud system's capture of its next frame's radiance at the trace's
+   * texels, with the texels that hold cloud: null wherever no chain built a
+   * system, and on a frame that draws no clouds.
+   */
+  cloudRadiance(): Promise<CloudRadiance | null>
+  /**
    * The lens the picture is being taken with, and the pixels it lands on.
    *
    * A getter rather than a setter for the same reason `world` is: the engine
@@ -395,6 +401,7 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
     boot: overrides.boot ?? (() => 'booted'),
     galaxyRender: overrides.galaxyRender ?? (() => null),
     clouds: overrides.clouds ?? (() => null),
+    cloudRadiance: overrides.cloudRadiance ?? (async () => null),
     terrain: overrides.terrain ?? (() => null),
     lensView: overrides.lensView ?? (() => null),
     framingLens: overrides.framingLens ?? (() => LENS_PRESETS.flight),

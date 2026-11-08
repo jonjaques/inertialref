@@ -66,6 +66,11 @@ export function Sensor({
               }
         engine.exposure = chain?.exposure ?? null
         engine.sensorDiagnostics = chain?.diagnostics ?? null
+        // The capture reads the chain on screen's own target, so it moves
+        // with the frame.
+        const system = chain?.clouds ?? null
+        engine.cloudRadiance =
+          system === null ? null : () => system.captureRadiance()
       },
     }),
   )

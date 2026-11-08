@@ -92,6 +92,7 @@ describe('renderHost, the render side of a host that has none', () => {
     expect(host.boot()).toBe('booted')
     expect(host.galaxyRender()).toBeNull()
     expect(host.clouds()).toBeNull()
+    await expect(host.cloudRadiance()).resolves.toBeNull()
     expect(host.terrain()).toBeNull()
     expect(host.lensView()).toBeNull()
     expect(host.framingLens()).toBe(LENS_PRESETS.flight)
@@ -442,6 +443,25 @@ describe('the clouds’ report', () => {
     const report = cloudReportIdle()
     expect(session().harness.clouds()).toBeNull()
     expect(session({ clouds: () => report }).harness.clouds()).toBe(report)
+  })
+
+  it('captures the radiance through the host, null with none, and differences two captures', async () => {
+    const capture = {
+      width: 2,
+      height: 1,
+      luminance: Float32Array.from([1, 3]),
+      cloud: Uint8Array.from([1, 0]),
+    }
+    await expect(session().harness.cloudRadiance()).resolves.toBeNull()
+    const ir = session({ cloudRadiance: async () => capture }).harness
+    await expect(ir.cloudRadiance()).resolves.toBe(capture)
+    const lit = { ...capture, luminance: Float32Array.from([2, 3]) }
+    expect(ir.cloudRadianceDifference(capture, lit)).toEqual({
+      texels: 1,
+      rmse: 1,
+      mean: 1.5,
+      relative: 1 / 1.5,
+    })
   })
 })
 
