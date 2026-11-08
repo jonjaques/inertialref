@@ -6,7 +6,6 @@ import {
   dot,
   float,
   floor,
-  int,
   ivec2,
   max,
   min,
@@ -362,23 +361,12 @@ export function levelOffset(
     .add(level.north.mul(s.mul(v).sub(eN)))
 }
 
-const facesAxis = (axis: 'normal' | 'a' | 'b') =>
+const facesAxis = (axis: 'normal' | 'a' | 'b'): Node<'vec3'>[] =>
   CUBE_FACES.map((face) => vec3(face[axis].x, face[axis].y, face[axis].z))
 
 const FACE_NORMALS = /*@__PURE__*/ facesAxis('normal')
 const FACE_A = /*@__PURE__*/ facesAxis('a')
 const FACE_B = /*@__PURE__*/ facesAxis('b')
-
-/** The face's own vector, by a chain of selects over the six. */
-function onFace(
-  face: Node<'int'>,
-  vectors: readonly Node<'vec3'>[],
-): Node<'vec3'> {
-  let picked = vectors[5]!
-  for (let f = 4; f >= 0; f -= 1)
-    picked = select(face.equal(int(f)), vectors[f]!, picked)
-  return picked
-}
 
 /**
  * A body-fixed direction → the atlas uv of its face tile, gutters included
@@ -405,23 +393,33 @@ export function cubeAtlasUv(
   const az = abs(direction.z)
   const xMajor = ax.greaterThanEqual(ay).and(ax.greaterThanEqual(az))
   const yMajor = ay.greaterThanEqual(az)
-  const face = select(
-    xMajor,
-    select(direction.x.greaterThanEqual(0), int(0), int(1)),
-    select(
-      yMajor,
-      select(direction.y.greaterThanEqual(0), int(2), int(3)),
-      select(direction.z.greaterThanEqual(0), int(4), int(5)),
-    ),
-  )
-  const depth = dot(direction, onFace(face, FACE_NORMALS))
+  /*
+   * Each face's own value, chosen by the face rule. No integer face index:
+   * r185 emits `float(i32)` of a select as the bare i32, which WGSL refuses
+   * to divide by a float, and the face's column and row are as easily chosen
+   * as its axes.
+   */
+  function onFace<T extends Node<'vec3'> | Node<'float'>>(
+    values: readonly T[],
+  ): T {
+    return select(
+      xMajor,
+      select(direction.x.greaterThanEqual(0), values[0]!, values[1]!),
+      select(
+        yMajor,
+        select(direction.y.greaterThanEqual(0), values[2]!, values[3]!),
+        select(direction.z.greaterThanEqual(0), values[4]!, values[5]!),
+      ),
+    ) as T
+  }
+  const depth = dot(direction, onFace(FACE_NORMALS))
   const toWarped = 4 / Math.PI
-  const a = atan(dot(direction, onFace(face, FACE_A)).div(depth)).mul(toWarped)
-  const b = atan(dot(direction, onFace(face, FACE_B)).div(depth)).mul(toWarped)
+  const a = atan(dot(direction, onFace(FACE_A)).div(depth)).mul(toWarped)
+  const b = atan(dot(direction, onFace(FACE_B)).div(depth)).mul(toWarped)
   const span = tile + 2 * gutter
-  const faceIndex = float(face)
-  const row = floor(faceIndex.div(columns))
-  const column = faceIndex.sub(row.mul(columns))
+  const faces = CUBE_FACES.map((_, f) => f)
+  const column = onFace(faces.map((f) => float(f % columns)))
+  const row = onFace(faces.map((f) => float(Math.floor(f / columns))))
   const x = column
     .mul(span)
     .add(gutter)
