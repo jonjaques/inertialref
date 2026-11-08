@@ -3,6 +3,7 @@ import {
   type ComputeNode,
   DepthTexture,
   HalfFloatType,
+  Matrix3,
   Mesh,
   MeshBasicNodeMaterial,
   PerspectiveCamera,
@@ -813,50 +814,68 @@ describe('the class', () => {
     f.dispose()
   })
 
-  it('dims the cloud’s own light by the cleared transmittance on a surface and the physical one on the sky, and the blocked air by the physical one on both', async () => {
-    // Looking straight down from 10 km at a layer from 1 to 3 km, through a
-    // gray air: a surface 9.5 km down over the left half, nothing on the right.
-    const sigma = 630
-    const f = rig({ medium: grayAir(sigma) })
-    const up = new Vector3(0, 0, 1)
-    serve(f.uniforms.served, 10_000, 1_000, 3_000, up)
-    f.uniforms.served.cleared.value = 1
-    const scene = sceneOf(
-      facing(9_500, [-1.5, 0, -1.5, 1.5], colored([0.2, 0.2, 0.2])),
-    )
-    await f.frame(scene, null)
-    const alone = await f.read('output')
-    await f.write({ light: [0.1, 0.1, 0.1, 1] })
-    await f.frame(scene, 'split')
-    const lit = await f.read('output')
-    await f.write({ light: [0, 0, 0, 1], air: [-0.05, -0.05, -0.05, 0] })
-    await f.frame(scene, 'split')
-    const blocked = await f.read('output')
-    const eye = R + 10_000
-    const shell = R + 3_000
-    for (let y = 0; y < SIZE; y += 1)
-      for (const x of [2, 7, 12, 19, 24, 29]) {
-        const ray = viewOf(screenOf(x, y), f.halfTan)
-        const mu = ray.dot(up)
-        const b = eye * mu
-        const start = -b - Math.sqrt(b * b - (eye * eye - shell * shell))
-        const physical = Math.exp((-sigma * start) / R)
-        const surface = x < SIZE / 2
-        const ownLight = 0.1 * LIGHT * (surface ? 1 : physical)
-        const lightAdded = at(lit, x, y) - at(alone, x, y)
-        expect(
-          Math.abs(lightAdded - ownLight),
-          `L_c (${x}, ${y}): ${lightAdded} against ${ownLight}`,
-        ).toBeLessThanOrEqual(0.01 * ownLight)
-        const airAdded = at(blocked, x, y) - at(alone, x, y)
-        const ownAir = -0.05 * LIGHT * physical
-        expect(
-          Math.abs(airAdded - ownAir),
-          `B (${x}, ${y}): ${airAdded} against ${ownAir}`,
-        ).toBeLessThanOrEqual(0.01 * Math.abs(ownAir))
-      }
-    f.dispose()
-  })
+  it.each([
+    ['in the render axes', new Matrix3()],
+    // Render +z is body-fixed −y: a transpose would turn the ray the other way.
+    [
+      'on a body turned a quarter about x',
+      new Matrix3().set(1, 0, 0, 0, 0, -1, 0, 1, 0),
+    ],
+  ] as const)(
+    'dims the cloud’s own light by the cleared transmittance on a surface and the physical one on the sky, and the blocked air by the physical one on both, %s',
+    async (_, toBodyFixed) => {
+      // Looking straight down from 10 km at a layer from 1 to 3 km, through a
+      // gray air: a surface 9.5 km down over the left half, nothing on the right.
+      const sigma = 630
+      const f = rig({ medium: grayAir(sigma) })
+      // Up is render +z, given in the body's own axes.
+      const up = new Vector3(0, 0, 1)
+      serve(
+        f.uniforms.served,
+        10_000,
+        1_000,
+        3_000,
+        up.clone().applyMatrix3(toBodyFixed),
+      )
+      f.uniforms.served.toBodyFixed.value.copy(toBodyFixed)
+      f.uniforms.served.cleared.value = 1
+      const scene = sceneOf(
+        facing(9_500, [-1.5, 0, -1.5, 1.5], colored([0.2, 0.2, 0.2])),
+      )
+      await f.frame(scene, null)
+      const alone = await f.read('output')
+      await f.write({ light: [0.1, 0.1, 0.1, 1] })
+      await f.frame(scene, 'split')
+      const lit = await f.read('output')
+      await f.write({ light: [0, 0, 0, 1], air: [-0.05, -0.05, -0.05, 0] })
+      await f.frame(scene, 'split')
+      const blocked = await f.read('output')
+      const eye = R + 10_000
+      const shell = R + 3_000
+      for (let y = 0; y < SIZE; y += 1)
+        for (const x of [2, 7, 12, 19, 24, 29]) {
+          const ray = viewOf(screenOf(x, y), f.halfTan)
+          const mu = ray.dot(up)
+          const b = eye * mu
+          const start = -b - Math.sqrt(b * b - (eye * eye - shell * shell))
+          const physical = Math.exp((-sigma * start) / R)
+          const surface = x < SIZE / 2
+          const ownLight = 0.1 * LIGHT * (surface ? 1 : physical)
+          const lightAdded = at(lit, x, y) - at(alone, x, y)
+          expect(
+            Math.abs(lightAdded - ownLight),
+            `L_c (${x}, ${y}): ${lightAdded} against ${ownLight}`,
+          ).toBeLessThanOrEqual(0.01 * ownLight)
+          const airAdded = at(blocked, x, y) - at(alone, x, y)
+          const ownAir = -0.05 * LIGHT * physical
+          expect(
+            Math.abs(airAdded - ownAir),
+            `B (${x}, ${y}): ${airAdded} against ${ownAir}`,
+          ).toBeLessThanOrEqual(0.01 * Math.abs(ownAir))
+        }
+      f.dispose()
+    },
+  )
 })
 
 describe('the second body', () => {
