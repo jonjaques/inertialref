@@ -943,8 +943,8 @@ export interface AirMedium {
  * The air at `height` over the datum (sea-level units) for a sun at cosine
  * `muSun` over the sample's horizontal, seen through `phases`, lit by `sunT`.
  *
- * Zeros for now, through the Ψ read the real terms make, so a kernel compiled
- * against it already binds the table it will bind.
+ * Zeros here, read through Ψ as the full terms read it, so a kernel compiled
+ * against this binds the table a full sample binds.
  */
 export function airMediumAt(
   air: AirUniforms,
