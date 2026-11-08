@@ -473,6 +473,19 @@ describe('the guide runtime', () => {
     f.session.dispose()
   })
 
+  it('ends the session, with the sentence, on an error the browser cannot repair', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.receive(provider.error('rate_limit_exceeded'))
+    expect(connection(f.runtime)).toBe('connected')
+    f.receive(provider.error('responses_validation_failed'))
+    await f.settle()
+    expect(connection(f.runtime)).toBe('offline')
+    expect(f.runtime.getSnapshot().message).toMatch(/configuration/)
+    expect(f.fake.closes()).toBe(1)
+    f.session.dispose()
+  })
+
   it('keeps the seconds the closing event carries, whoever ends the session', async () => {
     const f = rig()
     await f.runtime.start('marin')

@@ -14,11 +14,15 @@ function rig() {
   })
   const delegations = vi.fn()
   const closed = vi.fn()
+  const errors = vi.fn()
+  const fatal = vi.fn()
   const loop = new GuideLoop(new GuideChannel(fake.live), {
     now: () => now,
     execute,
     onDelegation: delegations,
     onClosed: closed,
+    onError: errors,
+    onFatal: fatal,
   })
   fake.listen((event) => loop.receive(event))
   const call = (
@@ -40,6 +44,8 @@ function rig() {
     execute,
     delegations,
     closed,
+    errors,
+    fatal,
     call,
     created,
     completed,
@@ -220,5 +226,221 @@ describe('the tool loop over the data channel', () => {
     expect(await pending).toBe(true)
     f.fake.emit(provider.delegation())
     expect(f.delegations).toHaveBeenCalledOnce()
+  })
+})
+
+/*
+ * The paths the provider can take that the happy path never shows. Each
+ * test is one adversarial mode of the fake, and each proves either that the
+ * chain closes — so the next arrival can prompt — or that the session ends
+ * with a message, without a provider.
+ */
+describe('the loop recovers', () => {
+  it('reads a refused continuation as a closed chain, not a chain in flight for good', async () => {
+    const f = rig()
+    f.fake.refuse('response.create', 'rate_limit_exceeded')
+    expect(f.loop.prompt('Arrived: Saturn.')).toBe(true)
+    expect(f.loop.inFlight).toBe(true)
+    await f.settle()
+    expect(f.loop.inFlight).toBe(false)
+    expect(f.errors).toHaveBeenCalledWith(
+      'rate_limit_exceeded',
+      expect.any(String),
+    )
+    expect(f.fatal).not.toHaveBeenCalled()
+    f.fake.refuse('response.create', null)
+    expect(f.loop.prompt('Arrived: Titan.')).toBe(true)
+    expect(f.creates()).toBe(2)
+  })
+
+  it('gives up on a continuation nothing answers within thirty seconds', () => {
+    const f = rig()
+    expect(f.loop.prompt('Arrived: Saturn.')).toBe(true)
+    f.advance(29_000)
+    expect(f.loop.inFlight).toBe(true)
+    f.advance(1_500)
+    expect(f.loop.inFlight).toBe(false)
+    expect(f.loop.prompt('Arrived: Titan.')).toBe(true)
+  })
+
+  it('abandons a response that never completes', () => {
+    const f = rig()
+    f.created('resp_1')
+    f.advance(89_000)
+    expect(f.loop.inFlight).toBe(true)
+    f.advance(2_000)
+    expect(f.loop.inFlight).toBe(false)
+    // Its late completion is not a continuation.
+    f.completed('resp_1')
+    expect(f.creates()).toBe(0)
+  })
+
+  it('ends the chain on a failed response and never continues it', async () => {
+    const f = rig()
+    f.created('resp_1')
+    f.call('call_1')
+    await f.settle()
+    f.fake.emit(provider.responseFailed('resp_1', 'server_error'))
+    expect(f.creates()).toBe(0)
+    expect(f.loop.inFlight).toBe(false)
+    expect(f.errors).toHaveBeenCalledWith('server_error', expect.any(String))
+    // A call the failed response left unanswered is dropped, not run late.
+    const g = rig()
+    g.created('resp_1')
+    g.fake.emit(provider.responseFailed('resp_1'))
+    g.call('call_late')
+    await g.settle()
+    expect(g.loop.pendingCalls).toBe(0)
+    expect(g.loop.inFlight).toBe(false)
+  })
+
+  it('re-prompts once for a terminal response cut off at the token cap, then stops', () => {
+    const f = rig()
+    f.created('resp_1')
+    f.fake.emit(provider.message('Saturn is'))
+    f.fake.emit(provider.responseIncomplete('resp_1', 'max_output_tokens'))
+    expect(f.creates()).toBe(1)
+    expect(f.developer().at(-1)).toMatch(/cut off/)
+    f.created('resp_2')
+    f.fake.emit(provider.responseIncomplete('resp_2', 'max_output_tokens'))
+    expect(f.creates()).toBe(1)
+    expect(f.loop.inFlight).toBe(false)
+    expect(f.errors).toHaveBeenCalledWith(
+      'max_output_tokens',
+      expect.any(String),
+    )
+    // A normal completion arms the re-prompt again.
+    f.created('resp_3')
+    f.completed('resp_3')
+    f.created('resp_4')
+    f.fake.emit(provider.responseIncomplete('resp_4', 'max_output_tokens'))
+    expect(f.creates()).toBe(2)
+  })
+
+  it('continues a response whose calls were answered even when it ended incomplete', async () => {
+    const f = rig()
+    f.created('resp_1')
+    f.call('call_1')
+    await f.settle()
+    f.fake.emit(provider.responseIncomplete('resp_1', 'max_output_tokens'))
+    expect(f.creates()).toBe(1)
+    expect(f.developer()).toHaveLength(0)
+  })
+
+  it('holds a call that arrives before its response is created, and continues once it completes', async () => {
+    const f = rig()
+    f.call('call_early')
+    await f.settle()
+    expect(f.execute).toHaveBeenCalledTimes(1)
+    expect(f.outputs()).toHaveLength(1)
+    // Answered, but nothing to continue yet: the response is not known.
+    expect(f.creates()).toBe(0)
+    f.created('resp_1')
+    expect(f.creates()).toBe(0)
+    f.completed('resp_1')
+    expect(f.creates()).toBe(1)
+  })
+
+  it('attributes a call to its own delegation, never to whichever response is open', async () => {
+    const f = rig()
+    f.fake.emit(provider.responseCreated('resp_a', 'item_a'))
+    f.fake.emit(provider.responseCreated('resp_b', 'item_b'))
+    f.fake.emit(
+      provider.functionCall('call_b', 'describe_view', '{}', 'item_b'),
+    )
+    await f.settle()
+    f.fake.emit(provider.responseCompleted('resp_b', null, 'item_b'))
+    expect(f.creates()).toBe(1)
+    f.fake.emit(provider.responseCreated('resp_b2', 'item_b'))
+    f.fake.emit(provider.responseCompleted('resp_b2', null, 'item_b'))
+    // The other delegation's response is still open and was not continued
+    // by an output that was never its own.
+    expect(f.loop.inFlight).toBe(true)
+    f.fake.emit(provider.responseCompleted('resp_a', null, 'item_a'))
+    expect(f.creates()).toBe(1)
+    expect(f.loop.inFlight).toBe(false)
+  })
+
+  it('does nothing for a duplicate or unknown completion', async () => {
+    const f = rig()
+    f.created('resp_1')
+    f.call('call_1')
+    await f.settle()
+    f.completed('resp_1')
+    f.completed('resp_1')
+    f.fake.emit(
+      provider.responseCompleted('resp_never_created', null, 'item_9'),
+    )
+    expect(f.creates()).toBe(1)
+  })
+
+  it('keeps the rows of live work when it prunes, and remembers what it has finished', async () => {
+    const f = rig()
+    // Seventy chains: a call, its continuation, the terminal response.
+    for (let i = 1; i <= 70; i++) {
+      f.created(`resp_${i}`)
+      f.call(`call_${i}`, 'describe_view', '{}')
+      await f.settle()
+      f.completed(`resp_${i}`)
+      f.created(`term_${i}`)
+      f.completed(`term_${i}`)
+    }
+    expect(f.creates()).toBe(70)
+    expect(f.loop.inFlight).toBe(false)
+    // A redelivered completion of a pruned response starts nothing.
+    f.completed('resp_1')
+    expect(f.creates()).toBe(70)
+    // A redelivered call of a pruned response runs nothing.
+    f.call('call_1', 'describe_view', '{}')
+    await f.settle()
+    expect(f.execute).toHaveBeenCalledTimes(70)
+    // A response holding an unanswered call survives seventy completions after it.
+    let release: (() => void) | null = null
+    f.execute.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ status: 'ok' } as GuideToolOutput)
+        }),
+    )
+    f.created('resp_slow')
+    f.call('call_slow', 'describe_view', '{}')
+    await f.settle()
+    f.completed('resp_slow')
+    for (let i = 71; i <= 140; i++) {
+      f.fake.emit(provider.responseCreated(`resp_${i}`, 'item_other'))
+      f.fake.emit(provider.responseCompleted(`resp_${i}`, null, 'item_other'))
+    }
+    const before = f.creates()
+    release!()
+    await f.settle()
+    expect(f.creates()).toBe(before + 1)
+  })
+
+  it('survives an answer the transport refuses, and the camera queue runs on', async () => {
+    const f = rig()
+    f.created('resp_1')
+    f.call('call_1')
+    f.fake.live.stop()
+    await f.settle()
+    expect(f.execute).toHaveBeenCalledTimes(1)
+    expect(f.errors).toHaveBeenCalledWith('send-failed', expect.any(String))
+    f.fake.listen((event) => f.loop.receive(event))
+    // The next response's move runs on the same serialized queue.
+    f.created('resp_2')
+    f.call('call_2')
+    await f.settle()
+    expect(f.execute).toHaveBeenCalledTimes(2)
+    expect(f.outputs().map((o) => o.callId)).toEqual(['call_2'])
+  })
+
+  it('ends the session on an error the browser cannot repair', () => {
+    const f = rig()
+    f.fake.emit(provider.error('responses_validation_failed'))
+    expect(f.fatal).toHaveBeenCalledWith(expect.stringMatching(/configuration/))
+    f.fake.emit(provider.error('insufficient_quota'))
+    expect(f.fatal).toHaveBeenCalledWith(expect.stringMatching(/budget/))
+    f.fake.emit(provider.error('something_else'))
+    expect(f.fatal).toHaveBeenCalledTimes(2)
+    expect(f.errors).toHaveBeenCalledTimes(3)
   })
 })

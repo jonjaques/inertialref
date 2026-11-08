@@ -346,8 +346,12 @@ export class GuideRuntime {
         },
         onError: (code, detail) => {
           this.#record('note', { error: code, detail })
-          if (code === 'session_expired')
-            this.#update({ message: 'The guide session expired.' })
+        },
+        // Written before the session closes rather than after, so a verdict
+        // that drops the message while it closes is not followed by one.
+        onFatal: (sentence) => {
+          this.#update({ message: sentence })
+          void this.end()
         },
         onClosed: (reason) => this.#closed(reason),
         onChange: () => this.#refresh(),

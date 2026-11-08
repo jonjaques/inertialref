@@ -165,7 +165,10 @@ export function liveSessionConfiguration(options: {
         reasoning: { effort: 'low' },
         service_tier: 'priority',
         text: { verbosity: 'low' },
-        max_output_tokens: 1200,
+        // Counts reasoning tokens as well as text on the Responses API; a
+        // terminal response truncated before its words leaves a stop never
+        // narrated, and the loop re-prompts once for one.
+        max_output_tokens: 2000,
       },
     },
     client: {

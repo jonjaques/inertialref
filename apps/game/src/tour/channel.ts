@@ -84,9 +84,9 @@ export class GuideChannel {
     })
   }
 
-  /** Run the backend on everything queued. */
-  respond(): void {
-    this.#send({ type: 'response.create' })
+  /** Run the backend on everything queued. Returns the event id, which an error naming it refuses. */
+  respond(): string {
+    return this.#send({ type: 'response.create' })
   }
 
   /* -- The voice, which speaks ------------------------------------------- */
