@@ -30,7 +30,7 @@ import {
 } from 'three/tsl'
 import { CLOUD_CLIPMAP_SIZE, type CloudFrame } from './cloudFrame.ts'
 import { levelPlane, levelTexel } from './cloudGeometry.ts'
-import { analyticMapNodes, type CloudMapNodes } from './cloudMaps.ts'
+import type { CloudMapNodes } from './cloudMaps.ts'
 import type { CloudBudget, CloudResource, CloudSample } from './cloudNodes.ts'
 import {
   CLOUD_CLIPMAP_LEVELS,
@@ -224,14 +224,14 @@ export class CloudClipmap implements CloudResource {
   #disposed = false
 
   /**
-   * `source` is what the levels bake from: the weather cube's nodes, as the
-   * system hands them; without them, the placeholder's function itself, at
-   * the clipmap's own resolution.
+   * `source` is what the levels bake from: the weather cube's nodes in the
+   * system (§3.9), or `analyticMapNodes`, the placeholder's function at the
+   * clipmap's own resolution, in a test that bakes without a cube. Required,
+   * because either compiles: a clipmap left to a default bakes the
+   * placeholder's own pattern and never the cube the far bakes read, and the
+   * fine and far marches then draw two different fields.
    */
-  constructor(
-    uniforms: CloudUniforms,
-    source: CloudMapNodes = analyticMapNodes(uniforms),
-  ) {
+  constructor(uniforms: CloudUniforms, source: CloudMapNodes) {
     this.#target.textures.forEach((map, k) => {
       map.name = CHANNELS[k]!
     })
