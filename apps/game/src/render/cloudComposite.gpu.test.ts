@@ -37,7 +37,12 @@ import {
   vec4,
 } from 'three/tsl'
 import { ATMOSPHERE_GAIN, SURFACE_LUMINANCE } from '@inertialref/rendering'
-import { CloudComposite } from './cloudComposite.ts'
+import {
+  CLOUD_HISTOGRAM_BINS,
+  cloudHistogramBin,
+  cloudHistogramEdge,
+} from '@inertialref/devtools'
+import { CloudComposite, residualBin } from './cloudComposite.ts'
 import type { AirMediumFn } from './cloudCompositeAir.ts'
 import { CloudDepth } from './cloudDepth.ts'
 import { CloudFrameNode } from './cloudFrameNode.ts'
@@ -948,10 +953,13 @@ describe('the residual meter', () => {
     await f.composite.residualRead()
     const residual = f.composite.residual
     expect(residual).not.toBeNull()
-    const { thin, light, total, classDisagreement } = residual!
+    const { thin, light, total, limb, classDisagreement } = residual!
     expect(thin.samples).toBe(TRACE * TRACE)
     for (const histogram of [thin, light, total])
       expect(histogram.bins.reduce((sum, n) => sum + n, 0)).toBe(TRACE * TRACE)
+    // From 1 km the limb dips 1.0°, and the rows nearest it stand at ±4.1°.
+    expect(limb.samples).toBe(0)
+    expect(limb.bins.reduce((sum, n) => sum + n, 0)).toBe(0)
     // No air: the identity's own residuals are nothing.
     expect(light.bins[0]).toBe(TRACE * TRACE)
     expect(total.bins[0]).toBe(TRACE * TRACE)
@@ -960,11 +968,68 @@ describe('the residual meter', () => {
     // over the black sky all of it, the top bin.
     const surface = 0.1 * Math.PI
     const reference = 0.5 * 0.3 + surface
-    const bin = Math.floor((Math.log10(surface / reference) + 4) * 16)
+    const bin = cloudHistogramBin(surface / reference)
     expect(bin).toBe(61)
     expect(thin.bins[bin]).toBe(TRACE * 4)
     expect(thin.bins[63]).toBe(TRACE * 4)
     expect(classDisagreement).toBe(TRACE)
+    f.dispose()
+  })
+
+  it('bins on the GPU exactly as the report’s definition the runner reads back by', async () => {
+    // Each bin's geometric middle, clear of the edges' rounding either way,
+    // and the two ends' overflow.
+    const errors = [
+      ...Array.from({ length: CLOUD_HISTOGRAM_BINS }, (_, i) =>
+        Math.sqrt(cloudHistogramEdge(i) * cloudHistogramEdge(i + 1)),
+      ),
+      0,
+      1e-9,
+      1,
+      7,
+    ]
+    const input = new StorageBufferAttribute(new Float32Array(errors), 1)
+    const output = new StorageBufferAttribute(new Uint32Array(errors.length), 1)
+    const from = storage(input, 'float', errors.length)
+    const into = storage(output, 'uint', errors.length)
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(errors.length)), () => {
+        into
+          .element(instanceIndex)
+          .assign(residualBin(from.element(instanceIndex)))
+      })
+    })().compute(errors.length)
+    await gpu.compute(kernel)
+    const bins = [...new Uint32Array(await gpu.readBuffer(output))]
+    expect(bins).toEqual(errors.map((e) => cloudHistogramBin(e)))
+    kernel.dispose()
+  })
+
+  it('counts the sky texels within 2° of the limb apart, and a ring Enhanced does not draw loses nothing', async () => {
+    // At 30° the row under the horizon stands at −1.9°, 0.9° from the limb
+    // 1 km up, and the one over it at +1.9°, 2.9° away. The square fills
+    // the lower half and ends inside column 4, so the row under the horizon
+    // is sky in columns 4–7 alone and the row over it is sky throughout: a
+    // band measured from the zenith would count 8.
+    const fov = 30
+    const halfTan = Math.tan((fov / 2) * (Math.PI / 180))
+    const f = rig({ fov })
+    serve(f.uniforms.served, 1_000, 0, 3_000)
+    const scene = sceneOf(
+      facing(200, [-1.5, 0.1, -1.5, 0], colored([0.3, 0.3, 0.3]), halfTan),
+    )
+    await f.write({
+      light: [0.2, 0.2, 0.2, 0.5],
+      air: [-0.1, -0.1, -0.1, 1e6],
+    })
+    f.composite.setMode('residual')
+    await f.frame(scene, 'split')
+    f.composite.measureResidual(gpu.renderer, f.target)
+    await f.composite.residualRead()
+    const { limb, thin } = f.composite.residual!
+    expect(thin.samples).toBe(TRACE * TRACE)
+    expect(limb.samples).toBe(4)
+    expect(limb.bins[0]).toBe(4)
     f.dispose()
   })
 })

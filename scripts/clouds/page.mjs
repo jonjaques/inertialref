@@ -491,6 +491,7 @@ const READ = {
       thin: histogramStats(residual?.thin),
       light: histogramStats(residual?.light),
       total: histogramStats(residual?.total),
+      limb: histogramStats(residual?.limb),
     }
   },
   cold(run, value, by) {
@@ -733,6 +734,7 @@ export const ERROR_COLUMNS = [
   ['thin worst', (r) => pct(r.thin?.worst)],
   ['residual light p95', (r) => pct(r.light?.p95)],
   ['residual total p95', (r) => pct(r.total?.p95)],
+  ['limb ring p95', (r) => pct(r.limb?.p95)],
   ['class disagreement', (r) => r.classDisagreement ?? '—'],
   ['RMSE (display)', (r) => fixed(r.display?.rmse, 4)],
   ['>3%', (r) => pct(r.display?.over?.['3%'])],
