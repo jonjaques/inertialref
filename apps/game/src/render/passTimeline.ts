@@ -157,8 +157,19 @@ const NAMES = new WeakMap<object, string>()
  * MRT keys, so the timeline cannot borrow them; a pass nobody named reads as
  * its texture's name and size, which still separates the passes of a frame.
  */
-export function namePass(target: object, label: string): void {
-  NAMES.set(target, label)
+export function namePass(target: object, label: string | null): void {
+  if (label === null) NAMES.delete(target)
+  else NAMES.set(target, label)
+}
+
+/**
+ * The name `namePass` gave a target, or undefined. A pass that renames a
+ * target for its own render hands this back after it, `null` for none, so
+ * the pass drawn into it next is labeled by whoever named it, not by a
+ * literal the renaming pass had to know.
+ */
+export function passName(target: object): string | undefined {
+  return NAMES.get(target)
 }
 
 const RESUMES = new WeakMap<object, string>()
