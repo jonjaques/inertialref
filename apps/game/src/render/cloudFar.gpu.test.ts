@@ -734,13 +734,16 @@ describe('a uniform slab', () => {
   })
 
   /*
-   * The far march lights a column from half its own depth toward the sun
-   * (§5.13 step 5): its light is c·T_sun·P₁·(1 − e^(−τ_s)) a step, which over
-   * one slab is (1 − T)·e^(−τ/2μ_s)·P₁ whatever the steps. That holds the step
-   * integral, the half column, the beam and the phase, at any depth.
+   * The far march lights each run of a column through the rest of the column
+   * above each of its points (`runSunShare`), which for a uniform slab is the
+   * fine march's limit, each point lit along its own path to the sun. With
+   * the sun at the zenith, measured: 1.4 × 10⁻⁴ (atlas) and 3.3 × 10⁻⁴
+   * (spheres, whose half float holds τ 1.5 to its own step) at worst. Lit
+   * through half its depth, e^(−τ/2μ_s), the slab misses it by 9.3% (atlas)
+   * and 9.6% (spheres) from 200 m looking straight up.
    */
   it.each(KINDS)(
-    'marched by the %s has the design’s light model in a thick slab',
+    'marched by the %s has the fine march’s light in a thick slab, each run lit through the rest of its column',
     async (kind) => {
       const tau = THICK[kind]
       const sigma = tau / THICKNESS
@@ -752,20 +755,15 @@ describe('a uniform slab', () => {
           place.probes.map((direction) => ({ direction })),
         )
         result.forEach((got, k) => {
-          const truth = slabTruth(
-            slabPieces(
-              place,
-              place.probes[k]!,
-              [LAYER.base, LAYER.top],
-              got.from,
-            ),
+          const truth = slabLight(
+            place,
+            place.probes[k]!,
+            [LAYER.base, LAYER.top],
             sigma,
+            got.from,
           )
-          // The sun at the zenith: its cosine over any column of these rays is
-          // within 1.2 × 10⁻⁴ of 1, which moves e^(−τ/2μ_s) by under 10⁻⁴.
-          const model = (1 - truth.transmittance) * Math.exp(-tau / 2)
           expect(
-            Math.abs(got.light[1] / ISOTROPIC / model - 1),
+            Math.abs(got.light[1] / ISOTROPIC / truth - 1),
             `${kind} from ${place.eye} m at μ ${place.probes[k]!.y}`,
           ).toBeLessThanOrEqual(1e-3)
         })
@@ -775,15 +773,15 @@ describe('a uniform slab', () => {
   )
 
   /*
-   * Against each point's own path to the sun, which is the fine march's
-   * limit, the half column is right to second order in τ: measured against
-   * this file's quadrature at τ 0.103, the thinnest slab the bake holds, it is
-   * 1.1 × 10⁻³ off from below and 3.7 × 10⁻³ from above (μ −0.6 under a sun
-   * at μ 0.6), where the lit top of the column is the half nearer the eye.
-   * The bound is that measured limit, not the march's.
+   * The same against the thinnest slab the bake holds, τ 0.103, under three
+   * suns, from below and above: measured 1.1 × 10⁻⁵ (atlas) and 3.2 × 10⁻⁴
+   * (spheres) at worst. Lit through half its depth the slab is right to
+   * second order in τ and no better: the spheres miss by 3.3 × 10⁻³ from
+   * 5 km looking straight down, and the atlas by 1.03 × 10⁻³ from 200 m at
+   * μ 0.6 under a sun at μ 0.6.
    */
   it.each(KINDS)(
-    'marched by the %s has the fine march’s light in a thin slab, within the half column’s second order',
+    'marched by the %s has the fine march’s light in a thin slab, under any sun',
     async (kind) => {
       const sigma = THIN[kind] / THICKNESS
       const cases: { place: Placement; probes: Vec[] }[] = [
@@ -826,14 +824,10 @@ describe('a uniform slab', () => {
           const [r, g, b] = got.light
           expect(r).toBe(g)
           expect(b).toBe(g)
-          // The half column's measured 3.7 × 10⁻³ is most of each bound. The
-          // spheres cache their sun at a texel's center, up to 27 km from where
-          // the ray crosses, which moves e^(−τ/2μ_s) by up to 5 × 10⁻⁴ under a
-          // sun at μ 0.6.
           expect(
             Math.abs(g / ISOTROPIC / truth - 1),
             `${kind} from ${place.eye} m at μ ${probes[k]!.y}`,
-          ).toBeLessThanOrEqual(kind === 'atlas' ? 4e-3 : 4.5e-3)
+          ).toBeLessThanOrEqual(1e-3)
         })
         built.field.dispose()
       }

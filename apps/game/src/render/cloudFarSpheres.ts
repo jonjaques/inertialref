@@ -30,6 +30,8 @@ import {
   type FarOptions,
   farRead,
   farTexel,
+  runDepths,
+  runSunShare,
   slantCosine,
   subColumnAround,
   subColumnOf,
@@ -46,9 +48,10 @@ import type { CloudBodyUniforms } from './cloudUniforms.ts'
  * with, so there is no column mixing along a grazing chord: that loss is what
  * the far comparison's grazing ray at sunset scores.
  *
- * The cache holds the cloud's own transmittance toward the sun, the layers
- * above and half of its own column, which the atlas reads a column a layer
- * for at every step. The air's beam is not cached: `cleared` is a per-frame
+ * The cache holds the cloud's transmittance toward the sun through the
+ * layers above, which the atlas reads a column a layer for at every step;
+ * the column's own depth above each point of a crossing is the march's
+ * (`runSunShare`). The air's beam is not cached: `cleared` is a per-frame
  * uniform, Enhanced and Photographic switch it, and a cached beam would light
  * a block 45 frames stale.
  *
@@ -79,7 +82,7 @@ function sunReach(body: CloudBodyUniforms, from: F, to: F, mu: F): F {
   return max(q, other)
 }
 
-/** (fraction, column τ, the cloud's transmittance to the sun from mid-height, 0). */
+/** (fraction, column τ, the cloud's transmittance to the sun through the layers above, 0). */
 function spheresBake(deps: CloudFarDeps): V4 {
   return Fn(() => {
     const body = deps.uniforms[deps.body]
@@ -102,13 +105,7 @@ function spheresBake(deps: CloudFarDeps): V4 {
     const middle = bottom.add(ceiling).mul(0.5).toVar()
     const center = faceDirection(texel.face, texel.a, texel.b).toVar()
     const muSun = dot(center, body.sun).toVar()
-    const sun = exp(
-      tau
-        .negate()
-        .div(
-          slantCosine(muSun, ceiling.sub(bottom), radius.add(middle)).mul(2),
-        ),
-    ).toVar()
+    const sun = float(1).toVar()
     // The layers above, each read as one column where the sun ray from this
     // column's mid-height meets its own: the statistics the atlas would read
     // there, evaluated here once a cycle instead of at every step.
@@ -204,15 +201,29 @@ function spheresMarch(
           ).toVar()
           const length = stop.sub(start).toVar()
           const sunMu = eyeRadius.mul(body.sunUp).add(t.mul(ray.nu)).div(radius)
+          const sigma = read.y.div(max(thickness, 1e-3)).toVar()
+          const runTau = sigma.mul(length).toVar()
+          const { entry, exit } = runDepths(
+            body,
+            ray,
+            { start, length },
+            {
+              sigma,
+              top: middle.add(thickness.mul(0.5)),
+              slant: slantCosine(sunMu, thickness, radius),
+            },
+          )
           march.step(
             {
               from: start,
               to: stop,
               start,
               length,
-              tau: read.y.div(max(thickness, 1e-3)).mul(length),
+              tau: runTau,
               fraction: read.x,
-              source: cloudBeam(body, middle, sunMu).mul(read.z),
+              source: cloudBeam(body, middle, sunMu)
+                .mul(read.z)
+                .mul(runSunShare(runTau, entry, exit)),
             },
             k,
           )
