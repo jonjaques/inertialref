@@ -724,6 +724,49 @@ describe('the march through one slab', () => {
     expect(result!.steps).toBeLessThan(60)
     expectLight(result!, 1 - result!.transmittance)
   })
+
+  it('hides the air between its exit and t₁ behind the cloud it stopped in', async () => {
+    /*
+     * An air of constant light per unit length and no extinction: the air
+     * over a stretch is its length times that light, which the composite
+     * adds under the cloud's opacity all the way to t₁. Past the exit the
+     * cloud passes under 1%, so B there is (T − 1) times that stretch's
+     * light, and the part before the exit is a share of its own stretch's.
+     * Stopped at the exit, B lets the whole stretch behind the cloud through.
+     */
+    const glow = [3, 2, 1] as const
+    const air: CloudAirFn = () => ({
+      extinction: vec3(0),
+      single: vec3(...glow),
+      multiple: vec3(0),
+    })
+    const uniforms = createCloudUniforms()
+    // A layer the medium leaves empty carries the span 2.4 km past the slab.
+    placeBody(uniforms, {
+      eye: 0,
+      layers: [
+        [SLAB.base, SLAB.top],
+        [3000, 4000],
+      ],
+    })
+    const march = probe(uniforms, slabMedium([{ ...SLAB, sigma: 0.02 }]), {
+      air,
+    })
+    const [result] = await march([{ direction: [0, 1, 0], jitter: 0.3 }])
+    const { transmittance, stopped, start, end } = result!
+    expect(transmittance).toBeLessThan(0.01)
+    expect(stopped).toBeLessThan(SLAB.top)
+    // The union's top, crossed in float32.
+    expect(Math.abs(end - 4000)).toBeLessThan(0.01)
+    glow.forEach((light, c) => {
+      const behind = ((transmittance - 1) * light * (end - stopped)) / R
+      const before = result!.air[c]! - behind
+      expect(before).toBeLessThanOrEqual(MARCH * Math.abs(behind))
+      expect(before).toBeGreaterThanOrEqual(
+        (-light * (stopped - start) * (1 + MARCH)) / R,
+      )
+    })
+  })
 })
 
 describe('the segment rule (maximum-random overlap, §5.7)', () => {
