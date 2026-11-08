@@ -218,8 +218,9 @@ const smoothstep = (edge0: number, edge1: number, x: number): number => {
  * over this span is close to that bell's distribution function, so the base
  * comes out near uniform on [0, 1], and a layer of coverage c at full
  * profile is cloudy over about c of its volume (§5.6's remap keeps
- * n_b > 1 − c). Left as it is, the value spans a third of [0, 1] and every
- * coverage under a half draws nearly nothing.
+ * n_b > 1 − c): measured, 15% at a coverage of 0.2, 31% at 0.35 and 50% at
+ * 0.5. Read unspread, the bell puts the same three at about 1%, 64% and
+ * 99%, which no coverage lever could steer.
  */
 export const BASE_NOISE_SPREAD = [0.52, 0.82] as const
 
