@@ -1023,6 +1023,73 @@ describe('the blocked air', () => {
   })
 })
 
+describe('the texel’s class', () => {
+  it('is the composite’s own test at any compression: a ridge 3 km out is surface, the clamp is sky', async () => {
+    /*
+     * An air lit by exactly the beam it is handed makes B one factor times
+     * that beam, so a texel's band ratios name its class whatever the
+     * quadrature did: the table's 0.5 and 0.25 on a sky texel, the cleared
+     * beam's 0.833 and 0.75 on a surface one. Compression 0.25 tells the
+     * class's units from their reciprocal: as R·c/1000 a ridge 0.75 render
+     * km out lies 1,194 sea-level units deep, past the air's wall at 0.0157,
+     * and reads as sky.
+     */
+    const compression = 0.25
+    const table = [0.5, 0.25, 0.125] as const
+    const cleared = table.map((c) => c + (1 - c) * 0.5)
+    const transmittance = new DataTexture(
+      new Uint16Array(
+        Array.from({ length: 16 }, (_, k) =>
+          DataUtils.toHalfFloat(k % 4 === 3 ? 1 : table[k % 4]!),
+        ),
+      ),
+      2,
+      2,
+      RGBAFormat,
+      HalfFloatType,
+    )
+    transmittance.magFilter = LinearFilter
+    transmittance.minFilter = LinearFilter
+    transmittance.needsUpdate = true
+    const air: CloudAirFn = (_air, _height, _muSun, _phases, sunT) => ({
+      extinction: vec3(20),
+      single: sunT.mul(5000),
+      multiple: vec3(0),
+    })
+    const uniforms = createCloudUniforms()
+    placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
+    const body = uniforms.served
+    body.compression.value = compression
+    body.cleared.value = 1
+    body.air.top.value = 1 + 100_000 / R
+    body.air.transmittance.value = transmittance
+    lookUp(uniforms, 1e-3)
+    sizeTrace(uniforms, 2, 1)
+    // The left texel's history pixels read the ridge, the right one's the clamp.
+    const depth = depthTexture(8, 4, (x) => (x < 4 ? 3 * compression : SKY_KM))
+    const slab = slabMedium([{ ...SLAB, sigma: 0.002 }])
+    const { deps } = standIns(uniforms, slab, () => depth)
+    const trace = new CloudTrace({ ...deps, air })
+    await trace.warm(renderer)
+    trace.render(renderer, frameOf({ width: 2, height: 1 }), BUDGET)
+    const aux = await texels(trace.outputs.aux, 4, 1)
+    const shape = (b: readonly number[]) => [b[1]! / b[0]!, b[2]! / b[0]!]
+    const [surface, sky] = [aux(0, 0), aux(2, 0)]
+    expect(surface[0]).toBeLessThan(0)
+    expect(sky[0]).toBeLessThan(0)
+    // Two half floats a ratio, each to its step.
+    const close = (got: number[], want: number[]) =>
+      got.forEach((value, k) =>
+        expect(relative(value, want[k]!)).toBeLessThanOrEqual(4 * HALF),
+      )
+    close(shape(surface), shape(cleared))
+    close(shape(sky), shape(table))
+    trace.dispose()
+    depth.dispose()
+    transmittance.dispose()
+  })
+})
+
 /* ------------------------------------------------------------------------- */
 /* The trace's kernels and outputs                                            */
 /* ------------------------------------------------------------------------- */

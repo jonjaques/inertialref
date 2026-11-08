@@ -29,7 +29,7 @@ import {
   vec4,
 } from 'three/tsl'
 import type { Extent } from '@inertialref/rendering'
-import { skyClass } from './cloudCompositeAir.ts'
+import { airEye, depthUnits, skyClass } from './cloudCompositeAir.ts'
 import { CLOUD_DEPTH_CLAMP_KM } from './cloudDepth.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import {
@@ -193,13 +193,12 @@ function traceView(
   const distanceKm = depth.load(screenTexel(screen, trace.render)).x.toVar()
   const stop = distanceKm.mul(1000).div(body.compression).toVar()
   const ray = cloudRay(direction, body, stop)
-  const R = body.datumRadius
   const sky = skyClass(
     body.air,
-    body.up.mul(body.eye.div(R).add(1)),
+    airEye(body),
     direction,
     distanceKm,
-    R.mul(body.compression).mul(1e-3),
+    depthUnits(body),
   ).toVar()
   // A ray that meets no span ends where the scene does: the history rejects
   // an old cloud that a ridge now stands in front of by this end.

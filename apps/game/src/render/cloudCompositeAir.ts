@@ -3,6 +3,7 @@ import {
   cross,
   dot,
   exp,
+  float,
   If,
   length,
   max,
@@ -26,6 +27,7 @@ import {
   SURFACE_AIR_SAMPLES,
 } from './air.ts'
 import { CLOUD_DEPTH_CLAMP_KM } from './cloudDepth.ts'
+import type { CloudBodyUniforms } from './cloudUniforms.ts'
 
 /*
  * The air a composite pixel already carries, split at the cloud span's start
@@ -77,6 +79,21 @@ const SKY_DEPTH_TOLERANCE = 2e-3
 const SKY_CLAMP_KM = CLOUD_DEPTH_CLAMP_KM * (1 - SKY_DEPTH_TOLERANCE)
 
 const LEVEL = { level: true } as const
+
+/** A body's eye in the air's units: sea-level units about its center, body-fixed. */
+export const airEye = (body: CloudBodyUniforms): Node<'vec3'> =>
+  body.up.mul(float(1).add(body.eye.div(body.datumRadius)))
+
+/**
+ * The sea-level units one kilometer of the depth copy is, for `skyClass` and
+ * `compositeAir`: the copy holds render kilometers, a render meter is
+ * 1/compression true ones, and R true meters are one unit. The trace and the
+ * composite both take it here, because its reciprocal compiles just as well
+ * and reads a 3 km ridge on far-shore as some 3,000 units deep, past every
+ * wall: the class of every texel is then sky.
+ */
+export const depthUnits = (body: CloudBodyUniforms): Node<'float'> =>
+  float(1000).div(body.compression.mul(body.datumRadius))
 
 export interface CompositeAir {
   /** The shell's own depth test: D at or past the air's outer far wall. */
