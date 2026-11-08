@@ -31,6 +31,7 @@ import {
   zenithSkyRadiance,
 } from './atmosphere.ts'
 import { airHeights } from './datum.ts'
+import { EXTRATERRESTRIAL_ILLUMINANCE } from './exposure.ts'
 
 /*
  * The physics of the scattering tables, held still in Node.
@@ -286,11 +287,12 @@ describe('the sky overhead', () => {
    * irradiance over π, so a measured sky in cd/m² is π·L/E⊥ in scene units,
    * with E⊥ the extraterrestrial normal illuminance of 133.8 klx that Darula
    * and Kittler state the CIE skies against. The sky keeps its ratio to the
-   * sun that lights it, which is the ratio a photograph records.
+   * sun that lights it, which is the ratio a photograph records. E⊥ is the
+   * constant `SCENE_UNIT_LUMINANCE` is defined from, so this anchor and the
+   * scene unit are one number.
    */
-  const EXTRATERRESTRIAL_LUX = 133_800
   const toScene = (candelas: number): number =>
-    (Math.PI * candelas) / EXTRATERRESTRIAL_LUX
+    (Math.PI * candelas) / EXTRATERRESTRIAL_ILLUMINANCE
 
   /** The model's luminous turbidity: Kittler's Tv, vertical, at m = 1. */
   const turbidity = (() => {
