@@ -1,6 +1,9 @@
+import { pcg4d } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
 import type { Body } from '@inertialref/universe'
 import { aerosolDepthOf } from './atmosphere.ts'
+import { type CubeFace, cubeFaceOf } from './cubeSphere.ts'
+import { periodIndex } from './weatherClock.ts'
 
 /*
  * The placeholder weather: analytic scenarios the cloud passes draw through
@@ -247,32 +250,182 @@ export const WEATHER_SCENARIOS: Readonly<Record<ScenarioId, WeatherScenario>> =
     },
   }
 
+/*
+ * The patterns. Each keeps the layer's `coverage` as its mean over the body
+ * and stays inside [0, 1], so a measurement that names a coverage gets it.
+ *
+ * Bands follow latitude about the pole, +Y in body-fixed axes: a cosine whose
+ * cloudy and clear halves are each `patternScale` wide, its swing as large as
+ * the mean allows without leaving [0, 1].
+ *
+ * Blobs sit one to a cell of the weather cube's face grid. A cell exists when
+ * the first lane of pcg4d(cell, period) falls under a u32 threshold, so the
+ * GPU's bake decides exactly what this does (rule 58): the comparison is
+ * between integers, and the cell index itself is never in doubt at a texel
+ * center, because a face edge holds a power of two of cells no finer than
+ * its 512 texels and a texel center is then never on a cell's edge — it sits
+ * at an odd multiple of half a texel. A blob is 1 over the inner half of its
+ * cell and falls smoothly to 0 by the cell's inscribed circle, so a cell
+ * index read the other way near an edge reads 0 on both sides and the field
+ * stays continuous across cells and faces. Its mean over the cell is
+ * 23π/160 = 0.4516; a coverage past that fills every cell and raises the
+ * floor between them instead.
+ */
+
+/** A blob's full core and its edge, in half-widths of its cell. */
+const BLOB_CORE = 0.5
+/** The blob's mean over its cell: π/4 for the core's disk plus 0.65·π/2 for its rim, over the cell's area of 4. */
+export const BLOB_MEAN = (23 * Math.PI) / 160
+/** The finest blob grid: one cell a texel of a 512-texel face. */
+const BLOB_CELLS_MAX = 512
+const U32_MAX = 0xffff_ffff
+
+const smoothstep = (edge0: number, edge1: number, x: number): number => {
+  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * Cells a face edge for blobs of angular size `patternScale`: the power of
+ * two nearest a face's quarter turn over that size. 32 for the anvil's 0.05
+ * rad, 16 texels a cell; 64 for fair-cumulus's 0.02, 8 a cell.
+ */
+export function blobCells(patternScale: number): number {
+  if (!(patternScale > 0)) return 1
+  const exponent = Math.round(Math.log2(Math.PI / 2 / patternScale))
+  return Math.min(BLOB_CELLS_MAX, Math.max(1, 2 ** exponent))
+}
+
+/**
+ * The u32 a blob cell's hash must fall under, for a layer's mean coverage:
+ * computed here, uploaded as an integer, never compared as a float.
+ */
+export function blobThreshold(coverage: number): number {
+  const share = Math.min(1, Math.max(0, coverage) / BLOB_MEAN)
+  return Math.min(U32_MAX, Math.floor(share * 0x1_0000_0000))
+}
+
+/** The coverage between blobs: none until every cell holds one. */
+function blobFloor(coverage: number): number {
+  return Math.max(0, (Math.min(1, coverage) - BLOB_MEAN) / (1 - BLOB_MEAN))
+}
+
+/**
+ * Whether the blob cell (i, j) of `face` holds a blob for `layer` in the
+ * pattern's period `period` (`periodIndex`'s halves). The face, the layer and
+ * the period's high half share pcg4d's third lane: a face is three bits, a
+ * layer two, and the high half is under 2¹⁰ for any instant within
+ * 3.2 × 10¹² s of a one-second period.
+ */
+export function blobExists(
+  face: CubeFace,
+  i: number,
+  j: number,
+  layer: number,
+  period: readonly [number, number],
+  threshold: number,
+): boolean {
+  const lane = (face | (layer << 3) | (period[1] << 5)) >>> 0
+  return pcg4d(i, j, lane, period[0]).x < threshold
+}
+
+function blobCoverage(
+  s: WeatherScenario,
+  layer: number,
+  coverage: number,
+  direction: Vec3,
+  t: number,
+): number {
+  const cells = blobCells(s.patternScale)
+  const { face, a, b } = cubeFaceOf(direction)
+  const x = ((a + 1) / 2) * cells
+  const y = ((b + 1) / 2) * cells
+  const i = Math.min(cells - 1, Math.max(0, Math.floor(x)))
+  const j = Math.min(cells - 1, Math.max(0, Math.floor(y)))
+  const floor = blobFloor(coverage)
+  const period = periodIndex(t, s.patternPeriod)
+  if (!blobExists(face, i, j, layer, period, blobThreshold(coverage)))
+    return floor
+  const radius = Math.hypot(2 * (x - i) - 1, 2 * (y - j) - 1)
+  return floor + (1 - floor) * (1 - smoothstep(BLOB_CORE, 1, radius))
+}
+
+function bandCoverage(
+  s: WeatherScenario,
+  coverage: number,
+  direction: Vec3,
+): number {
+  const length = Math.hypot(direction.x, direction.y, direction.z)
+  const latitude = Math.asin(
+    Math.min(1, Math.max(-1, length > 0 ? direction.y / length : 0)),
+  )
+  const swing = coverage <= 0.5 ? 1 : (1 - coverage) / coverage
+  return (
+    coverage * (1 + swing * Math.cos((Math.PI * latitude) / s.patternScale))
+  )
+}
+
 /**
  * The coverage the maps hold for `layer` at a body-fixed unit direction, at
  * presentation time `t`: the CPU reference of the maps' bake. Blob cells hash
  * (cell, periodIndex) with pcg4d against a u32 threshold (rule 58).
- *
- * Here the layer's mean coverage everywhere, which is what a uniform pattern
- * draws.
  */
 export function scenarioCoverage(
   s: WeatherScenario,
   layer: number,
-  _direction: Vec3,
-  _t: number,
+  direction: Vec3,
+  t: number,
 ): number {
-  return s.layers[layer]?.coverage ?? 0
+  const spec = s.layers[layer]
+  if (spec === undefined) return 0
+  const coverage = Math.min(1, Math.max(0, spec.coverage))
+  if (s.pattern === 'blobs')
+    return blobCoverage(s, layer, coverage, direction, t)
+  if (s.pattern === 'bands' && s.patternScale > 0)
+    return bandCoverage(s, coverage, direction)
+  return coverage
+}
+
+/*
+ * Each genus as a rise from its base and a fall to its top: smoothstep up
+ * over [0, rise], full density, smoothstep down over [fall, 1]. A stratus
+ * sheet holds its density through most of its depth; a cumulus rises sharply
+ * off a flat base and thins toward a rounded top; cirrus is a thin peak; a
+ * cumulonimbus fills its column to the anvil; fog is densest at the ground.
+ * Placeholders, like the scenarios: the measurement prices the march, and a
+ * profile's shape moves the cost only through where it puts the density.
+ */
+const PROFILES: Readonly<
+  Record<CloudGenus, { readonly rise: number; readonly fall: number }>
+> = {
+  stratus: { rise: 0.1, fall: 0.7 },
+  stratocumulus: { rise: 0.15, fall: 0.5 },
+  cumulus: { rise: 0.08, fall: 0.55 },
+  altocumulus: { rise: 0.2, fall: 0.6 },
+  cirrus: { rise: 0.3, fall: 0.5 },
+  cumulonimbus: { rise: 0.03, fall: 0.85 },
+  fog: { rise: 0.02, fall: 0.25 },
 }
 
 /**
  * The genus's density profile over a layer, `h01` = 0 at its base and 1 at
  * its top: continuous, 0 outside (0, 1), peak 1. The CPU reference of the
  * profile table.
- *
- * Here a box: the layer's whole height at full density.
  */
-export function genusProfile(_genus: CloudGenus, h01: number): number {
-  return h01 > 0 && h01 < 1 ? 1 : 0
+export function genusProfile(genus: CloudGenus, h01: number): number {
+  if (!(h01 > 0 && h01 < 1)) return 0
+  const { rise, fall } = PROFILES[genus]
+  return smoothstep(0, rise, h01) * (1 - smoothstep(fall, 1, h01))
+}
+
+/**
+ * The profile's mean over its layer, (1 + fall − rise)/2: each smoothstep
+ * integrates to half its width. §5.6's p̄, the density an unresolved cell
+ * stands for.
+ */
+export function genusProfileMean(genus: CloudGenus): number {
+  const { rise, fall } = PROFILES[genus]
+  return (1 + fall - rise) / 2
 }
 
 /** The lowest base and highest top, meters over the datum. */
