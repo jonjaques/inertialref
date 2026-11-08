@@ -57,7 +57,7 @@ import {
   wrapped,
 } from './cloudVolume.ts'
 import { runQuadPasses } from './quadPass.ts'
-import { warmSensorPass } from './warmup.ts'
+import { warmByDrawing } from './warmup.ts'
 
 /*
  * The sun's optical depth as a grid around the eye (Nubis³): τ from each
@@ -448,14 +448,20 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     return this.#disposed || !this.#allocated ? [] : [this.#target.texture]
   }
 
-  /** The bake against a slice; a renderer with no backend builds nothing. */
+  /**
+   * The bake against a slice, drawn (an R16F target, which `warmByDrawing`
+   * says why); a renderer with no backend builds nothing.
+   */
   warm(renderer: WebGPURenderer): Promise<void> {
     if (this.#disposed || renderer?.backend === undefined)
       return Promise.resolve()
     this.#allocated = true
-    this.#warm ??= warmSensorPass(renderer, this.#quad, [
-      { target: this.#target, material: this.#material },
-    ])
+    if (this.#warm === null) {
+      warmByDrawing(renderer, this.#quad, CLOUD_SUN_GRID_LABEL, [
+        { target: this.#target, material: this.#material },
+      ])
+      this.#warm = Promise.resolve()
+    }
     return this.#warm
   }
 

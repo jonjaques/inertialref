@@ -72,7 +72,7 @@ import type {
   CloudUniforms,
 } from './cloudUniforms.ts'
 import { runQuadPasses } from './quadPass.ts'
-import { warmCompute, warmSensorPass } from './warmup.ts'
+import { warmByDrawing, warmCompute } from './warmup.ts'
 
 /*
  * The local volume: the field cached in three eye-anchored levels of
@@ -898,17 +898,21 @@ export class CloudVolume implements CloudResource {
       : [this.#target.texture, this.#boundMap]
   }
 
-  /** The bake against a slice and the bound's kernel; a renderer with no backend builds nothing. */
+  /**
+   * The bake against a slice, drawn (an RG8 target, which `warmByDrawing`
+   * says why), and the bound's kernel; a renderer with no backend builds
+   * nothing.
+   */
   warm(renderer: WebGPURenderer): Promise<void> {
     if (this.#disposed || renderer?.backend === undefined)
       return Promise.resolve()
     this.#allocated = true
-    this.#warm ??= Promise.all([
-      warmSensorPass(renderer, this.#quad, [
+    if (this.#warm === null) {
+      warmByDrawing(renderer, this.#quad, CLOUD_VOLUME_LABEL, [
         { target: this.#target, material: this.#material },
-      ]),
-      warmCompute(renderer, [this.#boundKernel]),
-    ]).then(() => undefined)
+      ])
+      this.#warm = warmCompute(renderer, [this.#boundKernel])
+    }
     return this.#warm
   }
 

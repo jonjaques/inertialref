@@ -29,7 +29,7 @@ import type { CloudResource } from './cloudNodes.ts'
 import type { CloudUniforms } from './cloudUniforms.ts'
 import { runQuadPasses } from './quadPass.ts'
 import type { SceneLayout } from './sceneLayout.ts'
-import { warmSensorPass } from './warmup.ts'
+import { warmByDrawing } from './warmup.ts'
 
 /*
  * The scene's distance for the clouds: view distance along each pixel's ray
@@ -159,13 +159,23 @@ export class CloudDepth implements CloudResource {
     return this.#disposed || !this.#allocated ? [] : [this.#target.texture]
   }
 
-  /** Compiles against the tied depth; nothing before a tie, which is what the program binds. */
+  /**
+   * Compiles against the tied depth by drawing once (an R16F target, which
+   * `warmByDrawing` says why); nothing before a tie, which is what the
+   * program binds. The scene target goes on the device first: one nothing
+   * has drawn into holds no depth at its sample count to bind.
+   */
   warm(renderer: WebGPURenderer): Promise<void> {
-    if (this.#disposed || this.#tied === null) return Promise.resolve()
-    this.#allocated = true
-    this.#warm ??= warmSensorPass(renderer, this.#quad, [
-      { target: this.#target, material: this.#material },
-    ])
+    const tied = this.#tied
+    if (this.#disposed || tied === null) return Promise.resolve()
+    if (this.#warm === null) {
+      this.#allocated = true
+      renderer.initRenderTarget(tied)
+      warmByDrawing(renderer, this.#quad, CLOUD_DEPTH_LABEL, [
+        { target: this.#target, material: this.#material },
+      ])
+      this.#warm = Promise.resolve()
+    }
     return this.#warm
   }
 
