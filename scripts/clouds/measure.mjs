@@ -159,7 +159,10 @@ const HIDDEN = { on: false, deck: 'hidden' }
 /**
  * The trace's jitter held at one index, wherever two images are compared for
  * what one lever changes: under the moving jitter two captures of one still
- * differ by about 2% at far-shore, twice a ladder's 1%.
+ * differ by about 2% at far-shore, twice a ladder's 1%. A held image is exact
+ * for its one sample pattern and no other, so `--jitter-frame` takes the
+ * batch at another index, and the spread between indices is what a held
+ * figure resolves.
  */
 export const HELD = Object.freeze({ jitterFrame: 0 })
 /** The force each kind sets; `steady` and `choice` set none. */
@@ -342,7 +345,7 @@ const memory = (size) =>
     })),
   )
 
-const error = (size) =>
+const error = (size, held = HELD) =>
   ['sunset', 'fog', 'orbit', 'horizon-2.4km'].flatMap((scenario) =>
     ['automatic', 'enhanced'].map((mode) => ({
       id: `error/residual/${mode}/${scenario}/${size}`,
@@ -353,8 +356,8 @@ const error = (size) =>
       levers: levers(scenario, { on: true, composite: 'residual' }),
       // The screenshot pair is two frames: with the jitter held they differ
       // by the composite's form and the interleave's phase, not the sample.
-      identity: levers(scenario, { on: true, composite: 'identity', ...HELD }),
-      thin: levers(scenario, { on: true, composite: 'thin', ...HELD }),
+      identity: levers(scenario, { on: true, composite: 'identity', ...held }),
+      thin: levers(scenario, { on: true, composite: 'thin', ...held }),
     })),
   )
 
@@ -393,7 +396,7 @@ export const LADDERS = Object.freeze({
  * with it held, which reads the media's own difference without the means'
  * floor. The ladders: each value against the next, with the jitter held.
  */
-const images = (size) => [
+const images = (size, held = HELD) => [
   ...['ground', 'horizon', 'inside'].map((s) =>
     radiance(
       'cache',
@@ -401,9 +404,9 @@ const images = (size) => [
       s,
       size,
       0.03,
-      [{}, HELD].flatMap((jitter) =>
+      [{}, held].flatMap((jitter) =>
         ['cascades', 'grid'].map((sunDepth) => [
-          `volume against field, ${sunDepth}${jitter === HELD ? ', jitter held' : ''}`,
+          `volume against field, ${sunDepth}${jitter === held ? ', jitter held' : ''}`,
           { cache: 'field', sunDepth, ...jitter },
           { cache: 'volume', sunDepth, ...jitter },
         ]),
@@ -422,8 +425,8 @@ const images = (size) => [
           .slice(0, -1)
           .map((value, i) => [
             `${value} against ${values[i + 1]}`,
-            { [lever]: value, ...HELD },
-            { [lever]: values[i + 1], ...HELD },
+            { [lever]: value, ...held },
+            { [lever]: values[i + 1], ...held },
           ]),
       ),
     ),
@@ -451,8 +454,10 @@ export const BATCHES = Object.freeze({
   error,
 })
 
-export const batchRuns = (batch, sizes) =>
-  batch === 'stances' ? stances(sizes[0]) : sizes.flatMap(BATCHES[batch])
+export const batchRuns = (batch, sizes, held = HELD) =>
+  batch === 'stances'
+    ? stances(sizes[0])
+    : sizes.flatMap((size) => BATCHES[batch](size, held))
 
 /** The session flags of one invocation: the URL, the window, and whether it
  *  may attach to a page already booted, which `fresh` refuses. */
@@ -800,6 +805,7 @@ const OPTIONS = {
   sizes: { type: 'string', default: Object.keys(SIZES).join(',') },
   runs: { type: 'string', multiple: true, default: [] },
   'max-load': { type: 'string' },
+  'jitter-frame': { type: 'string' },
   'allow-dirty': { type: 'boolean', default: false },
   'dry-run': { type: 'boolean', default: false },
   help: { type: 'boolean', default: false },
@@ -812,6 +818,7 @@ export const USAGE = `node scripts/clouds/measure.mjs --batch <${Object.keys(BAT
   --sizes <list>     of ${Object.keys(SIZES).join(', ')}, the default, in that order
   --runs <text>      only the runs whose id holds it; repeat for more
   --max-load <n>     the one-minute load a quiet machine stays under; half the cores by default
+  --jitter-frame <n> the index a held comparison holds the trace's jitter at, ${HELD.jitterFrame} by default
   --allow-dirty      measure an uncommitted tree, marking every row
   --dry-run          print each run's drive.mjs invocation and launch nothing
 
@@ -830,7 +837,11 @@ export function parseOptions(argv) {
   const maxLoad = values['max-load'] && Number(values['max-load'])
   if (maxLoad !== undefined && !(maxLoad > 0))
     throw new Error('--max-load takes a positive load')
-  const runs = batchRuns(values.batch, sizes).filter(
+  const index = values['jitter-frame'] ?? String(HELD.jitterFrame)
+  if (!/^\d+$/.test(index) || !Number.isSafeInteger(Number(index)))
+    throw new Error('--jitter-frame takes a frame index, a whole number')
+  const held = Object.freeze({ jitterFrame: Number(index) })
+  const runs = batchRuns(values.batch, sizes, held).filter(
     (run) =>
       values.runs.length === 0 || values.runs.some((t) => run.id.includes(t)),
   )
@@ -843,6 +854,7 @@ export function parseOptions(argv) {
     runs,
     maxLoad,
     allowDirty: values['allow-dirty'],
+    held,
     dryRun: values['dry-run'],
   }
 }
@@ -924,6 +936,7 @@ async function measure(options) {
       url: options.url,
       ports: PORTS,
       identity: id,
+      held: options.held,
       rows: [],
     },
   }
