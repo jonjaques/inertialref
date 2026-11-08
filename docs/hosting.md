@@ -8,8 +8,10 @@ behind that URL before the persistent universe is possible.
 > and persistent mutations remain planned.** The client is live at
 > <https://inertialref.app> and the retained `inertialref.jonjaques.com` origin.
 > `apps/server` serves the static bundle, `/api/health`, the account verdict at
-> `/api/account`, and the `/api/tour` service that creates a GPT Live session
-> for an account granted the guide. The Worker
+> `/api/account`, the `/api/tour` service that creates a GPT Live session
+> for an account granted the guide, the [PostHog relay](#the-posthog-relay)
+> under `/api/relay/`, and Clerk's [account deletion](#account-deletion)
+> webhook. The Worker
 > implements no Durable Object; the browser holds the guide conversation over
 > WebRTC ([ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)). The
 > multiplayer `/ws` path still returns a deliberate 501; partition authorities
@@ -145,6 +147,101 @@ any branch push, or `pnpm --filter @inertialref/server run previews:deploy` —
 under the account's `workers.dev` subdomain, where the guide and accounts are
 on and sign-in is the development Clerk instance. The origin rule and the
 account check both admit that subdomain, so a preview can create a session.
+
+---
+
+## The PostHog relay
+
+The browser's posthog-js takes `<origin>/api/relay` as its API host
+(`RELAY_PREFIX` in `packages/protocol/src/net.ts`), and the Worker forwards
+what it sends to PostHog's US Cloud. Content blockers drop requests to
+PostHog's own hosts by name; a request to the page's own origin reaches the
+Worker. The table, and the SDK source behind each line of it, is
+`apps/server/src/relay.ts`.
+
+| Under `/api/relay/`                                  | Goes to                   | Methods   |
+| ---------------------------------------------------- | ------------------------- | --------- |
+| `e/`, `i/v0/e/`, `s/`, `flags/`, `i/v1/logs`         | `us.i.posthog.com`        | POST      |
+| `api/surveys/`, `api/early_access_features/`         | `us.i.posthog.com`        | GET       |
+| `static/…`, `array/…` (extensions and remote config) | `us-assets.i.posthog.com` | GET, HEAD |
+
+- **An allowlist, not a pass-through.** Each ingest path is one posthog-js
+  1.447.3 requests, spelled as it spells it. Anything else under the prefix is
+  the API's ordinary 404, and a wrong method is a 405 with `Allow`. No path
+  takes `OPTIONS`: the requests are same-origin and never preflighted. A path a
+  later SDK adds answers 404 until it is listed.
+- **No credential goes upstream.** The request carries `content-type`,
+  `content-encoding`, `user-agent`, `accept` and `origin`, and nothing else: on
+  `inertialref.app` a same-origin request carries Clerk's `__session` cookie.
+  `x-forwarded-for` is set from `cf-connecting-ip`, which is where PostHog reads
+  the address it locates an event by.
+- **Unread.** The body is forwarded as it arrived; posthog-js compresses in the
+  page and says so in the query string, which is kept. The answer is PostHog's,
+  status and body, with `set-cookie` removed.
+- **Free of the account allowance.** The relay asks nobody who is calling, so
+  `ACCOUNT_LIMIT` does not count it, and it needs no secret. A PostHog that
+  cannot be reached is a 502 and a `server.relay` record naming the path.
+
+The service worker passes every `/api/` request to the network, so nothing
+relayed is answered from its cache.
+
+---
+
+## Account deletion
+
+A person in PostHog is keyed by their Clerk user id. When an account is
+deleted, Clerk delivers `user.deleted` to `POST /api/clerk/webhook`. The Worker
+verifies the Svix signature with `verifyWebhook` from
+`@clerk/backend/webhooks`, then asks PostHog to delete the person, their events
+and their recordings:
+
+```http
+POST https://us.posthog.com/api/projects/719084/persons/bulk_delete/
+Authorization: Bearer $POSTHOG_PERSON_DELETE_KEY
+
+{"distinct_ids":["<Clerk user id>"],"delete_events":true,"delete_recordings":true}
+```
+
+Svix retries anything but a 2xx with backoff for days, so the status is the
+route's whole answer (`apps/server/src/clerkWebhook.ts`):
+
+| Status | When                                                                                  |
+| ------ | ------------------------------------------------------------------------------------- |
+| 200    | PostHog answered 2xx; any other event type; a `user.deleted` naming no user           |
+| 400    | The signature, its timestamp or its headers do not verify; PostHog is not asked       |
+| 503    | A secret is missing; PostHog answered anything but 2xx, or did not answer within 10 s |
+
+A deletion naming no user is acknowledged and logged as an error rather than
+refused: a retry carries the same payload, and Svix disables an endpoint whose
+deliveries fail for five days, which would stop the deletions that do name one.
+Each delivery writes one `server.clerk` record: the status codes and, once the
+signature verifies, the event type and PostHog's counts. It never holds the
+user id, the payload or a header.
+
+| Name                           | Kind                                         | Holds                                                            |
+| ------------------------------ | -------------------------------------------- | ---------------------------------------------------------------- |
+| `CLERK_WEBHOOK_SIGNING_SECRET` | Worker secret, Production only, undeclared   | The Clerk endpoint's signing secret, `whsec_…`                   |
+| `POSTHOG_PERSON_DELETE_KEY`    | Worker secret, Production only, undeclared   | A PostHog personal API key with `person:read` and `person:write` |
+| `POSTHOG_PROJECT_ID`           | Variable, declared in `cloudflare.config.ts` | `719084`. Not a credential: it opens nothing without a key       |
+
+**Both secrets are optional, which no other secret here is.** A declared secret
+is required, and an environment's upload fails while it is unset; a Clerk
+webhook names one URL, and a Worker Preview's URL changes with its branch, so
+Previews Base has no use for either. They are therefore not declared: the route
+reads them through `WebhookSecrets`, a widening of `Env`, and without either it
+answers 503 and writes one record naming what is missing. An undeclared secret
+still survives a deploy: `cf deploy` uploads with `keepSecrets` on, which keeps
+every secret the Worker holds, declared or not.
+
+Setting it up is two steps. In the Clerk dashboard, on the production
+instance's **Webhooks** page, add the endpoint
+`https://inertialref.app/api/clerk/webhook` subscribed to `user.deleted` and
+copy its signing secret. Then set both secrets at a prompt:
+
+```bash
+pnpm --filter @inertialref/server exec wrangler secret put CLERK_WEBHOOK_SIGNING_SECRET --name inertialrefd
+pnpm --filter @inertialref/server exec wrangler secret put POSTHOG_PERSON_DELETE_KEY --name inertialrefd
+```
 
 ---
 
@@ -569,14 +666,16 @@ exists to catch.
 ### H-7 · The front door is a public surface, not just a bundle
 
 ✅ **Built.** Everything a person or a machine meets before the WebGPU canvas
-does: the share card, the install manifest, the crawler files, the analytics
+does: the share card, the install manifest, the crawler files, the telemetry
 gate, and the one asset the repository will not carry.
 
 **One canonical hostname.** `inertialref.app` is what
 `<link rel="canonical">` names, what the sitemap lists, and the only host
-`src/analytics.ts` will load a tag on. Every version preview URL is the same
-deployment under a different name — useful for checking a build, and wrong to
-count as visits or to let a crawler index as a duplicate site. The Worker's own
+telemetry reports as `production` (`src/telemetry/consent.ts`,
+[ADR-0061](adr/0061-telemetry-is-posthog.md)). Every version preview URL is the
+same deployment under a different name — useful for checking a build, wrong to
+let a crawler index as a duplicate site, and reported as `preview`, which the
+PostHog project's test-account filter keeps out of its charts. The Worker's own
 `workers.dev` route is off (`workersDev: false` in `cloudflare.config.ts`), so there
 is no additional `workers.dev` address tracking production. Both custom
 origins remain live so installed apps keep their storage; a preview URL names
@@ -763,6 +862,8 @@ apps/server/                    ✅ the only place Cloudflare appears
   tsconfig.json                 ✅ the fourth typecheck project
   src/index.ts                  ✅ fetch handler: /api/health, /ws (501), assets
   src/routes.ts                 ✅ pure routing, so it is testable in plain Node
+  src/relay.ts                  ✅ PostHog's SDK, relayed by allowlist
+  src/clerkWebhook.ts           ✅ an account deleted in Clerk, deleted in PostHog
   .cloudflare/types/index.d.ts  ✅ generated by `cf workers types`, committed
   src/partition.ts              ⬜ class PartitionAuthority extends DurableObject
   src/api/                      ⬜ discovery, catalog, sync
@@ -1103,7 +1204,16 @@ commands run `cf` in `apps/server`, so the Workers Builds configuration is:
 | Deploy command, Production     | `pnpm --filter @inertialref/server run deploy`          |
 | Preview command, Previews Base | `pnpm --filter @inertialref/server run previews:deploy` |
 
-`deploy` is `cf deploy --mode production`, which stages its Build Output — the
+`deploy` is `cf deploy --mode production` between two PostHog steps,
+`scripts/posthog-release.mjs --release` before it and `--annotate` after it.
+The first records the error-tracking release the build's exceptions resolve
+to, and runs first because PostHog caches a release lookup for five minutes, a
+miss included; the second marks every chart at the moment the deploy went
+live. Both read `WORKERS_CI_COMMIT_SHA`, `WORKERS_CI_BRANCH` and
+`POSTHOG_RELEASE_KEY`, and the release's version is the bundle's build id, the
+one the browser reports as `$app_version`. Without the key or the commit each
+prints one line and sends nothing, and neither can fail the deploy: any error
+is a warning and exit 0. `cf deploy` stages its Build Output — the
 Worker bundle and a copy of `apps/game/dist` — under the ignored
 `apps/server/.cloudflare/output/`. The mode there is a statement, not the
 switch: `cloudflare.config.ts` evaluates anything that is neither a preview nor
@@ -1161,20 +1271,26 @@ API answers `12002 Invalid request body`.
 `cf builds triggers list --external-script-id <tag>` names the trigger, and
 `cf workers get inertialrefd` has the Worker's tag.
 
-| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Production      | Push to `main` → `cf deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workersDev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Review apps     | A branch push deploys a Worker Preview with its own URL and the Previews Base secrets and build variables: the development Clerk instance, and the guide and accounts switched on. That holds while the Worker implements no Durable Object; see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assetsDirectory` in `wrangler.config.ts` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry).                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Migrations      | None declared: the deployed Worker's `tour-v2` migration has deleted the guide's former classes. H4's `PartitionAuthority` is declared in `cloudflare.config.ts` with `exports.durableObject({ storage: 'sqlite' })`. D1 migrations remain future multiplayer work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Secrets         | Declared with `bindings.secret()`, never `bindings.text()`, and **not** Workers Builds' build variables — those exist only during the build. Production's values are set from the command line, never the dashboard (above): at a prompt with `wrangler secret put <NAME> --name inertialrefd` or `cf workers secrets update <NAME> --worker inertialrefd --type secret_text`, or uploaded with a version by `cf deploy --secrets-file`. Nothing in `cloudflare.config.ts` may be a credential; it is committed. The Worker's are `OPENAI_API_KEY` for the guide and `CLERK_SECRET_KEY` for accounts and the guide's grant — one name, set per environment: the production Clerk instance's key under Production, the development instance's under Previews Base. Every declared secret is required: an environment's upload fails while one is unset. `pnpm dev:server` reads them from the root `.env.local`. |
-| Build variables | `VITE_GA_MEASUREMENT_ID`, set in Workers Builds. Not a secret — it ships in the bundle — but this repository is public, and an id committed in it is an id every fork measures into. A build run from a developer's machine reads the same name out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation. `PUBLIC_CLERK_PUBLISHABLE_KEY` is the same kind of variable, for the same reason, and set per environment: the production instance's `pk_live_…` in the Production build settings and the development instance's `pk_test_…` in Previews Base, matching each environment's `CLERK_SECRET_KEY`. Without a usable key the build has no accounts ([ADR-0048](adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)).                                                                   |
-| Rollback        | From the command line: `cf workers deployments create` with the previous version at 100% (`cf workers deployments list` names it), or `wrangler rollback --name inertialrefd`, never the dashboard (above). DO SQLite migrations are not rolled back by either; write them additively.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| Observability   | Workers Logs and Workers Traces, unsampled and persisted. `apps/server/src/log.ts` writes one object per record in the `scope` / `message` / fields shape `packages/shared` uses, with the level as the console method; the guide section above says what is recorded and how to read it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Concern         | Approach                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production      | Push to `main` → `cf deploy`. One Worker, `inertialrefd`, on both `inertialref.app` and `inertialref.jonjaques.com`, with the former canonical — `workersDev` is `false`, so there is no additional `workers.dev` address tracking the tip.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Review apps     | A branch push deploys a Worker Preview with its own URL and the Previews Base secrets and build variables: the development Clerk instance, and the guide and accounts switched on. That holds while the Worker implements no Durable Object; see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| The gate        | `pnpm check` stays in `.github/workflows/check.yml`. **Cloudflare cannot see a GitHub status check**, so branch protection on `main` is what actually prevents a red merge from deploying.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Build command   | `pnpm build` — an optional R2 media pull, the documentation build, typecheck across five projects, then `astro build` into `apps/game/dist`, which is what `assetsDirectory` in `wrangler.config.ts` points at. `pnpm docs:build` stages `apps/game/public/doc-content/`, which is gitignored, so the deploy carries the documentation only because the build regenerates it. See [H-8](#h-8--r2-holds-what-the-repository-will-not-carry).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Node version    | `.node-version`, read by Cloudflare's build image _and_ by the Actions workflow, so the two cannot disagree about the runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Build identity  | `WORKERS_CI_COMMIT_SHA` and `WORKERS_CI_BRANCH` become `__BUILD_ID__`, so a review app's HUD names the branch it was built from.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Build secrets   | `POSTHOG_RELEASE_KEY`, Production only: a PostHog personal API key with `error_tracking:write` and `annotation:write`, read by the deploy command's release and annotation steps (above). Previews Base has none, so a preview records nothing. `POSTHOG_PROJECT_ID` may be set beside it; without it the steps use the one `cloudflare.config.ts` declares.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Migrations      | None declared: the deployed Worker's `tour-v2` migration has deleted the guide's former classes. H4's `PartitionAuthority` is declared in `cloudflare.config.ts` with `exports.durableObject({ storage: 'sqlite' })`. D1 migrations remain future multiplayer work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Secrets         | Declared with `bindings.secret()`, never `bindings.text()`, and **not** Workers Builds' build variables — those exist only during the build. Production's values are set from the command line, never the dashboard (above): at a prompt with `wrangler secret put <NAME> --name inertialrefd` or `cf workers secrets update <NAME> --worker inertialrefd --type secret_text`, or uploaded with a version by `cf deploy --secrets-file`. Nothing in `cloudflare.config.ts` may be a credential; it is committed. The Worker's are `OPENAI_API_KEY` for the guide and `CLERK_SECRET_KEY` for accounts and the guide's grant — one name, set per environment: the production Clerk instance's key under Production, the development instance's under Previews Base. Every declared secret is required: an environment's upload fails while one is unset. `pnpm dev:server` reads them from the root `.env.local`.                                                                                                                                     |
+| Build variables | `PUBLIC_POSTHOG_PROJECT_TOKEN` and `PUBLIC_POSTHOG_HOST`, set in Workers Builds on Production and on Previews Base. Not secrets — the token ships in the bundle and only writes events — but this repository is public, and a token committed in it is a project every fork reports into. The build also writes them into `dist/_headers` for crash reports (`apps/game/vite.config.ts`). A build run from a developer's machine reads the same names out of the gitignored `apps/game/.env.production`; a real environment variable wins over the file. `apps/game/.env.example` is the committed documentation. `PUBLIC_CLERK_PUBLISHABLE_KEY` is the same kind of variable, for the same reason, and set per environment: the production instance's `pk_live_…` in the Production build settings and the development instance's `pk_test_…` in Previews Base, matching each environment's `CLERK_SECRET_KEY`. Without a usable key the build has no accounts ([ADR-0048](adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md)). |
+| Rollback        | From the command line: `cf workers deployments create` with the previous version at 100% (`cf workers deployments list` names it), or `wrangler rollback --name inertialrefd`, never the dashboard (above). DO SQLite migrations are not rolled back by either; write them additively.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Manual deploy   | `pnpm run deploy:worker` still works and is the escape hatch when CI is the thing that is broken.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Observability   | Workers Logs and Workers Traces, unsampled and persisted. `apps/server/src/log.ts` writes one object per record in the `scope` / `message` / fields shape `packages/shared` uses, with the level as the console method; the guide section above says what is recorded and how to read it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+
+Two Worker secrets are Production's alone and are therefore not declared:
+`CLERK_WEBHOOK_SIGNING_SECRET` and `POSTHOG_PERSON_DELETE_KEY`, which
+[account deletion](#account-deletion) reads with the declared variable
+`POSTHOG_PROJECT_ID`. They are set at the same prompt as the others.
 
 ### Durable Objects require a different review environment
 

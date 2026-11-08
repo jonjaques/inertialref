@@ -7,13 +7,17 @@ import { configDefaults, defineConfig } from 'vitest/config'
 // React, and WebGL. Nothing here registers a browser environment on purpose.
 export default defineConfig({
   /*
-   * `apps/game/src/build.ts` reads a constant that Vite's `define` substitutes
-   * at build time (see apps/game/vite.config.ts). Tests do not go through that
-   * config, so without this the HUD smoke test fails on a bare
+   * `apps/game/src/build.ts` reads two constants that Vite's `define`
+   * substitutes at build time (see apps/game/vite.config.ts). Tests do not go
+   * through that config, so without these the HUD smoke test fails on a bare
    * `__BUILD_ID__ is not defined` — an error about a build system, thrown by a
-   * test about an overlay.
+   * test about an overlay. The tree is null, as in a production build: no dev
+   * server serves a test.
    */
-  define: { __BUILD_ID__: JSON.stringify('test') },
+  define: {
+    __BUILD_ID__: JSON.stringify('test'),
+    __SERVED_TREE__: JSON.stringify(null),
+  },
   /*
    * `apps/game`'s `@/` alias, repeated.
    *

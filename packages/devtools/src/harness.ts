@@ -151,6 +151,7 @@ import {
 } from './finding.ts'
 import {
   type BootPhase,
+  type BuildIdentity,
   type FrameStats,
   type GuideStatus,
   type GuideTraceEntry,
@@ -349,6 +350,20 @@ export class GameHarness {
     ]
       .filter((part) => part.length > 0)
       .join(' | ')
+  }
+
+  /**
+   * Which build this is, and on the dev server which checkout serves it.
+   *
+   * What a rig holds against the tree it means to measure before it runs a
+   * step: a port is not evidence of a tree, and sibling worktrees cut from one
+   * commit share the id, so the tree is the half that tells them apart. A
+   * production build names none, because its bundle carries no filesystem
+   * path. A copy, so a console that edits the answer edits nothing it reports.
+   */
+  build(): BuildIdentity {
+    const { id, tree } = this.#host.build
+    return { id, tree }
   }
 
   snapshot(alpha = 0): WorldSnapshot {
@@ -1738,6 +1753,7 @@ export class GameHarness {
       'InertialRef harness',
       '  ir.summary()                  one-line state',
       '  ir.status()                   full structured state',
+      '  ir.build()                    { id: BUILD_ID, tree }: the tree the dev server serves, null in a production build',
       '  ir.inspect(id?)               one entity, in detail',
       '  ir.dossier(address)           one star, body or station, as a page of astronomy',
       '  ir.step(ticks) / ir.runSeconds(s)',

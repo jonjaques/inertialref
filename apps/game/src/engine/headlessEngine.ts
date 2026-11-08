@@ -29,7 +29,10 @@ import { GameEngine, type GameEngineOptions } from './GameEngine.ts'
  * every message and honor the transfer list, so neither is a mock.
  */
 export function headlessEngine(
-  options: Pick<GameEngineOptions, 'catalog' | 'heightfieldArchive'> & {
+  options: Pick<
+    GameEngineOptions,
+    'catalog' | 'heightfieldArchive' | 'build'
+  > & {
     readonly threads?: boolean
   } = {},
 ): GameEngine {

@@ -27,6 +27,8 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { PICTURES } from '../../packages/devtools/src/pictures.ts'
+import { readSession, rigLeft, takeGpu } from '../driveLock.mjs'
+import { parseWait } from '../gpuLock.mjs'
 import { PLATES } from './check.mjs'
 import { capturePlates, serve } from './capture.mjs'
 
@@ -36,13 +38,14 @@ const { values, positionals: wanted } = parseArgs({
     port: { type: 'string', default: '9333' },
     url: { type: 'string' },
     'tree-port': { type: 'string', default: '5183' },
+    'gpu-wait': { type: 'string' },
     help: { type: 'boolean' },
   },
   allowPositionals: true,
 })
 if (values.help) {
   console.log(
-    'Usage: pnpm presets:plates [--port 9341] [--url http://localhost:5180] [preset-id ...]\nCaptures standard SDR at DPR 1 using the selected driver profile. Serves this tree on --tree-port (5183) unless --url names a server already serving it. Recipe presets start from the default lens; camera presets restore their declared lens.',
+    'Usage: pnpm presets:plates [--port 9341] [--url http://localhost:5180] [--gpu-wait <s>] [preset-id ...]\nCaptures standard SDR at DPR 1 using the selected driver profile. Serves this tree on --tree-port (5183) unless --url names a server already serving it. Recipe presets start from the default lens; camera presets restore their declared lens. Holds the GPU lock for the run, and --gpu-wait queues up to <s> seconds for it.',
   )
   process.exit(0)
 }
@@ -52,6 +55,7 @@ if (
   Number(values.port) > 65535
 )
   throw new Error('--port needs an integer from 1 to 65535.')
+const gpuWait = parseWait(values['gpu-wait'], '--gpu-wait')
 
 // Every name, not just one of them: a typo beside a real id would otherwise
 // capture the real one and report the run complete.
@@ -68,6 +72,18 @@ const pictures =
     ? PICTURES
     : PICTURES.filter((one) => wanted.includes(one.id))
 
+// One hold on the GPU lock for every capture, before the server starts, and
+// joined by each capture's drive.mjs child; `compare.mjs` says why.
+const gpu = await takeGpu('presets:plates', {
+  state: await readSession(values.port),
+  waitMs: gpuWait,
+  hint: '--gpu-wait <seconds> queues for it.',
+}).catch((error) => {
+  if (error?.name !== 'GpuLockError') throw error
+  console.error(error.message)
+  process.exit(1)
+})
+
 let origin = values.url
 let stop = null
 if (origin === undefined) {
@@ -81,15 +97,21 @@ if (origin === undefined) {
 try {
   await capturePlates({
     origin,
+    tree: ROOT,
     port: values.port,
     out: PLATES,
     pictures,
+    lock: gpu,
     extension: 'jpg',
   })
+  console.log(
+    `\n${pictures.length} plate${pictures.length === 1 ? '' : 's'} in ${path.relative(ROOT, PLATES)}.`,
+  )
 } finally {
+  // This command's own entry; the rig's Chrome keeps the lock until `--down`.
+  gpu.release()
   stop?.()
+  // Here, so a capture that threw says it as well: its rig is up all the same.
+  const left = await rigLeft(values.port)
+  if (left !== null) console.error(left)
 }
-
-console.log(
-  `\n${pictures.length} plate${pictures.length === 1 ? '' : 's'} in ${path.relative(ROOT, PLATES)}. pnpm drive --down when finished.`,
-)

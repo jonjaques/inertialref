@@ -4,6 +4,7 @@ import { Action } from '../hud/Action.tsx'
 import { Section } from '../hud/Section.tsx'
 import { SettingRow } from '../hud/SettingRow.tsx'
 import { ConfirmAction } from './ConfirmAction.tsx'
+import { ReportingSection } from './ReportingSection.tsx'
 import {
   exportPreferences,
   type ImportPlan,
@@ -108,6 +109,7 @@ export function DataSection({
 
   return (
     <div className="@container flex flex-col gap-2">
+      <ReportingSection />
       <Section id="settings.data.transfer" title="Move to another browser">
         <SettingRow
           label="Export"

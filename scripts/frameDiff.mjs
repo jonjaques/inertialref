@@ -54,7 +54,7 @@ async function magick(args) {
 }
 
 /** Pixels that differ between two frames, at the comparison size. */
-const changed = async (a, b) =>
+const changedPixels = async (a, b) =>
   Number(
     await magick([
       a,
@@ -107,8 +107,17 @@ const median = (values) => {
  * `timestamps` are seconds and optional; with them the report carries the rate
  * a strobe recurs at, which is the unit a bug report is written in — "two or
  * three times a second" — and the one no frame index can be compared against.
+ *
+ * `changed` is the one piece of I/O: the pixels two frames differ by, asked of
+ * their two paths rather than of a pair index, because the skip comparison
+ * asks about frames that are not adjacent. ImageMagick unless a caller passes
+ * counts of its own.
  */
-export async function analyzeFrames(paths, timestamps = null) {
+export async function analyzeFrames(
+  paths,
+  timestamps = null,
+  { changed = changedPixels } = {},
+) {
   const pairs = []
   for (let i = 1; i < paths.length; i += 1)
     pairs.push(await changed(paths[i - 1], paths[i]))

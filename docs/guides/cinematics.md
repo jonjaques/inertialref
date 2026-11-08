@@ -118,7 +118,9 @@ uv run scripts/compare_render.py .data/shot --out /tmp/shot-diff.csv
 ```
 
 `--port` attaches to a Chrome that is already up, and keys that Chrome's
-profile directory, so two agents capturing at once must use different ports.
+profile directory. A capture is a GPU job, so one runs at a time and none
+beside a `drive.mjs` rig or `pnpm test:gpu`: two GPU jobs at once have crashed
+macOS ([the GPU lock](../../.claude/skills/drive/SKILL.md#one-gpu-job-at-a-time)).
 There is **no `--help`**: passing it starts a full 2742-frame capture. Never
 write to `analysis/render-diff.csv` from a partial capture — it is the
 committed baseline the whole comparison is against.

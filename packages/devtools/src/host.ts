@@ -386,6 +386,25 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
 }
 
 /**
+ * Which build a host runs, and which checkout serves it, as the host was told.
+ *
+ * The id is `BUILD_ID`, a commit and `-dirty` when the tree had edits. It
+ * cannot tell two checkouts apart, because sibling worktrees cut from one
+ * commit describe it alike, so a dev server also names the tree it serves.
+ * Only a dev server: a shipped bundle must not carry a filesystem path, so a
+ * production build's tree is null, and a rig reads that as "unchecked" rather
+ * than as a mismatch. A host nothing built — the headless runner, a test —
+ * names neither. Plain data, because it crosses to a driver as JSON.
+ */
+export interface BuildIdentity {
+  readonly id: string | null
+  readonly tree: string | null
+}
+
+/** The identity of a host that no build produced. */
+export const UNBUILT: BuildIdentity = Object.freeze({ id: null, tree: null })
+
+/**
  * What the harness is built over: the simulation, and the render side.
  *
  * `world` must be a *getter*, not a captured reference. Loading a save replaces
@@ -426,4 +445,6 @@ export interface Host {
    */
   readonly now: (() => number) | null
   readonly render: RenderHost
+  /** Which build this is and which tree serves it; `ir.build()` answers it. */
+  readonly build: BuildIdentity
 }

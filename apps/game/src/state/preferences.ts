@@ -119,6 +119,7 @@ export const PREFERENCE_GROUPS = [
   'controls',
   'planetarium',
   'workspace',
+  'privacy',
 ] as const
 
 export type PreferenceGroup = (typeof PREFERENCE_GROUPS)[number]
@@ -798,6 +799,54 @@ export const DOCK_PANES = family<PaneState>({
   accept: isPaneState,
 })
 
+/* ------------------------------------------------------------------------ */
+/* privacy                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * What this browser sends to PostHog, one switch per tier
+ * (`telemetry/consent.ts`). Global Privacy Control and Do Not Track override
+ * all three, and a build without a project token sends nothing whatever they
+ * say. Preferences rather than PostHog's own opt-out, so the export, the
+ * import and the reset carry them like every other choice, and so the gate
+ * can answer before the SDK has loaded.
+ */
+
+/** Usage and crash reports: pageviews, events, exceptions, logs, timings. */
+export const TELEMETRY_USAGE = define({
+  key: 'privacy.usage',
+  group: 'privacy',
+  what: 'whether usage and crash reports are sent',
+  initial: true,
+  accept: isBoolean,
+})
+
+/**
+ * What a guide tour said, word for word. Off until the visitor turns it on:
+ * without it a tour reports its timing, its tool names and its cost, never a
+ * sentence (`tour/aiObservability.ts`).
+ */
+export const TELEMETRY_TRANSCRIPTS = define({
+  key: 'privacy.transcripts',
+  group: 'privacy',
+  what: 'whether guide tour transcripts are sent',
+  initial: false,
+  accept: isBoolean,
+})
+
+/**
+ * A recording of the page's interface — never the scene, which a WebGPU
+ * canvas does not give up outside the frame that drew it. Off until the
+ * visitor turns it on.
+ */
+export const TELEMETRY_REPLAY = define({
+  key: 'privacy.replay',
+  group: 'privacy',
+  what: 'whether the interface is recorded for session replay',
+  initial: false,
+  accept: isBoolean,
+})
+
 /**
  * The census. Everything declared above, and the reason export can exist.
  *
@@ -849,6 +898,9 @@ export const REGISTRY: readonly AnyPreference[] = [
   DEBUG_ON,
   TIMING_LEVEL,
   DOCK_PLACEMENT,
+  TELEMETRY_USAGE,
+  TELEMETRY_TRANSCRIPTS,
+  TELEMETRY_REPLAY,
 ]
 
 export const FAMILIES: readonly AnyFamily[] = [

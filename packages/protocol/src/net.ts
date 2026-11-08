@@ -57,6 +57,14 @@ export const ACCOUNT_PATH = '/api/account'
 export const SOCKET_PATH = '/ws'
 
 /**
+ * PostHog, through the Worker. The browser's SDK takes `<origin>` plus this,
+ * less its trailing slash, as its API host, so its requests are same-origin
+ * and a content blocker that drops PostHog's own hosts lets them through.
+ * Which paths under it reach PostHog is `apps/server/src/relay.ts`.
+ */
+export const RELAY_PREFIX = '/api/relay/'
+
+/**
  * Files the site serves but does not carry — object storage, not the bundle.
  *
  * The *prefix* is here because it is a path the client, the router and

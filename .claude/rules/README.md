@@ -64,7 +64,7 @@ every touch of its directory, and the thing it is competing with for attention i
 | `record.md`      | the object dossier or any planetarium panel                           |
 | `server.md`      | the Worker, net, protocol or persistence                              |
 | `testing.md`     | any `*.test.ts`                                                       |
-| `site.md`        | the document head, `public/`, the brand pipeline, analytics           |
+| `site.md`        | the document head, `public/`, the brand pipeline, telemetry           |
 | `documents.md`   | markdown under `docs/` or `design/`, `STYLE.md`, the docs build       |
 | `timing.md`      | the timing seam, the sink, the budgets or the profile report          |
 | `soundtrack.md`  | the player, the audio pipeline, `data/audio`, or the service worker   |

@@ -4,13 +4,14 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocManifest, DocPage } from '../docs/content.ts'
 import { DocsContentContext } from '../docs/initialDocs.ts'
-import { canonicalUrl, documentTitle, metadataForPath } from '../site.ts'
+import { documentTitle, metadataForPath } from '../site.ts'
 import { DocumentMeta } from './DocumentMeta.tsx'
 
-const { effects, pageView, startAnalytics } = vi.hoisted(() => ({
+const { effects, pageView, recordEvent, startTelemetry } = vi.hoisted(() => ({
   effects: [] as Array<() => void>,
   pageView: vi.fn(),
-  startAnalytics: vi.fn(),
+  recordEvent: vi.fn(),
+  startTelemetry: vi.fn(),
 }))
 
 vi.mock('react', async (original) => ({
@@ -19,9 +20,10 @@ vi.mock('react', async (original) => ({
     effects.push(effect)
   },
 }))
-vi.mock('../analytics.ts', () => ({
-  recordPageView: pageView,
-  startAnalytics,
+vi.mock('../telemetry/client.ts', () => ({
+  recordPageview: pageView,
+  recordEvent,
+  startTelemetry,
 }))
 
 const PAGE: DocPage = {
@@ -96,7 +98,7 @@ describe('metadata for a live documentation address', () => {
   it('records an alias as the canonical document before the router replaces it', () => {
     renderMetadata(`${ALIAS}?seed=paper#definition`)
     expect(pageView).toHaveBeenCalledExactlyOnceWith(
-      canonicalUrl(PAGE.route),
+      metadataForPath(PAGE.route, PAGE).path,
       documentTitle(metadataForPath(PAGE.route, PAGE)),
     )
     expect(document.title).not.toContain('Not Found')
@@ -110,9 +112,11 @@ describe('metadata for a live documentation address', () => {
   it('describes a dialog address while documentation remains behind it', () => {
     renderMetadata('/settings')
     expect(pageView).toHaveBeenCalledExactlyOnceWith(
-      canonicalUrl('/settings'),
+      metadataForPath('/settings').path,
       documentTitle(metadataForPath('/settings')),
     )
+    // A dialog over the menu is still the menu's mode.
+    expect(recordEvent).toHaveBeenCalledWith('mode entered', { mode: 'menu' })
   })
 
   it('still reports an unknown article as missing', () => {

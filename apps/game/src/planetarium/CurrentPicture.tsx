@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { describeCause } from '../hud/notice.ts'
+import { recordEvent } from '../telemetry/client.ts'
 import { PERSONAL_PICTURES, usePersistentState } from '../state/preferences.ts'
 import { SharePicture } from './SharePicture.tsx'
 
@@ -40,7 +41,8 @@ export function CurrentPicture({
       ? null
       : { ...shot.picture, label: name.trim() || shot.picture.label }
   return (
-    <div className="flex flex-col gap-4">
+    // A label being typed and the notice that repeats it: the visitor's words.
+    <div className="ph-sensitive flex flex-col gap-4">
       {picture === null ? (
         <p className="type-ui text-slate-400">{shot.error}</p>
       ) : (
@@ -51,6 +53,7 @@ export function CurrentPicture({
               event.preventDefault()
               try {
                 setPictures((held) => mergePictures(held, [picture]))
+                recordEvent('picture saved')
                 onNotice(`Saved ${picture.label}.`)
               } catch (cause) {
                 onNotice(describeCause(cause))

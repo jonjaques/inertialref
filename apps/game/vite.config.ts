@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   readSync,
+  writeFileSync,
 } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, loadEnv, type UserConfig } from 'vite'
@@ -60,42 +61,129 @@ const slug = (text: string): string =>
   text.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 40)
 
 /**
- * One line in the build log when a production build cannot measure anything.
+ * The checkout the dev server serves, injected as `__SERVED_TREE__` (see
+ * `src/build.ts`), and null in a build.
  *
- * `VITE_GA_MEASUREMENT_ID` is a Workers Builds *build variable* and is
- * deliberately not in the repository (`src/analytics.ts`), which means the one
- * way it fails — not reaching the build environment — produces a bundle that is
- * correct, passes every check, deploys cleanly and silently measures nothing.
- * There is no error to notice. Grepping the deployed bundle is how it was
- * caught the first time; this is so the *build log* answers it instead.
+ * The build id names a commit, and sibling worktrees cut from one
+ * `origin/main` describe the same one, `-dirty` alike once edited, so a rig
+ * pointed at a sibling's Vite on 5173 boots the same app and reads the same
+ * id. The root git reports is what differs, and `ir.build()` hands it to the
+ * rig to hold against the tree it means to measure.
  *
- * The id is not printed. It is public, but a build log is a bad habit to start.
+ * A `config` hook rather than an entry in `define` beside the id, because the
+ * command is the switch and the hook is where Vite states it: `gameVite` runs
+ * once, when Astro loads its config, before anything says whether it will
+ * serve or build. A shipped bundle must not carry a filesystem path, and
+ * `scripts/check-site.mjs` refuses a build whose output names this checkout.
  */
-function reportAnalytics(mode: string): void {
-  /*
-   * Only production, and only the failing case. A build that measures nothing
-   * is the correct outcome everywhere else — a fork, and every `pnpm dev` — so
-   * announcing the healthy one printed a line on every build for a fault that
-   * fires once. Silence here means the id resolved.
-   */
-  if (mode !== 'production') return
+function servedTree() {
+  const tree = (): string | null => {
+    try {
+      return execSync('git rev-parse --show-toplevel', {
+        cwd: fileURLToPath(new URL('.', import.meta.url)),
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim()
+    } catch {
+      // A checkout with no git history serves a tree it cannot name; the rig
+      // reads null as unchecked, as it reads a production build.
+      return null
+    }
+  }
+  return {
+    name: 'inertialref:served-tree',
+    config: (_config: UserConfig, { command }: { command: string }) => ({
+      define: {
+        __SERVED_TREE__: JSON.stringify(command === 'serve' ? tree() : null),
+      },
+    }),
+  }
+}
+
+/** The PostHog build variables, through `loadEnv` (below for why). */
+function telemetryEnv(mode: string): { token: string; host: string } {
   /*
    * Through `loadEnv`, not `process.env`, because the two sources are the whole
    * point: CI sets a real environment variable and a developer's machine has a
    * gitignored `.env.production`. Reading only the former reports "not set" on
-   * a local build whose bundle does contain the id, which is a diagnostic that
-   * lies in the direction that wastes the most time.
+   * a local build whose bundle does contain the token, which is a diagnostic
+   * that lies in the direction that wastes the most time.
    */
-  const resolved =
-    loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), 'VITE_')[
-      'VITE_GA_MEASUREMENT_ID'
-    ] ?? ''
-  if (resolved === '')
+  const env = loadEnv(
+    mode,
+    fileURLToPath(new URL('.', import.meta.url)),
+    'PUBLIC_POSTHOG_',
+  )
+  return {
+    token: env['PUBLIC_POSTHOG_PROJECT_TOKEN'] ?? '',
+    host: (env['PUBLIC_POSTHOG_HOST'] ?? '').replace(/\/+$/, ''),
+  }
+}
+
+/**
+ * One line in the build log when a production build cannot report anything.
+ *
+ * The PostHog token and host are Workers Builds *build variables* and are
+ * deliberately not in the repository (`src/telemetry/consent.ts`), which means
+ * the one way they fail — not reaching the build environment — produces a
+ * bundle that is correct, passes every check, deploys cleanly and silently
+ * reports nothing. There is no error to notice; this is so the *build log*
+ * answers it instead.
+ *
+ * Only production, and only the failing case. A build that reports nothing is
+ * the correct outcome everywhere else — a fork, and every `pnpm dev` — so
+ * announcing the healthy one would print a line on every build for a fault
+ * that fires once. The token is not printed. It is public, but a build log is
+ * a bad habit to start.
+ */
+function reportTelemetry(mode: string): void {
+  if (mode !== 'production') return
+  const { token, host } = telemetryEnv(mode)
+  if (token === '' || host === '')
     console.warn(
-      'analytics: VITE_GA_MEASUREMENT_ID is not set — this production build ' +
-        'measures nothing. It is a Workers Builds build variable, not a ' +
-        'repository file.',
+      'telemetry: PUBLIC_POSTHOG_PROJECT_TOKEN or PUBLIC_POSTHOG_HOST is not ' +
+        'set — this production build reports nothing. Both are Workers ' +
+        'Builds build variables, not repository files.',
     )
+}
+
+/**
+ * Crash reports, which the page itself can never send.
+ *
+ * A tab the browser kills for memory, or one that hangs, never reaches
+ * `runtimeFailure` or any handler; Chrome's Reporting API can say so on the
+ * next navigation, to the endpoint named `default`. PostHog's `/report/` turns
+ * the body into a `$browser_crash_report` event. The header names that
+ * endpoint and nothing else, and only `default`: this site has no CSP yet, so
+ * there are no violation reports to route.
+ *
+ * **The browser sends these itself.** No in-page switch, and not Global
+ * Privacy Control, can stop them; that was decided knowingly
+ * (`docs/adr/0061-telemetry-is-posthog.md`). PostHog drops the report's query
+ * strings, creates no person, and the project discards the address.
+ *
+ * Written as `dist/_headers`, which Workers static assets apply to every
+ * static response, because the token is a build variable and a committed
+ * `public/_headers` could not carry it. A build without a token writes none.
+ */
+function crashReportHeader(mode: string) {
+  return {
+    name: 'inertialref:crash-report-header',
+    apply: 'build' as const,
+    writeBundle() {
+      const { token, host } = telemetryEnv(mode)
+      const dir = fileURLToPath(new URL('./dist', import.meta.url))
+      if (mode !== 'production' || token === '' || host === '') return
+      if (!existsSync(dir)) return
+      const endpoint = `${host}/report/?token=${encodeURIComponent(token)}`
+      writeFileSync(
+        `${dir}/_headers`,
+        '# Generated by vite.config.ts (crashReportHeader). Not committed:\n' +
+          '# it carries the PostHog project token, a build variable.\n' +
+          `/*\n  Reporting-Endpoints: default="${endpoint}"\n`,
+      )
+    },
+  }
 }
 
 /**
@@ -193,6 +281,37 @@ function requireSourceMaps() {
 }
 
 /**
+ * Refuse an asset whose name a content blocker would block.
+ *
+ * Rollup names a shared chunk after one of the modules in it, so the shared
+ * shell chunk — the preferences, the site record and every mode's first
+ * import — can come out named after a telemetry module. Content blockers block
+ * URLs by vendor words (EasyPrivacy lists `posthog`, `analytics` and their
+ * kin), so a visitor with one loses the whole shell, not only the telemetry,
+ * and nothing in a test or a review shows it. The SDK's own chunk is
+ * `module.<hash>.js` after its file, which is why that one passes.
+ */
+const BLOCKED_NAME = /posthog|analytics|tracking|sentry/i
+
+function refuseBlockedAssetNames() {
+  return {
+    name: 'inertialref:refuse-blocked-asset-names',
+    apply: 'build' as const,
+    writeBundle(_options: unknown, bundle: Record<string, OutputEntry>) {
+      const blocked = Object.keys(bundle).filter((name) =>
+        BLOCKED_NAME.test(name.split('/').at(-1) ?? ''),
+      )
+      if (blocked.length > 0)
+        throw new Error(
+          `${blocked.join(', ')}: a content blocker would refuse ` +
+            'this file by its name. Rename the module the chunk is named ' +
+            'after (vite.config.ts, refuseBlockedAssetNames).',
+        )
+    },
+  }
+}
+
+/**
  * Refuse to bundle a git-lfs pointer in place of a model.
  *
  * `render/shipModels.ts` pulls `data/models/*.glb` in through
@@ -237,7 +356,7 @@ export function gameVite(
   mode = process.env['NODE_ENV'] ?? 'development',
   standalone = false,
 ): UserConfig {
-  reportAnalytics(mode)
+  reportTelemetry(mode)
   return {
     /*
      * `@/` is the one non-relative import specifier in this repository.
@@ -255,8 +374,11 @@ export function gameVite(
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
     plugins: [
+      servedTree(),
       requireRealModels(),
       requireSourceMaps(),
+      refuseBlockedAssetNames(),
+      crashReportHeader(mode),
       ...(standalone ? [react()] : []),
       // React Compiler handles memoization, so components here do not hand-write
       // useMemo/useCallback around render work.
