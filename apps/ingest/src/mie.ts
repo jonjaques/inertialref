@@ -38,8 +38,9 @@ export function wiscombeTerms(x: number): number {
 }
 
 /**
- * a_n and b_n. D_n starts at zero 16 terms above max(N, |mx|), as Wiscombe
- * advises; the downward recurrence forgets its start within those terms.
+ * a_n and b_n. D_n starts at zero 16 terms above max(N, |mx|), one more
+ * than BHMIE's 15: the downward recurrence forgets a wrong start within a few
+ * terms, where the upward one would amplify every rounding past n ≈ |mx|.
  */
 export function mieSeries(
   x: number,
