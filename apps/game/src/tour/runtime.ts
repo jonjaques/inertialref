@@ -586,6 +586,10 @@ export class GuideRuntime {
   async ask(text: string): Promise<void> {
     const query = text.trim().slice(0, 4000)
     if (!query || this.#loop === null || !this.#connected()) return
+    // A spoken question stands the tour down through the voice's delegation
+    // event; a typed one raises none, so a held quiet prompt would follow
+    // the answer as "continue the tour".
+    this.#cancelPacing()
     this.#loop.ask(query)
   }
 
@@ -819,10 +823,11 @@ export class GuideRuntime {
     linger.phase = 'speech'
     void this.#clock.waitForBeat({ since }).then((outcome) => {
       if (this.#linger !== linger || outcome === 'canceled') return
-      if (outcome === 'silent' && this.#meter() !== 'ok') {
-        // Silence on a meter that cannot hear is no measurement. Taking it
-        // for the end of the words started the quiet count under the
-        // narration, and the next stop cut it off.
+      if (this.#meter() !== 'ok') {
+        // Silence on a meter that cannot hear is no measurement, whether it
+        // is all the clock heard or what a track that ended under the words
+        // left it. Taking it for the end of the words started the quiet
+        // count under the narration, and the next stop cut it off.
         linger.phase = 'held'
         this.#record('note', { beat: outcome, meter: this.#meter() })
         return

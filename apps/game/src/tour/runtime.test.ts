@@ -453,6 +453,26 @@ describe('the guide runtime', () => {
     await f.dispose()
   })
 
+  it('drops the linger and its prompt when the visitor types a question', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    f.tick()
+    f.speak(0.05)
+    f.advance(2000, 20)
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    // A typed question raises no delegation event, which is the spoken
+    // question's cue; the typed path has to stand the tour down itself.
+    await f.runtime.ask('What is that moon?')
+    await f.settle()
+    f.terminal('That is Titan.')
+    f.advance(10_000, 100)
+    expect(quietPrompts(f)).toHaveLength(0)
+    await f.dispose()
+  })
+
   it("does not take the filler's tail for the beat", async () => {
     const f = rig()
     await lingering(f)
@@ -505,6 +525,37 @@ describe('the guide runtime', () => {
     f.advance(2600, 26)
     await f.settle()
     f.advance(2700, 27)
+    expect(quietPrompts(f)).toHaveLength(1)
+    await f.dispose()
+  })
+
+  it('holds the tour when the meter fails after the words began', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    const before = f.creates()
+    f.tick()
+    f.speak(0.05)
+    f.advance(1000, 10)
+    // The track ends under the narration. What the clock reads from here is
+    // exact zero, which is the quiet it was waiting for and no measurement.
+    f.fake.measure('ended')
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    f.advance(20_000, 200)
+    await f.settle()
+    expect(quietPrompts(f)).toHaveLength(0)
+    expect(f.creates()).toBe(before)
+    // A meter that hears again finds the narration over: the beat reads
+    // silent at the start timeout and the quiet counts from there.
+    f.fake.measure('ok')
+    f.tick()
+    f.advance(8500, 85)
+    await f.settle()
+    f.advance(4900, 49)
+    expect(quietPrompts(f)).toHaveLength(0)
+    f.advance(200, 2)
     expect(quietPrompts(f)).toHaveLength(1)
     await f.dispose()
   })
