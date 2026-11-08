@@ -101,6 +101,8 @@ export interface CloudSystem {
   /** Every pipeline any lever set draws with, and the noise baked; `progress` four times. */
   warm(progress?: () => void): Promise<void>
   readonly report: CloudRenderReport
+  /** Every resource the system holds, in the frame's order: the census's subject. */
+  readonly resources: readonly CloudResource[]
   dispose(): void
 }
 
@@ -461,6 +463,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     get report() {
       return reportOf()
     },
+    resources,
     dispose() {
       if (disposed) return
       disposed = true
