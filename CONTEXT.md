@@ -12968,6 +12968,27 @@ warm-up. The check above went through as `--keep` once, then `--keep` again
 on the kept worktree. The identity check runs after the boot and plays no
 part in it.
 
+**The review's four findings: three defects fixed with a test each, and one
+miscount.** The refusal ended "or name <served> as the tree under test
+(drive.mjs --tree)", with the sibling's path filled in, and said nothing about
+serving this tree while a sibling holds 5173. drive.mjs starts no server
+while the port answers and `pnpm dev` refuses a taken one, so the one remedy
+on screen drove the sibling as this tree. The refusal now leads with
+`pnpm dev:client --port <n>` and `--url http://localhost:<n>/ --no-serve`,
+and spells `--tree <path>` with a placeholder. `pnpm dev:client --port 5186`
+reaches `astro dev --port 5186` through both script layers, and served this
+worktree there. The harness's copy case compared `ir.build()` with the
+literal the session keeps by reference. With `build()` returning the host's
+object it still passed, 3 of 3. It now holds the answer against a copy taken
+before the edit, and fails under that mutation. `--tree ''` resolved to the
+shell's directory, and only after a full boot. It is now refused before the
+lock. The PR body counted seven touched test files and 122 cases where there
+are six and 120. The four GPU checks re-ran at `6050da6` with the outcomes
+above. Each fresh Vite's first boot failed again and the second went
+through. The sibling on 5185 was refused with the new wording after a boot
+and on a warm attach. `presets:compare --base HEAD` went through on the
+second `--keep` run.
+
 **Not done:** `--status` running the guard, which is P03's drive.mjs half
 and unit C. A probe of the foreign server before the boot, which would save
 the boot a refused run costs: the tree is in the page, so the page has to
