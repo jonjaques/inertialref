@@ -229,6 +229,30 @@ export async function closeChrome(
 }
 
 /**
+ * This process as the session lists an invocation driving the rig's page:
+ * its pid, and its start time, so a pid a crashed invocation left behind is
+ * not read as a later process that was given it.
+ */
+export const driver = (pid = process.pid) => ({ pid, start: startOf(pid) })
+
+/**
+ * The invocations the session lists as driving the rig's page that are still
+ * running. An invocation takes itself off the list when it exits, and one
+ * that was killed cannot, so every reader filters the list instead of
+ * trusting it. A start time that cannot be read is no proof the pid was
+ * reused, so that entry stays, as a Chrome's does in `rigLeft`.
+ *
+ * @param {{drivers?: {pid: number, start: string | null}[]} | null} state
+ */
+export function drivers(state) {
+  const listed = Array.isArray(state?.drivers) ? state.drivers : []
+  return listed.filter(({ pid, start }) => {
+    const who = identify(pid, start)
+    return who === 'same' || who === 'unknown'
+  })
+}
+
+/**
  * `--status`'s answer: the GPU free, held for this rig, or held by another
  * job, named the way a refusal names it. A status that cannot read the lock
  * says so rather than failing the command.

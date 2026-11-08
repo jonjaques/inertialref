@@ -14,6 +14,8 @@ import { TOKEN_ENV, acquire, release } from './gpuLock.mjs'
 import {
   adopt,
   closeChrome,
+  driver,
+  drivers,
   gpuLine,
   keep,
   launched,
@@ -430,5 +432,35 @@ describe('the rig and the GPU lock', () => {
       gpuToken: 'abc',
       chromePid: 7,
     })
+  })
+})
+
+/*
+ * `--status` sets the page's metrics and, when its socket closes, Chrome
+ * clears the page's device emulation for every session, so it must know
+ * whether an invocation is driving the page before it touches it.
+ */
+describe('the invocations driving the rig’s page', () => {
+  it('lists this process with the start time --down checks a pid by', () => {
+    expect(driver()).toEqual({ pid: process.pid, start: startOf(process.pid) })
+  })
+
+  it('keeps a driver that is still running and drops one that has exited or whose pid is reused', async () => {
+    const running = await chrome()
+    const exited = await chrome()
+    process.kill(exited, 'SIGKILL')
+    for (let i = 0; i < 100 && exists(exited); i += 1) await sleep(20)
+    const state = {
+      drivers: [
+        { pid: running, start: startOf(running) },
+        { pid: exited, start: 'Sat Nov  7 20:00:00 2026' },
+        // A pid that names another process now: a crashed invocation's,
+        // given to whatever started after it.
+        { pid: process.pid, start: 'Thu Jan  1 00:00:00 1970' },
+      ],
+    }
+    expect(drivers(state)).toEqual([{ pid: running, start: startOf(running) }])
+    expect(drivers({})).toEqual([])
+    expect(drivers(null)).toEqual([])
   })
 })

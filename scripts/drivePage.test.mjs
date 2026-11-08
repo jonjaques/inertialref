@@ -9,6 +9,7 @@ import {
   holdPage,
   pointLine,
   showing,
+  statusPoint,
 } from './drivePage.mjs'
 
 const URL_ = 'http://localhost:5173/planetarium?at=earth&presentation=occluded'
@@ -494,6 +495,130 @@ describe('holdPage', () => {
       'Runtime.evaluate',
     ])
     expect(point.dynamicRangeHigh).toBe(false)
+  })
+})
+
+/** `send`, with every command and its parameters kept in order. */
+const recording = (send) => {
+  const calls = []
+  return {
+    calls,
+    send: async (method, params = {}) => {
+      calls.push({ method, params })
+      return await send(method, params)
+    },
+  }
+}
+
+describe('statusPoint', () => {
+  const session = {
+    kind: 'webgpu',
+    tree: TREE,
+    browser: CHROME,
+    width: 1600,
+    height: 900,
+    dpr: 1,
+  }
+  const status = (open, options = {}) =>
+    statusPoint(open, {
+      state: session,
+      fallback: { width: 1600, height: 900, dpr: 1 },
+      tree: TREE,
+      browser: CHROME,
+      warn: () => {},
+      driving: [],
+      ...options,
+    })
+  /** The page's socket, as drive.mjs opens it, counting the opens and closes. */
+  const socket = (send) => {
+    const counts = { opened: 0, closed: 0 }
+    const open = async () => {
+      counts.opened += 1
+      return { send, close: () => (counts.closed += 1) }
+    }
+    return { open, counts }
+  }
+
+  /*
+   * A `--status` beside a live invocation on the port would set the session's
+   * last window over that invocation's, and its socket's close then clears
+   * the page's emulation for every session: a cast or a settle in progress
+   * drops to the window's own 1600×933 at DPR 2 with nothing to put it back.
+   */
+  it('opens no socket on a page another invocation is driving', async () => {
+    const { send, calls } = recording(rig([app()]).send)
+    const { open, counts } = socket(send)
+    const read = await status(open, {
+      driving: [{ pid: 4242, start: 'Sat Nov  7 20:00:00 2026' }],
+    })
+    expect(read).toEqual({
+      lines: ['not read: drive.mjs (pid 4242) is driving this page'],
+    })
+    expect(counts.opened).toBe(0)
+    expect(calls).toEqual([])
+  })
+
+  it('sets focus emulation and the recorded window before it reads, and refuses a buffer the rig did not ask for', async () => {
+    const { send, calls } = recording(rig([app({ canvas: [3200, 1800] })]).send)
+    const { open, counts } = socket(send)
+    const read = await status(open)
+    expect(calls.slice(0, 2)).toEqual([
+      {
+        method: 'Emulation.setFocusEmulationEnabled',
+        params: { enabled: true },
+      },
+      {
+        method: 'Emulation.setDeviceMetricsOverride',
+        params: {
+          width: 1600,
+          height: 900,
+          deviceScaleFactor: 1,
+          mobile: false,
+        },
+      },
+    ])
+    expect(calls.slice(2).every((c) => c.method === 'Runtime.evaluate')).toBe(
+      true,
+    )
+    expect(read.refused).toBe(true)
+    expect(read.lines).toEqual([
+      expect.stringMatching(
+        /^refused: driveLaunch: not a webgpu operating point: the drawing buffer is 3200×1800, not 1600×900/,
+      ),
+    ])
+    expect(counts).toEqual({ opened: 1, closed: 1 })
+  })
+
+  it('says why no page was read when the socket does not open', async () => {
+    const read = await status(async () => {
+      throw new Error('Chrome has no page open')
+    })
+    expect(read).toEqual({ lines: ['not read: Chrome has no page open'] })
+  })
+
+  it('prints the line and the full record of a page at its point, at the invocation’s window when the session recorded none', async () => {
+    const { send, calls } = recording(
+      rig([app({ canvas: [2880, 1800], viewport: [1440, 900], dpr: 2 })]).send,
+    )
+    const { open } = socket(send)
+    const read = await status(open, {
+      state: { tree: TREE },
+      fallback: { width: 1440, height: 900, dpr: 2 },
+    })
+    expect(calls[1].params).toMatchObject({
+      width: 1440,
+      height: 900,
+      deviceScaleFactor: 2,
+    })
+    expect(read.refused).toBeUndefined()
+    expect(read.lines[0]).toMatch(
+      /^operating point \(webgpu\): apple\/metal-3 on webgpu, buffer 2880×1800 for 1440×900 at DPR 2,/,
+    )
+    expect(JSON.parse(read.lines.slice(1).join('\n'))).toMatchObject({
+      kind: 'webgpu',
+      buffer: { width: 2880, height: 1800 },
+      identity: { verdict: 'match' },
+    })
   })
 })
 

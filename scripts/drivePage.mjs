@@ -248,6 +248,70 @@ export async function enter(send, { force }, page, hold) {
   }
 }
 
+/**
+ * `--status`'s read of the attached page: the line and the full record, or
+ * why none was read, and `refused` when the guard refuses the page. It holds
+ * the page to the kind and the window the session recorded for the last page
+ * that passed, the invocation's own flags where it recorded none, and `tree`.
+ *
+ * The window is set again first, as every attach sets it. Chrome drops an
+ * invocation's emulation when its socket closes, so between invocations the
+ * page is at the window's own size and ratio — 1600×933 at DPR 2 on the Mac
+ * mini's display for a rig booted at 1600×900 at 1 — which is no rig's
+ * operating point.
+ *
+ * Nothing is sent while another invocation is driving the page. Setting the
+ * session's window replaces that invocation's, and this socket's close then
+ * clears the page's device emulation for every session, so a cast, a settle
+ * or a shot in progress drops to the window's own size and ratio, and nothing
+ * puts it back.
+ *
+ * @param {() => Promise<{send: Function, close: () => void}>} open  the page's socket
+ * @param {{state: object, fallback: {width: number, height: number, dpr: number},
+ *   tree: string, browser: string, warn: (line: string) => void,
+ *   driving: {pid: number}[]}} options
+ */
+export async function statusPoint(
+  open,
+  { state, fallback, tree, browser, warn, driving },
+) {
+  const [other] = driving
+  if (other !== undefined)
+    return {
+      lines: [`not read: drive.mjs (pid ${other.pid}) is driving this page`],
+    }
+  let session
+  try {
+    session = await open()
+  } catch (error) {
+    return { lines: [`not read: ${error.message}`] }
+  }
+  const { send, close } = session
+  try {
+    await send('Emulation.setFocusEmulationEnabled', { enabled: true })
+    await send('Emulation.setDeviceMetricsOverride', {
+      width: state.width ?? fallback.width,
+      height: state.height ?? fallback.height,
+      deviceScaleFactor: state.dpr ?? fallback.dpr,
+      mobile: false,
+    })
+    const point = await holdPage(send, {
+      kind: state.kind ?? 'webgpu',
+      tree,
+      browser,
+      recorded: state.browser ?? null,
+      warn,
+    })
+    return {
+      lines: [pointLine(point), ...JSON.stringify(point, null, 2).split('\n')],
+    }
+  } catch (error) {
+    return { lines: [`refused: ${error.message}`], refused: true }
+  } finally {
+    close()
+  }
+}
+
 const size = ({ width, height }) => `${width}×${height}`
 
 /** The buffer against the window and the ratio the renderer built it at. */

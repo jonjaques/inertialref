@@ -74,7 +74,7 @@
  * window's label.
  */
 import { execFile, execFileSync, spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, stat, writeFile, rm } from 'node:fs/promises'
 import { parseArgs, promisify } from 'node:util'
 import { analyzeFrames, differenceMap, reportFrames } from './frameDiff.mjs'
@@ -86,6 +86,8 @@ import {
   RIG,
   adopt,
   closeChrome,
+  driver,
+  drivers,
   gpuLine,
   launched,
   readSession,
@@ -96,8 +98,7 @@ import {
   browserVersion,
   clearStorage,
   enter,
-  holdPage,
-  pointLine,
+  statusPoint,
 } from './drivePage.mjs'
 import { parseWait } from './gpuLock.mjs'
 import {
@@ -257,7 +258,8 @@ Lifecycle:
 
   --status           what this rig has running, who holds the GPU, and the
                      attached page's operating point, read again by the guard
-                     a boot runs; non-zero when the guard refuses it
+                     a boot runs; non-zero when the guard refuses it. A page
+                     another invocation is driving is not read or touched
   --print-url        print the resolved URL without starting Chrome or a server
   --down             close the Chrome and the dev server this rig started, and
                      release the GPU lock its Chrome held; never refused
@@ -398,11 +400,33 @@ const readState = () => readSession(PORT)
 
 /** A patch, merged over what is already recorded rather than replacing it, so
  *  a pid written the moment its process was spawned survives the fuller write
- *  at the end of start-up. */
+ *  at the end of start-up. A function is given the record as it is read here,
+ *  for a field another invocation may have changed since this one read it. */
 async function writeState(patch) {
   await mkdir(RIG, { recursive: true })
   const prior = (await readState()) ?? {}
-  await writeFile(STATE, `${JSON.stringify({ ...prior, ...patch }, null, 2)}\n`)
+  const next = typeof patch === 'function' ? patch(prior) : patch
+  await writeFile(STATE, `${JSON.stringify({ ...prior, ...next }, null, 2)}\n`)
+}
+
+/**
+ * This invocation off the session's list of drivers, as it exits. Synchronous,
+ * because it runs on `exit`, where nothing asynchronous finishes, and that is
+ * the one place every way out of `main` passes, `process.exit` included. A
+ * session `--down` has removed is left removed.
+ */
+function leave() {
+  let state
+  try {
+    state = JSON.parse(readFileSync(STATE, 'utf8'))
+  } catch {
+    return
+  }
+  const left = drivers(state).filter(({ pid }) => pid !== process.pid)
+  writeFileSync(
+    STATE,
+    `${JSON.stringify({ ...state, drivers: left }, null, 2)}\n`,
+  )
 }
 
 const alive = (pid) => {
@@ -548,6 +572,21 @@ async function pageTarget(tries = 60) {
   throw new Error(`no page target on port ${PORT}`)
 }
 
+/** The page target's socket, once open. An Error rather than the socket's
+ *  error event, whose message prints as `[object Event]`. */
+async function socket(target) {
+  const ws = new WebSocket(target)
+  await new Promise((resolve, reject) => {
+    ws.addEventListener('open', resolve, { once: true })
+    ws.addEventListener(
+      'error',
+      () => reject(new Error(`the page's socket on port ${PORT} did not open`)),
+      { once: true },
+    )
+  })
+  return ws
+}
+
 /** What `/json/version` says this port's Chrome is, or null with none up. */
 const chromeOnPort = () =>
   fetch(`http://127.0.0.1:${PORT}/json/version`)
@@ -684,53 +723,31 @@ async function down() {
 
 /**
  * The attached page's operating point, read fresh by the same guard a boot
- * runs, without navigating or booting: the full record, or why none was read.
- * It holds the page to the kind, the tree and the window the rig was booted
- * for, which the session recorded, unless `--tree` names another tree.
- *
- * The window is set again first, as every attach sets it. Chrome drops an
- * invocation's emulation when its socket closes, so between invocations the
- * page is at the window's own size and ratio — 1600×933 at DPR 2 on the Mac
- * mini's display for a rig booted at 1600×900 at 1 — which is no rig's
- * operating point. This socket's emulation goes the same way when it closes.
+ * runs, without navigating or booting (`statusPoint` in `drivePage.mjs`). It
+ * holds the page to the tree the session recorded, unless `--tree` names
+ * another.
  */
-async function statusPoint(state, browser) {
+async function pointOnPort(state, browser) {
   if (browser === null)
     return { lines: [`not read: no Chrome listens on port ${PORT}`] }
-  const target = await pageTarget(1).catch(() => null)
-  if (target === null) return { lines: ['not read: Chrome has no page open'] }
-  const ws = new WebSocket(target)
-  await new Promise((resolve, reject) => {
-    ws.addEventListener('open', resolve, { once: true })
-    ws.addEventListener('error', reject, { once: true })
-  })
-  try {
-    const { send } = connect(ws)
-    await send('Emulation.setFocusEmulationEnabled', { enabled: true })
-    await send('Emulation.setDeviceMetricsOverride', {
-      width: state.width ?? WIDTH,
-      height: state.height ?? HEIGHT,
-      deviceScaleFactor: state.dpr ?? DPR,
-      mobile: false,
+  const open = async () => {
+    const target = await pageTarget(1).catch(() => {
+      throw new Error('Chrome has no page open')
     })
-    const point = await holdPage(send, {
-      kind: state.kind ?? 'webgpu',
-      tree:
-        values.tree === undefined && typeof state.tree === 'string'
-          ? state.tree
-          : treeUnderTest(),
-      browser,
-      recorded: state.browser ?? null,
-      warn,
-    })
-    return {
-      lines: [pointLine(point), ...JSON.stringify(point, null, 2).split('\n')],
-    }
-  } catch (error) {
-    return { lines: [`refused: ${error.message}`], refused: true }
-  } finally {
-    ws.close()
+    const ws = await socket(target)
+    return { send: connect(ws).send, close: () => ws.close() }
   }
+  return await statusPoint(open, {
+    state,
+    fallback: { width: WIDTH, height: HEIGHT, dpr: DPR },
+    tree:
+      values.tree === undefined && typeof state.tree === 'string'
+        ? state.tree
+        : treeUnderTest(),
+    browser,
+    warn,
+    driving: drivers(state),
+  })
 }
 
 async function status() {
@@ -743,7 +760,7 @@ async function status() {
     state.browser !== browser
       ? ` (the session recorded ${state.browser})`
       : ''
-  const point = await statusPoint(state, browser)
+  const point = await pointOnPort(state, browser)
   console.log(
     [
       `port      ${PORT}`,
@@ -845,14 +862,23 @@ async function main() {
   const wasServing = await answers(URL_)
   const serverPid = await serve(prior)
   const chromePid = await launchChrome(prior, gpu)
-  await writeState({
+  // Listed as driving the page from before its socket opens until this
+  // process exits, so a `--status` beside it reads the page without touching
+  // it (`statusPoint`). Same-port invocations are admitted by design, so the
+  // list keeps whoever else is on it.
+  await writeState((now) => ({
     port: PORT,
     url: URL_,
     chromePid,
     serverPid,
     startedServer: prior.startedServer === true || !wasServing,
     gpuToken: gpu.token,
-  })
+    drivers: [
+      ...drivers(now).filter(({ pid }) => pid !== process.pid),
+      driver(),
+    ],
+  }))
+  process.once('exit', leave)
 
   // Held against the version the session recorded, as a warning and never a
   // refusal: Chrome stable updates itself, and a figure from one version does
@@ -868,11 +894,7 @@ async function main() {
   }
   await writeState({ browser })
 
-  const ws = new WebSocket(await pageTarget())
-  await new Promise((resolve, reject) => {
-    ws.addEventListener('open', resolve, { once: true })
-    ws.addEventListener('error', reject, { once: true })
-  })
+  const ws = await socket(await pageTarget())
   const wire = connect(ws)
   const { send, events } = wire
   await send('Page.enable')
