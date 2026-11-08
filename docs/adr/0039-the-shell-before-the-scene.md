@@ -45,9 +45,13 @@ requested URL; aliases redirect to their canonical spelling first. Unknown
 paths retain a 404. With no initial manifest or article, the loading shell
 renders identical markup at every API address and hydrates before fetching the
 requested page. Development serves those shells on demand. This needs no
-request-rendering adapter or Worker invocation. The build rejects a routing
-table above Cloudflare's static redirect limit instead of silently dropping
-API paths.
+request-rendering adapter or Worker invocation. Cloudflare drops rules past
+its static redirect limit without a word, so once the exact proxies would pass
+it the packages with the most pages each become one splat rewrite, largest
+first, until the exact rules fit. An unknown address under such a package
+reaches the shell's not-found state rather than a 404; every known address is
+unchanged. The build still rejects a table that cannot fit that way rather than
+silently dropping API paths.
 
 API exports whose paths differ only in case receive stable suffixes derived
 from their exact original paths. Case-insensitive filesystems must not let
