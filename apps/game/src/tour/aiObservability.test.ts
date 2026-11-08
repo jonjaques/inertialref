@@ -142,7 +142,9 @@ describe('the guide as AI traces', () => {
     ai.responseStarted('resp_1')
     ai.responseEnded(
       response({
-        calls: [{ callId: 'call_1', name: 'go_to', arguments: '{"to":"Titan"}' }],
+        calls: [
+          { callId: 'call_1', name: 'go_to', arguments: '{"to":"Titan"}' },
+        ],
       }),
     )
     ai.toolSettled(

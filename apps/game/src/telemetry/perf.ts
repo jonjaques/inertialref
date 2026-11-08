@@ -1,5 +1,5 @@
 import type { FrameMetrics, FrameSample } from '../engine/frameMetrics.ts'
-import { isReporting, recordEvent } from './posthog.ts'
+import { featureFlag, isReporting, recordEvent } from './posthog.ts'
 
 /*
  * Frame time in the field, as a `perf window` event a minute.
@@ -25,6 +25,9 @@ export const PERIOD_BOUNDS = [8, 12, 16.7, 20, 25, 33.4, 50, 100] as const
 
 /** A frame longer than this missed a 40 Hz budget, which a player sees. */
 export const DROPPED_MS = 25
+
+/** The PostHog feature flag that can stop `perf window` events. */
+export const PERF_WINDOW_FLAG = 'perf-window'
 
 /** One minute of frames, at the frame clock's own reckoning. */
 export const WINDOW_MS = 60_000
@@ -117,9 +120,14 @@ export class PerfWindow {
  */
 export function startPerfWindow(metrics: FrameMetrics): () => void {
   if (!isReporting()) return () => {}
-  const window_ = new PerfWindow((properties) =>
-    recordEvent('perf window', properties),
-  )
+  const window_ = new PerfWindow((properties) => {
+    // The flag is a kill switch, not a rollout: absent (a first visit, or a
+    // project without the flag) sends, and only an explicit `false` from
+    // PostHog stops the most frequent event this client sends, without a
+    // deploy. Read at send time, so a flag that loads after boot applies.
+    if (featureFlag(PERF_WINDOW_FLAG) === false) return
+    recordEvent('perf window', properties)
+  })
   metrics.tap = (frame) => window_.sample(frame)
   const leave = (): void => window_.flush()
   window.addEventListener('pagehide', leave)

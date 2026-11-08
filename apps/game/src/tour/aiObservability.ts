@@ -228,7 +228,7 @@ export class GuideAiObservability {
       $ai_provider: 'openai',
       $ai_model: LIVE_MODEL,
       $ai_request_cost_usd:
-        Math.round(((usage.voiceSeconds / 60) * VOICE_USD_PER_MINUTE) * 1e6) /
+        Math.round((usage.voiceSeconds / 60) * VOICE_USD_PER_MINUTE * 1e6) /
         1e6,
       $ai_stop_reason: cause,
       voice_seconds: usage.voiceSeconds,

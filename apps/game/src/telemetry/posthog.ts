@@ -232,7 +232,10 @@ export function configFor(
     enable_recording_console_log: true,
     session_recording: {
       maskAllInputs: true,
-      maskTextSelector: '.ph-sensitive, .ph-sensitive *',
+      // Status lines repeat what a press did, and a press on a saved picture
+      // names it: "Saved My dog's window."
+      maskTextSelector:
+        '.ph-sensitive, .ph-sensitive *, [role="status"], [aria-live]',
       blockSelector: '.ph-no-capture, [data-replay-block]',
       captureCanvas: { recordCanvas: false },
       recordHeaders: false,
@@ -384,13 +387,6 @@ export function featureFlag(key: string): string | boolean | undefined {
   }
 }
 
-/** Run once the flags this page will use are known, if they ever are. */
-export function whenFlagsLoaded(run: () => void): void {
-  withClient((posthog) => {
-    posthog.onFeatureFlags(() => run())
-  })
-}
-
 /** The launched surveys, for `surveys.ts`. Never called on a page that reports nothing. */
 export function loadSurveys(run: (surveys: readonly unknown[]) => void): void {
   withClient((posthog) => posthog.getSurveys((found) => run(found)))
@@ -442,14 +438,4 @@ export function sendLog(
   attributes?: LogAttributes,
 ): void {
   withClient((posthog) => posthog.logger[level](body, attributes))
-}
-
-/** The session id the SDK holds, for a log or a survey to name. */
-export function currentSessionId(): string | null {
-  if (client === null || state !== 'ready') return null
-  try {
-    return client.get_session_id() || null
-  } catch {
-    return null
-  }
 }

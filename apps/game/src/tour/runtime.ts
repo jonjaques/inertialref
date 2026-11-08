@@ -143,6 +143,11 @@ export interface GuideSnapshot {
   readonly message: string | null
   readonly usage: GuideUsage
   readonly expiresAt: number | null
+  /**
+   * The session id of the last tour this page ran to its end, for the
+   * post-tour survey to name; null before one has.
+   */
+  readonly lastTour: string | null
 }
 
 /** What the runtime needs from the executor; `executor.ts` is the one implementation. */
@@ -217,6 +222,7 @@ export class GuideRuntime {
     message: null,
     usage: NO_GUIDE_USAGE,
     expiresAt: null,
+    lastTour: null,
   }
   #executor: GuideExecutorPort | null = null
   #live: LiveConnectionPort | null = null
@@ -758,6 +764,7 @@ export class GuideRuntime {
         tour_session_id: this.#sessionId,
       })
       this.#ai.endSession(usage, cause)
+      if (this.#sessionId !== null) this.#update({ lastTour: this.#sessionId })
     }
     this.#measured = false
     this.#cancelLinger()

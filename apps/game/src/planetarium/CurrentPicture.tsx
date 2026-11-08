@@ -41,7 +41,8 @@ export function CurrentPicture({
       ? null
       : { ...shot.picture, label: name.trim() || shot.picture.label }
   return (
-    <div className="flex flex-col gap-4">
+    // A label being typed and the notice that repeats it: the visitor's words.
+    <div className="ph-sensitive flex flex-col gap-4">
       {picture === null ? (
         <p className="type-ui text-slate-400">{shot.error}</p>
       ) : (

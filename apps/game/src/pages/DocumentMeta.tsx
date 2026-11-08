@@ -1,6 +1,10 @@
 import { useContext, useEffect } from 'react'
 import { useLocation } from 'react-router'
-import { recordEvent, recordPageview, startTelemetry } from '../telemetry/posthog.ts'
+import {
+  recordEvent,
+  recordPageview,
+  startTelemetry,
+} from '../telemetry/posthog.ts'
 import { DocsContentContext } from '../docs/initialDocs.ts'
 import { docRoute } from '../docs/content.ts'
 import {

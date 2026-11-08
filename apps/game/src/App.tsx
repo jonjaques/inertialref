@@ -292,7 +292,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * module that says so should be the module that decides it.
    */
   const [firstLight] = useState(() =>
-    createFirstLight({ onFirstLight: bootFirstLight, onRevealed: bootRevealed }),
+    createFirstLight({
+      onFirstLight: bootFirstLight,
+      onRevealed: bootRevealed,
+    }),
   )
   const {
     phase: boot,

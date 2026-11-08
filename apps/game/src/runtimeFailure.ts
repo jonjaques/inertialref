@@ -46,10 +46,12 @@ export function createRuntimeFailureStore(
 }
 
 /** The page's store, reported to PostHog: `unsupported` is a boot event, not a defect. */
-export const runtimeFailure = createRuntimeFailureStore((kind, cause, first) => {
-  if (first !== null) bootFailed(first)
-  if (kind !== 'unsupported') reportFailure(kind, cause)
-})
+export const runtimeFailure = createRuntimeFailureStore(
+  (kind, cause, first) => {
+    if (first !== null) bootFailed(first)
+    if (kind !== 'unsupported') reportFailure(kind, cause)
+  },
+)
 const serverSnapshot = (): null => null
 
 export function useRuntimeFailure(): RuntimeFailure | null {
