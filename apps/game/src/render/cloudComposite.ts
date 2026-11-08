@@ -60,10 +60,12 @@ import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
 import type { CloudHistogram, CloudRenderReport } from '@inertialref/devtools'
 import { airMediumAt, airToward, marchAir, ORBIT_AIRLIGHT } from './air.ts'
 import {
+  airEye,
   type AirMediumFn,
   airSegment,
   type CompositeAir,
   compositeAir,
+  depthUnits,
   outerSpan,
   SKY_SEGMENT_SAMPLES,
   skyClass,
@@ -198,13 +200,6 @@ const normalShare = (x: Node<'float'>): Node<'float'> =>
   float(1).div(
     exp(clamp(x.mul(-NORMAL_SLOPE), -NORMAL_REACH, NORMAL_REACH)).add(1),
   )
-
-/** The eye in the air's units: sea-level units about the body's center, body-fixed. */
-const eyeUnits = (body: CloudBodyUniforms): Node<'vec3'> =>
-  body.up.mul(float(1).add(body.eye.div(body.datumRadius)))
-/** Sea-level units per kilometer of the depth copy, which is in render kilometers. */
-const unitsOf = (body: CloudBodyUniforms): Node<'float'> =>
-  float(1000).div(body.compression.mul(body.datumRadius))
 
 /** An eye-relative body-fixed point in a camera's normalized device coordinates. */
 function project(
@@ -399,14 +394,14 @@ function compositeGraph(
         const meters = reproject.mul(1000)
         const air = compositeAir(
           served.air,
-          eyeUnits(served),
+          airEye(served),
           direction,
           ray.start.div(radius),
           select(thin, clamp(meters, ray.start, ray.end), ray.end).div(radius),
           depthKm,
           served.sun,
           served.cleared,
-          unitsOf(served),
+          depthUnits(served),
           medium,
         )
         const transmittance = cloud.w
@@ -432,8 +427,8 @@ function compositeGraph(
         )
         If(ray.hit, () => {
           const radius = second.datumRadius
-          const units = unitsOf(second)
-          const eye = eyeUnits(second)
+          const units = depthUnits(second)
+          const eye = airEye(second)
           const sky = skyClass(second.air, eye, toSecond, depthKm, units)
           const far = deps.far(ray, ray.start, second, sky)
           const reached = clamp(far.depthMean, ray.start, ray.end)
@@ -924,8 +919,8 @@ function residualKernel(
       If(cloudy.and(ray.hit).and(served.active.greaterThan(0.5)), () => {
         tally(uint(SAMPLES))
         const radius = served.datumRadius
-        const units = unitsOf(served)
-        const eye = eyeUnits(served)
+        const units = depthUnits(served)
+        const eye = airEye(served)
         const start = ray.start.div(radius)
         const end = ray.end.div(radius)
         const reached = clamp(blocked.w.mul(1000).div(radius), start, end)
