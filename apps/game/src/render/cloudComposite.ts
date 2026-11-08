@@ -167,10 +167,12 @@ const DEVIATION_FLOOR_KM = 0.001
 /*
  * The normal CDF as 0.5·(1 + tanh(1.2·x)), within 0.02 of it everywhere,
  * written as the logistic 1/(1 + e^(−2.4·x)) it equals. Not `tanh`: on the
- * Metal device it is (e^2y − 1)/(e^2y + 1), which is ∞/∞ once 2y passes 88,
- * and the moments' argument is a kilometer over a meter's deviation — a NaN
- * share in every pixel of a cloud a kilometer in front of the scene. The
- * exponent is held to ±80, past which the share is 0 or 1 in float32 anyway.
+ * Metal device the GPU suite runs on, `tanh` returns NaN from an argument of
+ * 45 up (measured; 1 + 2⁻²³ at 44), and the moments' argument is meters of
+ * depth over a deviation floored at one, so a cloud 38 m in front of the
+ * scene had a NaN share, which defeats the discard and blends NaN into
+ * `motion`. The exponent is held to ±80, past which the share is 0 or 1 in
+ * float32 anyway.
  */
 const NORMAL_SLOPE = 2.4
 const NORMAL_REACH = 80
