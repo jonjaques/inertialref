@@ -155,12 +155,24 @@ export async function clerkWebhook(
     }
   }
 
-  log('info', 'person deletion queued', {
-    type: event.type,
-    status: response.status,
-    ...(await deletionCounts(response)),
-  })
-  return { status: 200, body: { deleted: true } }
+  /*
+   * A 2xx can still carry `deletion_errors`: PostHog accepted the request
+   * and failed the person. Answered 200 all the same, because a retry of a
+   * permanent failure is five days of 503s until Svix disables the endpoint
+   * and stops every deletion after it; logged as an error so it is read.
+   */
+  const counts = await deletionCounts(response)
+  const failed = (counts['deletion_errors'] ?? 0) > 0
+  log(
+    failed ? 'error' : 'info',
+    failed ? 'person deletion failed in part' : 'person deletion queued',
+    {
+      type: event.type,
+      status: response.status,
+      ...counts,
+    },
+  )
+  return { status: 200, body: { deleted: !failed } }
 }
 
 /*

@@ -173,6 +173,29 @@ describe('the Clerk webhook', () => {
     expect(records()).not.toContain(KEY)
   })
 
+  it('answers a deletion PostHog accepted and failed with 200, and logs it as an error', async () => {
+    // A retry of a permanent failure is days of 503s until Svix disables the
+    // endpoint, so the answer stays 200; the error log is what gets it read.
+    posthog.mockResolvedValue(
+      Response.json(
+        {
+          persons_found: 1,
+          persons_queued_for_deletion: 0,
+          deletion_errors: [{ distinct_id: 'x', error: 'boom' }],
+        },
+        { status: 202 },
+      ),
+    )
+    const answer = await clerkWebhook(await delivery(deleted(), secret), env())
+    expect(answer).toEqual({ status: 200, body: { deleted: false } })
+    expect(console.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'person deletion failed in part',
+        deletion_errors: 1,
+      }),
+    )
+  })
+
   it('takes a deletion PostHog found nobody for as done', async () => {
     // An account that never signed in while measured has no person.
     posthog.mockResolvedValue(
