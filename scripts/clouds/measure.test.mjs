@@ -17,6 +17,7 @@ import {
 import { wrap } from '../driveScript.mjs'
 import { binEdge, difference, histogramStats, parseRmse } from './diff.mjs'
 import {
+  HELD,
   LADDERS,
   PORTS,
   SCENARIOS,
@@ -234,12 +235,21 @@ describe('the images', () => {
     )
     for (const r of gate) {
       expect(r.type).toBe('radiance')
-      expect(r.comparisons).toHaveLength(2)
+      // Each sun depth under the moving jitter, then again with it held.
+      expect(r.comparisons.map((c) => [c.a.sunDepth, c.a.jitterFrame])).toEqual(
+        [
+          ['cascades', null],
+          ['grid', null],
+          ['cascades', HELD.jitterFrame],
+          ['grid', HELD.jitterFrame],
+        ],
+      )
       for (const c of r.comparisons) {
         expect(c.threshold).toBe(0.03)
         expect(c.a).toMatchObject({ on: true, cache: 'field' })
         expect(c.b).toMatchObject({ on: true, cache: 'volume' })
         expect(c.b.sunDepth).toBe(c.a.sunDepth)
+        expect(c.b.jitterFrame).toBe(c.a.jitterFrame)
       }
     }
   })
@@ -253,8 +263,23 @@ describe('the images', () => {
       expect(r.comparisons.map((c) => [c.a[r.label], c.b[r.label]])).toEqual(
         values.slice(0, -1).map((v, i) => [v, values[i + 1]]),
       )
-      for (const c of r.comparisons) expect(c.threshold).toBe(0.01)
+      for (const c of r.comparisons) {
+        expect(c.threshold).toBe(0.01)
+        // Held on both sides, so the pair differs by the lever alone.
+        expect([c.a.jitterFrame, c.b.jitterFrame]).toEqual([0, 0])
+      }
     }
+  })
+
+  it('hold the jitter nowhere else but the error batch’s screenshot pair', () => {
+    for (const r of ALL.error) {
+      expect(r.levers.jitterFrame).toBeNull()
+      expect([r.identity.jitterFrame, r.thin.jitterFrame]).toEqual([0, 0])
+    }
+    for (const batch of ['decisions', 'sweep', 'targets', 'memory', 'stances'])
+      for (const r of ALL[batch])
+        for (const set of [r.base, r.candidate, r.levers, ...(r.cells ?? [])])
+          if (set !== undefined) expect(set.jitterFrame, r.id).toBeNull()
   })
 })
 
@@ -441,8 +466,10 @@ function fakePage({
   pending = false,
   gpu = [6, 5, 7],
 } = {}) {
-  const calls = { passes: [], gpu: [], levers: [] }
+  const calls = { passes: [], gpu: [], levers: [], captured: [] }
   let reads = 0
+  // The frames the page has drawn: one a tick, as the report counts them.
+  let drawn = 0
   const engine = {
     cloudsAvailable: true,
     exposure: { processing: 'enhanced' },
@@ -456,6 +483,7 @@ function fakePage({
       extents: { trace: [480, 270] },
       steps: null,
       levers: {},
+      frames: drawn,
     }),
     gpu: async (n) => {
       calls.gpu.push(n)
@@ -490,6 +518,8 @@ function fakePage({
     // so two budgets differ by their ratio.
     cloudRadiance: async () => {
       calls.captures = (calls.captures ?? 0) + 1
+      // A capture is of the first frame drawn after the ask.
+      calls.captured.push(drawn + 1)
       const lit = calls.levers.at(-1)?.maxSteps ?? 1
       return {
         width: 2,
@@ -522,7 +552,11 @@ function fakePage({
   const context = vm.createContext({
     engine,
     ir,
-    requestAnimationFrame: (callback) => setImmediate(callback),
+    requestAnimationFrame: (callback) =>
+      setImmediate(() => {
+        drawn += 1
+        callback()
+      }),
   })
   return { context, calls }
 }
@@ -595,6 +629,11 @@ describe('the page steps', () => {
     // 64 against 96 steps: the fake lights a texel by its budget.
     expect(step.difference).toEqual({ texels: 2, relative: 0.5 })
     expect(step.floor).toEqual({ texels: 2, relative: 0 })
+    // In the interleave's order, so each half of a side holds every phase
+    // eight times.
+    expect(page.calls.captured.map((f) => f % 4)).toEqual(
+      Array.from({ length: 2 * RADIANCE_FRAMES }, (_, k) => k % 4),
+    )
     // Each side: a reset frame under its levers, then the levers alone.
     const [a, b] = [ladder.comparisons[0].a, ladder.comparisons[0].b]
     expect(page.calls.levers).toEqual([
@@ -889,17 +928,21 @@ describe('the figures', () => {
     expect(row.differences.map((d) => [d.relative, d.threshold])).toEqual([
       [0.021, 0.03],
       [0.042, 0.03],
+      [null, 0.03],
+      [null, 0.03],
     ])
     const lines = tables({ rows: [row] }).split('\n')
     expect(lines[0]).toBe(
-      '| Scenario | Size | Group | Lever | Comparison | radiance RMSE | noise floor | under | passes | cloud texels | quiet |',
+      '| Scenario | Size | Group | Lever | Comparison | jitter | radiance RMSE | noise floor | under | passes | cloud texels | quiet |',
     )
     expect(lines[2]).toBe(
-      '| inside | retina | cache | volume | volume against field, cascades | 2.1% | 0.4% | 3.0% | yes | 900 | yes |',
+      '| inside | retina | cache | volume | volume against field, cascades | moving | 2.10% | 0.40% | 3.0% | yes | 900 | yes |',
     )
     expect(lines[3]).toMatch(
-      /\| 4\.2% \| 0\.5% \| 3\.0% \| no \| 880 \| yes \|$/,
+      /field, grid \| moving \| 4\.20% \| 0\.50% \| 3\.0% \| no \| 880 \| yes \|$/,
     )
+    // The held comparisons answered nothing here, so each reads as a dash.
+    expect(lines[4]).toMatch(/cascades, jitter held \| held at 0 \| — \| — \|/)
   })
 
   it('print the latest attempt of a run, which is the one a re-run left', () => {
