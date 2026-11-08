@@ -27,6 +27,7 @@ import {
   clamp,
   Discard,
   dot,
+  exp,
   float,
   floor,
   Fn,
@@ -40,13 +41,13 @@ import {
   mrt,
   nodeObject,
   normalize,
+  output,
   positionGeometry,
   property,
   screenCoordinate,
   screenUV,
   select,
   storage,
-  tanh,
   texture,
   uint,
   uniform,
@@ -163,8 +164,16 @@ const MATCH = 0.02
 const MATCH_FLOOR_KM = 0.002
 /** km: the moments' deviation is never taken under a meter. */
 const DEVIATION_FLOOR_KM = 0.001
-/** The normal CDF as 0.5·(1 + tanh(1.2·x)): within 0.02 of it everywhere. */
-const NORMAL_SLOPE = 1.2
+/*
+ * The normal CDF as 0.5·(1 + tanh(1.2·x)), within 0.02 of it everywhere,
+ * written as the logistic 1/(1 + e^(−2.4·x)) it equals. Not `tanh`: on the
+ * Metal device it is (e^2y − 1)/(e^2y + 1), which is ∞/∞ once 2y passes 88,
+ * and the moments' argument is a kilometer over a meter's deviation — a NaN
+ * share in every pixel of a cloud a kilometer in front of the scene. The
+ * exponent is held to ±80, past which the share is 0 or 1 in float32 anyway.
+ */
+const NORMAL_SLOPE = 2.4
+const NORMAL_REACH = 80
 /*
  * Under these a fragment adds nothing a half float holds: an opacity under
  * 2⁻⁹, and light under the smallest normal half float once the gain is on.
@@ -174,13 +183,19 @@ const DARK = 2 ** -14
 /** View depth floor, render meters: `sensorMrt`'s own for every other writer. */
 const NEAREST = 1e-4
 
-/** The composite's own motion and velocity, assigned where the rest is formed and read by its MRT. */
+/**
+ * The composite's own source, motion and velocity, assigned where the rest is
+ * formed and read by its output and its MRT.
+ */
+const cloudSource = property('vec4', 'CloudSource')
 const cloudMotion = property('vec4', 'CloudMotion')
 const cloudVelocity = property('vec2', 'CloudVelocity')
 
 const largest = (v: Node<'vec3'>): Node<'float'> => max(max(v.x, v.y), v.z)
 const normalShare = (x: Node<'float'>): Node<'float'> =>
-  tanh(x.mul(NORMAL_SLOPE)).add(1).mul(0.5)
+  float(1).div(
+    exp(clamp(x.mul(-NORMAL_SLOPE), -NORMAL_REACH, NORMAL_REACH)).add(1),
+  )
 
 /** The eye in the air's units: sea-level units about the body's center, body-fixed. */
 const eyeUnits = (body: CloudBodyUniforms): Node<'vec3'> =>
@@ -478,7 +493,8 @@ function compositeGraph(
         Discard()
       },
     )
-    return vec4(light, opacity.add(nodeObject(follower)))
+    cloudSource.assign(vec4(light, opacity.add(nodeObject(follower))))
+    return cloudSource
   })()
   return {
     color,
@@ -505,6 +521,20 @@ function compositeMaterial(transparent: boolean): MeshBasicNodeMaterial {
     false,
     'alpha',
   )
+  /*
+   * The source goes back into `output` unclamped, ahead of the sensor's own
+   * output, which then applies the gain once and takes the opacity for
+   * `reactive` as it does for every material. Three clamps a color node's
+   * output at zero ("force unsigned floats", `NodeMaterial.setup`), and the
+   * identity's light is negative where the composite's air and the trace's
+   * blocked air disagree in quadrature: clamped, every such pixel is biased
+   * bright, and by an error the residual meter cannot see.
+   */
+  const radiance = material.outputNode!
+  material.outputNode = Fn(() => {
+    output.assign(cloudSource)
+    return radiance
+  })()
   material.name = 'cloud composite'
   material.transparent = transparent
   material.depthTest = false
