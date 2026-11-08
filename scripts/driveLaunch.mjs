@@ -20,8 +20,14 @@
  * the adapter and the drawing buffer after boot, through an `evaluate` port
  * that takes one expression and answers by value. `page.evaluate` is that
  * port, and so is `cdp.mjs`'s `evaluate` over drive.mjs's socket.
+ *
+ * The same port answers which checkout the page is served from, because a
+ * server on the expected port is not evidence of the expected tree: a sibling
+ * worktree's Vite on 5173 boots the same app and is photographed in its
+ * place. `compareIdentity` holds `ir.build()` against the tree under test.
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
+import path from 'node:path'
 import { dprCeiling } from '../apps/game/src/render/output.ts'
 import { pictureDprFactor } from '../apps/game/src/render/picture.ts'
 
@@ -140,6 +146,12 @@ export function launchOptions(
 }
 
 /**
+ * What the page says about the checkout behind it: `ir.build()`, a build id
+ * and the tree the dev server serves, or null on a page with no such verb.
+ */
+export const BUILD_IDENTITY = 'window.ir?.build?.() ?? null'
+
+/**
  * What the page says about its operating point: one expression, answered by
  * value.
  *
@@ -152,7 +164,8 @@ export function launchOptions(
  * that way.
  *
  * `build` is `dev` when the document loads Vite's client, which the dev server
- * injects and a production build has no copy of.
+ * injects and a production build has no copy of. `identity` is `ir.build()`,
+ * which `compareIdentity` reads.
  */
 export const OPERATING_POINT = `(async () => {
   const engine = window.engine ?? null
@@ -194,6 +207,7 @@ export const OPERATING_POINT = `(async () => {
       window.ir?.observerStatus?.()?.target?.system ??
       /(?:^|\\/)s:([^/]+)/.exec(address)?.[1] ??
       null,
+    identity: ${BUILD_IDENTITY},
   }
 })()`
 
@@ -253,7 +267,88 @@ function bufferRefusal(reading) {
   )
 }
 
-function refusals(reading, expects) {
+const NO_TREE =
+  'driveLaunch: the served tree is compared with the tree under test, and none was given'
+
+/*
+ * One spelling per checkout. git answers `--show-toplevel` with the physical
+ * path, a caller's `--tree` is whatever it typed, and on macOS `/tmp` and
+ * `/var` are symlinks into `/private`, so compared as strings a rig refuses
+ * the tree it serves. A path this machine cannot resolve is compared as
+ * spelled, less its trailing slashes.
+ */
+function canonicalTree(tree, realpath) {
+  const resolved = path.resolve(tree)
+  try {
+    return realpath(resolved)
+  } catch {
+    return resolved
+  }
+}
+
+/**
+ * The page's `ir.build()` against the checkout the caller means to measure.
+ *
+ * The build id alone cannot tell two checkouts apart: sibling worktrees cut
+ * from one `origin/main` describe the same commit, and both read `-dirty` once
+ * anything is edited. The tree is what differs, and only the dev server
+ * reports it, because a shipped bundle carries no filesystem path. A page that
+ * names no tree is unchecked rather than refused: refusing a production build
+ * refuses every `--url` at `pnpm preview` on 8787, and refusing a page with no
+ * `ir.build()` refuses every `presets:compare --base` at a commit older than
+ * the verb. Unchecked is said, so the caller can print it.
+ *
+ * @returns {{verdict: 'match' | 'mismatch' | 'unchecked', id: string | null,
+ *   served: string | null, expected: string, reason: string | null}}
+ */
+export function compareIdentity(
+  served,
+  expected,
+  { realpath = realpathSync } = {},
+) {
+  if (typeof expected !== 'string' || expected === '')
+    throw new TypeError(NO_TREE)
+  const id = typeof served?.id === 'string' ? served.id : null
+  const tree =
+    typeof served?.tree === 'string' && served.tree !== '' ? served.tree : null
+  const verdict = (name, reason) => ({
+    verdict: name,
+    id,
+    served: tree,
+    expected,
+    reason,
+  })
+  if (served === null || typeof served !== 'object')
+    return verdict(
+      'unchecked',
+      'the page answers no ir.build(): a build older than the check, or a page without the app',
+    )
+  if (tree === null)
+    return verdict(
+      'unchecked',
+      'the page names no tree: a production build carries no filesystem path',
+    )
+  if (canonicalTree(tree, realpath) === canonicalTree(expected, realpath))
+    return verdict('match', null)
+  return verdict('mismatch', `the page is served from ${tree}, not ${expected}`)
+}
+
+/**
+ * `ir.build()` read through `evaluate`, refused when another checkout serves
+ * the page and returned as the verdict otherwise. drive.mjs runs it after
+ * every boot and attach, before the first step.
+ */
+export async function assertServedTree(evaluate, tree, options) {
+  const verdict = compareIdentity(await evaluate(BUILD_IDENTITY), tree, options)
+  if (verdict.verdict === 'mismatch')
+    throw new Error(
+      `driveLaunch: ${verdict.reason}, the tree under test. Serve that tree, ` +
+        `or name ${verdict.served} as the tree under test (drive.mjs --tree).`,
+    )
+  return verdict
+}
+
+function refusals(reading, expects, identity) {
   const found = []
   if (expects.backend !== null && reading.backend !== expects.backend)
     found.push(
@@ -261,17 +356,19 @@ function refusals(reading, expects) {
     )
   if (expects.adapter) found.push(adapterRefusal(reading.adapter))
   if (expects.buffer) found.push(bufferRefusal(reading))
-  // The served build and tree against the tree under test (X3) belong here.
-  // Nothing in the page names the tree it was built from, so there is no
-  // reading to hold them against.
+  // Every kind, `shell` included: a DOM check against another checkout's
+  // markup is as wrong as a plate of it.
+  if (identity.verdict === 'mismatch') found.push(identity.reason)
   return found.filter((refusal) => refusal !== null)
 }
 
 /**
  * Reads the page's operating point through `evaluate`, refuses one that is not
- * `kind`, and returns it as a record for the test's annotations.
+ * `kind` or is served from a checkout other than `tree`, and returns it as a
+ * record for the test's annotations.
  *
- * `browser` is the version the caller launched — `browser.version()`, or
+ * `tree` is the checkout under test, which `compareIdentity` holds the page
+ * against. `browser` is the version the caller launched — `browser.version()`, or
  * `Browser.getVersion` over CDP — and `recorded` the one it recorded last, or
  * null on a first run. A change is a warning through `warn`, never a refusal:
  * Chrome stable updates itself, and a version floor would refuse the browser
@@ -282,7 +379,7 @@ function refusals(reading, expects) {
  */
 export async function assertOperatingPoint(
   evaluate,
-  { kind = 'webgpu', browser, recorded = null, warn = console.warn } = {},
+  { kind = 'webgpu', browser, tree, recorded = null, warn = console.warn } = {},
 ) {
   const expects = KINDS[kind]
   if (expects === undefined)
@@ -293,13 +390,15 @@ export async function assertOperatingPoint(
     throw new TypeError(
       'driveLaunch: assertOperatingPoint records the browser version, and none was given',
     )
+  if (typeof tree !== 'string' || tree === '') throw new TypeError(NO_TREE)
   const reading = await evaluate(OPERATING_POINT)
   if (recorded !== null && recorded !== browser)
     warn(
       `driveLaunch: Chrome changed from ${recorded} to ${browser} since the last recorded run; ` +
         'a figure from one does not compare with a figure from the other',
     )
-  const found = refusals(reading, expects)
+  const identity = compareIdentity(reading.identity, tree)
+  const found = refusals(reading, expects, identity)
   if (found.length > 0)
     throw new Error(
       `driveLaunch: not a ${kind} operating point: ${found.join('; ')}`,
@@ -318,6 +417,7 @@ export async function assertOperatingPoint(
     dynamicRangeHigh: reading.dynamicRangeHigh,
     picture: reading.picture,
     system: systemKind(reading.system),
+    identity,
   }
 }
 

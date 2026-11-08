@@ -1,5 +1,13 @@
 import fc from 'fast-check'
-import { readFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import vm from 'node:vm'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PICTURE, PICTURE_AA } from '../apps/game/src/render/picture.ts'
@@ -8,6 +16,8 @@ import {
   OPERATING_POINT,
   PRESETS,
   assertOperatingPoint,
+  assertServedTree,
+  compareIdentity,
   expectedBuffer,
   launchOptions,
   refuseForeignBrowser,
@@ -63,6 +73,18 @@ const SOL = 'SOL'
 // far-shore's system, `g:milky-way/s:P222_1_0_9/b:4`.
 const FAR_SHORE = 'P222_1_0_9'
 
+/*
+ * Two checkouts of one clone, cut from one commit, so they share a build id:
+ * the case the tree exists to tell apart. Neither path exists on any machine,
+ * so they are compared by their spelling, which is what a tree reported by a
+ * server on another host would be.
+ */
+const TREE = '/Users/agent/inertialref'
+const SIBLING = '/Users/agent/inertialref/.claude/worktrees/sibling'
+const BUILD = 'c8aa32e-dirty'
+const NO_TREE =
+  'driveLaunch: the served tree is compared with the tree under test, and none was given'
+
 /**
  * A `GPUAdapterInfo` as Chrome hands it out: its fields are accessors on the
  * prototype, so the object itself serializes to `{}` and a probe that returns
@@ -90,6 +112,8 @@ function page({
   system = SOL,
   search = '',
   requests = { count: 0 },
+  // `ir.build()`, or null for a build older than the verb.
+  build = () => ({ id: BUILD, tree: TREE }),
 } = {}) {
   const engine =
     description === null
@@ -115,7 +139,10 @@ function page({
     ir:
       engine === undefined
         ? undefined
-        : { observerStatus: () => ({ target: { system } }) },
+        : {
+            observerStatus: () => ({ target: { system } }),
+            ...(build === null ? {} : { build }),
+          },
     navigator: {
       gpu: {
         requestAdapter: async () => {
@@ -156,6 +183,7 @@ const fromRun = (run, extra = {}) =>
 const asserted = (evaluate, options = {}) =>
   assertOperatingPoint(evaluate, {
     browser: CHROME.version,
+    tree: TREE,
     warn: () => {},
     ...options,
   })
@@ -305,6 +333,13 @@ describe('the operating point after boot', () => {
       dynamicRangeHigh: false,
       picture: DEFAULT_PICTURE,
       system: 'sol',
+      identity: {
+        verdict: 'match',
+        id: BUILD,
+        served: TREE,
+        expected: TREE,
+        reason: null,
+      },
     })
   })
 
@@ -464,6 +499,17 @@ describe('the operating point after boot', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
+  it('refuses a page served from another tree, naming both', async () => {
+    const run = asserted(page({ build: () => ({ id: BUILD, tree: SIBLING }) }))
+    await expect(run).rejects.toThrow(`served from ${SIBLING}, not ${TREE}`)
+  })
+
+  it('needs the tree under test', async () => {
+    await expect(asserted(page(), { tree: undefined })).rejects.toThrow(
+      new TypeError(NO_TREE),
+    )
+  })
+
   it('needs the browser version it records', async () => {
     await expect(
       assertOperatingPoint(page(), { browser: undefined }),
@@ -489,6 +535,127 @@ describe('the operating point after boot', () => {
     )
     expect(point.backend).toBe('webgpu')
     expect(OPERATING_POINT.startsWith('(async () =>')).toBe(true)
+  })
+})
+
+describe('the served tree', () => {
+  /*
+   * `/tmp` is a symlink to `/private/tmp` on macOS and is no symlink on CI's
+   * Linux runner, so the realpath here is a table rather than the machine's.
+   */
+  const macOS = (tree) => tree.replace(/^\/tmp(?=\/|$)/, '/private/tmp')
+
+  it('matches the tree the page reports, and carries its build id', () => {
+    expect(compareIdentity({ id: BUILD, tree: TREE }, TREE)).toEqual({
+      verdict: 'match',
+      id: BUILD,
+      served: TREE,
+      expected: TREE,
+      reason: null,
+    })
+  })
+
+  it('refuses a sibling worktree on the same commit, naming both trees', async () => {
+    const verdict = compareIdentity({ id: BUILD, tree: SIBLING }, TREE)
+    expect(verdict).toMatchObject({ verdict: 'mismatch', id: BUILD })
+    expect(verdict.reason).toContain(SIBLING)
+    expect(verdict.reason).toContain(TREE)
+    await expect(
+      assertServedTree(
+        page({ build: () => ({ id: BUILD, tree: SIBLING }) }),
+        TREE,
+      ),
+    ).rejects.toThrow(`served from ${SIBLING}, not ${TREE}`)
+  })
+
+  /*
+   * Unchecked rather than refused: a production build carries no filesystem
+   * path, so every `--url` at `pnpm preview` on 8787 would be refused, and so
+   * would every `presets:compare --base` at a commit older than the verb.
+   */
+  it('leaves a production build unchecked, and proceeds', async () => {
+    for (const tree of [null, ''])
+      expect(compareIdentity({ id: BUILD, tree }, TREE)).toMatchObject({
+        verdict: 'unchecked',
+        id: BUILD,
+        reason: expect.stringContaining('production build'),
+      })
+    await expect(
+      assertServedTree(
+        page({ build: () => ({ id: BUILD, tree: null }) }),
+        TREE,
+      ),
+    ).resolves.toMatchObject({ verdict: 'unchecked' })
+  })
+
+  it('leaves a build older than ir.build() unchecked, and proceeds', async () => {
+    for (const served of [null, undefined])
+      expect(compareIdentity(served, TREE)).toMatchObject({
+        verdict: 'unchecked',
+        id: null,
+        reason: expect.stringContaining('ir.build()'),
+      })
+    await expect(
+      assertServedTree(page({ build: null }), TREE),
+    ).resolves.toMatchObject({ verdict: 'unchecked', id: null })
+    // A document with the app's scripts off has no harness at all.
+    await expect(
+      assertServedTree(page({ description: null }), TREE),
+    ).resolves.toMatchObject({ verdict: 'unchecked' })
+  })
+
+  it('reads /tmp and /private/tmp as one tree, and a trailing slash as none', () => {
+    const realpath = (tree) => {
+      const real = macOS(tree)
+      if (!real.startsWith('/private/tmp')) throw new Error('ENOENT')
+      return real
+    }
+    const served = { id: BUILD, tree: '/tmp/ir-wave2/' }
+    for (const expected of [
+      '/private/tmp/ir-wave2',
+      '/tmp/ir-wave2',
+      '/private/tmp/ir-wave2//',
+    ])
+      expect(compareIdentity(served, expected, { realpath }).verdict).toBe(
+        'match',
+      )
+    expect(
+      compareIdentity(served, '/private/tmp/ir-wave3', { realpath }).verdict,
+    ).toBe('mismatch')
+    // Spelling alone, where neither side exists: the slash still goes.
+    expect(compareIdentity({ id: BUILD, tree: `${TREE}/` }, TREE).verdict).toBe(
+      'match',
+    )
+  })
+
+  it('follows a symlinked worktree to the checkout it names', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'ir-identity-'))
+    try {
+      const tree = path.join(dir, 'checkout')
+      const link = path.join(dir, 'linked')
+      mkdirSync(tree)
+      symlinkSync(tree, link)
+      expect(compareIdentity({ id: BUILD, tree: link }, tree).verdict).toBe(
+        'match',
+      )
+      expect(
+        compareIdentity({ id: BUILD, tree: `${tree}/` }, `${link}/`).verdict,
+      ).toBe('match')
+      mkdirSync(path.join(dir, 'other'))
+      expect(
+        compareIdentity({ id: BUILD, tree: path.join(dir, 'other') }, link)
+          .verdict,
+      ).toBe('mismatch')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('needs the tree under test', () => {
+    for (const expected of [undefined, null, ''])
+      expect(() =>
+        compareIdentity({ id: BUILD, tree: TREE }, expected),
+      ).toThrow(new TypeError(NO_TREE))
   })
 })
 
