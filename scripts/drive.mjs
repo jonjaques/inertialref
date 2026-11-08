@@ -866,15 +866,7 @@ async function main() {
     recorded: typeof prior.browser === 'string' ? prior.browser : null,
     warn,
   }
-  // The window too, which `--status` sets again before it reads the page.
-  await writeState({
-    browser,
-    kind: hold.kind,
-    tree,
-    width: WIDTH,
-    height: HEIGHT,
-    dpr: DPR,
-  })
+  await writeState({ browser })
 
   const ws = new WebSocket(await pageTarget())
   await new Promise((resolve, reject) => {
@@ -920,7 +912,17 @@ async function main() {
   )
   // Record the controls only once this navigation succeeds. A failed boot
   // must not make the next warm attach trust a page from a different mode.
-  await writeState({ javascript: JAVASCRIPT, blockedUrls: BLOCKED_URLS })
+  // The point it passed at goes with them, which `--status` holds the page
+  // to: the kind, the tree and the window it sets again before reading.
+  await writeState({
+    javascript: JAVASCRIPT,
+    blockedUrls: BLOCKED_URLS,
+    kind: hold.kind,
+    tree,
+    width: WIDTH,
+    height: HEIGHT,
+    dpr: DPR,
+  })
 
   const run = (expression, userGesture) =>
     evaluate(send, expression, userGesture)
