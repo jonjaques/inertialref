@@ -589,6 +589,48 @@ describe('statusPoint', () => {
     expect(counts).toEqual({ opened: 1, closed: 1 })
   })
 
+  /*
+   * A stalled renderer answers `setDeviceMetricsOverride` only once it applies
+   * it, and the socket's own timeout is two minutes: the time someone runs
+   * `--status` to see who holds the GPU is the time it would hang.
+   */
+  it('gives a page that does not answer a deadline, and closes its socket', async () => {
+    const stalled = recording(() => new Promise(() => {}))
+    const { open, counts } = socket(stalled.send)
+    const started = performance.now()
+    const read = await status(open, { ms: 50 })
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(read).toEqual({
+      lines: ['not read: the page did not answer within 0.05 s'],
+    })
+    expect(counts).toEqual({ opened: 1, closed: 1 })
+    // The guard's read is held to the same deadline as the emulation.
+    const reading = recording(async (method) =>
+      method === 'Runtime.evaluate' ? new Promise(() => {}) : {},
+    )
+    const late = socket(reading.send)
+    expect(await status(late.open, { ms: 50 })).toEqual({
+      lines: ['not read: the page did not answer within 0.05 s'],
+    })
+    expect(late.counts.closed).toBe(1)
+  })
+
+  it('closes a socket that opens after the deadline', async () => {
+    let close
+    const closed = new Promise((resolve) => (close = resolve))
+    const read = await status(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ send: async () => ({}), close }), 100),
+        ),
+      { ms: 20 },
+    )
+    expect(read.lines).toEqual([
+      'not read: the page did not answer within 0.02 s',
+    ])
+    await closed
+  })
+
   it('says why no page was read when the socket does not open', async () => {
     const read = await status(async () => {
       throw new Error('Chrome has no page open')

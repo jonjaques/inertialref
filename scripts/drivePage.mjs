@@ -248,6 +248,10 @@ export async function enter(send, { force }, page, hold) {
   }
 }
 
+/** `--status`'s deadline. A booted page answers in about a second, most of it
+ *  the two frames the guard waits on, which are capped at one. */
+const STATUS_MS = 5000
+
 /**
  * `--status`'s read of the attached page: the line and the full record, or
  * why none was read, and `refused` when the guard refuses the page. It holds
@@ -266,28 +270,49 @@ export async function enter(send, { force }, page, hold) {
  * or a shot in progress drops to the window's own size and ratio, and nothing
  * puts it back.
  *
+ * The read has a deadline of its own, `ms`, from the socket's open to the
+ * record, and a page that misses it is not read rather than refused. A
+ * stalled renderer answers `setDeviceMetricsOverride` only once it applies
+ * it, and the socket's own timeout is two minutes, which is longest exactly
+ * when someone asks `--status` who holds the GPU.
+ *
  * @param {() => Promise<{send: Function, close: () => void}>} open  the page's socket
  * @param {{state: object, fallback: {width: number, height: number, dpr: number},
  *   tree: string, browser: string, warn: (line: string) => void,
- *   driving: {pid: number}[]}} options
+ *   driving: {pid: number}[], ms?: number}} options
  */
 export async function statusPoint(
   open,
-  { state, fallback, tree, browser, warn, driving },
+  { state, fallback, tree, browser, warn, driving, ms = STATUS_MS },
 ) {
   const [other] = driving
   if (other !== undefined)
     return {
       lines: [`not read: drive.mjs (pid ${other.pid}) is driving this page`],
     }
-  let session
-  try {
-    session = await open()
-  } catch (error) {
+  const late = new Error(`the page did not answer within ${ms / 1000} s`)
+  let timer
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(late), ms)
+  })
+  deadline.catch(() => {})
+  const within = (work) => Promise.race([work, deadline])
+  const notRead = (error) => {
+    clearTimeout(timer)
     return { lines: [`not read: ${error.message}`] }
   }
-  const { send, close } = session
+  const opening = open()
+  let session
   try {
+    session = await within(opening)
+  } catch (error) {
+    // A socket that opens after the deadline is closed when it does, or it
+    // holds the process open.
+    opening.then(({ close }) => close()).catch(() => {})
+    return notRead(error)
+  }
+  const { send, close } = session
+  const emulate = async () => {
     await send('Emulation.setFocusEmulationEnabled', { enabled: true })
     await send('Emulation.setDeviceMetricsOverride', {
       width: state.width ?? fallback.width,
@@ -295,19 +320,31 @@ export async function statusPoint(
       deviceScaleFactor: state.dpr ?? fallback.dpr,
       mobile: false,
     })
-    const point = await holdPage(send, {
-      kind: state.kind ?? 'webgpu',
-      tree,
-      browser,
-      recorded: state.browser ?? null,
-      warn,
-    })
+  }
+  try {
+    await within(emulate())
+  } catch (error) {
+    close()
+    return notRead(error)
+  }
+  try {
+    const point = await within(
+      holdPage(send, {
+        kind: state.kind ?? 'webgpu',
+        tree,
+        browser,
+        recorded: state.browser ?? null,
+        warn,
+      }),
+    )
     return {
       lines: [pointLine(point), ...JSON.stringify(point, null, 2).split('\n')],
     }
   } catch (error) {
+    if (error === late) return notRead(error)
     return { lines: [`refused: ${error.message}`], refused: true }
   } finally {
+    clearTimeout(timer)
     close()
   }
 }

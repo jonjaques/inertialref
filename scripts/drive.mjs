@@ -760,7 +760,8 @@ async function status() {
     state.browser !== browser
       ? ` (the session recorded ${state.browser})`
       : ''
-  const point = await pointOnPort(state, browser)
+  // The rig's lines before the page's, which is the one read that can wait:
+  // a page that does not answer still leaves who holds the GPU on screen.
   console.log(
     [
       `port      ${PORT}`,
@@ -774,9 +775,10 @@ async function status() {
           : 'not started by this rig'
       }`,
       `gpu       ${gpuLine(state).replaceAll('\n', '\n          ')}`,
-      `point     ${point.lines.join('\n          ')}`,
     ].join('\n'),
   )
+  const point = await pointOnPort(state, browser)
+  console.log(`point     ${point.lines.join('\n          ')}`)
   // A refusal is non-zero wherever the guard runs, so a script can ask
   // --status whether the rig is still at its operating point.
   if (point.refused === true) process.exitCode = 1
