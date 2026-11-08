@@ -525,6 +525,62 @@ function meanThrough(tau: F): F {
 }
 
 /**
+ * The sun's share a run of a homogeneous column sends back along the ray,
+ * first order, over the run's opacity 1 − e^(−τ_s) that the step already
+ * weighs it by: the run lit through the rest of its own column, an optical
+ * depth `entry` toward the sun where the ray enters it and `exit` where it
+ * leaves, linear between (plane-parallel):
+ *
+ *     ∫₀^τ_s e^(−τ − entry − (exit − entry)·τ/τ_s) dτ
+ *       = τ_s·(e^(−entry) − e^(−(τ_s + exit)))/(τ_s + exit − entry)
+ *
+ * A column lit through half its own depth instead, e^(−τ_col/2μ_s), is right
+ * to second order while it is thin and dark once it is not: a cumulus
+ * column of τ 30 to 90 passes 10⁻¹⁰ to 10⁻³⁰ of the sun that way, where its
+ * face toward the sun sends back μ_s/(μ_s + μ_v) of it; from orbit, where the
+ * far march draws every ray, every cumulus cell would be a hole. Both exponents
+ * stay at or under zero, `entry` and `exit` being depths, so nothing
+ * overflows whichever way a ray runs through the column.
+ */
+export function runSunShare(tau: F, entry: F, exit: F): F {
+  const spread = tau.add(exit).sub(entry).toVar()
+  const lit = exp(entry.negate())
+  const integral = select(
+    abs(spread).lessThan(1e-3),
+    lit.mul(float(1).sub(spread.mul(0.5)).add(spread.mul(spread).div(6))),
+    lit.sub(exp(tau.add(exit).negate())).div(spread),
+  )
+  // τ_s/(1 − e^(−τ_s)), with its series where the subtraction cancels.
+  const perOpacity = select(
+    tau.lessThan(1e-3),
+    float(1).add(tau.mul(0.5)).add(tau.mul(tau).div(12)),
+    tau.div(oneMinus(exp(tau.negate()))),
+  )
+  return integral.mul(perOpacity)
+}
+
+/**
+ * Where a step's run enters and leaves its column, as optical depths toward
+ * the sun through the rest of the column: σ·(top − h)/μ_s at either end's
+ * height, σ the column's extinction a meter of height.
+ */
+export function runDepths(
+  body: CloudBodyUniforms,
+  ray: CloudRay,
+  run: { readonly start: F; readonly length: F },
+  column: { readonly sigma: F; readonly top: F; readonly slant: F },
+): { readonly entry: F; readonly exit: F } {
+  const depth = (t: F): F =>
+    column.sigma
+      .mul(max(column.top.sub(cloudSample(ray, t, body, float(0)).altitude), 0))
+      .div(column.slant)
+  return {
+    entry: depth(run.start),
+    exit: depth(run.start.add(run.length)),
+  }
+}
+
+/**
  * The state one far march carries from `from` to the span's end, shared by
  * both candidates: the cloud's transmittance, the air's, each layer's light
  * before its phase, the blocked air, and the depth moments.
@@ -1006,32 +1062,19 @@ function atlasIntervals(
 }
 
 /**
- * The transmittance to the sun from a cloud sample in layer `k`: the layers
- * above along the sun, each one read at the sun ray's crossing of its
- * mid-height and mixed as one column, times half of its own column's depth
- * (§5.13 step 5). Times the beam, the light per unit irradiance there.
+ * The sun's light at a cloud sample in layer `k` from above its own column:
+ * the layers above along the sun, each one read at the sun ray's crossing of
+ * its mid-height and mixed as one column (§5.13 step 5), times the beam. The
+ * column's own depth above the sample is the step's (`runSunShare`).
  */
 function atlasSun(
   atlas: TextureNode,
   body: CloudBodyUniforms,
   sample: CloudSample,
   k: number,
-  ownTau: F,
-  thickness: F,
 ): V3 {
   const center = centerOf(body)
-  const own = exp(
-    ownTau
-      .negate()
-      .div(
-        slantCosine(
-          sample.sunMu,
-          thickness,
-          body.datumRadius.add(sample.altitude),
-        ).mul(2),
-      ),
-  )
-  let cloud: F = own
+  let cloud: F = float(1)
   for (let j = k + 1; j < FAR_ROWS; j += 1) {
     const above = farLayer(body, j)
     const middle = above.base.add(above.top).mul(0.5)
@@ -1110,12 +1153,29 @@ function atlasMarch(
           const run = cloudRun(body, ray.mu, t0, t1, base, top)
           const runStart = run.start.toVar()
           const runLength = run.length.toVar()
-          const tau = decodeTau(read.y).toVar()
+          const sigma = decodeTau(read.y)
+            .div(max(top.sub(base), 1e-3))
+            .toVar()
+          const runTau = sigma.mul(runLength).toVar()
           const sample = cloudSample(
             ray,
             runStart.add(runLength.mul(0.5)),
             body,
             float(0),
+          )
+          const { entry, exit } = runDepths(
+            body,
+            ray,
+            { start: runStart, length: runLength },
+            {
+              sigma,
+              top,
+              slant: slantCosine(
+                sample.sunMu,
+                thickness,
+                body.datumRadius.add(sample.altitude),
+              ),
+            },
           )
           march.step(
             {
@@ -1123,9 +1183,11 @@ function atlasMarch(
               to: t1,
               start: runStart,
               length: runLength,
-              tau: tau.div(max(top.sub(base), 1e-3)).mul(runLength),
+              tau: runTau,
               fraction: read.x,
-              source: atlasSun(atlas, body, sample, k, tau, thickness),
+              source: atlasSun(atlas, body, sample, k).mul(
+                runSunShare(runTau, entry, exit),
+              ),
             },
             k,
           )
