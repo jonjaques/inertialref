@@ -1,4 +1,5 @@
 export * from './capabilities.ts'
+export * from './clouds.ts'
 export * from './cutscene.ts'
 export * from './cutscenes/index.ts'
 export * from './cutscenes/tngIntro.ts'
