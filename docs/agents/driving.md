@@ -234,13 +234,20 @@ socket:
 - an adapter that is neither a fallback nor, by name, a software rasterizer:
   the engine's own device's `adapterInfo` where it has one, and a fresh
   request's otherwise;
-- a drawing buffer of the viewport × min(DPR, `dprCeiling` for the pointer)
+- the viewport and ratio the invocation's `--width`, `--height` and `--dpr`
+  asked for, as the page reports them, the ratio compared as the float32
+  Chrome keeps it in;
+- a drawing buffer of that viewport × min(DPR, `dprCeiling` for the pointer)
   × the picture's supersampling factor, floored as three floors it, at the
   ratio the page reports;
 - the served tree, as above.
 
-`--document` and `--no-javascript` hold the page to the DOM alone, with no
-renderer asked for. The buffer is read two animation frames after the rig's
+`--document` and `--no-javascript` hold the page to the DOM and the window
+alone, with no renderer asked for. The window is checked as well as the
+buffer because a page whose emulation another session cleared reports the
+window it was left at, and on Chrome 157 the app's ratio follows an emulated
+change, so its buffer agrees with that window and the buffer rule alone
+passes it. The buffer is read two animation frames after the rig's
 window is set, because a warm attach sets it on a page that has been at
 another size: Chrome drops an invocation's emulation when its socket closes,
 so between invocations the page sits at the window's own size and ratio,
@@ -261,14 +268,24 @@ The record is a line of narration unless `--quiet`, the `operatingPoint` of
 `--json` with `identity` beside it, and each `--reload` step's `point`. It
 names the adapter and backend, the buffer against the window and the ratio,
 the dynamic range, whether the system is Sol, a catalog star or generated,
-and the served tree. Chrome's version from `/json/version` is in it too, and
-in the port's session. A version other than the one the session recorded is a
-warning and never a refusal, because Chrome stable updates itself.
+and the served tree. Chrome's version from `/json/version` is in it too. The
+port's session records it with the kind, the tree, the window and the
+controls, and only once a page has passed, so a run that fails at boot or is
+refused does not consume the warning. A version other than the one the
+session recorded is warned about once per entry and never refused, because
+Chrome stable updates itself.
 
-`--status` reads the point again without navigating or booting. It sets the
-window, the kind and the tree the session recorded for the last page that
-passed, then prints the line and the full record beside the GPU's holder,
-and exits 1 when the guard refuses. A baseline older than both
+`--status` reads the point again without navigating or booting. It prints
+the rig's lines and the GPU's holder first, then sets the window, the kind
+and the tree the session recorded for the last page that passed, prints the
+line and the full record, and exits 1 when the guard refuses. It reads
+nothing while another invocation is driving the page, and says so with that
+invocation's pid: each invocation lists itself in the session until it
+exits, because setting a window replaces the running invocation's, and the
+status socket's close clears the page's device emulation for every session,
+so a cast or a settle in progress would drop to the window's own size and
+ratio. A page that does not answer within five seconds is not read rather
+than refused, and so is a socket that does not open. A baseline older than both
 `engine.picture` and `ir.build()`, which `presets:compare --base` can serve
 from an older commit, names no picture to hold the buffer against, so its
 buffer reads `unchecked` and the rig proceeds.
@@ -317,13 +334,16 @@ three; they are here because they explain what it is doing:
    run is what it must never contain. Exhausted, the ladder remounts the
    canvas: a second full preload and warm-up census 4.5 s after the first —
    about 6.5 s of a 10.2 s `navigation to first light` — an uncaught dispose
-   from inside Three on the way, and a drawing buffer that comes back at
-   3200×1800 for a rig asking for 1600×900 at DPR 1, because
-   `useDevicePixelRatio`'s media query does not re-fire under emulation.
-   **Every terrain figure taken after a rebuild in this rig is a retina
-   figure**, which is the trap below arriving without being asked for, and
-   the launch guard refuses that page before a step. Boot from this rig is
-   one census and ~4.3 s to first light.
+   from inside Three on the way, and a drawing buffer measured at 3200×1800
+   for a rig asking for 1600×900 at DPR 1. **Every terrain figure taken after
+   a rebuild in this rig is a retina figure**, which is the trap below
+   arriving without being asked for, and the launch guard refuses that page
+   before a step. On Chrome 157 the app's ratio follows an emulated DPR change
+   while focus emulation runs, and that buffer has not been reproduced there,
+   so the guard's unit case in `scripts/drivePage.test.mjs` holds the
+   refusal; [CONTEXT.md](../../CONTEXT.md) § "Every drive.mjs boot runs the
+   guard, and a page between invocations is at no rig's point" has the runs.
+   Boot from this rig is one census and ~4.3 s to first light.
 6. **Chrome left running is contention the test suite feels.** The driver keeps
    it up on purpose, and a full `pnpm test` beside it has timed out on a
    different unrelated file each run and passed clean once `--down` had run.

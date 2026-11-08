@@ -162,9 +162,10 @@ commands pass `--tree` themselves.
 attach and `--reload` the driver runs the launch guard,
 [`scripts/driveLaunch.mjs`](../../../scripts/driveLaunch.mjs), over its own socket: a
 WebGPU renderer on an adapter that is neither a fallback nor a software rasterizer by
-name, a drawing buffer of the window × min(DPR, the pointer's ceiling) × the picture's
-supersampling, floored as three floors it, and the served tree above. `--document` and
-`--no-javascript` hold the DOM alone. A refusal is the guard's reason on stderr and exit
+name, the `--width`, `--height` and `--dpr` reported back by the page, a drawing buffer of
+that window × min(DPR, the pointer's ceiling) × the picture's supersampling, floored as
+three floors it, and the served tree above. `--document` and `--no-javascript` hold the
+DOM and the window alone. A refusal is the guard's reason on stderr and exit
 1, and no step runs. It means the page is not the point the command asked for, so a
 figure taken there belongs to another point: a buffer the rig did not ask for is trap 5's
 remount, and `--fresh` boots the page again at the rig's window. The record is one line
@@ -175,12 +176,15 @@ operating point (webgpu): apple/metal-3 on webgpu, buffer 1600×900 for 1600×90
   dynamic range standard, system sol, served from …/inertialref (build 43d0c10d)
 ```
 
-Chrome's version is recorded in the session and a change is warned about, never refused,
-because Chrome stable updates itself. `--status` reads the point again without booting and
-prints the line, the full record and the GPU's holder, and exits 1 on a refusal. It first
-sets the window the session recorded, because Chrome drops an invocation's emulation when
-its socket closes: between invocations the page is at the window's own size and ratio,
-1600×933 at DPR 2 on the Mac mini's display, which is no rig's point. A baseline older than
+Chrome's version is recorded in the session once a page passes, and a change is warned
+about, never refused, because Chrome stable updates itself. `--status` prints the rig's
+lines and the GPU's holder, then reads the point again without booting, prints the line and
+the full record, and exits 1 on a refusal. It first sets the window the session recorded,
+because Chrome drops an invocation's emulation when its socket closes: between invocations
+the page is at the window's own size and ratio, 1600×933 at DPR 2 on the Mac mini's
+display, which is no rig's point. That same close clears the emulation of every session on
+the page, so `--status` touches nothing while another invocation is driving it, and says
+which pid is; a page that does not answer in five seconds is not read. A baseline older than
 `engine.picture` and `ir.build()` reads `buffer …, unchecked` and proceeds.
 [driving.md](../../../docs/agents/driving.md#the-operating-point) has the rest.
 
