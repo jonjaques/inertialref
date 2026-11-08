@@ -13,11 +13,10 @@ import { nameResume } from './passTimeline.ts'
  * resumed one (§4.2).
  *
  * Every three render and compute makes an encoder of its own and submits it
- * as it finishes, and the GPU runs submissions in order. The scene pass is
- * the exception that matters: its encoder goes on the queue only when the
- * whole pass finishes, so a pass issued from inside it — from a mesh's
- * `updateBefore` — is submitted first and runs ahead of every draw the scene
- * pass has made, reading the depth the previous frame left.
+ * as it finishes, and the GPU runs submissions in order. A pass issued from
+ * inside the scene pass — from a mesh's `updateBefore` — finishes first, so
+ * it goes on the queue ahead of every draw the scene pass has made and reads
+ * the depth the previous frame left.
  *
  * The end and the resume are three's own framebuffer copy, the sea's path: it
  * ends the pass, copies, sets every load op to `load`, and begins the pass
@@ -151,8 +150,7 @@ export function splitScenePass(
     BackendInternals | undefined
   if (backend?.isWebGPUBackend !== true) return false
   const context = (renderer as unknown as RenderTree)._currentRenderContext
-  // The canvas is not a scene pass: its probe would take the canvas's format,
-  // which no 1 × 1 texture three makes for a target shares.
+  // The canvas is not a scene pass, and has no target to key a probe on.
   if (context === null || context.renderTarget === null) return false
   const record = backend.get(context)
   const encoder = record.encoder
