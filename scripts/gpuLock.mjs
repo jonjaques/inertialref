@@ -37,6 +37,7 @@ import {
   writeSync,
 } from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /** How a parent hands its token to the processes it spawns. A token is not a
  *  bypass: one that does not match the live lock file buys nothing. */
@@ -76,8 +77,17 @@ const git = (cwd, args) =>
     stdio: ['ignore', 'pipe', 'pipe'],
   }).trim()
 
-/** The lock every checkout of this clone shares, as an absolute path. */
-export function lockPath(cwd = process.cwd()) {
+/** The checkout this file is in, which is the clone every job here guards. */
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+
+/**
+ * The lock every checkout of this clone shares, as an absolute path. Found
+ * from this file's checkout by default, not from the shell's directory:
+ * `node ~/inertialref/scripts/drive.mjs` from a scratch thread outside every
+ * repository would have no common dir to find, and from inside another
+ * repository it would find that one's, a lock no job of this clone checks.
+ */
+export function lockPath(cwd = HERE) {
   try {
     return path.join(
       path.resolve(cwd, git(cwd, ['rev-parse', '--git-common-dir'])),

@@ -1,4 +1,7 @@
 import { execFile } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
@@ -10,15 +13,12 @@ import { describe, expect, it } from 'vitest'
  * no rig of anyone's is attached to.
  */
 const DRIVE = fileURLToPath(new URL('./drive.mjs', import.meta.url))
-const run = (args) =>
-  promisify(execFile)(process.execPath, [
-    DRIVE,
-    '--port',
-    '9',
-    '--url',
-    'http://127.0.0.1:9/',
-    ...args,
-  ]).then(
+const run = (args, options = {}) =>
+  promisify(execFile)(
+    process.execPath,
+    [DRIVE, '--port', '9', '--url', 'http://127.0.0.1:9/', ...args],
+    options,
+  ).then(
     ({ stdout, stderr }) => ({ code: 0, stdout, stderr }),
     ({ code, stdout, stderr }) => ({ code, stdout, stderr }),
   )
@@ -44,5 +44,18 @@ describe('drive.mjs and the GPU lock', () => {
     expect(stdout).toMatch(
       /^gpu {7}(free|held for this rig\.|held by another job\.)/m,
     )
+  })
+
+  it("reads its own checkout's lock when the shell is outside every repository", async () => {
+    const outside = mkdtempSync(path.join(tmpdir(), 'ir-drive-'))
+    try {
+      const { code, stdout } = await run(['--status'], { cwd: outside })
+      expect(code).toBe(0)
+      expect(stdout).toMatch(
+        /^gpu {7}(free|held for this rig\.|held by another job\.)/m,
+      )
+    } finally {
+      rmSync(outside, { recursive: true, force: true })
+    }
   })
 })

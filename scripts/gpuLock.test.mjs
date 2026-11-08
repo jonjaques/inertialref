@@ -280,6 +280,25 @@ describe('the GPU lock', () => {
     expect(path.isAbsolute(expected)).toBe(true)
   })
 
+  it('is the clone this module is in, whatever directory the shell is in', () => {
+    // drive.mjs run by absolute path from a scratch thread outside any
+    // repository, and from inside another repository, whose own common dir
+    // would be a lock nothing here checks.
+    const outside = path.join(dir, 'outside')
+    const other = path.join(dir, 'other')
+    mkdirSync(outside)
+    execFileSync('git', ['init', '--quiet', other])
+    const program = `const { lockPath } = await import(${JSON.stringify(MODULE)}); process.stdout.write(lockPath())`
+    for (const cwd of [outside, other])
+      expect(
+        execFileSync(process.execPath, ['--input-type=module', '-e', program], {
+          cwd,
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }),
+      ).toBe(lockPath(ROOT))
+  })
+
   it('creates the lock naming this process, and release removes it', async () => {
     const listening = process.listenerCount('SIGTERM')
     const lock = await acquire('vitest', { path: file() })
