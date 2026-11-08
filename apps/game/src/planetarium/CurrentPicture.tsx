@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { Action } from '../hud/Action.tsx'
 import { describeCause } from '../hud/notice.ts'
+import { posthog } from '../posthog.ts'
 import { PERSONAL_PICTURES, usePersistentState } from '../state/preferences.ts'
 import { SharePicture } from './SharePicture.tsx'
 
@@ -51,6 +52,7 @@ export function CurrentPicture({
               event.preventDefault()
               try {
                 setPictures((held) => mergePictures(held, [picture]))
+                posthog.capture('planetarium_picture_saved')
                 onNotice(`Saved ${picture.label}.`)
               } catch (cause) {
                 onNotice(describeCause(cause))

@@ -16,6 +16,10 @@ interface ImportMetaEnv {
   readonly VITE_GA_MEASUREMENT_ID?: string
   /** Clerk's publishable key, `pk_…`. See `src/account/accounts.ts`. */
   readonly PUBLIC_CLERK_PUBLISHABLE_KEY?: string
+  /** PostHog public project token. See `src/posthog.ts`. */
+  readonly PUBLIC_POSTHOG_PROJECT_TOKEN?: string
+  /** PostHog API host. See `src/posthog.ts`. */
+  readonly PUBLIC_POSTHOG_HOST?: string
 }
 
 interface ImportMeta {

@@ -1,5 +1,6 @@
 import { DEBUG_LANDING_SITE, type TravelTarget } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
+import { posthog } from '../posthog.ts'
 import { Action } from './Action.tsx'
 
 /**
@@ -23,6 +24,13 @@ export function TargetActions({
   /** The panel's own try/catch-and-report. See `NavigatorPanel`. */
   run: (label: string, action: () => void) => void
 }) {
+  const captureAction = (action: string): void => {
+    posthog.capture('destination_action_selected', {
+      action,
+      target_kind: target.kind,
+    })
+  }
+
   if (target.kind === 'system')
     return (
       <>
@@ -30,21 +38,23 @@ export function TargetActions({
           label="Travel"
           tone="primary"
           title="Orbit this system's star, looking at it"
-          onClick={() =>
+          onClick={() => {
+            captureAction('travel')
             run(`traveling to ${target.name}`, () =>
               engine.harness.goTo(target.address),
             )
-          }
+          }}
         />
         <Action
           label="Generate"
           disabled={target.loaded}
           title="Generate the system and list its bodies without going there"
-          onClick={() =>
+          onClick={() => {
+            captureAction('generate')
             run(`generated ${target.name}`, () => {
               engine.harness.loadSystem(target.system)
             })
-          }
+          }}
         />
       </>
     )
@@ -55,17 +65,19 @@ export function TargetActions({
         label="Orbit"
         tone="primary"
         title="Circular orbit at an altitude that frames the body"
-        onClick={() =>
+        onClick={() => {
+          captureAction('orbit')
           run(`orbiting ${target.name}`, () =>
             engine.harness.goTo(target.address),
           )
-        }
+        }}
       />
       <Action
         label="Land"
         disabled={!target.landable}
         title={target.landable ? 'Park on the surface' : 'Not solid ground'}
-        onClick={() =>
+        onClick={() => {
+          captureAction('land')
           run(`landing on ${target.name}`, () =>
             engine.harness.land(
               target.address,
@@ -73,25 +85,27 @@ export function TargetActions({
               DEBUG_LANDING_SITE.longitude,
             ),
           )
-        }
+        }}
       />
       <Action
         label="Face"
         title="Point the nose at it without touching the trajectory"
-        onClick={() =>
+        onClick={() => {
+          captureAction('face')
           run(`facing ${target.name}`, () =>
             engine.harness.face(target.address),
           )
-        }
+        }}
       />
       <Action
         label="Burn"
         title="Aim at it and light the main drive"
-        onClick={() =>
+        onClick={() => {
+          captureAction('burn')
           run(`burning toward ${target.name}`, () =>
             engine.harness.burnToward(target.address),
           )
-        }
+        }}
       />
     </>
   )

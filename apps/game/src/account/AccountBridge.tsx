@@ -1,6 +1,36 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 import { useAuth } from '@clerk/react'
 import { AccountContext } from './accounts.ts'
+
+interface IdentityState {
+  initialized: boolean
+  userId: string | null
+}
+
+/** Synchronize Clerk's persisted browser identity with the browser SDK. */
+function usePostHogIdentity(isLoaded: boolean, userId: string | null): void {
+  const identity = useRef<IdentityState>({ initialized: false, userId: null })
+
+  useEffect(() => {
+    if (!isLoaded) return
+
+    const previous = identity.current
+    const next = userId
+    identity.current = { initialized: true, userId: next }
+
+    if (previous.initialized && previous.userId === next) return
+
+    void import('../posthog.ts')
+      .then(({ isPostHogStarted, posthog }) => {
+        // Account state can change while the browser-only module is loading.
+        if (!isPostHogStarted() || identity.current.userId !== next) return
+
+        if (previous.initialized && previous.userId !== null) posthog.reset()
+        if (next !== null) posthog.identify(next)
+      })
+      .catch(() => undefined)
+  }, [isLoaded, userId])
+}
 
 /**
  * Clerk's answer to "who is signed in", republished as this app's own
@@ -13,9 +43,12 @@ import { AccountContext } from './accounts.ts'
  */
 export function AccountBridge({ children }: { children: ReactNode }) {
   const { isLoaded, userId } = useAuth()
+  const accountUserId = userId ?? null
+  usePostHogIdentity(isLoaded, accountUserId)
+
   return (
     <AccountContext
-      value={{ configured: true, loaded: isLoaded, userId: userId ?? null }}
+      value={{ configured: true, loaded: isLoaded, userId: accountUserId }}
     >
       {children}
     </AccountContext>

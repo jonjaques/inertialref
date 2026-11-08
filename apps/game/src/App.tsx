@@ -18,6 +18,7 @@ import { ChromeContext } from './hud/chrome.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { TrackOverlay } from './hud/TrackOverlay.tsx'
+import { posthog } from './posthog.ts'
 import { useCoarsePointer, useDevicePixelRatio } from './hud/viewport.ts'
 import { bindEngineKnobs } from './state/engineKnobs.ts'
 import {
@@ -532,7 +533,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       storageBusy.current = true
       void engine
         .save()
-        .then((text) => flash(`saved ${text.length} bytes`))
+        .then((text) => {
+          posthog.capture('simulation_saved')
+          flash(`saved ${text.length} bytes`)
+        })
         .catch((cause: unknown) => flash(`save failed — ${describe(cause)}`))
         .finally(() => {
           storageBusy.current = false
@@ -543,7 +547,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       storageBusy.current = true
       void engine
         .load()
-        .then((ok) => flash(ok ? 'loaded' : 'nothing to load'))
+        .then((ok) => {
+          posthog.capture('simulation_load_completed', { restored: ok })
+          flash(ok ? 'loaded' : 'nothing to load')
+        })
         .catch((cause: unknown) => flash(`load failed — ${describe(cause)}`))
         .finally(() => {
           storageBusy.current = false

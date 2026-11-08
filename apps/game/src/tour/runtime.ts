@@ -21,6 +21,7 @@ import {
   isOutputTranscript,
   type LiveTransport,
 } from './channel.ts'
+import { GuideAiObservability } from './aiObservability.ts'
 import { SpeechClock } from './clock.ts'
 import { accessState, type GuideAccess } from './verdict.ts'
 import type { GuideArrival, SceneFacts } from './executor.ts'
@@ -200,6 +201,7 @@ export class GuideRuntime {
   readonly #host: GuideHost
   readonly #listeners = new Set<() => void>()
   readonly #clock: SpeechClock
+  readonly #ai: GuideAiObservability
   #snapshot: GuideSnapshot = {
     activity: OFFLINE,
     voice: null,
@@ -234,6 +236,7 @@ export class GuideRuntime {
   constructor(host: GuideHost) {
     this.#host = host
     this.#clock = new SpeechClock({ now: () => host.now() })
+    this.#ai = new GuideAiObservability(() => host.now())
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -332,9 +335,10 @@ export class GuideRuntime {
         (reason) => this.#failure(live, reason),
       )
       this.#live = live
-      const channel = new GuideChannel(live, (event, id) =>
-        this.#record('send', { ...event, event_id: id }),
-      )
+      const channel = new GuideChannel(live, (event, id) => {
+        this.#record('send', { ...event, event_id: id })
+        this.#ai.sent(event)
+      })
       this.#channel = channel
       const loop = new GuideLoop(channel, {
         now: () => this.#host.now(),
@@ -373,6 +377,7 @@ export class GuideRuntime {
       const created = decoded.value
       this.#guard(generation)
       this.#sessionId = created.sessionId
+      this.#ai.startSession(created.sessionId)
       this.#update({
         expiresAt: created.expiresAt > 0 ? created.expiresAt : null,
       })
@@ -473,6 +478,7 @@ export class GuideRuntime {
   #event(live: LiveConnectionPort, event: LiveServerEvent): void {
     if (live !== this.#live) return
     if (!isOutputTranscript(event)) this.#record('receive', event)
+    this.#ai.received(event)
     this.#loop?.receive(event)
   }
 
@@ -504,9 +510,16 @@ export class GuideRuntime {
     if (executor === null) return { status: 'rejected', reason: 'No scene.' }
     if (this.#paused())
       return { status: 'rejected', reason: 'The visitor has paused the guide.' }
-    const output = await executor.execute(call)
-    this.#record('note', { call: call.name, output })
-    return output
+    const startedAt = this.#host.now()
+    try {
+      const output = await executor.execute(call)
+      this.#record('note', { call: call.name, output })
+      this.#ai.toolExecuted(call, output, startedAt)
+      return output
+    } catch (cause) {
+      this.#ai.toolFailed(call, cause, startedAt)
+      throw cause
+    }
   }
 
   #executed(call: GuideCall, output: GuideToolOutput): void {

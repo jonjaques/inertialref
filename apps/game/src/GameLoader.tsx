@@ -16,11 +16,19 @@ export default function GameLoader() {
     let active = true
     void loadRuntime().then(
       (loaded) => {
-        if (active) setRuntime(loaded)
+        if (!active) return
+        setRuntime(loaded)
+        void import('./posthogLogs.ts')
+          .then(({ posthogLog }) => posthogLog.interactiveRuntimeLoaded())
+          .catch(() => undefined)
       },
       (cause: unknown) => {
         console.error('The interactive view could not start', cause)
-        if (active) runtimeFailure.report('runtime', cause)
+        if (!active) return
+        runtimeFailure.report('runtime', cause)
+        void import('./posthogLogs.ts')
+          .then(({ posthogLog }) => posthogLog.interactiveRuntimeFailed())
+          .catch(() => undefined)
       },
     )
     return () => {

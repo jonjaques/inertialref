@@ -1,5 +1,7 @@
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import { startAnalytics } from './analytics.ts'
+import { startPostHog } from './posthog.ts'
+import { posthogLog } from './posthogLogs.ts'
 import { BUILD_ID } from './build.ts'
 import { isTimingLevel, setTimingLevel } from './engine/browserTiming.ts'
 import { cacheStartupAssets } from './net/cacheStartupAssets.ts'
@@ -22,7 +24,10 @@ export function startClient(): void {
 
   // An effect inside App misses the catalog and renderer startup spans.
   const asked = new URLSearchParams(window.location.search).get(QUERY.timing)
-  setTimingLevel(isTimingLevel(asked) ? asked : read(TIMING_LEVEL))
+  const timingLevel = isTimingLevel(asked) ? asked : read(TIMING_LEVEL)
+  setTimingLevel(timingLevel)
+  startPostHog()
+  posthogLog.clientStarted(timingLevel)
   startAnalytics()
 
   // The readiness adapter also covers hydration after the load event. A

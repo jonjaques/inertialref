@@ -33,6 +33,7 @@
     "@leeoniya/ufuzzy": "^1.0.19",
     "@pmndrs/upscaler": "0.5.0",
     "@react-three/fiber": "^9.8.2",
+    "posthog-js": "^1.407.2",
     "@tanstack/react-virtual": "^3.14.21",
     "astro": "7.4.1",
     "class-variance-authority": "^0.7.1",
