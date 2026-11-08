@@ -196,8 +196,10 @@ const TAU_MIE = 0.12
 /**
  * The three bands' wavelengths, nm: where Bodhaine's column above is read,
  * and where an aerosol's Ångström slope is evaluated against its 550 nm depth.
+ * The droplets' Mie table (`apps/ingest/src/mieTable.ts`) is generated at
+ * these, so a channel is one wavelength in cloud and sky alike.
  */
-const BANDS = [680, 550, 440] as const
+export const AIR_BANDS = [680, 550, 440] as const
 
 /** The aerosol's single-scattering albedo where none is authored: 0.94,
  * MACv2's global mean. Extinction over scattering is its inverse. */
@@ -480,7 +482,7 @@ export function atmosphereRecipe(
   // The aerosol's depth per band: 550 nm is the measured one, and the
   // others follow its Ångström slope.
   const depth = aerosolDepthOf(haze)
-  const tauMie = BANDS.map(
+  const tauMie = AIR_BANDS.map(
     (wavelength) => depth * (wavelength / 550) ** -haze.aerosolAngstrom,
   )
   let mieScatter: [number, number, number]
