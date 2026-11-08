@@ -8,6 +8,7 @@ import type { PassReport } from './passReport.ts'
 import type { PictureReport } from './pictureReport.ts'
 import type { TerrainReport } from './descent.ts'
 import type { GalaxyRenderReport } from './galaxy.ts'
+import { cloudReportIdle } from './clouds.ts'
 import type { TimingPort } from './profile.ts'
 import { DEFAULT_PICTURE_PROCESSING } from './pictureProcessing.ts'
 import { PICTURES } from './pictures.ts'
@@ -90,6 +91,7 @@ describe('renderHost, the render side of a host that has none', () => {
     expect(host.frameStats()).toBeNull()
     expect(host.boot()).toBe('booted')
     expect(host.galaxyRender()).toBeNull()
+    expect(host.clouds()).toBeNull()
     expect(host.terrain()).toBeNull()
     expect(host.lensView()).toBeNull()
     expect(host.framingLens()).toBe(LENS_PRESETS.flight)
@@ -432,6 +434,14 @@ describe('the galaxy inspector', () => {
         .harness.galaxy()
         .render(),
     ).toBe(report)
+  })
+})
+
+describe('the clouds’ report', () => {
+  it('reads the system’s report through the host, and null with none', () => {
+    const report = cloudReportIdle()
+    expect(session().harness.clouds()).toBeNull()
+    expect(session({ clouds: () => report }).harness.clouds()).toBe(report)
   })
 })
 
