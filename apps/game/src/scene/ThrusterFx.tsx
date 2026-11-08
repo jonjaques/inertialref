@@ -7,6 +7,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { createThrusterPlumes, type ThrusterPlumes } from '../render/plumes.ts'
 import { thrusterLayoutFor } from '../render/thrusterLayouts.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
 import {
   read,
   RENDER_SHIP,
@@ -55,11 +56,13 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
           visuals: new ThrusterVisuals(layout),
           firing: new Float32Array(layout.nozzles.length),
         }
+        // Over the clouds under `?clouds=1`, before the warm-up compiles them.
+        if (engine.cloudsAvailable) markOverClouds(staged.plumes.group)
         built.set(id, staged)
       }
       return staged
     },
-    [built],
+    [built, engine],
   )
 
   /*

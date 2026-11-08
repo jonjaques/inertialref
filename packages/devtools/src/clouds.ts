@@ -104,13 +104,61 @@ export interface CloudRenderReport {
 export const CLOUD_SETTLE_FRAMES = 16
 
 /**
- * Null when there is nothing to wait for: no system, or levers off.
+ * What a measurement waits on: every cache's owed work done and four whole
+ * interleave cycles since the history last reset. Null when there is
+ * nothing to wait for — no system, or levers off.
  *
- * Null for every report here: nothing waits on the clouds until the system
- * that fills the report reports a frame.
+ * A forced path (cut, scrub, warp, fly) resets or re-owes work every frame,
+ * so it never settles; a runner waits it out to its cap.
  */
 export function cloudsSettled(
-  _report: Omit<CloudRenderReport, 'settle'> | null,
+  report: Omit<CloudRenderReport, 'settle'> | null,
 ): CloudSettle | null {
-  return null
+  if (report === null || !report.on) return null
+  const owed = Object.entries(report.pending)
+    .filter(([, pending]) => pending)
+    .map(([name]) => name)
+  const seen = Math.min(report.sinceReset, CLOUD_SETTLE_FRAMES)
+  return {
+    pending: owed.length > 0 || report.sinceReset < CLOUD_SETTLE_FRAMES,
+    history: `${seen}/${CLOUD_SETTLE_FRAMES}`,
+    caches: owed.length === 0 ? 'ready' : owed.join(', '),
+  }
+}
+
+/**
+ * The report of a system that drew nothing: one that exists and is off, or,
+ * with `reason`, one that cannot exist — the flag on a WebGL renderer, which
+ * draws no clouds in phase 0 (§4.6).
+ */
+export function cloudReportIdle(
+  reason: CloudRenderReport['reason'] = null,
+): CloudRenderReport {
+  return {
+    available: reason === null,
+    reason,
+    on: false,
+    levers: {},
+    served: null,
+    second: null,
+    regime: 'off',
+    reset: 'none',
+    extents: { render: [0, 0], css: [0, 0], trace: [0, 0], history: [0, 0] },
+    frames: 0,
+    resets: 0,
+    sinceReset: 0,
+    pending: {
+      maps: false,
+      clipmap: false,
+      volume: false,
+      sunDepth: false,
+      far: false,
+      history: false,
+    },
+    settle: null,
+    bytes: { total: 0 },
+    pipelines: { render: 0, compute: 0 },
+    steps: null,
+    residual: null,
+  }
 }

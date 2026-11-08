@@ -606,9 +606,7 @@ export function cloudFrame(
   previous: CloudFrame | null,
 ): CloudFrame | null {
   const { levers } = inputs
-  // Read defensively: the contracts' neutrality test hands in no inputs at
-  // all, and inputs without levers are clouds that are off.
-  if (levers?.on !== true) return null
+  if (!levers.on) return null
   const wet = (body: RenderBody): boolean => {
     const record = inputs.record(body.address)
     return record !== null && wetWorld(record)

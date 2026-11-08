@@ -49,6 +49,13 @@ import { warmPipeline } from './warmup.ts'
 import { SensorHistory } from './sensorHistory.ts'
 import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
 import { namePass } from './passTimeline.ts'
+import { type CloudRenderReport, cloudReportIdle } from '@inertialref/devtools'
+// Types only: the cloud system is its own chunk, loaded under `?clouds=1`.
+import type {
+  CloudEngineInputs,
+  CloudSystem,
+  CloudSystemFactory,
+} from './cloudSystem.ts'
 
 /* The sensor owns the only scene draw, then applies lens-side optics,
  * detector response and the canvas encode. MSAA belongs to the scene target;
@@ -71,6 +78,16 @@ export interface SensorDiagnostics {
   readonly defocusPasses: number
   readonly motionPasses: number
   readonly shutterFraction: number
+  /**
+   * The cloud system's report, read when asked: null without `?clouds=1`,
+   * and `{ available: false, reason: 'webgl' }` with it on WebGL.
+   */
+  readonly clouds: CloudRenderReport | null
+}
+
+export interface SensorOptions {
+  /** `?clouds=1`'s chunk: the chain builds the cloud system on WebGPU. */
+  readonly clouds?: CloudSystemFactory
 }
 
 export interface Sensor {
@@ -95,6 +112,8 @@ export interface Sensor {
   render(target?: RenderTarget | null, delta?: number): void
   /** What the scene pass draws into — the radiance before the curve. */
   readonly sceneTarget: RenderTarget
+  /** The cloud system the chain built, or null: no flag, or not WebGPU. */
+  readonly clouds: CloudSystem | null
   dispose(): void
 }
 
@@ -120,6 +139,8 @@ export interface SensorFrame {
   readonly gamma?: number
   readonly motionBlur?: boolean
   readonly noiseTick?: number
+  /** The engine's half of the clouds' inputs, under `?clouds=1`; null otherwise. */
+  readonly clouds?: CloudEngineInputs | null
 }
 
 /**
@@ -143,6 +164,7 @@ export function createSensor(
   layout: SceneLayout,
   frame?: () => SensorFrame,
   diagnostic?: 'bilinear',
+  options: SensorOptions = {},
 ): Sensor {
   const exposure = new ExposureMeter()
   const history = new SensorHistory()
@@ -188,6 +210,19 @@ export function createSensor(
    * — once per presented frame in the app, once per call everywhere else.
    */
   scenePass.updateBeforeType = NodeUpdateType.RENDER
+  /*
+   * After the pass's MRT, which pass B draws with. Nothing at all without
+   * the option: no object, pipeline or term in the post program, so every
+   * chain built without `?clouds=1` is today's.
+   */
+  const clouds =
+    options.clouds === undefined || !automaticAvailable
+      ? null
+      : options.clouds({ renderer, scene, camera, layout, scenePass })
+  const cloudsUnavailable =
+    options.clouds !== undefined && clouds === null
+      ? cloudReportIdle('webgl')
+      : null
   const upscale =
     automaticAvailable && pictureUpscales(picture)
       ? createUpscale(
@@ -275,17 +310,25 @@ export function createSensor(
     builtToneMapping = renderer.toneMapping
     builtColorSpace = renderer.outputColorSpace
     const encoded = renderOutput(sceneColor, builtToneMapping, builtColorSpace)
-    if (signature === null || psf === null) post.outputNode = encoded
+    // Pass B runs after the scene pass and before the upscaler: three runs
+    // the graph's `updateBefore`s children first, left to right, so the over
+    // pass goes right after the scene's term. Its node is vec4(0).
+    const scene0 = (): Node<'vec4'> =>
+      vec4(scenePass.getTextureNode().rgb.min(65_504).mul(0), 0)
+    if (signature === null || psf === null)
+      post.outputNode =
+        clouds === null
+          ? encoded
+          : scene0().add(nodeObject(clouds.overPass)).add(encoded)
     else {
       // Dependencies are enumerated here, once per presented frame. Internal
       // quads read plain textures, so their draws cannot resubmit the scene or
       // an earlier optical pass. Even a bypass updates its downstream texture.
       // Each term is bounded before the zero: the scene target can hold +Inf
       // where two clamped draws blend, and Inf × 0 is NaN in the canvas.
-      let dependencies: Node<'vec4'> = vec4(
-        scenePass.getTextureNode().rgb.min(65_504).mul(0),
-        0,
-      )
+      let dependencies: Node<'vec4'> = scene0()
+      if (clouds !== null)
+        dependencies = dependencies.add(nodeObject(clouds.overPass))
       if (upscale !== null)
         dependencies = dependencies.add(nodeObject(upscale).min(65_504).mul(0))
       if (defocus !== null)
@@ -355,9 +398,14 @@ export function createSensor(
         defocusPasses: defocus?.passes ?? 0,
         motionPasses: motion?.passes ?? 0,
         shutterFraction: motion?.fraction.value ?? 0,
+        // Read when asked: a report a frame would be built for nobody.
+        get clouds() {
+          return clouds?.report ?? cloudsUnavailable
+        },
       }
     },
     sceneTarget: scenePass.renderTarget,
+    clouds,
     render(target: RenderTarget | null = null, delta = 1 / 60) {
       const state = frame?.()
       let generation = 0
@@ -492,8 +540,14 @@ export function createSensor(
         ].join(':')
         if (pictureKey !== previousPictureKey) {
           upscale?.resetHistory()
+          clouds?.resetHistory()
           previousPictureKey = pictureKey
         }
+        // Before the jitter goes on: the frame's camera is the pose's.
+        clouds?.beginFrame(state?.clouds ?? null, {
+          processing: reading?.processing ?? '',
+          delta,
+        })
         // Enhanced is already a composed visibility domain. Its sky has a
         // separate gain, so no scalar physical pre-exposure describes it.
         // Photographic radiance has one pre-exposure, tracked by FSR to keep
@@ -539,8 +593,10 @@ export function createSensor(
             },
           )
         }
+        clouds?.afterFrame(renderer)
       } finally {
         upscale?.endFrame()
+        clouds?.endFrame()
         setSceneExposure(renderer, null)
         renderer.toneMapping = toneMapping
         renderer.outputColorSpace = outputColorSpace
@@ -558,6 +614,7 @@ export function createSensor(
     },
     dispose() {
       history.retire()
+      clouds?.dispose()
       post.dispose()
       scenePass.dispose()
       meter?.dispose()

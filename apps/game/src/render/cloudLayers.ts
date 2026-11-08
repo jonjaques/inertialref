@@ -30,6 +30,18 @@ export const UNDER_CLOUDS_LAYERS: Layers = /*@__PURE__*/ only(0)
 export const OVER_CLOUDS_LAYERS: Layers = /*@__PURE__*/ only(OVER_CLOUDS_LAYER)
 
 /**
+ * Every layer, for the lights: three keeps a light in a render's set only
+ * when its layers pass the camera's, so a light on layer 0 alone lights pass
+ * A and leaves pass B dark, and every overlay builds a second, unlit
+ * pipeline on its first pass-B frame.
+ */
+export const ALL_LAYERS: Layers = /*@__PURE__*/ (() => {
+  const layers = new Layers()
+  layers.enableAll()
+  return Object.freeze(layers)
+})()
+
+/**
  * The object and every descendant, a Group included: a Group that fails the
  * layer test sets no groupOrder for its children (`Renderer.js:3084–3092`),
  * so marking only the meshes reorders them within the pass.

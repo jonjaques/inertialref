@@ -22,10 +22,14 @@ import {
 import type { OrbitPath } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createOrbitTraceMaterial } from '../render/orbitTrace.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
+import { splitOrders } from '../render/cloudLevers.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /** Geometry carries directions; physical visibility is resolved before placement. */
 const TRACE_SHELL = 1e6
+/** Placement B's single list: after the composite (1.5), before the rings (2). */
+const SPLIT_TRACE_ORDER = 1.75
 
 export function OrbitTraces({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
@@ -131,6 +135,7 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
         )
         line = new LineSegments(geometry, material)
         line.frustumCulled = false
+        if (engine.cloudsAvailable) markOverClouds(line)
         lines.current.set(path.address, line)
         parent.add(line)
       }
@@ -183,6 +188,11 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
       lines.current.delete(address)
       previous.current.delete(address)
     }
+    const order =
+      engine.cloudsAvailable && splitOrders(engine.clouds)
+        ? SPLIT_TRACE_ORDER
+        : 0
+    for (const line of lines.current.values()) line.renderOrder = order
   })
   return <group ref={group} />
 }
