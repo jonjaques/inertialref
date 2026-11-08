@@ -65,8 +65,16 @@ const earth = SOL.get(RIG_EARTH)!
 
 /** The vertical field the camera and the lens share. */
 export const RIG_FOV = 60
-/** Looking up: −Z turned onto +Y about +X. */
-const LOOKING_UP: Quat = Q.fromAxisAngle({ x: 1, y: 0, z: 0 }, Math.PI / 2)
+/** Looking up: −Z turned onto +Y about +X, the image's top toward +Z. */
+export const LOOKING_UP: Quat = Q.fromAxisAngle(
+  { x: 1, y: 0, z: 0 },
+  Math.PI / 2,
+)
+/** Looking down: −Z turned onto −Y, the image's top toward −Z. */
+export const LOOKING_DOWN: Quat = Q.fromAxisAngle(
+  { x: 1, y: 0, z: 0 },
+  -Math.PI / 2,
+)
 
 function earthAt(eye: number, compression: number): RenderBody {
   const center: Vec3 = { x: 0, y: -(earth.radius + eye) * compression, z: 0 }
@@ -119,11 +127,11 @@ const sun: RenderStar = {
   brightness: 1,
 } as unknown as RenderStar
 
-function renderScene(body: RenderBody): RenderScene {
+function renderScene(body: RenderBody, looking: Quat): RenderScene {
   return {
     camera: {
       position: { x: 0, y: 0, z: 0 },
-      orientation: LOOKING_UP,
+      orientation: looking,
       up: { x: 0, y: 1, z: 0 },
     },
     horizon: null,
@@ -148,6 +156,8 @@ export interface CloudRigOptions {
   /** The image height, −1 to 1, the ceiling's lower edge stands at: 0, the middle, by default. */
   readonly ceilingEdge?: number
   readonly levers?: Partial<CloudLevers>
+  /** The camera's orientation, render axes: up by default. */
+  readonly looking?: Quat
 }
 
 export interface CloudRig {
@@ -177,8 +187,9 @@ export function cloudRig(
     sceneBackend(renderer),
   )
   const scene = new Scene()
+  const looking = options.looking ?? LOOKING_UP
   const camera = new PerspectiveCamera(RIG_FOV, width / height, 0.05, 1e10)
-  camera.quaternion.set(LOOKING_UP.x, LOOKING_UP.y, LOOKING_UP.z, LOOKING_UP.w)
+  camera.quaternion.set(looking.x, looking.y, looking.z, looking.w)
   // As `App.tsx`'s `onCreated` marks the camera under the flag, before any
   // warm-up: pass B's composite is on layer 1.
   if (options.clouds !== false) camera.layers.enable(OVER_CLOUDS_LAYER)
@@ -204,7 +215,7 @@ export function cloudRig(
   }
   scene.updateMatrixWorld(true)
   const body = earthAt(eye, compression)
-  const view = renderScene(body)
+  const view = renderScene(body, looking)
   const lens = lensForFov(RIG_FOV)
   const rig = {
     levers: { ...DEFAULT_CLOUD_LEVERS, ...options.levers } as CloudLevers,
@@ -229,7 +240,7 @@ export function cloudRig(
       historyKey: 'rig',
       camera: {
         position: { x: 0, y: 0, z: 0 },
-        quaternion: LOOKING_UP,
+        quaternion: looking,
       },
       lens,
     },
