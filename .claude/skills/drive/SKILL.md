@@ -161,9 +161,22 @@ of the clone; [`scripts/gpuLock.mjs`](../../../scripts/gpuLock.mjs) says how it 
   half-second poll of the holder letting go. It is seconds, unlike `--wait`. The preset
   commands take the same flag; `pnpm test:gpu` takes `IR_GPU_WAIT=<s>`.
 - **`--down` is never refused.** It closes the Chrome, waits for it to exit, then drops it
-  from the lock. `--status` names whoever holds the GPU.
+  from the lock. It signals only a pid whose start time matches the one the session
+  recorded, so a pid reused after a reboot is left alone. `--status` names whoever holds
+  the GPU.
 - **A preset command takes the lock once**, and every `drive.mjs` it spawns joins under
-  its token. The rig it leaves keeps the lock until `--down`, and the command says so.
+  its token. The rig it leaves keeps the lock until `--down`, and the command says so on
+  stderr, even when it fails.
+- **A sandbox that cannot write the clone's `.git` loses every GPU command.** The lock
+  fails closed, and `cannot write the GPU lock … EPERM` means the sandbox, not a busy GPU.
+  Codex's workspace-write sandbox keeps `.git` and a worktree's gitdir read-only. Probed
+  on the Mac mini (codex-cli 0.166.0, `codex sandbox --permission-profile :workspace`),
+  it refuses the lock from a worktree and from the main checkout alike. A Codex thread
+  needs full access for GPU work, or a permissions profile that grants write on
+  `<clone>/.git` itself, which also lifts Codex's guard on the rest of `.git`. A narrower
+  grant does not work: Codex grants write to an exact path or a whole subtree, and an
+  edit of the lock writes a scratch file named by pid. A Claude Code subagent in a
+  worktree there creates the lock. An `EnterWorktree` session is unprobed.
 
 ## Documents before enhancement
 

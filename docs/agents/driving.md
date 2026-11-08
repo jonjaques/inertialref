@@ -210,9 +210,11 @@ port are refused at once, with the holder's name, pid, age and worktree. A
 refusal means wait or ask whoever is working in that checkout; never `--down`
 a rig you did not start. `--gpu-wait <seconds>` queues instead, and
 `pnpm test:gpu` takes `IR_GPU_WAIT=<seconds>`. `--down` is never refused, and
-`--status` names the holder. The
+`--status` names the holder. A sandbox that cannot write the clone's `.git`,
+Codex's workspace-write sandbox among them, fails every GPU command closed with
+`cannot write the GPU lock`. The
 [`drive` skill](../../.claude/skills/drive/SKILL.md#one-gpu-job-at-a-time) has
-the preset commands' part.
+the preset commands' part and the sandbox's remedy.
 
 These are the browser, not bugs in the clock, and the driver handles the first
 three; they are here because they explain what it is doing:

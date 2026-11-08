@@ -380,9 +380,12 @@ The lock's rules are in the
 [`drive` skill](../../.claude/skills/drive/SKILL.md#one-gpu-job-at-a-time).
 
 A sandbox can prevent Dawn from finding the physical adapter even when this
-host has one. An adapter-initialization failure is not shader evidence. Run
-the same focused command with adapter access before changing rendering code;
-an unavailable or skipped GPU does not count as a passing shader check.
+host has one. One that keeps the clone's `.git` read-only, as Codex's
+workspace-write sandbox does, stops the suite before that, at the lock:
+`cannot write the GPU lock … EPERM`. An adapter-initialization failure is not
+shader evidence. Run the same focused command with adapter access before
+changing rendering code; an unavailable or skipped GPU does not count as a
+passing shader check.
 
 Lifecycle and pixel behavior need different observations. Deferred source
 jobs expose replacement, cancellation and recovery without drawing. A
