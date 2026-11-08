@@ -579,9 +579,10 @@ export function cloudMarch(
 /**
  * The fine march's result with the far march's added from where it stopped
  * to t₁ (§5.5): the far light and blocked air dimmed by the air and cloud
- * the fine march left, their depth moments merged by opacity, and the far
- * stretch recorded as one knot when it holds cloud. Nothing runs where the
- * fine march reached t₁ or exited early.
+ * the fine march left, the far air that cloud hides taken out of B, their
+ * depth moments merged by opacity, and the far stretch recorded as one knot
+ * when it holds cloud. Nothing runs where the fine march reached t₁ or
+ * exited early.
  */
 export function marchFar(
   fine: CloudMarchResult,
@@ -606,7 +607,17 @@ export function marchFar(
       const result = far(fine.stopped)
       const carried = fine.throughput.mul(fine.transmittance)
       out.light.addAssign(carried.mul(result.light))
-      out.air.addAssign(carried.mul(result.air))
+      // B past the stop is T_a·{T·B_far + (T − 1)·L_far}: the far march's
+      // own blocked air is relative to its start, so the air the fine
+      // march's cloud already hides behind it is the second term, and
+      // without it everything past a nearly opaque near cloud shows through.
+      out.air.addAssign(
+        fine.throughput.mul(
+          result.air
+            .mul(fine.transmittance)
+            .add(result.airLight.mul(fine.transmittance.sub(1))),
+        ),
+      )
       // Moments past t₀, the fine ones recovered from their mean and spread.
       const fineMean = fine.reproject.sub(ray.start)
       const fineFirst = fineMean.mul(fine.opacity)
