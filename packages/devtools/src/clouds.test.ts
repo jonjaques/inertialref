@@ -125,8 +125,12 @@ const pair = fc
   .tuple(fc.integer({ min: 1, max: 12 }), fc.integer({ min: 1, max: 12 }))
   .chain(([width, height]) => {
     const texels = width * height
+    // Scene luminances, flushed to zero under 10⁻⁶: a float32 subnormal
+    // scaled down underflows to zero, which no frame's radiance reaches.
     const luminances = fc.array(
-      fc.float({ min: 0, max: 50, noNaN: true, noDefaultInfinity: true }),
+      fc
+        .float({ min: 0, max: 50, noNaN: true, noDefaultInfinity: true })
+        .map((v) => (v < 1e-6 ? 0 : v)),
       { minLength: texels, maxLength: texels },
     )
     const marks = fc.array(fc.integer({ min: 0, max: 1 }), {
@@ -155,24 +159,28 @@ describe('the radiance difference', () => {
 
   it('is symmetric, zero between a capture and itself, and the same for both captures scaled alike', () => {
     fc.assert(
-      fc.property(pair, fc.double({ min: 0.01, max: 100 }), ([a, b], k) => {
-        const ab = cloudRadianceDifference(a!, b!)
-        const ba = cloudRadianceDifference(b!, a!)
-        expect(ba).toEqual(ab)
-        const self = cloudRadianceDifference(a!, a!)
-        expect(self.rmse).toBe(0)
-        if (self.relative !== null) expect(self.relative).toBe(0)
-        const scale = (c: CloudRadiance) => ({
-          ...c,
-          luminance: c.luminance.map((v) => v * k),
-        })
-        const scaled = cloudRadianceDifference(scale(a!), scale(b!))
-        expect(scaled.texels).toBe(ab.texels)
-        if (ab.relative === null || scaled.relative === null)
-          expect(scaled.relative).toBe(ab.relative)
-        // Float32 luminances: scaling rounds each to its own 2⁻²⁴.
-        else expect(scaled.relative).toBeCloseTo(ab.relative, 4)
-      }),
+      fc.property(
+        pair,
+        fc.double({ min: 0.01, max: 100, noNaN: true }),
+        ([a, b], k) => {
+          const ab = cloudRadianceDifference(a!, b!)
+          const ba = cloudRadianceDifference(b!, a!)
+          expect(ba).toEqual(ab)
+          const self = cloudRadianceDifference(a!, a!)
+          expect(self.rmse).toBe(0)
+          if (self.relative !== null) expect(self.relative).toBe(0)
+          const scale = (c: CloudRadiance) => ({
+            ...c,
+            luminance: c.luminance.map((v) => v * k),
+          })
+          const scaled = cloudRadianceDifference(scale(a!), scale(b!))
+          expect(scaled.texels).toBe(ab.texels)
+          if (ab.relative === null || scaled.relative === null)
+            expect(scaled.relative).toBe(ab.relative)
+          // Float32 luminances: scaling rounds each to its own 2⁻²⁴.
+          else expect(scaled.relative).toBeCloseTo(ab.relative, 4)
+        },
+      ),
     )
   })
 
