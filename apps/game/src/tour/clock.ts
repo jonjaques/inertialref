@@ -13,7 +13,12 @@
  * and then stayed below the floor for `quietMs`. The order matters: Live
  * fills the wait for backend work with an acknowledgment ("Mmm, good
  * question! I'm double checking."), and a clock that measured silence from
- * the end of that filler fired inside the beat it was meant to follow.
+ * the end of that filler fired inside the beat it was meant to follow. The
+ * filler is often still sounding when the terminal response lands, so a loud
+ * sample counts as the beat's speech only after one sub-floor sample since
+ * the words returned; the narration begins about 2.6 s after the filler's
+ * tail, and a beat that began on that tail settled on the gap and prompted
+ * the next stop over the narration.
  *
  * The numbers come from four recorded conversations, ten minutes of guide
  * speech sampled the way this clock samples it. Silence on the remote track
@@ -41,6 +46,8 @@ interface Waiter {
   readonly since: number
   readonly startBy: number
   readonly by: number
+  /** A sub-floor sample has been read since `since`; the next loud one is the beat's. */
+  quietSeen: boolean
   spoke: boolean
   readonly resolve: (outcome: BeatOutcome) => void
 }
@@ -48,6 +55,8 @@ interface Waiter {
 export class SpeechClock {
   readonly #options: SpeechClockOptions
   #lastLoudAt = -Infinity
+  /** The most recent sample was loud: the voice is sounding now. */
+  #sounding = false
   #waiter: Waiter | null = null
 
   constructor(options: SpeechClockOptions) {
@@ -70,13 +79,20 @@ export class SpeechClock {
   /** One level sample from the remote track. Call at a steady rate. */
   sample(level: number): void {
     const now = this.#options.now()
-    if (level > this.floor) this.#lastLoudAt = now
+    this.#sounding = level > this.floor
+    if (this.#sounding) this.#lastLoudAt = now
     const waiter = this.#waiter
     if (waiter === null) return
     if (!waiter.spoke) {
-      if (this.#lastLoudAt >= waiter.since) waiter.spoke = true
-      else if (now >= waiter.startBy) this.#settle('silent')
-      return
+      if (level <= this.floor) waiter.quietSeen = true
+      // Loud without a break up to the start timeout is speech too: the
+      // filler ran straight into the narration, and settling `silent` would
+      // start the quiet count under the words.
+      else if (waiter.quietSeen || now >= waiter.startBy) waiter.spoke = true
+      if (!waiter.spoke) {
+        if (now >= waiter.startBy) this.#settle('silent')
+        return
+      }
     }
     if (now - this.#lastLoudAt >= this.quietMs) this.#settle('spoken')
     else if (now >= waiter.by) this.#settle('spoken')
@@ -85,7 +101,8 @@ export class SpeechClock {
   /**
    * Resolve once speech that began after `since` has ended, or when no
    * speech begins within `startTimeoutMs`, or after `maxMs` regardless.
-   * A second wait cancels the first.
+   * Speech that is already sounding at `since` is not the beat's until it
+   * has broken once. A second wait cancels the first.
    */
   waitForBeat(options: {
     since: number
@@ -99,7 +116,10 @@ export class SpeechClock {
         since: options.since,
         startBy: now + (options.startTimeoutMs ?? 8000),
         by: now + (options.maxMs ?? 90_000),
-        spoke: this.#lastLoudAt >= options.since,
+        // A voice sounding at the last reading has to break before a loud
+        // sample is the beat's; one already quiet is heard from its next word.
+        quietSeen: !this.#sounding,
+        spoke: false,
         resolve,
       }
     })

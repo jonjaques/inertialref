@@ -81,8 +81,27 @@ export interface GuideStatus {
   readonly pendingCalls: number
   /** Backend responses whose chain has not ended without a tool call. */
   readonly inFlight: boolean
+  /** Whether the level the beat clock reads is a measurement; `ok` is the only state a tour advances on. */
+  readonly meter: GuideMeter
   readonly usage: GuideUsage
 }
+
+/**
+ * The health of the meter on the guide's voice track. Silence decodes to
+ * exact zero, so a meter that cannot measure reads exactly like a guide that
+ * has finished speaking; the states name why it cannot.
+ */
+export type GuideMeter =
+  /** The analyser is bound to a live track in a running audio context. */
+  | 'ok'
+  /** No remote track has been bound, or the analyser could not be made. */
+  | 'unmeasured'
+  /** The audio context is not running; the browser suspended it. */
+  | 'suspended'
+  /** The bound track has ended; the provider replaced it. */
+  | 'ended'
+  /** The voice has produced words for seconds while the meter read exact zero throughout. */
+  | 'stuck'
 
 /** What the session has cost so far, as the provider reports it. */
 export interface GuideUsage {
@@ -127,6 +146,7 @@ export const UNAVAILABLE_GUIDE: GuideStatus = Object.freeze({
   paused: false,
   pendingCalls: 0,
   inFlight: false,
+  meter: 'unmeasured',
   usage: NO_GUIDE_USAGE,
 })
 

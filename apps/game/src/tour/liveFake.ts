@@ -1,3 +1,4 @@
+import type { GuideMeter } from '@inertialref/devtools'
 import {
   type GuideClientEvent,
   type GuideConversationItem,
@@ -38,6 +39,8 @@ export interface LiveFake {
   readonly closes: () => number
   /** The output level the clock samples, 0 to 1. */
   speak(level: number): void
+  /** What the meter says of itself; `ok` until a test says otherwise. */
+  measure(health: GuideMeter): void
   /**
    * Refuse every later event of one type the way the provider does: accepted
    * on the wire, then an `error` naming the client event's id. `null` lifts
@@ -55,6 +58,7 @@ export function liveFake(): LiveFake {
   let onEvent: (event: LiveServerEvent) => void = () => {}
   let sequence = 0
   let level = 0
+  let health: GuideMeter = 'ok'
   let closes = 0
   let stopped = false
   const refused = new Map<GuideClientEvent['type'], string>()
@@ -89,6 +93,7 @@ export function liveFake(): LiveFake {
       return id
     },
     level: () => level,
+    meter: () => health,
     muteMicrophone: async (muted) => {
       microphone.push(muted)
     },
@@ -130,6 +135,9 @@ export function liveFake(): LiveFake {
     closes: () => closes,
     speak: (value) => {
       level = value
+    },
+    measure: (value) => {
+      health = value
     },
     refuse: (type, code) => {
       if (code === null) refused.delete(type)

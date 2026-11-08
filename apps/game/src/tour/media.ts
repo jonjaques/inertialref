@@ -1,3 +1,4 @@
+import type { GuideMeter } from '@inertialref/devtools'
 import {
   type GuideClientEvent,
   isGuideClientEvent,
@@ -19,7 +20,11 @@ import type { LiveTransport } from './channel.ts'
  *
  * The remote track is also the clock. Output audio streams whether or not
  * the guide is speaking, so `level()` reads an `AnalyserNode` on the track
- * and the runtime's clock decides what counts as speech.
+ * and the runtime's clock decides what counts as speech. Silence on that
+ * track decodes to exact zero, which is also what a suspended context or an
+ * ended track reads, so `meter()` says whether the level is a measurement at
+ * all; the runtime holds a tour rather than advance it on a meter that
+ * cannot hear.
  */
 
 export interface LiveHost {
@@ -105,7 +110,10 @@ export class LiveConnection implements LiveTransport {
     node: AnalyserNode
     buffer: Float32Array<ArrayBuffer>
     context: AudioContext
+    source: MediaStreamAudioSourceNode | null
+    track: MediaStreamTrack | null
   } | null = null
+  #meterResume: Promise<void> | null = null
   #sequence = 0
   readonly #senders: RTCRtpSender[] = []
   readonly #retired = new WeakSet<MediaStreamTrack>()
@@ -265,25 +273,68 @@ export class LiveConnection implements LiveTransport {
     return Math.sqrt(sum / meter.buffer.length)
   }
 
+  /**
+   * Whether `level` measures anything: a running context and a live track.
+   * A suspended context is asked to resume each time it is seen suspended,
+   * because the one resume at binding can fail and the state says nothing
+   * about it afterward.
+   */
+  meter(): GuideMeter {
+    const meter = this.#meter
+    if (meter === null || meter.track === null) return 'unmeasured'
+    if (meter.track.readyState !== 'live') return 'ended'
+    if (meter.context.state !== 'running') {
+      this.#resumeMeter(meter.context)
+      return 'suspended'
+    }
+    return 'ok'
+  }
+
   #listen(stream: MediaStream): void {
     const make = this.#host.context
-    if (make === undefined || this.#meter !== null) return
+    if (make === undefined) return
     try {
-      const context = make()
-      const node = context.createAnalyser()
-      node.fftSize = 2048
-      context.createMediaStreamSource(stream).connect(node)
-      this.#meter = {
-        node,
-        buffer: new Float32Array(node.fftSize),
-        context,
+      let meter = this.#meter
+      if (meter === null) {
+        const context = make()
+        const node = context.createAnalyser()
+        // Read every 100 ms: 8,192 samples at 48 kHz is 171 ms of audio, so
+        // every read overlaps the last. At 2,048 it was 43 ms, and the
+        // clock judged speech from 43 % of it.
+        node.fftSize = 8192
+        meter = {
+          node,
+          buffer: new Float32Array(node.fftSize),
+          context,
+          source: null,
+          track: null,
+        }
+        this.#meter = meter
       }
-      void context.resume().catch(() => {})
+      // Bound to every remote track, not the first: a track the provider
+      // replaces leaves an analyser on the old one reading exact zero for
+      // the rest of the session.
+      meter.source?.disconnect()
+      meter.source = meter.context.createMediaStreamSource(stream)
+      meter.source.connect(meter.node)
+      meter.track = stream.getAudioTracks()[0] ?? null
+      this.#resumeMeter(meter.context)
     } catch {
-      // Without an meter the clock reads silence and beats end on their
-      // start timeout; the conversation still works.
+      // Without a meter the clock reads silence, `meter()` says so, and the
+      // runtime holds the tour's pacing; the conversation still works.
       this.#meter = null
     }
+  }
+
+  #resumeMeter(context: AudioContext): void {
+    if (this.#meterResume !== null) return
+    const pending: Promise<void> = context
+      .resume()
+      .catch(() => {})
+      .finally(() => {
+        if (this.#meterResume === pending) this.#meterResume = null
+      })
+    this.#meterResume = pending
   }
 
   muteMicrophone(muted: boolean): Promise<void> {

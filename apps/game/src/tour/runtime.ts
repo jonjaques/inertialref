@@ -1,4 +1,5 @@
 import type {
+  GuideMeter,
   GuideState,
   GuideStatus,
   GuideTraceEntry,
@@ -33,16 +34,22 @@ import {
 } from './channel.ts'
 import { SpeechClock } from './clock.ts'
 import { accessState, type GuideAccess } from './verdict.ts'
-import type { GuideArrival, SceneFacts } from './executor.ts'
+import type {
+  GuideArrival,
+  GuideArrivalFailure,
+  SceneFacts,
+} from './executor.ts'
 import { GuideLoop } from './loop.ts'
 import type { LiveServerEvent } from './media.ts'
 import {
   arrivalBlock,
+  arrivalFailedBlock,
   BEGIN_CONVERSATION,
   greetingInstruction,
   openingLine,
   PAUSE_INSTRUCTION,
   quietBlock,
+  resumeBlock,
   RESUME_INSTRUCTION,
   sceneBlock,
   takeoverBlock,
@@ -66,6 +73,17 @@ import {
  * a `linger` the backend declares becomes a wait for the words to be spoken
  * and then for the declared seconds, and only then a prompt to continue. A
  * takeover, a pause, a new delegation or a new move ends the wait.
+ *
+ * A prompt the loop cannot start yet is held, not dropped. The loop refuses
+ * to start the backend while the visitor is speaking or a chain is open, and
+ * a quiet prompt discarded on that refusal left the tour stopped until the
+ * visitor spoke, when the backend read "continue the tour" inside their
+ * question. The runtime keeps the prompt and sends it at the first tick the
+ * loop can take it, or drops it when something else — a question, a move, a
+ * takeover, a pause — has made it moot. A resume from a pause that
+ * interrupted a tour is such a prompt too: the voice is told the visitor is
+ * back, but only the backend can continue the tour, and it is prompted from
+ * the view as it stands.
  */
 
 /**
@@ -161,6 +179,8 @@ export interface GuideExecutorPort {
   execute(call: GuideCall): Promise<GuideToolOutput>
   poll(): void
   cancel(): void
+  /** The visitor took the view by a route the observatory's revision does not see: a lens change. */
+  takeover(): void
   dispose(): void
 }
 
@@ -173,6 +193,8 @@ export interface LiveConnectionPort extends LiveTransport {
   prepare(): Promise<string>
   accept(sdp: string): Promise<void>
   level(): number
+  /** Whether `level` is a measurement; never `stuck`, which the runtime judges. */
+  meter(): GuideMeter
   close(timeoutMs?: number): Promise<{ closed: boolean }>
   stop(): void
 }
@@ -184,6 +206,7 @@ export interface GuideHost {
   request(path: string, body?: unknown, signal?: AbortSignal): Promise<Response>
   executor(events: {
     onArrival: (arrival: GuideArrival) => void
+    onArrivalFailed: (failure: GuideArrivalFailure) => void
     onTakeover: () => void
   }): GuideExecutorPort
   live(
@@ -204,11 +227,26 @@ const SCENE_DEBOUNCE_MS = 500
 const PAUSE_LIMIT_MS = 180_000
 /** How long the greeting waits for its acknowledgment before sending the cue. */
 const ACK_TIMEOUT_MS = 3000
+/**
+ * How long the voice may produce words while the meter reads exact zero
+ * before the meter, not the voice, is judged silent. The beat clock's own
+ * start timeout, so a meter that has not heard a whole start window is held
+ * against, and a narration the audio merely lags is not.
+ */
+const METER_STUCK_MS = 8000
 
 interface Linger {
   readonly seconds: number
-  phase: 'chain' | 'speech' | 'quiet'
+  /** `held`: the beat read silent on a meter that cannot hear; waiting for one that can. */
+  phase: 'chain' | 'speech' | 'held' | 'quiet'
   quietFrom: number
+}
+
+/** A prompt for the backend, held until the loop can start it. */
+interface Continuation {
+  readonly kind: 'quiet' | 'resume' | 'arrival-failed'
+  /** Written when it is sent, so a resume describes the view as it is then. */
+  readonly text: () => string
 }
 
 export class GuideRuntime {
@@ -238,8 +276,18 @@ export class GuideRuntime {
   #sceneChangedAt: number | null = null
   #sceneText = ''
   #linger: Linger | null = null
+  #continuation: Continuation | null = null
   /** The view revision of an arrival queued while a chain was open, until it is prompted. */
   #deferredArrival: number | null = null
+  /** The tour was between stops when the visitor paused; the resume prompts the backend. */
+  #pausedTour = false
+  /**
+   * When the voice began producing words with the meter reading exact zero
+   * throughout; null once the meter reads anything else. The transcript is
+   * the one witness that the voice is speaking which does not depend on the
+   * meter.
+   */
+  #voiceWordsSince: number | null = null
   /** A drag reports a takeover on every frame; the models hear about it once per gesture. */
   #takenOver = false
   #pausedAt: number | null = null
@@ -313,6 +361,7 @@ export class GuideRuntime {
       paused,
       pendingCalls: this.#loop?.pendingCalls ?? 0,
       inFlight: this.#loop?.inFlight ?? false,
+      meter: this.#meter(),
       usage,
     }
   }
@@ -374,7 +423,7 @@ export class GuideRuntime {
         onResponseStarted: (id) => this.#ai.responseStarted(id),
         onResponseEnded: (response) => this.#ai.responseEnded(response),
         onDelegation: () => {
-          this.#cancelLinger()
+          this.#cancelPacing()
           this.#takenOver = false
         },
         onError: (code, detail) => {
@@ -398,6 +447,7 @@ export class GuideRuntime {
       this.#guard(generation)
       const executor = this.#host.executor({
         onArrival: (arrival) => this.#arrival(arrival),
+        onArrivalFailed: (failure) => this.#arrivalFailed(failure),
         onTakeover: () => this.#takeover(),
       })
       this.#executor = executor
@@ -458,7 +508,16 @@ export class GuideRuntime {
     const channel = this.#channel
     if (!this.#connected() || this.#paused() || channel === null) return
     this.#pausedAt = this.#host.now()
-    this.#cancelLinger()
+    // What the resume has to repair: a tour between stops, waiting on words,
+    // on a move or on a prompt. A chain open at the pause counts too, since
+    // the pause refuses its camera calls and its stop is lost with them.
+    this.#pausedTour =
+      this.#linger !== null ||
+      this.#continuation !== null ||
+      this.#deferredArrival !== null ||
+      (this.#executor?.pending ?? null) !== null ||
+      (this.#loop?.inFlight ?? false)
+    this.#cancelPacing()
     this.#deferredArrival = null
     this.#executor?.cancel()
     void channel.mute(true).catch(() => {})
@@ -469,12 +528,24 @@ export class GuideRuntime {
 
   resume(): void {
     const channel = this.#channel
+    const executor = this.#executor
     if (!this.#connected() || !this.#paused() || channel === null) return
+    const pausedSeconds = (this.#host.now() - (this.#pausedAt ?? 0)) / 1000
     this.#pausedAt = null
     void channel.mute(false).catch((cause: unknown) => {
       this.#update({ message: message(cause) })
     })
     this.#instruct(channel, RESUME_INSTRUCTION)
+    // The voice is told, and cannot act on it: continuing the tour takes a
+    // delegation, and a paused tour never continued on its own. The backend
+    // is prompted from the view as it stands when the loop can take it.
+    if (this.#pausedTour && executor !== null) {
+      this.#pausedTour = false
+      this.#continuation = {
+        kind: 'resume',
+        text: () => resumeBlock(pausedSeconds, ...this.#scene(executor)),
+      }
+    }
     this.#update({ activity: LISTENING, message: null })
     recordEvent('tour resumed')
   }
@@ -493,7 +564,7 @@ export class GuideRuntime {
     if (this.#snapshot.activity.state === 'offline' || this.#ending) return
     this.#ending = true
     this.#generation++
-    this.#cancelLinger()
+    this.#cancelPacing()
     this.#executor?.cancel()
     this.#update({ activity: { state: 'ending' } })
     const live = this.#live
@@ -524,7 +595,8 @@ export class GuideRuntime {
 
   #event(live: LiveConnectionPort, event: LiveServerEvent): void {
     if (live !== this.#live) return
-    if (!isOutputTranscript(event)) this.#record('receive', event)
+    if (isOutputTranscript(event)) this.#voiceWordsSince ??= this.#host.now()
+    else this.#record('receive', event)
     const heard = visitorTranscript(event)
     if (heard !== null) this.#ai.heard(heard)
     this.#loop?.receive(event)
@@ -570,22 +642,30 @@ export class GuideRuntime {
       return
     }
     if (endsStop(output)) {
-      this.#cancelLinger()
+      this.#cancelPacing()
       // A new stop supersedes any arrival still waiting to be narrated.
       this.#deferredArrival = null
     }
     this.#refresh()
   }
 
-  #arrival(arrival: GuideArrival): void {
-    const executor = this.#executor
-    const loop = this.#loop
-    if (executor === null || loop === null) return
+  /** The scene as it stands, taken as the one the backend knows. */
+  #scene(executor: GuideExecutorPort): [ViewDescription, SceneFacts] {
     const view = executor.view()
     const facts = executor.facts()
     this.#sceneText = sceneBlock(view, facts)
     this.#sceneRevision = executor.viewRevision
     this.#sceneChangedAt = null
+    return [view, facts]
+  }
+
+  #arrival(arrival: GuideArrival): void {
+    const executor = this.#executor
+    const loop = this.#loop
+    if (executor === null || loop === null) return
+    const [view, facts] = this.#scene(executor)
+    // An arrival is the tour continuing; whatever prompt was waiting is moot.
+    this.#continuation = null
     const prompted = loop.prompt(arrivalBlock(arrival, view, facts))
     // Not prompted means a chain is open or the visitor is talking. The
     // message is queued as state either way; the tick starts the response
@@ -597,28 +677,46 @@ export class GuideRuntime {
     this.#refresh()
   }
 
+  /** The move never arrived; the backend was told `moving` and has to be told otherwise. */
+  #arrivalFailed(failure: GuideArrivalFailure): void {
+    const executor = this.#executor
+    if (executor === null) return
+    this.#record('note', {
+      arrivalFailed: failure.subject,
+      seconds: failure.seconds,
+    })
+    reportFailure('tour', new TourError('arrival-timeout'), {
+      tour_session_id: this.#sessionId,
+    })
+    this.#continuation = {
+      kind: 'arrival-failed',
+      text: () => arrivalFailedBlock(failure, ...this.#scene(executor)),
+    }
+    this.#refresh()
+  }
+
   #takeover(): void {
     const executor = this.#executor
     const loop = this.#loop
-    this.#cancelLinger()
+    this.#cancelPacing()
     this.#deferredArrival = null
     if (executor === null || loop === null) return
-    loop.cancelPending()
     // The observatory advances its revision on every frame of a drag, and a
     // three-second drag queued twenty-five takeover messages to the backend
     // and as many thinking appends to the voice. One per gesture: the flag
     // clears when the guide next acts or the visitor next speaks, and the
     // settled view reaches the backend through the scene block regardless.
-    if (this.#takenOver) return
-    this.#takenOver = true
-    const view = executor.view()
-    const facts = executor.facts()
-    this.#sceneText = sceneBlock(view, facts)
-    this.#sceneRevision = executor.viewRevision
-    this.#sceneChangedAt = null
-    loop.queue(takeoverBlock(view, facts))
-    this.#think(takeoverContext(view))
-    this.#update({ activity: { state: 'visitor-camera' } })
+    if (!this.#takenOver) {
+      this.#takenOver = true
+      const [view, facts] = this.#scene(executor)
+      loop.queue(takeoverBlock(view, facts))
+      this.#think(takeoverContext(view))
+      this.#update({ activity: { state: 'visitor-camera' } })
+    }
+    // After the block, never before: canceling the last pending call
+    // continues the chain, and a continuation that ran ahead of the block
+    // read only "canceled" and learned the view a response later.
+    loop.cancelPending()
   }
 
   #think(content: string): void {
@@ -637,7 +735,9 @@ export class GuideRuntime {
     if (executor === null || loop === null || live === null) return
     const now = this.#host.now()
     executor.poll()
-    this.#clock.sample(live.level())
+    const level = live.level()
+    if (level > 0) this.#voiceWordsSince = null
+    this.#clock.sample(level)
     const revision = executor.viewRevision
     if (revision !== this.#sceneRevision) {
       this.#sceneRevision = revision
@@ -684,7 +784,7 @@ export class GuideRuntime {
         this.#deferredArrival = null
         this.#record('note', { arrival: 'deferred', prompted: true })
       }
-    }
+    } else this.#tickContinuation(loop)
     this.#refresh()
   }
 
@@ -692,32 +792,82 @@ export class GuideRuntime {
     const linger = this.#linger
     const loop = this.#loop
     if (linger === null || loop === null) return
-    if (linger.phase === 'chain') {
-      if (loop.inFlight) return
-      linger.phase = 'speech'
-      void this.#clock.waitForBeat({ since: now }).then((outcome) => {
-        if (this.#linger !== linger || outcome === 'canceled') return
-        linger.phase = 'quiet'
-        // The quiet began at the last word, not when the clock was sure of
-        // it: the 2.5 s it takes to be sure is already looking time, and
-        // counting it twice made every gap between stops that much longer.
-        linger.quietFrom =
-          outcome === 'spoken' ? this.#clock.lastLoudAt : this.#host.now()
-        this.#record('note', { beat: outcome, quietSeconds: linger.seconds })
-      })
-      return
-    }
-    if (
-      linger.phase === 'quiet' &&
-      now - linger.quietFrom >= linger.seconds * 1000
-    ) {
-      this.#linger = null
-      loop.prompt(quietBlock(linger.seconds))
+    switch (linger.phase) {
+      case 'chain':
+        if (!loop.inFlight) this.#listenForBeat(linger, now)
+        return
+      case 'held':
+        // A meter that hears again listens for the beat from here; one that
+        // never does holds the tour, and the diagnostics say why.
+        if (this.#meter() === 'ok') this.#listenForBeat(linger, now)
+        return
+      case 'quiet':
+        if (now - linger.quietFrom >= linger.seconds * 1000) {
+          this.#linger = null
+          this.#continuation = {
+            kind: 'quiet',
+            text: () => quietBlock(linger.seconds),
+          }
+        }
+        return
+      case 'speech':
+        return
     }
   }
 
-  #cancelLinger(): void {
+  #listenForBeat(linger: Linger, since: number): void {
+    linger.phase = 'speech'
+    void this.#clock.waitForBeat({ since }).then((outcome) => {
+      if (this.#linger !== linger || outcome === 'canceled') return
+      if (outcome === 'silent' && this.#meter() !== 'ok') {
+        // Silence on a meter that cannot hear is no measurement. Taking it
+        // for the end of the words started the quiet count under the
+        // narration, and the next stop cut it off.
+        linger.phase = 'held'
+        this.#record('note', { beat: outcome, meter: this.#meter() })
+        return
+      }
+      linger.phase = 'quiet'
+      // The quiet began at the last word, not when the clock was sure of
+      // it: the 2.5 s it takes to be sure is already looking time, and
+      // counting it twice made every gap between stops that much longer.
+      linger.quietFrom =
+        outcome === 'spoken' ? this.#clock.lastLoudAt : this.#host.now()
+      this.#record('note', { beat: outcome, quietSeconds: linger.seconds })
+    })
+  }
+
+  /** Send the held prompt at the first tick the loop can start on it. */
+  #tickContinuation(loop: GuideLoop): void {
+    const continuation = this.#continuation
+    if (
+      continuation === null ||
+      this.#paused() ||
+      loop.inFlight ||
+      loop.visitorSpeaking
+    )
+      return
+    this.#continuation = null
+    const prompted = loop.prompt(continuation.text())
+    this.#record('note', { continuation: continuation.kind, prompted })
+  }
+
+  /** Whether the level the clock reads is a measurement. */
+  #meter(): GuideMeter {
+    const live = this.#live
+    if (live === null || !this.#connected()) return 'unmeasured'
+    const health = live.meter()
+    if (health !== 'ok') return health
+    const since = this.#voiceWordsSince
+    return since !== null && this.#host.now() - since >= METER_STUCK_MS
+      ? 'stuck'
+      : 'ok'
+  }
+
+  /** End the wait between stops and drop the prompt it was going to send. */
+  #cancelPacing(): void {
     this.#linger = null
+    this.#continuation = null
     this.#clock.cancel()
   }
 
@@ -771,7 +921,10 @@ export class GuideRuntime {
       if (this.#sessionId !== null) this.#update({ lastTour: this.#sessionId })
     }
     this.#measured = false
-    this.#cancelLinger()
+    this.#cancelPacing()
+    this.#deferredArrival = null
+    this.#pausedTour = false
+    this.#voiceWordsSince = null
     this.#pollRelease?.()
     this.#pollRelease = null
     this.#visibilityRelease?.()

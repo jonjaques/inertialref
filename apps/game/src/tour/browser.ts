@@ -52,11 +52,12 @@ export function createGuideRuntime(
         signal,
       })
     },
-    executor: ({ onArrival, onTakeover }) => {
+    executor: ({ onArrival, onArrivalFailed, onTakeover }) => {
       const readiness = new ViewReadiness()
       const executor = new GuideExecutor(engine.harness, {
         now: () => Date.now(),
         onArrival,
+        onArrivalFailed,
         onTakeover,
         // The mode's own claim on the guide, not the presence of a subject: a
         // Milky Way view clears the observatory's target, and a guide gated on
@@ -100,8 +101,10 @@ export function createGuideRuntime(
         },
       })
       // A lens change is the visitor's, and it reframes everything on screen
-      // without touching the observatory's revision.
-      const unsubscribe = subscribe(CAMERA_LENS, () => onTakeover())
+      // without touching the observatory's revision, so the executor is told
+      // rather than left to notice: a pending move would otherwise land and
+      // be narrated over the view the visitor chose.
+      const unsubscribe = subscribe(CAMERA_LENS, () => executor.takeover())
       return {
         get viewRevision() {
           return executor.viewRevision
@@ -120,6 +123,7 @@ export function createGuideRuntime(
         execute: (call) => executor.execute(call),
         poll: () => executor.poll(),
         cancel: () => executor.cancel(),
+        takeover: () => executor.takeover(),
         dispose: () => {
           unsubscribe()
           executor.dispose()

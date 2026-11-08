@@ -5,17 +5,23 @@ import {
   type GuideCall,
   type TourCameraMotion,
 } from '@inertialref/protocol'
-import { GuideExecutor, type GuideArrival } from './executor.ts'
+import {
+  GuideExecutor,
+  type GuideArrival,
+  type GuideArrivalFailure,
+} from './executor.ts'
 
 function rig(ready?: () => boolean) {
   const session = openSession()
   session.harness.look('s:SOL/b:2', { ease: false })
   const arrivals: GuideArrival[] = []
+  const failures: GuideArrivalFailure[] = []
   let takeovers = 0
   let now = 1000
   const executor = new GuideExecutor(session.harness, {
     now: () => now,
     onArrival: (arrival) => arrivals.push(arrival),
+    onArrivalFailed: (failure) => failures.push(failure),
     onTakeover: () => {
       takeovers += 1
     },
@@ -31,6 +37,7 @@ function rig(ready?: () => boolean) {
     eye: session.harness.observatory,
     executor,
     arrivals,
+    failures,
     takeovers: () => takeovers,
     settle,
     advance: (ms: number) => {
@@ -126,6 +133,40 @@ describe('the guide executor moves without blocking', () => {
     f.executor.poll()
     expect(f.takeovers()).toBe(1)
     expect(f.executor.pending).toBeNull()
+    f.settle()
+    expect(f.arrivals).toHaveLength(0)
+    f.dispose()
+  })
+
+  it('gives up on a move whose view never becomes ready, holds the camera, and reports it once', async () => {
+    const f = rig(() => false)
+    await f.executor.execute(goTo('Saturn'))
+    f.advance(44_999)
+    f.executor.poll()
+    expect(f.executor.pending).toBe('go_to')
+    expect(f.failures).toHaveLength(0)
+    f.advance(1)
+    f.executor.poll()
+    expect(f.failures).toEqual([
+      { tool: 'go_to', subject: 'Saturn', seconds: 45 },
+    ])
+    expect(f.executor.pending).toBeNull()
+    expect(f.eye.status().traveling).toBe(false)
+    f.executor.poll()
+    f.settle()
+    expect(f.failures).toHaveLength(1)
+    expect(f.arrivals).toHaveLength(0)
+    f.dispose()
+  })
+
+  it('treats a takeover the host reports, a lens change, exactly as a drag', async () => {
+    const f = rig()
+    await f.executor.execute(goTo('Titan'))
+    expect(f.eye.status().traveling).toBe(true)
+    f.executor.takeover()
+    expect(f.takeovers()).toBe(1)
+    expect(f.executor.pending).toBeNull()
+    expect(f.eye.status().traveling).toBe(false)
     f.settle()
     expect(f.arrivals).toHaveLength(0)
     f.dispose()

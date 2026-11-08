@@ -37,9 +37,53 @@ function peerFake(channel: ReturnType<typeof channelFake>) {
   return { sender, peer, listeners }
 }
 
-function rig() {
+/** An audio context that reads a steady level and remembers every source bound to it. */
+function contextFake() {
+  const sources: {
+    connect: ReturnType<typeof vi.fn>
+    disconnect: ReturnType<typeof vi.fn>
+  }[] = []
+  const node = {
+    fftSize: 0,
+    getFloatTimeDomainData: (buffer: Float32Array) => buffer.fill(0.1),
+  }
+  const context = {
+    state: 'suspended',
+    // Resumes on a later tick, as a real context does; an async body would
+    // run to its first await at once and the suspended state would never be
+    // seen.
+    resume: vi.fn(() =>
+      Promise.resolve().then(() => {
+        context.state = 'running'
+      }),
+    ),
+    close: vi.fn(async () => {}),
+    createAnalyser: () => node,
+    createMediaStreamSource: () => {
+      const source = { connect: vi.fn(), disconnect: vi.fn() }
+      sources.push(source)
+      return source
+    },
+  }
+  return { context, node, sources }
+}
+
+const settle = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve()
+}
+
+/** A remote stream with one audio track, as the peer's `track` event carries it. */
+function remoteStream() {
+  const track = { readyState: 'live' }
+  return {
+    track,
+    stream: { getAudioTracks: () => [track], getTracks: () => [track] },
+  }
+}
+
+function rig(context?: ReturnType<typeof contextFake>['context']) {
   const channel = channelFake()
-  const { peer } = peerFake(channel)
+  const { peer, listeners } = peerFake(channel)
   const track = { enabled: true, stop: vi.fn() }
   const events: Record<string, unknown>[] = []
   const failures: string[] = []
@@ -49,6 +93,9 @@ function rig() {
       capture: async () =>
         ({ getTracks: () => [track] }) as unknown as MediaStream,
       audio: audioFake,
+      ...(context === undefined
+        ? {}
+        : { context: () => context as unknown as AudioContext }),
     },
     (event) => events.push(event),
     (message) => failures.push(message),
@@ -57,7 +104,9 @@ function rig() {
     channel.dispatchEvent(
       new MessageEvent('message', { data: JSON.stringify(event) }),
     )
-  return { live, channel, peer, track, events, failures, emit }
+  const arrive = (remote: ReturnType<typeof remoteStream>) =>
+    listeners.get('track')?.({ streams: [remote.stream], track: remote.track })
+  return { live, channel, peer, track, events, failures, emit, arrive }
 }
 
 describe('the voice connection', () => {
@@ -119,6 +168,41 @@ describe('the voice connection', () => {
     expect(f.peer.close).toHaveBeenCalledOnce()
     expect(f.track.stop).toHaveBeenCalledOnce()
     expect(f.live.level()).toBe(0)
+  })
+
+  it('meters every remote track it is given, over the whole read interval, and says when it cannot', async () => {
+    const audio = contextFake()
+    const f = rig(audio.context)
+    await f.live.prepare()
+    expect(f.live.meter()).toBe('unmeasured')
+    expect(f.live.level()).toBe(0)
+    const first = remoteStream()
+    f.arrive(first)
+    // 100 ms between reads; 8,192 samples at 48 kHz is 171 ms, so no audio
+    // falls between two reads. At 2,048 the clock heard 43 % of it.
+    expect(audio.node.fftSize).toBe(8192)
+    expect(f.live.meter()).toBe('suspended')
+    await settle()
+    expect(f.live.meter()).toBe('ok')
+    expect(f.live.level()).toBeCloseTo(0.1, 6)
+    // The provider replaces the track: the old one ends, and the next one is
+    // bound in its place rather than left reading zero behind it.
+    first.track.readyState = 'ended'
+    expect(f.live.meter()).toBe('ended')
+    const second = remoteStream()
+    f.arrive(second)
+    expect(audio.sources).toHaveLength(2)
+    expect(audio.sources[0]!.disconnect).toHaveBeenCalledOnce()
+    expect(audio.sources[1]!.connect).toHaveBeenCalledWith(audio.node)
+    expect(f.live.meter()).toBe('ok')
+    await settle()
+    // A context the browser suspends is asked to resume each time it is seen.
+    audio.context.state = 'suspended'
+    const resumes = audio.context.resume.mock.calls.length
+    expect(f.live.meter()).toBe('suspended')
+    expect(audio.context.resume.mock.calls.length).toBe(resumes + 1)
+    await settle()
+    expect(f.live.meter()).toBe('ok')
   })
 
   it('gives up on a close the provider never acknowledges', async () => {

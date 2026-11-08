@@ -29,6 +29,7 @@ describe('the optional guide host', () => {
       paused: false,
       pendingCalls: 0,
       inFlight: false,
+      meter: 'unmeasured',
       usage: NO_GUIDE_USAGE,
     }
     const ask = vi.fn(async () => status)
