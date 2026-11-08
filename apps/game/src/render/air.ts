@@ -943,18 +943,52 @@ export interface AirMedium {
  * The air at `height` over the datum (sea-level units) for a sun at cosine
  * `muSun` over the sample's horizontal, seen through `phases`, lit by `sunT`.
  *
- * Zeros here, read through Ψ as the full terms read it, so a kernel compiled
- * against this binds the table a full sample binds.
+ * `marchAir`'s per-sample terms written out again, operation for operation,
+ * rather than shared with it: a helper both called would rename the
+ * expressions `marchAir` emits, and the WGSL of every material that marches
+ * the air would move with no picture to show for it. The caller reads the
+ * beam (`sunTableAt`, cleared as its class clears it), and a march built
+ * from these over `crowdedSamples` accumulates them as `marchAir` does —
+ * `cloudLight.gpu.test.ts` holds the two to one value, for one sample and
+ * for four. `height` is clamped at the datum as `marchAir` clamps its
+ * `length(point) − 1`, so a sample a float step under the ground is the
+ * ground's air.
  */
 export function airMediumAt(
   air: AirUniforms,
   height: Node<'float'>,
   muSun: Node<'float'>,
-  _phases: AirPhases,
-  _sunT: Node<'vec3'>,
+  phases: AirPhases,
+  sunT: Node<'vec3'>,
   read?: TableRead,
 ): AirMedium {
-  const height01 = saturate(height.div(max(air.top.sub(1), 1e-6)))
+  const shellHeight = max(air.top.sub(1), 1e-6)
+  const above = max(height, 0)
+  const height01 = saturate(above.div(shellHeight))
+  const fade = oneMinus(height01)
+  const densityR = exp(above.div(air.hRayleigh).negate()).mul(fade)
+  const densityM = exp(above.div(air.hMie).negate()).mul(fade)
+  const densityO = tentAt(above, air.ozonePeak, air.ozoneHalfWidth)
+  const densityD = tentAt(above, air.detachedPeak, air.detachedHalfWidth)
+  const scatterD = air.detachedScatter.mul(densityD)
+  const extinction = air.betaRayleigh
+    .mul(densityR)
+    .add(air.mieExtinction.mul(densityM))
+    .add(air.ozone.mul(densityO))
+    .add(air.detachedExtinction.mul(densityD))
   const psi = psiTableAt(air, muSun, height01, read)
-  return { extinction: vec3(0), single: vec3(0), multiple: psi.mul(0) }
+  const scatterToward = mix(air.mieScatter, air.mieForward, phases.forward)
+  const single = air.betaRayleigh
+    .mul(densityR)
+    .add(scatterD)
+    .mul(phases.rayleigh)
+    .add(scatterToward.mul(densityM).mul(phases.mie))
+    .mul(sunT)
+  const multiple = psi.mul(
+    air.betaRayleigh
+      .mul(densityR)
+      .add(air.mieScatter.mul(densityM))
+      .add(scatterD),
+  )
+  return { extinction, single, multiple }
 }
