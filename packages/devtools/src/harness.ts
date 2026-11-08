@@ -1753,7 +1753,7 @@ export class GameHarness {
       'InertialRef harness',
       '  ir.summary()                  one-line state',
       '  ir.status()                   full structured state',
-      '  ir.build()                    BUILD_ID, and the tree the dev server serves; null in a production build',
+      '  ir.build()                    { id: BUILD_ID, tree }: the tree the dev server serves, null in a production build',
       '  ir.inspect(id?)               one entity, in detail',
       '  ir.dossier(address)           one star, body or station, as a page of astronomy',
       '  ir.step(ticks) / ir.runSeconds(s)',

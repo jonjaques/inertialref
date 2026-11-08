@@ -242,8 +242,9 @@ socket:
   ratio the page reports;
 - the served tree, as above.
 
-`--document` and `--no-javascript` hold the page to the DOM and the window
-alone, with no renderer asked for. The window is checked as well as the
+`--document` and `--no-javascript` ask for no renderer, so the page is held to
+the window and the served tree alone; with scripts off it answers no
+`ir.build()`, and its tree reads `identity unchecked`. The window is checked as well as the
 buffer because a page whose emulation another session cleared reports the
 window it was left at, and on Chrome 157 the app's ratio follows an emulated
 change, so its buffer agrees with that window and the buffer rule alone
@@ -306,6 +307,8 @@ Codex's workspace-write sandbox among them, fails every GPU command closed with
 `cannot write the GPU lock`. The
 [`drive` skill](../../.claude/skills/drive/SKILL.md#one-gpu-job-at-a-time) has
 the preset commands' part and the sandbox's remedy.
+
+### The traps
 
 These are the browser, not bugs in the clock, and the driver handles the first
 three; they are here because they explain what it is doing:

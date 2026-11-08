@@ -12906,7 +12906,7 @@ enter, and `acquire` is not re-entrant within one process, so nothing here
 calls it twice in one. Which of the two Codex remedies a thread uses is the
 host's configuration and Jon's call.
 
-## A rig knows which tree it serves, and a cold Vite fails the first boot (7 Nov 2026)
+## A rig knows which tree it serves, and a cold Vite fails the first boot (7 Nov 2026; resolved the same day — it was the ladder's loader check)
 
 X3's identity half, the second wave's second unit, stacked on #189.
 `ir.build()` returns `BUILD_ID` and, on the dev server only, the served
@@ -13132,6 +13132,13 @@ base worktree, photographed both trees on their first boots, read 0 px over
 3% and exited 0 in 72 s. Its base worktree was removed afterward.
 `capture.mjs`'s `--wait 4000` warm-up stays: it covers a reload that lands
 after the boot.
+
+A warm attach now carries the guard's read and its two frames. Five
+`--keep-storage --js "ir.summary()"` invocations on the same rig, Mac mini at
+`a5da726` with no thermal warning recorded, took 679 ms for the first after
+the boot and 216–234 ms for the other four, wall clock per invocation, against
+26 ms for a bare `node -e 0`. The driver's header and the skill said 80 ms
+and about 0.1 s; they say about 0.2 s now.
 
 ## Known gaps
 

@@ -53,7 +53,8 @@
  * is a GPU job whether or not an invocation is driving it, and two GPU jobs at
  * once have crashed macOS. Each call starts with clean local storage and cookies;
  * --keep-storage opts into attaching to the booted page instead of reloading
- * it: measured, 6 s cold against 80 ms warm. Most of that cold figure
+ * it: measured on the Mac mini, 6 s cold against about 0.2 s warm, the launch
+ * guard's read and its two frames included. Most of that cold figure
  * is the dev server and Chrome rather than the page — `?presentation=occluded`
  * below is what keeps the page's own boot to one warm-up census. That is what
  * makes a batch of steps worth writing on one command line:
@@ -275,8 +276,9 @@ Every boot, attach and --reload holds the page to its operating point before a
 step runs: a WebGPU renderer on a hardware adapter, the --width, --height and
 --dpr reported back by the page, a drawing buffer of that window × min(DPR, the
 pointer's ceiling) × the picture's supersampling, and the --tree checkout
-serving it; --document holds the DOM and the window alone. A page that is not
-ends the invocation, non-zero, with the reason. Chrome's version is recorded and
+serving it. --document and --no-javascript ask for no renderer and hold the
+window and the served tree alone. A page that is not at its point ends the
+invocation, non-zero, with the reason. Chrome's version is recorded and
 a change warned about, never refused. The record is a line of narration, the
 operatingPoint field of --json, and in full in --status.
 

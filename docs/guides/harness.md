@@ -698,6 +698,14 @@ one boot: the default read at the start and the end of a sweep agrees within
 1.5 ms, and a second boot can read every pass a third slower at once. Set the
 lever on `engine.surfaceQuality`, let the terrain settle, then measure.
 
+**Name the thermal state with the figure.** The fanless MacBook Air steps every
+figure up about 35% after about three and a half minutes of load, so a sweep
+there that outlasts the onset charges the step to whichever lever it lands on.
+Read the default again between levers, and say whether the machine was cool or
+how many minutes it had been under load.
+[Driving](../agents/driving.md#the-traps), trap 8, has the step, the
+fan-cooled Mac mini's figures and the rule.
+
 ---
 
 ## Measuring terrain
@@ -824,7 +832,7 @@ verbs a console types. The scenes it plays are a session option,
 
 Pause before seeking for a frame-exact still. The browser needs to render
 after the seek before the sampled cinematic state is current; follow the
-capture procedure in [Driving](../agents/driving.md#session-lifetime).
+capture procedure in [Driving](../agents/driving.md#the-traps).
 
 ---
 
@@ -912,12 +920,17 @@ list from the command line and runs it over a rig of callbacks, and holds the
 `--settle` rule — two consecutive quiet `ir.settled()` answers inside a
 budget. [`cdp.mjs`](../../scripts/cdp.mjs) is the wire: `connect` over a
 socket, `evaluate`, the buffered logs, and the screencast and trace
-recordings. [`drivePage.mjs`](../../scripts/drivePage.mjs) clears storage and
+recordings. [`drivePage.mjs`](../../scripts/drivePage.mjs) clears storage,
 climbs the boot ladder — `drawing`, `booted`, document mode, the twelve-second
-cover give-up. Each has a `.test.mjs` beside it that runs against a fake
-socket, a scripted `send` or a fake rig, so a change to how the driver
-decides is checked by `pnpm test` without a browser; only what a compositor
-shows needs the real invocation.
+cover give-up — and holds every entry, and `--status`'s read, to its operating
+point; [`driveLaunch.mjs`](../../scripts/driveLaunch.mjs) is that guard's
+checks: the renderer, the adapter, the window, the drawing buffer and the
+served tree. [`driveLock.mjs`](../../scripts/driveLock.mjs) is the rig's hold
+on the machine's GPU lock, [`gpuLock.mjs`](../../scripts/gpuLock.mjs), from
+before Chrome launches until `--down`. Each has a `.test.mjs` beside it that
+runs against a fake socket, a scripted `send`, a fake rig or a lock file of its
+own, so a change to how the driver decides is checked by `pnpm test` without a
+browser; only what a compositor shows needs the real invocation.
 
 The pattern that works well:
 
@@ -952,7 +965,11 @@ and add the line to `help()`, which is what people actually read.
 `window.ir` keeps every name it has. Verbs a console types stay flat on the
 harness and instruments are sub-objects (`ir.cutscene`, `ir.observatory`,
 `ir.onFoot`, `ir.timing`); `scripts/drive.mjs`, this page and `help()` are the
-callers a rename breaks. Anything lifted out of the harness or the observatory
+callers a rename breaks. One of those breaks is silent: the guard in
+`scripts/driveLaunch.mjs` reads `ir.build()` with optional chaining, because a
+build older than the verb is a legitimate baseline, so a renamed `build` reads
+as `identity unchecked` and the served-tree check stops refusing anything.
+Anything lifted out of the harness or the observatory
 takes `Host` from `host.ts`, or a narrower port declared beside it, and is
 tested through `openSession({ workers: null })` the way `maneuvers.test.ts` is.
 

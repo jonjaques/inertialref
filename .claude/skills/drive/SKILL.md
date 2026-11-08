@@ -56,7 +56,9 @@ collection are `scripts/cdp.mjs`, while writing, differencing and clipping a cas
 `drive.mjs`; storage clearing, the boot ladder and the guard each entry runs after it
 are `scripts/drivePage.mjs`, and the guard's checks are `scripts/driveLaunch.mjs`.
 `pnpm vitest run driveSteps.test cdp.test drivePage.test driveLaunch.test` answers a
-change to any of them in under a second.
+change to any of them in under a second. The rig's hold on the GPU lock is
+`scripts/driveLock.mjs`, and `driveLock.test` takes about two seconds, because its
+stand-ins are real processes.
 
 ```bash
 node scripts/drive.mjs --help
@@ -72,7 +74,7 @@ IndexedDB saves, asset caches and service workers are retained. That is what mak
 a batch worth writing:
 
 ```bash
-node scripts/drive.mjs --keep-storage --js "ir.summary()"                     # ~0.1 s, page still hot
+node scripts/drive.mjs --keep-storage --js "ir.summary()"                     # ~0.2 s, page still hot
 node scripts/drive.mjs --url http://localhost:5173/planetarium \
     --js "ir.look('g:milky-way/s:SOL/b:5')" --wait 3000 --shot saturn.jpg
 node scripts/drive.mjs --js "ir.play('tng-intro')" --js "ir.pause()" \
@@ -131,7 +133,8 @@ is empty when it should not be, check the page before checking the code.
 Session flags worth knowing: `--url` (the mode is a function of the path and the query,
 and the driver re-boots unless the attached page is already showing everything the URL
 asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
-profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--color-profile` (Chrome's output color space; `srgb`
+profile too, so parallel agents must differ**, and the GPU lock below refuses a second
+port's rig while the first is up), `--width`/`--height`/`--dpr`, `--color-profile` (Chrome's output color space; `srgb`
 makes a plate the build's rather than the display's, and a Chrome already up under another
 profile is refused until `--down`), `--tree` (the checkout `--url` must be served from),
 `--keep-storage`, `--fresh`, `--json`, `--down`, `--status` (the rig, the GPU's holder and
@@ -164,8 +167,9 @@ attach and `--reload` the driver runs the launch guard,
 WebGPU renderer on an adapter that is neither a fallback nor a software rasterizer by
 name, the `--width`, `--height` and `--dpr` reported back by the page, a drawing buffer of
 that window × min(DPR, the pointer's ceiling) × the picture's supersampling, floored as
-three floors it, and the served tree above. `--document` and `--no-javascript` hold the
-DOM and the window alone. A refusal is the guard's reason on stderr and exit
+three floors it, and the served tree above. `--document` and `--no-javascript` ask for
+no renderer and hold the window and the served tree alone; with scripts off the page
+answers no `ir.build()`, so its tree reads unchecked. A refusal is the guard's reason on stderr and exit
 1, and no step runs. It means the page is not the point the command asked for, so a
 figure taken there belongs to another point: a buffer the rig did not ask for is trap 5's
 remount, and `--fresh` boots the page again at the rig's window. The record is one line
@@ -206,12 +210,14 @@ of the clone; [`scripts/gpuLock.mjs`](../../../scripts/gpuLock.mjs) says how it 
   half-second poll of the holder letting go. It is seconds, unlike `--wait`. The preset
   commands take the same flag; `pnpm test:gpu` takes `IR_GPU_WAIT=<s>`.
 - **`--down` is never refused.** It closes the Chrome, waits for it to exit, then drops it
-  from the lock. It signals only a pid whose start time matches the one the session
-  recorded, so a pid reused after a reboot is left alone. `--status` names whoever holds
-  the GPU.
+  from the lock. A pid that started at another time than the session recorded is another
+  process, given that pid after a reboot or a crash, and is left running. `--status` names
+  whoever holds the GPU.
 - **A preset command takes the lock once**, and every `drive.mjs` it spawns joins under
-  its token. The rig it leaves keeps the lock until `--down`, and the command says so on
-  stderr, even when it fails.
+  its token, which it hands down in `IR_GPU_LOCK_TOKEN`. The token is in the lock file,
+  and one copied from there or from another shell joins a job that is not yours and runs
+  beside it, the overlap the lock exists to stop. The rig a preset command leaves keeps
+  the lock until `--down`, and the command says so on stderr, even when it fails.
 - **A sandbox that cannot write the clone's `.git` loses every GPU command.** The lock
   fails closed, and `cannot write the GPU lock … EPERM` means the sandbox, not a busy GPU.
   Codex's workspace-write sandbox keeps `.git` and a worktree's gitdir read-only. Probed
@@ -322,7 +328,7 @@ a clean result meaningful.
 ```bash
 node scripts/drive.mjs --url http://localhost:5173/planetarium \
     --js "ir.preset('earthrise')" --wait 20000 --js "ir.chrome(false)" --cast 200
-# cast: 200 frames in 3.31s (60.4 fps) -> .data/drive/cast
+# cast: 200 frames in 3.31s (60.1 fps) -> .data/drive/cast
 #   8 events over 15 isolated frames, every 26 frames — 2.31 Hz
 ```
 
@@ -338,7 +344,7 @@ page's real rate, on their machine at their window size:
 ```bash
 node scripts/traceFrames.mjs ~/Downloads/Trace-*.json.gz
 # url: https://…/planetarium?at=g%3Amilky-way%2Fs%3ASOL%2Fb%3A2
-# 182 frames at 498x394, 3.04s (59.9 fps)
+# 182 frames at 498x394, 3.04s (59.5 fps)
 # 6 events over 6 isolated frames, every 27 frames — 2.22 Hz
 ```
 
@@ -443,9 +449,9 @@ handles the first three — they are here because they explain what it is doing.
    to read the fps before believing the verdict.
 8. **`--serve` cannot start a dev server in a worktree that has never built.**
    `pnpm dev` needs `apps/game/dist` for the Worker's asset binding, and without it both
-   halves exit — so the driver waits its full sixty seconds and then reports that nothing
-   answers the URL. Run `pnpm dev:client` yourself and pass `--no-serve`, or `pnpm build`
-   once. [development](../../../docs/guides/development.md) § Commands has it.
+   halves exit, so the driver reports that `pnpm dev` exited without serving, a few
+   seconds in, with the reason in `.data/drive/dev.log`. Run `pnpm dev:client` yourself
+   and pass `--no-serve`, or `pnpm build` once. [development](../../../docs/guides/development.md) § Commands has it.
 9. **Terrain does not stream just because you are at a body.** The streamer forgets
    everything above the eight-pixel relief gate, so `ir.land` and `ir.orbit(addr, 8)` from
    the root URL both left `ir.terrain()` reporting `visited: 0` and `lens: null` — which
