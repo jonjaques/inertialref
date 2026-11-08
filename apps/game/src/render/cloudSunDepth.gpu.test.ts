@@ -775,7 +775,9 @@ describe('a candidate that moves', () => {
         )
     }
     // A texel's column is the same column whichever eye drew it, to
-    // float32's centimeters about two eyes 75 m apart.
+    // float32's centimeters about two eyes 75 m apart (1.7 cm, measured);
+    // its stored G and B can then round to neighboring half floats, at most
+    // 2⁻¹⁰ apart (8.3 × 10⁻⁴, measured).
     expect(front).toBeLessThan(1e-3)
     expect(rest).toBeLessThan(1e-3)
     dispose(test)
