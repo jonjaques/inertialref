@@ -13060,6 +13060,35 @@ against the cold server failed with "renderer never became ready" after
 Vite's two dependency reloads, before the guard ran, as the entry above
 found; the second boot came up.
 
+**The review's six findings: five defects fixed with a test each, and one
+cause the measurement contradicted.** `--status` set the session's window
+on the page and closed its socket with no check for a live invocation, and
+Chromium's `EmulationHandler::Disable` clears the shared main-frame widget's
+device emulation for every session, so a `--status` beside a cast dropped
+it to the window's own 1600×933 at DPR 2 mid-run. Each invocation now lists
+itself in the session, pid and start time, until it exits, and `--status`
+touches nothing while one is live. The guard also holds the page's viewport
+and ratio to `--width`, `--height` and `--dpr`, compared as float32 because
+Chrome reads 1.05 back as 1.0499999523162842: a dropped page whose app ratio
+followed drew 3200×1866 and passed the buffer rule. Chrome's version was
+recorded before the boot, so a first run that failed at boot consumed the
+warning; it is now written with the point, once a page passes, by
+`enterSession`. `--status` printed nothing until a page that might be stalled
+answered, for up to the socket's 120 s; it now prints the rig first and gives
+the page 5 s. `enter` warned twice when it booted the page again; it now says
+each warning once per entry, because holding the second read against the
+version just read loses the warning when the first read dies before the
+operating point. Trap 5 in `driving.md` gave the remount's buffer a cause the
+DPR-2-to-1 attach above contradicts; it now states the buffer and points
+here. On the Mac mini at `0dcd5689`, the eight checks above passed again with
+the same results, after a first cold boot that failed before the guard and
+recorded no version. A session edited to record 156.0.7999.10 kept it
+through a run refused for its `--tree`, then warned once and recorded 157 on
+the next. A `sleep` listed as a driver made `--status` read nothing and name
+its pid, and once it exited `--status` read the page. Two `drive.mjs`
+invocations on one rig at once were not run, because two GPU commands may
+not overlap on this machine; the observer case rests on its unit case.
+
 **Not done:** the version record goes with the session at `--down`, so a
 Chrome that updated between a `--down` and the next launch is not warned
 about. A record that outlives the session would catch it.
