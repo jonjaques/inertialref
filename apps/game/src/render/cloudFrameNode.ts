@@ -1,3 +1,4 @@
+import { getLogger } from '@inertialref/shared'
 import {
   type Node,
   type NodeFrame,
@@ -7,16 +8,23 @@ import {
 } from 'three/webgpu'
 import { float } from 'three/tsl'
 import type { CloudPlacement } from './cloudLevers.ts'
+import { keepRenderer, splitScenePass } from './cloudSplit.ts'
 
 /*
  * The node that drives a frame's cloud work. It lives in the composite's
  * material, so its `updateBefore` runs at the composite's draw: inside pass B
- * under placement A, inside the split under B. `compileAsync` runs
- * `updateBefore` while warming (`upscale.ts:205`), so it does nothing outside
- * a frame, and warming the composite runs no cloud work.
+ * under placement A, inside the split under B. Either way the cloud passes are
+ * issued from inside an open render, each its own encoder submitted as it
+ * finishes, and the outer render's context and target are intact after them
+ * (the premise spike, `cloudPremises.gpu.test.ts`).
  *
- * Here it does nothing inside a frame either.
+ * `compileAsync` runs `updateBefore` while warming (`upscale.ts:205`), so it
+ * does nothing outside a frame, and warming the composite runs no cloud work.
  */
+
+const log = getLogger('game.clouds')
+
+const NOTHING = (): void => {}
 
 export interface CloudFrameDriver {
   /** True only between `beginFrame` and `endFrame`: `compileAsync` runs `updateBefore` while warming. */
@@ -31,8 +39,12 @@ export class CloudFrameNode extends TempNode<'float'> {
     return 'CloudFrameNode'
   }
 
-  constructor(_driver: CloudFrameDriver) {
+  readonly #driver: CloudFrameDriver
+  #reported = false
+
+  constructor(driver: CloudFrameDriver) {
     super('float')
+    this.#driver = driver
     this.updateBeforeType = NodeUpdateType.RENDER
   }
 
@@ -45,8 +57,47 @@ export class CloudFrameNode extends TempNode<'float'> {
    * Under 'split', `splitScenePass(renderer, run)`; under 'passes', `run()`;
    * under 'empty-split', `splitScenePass(renderer, () => {})`. Nothing
    * outside a frame.
+   *
+   * A throw in the cloud work is the clouds', not the frame's: the renderer
+   * is put back and the scene pass draws on without them. Left to escape, it
+   * would leave the render it is nested in — the scene pass or pass B, and
+   * the post chain around it — with no `finishRender`, its pass open and
+   * three's render tree pointing into it, and every later frame drawing
+   * through that.
    */
-  override updateBefore(_frame: NodeFrame): undefined {
+  override updateBefore(frame: NodeFrame): undefined {
+    const driver = this.#driver
+    if (!driver.inFrame) return undefined
+    const renderer = frame.renderer as WebGPURenderer | null
+    if (renderer === null) return undefined
+    const restore = keepRenderer(renderer)
+    try {
+      const placement = driver.placement
+      if (placement === 'passes') driver.run(renderer)
+      else
+        splitScenePass(
+          renderer,
+          placement === 'split' ? () => driver.run(renderer) : NOTHING,
+        )
+    } catch (cause) {
+      restore()
+      this.#report(cause)
+    }
     return undefined
+  }
+
+  /*
+   * Once: a throw in the cloud work repeats every frame, and the log's ring
+   * is 512 records, so a report a frame would push out everything a bug
+   * report wants beside it within nine seconds.
+   */
+  #report(cause: unknown): void {
+    if (this.#reported) return
+    this.#reported = true
+    log.warn('a frame’s cloud work failed; the frame draws without it', {
+      placement: this.#driver.placement,
+      cause: String(cause),
+      stack: cause instanceof Error ? (cause.stack ?? null) : null,
+    })
   }
 }
