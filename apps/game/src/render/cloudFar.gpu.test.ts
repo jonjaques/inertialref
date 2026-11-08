@@ -1321,6 +1321,33 @@ describe('the bake', () => {
     },
   )
 
+  it('keeps its blocks in order through a scrub, which jumps every frame, and is owed the cycle until the jumps stop', async () => {
+    const built = build('atlas', slab(1e-3), {
+      eye: 2000,
+      sun: UP,
+      layers: [[LAYER.base, LAYER.top]],
+    })
+    const { field } = built
+    await checked(() => field.warm(renderer))
+    await checked(() => {
+      for (let k = 0; k < FAR_CYCLE; k += 1)
+        field.render(renderer, frameFor('atlas', { jump: true }), BUDGET)
+    })
+    expect(field.pending).toBe(true)
+    const corners = await texels(textureOf(field), [
+      [FAR_WIDTH - 1, FAR_HEIGHT - 1],
+      [FAR_WIDTH - 1, 0],
+      [0, FAR_HEIGHT - 1],
+    ])
+    expect(corners.every((texel) => texel.some((v) => v !== 0))).toBe(true)
+    await checked(() => {
+      for (let k = 0; k < FAR_CYCLE; k += 1)
+        field.render(renderer, frameFor('atlas'), BUDGET)
+    })
+    expect(field.pending).toBe(false)
+    field.dispose()
+  })
+
   it('releases its atlas on a frame that selects the other candidate, and the second body’s when there is none', async () => {
     const place: Placement = {
       eye: 2000,

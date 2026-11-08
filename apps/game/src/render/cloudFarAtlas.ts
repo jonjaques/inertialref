@@ -751,11 +751,14 @@ const FORMATS = {
  * `initRenderTarget`, which allocates without drawing, so what `textures()`
  * lists always exists on the GPU at the size `bytes` declares.
  *
- * The atlas is body-fixed, not eye-anchored, so a cut leaves it valid. It
- * starts the cycle over on a jump of the field's time, and when the scenario,
- * the body or the handover footprint it was baked at changes; until the cycle
- * is through it is `pending`. Between, it keeps baking a block a frame, which
- * refreshes the whole atlas every 45 frames for the field's time.
+ * The atlas is body-fixed, not eye-anchored, so a cut leaves it valid. A jump
+ * of the field's time, or a change of the scenario, the body or the handover
+ * footprint it was baked at, owes the whole cycle again, and until 45 blocks
+ * have been drawn since, it is `pending`. The blocks keep their order through
+ * that: restarted at the first block, a scrub, which jumps every frame, would
+ * redraw that one block forever and never the other 44. Between, it keeps
+ * baking a block a frame, which refreshes the whole atlas every 45 frames for
+ * the field's time.
  */
 export class FarBake implements CloudResource {
   readonly name: string
@@ -855,7 +858,6 @@ export class FarBake implements CloudResource {
     const key = `${frame.scenario.id} ${body.address} ${frame.levers.farFootprint}`
     if (key !== this.#key || frame.jump) {
       this.#key = key
-      this.#next = 0
       this.#due = FAR_CYCLE
     }
     this.#draw(renderer)
