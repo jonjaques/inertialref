@@ -1,6 +1,138 @@
 {
   "version": 1,
   "skills": {
+    "authoring-error-tracking-alerts": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/authoring-error-tracking-alerts/SKILL.md",
+      "computedHash": "a412b1c5e8cc5d581029570cf0d3ed75af64b16ea754b1309a631478396e1530"
+    },
+    "authoring-log-alerts": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/authoring-log-alerts/SKILL.md",
+      "computedHash": "1a05ea8347a78f80deef73564b8dde58054bba8b9af4aff81e48bd3cd4f6c564"
+    },
+    "building-a-dashboard": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/building-a-dashboard/SKILL.md",
+      "computedHash": "5198c3318c307f1bdbda3b1fe00be08f0422f5732244618dec1048d2f3831c63"
+    },
+    "cleaning-up-stale-feature-flags": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/cleaning-up-stale-feature-flags/SKILL.md",
+      "computedHash": "fd252642ee927898222f65b7840a3a02e2bc338129e295143ad4ee2deae87088"
+    },
+    "creating-online-evaluations": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/creating-online-evaluations/SKILL.md",
+      "computedHash": "d61d8e5a4a83b50fe729aca0618f2ff3b72d36fa873e769910f954b5077269e7"
+    },
+    "creating-surveys": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/creating-surveys/SKILL.md",
+      "computedHash": "0fd257496f8ac002f4a8cd936a71827e73af19f319dab3e3f240fa00fd0c6956"
+    },
+    "diagnosing-stacktrace-symbolication": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/diagnosing-stacktrace-symbolication/SKILL.md",
+      "computedHash": "6b25bdb1178b4889b25b4d93d952a0eddf4ecc49d17b61478e791cb426f37890"
+    },
+    "exploring-ai-failures": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/exploring-ai-failures/SKILL.md",
+      "computedHash": "47ef2a4683e97d456b610772ab18330b6af308d70aad84da1f2bef076d493d95"
+    },
+    "exploring-live-traffic": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/exploring-live-traffic/SKILL.md",
+      "computedHash": "b91aa9c2a5be9dc53b759302477bfe93f3d8a95c3fb11231930530301eb79df6"
+    },
+    "exploring-llm-costs": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/exploring-llm-costs/SKILL.md",
+      "computedHash": "45ca640879762f7eb0528c90544a55807cd6fc4e0bba3d3e876614b93218831a"
+    },
+    "exploring-llm-evaluations": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/exploring-llm-evaluations/SKILL.md",
+      "computedHash": "191b69102502c7249da651806f00fb385eb82401679642d84df06c6c7224d8ec"
+    },
+    "exploring-llm-traces": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/exploring-llm-traces/SKILL.md",
+      "computedHash": "939c0497cfedb11296a05b1a94053d3a87fe881831ccf742f60eaafcf67d7c86"
+    },
+    "filtering-bot-traffic": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/filtering-bot-traffic/SKILL.md",
+      "computedHash": "114cfd6e7455756097a2685aad76ba78625e326ae089a4283aac6246e71a1d0e"
+    },
+    "grouping-noisy-errors": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/grouping-noisy-errors/SKILL.md",
+      "computedHash": "dd1305c201efa24c3fc66ed9145a62d57ac9be1c1f82e638bd2793e5e972c287"
+    },
+    "investigating-error-issue": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/investigating-error-issue/SKILL.md",
+      "computedHash": "e65f5ec62f44cba94a0b10c59025e6ed263d393568fdedfdfda49e5e0c812ab2"
+    },
+    "investigating-logs": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/investigating-logs/SKILL.md",
+      "computedHash": "8ce5004631c24e6b558920b4a946ff4f69d4073a1420cb55bd86a2992edcef6d"
+    },
+    "managing-path-cleaning-rules": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/managing-path-cleaning-rules/SKILL.md",
+      "computedHash": "787f33278426edbf2a887aa2ef5cacc76091e60b2570209f3c00100a196f6ae8"
+    },
+    "querying-posthog-data": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/querying-posthog-data/SKILL.md",
+      "computedHash": "66db519f85d45435eac1432fae76e5fd4d9f5e3ad6999378b06f501ef0990623"
+    },
+    "resolving-ingestion-warnings": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/resolving-ingestion-warnings/SKILL.md",
+      "computedHash": "4780ef0c0cfbeb43373b09044b629774137c6b53816026fbc834ac1c8262ebbf"
+    },
+    "suppressing-noisy-errors": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/suppressing-noisy-errors/SKILL.md",
+      "computedHash": "e46be53b87d5294b4a10261dcfcb89f4af9feb3b390ddac17c65ffe08687c738"
+    },
+    "triaging-error-issues": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/triaging-error-issues/SKILL.md",
+      "computedHash": "a33caf54e3f2e20132b01afb2164ccf8a25415e6b6f06617b23a368d77c83ab8"
+    },
+    "understanding-billing-usage": {
+      "source": "posthog/ai-plugin",
+      "sourceType": "github",
+      "skillPath": "skills/understanding-billing-usage/SKILL.md",
+      "computedHash": "376110b914f73814f3a723a19e2c9c203f691ab8212c570b23d0f9dd81a4e9e6"
+    },
     "webgpu-threejs-tsl": {
       "source": "dgreenheck/webgpu-claude-skill",
       "sourceType": "github",

@@ -3,6 +3,33 @@
 # Imported WebGPU skill. Keep its upstream formatting for subsequent updates.
 .claude/skills/webgpu-threejs-tsl/
 
+# Imported PostHog skills (posthog/ai-plugin, tracked in skills-lock.json), for
+# the same reason: `npx skills update` rewrites them, and a reformatted copy
+# would diff against upstream on every update. Each is listed rather than
+# globbed because they share no prefix with the skills this repository writes.
+.claude/skills/authoring-error-tracking-alerts/
+.claude/skills/authoring-log-alerts/
+.claude/skills/building-a-dashboard/
+.claude/skills/cleaning-up-stale-feature-flags/
+.claude/skills/creating-online-evaluations/
+.claude/skills/creating-surveys/
+.claude/skills/diagnosing-stacktrace-symbolication/
+.claude/skills/exploring-ai-failures/
+.claude/skills/exploring-live-traffic/
+.claude/skills/exploring-llm-costs/
+.claude/skills/exploring-llm-evaluations/
+.claude/skills/exploring-llm-traces/
+.claude/skills/filtering-bot-traffic/
+.claude/skills/grouping-noisy-errors/
+.claude/skills/investigating-error-issue/
+.claude/skills/investigating-logs/
+.claude/skills/managing-path-cleaning-rules/
+.claude/skills/querying-posthog-data/
+.claude/skills/resolving-ingestion-warnings/
+.claude/skills/suppressing-noisy-errors/
+.claude/skills/triaging-error-issues/
+.claude/skills/understanding-billing-usage/
+
 # 600 KB of workerd runtime types plus the staged deploy, both written by `cf`.
 # The types are committed so a typecheck is hermetic; reformatting them would
 # produce a diff nobody wrote. The output is git-ignored, but prettier walks
