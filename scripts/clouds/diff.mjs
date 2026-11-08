@@ -14,19 +14,21 @@
  * sensor's tone curve leaves of an error; the meter reads the error itself.
  */
 import { spawn } from 'node:child_process'
+import { cloudHistogramEdge } from '../../packages/devtools/src/clouds.ts'
 
 /** The presets' per-pixel levels: 3% against a PNG, 8% against a JPEG. */
 export const LEVELS = ['3%', '8%']
 
 /**
- * The residual meter's bins: 64, a sixteenth of a decade each, over 10⁻⁴…1,
- * bin 0 also holding everything under 10⁻⁴ and bin 63 everything from
- * 10^(−1/16) up. That is the exposure meter's convention, which the residual
- * meter follows. A threshold inside a bin cannot be resolved, so every figure
- * here is the bin-resolved upper bound: 1% is an edge and exact, 2% and 5%
- * fall inside bins 36 and 43 and are not.
+ * The residual meter's bins, by the report's own definition
+ * (`packages/devtools/src/clouds.ts`), which the meter counts by on the GPU:
+ * 64, a sixteenth of a decade each, over 10⁻⁴…1, bin 0 also holding
+ * everything under 10⁻⁴ and bin 63 everything from 10^(−1/16) up. A
+ * threshold inside a bin cannot be resolved, so every figure here is the
+ * bin-resolved upper bound: 1% is an edge and exact, 2% and 5% fall inside
+ * bins 36 and 43 and are not.
  */
-export const binEdge = (i) => 10 ** (-4 + i / 16)
+export const binEdge = cloudHistogramEdge
 
 /**
  * A histogram's share of texels over each threshold, its 95th percentile and

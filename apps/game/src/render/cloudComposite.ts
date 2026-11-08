@@ -20,11 +20,14 @@ import {
 } from 'three/webgpu'
 import {
   abs,
+  acos,
+  asin,
   atomicAdd,
   atomicStore,
   cameraProjectionMatrixInverse,
   cameraWorldMatrix,
   clamp,
+  cross,
   Discard,
   dot,
   exp,
@@ -34,6 +37,7 @@ import {
   If,
   instanceIndex,
   ivec2,
+  length,
   log2,
   max,
   min,
@@ -47,6 +51,7 @@ import {
   screenCoordinate,
   screenUV,
   select,
+  sqrt,
   storage,
   texture,
   uint,
@@ -57,8 +62,23 @@ import {
   vec4,
 } from 'three/tsl'
 import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
-import type { CloudHistogram, CloudRenderReport } from '@inertialref/devtools'
-import { airMediumAt, airToward, marchAir, ORBIT_AIRLIGHT } from './air.ts'
+import {
+  CLOUD_HISTOGRAM_BINS,
+  CLOUD_HISTOGRAM_BINS_A_DECADE,
+  CLOUD_HISTOGRAM_FLOOR_DECADE,
+  type CloudHistogram,
+  type CloudRenderReport,
+} from '@inertialref/devtools'
+import {
+  airMediumAt,
+  type AirUniforms,
+  airToward,
+  LIMB_SAMPLES,
+  limbReachOf,
+  marchAir,
+  marchLimb,
+  ORBIT_AIRLIGHT,
+} from './air.ts'
 import {
   airEye,
   type AirMediumFn,
@@ -681,14 +701,18 @@ export class CloudComposite {
 /* ------------------------------------------------------------------------- */
 
 const RESIDUAL_LABEL = 'cloud residual'
-/** 64 log bins from 10⁻⁴ to 1, a sixteenth of a decade each. */
-const BINS = 64
-const BINS_A_DECADE = 16
-const FLOOR_DECADE = -4
-/** Three histograms, then the cloud texels counted and the class disagreements. */
-const SAMPLES = 3 * BINS
-const DISAGREEMENTS = SAMPLES + 1
-const SLOTS = SAMPLES + 2
+/** The report's bins, which the runner reads back by the same definition. */
+const BINS = CLOUD_HISTOGRAM_BINS
+/**
+ * Four histograms — thin, light, total and the limb's — then the cloud
+ * texels counted, the limb's own, and the class disagreements.
+ */
+const SAMPLES = 4 * BINS
+const LIMB_TEXELS = SAMPLES + 1
+const DISAGREEMENTS = SAMPLES + 2
+const SLOTS = SAMPLES + 3
+/** Radians from the limb inside which a sky texel is the limb's (§8.6). */
+const LIMB_BAND = (2 * Math.PI) / 180
 /** A texel holds cloud where it extinguishes a thousandth or adds any light. */
 const CLOUDLESS = 1 - 1e-3
 /** Scene units: the relative errors' denominator is never under this. */
@@ -712,7 +736,8 @@ const luma = (v: Node<'vec3'>): Node<'float'> => dot(v, LUMA)
  * after a frame drawn with the composite inert, so the scene target holds the
  * scene as built. A cloud texel reads that scene ÷ the gain, the depth copy,
  * the history and the served body's air, and puts three relative errors in
- * three histograms, each against the identity's own output there:
+ * three histograms, each against the identity's own output there, and a
+ * fourth for the limb:
  *
  * - `thin`: the identity against the thin form;
  * - `light`: the identity's light residual, T_c·{L_scene(0, end) −
@@ -721,7 +746,11 @@ const luma = (v: Node<'vec3'>): Node<'float'> => dot(v, LUMA)
  * - `total`: that plus its transmittance residual × S, T_c·{T_scene −
  *   T_a(0, t₁)·T_a(t₁, end)}·S with S = (scene − L_scene)/T_scene, where a
  *   surface's T is the cleared one segment by segment under Enhanced, which
- *   does not compose.
+ *   does not compose;
+ * - `limb`: at a sky texel within 2° of the limb, the light of the ring
+ *   Enhanced draws there times the cloud's opacity, the share of a ring in
+ *   front of the cloud the identity dims, which no other histogram can see:
+ *   the meter's own air for a sky texel is the shell's physics alone.
  *
  * It counts the cloud texels whose footprint's corners do not all share the
  * class of its center — the texels the trace and the composite can decide
@@ -793,15 +822,65 @@ class ResidualMeter {
   }
 }
 
-/** The slot of a relative error in histogram `k`, from 10⁻⁴ (and under) to 1 (and over). */
-function binOf(k: number, error: Node<'float'>): Node<'uint'> {
+/**
+ * The bin of a relative error, from 10⁻⁴ (and under) to 1 (and over):
+ * `cloudHistogramBin`'s, on the GPU.
+ */
+export function residualBin(error: Node<'float'>): Node<'uint'> {
   const decade = log2(max(error, 1e-30)).div(Math.log2(10))
   const index = clamp(
-    floor(decade.sub(FLOOR_DECADE).mul(BINS_A_DECADE)),
+    floor(
+      decade
+        .sub(CLOUD_HISTOGRAM_FLOOR_DECADE)
+        .mul(CLOUD_HISTOGRAM_BINS_A_DECADE),
+    ),
     0,
     BINS - 1,
   )
-  return uint(index).add(uint(k * BINS))
+  return uint(index)
+}
+
+/** The slot of a relative error in histogram `k`. */
+const binOf = (k: number, error: Node<'float'>): Node<'uint'> =>
+  residualBin(error).add(uint(k * BINS))
+
+/**
+ * Whether a ray from an eye at `eye` (sea-level units about the center,
+ * its own up) lies within the band of the limb: its angle from the nadir
+ * against the datum's tangent cone, asin(1/r).
+ */
+function nearLimb(eye: Node<'vec3'>, direction: Node<'vec3'>): Node<'bool'> {
+  const r = max(length(eye), 1)
+  const nadir = acos(clamp(dot(direction, eye).div(r).negate(), -1, 1))
+  return abs(nadir.sub(asin(float(1).div(r)))).lessThan(LIMB_BAND)
+}
+
+/**
+ * The ring Enhanced draws along a ray, as the shell marches it: the lifted
+ * gas from where the ray enters its reach to where it leaves it, or to the
+ * ground the ray meets ahead (`materials.ts`). Zero wherever Enhanced is off
+ * or the eye has no lift.
+ */
+function limbRing(
+  air: AirUniforms,
+  eye: Node<'vec3'>,
+  direction: Node<'vec3'>,
+  sun: Node<'vec3'>,
+): Node<'vec3'> {
+  const toCenter = eye.negate()
+  const closest = dot(toCenter, direction)
+  const impactSquared = max(length(cross(direction, toCenter)).pow(2), 0)
+  const reach = limbReachOf(air)
+  const halfReach = sqrt(max(reach.mul(reach).sub(impactSquared), 0))
+  const halfInner = sqrt(max(float(1).sub(impactSquared), 0))
+  const near = max(closest.sub(halfReach), 0)
+  const meetsGround = impactSquared.lessThan(1).and(closest.greaterThan(0))
+  const far = select(
+    meetsGround,
+    max(closest.sub(halfInner), near),
+    closest.add(halfReach),
+  )
+  return marchLimb(air, eye, direction, near, far, sun, LIMB_SAMPLES)
 }
 
 /**
@@ -987,6 +1066,15 @@ function residualKernel(
           ),
         )
 
+        // §5.11 (iii): the ring Enhanced draws at a sky pixel is in front of
+        // the cloud, and the identity dims it by T_c with the rest of the
+        // scene; the shell's own march of it says how much light that is.
+        If(identity.sky.and(nearLimb(eye, direction)), () => {
+          tally(uint(LIMB_TEXELS))
+          const ring = limbRing(served.air, eye, direction, served.sun)
+          tally(binOf(3, abs(luma(ring.mul(k).mul(opaque))).div(reference)))
+        })
+
         // The class at the footprint's corners against its center's: the
         // corners that are sky, against all four or none.
         const skyCorners = CORNERS.map(([jx, jy]) => {
@@ -1009,10 +1097,14 @@ function residualKernel(
   })().compute(WORKGROUP)
 }
 
-function histogram(counts: Uint32Array, k: number): CloudHistogram {
+function histogram(
+  counts: Uint32Array,
+  k: number,
+  samples = SAMPLES,
+): CloudHistogram {
   return {
     bins: Array.from(counts.subarray(k * BINS, (k + 1) * BINS)),
-    samples: counts[SAMPLES] ?? 0,
+    samples: counts[samples] ?? 0,
   }
 }
 
@@ -1023,6 +1115,7 @@ function readout(
     thin: histogram(counts, 0),
     light: histogram(counts, 1),
     total: histogram(counts, 2),
+    limb: histogram(counts, 3, LIMB_TEXELS),
     classDisagreement: counts[DISAGREEMENTS] ?? 0,
   }
 }
