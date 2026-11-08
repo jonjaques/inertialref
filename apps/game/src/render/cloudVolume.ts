@@ -640,10 +640,10 @@ export class CloudVolume implements CloudResource {
   ): void {
     if (this.#disposed) return
     if (!volumeSelected(frame.levers)) {
-      this.#release()
+      this.#release(renderer)
       return
     }
-    this.#allocate()
+    this.#allocate(renderer)
     this.#invalidate(frame, budget)
     const work = this.#schedule(frame, budget.slices)
     this.#bake(renderer, frame, work)
@@ -828,22 +828,36 @@ export class CloudVolume implements CloudResource {
   /* ----------------------------------------------------------------------- */
 
   /** Real size, the frame the levers first select it. */
-  #allocate(): void {
+  #allocate(renderer: WebGPURenderer): void {
     this.#allocated = true
     if (this.#target.width === CLOUD_VOLUME_SIZE) return
-    this.#target.setSize(CLOUD_VOLUME_SIZE, CLOUD_VOLUME_SIZE, DEPTH)
-    this.#boundMap.setSize(BRICKS, BRICKS, SLOTS)
+    this.#resize(renderer, CLOUD_VOLUME_SIZE, DEPTH, BRICKS, SLOTS)
     this.#forget()
   }
 
   /** Back to the 1 × 1 targets warming built against, holding nothing. */
-  #release(): void {
-    if (this.#target.width !== 1) {
-      this.#target.setSize(1, 1, 1)
-      this.#boundMap.setSize(1, 1, 1)
-    }
+  #release(renderer: WebGPURenderer): void {
+    if (this.#target.width !== 1) this.#resize(renderer, 1, 1, 1, 1)
     this.#forget()
     this.#pending = false
+  }
+
+  /*
+   * A resize frees the textures and three makes the new ones at their next
+   * binding, which a released cache never has: allocated here, so what
+   * `textures()` lists is always on the device at the size `bytes` declares.
+   */
+  #resize(
+    renderer: WebGPURenderer,
+    size: number,
+    depth: number,
+    bricks: number,
+    slots: number,
+  ): void {
+    this.#target.setSize(size, size, depth)
+    this.#boundMap.setSize(bricks, bricks, slots)
+    renderer.initRenderTarget(this.#target)
+    renderer.initTexture(this.#boundMap)
   }
 
   #forget(): void {
