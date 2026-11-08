@@ -171,6 +171,23 @@ export default defineConfig(({ isPreview }) => {
         CLERK_SECRET_KEY: bindings.secret(),
 
         /*
+         * Account deletion reaching PostHog (`src/clerkWebhook.ts`): the
+         * project the deletion is asked of. Not a credential — it opens
+         * nothing without a personal key — and committing it routes nothing
+         * of a fork's into this project, which is the reason the browser's
+         * project token is a build variable instead.
+         *
+         * The route's two secrets are deliberately not here.
+         * `CLERK_WEBHOOK_SIGNING_SECRET` and `POSTHOG_PERSON_DELETE_KEY` are
+         * production's alone: a Clerk webhook names one URL, a preview's
+         * changes with its branch, and a declared secret would fail every
+         * Previews Base upload for want of a value it has no use for. The
+         * route reads them through a widening of `Env` and answers 503
+         * without them.
+         */
+        POSTHOG_PROJECT_ID: bindings.text('719084'),
+
+        /*
          * Allowances (`src/limits.ts`). Counted per location and settled
          * eventually, so each is a bound on a script, not a meter on a person.
          * A namespace is any integer unique within the account.

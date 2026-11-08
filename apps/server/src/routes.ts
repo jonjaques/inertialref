@@ -7,6 +7,7 @@ import {
   RELAY_PREFIX,
   SOCKET_PATH,
 } from '@inertialref/protocol'
+import { CLERK_WEBHOOK_PATH } from './clerkWebhook.ts'
 import { type MediaObject, mediaFor } from './media.ts'
 import { type RelayTarget, relayTarget } from './relay.ts'
 
@@ -16,10 +17,10 @@ import { type RelayTarget, relayTarget } from './relay.ts'
  * Separated from `index.ts` because it is the half with decisions in it, and a
  * decision here is a pure function of the path, testable with no request, no
  * `Env` and no binding. `index.ts` runs in plain Node too, as long as a test
- * hands it an `Env` that holds whatever its route reaches (`relay.test.ts`).
- * Durable Object tests will need `@cloudflare/vitest-pool-workers` (and a
- * Vitest bump) when there is a Durable Object; routing does not, and should
- * not wait for one.
+ * hands it an `Env` that holds whatever its route reaches (`relay.test.ts`,
+ * `clerkWebhook.test.ts`). Durable Object tests will need
+ * `@cloudflare/vitest-pool-workers` (and a Vitest bump) when there is a Durable
+ * Object; routing does not, and should not wait for one.
  *
  * `runWorkerFirst` in cloudflare.config.ts means `asset` is normally unreachable —
  * a path that is not `/api`, `/api/*`, `/ws` or `/media/*` never wakes the
@@ -34,6 +35,7 @@ export type Route =
   | { readonly kind: 'account' }
   | { readonly kind: 'socket' }
   | { readonly kind: 'relay'; readonly target: RelayTarget }
+  | { readonly kind: 'clerk-webhook' }
   | { readonly kind: 'api-not-found' }
   | { readonly kind: 'media'; readonly object: MediaObject }
   | { readonly kind: 'media-not-found' }
@@ -47,6 +49,7 @@ export function routeFor(pathname: string): Route {
   if (pathname === HEALTH_PATH) return { kind: 'health' }
   if (pathname === ACCOUNT_PATH) return { kind: 'account' }
   if (pathname === SOCKET_PATH) return { kind: 'socket' }
+  if (pathname === CLERK_WEBHOOK_PATH) return { kind: 'clerk-webhook' }
   /*
    * PostHog, by allowlist (`relay.ts`). A path under the prefix that the
    * allowlist does not name falls through to the API's 404 below, the same

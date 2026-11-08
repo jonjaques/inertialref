@@ -20,6 +20,7 @@ import { GENERATION_VERSIONS } from '@inertialref/universe'
  */
 import catalogManifest from '../../../data/catalog/manifest.json' with { type: 'json' }
 import { AccountUnavailableError } from './account.ts'
+import { clerkWebhook } from './clerkWebhook.ts'
 import { accountStatus } from './grants.ts'
 import { allowed, RETRY_AFTER, sourceKey } from './limits.ts'
 import { relay } from './relay.ts'
@@ -70,9 +71,10 @@ export default {
      * because both ask Clerk who is calling, and Clerk's API has a rate limit
      * of its own that every visitor shares. Checked before any of that work.
      *
-     * The relay is outside it on purpose. It asks nobody who is calling, so it
-     * spends none of Clerk's limit, and it carries every measured page's
-     * events: one visitor's burst would refuse their next account check.
+     * The relay and the Clerk webhook are outside it on purpose. Neither asks
+     * anybody who is calling, so neither spends Clerk's limit, and the relay
+     * carries every measured page's events: one visitor's burst would refuse
+     * their next account check.
      */
     if (
       (route.kind === 'account' || route.kind === 'tour') &&
@@ -138,6 +140,14 @@ export default {
           (await relay(request, route.target)) ??
           api({ error: 'PostHog is unreachable' }, 502)
         )
+      }
+
+      case 'clerk-webhook': {
+        if (request.method !== 'POST') {
+          return api({ error: 'the webhook is a POST' }, 405)
+        }
+        const { status, body } = await clerkWebhook(request, env)
+        return api(body, status)
       }
 
       case 'api-not-found':

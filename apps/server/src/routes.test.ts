@@ -5,6 +5,7 @@ import {
   SOCKET_PATH,
   mediaPath,
 } from '@inertialref/protocol'
+import { CLERK_WEBHOOK_PATH } from './clerkWebhook.ts'
 import { MEDIA, resolveRange } from './media.ts'
 import { routeFor } from './routes.ts'
 
@@ -18,6 +19,9 @@ describe('worker routing', () => {
     expect(routeFor(HEALTH_PATH).kind).toBe('health')
     expect(routeFor(ACCOUNT_PATH).kind).toBe('account')
     expect(routeFor(SOCKET_PATH).kind).toBe('socket')
+    expect(routeFor(CLERK_WEBHOOK_PATH).kind).toBe('clerk-webhook')
+    for (const path of ['/api/clerk', '/api/clerk/', `${CLERK_WEBHOOK_PATH}/`])
+      expect(routeFor(path).kind, path).toBe('api-not-found')
   })
 
   it('answers anything else under /api from the API, not the page', () => {
