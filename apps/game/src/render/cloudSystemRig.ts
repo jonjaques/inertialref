@@ -214,7 +214,9 @@ export function cloudRig(
     settings: DEFAULT_SENSOR_SETTINGS,
     time: 0,
     headroom: 1,
-    pinned: null,
+    // A pinned exposure: two chains compared frame for frame do not wait on
+    // their meters' readbacks landing alike.
+    pinned: 0,
     noiseTick: 0,
     clouds: {
       levers: rig.levers,
