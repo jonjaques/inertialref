@@ -30,6 +30,7 @@ export const loadRuntime = createRuntimeLoader({
     }
     const { startClient } = await import('./clientStartup.ts')
     startClient()
+    bootStarted()
   },
   app: async () => (await import('./App.tsx')).default,
   catalog: async () => {
@@ -39,3 +40,4 @@ export const loadRuntime = createRuntimeLoader({
 })
 import { beginGraphicsSession } from './graphicsSession.ts'
 import { runtimeFailure } from './runtimeFailure.ts'
+import { bootStarted } from './telemetry/boot.ts'

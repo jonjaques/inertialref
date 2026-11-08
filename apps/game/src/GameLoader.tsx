@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { GameRuntimeBoundary } from './GameRuntimeBoundary.tsx'
-import { posthogLog } from './posthog.ts'
 import { loadRuntime } from './runtimeLoader.ts'
 import { runtimeFailure, useRuntimeFailure } from './runtimeFailure.ts'
 import { RuntimeNotice } from './RuntimeNotice.tsx'
+import { sendLog } from './telemetry/posthog.ts'
 
 export default function GameLoader() {
   const [runtime, setRuntime] = useState<Awaited<
@@ -19,13 +19,13 @@ export default function GameLoader() {
       (loaded) => {
         if (!active) return
         setRuntime(loaded)
-        posthogLog.interactiveRuntimeLoaded()
+        sendLog('info', 'interactive runtime loaded')
       },
       (cause: unknown) => {
         console.error('The interactive view could not start', cause)
         if (!active) return
         runtimeFailure.report('runtime', cause)
-        posthogLog.interactiveRuntimeFailed()
+        sendLog('warn', 'interactive runtime failed to load')
       },
     )
     return () => {

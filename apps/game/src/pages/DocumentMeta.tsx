@@ -1,6 +1,6 @@
 import { useContext, useEffect } from 'react'
 import { useLocation } from 'react-router'
-import { recordPageView, startAnalytics } from '../analytics.ts'
+import { recordEvent, recordPageview, startTelemetry } from '../telemetry/posthog.ts'
 import { DocsContentContext } from '../docs/initialDocs.ts'
 import { docRoute } from '../docs/content.ts'
 import {
@@ -9,11 +9,12 @@ import {
   metadataForPath,
   robotsContent,
 } from '../site.ts'
-import { DOCS } from './paths.ts'
+import { DOCS, modeForPath, resolvedLocation } from './paths.ts'
 
 /** Metadata describes the address bar, including a dialog over another mode. */
 export function DocumentMeta() {
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const { pathname } = location
   const docs = useContext(DocsContentContext)
   const path = docRoute(
     docs?.manifest.value ?? null,
@@ -49,9 +50,22 @@ export function DocumentMeta() {
     attribute('meta[property="og:url"]', 'content', canonical)
     attribute('meta[name="twitter:title"]', 'content', title)
     attribute('meta[name="twitter:description"]', 'content', page.description)
-    startAnalytics()
-    recordPageView(canonical, title)
+    // Started here rather than with the runtime, because the menu, the
+    // settings and the docs are visits too and never load the runtime.
+    startTelemetry()
+    recordPageview(page.path, title)
   }, [path, pending, doc, missing])
+
+  /*
+   * Which mode the address bar is in, once per change of mode. The resolved
+   * pathname, not the raw one: a dialog over the planetarium is still the
+   * planetarium, and counting the dialog's path would enter a mode nobody
+   * left.
+   */
+  const mode = modeForPath(resolvedLocation(location).pathname)
+  useEffect(() => {
+    recordEvent('mode entered', { mode })
+  }, [mode])
 
   return null
 }

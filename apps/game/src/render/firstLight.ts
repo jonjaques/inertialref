@@ -239,6 +239,10 @@ export function createFirstLight(
     readonly signal?: typeof signalFor
     /** Injected so a test needs no `window`. */
     readonly replay?: () => void
+    /** Told the first-light time, on the navigation's clock (`telemetry/boot.ts`). */
+    readonly onFirstLight?: (msSinceNavigation: number) => void
+    /** Told when the cover has lifted, on the same clock. */
+    readonly onRevealed?: (msSinceNavigation: number) => void
   } = {},
 ): FirstLight {
   const signal = deps.signal ?? signalFor
@@ -299,6 +303,7 @@ export function createFirstLight(
     if (store.getState().phase !== 'booting') return
     if (!isWarmed || !isPresented) return
     log.info('first light')
+    deps.onFirstLight?.(performance.now())
     /*
      * **The measurement this project cares about most and stated nowhere.**
      *
@@ -411,6 +416,7 @@ export function createFirstLight(
       // `first light` is the cover's own fade, and it is the one part of boot
       // that is a deliberate cost rather than a measured one.
       timer.mark('revealed', BOOT_MARKER)
+      deps.onRevealed?.(performance.now())
       store.setState({ ...store.getState(), phase: 'done' })
     },
   }

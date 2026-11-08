@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { reportFailure } from '../telemetry/posthog.ts'
 import { Action } from './Action.tsx'
 
 /*
@@ -55,6 +56,12 @@ export class ErrorBoundary extends Component<
     // affordances — one expands to a clickable source frame, the other is
     // twenty lines that would be a single unreadable field in a log record.
     console.error(`[hud] ${this.props.what} failed`, error, info.componentStack)
+    // A panel that stopped drawing is a defect the page survived, which is
+    // exactly the kind nothing else would ever report.
+    reportFailure('boundary', error, {
+      boundary: this.props.what,
+      react_component_stack: (info.componentStack ?? '').slice(0, 4000),
+    })
   }
 
   override render(): ReactNode {

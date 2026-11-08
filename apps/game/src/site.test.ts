@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { isMeasured } from './analytics.ts'
 import {
   ABOUT,
   CINEMA,
@@ -21,11 +20,11 @@ import {
 /*
  * What the site says about itself, and to whom.
  *
- * These are the two pieces of this area that are pure functions of a string,
- * and both of them fail silently in production. A description that resolves to
- * the wrong page is a search result describing something else; an analytics
- * gate that lets `localhost` through poisons the numbers with the maintainer's
- * own testing and nothing anywhere says so. Neither needs a browser to state.
+ * These are the pieces of this area that are pure functions of a string,
+ * and they fail silently in production: a description that resolves to the
+ * wrong page is a search result describing something else, and nothing
+ * anywhere says so. None of it needs a browser to state. Who is measured is
+ * `telemetry/consent.test.ts`.
  *
  * The tags actually written into the document are `pages/DocumentMeta.tsx`'s
  * job and are not tested here — that needs a DOM, and what would be under test
@@ -131,51 +130,6 @@ describe('what a search result and a tab strip get', () => {
     // Two constants, one fact. They are separate because one is compared
     // against `location.hostname` and the other is concatenated into a URL.
     expect(SITE.origin).toBe(`https://${SITE.host}`)
-  })
-})
-
-describe('who is measured', () => {
-  const canonical = {
-    production: true,
-    hostname: SITE.host,
-    measurementId: 'G-TEST',
-    optedOut: false,
-  }
-
-  it('measures the canonical host in a production build', () => {
-    expect(isMeasured(canonical)).toBe(true)
-  })
-
-  it('measures nothing anywhere else', () => {
-    /*
-     * Each of these is a real address this exact bundle answers on. The
-     * versioned forms are the ones that still arrive: `workers_dev` is `false`
-     * so the Worker has no shared `workers.dev` route, but `preview_urls` is
-     * `true` and every uploaded version gets its own hostname on that subdomain.
-     * The bare and aliased spellings stay listed because the gate is a
-     * canonical-host allow-list, not a preview-shaped denylist.
-     */
-    for (const hostname of [
-      'localhost',
-      '127.0.0.1',
-      'inertialrefd.jaquers.workers.dev',
-      '1a2b3c4d-inertialrefd.jaquers.workers.dev',
-      'preview-branch.inertialrefd.workers.dev',
-    ]) {
-      expect(isMeasured({ ...canonical, hostname })).toBe(false)
-    }
-  })
-
-  it('measures nothing in a development build', () => {
-    expect(isMeasured({ ...canonical, production: false })).toBe(false)
-  })
-
-  it('measures nothing without an id, which is what a fork builds with', () => {
-    expect(isMeasured({ ...canonical, measurementId: '' })).toBe(false)
-  })
-
-  it('honors an explicit opt-out', () => {
-    expect(isMeasured({ ...canonical, optedOut: true })).toBe(false)
   })
 })
 

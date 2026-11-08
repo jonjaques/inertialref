@@ -55,6 +55,13 @@ export class FrameMetrics {
    */
   gpuMs: number | null = null
 
+  /**
+   * A second reader of every sample, or null. `telemetry/perf.ts` keeps a
+   * minute where these series keep four seconds, which is the difference
+   * between a plot and a population.
+   */
+  tap: ((frame: FrameSample) => void) | null = null
+
   sample(frame: FrameSample): void {
     this.period.push(frame.periodMs)
     this.engineMs.push(frame.engineMs)
@@ -64,6 +71,7 @@ export class FrameMetrics {
     this.triangles.push(frame.triangles)
     this.queuedJobs.push(frame.queuedJobs)
     this.heapMb.push(frame.heapMb)
+    this.tap?.(frame)
   }
 }
 

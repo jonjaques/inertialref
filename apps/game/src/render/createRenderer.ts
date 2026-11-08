@@ -1,6 +1,7 @@
 import { resolvePicture, type Picture } from './picture.ts'
 import { getLogger } from '@inertialref/shared'
 import { runtimeFailure } from '../runtimeFailure.ts'
+import { registerContext } from '../telemetry/posthog.ts'
 import {
   watchRendererErrors,
   watchRendererValidation,
@@ -238,6 +239,7 @@ async function buildRenderer(
       }
     }
     stopValidation = watchRendererValidation(renderer, report)
+    registerContext(adapterContext(renderer))
 
     /*
      * Clear to *opaque* black. The default clear alpha is 0, and on the
@@ -368,5 +370,24 @@ function disposeRenderer(renderer: WebGPURenderer): void {
     else (renderer.backend as unknown as { dispose(): void }).dispose()
   } catch (cause) {
     log.warn('renderer disposal failed', { cause: String(cause) })
+  }
+}
+
+/**
+ * Which GPU this page draws with, on every later telemetry event, so a
+ * failure or a slow minute can be broken down by vendor. `adapterInfo` is on
+ * the device since Chrome 132 and absent on WebGL, which says nothing about
+ * its adapter without an extension this does not ask for.
+ */
+function adapterContext(renderer: WebGPURenderer): Record<string, string> {
+  if (!('isWebGPUBackend' in renderer.backend)) return { gpu_backend: 'webgl' }
+  const { device } = renderer.backend as unknown as {
+    device?: { adapterInfo?: { vendor?: string; architecture?: string } }
+  }
+  const info = device?.adapterInfo
+  return {
+    gpu_backend: 'webgpu',
+    ...(info?.vendor ? { adapter_vendor: info.vendor } : {}),
+    ...(info?.architecture ? { adapter_architecture: info.architecture } : {}),
   }
 }

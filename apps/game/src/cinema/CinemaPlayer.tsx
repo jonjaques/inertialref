@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { recordEvent } from '../posthog.ts'
+import { recordEvent } from '../telemetry/posthog.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { FrameScrubber } from '../hud/FrameScrubber.tsx'
@@ -195,7 +195,7 @@ export function CinemaPlayer({
   const toggle = useCallback(() => {
     // Space reaches here with no scene open; that toggled nothing.
     if (playhead !== null)
-      recordEvent('cinema_playback_toggled', {
+      recordEvent('cinema playback toggled', {
         action: playhead.paused ? 'play' : 'pause',
       })
     session.toggle()
@@ -365,7 +365,7 @@ export function CinemaPlayer({
                 label="Copy a link to this frame"
                 icon={Link2}
                 onClick={() => {
-                  recordEvent('cinema_frame_link_copied')
+                  recordEvent('cinema frame link copied')
                   void navigator.clipboard?.writeText(
                     new URL(
                       cinemaLink(id, { frame: playhead.frame }),

@@ -19,7 +19,9 @@ import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { TrackOverlay } from './hud/TrackOverlay.tsx'
 import { useCoarsePointer, useDevicePixelRatio } from './hud/viewport.ts'
-import { recordEvent } from './posthog.ts'
+import { bootFirstLight, bootRevealed } from './telemetry/boot.ts'
+import { startPerfWindow } from './telemetry/perf.ts'
+import { recordEvent } from './telemetry/posthog.ts'
 import { bindEngineKnobs } from './state/engineKnobs.ts'
 import {
   DEBUG_ON,
@@ -289,7 +291,9 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * "provably presented" means something different on each backend and the
    * module that says so should be the module that decides it.
    */
-  const [firstLight] = useState(() => createFirstLight())
+  const [firstLight] = useState(() =>
+    createFirstLight({ onFirstLight: bootFirstLight, onRevealed: bootRevealed }),
+  )
   const {
     phase: boot,
     stages: bootStages,
@@ -300,6 +304,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   // double-invoked under StrictMode and a factory with side effects in it leaks
   // one of every two. It returns its own teardown.
   useEffect(() => firstLight.start(), [firstLight])
+  // A minute of frame times at a time, to PostHog; nothing where nothing reports.
+  useEffect(() => startPerfWindow(engine.metrics), [engine])
   // The phase the harness reports as `ir.status().boot`, read live from the
   // store so a driver polling it sees the cover lift on the frame it does.
   useEffect(() => {
@@ -534,7 +540,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       void engine
         .save()
         .then((text) => {
-          recordEvent('simulation_saved')
+          recordEvent('simulation saved')
           flash(`saved ${text.length} bytes`)
         })
         .catch((cause: unknown) => flash(`save failed — ${describe(cause)}`))
@@ -548,7 +554,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       void engine
         .load()
         .then((ok) => {
-          recordEvent('simulation_load_completed', { restored: ok })
+          recordEvent('simulation loaded', { restored: ok })
           flash(ok ? 'loaded' : 'nothing to load')
         })
         .catch((cause: unknown) => flash(`load failed — ${describe(cause)}`))

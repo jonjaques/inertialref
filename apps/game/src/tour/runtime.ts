@@ -16,7 +16,13 @@ import {
   type GuideSessionRequest,
   type GuideToolOutput,
 } from '@inertialref/protocol'
-import { recordEvent } from '../posthog.ts'
+import { read, TELEMETRY_TRANSCRIPTS } from '../state/preferences.ts'
+import { TourError } from '../telemetry/failures.ts'
+import {
+  recordAiEvent,
+  recordEvent,
+  reportFailure,
+} from '../telemetry/posthog.ts'
 import { GuideAiObservability } from './aiObservability.ts'
 import {
   conversationEntry,
@@ -246,7 +252,9 @@ export class GuideRuntime {
   constructor(host: GuideHost) {
     this.#host = host
     this.#clock = new SpeechClock({ now: () => host.now() })
-    this.#ai = new GuideAiObservability(recordEvent)
+    this.#ai = new GuideAiObservability(recordAiEvent, () =>
+      read(TELEMETRY_TRANSCRIPTS),
+    )
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -365,6 +373,10 @@ export class GuideRuntime {
         },
         onError: (code, detail) => {
           this.#record('note', { error: code, detail })
+          // The code alone: the provider's message can quote the conversation.
+          reportFailure('tour', new TourError(code), {
+            tour_session_id: this.#sessionId,
+          })
           if (code === 'session_expired')
             this.#update({ message: 'The guide session expired.' })
         },
@@ -403,7 +415,11 @@ export class GuideRuntime {
       this.#sceneText = sceneBlock(view, facts)
       this.#update({ activity: LISTENING })
       this.#measured = true
-      recordEvent('guide_session_started')
+      recordEvent('tour started', {
+        voice: chosen,
+        transcript_consent: read(TELEMETRY_TRANSCRIPTS),
+        tour_session_id: created.sessionId,
+      })
       this.#pollRelease ??= this.#host.poll(() => this.#tick())
       this.#visibilityRelease ??= this.#host.visibility((visible) => {
         if (!visible) this.pause()
@@ -421,6 +437,8 @@ export class GuideRuntime {
       channel.comment(BEGIN_CONVERSATION)
     } catch (cause) {
       if (generation !== this.#generation) return
+      // Before the session opened, so `#teardown` will not count it.
+      if (!this.#measured) recordEvent('tour start failed')
       this.#teardown('failed')
       this.#update({ activity: OFFLINE, message: message(cause) })
     }
@@ -436,7 +454,7 @@ export class GuideRuntime {
     void channel.mute(true).catch(() => {})
     this.#instruct(channel, PAUSE_INSTRUCTION)
     this.#update({ activity: { state: 'paused' } })
-    recordEvent('guide_session_paused')
+    recordEvent('tour paused')
   }
 
   resume(): void {
@@ -448,7 +466,7 @@ export class GuideRuntime {
     })
     this.#instruct(channel, RESUME_INSTRUCTION)
     this.#update({ activity: LISTENING, message: null })
-    recordEvent('guide_session_resumed')
+    recordEvent('tour resumed')
   }
 
   /** An instruction a closing connection may refuse; its failure handler reports that. */
@@ -731,7 +749,16 @@ export class GuideRuntime {
 
   /** Release the session; `cause` is how it ended, for the measurement. */
   #teardown(cause: 'ended' | 'closed' | 'failed'): void {
-    if (this.#measured) recordEvent('guide_session_ended', { cause })
+    if (this.#measured) {
+      const usage = this.#loop?.usage ?? this.#snapshot.usage
+      recordEvent('tour ended', {
+        cause,
+        voice_seconds: usage.voiceSeconds,
+        responses: usage.responses,
+        tour_session_id: this.#sessionId,
+      })
+      this.#ai.endSession(usage, cause)
+    }
     this.#measured = false
     this.#cancelLinger()
     this.#pollRelease?.()

@@ -4,7 +4,7 @@ import { encodePictures, type Picture } from '@inertialref/devtools'
 import { Action } from '../hud/Action.tsx'
 import { SwitchRow } from '../hud/SwitchRow.tsx'
 import { describeCause } from '../hud/notice.ts'
-import { recordEvent } from '../posthog.ts'
+import { recordEvent } from '../telemetry/posthog.ts'
 import { pictureLink, presetLink } from './presetUrl.ts'
 import { downloadPictures } from './presetFiles.ts'
 
@@ -32,7 +32,7 @@ export function SharePicture({
               window.location.origin,
             ).href
       await navigator.clipboard.writeText(text)
-      recordEvent('planetarium_picture_shared', {
+      recordEvent('picture shared', {
         format: kind,
         preset_source: builtin ? 'builtin' : 'personal',
       })
@@ -61,7 +61,7 @@ export function SharePicture({
           icon={Download}
           title="Download this preset as JSON"
           onClick={() => {
-            recordEvent('planetarium_picture_shared', {
+            recordEvent('picture shared', {
               format: 'download',
               preset_source: builtin ? 'builtin' : 'personal',
             })

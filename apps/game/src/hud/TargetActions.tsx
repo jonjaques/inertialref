@@ -1,6 +1,6 @@
 import { DEBUG_LANDING_SITE, type TravelTarget } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
-import { recordEvent } from '../posthog.ts'
+import { recordEvent } from '../telemetry/posthog.ts'
 import { Action } from './Action.tsx'
 
 /**
@@ -25,7 +25,7 @@ export function TargetActions({
   run: (label: string, action: () => void) => void
 }) {
   const captureAction = (action: string): void => {
-    recordEvent('destination_action_selected', {
+    recordEvent('destination action selected', {
       action,
       target_kind: target.kind,
     })
