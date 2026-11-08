@@ -29,6 +29,12 @@ Reasoning and the full card: [`.claude/skills/drive/SKILL.md`](../skills/drive/S
   second call and the driver re-navigates at the defaults, discarding the observatory
   you set up. `--down` at the end.
 
+- **One GPU job runs on the machine at a time, and a refusal by its lock is a stop.** A
+  rig holds the lock until `--down`, and `pnpm test:gpu` and a rig on another port are
+  refused while it is up. Wait (`--gpu-wait <s>`, or `IR_GPU_WAIT=<s>` for the suite) or
+  ask whoever holds it. Never `--down` a rig you did not start, never delete the lock
+  file, and never borrow its token. `cannot write the GPU lock … EPERM` is the sandbox.
+
 - **The rig must not measure itself.** The driver sets `?presentation=occluded` on every
   URL: a driven boot is a measurement, and the watchdog's ladder — a doubled preload
   census and a 3200×1800 buffer for a rig asking for DPR 1 — must never be inside one.

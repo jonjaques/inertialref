@@ -1,0 +1,14 @@
+{
+  "description": {
+    "gamut": "srgb",
+    "backend": "webgpu",
+    "mode": "standard",
+    "preference": "standard",
+    "headroom": 1,
+    "capability": {
+      "webgpu": true,
+      "dynamicRangeHigh": true,
+      "extendedCanvas": true
+    }
+  }
+}

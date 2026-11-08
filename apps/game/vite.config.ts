@@ -60,6 +60,46 @@ function buildId(): string {
 const slug = (text: string): string =>
   text.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 40)
 
+/**
+ * The checkout the dev server serves, injected as `__SERVED_TREE__` (see
+ * `src/build.ts`), and null in a build.
+ *
+ * The build id names a commit, and sibling worktrees cut from one
+ * `origin/main` describe the same one, `-dirty` alike once edited, so a rig
+ * pointed at a sibling's Vite on 5173 boots the same app and reads the same
+ * id. The root git reports is what differs, and `ir.build()` hands it to the
+ * rig to hold against the tree it means to measure.
+ *
+ * A `config` hook rather than an entry in `define` beside the id, because the
+ * command is the switch and the hook is where Vite states it: `gameVite` runs
+ * once, when Astro loads its config, before anything says whether it will
+ * serve or build. A shipped bundle must not carry a filesystem path, and
+ * `scripts/check-site.mjs` refuses a build whose output names this checkout.
+ */
+function servedTree() {
+  const tree = (): string | null => {
+    try {
+      return execSync('git rev-parse --show-toplevel', {
+        cwd: fileURLToPath(new URL('.', import.meta.url)),
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim()
+    } catch {
+      // A checkout with no git history serves a tree it cannot name; the rig
+      // reads null as unchecked, as it reads a production build.
+      return null
+    }
+  }
+  return {
+    name: 'inertialref:served-tree',
+    config: (_config: UserConfig, { command }: { command: string }) => ({
+      define: {
+        __SERVED_TREE__: JSON.stringify(command === 'serve' ? tree() : null),
+      },
+    }),
+  }
+}
+
 /** The PostHog build variables, through `loadEnv` (below for why). */
 function telemetryEnv(mode: string): { token: string; host: string } {
   /*
@@ -334,6 +374,7 @@ export function gameVite(
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
     plugins: [
+      servedTree(),
       requireRealModels(),
       requireSourceMaps(),
       refuseBlockedAssetNames(),

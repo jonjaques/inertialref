@@ -17,7 +17,9 @@
  *
  * Both trees are served by this script on ports of its own — never whatever
  * answers on 5173, which is any project's dev server — unless `--url` names a
- * server already serving this tree.
+ * server already serving this tree. Every capture is told which tree its
+ * server serves, the base worktree's or this one, and refuses a page another
+ * checkout serves.
  *
  * The reference is the committed plate unless `--base` names a commit. The
  * plates are the frames a reviewer last accepted — `pnpm presets:plates`
@@ -50,6 +52,8 @@ import {
   PLATE_HEIGHT,
   PLATE_WIDTH,
 } from '../../packages/devtools/src/pictures.ts'
+import { readSession, rigLeft, takeGpu } from '../driveLock.mjs'
+import { parseWait } from '../gpuLock.mjs'
 import { PLATES, plateName } from './check.mjs'
 import { capturePlates, serve } from './capture.mjs'
 import ledger from '../../apps/headless/src/pictureLedger.json' with { type: 'json' }
@@ -107,6 +111,7 @@ const { values, positionals: wanted } = parseArgs({
     'tree-port': { type: 'string', default: '5183' },
     'base-port': { type: 'string', default: '5184' },
     threshold: { type: 'string', default: String(NOISE_FLOOR) },
+    'gpu-wait': { type: 'string' },
     all: { type: 'boolean', default: false },
     twice: { type: 'boolean', default: false },
     keep: { type: 'boolean', default: false },
@@ -122,11 +127,12 @@ if (values.help) {
       'pnpm presets:compare [preset-id ...] [--base <ref>]',
       '',
       '  --base <ref>       photograph a baseline served from this commit instead of using the committed plates',
-      '  --url <origin>     a server already serving this tree; without it one is started on --tree-port',
+      '  --url <origin>     a server already serving this tree, which the driver checks; without it one is started on --tree-port',
       '  --port <n>         the driver CDP port, which keys its Chrome profile; default 9333',
       '  --tree-port <n>    the port this tree is served on; default 5183',
       '  --base-port <n>    the port the baseline is served on; default 5184',
       `  --threshold <px>   changed pixels a plate may drift by; default ${NOISE_FLOOR}`,
+      '  --gpu-wait <s>     queue up to <s> seconds for the GPU lock instead of failing at once',
       `  --all              the dark pictures too; by default only the lit ones are compared`,
       `  --twice            photograph the tree a second time and compare the two: the rig's own noise`,
       '  --keep             keep the baseline worktree and its server log',
@@ -139,6 +145,7 @@ if (values.help) {
 const threshold = Number(values.threshold)
 if (!Number.isFinite(threshold) || threshold < 0)
   throw new Error('--threshold needs a pixel count.')
+const gpuWait = parseWait(values['gpu-wait'], '--gpu-wait')
 
 const say = (line) => {
   if (!values.json) console.log(line)
@@ -289,6 +296,23 @@ async function pair(a, b, id) {
 
 // --- the run ------------------------------------------------------------------------
 
+/*
+ * One hold on the machine's GPU lock for the whole run, taken before either
+ * server starts so a refusal costs nothing, and joined by every capture's
+ * drive.mjs child. The base server is `astro dev` and draws nothing, so it
+ * takes no lock of its own. A rig already up on `--port` from an earlier run
+ * is joined rather than refused, as a second drive.mjs call on it is.
+ */
+const gpu = await takeGpu('presets:compare', {
+  state: await readSession(values.port),
+  waitMs: gpuWait,
+  hint: '--gpu-wait <seconds> queues for it.',
+}).catch((error) => {
+  if (error?.name !== 'GpuLockError') throw error
+  console.error(error.message)
+  process.exit(1)
+})
+
 await rm(OUT, { recursive: true, force: true })
 await mkdir(OUT, { recursive: true })
 
@@ -321,9 +345,11 @@ try {
     say(`\nphotographing ${referenceLabel} on :${values['base-port']}`)
     reference = await capturePlates({
       origin: `http://localhost:${values['base-port']}`,
+      tree: base.tree,
       port: values.port,
       out: path.join(OUT, 'base'),
       pictures,
+      lock: gpu,
       extension: 'png',
       say,
     })
@@ -332,9 +358,11 @@ try {
     say(`\nphotographing the tree at ${origin}, the first time`)
     reference = await capturePlates({
       origin,
+      tree: ROOT,
       port: values.port,
       out: path.join(OUT, 'base'),
       pictures,
+      lock: gpu,
       extension: 'png',
       say,
     })
@@ -353,9 +381,11 @@ try {
   say(`\nphotographing the tree at ${origin}`)
   const head = await capturePlates({
     origin,
+    tree: ROOT,
     port: values.port,
     out: path.join(OUT, 'head'),
     pictures,
+    lock: gpu,
     extension: 'png',
     say,
   })
@@ -422,6 +452,8 @@ try {
   }
   if (moved.length > 0) process.exitCode = 1
 } finally {
+  // This command's own entry; the rig's Chrome keeps the lock until `--down`.
+  gpu.release()
   stopTree?.()
   stopBase?.()
   if (base !== null && !values.keep) {
@@ -431,4 +463,9 @@ try {
       say(`could not remove ${base.tree}: ${String(cause)}`)
     }
   }
+  // Here, not after the report: a run that threw partway has left the rig's
+  // Chrome up holding the lock all the same. On stderr, so --json stays one
+  // object.
+  const left = await rigLeft(values.port)
+  if (left !== null) console.error(left)
 }

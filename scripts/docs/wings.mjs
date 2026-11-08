@@ -229,6 +229,10 @@ export const WINGS = [
             'Stations',
           ],
           ['docs/adr/0061-telemetry-is-posthog.md', 'Telemetry'],
+          [
+            'docs/adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md',
+            'The GPU lock and the guard',
+          ],
         ],
       },
     ],

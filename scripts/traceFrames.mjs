@@ -30,83 +30,136 @@ import { analyzeFrames, differenceMap, reportFrames } from './frameDiff.mjs'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 
-const [input, target] = process.argv.slice(2)
-if (input === undefined) {
-  process.stderr.write(
-    'usage: node scripts/traceFrames.mjs <trace.json[.gz]> [outdir]\n',
-  )
-  process.exit(1)
+/** The events of a trace file, gzipped or plain, wrapped or bare. */
+export function readTrace(raw) {
+  // Sniffed rather than taken from the extension: Chrome hands out `.json.gz`
+  // from the DevTools download button and `.json` from the file-system export,
+  // and a reporter renames neither.
+  const text =
+    raw[0] === 0x1f && raw[1] === 0x8b
+      ? gunzipSync(raw).toString('utf8')
+      : raw.toString('utf8')
+  const parsed = JSON.parse(text)
+  if (Array.isArray(parsed)) return parsed
+  // Anything else carries no events, and reads as a trace without frames
+  // rather than as a TypeError from the filter.
+  return Array.isArray(parsed?.traceEvents) ? parsed.traceEvents : []
 }
 
-const out = target ?? path.join(ROOT, '.data/drive/trace')
+/** The composited frames, in the order they were shown. */
+export const screenshots = (events) =>
+  events
+    .filter((e) => e.name === 'Screenshot' && typeof e.ts === 'number')
+    .sort((a, b) => a.ts - b.ts)
 
-const raw = await readFile(input)
-// Sniffed rather than taken from the extension: Chrome hands out `.json.gz`
-// from the DevTools download button and `.json` from the file-system export,
-// and a reporter renames neither.
-const text =
-  raw[0] === 0x1f && raw[1] === 0x8b
-    ? gunzipSync(raw).toString('utf8')
-    : raw.toString('utf8')
-const parsed = JSON.parse(text)
-const events = Array.isArray(parsed) ? parsed : parsed.traceEvents
+/**
+ * The command: write a trace's frames to a directory, difference them, and
+ * name the ones that stand alone.
+ *
+ * `argv` is the command line after the script name, and the return is the
+ * exit code, so a test runs the whole command without a child process.
+ * `changed` reaches `analyzeFrames` as its pixel count, which is ImageMagick's
+ * when it is not given.
+ */
+export async function traceFrames(
+  argv,
+  { stdout = process.stdout, stderr = process.stderr, changed } = {},
+) {
+  const [input, target] = argv
+  if (input === undefined) {
+    stderr.write(
+      'usage: node scripts/traceFrames.mjs <trace.json[.gz]> [outdir]\n',
+    )
+    return 1
+  }
 
-const shots = events
-  .filter((e) => e.name === 'Screenshot' && typeof e.ts === 'number')
-  .sort((a, b) => a.ts - b.ts)
+  const out = target ?? path.join(ROOT, '.data/drive/trace')
 
-if (shots.length === 0) {
-  process.stderr.write(
-    'no Screenshot events — the trace was recorded without the Screenshots checkbox\n',
+  const events = readTrace(await readFile(input))
+  const shots = screenshots(events)
+
+  if (shots.length === 0) {
+    stderr.write(
+      'no Screenshot events — the trace was recorded without the Screenshots checkbox\n',
+    )
+    return 1
+  }
+
+  /*
+   * The frames and their instants, from the same shots. A Screenshot without
+   * a snapshot string is not a frame, and leaving it in the timestamps or the
+   * file numbering would put frame N of the report in some other file, and
+   * every instant after it on the wrong frame. Microseconds in the trace,
+   * seconds everywhere the analysis reports a rate.
+   */
+  const frames = []
+  for (const shot of shots) {
+    const data = shot.args?.snapshot ?? shot.args?.data?.snapshot
+    if (typeof data === 'string') frames.push({ data, at: shot.ts / 1e6 })
+  }
+  // With no frame there is nothing to difference, and the quiet verdict that
+  // would follow reads as an all-clear.
+  if (frames.length === 0) {
+    stderr.write(
+      `none of ${shots.length} Screenshot events carries a snapshot, so there is no frame to read\n`,
+    )
+    return 1
+  }
+
+  /* The page the trace was taken of, which is half of what makes it reproducible. */
+  const started = events.find((e) => e.name === 'TracingStartedInBrowser')
+  const frame = started?.args?.data?.frames?.[0]
+  if (frame?.url !== undefined) stdout.write(`url: ${frame.url}\n`)
+
+  await rm(out, { recursive: true, force: true })
+  await mkdir(out, { recursive: true })
+
+  const paths = []
+  for (const [i, { data }] of frames.entries()) {
+    const file = path.join(out, `${String(i).padStart(4, '0')}.jpg`)
+    await writeFile(file, Buffer.from(data, 'base64'))
+    paths.push(file)
+  }
+
+  const timestamps = frames.map((one) => one.at)
+  const span = timestamps[timestamps.length - 1] - timestamps[0]
+  // Intervals over the span, not frames: six frames 20 ms apart are 50 fps,
+  // and counting frames calls them 60, which on a short trace lifts a
+  // subsampled capture over the rate `reportFrames` trusts.
+  const fps = span > 0 ? (paths.length - 1) / span : 0
+
+  const { stdout: identified } = await promisify(execFile)('magick', [
+    'identify',
+    '-format',
+    '%wx%h',
+    paths[0],
+  ]).catch(() => ({ stdout: '?' }))
+
+  stdout.write(
+    `${paths.length} frames at ${identified}, ${span.toFixed(2)}s (${fps.toFixed(1)} fps) -> ${path.relative(ROOT, out)}\n`,
   )
-  process.exit(1)
+
+  const analysis = await analyzeFrames(paths, timestamps, { changed })
+  stdout.write(`${reportFrames(analysis, fps)}\n`)
+
+  const first = analysis.events[0]
+  if (first !== undefined) {
+    const map = await differenceMap(
+      paths[first.frame - 1],
+      paths[first.frame],
+      path.join(out, 'difference.png'),
+    )
+    stdout.write(`where: ${path.relative(ROOT, map)}\n`)
+    stdout.write(
+      `pair:  ${path.relative(ROOT, paths[first.frame - 1])} and ${path.relative(ROOT, paths[first.frame])}\n`,
+    )
+  }
+  return 0
 }
 
-/* The page the trace was taken of, which is half of what makes it reproducible. */
-const started = events.find((e) => e.name === 'TracingStartedInBrowser')
-const frame = started?.args?.data?.frames?.[0]
-if (frame?.url !== undefined) process.stdout.write(`url: ${frame.url}\n`)
-
-await rm(out, { recursive: true, force: true })
-await mkdir(out, { recursive: true })
-
-const paths = []
-for (const [i, shot] of shots.entries()) {
-  const data = shot.args?.snapshot ?? shot.args?.data?.snapshot
-  if (typeof data !== 'string') continue
-  const file = path.join(out, `${String(i).padStart(4, '0')}.jpg`)
-  await writeFile(file, Buffer.from(data, 'base64'))
-  paths.push(file)
-}
-
-// Microseconds in the trace, seconds everywhere the analysis reports a rate.
-const timestamps = shots.map((s) => s.ts / 1e6)
-const span = timestamps[timestamps.length - 1] - timestamps[0]
-const fps = span > 0 ? paths.length / span : 0
-
-const { stdout: identified } = await promisify(execFile)('magick', [
-  'identify',
-  '-format',
-  '%wx%h',
-  paths[0],
-]).catch(() => ({ stdout: '?' }))
-
-process.stdout.write(
-  `${paths.length} frames at ${identified}, ${span.toFixed(2)}s (${fps.toFixed(1)} fps) -> ${path.relative(ROOT, out)}\n`,
-)
-
-const analysis = await analyzeFrames(paths, timestamps)
-process.stdout.write(`${reportFrames(analysis, fps)}\n`)
-
-const first = analysis.events[0]
-if (first !== undefined) {
-  const map = await differenceMap(
-    paths[first.frame - 1],
-    paths[first.frame],
-    path.join(out, 'difference.png'),
-  )
-  process.stdout.write(`where: ${path.relative(ROOT, map)}\n`)
-  process.stdout.write(
-    `pair:  ${path.relative(ROOT, paths[first.frame - 1])} and ${path.relative(ROOT, paths[first.frame])}\n`,
-  )
-}
+// `import.meta.main` rather than `process.argv[1]` against this file's path:
+// run through a symlink, argv names the link and the loader resolved the
+// target, so the comparison is false and the command exits 0 having done
+// nothing.
+if (import.meta.main)
+  process.exitCode = await traceFrames(process.argv.slice(2))

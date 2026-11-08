@@ -11,6 +11,7 @@ import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
+import { BUILD_ID, SERVED_TREE } from './build.ts'
 import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
 import type { HudCommands, HudRenderState } from './hud/controls.ts'
 import { BootOverlay } from './hud/BootOverlay.tsx'
@@ -107,6 +108,9 @@ function engineInstance(catalog: StarCatalog): GameEngine {
   singleton = new GameEngine({
     seed: query.get('seed') ?? 'inertialref',
     catalog,
+    // `ir.build()`'s answer: what a rig holds against the tree it means to
+    // measure before it runs a step.
+    build: { id: BUILD_ID, tree: SERVED_TREE },
   })
   /*
    * The address bar's chrome and layer stances, pushed once the engine exists

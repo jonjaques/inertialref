@@ -264,6 +264,13 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **Every boot against a fresh dev server ran out its hundred seconds.** The
+  boot ladder held the frame to the navigation's own loader so the page being
+  left could not answer `booted`, and a fresh Vite pre-bundles what the first
+  load imports and reloads the page on its own, so the document that boots
+  carries a third loader the check never matched. The ladder now waits for
+  any loader but the one it is leaving; `drivePage.test.mjs` boots through a
+  third loader in both modes (7 Nov 2026, below).
 - **A playlist drag downward ended after one row.** The editor reordered its
   rows live under the pointer; React reorders keyed rows by moving their DOM
   nodes, and a node moved while it holds pointer capture loses it. Dragging up
@@ -12743,6 +12750,461 @@ events, identify, replay, a crash report, and the Worker's log export.
 is off-screen on the Air's own display and on-screen with a monitor beside it,
 along with Chrome's warning bar for the resolver flag. The probe runs headless,
 which boots WebGPU on this machine.
+
+## Headless Chrome presents, a synthetic key fires, and the Air steps up 35% under load (7 Nov 2026)
+
+The Playwright research spike (pull request #187) probed the browser before
+choosing a runner, and three of its results contradicted the rig's own
+documentation. Its plan letters the probes A–K for capability, N1–N7 for the
+noise floor on the Air and M1–M6 on the Mac mini; G1 is the rig check run
+afterward. Unless a figure says otherwise it is the dev build, Google Chrome
+157.0.8103.39 through Playwright 1.62.1's `channel: 'chrome'` in new headless,
+`presentation=occluded` on every URL, and the MacBook Air (Mac17,4, fanless,
+base M5) at `29e2ed46`. The Mac mini is a Mac18,5 with the M6, fan-cooled. The
+two points are earthrise and the far-shore preset
+(`g:milky-way/s:P222_1_0_9/b:4`, a shore under a low sun outside Sol).
+
+**A headless compositor presents, and SwiftShader runs on macOS.** `drive.mjs`'s
+header said a headless one presents nothing and that SwiftShader has no macOS
+build to fall back to. Chrome 157 and Chrome for Testing 151 headless both
+get `apple`/`metal-3` with `timestamp-query` (probe A). A CDP screencast takes
+179–180 frames in 3 s headless and headed alike, where `recordVideo` is fixed
+at 25 fps (F), and the two lit pictures probed agree across launches and between
+headless and headed at AE 0 (C). Playwright's default headless shell is the one that falls back: its
+adapter is null and the game runs WebGL over SwiftShader, 67–79 s to boot and
+1 fps. `--enable-unsafe-webgpu` alone gives it SwiftShader's fallback adapter;
+with `--use-angle=metal` as well it reaches `metal-3`. The header keeps the
+window for the reasons that survive (pacing, the display's color profile, the
+guide's audio) and gives the headless figures as Playwright-launched Chrome's,
+because `drive.mjs` has never launched headless.
+
+**A synthetic key fires a binding when it carries `code`.** Trap 10 of the
+drive skill said a synthetic `KeyboardEvent` on `window` did not fire
+`chrome.instruments`. The keymap resolves a chord from `event.code`,
+`chordFromEvent` returns null for an empty one (`input/chord.ts`), and
+`handleKeyDown` accepts an untrusted event, skipping only
+`useDevice('keyboard')`. Probe E, headless at earthrise:
+`page.keyboard.press('Shift+KeyH')` took the DOM from 60 elements to 1,035, and
+a synthetic event carrying only `key` changed nothing. The rig check (G1) ran
+on the Mac mini at earthrise 1600×900@1 in the planetarium, on the dev build of
+`830c243`, against a warm `drive.mjs --keep-storage` page
+(`performance.timeOrigin` unchanged, no navigation), with thermal pressure 0
+before and after, and a keydown and its keyup per row:
+
+| target     | event                                            | `ir.hud.debug.on` | Instruments toggle            |
+| ---------- | ------------------------------------------------ | ----------------- | ----------------------------- |
+| `window`   | ``{key: '`', bubbles: true}``                    | unset → unset     | unchanged                     |
+| `window`   | ``{code: 'Backquote', key: '`', bubbles: true}`` | unset → `true`    | on; four panel toggles appear |
+| `document` | ``{code: 'Backquote', key: '`', bubbles: true}`` | `true` → `false`  | off; the four toggles go      |
+| `document` | ``{key: '`', bubbles: true}``                    | `false` → `false` | unchanged                     |
+
+The keymap's only keydown listener is on `window`, so the `document` dispatch
+reaches it by bubbling. An untrusted event is still not a key press: it does
+not hand the prompts and the cursor to the keyboard, and an `isTrusted` check in
+`handleKeyDown` would remove the route without a sound. The driver has no
+trusted key step. Not run: a `document` dispatch without `bubbles`, a dispatch
+on a focused element, and CDP's `Input.dispatchKeyEvent`.
+
+**The noise floor (N1, N4).** Five fresh-context runs per point, cool, at
+1600×900@1: `ir.gpu` as the minimum of three `ir.gpu(120)` calls has a CV of
+0.56% at far-shore and 1.56% at earthrise, and heap after GC 0.1%. Cool, the
+between-run variance at far-shore is near zero — 0.007 ms against 0.331
+within a run — so repeats in one context beat fresh contexts, each of which
+costs 29–40 s cool and 51–57 s stepped, mostly settle. Seven interleaved pairs
+of DPR 1 against 1.05 at far-shore, on the stepped machine: `ir.gpu` +0.88 ms
+(+6.5%), paired t = 25, sd(d) 0.093 ms on a 13.55 ms mean, which resolves
+0.85% at five pairs (95% confidence). rAF p95 moved 0.00 ms, because headless
+rAF is a fixed 60 Hz clock and detects nothing under the 16.7 ms budget. The
+CPU-only spans moved with the GPU: `Engine/snapshot` +28%, `Render/sensor`
++24%.
+
+**The fanless Air steps up about 35% after about 3.5 minutes of load (N5).** At
+far-shore 1600×900@1: `ir.gpu` 10.2 → 13.4–15.3 ms, settle 12–18 → 28–31 s,
+boot 5 → 7–8 s, main-thread task time 400 → 510–790 ms/s, and the CPU spans
+with them. Five idle minutes restored it, two cool sessions disagreed by 8%,
+and `pmset` recorded no thermal warning. Onset and recovery are one observation
+each, and the cause is inferred, because `powermetrics` needs sudo. A candidate
+measured against a stored baseline on this machine measures the room, so the
+rule — interleave first, idle between short arms only, name the thermal state
+— is a caveat in [perf](design/plans/perf.md#caveats-that-shape-these-numbers)
+and a trap in both driving cards.
+
+**The Mac mini held flat (M2, M3, M5)**, on N1's protocol at `521c494`, served
+by `pnpm dev:client`, with thermal pressure
+(`notifyutil -g com.apple.system.thermalpressurelevel`) 0 before and after every
+run. At far-shore 1600×900@1, 27 runs over 10.4 minutes: `ir.gpu` 6.79 ms
+against the Air's 10.2 cool, a CV of 0.76% leaving out one excursion, the last
+three runs within 0.1% of the first three. The excursion was runs 10 and 11,
+3.8–4.6 minutes in, at 7.03–7.77 ms and rising within each run, while a code
+review and citation scripts ran on the machine; the next 15 read 6.77–6.82 ms
+under the same load, and the cause is unattributed. At 1440×900@2 (buffer
+2880×1800), 18 runs over 10.4 minutes: 21.24 ms against the Air's 39.8, a CV of
+0.27%, the last three 0.19% below the first, rAF 41–42. That is one session at
+each window, not a between-session spread, so the rule holds there too. The
+headed rig there, off the 1920-point desktop at x=2400, gets 100.7–102.9 rAF/s
+with the display asleep and 98.6–100.7 awake, gaps to 16.8–18.2 ms, never the
+panel's 120.
+
+**Rejected:** marking perf.md's earlier figures "possibly confounded". None of
+them records its thermal state, so the mark could not be acted on; the rule
+asks it of every figure taken from here.
+
+## Every GPU job takes the lock, and a vitest fork outlives the process that holds it (7 Nov 2026)
+
+P01's wiring, the second wave's first unit, stacked on #188. The lock built
+in the first wave (`scripts/gpuLock.mjs`) is now taken by `pnpm test:gpu`
+through the GPU config's `globalSetup` (`scripts/gpuSuiteLock.mjs`), by
+`drive.mjs` from before its Chrome launches until `--down`
+(`scripts/driveLock.mjs`), and once by `presets:compare` and
+`presets:plates`, whose `drive.mjs` children join under the token in their
+environment. The skill's "One GPU job at a time" is the working rule.
+
+**A vitest fork outlives its main process.** The suite's holder is vitest's
+main process and the Dawn devices are in its fork workers. In a probe under
+vitest 5.0.5 on the Mac mini, with a 30 s test running, a fork ran about 20 s
+past a SIGKILL of the main process, and was
+still running 4 s after a SIGTERM that ended the main process within 1 s.
+Released with the main process's own entry, the lock would have let the next
+job start beside a worker mid-file, which is the overlap it exists to stop. A
+holder that takes the lock with `keepChildren` records the children `pgrep -P`
+still finds when it ends by SIGINT, SIGTERM or an exit before its release, and
+the lock is stale only once they are gone. vitest's teardown releases
+explicitly, so a finished suite leaves no lock. A SIGKILL runs no handler and
+still leaves the workers unrecorded.
+
+**Joining takes the live token, whichever it is.** A rig invocation can be
+handed two tokens, its port's session's and a parent's in
+`IR_GPU_LOCK_TOKEN`, and either can be stale: a session outlives a Chrome that
+died, and a shell can carry a token from a finished command. Offering the
+parent's unchecked had a rig refused by the lock its own Chrome held, so the
+one offered is the one `holding()` reads in the live file. `--down` drops
+Chrome from the lock only after Chrome has exited, because a queued job starts
+within one poll of the drop.
+
+**vitest misreports a refused `globalSetup`.** The first refused run exited 1
+in 0.42 s and named the rig, then printed "No test files found, exiting with
+code 1" with the include pattern, a stack and the lock serialized. The first
+line sends a reader to the config's glob. The setup now writes the lock's own
+refusal and exits 1 itself; no worker exists yet.
+
+**Checked on the Mac mini** (Mac18,5, M6), display asleep, thermal pressure 0
+throughout, served by `pnpm dev:client`: the first two checks at `5a5e836`, the
+rest at `376d002`, which added the clean refusal. The times are what the
+checks observed, not measurements. `pnpm test:gpu` with no lock: 52 files and
+232 tests pass, and no lock file is left. Beside a rig on 9333 it exits 1 in
+0.40 s with the refusal alone, and a rig on 9334 is refused in 0.15 s with no
+Chrome, profile or session created. A `--keep-storage` attach joins under the
+rig's token. Queued under `IR_GPU_WAIT=180`, the suite took the lock 417 ms
+after `--down` removed it, inside one 500 ms poll, then passed.
+`presets:compare earthrise` held one token across both captures' children and
+Chrome, refused `test:gpu` in 0.62 s while it ran, and left the lock to the
+Chrome until `--down`. A SIGKILLed `drive.mjs` left its dead entry beside its
+live Chrome and the lock held; with the Chrome ended, `holding()` read the file
+as nobody and the next `test:gpu` reclaimed it. A rig's first boot against a
+cold dev server ran out of budget while Vite re-optimized its dependencies and
+reloaded twice; the second boot took 3.6 s.
+
+**The review's four defects, fixed with a test each.** The lock path came from
+`process.cwd()`. From a scratch thread outside every repository,
+`node <clone>/scripts/drive.mjs` found no common dir, and from inside another
+repository it took that repository's `.git/inertialref-gpu.lock`, which no job
+here checks. It now comes from the directory `gpuLock.mjs` is in. `--down`
+sent SIGTERM to the session's chromePid and SIGKILL 10 s later, and a session
+outlives a reboot, so the pid could name anything. The session now records
+`chromeStart`, the same `ps -o lstart=` reading the lock takes. A pid whose
+start differs is left running and only dropped from the lock. SIGKILL goes
+only to a start-time match, and a session with no start time gets SIGTERM
+alone. The preset commands printed the rig line from inside the try
+(compare) or after the finally (plates), so a capture that threw left a
+Chrome holding the lock with only the error on screen. The line now comes
+from the finally, on stderr, and only while that Chrome is up under the live
+token. With compare's rig up, a compare pointed at a URL nothing serves exits
+1 and prints the line. The pre-fix compare, run in the same state, exits 1
+without it. Taking over a rig an older driver left up had no test and no
+check. With the first wave's drive.mjs booting 9335 unlocked, this driver's
+first call attached to the same Chrome (pid unchanged) and took a fresh lock
+recording it. It wrote the token and start time into the session, `test:gpu`
+was refused naming that Chrome, and `--down` released the lock. The eight
+checks above re-ran at `b78b953` with the same outcomes.
+
+**Codex's workspace-write sandbox cannot take the lock.** Probed on the Mac
+mini with codex-cli 0.166.0's `codex sandbox --permission-profile :workspace`.
+Writing in the clone's `.git` is refused with EPERM from a linked worktree and
+from the main checkout. Codex keeps `.git`, and a worktree's resolved gitdir,
+read-only inside every writable root, and `acquire()` there fails closed. A
+legacy `writable_roots` entry changes nothing under the profile. A
+permissions profile granting `<clone>/.git` write works. Codex refuses a glob
+write grant for the lock's files alone, and exact paths cannot cover the edit's
+pid-named scratch file. So a Codex thread runs GPU work with full access or
+with that broader grant. The `EnterWorktree` session is unprobed, because
+making one creates a worktree.
+
+**Rejected:** a lock path from the environment, for tests, because pointing a
+job at a different file is a bypass by another name; tests pass `path`
+instead. A unit test that lets `capturePlates` spawn `drive.mjs`, because it
+would launch Chrome from the root suite; the preset wiring is checked on the
+real rig.
+
+**Not done:** `pnpm gpu:who`, the acquisition log, the Stop gate's warning
+while the lock is held, the lease policy for long holders, and an idle-rig
+exemption, which is Jon's call on G5's figures. The module's two gaps from
+#188's review stand: two waiters breaking one stale edit mutex can both
+enter, and `acquire` is not re-entrant within one process, so nothing here
+calls it twice in one. Which of the two Codex remedies a thread uses is the
+host's configuration and Jon's call.
+
+## A rig knows which tree it serves, and a cold Vite fails the first boot (7 Nov 2026; resolved the same day — it was the ladder's loader check)
+
+X3's identity half, the second wave's second unit, stacked on #189.
+`ir.build()` returns `BUILD_ID` and, on the dev server only, the served
+tree's root. `drive.mjs` holds the tree against the tree under test after
+every boot and attach, and refuses a page another checkout serves before
+the first step, naming both. `docs/agents/driving.md` § "Which checkout is
+served" is the working rule. The comparison is `compareIdentity` in
+`scripts/driveLaunch.mjs`, and P03's guard calls it, so unit C gets it from
+`assertOperatingPoint`.
+
+**The build id cannot tell two checkouts apart.** It is
+`git describe --always --dirty --abbrev=8`, and worktrees cut from one
+commit describe it alike. On the mini this worktree and a sibling at
+`ce9a4b1` both booted as `ce9a4b18`, and a rig pointed at the sibling's
+port would have photographed it as this tree. The tree root is the half
+that differs.
+
+**The tree is decided in a `config` hook, because only the hook knows the
+command.** `gameVite()` runs once, when Astro loads its config, before
+anything says whether it will serve or build, so an entry in `define`
+beside the id cannot switch on it. The `inertialref:served-tree` plugin
+defines `__SERVED_TREE__` as the root when Vite serves and null when it
+builds. The production App chunk reads `build:{id:Oh,tree:null}`, and the
+checkout's path is in none of `dist`'s 2584 files (240 MB).
+`scripts/check-site.mjs` asserts it for 142 pages and 165 scripts. With the
+hook made to define the tree on build too, the build exits 1 there, naming
+`assets/build.D9n_CpKd.js`.
+
+**A page that names no tree is unchecked, not refused.** That covers a
+production build, and any build older than the verb. Refusing either breaks
+`--url` at `pnpm preview` on 8787 and every `presets:compare --base` at an
+older commit. The cost is that a foreign Vite running a build from before
+this change is still accepted, so the check holds only for builds that have
+the verb. Trees compare after realpath. git answers with the physical path,
+and on macOS `/tmp` and `/var` are symlinks into `/private`. A string
+comparison refused the tree it served in the test that pins this. The
+preset commands' children run `--quiet --json`, so `--json` carries the
+verdict, and a capture prints "served from <tree>" once per origin.
+
+**Checked on the Mac mini** (Mac18,5, M6), display asleep, thermal pressure
+0, at `ce9a4b1`. The times are what the checks observed, not measurements,
+and the plate result is not a pixel measurement. Against this worktree's
+`pnpm dev:client` on 5173, `drive.mjs` printed "served from …/wave2-identity
+(build ce9a4b18)" and ran its steps. A detached sibling worktree at the
+same commit, on `astro dev --port 5185`, was refused after the boot with
+both trees named. No `--js` step ran and no shot was written. The same page
+was refused again on a warm attach. With `--tree` naming the sibling it
+proceeded, and a symlinked `--tree` with a trailing slash matched too.
+`presets:compare earthrise --base HEAD` printed "served from
+…/.data/presets/base/ce9a4b18ce58" for the base set and this worktree for
+the head, and the table read `same`. Against `pnpm preview` on 8787 the
+driver printed "identity unchecked: the page names no tree", `ir.build()`
+answered `{"id":"ce9a4b18","tree":null}`, and the steps ran.
+
+**A cold Vite fails the first boot.** The first boot against each fresh dev
+server failed with "renderer never became ready": this worktree's 5173, the
+sibling's 5185, and compare's base on 5184 twice. Vite optimized its
+dependencies twice and reloaded the page twice inside the boot, and the app
+logged "Failed to fetch dynamically imported module: …/src/App.tsx".
+The second boot on a warm cache came up in 3.3–4.1 s. compare deletes its
+base worktree at the end, so every `--base` run was cold and failed at the
+base's warm-up, and the check above went through as `--keep` once, then
+`--keep` again on the kept worktree. The identity check runs after the boot
+and plays no part in it. The cause is the ladder's check of the navigation's
+loader, and the entry on the cold dev server's reload, below, fixes it.
+
+**The review's four findings: three defects fixed with a test each, and one
+miscount.** The refusal ended "or name <served> as the tree under test
+(drive.mjs --tree)", with the sibling's path filled in, and said nothing about
+serving this tree while a sibling holds 5173. drive.mjs starts no server
+while the port answers and `pnpm dev` refuses a taken one, so the one remedy
+on screen drove the sibling as this tree. The refusal now leads with
+`pnpm dev:client --port <n>` and `--url http://localhost:<n>/ --no-serve`,
+and spells `--tree <path>` with a placeholder. `pnpm dev:client --port 5186`
+reaches `astro dev --port 5186` through both script layers, and served this
+worktree there. The harness's copy case compared `ir.build()` with the
+literal the session keeps by reference. With `build()` returning the host's
+object it still passed, 3 of 3. It now holds the answer against a copy taken
+before the edit, and fails under that mutation. `--tree ''` resolved to the
+shell's directory, and only after a full boot. It is now refused before the
+lock. The PR body counted seven touched test files and 122 cases where there
+are six and 120. The four GPU checks re-ran at `6050da6` with the outcomes
+above. Each fresh Vite's first boot failed again and the second went
+through. The sibling on 5185 was refused with the new wording after a boot
+and on a warm attach. `presets:compare --base HEAD` went through on the
+second `--keep` run.
+
+**Not done:** `--status` running the guard, which is P03's drive.mjs half
+and unit C. A probe of the foreign server before the boot, which would save
+the boot a refused run costs: the tree is in the page, so the page has to
+load.
+
+## Every drive.mjs boot runs the guard, and a page between invocations is at no rig's point (7 Nov 2026)
+
+P03's drive.mjs half, the second wave's third unit, stacked on #191. After
+every boot, attach and `--reload`, `enter` in `scripts/drivePage.mjs` runs
+the boot ladder, then the served-tree check on its own, so its refusal keeps
+the remedy unit B gave it, then `assertOperatingPoint`, kind `webgpu`, or
+`shell` under `--document`. A refusal exits 1 before any step. The record is
+one narrated line, the `operatingPoint` of `--json` and each `--reload`
+step's `point`. `--status` reads it again through the same guard.
+`docs/agents/driving.md` § "The operating point" is the working account.
+
+**Chrome drops an invocation's emulation when its socket closes.** Between
+invocations the rig's page sits at the window's own size and ratio. On the
+Mac mini's display that was 1600×933 at DPR 2 for a page booted at 1600×900
+at 1, and the app's canvas was 1600×933, still at ratio 1. The first
+`--status`, which read the page as it stood, would have held it against
+3200×1866 and refused every webgpu rig. A warm attach sets 1600×900 back,
+and the canvas follows a frame or two later, so a guard that reads at once
+races the resize. The guard now waits two animation frames, capped at a
+second, before it reads a buffer, and not for a document, whose scripts may
+be off. `--status` sets focus emulation and the window the session recorded
+before it reads. The session records the kind, the tree and the window only
+once a page has passed: written before the guard, a refused `--tree` became
+what `--status` held the page to.
+
+**The stale buffer the guard is for did not reproduce on Chrome 157.** A
+page booted at 1440×900 at DPR 2 and attached warm at DPR 1 drew 1440×900,
+so the app's ratio followed the emulated change while focus emulation ran.
+A buffer set behind the app with `renderer.setPixelRatio(2)` was put back to
+1600×900 by R3F at the next invocation, because the window changes size
+between invocations. Trap 5's remount, 3200×1800 for 1600×900 at DPR 1, is
+therefore refused in the unit cases and was not produced in the browser.
+The ratio did not follow when the emulation was dropped with the window
+occluded, which is the 1600×933 above.
+
+**Two refusals were narrowed so a legitimate rig passes.** A page that names
+no picture is refused, unless it also answers no `ir.build()`: `engine.picture`
+landed on 11 Oct 2026 (#129), a month before `ir.build()`, so such a page is
+a baseline from before both, and refusing it refuses every
+`presets:compare --base` at that age. The record's `expectedBuffer` is null
+there and the line says `unchecked`. A page the guard finds with nothing
+booted in it is booted once more, unforced, and refused the second time,
+because a fresh Vite's dependency reload can land in the ladder's cover
+loop, whose probe reads a page it cannot evaluate as booted. None of the
+runs below printed that re-entry, so it rests on its unit case.
+
+**Checked on the Mac mini** (Mac18,5, M6, Chrome 157.0.8103.39), display
+probably asleep and thermal state not read, so no time or pixel figure here
+is a measurement. Against this worktree's `pnpm dev:client`, at the build
+`43d0c10d` it stamped: the default URL, `--preset earthrise` and
+`--preset far-shore` passed at apple/metal-3 on webgpu, 1600×900 for
+1600×900 at DPR 1, system sol, sol and generated, served from this tree.
+1440×900 at DPR 2 passed at 2880×1800. No bundled preset carries a picture,
+so none has a supersampling factor above 1; earthrise with
+`--query picture=supersample:native` passed at 3200×1800, supersampled ×2.
+`--color-profile srgb` recorded `dynamicRangeHigh` false and proceeded; the
+display-profile runs read false on this display too. A `--keep-storage`
+attach passed, a `--reload` step carried its own point in `--json`, and
+`--status` printed the line and the full record and exited 0. `--tree`
+naming the main checkout was refused, exit 1, with no step run. A session
+edited to record 156.0.7999.10 warned of the change, proceeded, and recorded
+the running version. `--no-javascript` passed as `shell`. The first boot
+against the cold server failed with "renderer never became ready" after
+Vite's two dependency reloads, before the guard ran, as the entry above
+found; the second boot came up.
+
+**The review's six findings: five defects fixed with a test each, and one
+cause the measurement contradicted.** `--status` set the session's window
+on the page and closed its socket with no check for a live invocation, and
+Chromium's `EmulationHandler::Disable` clears the shared main-frame widget's
+device emulation for every session, so a `--status` beside a cast dropped
+it to the window's own 1600×933 at DPR 2 mid-run. Each invocation now lists
+itself in the session, pid and start time, until it exits, and `--status`
+touches nothing while one is live. The guard also holds the page's viewport
+and ratio to `--width`, `--height` and `--dpr`, compared as float32 because
+Chrome reads 1.05 back as 1.0499999523162842: a dropped page whose app ratio
+followed drew 3200×1866 and passed the buffer rule. Chrome's version was
+recorded before the boot, so a first run that failed at boot consumed the
+warning; it is now written with the point, once a page passes, by
+`enterSession`. `--status` printed nothing until a page that might be stalled
+answered, for up to the socket's 120 s; it now prints the rig first and gives
+the page 5 s. `enter` warned twice when it booted the page again; it now says
+each warning once per entry, because holding the second read against the
+version just read loses the warning when the first read dies before the
+operating point. Trap 5 in `driving.md` gave the remount's buffer a cause the
+DPR-2-to-1 attach above contradicts; it now states the buffer and points
+here. On the Mac mini at `0dcd5689`, the eight checks above passed again with
+the same results, after a first cold boot that failed before the guard and
+recorded no version. A session edited to record 156.0.7999.10 kept it
+through a run refused for its `--tree`, then warned once and recorded 157 on
+the next. A `sleep` listed as a driver made `--status` read nothing and name
+its pid, and once it exited `--status` read the page. Two `drive.mjs`
+invocations on one rig at once were not run, because two GPU commands may
+not overlap on this machine; the observer case rests on its unit case.
+
+**Not done:** the version record goes with the session at `--down`, so a
+Chrome that updated between a `--down` and the next launch is not warned
+about. A record that outlives the session would catch it.
+
+## A cold dev server's own reload is the document that boots, and the ladder refused it (7 Nov 2026)
+
+Every unit of the second wave reported the first boot against a fresh dev
+server failing with "renderer never became ready", eleven times in all, on
+5173, 5185 and compare's base on 5184, and called it a cold-Vite defect older
+than the wave. It was the first wave's. C4 made renderer mode wait, as document
+mode already did, for the frame tree to hold the loader `Page.navigate`
+returned, so a booted page being left could not answer `booted` for the page
+being entered. A fresh Vite pre-bundles what the first load imports and
+reloads the page on its own: on the Mac mini at `b37f7fb`, "optimized
+dependencies changed. reloading" at 3 s and again at 7 s into the boot. The
+document that boots is the reload's, with a loader that is neither the page
+left nor the navigation's, so the check never matched and the ladder ran
+out its 200 polls. G1, on `830c243` before C4, crossed the same two reloads
+and booted, because renderer mode then took any document as committed.
+
+The ladder now reads the frame's loader before it navigates and takes the
+commit as any other loader, or the navigation's own. A frame tree that
+cannot be read beforehand leaves the navigation's loader as the only sign.
+Matching only "not the old loader" was not enough for the scripted Chrome
+in `drivePage.test.mjs`, which reports one loader throughout, so the
+equality stays. The new case boots through a third loader in renderer and
+document mode, and both failed "never became ready" against the old check.
+
+On the Mac mini at `b37f7fb` with this change, display state not checked and
+no thermal warning recorded by `pmset`: with this worktree's `.vite` cache moved
+aside and `pnpm dev:client` started fresh, the first `drive.mjs` boot passed.
+It crossed both reloads, settled on the reloaded document (navigation type
+`reload`), passed the guard at 1600×900 at DPR 1 and was ready in 11.1 s.
+`pnpm presets:compare earthrise --base HEAD`, with no `--keep`, built a fresh
+base worktree, photographed both trees on their first boots, read 0 px over
+3% and exited 0 in 72 s. Its base worktree was removed afterward.
+`capture.mjs`'s `--wait 4000` warm-up stays: it covers a reload that lands
+after the boot.
+
+A warm attach now carries the guard's read and its two frames. Five
+`--keep-storage --js "ir.summary()"` invocations on the same rig, Mac mini at
+`a5da726` with no thermal warning recorded, took 679 ms for the first after
+the boot and 216–234 ms for the other four, wall clock per invocation, against
+26 ms for a bare `node -e 0`. The driver's header and the skill said 80 ms
+and about 0.1 s; they say about 0.2 s now.
+
+## The rig's three decisions are an ADR, and a new GPU runner takes the lock (7 Nov 2026)
+
+The lock, the guard and the served tree landed in the second wave, and Rule 47
+moves a landed phase's decisions out of its plan:
+[ADR-0062](docs/adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md)
+records them with the alternatives they beat, and the Playwright plan's P01,
+P03 and X3 sections keep only the work that remains. The lock is also an
+invariant an agent can break without reading the plan, by writing a GPU runner
+that never takes it, so it is Rule 68 in `AGENTS.md` and
+`docs/agents/invariants.md`; `.claude/rules/browser.md` carries the refusal's
+half. An advisory `flock` is the obvious alternative and does not fit: the lock
+must outlive the invocation that launched the rig's Chrome, and Node 26.13's
+`fs`, `fs/promises` and `FileHandle` expose no lock call at all.
+
+One trade is Jon's to confirm. Codex's workspace-write sandbox cannot write the
+lock's home in the clone's `.git`, and #188 keeps the home and documents the
+remedy, full access or a profile that grants write on `<clone>/.git`, rather
+than moving the lock out of `.git`.
 
 ## Known gaps
 

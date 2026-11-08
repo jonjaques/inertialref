@@ -23,7 +23,16 @@
  * extension. Each tree a plate is taken from is served here, on a port the
  * caller chose, and never whatever answers on 5173: that port is any
  * project's dev server, and a driver pointed at another repository's Vite
- * waits its whole boot budget for a renderer that never appears.
+ * waits its whole boot budget for a renderer that never appears. A port the
+ * caller chose is still not evidence of a tree, so every driver is told which
+ * checkout its origin serves, and refuses a page another one serves before it
+ * photographs anything.
+ *
+ * Every capture runs under the caller's one hold on the machine's GPU lock.
+ * Each drive.mjs child takes the lock on its own, and one that acquired
+ * rather than joined would be refused by its own parent; the token in the
+ * child's environment is what makes it join. The Chrome the first child
+ * launches keeps the lock after the command exits, until `--down`.
  */
 import { existsSync, mkdirSync, openSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
@@ -133,21 +142,35 @@ export async function serve(tree, port, log) {
 /**
  * @param {object} options
  * @param {string} options.origin      the server, e.g. http://localhost:5183
+ * @param {string} options.tree        the checkout that server serves, for drive.mjs's `--tree`
  * @param {string} options.port        the driver's CDP port; keys its Chrome profile
  * @param {string} options.out         directory the files land in
  * @param {readonly {id: string, why: string}[]} options.pictures
+ * @param {{env: Record<string, string>}} options.lock  the caller's GPU lock, from `takeGpu`
  * @param {'jpg' | 'png'} [options.extension]  jpg for a committed plate, png to difference
  * @param {(line: string) => void} [options.say]
  * @returns {Promise<Map<string, {file: string, settled: boolean, settleMs: number | null, light: object}>>}
  */
 export async function capturePlates({
   origin,
+  tree,
   port,
   out,
   pictures,
+  lock,
   extension = 'jpg',
   say = console.log,
 }) {
+  if (lock?.env === undefined)
+    throw new Error(
+      "capturePlates runs under its caller's GPU lock; take it with takeGpu first",
+    )
+  // No default: this tree is the wrong answer for a `--base` origin, and a
+  // driver held to it refuses every plate there.
+  if (typeof tree !== 'string' || tree === '')
+    throw new Error(
+      'capturePlates needs the tree its origin serves, which each drive.mjs holds the page against',
+    )
   /**
    * One driver invocation, its step results parsed from `--json`.
    *
@@ -167,6 +190,8 @@ export async function capturePlates({
           '--no-serve',
           '--url',
           origin,
+          '--tree',
+          tree,
           '--width',
           String(PLATE_WIDTH),
           '--height',
@@ -177,7 +202,11 @@ export async function capturePlates({
           '--json',
           ...args,
         ],
-        { stdio: ['ignore', 'pipe', 'inherit'], cwd: ROOT },
+        {
+          stdio: ['ignore', 'pipe', 'inherit'],
+          cwd: ROOT,
+          env: { ...process.env, ...lock.env },
+        },
       )
       let text = ''
       child.stdout.on('data', (chunk) => {
@@ -204,12 +233,20 @@ export async function capturePlates({
    * renderer restarting between the settle and the shot. The wait covers that
    * reload; the pictures after it are served from a warm bundle.
    */
-  await drive([
+  const warm = await drive([
     '--url',
     new URL('/planetarium', origin).toString(),
     '--wait',
     '4000',
   ])
+  // Once per origin, so a run says which tree each set of plates came from,
+  // and says so when a base older than the check could not be asked.
+  const identity = warm.identity
+  say(
+    identity?.verdict === 'match'
+      ? `served from ${identity.served} (build ${identity.id})`
+      : `identity unchecked: ${identity?.reason ?? 'the driver reported none'}`,
+  )
 
   const written = new Map()
   for (const picture of pictures) {

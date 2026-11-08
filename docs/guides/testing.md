@@ -366,10 +366,26 @@ needs a Metal, Vulkan or D3D adapter. It is not in `pnpm check` for the same
 reason. Run it during shader work, and before shipping any change under
 `render/`.
 
+It takes the machine's GPU lock before any test file runs and releases it
+after the last, from `scripts/gpuSuiteLock.mjs`, the config's `globalSetup`.
+The focused form goes through the same config and takes it too. Beside a
+`drive.mjs` rig, a preset capture or another worktree's suite it exits 1 at
+once and prints only the refusal: the holder, its pid, its age and its
+worktree. That is a stop, not a failure to fix, and
+`IR_GPU_WAIT=<seconds> pnpm test:gpu` queues for it instead. A suite ended by
+SIGINT or SIGTERM leaves the lock to the fork workers still running, which
+hold the devices and outlive the main process; a SIGKILL leaves them
+unrecorded. CI's runner takes the lock as well, and nothing there holds it.
+The lock's rules are in the
+[`drive` skill](../../.claude/skills/drive/SKILL.md#one-gpu-job-at-a-time).
+
 A sandbox can prevent Dawn from finding the physical adapter even when this
-host has one. An adapter-initialization failure is not shader evidence. Run
-the same focused command with adapter access before changing rendering code;
-an unavailable or skipped GPU does not count as a passing shader check.
+host has one. One that keeps the clone's `.git` read-only, as Codex's
+workspace-write sandbox does, stops the suite before that, at the lock:
+`cannot write the GPU lock … EPERM`. An adapter-initialization failure is not
+shader evidence. Run the same focused command with adapter access before
+changing rendering code; an unavailable or skipped GPU does not count as a
+passing shader check.
 
 Lifecycle and pixel behavior need different observations. Deferred source
 jobs expose replacement, cancellation and recovery without drawing. A
@@ -545,6 +561,7 @@ otherwise assert in prose.
 pnpm test                       # regular Node suite
 pnpm test:slow                  # terrain descent and galaxy calibration/population
 pnpm test:gpu                   # the shader suite, on the real GPU — not in check
+IR_GPU_WAIT=120 pnpm test:gpu   # queue up to 120 s for the GPU lock, not fail beside a rig
 pnpm test:coverage              # the same suite, plus coverage/coverage-final.json
 # Under v8, geology.test.ts's crater-rim walk — 2.5 s alone — runs past its 20 s
 # timeout: coverage costs a third of the suite and far more on one tight loop.

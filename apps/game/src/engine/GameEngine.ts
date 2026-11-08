@@ -4,6 +4,7 @@ import {
   type PictureDebug,
 } from '../render/upscale.ts'
 import type {
+  BuildIdentity,
   GalaxyRenderReport,
   ObserverPose,
   GuideHostPort,
@@ -287,6 +288,12 @@ export interface GameEngineOptions {
   readonly heightfieldArchive?: HeightfieldArchive | null
   readonly store?: SaveStore
   readonly now?: () => number
+  /**
+   * Which build this is and which tree serves it, for `ir.build()`. The app
+   * passes `build.ts`'s two constants; a test passes one of its own, or
+   * nothing, and the harness names neither.
+   */
+  readonly build?: BuildIdentity
 }
 
 /**
@@ -999,6 +1006,7 @@ export class GameEngine {
       ...(options.canFly === undefined ? {} : { canFly: options.canFly }),
       ...(options.seed === undefined ? {} : { seed: options.seed }),
       ...(options.catalog === undefined ? {} : { catalog: options.catalog }),
+      ...(options.build === undefined ? {} : { build: options.build }),
       // `undefined` means "the browser default"; `null` means "no pool at all".
       workers:
         options.workers === undefined

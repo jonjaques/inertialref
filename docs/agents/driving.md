@@ -199,6 +199,117 @@ containing both `--js` and `--down` closes Chrome without evaluating the script.
 The same applies to `--file` and `--shot`. Finish the inspection batch, then
 call `node scripts/drive.mjs --port <port> --down` for that rig.
 
+### Which checkout is served
+
+A server answering `--url` is not evidence of a tree. A sibling worktree's
+Vite on 5173 boots the same app under the same build id, because worktrees
+cut from one commit describe it alike. After every boot and every attach the
+driver reads `ir.build()` and holds the served tree against its own
+checkout's `git rev-parse --show-toplevel`. A page another checkout serves is
+refused before the first step, and the refusal names both trees. The usual
+cause is a sibling's Vite on 5173: while the port answers the driver starts no
+server, and `pnpm dev` refuses the taken port. Serve this checkout on a port of
+its own, `pnpm dev:client --port <n>`, and drive it with
+`--url http://localhost:<n>/ --no-serve`. Pass `--tree <path>` only when you
+mean to drive another checkout. Naming the sibling to get past a refusal
+drives the sibling and reports it as this tree. A production build names no
+tree, and neither does a build older than the verb, so both read
+`identity unchecked` and proceed: `--url` at `pnpm preview` on 8787 and
+`presets:compare --base` at an older commit. The preset commands pass the
+tree they serve and print which tree each set of plates came from. Trees
+compare after realpath, so a symlinked worktree, or `/tmp` against
+`/private/tmp`, is one tree. The check names the served tree, not the edit:
+the build id is stamped when the server starts.
+
+### The operating point
+
+A figure is a figure about the point it was taken at, and the wrong point
+boots and answers like the right one. So after every boot, attach and
+`--reload`, and before the first step, the driver holds the page to its
+operating point with the launch guard in
+[`scripts/driveLaunch.mjs`](../../scripts/driveLaunch.mjs), over its own
+socket:
+
+- a WebGPU renderer;
+- an adapter that is neither a fallback nor, by name, a software rasterizer:
+  the engine's own device's `adapterInfo` where it has one, and a fresh
+  request's otherwise;
+- the viewport and ratio the invocation's `--width`, `--height` and `--dpr`
+  asked for, as the page reports them, the ratio compared as the float32
+  Chrome keeps it in;
+- a drawing buffer of that viewport × min(DPR, `dprCeiling` for the pointer)
+  × the picture's supersampling factor, floored as three floors it, at the
+  ratio the page reports;
+- the served tree, as above.
+
+`--document` and `--no-javascript` ask for no renderer, so the page is held to
+the window and the served tree alone; with scripts off it answers no
+`ir.build()`, and its tree reads `identity unchecked`. The window is checked as well as the
+buffer because a page whose emulation another session cleared reports the
+window it was left at, and on Chrome 157 the app's ratio follows an emulated
+change, so its buffer agrees with that window and the buffer rule alone
+passes it. The buffer is read two animation frames after the rig's
+window is set, because a warm attach sets it on a page that has been at
+another size: Chrome drops an invocation's emulation when its socket closes,
+so between invocations the page sits at the window's own size and ratio,
+1600×933 at DPR 2 on the Mac mini's display for a rig at 1600×900 at 1. A
+page the guard finds with nothing booted in it is booted once more, for the
+reload a fresh Vite makes inside the boot, and refused the second time.
+
+A refusal prints the guard's reason, exits 1 and runs no step. It means the
+page is not the point the command asked for, and the remedy depends on the
+check: a buffer the rig did not ask for is the remount of trap 5 below, and
+`--fresh` boots the page again at the rig's window; a WebGL backend or a
+software adapter means this Chrome is not drawing on the GPU, and trap 4's
+`--down` and a fresh start is the first thing to try; a tree mismatch is the
+section above. Forced sRGB, `--color-profile srgb`, is recorded as
+`dynamicRangeHigh` false and is not refused.
+
+The record is a line of narration unless `--quiet`, the `operatingPoint` of
+`--json` with `identity` beside it, and each `--reload` step's `point`. It
+names the adapter and backend, the buffer against the window and the ratio,
+the dynamic range, whether the system is Sol, a catalog star or generated,
+and the served tree. Chrome's version from `/json/version` is in it too. The
+port's session records it with the kind, the tree, the window and the
+controls, and only once a page has passed, so a run that fails at boot or is
+refused does not consume the warning. A version other than the one the
+session recorded is warned about once per entry and never refused, because
+Chrome stable updates itself.
+
+`--status` reads the point again without navigating or booting. It prints
+the rig's lines and the GPU's holder first, then sets the window, the kind
+and the tree the session recorded for the last page that passed, prints the
+line and the full record, and exits 1 when the guard refuses. It reads
+nothing while another invocation is driving the page, and says so with that
+invocation's pid: each invocation lists itself in the session until it
+exits, because setting a window replaces the running invocation's, and the
+status socket's close clears the page's device emulation for every session,
+so a cast or a settle in progress would drop to the window's own size and
+ratio. A page that does not answer within five seconds is not read rather
+than refused, and so is a socket that does not open. A baseline older than both
+`engine.picture` and `ir.build()`, which `presets:compare --base` can serve
+from an older commit, names no picture to hold the buffer against, so its
+buffer reads `unchecked` and the rig proceeds.
+
+### One GPU job at a time
+
+Every GPU job on the machine takes one lock, in the clone's git common
+directory, because two at once have crashed macOS:
+[`scripts/gpuLock.mjs`](../../scripts/gpuLock.mjs). A rig holds it from before
+its Chrome launches until `--down` has closed that Chrome, and a later call on
+the same `--port` joins it. Beside a rig, `pnpm test:gpu` and a rig on another
+port are refused at once, with the holder's name, pid, age and worktree. A
+refusal means wait or ask whoever is working in that checkout; never `--down`
+a rig you did not start. `--gpu-wait <seconds>` queues instead, and
+`pnpm test:gpu` takes `IR_GPU_WAIT=<seconds>`. `--down` is never refused, and
+`--status` names the holder. A sandbox that cannot write the clone's `.git`,
+Codex's workspace-write sandbox among them, fails every GPU command closed with
+`cannot write the GPU lock`. The
+[`drive` skill](../../.claude/skills/drive/SKILL.md#one-gpu-job-at-a-time) has
+the preset commands' part and the sandbox's remedy.
+
+### The traps
+
 These are the browser, not bugs in the clock, and the driver handles the first
 three; they are here because they explain what it is doing:
 
@@ -226,12 +337,16 @@ three; they are here because they explain what it is doing:
    run is what it must never contain. Exhausted, the ladder remounts the
    canvas: a second full preload and warm-up census 4.5 s after the first —
    about 6.5 s of a 10.2 s `navigation to first light` — an uncaught dispose
-   from inside Three on the way, and a drawing buffer that comes back at
-   3200×1800 for a rig asking for 1600×900 at DPR 1, because
-   `useDevicePixelRatio`'s media query does not re-fire under emulation.
-   **Every terrain figure taken after a rebuild in this rig is a retina
-   figure**, which is the trap below arriving without being asked for. Boot
-   from this rig is one census and ~4.3 s to first light.
+   from inside Three on the way, and a drawing buffer measured at 3200×1800
+   for a rig asking for 1600×900 at DPR 1. **Every terrain figure taken after
+   a rebuild in this rig is a retina figure**, which is the trap below
+   arriving without being asked for, and the launch guard refuses that page
+   before a step. On Chrome 157 the app's ratio follows an emulated DPR change
+   while focus emulation runs, and that buffer has not been reproduced there,
+   so the guard's unit case in `scripts/drivePage.test.mjs` holds the
+   refusal; [CONTEXT.md](../../CONTEXT.md) § "Every drive.mjs boot runs the
+   guard, and a page between invocations is at no rig's point" has the runs.
+   Boot from this rig is one census and ~4.3 s to first light.
 6. **Chrome left running is contention the test suite feels.** The driver keeps
    it up on purpose, and a full `pnpm test` beside it has timed out on a
    different unrelated file each run and passed clean once `--down` had run.
@@ -239,6 +354,23 @@ three; they are here because they explain what it is doing:
 7. **`--serve` cannot start a dev server in a worktree that has never built** —
    `cf dev` needs `apps/game/dist`. Use `pnpm dev:client` and `--no-serve`,
    or build once. [development](../guides/development.md) § Commands.
+8. **The MacBook Air steps every figure up about 35% after about 3.5 minutes
+   of load.** It is fanless (Mac17,4, base M5). At the far-shore preset,
+   1600×900 at DPR 1, in Chrome 157 headless on the dev build, `ir.gpu` goes
+   from 10.2 ms to 13.4–15.3, settle from 12–18 s to 28–31 and boot from 5 s
+   to 7–8, and five idle minutes bring it back. Two cool sessions still
+   disagree by 8%, and `pmset` records no warning. Onset and recovery each rest
+   on one observation at that point, and the cause is inferred, because
+   `powermetrics` needs sudo. So compare base and candidate **interleaved in
+   one session** first. Idling five minutes between arms suits a short arm
+   only: a six-boot series or a thirteen-plate pass runs 3–6 minutes and
+   outlasts the onset. Name the thermal state of every figure: cool, or how
+   many minutes under load, and on the Mac mini
+   `notifyutil -g com.apple.system.thermalpressurelevel` before and after. The
+   fan-cooled Mac mini (Mac18,5, M6) held `ir.gpu` flat through 10.4 sustained
+   minutes at far-shore 1600×900@1 and 1440×900@2, thermal pressure 0
+   throughout, but that is one session at each window, so the rule holds there
+   too until repeated sessions give a between-session spread.
 
 Default readiness is `ir.status().boot`: `drawing` once a renderer exists,
 `booted` once the boot cover lifts. The bare harness appears seconds earlier,
@@ -314,6 +446,19 @@ suite's side.
 number below is a dev-build number; both are real and only one is about a
 player. `pnpm preview` on 8787 is the shipped one, and it is worth re-measuring
 anything that lands in a design document there.
+
+**Name the thermal state.** On the fanless MacBook Air a figure taken after a
+few minutes of load is a figure about a different machine; trap 8 above has the
+step and the rule.
+
+**A headless frame interval detects nothing under the 16.7 ms budget, and a
+CPU span is not a control for a GPU change.** Headless rAF is a fixed 60 Hz
+clock: a DPR change from 1 to 1.05 at far-shore on the Air raised `ir.gpu`
+6.5% across seven interleaved pairs and moved rAF p95 by 0.00 ms. The same
+change raised the CPU-only spans `Engine/snapshot` 28% and `Render/sensor`
+24%: on the Air's M5 the CPU spans move with GPU load. Read `ir.gpu`
+for a GPU question; a CPU span that moves beside a GPU change is not, by that
+alone, CPU work.
 
 **Name the operating point, and prefer two.** A figure measured at one is a
 figure about that point. The four that recur, all dev build, 1600×900 at DPR 1

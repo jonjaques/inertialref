@@ -56,6 +56,14 @@ leaves the host's approvals, sandbox, model selection, and credentials alone.
 Keep permission policy in the host's supported configuration rather than
 translating Claude matchers into broad shell allowances.
 
+The workspace-write sandbox keeps `.git` read-only, and the machine's GPU lock
+is a file in the clone's git common dir, so every GPU command fails closed
+there: `pnpm test:gpu`, every `scripts/drive.mjs` and the preset commands stop
+with `cannot write the GPU lock … EPERM`. That refusal is the sandbox, not a
+busy GPU. The drive skill's
+[One GPU job at a time](../.claude/skills/drive/SKILL.md#one-gpu-job-at-a-time)
+has what a thread does instead.
+
 ## Verification and references
 
 Run `pnpm vitest run scripts/agents/codex-hook.test.mjs` for the adapter and

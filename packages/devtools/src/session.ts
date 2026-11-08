@@ -22,7 +22,13 @@ import {
   partitionOfEntity,
 } from '@inertialref/net'
 import { GameHarness } from './harness.ts'
-import { type Host, type RenderHost, renderHost } from './host.ts'
+import {
+  type BuildIdentity,
+  type Host,
+  type RenderHost,
+  renderHost,
+  UNBUILT,
+} from './host.ts'
 import type { CutsceneScript } from './cutscene.ts'
 
 /*
@@ -80,6 +86,12 @@ export interface SessionOptions {
    * getter this module exists to protect.
    */
   readonly render?: Partial<RenderHost>
+  /**
+   * Which build the host runs and which tree serves it. The browser passes
+   * `BUILD_ID` and the dev server's tree; Node and a test pass nothing and
+   * name neither, which is the true answer for a host no build produced.
+   */
+  readonly build?: BuildIdentity
   /**
    * Called after the world is replaced, so a host can drop derived state.
    *
@@ -221,6 +233,7 @@ export function openSession(options: SessionOptions = {}): Session {
     // Whole, whatever the caller supplied: the headless adapter answers the
     // rest, so no reader of the port asks whether a member is there.
     render: renderHost(options.render),
+    build: options.build ?? UNBUILT,
   }
 
   const harness = new GameHarness(host, options.cutscenes)
