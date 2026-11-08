@@ -321,6 +321,7 @@ describe('the operating point after boot', () => {
       dpr: 1,
       coarse: false,
       buffer: { width: 1600, height: 900 },
+      expectedBuffer: { width: 1600, height: 900 },
       adapter: {
         vendor: 'apple',
         architecture: 'metal-3',
@@ -738,6 +739,27 @@ describe('the drawing buffer', () => {
     await expect(asserted(page({ picture: null }))).rejects.toThrow(
       'the page names no picture',
     )
+  })
+
+  /*
+   * `engine.picture` landed on 11 October 2026 (#129) and `ir.build()` a month
+   * after it, so a page that answers neither is a build from before both: the
+   * baseline `presets:compare --base` serves from an older commit, driven by
+   * this tree's driver. Refusing it refuses every such baseline, and its
+   * picture cannot be read to check the buffer against. A page that answers
+   * `ir.build()` postdates `engine.picture`, so naming no picture there is a
+   * regression and is still refused, above.
+   */
+  it('leaves the buffer of a build older than engine.picture and ir.build() unchecked, and says so', async () => {
+    const point = await asserted(
+      page({ picture: null, build: null, canvas: [3200, 1800] }),
+    )
+    expect(point).toMatchObject({
+      buffer: { width: 3200, height: 1800 },
+      expectedBuffer: null,
+      picture: null,
+      identity: { verdict: 'unchecked' },
+    })
   })
 
   it('accepts exactly one buffer at any viewport and ratio', async () => {

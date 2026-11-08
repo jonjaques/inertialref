@@ -253,10 +253,23 @@ function adapterRefusal(adapter) {
   return null
 }
 
+/*
+ * The buffer the renderer builds for the page, or null where the page is older
+ * than the field that says. `engine.picture` landed a month before `ir.build()`,
+ * so a page that answers neither is a build from before both — the baseline
+ * `presets:compare --base` serves from an older commit, driven by this tree's
+ * driver — and refusing it refuses every such baseline. A page that answers
+ * `ir.build()` and names no picture has lost the field, and is refused.
+ */
+const ruled = (reading) =>
+  reading.picture === null ? null : expectedBuffer(reading)
+
 function bufferRefusal(reading) {
   if (reading.buffer === null) return 'the page has no drawing buffer'
   if (reading.picture === null)
-    return 'the page names no picture, so its drawing buffer cannot be checked'
+    return reading.identity === null
+      ? null
+      : 'the page names no picture, so its drawing buffer cannot be checked'
   const { width, height } = expectedBuffer(reading)
   if (reading.buffer.width === width && reading.buffer.height === height)
     return null
@@ -420,6 +433,8 @@ export async function assertOperatingPoint(
     dpr: reading.dpr,
     coarse: reading.coarse,
     buffer: reading.buffer,
+    // What the buffer was held against; null is a page too old to say.
+    expectedBuffer: ruled(reading),
     adapter: reading.adapter,
     backend: reading.backend,
     dynamicRangeHigh: reading.dynamicRangeHigh,
