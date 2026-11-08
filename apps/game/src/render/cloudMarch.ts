@@ -27,6 +27,7 @@ import {
   sunTableAt,
   type TableRead,
 } from './air.ts'
+import { airEye, airSegment } from './cloudCompositeAir.ts'
 import { cloudSample, shellCrossing } from './cloudGeometry.ts'
 import { type CloudKnotWriter, KNOT_TRANSMITTANCE } from './cloudKnots.ts'
 import type {
@@ -134,6 +135,8 @@ const AHEAD_RELATIVE = 2e-7
 const NEVER = 1e30
 /** The sweep's step (§8.4). */
 const SWEEP_STEP = 4
+/** The air past an early exit: `airToward`'s four samples, the composite's surface segment. */
+const BEHIND_SAMPLES = 4
 
 const LEVEL: TableRead = { level: true }
 
@@ -543,6 +546,29 @@ export function cloudMarch(
   })
   If(seg.open.greaterThan(0), () => {
     close()
+  })
+  /*
+   * Stopped under 1%, the march leaves the air from here to t₁ to nobody:
+   * no far march follows an exit, and the composite still adds L_a(0, t₁)
+   * under the cloud's whole opacity, so an opaque cloud on the horizon
+   * would wear every kilometer of air behind it to the union's top, some
+   * 350 of them from Earth's ground. The cloud's transmittance is held at
+   * the exit's, under 1%, from here on.
+   */
+  If(r.closed.lessThan(EXIT_TRANSMITTANCE).and(r.t.lessThan(ray.end)), () => {
+    const R = body.datumRadius
+    const behind = airSegment(
+      body.air,
+      airEye(body),
+      ray.direction,
+      r.t.div(R),
+      ray.end.div(R),
+      body.sun,
+      BEHIND_SAMPLES,
+      select(sky, float(0), body.cleared.mul(ORBIT_AIRLIGHT)),
+      air,
+    )
+    r.blocked.addAssign(r.air.mul(r.closed.sub(1)).mul(behind.inscatter))
   })
 
   const opacity = r.weight
