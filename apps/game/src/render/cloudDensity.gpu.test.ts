@@ -429,10 +429,10 @@ function reference(
   const shaped = saturate((base * p - (1 - cover)) / Math.max(cover, 1e-6))
   const eroded = saturate((shaped - erosion) / Math.max(1 - erosion, 1e-6))
   const f = smoothstep(cell / 4, cell, point.footprint)
-  return {
-    fraction: 1 + (cover - 1) * f,
-    sigma: spec.sigma * (eroded + (mean - eroded) * f),
-  }
+  const fraction = 1 + (cover - 1) * f
+  // The two pictures of a cell blend by their mean extinction, fraction × σ.
+  const extinction = spec.sigma * (eroded * (1 - f) + cover * mean * f)
+  return { fraction, sigma: extinction / Math.max(fraction, 1e-6) }
 }
 
 async function storedNoise(
@@ -614,6 +614,40 @@ describe('the three media are §5.6, differing only in their coverage', () => {
     expect(worst).toBeLessThanOrEqual(1e-3)
     expect(blobbed).toBeGreaterThan(10)
     expect(clear).toBeGreaterThan(10)
+    field.dispose()
+  })
+
+  it('holds no cloud in a cell with no coverage, at any footprint', async () => {
+    /*
+     * σ and the fraction blended each on its own put (1 − f)·f·σ_k·p̄ of
+     * extinction here, a quarter of the mean density at f = ½, where the
+     * resolved picture holds no σ and the unresolved one no share. Clear
+     * cells of fair-cumulus, at footprints across the blend's band.
+     */
+    const scenario = WEATHER_SCENARIOS['fair-cumulus']
+    const field = bakeField(scenario)
+    const spec = scenario.layers[0]!
+    const altitude = (spec.base + spec.top) / 2
+    const points: Point[] = []
+    for (let k = 0; points.length < 18 && k < 400; k += 1) {
+      const offset = {
+        x: ((k % 20) - 10) * 23_000,
+        y: 0,
+        z: (Math.floor(k / 20) - 10) * 23_000,
+      }
+      const direction = unit(added(EYE, offset))
+      if (scenarioCoverage(scenario, 0, direction, TIME) > 0) continue
+      for (const share of [0.1, 0.3, 0.5, 0.75, 0.95, 2])
+        points.push({ offset, altitude, footprint: share * spec.cellMeters })
+    }
+    expect(points).toHaveLength(18)
+    const read = await evaluate(
+      points,
+      analyticMedium({ uniforms: field.uniforms, noise: noise.nodes, profile }),
+      field.uniforms,
+    )
+    for (let n = 0; n < points.length; n += 1)
+      expect(read[n * 8]! * read[n * 8 + 1]!).toBe(0)
     field.dispose()
   })
 
