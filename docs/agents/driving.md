@@ -221,6 +221,58 @@ compare after realpath, so a symlinked worktree, or `/tmp` against
 `/private/tmp`, is one tree. The check names the served tree, not the edit:
 the build id is stamped when the server starts.
 
+### The operating point
+
+A figure is a figure about the point it was taken at, and the wrong point
+boots and answers like the right one. So after every boot, attach and
+`--reload`, and before the first step, the driver holds the page to its
+operating point with the launch guard in
+[`scripts/driveLaunch.mjs`](../../scripts/driveLaunch.mjs), over its own
+socket:
+
+- a WebGPU renderer;
+- an adapter that is neither a fallback nor, by name, a software rasterizer:
+  the engine's own device's `adapterInfo` where it has one, and a fresh
+  request's otherwise;
+- a drawing buffer of the viewport × min(DPR, `dprCeiling` for the pointer)
+  × the picture's supersampling factor, floored as three floors it, at the
+  ratio the page reports;
+- the served tree, as above.
+
+`--document` and `--no-javascript` hold the page to the DOM alone, with no
+renderer asked for. The buffer is read two animation frames after the rig's
+window is set, because a warm attach sets it on a page that has been at
+another size: Chrome drops an invocation's emulation when its socket closes,
+so between invocations the page sits at the window's own size and ratio,
+1600×933 at DPR 2 on the Mac mini's display for a rig at 1600×900 at 1. A
+page the guard finds with nothing booted in it is booted once more, for the
+reload a fresh Vite makes inside the boot, and refused the second time.
+
+A refusal prints the guard's reason, exits 1 and runs no step. It means the
+page is not the point the command asked for, and the remedy depends on the
+check: a buffer the rig did not ask for is the remount of trap 5 below, and
+`--fresh` boots the page again at the rig's window; a WebGL backend or a
+software adapter means this Chrome is not drawing on the GPU, and trap 4's
+`--down` and a fresh start is the first thing to try; a tree mismatch is the
+section above. Forced sRGB, `--color-profile srgb`, is recorded as
+`dynamicRangeHigh` false and is not refused.
+
+The record is a line of narration unless `--quiet`, the `operatingPoint` of
+`--json` with `identity` beside it, and each `--reload` step's `point`. It
+names the adapter and backend, the buffer against the window and the ratio,
+the dynamic range, whether the system is Sol, a catalog star or generated,
+and the served tree. Chrome's version from `/json/version` is in it too, and
+in the port's session. A version other than the one the session recorded is a
+warning and never a refusal, because Chrome stable updates itself.
+
+`--status` reads the point again without navigating or booting. It sets the
+window, the kind and the tree the session recorded for the last page that
+passed, then prints the line and the full record beside the GPU's holder,
+and exits 1 when the guard refuses. A baseline older than both
+`engine.picture` and `ir.build()`, which `presets:compare --base` can serve
+from an older commit, names no picture to hold the buffer against, so its
+buffer reads `unchecked` and the rig proceeds.
+
 ### One GPU job at a time
 
 Every GPU job on the machine takes one lock, in the clone's git common
@@ -269,8 +321,9 @@ three; they are here because they explain what it is doing:
    3200×1800 for a rig asking for 1600×900 at DPR 1, because
    `useDevicePixelRatio`'s media query does not re-fire under emulation.
    **Every terrain figure taken after a rebuild in this rig is a retina
-   figure**, which is the trap below arriving without being asked for. Boot
-   from this rig is one census and ~4.3 s to first light.
+   figure**, which is the trap below arriving without being asked for, and
+   the launch guard refuses that page before a step. Boot from this rig is
+   one census and ~4.3 s to first light.
 6. **Chrome left running is contention the test suite feels.** The driver keeps
    it up on purpose, and a full `pnpm test` beside it has timed out on a
    different unrelated file each run and passed clean once `--down` had run.

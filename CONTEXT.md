@@ -12994,6 +12994,76 @@ and unit C. A probe of the foreign server before the boot, which would save
 the boot a refused run costs: the tree is in the page, so the page has to
 load.
 
+## Every drive.mjs boot runs the guard, and a page between invocations is at no rig's point (7 Nov 2026)
+
+P03's drive.mjs half, the second wave's third unit, stacked on #191. After
+every boot, attach and `--reload`, `enter` in `scripts/drivePage.mjs` runs
+the boot ladder, then the served-tree check on its own, so its refusal keeps
+the remedy unit B gave it, then `assertOperatingPoint`, kind `webgpu`, or
+`shell` under `--document`. A refusal exits 1 before any step. The record is
+one narrated line, the `operatingPoint` of `--json` and each `--reload`
+step's `point`. `--status` reads it again through the same guard.
+`docs/agents/driving.md` § "The operating point" is the working account.
+
+**Chrome drops an invocation's emulation when its socket closes.** Between
+invocations the rig's page sits at the window's own size and ratio. On the
+Mac mini's display that was 1600×933 at DPR 2 for a page booted at 1600×900
+at 1, and the app's canvas was 1600×933, still at ratio 1. The first
+`--status`, which read the page as it stood, would have held it against
+3200×1866 and refused every webgpu rig. A warm attach sets 1600×900 back,
+and the canvas follows a frame or two later, so a guard that reads at once
+races the resize. The guard now waits two animation frames, capped at a
+second, before it reads a buffer, and not for a document, whose scripts may
+be off. `--status` sets focus emulation and the window the session recorded
+before it reads. The session records the kind, the tree and the window only
+once a page has passed: written before the guard, a refused `--tree` became
+what `--status` held the page to.
+
+**The stale buffer the guard is for did not reproduce on Chrome 157.** A
+page booted at 1440×900 at DPR 2 and attached warm at DPR 1 drew 1440×900,
+so the app's ratio followed the emulated change while focus emulation ran.
+A buffer set behind the app with `renderer.setPixelRatio(2)` was put back to
+1600×900 by R3F at the next invocation, because the window changes size
+between invocations. Trap 5's remount, 3200×1800 for 1600×900 at DPR 1, is
+therefore refused in the unit cases and was not produced in the browser.
+The ratio did not follow when the emulation was dropped with the window
+occluded, which is the 1600×933 above.
+
+**Two refusals were narrowed so a legitimate rig passes.** A page that names
+no picture is refused, unless it also answers no `ir.build()`: `engine.picture`
+landed on 11 Oct 2026 (#129), a month before `ir.build()`, so such a page is
+a baseline from before both, and refusing it refuses every
+`presets:compare --base` at that age. The record's `expectedBuffer` is null
+there and the line says `unchecked`. A page the guard finds with nothing
+booted in it is booted once more, unforced, and refused the second time,
+because a fresh Vite's dependency reload can land in the ladder's cover
+loop, whose probe reads a page it cannot evaluate as booted. None of the
+runs below printed that re-entry, so it rests on its unit case.
+
+**Checked on the Mac mini** (Mac18,5, M6, Chrome 157.0.8103.39), display
+probably asleep and thermal state not read, so no time or pixel figure here
+is a measurement. Against this worktree's `pnpm dev:client`, at the build
+`43d0c10d` it stamped: the default URL, `--preset earthrise` and
+`--preset far-shore` passed at apple/metal-3 on webgpu, 1600×900 for
+1600×900 at DPR 1, system sol, sol and generated, served from this tree.
+1440×900 at DPR 2 passed at 2880×1800. No bundled preset carries a picture,
+so none has a supersampling factor above 1; earthrise with
+`--query picture=supersample:native` passed at 3200×1800, supersampled ×2.
+`--color-profile srgb` recorded `dynamicRangeHigh` false and proceeded; the
+display-profile runs read false on this display too. A `--keep-storage`
+attach passed, a `--reload` step carried its own point in `--json`, and
+`--status` printed the line and the full record and exited 0. `--tree`
+naming the main checkout was refused, exit 1, with no step run. A session
+edited to record 156.0.7999.10 warned of the change, proceeded, and recorded
+the running version. `--no-javascript` passed as `shell`. The first boot
+against the cold server failed with "renderer never became ready" after
+Vite's two dependency reloads, before the guard ran, as the entry above
+found; the second boot came up.
+
+**Not done:** the version record goes with the session at `--down`, so a
+Chrome that updated between a `--down` and the next launch is not warned
+about. A record that outlives the session would catch it.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

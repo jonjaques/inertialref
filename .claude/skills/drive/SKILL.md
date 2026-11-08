@@ -53,9 +53,10 @@ own Chrome on its own profile and port and needs no focus at all.
 Its decisions run without Chrome. The step list, `--settle` and the step results
 are `scripts/driveSteps.mjs`; the CDP channel and the frame and trace-event
 collection are `scripts/cdp.mjs`, while writing, differencing and clipping a cast stay in
-`drive.mjs`; storage clearing and the boot ladder are `scripts/drivePage.mjs`.
-`pnpm vitest run driveSteps.test cdp.test drivePage.test` answers a change to any of
-them in under a second.
+`drive.mjs`; storage clearing, the boot ladder and the guard each entry runs after it
+are `scripts/drivePage.mjs`, and the guard's checks are `scripts/driveLaunch.mjs`.
+`pnpm vitest run driveSteps.test cdp.test drivePage.test driveLaunch.test` answers a
+change to any of them in under a second.
 
 ```bash
 node scripts/drive.mjs --help
@@ -133,7 +134,8 @@ asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
 profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--color-profile` (Chrome's output color space; `srgb`
 makes a plate the build's rather than the display's, and a Chrome already up under another
 profile is refused until `--down`), `--tree` (the checkout `--url` must be served from),
-`--keep-storage`, `--fresh`, `--json`, `--down`, `--status`.
+`--keep-storage`, `--fresh`, `--json`, `--down`, `--status` (the rig, the GPU's holder and
+the page's operating point, read again).
 
 A `--shot` is downscaled to 1568 px on its long edge, because that is where the reader
 downsamples anyway — beyond it a bigger file is bytes spent on pixels nobody sees. Pass
@@ -155,6 +157,32 @@ production build names no tree, and neither does a build older than the verb, so
 `pnpm preview` and an old `--base` read `identity unchecked` and proceed. The preset
 commands pass `--tree` themselves.
 [driving.md](../../../docs/agents/driving.md#which-checkout-is-served) has the rest.
+
+**Every page is held to its operating point before the first step.** After every boot,
+attach and `--reload` the driver runs the launch guard,
+[`scripts/driveLaunch.mjs`](../../../scripts/driveLaunch.mjs), over its own socket: a
+WebGPU renderer on an adapter that is neither a fallback nor a software rasterizer by
+name, a drawing buffer of the window × min(DPR, the pointer's ceiling) × the picture's
+supersampling, floored as three floors it, and the served tree above. `--document` and
+`--no-javascript` hold the DOM alone. A refusal is the guard's reason on stderr and exit
+1, and no step runs. It means the page is not the point the command asked for, so a
+figure taken there belongs to another point: a buffer the rig did not ask for is trap 5's
+remount, and `--fresh` boots the page again at the rig's window. The record is one line
+of narration, the `operatingPoint` of `--json`, and each `--reload` step's result:
+
+```text
+operating point (webgpu): apple/metal-3 on webgpu, buffer 1600×900 for 1600×900 at DPR 1,
+  dynamic range standard, system sol, served from …/inertialref (build 43d0c10d)
+```
+
+Chrome's version is recorded in the session and a change is warned about, never refused,
+because Chrome stable updates itself. `--status` reads the point again without booting and
+prints the line, the full record and the GPU's holder, and exits 1 on a refusal. It first
+sets the window the session recorded, because Chrome drops an invocation's emulation when
+its socket closes: between invocations the page is at the window's own size and ratio,
+1600×933 at DPR 2 on the Mac mini's display, which is no rig's point. A baseline older than
+`engine.picture` and `ir.build()` reads `buffer …, unchecked` and proceeds.
+[driving.md](../../../docs/agents/driving.md#the-operating-point) has the rest.
 
 ## One GPU job at a time
 
@@ -396,8 +424,8 @@ handles the first three — they are here because they explain what it is doing.
    contain. Exhausted, the ladder remounts the canvas: a second full preload 4.5 s
    after the first, an uncaught Three dispose, and a drawing buffer that comes back
    **3200×1800 for a rig asking for 1600×900 at DPR 1**. Every terrain figure taken
-   after a rebuild here is a retina figure. The flag says "not to be sampled"; the
-   watchdog stands down and lifts the cover.
+   after a rebuild here is a retina figure, and the launch guard refuses that page before
+   a step. The flag says "not to be sampled"; the watchdog stands down and lifts the cover.
 6. **The default rig is 1600×900 at DPR 1, and that is not what anyone is looking at.**
    Terrain selection is measured in _display pixels_, so the streamer at a retina window
    asks for four times the patches and behaves like a different subsystem: the geometry
