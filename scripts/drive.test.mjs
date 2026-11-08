@@ -58,6 +58,25 @@ describe('drive.mjs and the GPU lock', () => {
     )
   })
 
+  /*
+   * `path.resolve('')` is the shell's directory, so an unset variable in
+   * `--tree "$TREE"` would hold the page against wherever the shell is: a
+   * false refusal from a scratch thread, a false match from a sibling.
+   */
+  it('refuses an empty --tree before anything starts', async () => {
+    const { code, stderr } = await run([
+      '--no-serve',
+      '--tree',
+      '',
+      '--js',
+      '1',
+    ])
+    expect(code).toBe(1)
+    expect(stderr).toContain(
+      "--tree takes the checkout --url must be served from, and '' names none; leave it out to hold the page against this checkout",
+    )
+  })
+
   it("reads its own checkout's lock when the shell is outside every repository", async () => {
     const outside = mkdtempSync(path.join(tmpdir(), 'ir-drive-'))
     try {

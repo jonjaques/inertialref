@@ -333,9 +333,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
  * Vite on 5173 boots the same app under the same build id, and is driven,
  * photographed and measured as this one. git's root rather than `ROOT`, so
  * the default is spelled the way the dev server spells the tree it reports;
- * the comparison resolves symlinks either way.
+ * the comparison resolves symlinks either way. An empty `--tree` is refused
+ * rather than resolved: `path.resolve('')` is the shell's directory, which
+ * from a sibling checkout is a false match.
  */
 function treeUnderTest() {
+  if (values.tree === '')
+    throw new Error(
+      "--tree takes the checkout --url must be served from, and '' names none; leave it out to hold the page against this checkout",
+    )
   if (values.tree !== undefined) return path.resolve(values.tree)
   try {
     return execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -728,6 +734,9 @@ async function main() {
   if (values.down === true) return await down()
   if (values.status === true) return await status()
   const gpuWait = parseWait(values['gpu-wait'], '--gpu-wait')
+  // Before the lock, so a `--tree` that names nothing is refused before it
+  // has started a server, a Chrome or a boot.
+  const tree = treeUnderTest()
   checkSteps(script, {
     userGesture: values['user-gesture'] === true,
     javascript: JAVASCRIPT,
@@ -799,7 +808,7 @@ async function main() {
     evaluate(send, expression, userGesture)
   // After the boot or the attach and before the first step, so a page another
   // checkout serves is refused before anything is read from it.
-  const identity = await assertServedTree(run, treeUnderTest())
+  const identity = await assertServedTree(run, tree)
   note(
     identity.verdict === 'match'
       ? `served from ${identity.served} (build ${identity.id})`
