@@ -13,17 +13,10 @@ import {
   cloudReportIdle,
   cloudsSettled,
 } from '@inertialref/devtools'
-import { type Extent, mieDroplets } from '@inertialref/rendering'
-import { CloudClipmap } from './cloudClipmap.ts'
+import type { Extent } from '@inertialref/rendering'
+import { type CloudField, createCloudField } from './cloudField.ts'
 import { CloudComposite } from './cloudComposite.ts'
-import {
-  analyticMedium,
-  fieldMedium,
-  sweepMedium,
-  synopticMedium,
-} from './cloudDensity.ts'
 import { CloudDepth } from './cloudDepth.ts'
-import { createFarField } from './cloudFar.ts'
 import {
   type CloudFrame,
   cloudFrame,
@@ -33,22 +26,11 @@ import { type CloudFrameDriver, CloudFrameNode } from './cloudFrameNode.ts'
 import { CloudHistory } from './cloudHistory.ts'
 import { UNDER_CLOUDS_LAYERS } from './cloudLayers.ts'
 import type { CloudLevers, CloudPlacement } from './cloudLevers.ts'
-import { CloudMaps, writeScenarioPattern } from './cloudMaps.ts'
 import type { CloudBudget, CloudResource } from './cloudNodes.ts'
-import { CloudNoise } from './cloudNoise.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
-import { CloudPhase } from './cloudPhase.ts'
-import {
-  CLOUD_PROFILE_HEIGHTS,
-  CLOUD_PROFILE_ROWS,
-  CloudProfile,
-} from './cloudProfile.ts'
-import { CloudSunCascades, SUN_DEPTH_FRAME_CAP } from './cloudSunCascades.ts'
-import { CloudSunGrid } from './cloudSunGrid.ts'
-import { cloudSunFn } from './cloudSunlight.ts'
+import { CLOUD_PROFILE_HEIGHTS, CLOUD_PROFILE_ROWS } from './cloudProfile.ts'
+import { SUN_DEPTH_FRAME_CAP } from './cloudSunCascades.ts'
 import { CloudTrace } from './cloudTrace.ts'
-import { createCloudUniforms } from './cloudUniforms.ts'
-import { CloudVolume } from './cloudVolume.ts'
 import type { SceneLayout } from './sceneLayout.ts'
 
 /*
@@ -57,12 +39,9 @@ import type { SceneLayout } from './sceneLayout.ts'
  * the composite's frame node, and reports. Built only under `?clouds=1`, and
  * only on WebGPU; with its levers off it draws nothing and adds no pass.
  *
- * It orchestrates and holds no shader code. Every node set is built once and
- * handed to every module that reads it — the field medium, the noise, the
- * phase, the bodies' uniforms — because the trace's 13 sampled bindings (15
- * with the volume) of WebGPU's 16 are counted on shared nodes: a second
- * medium built over the same textures is a second set of bindings, and the
- * volume kernels would not compile.
+ * It orchestrates and holds no shader code. The field and every node set
+ * that reads it are built once, by `createCloudField`, and handed to every
+ * module that reads them; `cloudField.ts` says why they must be shared.
  */
 
 export interface CloudSystemDeps {
@@ -103,6 +82,8 @@ export interface CloudSystem {
   readonly report: CloudRenderReport
   /** Every resource the system holds, in the frame's order: the census's subject. */
   readonly resources: readonly CloudResource[]
+  /** The field the frame draws and every node set that reads it: the instruments' subject. */
+  readonly field: CloudField
   dispose(): void
 }
 
@@ -202,69 +183,28 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
   const census = censusOf(renderer)
   const baseline = { ...census }
 
-  const uniforms = createCloudUniforms()
-  const noise = new CloudNoise()
-  const profile = new CloudProfile()
-  const maps = new CloudMaps(uniforms)
-  const clipmap = new CloudClipmap(uniforms, maps.nodes)
-  const recipe = { uniforms, noise: noise.nodes, profile }
-  const field = fieldMedium({ ...recipe, clipmap: clipmap.nodes })
-  const volume = new CloudVolume({ uniforms, bake: field, detail: noise.nodes })
-  const cascades = new CloudSunCascades(uniforms, field)
-  const grid = new CloudSunGrid(uniforms, volume)
-  const phase = new CloudPhase(mieDroplets())
-  const synoptic = synopticMedium({ ...recipe, maps: maps.nodes })
-  const farAtlas = createFarField('atlas', {
-    uniforms,
-    field: synoptic,
-    phase,
-    body: 'served',
-  })
-  const farSpheres = createFarField('spheres', {
-    uniforms,
-    field: synoptic,
-    phase,
-    body: 'served',
-  })
-  const farSecond = createFarField('atlas', {
-    uniforms,
-    field: analyticMedium(recipe),
-    phase,
-    body: 'second',
-  })
+  const field = createCloudField()
+  const { uniforms } = field
   const depth = new CloudDepth(uniforms, layout)
   depth.tie(scenePass.renderTarget)
   const trace = new CloudTrace({
     uniforms,
     media: {
-      field,
-      volume: volume.medium,
-      bound: (sample, body) => volume.bound(sample, body),
-      brickExit: (sample, ray, body) => volume.brickExit(sample, ray, body),
-      sweep: sweepMedium({ ...recipe, clipmap: clipmap.nodes }),
+      field: field.medium,
+      volume: field.volume.medium,
+      bound: (sample, body) => field.volume.bound(sample, body),
+      brickExit: (sample, ray, body) =>
+        field.volume.brickExit(sample, ray, body),
+      sweep: field.sweep,
     },
-    // The taps read the field's own textures in every kernel: the volume's
-    // kernels at 15 bindings count them so.
-    sun: {
-      cascades: cloudSunFn({ uniforms, medium: field, depth: cascades }),
-      grid: cloudSunFn({ uniforms, medium: field, depth: grid }),
-    },
-    phase,
-    far: { atlas: farAtlas.far, spheres: farSpheres.far },
+    sun: field.sun,
+    phase: field.phase,
+    far: { atlas: field.farAtlas.far, spheres: field.farSpheres.far },
     depth: () => depth.texture,
   })
   const history = new CloudHistory(uniforms, () => trace.outputs)
   const resources: readonly CloudResource[] = [
-    noise,
-    maps,
-    clipmap,
-    volume,
-    cascades,
-    grid,
-    phase,
-    farAtlas,
-    farSpheres,
-    farSecond,
+    ...field.bakes,
     depth,
     trace,
     history,
@@ -291,10 +231,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     const built = frame
     if (built === null) return
     const budget = budgetOf(built)
-    for (const resource of [noise, maps, clipmap, volume, cascades, grid])
-      resource.render(target, built, budget)
-    for (const far of [farAtlas, farSpheres, farSecond])
-      far.render(target, built, budget)
+    field.render(target, built, budget)
     depth.render(target)
     if (built.regime === 'immediate')
       for (let k = 0; k < 4; k += 1) {
@@ -321,8 +258,8 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     uniforms,
     history: () => history.outputs,
     depth: () => depth.texture,
-    far: farSecond.far,
-    phase,
+    far: field.farSecond.far,
+    phase: field.phase,
     frameNode,
   })
   const overPass = new CloudOverPassNode(
@@ -334,8 +271,8 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
   scene.add(composite.passes, composite.split)
 
   const farPending = (): boolean =>
-    (levers?.far === 'spheres' ? farSpheres : farAtlas).pending ||
-    farSecond.pending
+    (levers?.far === 'spheres' ? field.farSpheres : field.farAtlas).pending ||
+    field.farSecond.pending
 
   const reportOf = (): CloudRenderReport => {
     if (disposed) return cloudReportIdle()
@@ -366,10 +303,11 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       resets,
       sinceReset,
       pending: {
-        maps: maps.pending,
-        clipmap: clipmap.pending,
-        volume: volume.pending,
-        sunDepth: (levers?.sunDepth === 'grid' ? grid : cascades).pending,
+        maps: field.maps.pending,
+        clipmap: field.clipmap.pending,
+        volume: field.volume.pending,
+        sunDepth: (levers?.sunDepth === 'grid' ? field.grid : field.cascades)
+          .pending,
         far: farPending(),
         history: history.pending,
       },
@@ -407,11 +345,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
             )
       if (frame === null) return
       frames += 1
-      uniforms.write(frame)
-      // The pattern every scenarioCoverageNode reads, before any pass of the
-      // frame: the maps write it too, but the second body's far bake reads it
-      // through the analytic medium whatever the maps did.
-      writeScenarioPattern(uniforms, frame.scenario)
+      field.write(frame)
       const view = camera as Camera & { near?: number; far?: number }
       uniforms.camera.near.value = view.near ?? uniforms.camera.near.value
       uniforms.camera.far.value = view.far ?? uniforms.camera.far.value
@@ -444,14 +378,12 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     async warm(progress = () => {}) {
       if (disposed) return
       // The noise's warm-up bakes it, so the first frame reads baked noise.
-      await noise.warm(renderer)
-      await maps.warm(renderer)
-      await clipmap.warm(renderer)
+      // A warm-up is idempotent, so the bakes' pass after the first three
+      // compiles only the rest, in the frame's order.
+      for (const bake of [field.noise, field.maps, field.clipmap])
+        await bake.warm(renderer)
       progress()
-      for (const resource of [volume, cascades, grid, phase])
-        await resource.warm(renderer)
-      for (const far of [farAtlas, farSpheres, farSecond])
-        await far.warm(renderer)
+      for (const bake of field.bakes) await bake.warm(renderer)
       await depth.warm(renderer)
       progress()
       await trace.warm(renderer)
@@ -464,13 +396,14 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       return reportOf()
     },
     resources,
+    field,
     dispose() {
       if (disposed) return
       disposed = true
       scene.remove(composite.passes, composite.split)
       composite.dispose()
-      for (const resource of resources) resource.dispose()
-      profile.dispose()
+      field.dispose()
+      for (const resource of [depth, trace, history]) resource.dispose()
       frame = null
     },
   }
