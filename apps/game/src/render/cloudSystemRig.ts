@@ -85,7 +85,11 @@ export const LOOKING_DOWN: Quat = Q.fromAxisAngle(
   -Math.PI / 2,
 )
 
-function earthAt(eye: number, compression: number): RenderBody {
+function earthAt(
+  eye: number,
+  compression: number,
+  orientation: Quat = Q.IDENTITY,
+): RenderBody {
   const center: Vec3 = { x: 0, y: -(earth.radius + eye) * compression, z: 0 }
   return {
     sunlight: 0.85,
@@ -101,7 +105,7 @@ function earthAt(eye: number, compression: number): RenderBody {
       compressed: compression !== 1,
       angularRadius: 1.4,
     },
-    orientation: Q.IDENTITY,
+    orientation,
     hasAtmosphere: true,
     terminator: 0.1,
     atmosphereScale: 1.02,
@@ -193,6 +197,12 @@ export interface RigStance {
   readonly sun?: Vec3
   /** Earth's own air; none when absent (see `CloudRigOptions.air`). */
   readonly air?: boolean
+  /**
+   * Earth's orientation, its own axes into the render's; unturned when
+   * absent. The eye stands over the body-fixed direction this turn carries
+   * onto the render's +Y, so a test picks the place it measures over.
+   */
+  readonly turn?: Quat
 }
 
 /**
@@ -204,7 +214,7 @@ export function rigEngineInputs(
   stance: RigStance,
   levers: CloudLevers,
 ): CloudEngineInputs {
-  const body = earthAt(stance.eye, stance.compression ?? 1)
+  const body = earthAt(stance.eye, stance.compression ?? 1, stance.turn)
   const lens = lensForFov(RIG_FOV)
   return {
     levers,
