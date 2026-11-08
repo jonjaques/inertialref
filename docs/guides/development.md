@@ -407,8 +407,9 @@ variables are **not in the repository**: Workers Builds supplies them as build
 variables, a deploy from this machine reads them from gitignored
 `apps/game/.env.production`, and a real environment variable wins over the
 file. `apps/game/.env.example` documents the setup. The SDK is a dynamic import
-after the gate. Reaching the project from an agent is the PostHog skills in
-`.claude/skills` and its MCP server with a read-only personal key.
+after the gate. An agent reads the project through PostHog's MCP server with
+a read-only personal key; PostHog's agent skills are installed per machine,
+not vendored here.
 
 **Accounts** are Clerk's
 ([ADR-0048](../adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md))
