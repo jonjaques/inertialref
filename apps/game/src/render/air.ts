@@ -4,6 +4,7 @@ import {
   type Node,
   RGBAFormat,
   type Texture,
+  type TextureNode,
   Vector3,
 } from 'three/webgpu'
 import {
@@ -137,8 +138,18 @@ const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
  * march reads. `set` points them at one body's air, idempotently and without a
  * rebuild, `lift` writes the limb beside it, and `clear` is a vacuum, which
  * draws nothing, extinguishes nothing and passes the beam white.
+ *
+ * `ownStandIns` starts the tables on stand-ins of this bundle's own, for a
+ * material that binds two bodies' air: two texture nodes over `LUT_WHITE`
+ * compile to one binding (rule 57), and the second body's tables would then
+ * swap into nothing. Every other material shares the one pair.
  */
-export function createAirUniforms() {
+export function createAirUniforms(
+  options: { readonly ownStandIns?: boolean } = {},
+) {
+  const own = options.ownStandIns === true
+  const white = own ? lutPixel(255, 255, 255) : LUT_WHITE
+  const black = own ? lutPixel(0, 0, 0) : LUT_BLACK
   const top = uniform(1)
   const limb = uniform(0)
   const limbFalloff = uniform(0)
@@ -156,8 +167,8 @@ export function createAirUniforms() {
   const detachedScatter = uniform(new Vector3(0, 0, 0))
   const hRayleigh = uniform(1)
   const hMie = uniform(1)
-  const transmittance = texture(LUT_WHITE)
-  const multiScatter = texture(LUT_BLACK)
+  const transmittance = texture(white)
+  const multiScatter = texture(black)
   return {
     top,
     betaRayleigh,
@@ -224,9 +235,10 @@ export function createAirUniforms() {
       // it, so a material cleared for an airless body but still bound to the
       // last body's tables lit Luna's low sun through Earth's sea-level
       // column — one shared ground material, one shared sea, and a walk from
-      // one world to the next.
-      transmittance.value = LUT_WHITE
-      multiScatter.value = LUT_BLACK
+      // one world to the next. This bundle's own stand-ins, so a material
+      // that binds two bodies' air never holds two nodes over one object.
+      transmittance.value = white
+      multiScatter.value = black
     },
   }
 }
@@ -349,6 +361,27 @@ export function marchAir(
 }
 
 /**
+ * How a table is read. `level` names level 0: a read in non-uniform control
+ * flow — a pass that chooses its march per pixel — has no implicit
+ * derivatives, and WGSL refuses a `textureSample` there (plan §5.2). Absent,
+ * the read is the one every existing material compiles, node for node, so
+ * none of their programs moves.
+ */
+export interface TableRead {
+  readonly level?: boolean
+}
+
+/** `table` at `uv`, read as `read` asks. */
+function readTable(
+  table: TextureNode,
+  uv: Node<'vec2'>,
+  read: TableRead | undefined,
+): TextureNode {
+  const sampled = table.sample(uv)
+  return read?.level === true ? sampled.level(float(0)) : sampled
+}
+
+/**
  * A step's share of its own length that reaches its start, (1 − e^−τ)/τ,
  * given its transmittance `through` = e^−τ: 1 for a step that holds nothing,
  * 1/τ for an opaque one.
@@ -363,7 +396,10 @@ export function marchAir(
  * to nothing rather than to its length. A per-channel `step` rather than
  * `select`, so both arms are plain vector arithmetic.
  */
-function stepShare(stepTau: Node<'vec3'>, through: Node<'vec3'>): Node<'vec3'> {
+export function stepShare(
+  stepTau: Node<'vec3'>,
+  through: Node<'vec3'>,
+): Node<'vec3'> {
   const series = vec3(1)
     .sub(stepTau.mul(0.5))
     .add(stepTau.mul(stepTau).div(6))
@@ -381,20 +417,23 @@ function tentAt(
   return max(float(1).sub(abs(height.sub(peak)).div(max(halfWidth, 1e-9))), 0)
 }
 
+/** A view direction's phase functions against the sun (`phasesToward`). */
+export interface AirPhases {
+  readonly rayleigh: Node<'float'>
+  readonly mie: Node<'float'>
+  readonly forward: Node<'float'>
+}
+
 /**
  * The two phase functions for a view direction against the sun: Rayleigh's,
  * and Henyey–Greenstein at the one aerosol asymmetry — and the lobe's share
  * of its peak toward the sun, which is how far the aerosol's color has
  * turned from the sky's (`mieScatter`) to the limb's (`mieForward`).
  */
-function phasesToward(
+export function phasesToward(
   direction: Node<'vec3'>,
   sun: Node<'vec3'>,
-): {
-  readonly rayleigh: Node<'float'>
-  readonly mie: Node<'float'>
-  readonly forward: Node<'float'>
-} {
+): AirPhases {
   const nu = dot(direction, sun)
   const g = AEROSOL_ASYMMETRY
   const mie = float((1 - g * g) / (4 * Math.PI)).div(
@@ -416,9 +455,11 @@ export function sunTableAt(
   air: AirUniforms,
   muSun: Node<'float'>,
   height01: Node<'float'>,
+  read?: TableRead,
 ): Node<'vec3'> {
   const lutUv = vec2(muSun.add(1).mul(0.5), height01)
-  return air.transmittance.sample(texelCentered(lutUv, TRANSMITTANCE)).rgb
+  return readTable(air.transmittance, texelCentered(lutUv, TRANSMITTANCE), read)
+    .rgb
 }
 
 /**
@@ -427,22 +468,27 @@ export function sunTableAt(
  * coefficients that are zero until the tables arrive, so it still draws a
  * vacuum.
  */
-function psiTableAt(
+export function psiTableAt(
   air: AirUniforms,
   muSun: Node<'float'>,
   height01: Node<'float'>,
+  read?: TableRead,
 ): Node<'vec3'> {
   const lutUv = vec2(muSun.add(1).mul(0.5), height01)
-  return exp(air.multiScatter.sample(texelCentered(lutUv, MULTI_SCATTER)).rgb)
+  return exp(
+    readTable(air.multiScatter, texelCentered(lutUv, MULTI_SCATTER), read).rgb,
+  )
 }
 
 /**
  * `samples` midpoint samples from `near` to `far` along `direction` from
  * `origin`, crowded toward the segment's lowest point as the doc comment on
  * `marchAir` describes, each handed to `each` with its step length. A
- * `Loop`, so it lives inside a material's `Fn`.
+ * `Loop`, so it lives inside a material's `Fn`. It reads no texture, so a
+ * march built over it in non-uniform control flow is as legal as its
+ * table reads.
  */
-function crowdedSamples(
+export function crowdedSamples(
   origin: Node<'vec3'>,
   direction: Node<'vec3'>,
   near: Node<'float'>,
@@ -796,19 +842,43 @@ export function sunThrough(
 }
 
 /**
+ * The beam `sunThrough` gives a surface, at a height the caller resolved off
+ * the CPU's float64 heights rather than from `length(point) − 1`: a cloud
+ * sample is an eye-relative offset kilometers out, and its height formed from
+ * a sea-level-unit position carries the float32 step of a planetary radius
+ * (rule 52). `height01` is the share of the air's own height, clamped as
+ * `sunThrough` clamps it; `cleared` is `clearedFromOrbit`'s value, which the
+ * caller holds as a uniform of its own.
+ */
+export function sunThroughAt(
+  air: AirUniforms,
+  height01: Node<'float'>,
+  muSun: Node<'float'>,
+  cleared: Node<'float'>,
+  read?: TableRead,
+): Node<'vec3'> {
+  const height = saturate(height01)
+  const table = sunTableAt(air, muSun, height, read)
+  return clearedBeam(air, table, height, cleared, read)
+}
+
+/**
  * A beam read from the transmittance table, cleared by `strength` toward its
  * hue: the slant's color over the column straight overhead at `height01`,
  * with its dimming taken off down to `ORBIT_BEAM_FLOOR` of the overhead
  * light and kept under that.
  */
-function clearedBeam(
+export function clearedBeam(
   air: AirUniforms,
   table: Node<'vec3'>,
   height01: Node<'float'>,
   strength: Node<'float'>,
+  read?: TableRead,
 ): Node<'vec3'> {
-  const overhead = air.transmittance.sample(
+  const overhead = readTable(
+    air.transmittance,
     texelCentered(vec2(1, height01), TRANSMITTANCE),
+    read,
   ).rgb
   const slant = table.div(max(overhead, vec3(1e-4)))
   const brightest = max(max(slant.x, slant.y), slant.z)
@@ -855,4 +925,36 @@ const ORBIT_BEAM_HUE = 0.5
  * the composite's against 0.025 — and a crescent's sliver and a dark limb
  * wash white (0.043 against 0.033). Half is between: 0.023 and 0.040.
  */
-const ORBIT_AIRLIGHT = 0.5
+export const ORBIT_AIRLIGHT = 0.5
+
+/**
+ * One sample of the air, per unit length in sea-level units: its extinction,
+ * its single scattering already multiplied by the beam `sunT`, and its
+ * multiple scattering — `marchAir`'s per-sample terms, for a march that is
+ * not `marchAir`'s.
+ */
+export interface AirMedium {
+  readonly extinction: Node<'vec3'>
+  readonly single: Node<'vec3'>
+  readonly multiple: Node<'vec3'>
+}
+
+/**
+ * The air at `height` over the datum (sea-level units) for a sun at cosine
+ * `muSun` over the sample's horizontal, seen through `phases`, lit by `sunT`.
+ *
+ * Zeros for now, through the Ψ read the real terms make, so a kernel compiled
+ * against it already binds the table it will bind.
+ */
+export function airMediumAt(
+  air: AirUniforms,
+  height: Node<'float'>,
+  muSun: Node<'float'>,
+  _phases: AirPhases,
+  _sunT: Node<'vec3'>,
+  read?: TableRead,
+): AirMedium {
+  const height01 = saturate(height.div(max(air.top.sub(1), 1e-6)))
+  const psi = psiTableAt(air, muSun, height01, read)
+  return { extinction: vec3(0), single: vec3(0), multiple: psi.mul(0) }
+}
