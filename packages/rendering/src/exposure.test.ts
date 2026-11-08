@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
+import { AU } from '@inertialref/shared'
 import { type Lens, LENS_PRESETS, exposureValue } from './lens.ts'
+import { stellarIlluminance } from './photometry.ts'
 import {
   DEFAULT_SENSOR_SETTINGS,
+  EXTRATERRESTRIAL_ILLUMINANCE,
   meteredShare,
   ExposureMeter,
   exposureForLuminance,
+  SCENE_UNIT_LUMINANCE,
   SURFACE_LUMINANCE,
   adaptExposure,
   exposureMultiplier,
@@ -474,5 +478,38 @@ describe('Enhanced inside an atmosphere', () => {
     expect(
       meter.update(LENS_PRESETS.flight, enhanced, 61, null, 0).effectiveEV,
     ).toBeCloseTo(calibration, 9)
+  })
+})
+
+/*
+ * Two constants name light at the scale of a sunlit surface, and they are not
+ * one unit. The scene unit is the sun above the air, which the air's anchor
+ * in `atmosphere.test.ts` reads through the same constant; the sensor's white
+ * is a calibration half a stop under it. Each test holds a value someone
+ * would otherwise have to rediscover, so a change to either constant fails
+ * here and has to restate the bias rather than drift it.
+ */
+describe('the scene unit', () => {
+  it('is the sun above the air over π', () => {
+    expect(SCENE_UNIT_LUMINANCE).toBe(EXTRATERRESTRIAL_ILLUMINANCE / Math.PI)
+    // 133,800/π = 42,589.86.
+    expect(Math.abs(SCENE_UNIT_LUMINANCE - 42_590)).toBeLessThan(0.5)
+  })
+
+  it('sits half a stop over the sensor’s calibration white', () => {
+    const bias = SCENE_UNIT_LUMINANCE / SURFACE_LUMINANCE
+    const why =
+      'the sensor’s half-stop calibration bias: SCENE_UNIT_LUMINANCE / ' +
+      'SURFACE_LUMINANCE is 1.420, 0.506 stop, and moving it moves every plate'
+    expect(bias, why).toBeGreaterThanOrEqual(1.418)
+    expect(bias, why).toBeLessThanOrEqual(1.422)
+  })
+
+  it('takes the solar luminance to be the disk at sea level', () => {
+    // 1.6 × 10⁹ cd/m² over the disk's 6.794 × 10⁻⁵ sr is 108.7 klx, 0.8125 of
+    // the sun above the air: the disk under the air, not above it.
+    const share = stellarIlluminance(1, AU) / EXTRATERRESTRIAL_ILLUMINANCE
+    expect(share).toBeGreaterThanOrEqual(0.8)
+    expect(share).toBeLessThanOrEqual(0.83)
   })
 })
