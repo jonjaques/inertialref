@@ -29,6 +29,7 @@ import {
   systemId,
   walkBodies,
 } from '@inertialref/universe'
+import { OVER_CLOUDS_LAYER } from './cloudLayers.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { type CloudSystem, createCloudSystem } from './cloudSystem.ts'
 import type { GpuSession } from './gpuHarness.ts'
@@ -178,6 +179,9 @@ export function cloudRig(
   const scene = new Scene()
   const camera = new PerspectiveCamera(RIG_FOV, width / height, 0.05, 1e10)
   camera.quaternion.set(LOOKING_UP.x, LOOKING_UP.y, LOOKING_UP.z, LOOKING_UP.w)
+  // As `App.tsx`'s `onCreated` marks the camera under the flag, before any
+  // warm-up: pass B's composite is on layer 1.
+  if (options.clouds !== false) camera.layers.enable(OVER_CLOUDS_LAYER)
   camera.updateMatrixWorld()
   const disposables: { dispose(): void }[] = []
   if (options.ceiling !== undefined && options.ceiling !== null) {
