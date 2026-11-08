@@ -159,6 +159,11 @@ interface OpenResponse {
   readonly openedAt: number
   model: string | null
   completed: boolean
+  /**
+   * Open past the bound. No longer in flight and never continued, but not
+   * completed either: the provider's late completion still counts once.
+   */
+  abandoned: boolean
   /** Every call this response made, answered or not. */
   readonly callIds: string[]
   /** The continuation has been sent, or never will be; a late redelivery must not send one. */
@@ -246,7 +251,7 @@ export class GuideLoop {
     this.#expire()
     if (this.#continuing !== null || this.pendingCalls > 0) return true
     for (const response of this.#responses.values())
-      if (!response.completed) return true
+      if (!response.completed && !response.abandoned) return true
     return false
   }
   get visitorSpeaking(): boolean {
@@ -502,6 +507,9 @@ export class GuideLoop {
   ): void {
     let row = this.#responses.get(id)
     if (row === undefined) {
+      // A redelivery for a pruned row must not adopt the calls of the next
+      // response, which is what a provisional row under this delegation is.
+      if (this.#finished.has(id)) return
       // A completion for a response whose `response.created` was lost: the
       // calls that arrived under its delegation hold a provisional row.
       const provisional = this.#responses.get(provisionalKey(delegationId))
@@ -510,6 +518,7 @@ export class GuideLoop {
       provisional.id = id
       this.#responses.set(id, provisional)
       row = provisional
+      this.#options.onResponseStarted?.(id)
     }
     // A duplicate completion counts nothing twice and continues nothing.
     if (row.completed) return
@@ -541,7 +550,11 @@ export class GuideLoop {
         typeof error?.code === 'string' ? error.code : 'response_failed',
         typeof error?.message === 'string' ? error.message : '',
       )
-    } else if (kind === 'response.incomplete' && row.callIds.length === 0) {
+    } else if (
+      kind === 'response.incomplete' &&
+      row.callIds.length === 0 &&
+      !row.abandoned
+    ) {
       // A terminal response truncated before its words leaves the voice
       // silent and the stop never narrated. `max_output_tokens` counts
       // reasoning tokens, so one re-prompt is given; a second cut-off ends
@@ -558,7 +571,11 @@ export class GuideLoop {
           'The response ended incomplete.',
         )
     } else {
-      if (kind === 'response.completed') this.#reprompted = false
+      // A whole terminal answer restores the one re-prompt; a tool round does
+      // not, or a retry that calls a tool before hitting the cap again would
+      // be retried without end.
+      if (kind === 'response.completed' && row.callIds.length === 0)
+        this.#reprompted = false
       this.#continueIfAnswered(row)
     }
     this.#pruneResponses()
@@ -614,6 +631,7 @@ export class GuideLoop {
       openedAt: this.#options.now(),
       model,
       completed: false,
+      abandoned: false,
       callIds: [],
       continued: false,
       text: '',
@@ -624,21 +642,28 @@ export class GuideLoop {
    * The row a delegation's item belongs to: the newest open under it, else
    * its latest. Newest, because a response whose completion was lost stays
    * open until the bound closes it, and the item is the live response's.
+   *
+   * For a call, a row already continued is never the one: its continuation
+   * is the response the call belongs to, and attaching the call to the row
+   * behind it would answer it without ever continuing it.
    */
-  #find(delegationId: string | null): OpenResponse | undefined {
+  #find(
+    delegationId: string | null,
+    forCall = false,
+  ): OpenResponse | undefined {
     let open: OpenResponse | undefined
     let latest: OpenResponse | undefined
     for (const row of this.#responses.values()) {
       if (row.delegationId !== delegationId) continue
-      latest = row
-      if (!row.completed) open = row
+      if (!forCall || !row.continued) latest = row
+      if (!row.completed && !row.abandoned) open = row
     }
     return open ?? latest
   }
 
-  /** As `#find`, holding a provisional row when the delegation is not yet known at all. */
+  /** As `#find` for a call, holding a provisional row when no response can take it yet. */
   #rowFor(delegationId: string | null): OpenResponse {
-    const found = this.#find(delegationId)
+    const found = this.#find(delegationId, true)
     if (found !== undefined) return found
     const row = this.#row(null, delegationId)
     this.#responses.set(provisionalKey(delegationId), row)
@@ -657,10 +682,23 @@ export class GuideLoop {
       )
     }
     for (const row of this.#responses.values()) {
-      if (row.completed || now - row.openedAt < RESPONSE_TIMEOUT_MS) continue
-      row.completed = true
+      if (
+        row.completed ||
+        row.abandoned ||
+        now - row.openedAt < RESPONSE_TIMEOUT_MS
+      )
+        continue
+      // Abandoned, not completed: nothing is in flight for it and it is
+      // never continued, but a late completion still counts its usage and
+      // reports the response once. Its calls are retired with it, or a tool
+      // that never returns would hold "in flight" past the bound; an answer
+      // that arrives later finds the call answered and sends nothing.
+      row.abandoned = true
       row.continued = true
-      if (row.id !== null) remember(this.#finished, row.id)
+      for (const callId of row.callIds) {
+        const call = this.#calls.get(callId)
+        if (call !== undefined) call.answered = true
+      }
       this.#options.onError?.(
         'response-timeout',
         'The response never completed.',
@@ -668,10 +706,10 @@ export class GuideLoop {
     }
   }
 
-  /** Done: completed, every call answered, and continued or terminal. */
+  /** Done: completed or abandoned, every call answered, and continued or terminal. */
   #done(row: OpenResponse): boolean {
     return (
-      row.completed &&
+      (row.completed || row.abandoned) &&
       (row.continued || row.callIds.length === 0) &&
       row.callIds.every((id) => this.#calls.get(id)?.answered !== false)
     )
@@ -683,6 +721,9 @@ export class GuideLoop {
       if (this.#responses.size <= KEPT_RESPONSES) return
       if (!this.#done(row)) continue
       this.#responses.delete(key)
+      // An abandoned row's completion may still come; past the row it is a
+      // redelivery, and remembered so it adopts nothing.
+      if (row.id !== null) remember(this.#finished, row.id)
       for (const callId of row.callIds) this.#calls.delete(callId)
     }
   }

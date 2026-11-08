@@ -351,37 +351,112 @@ describe('the loop recovers', () => {
     expect(f.creates()).toBe(0)
     expect(f.loop.inFlight).toBe(false)
     expect(f.errors).toHaveBeenCalledWith('server_error', expect.any(String))
-    // A call the failed response left unanswered is dropped, not run late.
+    // A call after the failure cannot be told from the next response's early
+    // call, so it is held for a response that may come, and the bound closes
+    // it if none does.
     const g = rig()
     g.created('resp_1')
     g.fake.emit(provider.responseFailed('resp_1'))
     g.call('call_late')
     await g.settle()
     expect(g.loop.pendingCalls).toBe(0)
+    expect(g.creates()).toBe(0)
+    expect(g.loop.inFlight).toBe(true)
+    g.advance(91_000)
     expect(g.loop.inFlight).toBe(false)
   })
 
-  it('re-prompts once for a terminal response cut off at the token cap, then stops', () => {
+  it("holds a continuation's early call for the response that is coming, not the row behind it", async () => {
+    const f = rig()
+    f.created('resp_a')
+    f.call('call_a', 'describe_view', '{}')
+    await f.settle()
+    f.completed('resp_a')
+    expect(f.creates()).toBe(1)
+    // The continuation's first call lands before its `response.created`.
+    f.call('call_b', 'describe_view', '{}')
+    await f.settle()
+    expect(f.execute).toHaveBeenCalledTimes(2)
+    expect(f.settled).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.anything(),
+      { responseId: null, durationMs: 0 },
+    )
+    expect(f.creates()).toBe(1)
+    f.created('resp_b')
+    f.completed('resp_b')
+    expect(f.creates()).toBe(2)
+  })
+
+  it('reports a response adopted at its completion as started, so its trace exists', async () => {
+    const f = rig()
+    f.fake.emit(
+      provider.functionCall('call_q', 'describe_view', '{}', 'item_q'),
+    )
+    await f.settle()
+    f.fake.emit(provider.responseCompleted('resp_q', null, 'item_q'))
+    expect(f.started).toHaveBeenCalledWith('resp_q')
+    expect(f.ended).toHaveBeenCalledOnce()
+    expect(f.ended.mock.calls[0]![0]).toMatchObject({
+      id: 'resp_q',
+      calls: [{ callId: 'call_q' }],
+    })
+    expect(f.creates()).toBe(1)
+  })
+
+  it('retires the calls of an abandoned response, and still counts its late completion once', async () => {
+    const f = rig()
+    let release: (() => void) | null = null
+    f.execute.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ status: 'ok' } as GuideToolOutput)
+        }),
+    )
+    f.created('resp_1')
+    f.call('call_stuck', 'describe_view', '{}')
+    await f.settle()
+    f.advance(91_000)
+    expect(f.loop.inFlight).toBe(false)
+    expect(f.loop.pendingCalls).toBe(0)
+    release!()
+    await f.settle()
+    expect(f.outputs()).toHaveLength(0)
+    const usage = { input_tokens: 100, output_tokens: 10 }
+    f.completed('resp_1', usage)
+    f.completed('resp_1', usage)
+    expect(f.loop.usage.responses).toBe(1)
+    expect(f.ended).toHaveBeenCalledOnce()
+    expect(f.creates()).toBe(0)
+  })
+
+  it('re-prompts once for a terminal response cut off at the token cap, then stops', async () => {
     const f = rig()
     f.created('resp_1')
     f.fake.emit(provider.message('Saturn is'))
     f.fake.emit(provider.responseIncomplete('resp_1', 'max_output_tokens'))
     expect(f.creates()).toBe(1)
     expect(f.developer().at(-1)).toMatch(/cut off/)
+    // The retry calls a tool first; that round does not restore the retry.
     f.created('resp_2')
-    f.fake.emit(provider.responseIncomplete('resp_2', 'max_output_tokens'))
-    expect(f.creates()).toBe(1)
+    f.call('call_2', 'describe_view', '{}')
+    await f.settle()
+    f.completed('resp_2')
+    expect(f.creates()).toBe(2)
+    f.created('resp_3')
+    f.fake.emit(provider.responseIncomplete('resp_3', 'max_output_tokens'))
+    expect(f.creates()).toBe(2)
     expect(f.loop.inFlight).toBe(false)
     expect(f.errors).toHaveBeenCalledWith(
       'max_output_tokens',
       expect.any(String),
     )
-    // A normal completion arms the re-prompt again.
-    f.created('resp_3')
-    f.completed('resp_3')
+    // A whole terminal answer arms the re-prompt again.
     f.created('resp_4')
-    f.fake.emit(provider.responseIncomplete('resp_4', 'max_output_tokens'))
-    expect(f.creates()).toBe(2)
+    f.completed('resp_4')
+    f.created('resp_5')
+    f.fake.emit(provider.responseIncomplete('resp_5', 'max_output_tokens'))
+    expect(f.creates()).toBe(3)
   })
 
   it('continues a response whose calls were answered even when it ended incomplete', async () => {
@@ -461,6 +536,18 @@ describe('the loop recovers', () => {
     f.call('call_1', 'describe_view', '{}')
     await f.settle()
     expect(f.execute).toHaveBeenCalledTimes(70)
+    // A redelivered completion of a pruned response does not adopt the next
+    // response's early call, which is holding a provisional row.
+    f.fake.emit(
+      provider.functionCall('call_next', 'describe_view', '{}', 'item_fresh'),
+    )
+    await f.settle()
+    f.fake.emit(provider.responseCompleted('resp_1', null, 'item_fresh'))
+    expect(f.creates()).toBe(70)
+    expect(f.loop.inFlight).toBe(true)
+    f.fake.emit(provider.responseCreated('resp_next', 'item_fresh'))
+    f.fake.emit(provider.responseCompleted('resp_next', null, 'item_fresh'))
+    expect(f.creates()).toBe(71)
     // A response holding an unanswered call survives seventy completions after it.
     let release: (() => void) | null = null
     f.execute.mockImplementationOnce(
