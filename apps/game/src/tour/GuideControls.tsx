@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { Mic, Pause, Play, Square } from 'lucide-react'
 import { Action } from '../hud/Action.tsx'
-import { posthog } from '../posthog.ts'
 import { useActionTitle } from '../input/useKeymap.ts'
 import {
   PLANETARIUM_GUIDE_VOICE,
@@ -70,7 +69,6 @@ export function GuideControls({
                 icon={Mic}
                 tone="primary"
                 onClick={() => {
-                  posthog.capture('guide_session_started')
                   void runtime.start(voice)
                 }}
               />
@@ -81,13 +79,7 @@ export function GuideControls({
                   icon={paused ? Play : Pause}
                   title={pauseTitle}
                   disabled={connecting || closing}
-                  onClick={() => {
-                    posthog.capture(
-                      paused ? 'guide_session_resumed' : 'guide_session_paused',
-                    )
-                    if (paused) runtime.resume()
-                    else runtime.pause()
-                  }}
+                  onClick={() => (paused ? runtime.resume() : runtime.pause())}
                 />
                 <Action
                   label="End"
@@ -95,7 +87,6 @@ export function GuideControls({
                   title={endTitle}
                   disabled={closing}
                   onClick={() => {
-                    posthog.capture('guide_session_ended')
                     void runtime.end()
                   }}
                 />

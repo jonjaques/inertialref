@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { posthog } from '../posthog.ts'
+import { recordEvent } from '../posthog.ts'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { FrameScrubber } from '../hud/FrameScrubber.tsx'
@@ -193,11 +193,13 @@ export function CinemaPlayer({
   )
 
   const toggle = useCallback(() => {
-    posthog.capture('cinema_playback_toggled', {
-      action: playhead?.paused ? 'play' : 'pause',
-    })
+    // Space reaches here with no scene open; that toggled nothing.
+    if (playhead !== null)
+      recordEvent('cinema_playback_toggled', {
+        action: playhead.paused ? 'play' : 'pause',
+      })
     session.toggle()
-  }, [playhead?.paused, session])
+  }, [playhead, session])
 
   const replay = useCallback(() => {
     // Play it again through the same verb the URL used, and clear the frame the
@@ -363,7 +365,7 @@ export function CinemaPlayer({
                 label="Copy a link to this frame"
                 icon={Link2}
                 onClick={() => {
-                  posthog.capture('cinema_frame_link_copied')
+                  recordEvent('cinema_frame_link_copied')
                   void navigator.clipboard?.writeText(
                     new URL(
                       cinemaLink(id, { frame: playhead.frame }),

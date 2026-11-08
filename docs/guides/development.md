@@ -404,6 +404,14 @@ environment variable wins over the file. `apps/game/.env.example` documents
 the setup. Nothing secret may go in either place because every `VITE_*` value
 ships in the bundle.
 
+**PostHog** loads from `src/posthog.ts` behind the same gate, `isMeasured`,
+with `PUBLIC_POSTHOG_PROJECT_TOKEN` and `PUBLIC_POSTHOG_HOST` in place of the
+measurement id. It carries the product events, account identity, unhandled
+errors, three lifecycle logs and the guide's AI traces, which include what the
+visitor says to the guide. The SDK is a dynamic import after the gate, so an
+unmeasured page never fetches it; every call site goes through
+`src/posthog.ts`.
+
 **Accounts** are Clerk's
 ([ADR-0048](../adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md))
 and exist only where both halves have a key. The client needs

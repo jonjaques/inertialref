@@ -1,12 +1,11 @@
 import { createConsoleSink, logHub } from '@inertialref/shared'
 import { startAnalytics } from './analytics.ts'
-import { startPostHog } from './posthog.ts'
-import { posthogLog } from './posthogLogs.ts'
 import { BUILD_ID } from './build.ts'
 import { isTimingLevel, setTimingLevel } from './engine/browserTiming.ts'
 import { cacheStartupAssets } from './net/cacheStartupAssets.ts'
 import { registerServiceWorker } from './net/registerServiceWorker.ts'
 import { QUERY } from './pages/paths.ts'
+import { posthogLog, startPostHog } from './posthog.ts'
 import { installSchedulerYield } from './render/schedulerYield.ts'
 import { read, TIMING_LEVEL } from './state/preferences.ts'
 

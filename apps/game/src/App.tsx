@@ -18,8 +18,8 @@ import { ChromeContext } from './hud/chrome.ts'
 import { CutsceneOverlay } from './hud/CutsceneOverlay.tsx'
 import { ErrorBoundary } from './hud/ErrorBoundary.tsx'
 import { TrackOverlay } from './hud/TrackOverlay.tsx'
-import { posthog } from './posthog.ts'
 import { useCoarsePointer, useDevicePixelRatio } from './hud/viewport.ts'
+import { recordEvent } from './posthog.ts'
 import { bindEngineKnobs } from './state/engineKnobs.ts'
 import {
   DEBUG_ON,
@@ -534,7 +534,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       void engine
         .save()
         .then((text) => {
-          posthog.capture('simulation_saved')
+          recordEvent('simulation_saved')
           flash(`saved ${text.length} bytes`)
         })
         .catch((cause: unknown) => flash(`save failed — ${describe(cause)}`))
@@ -548,7 +548,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
       void engine
         .load()
         .then((ok) => {
-          posthog.capture('simulation_load_completed', { restored: ok })
+          recordEvent('simulation_load_completed', { restored: ok })
           flash(ok ? 'loaded' : 'nothing to load')
         })
         .catch((cause: unknown) => flash(`load failed — ${describe(cause)}`))

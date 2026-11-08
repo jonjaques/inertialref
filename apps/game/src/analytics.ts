@@ -79,9 +79,10 @@ export function isMeasured(
  *
  * Neither is in `lib.dom` — GPC is a W3C draft and DNT was removed after
  * browsers stopped sending it — so both are read off widened views rather than
- * declared as if they were standard.
+ * declared as if they were standard. Exported for `posthog.ts`, which passes
+ * `isMeasured` the same answer.
  */
-function hasOptedOut(): boolean {
+export function hasOptedOut(): boolean {
   const gpc = (navigator as Navigator & { globalPrivacyControl?: boolean })
     .globalPrivacyControl
   const dnt = (navigator as Navigator & { doNotTrack?: string | null })

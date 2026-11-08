@@ -16,12 +16,15 @@ import {
   type GuideSessionRequest,
   type GuideToolOutput,
 } from '@inertialref/protocol'
+import { recordEvent } from '../posthog.ts'
+import { GuideAiObservability } from './aiObservability.ts'
 import {
+  conversationEntry,
   GuideChannel,
   isOutputTranscript,
   type LiveTransport,
+  visitorTranscript,
 } from './channel.ts'
-import { GuideAiObservability } from './aiObservability.ts'
 import { SpeechClock } from './clock.ts'
 import { accessState, type GuideAccess } from './verdict.ts'
 import type { GuideArrival, SceneFacts } from './executor.ts'
@@ -232,11 +235,18 @@ export class GuideRuntime {
   #traceEnabled = false
   #traceSequence = 0
   #traceEntries: GuideTraceEntry[] = []
+  /**
+   * Whether the open session's start was measured, so its end is measured
+   * once. Measured here rather than at the panel's buttons: the keys and a
+   * hidden tab pause a session too, and the keys, the time limit, the pause
+   * limit, a lost grant and the provider end one.
+   */
+  #measured = false
 
   constructor(host: GuideHost) {
     this.#host = host
     this.#clock = new SpeechClock({ now: () => host.now() })
-    this.#ai = new GuideAiObservability(() => host.now())
+    this.#ai = new GuideAiObservability(recordEvent)
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -337,13 +347,18 @@ export class GuideRuntime {
       this.#live = live
       const channel = new GuideChannel(live, (event, id) => {
         this.#record('send', { ...event, event_id: id })
-        this.#ai.sent(event)
+        this.#ai.sent(conversationEntry(event))
       })
       this.#channel = channel
       const loop = new GuideLoop(channel, {
         now: () => this.#host.now(),
         execute: (call) => this.#execute(call),
-        onExecuted: (call, output) => this.#executed(call, output),
+        onExecuted: (call, output, context) => {
+          this.#executed(call, output)
+          this.#ai.toolSettled(call, output, context)
+        },
+        onResponseStarted: (id) => this.#ai.responseStarted(id),
+        onResponseEnded: (response) => this.#ai.responseEnded(response),
         onDelegation: () => {
           this.#cancelLinger()
           this.#takenOver = false
@@ -387,6 +402,8 @@ export class GuideRuntime {
       this.#sceneChangedAt = null
       this.#sceneText = sceneBlock(view, facts)
       this.#update({ activity: LISTENING })
+      this.#measured = true
+      recordEvent('guide_session_started')
       this.#pollRelease ??= this.#host.poll(() => this.#tick())
       this.#visibilityRelease ??= this.#host.visibility((visible) => {
         if (!visible) this.pause()
@@ -404,7 +421,7 @@ export class GuideRuntime {
       channel.comment(BEGIN_CONVERSATION)
     } catch (cause) {
       if (generation !== this.#generation) return
-      this.#teardown()
+      this.#teardown('failed')
       this.#update({ activity: OFFLINE, message: message(cause) })
     }
   }
@@ -419,6 +436,7 @@ export class GuideRuntime {
     void channel.mute(true).catch(() => {})
     this.#instruct(channel, PAUSE_INSTRUCTION)
     this.#update({ activity: { state: 'paused' } })
+    recordEvent('guide_session_paused')
   }
 
   resume(): void {
@@ -430,6 +448,7 @@ export class GuideRuntime {
     })
     this.#instruct(channel, RESUME_INSTRUCTION)
     this.#update({ activity: LISTENING, message: null })
+    recordEvent('guide_session_resumed')
   }
 
   /** An instruction a closing connection may refuse; its failure handler reports that. */
@@ -455,7 +474,7 @@ export class GuideRuntime {
     // carries the billed seconds, and `#refresh` stops reading once the
     // session ends.
     const usage = this.#loop?.usage ?? this.#snapshot.usage
-    this.#teardown()
+    this.#teardown('ended')
     this.#update({ activity: OFFLINE, voice: null, expiresAt: null, usage })
   }
 
@@ -478,7 +497,8 @@ export class GuideRuntime {
   #event(live: LiveConnectionPort, event: LiveServerEvent): void {
     if (live !== this.#live) return
     if (!isOutputTranscript(event)) this.#record('receive', event)
-    this.#ai.received(event)
+    const heard = visitorTranscript(event)
+    if (heard !== null) this.#ai.heard(heard)
     this.#loop?.receive(event)
   }
 
@@ -487,7 +507,7 @@ export class GuideRuntime {
     if (this.#ending) return
     // The closing event's seconds, which the loop has and the snapshot not yet.
     const usage = this.#loop?.usage ?? this.#snapshot.usage
-    this.#teardown()
+    this.#teardown('closed')
     this.#update({
       activity: OFFLINE,
       voice: null,
@@ -501,7 +521,7 @@ export class GuideRuntime {
 
   #failure(live: LiveConnectionPort, reason: string): void {
     if (live !== this.#live || this.#ending) return
-    this.#teardown()
+    this.#teardown('failed')
     this.#update({ activity: OFFLINE, voice: null, message: reason })
   }
 
@@ -510,16 +530,9 @@ export class GuideRuntime {
     if (executor === null) return { status: 'rejected', reason: 'No scene.' }
     if (this.#paused())
       return { status: 'rejected', reason: 'The visitor has paused the guide.' }
-    const startedAt = this.#host.now()
-    try {
-      const output = await executor.execute(call)
-      this.#record('note', { call: call.name, output })
-      this.#ai.toolExecuted(call, output, startedAt)
-      return output
-    } catch (cause) {
-      this.#ai.toolFailed(call, cause, startedAt)
-      throw cause
-    }
+    const output = await executor.execute(call)
+    this.#record('note', { call: call.name, output })
+    return output
   }
 
   #executed(call: GuideCall, output: GuideToolOutput): void {
@@ -716,7 +729,10 @@ export class GuideRuntime {
       throw new Error('The guide request was canceled.')
   }
 
-  #teardown(): void {
+  /** Release the session; `cause` is how it ended, for the measurement. */
+  #teardown(cause: 'ended' | 'closed' | 'failed'): void {
+    if (this.#measured) recordEvent('guide_session_ended', { cause })
+    this.#measured = false
     this.#cancelLinger()
     this.#pollRelease?.()
     this.#pollRelease = null
