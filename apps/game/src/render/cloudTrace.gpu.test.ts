@@ -923,15 +923,20 @@ describe('past the fine march', () => {
       layers: [EMPTY_BELOW, [SLAB.base, SLAB.top]],
     })
     const slab = slabMedium([{ ...SLAB, sigma }])
-    const [skipped] = await probe(uniforms, slab, { skip })([
-      { direction: [0, 1, 0] },
-    ])
+    // At two jitters: the first step after the last brick takes it again.
+    const skipping = await probe(uniforms, slab, { skip })(
+      [0, 0.6].map((jitter) => ({ direction: [0, 1, 0] as Vec3, jitter })),
+    )
     const [walked] = await probe(uniforms, slab)([{ direction: [0, 1, 0] }])
-    expect(relative(skipped!.transmittance, through)).toBeLessThanOrEqual(MARCH)
-    expectLight(skipped!, 1 - through)
-    // Three bricks cover the 700 m the schedule's growing steps take about
-    // fourteen to cross.
-    expect(skipped!.steps).toBeLessThan(walked!.steps - 5)
+    for (const skipped of skipping) {
+      expect(relative(skipped.transmittance, through)).toBeLessThanOrEqual(
+        MARCH,
+      )
+      expectLight(skipped, 1 - through)
+      // Three bricks cover the 700 m the schedule's growing steps take about
+      // fourteen to cross.
+      expect(skipped.steps).toBeLessThan(walked!.steps - 5)
+    }
   })
 })
 
@@ -1082,6 +1087,48 @@ async function stepsOf(trace: CloudTrace): Promise<CloudTrace['steps']> {
     await new Promise((resolve) => setTimeout(resolve, 5))
   return trace.steps
 }
+
+describe('the outputs', () => {
+  it('follow the frame’s extent, one level each, holding the 72 bytes a texel they declare', async () => {
+    const traced = await rig(slabMedium([]), 4, 4, {
+      eye: 1000,
+      layers: [[100, 5000]],
+    })
+    const { trace, uniforms } = traced
+    const backend = renderer.backend as unknown as {
+      get(texture: object): { texture: GPUTexture }
+    }
+    for (const [width, height] of [
+      [4, 4],
+      [6, 2],
+    ] as const) {
+      sizeTrace(uniforms, width, height)
+      trace.render(renderer, frameOf({ width, height }), BUDGET)
+      // A resize disposes the four and three makes them again at the next
+      // binding: the kernels write the new ones, not what was destroyed.
+      const { light } = await outputsOf(trace, width, height)
+      for (let k = 0; k < width * height; k += 1)
+        expect(light(k % width, Math.floor(k / width))).toEqual([0, 0, 0, 1])
+      const held = trace.textures().map((map) => {
+        const gpuTexture = backend.get(map).texture
+        return [gpuTexture.width, gpuTexture.height, gpuTexture.mipLevelCount]
+      })
+      expect(held).toEqual([
+        [width, height, 1],
+        [2 * width, height, 1],
+        [2 * width, height, 1],
+        [2 * width, 2 * height, 1],
+      ])
+      // RGBA16F: eight bytes a texel of each.
+      const bytes = held.reduce((sum, [w, h]) => sum + w! * h! * 8, 0)
+      expect(trace.bytes).toBe(bytes)
+      expect(trace.bytes).toBe(width * height * 72)
+    }
+    traced.dispose()
+    expect(trace.bytes).toBe(0)
+    expect(trace.textures()).toEqual([])
+  })
+})
 
 describe('the immediate regime', () => {
   it('traces every history pixel exactly once over its four dispatches, and stores nothing outside the extent', async () => {
