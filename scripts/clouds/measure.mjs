@@ -10,7 +10,8 @@
  *
  * `stances` shows every scenario's sun, its passes and a still before a batch
  * stands on it; `decisions` and `sweep` measure the four choices and the fetch
- * rate; `targets`, `memory` and `error` measure the landed code. A run's steps
+ * rate, and `images` the radiance differences §8.7's cache gate and quality
+ * ladders read; `targets`, `memory` and `error` measure the landed code. A run's steps
  * are `page.mjs`'s; its figures land in `.data/clouds/<batch>-<time>.json`
  * and in the Markdown tables printed at the end, from which the choices are
  * decided by the rules fixed before measuring.
@@ -349,6 +350,74 @@ const error = (size) =>
     })),
   )
 
+/** A run of radiance comparisons at one stance: each pair of lever sets captured and differenced (§8.7). */
+const radiance = (group, label, scenario, size, threshold, comparisons) => ({
+  id: ['images', group, label, scenario, size].join('/'),
+  type: 'radiance',
+  batch: 'images',
+  group,
+  label,
+  ...stood(scenario, size),
+  comparisons: comparisons.map(([name, a, b]) => ({
+    name,
+    threshold,
+    a: levers(scenario, { ...ON, ...a }),
+    b: levers(scenario, { ...ON, ...b }),
+  })),
+})
+
+/**
+ * Each quality lever's ladder: §8.7 sets it to the smallest value whose
+ * image differs from the next larger one by under 1% radiance RMSE in
+ * `horizon` and `inside`. Two taps or four, or none; the default maxSteps,
+ * 192, and the default footprint, 400 m, sit inside their ladders.
+ */
+export const LADDERS = Object.freeze({
+  maxSteps: [64, 96, 128, 192, 256, 384],
+  lightTaps: [0, 2, 4],
+  farFootprint: [200, 400, 800, 1600],
+})
+
+/**
+ * §8.7's image inputs. The cache gate: each volume combination against the
+ * field one with the same sun depth, under 3% over cloud texels, in `ground`,
+ * `horizon` and `inside`. The ladders: each value against the next.
+ */
+const images = (size) => [
+  ...['ground', 'horizon', 'inside'].map((s) =>
+    radiance('cache', 'volume', s, size, 0.03, [
+      [
+        'volume against field, cascades',
+        { cache: 'field', sunDepth: 'cascades' },
+        { cache: 'volume', sunDepth: 'cascades' },
+      ],
+      [
+        'volume against field, grid',
+        { cache: 'field', sunDepth: 'grid' },
+        { cache: 'volume', sunDepth: 'grid' },
+      ],
+    ]),
+  ),
+  ...Object.entries(LADDERS).flatMap(([lever, values]) =>
+    ['horizon', 'inside'].map((s) =>
+      radiance(
+        'ladder',
+        lever,
+        s,
+        size,
+        0.01,
+        values
+          .slice(0, -1)
+          .map((value, i) => [
+            `${value} against ${values[i + 1]}`,
+            { [lever]: value },
+            { [lever]: values[i + 1] },
+          ]),
+      ),
+    ),
+  ),
+]
+
 const stances = (size) =>
   Object.keys(SCENARIOS).map((scenario) => ({
     id: `stances/verify/${scenario}/${size}`,
@@ -363,6 +432,7 @@ const stances = (size) =>
 export const BATCHES = Object.freeze({
   stances,
   decisions,
+  images,
   sweep,
   targets,
   memory,
