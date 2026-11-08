@@ -218,7 +218,10 @@ describe('the stubs are neutral', () => {
 
   it('every resource holds nothing, owes nothing and warms at once', async () => {
     const noiseResource = new noise.CloudNoise()
-    const clipmapResource = new clipmap.CloudClipmap(bundle)
+    const clipmapResource = new clipmap.CloudClipmap(
+      bundle,
+      maps.analyticMapNodes(bundle),
+    )
     const resources: CloudResource[] = [
       noiseResource,
       new maps.CloudMaps(bundle),

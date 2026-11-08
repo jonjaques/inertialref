@@ -41,6 +41,7 @@ import {
 } from './cloudFrame.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
+  analyticMapNodes,
   CLOUD_CUBE_COLUMNS,
   CLOUD_CUBE_GUTTER,
   CLOUD_CUBE_TILE,
@@ -629,7 +630,7 @@ describe('a lookup', () => {
     // the levels a frame rebuilds: one frame after overcast's cover of 1
     // gives way to two-decks' 0.6, levels 0–2 hold 0.6 and 3–5 still 1.
     const uniforms = createCloudUniforms()
-    const clipmap = new CloudClipmap(uniforms)
+    const clipmap = new CloudClipmap(uniforms, analyticMapNodes(uniforms))
     const eye = scaled(EYE_DIRECTION, EARTH + 1500)
     const update = levels(eye, EARTH, null)
     const overcast = WEATHER_SCENARIOS.overcast
@@ -702,7 +703,7 @@ describe('a lookup', () => {
 describe('the schedule', () => {
   it('a first frame rebuilds levels 0–2, then one more a frame; a still frame refreshes an eighth; a cut three', async () => {
     const uniforms = createCloudUniforms()
-    const clipmap = new CloudClipmap(uniforms)
+    const clipmap = new CloudClipmap(uniforms, analyticMapNodes(uniforms))
     const scenario = WEATHER_SCENARIOS['two-decks']
     writeScenarioPattern(uniforms, scenario)
     const eye = scaled(EYE_DIRECTION, EARTH + 1500)
@@ -745,7 +746,7 @@ describe('the schedule', () => {
 
   it('holds one level a texture, its declared bytes its own, and nothing before it warms', async () => {
     const uniforms = createCloudUniforms()
-    const clipmap = new CloudClipmap(uniforms)
+    const clipmap = new CloudClipmap(uniforms, analyticMapNodes(uniforms))
     expect(clipmap.bytes).toBe(0)
     expect(clipmap.textures()).toEqual([])
     expect(clipmap.pending).toBe(false)
