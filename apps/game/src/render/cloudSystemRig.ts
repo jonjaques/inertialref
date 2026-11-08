@@ -18,7 +18,12 @@ import {
   type RenderScene,
   type RenderStar,
 } from '@inertialref/rendering'
-import { type Quat, Quaternion as Q, type Vec3 } from '@inertialref/spatial'
+import {
+  type Quat,
+  Quaternion as Q,
+  type Vec3,
+  Vec,
+} from '@inertialref/spatial'
 import {
   type Body,
   formatAddress,
@@ -85,27 +90,34 @@ export const LOOKING_DOWN: Quat = Q.fromAxisAngle(
   -Math.PI / 2,
 )
 
-function earthAt(
-  eye: number,
-  compression: number,
-  orientation: Quat = Q.IDENTITY,
-): RenderBody {
-  const center: Vec3 = { x: 0, y: -(earth.radius + eye) * compression, z: 0 }
+interface Placed {
+  readonly address: string
+  readonly name: string
+  readonly center: Vec3
+  readonly compression: number
+  readonly distance: number
+  readonly angularRadius: number
+  readonly orientation: Quat
+}
+
+/** A body with Earth's record and air, placed about the eye. */
+function earthLike(placed: Placed): RenderBody {
+  const { compression } = placed
   return {
     sunlight: 0.85,
-    address: RIG_EARTH,
-    name: earth.name,
+    address: placed.address,
+    name: placed.name,
     kind: earth.kind,
     placement: {
-      position: center,
+      position: placed.center,
       scale: earth.radius * compression,
       compression,
-      distance: (earth.radius + eye) * compression,
+      distance: placed.distance * compression,
       tier: 'surface',
       compressed: compression !== 1,
-      angularRadius: 1.4,
+      angularRadius: placed.angularRadius,
     },
-    orientation,
+    orientation: placed.orientation,
     hasAtmosphere: true,
     terminator: 0.1,
     atmosphereScale: 1.02,
@@ -120,6 +132,42 @@ function earthAt(
     rings: null,
     appearance: earth.appearance,
   } as unknown as RenderBody
+}
+
+function earthAt(
+  eye: number,
+  compression: number,
+  orientation: Quat = Q.IDENTITY,
+): RenderBody {
+  return earthLike({
+    address: RIG_EARTH,
+    name: earth.name,
+    center: { x: 0, y: -(earth.radius + eye) * compression, z: 0 },
+    compression,
+    distance: earth.radius + eye,
+    angularRadius: 1.4,
+    orientation,
+  })
+}
+
+/**
+ * The second wet body: Earth's own record under another address, so the
+ * frame finds it wet, its center `distance` meters from the eye `toward` a
+ * render direction, uncompressed and unturned.
+ */
+export const RIG_TWIN = 'g:milky-way/s:SOL/b:2-twin'
+
+function twinAt(distance: number, toward: Vec3): RenderBody {
+  const unit = Vec.normalize(toward)
+  return earthLike({
+    address: RIG_TWIN,
+    name: 'Twin',
+    center: Vec.scale(unit, distance),
+    compression: 1,
+    distance,
+    angularRadius: Math.asin(earth.radius / distance),
+    orientation: Q.IDENTITY,
+  })
 }
 
 /**
@@ -150,10 +198,10 @@ function star(position: Vec3): RenderStar {
 const STAR = { x: -0.6e9, y: 1.2e9, z: 0.3e9 }
 
 /**
- * The star `toward` a body-fixed sun from `body`'s center: Earth sits
- * unturned, so its own axes are the render's, and a star placed from the
- * eye instead would tilt the sun by the eye's height over the star's
- * distance, a degree from 20,000 km.
+ * The star `toward` the sun from `body`'s center, render axes: the frame's
+ * sun is that direction in the body's own axes. A star placed toward the
+ * sun from the eye instead would tilt it by the eye's height over the
+ * star's distance, a degree from 20,000 km.
  */
 function starToward(body: RenderBody, toward: Vec3): RenderStar {
   const reach = 1e12 / Math.hypot(toward.x, toward.y, toward.z)
@@ -166,7 +214,7 @@ function starToward(body: RenderBody, toward: Vec3): RenderStar {
 }
 
 function renderScene(
-  body: RenderBody,
+  bodies: readonly RenderBody[],
   looking: Quat,
   sun: RenderStar,
 ): RenderScene {
@@ -177,7 +225,7 @@ function renderScene(
       up: { x: 0, y: 1, z: 0 },
     },
     horizon: null,
-    bodies: [body],
+    bodies,
     stars: [sun],
     entities: [],
     structures: [],
@@ -203,6 +251,8 @@ export interface RigStance {
    * onto the render's +Y, so a test picks the place it measures over.
    */
   readonly turn?: Quat
+  /** A second wet body (`RIG_TWIN`), `distance` meters from the eye `toward` a render direction. */
+  readonly twin?: { readonly distance: number; readonly toward: Vec3 }
 }
 
 /**
@@ -219,11 +269,14 @@ export function rigEngineInputs(
   return {
     levers,
     scene: renderScene(
-      body,
+      stance.twin === undefined
+        ? [body]
+        : [body, twinAt(stance.twin.distance, stance.twin.toward)],
       stance.looking,
       stance.sun === undefined ? star(STAR) : starToward(body, stance.sun),
     ),
-    record: (address) => SOL.get(address) ?? null,
+    record: (address) =>
+      SOL.get(address) ?? (address === RIG_TWIN ? earth : null),
     scattering: (drawn) =>
       stance.air === true ? scatteringOf({ pool: () => null }, drawn) : null,
     renderTime: 50_000,
@@ -277,6 +330,8 @@ export interface CloudRigOptions {
   readonly air?: boolean
   /** Toward the sun from Earth's center, render axes; up and a little west of the eye by default. */
   readonly sun?: Vec3
+  /** A second wet body: see `RigStance.twin`. */
+  readonly twin?: RigStance['twin']
 }
 
 export interface CloudRig {
@@ -339,6 +394,7 @@ export function cloudRig(
     looking,
     ...(options.sun === undefined ? {} : { sun: options.sun }),
     ...(options.air === undefined ? {} : { air: options.air }),
+    ...(options.twin === undefined ? {} : { twin: options.twin }),
   }
   const lens = lensForFov(RIG_FOV)
   const rig = {
