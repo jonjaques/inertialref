@@ -13308,6 +13308,37 @@ linger rather than falling back to the clock's start timeout.
 `ir.guideStatus().meter` says so, and `docs/roadmap.md` says the listen is
 with the window on screen.
 
+## The transport survives what it can (8 Nov 2026)
+
+Phase 2 of `design/plans/the-guide.md`: findings 10 to 14 of the November
+council. [ADR-0042](docs/adr/0042-the-guide-speaks-in-one-voice.md) holds
+the rule under "the transport survives what it can". What the plan's fixes
+got wrong, and what the tests taught.
+
+**There is no ICE restart to attempt.** The plan asked for `restartIce()`
+inside the grace. An ICE restart is a new offer and answer, the Worker
+exchanges one SDP at session creation, and the Live API has no renegotiation
+route. `disconnected` returns to `connected` by itself once packets flow,
+which is what the 10 s grace waits for.
+
+**The verbs no longer throw out of the tick; the host can.** Finding 11
+named `note`, `answer`, `respond` and `ask` as the throwers; phase 0's
+`#try` reports a failed send instead. What can still throw under a tick is a
+host read, an analyser on a closed context, so the guard stays and its test
+patches the fake's level.
+
+**A beat the gap interrupted is listened for again.** Not sampling the clock
+during the grace holds a linger, and on recovery the first sample would have
+read the whole gap as the quiet after the last word and prompted the next
+stop at once; the runtime cancels the beat and holds the linger until the
+meter hears speech begin, or the start timeout says the narration is over.
+
+**Resume follows the capture.** `channel.mute(false)` awaited nothing and
+sent the unmute at once, and two runtime tests read "listening"
+synchronously after `resume()`, which was the defect in test form. The
+fake's unmute settles a microtask later so a test can see paused while the
+capture is coming.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

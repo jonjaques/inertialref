@@ -3,7 +3,8 @@
 Status: accepted · 14 Sep 2026; authorization amended 29 Sep 2026 by
 [ADR-0048](0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md),
 where an account grant replaces the shared password; the loop's bounds
-added 7 Nov 2026 and the tour's pacing 8 Nov 2026. Supersedes the two-model
+added 7 Nov 2026, the tour's pacing and the transport's survival 8 Nov 2026.
+Supersedes the two-model
 narration, the controlled clips, the application socket, and the Durable
 Object session store of [ADR-0041](0041-the-guide-requests-the-view.md); keeps
 that ADR's execution boundary.
@@ -101,6 +102,30 @@ output and transcripts are data and never become an instruction.
   beat that reads silent on a meter that is not `ok` holds the linger and
   listens again once the meter can hear; `ir.guideStatus().meter` says why a
   tour is holding.
+
+- **The transport survives what it can, and reports what it cannot.** A peer
+  that reports `disconnected` is on a 10 s grace, not over: that is the state
+  WebRTC uses for a loss it expects to recover from — a Wi-Fi roam, a lid
+  cycle, a burst of lost packets — and consent checks bring it back on their
+  own once packets flow. No ICE restart is attempted, because that takes a
+  new offer and answer and the Worker's one SDP exchange is at session
+  creation. While the peer is on its grace the runtime says `reconnecting`,
+  does not sample the clock, so a linger holds rather than reads the gap as
+  the end of the words, and listens for an interrupted beat afresh once the
+  path is back. `failed`, `closed`, the channel's own `close` or `error`, a
+  frame over 65,536 characters, and the grace running out are failures,
+  reported once with their reason, never a silence; a host read that throws
+  under a tick ends the session the same way rather than throwing every
+  100 ms. A capture track that ends on its own is re-captured from the
+  default device, and when no device answers the session continues with a
+  message rather than ending; a refused `audio.play()` is a message too,
+  retried on the next unmute, which the panel's Resume makes under a
+  gesture. A resume opens the provider's input only once the microphone is
+  live — told first, the voice took the silent carrier for the visitor's
+  turn — so the status says paused until then and stays paused, with the
+  reason, when the capture fails. The page going away runs the failure path,
+  because a page the back-forward cache restores must not find the runtime
+  connected over a dead transport.
 
 - **The browser starts backend work only while no chain is in flight and the
   visitor is quiet.** A message queued into an open chain is read by that
@@ -209,9 +234,14 @@ refuses an event off the allow list as the real connection does, and plays
 the provider's refusals, failures and cut-offs on request, so the beat, the
 correction, the deferred arrival, the held prompts, the paused tour, the
 meter that cannot hear, the filler's tail, the move that never arrives, the
-lens takeover, the one-move-per-turn guard, pause, end,
+lens takeover, the one-move-per-turn guard, pause, end, the peer on its
+grace, the resume that waits for the microphone, the page going away,
 and every recovery above are covered without a provider, and a misspelled
-event fails a test rather than a session. The browser names provider events only in its adapter
+event fails a test rather than a session. The peer connection, the data
+channel, the capture tracks and the audio element are driven by a small
+host fake in `media.test.ts`: the grace and its expiry, a channel the
+provider drops, a track that ends on its own, a refused play, a frame too
+large to read. The browser names provider events only in its adapter
 — `channel.ts`, `loop.ts` and `media.ts` — and the runtime speaks in verbs
 over a `send` typed on the protocol's `GuideClientEvent`. Determinism is unchanged: the executor moves only the observatory,
 and headless checks preserve identical canonical hashes.

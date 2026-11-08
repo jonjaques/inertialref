@@ -133,46 +133,17 @@ deadline and the host-reported takeover.
 
 ### The transport dies in ways the runtime does not see
 
-10. **ICE `disconnected` is terminal.** `media.ts:185-188` fails the session
-    on `disconnected` exactly as on `failed`. `disconnected` is the state
-    WebRTC uses for a transient loss that routinely returns to `connected`
-    within seconds — a Wi-Fi roam, a lid cycle, a few lost packets — and it
-    ends the conversation, releases the microphone, and asks for a new
-    Start, a new greeting and a lost context. Fix: a grace timer (8–10 s)
-    on `disconnected`, `restartIce()` once inside it, a "reconnecting"
-    status, failure on `failed`, `closed`, or expiry. (Five seats and this
-    spike; confirmed.)
-11. **Nothing listens to the data channel itself.** `media.ts:145-197`
-    handles the channel's `message` and the peer's `connectionstatechange`
-    and not the channel's `close` or `error`. Scenario: the provider closes
-    the channel while the peer stays connected; `send` throws from then on,
-    the failure handler never fires, and the verbs that do not swallow —
-    `note`, `answer`, `respond`, `ask` — throw out of `#tick` every 100 ms
-    while the panel says "Listening". Fix: route `close` and `error` to the
-    failure handler; guard `#tick`. (Two seats; confirmed.)
-12. **The microphone can vanish unnoticed, and a resume says "Listening"
-    early.** No capture track has an `ended` listener and nothing watches
-    `devicechange`, so an unplugged headset leaves the sender holding a dead
-    track and the guide deaf with no message; a rejected `audio.play()`
-    fails the whole session where a retry on the next gesture would do;
-    `runtime.ts:423-427` unmutes the provider's input and reports Listening
-    before `getUserMedia` settles, and a refusal there restores the
-    microphone's internal mute while `ir.guideStatus` reports it `active`.
-    Fix: `ended` listeners that re-capture through `#resumeCapture` or
-    report; await the capture before the provider unmute; a resuming and a
-    failed state the status follows. (Four seats.)
-13. **Page hide stops the transport and not the runtime.** `runtime.ts:390-393`
-    closes the channel and stops the connection; the runtime stays
-    "connected" over a dead transport, and a page restored from the
-    back-forward cache offers Pause and Resume against nothing. Chromium
-    refuses the cache to a page with an open peer connection, so the
-    scenario needs another browser; the fix is a line, so it is cheap to
-    close: run the failure path on `pagehide`. (Three seats; confirmed.)
-14. **A message over 65,536 bytes is dropped in silence.** `media.ts:150-154`
-    returns on an oversized frame; a function call whose arguments cross the
-    bound is a call the loop never learns of, and its chain hangs. Fix: fail
-    loudly through the failure handler, or answer the call as too large if
-    its id can be read. (One seat; confirmed.)
+Findings 10 to 14 landed: a `disconnected` peer is on a 10 s grace and
+reported as `reconnecting`, with no ICE restart because the Worker's one
+SDP exchange is at session creation; the channel's own `close` and `error`
+reach the failure handler and the tick is guarded; a capture track that
+ends is re-captured or reported, a refused `audio.play()` is retried on the
+next unmute, and a resume says Listening only once the microphone is live;
+page hide runs the failure path; a frame too large to read is a failure,
+not a silence. The rules are in
+[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) under "the
+transport survives what it can". `devicechange` is not watched: the track's
+own `ended` covers the device in use.
 
 ### A long session grows
 
@@ -509,16 +480,15 @@ themselves measures the stall.
 
 | Phase | Lands                                                                                                                                                                                                                                                                                                                                                                                             | Done when                                                                                                                                                                                                                                                                                                                                        |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2     | **The transport survives.** Findings 10–14: a grace period on `disconnected`, the channel's own `close` and `error`, the microphone's `ended`, a resume whose status follows the capture, teardown on `pagehide`, a loud oversized frame                                                                                                                                                          | A test per path on a small host fake for `media.ts`; a drive-rig session that drops the network for five seconds and keeps the conversation                                                                                                                                                                                                      |
 | 3     | **Consent and the recorder** (§4): the D1 binding and its four tables, the consent route and the events route, the panel's switch and disclosure, the recorder at the channel boundary, the export script, the weekly sweep; the `$ai_*` events through the relay and `TELEMETRY_TRANSCRIPTS` replaced by the row; ADR-0042's "sees nothing of the conversation" and ADR-0061's exception amended | A session opted in replays through `scripts/tour/replay.mjs` from the export and its trace arrives at the relay's capture path; a session opted out writes no row and sends no sentence; an opt-out mid-session refuses the next batch; the Worker tests cover the consent check without Clerk; `tool_calls` answers the refusal question in SQL |
 | 4     | **The bounds** — findings 15–18: a daily per-account limiter, a client usage ceiling, `cancelPending` on pause, a greeting and a pause that do not accumulate, the context ratio in diagnostics, one search handle per call, a note for a superseded move, the ADR's sentence on what the allow list protects                                                                                     | Worker tests for the limiter; loop tests for the pause and the parallel searches; a two-hour drive-rig session whose usage ratio is read from `ir.guideStatus`                                                                                                                                                                                   |
 | 5     | **The panel** — findings 19 and 20: captions from the deltas, a typed request field, a radiogroup for the voices, the disclosure tied to Start, a sentence for a network error, the four small ones                                                                                                                                                                                               | An axe pass on the panel; a screen reader names the chosen voice; a typed request runs a tour with the microphone muted; a render test for `GuideControls`                                                                                                                                                                                       |
 | 6     | **The comparison** (§5): a week each of Astra `low`, Luna `low`, GPT-6.1 Sol `low`, GPT-6.1 Terra `none`; then the Fast tier against default; then `acknowledgement_delay_ms`; the voices auditioned                                                                                                                                                                                              | The measures of §5 as SQL over phase 3's rows, in a table on this page or its ADR, with the operating point named; a backend changes only on a measured win; `GUIDE_VOICES` grows only by voices that passed the listen                                                                                                                          |
 
-Phase 3 needs none of 1–2 to compile and both to be worth reading; phases
-1 and 2 are each a day, and the council's first three recommendations agree
-on their order. Phases 0 and 1, the loop and the pacing, are landed. A fresh council round reviews each phase's pull
-request, not this page.
+Phase 3 needs none of 1–2 to compile and both to be worth reading, and the
+council's first three recommendations agree on their order. Phases 0 to 2,
+the loop, the pacing and the transport, are landed. A fresh council round
+reviews each phase's pull request, not this page.
 
 ---
 
