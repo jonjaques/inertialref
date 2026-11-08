@@ -338,15 +338,20 @@ describe('the stubs are neutral', () => {
     mesh.dispose()
   })
 
-  it('the stand-in droplet table decodes as the isotropic table it says it is', () => {
+  // The table's physics is held in packages/rendering/src/mieTable.test.ts;
+  // here only the shape every GPU module sizes its upload by, which holds for
+  // the generated table and for any table regenerated at another resolution.
+  it('the droplet table decodes to the shape its consumers size against', () => {
     const table = mieDroplets()
     expect(table.phase).toHaveLength(table.radii * table.angles * 3)
-    // 1/(4π) through a half float: 0.0795898, 1.6 × 10⁻⁴ above it.
-    for (const p of table.phase) expect(p).toBeCloseTo(1 / (4 * Math.PI), 3)
-    expect(samplePhase(table, -0.3, 7)[1]).toBeCloseTo(1 / (4 * Math.PI), 3)
-    expect(table.bulk).toEqual([
-      { extinction: 2, albedo: 1, asymmetry: 0 },
-      { extinction: 2, albedo: 1, asymmetry: 0 },
-    ])
+    expect(table.bulk).toHaveLength(table.radii)
+    expect(table.gloryRed).toHaveLength(table.radii)
+    for (const p of table.phase) expect(Number.isFinite(p) && p >= 0).toBe(true)
+    const [, green] = samplePhase(
+      table,
+      -0.3,
+      (table.radiusMin + table.radiusMax) / 2,
+    )
+    expect(Number.isFinite(green) && green > 0).toBe(true)
   })
 })
