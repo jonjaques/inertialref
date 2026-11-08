@@ -87,7 +87,8 @@ import { warmCompute } from './warmup.ts'
  * writing the trace's two textures at the interleave's texels from an
  * analytic deck: a level cloud layer fixed on the body 2 km over the eye,
  * with a bright patch on it the wind carries. The oracle is that deck,
- * evaluated in float64 at each history pixel's center.
+ * evaluated in float64 at each history pixel's center, or the trace's own
+ * samples read back, or a twin history fed the same frames.
  */
 
 const TIMESTAMPS = await adapterOffers('timestamp-query')
@@ -275,10 +276,10 @@ const DECK_HEIGHT = 2000
  * view's center, resolved by the trace's samples two pixels apart, and
  * nothing at the image's edges. The clip holds a pixel to the bilinear
  * current of its neighbors, so it flattens what the trace has not measured:
- * a peak the samples straddle reads 0.25% under the deck at thirteen pixels,
- * and an edge row on a frame that does not sample it is held to the row
- * inside it, clamp-to-edge, 1.6% off where a patch's slope crossed the edge.
- * Both are the clip doing its job; neither is this file's subject.
+ * at the peak, which the samples straddle, the patch reads 0.4% under the
+ * deck after twelve frames. That is the clip doing its job, so a test that
+ * needs exactness holds the history to the trace's own samples or to a twin
+ * rather than to the deck.
  */
 const PATCH_RADIUS = 400
 const BASE = [0.3, 0.35, 0.4] as const
@@ -325,10 +326,9 @@ function aimOf(
   }
 }
 
-/** One history texel of the deck, float64. */
+/** One history texel of the deck, float64: (L_c, T_c). */
 interface Texel {
   readonly light: readonly [number, number, number, number]
-  readonly distance: number
 }
 
 /** The deck at every history pixel's center: what a stationary history converges to. */
@@ -360,7 +360,6 @@ function expected(
         (BASE[2] + PATCH[2] * blob) * gain,
         0.7 - 0.4 * blob,
       ],
-      distance: reach / 1000,
     }
   }
 }
@@ -851,9 +850,10 @@ describe('the immediate regime', () => {
 describe('a stationary scene', () => {
   /*
    * The trace mean is what the trace wrote, read back after every frame and
-   * averaged per pixel over its eight converging samples. The deck is flat,
-   * so the nine neighbors' bilinear current is the deck wherever the trace
-   * has sampled it and the clip answers only to the frame's own samples.
+   * averaged per pixel over its eight converging samples. The patch is
+   * spread across the whole deck, so the light has no peak for the clip to
+   * flatten, and at most the linear ramp a test adds, which the bilinear
+   * current follows exactly.
    */
   async function sampled(
     rig: Rig,
