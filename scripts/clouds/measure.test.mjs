@@ -561,6 +561,138 @@ describe('the page steps', () => {
     await expect(send(page, run, 'stance')).rejects.toThrow(/no cloud system/)
     expect(page.calls.visit).toBeUndefined()
   })
+
+  it('run every kind of step in a page that holds nothing of this module', async () => {
+    const page = fakePage()
+    const { ir, engine } = page.context
+    const entry = (name, track, startMs, durationMs) => ({
+      name,
+      track,
+      startMs,
+      durationMs,
+    })
+    // The boot's spans, and a frame drawn before the levers moved.
+    const entries = [
+      entry('warm-up', 'Boot', 0, 4200),
+      entry('warming the clouds', 'Boot', 100, 800),
+      entry('sensor', 'Render', 50, 1),
+    ]
+    const report = {
+      settle: { pending: false },
+      extents: { trace: [480, 270] },
+      steps: { mean: 64, max: 64, exhausted: 0 },
+      levers: { stats: true },
+      residual: {
+        thin: { bins: [4], samples: 4 },
+        light: { bins: [4], samples: 4 },
+        total: { bins: [4], samples: 4 },
+        classDisagreement: 2,
+      },
+      served: 'g:milky-way/s:P222_1_0_9/b:4',
+      second: null,
+      regime: 'converging',
+      pipelines: { render: 30, compute: 14 },
+      bytes: { total: 83_500_000 },
+    }
+    Object.assign(ir, {
+      clouds: () => report,
+      profile: async () => ({
+        frames: 180,
+        late: [{}, {}],
+        spans: [{ track: 'Render', name: 'sensor', meanMs: 2.4 }],
+      }),
+      lens: () => ({ focalLength: 21 }),
+      picture: () => ({ path: 'native' }),
+      build: () => ({ id: 'b1' }),
+      timing: {
+        drain: () => entries.splice(0),
+        // The mark, then the frame the levers drew.
+        mark: (name) =>
+          entries.push(
+            entry(name, 'Boot', 200, 0),
+            entry('sensor', 'Render', 210, 9.5),
+          ),
+      },
+      preset: () => ({
+        picture: {
+          id: 'far-shore',
+          label: 'The Far Shore',
+          why: '',
+          time: 100_331.95,
+          address: 'x',
+          framing: { kind: 'camera' },
+          lens: { focalLength: 20.8 },
+        },
+      }),
+      takePicture: (picture) => {
+        page.calls.picture = picture
+      },
+    })
+    engine.sensorSettings = { mode: 'enhanced', look: 'neutral' }
+    engine.requestSensorSettings = (settings) => {
+      page.calls.settings = settings
+      engine.exposure = {
+        processing: settings.mode === 'enhanced' ? 'enhanced' : 'photographic',
+      }
+    }
+
+    const profiled = decision('decisions/placement/split/horizon/1080p/steady')
+    expect(await send(page, profiled, 'profile:candidate')).toMatchObject({
+      frames: 180,
+      late: 2,
+      sensor: { meanMs: 2.4 },
+    })
+    expect(await send(page, profiled, 'report')).toMatchObject({
+      build: { id: 'b1' },
+      lens: { focalLength: 21 },
+    })
+
+    const sweep = ALL.sweep.find((r) => r.label === 'scale-1')
+    const cell = sweep.cells.findIndex((c) => c.fixedSteps === 64)
+    expect(await send(page, sweep, `cell:${cell}`)).toMatchObject({
+      accepted: true,
+      trace: { ms: 1.2 },
+      frames: 40,
+    })
+
+    const residual = ALL.error.find((r) => r.mode === 'automatic')
+    expect(await send(page, residual, 'residual')).toMatchObject({
+      processing: 'photographic',
+      residual: { classDisagreement: 2 },
+    })
+    expect(page.calls.settings).toEqual({ mode: 'automatic', look: 'neutral' })
+    expect(await send(page, residual, 'show:identity')).toMatchObject({
+      settled: 5,
+    })
+
+    const cold = ALL.memory.find((r) => r.flag)
+    expect(await send(page, cold, 'boot')).toMatchObject({
+      warmUp: 4200,
+      clouds: 800,
+    })
+    await send(page, cold, 'on')
+    expect(await send(page, cold, 'first')).toMatchObject({
+      sensorMs: 9.5,
+      pipelines: { render: 30, compute: 14 },
+    })
+
+    // The moon's rise is far-shore's picture with its own address and no lens.
+    const moon = ALL.stances.find((r) => r.scenario === 'pair-moon')
+    await send(page, moon, 'stance')
+    expect(page.calls.picture).toMatchObject({
+      address: 'g:milky-way/s:P222_1_0_9/b:4.0',
+      framing: { kind: 'rise' },
+      time: 100_331.95,
+    })
+    expect(page.calls.picture.lens).toBeUndefined()
+    expect(await send(page, moon, 'verify')).toMatchObject({
+      served: 'g:milky-way/s:P222_1_0_9/b:4',
+      labels: [
+        ['scene', 34],
+        ['cloud trace', 1],
+      ],
+    })
+  })
 })
 
 describe('the figures', () => {
