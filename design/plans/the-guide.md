@@ -33,7 +33,7 @@ seats raised it.
 One conversation, three parties. GPT Live (`gpt-live-1`) listens and speaks.
 Every request that needs the scene or reasoning is delegated to GPT-6 Astra
 (`gpt-6-astra`, `reasoning.effort: low`, `service_tier: priority`,
-`parallel_tool_calls: true`, 1,200 output tokens), which holds the fourteen
+`parallel_tool_calls: true`, 2,000 output tokens), which holds the fourteen
 tools in `packages/protocol/src/guideTools.ts`. The browser owns the WebRTC
 peer connection and the `oai-events` data channel, executes every tool against
 the observatory (`executor.ts`), answers it, and continues the response
@@ -94,62 +94,12 @@ it costs a visitor.
 
 ### The loop cannot recover
 
-1. **A refused or lost continuation wedges the chain for the rest of the
-   session.** `loop.ts:435-443` sets `#continuing` at `response.create` and
-   only `response.created` clears it; a provider `error` is traced and
-   nothing else (`loop.ts:265-271`; `runtime.ts:347-351` surfaces
-   `session_expired` alone). Scenario: the provider refuses the create — a
-   rate limit, a continuation raced against a redelivery, or the
-   asynchronous `responses_validation_failed` a project without the Fast tier
-   gets after `session.started` — and from then on `inFlight` is true, every
-   arrival queues as state, every linger waits in `chain`, and the status
-   line says "Thinking" until the visitor ends the session. One seat
-   reproduced it with `rate_limit_exceeded`. `response.failed` and
-   `response.incomplete` are also handled as completions (`loop.ts:347-349`),
-   so a failed response whose calls were answered is _continued_, and an
-   incomplete one is treated as a beat: `max_output_tokens` counts reasoning
-   tokens on the Responses API, so 1,200 is tight, and a terminal response
-   truncated before its text leaves the voice silent, the clock `silent` at
-   8 s, and the next stop prompted with this one never narrated. Fix: clear
-   `#continuing` when an `error` names the pending create's event id and
-   when nothing arrives within a bound (30 s); end the chain on `failed`;
-   on `incomplete_details.reason === 'max_output_tokens'` queue a note and
-   re-prompt once, and raise the cap to 2,000; map configuration-class codes
-   to a message and end the session, because the browser cannot repair a
-   configuration it may not change. (Five seats and this spike; confirmed.)
-2. **Eviction forgets live work.** `loop.ts:366-371` prunes completed
-   responses past 64 without asking whether their calls are answered, and
-   `loop.ts:316-317` deletes the oldest call past 512 whether or not it is
-   answered. Scenario one: a camera call still waiting in the serialized
-   queue loses its response row; the output then reaches
-   `#continueIfAnswered` with no row and `#create()` fires after the first
-   sibling output, a continuation with outputs missing, which the provider
-   refuses — and finding 1 does the rest. Scenario two: a redelivered
-   `response.completed` for an evicted id, or one whose `response.created`
-   was lost, reaches the same branch and starts an unsolicited, billed
-   response (reproduced). Scenario three: an unanswered call is evicted,
-   `inFlight` reads false, and the continuation never fires. A lively
-   quarter-hour reaches 64 responses. Fix: prune only responses whose calls
-   are all answered and continued; keep a bounded set of completed ids so an
-   unknown completion does nothing; never evict unanswered work, refuse new
-   work instead. (Five seats; confirmed.)
-3. **A call is attributed to whichever response is open.** `loop.ts:383`
-   falls back to the most recent open response when no row matches the
-   delegation id, and the response id the item event itself carries is never
-   read; `loop.ts:413` creates a response at once for a call matched to no
-   row, and `loop.ts:311` does the same for a call that arrives before its
-   `response.created`, one `response.create` per output. Scenario: an item
-   event lands after its `response.completed`, or under a second delegation,
-   and the first output continues the wrong response while a sibling is
-   unanswered. Fix: key calls by the item event's response id, never fall
-   back, hold an unmatched output until its response is known complete.
-   (Four seats and this spike; confirmed.)
-4. **A throwing answer poisons the camera queue.** `loop.ts:331-332` chains
-   `#run` on `#queue`; `#run` catches the executor but not `#output`, and
-   `channel.answer` throws when the channel is not open. One rejection and
-   no camera call runs again for the session; for a query the same throw is
-   an unhandled rejection. Fix: catch in `#run`'s tail and report through
-   the failure handler. (One seat; confirmed.)
+Findings 1 to 4 landed: the loop keys a call to its own delegation, closes a
+chain the provider abandons, ends one on a failed response, re-prompts once
+for a terminal response cut off at the token cap, prunes only finished work,
+and reports a send it cannot make. The rules are in
+[ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md) under "the
+loop bounds its own work", and the numbers are kept here only by reference.
 
 ### The tour stops pacing itself
 
@@ -340,17 +290,15 @@ it costs a visitor.
 
 ### What the fake cannot say
 
-21. `liveFake.ts` acknowledges every append and mute, emits
-    `session.started` synchronously on `accept`, and never emits an
-    `error`, a `failed` or `incomplete` response, an item after its
-    completion or before its `response.created`, a duplicate completion, an
-    oversized frame, or an ICE state; `media.test.ts` never exercises the
-    mute and the silent carrier, the `track` handler,
-    `connectionstatechange`, or an autoplay refusal (jsdom has no
-    `AudioContext`, so these need a small host fake); the pruning paths run
-    in no test, and `GuideControls` has no render test. Redelivery is
-    covered (`runtime.test.ts:324`). Every fix above needs its adversarial
-    mode in the fake first, and the test that proves recovery. (Four seats.)
+21. `liveFake.ts` plays the loop's adversarial modes — a refused client
+    event, a failed or incomplete response, an item before its creation or
+    after its completion, a duplicate completion — and the loop tests hold
+    them. What it still cannot say: `media.test.ts` never exercises the mute
+    and the silent carrier, the `track` handler, `connectionstatechange`, an
+    oversized frame or an autoplay refusal (jsdom has no `AudioContext`, so
+    these need a small host fake), and `GuideControls` has no render test.
+    Every fix above needs its adversarial mode in a fake first, and the test
+    that proves recovery. (Four seats.)
 
 ### Checked, and not a defect
 
@@ -564,7 +512,6 @@ themselves measures the stall.
 
 | Phase | Lands                                                                                                                                                                                                                                                                                                                        | Done when                                                                                                                                                                                                                                                                |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 0     | **The loop recovers.** Findings 1–4 and 21: the fake grows adversarial modes (an `error` after `response.create`, `failed`, `incomplete`, an item after its completion or before its creation, a duplicate completion, an oversized frame), and the loop clears, bounds and keys its work; `max_output_tokens` to 2,000      | A loop test per mode proves the chain closes or the session ends with a message; no test needs a provider                                                                                                                                                                |
 | 1     | **The tour keeps pacing.** Findings 5–9: a pending continuation held until accepted, a paused beat and a resume that prompts, a meter that knows it is unhealthy and sees the whole interval, a sub-floor sample before a beat's speech counts, an arrival deadline, a takeover that reaches the executor in the right order | Runtime tests for the lost linger, the paused tour, the dead meter, the filler overlap, the stuck arrival and the lens takeover; one listen with the window on screen confirms a tour still beats                                                                        |
 | 2     | **The transport survives.** Findings 10–14: a grace period on `disconnected`, the channel's own `close` and `error`, the microphone's `ended`, a resume whose status follows the capture, teardown on `pagehide`, a loud oversized frame                                                                                     | A test per path on a small host fake for `media.ts`; a drive-rig session that drops the network for five seconds and keeps the conversation                                                                                                                              |
 | 3     | **Consent and the recorder** (§4): the D1 binding and its four tables, the consent route and the events route, the panel's switch and disclosure, the recorder at the channel boundary, the export script, the weekly sweep; ADR-0042's "sees nothing of the conversation" amended                                           | A session opted in replays through `scripts/tour/replay.mjs` from the export; a session opted out writes no row; an opt-out mid-session refuses the next batch; the Worker tests cover the consent check without Clerk; `tool_calls` answers the refusal question in SQL |
@@ -572,9 +519,9 @@ themselves measures the stall.
 | 5     | **The panel** — findings 19 and 20: captions from the deltas, a typed request field, a radiogroup for the voices, the disclosure tied to Start, a sentence for a network error, the four small ones                                                                                                                          | An axe pass on the panel; a screen reader names the chosen voice; a typed request runs a tour with the microphone muted; a render test for `GuideControls`                                                                                                               |
 | 6     | **The comparison** (§5): a week each of Astra `low`, Luna `low`, GPT-6.1 Sol `low`, GPT-6.1 Terra `none`; then the Fast tier against default; then `acknowledgement_delay_ms`; the voices auditioned                                                                                                                         | The measures of §5 as SQL over phase 3's rows, in a table on this page or its ADR, with the operating point named; a backend changes only on a measured win; `GUIDE_VOICES` grows only by voices that passed the listen                                                  |
 
-Phase 3 needs none of 0–2 to compile and all of them to be worth reading;
-phases 0–2 are each a day, and the council's first three recommendations
-agree on their order. A fresh council round reviews each phase's pull
+Phase 3 needs none of 1–2 to compile and both to be worth reading; phases
+1 and 2 are each a day, and the council's first three recommendations agree
+on their order. Phase 0, the loop, is landed. A fresh council round reviews each phase's pull
 request, not this page.
 
 ---

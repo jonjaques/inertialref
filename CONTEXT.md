@@ -264,6 +264,19 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **A refused `response.create` wedged the guide for the session.** The
+  in-flight flag set at the create was cleared only by `response.created`, so
+  a rate limit, a redelivery race or a configuration refusal left every later
+  arrival queued and the status on "Thinking" until the visitor gave up. The
+  create keeps its event id, an `error` naming it closes the chain, and 30 s
+  with no answer does the same; `loop.test.ts` refuses the create through the
+  fake and prompts again (7 Nov 2026, below).
+- **An unknown completion started a billed response.** A continuation for a
+  response the loop had no row for — pruned, or created before its
+  `response.created` was lost — fired `response.create` at once. Finished ids
+  outlive their rows and an unknown completion does nothing; a call that
+  arrives before its creation holds a provisional row instead (7 Nov 2026,
+  below).
 - **A playlist drag downward ended after one row.** The editor reordered its
   rows live under the pointer; React reorders keyed rows by moving their DOM
   nodes, and a node moved while it holds pointer capture loses it. Dragging up
@@ -12696,6 +12709,55 @@ starboard arrays, 106 px from the middle of a circle 217 px in radius, selects E
 sphere, taken as an occluder the way a body's disk is, removes the planet: at
 the 98 m floor it is 83.6° across with Earth's center behind it. So a station
 hides nothing. Proxima Centauri b clicks and describes as before.
+
+## The guide's loop closes what the provider abandons (7 Nov 2026)
+
+Phase 0 of `design/plans/the-guide.md`: findings 1 to 4 of the November
+council, with the fake's adversarial modes (finding 21).
+[ADR-0042](docs/adr/0042-the-guide-speaks-in-one-voice.md) holds the rules
+under "the loop bounds its own work"; this is what was measured and what the
+obvious fix got wrong.
+
+**The item event carries no response id.** The plan's fix for finding 3 was to
+read it; the 14 Sep recording's twenty `response.output_item.done` events
+hold `item`, `output_index` and `sequence_number` and nothing else. What the
+envelope carries is `delegation_id`, and every delegation in that recording
+ran exactly two responses under it — the tool round and the continuation —
+sequentially. So the key is the delegation, and the row is the newest
+response open under it. Newest rather than first, because a response whose
+completion was lost stays open until the 90 s bound closes it, and an item
+arriving in that window is the live response's.
+
+**The bounds are from the recording, not from the API's limits.** Fifteen
+`response.create` events were answered by `response.created` in 168 to
+972 ms, and twenty responses ran 1.0 to 2.0 s from created to completed. The
+continuation bound is 30 s and the response bound 90 s: an order of
+magnitude outside the measured path, and short enough that a visitor who hit
+one would wait, not leave.
+
+**A refused continuation is a recoverable error; a refused configuration is
+not.** The provider's `error` names the client event it refuses by
+`client_event_id` (the Live spelling; the legacy Realtime API put it inside
+the error as `event_id`, and the loop reads both). A rate limit on the create
+closes the chain and the next arrival tries again. `responses_validation_failed`
+and `insufficient_quota` end the session with a sentence, because the
+configuration is the Worker's and the budget is the project's, and a browser
+left talking to a voice that cannot think is worse than a message.
+
+**One re-prompt, not a loop.** `max_output_tokens` counts reasoning tokens on
+the Responses API. At 1,200 a terminal response could spend its cap thinking
+and arrive with no text; the cap is 2,000 and a terminal response cut off is
+re-prompted once with a note saying so. A second cut-off in a row ends the
+chain, because the alternative is a billed loop on a question the cap cannot
+hold.
+
+**Two defects were the same prune.** Rows were pruned at 64 and calls at 512
+by age alone, so a slow camera call could lose its row and reach the
+continuation with nothing to continue, and a redelivered completion for a
+pruned id fell into the same "unknown response" branch — which fired
+`response.create`, an unsolicited, billed response. Pruning only finished
+work fixes the first; remembering finished ids past their rows fixes the
+second; and the branch that created a response for an unknown id is gone.
 
 ## Known gaps
 

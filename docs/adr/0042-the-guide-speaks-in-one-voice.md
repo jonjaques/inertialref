@@ -2,7 +2,8 @@
 
 Status: accepted · 14 Sep 2026; authorization amended 29 Sep 2026 by
 [ADR-0048](0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md),
-where an account grant replaces the shared password. Supersedes the two-model
+where an account grant replaces the shared password; the loop's bounds
+added 7 Nov 2026. Supersedes the two-model
 narration, the controlled clips, the application socket, and the Durable
 Object session store of [ADR-0041](0041-the-guide-requests-the-view.md); keeps
 that ADR's execution boundary.
@@ -98,6 +99,30 @@ output and transcripts are data and never become an instruction.
   because a move that replaces a move still starting is a camera that thrashes.
   A response continues only once every call it made has its output.
 
+- **The loop bounds its own work, in number and in time, because nothing else
+  can close a chain the provider abandons.** "In flight" is read from the
+  loop alone, and a chain that never closes is a tour that never advances. A
+  `response.create` the provider refuses closes the chain when the `error`
+  names the create's event id, and so does 30 s with no `response.created`;
+  an open response is abandoned at 90 s. The recorded sessions answer a
+  create in 168 to 972 ms and complete a response in 1.0 to 2.0 s, so both
+  bounds are an order of magnitude outside the measured path. A failed
+  response is never continued; a terminal response cut off at the token cap
+  is re-prompted once, with a note saying so, and ended on a second cut-off;
+  a code the browser cannot act on — a configuration it may not change, a
+  budget that is spent — ends the session with a sentence. An item event
+  carries no response id, only its envelope's delegation id, so a call is
+  keyed to the newest response open under its own delegation and never to
+  whichever response is open; a call that arrives before its
+  `response.created` holds a provisional row the created or the completion
+  adopts, and an unmatched output is never a continuation on its own. A row
+  is pruned only once it is done — completed, every call answered, continued
+  or terminal — and the ids of finished responses and seen calls outlive
+  their rows in bounded sets, so a redelivered completion or item does
+  nothing, where an unknown completion would otherwise start a billed
+  response. Every send the loop makes is caught and reported, because the
+  answer of one call is the serialized queue every later move waits on.
+
 - **The server holds two things.** Authorization: only a signed-in account
   whose private metadata grants the guide can create a session — the browser
   presents its Clerk session token and the Worker reads the grant
@@ -149,11 +174,12 @@ and the controlling-tab application socket are gone.
 ## Consequences
 
 The pure loop, executor, and clock are tested with one fake data channel
-(`apps/game/src/tour/liveFake.ts`) that replays the phase-0 event shapes and
-refuses an event off the allow list as the real connection does, so the beat,
-the correction, the deferred arrival, the one-move-per-turn guard, pause, and
-end are covered without a provider, and a misspelled event fails a test
-rather than a session. The browser names provider events only in its adapter
+(`apps/game/src/tour/liveFake.ts`) that replays the phase-0 event shapes,
+refuses an event off the allow list as the real connection does, and plays
+the provider's refusals, failures and cut-offs on request, so the beat, the
+correction, the deferred arrival, the one-move-per-turn guard, pause, end,
+and every recovery above are covered without a provider, and a misspelled
+event fails a test rather than a session. The browser names provider events only in its adapter
 — `channel.ts`, `loop.ts` and `media.ts` — and the runtime speaks in verbs
 over a `send` typed on the protocol's `GuideClientEvent`. Determinism is unchanged: the executor moves only the observatory,
 and headless checks preserve identical canonical hashes.
