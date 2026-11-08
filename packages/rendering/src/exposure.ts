@@ -8,10 +8,10 @@ export const EXTRATERRESTRIAL_ILLUMINANCE = 133_800
 
 /**
  * The scene unit, cd/m²: an albedo-one surface under the sun above the air at
- * 1 AU, E⊥/π, 42,590. The air's gain of π is anchored to it (ADR-0056), so a
- * sky measured in cd/m² is its luminance over this in scene units, and an
- * absolute emitter — lightning, the moon, a city, airglow — converts its
- * physical radiance into scene units by dividing by it.
+ * 1 AU, E⊥/π, 42,590. The air's gain of π is anchored to it (ADR-0056): a
+ * sky measured in cd/m² is that luminance divided by this, in scene units,
+ * and an absolute emitter — lightning, the moon, a city, airglow — converts
+ * its physical radiance into scene units the same way.
  */
 export const SCENE_UNIT_LUMINANCE = EXTRATERRESTRIAL_ILLUMINANCE / Math.PI
 
@@ -20,11 +20,11 @@ export const SCENE_UNIT_LUMINANCE = EXTRATERRESTRIAL_ILLUMINANCE / Math.PI
  * exposure equates with one scene unit, "an albedo-one surface under
  * terrestrial sunlight". It is a calibration, not the unit: it sits 1.420
  * times, half a stop, under `SCENE_UNIT_LUMINANCE`. Setting it to the unit
- * opens every manual exposure by 0.51 EV at a fixed lens and moves every
- * plate, which no emitter calibrated against either constant would yet
- * justify. The galaxy, the stars, their visibility floor and the sun's disk
- * divide by it as though it were the unit, and are open in
- * `design/plans/the-air.md`.
+ * would open every manual exposure by 0.51 EV at a fixed lens and move every
+ * plate, and no emitter is calibrated against either constant yet, so the
+ * move would improve no picture. The galaxy, the stars, their visibility
+ * floor and the sun's disk divide by it as though it were the unit; that
+ * defect is open in `design/plans/the-air.md`.
  */
 export const SURFACE_LUMINANCE = 30_000
 
