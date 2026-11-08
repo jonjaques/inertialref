@@ -248,6 +248,39 @@ export async function enter(send, { force }, page, hold) {
   }
 }
 
+/**
+ * `enter`, then the session's record of the page it admitted: the kind, the
+ * tree and the metrics `--status` holds the page to, the controls a later
+ * warm attach trusts, and the Chrome version the next run is warned against.
+ *
+ * All of it is written only once the page has passed. Written before the
+ * guard, a refused `--tree` becomes what `--status` holds the rig's own page
+ * to, and a version recorded by a run that fails at boot, or is refused
+ * before the read that warns, is one nobody is ever warned about.
+ *
+ * @param {{controls: object, write: (patch: object) => Promise<void>}} session
+ */
+export async function enterSession(
+  send,
+  options,
+  page,
+  hold,
+  { controls, write },
+) {
+  const point = await enter(send, options, page, hold)
+  const { width, height, dpr } = hold.metrics
+  await write({
+    ...controls,
+    kind: hold.kind,
+    tree: hold.tree,
+    browser: hold.browser,
+    width,
+    height,
+    dpr,
+  })
+  return point
+}
+
 /** `--status`'s deadline. A booted page answers in about a second, most of it
  *  the two frames the guard waits on, which are capped at one. */
 const STATUS_MS = 5000

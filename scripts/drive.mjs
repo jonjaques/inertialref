@@ -98,6 +98,7 @@ import {
   browserVersion,
   clearStorage,
   enter,
+  enterSession,
   statusPoint,
 } from './drivePage.mjs'
 import { parseWait } from './gpuLock.mjs'
@@ -899,7 +900,6 @@ async function main() {
     recorded: typeof prior.browser === 'string' ? prior.browser : null,
     warn,
   }
-  await writeState({ browser })
 
   const ws = await socket(await pageTarget())
   const wire = connect(ws)
@@ -926,8 +926,10 @@ async function main() {
   if (values['keep-storage'] !== true) await clearStorage(send, page)
   // The boot or the attach, then the guard, before the first step: a page at
   // another operating point, or served from another checkout, is refused
-  // before anything is read from it.
-  const point = await enter(
+  // before anything is read from it. The session records the controls with
+  // the point only once it passes, so a failed boot cannot make the next warm
+  // attach trust a page from a different mode.
+  const point = await enterSession(
     send,
     {
       force:
@@ -938,20 +940,11 @@ async function main() {
     },
     page,
     hold,
+    {
+      controls: { javascript: JAVASCRIPT, blockedUrls: BLOCKED_URLS },
+      write: writeState,
+    },
   )
-  // Record the controls only once this navigation succeeds. A failed boot
-  // must not make the next warm attach trust a page from a different mode.
-  // The point it passed at goes with them, which `--status` holds the page
-  // to: the kind, the tree and the window it sets again before reading.
-  await writeState({
-    javascript: JAVASCRIPT,
-    blockedUrls: BLOCKED_URLS,
-    kind: hold.kind,
-    tree,
-    width: WIDTH,
-    height: HEIGHT,
-    dpr: DPR,
-  })
 
   const run = (expression, userGesture) =>
     evaluate(send, expression, userGesture)

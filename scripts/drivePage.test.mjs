@@ -6,6 +6,7 @@ import {
   browserVersion,
   clearStorage,
   enter,
+  enterSession,
   holdPage,
   pointLine,
   showing,
@@ -498,6 +499,70 @@ describe('enter', () => {
     )
     expect(warn).toHaveBeenCalledTimes(1)
     expect(warn.mock.calls[0][0]).toContain(`156.0.7999.10 to ${CHROME}`)
+  })
+})
+
+/*
+ * What `--status` holds the page to and what the next run is warned against
+ * are the session's, so they are written only once a page passes. Written
+ * before the guard, a refused `--tree` becomes what `--status` holds the
+ * rig's own page to, and a Chrome version recorded by a run that fails before
+ * the guard reads the page is one nobody is ever warned about.
+ */
+describe('enterSession', () => {
+  const controls = { javascript: true, blockedUrls: [] }
+  const metrics = { width: 1600, height: 900, dpr: 1 }
+
+  it('records nothing for an entry the guard refuses, so the next run is still warned', async () => {
+    const write = vi.fn()
+    const warn = vi.fn()
+    const sibling = rig([app({ tree: SIBLING })])
+    await expect(
+      enterSession(
+        sibling.send,
+        { force: true },
+        page(),
+        hold({ metrics, recorded: '156.0.7999.10', warn }),
+        { controls, write },
+      ),
+    ).rejects.toThrow(`the page is served from ${SIBLING}`)
+    const unready = chrome(ladder({ ready: [false], here: ['/'] }))
+    await expect(
+      enterSession(
+        unready.send,
+        { force: true },
+        page(),
+        hold({ metrics, recorded: '156.0.7999.10', warn }),
+        { controls, write },
+      ),
+    ).rejects.toThrow('renderer never became ready')
+    expect(write).not.toHaveBeenCalled()
+    // Neither got as far as the read that warns.
+    expect(warn).not.toHaveBeenCalled()
+  })
+
+  it('records the kind, the tree, the window, the controls and the version once the page passes', async () => {
+    const write = vi.fn()
+    const { send } = rig([app()])
+    const point = await enterSession(
+      send,
+      { force: true },
+      page(),
+      hold({ metrics, recorded: '156.0.7999.10' }),
+      { controls, write },
+    )
+    expect(point.backend).toBe('webgpu')
+    expect(write).toHaveBeenCalledTimes(1)
+    expect(write).toHaveBeenCalledWith({
+      javascript: true,
+      blockedUrls: [],
+      kind: 'webgpu',
+      tree: TREE,
+      browser: CHROME,
+      width: 1600,
+      height: 900,
+      dpr: 1,
+    })
   })
 })
 
