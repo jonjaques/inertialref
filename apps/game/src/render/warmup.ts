@@ -4,6 +4,7 @@ import {
   NoToneMapping,
   type Scene,
   type Camera,
+  type ComputeNode,
   type NodeMaterial,
   type Object3D,
   type QuadMesh,
@@ -612,6 +613,36 @@ export function warmSensorPass(
     renderer.outputColorSpace = color
   }
   return Promise.all(compiles).then(() => undefined)
+}
+
+/**
+ * Build compute pipelines ahead of their first frame.
+ *
+ * r185 has no compute compile-ahead: `compute()` builds a kernel's pipeline
+ * synchronously at its first dispatch (`createComputePipeline`), which is a
+ * main-thread stall inside whatever frame first selects it. This is that
+ * dispatch, at boot, with no workgroups: three builds the pipeline and its
+ * bindings before it looks at the dispatch size, and a dispatch of nothing
+ * runs nothing, so a warm-up neither depends on each kernel's own bounds
+ * guard nor writes into a 1 × 1 stand-in. One kernel a macrotask, because
+ * each build blocks. Failures are logged and swallowed, as `warmCompile`'s
+ * are: a kernel that will not build resurfaces at its first dispatch.
+ */
+export async function warmCompute(
+  renderer: WebGPURenderer,
+  kernels: readonly ComputeNode[],
+): Promise<void> {
+  for (const kernel of kernels) {
+    try {
+      renderer.compute(kernel, [0, 1, 1])
+    } catch (cause) {
+      log.warn('a compute warm-up failed', {
+        kernel: kernel.name,
+        cause: String(cause),
+      })
+    }
+    await breathe()
+  }
 }
 
 /** The no-op every ticket verb becomes once there is no boot to report to. */

@@ -161,6 +161,22 @@ export function namePass(target: object, label: string): void {
   NAMES.set(target, label)
 }
 
+const RESUMES = new WeakMap<object, string>()
+
+/**
+ * Name the pass a framebuffer copy into `texture` resumes, in place of
+ * "<label> after copy".
+ *
+ * A split of the scene pass is a copy into a texture of its own, and what it
+ * resumes is a different pass in kind: the half drawn over the clouds. Named
+ * by the copy's rule it would read `scene after copy`, beside the sea's own
+ * frame read, and behind a sea sheet `scene after copy after copy` — a label
+ * built by the chain of copies before it rather than by what the pass is.
+ */
+export function nameResume(texture: object, label: string): void {
+  RESUMES.set(texture, label)
+}
+
 interface Target {
   readonly width: number
   readonly height: number
@@ -312,7 +328,9 @@ export class PassTimeline {
         // Slots are allocated two to a pass, in order.
         const label =
           this.#pending[current.beginningOfPassWriteIndex / 2]?.label
-        const writes = this.#allocate(`${label ?? 'pass'} after copy`, 'render')
+        const resumed =
+          RESUMES.get(texture as object) ?? `${label ?? 'pass'} after copy`
+        const writes = this.#allocate(resumed, 'render')
         // The resumed pass reads the descriptor inside the original call.
         descriptor.timestampWrites = writes ?? undefined
       }
