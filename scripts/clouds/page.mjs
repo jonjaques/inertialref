@@ -234,6 +234,31 @@ export async function cloudStep(step) {
       set(step.levers)
       return { settled: await settle(step.settleCap) }
     },
+    async radiance() {
+      /*
+       * Each side from a reset: maxSteps and lightTaps move no reset key, so
+       * a history settled under one value and carried into the next blends
+       * the two, and the capture would read some of the other's light.
+       */
+      const capture = async (levers) => {
+        set({ ...levers, force: 'reset' })
+        await frame()
+        await frame()
+        set(levers)
+        const settled = await settle(step.settleCap)
+        return { settled, shot: await ir.cloudRadiance() }
+      }
+      const a = await capture(step.a)
+      const b = await capture(step.b)
+      return {
+        settled: [a.settled, b.settled],
+        extent: a.shot === null ? null : [a.shot.width, a.shot.height],
+        difference:
+          a.shot === null || b.shot === null
+            ? null
+            : ir.cloudRadianceDifference(a.shot, b.shot),
+      }
+    },
     boot() {
       // Every boot span, and nothing else: at `full` the timeline holds about
       // 2,800 entries a second, which is no payload for a DevTools reply.
@@ -358,6 +383,11 @@ const STEPS = {
     js('verify', { kind: 'verify', levers: run.levers, ...at }),
     flag('shot', '--shot', shots.still),
   ],
+  // One step a comparison, two captures each, under the DevTools timeout.
+  radiance: (run) =>
+    run.comparisons.map((c, i) =>
+      js(`radiance:${i}`, { kind: 'radiance', a: c.a, b: c.b, ...at }),
+    ),
 }
 
 /**
@@ -522,6 +552,21 @@ const READ = {
   },
   verify(run, value) {
     return { verify: value('verify') ?? null }
+  },
+  radiance(run, value) {
+    return {
+      differences: run.comparisons.map((c, i) => {
+        const r = value(`radiance:${i}`) ?? null
+        return {
+          name: c.name,
+          threshold: c.threshold,
+          relative: r?.difference?.relative ?? null,
+          texels: r?.difference?.texels ?? null,
+          settled: r?.settled ?? null,
+          extent: r?.extent ?? null,
+        }
+      }),
+    }
   },
 }
 
@@ -791,6 +836,25 @@ export function memoryTable(rows) {
   ].join('\n')
 }
 
+/**
+ * §8.7's image inputs, one row a comparison: the cache gate's volume against
+ * field under 3%, a ladder's value against the next under 1%.
+ */
+const RADIANCE_COLUMNS = [
+  ...NAMED,
+  ['Group', (d) => d.group],
+  ['Lever', (d) => d.label],
+  ['Comparison', (d) => d.name],
+  ['radiance RMSE', (d) => pct(d.relative)],
+  ['under', (d) => pct(d.threshold)],
+  [
+    'passes',
+    (d) => (Number.isFinite(d.relative) ? yes(d.relative < d.threshold) : '—'),
+  ],
+  ['cloud texels', (d) => d.texels ?? '—'],
+  ['quiet', (d) => yes(d.quiet.ok)],
+]
+
 const labelsOf = (r) => r.verify?.labels ?? []
 
 const STANCE_COLUMNS = [
@@ -827,6 +891,13 @@ export function tables(doc) {
     of('residual').length > 0 && table(of('residual'), ERROR_COLUMNS),
     of('cold').length > 0 && memoryTable(of('cold')),
     of('verify').length > 0 && table(of('verify'), STANCE_COLUMNS),
+    of('radiance').length > 0 &&
+      table(
+        of('radiance').flatMap((r) =>
+          r.differences.map((d) => ({ ...r, ...d })),
+        ),
+        RADIANCE_COLUMNS,
+      ),
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -846,4 +917,6 @@ export const progress = (r) =>
       `warm-up ${fixed(r.spans?.warmUp)} ms, the clouds' ${fixed(r.spans?.clouds)} ms`,
     verify: () =>
       `sun ${fixed(r.verify?.light?.sun, 1)}°, served ${r.verify?.served ?? '—'}`,
+    radiance: () =>
+      r.differences.map((d) => `${d.name} ${pct(d.relative)}`).join(', '),
   })[r.type]()

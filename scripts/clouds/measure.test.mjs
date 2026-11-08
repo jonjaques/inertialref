@@ -17,6 +17,7 @@ import {
 import { wrap } from '../driveScript.mjs'
 import { binEdge, difference, histogramStats, parseRmse } from './diff.mjs'
 import {
+  LADDERS,
   PORTS,
   SCENARIOS,
   batchRuns,
@@ -57,10 +58,9 @@ import {
 
 const SIZES = ['1080p', 'retina']
 const ALL = Object.fromEntries(
-  ['stances', 'decisions', 'sweep', 'targets', 'memory', 'error'].map((b) => [
-    b,
-    batchRuns(b, SIZES),
-  ]),
+  ['stances', 'decisions', 'images', 'sweep', 'targets', 'memory', 'error'].map(
+    (b) => [b, batchRuns(b, SIZES)],
+  ),
 )
 const count = (runs, test) => runs.filter(test).length
 
@@ -76,6 +76,7 @@ describe('the batches', () => {
           run.identity,
           run.thin,
           ...(run.cells ?? []),
+          ...(run.comparisons ?? []).flatMap((c) => [c.a, c.b]),
         ].filter((s) => s !== undefined))
           expect(isCloudLevers(set), `${run.id}: ${JSON.stringify(set)}`).toBe(
             true,
@@ -220,6 +221,39 @@ describe('the batches', () => {
     })
     expect(SCENARIOS['earth-orbit'].levers.flySpeed).toBe(7700)
     expect(at('sunset')).toMatchObject({ kind: 'raise', height: 1500 })
+  })
+})
+
+describe('the images', () => {
+  it('compare each volume combination with the field one of its sun depth, under 3%, where the cache gate reads it', () => {
+    const gate = ALL.images.filter((r) => r.group === 'cache')
+    expect(gate).toHaveLength(6)
+    expect(new Set(gate.map((r) => r.scenario))).toEqual(
+      new Set(['ground', 'horizon', 'inside']),
+    )
+    for (const r of gate) {
+      expect(r.type).toBe('radiance')
+      expect(r.comparisons).toHaveLength(2)
+      for (const c of r.comparisons) {
+        expect(c.threshold).toBe(0.03)
+        expect(c.a).toMatchObject({ on: true, cache: 'field' })
+        expect(c.b).toMatchObject({ on: true, cache: 'volume' })
+        expect(c.b.sunDepth).toBe(c.a.sunDepth)
+      }
+    }
+  })
+
+  it('climb each quality lever’s ladder a value against the next, under 1%, in horizon and inside', () => {
+    const ladders = ALL.images.filter((r) => r.group === 'ladder')
+    expect(ladders).toHaveLength(Object.keys(LADDERS).length * 2 * 2)
+    for (const r of ladders) {
+      const values = LADDERS[r.label]
+      expect(['horizon', 'inside']).toContain(r.scenario)
+      expect(r.comparisons.map((c) => [c.a[r.label], c.b[r.label]])).toEqual(
+        values.slice(0, -1).map((v, i) => [v, values[i + 1]]),
+      )
+      for (const c of r.comparisons) expect(c.threshold).toBe(0.01)
+    }
   })
 })
 
@@ -451,6 +485,22 @@ function fakePage({
         ],
       }
     },
+    // A capture whose every texel is cloud lit by the levers' step budget,
+    // so two budgets differ by their ratio.
+    cloudRadiance: async () => {
+      calls.captures = (calls.captures ?? 0) + 1
+      const lit = calls.levers.at(-1)?.maxSteps ?? 1
+      return {
+        width: 2,
+        height: 1,
+        luminance: Float32Array.from([lit, lit]),
+        cloud: Uint8Array.from([1, 1]),
+      }
+    },
+    cloudRadianceDifference: (a, b) => ({
+      texels: a.cloud.length,
+      relative: Math.abs(a.luminance[0] - b.luminance[0]) / a.luminance[0],
+    }),
     light: () => ({ sun: 37.5, phase: null, lit: true }),
     visit: (address, options) => {
       calls.visit = { address, options }
@@ -530,6 +580,26 @@ describe('the page steps', () => {
       )
       expect(timeline.labels['cloud trace'].ms).toBe(1.2)
     }
+  })
+
+  it('capture each side of a comparison from a reset, then difference them', async () => {
+    const ladder = ALL.images.find(
+      (r) => r.id === 'images/ladder/maxSteps/horizon/1080p',
+    )
+    const page = fakePage()
+    const step = await send(page, ladder, 'radiance:0')
+    expect(page.calls.captures).toBe(2)
+    expect(step.extent).toEqual([2, 1])
+    // 64 against 96 steps: the fake lights a texel by its budget.
+    expect(step.difference).toEqual({ texels: 2, relative: 0.5 })
+    // Each side: a reset frame under its levers, then the levers alone.
+    const [a, b] = [ladder.comparisons[0].a, ladder.comparisons[0].b]
+    expect(page.calls.levers).toEqual([
+      { ...a, force: 'reset' },
+      a,
+      { ...b, force: 'reset' },
+      b,
+    ])
   })
 
   it('refuse a read that dropped passes, which reports every label low', async () => {
@@ -784,6 +854,39 @@ describe('the figures', () => {
     expect(line).toBe(
       '| orbit | retina | steady | split | 10.02 | 10.44 | 0.42 (0.04) | 0.30 | 1.10 | — | — | 0.05 | 35 | 83.50 | 0.40 | 2 | yes |',
     )
+  })
+
+  it('read a radiance run a comparison a row, and say which pass their threshold', () => {
+    const gate = ALL.images.find(
+      (r) => r.id === 'images/cache/volume/inside/retina',
+    )
+    const p = plan(gate)
+    const values = [
+      { difference: { relative: 0.021, texels: 900 }, settled: [17, 17] },
+      { difference: { relative: 0.042, texels: 880 }, settled: [17, 20] },
+    ]
+    const row = {
+      ...figures(gate, p, {
+        results: p.map((s) => ({
+          value: s.tag.startsWith('radiance:')
+            ? values[Number(s.tag.split(':')[1])]
+            : null,
+        })),
+      }),
+      quiet: { ok: true },
+    }
+    expect(row.differences.map((d) => [d.relative, d.threshold])).toEqual([
+      [0.021, 0.03],
+      [0.042, 0.03],
+    ])
+    const lines = tables({ rows: [row] }).split('\n')
+    expect(lines[0]).toBe(
+      '| Scenario | Size | Group | Lever | Comparison | radiance RMSE | under | passes | cloud texels | quiet |',
+    )
+    expect(lines[2]).toBe(
+      '| inside | retina | cache | volume | volume against field, cascades | 2.1% | 3.0% | yes | 900 | yes |',
+    )
+    expect(lines[3]).toMatch(/\| 4\.2% \| 3\.0% \| no \| 880 \| yes \|$/)
   })
 
   it('print the latest attempt of a run, which is the one a re-run left', () => {
