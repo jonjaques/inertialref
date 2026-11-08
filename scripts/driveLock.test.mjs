@@ -58,6 +58,17 @@ async function chrome({ stubborn = false } = {}) {
   return child.pid
 }
 
+/** The start time the way the lock and the session record it, in the pinned
+ *  locale and zone. */
+function startOf(pid) {
+  return execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], {
+    encoding: 'utf8',
+    env: { ...process.env, LC_ALL: 'C', TZ: 'UTC' },
+  })
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
 /** Whether a pid names a process that has not exited: a zombie has. */
 function exists(pid) {
   try {
@@ -269,15 +280,74 @@ describe('the rig and the GPU lock', () => {
     const closing = closeChrome(rig.chrome, {
       path: file(),
       token: rig.token,
+      start: startOf(rig.chrome),
       graceMs: 400,
     })
     await sleep(200)
     // Still inside the grace: SIGTERM was ignored, and the lock still holds.
     expect(exists(rig.chrome)).toBe(true)
     expect(pids()).toEqual([rig.chrome])
-    expect(await closing).toEqual({ closed: true, released: true })
+    expect(await closing).toEqual({
+      closed: true,
+      released: true,
+      reused: false,
+    })
     expect(exists(rig.chrome)).toBe(false)
     expect(existsSync(file())).toBe(false)
+  })
+
+  it('signals nothing whose pid now names another process, and only drops it from the lock', async () => {
+    // The session's start time is not the one its pid has now: the machine
+    // rebooted, or the Chrome died and its pid went to something else.
+    const rig = await rigLeftUp()
+    const result = await closeChrome(rig.chrome, {
+      path: file(),
+      token: rig.token,
+      start: 'Thu Jan 1 00:00:00 1970',
+      graceMs: 200,
+    })
+    await sleep(100)
+    expect(exists(rig.chrome)).toBe(true)
+    expect(result).toMatchObject({ closed: false, released: true })
+    expect(existsSync(file())).toBe(false)
+  })
+
+  it('kills only a Chrome whose start time the session recorded, and the lock holds while one lives', async () => {
+    // A session with no start time gets the SIGTERM a drive.mjs from before
+    // the lock sent, and never the SIGKILL after it: its pid is unproven.
+    const rig = await rigLeftUp({ stubborn: true })
+    const result = await closeChrome(rig.chrome, {
+      path: file(),
+      token: rig.token,
+      graceMs: 300,
+    })
+    expect(exists(rig.chrome)).toBe(true)
+    expect(result).toMatchObject({ closed: false, released: false })
+    expect(pids()).toEqual([rig.chrome])
+  })
+
+  it('records when the Chrome it holds for started, so --down can tell it from a reused pid', async () => {
+    const lock = await takeGpu('drive.mjs (port 9400)', {
+      path: file(),
+      env: {},
+    })
+    const fresh = await chrome()
+    expect(launched(lock, fresh)).toEqual({
+      chromePid: fresh,
+      chromeStart: startOf(fresh),
+      gpuToken: lock.token,
+    })
+    // A session from before this field gets it when its Chrome is taken
+    // over, and a session that has it keeps the one it has.
+    const old = await chrome()
+    expect(adopt(lock, { chromePid: old })).toEqual({
+      chromePid: old,
+      chromeStart: startOf(old),
+    })
+    expect(adopt(lock, { chromePid: old, chromeStart: 'kept' })).toEqual({
+      chromePid: old,
+      chromeStart: 'kept',
+    })
   })
 
   it('is never refused: it closes its Chrome beside another job and leaves that lock alone', async () => {
@@ -286,7 +356,7 @@ describe('the rig and the GPU lock', () => {
     const mine = await chrome()
     expect(
       await closeChrome(mine, { path: file(), token: 'f'.repeat(32) }),
-    ).toEqual({ closed: true, released: false })
+    ).toEqual({ closed: true, released: false, reused: false })
     expect(exists(mine)).toBe(false)
     expect(readFileSync(file(), 'utf8')).toBe(before)
     expect(exists(other.chrome)).toBe(true)
@@ -299,11 +369,13 @@ describe('the rig and the GPU lock', () => {
     expect(await closeChrome(old, { path: file() })).toEqual({
       closed: true,
       released: false,
+      reused: false,
     })
     expect(readFileSync(file(), 'utf8')).toBe(before)
     expect(await closeChrome(old, { path: file() })).toEqual({
       closed: false,
       released: false,
+      reused: false,
     })
     expect(exists(other.chrome)).toBe(true)
   })

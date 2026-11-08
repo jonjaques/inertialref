@@ -13,7 +13,13 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { TOKEN_ENV, acquire, forget, holding } from './gpuLock.mjs'
+import {
+  TOKEN_ENV,
+  acquire,
+  forget,
+  holding,
+  processStart,
+} from './gpuLock.mjs'
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url))
 
@@ -83,27 +89,43 @@ export function keep(lock, pid) {
     )
 }
 
+/** `pid`'s start time as the lock records it, or null when it has exited or
+ *  `ps` cannot say. */
+const startOf = (pid) => {
+  try {
+    return processStart(pid)
+  } catch {
+    return null
+  }
+}
+
 /**
  * Holds the lock for a Chrome already up on the port — an attach — and
  * returns the session fields that record it. A session written by a
  * drive.mjs from before the lock has no token, so the lock this invocation
- * took becomes the one that holds that Chrome. A session with no pid names
- * nothing to keep, and the lock then holds for the Chrome only while this
- * invocation runs.
+ * took becomes the one that holds that Chrome, and no start time, so it is
+ * read now and `--down` can tell that Chrome from a process given its pid
+ * later. A session with no pid names nothing to keep, and the lock then
+ * holds for the Chrome only while this invocation runs.
  *
  * @param {{record: (pid: number) => boolean, path: string}} lock
- * @param {{chromePid?: number | null}} state  the port's session
+ * @param {{chromePid?: number | null, chromeStart?: string | null}} state  the port's session
  */
 export function adopt(lock, state) {
   const chromePid = state.chromePid ?? null
   keep(lock, chromePid)
-  return { chromePid }
+  return {
+    chromePid,
+    chromeStart:
+      state.chromeStart ?? (chromePid === null ? null : startOf(chromePid)),
+  }
 }
 
 /**
  * Holds the lock for a Chrome this invocation just spawned, and returns the
- * session fields that record it. A Chrome the lock cannot record is ended
- * here: it would render unlocked from the moment the invocation exits.
+ * session fields that record it, its start time among them. A Chrome the
+ * lock cannot record is ended here: it would render unlocked from the
+ * moment the invocation exits.
  *
  * @param {{record: (pid: number) => boolean, path: string, token: string}} lock
  * @param {number} pid
@@ -112,14 +134,14 @@ export function launched(lock, pid) {
   try {
     keep(lock, pid)
   } catch (error) {
-    try {
-      process.kill(pid, 'SIGTERM')
-    } catch {
-      /* it never started, or has already exited */
-    }
+    signal(pid, 'SIGTERM')
     throw error
   }
-  return { chromePid: pid ?? null, gpuToken: lock.token }
+  return {
+    chromePid: pid ?? null,
+    chromeStart: Number.isInteger(pid) ? startOf(pid) : null,
+    gpuToken: lock.token,
+  }
 }
 
 /** EPERM is a live process under another user; anything else is gone. */
@@ -133,6 +155,14 @@ const alive = (pid) => {
   }
 }
 
+const signal = (pid, name) => {
+  try {
+    process.kill(pid, name)
+  } catch {
+    /* it never started, or has already exited */
+  }
+}
+
 async function exited(pid, ms) {
   for (const end = Date.now() + ms; Date.now() < end; await sleep(50))
     if (!alive(pid)) return true
@@ -140,37 +170,62 @@ async function exited(pid, ms) {
 }
 
 /**
+ * Whether `pid` is still the Chrome the session recorded starting at
+ * `start`: `same`; `reused`, when the pid now names another process, which a
+ * reboot or a crashed Chrome leaves a surviving session pointing at; `gone`;
+ * or `unknown`, when the session recorded no start time or `ps` cannot say.
+ */
+function identify(pid, start) {
+  if (!alive(pid)) return 'gone'
+  if (typeof start !== 'string') return 'unknown'
+  let now
+  try {
+    now = processStart(pid)
+  } catch {
+    return 'unknown'
+  }
+  if (now === null) return 'gone'
+  return now === start ? 'same' : 'reused'
+}
+
+/**
  * Closes the rig's Chrome, then drops it from the lock: `--down`, which the
  * lock never refuses. The drop waits for the exit, because a Chrome still
  * tearing down its GPU process is still a GPU job, and a job queued on the
- * lock starts within one poll of the drop. A Chrome that ignores SIGTERM past
- * `graceMs` is killed. Without a token — a rig that predates the lock — or
+ * lock starts within one poll of the drop.
+ *
+ * Nothing is signaled until the pid is shown to be that Chrome by the start
+ * time the session recorded: a session outlives a reboot, and its pid can
+ * by then name any process of this user's. A pid that names another process
+ * is left alone and only dropped from the lock. A Chrome that ignores
+ * SIGTERM past `graceMs` is killed only when its start time matches; one
+ * with no start time recorded gets SIGTERM alone, and while it runs the lock
+ * keeps holding for it. Without a token — a rig that predates the lock — or
  * with one the file does not hold, no lock is touched, so closing a rig
  * beside another job's lock leaves that lock alone.
  *
- * @returns {Promise<{closed: boolean, released: boolean}>}
+ * @returns {Promise<{closed: boolean, released: boolean, reused: boolean}>}
  */
 export async function closeChrome(
   pid,
-  { token, path: file, graceMs = 10_000 } = {},
+  { token, start, path: file, graceMs = 10_000 } = {},
 ) {
-  const closed = alive(pid)
-  if (closed) {
-    process.kill(pid, 'SIGTERM')
-    if (!(await exited(pid, graceMs))) {
-      try {
-        process.kill(pid, 'SIGKILL')
-      } catch {
-        /* it exited between the check and the kill */
-      }
+  const was = identify(pid, start)
+  const ours = was === 'same' || was === 'unknown'
+  if (ours) {
+    signal(pid, 'SIGTERM')
+    if (!(await exited(pid, graceMs)) && identify(pid, start) === 'same') {
+      signal(pid, 'SIGKILL')
       await exited(pid, 2_000)
     }
   }
+  const now = identify(pid, start)
   const released =
     token !== undefined &&
     Number.isInteger(pid) &&
+    (now === 'gone' || now === 'reused') &&
     forget(pid, { path: file, token })
-  return { closed, released }
+  return { closed: ours && now === 'gone', released, reused: was === 'reused' }
 }
 
 /**

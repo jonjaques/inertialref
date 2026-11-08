@@ -427,12 +427,13 @@ async function launchChrome(state, gpu) {
           `node scripts/drive.mjs --port ${PORT} --down first`,
       )
     }
-    const { chromePid } = adopt(gpu, state)
-    if (chromePid === null)
+    const adopted = adopt(gpu, state)
+    if (adopted.chromePid === null)
       process.stderr.write(
         `Chrome on port ${PORT} has no recorded pid, so the GPU lock holds for it only while this invocation runs\n`,
       )
-    return chromePid
+    await writeState(adopted)
+    return adopted.chromePid
   }
   if (!existsSync(CHROME)) throw new Error(`no Chrome at ${CHROME}`)
   const child = spawn(
@@ -577,10 +578,26 @@ async function down() {
   try {
     // Never refused by the lock: this takes nothing, it only drops the
     // Chrome it closes, once that Chrome has exited.
-    const { closed, released } = await closeChrome(state.chromePid, {
+    const pid = state.chromePid
+    const { closed, released, reused } = await closeChrome(pid, {
       token: state.gpuToken,
+      start: state.chromeStart,
     })
-    if (closed) say(`closed Chrome (pid ${state.chromePid})`)
+    if (closed) say(`closed Chrome (pid ${pid})`)
+    else if (reused)
+      say(
+        `pid ${pid} did not start when this rig's Chrome did, so it is another process; left running`,
+      )
+    else if (alive(pid))
+      say(
+        `Chrome (pid ${pid}) is still running` +
+          (state.gpuToken === undefined
+            ? ''
+            : ', and the GPU lock holds for it until it exits') +
+          (typeof state.chromeStart === 'string'
+            ? ''
+            : '. No start time was recorded to prove the pid is still that Chrome, so it got SIGTERM and no SIGKILL'),
+      )
     if (released) say('released its hold on the GPU lock')
   } finally {
     if (state.startedServer === true && alive(state.serverPid)) {

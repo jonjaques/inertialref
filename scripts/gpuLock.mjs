@@ -134,6 +134,11 @@ function startOf(pid) {
   return stat === '' || stat.startsWith('Z') ? null : start.join(' ')
 }
 
+/* drive.mjs keeps its Chrome's start time beside the pid in its session, so
+ * a later `--down` signals that Chrome and not a process that has its pid
+ * now; the start time has to be read the way this file reads it. */
+export { startOf as processStart }
+
 const startOrNull = (pid) => {
   try {
     return startOf(pid)
