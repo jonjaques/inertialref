@@ -12899,6 +12899,80 @@ enter, and `acquire` is not re-entrant within one process, so nothing here
 calls it twice in one. Which of the two Codex remedies a thread uses is the
 host's configuration and Jon's call.
 
+## A rig knows which tree it serves, and a cold Vite still fails the first boot (7 Nov 2026)
+
+X3's identity half, the second wave's second unit, stacked on #189.
+`ir.build()` returns `BUILD_ID` and, on the dev server only, the served
+tree's root. `drive.mjs` holds the tree against the tree under test after
+every boot and attach, and refuses a page another checkout serves before
+the first step, naming both. `docs/agents/driving.md` § "Which checkout is
+served" is the working rule. The comparison is `compareIdentity` in
+`scripts/driveLaunch.mjs`, and P03's guard calls it, so unit C gets it from
+`assertOperatingPoint`.
+
+**The build id cannot tell two checkouts apart.** It is
+`git describe --always --dirty --abbrev=8`, and worktrees cut from one
+commit describe it alike. On the mini this worktree and a sibling at
+`ce9a4b1` both booted as `ce9a4b18`, and a rig pointed at the sibling's
+port would have photographed it as this tree. The tree root is the half
+that differs.
+
+**The tree is decided in a `config` hook, because only the hook knows the
+command.** `gameVite()` runs once, when Astro loads its config, before
+anything says whether it will serve or build, so an entry in `define`
+beside the id cannot switch on it. The `inertialref:served-tree` plugin
+defines `__SERVED_TREE__` as the root when Vite serves and null when it
+builds. The production App chunk reads `build:{id:Oh,tree:null}`, and the
+checkout's path is in none of `dist`'s 2584 files (240 MB).
+`scripts/check-site.mjs` asserts it for 142 pages and 165 scripts. With the
+hook made to define the tree on build too, the build exits 1 there, naming
+`assets/build.D9n_CpKd.js`.
+
+**A page that names no tree is unchecked, not refused.** That covers a
+production build, and any build older than the verb. Refusing either breaks
+`--url` at `pnpm preview` on 8787 and every `presets:compare --base` at an
+older commit. The cost is that a foreign Vite running a build from before
+this change is still accepted, so the check holds only for builds that have
+the verb. Trees compare after realpath. git answers with the physical path,
+and on macOS `/tmp` and `/var` are symlinks into `/private`. A string
+comparison refused the tree it served in the test that pins this. The
+preset commands' children run `--quiet --json`, so `--json` carries the
+verdict, and a capture prints "served from <tree>" once per origin.
+
+**Checked on the Mac mini** (Mac18,5, M6), display asleep, thermal pressure
+0, at `ce9a4b1`. The times are what the checks observed, not measurements,
+and the plate result is not a pixel measurement. Against this worktree's
+`pnpm dev:client` on 5173, `drive.mjs` printed "served from …/wave2-identity
+(build ce9a4b18)" and ran its steps. A detached sibling worktree at the
+same commit, on `astro dev --port 5185`, was refused after the boot with
+both trees named. No `--js` step ran and no shot was written. The same page
+was refused again on a warm attach. With `--tree` naming the sibling it
+proceeded, and a symlinked `--tree` with a trailing slash matched too.
+`presets:compare earthrise --base HEAD` printed "served from
+…/.data/presets/base/ce9a4b18ce58" for the base set and this worktree for
+the head, and the table read `same`. Against `pnpm preview` on 8787 the
+driver printed "identity unchecked: the page names no tree", `ir.build()`
+answered `{"id":"ce9a4b18","tree":null}`, and the steps ran.
+
+**A cold Vite fails the first boot.** The first boot against each fresh dev
+server failed with "renderer never became ready": this worktree's 5173, the
+sibling's 5185, and compare's base on 5184 twice. Vite optimized its
+dependencies twice and reloaded the page twice inside the boot, and the app
+logged "Failed to fetch dynamically imported module: …/src/App.tsx".
+Whether that failed import or the ladder's check of the navigation's
+loader is what holds the boot short of ready is not established. The
+second boot on a warm cache came up in 3.3–4.1 s. `capture.mjs`'s warm-up assumes the reload comes
+after the boot, where `--wait 4000` covers it. compare deletes its base
+worktree at the end, so every `--base` run is cold and fails at the base's
+warm-up. The check above went through as `--keep` once, then `--keep` again
+on the kept worktree. The identity check runs after the boot and plays no
+part in it.
+
+**Not done:** `--status` running the guard, which is P03's drive.mjs half
+and unit C. A probe of the foreign server before the boot, which would save
+the boot a refused run costs: the tree is in the page, so the page has to
+load.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
@@ -13066,3 +13140,7 @@ Fuller treatment, with the seam for each, in [`docs/roadmap.md`](docs/roadmap.md
   client runs a separate starfield survey with its own radius and hysteresis.
   It is tested and left in place deliberately — wiring it into the frame loop
   changes what unloads mid-flight, which is a gameplay decision, not a cleanup.
+- **`presets:compare --base` fails on a cold base worktree.** A fresh Vite
+  optimizes and reloads inside the first boot, and the base's warm-up ends
+  "renderer never became ready". compare deletes the worktree after every run, so every `--base` run
+  is cold; `--keep`, twice, is the workaround. 7 Nov 2026 entry above.

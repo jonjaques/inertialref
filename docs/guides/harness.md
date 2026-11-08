@@ -40,6 +40,7 @@ pixels.
 | ---------------------- | ----------------------------------------------------------------- |
 | `ir.summary()`         | one line: tick, hash, frame, speed, systems                       |
 | `ir.status()`          | everything the debug overlay shows, structured                    |
+| `ir.build()`           | `BUILD_ID`, and the tree the dev server serves                    |
 | `ir.inspect(id?)`      | one entity in full — frames, canonical + local coords, velocities |
 | `ir.dossier(address)`  | one star, body or station as a page of astronomy                  |
 | `ir.snapshot(alpha?)`  | the raw presentation snapshot                                     |
@@ -71,6 +72,17 @@ there is a renderer, `drawing` while the boot cover is still up over a scene
 that already renders, and `booted` once the cover is gone. It is answered by
 the presentation host, so the driver waits on it rather than on a DOM selector
 or an engine field a rename would silently break. Headlessly it is `booted`.
+
+**`ir.build()` says which build this is and which checkout serves it**, as
+`{ id, tree }`. `id` is `BUILD_ID`: the commit, `-dirty` when the tree had
+edits. `tree` is the served checkout's root, from `git rev-parse
+--show-toplevel`, and only the dev server has it. Sibling worktrees cut from
+one commit share an id, so the tree is what tells them apart, and the driver
+holds it against the tree it means to measure before it runs a step
+([driving](../agents/driving.md#which-checkout-is-served)). A production build
+reports `tree: null`, because a shipped bundle carries no filesystem path, and
+`pnpm build` refuses one that names this checkout. Headlessly both are null:
+no build produced that host.
 
 **`ir.lens()` is the optics, and `ir.status().lens` is the same object.** Focal
 length, gauge and zoom are what the camera is set to; the field of view, the

@@ -132,7 +132,8 @@ and the driver re-boots unless the attached page is already showing everything t
 asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
 profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--color-profile` (Chrome's output color space; `srgb`
 makes a plate the build's rather than the display's, and a Chrome already up under another
-profile is refused until `--down`), `--keep-storage`, `--fresh`, `--json`, `--down`, `--status`.
+profile is refused until `--down`), `--tree` (the checkout `--url` must be served from),
+`--keep-storage`, `--fresh`, `--json`, `--down`, `--status`.
 
 A `--shot` is downscaled to 1568 px on its long edge, because that is where the reader
 downsamples anyway — beyond it a bigger file is bytes spent on pixels nobody sees. Pass
@@ -142,6 +143,15 @@ or not `--logs` was asked for, so a broken page never looks like a blank capture
 For anything about how the app is _served_ — asset headers, the SPA fallback, the service
 worker — point the driver at `pnpm preview` on 8787 instead: `pnpm preview` in one shell,
 then `--url http://localhost:8787/`.
+
+**A server on the port is not the tree.** A sibling worktree's Vite on 5173 boots the
+same app under the same build id. After every boot and attach the driver reads
+`ir.build()` and refuses a page another checkout serves, before the first step and
+naming both trees. `--tree <path>` names the checkout you serve on purpose; the
+default is the driver's own. A production build names no tree, and neither does a
+build older than the verb, so `pnpm preview` and an old `--base` read
+`identity unchecked` and proceed. The preset commands pass `--tree` themselves.
+[driving.md](../../../docs/agents/driving.md#which-checkout-is-served) has the rest.
 
 ## One GPU job at a time
 

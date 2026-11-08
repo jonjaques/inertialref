@@ -199,6 +199,23 @@ containing both `--js` and `--down` closes Chrome without evaluating the script.
 The same applies to `--file` and `--shot`. Finish the inspection batch, then
 call `node scripts/drive.mjs --port <port> --down` for that rig.
 
+### Which checkout is served
+
+A server answering `--url` is not evidence of a tree. A sibling worktree's
+Vite on 5173 boots the same app under the same build id, because worktrees
+cut from one commit describe it alike. After every boot and every attach the
+driver reads `ir.build()` and holds the served tree against its own
+checkout's `git rev-parse --show-toplevel`. A page another checkout serves is
+refused before the first step, and the refusal names both trees. Pass
+`--tree <path>` when you serve another checkout on purpose. A production
+build names no tree, and neither does a build older than the verb, so both
+read `identity unchecked` and proceed: `--url` at `pnpm preview` on 8787 and
+`presets:compare --base` at an older commit. The preset commands pass the
+tree they serve and print which tree each set of plates came from. Trees
+compare after realpath, so a symlinked worktree, or `/tmp` against
+`/private/tmp`, is one tree. The check names the served tree, not the edit:
+the build id is stamped when the server starts.
+
 ### One GPU job at a time
 
 Every GPU job on the machine takes one lock, in the clone's git common
