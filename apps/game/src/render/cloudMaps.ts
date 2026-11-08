@@ -51,7 +51,8 @@ import { warmSensorPass } from './warmup.ts'
  * read it — the clipmap's levels, the far atlas, the sphere caches — and the
  * fine march does not, which keeps the trace kernel inside the binding limit.
  *
- * Phase 0's packing (§3.9), so a fine step reads one texel:
+ * Phase 0's packing (§3.9), which the clipmap shares, so a fine step's
+ * coverage of all three layers is one texel:
  *
  *   0  coverage of layers 0–2           ice share of the middle layer
  *   1  log in-cloud τ of layers 0–2     rain rate
