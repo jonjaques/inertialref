@@ -68,8 +68,14 @@ export default defineConfig(({ isPreview }) => {
        *             slow or refused session shows where the time and the
        *             failure sat. `traces.enabled` turns tracing on regardless
        *             of the compatibility date.
-       *   persist — both stay queryable in the dashboard; a destination would
-       *             forward them somewhere else, and there is nowhere else yet.
+       *   persist — both stay queryable in the dashboard.
+       *   destinations — logs also go to PostHog Logs over OTLP, through the
+       *             account's `posthog-logs` destination (created with
+       *             `cf o11y destinations create`; its endpoint and bearer token
+       *             live on the destination, not here), so a Worker record and
+       *             the browser event that caused it share a search
+       *             (ADR-0061). A rebuilt account needs the destination
+       *             created again before this name means anything.
        *
        * Live: `pnpm --filter @inertialref/server run tail`.
        */
@@ -81,6 +87,7 @@ export default defineConfig(({ isPreview }) => {
           invocationLogs: true,
           headSamplingRate: 1,
           persist: true,
+          destinations: ['posthog-logs'],
         },
         traces: { enabled: true, headSamplingRate: 1, persist: true },
       },

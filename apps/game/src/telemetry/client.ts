@@ -5,6 +5,7 @@ import type {
   PostHogConfig,
   Properties,
 } from 'posthog-js'
+import { RELAY_PREFIX } from '@inertialref/protocol'
 import { BUILD_ID } from '../build.ts'
 import {
   read,
@@ -59,8 +60,8 @@ const HOST: string = (import.meta.env.PUBLIC_POSTHOG_HOST ?? '').replace(
   /\/+$/,
   '',
 )
-/** The Worker's relay to `HOST`. `apps/server/src/relay.ts`. */
-const RELAY_PATH = '/api/relay'
+/** The Worker's relay to `HOST`, without its slash. `apps/server/src/relay.ts`. */
+const RELAY_PATH = RELAY_PREFIX.slice(0, -1)
 
 /** Where a toolbar or a replay link opens: the app host beside the ingest one. */
 export const uiHostFor = (ingest: string): string =>
