@@ -506,6 +506,45 @@ describe('the look and stance verbs the observatory carries', () => {
   })
 })
 
+describe('build identity', () => {
+  /*
+   * What a rig holds against the tree it means to measure. Two worktrees cut
+   * from one commit share the id, so the tree is the half that tells them
+   * apart, and the harness hands back exactly what its host was opened with.
+   */
+  it('answers the build and the tree its host was opened with', () => {
+    const build = {
+      id: 'c8aa32e-dirty',
+      tree: '/Users/agent/inertialref/.claude/worktrees/sibling',
+    }
+    const ir = openSession({
+      workers: null,
+      catalog: TEST_CATALOG,
+      build,
+    }).harness
+    expect(ir.build()).toEqual(build)
+    // A copy, so a console that edits the answer edits nothing it reports.
+    ;(ir.build() as { tree: string | null }).tree = null
+    expect(ir.build()).toEqual(build)
+  })
+
+  it('names neither where nothing built the host: the headless runner, a test', () => {
+    expect(session().harness.build()).toEqual({ id: null, tree: null })
+  })
+
+  it('crosses to a driver as JSON unchanged, null tree and all', () => {
+    const ir = openSession({
+      workers: null,
+      catalog: TEST_CATALOG,
+      build: { id: 'c8aa32e', tree: null },
+    }).harness
+    expect(JSON.parse(JSON.stringify(ir.build()))).toEqual({
+      id: 'c8aa32e',
+      tree: null,
+    })
+  })
+})
+
 describe('help', () => {
   /*
    * The string is hand-written, so a renamed verb leaves it wrong silently.
@@ -536,6 +575,10 @@ describe('help', () => {
         missing.push(`ir.${name}.${member}`)
     }
     expect(missing).toEqual([])
+  })
+
+  it('names the build verb a rig checks the served tree with', () => {
+    expect(session().harness.help()).toContain('ir.build()')
   })
 
   it('lists the scenarios, the scenes and the shots by their ids', () => {

@@ -23,7 +23,10 @@ export default defineConfig({
   // The same `define` and alias the root config carries, and for the same
   // reasons it gives: a material module can reach `build.ts` or a `@/` import
   // through what it imports, and this project does not go through the root.
-  define: { __BUILD_ID__: JSON.stringify('test') },
+  define: {
+    __BUILD_ID__: JSON.stringify('test'),
+    __SERVED_TREE__: JSON.stringify(null),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -453,6 +453,16 @@ describe('the game engine, headless', () => {
     game.dispose()
   })
 
+  it('hands the harness the build it was opened with, and none by default', () => {
+    const build = { id: 'c8aa32e-dirty', tree: '/Users/agent/inertialref' }
+    const game = headlessEngine({ build })
+    expect(game.harness.build()).toEqual(build)
+    game.dispose()
+    const bare = headlessEngine()
+    expect(bare.harness.build()).toEqual({ id: null, tree: null })
+    bare.dispose()
+  })
+
   it('reads the world through the session rather than a captured reference', async () => {
     const game = headlessEngine()
     game.frame(1 / 60)
