@@ -826,7 +826,8 @@ async function main() {
   const trailing = drainLogs(events).filter((l) => /^(error|exception)/.test(l))
   for (const line of trailing) process.stderr.write(`${line}\n`)
 
-  if (values.json === true) process.stdout.write(jsonReport(results, trailing))
+  if (values.json === true)
+    process.stdout.write(jsonReport(results, trailing, identity))
   ws.close()
 }
 

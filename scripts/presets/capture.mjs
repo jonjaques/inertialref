@@ -233,12 +233,20 @@ export async function capturePlates({
    * renderer restarting between the settle and the shot. The wait covers that
    * reload; the pictures after it are served from a warm bundle.
    */
-  await drive([
+  const warm = await drive([
     '--url',
     new URL('/planetarium', origin).toString(),
     '--wait',
     '4000',
   ])
+  // Once per origin, so a run says which tree each set of plates came from,
+  // and says so when a base older than the check could not be asked.
+  const identity = warm.identity
+  say(
+    identity?.verdict === 'match'
+      ? `served from ${identity.served} (build ${identity.id})`
+      : `identity unchecked: ${identity?.reason ?? 'the driver reported none'}`,
+  )
 
   const written = new Map()
   for (const picture of pictures) {

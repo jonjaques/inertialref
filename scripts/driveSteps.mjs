@@ -203,6 +203,7 @@ export async function sampleFrames(evaluate, count, expression) {
   return { frames: samples.length, spans, samples }
 }
 
-/** What `--json` prints: every step result, and the page errors after them. */
-export const jsonReport = (results, errors) =>
-  `${JSON.stringify({ results, errors }, null, 2)}\n`
+/** What `--json` prints: every step result, the page errors after them, and
+ *  which tree served the page, as `assertServedTree` judged it. */
+export const jsonReport = (results, errors, identity) =>
+  `${JSON.stringify(identity === undefined ? { results, errors } : { results, errors, identity }, null, 2)}\n`

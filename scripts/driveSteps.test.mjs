@@ -306,4 +306,19 @@ describe('jsonReport', () => {
         '  "errors": [\n    "exception: boom"\n  ]\n}\n',
     )
   })
+
+  it('carries the served-tree verdict, so a caller reading --json can say which tree it photographed', () => {
+    const identity = {
+      verdict: 'match',
+      id: 'c8aa32e',
+      served: '/Users/agent/inertialref',
+      expected: '/Users/agent/inertialref',
+      reason: null,
+    }
+    expect(JSON.parse(jsonReport([], [], identity))).toEqual({
+      results: [],
+      errors: [],
+      identity,
+    })
+  })
 })
