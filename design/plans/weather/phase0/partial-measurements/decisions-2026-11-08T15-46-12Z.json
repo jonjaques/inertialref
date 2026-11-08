@@ -1,0 +1,622 @@
+{
+  "batch": "decisions",
+  "startedAt": "2026-11-08T15:46:12.777Z",
+  "url": "http://localhost:8787/",
+  "ports": {
+    "rig": 9341,
+    "cold": 9342
+  },
+  "identity": {
+    "head": "24c130d2723d8574ea082117caea193e48ef25ea",
+    "clean": true,
+    "committedAt": 1794152717000,
+    "builtAt": 1794152764598.5747,
+    "hardware": "Mac18,5, Apple M6",
+    "cores": 12
+  },
+  "held": {
+    "jitterFrame": 0
+  },
+  "rows": [
+    {
+      "id": "decisions/placement/split/horizon/1080p/steady",
+      "type": "ab",
+      "batch": "decisions",
+      "group": "placement",
+      "label": "split",
+      "scenario": "horizon",
+      "size": "1080p",
+      "kind": "steady",
+      "stance": {
+        "light": {
+          "address": "g:milky-way/s:P222_1_0_9/b:4",
+          "sun": 37.507996949075995,
+          "phase": 43.73473331112089,
+          "lit": true
+        },
+        "stance": {
+          "latitude": 0.30574769359243004,
+          "longitude": 3.0153751141637355,
+          "height": 2,
+          "heading": 1.5707963267948966,
+          "pitch": 0.03490658503988659
+        },
+        "processing": "enhanced"
+      },
+      "scene": {
+        "step": "settle",
+        "ms": 15082,
+        "settled": true,
+        "ok": true,
+        "galaxy": {
+          "pending": false,
+          "tiles": "0/1638",
+          "survey": false
+        },
+        "terrain": {
+          "pending": 0,
+          "patches": 663,
+          "deposits": false
+        }
+      },
+      "operatingPoint": {
+        "kind": "webgpu",
+        "origin": "http://localhost:8787",
+        "build": "production",
+        "browser": "157.0.8103.39",
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        },
+        "dpr": 1,
+        "coarse": false,
+        "buffer": {
+          "width": 1920,
+          "height": 1080
+        },
+        "expectedBuffer": {
+          "width": 1920,
+          "height": 1080
+        },
+        "adapter": {
+          "vendor": "apple",
+          "architecture": "metal-3",
+          "device": "",
+          "description": "",
+          "isFallbackAdapter": false,
+          "source": "device"
+        },
+        "backend": "webgpu",
+        "dynamicRangeHigh": false,
+        "picture": {
+          "aa": "msaa",
+          "scale": "native",
+          "sharpness": "standard"
+        },
+        "system": "generated",
+        "identity": {
+          "verdict": "unchecked",
+          "id": "24c130d2",
+          "served": null,
+          "expected": "/Users/jonjaques/.t3/worktrees/inertialref/t3-e896a8db",
+          "reason": "the page names no tree: a production build carries no filesystem path"
+        }
+      },
+      "errors": [],
+      "levers": {
+        "base": {
+          "on": false,
+          "scenario": "broken-horizon",
+          "placement": "split",
+          "cache": "field",
+          "far": "atlas",
+          "farFootprint": 400,
+          "sunDepth": "cascades",
+          "lightTaps": 2,
+          "composite": "identity",
+          "force": "none",
+          "warp": 1000,
+          "scrubSeconds": 10800,
+          "flySpeed": 250,
+          "traceScale": 1,
+          "maxSteps": 192,
+          "fixedSteps": 0,
+          "sweepReads": 0,
+          "sweepExtra": "none",
+          "noiseFormat": "r8",
+          "jitterFrame": null,
+          "served": null,
+          "second": null,
+          "deck": "auto",
+          "stats": false
+        },
+        "candidate": {
+          "on": true,
+          "scenario": "broken-horizon",
+          "placement": "split",
+          "cache": "field",
+          "far": "atlas",
+          "farFootprint": 400,
+          "sunDepth": "cascades",
+          "lightTaps": 2,
+          "composite": "identity",
+          "force": "none",
+          "warp": 1000,
+          "scrubSeconds": 10800,
+          "flySpeed": 250,
+          "traceScale": 1,
+          "maxSteps": 192,
+          "fixedSteps": 0,
+          "sweepReads": 0,
+          "sweepExtra": "none",
+          "noiseFormat": "r8",
+          "jitterFrame": null,
+          "served": null,
+          "second": null,
+          "deck": "auto",
+          "stats": false
+        }
+      },
+      "pairs": [
+        {
+          "base": 6.230370370326219,
+          "candidate": 11.055555555555555,
+          "delta": 4.825185185229336,
+          "settled": [5, 45]
+        },
+        {
+          "base": 6.2311111111331865,
+          "candidate": 11.075555555577631,
+          "delta": 4.844444444444445,
+          "settled": [5, 17]
+        },
+        {
+          "base": 6.2288888889330405,
+          "candidate": 11.071111111177338,
+          "delta": 4.842222222244297,
+          "settled": [5, 17]
+        },
+        {
+          "base": 6.2288888889330405,
+          "candidate": 11.074074074074074,
+          "delta": 4.845185185141034,
+          "settled": [5, 17]
+        },
+        {
+          "base": 6.226666666622515,
+          "candidate": 11.071851851873928,
+          "delta": 4.845185185251413,
+          "settled": [5, 17]
+        }
+      ],
+      "summary": {
+        "base": 6.2288888889330405,
+        "candidate": 11.071851851873928,
+        "delta": 4.844444444444445,
+        "spread": 0.020000000022077025
+      },
+      "passes": {
+        "perFrame": 27,
+        "frames": 45,
+        "wallMs": 11.302222222089767,
+        "busyMs": 10.922666666573948,
+        "labels": {
+          "canvas": {
+            "count": 1,
+            "ms": 0.48642275664541457,
+            "latencyMs": 8.202194489704238
+          },
+          "scene": {
+            "count": 1,
+            "ms": 2.6301781326532363,
+            "latencyMs": 10.449351111385557
+          },
+          "scene after copy": {
+            "count": 1,
+            "ms": 2.263176533579826,
+            "latencyMs": 12.025127823154131
+          },
+          "scene over clouds": {
+            "count": 1,
+            "ms": 1.5306296888324948,
+            "latencyMs": 12.578542932868004
+          },
+          "cloud maps": {
+            "count": 1,
+            "ms": 0.03203982280360328,
+            "latencyMs": 8.745415111382803
+          },
+          "cloud clipmap": {
+            "count": 1,
+            "ms": 0.007281778256098429,
+            "latencyMs": 9.003190045224295
+          },
+          "cloud sun cascade": {
+            "count": 1,
+            "ms": 0.4441884438196818,
+            "latencyMs": 8.19636906683445
+          },
+          "cloud far atlas": {
+            "count": 1,
+            "ms": 0.738372266292572,
+            "latencyMs": 8.86192355553309
+          },
+          "cloud depth": {
+            "count": 1,
+            "ms": 0.09903217785888248,
+            "latencyMs": 9.084745955467223
+          },
+          "cloud trace": {
+            "count": 1,
+            "ms": 1.7345194657643637,
+            "latencyMs": 1.7345194657643637
+          },
+          "cloud history": {
+            "count": 1,
+            "ms": 0.26360035604900783,
+            "latencyMs": 0.26360035604900783
+          },
+          "defocus 0": {
+            "count": 1,
+            "ms": 0.10777031183242798,
+            "latencyMs": 12.513006933861309
+          },
+          "defocus 1": {
+            "count": 1,
+            "ms": 0.04514702161153158,
+            "latencyMs": 12.2013468441036
+          },
+          "defocus 2": {
+            "count": 1,
+            "ms": 0.046603378322389394,
+            "latencyMs": 12.236299378342098
+          },
+          "defocus 3": {
+            "count": 1,
+            "ms": 0.0815559102429284,
+            "latencyMs": 12.303291732403967
+          },
+          "psf down 0": {
+            "count": 1,
+            "ms": 0.07136142353216807,
+            "latencyMs": 12.210084979070558
+          },
+          "psf down 1": {
+            "count": 1,
+            "ms": 0.01601991123623318,
+            "latencyMs": 11.744051201144854
+          },
+          "psf down 2": {
+            "count": 1,
+            "ms": 0.026214399933815004,
+            "latencyMs": 11.20665600001812
+          },
+          "psf down 3": {
+            "count": 1,
+            "ms": 0.0072817775938245986,
+            "latencyMs": 10.019726223084662
+          },
+          "psf down 4": {
+            "count": 1,
+            "ms": 0.005825422207514445,
+            "latencyMs": 9.878459735049141
+          },
+          "psf down 5": {
+            "count": 1,
+            "ms": 0.00436906615893046,
+            "latencyMs": 9.08183324403233
+          },
+          "psf up 0": {
+            "count": 1,
+            "ms": 0.0072817775938245986,
+            "latencyMs": 9.051249777939585
+          },
+          "psf up 1": {
+            "count": 1,
+            "ms": 0.0058254218763775295,
+            "latencyMs": 8.309964799549844
+          },
+          "psf up 2": {
+            "count": 1,
+            "ms": 0.011650844746165805,
+            "latencyMs": 8.296857599086232
+          },
+          "psf up 3": {
+            "count": 1,
+            "ms": 0.013107200132475958,
+            "latencyMs": 8.270643200476965
+          },
+          "psf up 4": {
+            "count": 1,
+            "ms": 0.04951608810159895,
+            "latencyMs": 8.285206754671202
+          },
+          "psf resolve": {
+            "count": 1,
+            "ms": 0.1922389331791136,
+            "latencyMs": 8.454143999682532
+          },
+          "compute": {
+            "count": 0.044444444444444446,
+            "ms": 0.0014563557174470689,
+            "latencyMs": 0.008738133311271667
+          }
+        },
+        "settled": 5,
+        "clouds": {
+          "available": true,
+          "reason": null,
+          "on": true,
+          "levers": {
+            "on": true,
+            "scenario": "broken-horizon",
+            "placement": "split",
+            "cache": "field",
+            "far": "atlas",
+            "farFootprint": 400,
+            "sunDepth": "cascades",
+            "lightTaps": 2,
+            "composite": "identity",
+            "force": "none",
+            "warp": 1000,
+            "scrubSeconds": 10800,
+            "flySpeed": 250,
+            "traceScale": 1,
+            "maxSteps": 192,
+            "fixedSteps": 0,
+            "sweepReads": 0,
+            "sweepExtra": "none",
+            "noiseFormat": "r8",
+            "jitterFrame": null,
+            "served": null,
+            "second": null,
+            "deck": "auto",
+            "stats": false
+          },
+          "served": "g:milky-way/s:P222_1_0_9/b:4",
+          "second": null,
+          "regime": "converging",
+          "reset": "none",
+          "extents": {
+            "render": [1920, 1080],
+            "css": [1920, 1080],
+            "trace": [480, 270],
+            "history": [960, 540]
+          },
+          "frames": 2189,
+          "resets": 5,
+          "sinceReset": 472,
+          "pending": {
+            "maps": false,
+            "clipmap": false,
+            "volume": false,
+            "sunDepth": false,
+            "far": false,
+            "history": false
+          },
+          "bytes": {
+            "profile": 2048,
+            "noise": 2162692,
+            "maps": 25362816,
+            "clipmap": 6291456,
+            "volume": 6,
+            "sunCascades": 6291456,
+            "sunGrid": 2,
+            "phase": 262144,
+            "farAtlas": 4792608,
+            "farSpheres": 8,
+            "farSecond": 4,
+            "depth": 4147200,
+            "trace": 9331200,
+            "history": 24883200,
+            "total": 83526840
+          },
+          "pipelines": {
+            "render": 15,
+            "compute": 17
+          },
+          "steps": null,
+          "residual": null,
+          "settle": {
+            "pending": false,
+            "history": "16/16",
+            "caches": "ready"
+          }
+        }
+      },
+      "cpu": {
+        "candidate": {
+          "frames": 274,
+          "late": 0,
+          "sensor": {
+            "track": "Render",
+            "name": "sensor",
+            "count": 274,
+            "totalMs": 1357.800000011921,
+            "meanMs": 4.955474452598252,
+            "p95Ms": 7.299999997019768,
+            "maxMs": 8.299999997019768,
+            "shareOfFrame": 0.45195220184843987
+          }
+        },
+        "base": {
+          "frames": 343,
+          "late": 0,
+          "sensor": {
+            "track": "Render",
+            "name": "sensor",
+            "count": 343,
+            "totalMs": 1061.2999998629093,
+            "meanMs": 3.0941690958102313,
+            "p95Ms": 3.5,
+            "maxMs": 6.299999997019768,
+            "shareOfFrame": 0.35287272238986384
+          }
+        }
+      },
+      "report": {
+        "clouds": {
+          "available": true,
+          "reason": null,
+          "on": false,
+          "levers": {
+            "on": false,
+            "scenario": "broken-horizon",
+            "placement": "split",
+            "cache": "field",
+            "far": "atlas",
+            "farFootprint": 400,
+            "sunDepth": "cascades",
+            "lightTaps": 2,
+            "composite": "identity",
+            "force": "none",
+            "warp": 1000,
+            "scrubSeconds": 10800,
+            "flySpeed": 250,
+            "traceScale": 1,
+            "maxSteps": 192,
+            "fixedSteps": 0,
+            "sweepReads": 0,
+            "sweepExtra": "none",
+            "noiseFormat": "r8",
+            "jitterFrame": null,
+            "served": null,
+            "second": null,
+            "deck": "auto",
+            "stats": false
+          },
+          "served": null,
+          "second": null,
+          "regime": "off",
+          "reset": "none",
+          "extents": {
+            "render": [0, 0],
+            "css": [0, 0],
+            "trace": [0, 0],
+            "history": [0, 0]
+          },
+          "frames": 2469,
+          "resets": 5,
+          "sinceReset": 752,
+          "pending": {
+            "maps": false,
+            "clipmap": false,
+            "volume": false,
+            "sunDepth": false,
+            "far": false,
+            "history": false
+          },
+          "bytes": {
+            "profile": 2048,
+            "noise": 2162692,
+            "maps": 25362816,
+            "clipmap": 6291456,
+            "volume": 6,
+            "sunCascades": 6291456,
+            "sunGrid": 2,
+            "phase": 262144,
+            "farAtlas": 4792608,
+            "farSpheres": 8,
+            "farSecond": 4,
+            "depth": 4147200,
+            "trace": 9331200,
+            "history": 24883200,
+            "total": 83526840
+          },
+          "pipelines": {
+            "render": 15,
+            "compute": 17
+          },
+          "steps": null,
+          "residual": null,
+          "settle": null
+        },
+        "light": {
+          "address": "g:milky-way/s:P222_1_0_9/b:4",
+          "sun": 37.507996949075995,
+          "phase": 43.73473331112089,
+          "lit": true
+        },
+        "lens": {
+          "focalLength": 20.784609690826528,
+          "effectiveFocalLength": 20.784609690826528,
+          "gauge": 24,
+          "zoom": 1,
+          "fStop": 2.8,
+          "verticalFovDegrees": 59.99999999999999,
+          "horizontalFovDegrees": 91.49284451967723,
+          "apertureDiameter": 7.423074889580904,
+          "circleOfConfusion": 0.03333333333333333,
+          "pixelPitch": 0.022222222222222223,
+          "pixelsPerRadian": 935.3074360871938,
+          "pixelAngleMrad": 1.0691671651659735,
+          "depthOfField": {
+            "near": 4.649356038262256,
+            "far": null,
+            "hyperfocal": 4.649356038262256
+          },
+          "airyDiameter": 0.0037576,
+          "diffractionLimit": 16.559032952475576,
+          "angularResolutionMrad": 0.0903938071461224,
+          "exposureValue": 10.936637939002571,
+          "viewport": {
+            "width": 1920,
+            "height": 1080
+          }
+        },
+        "picture": {
+          "path": "native",
+          "renderWidth": 1920,
+          "renderHeight": 1080,
+          "displayWidth": 1920,
+          "displayHeight": 1080,
+          "phase": 0,
+          "phaseCount": 1,
+          "frames": 0,
+          "resets": 0,
+          "workingTextureBytes": 0,
+          "initMs": 0,
+          "gpuTimings": {},
+          "debug": "none"
+        },
+        "build": {
+          "id": "24c130d2",
+          "tree": null
+        },
+        "processing": "enhanced"
+      },
+      "sceneOver": 1.5306296888324948,
+      "trace": 1.7345194657643637,
+      "history": 0.26360035604900783,
+      "depth": 0.09903217785888248,
+      "bakes": 1.2218823111719557,
+      "perFrame": 27,
+      "bytes": 83526840,
+      "sensor": 1.8613053567880207,
+      "late": 0,
+      "still": null,
+      "minutes": 1.1102,
+      "chrome": "157.0.8103.39",
+      "quiet": {
+        "ok": true,
+        "before": {
+          "at": "2026-11-08T15:46:12.810Z",
+          "ok": true,
+          "load": 1.62255859375,
+          "limit": 6,
+          "busy": [],
+          "thermal": 0
+        },
+        "after": {
+          "at": "2026-11-08T15:47:19.368Z",
+          "ok": true,
+          "load": 1.98583984375,
+          "limit": 6,
+          "busy": [],
+          "thermal": 0
+        }
+      },
+      "attempt": 1
+    }
+  ]
+}

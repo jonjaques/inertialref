@@ -17,6 +17,9 @@ under.
 It is a plan, so it promises. When a phase lands, its decision moves into an
 ADR and the section here goes; cite the ADR, not this page.
 
+Phase 0 is built and its measurement is owed; [the working notes](weather/README.md)
+say where it stands, what is left and where the evidence is.
+
 | Reads with                                                                        | For                                                        |
 | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | [ADR-0056](../../docs/adr/0056-the-air-is-measured-and-its-gain-is-pi.md)         | The air the clouds stand in, its tables and its one march  |
