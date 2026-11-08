@@ -20,6 +20,12 @@ import { keepRenderer, splitScenePass } from './cloudSplit.ts'
  *
  * `compileAsync` runs `updateBefore` while warming (`upscale.ts:205`), so it
  * does nothing outside a frame, and warming the composite runs no cloud work.
+ * A compile reaches the node once the node has drawn: three runs a
+ * render-scoped node once per render id, and a compile from the top level
+ * runs at id 0, which is where a fresh node's record starts. So a warm-up
+ * before the composite's first frame passes it by, and any compile after
+ * that frame would run the frame's work inside the compile without the
+ * guard.
  */
 
 const log = getLogger('game.clouds')
