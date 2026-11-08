@@ -1,6 +1,8 @@
 import { Link } from 'react-router'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { FOCUS_RING } from '../hud/focus.ts'
+import { SurveyPrompt } from '../hud/SurveyPrompt.tsx'
+import { SURVEYS } from '../telemetry/surveys.ts'
 import type { DocManifest, DocPage } from './content.ts'
 import { neighbors } from './docsNav.ts'
 
@@ -32,6 +34,11 @@ export function DocFooter({
 
   return (
     <footer className="mt-14 border-t border-slate-800 pt-5">
+      {/* Nothing until PostHog answers with the launched survey, so a
+          prerendered page and a page that reports nothing draw no frame. */}
+      <div className="mb-6 max-w-md empty:hidden">
+        <SurveyPrompt name={SURVEYS.docs} subject={['doc_route', route]} />
+      </div>
       <div className="flex items-start justify-between gap-6">
         {previous === null ? (
           <span />

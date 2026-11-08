@@ -1,0 +1,55 @@
+{
+  "variants": [
+    {
+      "args": [],
+      "version": "151.0.7922.34",
+      "adapter": null
+    },
+    {
+      "args": ["--enable-unsafe-webgpu"],
+      "version": "151.0.7922.34",
+      "adapter": {
+        "vendor": "google",
+        "architecture": "swiftshader",
+        "isFallbackAdapter": true
+      }
+    },
+    {
+      "args": ["--enable-unsafe-webgpu", "--use-angle=metal"],
+      "version": "151.0.7922.34",
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "isFallbackAdapter": false
+      }
+    },
+    {
+      "args": [
+        "--enable-unsafe-webgpu",
+        "--enable-gpu",
+        "--use-angle=metal",
+        "--ignore-gpu-blocklist"
+      ],
+      "version": "151.0.7922.34",
+      "adapter": {
+        "vendor": "apple",
+        "architecture": "metal-3",
+        "isFallbackAdapter": false
+      }
+    }
+  ],
+  "gameFallback": {
+    "description": {
+      "gamut": "srgb",
+      "backend": "webgl",
+      "mode": "standard",
+      "preference": "standard",
+      "headroom": 1,
+      "capability": {
+        "webgpu": true,
+        "dynamicRangeHigh": false,
+        "extendedCanvas": false
+      }
+    }
+  }
+}

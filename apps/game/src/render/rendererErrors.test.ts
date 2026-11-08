@@ -1,6 +1,7 @@
 import { getConsoleFunction, type WebGPURenderer } from 'three/webgpu'
 import { expect, it, vi } from 'vitest'
 import {
+  graphicsError,
   watchRendererErrors,
   watchRendererValidation,
 } from './rendererErrors.ts'
@@ -227,5 +228,21 @@ it('does not overwrite methods installed after the observer', () => {
   expect(device.createRenderPipeline).toBe(replacement.createRenderPipeline)
   expect(device.createRenderPipelineAsync).toBe(
     replacement.createRenderPipelineAsync,
+  )
+})
+
+it("names an uncaptured error by the class three.js's record reports", () => {
+  // `WebGPUBackend`'s `onuncapturederror` hands `onError` a plain record, so
+  // the constructor is `Object` and the class is the record's `type`.
+  const named = graphicsError({
+    api: 'WebGPU',
+    type: 'GPUValidationError',
+    message: 'Invalid ShaderModule "fragment"',
+    originalEvent: {},
+  })
+  expect(named.name).toBe('GPUValidationError')
+  expect(named.message).toBe('Invalid ShaderModule "fragment"')
+  expect(graphicsError({ message: 'Invalid command buffer' }).name).toBe(
+    'Error',
   )
 })

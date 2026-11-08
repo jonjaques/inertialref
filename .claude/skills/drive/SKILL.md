@@ -53,9 +53,12 @@ own Chrome on its own profile and port and needs no focus at all.
 Its decisions run without Chrome. The step list, `--settle` and the step results
 are `scripts/driveSteps.mjs`; the CDP channel and the frame and trace-event
 collection are `scripts/cdp.mjs`, while writing, differencing and clipping a cast stay in
-`drive.mjs`; storage clearing and the boot ladder are `scripts/drivePage.mjs`.
-`pnpm vitest run driveSteps.test cdp.test drivePage.test` answers a change to any of
-them in under a second.
+`drive.mjs`; storage clearing, the boot ladder and the guard each entry runs after it
+are `scripts/drivePage.mjs`, and the guard's checks are `scripts/driveLaunch.mjs`.
+`pnpm vitest run driveSteps.test cdp.test drivePage.test driveLaunch.test` answers a
+change to any of them in under a second. The rig's hold on the GPU lock is
+`scripts/driveLock.mjs`, and `driveLock.test` takes about two seconds, because its
+stand-ins are real processes.
 
 ```bash
 node scripts/drive.mjs --help
@@ -71,7 +74,7 @@ IndexedDB saves, asset caches and service workers are retained. That is what mak
 a batch worth writing:
 
 ```bash
-node scripts/drive.mjs --keep-storage --js "ir.summary()"                     # ~0.1 s, page still hot
+node scripts/drive.mjs --keep-storage --js "ir.summary()"                     # ~0.2 s, page still hot
 node scripts/drive.mjs --url http://localhost:5173/planetarium \
     --js "ir.look('g:milky-way/s:SOL/b:5')" --wait 3000 --shot saturn.jpg
 node scripts/drive.mjs --js "ir.play('tng-intro')" --js "ir.pause()" \
@@ -130,9 +133,12 @@ is empty when it should not be, check the page before checking the code.
 Session flags worth knowing: `--url` (the mode is a function of the path and the query,
 and the driver re-boots unless the attached page is already showing everything the URL
 asks for — `?at=`, `?t=`, `?seed=`), `--port` (**keys the Chrome
-profile too, so parallel agents must differ**), `--width`/`--height`/`--dpr`, `--color-profile` (Chrome's output color space; `srgb`
+profile too, so parallel agents must differ**, and the GPU lock below refuses a second
+port's rig while the first is up), `--width`/`--height`/`--dpr`, `--color-profile` (Chrome's output color space; `srgb`
 makes a plate the build's rather than the display's, and a Chrome already up under another
-profile is refused until `--down`), `--keep-storage`, `--fresh`, `--json`, `--down`, `--status`.
+profile is refused until `--down`), `--tree` (the checkout `--url` must be served from),
+`--keep-storage`, `--fresh`, `--json`, `--down`, `--status` (the rig, the GPU's holder and
+the page's operating point, read again).
 
 A `--shot` is downscaled to 1568 px on its long edge, because that is where the reader
 downsamples anyway — beyond it a bigger file is bytes spent on pixels nobody sees. Pass
@@ -142,6 +148,86 @@ or not `--logs` was asked for, so a broken page never looks like a blank capture
 For anything about how the app is _served_ — asset headers, the SPA fallback, the service
 worker — point the driver at `pnpm preview` on 8787 instead: `pnpm preview` in one shell,
 then `--url http://localhost:8787/`.
+
+**A server on the port is not the tree.** A sibling worktree's Vite on 5173 boots the
+same app under the same build id. After every boot and attach the driver reads
+`ir.build()` and refuses a page another checkout serves, before the first step and
+naming both trees. When a sibling holds 5173, serve this tree on a port of its own,
+`pnpm dev:client --port <n>`, and pass `--url http://localhost:<n>/ --no-serve`.
+`--tree <path>` names a checkout you drive on purpose; the default is the driver's
+own, and naming the sibling to get past a refusal drives it as this tree. A
+production build names no tree, and neither does a build older than the verb, so
+`pnpm preview` and an old `--base` read `identity unchecked` and proceed. The preset
+commands pass `--tree` themselves.
+[driving.md](../../../docs/agents/driving.md#which-checkout-is-served) has the rest.
+
+**Every page is held to its operating point before the first step.** After every boot,
+attach and `--reload` the driver runs the launch guard,
+[`scripts/driveLaunch.mjs`](../../../scripts/driveLaunch.mjs), over its own socket: a
+WebGPU renderer on an adapter that is neither a fallback nor a software rasterizer by
+name, the `--width`, `--height` and `--dpr` reported back by the page, a drawing buffer of
+that window × min(DPR, the pointer's ceiling) × the picture's supersampling, floored as
+three floors it, and the served tree above. `--document` and `--no-javascript` ask for
+no renderer and hold the window and the served tree alone; with scripts off the page
+answers no `ir.build()`, so its tree reads unchecked. A refusal is the guard's reason on stderr and exit
+1, and no step runs. It means the page is not the point the command asked for, so a
+figure taken there belongs to another point: a buffer the rig did not ask for is trap 5's
+remount, and `--fresh` boots the page again at the rig's window. The record is one line
+of narration, the `operatingPoint` of `--json`, and each `--reload` step's result:
+
+```text
+operating point (webgpu): apple/metal-3 on webgpu, buffer 1600×900 for 1600×900 at DPR 1,
+  dynamic range standard, system sol, served from …/inertialref (build 43d0c10d)
+```
+
+Chrome's version is recorded in the session once a page passes, and a change is warned
+about, never refused, because Chrome stable updates itself. `--status` prints the rig's
+lines and the GPU's holder, then reads the point again without booting, prints the line and
+the full record, and exits 1 on a refusal. It first sets the window the session recorded,
+because Chrome drops an invocation's emulation when its socket closes: between invocations
+the page is at the window's own size and ratio, 1600×933 at DPR 2 on the Mac mini's
+display, which is no rig's point. That same close clears the emulation of every session on
+the page, so `--status` touches nothing while another invocation is driving it, and says
+which pid is; a page that does not answer in five seconds is not read. A baseline older than
+`engine.picture` and `ir.build()` reads `buffer …, unchecked` and proceeds.
+[driving.md](../../../docs/agents/driving.md#the-operating-point) has the rest.
+
+## One GPU job at a time
+
+Two overlapping GPU jobs have crashed macOS twice, so every GPU job takes one lock:
+`pnpm test:gpu`, every `drive.mjs` rig, and `presets:compare` and `presets:plates`. It
+is `$(git rev-parse --git-common-dir)/inertialref-gpu.lock`, one file for every worktree
+of the clone; [`scripts/gpuLock.mjs`](../../../scripts/gpuLock.mjs) says how it is held.
+
+- **A rig holds it from before its Chrome launches until `--down`**, because the Chrome
+  is detached and is a GPU job whether or not an invocation is driving it. A later call
+  on the same `--port` joins it. A call on another port, and `pnpm test:gpu`, are refused
+  while it is up, so `--down` when finished is what lets the next job run.
+- **A refusal is a stop.** It names the holder, its pid, its age and its worktree. Wait
+  for it, or ask whoever is working in that checkout. Never `--down` a rig you did not
+  start, because that ends someone else's session, and never delete the lock file.
+- **`--gpu-wait <s>` queues** for up to that many seconds and starts within one
+  half-second poll of the holder letting go. It is seconds, unlike `--wait`. The preset
+  commands take the same flag; `pnpm test:gpu` takes `IR_GPU_WAIT=<s>`.
+- **`--down` is never refused.** It closes the Chrome, waits for it to exit, then drops it
+  from the lock. A pid that started at another time than the session recorded is another
+  process, given that pid after a reboot or a crash, and is left running. `--status` names
+  whoever holds the GPU.
+- **A preset command takes the lock once**, and every `drive.mjs` it spawns joins under
+  its token, which it hands down in `IR_GPU_LOCK_TOKEN`. The token is in the lock file,
+  and one copied from there or from another shell joins a job that is not yours and runs
+  beside it, the overlap the lock exists to stop. The rig a preset command leaves keeps
+  the lock until `--down`, and the command says so on stderr, even when it fails.
+- **A sandbox that cannot write the clone's `.git` loses every GPU command.** The lock
+  fails closed, and `cannot write the GPU lock … EPERM` means the sandbox, not a busy GPU.
+  Codex's workspace-write sandbox keeps `.git` and a worktree's gitdir read-only. Probed
+  on the Mac mini (codex-cli 0.166.0, `codex sandbox --permission-profile :workspace`),
+  it refuses the lock from a worktree and from the main checkout alike. A Codex thread
+  needs full access for GPU work, or a permissions profile that grants write on
+  `<clone>/.git` itself, which also lifts Codex's guard on the rest of `.git`. A narrower
+  grant does not work: Codex grants write to an exact path or a whole subtree, and an
+  edit of the lock writes a scratch file named by pid. A Claude Code subagent in a
+  worktree there creates the lock. An `EnterWorktree` session is unprobed.
 
 ## Documents before enhancement
 
@@ -242,7 +328,7 @@ a clean result meaningful.
 ```bash
 node scripts/drive.mjs --url http://localhost:5173/planetarium \
     --js "ir.preset('earthrise')" --wait 20000 --js "ir.chrome(false)" --cast 200
-# cast: 200 frames in 3.31s (60.4 fps) -> .data/drive/cast
+# cast: 200 frames in 3.31s (60.1 fps) -> .data/drive/cast
 #   8 events over 15 isolated frames, every 26 frames — 2.31 Hz
 ```
 
@@ -258,7 +344,7 @@ page's real rate, on their machine at their window size:
 ```bash
 node scripts/traceFrames.mjs ~/Downloads/Trace-*.json.gz
 # url: https://…/planetarium?at=g%3Amilky-way%2Fs%3ASOL%2Fb%3A2
-# 182 frames at 498x394, 3.04s (59.9 fps)
+# 182 frames at 498x394, 3.04s (59.5 fps)
 # 6 events over 6 isolated frames, every 27 frames — 2.22 Hz
 ```
 
@@ -348,8 +434,8 @@ handles the first three — they are here because they explain what it is doing.
    contain. Exhausted, the ladder remounts the canvas: a second full preload 4.5 s
    after the first, an uncaught Three dispose, and a drawing buffer that comes back
    **3200×1800 for a rig asking for 1600×900 at DPR 1**. Every terrain figure taken
-   after a rebuild here is a retina figure. The flag says "not to be sampled"; the
-   watchdog stands down and lifts the cover.
+   after a rebuild here is a retina figure, and the launch guard refuses that page before
+   a step. The flag says "not to be sampled"; the watchdog stands down and lifts the cover.
 6. **The default rig is 1600×900 at DPR 1, and that is not what anyone is looking at.**
    Terrain selection is measured in _display pixels_, so the streamer at a retina window
    asks for four times the patches and behaves like a different subsystem: the geometry
@@ -363,19 +449,30 @@ handles the first three — they are here because they explain what it is doing.
    to read the fps before believing the verdict.
 8. **`--serve` cannot start a dev server in a worktree that has never built.**
    `pnpm dev` needs `apps/game/dist` for the Worker's asset binding, and without it both
-   halves exit — so the driver waits its full sixty seconds and then reports that nothing
-   answers the URL. Run `pnpm dev:client` yourself and pass `--no-serve`, or `pnpm build`
-   once. [development](../../../docs/guides/development.md) § Commands has it.
+   halves exit, so the driver reports that `pnpm dev` exited without serving, a few
+   seconds in, with the reason in `.data/drive/dev.log`. Run `pnpm dev:client` yourself
+   and pass `--no-serve`, or `pnpm build` once. [development](../../../docs/guides/development.md) § Commands has it.
 9. **Terrain does not stream just because you are at a body.** The streamer forgets
    everything above the eight-pixel relief gate, so `ir.land` and `ir.orbit(addr, 8)` from
    the root URL both left `ir.terrain()` reporting `visited: 0` and `lens: null` — which
    reads exactly like a broken streamer and is the gate working. `ir.visit(addr, {site:
 'summit', height: 2})` **in the planetarium** is what makes it stream; check
    `ir.terrain().visited` before concluding anything about ground.
-10. **There is no key-press step, and a synthetic `KeyboardEvent` is not a substitute.**
-    Dispatching one on `window` did not fire `chrome.instruments`, and the driver exposes
-    no `Input.dispatchKeyEvent`. Reach a keyboard affordance through the preference it
-    toggles or the harness verb behind it — never by faking the event and believing the
+10. **There is no trusted key-press step, and a synthetic `KeyboardEvent` fires a binding
+    only when it carries `code`.** The keymap resolves a chord from `event.code`, declines
+    an empty one, and accepts untrusted events (`handleKeyDown` in
+    `apps/game/src/input/keymapStore.ts`). On a warm earthrise page (`--keep-storage`), a
+    `--js` step dispatching
+    ``new KeyboardEvent('keydown', {code: 'Backquote', key: '`', bubbles: true})`` and its
+    `keyup` fires `chrome.instruments` from `window` or from `document`, which reaches the
+    keymap's one listener on `window` by bubbling: `localStorage['ir.hud.debug.on']` flips
+    and the Instruments toggle follows. The same pair with only ``key: '`'`` changes
+    nothing on either target. It is still not a key press. An untrusted event skips
+    `useDevice('keyboard')`, so the prompts and the cursor are not handed to the keyboard,
+    and an `isTrusted` check in the keymap would remove the route without a sound; the
+    driver exposes no `Input.dispatchKeyEvent`. Prefer the preference a binding toggles or
+    the harness verb behind it, and when the binding itself is the subject, read its effect
+    back — the stored preference, the toggle's `aria-pressed` — rather than believing the
     silence.
 11. **`--shot` cannot carry a color space.** `Page.captureScreenshot` writes an 8-bit PNG
     with no `iCCP`, `cHRM`, `sRGB` or `cICP` chunk, so every viewer reads it as sRGB and an
@@ -388,6 +485,21 @@ handles the first three — they are here because they explain what it is doing.
     never a fixed one, or a standard-output frame is re-tagged as P3 — and Chrome writes the
     profile on export. `render.hdr` in `localStorage` (`ir.hud.render.hdr`, JSON) is what
     forces the other mode, and it is per Chrome profile, so it is per `--port`.
+12. **The MacBook Air steps every figure up about 35% after about 3.5 minutes of load.**
+    It is fanless (Mac17,4, base M5). At the far-shore preset, 1600×900 at DPR 1, in
+    Chrome 157 headless on the dev build, `ir.gpu` goes from 10.2 ms to 13.4–15.3, settle
+    from 12–18 s to 28–31 and boot from 5 s to 7–8, and five idle minutes bring it back.
+    Two cool sessions still disagree by 8%, and `pmset` records no warning. Onset and
+    recovery each rest on one observation at that point, and the cause is inferred,
+    because `powermetrics` needs sudo. So compare base and candidate **interleaved in one
+    session** first. Idling five minutes between arms suits a short arm only: a six-boot
+    series or a thirteen-plate pass runs 3–6 minutes and outlasts the onset. Name the
+    thermal state of every figure: cool, or how many minutes under load, and on the Mac
+    mini `notifyutil -g com.apple.system.thermalpressurelevel` before and after. The
+    fan-cooled Mac mini (Mac18,5, M6) held `ir.gpu` flat through 10.4 sustained minutes
+    at far-shore 1600×900@1 and 1440×900@2, thermal pressure 0 throughout, but that is
+    one session at each window, so the rule holds there too until repeated sessions give
+    a between-session spread.
 
 Readiness is `ir.status().boot` — `drawing` once a renderer exists, `booted` once the
 cover lifts — not the bare presence of `window.ir`, which appears seconds earlier, so a
@@ -419,7 +531,15 @@ settle, then measure. It cuts both ways: trap 6 is this seen from the test suite
 
 **Say which build**: dev React is ~5× shipped. **Name the operating point, and prefer
 two** — a figure measured at one is a figure about that point, which is the mistake that
-reached an ADR before an audit caught it.
+reached an ADR before an audit caught it. **Name the thermal state** too; trap 12 is why.
+
+**A headless frame interval detects nothing under the 16.7 ms budget, and a CPU span is
+not a control for a GPU change.** Headless rAF is a fixed 60 Hz clock: a DPR change from 1
+to 1.05 at far-shore on the Air raised `ir.gpu` 6.5% across seven interleaved pairs and
+moved rAF p95 by 0.00 ms. The same change raised the CPU-only spans `Engine/snapshot` 28%
+and `Render/sensor` 24%: on the Air's M5 the CPU spans move with GPU load. Read `ir.gpu`
+for a GPU question; a CPU span that moves beside a GPU change is not, by that alone, CPU
+work.
 
 **`?workers=N`** overrides the pool size (bounded at sixteen). It is how the ceiling in
 `engine/browserWorker.ts` was chosen: land, converge twenty seconds, and read `jobs/s`,

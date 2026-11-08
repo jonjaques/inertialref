@@ -24,3 +24,7 @@ allowBuilds:
   # with a Gatekeeper message, the fix is `xattr -d com.apple.quarantine` on
   # that file, not flipping this to true.
   webgpu: false
+  # core-js arrives with posthog-js. Its postinstall prints a funding banner and
+  # builds nothing, and the bundle never loads core-js: posthog-js ships one
+  # self-contained module. Undecided, pnpm fails the install on it.
+  core-js: false

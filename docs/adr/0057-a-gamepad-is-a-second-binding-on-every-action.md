@@ -142,8 +142,9 @@ ADR-0018 unpicked: two ideas of which mode is live, two conflict models, and a
 `Space`-in-the-cinema bug waiting for each pair of them to disagree.
 
 **Pad presses as synthetic `KeyboardEvent`s.** There is no magnitude to carry,
-a synthetic event is untrusted, and the drive skill already records one
-dispatched on `window` failing to fire `chrome.instruments`.
+and a synthetic event is untrusted: it fires a binding only while the keymap
+accepts untrusted events, so an `isTrusted` check there would remove every pad
+press without a sound (the drive skill's trap 10).
 
 **A per-axis deadzone, or an unscaled radial one.** The first snaps slow
 diagonals to a cross. The second makes the deadzone's own size the finest turn

@@ -3,6 +3,7 @@ import { GameRuntimeBoundary } from './GameRuntimeBoundary.tsx'
 import { loadRuntime } from './runtimeLoader.ts'
 import { runtimeFailure, useRuntimeFailure } from './runtimeFailure.ts'
 import { RuntimeNotice } from './RuntimeNotice.tsx'
+import { sendLog } from './telemetry/client.ts'
 
 export default function GameLoader() {
   const [runtime, setRuntime] = useState<Awaited<
@@ -16,11 +17,15 @@ export default function GameLoader() {
     let active = true
     void loadRuntime().then(
       (loaded) => {
-        if (active) setRuntime(loaded)
+        if (!active) return
+        setRuntime(loaded)
+        sendLog('info', 'interactive runtime loaded')
       },
       (cause: unknown) => {
         console.error('The interactive view could not start', cause)
-        if (active) runtimeFailure.report('runtime', cause)
+        if (!active) return
+        runtimeFailure.report('runtime', cause)
+        sendLog('warn', 'interactive runtime failed to load')
       },
     )
     return () => {

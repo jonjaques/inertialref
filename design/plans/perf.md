@@ -623,6 +623,24 @@ says.
   reads 45 ms runs quiet and 285 ms with a build running beside it, the queue
   7.8 s rather than 1.1, and convergence over a minute. `CONTEXT.md` records the
   trap for patch generation; it applies to every pool figure here.
+- **The machine these figures come from steps up about 35% after about 3.5
+  minutes of load.** It is the fanless MacBook Air (Mac17,4, base M5). At the
+  far-shore preset, 1600×900 at DPR 1, in Chrome 157 headless on the dev build,
+  `ir.gpu` goes from 10.2 ms to 13.4–15.3, settle from 12–18 s to 28–31 and boot
+  from 5 s to 7–8, and five idle minutes bring it back; two cool sessions still
+  disagree by 8%, and `pmset` records no warning. Onset and recovery each rest on
+  one observation at that point, and the cause is inferred, because
+  `powermetrics` needs sudo. The step moves the CPU spans with the GPU time, and
+  GPU load alone does too: at the same point a DPR change from 1 to 1.05 raised
+  the CPU-only `Engine/snapshot` 28% and `Render/sensor` 24%, so on this SoC a
+  CPU span is no control for a GPU change. Interleave base and candidate in one
+  session first. Idling five minutes between arms suits a short arm only, since
+  a six-boot series or a thirteen-plate pass runs 3–6 minutes and outlasts the
+  onset. Name the thermal state of every figure. The fan-cooled Mac mini
+  (Mac18,5, M6) held `ir.gpu` flat through 10.4 sustained minutes at far-shore
+  1600×900@1 and 1440×900@2, thermal pressure 0 throughout, but that is one
+  session at each window, so the rule holds there too until repeated sessions
+  give a between-session spread.
 - **Dev-build React numbers are ~5× the shipped ones.** Both are real; only one
   is about a player. The dev figure is still the one an author feels all day.
 - **The driver re-navigates when a URL half-matches.** One "production" trace

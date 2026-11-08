@@ -4,6 +4,7 @@ import { encodePictures, type Picture } from '@inertialref/devtools'
 import { Action } from '../hud/Action.tsx'
 import { SwitchRow } from '../hud/SwitchRow.tsx'
 import { describeCause } from '../hud/notice.ts'
+import { recordEvent } from '../telemetry/client.ts'
 import { pictureLink, presetLink } from './presetUrl.ts'
 import { downloadPictures } from './presetFiles.ts'
 
@@ -31,6 +32,10 @@ export function SharePicture({
               window.location.origin,
             ).href
       await navigator.clipboard.writeText(text)
+      recordEvent('picture shared', {
+        format: kind,
+        preset_source: builtin ? 'builtin' : 'personal',
+      })
       setFallback('')
       onNotice(kind === 'json' ? 'JSON copied.' : 'Link copied.')
     } catch (cause) {
@@ -55,7 +60,13 @@ export function SharePicture({
           label="Download"
           icon={Download}
           title="Download this preset as JSON"
-          onClick={() => downloadPictures([picture], picture.id)}
+          onClick={() => {
+            recordEvent('picture shared', {
+              format: 'download',
+              preset_source: builtin ? 'builtin' : 'personal',
+            })
+            downloadPictures([picture], picture.id)
+          }}
         />
       </div>
       <SwitchRow

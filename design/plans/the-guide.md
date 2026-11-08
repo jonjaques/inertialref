@@ -12,6 +12,7 @@ section here goes; cite the ADR, not this page.
 | [ADR-0042](../../docs/adr/0042-the-guide-speaks-in-one-voice.md)                            | One voice, the browser as the middle, the remote-track clock |
 | [ADR-0041](../../docs/adr/0041-the-guide-requests-the-view.md)                              | The execution boundary every tool call is held to            |
 | [ADR-0048](../../docs/adr/0048-accounts-are-clerks-and-the-worker-decides-who-is-asking.md) | The grant, and where private metadata is read                |
+| [ADR-0061](../../docs/adr/0061-telemetry-is-posthog.md)                                     | PostHog, the Worker's relay, and the tour as an AI trace     |
 | [Hosting](../../docs/hosting.md#the-private-planetarium-guide)                              | The two routes, Workers Logs, previews                       |
 | [The guide's scripts](../../scripts/tour/README.md)                                         | The probes, the harness verbs, the conversation replay       |
 | [Roadmap](../../docs/roadmap.md#the-guide)                                                  | What was already open: the listen, the cheaper backend       |
@@ -50,6 +51,19 @@ both ways (`runtime.ts` `#record`, a 200-entry ring behind
 provider reports per response and per session. The recording the replay
 script reads (`scripts/tour/replay.mjs`) is exactly that, dumped by a scratch
 recorder that is not committed.
+
+What PostHog keeps, since
+[ADR-0061](../../docs/adr/0061-telemetry-is-posthog.md): the tour as an AI
+trace — one `$ai_generation` per backend response, one `$ai_span` per answered
+tool call, the voice priced once per session — with the words only while the
+browser's `TELEMETRY_TRANSCRIPTS` switch is on, and the shape (models, tokens,
+cost, latency, tool names) regardless (`tour/aiObservability.ts`). Those
+events are the one thing the SDK sends straight to the ingest host rather
+than through the Worker's relay (`apps/server/src/relay.ts`), so that
+ADR-0042's "the Worker sees nothing of the conversation" holds as written;
+PostHog keeps AI content for thirty days, and a content blocker that drops the
+ingest host drops a tour's trace. The trace carries no level sample, no
+arrival and no state, which are what the replay checks.
 
 ---
 
@@ -332,6 +346,21 @@ loop bounds its own work", and the numbers are kept here only by reference.
 
 ### The shape
 
+Two captures, through one Worker, under one consent. The first is PostHog's
+AI trace, which is landed (§1) and stays: it is where cost, latency, tool
+failure and the evaluation of
+[the telemetry plan](telemetry.md#14-evaluating-the-guide) live, and nothing
+below replaces it. The second is the Worker's own, which this section
+designs: the whole conversation as the replay reads it, in rows this
+repository owns, past PostHog's thirty days. Both reach the Worker on the
+page's own origin — the trace through the relay, the batches through a route
+of their own — and the relay's one exception goes: once the Worker holds the
+batches, keeping its relay blind to the same words protects nothing, so the
+`$ai_*` events ride `/api/relay/` unread like every other event and a
+content blocker no longer drops a tour's trace. The phase that lands this
+amends ADR-0061's exception and its rejected alternative along with
+ADR-0042's sentence.
+
 The browser is the one party that sees the whole conversation, so the
 browser records it. The recorder is the hook `#record` already is, moved to
 the channel and media boundary so it sees every send and receive, with two
@@ -367,11 +396,22 @@ whose payloads concatenate into the document the replay script reads;
 incomplete. The aggregate questions — refusals by tool, beat lengths,
 delegations that never fired, the cache hit rate, cost per session — are
 SQL. No Durable Object, so the version URLs stay. The Worker now sees
-conversation content, which ADR-0042 says it never does; the phase that lands
-this amends that sentence.
+conversation content, which ADR-0042 says it never does, and relays the
+trace it was kept from under ADR-0061; the phase that lands this amends both.
 
 Why not the alternatives, each measured against the same constraints:
 
+- **PostHog alone.** The trace is a generation and its spans: no level
+  samples, no arrivals, no executor states, so the replay cannot run on it and
+  the beat cannot be measured from it; AI content is kept thirty days, and the
+  telemetry plan's own answer to custody past that
+  ([an R2 export](telemetry.md#16-transcripts-in-our-own-bucket)) waits on an
+  erasure design because exported files hold every visitor of an interval.
+  Rows keyed by `user_id` are that design: one account is one `DELETE`.
+- **Teeing the relay's `$ai_*` traffic into D1 instead of a route of its
+  own.** The relay forwards the SDK's gzipped bodies unread, by design, and
+  the trace lacks what the replay needs anyway; a route that takes the
+  recorder's batches is the honest capture, and the relay stays a relay.
 - **A Durable Object on the sideband.** OpenAI's
   `wss://api.openai.com/v1/live/sessions/{id}/attach` delivers both
   transcripts with millisecond ranges, the delegation events and the usage
@@ -415,7 +455,13 @@ the origin and account checks, read by the events route on every batch —
 not at session creation alone, so an opt-out mid-session refuses the next
 batch, and not through the minute-long metadata cache the grant uses, which
 would record for up to a minute after a visitor said stop. Default off.
-`admin` grants every feature and grants no consent. The verdict route
+`admin` grants every feature and grants no consent. It is the one consent for
+both captures: the words in PostHog's trace follow the same row, read from the
+verdict, and the browser-local `TELEMETRY_TRANSCRIPTS` switch of ADR-0061 goes
+— Settings › Data and the panel both render the row and write it through the
+route, because a consent for an account's transcript is account state, and a
+switch in one browser that another browser of the same account cannot see is
+a consent nobody can revoke. The verdict route
 carries the current state so the panel renders the switch from the Worker's
 answer and never from a browser flag; the row is deleted with the account's
 rows, so the consent and the data have one deletion path.
@@ -510,14 +556,14 @@ is the order the council gave: a recorder that rides a loop which can wedge
 records the wedge, and a model comparison over sessions that stop pacing
 themselves measures the stall.
 
-| Phase | Lands                                                                                                                                                                                                                                                                                                                        | Done when                                                                                                                                                                                                                                                                |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1     | **The tour keeps pacing.** Findings 5–9: a pending continuation held until accepted, a paused beat and a resume that prompts, a meter that knows it is unhealthy and sees the whole interval, a sub-floor sample before a beat's speech counts, an arrival deadline, a takeover that reaches the executor in the right order | Runtime tests for the lost linger, the paused tour, the dead meter, the filler overlap, the stuck arrival and the lens takeover; one listen with the window on screen confirms a tour still beats                                                                        |
-| 2     | **The transport survives.** Findings 10–14: a grace period on `disconnected`, the channel's own `close` and `error`, the microphone's `ended`, a resume whose status follows the capture, teardown on `pagehide`, a loud oversized frame                                                                                     | A test per path on a small host fake for `media.ts`; a drive-rig session that drops the network for five seconds and keeps the conversation                                                                                                                              |
-| 3     | **Consent and the recorder** (§4): the D1 binding and its four tables, the consent route and the events route, the panel's switch and disclosure, the recorder at the channel boundary, the export script, the weekly sweep; ADR-0042's "sees nothing of the conversation" amended                                           | A session opted in replays through `scripts/tour/replay.mjs` from the export; a session opted out writes no row; an opt-out mid-session refuses the next batch; the Worker tests cover the consent check without Clerk; `tool_calls` answers the refusal question in SQL |
-| 4     | **The bounds** — findings 15–18: a daily per-account limiter, a client usage ceiling, `cancelPending` on pause, a greeting and a pause that do not accumulate, the context ratio in diagnostics, one search handle per call, a note for a superseded move, the ADR's sentence on what the allow list protects                | Worker tests for the limiter; loop tests for the pause and the parallel searches; a two-hour drive-rig session whose usage ratio is read from `ir.guideStatus`                                                                                                           |
-| 5     | **The panel** — findings 19 and 20: captions from the deltas, a typed request field, a radiogroup for the voices, the disclosure tied to Start, a sentence for a network error, the four small ones                                                                                                                          | An axe pass on the panel; a screen reader names the chosen voice; a typed request runs a tour with the microphone muted; a render test for `GuideControls`                                                                                                               |
-| 6     | **The comparison** (§5): a week each of Astra `low`, Luna `low`, GPT-6.1 Sol `low`, GPT-6.1 Terra `none`; then the Fast tier against default; then `acknowledgement_delay_ms`; the voices auditioned                                                                                                                         | The measures of §5 as SQL over phase 3's rows, in a table on this page or its ADR, with the operating point named; a backend changes only on a measured win; `GUIDE_VOICES` grows only by voices that passed the listen                                                  |
+| Phase | Lands                                                                                                                                                                                                                                                                                                                                                                                             | Done when                                                                                                                                                                                                                                                                                                                                        |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1     | **The tour keeps pacing.** Findings 5–9: a pending continuation held until accepted, a paused beat and a resume that prompts, a meter that knows it is unhealthy and sees the whole interval, a sub-floor sample before a beat's speech counts, an arrival deadline, a takeover that reaches the executor in the right order                                                                      | Runtime tests for the lost linger, the paused tour, the dead meter, the filler overlap, the stuck arrival and the lens takeover; one listen with the window on screen confirms a tour still beats                                                                                                                                                |
+| 2     | **The transport survives.** Findings 10–14: a grace period on `disconnected`, the channel's own `close` and `error`, the microphone's `ended`, a resume whose status follows the capture, teardown on `pagehide`, a loud oversized frame                                                                                                                                                          | A test per path on a small host fake for `media.ts`; a drive-rig session that drops the network for five seconds and keeps the conversation                                                                                                                                                                                                      |
+| 3     | **Consent and the recorder** (§4): the D1 binding and its four tables, the consent route and the events route, the panel's switch and disclosure, the recorder at the channel boundary, the export script, the weekly sweep; the `$ai_*` events through the relay and `TELEMETRY_TRANSCRIPTS` replaced by the row; ADR-0042's "sees nothing of the conversation" and ADR-0061's exception amended | A session opted in replays through `scripts/tour/replay.mjs` from the export and its trace arrives at the relay's capture path; a session opted out writes no row and sends no sentence; an opt-out mid-session refuses the next batch; the Worker tests cover the consent check without Clerk; `tool_calls` answers the refusal question in SQL |
+| 4     | **The bounds** — findings 15–18: a daily per-account limiter, a client usage ceiling, `cancelPending` on pause, a greeting and a pause that do not accumulate, the context ratio in diagnostics, one search handle per call, a note for a superseded move, the ADR's sentence on what the allow list protects                                                                                     | Worker tests for the limiter; loop tests for the pause and the parallel searches; a two-hour drive-rig session whose usage ratio is read from `ir.guideStatus`                                                                                                                                                                                   |
+| 5     | **The panel** — findings 19 and 20: captions from the deltas, a typed request field, a radiogroup for the voices, the disclosure tied to Start, a sentence for a network error, the four small ones                                                                                                                                                                                               | An axe pass on the panel; a screen reader names the chosen voice; a typed request runs a tour with the microphone muted; a render test for `GuideControls`                                                                                                                                                                                       |
+| 6     | **The comparison** (§5): a week each of Astra `low`, Luna `low`, GPT-6.1 Sol `low`, GPT-6.1 Terra `none`; then the Fast tier against default; then `acknowledgement_delay_ms`; the voices auditioned                                                                                                                                                                                              | The measures of §5 as SQL over phase 3's rows, in a table on this page or its ADR, with the operating point named; a backend changes only on a measured win; `GUIDE_VOICES` grows only by voices that passed the listen                                                                                                                          |
 
 Phase 3 needs none of 1–2 to compile and both to be worth reading; phases
 1 and 2 are each a day, and the council's first three recommendations agree

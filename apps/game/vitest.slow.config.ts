@@ -26,7 +26,10 @@ export default defineConfig({
   // The same `define` and alias the root config carries, for the reasons it
   // gives: the engine reaches `build.ts` and `@/` imports through what it
   // imports, and this project does not go through the root.
-  define: { __BUILD_ID__: JSON.stringify('test') },
+  define: {
+    __BUILD_ID__: JSON.stringify('test'),
+    __SERVED_TREE__: JSON.stringify(null),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

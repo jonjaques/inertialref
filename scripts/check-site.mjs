@@ -9,6 +9,16 @@ import {
 import { docHtmlRoutes, docRedirects, isApiRoute } from './docs/prerender.mjs'
 
 const root = new URL('../apps/game/dist/', import.meta.url)
+/*
+ * This checkout's path, which a shipped bundle must not carry. The dev server
+ * defines `__SERVED_TREE__` as it so a rig can tell sibling worktrees apart,
+ * and a build defines it as null (apps/game/vite.config.ts); a define that
+ * took the wrong branch would hand every visitor a path on this machine and
+ * pass every other assertion here. Every page and every script is searched.
+ */
+const tree = fileURLToPath(new URL('..', import.meta.url)).replace(/\/+$/, '')
+const leaks = (text, file) =>
+  assert(!text.includes(tree), `${file}: carries this checkout's path, ${tree}`)
 const manifest = JSON.parse(
   await readFile(new URL('doc-content/manifest.json', root), 'utf8'),
 )
@@ -51,6 +61,7 @@ for (const file of await readdir(root, { recursive: true })) {
           ),
         )
   const html = await readFile(new URL(file, root), 'utf8')
+  leaks(html, file)
   const meta = metadataForPath(route, page)
   assert(
     html.includes(`<title>${escape(documentTitle(meta))}</title>`),
@@ -80,6 +91,13 @@ for (const file of await readdir(root, { recursive: true })) {
   checked += 1
 }
 
+let scripts = 0
+for (const file of await readdir(root, { recursive: true })) {
+  if (!file.endsWith('.js')) continue
+  leaks(await readFile(new URL(file, root), 'utf8'), file)
+  scripts += 1
+}
+
 for (const route of docHtmlRoutes(manifest)) {
   await readFile(new URL(`${route.slice(1)}.html`, root))
 }
@@ -91,5 +109,5 @@ for (const entry of Object.values(manifest.pages)) {
   await readFile(new URL(`doc-content/page/${entry.asset}`, root))
 }
 console.log(
-  `site: ${checked} rendered documents verified in ${fileURLToPath(root)}`,
+  `site: ${checked} rendered documents verified, and ${scripts} scripts carry no path of this checkout, in ${fileURLToPath(root)}`,
 )

@@ -13,7 +13,9 @@ import { offersAccounts, siteOrigins } from './origins.ts'
  * Who is asking, as the Worker decides it (docs/hosting.md H-2).
  *
  * The identity provider is Clerk, and this is the only file in the Worker that
- * knows it. The browser signs in against Clerk directly — the Worker is never in
+ * asks it anything. `clerkWebhook.ts` is the one that hears from it: a signed
+ * delivery saying an account is gone, which decides nobody's identity. The
+ * browser signs in against Clerk directly — the Worker is never in
  * that conversation and never holds a password — and then presents the
  * short-lived session token Clerk minted for it. What the Worker owns is the
  * verdict on that token: signature, lifetime, and which page asked for it.

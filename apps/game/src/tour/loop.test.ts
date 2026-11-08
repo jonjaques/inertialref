@@ -16,6 +16,9 @@ function rig() {
   const closed = vi.fn()
   const errors = vi.fn()
   const fatal = vi.fn()
+  const settled = vi.fn()
+  const started = vi.fn()
+  const ended = vi.fn()
   const loop = new GuideLoop(new GuideChannel(fake.live), {
     now: () => now,
     execute,
@@ -23,6 +26,9 @@ function rig() {
     onClosed: closed,
     onError: errors,
     onFatal: fatal,
+    onExecuted: settled,
+    onResponseStarted: started,
+    onResponseEnded: ended,
   })
   fake.listen((event) => loop.receive(event))
   const call = (
@@ -46,6 +52,9 @@ function rig() {
     closed,
     errors,
     fatal,
+    settled,
+    started,
+    ended,
     call,
     created,
     completed,
@@ -217,6 +226,64 @@ describe('the tool loop over the data channel', () => {
     release!()
     await f.settle()
     expect(f.outputs()).toHaveLength(1)
+  })
+
+  it('reports each response once, with what its own delegation said and called', async () => {
+    const f = rig()
+    f.fake.emit(provider.responseCreated('resp_1', 'item_1'))
+    f.advance(100)
+    f.fake.emit(provider.responseCreated('resp_2', 'item_2'))
+    // Each item lands on its own delegation's response, not the newest one.
+    f.fake.emit(provider.message('Saturn, from the rings.', 'item_1'))
+    f.execute.mockImplementationOnce(async () => {
+      f.advance(40)
+      return { status: 'ok', matches: [] }
+    })
+    f.fake.emit(
+      provider.functionCall('call_1', 'describe_view', '{}', 'item_2'),
+    )
+    await f.settle()
+    f.advance(150)
+    const usage = {
+      input_tokens: 1875,
+      input_tokens_details: { cached_tokens: 1619 },
+      output_tokens: 28,
+    }
+    f.fake.emit(provider.responseCompleted('resp_1', usage, 'item_1'))
+    // The provider's redelivery is counted once.
+    f.fake.emit(provider.responseCompleted('resp_1', usage, 'item_1'))
+    f.fake.emit(provider.responseCompleted('resp_2', null, 'item_2'))
+
+    expect(f.started.mock.calls).toEqual([['resp_1'], ['resp_2']])
+    expect(f.ended.mock.calls).toEqual([
+      [
+        {
+          id: 'resp_1',
+          model: null,
+          outcome: 'completed',
+          durationMs: 290,
+          text: 'Saturn, from the rings.',
+          calls: [],
+          usage: { inputTokens: 1875, cachedTokens: 1619, outputTokens: 28 },
+        },
+      ],
+      [
+        {
+          id: 'resp_2',
+          model: null,
+          outcome: 'completed',
+          durationMs: 190,
+          text: '',
+          calls: [{ callId: 'call_1', name: 'describe_view', arguments: '{}' }],
+          usage: null,
+        },
+      ],
+    ])
+    expect(f.settled).toHaveBeenCalledWith(
+      { name: 'describe_view' },
+      { status: 'ok', matches: [] },
+      { responseId: 'resp_2', durationMs: 40 },
+    )
   })
 
   it('matches acknowledgments to the event that asked and notices delegations', async () => {
