@@ -156,6 +156,12 @@ const presetOf = (scenario) => SCENARIOS[scenario].preset ?? 'far-shore'
 const OFF = { on: false }
 const ON = { on: true }
 const HIDDEN = { on: false, deck: 'hidden' }
+/**
+ * The trace's jitter held at one index, wherever two images are compared for
+ * what one lever changes: under the moving jitter two captures of one still
+ * differ by about 2% at far-shore, twice a ladder's 1%.
+ */
+export const HELD = Object.freeze({ jitterFrame: 0 })
 /** The force each kind sets; `steady` and `choice` set none. */
 const FORCE = {
   reset: { force: 'reset' },
@@ -345,8 +351,10 @@ const error = (size) =>
       ...stood(scenario, size),
       mode,
       levers: levers(scenario, { on: true, composite: 'residual' }),
-      identity: levers(scenario, { on: true, composite: 'identity' }),
-      thin: levers(scenario, { on: true, composite: 'thin' }),
+      // The screenshot pair is two frames: with the jitter held they differ
+      // by the composite's form and the interleave's phase, not the sample.
+      identity: levers(scenario, { on: true, composite: 'identity', ...HELD }),
+      thin: levers(scenario, { on: true, composite: 'thin', ...HELD }),
     })),
   )
 
@@ -381,22 +389,26 @@ export const LADDERS = Object.freeze({
 /**
  * §8.7's image inputs. The cache gate: each volume combination against the
  * field one with the same sun depth, under 3% over cloud texels, in `ground`,
- * `horizon` and `inside`. The ladders: each value against the next.
+ * `horizon` and `inside`, under the moving jitter the player sees, and again
+ * with it held, which reads the media's own difference without the means'
+ * floor. The ladders: each value against the next, with the jitter held.
  */
 const images = (size) => [
   ...['ground', 'horizon', 'inside'].map((s) =>
-    radiance('cache', 'volume', s, size, 0.03, [
-      [
-        'volume against field, cascades',
-        { cache: 'field', sunDepth: 'cascades' },
-        { cache: 'volume', sunDepth: 'cascades' },
-      ],
-      [
-        'volume against field, grid',
-        { cache: 'field', sunDepth: 'grid' },
-        { cache: 'volume', sunDepth: 'grid' },
-      ],
-    ]),
+    radiance(
+      'cache',
+      'volume',
+      s,
+      size,
+      0.03,
+      [{}, HELD].flatMap((jitter) =>
+        ['cascades', 'grid'].map((sunDepth) => [
+          `volume against field, ${sunDepth}${jitter === HELD ? ', jitter held' : ''}`,
+          { cache: 'field', sunDepth, ...jitter },
+          { cache: 'volume', sunDepth, ...jitter },
+        ]),
+      ),
+    ),
   ),
   ...Object.entries(LADDERS).flatMap(([lever, values]) =>
     ['horizon', 'inside'].map((s) =>
@@ -410,8 +422,8 @@ const images = (size) => [
           .slice(0, -1)
           .map((value, i) => [
             `${value} against ${values[i + 1]}`,
-            { [lever]: value },
-            { [lever]: values[i + 1] },
+            { [lever]: value, ...HELD },
+            { [lever]: values[i + 1], ...HELD },
           ]),
       ),
     ),

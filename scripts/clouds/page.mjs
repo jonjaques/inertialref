@@ -253,7 +253,26 @@ export async function cloudStep(step) {
        * each pixel's mean gains samples until the 32nd, and captured from the
        * 16th the halves differ by 2.1% where a converged page's differ by
        * 0.54%.
+       *
+       * Capture k comes from a frame ≡ k (mod 4) by the report's own count,
+       * so every half holds each of the interleave's four phases alike. A
+       * pixel takes its fresh sample one frame in four and the clip holds it
+       * to its neighbors the other three, so consecutive frames are four
+       * different images even of a held still: in the system's GPU rig, with
+       * the jitter held, frames 1, 2 and 3 apart differ by 33%, 3.7% and 32%
+       * and frames 4 apart by nothing. A capture is of the first frame drawn
+       * after the ask, so the ask waits for the frame before the one it
+       * wants; captures at whatever gap the readback leaves would weight the
+       * phases differently in each mean.
        */
+      const drawn = () => report()?.frames ?? 0
+      const captureAt = async (residue) => {
+        for (let tick = 0; tick < 16; tick += 1) {
+          if ((drawn() + 1) % 4 === residue) return await ir.cloudRadiance()
+          await frame()
+        }
+        throw new Error(`no frame ≡ ${residue} (mod 4) drawn in 16 ticks`)
+      }
       const mean = (shots) => {
         const { width, height } = shots[0]
         const luminance = new Float32Array(width * height)
@@ -274,7 +293,7 @@ export async function cloudStep(step) {
         for (let i = 0; i < step.converge; i += 1) await frame()
         const shots = []
         for (let i = 0; i < step.frames; i += 1) {
-          const shot = await ir.cloudRadiance()
+          const shot = await captureAt(i % 4)
           if (shot === null) return { settled, shots: null }
           shots.push(shot)
         }
@@ -608,6 +627,10 @@ const READ = {
         return {
           name: c.name,
           threshold: c.threshold,
+          jitter:
+            c.a.jitterFrame === null && c.b.jitterFrame === null
+              ? 'moving'
+              : `held at ${c.a.jitterFrame}`,
           relative: r?.difference?.relative ?? null,
           floor: r?.floor?.relative ?? null,
           texels: r?.difference?.texels ?? null,
@@ -714,7 +737,8 @@ export function fitSweep(cells) {
 /* --------------------------------------------------------------- the tables ---- */
 
 const fixed = (x, digits = 2) => (Number.isFinite(x) ? x.toFixed(digits) : '—')
-const pct = (x) => (Number.isFinite(x) ? `${(x * 100).toFixed(1)}%` : '—')
+const pct = (x, digits = 1) =>
+  Number.isFinite(x) ? `${(x * 100).toFixed(digits)}%` : '—'
 const mb = (bytes) => fixed(bytes == null ? NaN : bytes / 1e6)
 const rate = (x) => (Number.isFinite(x) ? x.toExponential(3) : '—')
 const yes = (x) => (x ? 'yes' : 'no')
@@ -894,8 +918,10 @@ const RADIANCE_COLUMNS = [
   ['Group', (d) => d.group],
   ['Lever', (d) => d.label],
   ['Comparison', (d) => d.name],
-  ['radiance RMSE', (d) => pct(d.relative)],
-  ['noise floor', (d) => pct(d.floor)],
+  ['jitter', (d) => d.jitter],
+  // Hundredths: a ladder's 1% is read against figures a tenth of it apart.
+  ['radiance RMSE', (d) => pct(d.relative, 2)],
+  ['noise floor', (d) => pct(d.floor, 2)],
   ['under', (d) => pct(d.threshold)],
   [
     'passes',
@@ -968,5 +994,9 @@ export const progress = (r) =>
     verify: () =>
       `sun ${fixed(r.verify?.light?.sun, 1)}°, served ${r.verify?.served ?? '—'}`,
     radiance: () =>
-      r.differences.map((d) => `${d.name} ${pct(d.relative)}`).join(', '),
+      r.differences
+        .map(
+          (d) => `${d.name} ${pct(d.relative, 2)} (floor ${pct(d.floor, 2)})`,
+        )
+        .join(', '),
   })[r.type]()
