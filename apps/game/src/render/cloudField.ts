@@ -107,6 +107,7 @@ export function createCloudField(): CloudField {
   })
   const caches = [noise, maps, clipmap, volume, cascades, grid] as const
   const fars = [farAtlas, farSpheres, farSecond] as const
+  const bakes = [...caches, phase, ...fars] as const
   return {
     uniforms,
     noise,
@@ -126,7 +127,7 @@ export function createCloudField(): CloudField {
     farAtlas,
     farSpheres,
     farSecond,
-    bakes: [...caches, phase, ...fars],
+    bakes,
     write(frame) {
       uniforms.write(frame)
       // The pattern every scenarioCoverageNode reads, before any pass of the
@@ -139,7 +140,7 @@ export function createCloudField(): CloudField {
       for (const far of fars) far.render(renderer, frame, budget)
     },
     dispose() {
-      for (const bake of [...caches, phase, ...fars]) bake.dispose()
+      for (const bake of bakes) bake.dispose()
       profile.dispose()
     },
   }

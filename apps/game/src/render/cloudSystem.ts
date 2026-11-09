@@ -212,12 +212,9 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
   })
   const history = new CloudHistory(uniforms, () => trace.outputs)
   const radiance = new CloudRadianceMeter(uniforms, () => history.outputs)
-  const resources: readonly CloudResource[] = [
-    ...field.bakes,
-    depth,
-    trace,
-    history,
-  ]
+  /** What the system holds past the field's bakes: the field disposes its own. */
+  const own = [depth, trace, history] as const
+  const resources: readonly CloudResource[] = [...field.bakes, ...own]
 
   let frame: CloudFrame | null = null
   let levers: CloudLevers | null = null
@@ -417,7 +414,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       composite.dispose()
       radiance.dispose()
       field.dispose()
-      for (const resource of [depth, trace, history]) resource.dispose()
+      for (const resource of own) resource.dispose()
       frame = null
     },
   }
