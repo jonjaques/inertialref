@@ -218,8 +218,8 @@ export function createSensor(
   scenePass.updateBeforeType = NodeUpdateType.RENDER
   /*
    * After the pass's MRT, which pass B draws with. Nothing at all without
-   * the option: no object, pipeline or term in the post program, so every
-   * chain built without `?clouds=1` is today's.
+   * the option: no object, pipeline or term in the post program, so a
+   * chain built without `?clouds=1` holds nothing of the clouds.
    */
   const clouds =
     options.clouds === undefined || !automaticAvailable

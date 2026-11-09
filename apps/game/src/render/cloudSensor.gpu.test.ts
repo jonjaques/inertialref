@@ -20,9 +20,10 @@ import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 
 /*
- * Off by default, at the sensor (§4.7). Without the flag the chain is
- * today's: no system, no report, no object in the scene, no layer on the
- * camera. With it and the levers off, a frame is the frame without it —
+ * Off by default, at the sensor (§4.7). Without the flag the chain holds
+ * nothing of the clouds: no system, no report, no object in the scene, no
+ * layer on the camera. With it and the levers off, a frame is the frame
+ * without it —
  * the pixels bit for bit, the draw calls, the passes on the timeline — and
  * the post program carries one more `+ 0` term and not one more binding.
  * With the levers on, both placements draw their passes, and an overlay
