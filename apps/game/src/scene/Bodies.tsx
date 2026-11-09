@@ -321,10 +321,10 @@ export function Bodies({
     residency.begin()
     // Under `?clouds=1` alone: without it no lever is read and no deck moves.
     const clouds = engine.cloudsAvailable ? engine.clouds : null
-    // The report is built when read, so only when a deck can yield to it.
+    // The served body alone: the report beside it is built whole at each read.
     const served =
       clouds?.on === true
-        ? (engine.sensorDiagnostics?.clouds?.served ?? null)
+        ? (engine.sensorDiagnostics?.cloudsServed ?? null)
         : null
 
     const geometryFor = (angle: number): SphereGeometry =>

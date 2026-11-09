@@ -87,6 +87,12 @@ export interface CloudSystem {
   resetHistory(): void
   /** Every pipeline any lever set draws with, and the noise baked; `progress` four times. */
   warm(progress?: () => void): Promise<void>
+  /**
+   * The body the last frame served, or null: what a deck yields to
+   * (`scene/Bodies.tsx`), read every frame, where `report` is built whole
+   * at every read.
+   */
+  readonly served: string | null
   readonly report: CloudRenderReport
   /** Every resource the system holds, in the frame's order: the census's subject. */
   readonly resources: readonly CloudResource[]
@@ -401,6 +407,9 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       progress()
       await composite.warm(renderer, layout, camera, scene)
       progress()
+    },
+    get served() {
+      return frame?.served.address ?? null
     },
     get report() {
       return reportOf()
