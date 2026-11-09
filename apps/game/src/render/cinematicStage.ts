@@ -227,6 +227,8 @@ export function createLandingEffects() {
 
   return {
     group,
+    /** The staged sky: what stands in for the air, and so stays under the clouds. */
+    sky,
     /**
      * `hull` is the one the frame draws, or null while a named prop is still
      * loading. Only the entry sheath needs it — it is scaled from the beam and
