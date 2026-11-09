@@ -8,8 +8,6 @@ import { markOverClouds } from '../render/cloudLayers.ts'
 import { splitOrders } from '../render/cloudLevers.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
-/** `createLandingEffects`' sky mesh, which stays under the clouds. */
-const STAGED_SKY = 'cinematic-sky'
 /** After the sea sheets and the decks, before the composite's 1.5. */
 const SPLIT_SKY_ORDER = 1.25
 
@@ -25,11 +23,10 @@ export function CinematicStage({ engine }: { engine: GameEngine }) {
    */
   const effects = useMemo(() => {
     const made = createLandingEffects()
-    const sky = made.group.getObjectByName(STAGED_SKY) ?? null
     if (engine.cloudsAvailable)
       for (const child of made.group.children)
-        if (child !== sky) markOverClouds(child)
-    return { ...made, sky, skyOrder: sky?.renderOrder ?? 0 }
+        if (child !== made.sky) markOverClouds(child)
+    return { ...made, skyOrder: made.sky.renderOrder }
   }, [engine])
 
   useEffect(() => {
@@ -48,9 +45,8 @@ export function CinematicStage({ engine }: { engine: GameEngine }) {
   }, [engine, gl, camera, scene, effects])
 
   useTimedFrame('cinematicStage', () => {
-    const sky = effects.sky
-    if (sky !== null && engine.cloudsAvailable)
-      sky.renderOrder = splitOrders(engine.clouds)
+    if (engine.cloudsAvailable)
+      effects.sky.renderOrder = splitOrders(engine.clouds)
         ? SPLIT_SKY_ORDER
         : effects.skyOrder
     // The sample goes through whole: the sky and the pad dust hang off the
