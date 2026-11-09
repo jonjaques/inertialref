@@ -83,6 +83,12 @@ export interface SensorDiagnostics {
    * and `{ available: false, reason: 'webgl' }` with it on WebGL.
    */
   readonly clouds: CloudRenderReport | null
+  /**
+   * The body the clouds served last frame, or null: the one field of the
+   * report the frame itself reads, every frame, for the deck that yields to
+   * it. Apart from `clouds`, which builds the whole report at each read.
+   */
+  readonly cloudsServed: string | null
 }
 
 export interface SensorOptions {
@@ -402,6 +408,7 @@ export function createSensor(
         get clouds() {
           return clouds?.report ?? cloudsUnavailable
         },
+        cloudsServed: clouds?.served ?? null,
       }
     },
     sceneTarget: scenePass.renderTarget,
