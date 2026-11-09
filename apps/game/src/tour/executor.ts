@@ -30,9 +30,18 @@ import { instantSeconds, pictureInstant } from './scene.ts'
  * names are resolved to addresses through the search index, so the model
  * never sees or produces one; arrival is a receipt from the observatory,
  * gated on the renderer's readiness, never a timer; and a change of view the
- * visitor makes cancels whatever the guide had pending. Time changes go
- * through the observatory's photographic instant and nothing else — no tool
- * here can reach the simulation clock, warp, or a teleport.
+ * visitor makes cancels whatever the guide had pending, whether the
+ * observatory's revision shows it (a drag, a preset) or the host reports it
+ * (a lens change, through `takeover`). Time changes go through the
+ * observatory's photographic instant and nothing else — no tool here can
+ * reach the simulation clock, warp, or a teleport.
+ *
+ * A move does have a deadline, and it is not an arrival. `ready()` can stay
+ * false for good — a texture set that never finishes loading, a model that
+ * fails — and a pending move with no end leaves the guide saying "Moving to
+ * X" and the backend told `moving` and nothing after. At 45 s the move is
+ * canceled, the camera held where it is, and the failure reported, so the
+ * backend can say so and go on.
  *
  * No tool blocks on the camera. A move starts the travel, records what is
  * pending, and returns `moving` at once; `poll` publishes the arrival when
@@ -50,6 +59,13 @@ export interface GuideArrival {
   readonly viewRevision: number
 }
 
+/** A move canceled at the deadline because the view never became ready. */
+export interface GuideArrivalFailure {
+  readonly tool: GuideArrival['tool']
+  readonly subject: string
+  readonly seconds: number
+}
+
 /** What the scene block says beyond the projection: names and choices. */
 export interface SceneFacts {
   readonly framing: string | null
@@ -64,6 +80,7 @@ export interface SceneFacts {
 export interface GuideExecutorOptions {
   readonly now: () => number
   readonly onArrival: (arrival: GuideArrival) => void
+  readonly onArrivalFailed: (failure: GuideArrivalFailure) => void
   readonly onTakeover: () => void
   /** Whether the guide may move the camera: the planetarium is mounted. */
   readonly active?: () => boolean
@@ -75,7 +92,7 @@ export interface GuideExecutorOptions {
   readonly viewport?: () => Viewport | null
 }
 
-interface Pending {
+interface Move {
   readonly tool: GuideArrival['tool']
   readonly subject: string
   readonly address: string
@@ -83,8 +100,14 @@ interface Pending {
   readonly motion: ObserverMotionRecipe | null
 }
 
+interface Pending extends Move {
+  readonly startedAt: number
+}
+
 /** Seconds a fly-to typically takes; the model hears it as an estimate. */
 const ESTIMATED_TRAVEL_SECONDS = 3
+/** Milliseconds after which a move that has not arrived is a failure, not a wait. */
+const ARRIVAL_DEADLINE_MS = 45_000
 
 const SITE_WORDS = ['summit', 'shore', 'basin', 'pole'] as const
 
@@ -292,6 +315,15 @@ export class GuideExecutor {
       this.#pending = null
       return false
     }
+    if (this.#options.now() - pending.startedAt >= ARRIVAL_DEADLINE_MS) {
+      this.cancel()
+      this.#options.onArrivalFailed({
+        tool: pending.tool,
+        subject: pending.subject,
+        seconds: ARRIVAL_DEADLINE_MS / 1000,
+      })
+      return false
+    }
     if (eye.status().traveling || this.#options.ready?.() === false)
       return false
     this.#pending = null
@@ -303,6 +335,20 @@ export class GuideExecutor {
       viewRevision: this.viewRevision,
     })
     return false
+  }
+
+  /**
+   * The visitor took the view by a route the revision does not show. A lens
+   * change reframes everything on screen without touching the observatory,
+   * so a poll would see nothing: the guide's move would still land, its
+   * arrival be published, and the narration restart over the view the
+   * visitor chose. The same cancellation as a drag, then the same report.
+   */
+  takeover(): void {
+    if (this.#disposed) return
+    this.cancel()
+    this.#framing = null
+    this.#options.onTakeover()
   }
 
   /** Stop what the guide started, and hold the camera where it is. */
@@ -392,8 +438,9 @@ export class GuideExecutor {
   /* Moving                                                                   */
   /* ---------------------------------------------------------------------- */
 
-  #startMove(pending: Pending): GuideToolOutput {
+  #startMove(move: Move): GuideToolOutput {
     this.stopMotion()
+    const pending: Pending = { ...move, startedAt: this.#options.now() }
     this.#pending = pending
     this.#seenRevision = this.viewRevision
     return {

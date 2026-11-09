@@ -1,9 +1,10 @@
+import type { GuideMeter } from '@inertialref/devtools'
 import {
   type GuideClientEvent,
   type GuideConversationItem,
   isGuideClientEvent,
 } from '@inertialref/protocol'
-import type { LiveServerEvent } from './media.ts'
+import type { LiveServerEvent, TransportNotice } from './media.ts'
 import type { LiveConnectionPort } from './runtime.ts'
 
 /*
@@ -27,8 +28,15 @@ export interface LiveFake {
   readonly live: LiveConnectionPort
   /** Every event sent, stamped, in order. */
   readonly sent: readonly SentEvent[]
-  /** Where server events go: the runtime's handler, set by `listen`. */
-  listen(onEvent: (event: LiveServerEvent) => void): void
+  /** Where server events and transport notices go: the runtime's handlers, set by `listen`. */
+  listen(
+    onEvent: (event: LiveServerEvent) => void,
+    onNotice?: (notice: TransportNotice) => void,
+  ): void
+  /** What the transport would report about itself: a lost path, a path regained, a microphone gone. */
+  notify(notice: TransportNotice): void
+  /** Make every later unmute's capture fail with this message; `null` lifts it. */
+  captureFailure(message: string | null): void
   /** Deliver one server event, as the data channel would. */
   emit(event: LiveServerEvent): void
   /** The answers `accept` was given, and the mutes asked for, in order. */
@@ -38,6 +46,15 @@ export interface LiveFake {
   readonly closes: () => number
   /** The output level the clock samples, 0 to 1. */
   speak(level: number): void
+  /** What the meter says of itself; `ok` until a test says otherwise. */
+  measure(health: GuideMeter): void
+  /**
+   * Refuse every later event of one type the way the provider does: accepted
+   * on the wire, then an `error` naming the client event's id. `null` lifts
+   * it. A rate limit on `response.create` and a `responses_validation_failed`
+   * are both this shape.
+   */
+  refuse(type: GuideClientEvent['type'], code: string | null): void
 }
 
 export function liveFake(): LiveFake {
@@ -46,10 +63,14 @@ export function liveFake(): LiveFake {
   const microphone: boolean[] = []
   const guideAudio: boolean[] = []
   let onEvent: (event: LiveServerEvent) => void = () => {}
+  let onNotice: (notice: TransportNotice) => void = () => {}
+  let captureFails: string | null = null
   let sequence = 0
   let level = 0
+  let health: GuideMeter = 'ok'
   let closes = 0
   let stopped = false
+  const refused = new Map<GuideClientEvent['type'], string>()
   const emit = (event: LiveServerEvent) => onEvent(event)
   const later = (event: LiveServerEvent) => queueMicrotask(() => emit(event))
 
@@ -68,6 +89,11 @@ export function liveFake(): LiveFake {
       if (stopped) throw new Error('The voice connection is not open.')
       const id = `guide-${++sequence}`
       sent.push({ ...event, event_id: id })
+      const refusal = refused.get(type)
+      if (refusal !== undefined) {
+        later(provider.error(refusal, `Refused: ${type}.`, id))
+        return id
+      }
       if (type.endsWith('.append')) later(provider.ack(`${type}ed`, id))
       if (type.endsWith('.mute') || type.endsWith('.unmute'))
         later(provider.ack(`${type}d`, id))
@@ -76,8 +102,14 @@ export function liveFake(): LiveFake {
       return id
     },
     level: () => level,
+    meter: () => health,
+    // An unmute settles a tick later, as a capture does, so a test can see
+    // what the runtime says of itself while the microphone is still coming.
     muteMicrophone: async (muted) => {
       microphone.push(muted)
+      if (muted) return
+      await Promise.resolve()
+      if (captureFails !== null) throw new Error(captureFails)
     },
     muteGuide: (muted) => {
       guideAudio.push(muted)
@@ -106,9 +138,14 @@ export function liveFake(): LiveFake {
   return {
     live,
     sent,
-    listen: (handler) => {
+    listen: (handler, notices) => {
       onEvent = handler
+      onNotice = notices ?? (() => {})
       stopped = false
+    },
+    notify: (notice) => onNotice(notice),
+    captureFailure: (message) => {
+      captureFails = message
     },
     emit,
     accepted,
@@ -117,6 +154,13 @@ export function liveFake(): LiveFake {
     closes: () => closes,
     speak: (value) => {
       level = value
+    },
+    measure: (value) => {
+      health = value
+    },
+    refuse: (type, code) => {
+      if (code === null) refused.delete(type)
+      else refused.set(type, code)
     },
   }
 }
@@ -200,6 +244,56 @@ export const provider = {
       { type: 'response.completed', response: { id, usage } },
       delegation,
     ),
+  /** The backend failed the response: a server error, a refused tool output. */
+  responseFailed: (
+    id: string,
+    code = 'server_error',
+    delegation = 'item_1',
+  ): LiveServerEvent =>
+    delegated(
+      {
+        type: 'response.failed',
+        response: {
+          id,
+          status: 'failed',
+          error: { code, message: `The response failed: ${code}.` },
+          usage: null,
+        },
+      },
+      delegation,
+    ),
+  /** The backend stopped early: at the token cap, or a content filter. */
+  responseIncomplete: (
+    id: string,
+    reason: 'max_output_tokens' | 'content_filter' = 'max_output_tokens',
+    delegation = 'item_1',
+  ): LiveServerEvent =>
+    delegated(
+      {
+        type: 'response.incomplete',
+        response: {
+          id,
+          status: 'incomplete',
+          incomplete_details: { reason },
+          usage: null,
+        },
+      },
+      delegation,
+    ),
+  /**
+   * A session error. With a client event id it is the provider refusing that
+   * command (`client_event_id` is the Live spelling); without one it is a
+   * session-level failure such as `responses_validation_failed`.
+   */
+  error: (
+    code: string,
+    message = `Error: ${code}.`,
+    clientEventId?: string,
+  ): LiveServerEvent => ({
+    type: 'error',
+    ...(clientEventId === undefined ? {} : { client_event_id: clientEventId }),
+    error: { type: 'invalid_request_error', code, message },
+  }),
 } as const
 
 /* ------------------------------------------------------------------------- */

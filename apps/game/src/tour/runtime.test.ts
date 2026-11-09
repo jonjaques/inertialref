@@ -17,7 +17,7 @@ import {
 } from './runtime.ts'
 import type { GuideAccess } from './verdict.ts'
 
-function rig() {
+function rig(options: { ready?: () => boolean } = {}) {
   const session = openSession()
   session.harness.look('s:SOL/b:2', { ease: false })
   const requests: { path: string; body: unknown }[] = []
@@ -26,6 +26,7 @@ function rig() {
   let access: GuideAccess = { state: 'granted', voices: ['marin', 'cedar'] }
   let run: (() => void) | null = null
   let visibility: ((visible: boolean) => void) | null = null
+  let leave: (() => void) | null = null
   let executor: GuideExecutor | null = null
   const host: GuideHost = {
     access: () => access,
@@ -54,13 +55,20 @@ function rig() {
     executor: (events) => {
       executor = new GuideExecutor(session.harness, {
         now: () => time,
+        ready: options.ready,
         ...events,
       })
       return executor
     },
-    live: (onEvent) => {
-      fake.listen(onEvent)
+    live: (onEvent, _failure, onNotice) => {
+      fake.listen(onEvent, onNotice)
       return fake.live
+    },
+    leaving: (handler) => {
+      leave = handler
+      return () => {
+        leave = null
+      }
     },
     poll: (tick) => {
       run = tick
@@ -127,6 +135,7 @@ function rig() {
       run?.()
     },
     hide: () => visibility?.(false),
+    leave: () => leave?.(),
     activity: () => runtime.getSnapshot().activity,
     developer: () => read.developer(fake.sent),
     outputs: () => read.outputs(fake.sent),
@@ -388,6 +397,371 @@ describe('the guide runtime', () => {
     await f.dispose()
   })
 
+  /** A stop narrated and a five-second linger declared, with the beat not yet listened for. */
+  const lingering = async (f: ReturnType<typeof rig>) => {
+    await f.runtime.start('marin')
+    f.delegated('go_to', { subject: 'Saturn', framing: null, motion: null })
+    await f.settle()
+    f.terminal('Heading to Saturn.')
+    f.arrive()
+    f.delegated('linger', { seconds: 5, reason: 'the rings' })
+    await f.settle()
+  }
+  const quietPrompts = (f: ReturnType<typeof rig>) =>
+    f
+      .developer()
+      .filter((text) => text.startsWith('The visitor has looked quietly'))
+
+  it('holds the quiet prompt while the visitor is speaking and sends it once they stop', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    const before = f.creates()
+    f.tick()
+    f.speak(0.05)
+    f.advance(2000, 20)
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    // The visitor talks over the whole quiet. Nothing is queued: a prompt
+    // queued on refusal was read inside their question as "continue".
+    for (let i = 0; i < 6; i++) {
+      f.receive(provider.visitorSaid('hmm'))
+      f.advance(900, 9)
+    }
+    expect(f.creates()).toBe(before)
+    expect(quietPrompts(f)).toHaveLength(0)
+    f.advance(1100, 11)
+    expect(quietPrompts(f)).toHaveLength(1)
+    expect(f.creates()).toBe(before + 1)
+    await f.dispose()
+  })
+
+  it('drops the quiet prompt when the visitor asks for something instead', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    f.tick()
+    f.speak(0.05)
+    f.advance(2000, 20)
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    for (const word of ['what', 'is', 'that', 'moon']) {
+      f.receive(provider.visitorSaid(word))
+      f.advance(900, 9)
+    }
+    // The voice delegates the question: that is the tour's cue to stand down.
+    f.receive(provider.delegation())
+    f.delegated('describe_view', {})
+    await f.settle()
+    f.terminal('That is Titan.')
+    f.advance(10_000, 100)
+    expect(quietPrompts(f)).toHaveLength(0)
+    await f.dispose()
+  })
+
+  it('drops the linger and its prompt when the visitor types a question', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    f.tick()
+    f.speak(0.05)
+    f.advance(2000, 20)
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    // A typed question raises no delegation event, which is the spoken
+    // question's cue; the typed path has to stand the tour down itself.
+    await f.runtime.ask('What is that moon?')
+    await f.settle()
+    f.terminal('That is Titan.')
+    f.advance(10_000, 100)
+    expect(quietPrompts(f)).toHaveLength(0)
+    await f.dispose()
+  })
+
+  it("does not take the filler's tail for the beat", async () => {
+    const f = rig()
+    await lingering(f)
+    // The acknowledgment is still sounding when the words return.
+    f.speak(0.05)
+    f.advance(300, 3)
+    f.terminal('Those rings are countless pieces of ice.')
+    const before = f.creates()
+    f.tick()
+    f.advance(1000, 10)
+    f.speak(0)
+    // Longer than the quiet interval: a beat that counted the tail settles
+    // here and starts the five seconds under the narration that follows.
+    f.advance(2600, 26)
+    await f.settle()
+    f.speak(0.05)
+    f.advance(6000, 60)
+    expect(f.creates()).toBe(before)
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    f.advance(2000, 20)
+    expect(f.creates()).toBe(before)
+    f.advance(700, 7)
+    expect(quietPrompts(f)).toHaveLength(1)
+    await f.dispose()
+  })
+
+  it('holds the tour while the meter cannot hear, and listens again when it can', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    const before = f.creates()
+    f.fake.measure('suspended')
+    f.tick()
+    expect(f.runtime.diagnostics().meter).toBe('suspended')
+    // The beat reads silent at the start timeout; on this meter that is no
+    // measurement, and the quiet count does not start.
+    f.advance(8500, 85)
+    await f.settle()
+    f.advance(20_000, 200)
+    await f.settle()
+    expect(quietPrompts(f)).toHaveLength(0)
+    expect(f.creates()).toBe(before)
+    f.fake.measure('ok')
+    f.tick()
+    f.speak(0.05)
+    f.advance(2000, 20)
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    f.advance(2700, 27)
+    expect(quietPrompts(f)).toHaveLength(1)
+    await f.dispose()
+  })
+
+  it('holds the tour when the meter fails after the words began', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    const before = f.creates()
+    f.tick()
+    f.speak(0.05)
+    f.advance(1000, 10)
+    // The track ends under the narration. What the clock reads from here is
+    // exact zero, which is the quiet it was waiting for and no measurement.
+    f.fake.measure('ended')
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    f.advance(20_000, 200)
+    await f.settle()
+    expect(quietPrompts(f)).toHaveLength(0)
+    expect(f.creates()).toBe(before)
+    // A meter that hears again finds the narration over: the beat reads
+    // silent at the start timeout and the quiet counts from there.
+    f.fake.measure('ok')
+    f.tick()
+    f.advance(8500, 85)
+    await f.settle()
+    f.advance(4900, 49)
+    expect(quietPrompts(f)).toHaveLength(0)
+    f.advance(200, 2)
+    expect(quietPrompts(f)).toHaveLength(1)
+    await f.dispose()
+  })
+
+  it('holds the tour while the peer finds its path again, and listens for the beat afresh', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    const before = f.creates()
+    f.tick()
+    f.speak(0.05)
+    f.advance(1000, 10)
+    f.fake.notify('reconnecting')
+    expect(f.activity()).toEqual({ state: 'reconnecting' })
+    expect(f.runtime.diagnostics()).toMatchObject({
+      state: 'reconnecting',
+      connection: 'connected',
+    })
+    // Twenty seconds of a silent track: the gap, not the end of the words.
+    f.speak(0)
+    f.advance(20_000, 200)
+    await f.settle()
+    expect(quietPrompts(f)).toHaveLength(0)
+    expect(f.creates()).toBe(before)
+    f.fake.notify('connected')
+    f.tick()
+    expect(f.activity()).toEqual({ state: 'listening' })
+    // The narration resumes and ends; the quiet counts from its last word.
+    f.speak(0.05)
+    f.advance(2000, 20)
+    f.speak(0)
+    f.advance(2600, 26)
+    await f.settle()
+    f.advance(2700, 27)
+    expect(quietPrompts(f)).toHaveLength(1)
+    await f.dispose()
+  })
+
+  it('ends through the failure path when the page goes away', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.leave()
+    expect(connection(f.runtime)).toBe('offline')
+    expect(f.runtime.getSnapshot().message).toMatch(/left the page/)
+    expect(read.indexOf(f.sent, 'session.close')).toBeGreaterThan(-1)
+    f.session.dispose()
+  })
+
+  it('says it is listening once the microphone is live, and stays paused when none comes', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.runtime.pause()
+    const resuming = f.runtime.resume()
+    expect(f.activity()).toEqual({ state: 'paused' })
+    expect(read.indexOf(f.sent, 'session.input_audio.unmute')).toBe(-1)
+    await resuming
+    expect(f.activity()).toEqual({ state: 'listening' })
+    expect(read.indexOf(f.sent, 'session.input_audio.unmute')).toBeGreaterThan(
+      -1,
+    )
+    f.runtime.pause()
+    const unmutes = () =>
+      f.sent.filter((event) => event.type === 'session.input_audio.unmute')
+        .length
+    const before = unmutes()
+    f.fake.captureFailure('No microphone answered.')
+    await f.runtime.resume()
+    expect(f.activity()).toEqual({ state: 'paused' })
+    expect(f.runtime.diagnostics().microphone).toBe('muted')
+    expect(f.runtime.getSnapshot().message).toBe('No microphone answered.')
+    expect(unmutes()).toBe(before)
+    f.fake.captureFailure(null)
+    await f.runtime.resume()
+    expect(f.activity()).toEqual({ state: 'listening' })
+    expect(f.runtime.getSnapshot().message).toBeNull()
+    await f.dispose()
+  })
+
+  it('ends with the reason when the transport throws under a tick', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    ;(f.fake.live as { level: () => number }).level = () => {
+      throw new Error('The analyser is gone.')
+    }
+    f.tick()
+    expect(connection(f.runtime)).toBe('offline')
+    expect(f.runtime.getSnapshot().message).toBe('The analyser is gone.')
+    f.session.dispose()
+  })
+
+  it('judges a meter stuck at zero while the voice produces words, until it reads anything', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    expect(f.runtime.diagnostics().meter).toBe('ok')
+    f.receive({ type: 'session.output_transcript.delta', delta: 'Saturn' })
+    f.advance(7900, 79)
+    expect(f.runtime.diagnostics().meter).toBe('ok')
+    f.advance(200, 2)
+    expect(f.runtime.diagnostics().meter).toBe('stuck')
+    f.speak(0.001)
+    f.tick()
+    expect(f.runtime.diagnostics().meter).toBe('ok')
+    await f.dispose()
+  })
+
+  it('resumes a paused tour by prompting the backend from the view as it stands', async () => {
+    const f = rig()
+    await lingering(f)
+    f.terminal('Those rings are countless pieces of ice.')
+    f.tick()
+    const before = f.creates()
+    // Paused while the words are still coming: the voice finishes them
+    // behind the mute, and nothing would continue the tour.
+    f.runtime.pause()
+    f.advance(2000, 20)
+    await f.runtime.resume()
+    expect(f.activity()).toEqual({ state: 'listening' })
+    expect(f.appends('instructions').at(-1)).toMatch(/^The visitor resumed/)
+    f.advance(100, 1)
+    const prompt = f.developer().at(-1)!
+    expect(prompt).toMatch(/^The visitor paused for 2 seconds and has resumed/)
+    expect(prompt).toContain('Current view:')
+    expect(f.creates()).toBe(before + 1)
+    await f.dispose()
+  })
+
+  it('prompts nothing on resume when no tour was under way', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.runtime.pause()
+    f.advance(2000, 20)
+    await f.runtime.resume()
+    f.advance(2000, 20)
+    expect(f.creates()).toBe(0)
+    expect(f.developer().some((text) => text.includes('has resumed'))).toBe(
+      false,
+    )
+    await f.dispose()
+  })
+
+  it('gives up on a move that never arrives, tells the backend, and goes on from the view', async () => {
+    const f = rig({ ready: () => false })
+    await f.runtime.start('marin')
+    f.delegated('go_to', { subject: 'Saturn', framing: null, motion: null })
+    await f.settle()
+    f.terminal('Heading to Saturn.')
+    const before = f.creates()
+    f.advance(44_000, 44)
+    expect(status(f.runtime)).toBe('Moving to Saturn')
+    expect(f.creates()).toBe(before)
+    f.advance(1100, 11)
+    expect(f.runtime.diagnostics().state).not.toBe('moving')
+    const note = f.developer().at(-1)!
+    expect(note).toMatch(
+      /^The camera did not arrive at Saturn within 45 seconds/,
+    )
+    expect(note).toContain('Current view:')
+    expect(f.creates()).toBe(before + 1)
+    expect(f.developer().some((text) => text.startsWith('Arrived:'))).toBe(
+      false,
+    )
+    await f.dispose()
+  })
+
+  it('treats a lens change as a takeover the executor hears: the move is canceled before it lands', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.delegated('go_to', { subject: 'Titan', framing: null, motion: null })
+    await f.settle()
+    f.terminal('Heading to Titan.')
+    f.executor().takeover()
+    f.tick()
+    expect(status(f.runtime)).toBe('You have the camera')
+    expect(f.developer().at(-1)).toMatch(/^The visitor has taken the camera/)
+    f.arrive()
+    expect(f.developer().some((text) => text.startsWith('Arrived:'))).toBe(
+      false,
+    )
+    await f.dispose()
+  })
+
+  it('tells the backend about the takeover before canceling its calls, so the continuation reads the view', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    // The call is still executing when the visitor takes the camera.
+    f.delegated('go_to', { subject: 'Titan', framing: null, motion: null })
+    f.session.harness.observatory.zoom(2)
+    f.tick()
+    await f.settle()
+    const where = (needle: string) =>
+      f.sent.findIndex((event) => JSON.stringify(event).includes(needle))
+    const block = where('The visitor has taken the camera')
+    const canceled = where('function_call_output')
+    expect(block).toBeGreaterThan(-1)
+    expect(canceled).toBeGreaterThan(block)
+    await f.dispose()
+  })
+
   it.each([
     [
       'a refinement of the stop',
@@ -452,7 +826,7 @@ describe('the guide runtime', () => {
     expect(f.fake.guideAudio.at(-1)).toBe(true)
     expect(read.indexOf(f.sent, 'session.input_audio.mute')).toBeGreaterThan(-1)
     expect(f.appends('instructions').at(-1)).toMatch(/^The visitor paused/)
-    f.runtime.resume()
+    await f.runtime.resume()
     expect(f.activity()).toEqual({ state: 'listening' })
     expect(f.fake.microphone.at(-1)).toBe(false)
     expect(read.indexOf(f.sent, 'session.input_audio.unmute')).toBeGreaterThan(
@@ -460,7 +834,7 @@ describe('the guide runtime', () => {
     )
     f.hide()
     expect(f.activity()).toEqual({ state: 'paused' })
-    f.runtime.resume()
+    await f.runtime.resume()
     f.runtime.pause()
     f.advance(180_000, 2)
     await f.settle()
@@ -470,6 +844,19 @@ describe('the guide runtime', () => {
     // Another account signing in drops it rather than being greeted by it.
     f.runtime.forgetMessage()
     expect(f.runtime.getSnapshot().message).toBeNull()
+    f.session.dispose()
+  })
+
+  it('ends the session, with the sentence, on an error the browser cannot repair', async () => {
+    const f = rig()
+    await f.runtime.start('marin')
+    f.receive(provider.error('rate_limit_exceeded'))
+    expect(connection(f.runtime)).toBe('connected')
+    f.receive(provider.error('responses_validation_failed'))
+    await f.settle()
+    expect(connection(f.runtime)).toBe('offline')
+    expect(f.runtime.getSnapshot().message).toMatch(/configuration/)
+    expect(f.fake.closes()).toBe(1)
     f.session.dispose()
   })
 

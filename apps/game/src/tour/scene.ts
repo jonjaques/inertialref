@@ -1,6 +1,10 @@
 import type { ViewDescription } from '@inertialref/devtools'
 import { GUIDE_LIMITS } from '@inertialref/protocol'
-import type { GuideArrival, SceneFacts } from './executor.ts'
+import type {
+  GuideArrival,
+  GuideArrivalFailure,
+  SceneFacts,
+} from './executor.ts'
 
 /*
  * What the model sees, as text.
@@ -156,6 +160,27 @@ export function arrivalBlock(
 /** The metronome's other tick. */
 export function quietBlock(seconds: number): string {
   return `The visitor has looked quietly for ${Math.round(seconds)} seconds. Continue the tour with the next stop.`
+}
+
+/**
+ * The tour was under way when the visitor paused; the voice alone cannot
+ * continue it, so the backend is told, from the view as it stands.
+ */
+export function resumeBlock(
+  pausedSeconds: number,
+  view: ViewDescription,
+  facts: SceneFacts,
+): string {
+  return `The visitor paused for ${Math.round(pausedSeconds)} seconds and has resumed. The tour was under way; continue it from this view: finish the stop that was interrupted, or go on to the next.\n${sceneBlock(view, facts)}`
+}
+
+/** A move the camera never completed; the backend was told `moving` and nothing since. */
+export function arrivalFailedBlock(
+  failure: GuideArrivalFailure,
+  view: ViewDescription,
+  facts: SceneFacts,
+): string {
+  return `The camera did not arrive at ${failure.subject} within ${failure.seconds} seconds. The move is canceled and the view is held where the camera is. Say so briefly, and continue from this view.\n${sceneBlock(view, facts)}`
 }
 
 /** What the visitor did, for the backend. */

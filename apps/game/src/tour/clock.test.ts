@@ -60,6 +60,42 @@ describe('the speech clock', () => {
     run(0, 2600)
     expect(await beat).toBe('spoken')
   })
+  it("does not take the filler's tail for the beat when the words return under it", async () => {
+    const f = rig()
+    // The acknowledgment is still sounding when the terminal response lands.
+    f.run(0.05, 1000)
+    const beat = f.clock.waitForBeat({ since: f.now() })
+    f.run(0.05, 1000)
+    // The gap before the narration is longer than the quiet interval; a beat
+    // that counted the tail as speech settles here, under the narration.
+    f.run(0, 2000)
+    let settled = false
+    void beat.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    f.run(0.05, 4000)
+    f.run(0, 1400)
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    f.run(0, 200)
+    expect(await beat).toBe('spoken')
+  })
+  it('reads speech that never breaks before the start timeout as the beat, not as silence', async () => {
+    const f = rig()
+    f.run(0.05, 500)
+    const beat = f.clock.waitForBeat({ since: f.now(), startTimeoutMs: 2000 })
+    f.run(0.05, 3000)
+    let settled = false
+    void beat.then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    f.run(0, 1600)
+    expect(await beat).toBe('spoken')
+  })
   it('gives up on a beat nothing speaks and reports cancellation', async () => {
     const f = rig()
     const silent = f.clock.waitForBeat({ since: f.now(), startTimeoutMs: 2000 })

@@ -87,6 +87,16 @@ const DECLARATIONS = new Set([
   SyntaxKind.TypeParameter,
 ])
 
+/*
+ * Names an upstream API spells the British way, which a fake of that API has
+ * to declare under the same name: a declaration here is a reference to their
+ * spelling, and the rename would make the fake disagree with the object it
+ * stands in for. `STYLE.md` keeps the spelling an upstream API defines.
+ */
+const UPSTREAM = new Set([
+  'createAnalyser', // Web Audio: BaseAudioContext.createAnalyser()
+])
+
 const found = []
 for (const file of project.getSourceFiles()) {
   const path = file.getFilePath().replace(ROOT, '')
@@ -106,6 +116,7 @@ for (const file of project.getSourceFiles()) {
     const name = Node.isStringLiteral(node)
       ? node.getLiteralValue()
       : node.getText()
+    if (UPSTREAM.has(name)) return
     const renamed = americanize(name)
     if (renamed === name) return
     found.push({

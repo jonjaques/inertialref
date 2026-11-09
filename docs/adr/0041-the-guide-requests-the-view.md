@@ -1,6 +1,7 @@
 # ADR-0041: The guide requests the view through the observatory
 
-Status: accepted · 13 Sep 2026. The execution boundary stands.
+Status: accepted · 13 Sep 2026; the move's deadline and the host-reported
+takeover added 8 Nov 2026. The execution boundary stands.
 [ADR-0042](0042-the-guide-speaks-in-one-voice.md) supersedes the two-model
 narration, the controlled clips, the application socket, and the Durable
 Object session store described here; read it for the current shape of the
@@ -53,8 +54,17 @@ The local executor deduplicates operation IDs and checks the current request
 revision, expected view revision, session, expiry, and allowed arguments.
 Acceptance and arrival are different receipts. Explicit observatory changes
 advance a mutation revision; rendered easing and photographic playback do not.
-Taking over the camera revokes pending work. Holding a canceled movement stops
-the presentation pose without moving the ship. Named finite orbit, push-in,
+Taking over the camera revokes pending work, whether the revision shows the
+takeover (a drag, a preset) or the host reports it: a lens change reframes
+everything on screen without touching the observatory, so the host tells the
+executor through `takeover()`, which cancels exactly as a drag does and then
+reports. Holding a canceled movement stops
+the presentation pose without moving the ship. Arrival is a receipt, never a
+timer, and a move still has a deadline that is not an arrival: readiness can
+stay false for good — a texture set that never finishes loading, a model that
+fails — and at 45 s the executor cancels the move, holds the camera where it
+is and reports the failure, so the backend that was told `moving` is told
+otherwise and the status line stops saying "Moving to". Named finite orbit, push-in,
 pull-back, and reveal gestures run inside the observatory's existing sample
 loop while narration plays. They use bounded target-relative angles and range,
 not another camera producer. Starting a gesture precedes its arrival receipt;
@@ -129,6 +139,8 @@ budgets require their own implementation and acceptance.
   compositions and the existing observatory solve movement locally.
 - Advancing after a transcript or timer can move the camera while speech is
   still playing. Controlled clip completion provides evidence the host can test.
+  The 45 s deadline is not that timer: it moves nothing and reports a move that
+  did not happen.
 - Treating the shared password as independent users lets new cookies reset
   the allowance. One alpha principal keeps the bound across sessions.
 - Anonymous public admission needs account, abuse, and quota decisions that
