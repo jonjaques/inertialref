@@ -460,6 +460,15 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       warmByDrawing(renderer, this.#quad, CLOUD_SUN_GRID_LABEL, [
         { target: this.#target, material: this.#material },
       ])
+      // The draw lands on the target's first slice with whatever the bake's
+      // uniforms last held. A warm-up that arrives after a frame has baked —
+      // a chain rebuilt with the levers on — draws over a slice its record
+      // still calls current, so a grid at its real size owes every slice
+      // again.
+      if (this.#target.width !== 1) {
+        this.#forget()
+        this.#pending = true
+      }
       this.#warm = Promise.resolve()
     }
     return this.#warm
