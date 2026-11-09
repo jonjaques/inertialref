@@ -627,6 +627,9 @@ export function warmSensorPass(
  * guard nor writes into a 1 × 1 stand-in. One kernel a macrotask, because
  * each build blocks. Failures are logged and swallowed, as `warmCompile`'s
  * are: a kernel that will not build resurfaces at its first dispatch.
+ * `computeAsync` and not `compute`: on a renderer still initializing,
+ * `compute` hands back an unawaited `computeAsync` whose rejection the catch
+ * never sees; on an initialized one the two are the same synchronous build.
  */
 export async function warmCompute(
   renderer: WebGPURenderer,
@@ -634,7 +637,7 @@ export async function warmCompute(
 ): Promise<void> {
   for (const kernel of kernels) {
     try {
-      renderer.compute(kernel, [0, 1, 1])
+      await renderer.computeAsync(kernel, [0, 1, 1])
     } catch (cause) {
       log.warn('a compute warm-up failed', {
         kernel: kernel.name,

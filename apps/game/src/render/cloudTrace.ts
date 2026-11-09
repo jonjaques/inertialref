@@ -115,5 +115,8 @@ export class CloudTrace implements CloudResource {
     _k: number,
   ): void {}
 
-  dispose(): void {}
+  dispose(): void {
+    const { light, aux, knotDepth, knotLight } = this.outputs
+    for (const texture of [light, aux, knotDepth, knotLight]) texture.dispose()
+  }
 }

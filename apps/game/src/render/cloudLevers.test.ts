@@ -124,6 +124,14 @@ describe('the cloud levers', () => {
     expect(isCloudLevers('on')).toBe(false)
   })
 
+  it("refuse an inherited name in a lever's place", () => {
+    // `toString` counts as a key and finds Object.prototype's function, which
+    // answers 1 with a truthy string; only an own-key test refuses it.
+    const { stats: _, ...missing } = DEFAULT_CLOUD_LEVERS
+    for (const name of ['toString', 'constructor', 'valueOf'])
+      expect(isCloudLevers({ ...missing, [name]: 1 })).toBe(false)
+  })
+
   it('take the sweep only whole: fixed steps exactly with reads', () => {
     const sweep = (fixedSteps: number, sweepReads: number) =>
       isCloudLevers({ ...DEFAULT_CLOUD_LEVERS, fixedSteps, sweepReads })

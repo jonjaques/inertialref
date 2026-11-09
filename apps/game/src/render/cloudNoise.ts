@@ -12,8 +12,8 @@ import {
  * slices and read at level 0. Held texel by texel to `weatherNoise.ts`.
  *
  * Neutral here: each node reads a 1 × 1 stand-in of its texture's format and
- * kind and returns zero, so a kernel compiled against it binds what the baked
- * noise will.
+ * kind and returns zero, so a kernel compiled against it binds the baked
+ * noise's bindings.
  */
 
 /** Perlin–Worley, R8 (and an RGBA8 sweep variant). */

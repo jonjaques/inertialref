@@ -1,5 +1,5 @@
 import type { DataTexture, Node } from 'three/webgpu'
-import { step, texture } from 'three/tsl'
+import { float, select, texture } from 'three/tsl'
 import { cloudStandInBinding, cloudStandInTexture } from './cloudNodes.ts'
 
 /*
@@ -15,9 +15,15 @@ export class CloudProfile {
   }) as DataTexture
   readonly #table = texture(this.texture)
 
-  /** The genus's profile at `h01`, 0 at its layer's base and 1 at its top; 0 outside. */
+  /** The genus's profile at `h01`, 0 at its layer's base and 1 at its top; 0 outside (0, 1). */
   profile(_genus: Node<'float'>, h01: Node<'float'>): Node<'float'> {
-    const inside = step(0, h01).mul(step(h01, 1))
+    // Strict at both ends, as `genusProfile` is: `step` is inclusive, and
+    // would draw a sample standing exactly on a base or a top at full density.
+    const inside = select(
+      h01.greaterThan(0).and(h01.lessThan(1)),
+      float(1),
+      float(0),
+    )
     return inside.add(cloudStandInBinding(this.#table, '2d'))
   }
 

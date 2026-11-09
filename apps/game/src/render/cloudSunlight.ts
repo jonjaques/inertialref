@@ -15,7 +15,7 @@ import type { CloudUniforms } from './cloudUniforms.ts'
  *
  * Neutral here: no taps, the candidate's depth past the reach, and the
  * air's real beam, so a kernel compiled against it binds the sun depth's
- * texture and the air's transmittance table as the real one will.
+ * texture and the air's transmittance table, the bindings the real one has.
  */
 
 /** Tap midpoints and widths, meters, over the first kilometer toward the sun (§5.9). */

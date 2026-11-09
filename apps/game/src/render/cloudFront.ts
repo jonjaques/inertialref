@@ -11,8 +11,8 @@ import type { CloudUniforms } from './cloudUniforms.ts'
  * stands in (§5.12). Span-relative: the air in front of the span is the
  * object's own material's.
  *
- * Neutral here: nothing in front, read through the knots' two textures as the
- * real lookup will.
+ * Neutral here: nothing in front, read through the knots' two textures, the
+ * bindings the real lookup has.
  */
 export function cloudFront(
   trace: () => CloudTraceTextures,

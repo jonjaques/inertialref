@@ -85,5 +85,8 @@ export class CloudHistory implements CloudResource {
 
   reset(): void {}
 
-  dispose(): void {}
+  dispose(): void {
+    const { light, air, depth } = this.outputs
+    for (const texture of [light, air, depth]) texture.dispose()
+  }
 }

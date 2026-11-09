@@ -18,7 +18,7 @@ import {
  * sit in non-uniform control flow.
  *
  * Neutral here: every pixel sky, no air in front of a cloud, read through
- * both of the air's tables at level 0 as the real marches will.
+ * both of the air's tables at level 0, the reads the real marches make.
  */
 
 export interface CompositeAir {
