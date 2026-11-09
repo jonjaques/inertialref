@@ -35,8 +35,9 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * resource's declared bytes its GPU textures'; the far atlas holding cloud
  * past the clipmap's reach; the trace stopping at the scene in true
  * kilometers at a compression that is not 1; the trace and the history on
- * one interleave; and every lever set's frame drawn with no validation
- * error and no cloud work thrown away.
+ * one interleave; every lever set's frame drawn with no validation error
+ * and no cloud work thrown away; and a warm-up that lands on whole caches
+ * leaving them owing the slices it drew over.
  *
  * One rig for the file: the eye 100 m up under overcast's 300 m base, the
  * camera looking straight up, a ceiling over the image's top half 50 render
@@ -388,4 +389,44 @@ describe('the whole chain over a depth step', () => {
       })
     }
   }, 60_000)
+})
+
+describe('a warm-up that arrives after the caches are whole', () => {
+  /*
+   * A chain rebuilt mid-session draws its first frames while its warm-up is
+   * still awaiting the noise, so the volume and the sun grid can be whole by
+   * the time theirs runs. Each warms by drawing into its target's first
+   * slice with the last bake's uniforms: a slice the record calls current.
+   */
+  it('leaves the volume and the sun grid owing what it drew over, and the next frames bake it', async () => {
+    const late = cloudRig(gpu, WIDTH, HEIGHT, {
+      levers: {
+        scenario: 'overcast',
+        on: true,
+        cache: 'volume',
+        sunDepth: 'grid',
+      },
+    })
+    const owed = () => {
+      const { volume, sunDepth } = late.system!.report.pending
+      return { volume, sunDepth }
+    }
+    // Both caches fill under a per-frame budget; 400 frames is many times it.
+    const settle = (): void => {
+      late.frame()
+      for (let k = 0; k < 400 && (owed().volume || owed().sunDepth); k += 1)
+        late.frame()
+    }
+    try {
+      settle()
+      expect(owed()).toEqual({ volume: false, sunDepth: false })
+      await late.system!.warm()
+      expect(owed()).toEqual({ volume: true, sunDepth: true })
+      settle()
+      expect(owed()).toEqual({ volume: false, sunDepth: false })
+      await gpu.read(late.target)
+    } finally {
+      late.dispose()
+    }
+  }, 120_000)
 })
