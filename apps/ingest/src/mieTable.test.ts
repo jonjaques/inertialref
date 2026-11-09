@@ -87,7 +87,7 @@ describe('the half-float encoder', () => {
     expect(halfBits(-0)).toBe(0x8000)
     expect(halfBits(65504)).toBe(0x7bff)
     expect(halfBits(2 ** -24)).toBe(0x0001)
-    // 1/(4π), the stand-in table's value: 0.0795898 is 0x2d18.
+    // 1/(4π), an isotropic phase: 0.0795898 is 0x2d18.
     expect(halfBits(1 / (4 * Math.PI))).toBe(0x2d18)
     // Halfway between 1 and the next half rounds to the even mantissa.
     expect(halfBits(1 + 2 ** -11)).toBe(0x3c00)
@@ -129,8 +129,8 @@ describe('the distribution, the bands and the index', () => {
         spread += w * r * r * (r - reff) ** 2
       })
       const veff = spread / (reff * reff * area)
-      expect(Math.abs(reff / effective - 1)).toBeLessThan(0.01)
-      expect(Math.abs(veff / DROPLET_TABLE.variance - 1)).toBeLessThan(0.01)
+      expect(Math.abs(reff / effective - 1)).toBeLessThan(1e-5)
+      expect(Math.abs(veff / DROPLET_TABLE.variance - 1)).toBeLessThan(1e-5)
     }
   })
 
