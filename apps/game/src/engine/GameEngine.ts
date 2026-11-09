@@ -498,8 +498,11 @@ export class GameEngine {
    * The clouds' levers, which the sensor's chain reads every frame and a
    * script writes whole: `engine.clouds = { ...engine.clouds, on: true }`.
    * A malformed set throws rather than landing, because a mistyped field
-   * would otherwise measure the default without a word. Inert without
-   * `?clouds=1`, which builds no system to read them.
+   * would otherwise measure the default without a word. Held as a frozen
+   * copy, because a field written in place skips that check, and the frame
+   * compares its levers against the last frame's, which would be the same
+   * object: a scenario changed that way keeps the old one's history. Inert
+   * without `?clouds=1`, which builds no system to read them.
    */
   #clouds: CloudLevers = DEFAULT_CLOUD_LEVERS
 
@@ -509,7 +512,7 @@ export class GameEngine {
 
   set clouds(levers: CloudLevers) {
     if (!isCloudLevers(levers)) throw new Error('Invalid cloud levers.')
-    this.#clouds = levers
+    this.#clouds = Object.freeze({ ...levers })
   }
 
   /** `?clouds=1`'s chunk, resolved in the canvas's renderer factory; null without the flag. */
