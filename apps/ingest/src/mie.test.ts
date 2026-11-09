@@ -238,11 +238,10 @@ describe('Laven’s glory rings, on the series (the Done-when’s first half)', 
     // image of monodisperse drops at about 24/r, 37/r, 56/r and 76/r degrees,
     // and warns that they are not where any one wavelength peaks. So:
     // 100 wavelengths across 380–700 nm, equal energy, the CIE 1931 observer,
-    // linear sRGB, and redness R/(R + G + B). The first run measures the first
-    // ring at −10.3, −8.8, −6.7 and −6.2% of 24/r for 6, 10, 16 and 25 µm, and
-    // the second at −1.5, +0.7, +2.3 and +2.0% of 37/r; the design's review
-    // found −8.8% and 0% at 10 µm with 300 wavelengths. The bounds leave room
-    // for the fit's distance from CIE's own tables.
+    // linear sRGB, and redness R/(R + G + B). The first ring measures −10.3,
+    // −8.8, −6.7 and −6.2% of 24/r for 6, 10, 16 and 25 µm, and the second
+    // −1.5, +0.7, +2.3 and +2.0% of 37/r. The bounds leave room for the fit's
+    // distance from CIE's own tables.
     const step = 0.005
     for (const r of [6, 10, 16, 25]) {
       const psi = Array.from(

@@ -378,6 +378,10 @@ export function whiteLightRedness(
   psi: readonly number[],
   spectrum: Spectrum,
 ): Float64Array {
+  if (!(spectrum.count >= 2))
+    throw new Error(
+      `mie: a spectrum needs both ends, not ${spectrum.count} wavelengths`,
+    )
   const cosines = psi.map((degrees) => Math.cos((degrees * Math.PI) / 180))
   const shortest = Math.min(spectrum.from, spectrum.to) / 1000
   const table = angularTable(

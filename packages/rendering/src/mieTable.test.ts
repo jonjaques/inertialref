@@ -72,7 +72,7 @@ describe('the droplet table', () => {
     // row's forward peak, 1/x = 0.13° wide in blue, across seventeen texels.
     for (let row = 0; row < table.radii; row += 1)
       for (let band = 0; band < 3; band += 1)
-        expect(Math.abs(phaseIntegral(table, row, band) - 1)).toBeLessThan(0.01)
+        expect(Math.abs(phaseIntegral(table, row, band) - 1)).toBeLessThan(1e-4)
   })
 
   it('peaks straight ahead and falls from there across 0.5·(10/r_e) degrees', () => {
