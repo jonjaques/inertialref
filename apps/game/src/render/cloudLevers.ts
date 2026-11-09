@@ -186,9 +186,12 @@ export function isCloudLevers(value: unknown): value is CloudLevers {
   const keys = Object.keys(record)
   if (keys.length !== Object.keys(FIELDS).length) return false
   for (const key of keys) {
-    const test = FIELDS[key as keyof CloudLevers] as
-      ((value: unknown) => boolean) | undefined
-    if (test === undefined || !test(record[key])) return false
+    // Own keys only: `FIELDS.toString` is Object.prototype's, a function that
+    // answers every value with a truthy string, so a lever set carrying
+    // `toString` in place of a real field would count right and pass.
+    if (!Object.hasOwn(FIELDS, key)) return false
+    const test = FIELDS[key as keyof CloudLevers]
+    if (!test(record[key])) return false
   }
   const levers = value as CloudLevers
   return levers.fixedSteps > 0 === levers.sweepReads >= 1
