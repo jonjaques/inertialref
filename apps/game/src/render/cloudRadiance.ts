@@ -40,6 +40,10 @@ import { sceneRadianceGain } from './radiance.ts'
  * which no figure the report carries could give: the residual meter compares
  * composite forms on one frame, not one frame against another.
  *
+ * Under placement 'passes' the scene target holds only the layers under the
+ * clouds — the over-clouds pass joins the image later, in the post graph — so
+ * a capture there reads the cloud without what is drawn in front of it.
+ *
  * An instrument (rule 65): it writes nothing a frame reads, builds and
  * allocates nothing until the first capture is asked for, keeps one readback
  * in flight, and a failure answers null rather than reaching the frame.
@@ -55,6 +59,11 @@ const LUMA = /*@__PURE__*/ vec3(0.2126, 0.7152, 0.0722)
 /** Floats a texel: its luminance and its mark. */
 const STRIDE = 2
 
+interface Ask {
+  readonly promise: Promise<CloudRadiance | null>
+  readonly settle: (capture: CloudRadiance | null) => void
+}
+
 interface Kernel {
   readonly node: ComputeNode
   readonly buffer: StorageBufferAttribute
@@ -69,11 +78,14 @@ export class CloudRadianceMeter {
   /** The history's newest light, which flips parity every converging frame. */
   #light: TextureNode | null = null
   #kernel: Kernel | null = null
-  #asked: {
-    readonly promise: Promise<CloudRadiance | null>
-    readonly settle: (capture: CloudRadiance | null) => void
-  } | null = null
-  #reading = false
+  /** The ask waiting for a frame: every caller since the last dispatch shares it. */
+  #asked: Ask | null = null
+  /**
+   * The ask whose frame is dispatched and reading back. Apart from `#asked`,
+   * so a caller asking while it reads waits for a frame drawn after the ask
+   * rather than joining one drawn before it.
+   */
+  #reading: Ask | null = null
   #failed = false
   #disposed = false
 
@@ -83,9 +95,10 @@ export class CloudRadianceMeter {
   }
 
   /**
-   * The next frame's capture: one promise for every caller until it lands,
-   * so two asks between frames read one frame, and null when there is no
-   * frame to read.
+   * The capture of the next frame drawn after the ask: one promise for every
+   * caller until that frame is dispatched, so two asks between frames read
+   * one frame, and null when there is no frame to read. While a readback is
+   * in flight, the next capture waits for the first frame after it lands.
    */
   request(): Promise<CloudRadiance | null> {
     if (this.#disposed) return Promise.resolve(null)
@@ -108,9 +121,10 @@ export class CloudRadianceMeter {
     drawn: boolean,
   ): void {
     const asked = this.#asked
-    if (asked === null || this.#reading) return
+    if (asked === null || this.#reading !== null) return
+    this.#asked = null
     if (!drawn || this.#disposed) {
-      this.#answer(null)
+      asked.settle(null)
       return
     }
     const { x: width, y: height } = this.#uniforms.trace.size.value
@@ -118,18 +132,18 @@ export class CloudRadianceMeter {
     try {
       const kernel = this.#kernelFor(texels)
       follow(this.#scene, sceneTarget.texture)
-      const history = this.#history()
-      this.#light ??= texture(history.light)
-      follow(this.#light, history.light)
+      // `#kernelFor` built the light's node on the first capture.
+      follow(this.#light!, this.#history().light)
       kernel.node.count = Math.ceil(texels / WORKGROUP) * WORKGROUP
       renderer.compute(kernel.node)
-      this.#reading = true
-      // The flag clears before the answer goes out: an await on the answer
-      // resumes ahead of a `finally`, and a caller asking again from there
-      // would find a readback still in flight and wait on a frame it drew.
+      this.#reading = asked
+      // The readback clears before the answer goes out: an await on the
+      // answer resumes ahead of a `finally`, and a caller asking again from
+      // there would find a readback still in flight and wait a frame longer.
       void renderer.getArrayBufferAsync(kernel.buffer).then(
         (buffer) => {
-          this.#reading = false
+          if (this.#reading !== asked) return
+          this.#reading = null
           const values = new Float32Array(buffer, 0, texels * STRIDE)
           const luminance = new Float32Array(texels)
           const cloud = new Uint8Array(texels)
@@ -137,14 +151,13 @@ export class CloudRadianceMeter {
             luminance[i] = values[STRIDE * i]!
             cloud[i] = values[STRIDE * i + 1]! > 0.5 ? 1 : 0
           }
-          this.#answer(
-            this.#disposed ? null : { width, height, luminance, cloud },
-          )
+          asked.settle({ width, height, luminance, cloud })
         },
         () => {
           // A device being replaced reads nothing back: no capture.
-          this.#reading = false
-          this.#answer(null)
+          if (this.#reading !== asked) return
+          this.#reading = null
+          asked.settle(null)
         },
       )
     } catch (cause) {
@@ -153,22 +166,19 @@ export class CloudRadianceMeter {
           cause: String(cause),
         })
       this.#failed = true
-      this.#answer(null)
+      this.#reading = null
+      asked.settle(null)
     }
   }
 
   dispose(): void {
     this.#disposed = true
-    this.#answer(null)
+    for (const ask of [this.#asked, this.#reading]) ask?.settle(null)
+    this.#asked = null
+    this.#reading = null
     this.#kernel?.node.dispose()
     this.#kernel?.buffer.dispose()
     this.#kernel = null
-  }
-
-  #answer(capture: CloudRadiance | null): void {
-    const asked = this.#asked
-    this.#asked = null
-    asked?.settle(capture)
   }
 
   /**

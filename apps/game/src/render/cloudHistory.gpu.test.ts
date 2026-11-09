@@ -289,11 +289,11 @@ const BLOCKED = [0.02, 0.03, 0.04] as const
 const SCENE_END = 60
 
 /*
- * What the trace holds from orbit over fair-cumulus, measured there: a blob's
- * opaque middle has no light the half column it is lit through lets out, and
- * the blocked air of its whole span; the thin texels around it have light and
- * blocked air that nearly cancel. The lattice is every third texel each way
- * thin, the rest opaque.
+ * The case a clip held on L_c + B has no bound in, at the magnitudes of a
+ * trace from orbit over fair-cumulus: an opaque middle that lets out no
+ * light and holds the blocked air of its whole span, beside thin texels whose
+ * light and blocked air nearly cancel. The lattice is every third texel each
+ * way thin, the rest opaque.
  */
 const LATTICE = {
   thinLight: 5e-4,
@@ -978,11 +978,6 @@ describe('a stationary scene', () => {
   })
 })
 
-/**
- * The body turning under a camera held in render space: the eye sweeps 6.7 m
- * a frame through the body's axes, 0.2° off the spin axis, and the camera's
- * body-fixed basis turns 3 × 10⁻⁴ rad a frame with it.
- */
 describe('the clip', () => {
   /*
    * Each term stays inside the range the trace drew, past it by at most the
@@ -1016,6 +1011,11 @@ describe('the clip', () => {
   })
 })
 
+/**
+ * The body turning under a camera held in render space: the eye sweeps 6.7 m
+ * a frame through the body's axes, 0.2° off the spin axis, and the camera's
+ * body-fixed basis turns 3 × 10⁻⁴ rad a frame with it.
+ */
 const SPIN = Vec.normalize(
   Vec.add(
     UP,
