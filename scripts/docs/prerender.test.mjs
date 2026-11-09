@@ -130,4 +130,19 @@ describe('API HTML build policy', () => {
       '2,000',
     )
   })
+
+  it('fails before the collapsed packages pass the dynamic rule limit', () => {
+    // 3,600 exact rules of two members a package: fitting 2,000 collapses
+    // 800 packages, each one splat rule, against a limit of 100.
+    const narrow = Object.fromEntries(
+      Array.from({ length: 1200 }, (_, i) => [
+        [`/docs/api/package${i}`, { kind: 'api-package' }],
+        [`/docs/api/package${i}/A`, { kind: 'api-member' }],
+        [`/docs/api/package${i}/B`, { kind: 'api-member' }],
+      ]).flat(),
+    )
+    expect(() => docRedirects({ pages: narrow, prerenderApi: false })).toThrow(
+      '100 dynamic',
+    )
+  })
 })
