@@ -311,6 +311,9 @@ The guide is one voice — [ADR-0042](adr/0042-the-guide-speaks-in-one-voice.md)
 owns the design and [ADR-0041](adr/0041-the-guide-requests-the-view.md) the
 execution boundary it keeps. The code is complete; what is open is judged by
 a person or was declined as a core requirement.
+[The guide plan](../design/plans/the-guide.md) is the spike of 7 Nov 2026:
+what the provider changed since launch, twenty-one review findings scored by
+a council of five, the transcript design, and the backend comparison.
 
 | Item                   | What it needs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
