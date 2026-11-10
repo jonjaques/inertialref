@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { CAMPAIGNS, eta, outcome, ours, owner, strays } from './campaign.mjs'
+import {
+  CAMPAIGNS,
+  child,
+  eta,
+  outcome,
+  ours,
+  owner,
+  strays,
+} from './campaign.mjs'
 import {
   FAILS,
   HELD,
@@ -141,6 +149,20 @@ describe('a campaign', () => {
     expect(outcome(stage({ done: 78, total: 78 }), 0)).toBe('done')
     // A command's exit is all there is to read of it.
     expect(outcome(stage({ kind: 'command', total: null }), 0)).toBe('done')
+  })
+
+  it('launches nothing once it has been told to stop', async () => {
+    // SIGTERM while the loop awaited the preview's check: no child to kill.
+    const ctx = { current: null, stop: new AbortController() }
+    ctx.stop.abort()
+    const launched = []
+    const result = await child(['node', 'measure.mjs'], {}, ctx, (...a) => {
+      launched.push(a)
+      throw new Error('spawned after the stop')
+    })
+    expect(launched).toEqual([])
+    expect(result.code).not.toBe(0)
+    expect(ctx.current).toBeNull()
   })
 
   it('ends at the running batch’s own rate, then each later stage’s estimate', () => {

@@ -270,11 +270,16 @@ async function refusal() {
 /**
  * A child in its own process group, so a stop reaches everything under it
  * (pnpm's vitest and its workers, the runner's drive.mjs). Its stderr is kept
- * as well as logged: its last lines are a stopped stage's reason.
+ * as well as logged: its last lines are a stopped stage's reason. None is
+ * launched once the campaign is stopping: a signal that lands while the
+ * caller awaited the preview finds no child to kill, and the check here is
+ * the last one with nothing awaited between it and the spawn.
  */
-function child(command, env, ctx) {
+export function child(command, env, ctx, launch = spawn) {
+  if (ctx.stop.signal.aborted)
+    return Promise.resolve({ code: 1, tail: 'stopped before it began' })
   return new Promise((resolve) => {
-    const proc = spawn(command[0], command.slice(1), {
+    const proc = launch(command[0], command.slice(1), {
       cwd: ROOT,
       env: { ...process.env, ...env },
       stdio: ['ignore', 'inherit', 'pipe'],
@@ -381,6 +386,7 @@ const preview = (ctx) =>
 
 /** Serves the built bundle on 8787 as `pnpm preview` does, without the build. */
 async function serve(state, ctx) {
+  if (ctx.stop.signal.aborted) throw new Error('stopped before serving')
   const out = openSync(state.previewLog, 'a')
   const proc = spawn(
     'pnpm',
@@ -410,6 +416,9 @@ async function serve(state, ctx) {
     }
     if (proc.exitCode !== null) break
     await sleep(2000, ctx.stop.signal)
+    // The sleep ends at once under a stop, and without this the loop would
+    // poll the port until its deadline, three minutes after the signal.
+    if (ctx.stop.signal.aborted) throw new Error('stopped while serving')
   }
   throw new Error(`the preview did not answer ${URL_}; see ${state.previewLog}`)
 }
