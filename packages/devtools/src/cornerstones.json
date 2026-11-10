@@ -219,7 +219,7 @@
         "terrain": 7,
         "photometry": 1
       },
-      "time": 82800.6354948202,
+      "time": 82596.09687821846,
       "address": "g:milky-way/s:P222_3_2_k/b:3",
       "framing": {
         "kind": "camera",
@@ -233,10 +233,10 @@
           "pitch": 0
         },
         "surface": {
-          "latitude": -0.2928832177490203,
-          "longitude": 0.6526948251778841,
+          "latitude": -0.28844336598413356,
+          "longitude": 0.6635588376687422,
           "height": 2,
-          "heading": 3.246312408709453,
+          "heading": 0.15707963267948966,
           "pitch": 0.08726646259971647
         }
       },

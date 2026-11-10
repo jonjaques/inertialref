@@ -98,26 +98,26 @@
       "id": "weather-g2-overcast-shore",
       "address": "g:milky-way/s:P222_3_2_k/b:3",
       "body": "62e170409bfc48fc",
-      "time": 82800.63549,
+      "time": 82596.09688,
       "fovDeg": 50,
       "focalLength": 25.73408305,
       "weather": "overcast",
       "altitude": 2,
       "sun": {
         "elevation": 35,
-        "azimuth": 78.368
+        "azimuth": 78.565
       },
       "light": {
         "sun": 35,
         "phase": 14.658
       },
       "surface": {
-        "latitude": -0.2928832177,
-        "longitude": 0.6526948252,
+        "latitude": -0.288443366,
+        "longitude": 0.6635588377,
         "height": 2,
-        "heading": 3.246312409,
+        "heading": 0.1570796327,
         "pitch": 0.0872664626,
-        "groundElevation": 192
+        "groundElevation": 193
       }
     },
     {
@@ -224,5 +224,120 @@
         "groundElevation": 213
       }
     }
-  ]
+  ],
+  "guard": {
+    "picture": {
+      "id": "weather-guard-station",
+      "label": "The overlay guard",
+      "why": "E1’s picture with the station in it: the composite’s hardest frame, a hull’s silhouette over the cloud field.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 11392.718842599568,
+      "address": "s:SOL/b:2/a:0",
+      "framing": {
+        "kind": "camera",
+        "basis": {
+          "x": 0.1963437972399689,
+          "y": 0.12351194266031316,
+          "z": -0.020254798310873495,
+          "w": 0.972514090618255
+        },
+        "state": {
+          "azimuth": 0,
+          "elevation": 0,
+          "distance": 2500
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": null
+      },
+      "lens": {
+        "focalLength": 120.22449583648354,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "fair-cumulus"
+      }
+    },
+    "subPoint": {
+      "latitude": -3.185,
+      "longitude": -34.168
+    },
+    "sun": {
+      "elevation": 50,
+      "azimuth": 289.96
+    },
+    "crossings": [
+      {
+        "time": 236.3507347,
+        "behind": 0.06611066135
+      },
+      {
+        "time": 5814.535037,
+        "behind": 0.2393606042
+      },
+      {
+        "time": 11392.71884,
+        "behind": 1
+      }
+    ],
+    "behind": 1
+  },
+  "zoom": {
+    "trace": [
+      360,
+      225
+    ],
+    "band": 2,
+    "first": {
+      "near": 414504,
+      "far": 1312724
+    },
+    "last": {
+      "near": 534400,
+      "far": 698522
+    },
+    "serves": {
+      "from": 618,
+      "to": 964
+    }
+  },
+  "g5": {
+    "frames": 1600,
+    "metersAFrame": 2.5,
+    "coverAtEye": {
+      "least": 1,
+      "most": 1
+    },
+    "clearAhead": {
+      "first": 0,
+      "last": 0,
+      "within": 3000
+    },
+    "c6": false
+  }
 }
