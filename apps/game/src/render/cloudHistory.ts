@@ -28,6 +28,7 @@ import {
   min,
   mix,
   select,
+  sin,
   sqrt,
   storage,
   texture,
@@ -40,7 +41,11 @@ import {
   vec4,
 } from 'three/tsl'
 import { invariant } from '@inertialref/shared'
-import { type Extent, textureBytes } from '@inertialref/rendering'
+import {
+  type Extent,
+  textureBytes,
+  WEATHER_AXIAL_DRIFT,
+} from '@inertialref/rendering'
 import type { CloudFrame } from './cloudFrame.ts'
 import { traceScreen, viewDirection } from './cloudGeometry.ts'
 import {
@@ -59,7 +64,7 @@ import { warmCompute } from './warmup.ts'
  * (2i + φx, 2j + φy), φ stepping through (0,0), (1,1), (1,0), (0,1) one a
  * frame, so each pixel takes a fresh sample every fourth frame; every pixel
  * is also reprojected from the last frame's history in body-fixed axes, by
- * the eye's motion and the cloud's drift on the wind, and clipped to the
+ * the eye's motion and the cloud's own (`levelMotion`), and clipped to the
  * current neighborhood's variance. The body's turn needs no term of its own:
  * the axes turn with it, and the eye's motion through them is the turn.
  *
@@ -155,6 +160,53 @@ interface Parity {
 interface TraceNodes {
   readonly light: TextureNode
   readonly aux: TextureNode
+}
+
+/**
+ * Where the cloud at `offset` from the eye, body-fixed meters, was one frame
+ * ago, less where it is: its level's rigid turn about the spin axis by
+ * `ω_k·Δt`, and the drift along the axis the other way (phase 1 design
+ * §5.3, §5.10). A lattice point stands at `R_y(ωt)·(q − ŷ·wt)`, so a frame
+ * earlier it was at `R_y(−ω·Δt)·P + ŷ·w·Δt`.
+ *
+ * `k` is the level the point's height falls in, split at the middle of each
+ * gap between the body's levels, so a point between two decks takes the
+ * nearer's turn. The height is the eye's plus `(2·P_e·X + X·X)/(|P| + |P_e|)`,
+ * never `|P| − R` (rule 52): a float32 at Earth's radius steps by half a
+ * meter. The turn is `(cos θ − 1)·P` plus `sin θ` across, the first formed as
+ * `−2·sin²(θ/2)`: a difference of two positions a radius long would cancel
+ * the half-meter float32 step of each into a displacement of millimeters.
+ *
+ * The drift is the weathers' one rate, `WEATHER_AXIAL_DRIFT`: the trace's
+ * uniforms carry each level's turn and no drift.
+ */
+function levelMotion(uniforms: CloudUniforms, offset: Node<'vec3'>) {
+  const { served, trace } = uniforms
+  const eye = served.up.mul(served.datumRadius.add(served.eye)).toVar()
+  const point = eye.add(offset).toVar()
+  const height = served.eye.add(
+    dot(eye, offset)
+      .mul(2)
+      .add(dot(offset, offset))
+      .div(length(point).add(length(eye))),
+  )
+  const { boundaries, boundariesHigh } = served
+  const lowGap = boundaries.y.add(boundaries.z).mul(0.5)
+  const highGap = boundaries.w.add(boundariesHigh.x).mul(0.5)
+  const rate = select(
+    height.greaterThanEqual(highGap),
+    trace.turn.z,
+    select(height.greaterThanEqual(lowGap), trace.turn.y, trace.turn.x),
+  )
+  const angle = rate.mul(trace.frameSeconds).toVar()
+  const half = sin(angle.mul(0.5))
+  const bend = half.mul(half).mul(-2).toVar()
+  const across = sin(angle).toVar()
+  return vec3(
+    bend.mul(point.x).sub(across.mul(point.z)),
+    trace.frameSeconds.mul(WEATHER_AXIAL_DRIFT),
+    across.mul(point.x).add(bend.mul(point.z)),
+  )
 }
 
 /** A trace texel, or a blend of them: (L_c, T_c), (B, d_reproj), (d_end, d_front, deviation, knots). */
@@ -306,7 +358,7 @@ function convergingKernel(
     depth: texture(from.depth),
   }
   const { camera } = uniforms
-  const { size, history, wind, frameSeconds } = uniforms.trace
+  const { size, history } = uniforms.trace
   const body = Fn(() => {
     const pixel = globalId.xy as unknown as Node<'uvec2'>
     If(
@@ -353,14 +405,15 @@ function convergingKernel(
           depth: blend(field('depth'), ownX, ownY).toVar(),
         }
 
-        // X = d̂·d_reproj now; X_prev = X + translation − wind·Δt, projected
-        // onto the previous basis and plane (galaxyTemporal.ts's form).
+        // X = d̂·d_reproj now; X_prev = X + translation + the cloud's own
+        // motion back a frame, projected onto the previous basis and plane
+        // (galaxyTemporal.ts's form).
         const ray = viewDirection(camera, traceScreen(pixel, vec2(0), history))
         const distance = current.air.w.mul(KM).toVar()
-        const before = ray
-          .mul(distance)
+        const cloud = ray.mul(distance).toVar()
+        const before = cloud
           .add(camera.translation)
-          .sub(wind.mul(frameSeconds))
+          .add(levelMotion(uniforms, cloud))
           .toVar()
         const ahead = dot(before, camera.previousForward).toVar()
         const facing = max(ahead, 1e-6)

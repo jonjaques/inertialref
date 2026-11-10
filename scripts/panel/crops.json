@@ -1,0 +1,195 @@
+{
+  "format": "inertialref/panel-crops",
+  "version": 1,
+  "frame": "Each crop is a rectangle in fractions of the frame, x and y from its top-left corner, cut at native pixels: the same fractions on every arm and on a photograph (weather rubric §3.2). Each is placed by the preset's geometry, not by what one plate draws, so it holds while the picture changes.",
+  "crops": {
+    "weather-e1-cumulus-orbit": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The nadir: at pitch −88° the frame's center is straight down, where the cells and their shadows are at their least foreshortened."
+      }
+    },
+    "weather-e2-limb-dusk": {
+      "crop": {
+        "x": 0.125,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The limb away from the sun. Pitch −19.8° is the horizon's dip from 400 km, so the limb crosses the frame at mid-height; this cell holds the cloud tops standing into the band."
+      },
+      "terminator": {
+        "x": 0.375,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The limb over the sun's azimuth, where the terminator meets it and the tops lay their shadows on the air. E2's Shadow is scored here and nowhere else (rubric §2)."
+      }
+    },
+    "weather-e3-whole-face": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The disk's center, the sub-observer point: the least foreshortened cloud on the face."
+      }
+    },
+    "weather-g1-fair": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.35,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The bases over the horizon. At pitch 4° through a 50° lens the horizon sits 0.575 down the frame; the crop holds it and the row of bases above it."
+      }
+    },
+    "weather-g2-overcast-shore": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.4,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The sea's horizon. At pitch 5° through a 50° lens it sits 0.594 down the frame; the crop holds the deck over it and the water under it."
+      }
+    },
+    "weather-g3-underlit-dusk": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.45,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The layer's underside over the sun. At pitch 15° through a 55° lens the horizon sits 0.757 down the frame, and the camera faces the sun's azimuth, so the crop is the lit base above the glow."
+      }
+    },
+    "weather-g4-over-deck": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The antisolar point, at the frame's center: the glory's rings and the deck's cells around it."
+      }
+    }
+  },
+  "anchorFrame": "Each real-time anchor still has its own rectangle, in that image's pixels from its top-left corner, at the size of its picture's crop cell (720 × 450): the shared fractions can miss an anchor's subject, and a 4K still's fraction would be scaled down. Each is placed by eye on the cloud the picture's crop is there to show, and is cut at native pixels with no scaling.",
+  "anchors": {
+    "a-e1-ue4-1.png": {
+      "picture": "weather-e1-cumulus-orbit",
+      "sha256": "34c3427be3bc056ab0735cb3f59774f499626cddaa6a2b2edfb86208a5ad20e4",
+      "pixels": [1184, 755],
+      "crop": {
+        "x": 240,
+        "y": 305,
+        "w": 720,
+        "h": 450,
+        "why": "The near field of small cells and their shadows on the sea, the least foreshortened cloud in an oblique frame, as E1's crop is its nadir."
+      }
+    },
+    "a-e2-ue4-1.jpg": {
+      "picture": "weather-e2-limb-dusk",
+      "sha256": "8b79a649a4ce0151c1297ad8b95869c25bd78a3a85c35ffefc45e05f63a10e7c",
+      "pixels": [1036, 451],
+      "crop": {
+        "x": 200,
+        "y": 0,
+        "w": 720,
+        "h": 450,
+        "why": "The deck's tops along the limb, the nearest this still has to E2's cloud tops standing into the band."
+      },
+      "terminator": {
+        "x": 316,
+        "y": 0,
+        "w": 720,
+        "h": 450,
+        "why": "The tower and the long shadow it lays across the deck, the shadow on the air that E2's terminator crop scores."
+      }
+    },
+    "a-g1-decima-1.jpg": {
+      "picture": "weather-g1-fair",
+      "sha256": "e473c61d59689c51940796e26e1f312d33392b50b67bbd5bf96f3dab5b4da0b0",
+      "pixels": [3840, 2160],
+      "crop": {
+        "x": 2350,
+        "y": 1180,
+        "w": 720,
+        "h": 450,
+        "why": "Two fair-weather cells right of center with their flat bases against the sky, the bases G1's crop holds."
+      }
+    },
+    "a-g1-hdrp-1.png": {
+      "picture": "weather-g1-fair",
+      "sha256": "86a630a9cfed6df8fd5a8d657ba82cd58ecadc88215cfd555c2480e10e24dad4",
+      "pixels": [1500, 643],
+      "crop": {
+        "x": 390,
+        "y": 150,
+        "w": 720,
+        "h": 450,
+        "why": "The row of flat bases receding to the horizon under one large cell, as G1's crop holds its bases over the horizon."
+      }
+    },
+    "a-g2-frostbite-1.png": {
+      "picture": "weather-g2-overcast-shore",
+      "sha256": "fee8f2f8b48f9e0ba064bc6231859f9c4ef6e9d38ce2d590f555ded9f52c9b0a",
+      "pixels": [1916, 892],
+      "crop": {
+        "x": 1100,
+        "y": 442,
+        "w": 720,
+        "h": 450,
+        "why": "The dark base over the flat horizon, as G2's crop holds the deck over the sea's horizon."
+      }
+    },
+    "a-g3-decima-1.jpg": {
+      "picture": "weather-g3-underlit-dusk",
+      "sha256": "eaf99b329b05d254fd5bdab8ef81a04e8ce8feb66ca662b4971736ab0d03255a",
+      "pixels": [1199, 674],
+      "crop": {
+        "x": 467,
+        "y": 110,
+        "w": 720,
+        "h": 450,
+        "why": "The broken layer lit from below over the sun's disk, as G3's crop holds the layer's underside over the glow."
+      }
+    },
+    "a-g3-decima-2.jpg": {
+      "picture": "weather-g3-underlit-dusk",
+      "sha256": "ebd3803472b3df9e2d481316f0b0201b0a1d3145b236182260157ccfc6250b29",
+      "pixels": [3840, 2160],
+      "crop": {
+        "x": 2800,
+        "y": 1350,
+        "w": 720,
+        "h": 450,
+        "why": "The layer's red underside just above the sun at lower right, the part of the frame lit from below."
+      }
+    },
+    "a-g4-decima-1.jpg": {
+      "picture": "weather-g4-over-deck",
+      "sha256": "677d739f001fb44f9353e70e2a07b16bb6436325118b807f87766d6cc721b15b",
+      "pixels": [3840, 2160],
+      "crop": {
+        "x": 1944,
+        "y": 1121,
+        "w": 720,
+        "h": 450,
+        "why": "The deck's top at the center of the canyon, the cloud surface G4's crop holds around its antisolar point."
+      }
+    },
+    "a-g4-ue5-1.png": {
+      "picture": "weather-g4-over-deck",
+      "sha256": "5ef5b8a3e6ecce50aa30fb99ff03d134a99cc884acd414ff9aefd98c74dbc908",
+      "pixels": [1000, 542],
+      "crop": {
+        "x": 140,
+        "y": 46,
+        "w": 720,
+        "h": 450,
+        "why": "The cloud tops at the frame's center seen from above, as G4's crop holds the deck at its center."
+      }
+    }
+  }
+}

@@ -10,8 +10,9 @@ import {
   blobCells,
   blobThreshold,
   BLOB_MEAN,
+  type BodyWeather,
+  bodyWeather,
   CLIMATE_REGIME,
-  CLOUD_ADVECTION_PERIOD,
   CLOUD_GENERA,
   type CloudExtents,
   cloudExtents,
@@ -19,23 +20,29 @@ import {
   commonPeriod,
   driftOffset,
   type Extent,
+  type FieldClock,
+  fieldClock,
   GENUS_TABLE,
   genusProfileMean,
   horizonBasis,
+  latticeOrigin,
   type Lens,
+  type LevelSpec,
   type LevelUpdate,
   levelFrames,
   MIE_DROPLETS,
   periodIndex,
   reducePoint,
   reduceTurns,
+  regimeWeather,
   type RenderBody,
+  type RenderPlacement,
   type RenderScene,
   type ShellHeights,
-  shellBoundaries,
   shellHeights,
   shellUnion,
   terminatorSines,
+  turnBack,
   verticalFov,
   WEATHER_SCENARIOS,
   type WeatherScenario,
@@ -43,6 +50,7 @@ import {
 // Types only: this module reaches no Three at runtime, as `bodyUniforms.ts`.
 import type { AtmosphereScattering } from './atmosphereLuts.ts'
 import {
+  cloudFieldKey,
   type CloudLevers,
   cloudResetKey,
   type CloudWeather,
@@ -166,8 +174,9 @@ export interface CloudBodyFrame {
    */
   readonly eye: Vec3
   /**
-   * Body-fixed unit, as `TerrainPatches` forms it, turned about the spin axis
-   * by the synthetic interval under 'scrub' and 'warp'.
+   * Body-fixed unit: the true direction from the body's center to the key
+   * star (`trueSun`), turned about the spin axis by the synthetic interval
+   * under 'scrub' and 'warp'.
    */
   readonly sun: Vec3
   readonly shells: ShellHeights
@@ -176,13 +185,20 @@ export interface CloudBodyFrame {
   readonly limbFalloff: number
   /** keyColor × (visibility ? 1 : sunlight), as the ground's. */
   readonly dayColor: Rgb
+  /*
+   * Phase 0's lookup, which the fine march's medium reads until it reads each
+   * level's turn: one origin for every layer, and one drift built in the
+   * eye's tangent basis, so the field it draws turns with the eye. Each level
+   * carries the body's own turn beside them (`levels`), and the history
+   * reprojects by that.
+   */
   /** `reducePoint(eye, base period)`. */
   readonly noiseOrigin: Vec3
   /** `reducePoint(eye, detail period)`. */
   readonly detailOrigin: Vec3
   /** `driftOffset(wind, time, base period)`. */
   readonly drift: Vec3
-  /** Body-fixed m/s at the eye. */
+  /** Body-fixed m/s at the eye, in its tangent basis. */
   readonly wind: Vec3
   /** Six levels, 250 m × 2^k. */
   readonly clipmap: LevelUpdate
@@ -190,30 +206,38 @@ export interface CloudBodyFrame {
   readonly volume: LevelUpdate
   /**
    * The weather's identity: a regime's id, or 'climate'. Every bake that
-   * holds this body's field starts over when it changes.
+   * holds this body's field starts over when it changes, and a change is a
+   * `'field'` reset.
    */
   readonly weatherKey: string
+  /** The body's own weather's levels, each in its own noise frame (`weatherLevels`). */
   readonly levels: readonly [CloudLevelFrame, CloudLevelFrame, CloudLevelFrame]
   readonly climate: CloudClimateFrame
 }
 
 export type CloudRegime = 'converging' | 'immediate'
 /**
- * Why the history restarts. `'key'` is anything that names what the history
- * holds; its two halves are `'picture'`, a cut that leaves the field as it
- * was, and `'field'`, a change of the weather, a body or a cache's layout.
+ * Why the history restarts, a discontinuity each (phase 1 design §4.7):
+ *
+ * - `'first'`: no previous frame. Every cache is built.
+ * - `'field'`: the weather, the served or second body, or a size the caches
+ *   are laid out by (`cloudFieldKey`). Every cache is rebuilt from no
+ *   previous frame.
+ * - `'picture'`: the picture's epoch, the sensor's history key, or a lever
+ *   that changes what the history means and not the field. The caches stand:
+ *   the field is a function of body, place and time, and a cut that keeps
+ *   all three leaves it as it was.
+ * - `'jump'`: the field's time moved by a step the clock's rate does not
+ *   explain. Each bake reads `jump` and starts over itself.
+ * - `'resize'`: the trace's or the history's extent.
+ * - `'cut'`, `'force'`: the levers' forced cut and reset. The caches stand.
+ *
+ * The camera's motion is none of these: the history rejects per pixel what
+ * it cannot reproject (`cloudHistory.ts`), so a turn or a descent past a
+ * layer's boundary costs the pixels it moves and switches nothing.
  */
 export type CloudResetReason =
-  | 'none'
-  | 'first'
-  | 'key'
-  | 'field'
-  | 'picture'
-  | 'jump'
-  | 'resize'
-  | 'motion'
-  | 'cut'
-  | 'force'
+  'none' | 'first' | 'field' | 'picture' | 'jump' | 'resize' | 'cut' | 'force'
 
 export interface CloudCameraFrame {
   readonly right: Vec3
@@ -233,7 +257,7 @@ export interface CloudFrame {
   readonly second: CloudBodyFrame | null
   /** The instant the field is drawn at; synthetic under force. */
   readonly time: number
-  /** time − previous.time: the field's own Δt, which the history moves the wind by. */
+  /** time − previous.time: the field's own Δt, which the history turns each level by. */
   readonly frameSeconds: number
   /** `periodIndex(time, scenario.patternPeriod)`. */
   readonly period: readonly [number, number]
@@ -255,9 +279,9 @@ export interface CloudFrame {
    * did not build reads as a changed picture and an eye that has flown
    * nowhere.
    */
-  /** The picture epoch this frame was built under: a change is a 'key' reset. */
+  /** The picture epoch this frame was built under: a change is a 'picture' reset. */
   readonly pictureEpoch?: number
-  /** The sensor's history key this frame was built under: a change is a 'key' reset. */
+  /** The sensor's history key this frame was built under: a change is a 'picture' reset. */
   readonly historyKey?: string
   /**
    * The synthetic path force 'fly' has carried the eye, served body-fixed
@@ -312,60 +336,224 @@ export function weatherScenario(weather: CloudWeather): WeatherScenario {
 
 const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1] as const
 
+/** A level's numbers apart from its noise frame. */
+type LevelNumbers = Omit<
+  CloudLevelFrame,
+  'turn' | 'turnRate' | 'noiseOrigin' | 'detailOrigin'
+>
+
+/** The droplets' rows of the phase atlas, a gain and a transport of one: the unscaled medium. */
+const DROPLETS = {
+  gain: 1,
+  transport: 1,
+  phaseRow: 0,
+  phaseRows: MIE_DROPLETS.radii,
+  phaseRadius: MIE_DROPLETS.radiusMin,
+} as const
+
+/** A level with no thickness at `height` and nothing in it, as `ShellHeights` lays an absent one out. */
+const emptyLevel = (height: number): LevelNumbers => ({
+  ...DROPLETS,
+  base: height,
+  top: height,
+  sigma: 0,
+  radius: 10,
+  radiusRange: [10, 10],
+  cell: 1,
+  erosion: 0,
+  profileRow: 0,
+  meanDepth: [0, 0],
+})
+
+/** A regime's layer `k` as a level's numbers: the layer's own, one radius through it. */
+function regimeLevel(scenario: WeatherScenario, k: number): LevelNumbers {
+  const layer = scenario.layers[k]
+  if (layer === undefined) return emptyLevel(shellUnion(scenario).top)
+  const depth =
+    layer.sigma * (layer.top - layer.base) * genusProfileMean(layer.genus)
+  return {
+    ...DROPLETS,
+    base: layer.base,
+    top: layer.top,
+    sigma: layer.sigma,
+    radius: layer.radius,
+    radiusRange: [layer.radius, layer.radius],
+    cell: layer.cellMeters,
+    erosion: layer.erosion,
+    profileRow: CLOUD_GENERA.indexOf(layer.genus),
+    meanDepth: [depth, depth],
+  }
+}
+
+/**
+ * A fitted climate's level as numbers: the genus table's, the stratiform
+ * genus the reference and the radius's range across both ends of the blend.
+ */
+function genusLevel(spec: LevelSpec): LevelNumbers {
+  if (!(spec.top > spec.base)) return emptyLevel(spec.top)
+  const flat = GENUS_TABLE[spec.stratiform]
+  const heaped = GENUS_TABLE[spec.cumuliform]
+  const depth = (genus: LevelSpec['stratiform']): number =>
+    GENUS_TABLE[genus].sigma * (spec.top - spec.base) * genusProfileMean(genus)
+  return {
+    ...DROPLETS,
+    base: spec.base,
+    top: spec.top,
+    sigma: flat.sigma,
+    radius: flat.radius,
+    radiusRange: [
+      Math.min(flat.radius, heaped.radius),
+      Math.max(flat.radius, heaped.radius),
+    ],
+    cell: flat.cell,
+    erosion: flat.erosion,
+    profileRow: CLOUD_GENERA.indexOf(spec.stratiform),
+    meanDepth: [depth(spec.stratiform), depth(spec.cumuliform)],
+  }
+}
+
 /**
  * A scenario's layers as a body's three levels. Each number is the layer's
  * own: one radius through the level, a gain and a transport of one, no turn,
  * the droplets' rows of the phase atlas for every genus, and the profile's
  * row the genus's index. An absent layer sits at the union's top with no
  * thickness and nothing in it, as `ShellHeights` lays out its boundaries.
+ * The stand-in a hand-built frame draws; `cloudFrame` builds each body's
+ * levels from its own weather (`weatherLevels`).
  */
 export function scenarioLevels(
   scenario: WeatherScenario,
   origins: { readonly noise: Vec3; readonly detail: Vec3 },
 ): CloudBodyFrame['levels'] {
-  const { top: ceiling } = shellUnion(scenario)
-  const level = (k: number): CloudLevelFrame => {
-    const layer = scenario.layers[k]
-    const shared = {
-      gain: 1,
-      transport: 1,
-      phaseRow: 0,
-      phaseRows: MIE_DROPLETS.radii,
-      phaseRadius: MIE_DROPLETS.radiusMin,
-      turn: IDENTITY,
-      turnRate: 0,
-      noiseOrigin: origins.noise,
-      detailOrigin: origins.detail,
-    }
-    if (layer === undefined)
-      return {
-        ...shared,
-        base: ceiling,
-        top: ceiling,
-        sigma: 0,
-        radius: 10,
-        radiusRange: [10, 10],
-        cell: 1,
-        erosion: 0,
-        profileRow: 0,
-        meanDepth: [0, 0],
-      }
-    const depth =
-      layer.sigma * (layer.top - layer.base) * genusProfileMean(layer.genus)
+  const level = (k: number): CloudLevelFrame => ({
+    ...regimeLevel(scenario, k),
+    turn: IDENTITY,
+    turnRate: 0,
+    noiseOrigin: origins.noise,
+    detailOrigin: origins.detail,
+  })
+  return [level(0), level(1), level(2)]
+}
+
+/**
+ * The weather a body draws under the lever, and the regime whose layers give
+ * its levels their numbers: null under a fitted climate, whose levels are
+ * the genus table's. No record leaves the body a regime with no weather to
+ * turn it, and its levels stand still.
+ */
+export type DrawnWeather =
+  | { readonly weather: BodyWeather | null; readonly regime: WeatherScenario }
+  | { readonly weather: BodyWeather; readonly regime: null }
+
+/**
+ * The lever's weather on a body: a named regime held over it, or its own.
+ * A body with no weather of its own (a dry one a lever forces by address)
+ * draws its own as the climate regime, as phase 0 drew every body. Until
+ * the zonal law is fitted a body's own climate is that regime too
+ * (`bodyWeather`), whose layers are the numbers the genus table stands in
+ * for, so the climate is drawn from them and not from the table.
+ */
+export function drawnWeather(
+  lever: CloudWeather,
+  record: Body | null,
+): DrawnWeather {
+  if (record === null) return { weather: null, regime: weatherScenario(lever) }
+  if (lever !== 'climate')
     return {
-      ...shared,
-      base: layer.base,
-      top: layer.top,
-      sigma: layer.sigma,
-      radius: layer.radius,
-      radiusRange: [layer.radius, layer.radius],
-      cell: layer.cellMeters,
-      erosion: layer.erosion,
-      profileRow: CLOUD_GENERA.indexOf(layer.genus),
-      meanDepth: [depth, depth],
+      weather: regimeWeather(record, lever),
+      regime: WEATHER_SCENARIOS[lever],
+    }
+  const own = bodyWeather(record) ?? regimeWeather(record, CLIMATE_REGIME)
+  return {
+    weather: own,
+    regime:
+      own.climate.kind === 'regime' ? WEATHER_SCENARIOS[CLIMATE_REGIME] : null,
+  }
+}
+
+/**
+ * A body's levels at an instant, each in its own noise frame: its turn about
+ * the spin axis and its drift along it from the weather's clock, and the
+ * origins `latticeOrigin` reduces at the eye by the level's own periods. A
+ * base period is eight of the level's cells and a detail period one, where
+ * each noise tiles.
+ *
+ * Nothing here is the observer's (phase 1 design §5.3). The eye enters only
+ * as the point a float32 offset is measured from, and `origin_k + M_k·(p −
+ * eye)` is `M_k·p + ŷ·drift` reduced, for any eye. A drift built in the
+ * eye's tangent basis (`horizonBasis`) turns the whole lattice as the eye
+ * moves at a held instant; that is the bridge the fine march reads
+ * (`CloudBodyFrame.drift`), and no level reads it.
+ */
+export function weatherLevels(
+  drawn: DrawnWeather,
+  time: number,
+  eye: Vec3,
+): CloudBodyFrame['levels'] {
+  const { weather } = drawn
+  const clock: FieldClock =
+    weather === null
+      ? { turn: [0, 0, 0], drift: 0, time }
+      : fieldClock(weather, time)
+  const level = (k: number): CloudLevelFrame => {
+    const numbers =
+      drawn.regime !== null
+        ? regimeLevel(drawn.regime, k)
+        : genusLevel(drawn.weather.levels[k]!)
+    const angle = clock.turn[k]!
+    return {
+      ...numbers,
+      turn: turnBack(angle),
+      turnRate: weather?.turn[k] ?? 0,
+      noiseOrigin: latticeOrigin(
+        eye,
+        angle,
+        clock.drift,
+        numbers.cell * BASE_CELLS,
+      ),
+      detailOrigin: latticeOrigin(eye, angle, clock.drift, numbers.cell),
     }
   }
   return [level(0), level(1), level(2)]
+}
+
+/**
+ * A body's climate as its uniforms take it. A regime's is its pattern. A
+ * fitted climate's law is not on `BodyClimate`, which answers `sample` and
+ * holds no coefficients, so until it does the law is zeros and the climate
+ * is drawn uniform at its own sample under the eye.
+ */
+function weatherClimate(
+  drawn: DrawnWeather,
+  time: number,
+  eye: Vec3,
+  sun: Vec3,
+): CloudClimateFrame {
+  if (drawn.regime !== null) return scenarioClimate(drawn.regime, time)
+  const { climate } = drawn.weather
+  const sample = climate.sample(Vec.normalize(eye), sun, time)
+  const floor = (cover: number): number =>
+    Math.max(0, (cover - BLOB_MEAN) / (1 - BLOB_MEAN))
+  const [low, middle, high] = sample.cover
+  return {
+    kind: climate.kind,
+    law: new Array<number>(16).fill(0),
+    pattern: 'uniform',
+    patternScale: 0,
+    patternCells: blobCells(0),
+    period: [0, 0],
+    terminator: [2, 3],
+    blobThreshold: [
+      blobThreshold(low),
+      blobThreshold(middle),
+      blobThreshold(high),
+    ],
+    blobFloor: [floor(low), floor(middle), floor(high)],
+    cover: sample.cover,
+    convective: sample.convective,
+    ice: sample.ice,
+    deep: sample.deep,
+  }
 }
 
 /**
@@ -423,11 +611,13 @@ export function scenarioClimate(
 /* The rules' thresholds                                                      */
 /* ------------------------------------------------------------------------- */
 
-/** A turn of the camera past this between calls is motion the history cannot follow. */
-const MOTION_TURN = (20 * Math.PI) / 180
-/** Travel past this share of the eye's height over the nearest boundary is motion. */
-const MOTION_SHARE = 0.1
-/** A step of the field's time off the expected one by more than the larger of these is a jump. */
+/**
+ * A step of the field's time off the one the clock's rate explains by more
+ * than the larger of these is a jump: a second, or four times the explained
+ * step. The scale holds a warp's own frame-to-frame jitter at any rate of the
+ * dock's ladder; the floor holds a paused or held clock's, where the
+ * explained step is nothing.
+ */
 const JUMP_FLOOR = 1
 const JUMP_SCALE = 4
 /**
@@ -504,8 +694,44 @@ function secondBody(
 }
 
 /**
- * The body-fixed sun as `TerrainPatches` forms it, from the key star's
- * placement to the body's, turned under a synthetic clock.
+ * Where a placed object truly is from the scene's eye, render axes, meters:
+ * its direction from the eye, which compression keeps (rule 28), at its true
+ * distance, which the placement carries beside its compressed one. Null for
+ * an object at the eye, which has no direction.
+ */
+function trueOffset(placement: RenderPlacement, eye: Vec3): Vec3 | null {
+  const offset = Vec.sub(placement.position, eye)
+  const length = Vec.length(offset)
+  return length === 0 ? null : Vec.scale(offset, placement.distance / length)
+}
+
+/**
+ * The key star's true direction from the body's center, render axes: the
+ * star's true offset from the eye less the body's, which is the difference
+ * of the simulation's own positions to float64's rounding.
+ *
+ * Not the difference of the two render positions. Compression keeps
+ * directions from the eye and nothing else, and the star stands at a
+ * compressed distance, so from the body's center in render space it carries
+ * the parallax of the center's offset from the eye over the star's render
+ * distance: 2.04° on P222_1_0_7 III's dusk picture, where the star stands 28
+ * radii out, which put a sun 1.5° under the horizon 0.5° over it and cleared
+ * a layer that ends at the terminator from the whole frame.
+ */
+function trueSun(body: RenderBody, scene: RenderScene): Vec3 | null {
+  const key = scene.stars[0]
+  if (key === undefined) return null
+  const eye = scene.camera.position
+  const star = trueOffset(key.placement, eye)
+  const center = trueOffset(body.placement, eye)
+  if (star === null) return null
+  const toStar = center === null ? star : Vec.sub(star, center)
+  return Vec.length(toStar) === 0 ? null : Vec.normalize(toStar)
+}
+
+/**
+ * The body-fixed sun: the true one (`trueSun`), turned under a synthetic
+ * clock.
  *
  * Under 'scrub' and 'warp' the field's instant runs ahead of the world's,
  * and a body turns under a sun that, over a few hours, holds still: so the
@@ -521,17 +747,11 @@ function bodySun(
   time: number,
   renderTime: number,
 ): Vec3 {
-  const key = scene.stars[0]
-  const toStar =
-    key === undefined
-      ? null
-      : Vec.sub(key.placement.position, body.placement.position)
+  const toStar = trueSun(body, scene)
   // A body on its star, or a scene with no star, has no sun to face; a zero
   // vector normalized would be NaN across every sample.
   const sun =
-    toStar === null || Vec.length(toStar) === 0
-      ? POLE
-      : Q.rotate(Q.conjugate(body.orientation), Vec.normalize(toStar))
+    toStar === null ? POLE : Q.rotate(Q.conjugate(body.orientation), toStar)
   const period = body.rotationPeriod
   const interval = time - renderTime
   if (interval === 0 || !Number.isFinite(period) || period === 0) return sun
@@ -542,18 +762,19 @@ function bodySun(
 /** What every body's frame is built from this call. */
 interface Context {
   readonly inputs: CloudFrameInputs
+  /** The lever's regime: what the bridged lookup's periods are the least common of. */
   readonly scenario: WeatherScenario
   readonly weatherKey: string
-  readonly boundaries: readonly number[]
   readonly periods: { readonly base: number; readonly detail: number }
   readonly time: number
-  readonly jump: boolean
 }
 
 /**
  * One body's frame. The served body carries its caches' frames, scrolled from
  * `caches` or rebuilt from none; a second body has no eye-anchored caches —
- * it is drawn by its far march alone — and gets empty ones.
+ * it is drawn by its far march alone — and gets empty ones. Each body draws
+ * its own weather under the lever (`drawnWeather`): its levels, the shells
+ * they bound and its climate.
  */
 function bodyFrame(
   context: Context,
@@ -564,7 +785,13 @@ function bodyFrame(
   const { inputs, scenario, time } = context
   const datumRadius = body.trueRadius
   const sun = bodySun(body, inputs.scene, time, inputs.renderTime)
-  const shells = shellHeights(eye, datumRadius, context.boundaries)
+  const drawn = drawnWeather(inputs.levers.weather, inputs.record(body.address))
+  const levels = weatherLevels(drawn, time, eye)
+  const shells = shellHeights(
+    eye,
+    datumRadius,
+    levels.flatMap((level) => [level.base, level.top]),
+  )
   const { east, north } = horizonBasis(eye)
   const wind = Vec.add(
     Vec.scale(east, scenario.wind.east),
@@ -574,8 +801,6 @@ function bodyFrame(
   const color = key?.color ?? WHITE
   const gain = inputs.visibility ? 1 : body.sunlight
   const served = caches !== 'none'
-  const noiseOrigin = reducePoint(eye, context.periods.base)
-  const detailOrigin = reducePoint(eye, context.periods.detail)
   return {
     address: body.address,
     datumRadius,
@@ -588,8 +813,8 @@ function bodyFrame(
     limb: body.limb,
     limbFalloff: body.limbFalloff,
     dayColor: { r: color.r * gain, g: color.g * gain, b: color.b * gain },
-    noiseOrigin,
-    detailOrigin,
+    noiseOrigin: reducePoint(eye, context.periods.base),
+    detailOrigin: reducePoint(eye, context.periods.detail),
     drift: driftOffset(wind, time, context.periods.base),
     wind,
     clipmap: served
@@ -610,13 +835,9 @@ function bodyFrame(
           caches?.volume.frames ?? null,
         )
       : NO_LEVELS,
-    // Both bodies draw the lever's one weather, under the lever's name.
-    ...scenarioWeather(
-      scenario,
-      { noise: noiseOrigin, detail: detailOrigin },
-      time,
-    ),
     weatherKey: context.weatherKey,
+    levels,
+    climate: weatherClimate(drawn, time, eye, sun),
   }
 }
 
@@ -651,11 +872,18 @@ function frameTime(
 }
 
 /**
- * Whether the field's time moved discontinuously: off the step it should
- * have taken by more than a second or four of it, or into the next hour of
- * the drift, where the field starts over 3,600 s of wind away. Always under
- * 'scrub'. The expected step is the call's own `delta`, or `delta·warp`
- * under 'warp'; a held instant changed by the planetarium reads as a jump.
+ * Whether the field's time moved by a step the clock's rate does not
+ * explain: off `rate·delta` by more than a second or four of that step.
+ * The rate is the world clock's own (`CloudFrameInputs.rate`), or the
+ * lever's under 'warp'; every frame is a jump under 'scrub'. A steady warp
+ * at any rate of the dock's ladder is then continuous, and a scrub, a
+ * planetarium's held instant moved, or a clock that stepped without its rate
+ * saying so is a jump.
+ *
+ * The expected step is not `delta` alone: under the game's own warp from
+ * 100× a 60 Hz frame's step of world time passes `max(1 s, 4·delta)`, and
+ * every frame would take the reset path, the immediate regime and every
+ * cache rebuilt, at the rates a player warps at (phase 1 design §4.7).
  */
 function jumped(
   inputs: CloudFrameInputs,
@@ -665,18 +893,12 @@ function jumped(
   if (previous === null) return false
   const { force, warp } = inputs.levers
   if (force === 'scrub') return true
-  const expected = force === 'warp' ? inputs.delta * warp : inputs.delta
-  if (
+  const rate = force === 'warp' ? warp : inputs.rate
+  const expected = rate * inputs.delta
+  return (
     Math.abs(time - previous.time - expected) >
-    Math.max(JUMP_FLOOR, JUMP_SCALE * expected)
+    Math.max(JUMP_FLOOR, JUMP_SCALE * Math.abs(expected))
   )
-    return true
-  const [low, high] = periodIndex(time, CLOUD_ADVECTION_PERIOD)
-  const [lowBefore, highBefore] = periodIndex(
-    previous.time,
-    CLOUD_ADVECTION_PERIOD,
-  )
-  return low !== lowBefore || high !== highBefore
 }
 
 /** The camera's basis in the served body's axes, and the trace's ray budget. */
@@ -727,29 +949,6 @@ function flight(
   )
 }
 
-/**
- * Whether the camera turned more than 20° or the eye moved more than a tenth
- * of its height over the nearest shell boundary: farther than the history
- * can follow by reprojecting.
- */
-function moved(
-  camera: CloudCameraFrame,
-  before: CloudCameraFrame,
-  translation: Vec3,
-  shells: ShellHeights,
-): boolean {
-  // The relative rotation's angle from the trace of its matrix, the sum of
-  // the two bases' matching axes' cosines.
-  const trace =
-    Vec.dot(camera.right, before.right) +
-    Vec.dot(camera.up, before.up) +
-    Vec.dot(camera.forward, before.forward)
-  const turn = Math.acos(Math.min(1, Math.max(-1, (trace - 1) / 2)))
-  if (turn > MOTION_TURN) return true
-  const clearance = Math.min(...shells.eyeOver.map(Math.abs))
-  return Vec.length(translation) > MOTION_SHARE * clearance
-}
-
 const sameExtent = (a: Extent, b: Extent): boolean =>
   a.width === b.width && a.height === b.height
 
@@ -759,38 +958,48 @@ const sameExtents = (a: CloudExtents, b: CloudExtents): boolean =>
   sameExtent(a.trace, b.trace) &&
   sameExtent(a.history, b.history)
 
-/** Whether anything that names what the history holds changed. */
-function keyChanged(
+/** Whether the field changed: the weather, a body, or a size the caches are laid out by. */
+function fieldChanged(
   inputs: CloudFrameInputs,
   previous: CloudFrame,
   served: RenderBody,
   second: RenderBody | null,
 ): boolean {
   return (
-    cloudResetKey(inputs.levers) !== cloudResetKey(previous.levers) ||
-    inputs.pictureEpoch !== previous.pictureEpoch ||
-    inputs.historyKey !== previous.historyKey ||
+    cloudFieldKey(inputs.levers) !== cloudFieldKey(previous.levers) ||
     served.address !== previous.served.address ||
     (second?.address ?? null) !== (previous.second?.address ?? null)
   )
 }
 
-/** Why the history resets, by §3.3's order: the first reason that holds. */
+/** Whether what the history holds changed under the same field: a cut. */
+function pictureChanged(
+  inputs: CloudFrameInputs,
+  previous: CloudFrame,
+): boolean {
+  return (
+    cloudResetKey(inputs.levers) !== cloudResetKey(previous.levers) ||
+    inputs.pictureEpoch !== previous.pictureEpoch ||
+    inputs.historyKey !== previous.historyKey
+  )
+}
+
+/** Why the history resets: the first reason that holds, the costliest first. */
 function resetReason(
   force: CloudLevers['force'],
   checks: {
     readonly first: boolean
-    readonly key: boolean
+    readonly field: boolean
+    readonly picture: boolean
     readonly resize: boolean
     readonly jump: boolean
-    readonly motion: boolean
   },
 ): CloudResetReason {
   if (checks.first) return 'first'
-  if (checks.key) return 'key'
+  if (checks.field) return 'field'
+  if (checks.picture) return 'picture'
   if (checks.resize) return 'resize'
   if (checks.jump) return 'jump'
-  if (checks.motion) return 'motion'
   if (force === 'cut') return 'cut'
   if (force === 'reset' || force === 'scrub') return 'force'
   return 'none'
@@ -803,10 +1012,10 @@ function resetReason(
 /**
  * The frame, or null when `levers.on` is false or no body is served.
  *
- * Under 'cut', and whenever the picture's key changes, every eye-anchored
- * level, the clipmap's and the volume's, is rebuilt from no previous frame,
- * as a teleport does: a key change is a new body, epoch or lever set, and what the caches
- * hold is no longer this picture's.
+ * On a first frame and a `'field'` reset every eye-anchored level, the
+ * clipmap's and the volume's, is built from no previous frame: what the
+ * caches hold is another field's. Every other reset keeps them, and a level
+ * rebuilds only where its anchor moved (`levelFrames`).
  */
 export function cloudFrame(
   inputs: CloudFrameInputs,
@@ -839,18 +1048,16 @@ export function cloudFrame(
   const flown = flight(inputs, previous, servedAt, trueEye, camera.forward)
   const sameServed =
     previous !== null && previous.served.address === servedAt.address
-  const key =
-    previous !== null && keyChanged(inputs, previous, servedAt, secondAt)
+  const field =
+    previous !== null && fieldChanged(inputs, previous, servedAt, secondAt)
   const context: Context = {
     inputs,
     scenario,
     weatherKey: levers.weather,
-    boundaries: shellBoundaries(scenario),
     periods: cloudNoisePeriods(scenario),
     time,
-    jump,
   }
-  const rebuild = previous === null || key || levers.force === 'cut'
+  const rebuild = previous === null || field
   const flownRender = Q.rotate(servedAt.orientation, flown)
   const served = bodyFrame(
     context,
@@ -873,12 +1080,10 @@ export function cloudFrame(
   const previousCamera = sameServed ? previous.camera : null
   const reset = resetReason(levers.force, {
     first: previous === null,
-    key,
+    field,
+    picture: previous !== null && pictureChanged(inputs, previous),
     resize: previous !== null && !sameExtents(previous.extents, extents),
     jump,
-    motion:
-      previousCamera !== null &&
-      moved(camera, previousCamera, translation, served.shells),
   })
   return {
     levers,

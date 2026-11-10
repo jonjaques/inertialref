@@ -791,12 +791,15 @@ async function status() {
   if (point.refused === true) process.exitCode = 1
 }
 
-/** A cast written to `.data/drive/cast/`, differenced, and clipped, as the
- *  step's result and the lines it says. */
-async function cast(wire, n) {
-  const dir = path.join(RIG, 'cast')
-  await rm(dir, { recursive: true, force: true })
-  const frames = await castFrames(wire, n, { maxPx: CAST_PX })
+/**
+ * A cast's frames as `0000.jpg` onward, and beside them `timestamps.json`:
+ * each frame's screencast instant, seconds since the epoch as Chrome stamps
+ * it, in file order. Without it a gap in the stream is invisible in the
+ * frames, which are numbered as they arrived; with it a frame finds the
+ * page's own log entry, whose instants are the same epoch in milliseconds
+ * (`scripts/castSteps.mjs`).
+ */
+export async function writeCastFrames(dir, frames) {
   await mkdir(dir, { recursive: true })
   const paths = []
   for (const [i, frame] of frames.entries()) {
@@ -804,6 +807,20 @@ async function cast(wire, n) {
     await writeFile(file, Buffer.from(frame.data, 'base64'))
     paths.push(file)
   }
+  await writeFile(
+    path.join(dir, 'timestamps.json'),
+    `${JSON.stringify(frames.map((frame) => frame.at))}\n`,
+  )
+  return paths
+}
+
+/** A cast written to `.data/drive/cast/`, differenced, and clipped, as the
+ *  step's result and the lines it says. */
+async function cast(wire, n) {
+  const dir = path.join(RIG, 'cast')
+  await rm(dir, { recursive: true, force: true })
+  const frames = await castFrames(wire, n, { maxPx: CAST_PX })
+  const paths = await writeCastFrames(dir, frames)
   const at = frames.map((f) => f.at)
   const span = at.length > 1 ? at[at.length - 1] - at[0] : 0
   // Intervals over the span, as `traceFrames.mjs` counts them: n frames
@@ -982,7 +999,10 @@ async function main() {
   ws.close()
 }
 
-await main().catch((error) => {
-  process.stderr.write(`${String(error)}\n`)
-  process.exit(1)
-})
+// Run as a command; imported, as its test imports the cast's writer, it
+// launches nothing.
+if (import.meta.main)
+  await main().catch((error) => {
+    process.stderr.write(`${String(error)}\n`)
+    process.exit(1)
+  })
