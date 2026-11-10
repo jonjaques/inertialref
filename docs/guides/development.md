@@ -372,12 +372,12 @@ carries the rest.
 
 API articles always ship as JSON. Every build pre-renders prose, the
 `/docs/api` loading shell and each package's own page, and no member page: the
-1,858 member pages are 50 of the bundle stage's 61 seconds on an Apple M6 when
-they are rendered, and the shell fetches a member's article when it is opened.
-Every branch builds the same output, `main` included. Use `pnpm preview` for
-built API deep links because the Worker asset server applies their generated
-rewrites; `astro preview` does not. During `pnpm dev`, Astro renders API
-loading shells on demand.
+1,858 member pages take 41 to 50 seconds of a 51 to 61 second bundle stage on
+an Apple M6 when they are rendered, and the shell fetches a member's article
+when it is opened. Every branch builds the same output, `main` included. Use
+`pnpm preview` for built API deep links because the Worker asset server applies
+their generated rewrites; `astro preview` does not. During `pnpm dev`, Astro
+renders API loading shells on demand.
 
 **`design/` is the other half of that division, and it is not published.**
 Plans, working reviews and the complexity report live there; `docs/` is the

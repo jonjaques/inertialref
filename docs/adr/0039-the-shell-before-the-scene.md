@@ -34,9 +34,10 @@ a mutable module-global current page.
 Every build, `main` included, pre-renders prose, one API loading shell at
 `/docs/api`, and each package's own reference page. No build pre-renders an API
 member page; its article loads through the existing JSON requests. Rendering
-the 1,858 member pages is 50 of the bundle stage's 61 seconds on an Apple M6,
-and each package page already links every member it exports. TypeDoc
-conversion, link validation and all API JSON assets remain part of every build.
+the 1,858 member pages is 41 to 50 seconds of a 51 to 61 second bundle stage on
+an Apple M6, which takes 7 seconds without them, and each package page already
+links every member it exports. TypeDoc conversion, link validation and all API
+JSON assets remain part of every build.
 
 One static-asset rewrite per package, `/docs/api/<package>/*`, sends its
 member addresses to `/docs/api` while retaining the requested URL. Aliases
@@ -123,8 +124,8 @@ semantics and avoids introducing another renderer persistence mechanism.
 and copying its HTML into another creates a second content lifetime and can
 remove the article before its replacement exists. Hydration keeps one shell.
 
-**Pre-render every API member page.** It keeps every unknown address a 404
-from a static table, at 50 of the bundle stage's 61 seconds on every build. An
+**Pre-render every API member page.** It keeps every unknown address a 404 from
+a static table, at 41 to 50 seconds of the bundle stage on every build. An
 exact proxy for each member instead keeps the 404 without the render, but the
 table grows with the export count: 126 aliases, 12 package pages and 1,858
 members made 1,996 static rules against Cloudflare's 2,000.
