@@ -15,8 +15,8 @@ import { wrap } from '../driveScript.mjs'
 import {
   armsOf,
   castArgs,
+  castLevers,
   castReads,
-  checkBuild,
   checkStill,
   cutFrom,
   dataRoot,
@@ -51,6 +51,7 @@ import {
   HELD,
   INSTALL_PATH,
   markCloudsOnly,
+  parseLevers,
   presentationRate,
   SAMPLES,
   seekPath,
@@ -62,6 +63,7 @@ import {
 import {
   baseSource,
   buildSheets,
+  checkBuild,
   checkRecord,
   checkTake,
   keptClip,
@@ -71,9 +73,12 @@ import {
   provenance,
   shotOf,
   RECORD_FIELDS,
+  sameBuild,
+  sheetPlate,
   role,
   ROLES,
   sunInFrame,
+  treeBuild,
 } from './sheet.mjs'
 
 /*
@@ -209,6 +214,45 @@ describe('the capture’s plan', () => {
       ],
     ])
       expect(() => parseCapture(argv), argv.join(' ')).toThrow()
+  })
+
+  it('takes one named cast alone, so an invocation holds the lock for one', () => {
+    const one = parseCapture([
+      '--phase',
+      '1',
+      '--dry-run',
+      '--only',
+      'g5',
+      '--cast',
+      'weather-g5-inside-fly',
+      '--no-default-samples',
+    ])
+    expect(one.casts.map((cast) => castName(cast, true))).toEqual([
+      'weather-g5-inside-fly-on',
+    ])
+    expect(
+      planOf(one)
+        .filter((take) => take.kind === 'cast')
+        .map((take) => take.arm),
+    ).toEqual(['on', 'off'])
+    expect(() =>
+      parseCapture(['--phase', '1', '--dry-run', '--cast', 'weather-g9']),
+    ).toThrow(/names no cast/)
+    // One arm by its name: C4's cast beside the control it is read against.
+    const pair = parseCapture([
+      '--phase',
+      '1',
+      '--dry-run',
+      '--cast',
+      'weather-g6-descent-climate',
+      '--cast',
+      'weather-g6-descent-slow-off',
+    ])
+    expect(
+      planOf(pair)
+        .filter((take) => take.kind === 'cast')
+        .map((take) => `${take.preset} ${take.arm}`),
+    ).toEqual(['weather-g6-descent climate on', 'weather-g6-descent slow off'])
   })
 
   it('plans each take with its preset, role, arm and frames, and the noise floor as ten boots a still', () => {
@@ -368,6 +412,10 @@ describe('the capture’s plan', () => {
       inside: true,
     })
     expect(spansReduction(clock, log).seconds).toBeCloseTo((299 / 45) * 100, 6)
+    // Where the noise starts over: the first path frame at or past it.
+    const at = spansReduction(clock, log).frame
+    expect(log[at].time).toBeGreaterThanOrEqual(reduction)
+    expect(log[at - 1].time).toBeLessThan(reduction)
     expect(spansReduction(clock, log.slice(0, 2)).inside).toBe(false)
     expect(spansReduction(CASTS[0], log)).toBeNull()
     const scrub = castByKey('weather-e1-cumulus-orbit-scrub')
@@ -522,21 +570,86 @@ describe('what the capture refuses', () => {
     )
   })
 
-  it('a take whose page was built from another commit, or from an edited tree', () => {
-    const commit = 'abcdef1234567890abcdef1234567890abcdef12'
+  it('a take whose page was built from another tree, or from an edited one', () => {
     const at = (id) => ({ build: { id, tree: null } })
-    expect(checkBuild('e1', at('abcdef12'), commit)).toBe('abcdef12')
-    // A tag's describe, and CI's branch form, both name the commit.
-    expect(checkBuild('e1', at('v1.0-3-gabcdef12'), commit)).toBeTruthy()
-    expect(checkBuild('e1', at('weather-p1-u@abcdef12'), commit)).toBeTruthy()
-    for (const bad of [
-      at('abcdef12-dirty'),
+    expect(checkBuild('e1', at('abcdef12'), 'abcdef12')).toBe('abcdef12')
+    expect(
+      checkBuild('e1', at('v1.0-3-gabcdef12'), 'v1.0-3-gabcdef12'),
+    ).toBeTruthy()
+    for (const [bad, tree] of [
       // The baseline's own case: plates of 23f173bc, recorded at ab301957.
-      at('23f173bc'),
-      {},
-      undefined,
+      [at('23f173bc'), 'ab301957'],
+      // A prefix is not the tree: an equality, not a substring.
+      [at('abcdef12'), 'abcdef123'],
+      // An edited tree, built as it stands: the same id, and still refused.
+      [at('abcdef12-dirty'), 'abcdef12-dirty'],
+      // Built clean, measured on an edited tree.
+      [at('abcdef12'), 'abcdef12-dirty'],
+      [{}, 'abcdef12'],
+      [undefined, 'abcdef12'],
     ])
-      expect(() => checkBuild('e1', bad, commit)).toThrow(/refused/)
+      expect(() => checkBuild('e1', bad, tree), JSON.stringify(bad)).toThrow(
+        /refused/,
+      )
+  })
+
+  it('hold a page to its tree by equality, a dirty tree measured on purpose included', () => {
+    expect(sameBuild('abcdef12', 'abcdef12')).toBe(true)
+    // The runner's --allow-dirty: built from the edited tree it measures.
+    expect(sameBuild('abcdef12-dirty', 'abcdef12-dirty')).toBe(true)
+    expect(sameBuild('abcdef12', 'abcdef12-dirty')).toBe(false)
+    expect(sameBuild('abcdef12-dirty', 'abcdef12')).toBe(false)
+    expect(sameBuild(undefined, 'abcdef12')).toBe(false)
+    // The tree's id has the page's form.
+    expect(treeBuild()).toMatch(/^[\w.@-]+$/)
+  })
+
+  it('read --lever against the engine’s own table before anything boots, and set it on every volume arm', () => {
+    expect(parseLevers([])).toBeNull()
+    expect(parseLevers(['maxSteps=24', 'composite=identity'])).toEqual({
+      maxSteps: 24,
+      composite: 'identity',
+    })
+    expect(() => parseLevers(['handoverBnd=1'])).toThrow(/no lever/)
+    expect(() => parseLevers(['maxSteps=-1'])).toThrow(/refuses/)
+    expect(() => parseLevers(['maxSteps'])).toThrow(/<name>=<value>/)
+    expect(() =>
+      parseCapture(['--phase', '1', '--dry-run', '--lever', 'nope=1']),
+    ).toThrow(/no lever/)
+    const levers = { maxSteps: 24 }
+    const set = setLevers(levers)
+    // A still's volume arm sets them after its first settle; its deck does not.
+    const volume = stillArgs(
+      'weather-e1-cumulus-orbit',
+      'volume',
+      'a.png',
+      levers,
+    )
+    expect(jsOf(volume)[0]).toBe(set)
+    expect(volume.indexOf(set)).toBeLessThan(volume.indexOf(READ))
+    expect(
+      jsOf(stillArgs('weather-e1-cumulus-orbit', 'deck', 'b.png', levers)),
+    ).not.toContain(set)
+    // A cast's clouds-on arm over its own; its control keeps its own alone.
+    const injected = castByKey('weather-g6-descent-injected')
+    expect(castLevers(injected, true, levers)).toEqual({
+      ...injected.levers,
+      maxSteps: 24,
+    })
+    expect(castLevers(CASTS[0], false, levers)).toBeNull()
+    const on = castArgs(CASTS[0], true, null, levers)
+    expect(jsOf(on)[0]).toBe(set)
+    const answer = (values) => ({
+      results: values.map((value) => ({ step: 'js', value })),
+    })
+    expect(
+      castReads(CASTS[0], true, answer(jsOf(on).map((_, i) => i)), levers)
+        .levers,
+    ).toBe(0)
+    // Settled stills set them before the install.
+    expect(
+      jsOf(sampleArgs(CASTS[1], [75], ['a.png'], levers)).slice(0, 2),
+    ).toEqual([set, INSTALL_PATH])
   })
 
   const log = (hz, n = 120) =>
@@ -570,6 +683,22 @@ describe('what the capture refuses', () => {
     })
     expect(thinned.coverage).toBeCloseTo(1 / 3, 2)
     expect(thinned.retake).toBe(true)
+    // One path frame shown twice and the next skipped, every other pair:
+    // as many frames as path frames, and three quarters of the path.
+    const page = log(60, 400)
+    const doubled = page.flatMap((one, k) =>
+      k % 4 === 1 ? [] : k % 4 === 0 ? [one.at, one.at + 1] : [one.at],
+    )
+    const halved = checkCast(
+      'c',
+      page,
+      doubled.map((ms) => ms / 1000),
+      {
+        frames: 300,
+      },
+    )
+    expect(halved.coverage).toBeCloseTo(0.75, 2)
+    expect(halved.retake).toBe(false)
     // No instants, no figure: the record says so rather than guessing.
     expect(checkCast('c', log(60), null, cast)).toMatchObject({
       coverage: null,
@@ -669,6 +798,20 @@ describe('what the capture refuses', () => {
     expect(() =>
       checkCast('c', descent, null, { frames: 1012, path: CASTS[0].path }),
     ).toThrow(/3 m at its last frame/)
+  })
+
+  it('keep a cut or a scrub with its drops listed, however many the event’s load costs', () => {
+    // The smoke's cut to E1: frames missed from the cut's own frame on.
+    const page = log(60, 180)
+    for (const k of [30, 31, 32, 42, 58, 66, 70])
+      for (let i = k; i < page.length; i += 1) page[i].at += 1000 / 60
+    const cut = castByKey('weather-e1-cumulus-orbit-cut')
+    const kept = checkCast('c', page, null, cut)
+    expect(kept.dropped.map((one) => one.frame)).toContain(30)
+    // The same log on a path is refused: three in a row, past 3%.
+    expect(() =>
+      checkCast('c', page, null, { frames: 90, path: { kind: 'fly' } }),
+    ).toThrow(/3 in a row/)
   })
 
   it('mark a clouds-on drop the clouds’ own where its control dropped nothing within ten path frames', () => {
@@ -1267,6 +1410,38 @@ describe('the sheets', () => {
     expect(rows[3]).toContain(
       '[slow off, 42.6 Hz, not held at 60](weather-g6-descent-slow-off/cast.mp4)',
     )
+  })
+
+  it('lay a picture’s kept volume plate, and none for a picture taken only as noise-floor pairs', () => {
+    const pair = (side) => ({
+      id: 'weather-g2-overcast-shore',
+      arm: 'volume',
+      file: `pairs/weather-g2-overcast-shore-volume-0${side}.png`,
+      role: { name: 'reference-run', differences: [] },
+    })
+    // The smoke's first step: `--pairs 1 --only g2` kept two reference runs.
+    expect(
+      sheetPlate(
+        { stills: [pair('a'), pair('b')] },
+        'weather-g2-overcast-shore',
+      ),
+    ).toBeNull()
+    expect(
+      sheetPlate(
+        {
+          stills: [
+            pair('a'),
+            {
+              id: 'weather-g2-overcast-shore',
+              arm: 'volume',
+              file: 'weather-g2-overcast-shore-volume.png',
+              role: { name: 'candidate', differences: [] },
+            },
+          ],
+        },
+        'weather-g2-overcast-shore',
+      ),
+    ).toBe('weather-g2-overcast-shore-volume.png')
   })
 
   it('show a cast halfway along its path, by the screencast’s instants rather than its index', () => {

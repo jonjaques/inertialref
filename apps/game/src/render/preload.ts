@@ -203,13 +203,14 @@ async function warm(
    * cache in `atmosphereLuts.ts` is keyed identically (same function), so the
    * draw-time ask in `Bodies.tsx` becomes a lookup. */
   const bakes = scatteringBakes(engine.world.loadedSystems())
+  const wants = prebakeWants(engine)
   bakeCount = bakes.length
   warmup.register({
     label: 'baking atmospheres',
     units: bakes.length,
     run: async (done) => {
       for (const bake of bakes) {
-        const set = scatteringFor(bake.haze, bake.topRatio, bake.heights)
+        const set = scatteringFor(bake.haze, bake.topRatio, bake.heights, wants)
         renderer.initTexture(set.transmittance)
         renderer.initTexture(set.multiScatter)
         done()
@@ -298,6 +299,17 @@ async function sceneView(
 }
 
 /**
+ * What the prebake asks of each air: its sky table where the page built the
+ * cloud system, as the draw-time ask (`scatteringOf`) wants it, and nothing
+ * more without `?clouds=1`. A prebake without the sky leaves each haze's
+ * sky to a late job of its own once a cloud asks for it; one with the sky
+ * on a page without clouds bakes a table no material reads.
+ */
+function prebakeWants(engine: GameEngine): { readonly sky: boolean } {
+  return { sky: engine.cloudSystemFactory !== null }
+}
+
+/**
  * Keep atmospheres warm as new systems load mid-session.
  *
  * A jump to a procedural system generates bodies whose hazes the boot pass
@@ -323,7 +335,7 @@ export function watchSystemAtmospheres(engine: GameEngine): () => void {
       return
     }
     queue = queue.slice(1)
-    scatteringFor(next.haze, next.topRatio, next.heights)
+    scatteringFor(next.haze, next.topRatio, next.heights, prebakeWants(engine))
     setTimeout(drain, 0)
   }
 
@@ -338,13 +350,17 @@ export function watchSystemAtmospheres(engine: GameEngine): () => void {
     const pool = engine.pool()
     if (pool !== null) {
       for (const bake of bakes) {
-        void warmScattering(pool, bake.haze, bake.topRatio, bake.heights).catch(
-          (cause: unknown) => {
-            // A pool that has gone away mid-session is the only rejection;
-            // the draw-time ask falls back to the synchronous bake.
-            log.warn('atmosphere prefetch declined', { cause: String(cause) })
-          },
-        )
+        void warmScattering(
+          pool,
+          bake.haze,
+          bake.topRatio,
+          bake.heights,
+          prebakeWants(engine),
+        ).catch((cause: unknown) => {
+          // A pool that has gone away mid-session is the only rejection;
+          // the draw-time ask falls back to the synchronous bake.
+          log.warn('atmosphere prefetch declined', { cause: String(cause) })
+        })
       }
       return
     }

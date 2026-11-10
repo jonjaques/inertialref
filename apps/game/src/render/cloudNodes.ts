@@ -133,6 +133,14 @@ export interface CloudSunDepths {
    * of the point.
    */
   readonly weight: Node<'float'>
+  /**
+   * The cache's share of the depth behind the point, 0..1: `whole` is
+   * `toSun` plus this share of what lies between the point and the ray's far
+   * end. One where the cache holds the whole ray; it falls to zero as the far
+   * end leaves the cache's reach while the point stays inside it, and there
+   * the part behind is the statistics' to give.
+   */
+  readonly behind: Node<'float'>
 }
 
 export interface CloudSunDepthNodes {
@@ -587,7 +595,7 @@ export const CLOUD_STAND_INS = {
     return {
       depths: () => {
         const none = cloudStandInBinding(map, '3d')
-        return { toSun: none, whole: none, weight: float(1) }
+        return { toSun: none, whole: none, weight: float(1), behind: float(1) }
       },
     }
   },

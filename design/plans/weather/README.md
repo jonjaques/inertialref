@@ -25,12 +25,12 @@ at `fb5aa5f5`. Each phase is a pull request into it, the phases are merged
 forward and never rebased, and `the-weather` merges to `main` when the weather
 ships.
 
-| Pull request | Branch                       | Holds                                                     | State                               |
-| ------------ | ---------------------------- | --------------------------------------------------------- | ----------------------------------- |
-| #206         | `weather/phase-0`            | Phase 0: the passes, the measurement, the four records    | Merged into `the-weather`           |
-| #199–#204    | `weather/p0-1-…` to `p0-6-…` | The same work as six stacked pull requests against `main` | Superseded by #206; closed          |
-| #207         | `weather/p1-cornerstones`    | Phase 1's cornerstones, the velocity row, the baseline    | Open                                |
-| #209         | `weather/phase-1`            | Phase 1 in waves; wave 1 is merged                        | Draft, on `weather/p1-cornerstones` |
+| Pull request | Branch                       | Holds                                                     | State                      |
+| ------------ | ---------------------------- | --------------------------------------------------------- | -------------------------- |
+| #206         | `weather/phase-0`            | Phase 0: the passes, the measurement, the four records    | Merged into `the-weather`  |
+| #199–#204    | `weather/p0-1-…` to `p0-6-…` | The same work as six stacked pull requests against `main` | Superseded by #206; closed |
+| #207         | `weather/p1-cornerstones`    | Phase 1's cornerstones, the velocity row, the baseline    | Merged into `the-weather`  |
+| #209         | `weather/phase-1`            | Phase 1 in waves; wave 1 is merged                        | Draft, on `the-weather`    |
 
 Wave 1 is package C, the contracts, at `78f6b3ee`, and three packages built
 beside it: I, the instruments; U, the capture's second pass; and J, the
@@ -39,6 +39,10 @@ rest of that section's second table. D, R1, T1, T2, H and L go first, since
 wave 3 waits on them, and T3, T4, E, Q, W, R2 and Y follow as slots free.
 Each builds from the contracts' tip and merges forward into
 `weather/phase-1`.
+
+Between package L's merge and package F's, a slice of the sun's depth baked
+from stale maps under a held clock is never redrawn, so no capture is taken
+from this branch in that interval.
 
 ## What phase 0 decided
 

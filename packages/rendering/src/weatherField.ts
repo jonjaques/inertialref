@@ -128,27 +128,186 @@ export function levelOrigin(
   return latticeOrigin(point, clock.turn[level] ?? 0, clock.drift, period)
 }
 
-/** The base noise's cells at a body point: its place in the level's frame over eight cells, over the cell. */
+/* ------------------------------------------------------------------------- */
+/* The mesoscale displacement                                                 */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * The base noise tiles every eight cells, 9.6 km for cumulus, and a cover
+ * that holds over a stance lays that one tile across the whole field: from
+ * orbit E1's 80 km frame is the same tile eight times a side, its
+ * cloud-or-clear map correlating at 0.88 with itself 23.5 km away. Real
+ * cumulus fields are herded by the boundary layer's mesoscale circulation
+ * and repeat at no lag.
+ *
+ * So each level's noise is read displaced by a smooth field that varies over
+ * tens of kilometers: six waves along the axes of an icosahedron turned off
+ * the lattice's own axes, each displacing across its own direction, with
+ * wavelengths of 17 to 73 cells (20 to 88 km for cumulus) that no two share
+ * a ratio of small integers. Each wave's displacement is perpendicular to
+ * its direction, so the field is divergence-free: it moves the noise and
+ * neither makes nor removes cloud, and a stance keeps its regime's cover and
+ * share of cloudy columns. Six and not four, because a lag nearly
+ * perpendicular to every wave sees no displacement: with four, three of
+ * them lay across E1's repeat and it held at 0.48.
+ *
+ * It is a stand-in for that circulation, not a model of it. Its constants
+ * are package G's: each wave steepens the displacement by
+ * `MESOSCALE_GRADIENT`, the six by at most 0.66, under the 1 at which the
+ * noise would fold over itself. Measured over 80 km at 28 places on Earth
+ * and the cornerstones' world, it leaves no cloud-or-clear map correlating
+ * at over 0.30 at any lag from 2 to 40 km (`weatherField.test.ts`).
+ *
+ * The march evaluates it from uniforms: six phases a level at the eye, and
+ * a sine a wave a step. No texture is bound or read for it.
+ */
+
+/**
+ * One wave of a level's mesoscale displacement, in the level's cells: the
+ * noise at lattice point p′ is read at `p′ + Σ a·cell·push·sin(k·p′)`, with
+ * `k = 2π/(wavelength·cell)·along`.
+ */
+export interface MesoscaleWave {
+  /** Unit, in the level's turned frame: the direction the wave varies along. */
+  readonly along: Vec3
+  /** Unit and perpendicular to `along`: the direction it displaces the noise. */
+  readonly push: Vec3
+  /** Cells. */
+  readonly wavelength: number
+  /** Cells. */
+  readonly amplitude: number
+}
+
+const normalize = (v: Vec3): Vec3 => {
+  const l = Math.hypot(v.x, v.y, v.z)
+  return { x: v.x / l, y: v.y / l, z: v.z / l }
+}
+const cross = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.y * b.z - a.z * b.y,
+  y: a.z * b.x - a.x * b.z,
+  z: a.x * b.y - a.y * b.x,
+})
+const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z
+
+/** How much each wave steepens the displacement: its amplitude over its wavelength, times 2π. A stand-in for G. */
+export const MESOSCALE_GRADIENT = 0.11
+/** Each wave's wavelength, cells: incommensurate, 20 to 88 km for cumulus. A stand-in for G. */
+export const MESOSCALE_WAVELENGTHS = [17, 23, 31, 41, 55, 73] as const
+
+const GOLDEN = (1 + Math.sqrt(5)) / 2
+/** A rotation by 0.613 rad about the pole and 1.137 rad about y: no axis of the icosahedron on the lattice's axes, whose period would then line up with a wave. */
+const offAxis = (v: Vec3): Vec3 => {
+  const [a, b] = [0.613, 1.137]
+  const x = Math.cos(a) * v.x - Math.sin(a) * v.y
+  const y = Math.sin(a) * v.x + Math.cos(a) * v.y
+  return {
+    x: Math.cos(b) * x + Math.sin(b) * v.z,
+    y,
+    z: -Math.sin(b) * x + Math.cos(b) * v.z,
+  }
+}
+/** The icosahedron's six axes through opposite vertices, and for each a direction its push is made perpendicular from. */
+const AXES: readonly Vec3[] = [
+  { x: 0, y: 1, z: GOLDEN },
+  { x: 0, y: 1, z: -GOLDEN },
+  { x: 1, y: GOLDEN, z: 0 },
+  { x: 1, y: -GOLDEN, z: 0 },
+  { x: GOLDEN, y: 0, z: 1 },
+  { x: -GOLDEN, y: 0, z: 1 },
+]
+const ACROSS: readonly Vec3[] = [
+  { x: 0.3, y: 0.8, z: 0.5 },
+  { x: 0.9, y: -0.2, z: 0.4 },
+  { x: -0.5, y: 0.3, z: 0.8 },
+  { x: 0.2, y: 0.4, z: -0.9 },
+  { x: 0.7, y: 0.7, z: -0.1 },
+  { x: -0.4, y: 0.9, z: 0.2 },
+]
+
+export const MESOSCALE_WAVES: readonly MesoscaleWave[] = AXES.map((axis, j) => {
+  const along = normalize(offAxis(axis))
+  const wavelength = MESOSCALE_WAVELENGTHS[j]!
+  return {
+    along,
+    push: normalize(cross(along, ACROSS[j]!)),
+    wavelength,
+    amplitude: (MESOSCALE_GRADIENT * wavelength) / (2 * Math.PI),
+  }
+})
+
+const TAU = 2 * Math.PI
+const angleOf = (x: number): number => x - TAU * Math.floor(x / TAU)
+
+/**
+ * Each wave's phase at a body point in level k's frame, `k·p′` in
+ * [0, 2π), float64: the turned point's term and the drift's reduced apart,
+ * as the lattice's origin is, so ten years of drift keep the phase's
+ * precision. For an eye it is what the frame uploads; the GPU adds
+ * `k·M_k·(p − eye)` in float32.
+ */
+export function mesoscalePhases(
+  clock: FieldClock,
+  level: number,
+  point: Vec3,
+  cell: number,
+): number[] {
+  const turned = unturn(point, clock.turn[level] ?? 0)
+  return MESOSCALE_WAVES.map(({ along, wavelength }) => {
+    const k = TAU / (wavelength * cell)
+    return angleOf(
+      angleOf(k * dot(along, turned)) + angleOf(k * along.y * clock.drift),
+    )
+  })
+}
+
+/** The displacement the phases give, meters, in the level's turned frame. */
+export function mesoscaleDisplacement(
+  phases: readonly number[],
+  cell: number,
+): Vec3 {
+  let x = 0
+  let y = 0
+  let z = 0
+  MESOSCALE_WAVES.forEach(({ push, amplitude }, j) => {
+    const a = amplitude * cell * Math.sin(phases[j]!)
+    x += push.x * a
+    y += push.y * a
+    z += push.z * a
+  })
+  return { x, y, z }
+}
+
+/** The base noise's cells at a body point displaced by `w`: its place in the level's frame over eight cells, over the cell. */
 function baseCells(
   clock: FieldClock,
   level: number,
   point: Vec3,
   cell: number,
+  w: Vec3,
 ): Vec3 {
   const at = levelOrigin(clock, level, point, BASE_NOISE_PERIOD * cell)
-  return { x: at.x / cell, y: at.y / cell, z: at.z / cell }
+  return {
+    x: (at.x + w.x) / cell,
+    y: (at.y + w.y) / cell,
+    z: (at.z + w.z) / cell,
+  }
 }
 
-/** The detail's cells at a body point: four a base cell, tiling once a base cell. */
+/** The detail's cells at a body point displaced by `w`: four a base cell, tiling once a base cell. */
 function detailCells(
   clock: FieldClock,
   level: number,
   point: Vec3,
   cell: number,
+  w: Vec3,
 ): Vec3 {
   const at = levelOrigin(clock, level, point, cell)
   const scale = DETAIL_NOISE_PERIOD / cell
-  return { x: at.x * scale, y: at.y * scale, z: at.z * scale }
+  return {
+    x: (at.x + w.x) * scale,
+    y: (at.y + w.y) * scale,
+    z: (at.z + w.z) * scale,
+  }
 }
 
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))
@@ -184,11 +343,15 @@ function levelSample(
   const [shape, mean, , radius] = readLevelProfile(profile, h01, convective)
   const c = clamp01(cover)
   const { cell } = profile
-  const base = baseNoiseTexture(baseCells(clock, level, point, cell))
+  const w = mesoscaleDisplacement(
+    mesoscalePhases(clock, level, point, cell),
+    cell,
+  )
+  const base = baseNoiseTexture(baseCells(clock, level, point, cell, w))
   const reach = 1 - smoothstep(cell / 16, cell / 4, footprint)
   const erosion =
     reach > 0
-      ? detailNoiseTexture(detailCells(clock, level, point, cell)) *
+      ? detailNoiseTexture(detailCells(clock, level, point, cell, w)) *
         profile.erosion *
         reach
       : 0
@@ -225,11 +388,12 @@ const unit = (p: Vec3, length: number): Vec3 => ({
  * `sigma` is scaled, `σ′`; the extinction a transmittance through the
  * sample is formed from is `fraction·sigma`.
  *
- * Measured on a Mac mini (Mac18,5, Apple M6, Node 26), over 40,000 places
- * in a 20 km square of a low level: 0.5–0.6 µs a call where the noise's
- * texels near it are known, 7–11 µs where the call is the first to need
- * them (3.4 µs a texel), and 0.3–0.4 µs unresolved, where the detail is
- * not read. A column (`columnDepth`) is 145–165 µs.
+ * Measured on a Mac mini (Mac18,5, Apple M6, Node 26) shared with other
+ * builds, over 40,000 places in a 20 km square of a low level: 0.8–1.0 µs a
+ * call where the noise's texels near it are known, 10–15 µs where the call
+ * is the first to need them (3.4 µs a texel), and 0.6–1.0 µs unresolved,
+ * where the detail is not read. The mesoscale displacement's six sines are
+ * about a third of a known call. A column (`columnDepth`) is 220–280 µs.
  */
 export function cloudFieldAt(
   weather: BodyWeather,

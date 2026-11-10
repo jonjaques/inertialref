@@ -1,5 +1,18 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { DataUtils, type Node, StorageBufferAttribute } from 'three/webgpu'
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
+import {
+  DataUtils,
+  type Node,
+  StorageBufferAttribute,
+  type Texture,
+} from 'three/webgpu'
 import {
   dot,
   exp,
@@ -7,22 +20,35 @@ import {
   Fn,
   If,
   instanceIndex,
+  int,
+  ivec2,
   length,
   max,
   saturate,
   storage,
+  textureLoad,
   uint,
   uniform,
   vec3,
 } from 'three/tsl'
 import {
+  angleIndex,
   angleOf,
+  iceAggregate,
+  iceRowIndex,
+  type IceTable,
   type MieTable,
   mieDroplets,
+  PHASE_ATLAS,
+  type PhaseAtlas,
+  phaseAtlas,
+  radiusIndex,
   radiusOf,
-  samplePhase,
+  sampleAtlas,
+  toHalves,
 } from '@inertialref/rendering'
 import { SOLAR_PLANETS } from '@inertialref/universe'
+import { createInlineWorker, WorkerPool } from '@inertialref/workers'
 import {
   type AirUniforms,
   airMediumAt,
@@ -43,18 +69,42 @@ import {
   type CloudSunDepthNodes,
   slabMedium,
 } from './cloudNodes.ts'
-import { CloudPhase } from './cloudPhase.ts'
+import { CloudPhase, createCloudPhase } from './cloudPhase.ts'
 import { cloudSunFn } from './cloudSunlight.ts'
 import { type CloudBodyUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { altitudeAt } from './cloudGeometry.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { setSceneExposure } from './radiance.ts'
+import { createGameTaskRegistry } from '../workers/registry.ts'
+
+/*
+ * The atlas's convolutions are counted, not timed: `phaseAtlas` is wrapped
+ * in a counter, so "nothing convolved on this thread inside the call" is a
+ * count that has not moved when `serve` returns. The inline pool's worker
+ * shares this thread but runs only after the call has returned, so its
+ * convolution is counted after the answer lands, and only then.
+ */
+const convolutions = vi.hoisted(() => ({ count: 0 }))
+vi.mock('@inertialref/rendering', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@inertialref/rendering')>()
+  return {
+    ...real,
+    phaseAtlas: (...args: Parameters<typeof real.phaseAtlas>) => {
+      convolutions.count += 1
+      return real.phaseAtlas(...args)
+    },
+  }
+})
+
+beforeEach(() => {
+  convolutions.count = 0
+})
 
 /*
  * The light a cloud sample is lit by (§5.9, §5.10) and the air's pieces the
  * clouds take from `air.ts` (§3.6), on the GPU: the beam a cloud sees is the
  * beam the ground beside it sees, the air's sample is `marchAir`'s sample,
- * the phase read is `samplePhase`'s bilinear lookup, and the taps mix as
+ * the phase read is `sampleAtlas`'s bilinear lookup, and the taps mix as
  * one segment.
  */
 
@@ -472,7 +522,7 @@ describe('the air a cloud is seen through', () => {
  * A table whose every texel differs from its neighbors, on the real angular
  * and radial axes, quantized to half floats as the generated file's are, so
  * the lookup is tested on a table that can tell a wrong texel from a right
- * one. The committed stand-in is isotropic, and any lookup reads it right.
+ * one. Each row's extinction is its own, so each row's gain is too.
  */
 function structuredTable(angles: number, radii: number): MieTable {
   const phase = new Float32Array(angles * radii * 3)
@@ -480,7 +530,7 @@ function structuredTable(angles: number, radii: number): MieTable {
     for (let i = 0; i < angles; i += 1)
       for (let band = 0; band < 3; band += 1) {
         // A forward peak over a floor, rippling in angle and moving with the row.
-        const theta = angleOf({ angles } as MieTable, i)
+        const theta = angleOf({ angles }, i)
         const value =
           0.05 +
           40 * Math.exp(-theta * (8 + row)) +
@@ -494,8 +544,8 @@ function structuredTable(angles: number, radii: number): MieTable {
     angles,
     radii,
     phase,
-    bulk: Array.from({ length: radii }, () => ({
-      extinction: 2,
+    bulk: Array.from({ length: radii }, (_, row) => ({
+      extinction: 2 + 0.013 * row,
       albedo: 1,
       asymmetry: 0.85,
     })),
@@ -503,113 +553,522 @@ function structuredTable(angles: number, radii: number): MieTable {
   }
 }
 
-describe('the droplet phase', () => {
-  /*
-   * 200 angles × 5 radii through `CloudPhase` against `samplePhase` on the
-   * same table. The lookup lands on texel centers; what is left is the
-   * sampler's own filtering, which interpolates in a fixed-point weight
-   * (Metal's is 8 bits) and filters a half-float texture in half floats: a
-   * bound of the neighbors' difference over 2⁸ and two half-float steps of
-   * the value.
+/** An ice table of `diameters` rows on the droplets' axis, every texel and every gain its own, or every texel `poison`. */
+function structuredIce(diameters: number, poison?: number): IceTable {
+  const angles = 1024
+  const phase = new Float32Array(diameters * angles * 3)
+  for (let row = 0; row < diameters; row += 1)
+    for (let i = 0; i < angles; i += 1)
+      for (let band = 0; band < 3; band += 1)
+        phase[(row * angles + i) * 3 + band] =
+          poison ??
+          DataUtils.fromHalfFloat(
+            DataUtils.toHalfFloat(
+              0.04 +
+                6 * Math.exp(-angleOf({ angles }, i) * (3 + row)) +
+                0.015 * (1 + Math.cos(0.7 * i + 2.3 * row + band)),
+            ),
+          )
+  return {
+    angles,
+    diameters,
+    diameterMin: 10,
+    diameterStep: 5,
+    bands: [680, 550, 440],
+    phase,
+    bulk: Array.from({ length: diameters }, (_, row) => ({
+      extinction: 2.1 + 0.02 * row,
+      albedo: 1,
+      asymmetry: 0.78,
+    })),
+  }
+}
+
+/** The sun's angular radius from Earth, radians (phase 1 design §5.4). */
+const EARTH_SUN = 0.265 * (Math.PI / 180)
+
+/** An atlas's texels as the GPU holds them: each a half float, as `CloudPhase` rounds it. */
+function asHalves(atlas: PhaseAtlas): PhaseAtlas {
+  return {
+    ...atlas,
+    texels: Float32Array.from(toHalves(atlas.texels), (h) =>
+      DataUtils.fromHalfFloat(h),
+    ),
+  }
+}
+
+/**
+ * The largest difference among the texels a read at (ν, row) blends, any
+ * channel: what a fixed-point filter weight's rounding can move it by.
+ */
+function neighborSpread(atlas: PhaseAtlas, nu: number, row: number): number {
+  const theta = Math.acos(Math.min(1, Math.max(-1, nu)))
+  const a = Math.min(
+    atlas.width - 1,
+    Math.max(0, angleIndex({ angles: atlas.width }, theta)),
+  )
+  let low = Infinity
+  let high = -Infinity
+  for (const j of [Math.floor(row), Math.min(Math.ceil(row), atlas.height - 1)])
+    for (const i of [
+      Math.floor(a),
+      Math.min(Math.floor(a) + 1, atlas.width - 1),
+    ])
+      for (let c = 0; c < 4; c += 1) {
+        const v = atlas.texels[(j * atlas.width + i) * 4 + c]!
+        low = Math.min(low, v)
+        high = Math.max(high, v)
+      }
+  return high - low
+}
+
+/**
+ * The worst error of `got` against the CPU's read of the atlas, as a share
+ * of its bound. The lookup lands on texel centers; what is left is the
+ * sampler's own filtering, which interpolates in a fixed-point weight
+ * (Metal's is 8 bits) and filters a half-float texture in half floats: a
+ * bound of the neighbors' difference over 2⁸ and two half-float steps of
+ * the value.
+ */
+function worstShare(
+  atlas: PhaseAtlas,
+  cases: readonly (readonly [nu: number, row: number])[],
+  got: Float32Array,
+  channels: number,
+): number {
+  let worst = 0
+  cases.forEach(([nu, row], k) => {
+    const expected = sampleAtlas(atlas, nu, row)
+    const spread = neighborSpread(atlas, nu, row)
+    for (let c = 0; c < channels; c += 1) {
+      const bound = spread / 256 + 2 * 2 ** -10 * Math.abs(expected[c]!)
+      const error = Math.abs(got[k * channels + c]! - expected[c]!)
+      worst = Math.max(worst, error / Math.max(bound, 1e-9))
+    }
+  })
+  return worst
+}
+
+/** Cosines at both ends of the axis, where its texels are densest, and between. */
+function cosines(next: () => number, count: number): number[] {
+  return Array.from({ length: count }, (_, a) => {
+    const u = a < 20 ? a / 2000 : a < 40 ? 1 - (a - 20) / 2000 : next()
+    return f32(Math.cos(Math.PI * u))
+  })
+}
+
+describe('the phase atlas', () => {
+  /** Level 0 the droplets, level 1 the ice, level 2 the droplets again with one row too many: the poison test's control. */
+  function levels(droplets: MieTable, ice: IceTable) {
+    const layers = createCloudUniforms().served.layers
+    layers.phaseRow.value.set(PHASE_ATLAS.dropletRow, PHASE_ATLAS.iceRow, 0)
+    layers.phaseRows.value.set(
+      droplets.radii,
+      ice.diameters,
+      droplets.radii + 1,
+    )
+    layers.phaseRadius.value.set(
+      droplets.radiusMin,
+      ice.diameterMin / 2,
+      droplets.radiusMin,
+    )
+    return layers
+  }
+
+  /**
+   * `phase` at 200 angles × 5 radii in each class, rgba, and `droplets`,
+   * rgb, through one atlas. The radii are below each class's first row, at
+   * it, two between and past its last.
    */
-  async function lookups(table: MieTable): Promise<number> {
-    const phase = new CloudPhase(table)
+  async function lookups(
+    phase: CloudPhase,
+    droplets: MieTable,
+    ice: IceTable,
+  ): Promise<{
+    rows: [number, number][]
+    level: number[]
+    phased: Float32Array
+    bridge: Float32Array
+  }> {
     await phase.warm(gpu.renderer)
     const next = draws(23)
-    const cases: [number, number][] = []
-    const radii = [
-      table.radiusMin * 0.8,
-      table.radiusMin,
-      radiusOf(table, 0.37 * (table.radii - 1)),
-      radiusOf(table, (table.radii - 1) * next()),
-      table.radiusMax * 1.3,
+    const nus = cosines(next, 200)
+    const dropletRadii = [
+      droplets.radiusMin * 0.8,
+      droplets.radiusMin,
+      radiusOf(droplets, 0.37 * (droplets.radii - 1)),
+      radiusOf(droplets, (droplets.radii - 1) * next()),
+      droplets.radiusMax * 1.3,
     ]
-    for (let a = 0; a < 200; a += 1) {
-      // Both ends of the axis, where its texels are densest, and in between.
-      const u = a < 20 ? a / 2000 : a < 40 ? 1 - (a - 20) / 2000 : next()
-      const nu = f32(Math.cos(Math.PI * u))
-      for (const radius of radii) cases.push([nu, f32(radius)])
+    const last = ice.diameterMin + (ice.diameters - 1) * ice.diameterStep
+    const iceRadii = [
+      ice.diameterMin * 0.3,
+      ice.diameterMin / 2,
+      (ice.diameterMin + 0.41 * (last - ice.diameterMin)) / 2,
+      (ice.diameterMin + next() * (last - ice.diameterMin)) / 2,
+      last * 0.8,
+    ]
+    const cases: [number, number, number][] = []
+    for (const nu of nus) {
+      for (const r of dropletRadii) cases.push([nu, f32(r), 0])
+      for (const r of iceRadii) cases.push([nu, f32(r), 1])
     }
+    const rows = cases.map(([nu, radius, level]): [number, number] => [
+      nu,
+      level === 0
+        ? PHASE_ATLAS.dropletRow +
+          Math.min(
+            droplets.radii - 1,
+            Math.max(0, radiusIndex(droplets, radius)),
+          )
+        : PHASE_ATLAS.iceRow +
+          Math.min(ice.diameters - 1, Math.max(0, iceRowIndex(ice, radius))),
+    ])
+    const layers = levels(droplets, ice)
     const inputs = new Float32Array(cases.flat())
-    const out = await run(cases.length, inputs, 2, 3, (read, write) => {
+    const phased = await run(cases.length, inputs, 3, 4, (read, write) => {
+      const nu = read(0)
+      const radius = read(1)
+      const atDroplets = phase.phase(nu, layers, 0, radius)
+      const atIce = phase.phase(nu, layers, 1, radius)
+      const value = read(2).greaterThan(0.5).select(atIce, atDroplets)
+      write(0, value.x)
+      write(1, value.y)
+      write(2, value.z)
+      write(3, value.w)
+    })
+    const bridge = await run(cases.length, inputs, 3, 3, (read, write) => {
       const value = phase.droplets(read(0), read(1))
       write(0, value.x)
       write(1, value.y)
       write(2, value.z)
     })
-    let worst = 0
-    cases.forEach(([nu, radius], k) => {
-      const expected = samplePhase(table, nu, radius)
-      // The spread of the four texels the read blends, which is what a
-      // weight's rounding can move it by.
-      const spread = neighborSpread(table, nu, radius)
-      for (let band = 0; band < 3; band += 1) {
-        const bound = spread / 256 + 2 * 2 ** -10 * Math.abs(expected[band]!)
-        const error = Math.abs(out[k * 3 + band]! - expected[band]!)
-        worst = Math.max(worst, error / Math.max(bound, 1e-9))
-      }
-    })
+    return { rows, level: cases.map((c) => c[2]), phased, bridge }
+  }
+
+  it('equals the CPU’s convolved atlas at 200 angles × 5 radii in both classes, the gain in the fourth channel', async () => {
+    const droplets = structuredTable(1024, 32)
+    const ice = structuredIce(PHASE_ATLAS.iceRows)
+    const phase = new CloudPhase(droplets, ice)
+    expect(phase.serve(EARTH_SUN, null)).toBe('convolved')
+    const atlas = asHalves(phaseAtlas(droplets, ice, EARTH_SUN))
+    const { rows, phased } = await lookups(phase, droplets, ice)
+    expect(worstShare(atlas, rows, phased, 4)).toBeLessThanOrEqual(1)
+    // The control: the same reads held to the unconvolved atlas miss it,
+    // so the bound sees the disk.
+    const unconvolved = asHalves(phaseAtlas(droplets, ice, 0))
+    expect(worstShare(unconvolved, rows, phased, 4)).toBeGreaterThan(1)
     phase.dispose()
-    return worst
-  }
+  })
 
-  /** The largest difference among the texels a lookup at (ν, r) blends. */
-  function neighborSpread(table: MieTable, nu: number, radius: number): number {
-    const theta = Math.acos(Math.min(1, Math.max(-1, nu)))
-    const c = Math.min(1, Math.max(-1, 1 - (2 * theta) / Math.PI))
-    const a = Math.min(
-      table.angles - 1,
-      Math.max(0, ((table.angles - 1) * Math.acos(c)) / Math.PI),
+  it('and on the committed tables, the droplets and the ice stand-in', async () => {
+    const droplets = mieDroplets()
+    const ice = iceAggregate()
+    const phase = new CloudPhase(droplets, ice)
+    phase.serve(EARTH_SUN, null)
+    const atlas = asHalves(phaseAtlas(droplets, ice, EARTH_SUN))
+    const { rows, phased } = await lookups(phase, droplets, ice)
+    expect(worstShare(atlas, rows, phased, 4)).toBeLessThanOrEqual(1)
+    phase.dispose()
+  })
+
+  it('reads `droplets` from the droplets’ rows at no gain, under a point sun as generated', async () => {
+    // The bridge the march reads until it reads `phase`: the table as
+    // generated, through the 64-row atlas, where it read a 32-row texture.
+    const droplets = structuredTable(1024, 32)
+    const ice = structuredIce(PHASE_ATLAS.iceRows)
+    const phase = new CloudPhase(droplets, ice)
+    expect(phase.angularRadius).toBe(0)
+    const { rows, level, bridge } = await lookups(phase, droplets, ice)
+    const atlas = asHalves(phaseAtlas(droplets, ice, 0))
+    const keep = level.flatMap((l, k) => (l === 0 ? [k] : []))
+    const got = new Float32Array(
+      keep.flatMap((k) => [...bridge.subarray(3 * k, 3 * k + 3)]),
     )
-    const r = Math.min(
-      table.radii - 1,
-      Math.max(
-        0,
-        ((table.radii - 1) * Math.log(radius / table.radiusMin)) /
-          Math.log(table.radiusMax / table.radiusMin),
+    expect(
+      worstShare(
+        atlas,
+        keep.map((k) => rows[k]!),
+        got,
+        3,
       ),
-    )
-    let low = Infinity
-    let high = -Infinity
-    for (const row of [
-      Math.floor(r),
-      Math.min(Math.floor(r) + 1, table.radii - 1),
-    ])
-      for (const i of [
-        Math.floor(a),
-        Math.min(Math.floor(a) + 1, table.angles - 1),
-      ])
-        for (let band = 0; band < 3; band += 1) {
-          const v = table.phase[(row * table.angles + i) * 3 + band]!
-          low = Math.min(low, v)
-          high = Math.max(high, v)
-        }
-    return high - low
-  }
-
-  it('equals samplePhase at 200 angles × 5 radii on a table with structure in every texel', async () => {
-    expect(await lookups(structuredTable(1024, 32))).toBeLessThanOrEqual(1)
+    ).toBeLessThanOrEqual(1)
+    phase.dispose()
   })
 
-  it('and on the committed table', async () => {
-    expect(await lookups(mieDroplets())).toBeLessThanOrEqual(1)
+  it('never blends a class with the next: the droplets’ last row reads no poison from the ice, nor the ice’s first from the droplets', async () => {
+    // A finite poison, 60,000 sr⁻¹ in every texel of the other class: a
+    // filter weight of one part in 2⁸ on it is 234 sr⁻¹, far past the
+    // bound a read is held to at its own class's edge row.
+    const POISON = 60_000
+    const droplets = mieDroplets()
+    const nus = cosines(draws(5), 60)
+    const read = async (
+      phase: CloudPhase,
+      ice: IceTable,
+      level: 0 | 1 | 2,
+      radius: number,
+    ): Promise<Float32Array> => {
+      await phase.warm(gpu.renderer)
+      const layers = levels(droplets, ice)
+      return run(nus.length, new Float32Array(nus), 1, 4, (at, write) => {
+        const value = phase.phase(at(0), layers, level, float(radius))
+        write(0, value.x)
+        write(1, value.y)
+        write(2, value.z)
+        write(3, value.w)
+      })
+    }
+    const share = (
+      tables: [MieTable, IceTable],
+      row: number,
+      got: Float32Array,
+    ): number =>
+      worstShare(
+        asHalves(phaseAtlas(...tables, EARTH_SUN)),
+        nus.map((nu) => [nu, row] as const),
+        got,
+        4,
+      )
+    const lastDroplet = PHASE_ATLAS.dropletRow + droplets.radii - 1
+    const poisonedIce = structuredIce(PHASE_ATLAS.iceRows, POISON)
+    const intoIce = new CloudPhase(droplets, poisonedIce)
+    intoIce.serve(EARTH_SUN, null)
+    for (const radius of [droplets.radiusMax, droplets.radiusMax * 2])
+      expect(
+        share(
+          [droplets, poisonedIce],
+          lastDroplet,
+          await read(intoIce, poisonedIce, 0, radius),
+        ),
+      ).toBeLessThanOrEqual(1)
+    // The control: a level that claims one droplet row too many reads into
+    // the ice at a radius past the droplets' last, and the poison shows.
+    expect(
+      share(
+        [droplets, poisonedIce],
+        lastDroplet,
+        await read(intoIce, poisonedIce, 2, droplets.radiusMax * 1.05),
+      ),
+    ).toBeGreaterThan(1)
+    intoIce.dispose()
+    const ice = structuredIce(PHASE_ATLAS.iceRows)
+    const poisonedDroplets: MieTable = {
+      ...droplets,
+      phase: new Float32Array(droplets.phase.length).fill(POISON),
+    }
+    const intoDroplets = new CloudPhase(poisonedDroplets, ice)
+    intoDroplets.serve(EARTH_SUN, null)
+    for (const radius of [ice.diameterMin / 2, 1])
+      expect(
+        share(
+          [poisonedDroplets, ice],
+          PHASE_ATLAS.iceRow,
+          await read(intoDroplets, ice, 1, radius),
+        ),
+      ).toBeLessThanOrEqual(1)
+    intoDroplets.dispose()
   })
 
-  it('holds the table at one level, 1024 × 32 RGBA16F of it, once warmed', async () => {
-    const phase = new CloudPhase(structuredTable(1024, 32))
+  it('convolves again when the served sun has moved 1%, and not before', () => {
+    const phase = new CloudPhase(mieDroplets(), iceAggregate())
+    expect(phase.serve(0, null)).toBe('held')
+    expect(phase.serve(EARTH_SUN, null)).toBe('convolved')
+    expect(phase.serve(EARTH_SUN * 1.009, null)).toBe('held')
+    expect(phase.angularRadius).toBe(EARTH_SUN)
+    expect(phase.serve(EARTH_SUN * 0.985, null)).toBe('convolved')
+    expect(phase.angularRadius).toBe(EARTH_SUN * 0.985)
+    expect(phase.serve(0, null)).toBe('convolved')
+    phase.dispose()
+    expect(phase.serve(EARTH_SUN, null)).toBe('held')
+  })
+
+  it('holds the atlas at one level, 1024 × 64 RGBA16F of it, once warmed', async () => {
+    const phase = new CloudPhase(structuredTable(1024, 32), iceAggregate())
     expect(phase.bytes).toBe(0)
     expect(phase.textures()).toEqual([])
     await phase.warm(gpu.renderer)
-    expect(phase.bytes).toBe(1024 * 32 * 8)
+    expect(phase.bytes).toBe(1024 * 64 * 8)
     const [map] = phase.textures()
-    const levels = (
+    const texture = (
       gpu.renderer.backend as unknown as {
         get(texture: object): { texture: GPUTexture }
       }
-    ).get(map!).texture.mipLevelCount
-    expect(levels).toBe(1)
+    ).get(map!).texture
+    expect(texture.mipLevelCount).toBe(1)
+    expect([texture.width, texture.height]).toEqual([1024, 64])
     phase.dispose()
     expect(phase.bytes).toBe(0)
+  })
+})
+
+describe('the atlas convolved on the pool', () => {
+  function inlinePool(): WorkerPool {
+    return new WorkerPool({
+      factory: () => createInlineWorker(createGameTaskRegistry()),
+      size: 1,
+    })
+  }
+
+  /** Every texel of a 1024 × 64 RGBA16F texture by `textureLoad`, as the device holds it. */
+  async function deviceTexels(map: Texture): Promise<Float32Array> {
+    const width = 1024
+    const count = width * PHASE_ATLAS.rows
+    const out = new StorageBufferAttribute(new Float32Array(count * 4), 1)
+    const into = storage(out, 'float', count * 4)
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(count)), () => {
+        const x = int(instanceIndex.mod(uint(width)))
+        const y = int(instanceIndex.div(uint(width)))
+        const texel = textureLoad(map, ivec2(x, y))
+        const to = instanceIndex.mul(4)
+        into.element(to).assign(texel.x)
+        into.element(to.add(1)).assign(texel.y)
+        into.element(to.add(2)).assign(texel.z)
+        into.element(to.add(3)).assign(texel.w)
+      })
+    })().compute(count)
+    await gpu.compute(kernel)
+    const values = new Float32Array(await gpu.readBuffer(out))
+    kernel.dispose()
+    return values
+  }
+
+  /** The main thread's convolution at a radius, half for half. */
+  const halves = (angularRadius: number): Float32Array =>
+    asHalves(phaseAtlas(mieDroplets(), iceAggregate(), angularRadius)).texels
+
+  /** A system's phase: the committed tables, which the pool's task convolves. */
+  const systemPhase = (): CloudPhase =>
+    createCloudPhase({ uniforms: createCloudUniforms() })
+
+  it('asks the pool and returns at once: nothing convolves on this thread inside the call', async () => {
+    const pool = inlinePool()
+    const phase = systemPhase()
+    try {
+      await phase.warm(gpu.renderer)
+      const before = convolutions.count
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(convolutions.count).toBe(before)
+      // The atlas keeps the point sun's table until the answer lands.
+      expect(phase.angularRadius).toBe(0)
+      await phase.served()
+      expect(convolutions.count).toBe(before + 1)
+      expect(phase.angularRadius).toBe(EARTH_SUN)
+    } finally {
+      phase.dispose()
+      pool.terminate()
+    }
+  })
+
+  it('holds the real ice inside half float’s range on the device from construction, before any sun is served', async () => {
+    // The point sun's atlas: the droplets as generated, the ice spread by
+    // `ICE_DISK_FLOOR`'s disk, so the 120 µm row's forward peak is 61,368
+    // sr⁻¹ where unspread it would be an infinity in RGBA16F.
+    // Nor does it warn: three's `toHalfFloat` warned once a texel it
+    // clamped, 171 of them a system on the real ice.
+    const warned = vi.spyOn(console, 'warn')
+    const phase = systemPhase()
+    try {
+      await phase.warm(gpu.renderer)
+      expect(warned).not.toHaveBeenCalled()
+      const held = await deviceTexels(phase.texture)
+      expect(held.every(Number.isFinite)).toBe(true)
+      expect(held.reduce((most, v) => Math.max(most, v), 0)).toBeLessThan(65504)
+      expect(held).toEqual(halves(0))
+    } finally {
+      warned.mockRestore()
+      phase.dispose()
+    }
+  })
+
+  it('lands on the device half for half what the main thread convolves', async () => {
+    const pool = inlinePool()
+    const phase = systemPhase()
+    try {
+      await phase.warm(gpu.renderer)
+      phase.serve(EARTH_SUN, pool)
+      await phase.served()
+      const expected = halves(EARTH_SUN)
+      const held = await deviceTexels(phase.texture)
+      expect(held).toEqual(expected)
+      // The control: the point sun's atlas is not it, so the read sees the
+      // upload rather than the table the atlas was built with.
+      expect(halves(0)).not.toEqual(expected)
+    } finally {
+      phase.dispose()
+      pool.terminate()
+    }
+  })
+
+  it('makes one job of two asks for one radius, and of an ask within 1% of the one in flight', async () => {
+    const pool = inlinePool()
+    const phase = systemPhase()
+    try {
+      const before = convolutions.count
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(phase.serve(EARTH_SUN * 1.005, pool)).toBe('asked')
+      await phase.served()
+      expect(convolutions.count).toBe(before + 1)
+      expect(phase.angularRadius).toBe(EARTH_SUN)
+      // Landed, a radius within 1% of it asks nothing at all.
+      expect(phase.serve(EARTH_SUN * 1.005, pool)).toBe('held')
+      await phase.served()
+      expect(convolutions.count).toBe(before + 1)
+    } finally {
+      phase.dispose()
+      pool.terminate()
+    }
+  })
+
+  it('drops an answer for a radius the served sun has left', async () => {
+    const pool = inlinePool()
+    const phase = systemPhase()
+    try {
+      await phase.warm(gpu.renderer)
+      // The sun goes back to the radius the atlas holds while the answer is
+      // in flight: the answer lands and is not bound.
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(phase.serve(0, pool)).toBe('held')
+      await phase.served()
+      expect(phase.angularRadius).toBe(0)
+      expect(await deviceTexels(phase.texture)).toEqual(halves(0))
+      // A second sun asked for while the first is in flight: the first's
+      // answer lands first and is dropped, the second's is bound.
+      const before = convolutions.count
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(phase.serve(2 * EARTH_SUN, pool)).toBe('asked')
+      await phase.served()
+      expect(convolutions.count).toBe(before + 2)
+      expect(phase.angularRadius).toBe(2 * EARTH_SUN)
+      expect(await deviceTexels(phase.texture)).toEqual(halves(2 * EARTH_SUN))
+    } finally {
+      phase.dispose()
+      pool.terminate()
+    }
+  })
+
+  it('convolves inside the call where there is no pool, and for tables the pool does not hold', () => {
+    // The point sun's atlas, its ice spread by the floor's disk, is
+    // convolved once a page and copied by every system after: a second
+    // system convolves nothing.
+    systemPhase().dispose()
+    const before = convolutions.count
+    const phase = systemPhase()
+    expect(convolutions.count).toBe(before)
+    expect(phase.serve(EARTH_SUN, null)).toBe('convolved')
+    expect(convolutions.count).toBe(before + 1)
+    expect(phase.angularRadius).toBe(EARTH_SUN)
+    phase.dispose()
+    const pool = inlinePool()
+    const own = new CloudPhase(structuredTable(1024, 32), iceAggregate())
+    try {
+      expect(own.serve(EARTH_SUN, pool)).toBe('convolved')
+    } finally {
+      own.dispose()
+      pool.terminate()
+    }
   })
 })
 
@@ -651,7 +1110,7 @@ describe('the sun a cloud sample sees', () => {
         const toSun = max(float(TOP).sub(altitudeAt(body, offset)), 0).mul(
           sigma,
         )
-        return { toSun, whole: toSun, weight: float(1) }
+        return { toSun, whole: toSun, weight: float(1), behind: float(1) }
       },
     }
     const sun = cloudSunFn({ uniforms, medium, depth })

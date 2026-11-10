@@ -1,5 +1,6 @@
 import {
   DataTexture,
+  DataUtils,
   HalfFloatType,
   LinearFilter,
   type Node,
@@ -34,11 +35,16 @@ import {
   AEROSOL_ASYMMETRY,
   AEROSOL_FORWARD_PEAK,
   type AtmosphereRecipe,
+  darkSkyTable,
   LIMB_BRIGHTNESS,
   LIMB_CEILING_FALLOFFS,
   LIMB_GAIN,
   MULTI_SCATTER_HEIGHT,
   MULTI_SCATTER_WIDTH,
+  SKY_BLOCK_COLUMNS,
+  SKY_BLOCK_GUARD,
+  SKY_TABLE_HEIGHT,
+  SKY_TABLE_WIDTH,
   TRANSMITTANCE_HEIGHT,
   TRANSMITTANCE_WIDTH,
 } from '@inertialref/rendering'
@@ -131,16 +137,23 @@ const LUT_WHITE = /*@__PURE__*/ lutPixel(255, 255, 255)
 const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
 
 /**
- * The sky table's stand-in: one RGBA16F texel of zeros, linear, as the table
- * is. An object of its own, never `LUT_BLACK`: the multiple-scattering
- * table's node already stands over that one, and a second node over it would
- * compile to its binding (rule 57).
+ * The sky table's stand-in: the table's own layout, one row high, holding no
+ * sky (`darkSkyTable`), RGBA16F and linear as the table is. Not a texel of
+ * zeros, because the reader draws the mean as e^(block 0) with no
+ * coefficient after it to keep a stand-in dark, as Ψ's has: zeros read as
+ * a sky of radiance one. An object of its own, never `LUT_BLACK`: the
+ * multiple-scattering table's node already stands over that one, and a
+ * second node over it would compile to its binding (rule 57).
  */
 function skyPixel(): DataTexture {
+  const dark = darkSkyTable(1)
+  const half = new Uint16Array(dark.data.length)
+  for (let i = 0; i < dark.data.length; i += 1)
+    half[i] = DataUtils.toHalfFloat(dark.data[i] as number)
   const map = new DataTexture(
-    new Uint16Array(4),
-    1,
-    1,
+    half,
+    dark.width,
+    dark.height,
     RGBAFormat,
     HalfFloatType,
   )
@@ -174,8 +187,8 @@ export interface AirTables {
  * rebuild, `lift` writes the limb beside it, and `clear` is a vacuum, which
  * draws nothing, extinguishes nothing and passes the beam white.
  *
- * `sky` is the sky's irradiance on a cloud, a table of its own that only the
- * cloud passes read. TSL binds a texture in a graph that reads it and in no
+ * `sky` is the sky's light on a cloud (`bakeSkyMoments`, read by
+ * `skyTableAt`), a table of its own that only the cloud passes read. TSL binds a texture in a graph that reads it and in no
  * other, so the member costs the shell, the sphere, the ground and the sea
  * no binding and moves none of their WGSL (`cloudPremises.gpu.test.ts`).
  * `bind` takes a body's tables as one object, so a table more is a member
@@ -547,6 +560,53 @@ export function psiTableAt(
   return exp(
     readTable(air.multiScatter, texelCentered(lutUv, MULTI_SCATTER), read).rgb,
   )
+}
+
+/** The sky's light at one point, per band, as the sky table holds it (§5.6). */
+export interface SkyAt {
+  /** L̄: the sky's mean radiance over the sphere, per unit of the sun's irradiance. */
+  readonly mean: Node<'vec3'>
+  /** Δ: the irradiance from above less that from below, over π·L̄. */
+  readonly up: Node<'vec3'>
+  /** Δ_s: the same across a vertical face turned to the sun's azimuth. */
+  readonly sunward: Node<'vec3'>
+}
+
+/**
+ * The sky table at one sample, in the coordinates `sunTableAt` takes: one
+ * read of each block, the mean through its logarithm as Ψ is read.
+ *
+ * A block's 32 columns sit inside a guard column each side, so the cosine
+ * is clamped to the block's first and last column centers and a bilinear
+ * read never reaches the next block; the guards repeat the edge columns,
+ * so a read that rounds onto one filters against itself. Read at level 0
+ * always, because the march reads it in a compute kernel, where a sampled
+ * read has no derivatives to choose a level from, and the table has none.
+ */
+export function skyTableAt(
+  air: AirUniforms,
+  muSun: Node<'float'>,
+  height01: Node<'float'>,
+): SkyAt {
+  const column = saturate(muSun.add(1).mul(0.5))
+    .mul(SKY_BLOCK_COLUMNS - 1)
+    .add(SKY_BLOCK_GUARD + 0.5)
+  const v = saturate(height01)
+    .mul(SKY_TABLE_HEIGHT - 1)
+    .add(0.5)
+    .div(SKY_TABLE_HEIGHT)
+  const block = (index: number): Node<'vec3'> =>
+    air.sky
+      .sample(
+        vec2(
+          column
+            .add(index * (SKY_BLOCK_COLUMNS + 2 * SKY_BLOCK_GUARD))
+            .div(SKY_TABLE_WIDTH),
+          v,
+        ),
+      )
+      .level(float(0)).rgb
+  return { mean: exp(block(0)), up: block(1), sunward: block(2) }
 }
 
 /**

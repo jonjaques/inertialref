@@ -5,7 +5,6 @@ import {
   openSession,
   clockStart,
   type Picture,
-  solveStationSun,
   stationSubPoint,
   sunAt,
   sunDirection,
@@ -46,6 +45,18 @@ import {
   seaDatumElevation,
 } from '@inertialref/universe'
 import { loadStarCatalog } from './catalog.ts'
+import {
+  C6,
+  c6Figures,
+  cloudyColumn,
+  GUARD,
+  GUARD_RING,
+  solveGuard,
+  FRAME_CLAUSES,
+  frameFigures,
+  g3Figures,
+  limbFigures,
+} from './cornerstoneSolve.ts'
 
 /*
  * The cornerstones' ledger: what each of the ten pictures the weather is
@@ -79,10 +90,14 @@ import { loadStarCatalog } from './catalog.ts'
  * And what the capture's checks need of the poses (phase 1 design §3.8):
  *
  * - the overlay guard stands at the station's own place, over E1's sun, with
- *   cloud behind the station and the station a quarter of the frame;
+ *   cloud behind the station's silhouette and the station a quarter of the
+ *   frame;
  * - the zoom from G6's start crosses the handover's band only at some
  *   footprints, and the snapshot says which;
- * - G5's path is recorded against C6 on the coverage the CPU holds.
+ * - G5's flight holds C6 on the CPU field;
+ * - and every picture's weather holds its clause on that field
+ *   (`cornerstoneSolve.ts`, which re-places the pictures that depend on
+ *   where a cloud stands).
  *
  * The snapshot is `cornerstoneLedger.json`; `pnpm cornerstones:ledger`
  * rewrites it, as `presets:ledger` rewrites the pictures'.
@@ -344,10 +359,14 @@ describe('the cornerstones', () => {
                 azimuth: degrees(guard.solved.azimuth),
               },
               crossings: guard.crossings,
-              behind: figure(guard.behind),
             },
             zoom: zoomFootprints(session),
-            g5: g5Path(session),
+            g5: {
+              frames: C6.frames,
+              metersAFrame: C6.metersAFrame,
+              c6: c6Figures(session).figures,
+            },
+            field: fieldFigures(session, guard),
           },
           null,
           2,
@@ -693,7 +712,7 @@ describe('the cornerstones', () => {
         guard.solved,
         (time) => sunOver(guard.sub.sun(time), guard.sub.place(time)),
       )
-      expect(guard.behind).toBeGreaterThanOrEqual(GUARD.cover)
+      expect(guard.ring).toBeGreaterThanOrEqual(GUARD_RING.share)
       // The committed guard is the solved one, to the bit: its instant and
       // its basis are the solver's, not a copy that can drift from it.
       expect(CORNERSTONES.find((one) => one.id === GUARD.id)).toEqual(
@@ -779,6 +798,31 @@ describe('the cornerstones', () => {
       expect(zoom.serves.from).toBeLessThanOrEqual(800)
       expect(zoom.serves.to).toBeGreaterThanOrEqual(800)
       expect(zoom.serves.from).toBeGreaterThan(200)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('show each picture’s weather on the CPU field, every clause as `cornerstoneSolve.ts` states it', () => {
+    const session = openSession({ catalog: loadStarCatalog(), workers: null })
+    try {
+      for (const id of Object.keys(FRAME_CLAUSES))
+        expect(frameFigures(session, id), id).toMatchObject({ holds: true })
+      expect(g3Figures(session), 'G3’s deck and its slot').toMatchObject({
+        holds: true,
+      })
+      expect(limbFigures(session), 'E2’s limb').toMatchObject({ holds: true })
+      expect(c6Figures(session), 'G5 and C6').toMatchObject({ holds: true })
+      // Cloud behind the guard's station, on the ring its silhouette's edge
+      // stands over, and the committed guard is the one that holds it.
+      const guard = solveGuard(session)
+      expect(
+        guard.ring,
+        'cloud behind the guard’s station',
+      ).toBeGreaterThanOrEqual(GUARD_RING.share)
+      expect(CORNERSTONES.find((one) => one.id === GUARD.id)).toEqual(
+        guard.picture,
+      )
     } finally {
       session.dispose()
     }
@@ -893,134 +937,6 @@ const G2_DEPTH = {
 } as const
 
 /*
- * The overlay guard (phase 1 design §3.8, rubric §2): E1's picture with the
- * station in it, from the station's own place.
- *
- * - **2.5 km off, not the design's 1 km.** The ledger holds the station's
- *   65.3 m sphere between a twentieth and a third of the frame, and through
- *   E1's 11.4° lens at 1 km it fills 0.65 of it; at 2.5 km it fills 0.26.
- * - **2° off the station's vertical, toward the south,** so the camera looks
- *   down and north at E1's pitch of −88°: the orbit camera's elevation is
- *   clamped off its pole, and a basis turns the pose onto the sub-point.
- * - **It is in `cornerstones.json` as the solver writes it,** and its test
- *   holds the committed picture equal to the solved one.
- * - **The instant is the first crossing of E1's sun whose ground behind the
- *   station holds cloud**, at a blob's half height or over: the ground the
- *   camera's line meets past the station, 14 km north of the sub-point. The
- *   first two crossings stand over a blob's rim (cover 0.07 and 0.24) and
- *   the third over a core; mvp.md §2 lets a guard's instant be chosen for
- *   its cloud as a cornerstone's place is.
- */
-const GUARD = {
-  id: 'weather-guard-station',
-  station: 's:SOL/b:2/a:0',
-  distance: 2_500,
-  tilt: 2,
-  cover: 0.5,
-  crossings: 12,
-} as const
-
-function solveGuard(session: ReturnType<typeof openSession>) {
-  const e1 = CORNERSTONES.find((one) => one.id === 'weather-e1-cumulus-orbit')!
-  const sub = stationSubPoint(session.world, GUARD.station)
-  const scenario = WEATHER_SCENARIOS[e1.weather!.regime as 'fair-cumulus']
-  const body = bodyOf(session, sub.body)
-  const crossings: { time: number; behind: number }[] = []
-  let after = 0
-  for (let n = 0; n < GUARD.crossings; n += 1) {
-    const solved = solveStationSun(session.world, GUARD.station, {
-      elevation: 50,
-      trend: 'falling',
-      after,
-    })
-    if (solved === null) break
-    // The station in the body's axes, and the compass at its sub-point.
-    const { up, north } = compassBasis(
-      solved.place.latitude,
-      solved.place.longitude,
-      0,
-    )
-    const tilt = GUARD.tilt * DEG
-    const toCamera = vec3(
-      up.x * Math.cos(tilt) - north.x * Math.sin(tilt),
-      up.y * Math.cos(tilt) - north.y * Math.sin(tilt),
-      up.z * Math.cos(tilt) - north.z * Math.sin(tilt),
-    )
-    const screenUp = vec3(
-      north.x * Math.cos(tilt) + up.x * Math.sin(tilt),
-      north.y * Math.cos(tilt) + up.y * Math.sin(tilt),
-      north.z * Math.cos(tilt) + up.z * Math.sin(tilt),
-    )
-    const bodyPose = session.world.frames.pose(sub.bodyFrame, solved.time)
-    const stationPose = session.world.frames.pose(sub.frame, solved.time)
-    const local = Q.rotateInverse(
-      bodyPose.orientation,
-      UV.difference(stationPose.position, bodyPose.position),
-    )
-    // The ground behind the station along the camera's line, on the sphere.
-    const look = vec3(-toCamera.x, -toCamera.y, -toCamera.z)
-    const b = local.x * look.x + local.y * look.y + local.z * look.z
-    const c =
-      local.x * local.x +
-      local.y * local.y +
-      local.z * local.z -
-      body.radius * body.radius
-    const t = -b - Math.sqrt(b * b - c)
-    const ground = vec3(
-      local.x + t * look.x,
-      local.y + t * look.y,
-      local.z + t * look.z,
-    )
-    const behind = scenarioCoverage(
-      scenario,
-      0,
-      ground,
-      solved.time,
-      sub.sun(solved.time),
-    )
-    crossings.push({ time: figure(solved.time), behind: figure(behind) })
-    if (behind >= GUARD.cover) {
-      const world = (v: Vec3): Vec3 => Q.rotate(bodyPose.orientation, v)
-      const x = world(toCamera)
-      const y = world(screenUp)
-      const z = vec3(
-        x.y * y.z - x.z * y.y,
-        x.z * y.x - x.x * y.z,
-        x.x * y.y - x.y * y.x,
-      )
-      const picture: Picture = {
-        ...e1,
-        id: GUARD.id,
-        label: 'The overlay guard',
-        why: 'E1’s picture with the station in it: the composite’s hardest frame, a hull’s silhouette over the cloud field.',
-        time: solved.time,
-        address: GUARD.station,
-        framing: {
-          kind: 'camera',
-          basis: Q.fromBasis(x, y, z),
-          state: { azimuth: 0, elevation: 0, distance: GUARD.distance },
-          look: { yaw: 0, pitch: 0 },
-          surface: null,
-        },
-      }
-      return {
-        picture,
-        solved,
-        sub,
-        behind,
-        crossings,
-        up,
-        bodyOrientation: bodyPose.orientation,
-      }
-    }
-    after = solved.time + 60
-  }
-  throw new Error(
-    `no crossing of E1's sun in ${GUARD.crossings} has cloud behind the station: ${JSON.stringify(crossings)}`,
-  )
-}
-
-/*
  * C1's zoom (rubric §4, its first amendment): from G6's start, 400 km up, at
  * pitch −45°, 60° to 11.4° in 300 frames. It counts only where frames of it
  * stand on both sides of the handover's band, and that depends on the
@@ -1118,62 +1034,47 @@ function zoomFootprints(session: ReturnType<typeof openSession>) {
   }
 }
 
-/*
- * G5's cast against C6 (rubric §4, phase 1 design §8.5): 1,600 frames at
- * 2.5 m a frame along G5's heading, the range ahead over 2 km at the first
- * frame and the last, and a cloud between. The CPU holds the coverage the
- * maps bake and no finer field: the fine medium's 1.2 km cells are the
- * GPU's alone. So this records what the coverage says along the path, the
- * cover at the eye and the clear distance ahead at each end, and asserts
- * nothing of C6: on the placeholder's 96 km blob cells G5's stance at L
- * stands in a blob's core, and no 4 km path from there runs clear, through a
- * cloud and clear again. The cast is defined in `scripts/weather/descent.mjs`.
- */
-const G5_PATH = {
-  frames: 1600,
-  metersAFrame: 2.5,
-  ahead: 3000,
-  step: 25,
-} as const
+const rounded = (value: number | null): number | null =>
+  value === null ? null : figure(value)
 
-function g5Path(session: ReturnType<typeof openSession>) {
-  const picture = CORNERSTONES.find((one) => one.id === 'weather-g5-inside')!
-  if (picture.framing.kind !== 'camera' || picture.framing.surface === null)
-    throw new Error('G5 is a stance')
-  const { latitude, longitude, heading } = picture.framing.surface
-  const body = bodyOf(session, picture.address)
-  const scenario = WEATHER_SCENARIOS[picture.weather!.regime as 'fair-cumulus']
-  const cover = (m: number): number => {
-    const at = along(latitude, longitude, heading, m, body.radius)
-    return scenarioCoverage(
-      scenario,
-      0,
-      geodeticDirection(at.latitude, at.longitude),
-      picture.time,
-    )
-  }
-  /** Meters from frame k's eye to the first point ahead with any cover. */
-  const clear = (k: number): number | null => {
-    const from = k * G5_PATH.metersAFrame
-    for (let m = 0; m <= G5_PATH.ahead; m += G5_PATH.step)
-      if (cover(from + m) > 0) return m
-    return null
-  }
-  let least = Infinity
-  let most = 0
-  for (let k = 0; k < G5_PATH.frames; k += 10) {
-    const c = cover(k * G5_PATH.metersAFrame)
-    least = Math.min(least, c)
-    most = Math.max(most, c)
-  }
-  const first = clear(0)
-  const last = clear(G5_PATH.frames - 1)
-  const holds = (m: number | null): boolean => m === null || m >= 2000
+/**
+ * Every picture's weather on the CPU field, against its clause
+ * (`cornerstoneSolve.ts`), as the snapshot records it. E3 has none: its
+ * weather becomes the world's own climate at integration.
+ */
+function fieldFigures(
+  session: ReturnType<typeof openSession>,
+  guard: ReturnType<typeof solveGuard>,
+) {
+  const frames = Object.fromEntries(
+    Object.keys(FRAME_CLAUSES).map((id) => {
+      const one = frameFigures(session, id)
+      return [
+        id,
+        {
+          columns: one.columns,
+          cover: figure(one.cover),
+          cloudy: figure(one.cloudy),
+          holds: one.holds,
+        },
+      ]
+    }),
+  )
+  const g3 = g3Figures(session)
+  const limb = limbFigures(session)
+  const behind = cloudyColumn(
+    session,
+    'weather-e1-cumulus-orbit',
+    guard.ground,
+    guard.picture.time,
+  )
   return {
-    frames: G5_PATH.frames,
-    metersAFrame: G5_PATH.metersAFrame,
-    coverAtEye: { least: figure(least), most: figure(most) },
-    clearAhead: { first, last, within: G5_PATH.ahead },
-    c6: holds(first) && holds(last) && most > 0,
+    frames,
+    g3: { ...g3, deck: figure(g3.deck), slot: rounded(g3.slot) },
+    e2: { ...limb, center: figure(limb.center), share: figure(limb.share) },
+    guard: {
+      ring: figure(guard.ring),
+      behind: { depth: figure(behind.depth), cloudy: behind.holds },
+    },
   }
 }
