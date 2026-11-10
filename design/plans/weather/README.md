@@ -30,7 +30,7 @@ ships.
 | #206         | `weather/phase-0`            | Phase 0: the passes, the measurement, the four records    | Merged into `the-weather`           |
 | #199–#204    | `weather/p0-1-…` to `p0-6-…` | The same work as six stacked pull requests against `main` | Superseded by #206; closed          |
 | #207         | `weather/p1-cornerstones`    | Phase 1's cornerstones, the velocity row, the baseline    | Open                                |
-| Draft        | `weather/phase-1`            | Phase 1 in waves; wave 1 is merged                        | Draft, on `weather/p1-cornerstones` |
+| #209         | `weather/phase-1`            | Phase 1 in waves; wave 1 is merged                        | Draft, on `weather/p1-cornerstones` |
 
 Wave 1 is package C, the contracts, at `78f6b3ee`, and three packages built
 beside it: I, the instruments; U, the capture's second pass; and J, the
