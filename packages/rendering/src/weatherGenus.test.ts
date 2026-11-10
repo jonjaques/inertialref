@@ -20,6 +20,24 @@ import {
 } from './weatherGenus.ts'
 import { CLOUD_GENERA, type CloudGenus } from './weatherScenario.ts'
 
+/**
+ * A number in [min, max]: three draws in four uniform in value, one from
+ * `fc.double`. A double alone is drawn over float64's bit patterns, so most
+ * of its draws are within a few powers of two of zero: an instant of
+ * 10⁻²⁰⁰ s, a longitude of 10⁻⁹⁰ rad, under which a drift or a turn cannot
+ * show a defect. The double's draws are kept for the edges it finds.
+ */
+const between = (min: number, max: number) =>
+  fc.oneof(
+    {
+      weight: 3,
+      arbitrary: fc
+        .noBias(fc.integer({ min: 0, max: 2 ** 30 }))
+        .map((i) => min + ((max - min) * i) / 2 ** 30),
+    },
+    { weight: 1, arbitrary: fc.double({ min, max, noNaN: true }) },
+  )
+
 /*
  * The genus table and the law it follows: water grows adiabatically over a
  * base, droplets grow with it, and the extinction is the water's. Phase 1
@@ -31,8 +49,8 @@ const ADIABATIC: readonly CloudGenus[] = CLOUD_GENERA.filter(
 )
 
 const genus = fc.constantFrom(...CLOUD_GENERA)
-const thickness = fc.double({ min: 100, max: 15_000, noNaN: true })
-const h01 = fc.double({ min: 0, max: 1, noNaN: true })
+const thickness = between(100, 15_000)
+const h01 = between(0, 1)
 
 /** The mean of f over [0, 1] by 4,096 midpoints: 10⁻⁷ of a smoothstep's integral. */
 const meanOf = (f: (h: number) => number): number => {
@@ -53,16 +71,11 @@ describe('the law’s size', () => {
 
   it('makes σ go as the water’s two-thirds power and the radius as its cube root', () => {
     fc.assert(
-      fc.property(
-        fc.double({ min: 1e-6, max: 5e-3, noNaN: true }),
-        fc.double({ min: 1.1, max: 8, noNaN: true }),
-        (water, factor) => {
-          const ratio = (f: (w: number) => number) =>
-            f(water * factor) / f(water)
-          expect(ratio(waterExtinction)).toBeCloseTo(factor ** (2 / 3), 10)
-          expect(ratio(effectiveRadius)).toBeCloseTo(factor ** (1 / 3), 10)
-        },
-      ),
+      fc.property(between(1e-6, 5e-3), between(1.1, 8), (water, factor) => {
+        const ratio = (f: (w: number) => number) => f(water * factor) / f(water)
+        expect(ratio(waterExtinction)).toBeCloseTo(factor ** (2 / 3), 10)
+        expect(ratio(effectiveRadius)).toBeCloseTo(factor ** (1 / 3), 10)
+      }),
     )
   })
 })

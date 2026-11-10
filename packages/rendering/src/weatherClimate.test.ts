@@ -39,6 +39,24 @@ import {
   wetWorld,
 } from './weatherScenario.ts'
 
+/**
+ * A number in [min, max]: three draws in four uniform in value, one from
+ * `fc.double`. A double alone is drawn over float64's bit patterns, so most
+ * of its draws are within a few powers of two of zero: an instant of
+ * 10⁻²⁰⁰ s, a longitude of 10⁻⁹⁰ rad, under which a drift or a turn cannot
+ * show a defect. The double's draws are kept for the edges it finds.
+ */
+const between = (min: number, max: number) =>
+  fc.oneof(
+    {
+      weight: 3,
+      arbitrary: fc
+        .noBias(fc.integer({ min: 0, max: 2 ** 30 }))
+        .map((i) => min + ((max - min) * i) / 2 ** 30),
+    },
+    { weight: 1, arbitrary: fc.double({ min, max, noNaN: true }) },
+  )
+
 /*
  * The weather per body, as far as a regime carries it: a scenario's layers
  * are the three levels and its pattern is the climate's sample, on real
@@ -69,10 +87,7 @@ const cornerstones = body(system('P222_3_2_k'), 'g:milky-way/s:P222_3_2_k/b:3')
 const DEG = Math.PI / 180
 
 const unit = fc
-  .tuple(
-    fc.double({ min: -1, max: 1, noNaN: true }),
-    fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }),
-  )
+  .tuple(between(-1, 1), between(0, 2 * Math.PI))
   .map(([y, longitude]): Vec3 => {
     const ring = Math.sqrt(1 - y * y)
     return { x: ring * Math.cos(longitude), y, z: ring * Math.sin(longitude) }
@@ -115,7 +130,7 @@ describe('a regime as a weather', () => {
         fc.property(
           unit,
           unit,
-          fc.double({ min: -3.2e8, max: 3.2e8, noNaN: true }),
+          between(-3.2e8, 3.2e8),
           (direction, sun, time) => {
             const sample = climate.sample(direction, sun, time)
             for (let k = 0; k < MAX_CLOUD_LAYERS; k += 1)
@@ -226,7 +241,7 @@ describe('a body’s own weather', () => {
       fc.property(
         unit,
         unit,
-        fc.double({ min: -3.2e8, max: 3.2e8, noNaN: true }),
+        between(-3.2e8, 3.2e8),
         (direction, sun, time) => {
           for (let b = 0; b < 2; b += 1) {
             const a = first[b]!.climate.sample(direction, sun, time)
@@ -289,7 +304,7 @@ describe('the zonal law', () => {
 
   it('moves the convergence zone with the sun, by ι of the sub-solar latitude', () => {
     fc.assert(
-      fc.property(fc.double({ min: -30, max: 30, noNaN: true }), (degrees) => {
+      fc.property(between(-30, 30), (degrees) => {
         const subsolar = degrees * DEG
         const zone = EARTH_ZONAL_LAW.follow * subsolar
         const at = (latitude: number) =>
@@ -321,17 +336,13 @@ describe('the zonal law', () => {
       zonalLaw(cornerstones).storms - zonalLaw(cornerstones).hadley,
     ).toBeCloseTo(20 * DEG, 15)
     fc.assert(
-      fc.property(
-        fc.double({ min: 1e3, max: 1e8, noNaN: true }),
-        fc.double({ min: 1e3, max: 1e8, noNaN: true }),
-        (a, b) => {
-          const [fast, slow] = a < b ? [a, b] : [b, a]
-          expect(hadleyEdge(slow)).toBeGreaterThanOrEqual(hadleyEdge(fast))
-          expect(hadleyEdge(-slow)).toBe(hadleyEdge(slow))
-          expect(hadleyEdge(fast)).toBeGreaterThanOrEqual(HADLEY_EDGE_RANGE[0])
-          expect(hadleyEdge(slow)).toBeLessThanOrEqual(HADLEY_EDGE_RANGE[1])
-        },
-      ),
+      fc.property(between(1e3, 1e8), between(1e3, 1e8), (a, b) => {
+        const [fast, slow] = a < b ? [a, b] : [b, a]
+        expect(hadleyEdge(slow)).toBeGreaterThanOrEqual(hadleyEdge(fast))
+        expect(hadleyEdge(-slow)).toBe(hadleyEdge(slow))
+        expect(hadleyEdge(fast)).toBeGreaterThanOrEqual(HADLEY_EDGE_RANGE[0])
+        expect(hadleyEdge(slow)).toBeLessThanOrEqual(HADLEY_EDGE_RANGE[1])
+      }),
     )
   })
 

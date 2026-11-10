@@ -34,6 +34,24 @@ import {
 } from './weatherNoise.ts'
 import { SCENARIO_IDS, type ScenarioId } from './weatherScenario.ts'
 
+/**
+ * A number in [min, max]: three draws in four uniform in value, one from
+ * `fc.double`. A double alone is drawn over float64's bit patterns, so most
+ * of its draws are within a few powers of two of zero: an instant of
+ * 10⁻²⁰⁰ s, a longitude of 10⁻⁹⁰ rad, under which a drift or a turn cannot
+ * show a defect. The double's draws are kept for the edges it finds.
+ */
+const between = (min: number, max: number) =>
+  fc.oneof(
+    {
+      weight: 3,
+      arbitrary: fc
+        .noBias(fc.integer({ min: 0, max: 2 ** 30 }))
+        .map((i) => min + ((max - min) * i) / 2 ** 30),
+    },
+    { weight: 1, arbitrary: fc.double({ min, max, noNaN: true }) },
+  )
+
 /*
  * The field's clock, which is whole, and the field's shape. The clock is
  * held without a body: a weather is its rates, and the clock reads nothing
@@ -68,67 +86,49 @@ const weatherAt = (
 
 /** A wind of up to 100 m/s on a body from 500 km to Jupiter's radius, either way. */
 const rate = fc
-  .tuple(
-    fc.double({ min: -100, max: 100, noNaN: true }),
-    fc.double({ min: 5e5, max: 7e7, noNaN: true }),
-  )
+  .tuple(between(-100, 100), between(5e5, 7e7))
   .map(([wind, radius]) => wind / radius)
 
 describe('the field’s clock', () => {
   it('reduces each level’s turn into [0, 2π), ten years either side of the epoch', () => {
     fc.assert(
-      fc.property(
-        rate,
-        rate,
-        rate,
-        fc.double({ min: -3.2e8, max: 3.2e8, noNaN: true }),
-        (a, b, c, time) => {
-          const { turn } = fieldClock(weatherAt([a, b, c]), time)
-          for (const angle of turn) {
-            expect(angle).toBeGreaterThanOrEqual(0)
-            expect(angle).toBeLessThan(TURN)
-          }
-        },
-      ),
+      fc.property(rate, rate, rate, between(-3.2e8, 3.2e8), (a, b, c, time) => {
+        const { turn } = fieldClock(weatherAt([a, b, c]), time)
+        for (const angle of turn) {
+          expect(angle).toBeGreaterThanOrEqual(0)
+          expect(angle).toBeLessThan(TURN)
+        }
+      }),
     )
   })
 
   it('is the rate times the time, on the circle', () => {
     fc.assert(
-      fc.property(
-        rate,
-        fc.double({ min: -3.2e8, max: 3.2e8, noNaN: true }),
-        (omega, time) => {
-          const [angle] = fieldClock(weatherAt([omega, 0, 0]), time).turn
-          // The two agree as points of the circle: a turn reduced first is
-          // the more exact, so the bound is the unreduced product's own
-          // rounding, a few float64 steps of its size.
-          const product = omega * time
-          const apart = Math.abs(Math.sin((angle - product) / 2) * 2)
-          expect(apart).toBeLessThanOrEqual(
-            8 * Number.EPSILON * Math.max(1, Math.abs(product)),
-          )
-        },
-      ),
+      fc.property(rate, between(-3.2e8, 3.2e8), (omega, time) => {
+        const [angle] = fieldClock(weatherAt([omega, 0, 0]), time).turn
+        // The two agree as points of the circle: a turn reduced first is
+        // the more exact, so the bound is the unreduced product's own
+        // rounding, a few float64 steps of its size.
+        const product = omega * time
+        const apart = Math.abs(Math.sin((angle - product) / 2) * 2)
+        expect(apart).toBeLessThanOrEqual(
+          8 * Number.EPSILON * Math.max(1, Math.abs(product)),
+        )
+      }),
     )
   })
 
   it('moves by the turn’s own step from one frame to the next, with no restart at any instant', () => {
     fc.assert(
-      fc.property(
-        rate,
-        fc.double({ min: 0, max: 3.2e8, noNaN: true }),
-        (omega, time) => {
-          const step = 1 / 60
-          const before = fieldClock(weatherAt([omega, 0, 0]), time).turn[0]
-          const after = fieldClock(weatherAt([omega, 0, 0]), time + step)
-            .turn[0]
-          const moved = Math.abs(Math.sin((after - before - omega * step) / 2))
-          // Each reduction rounds once at the size of a turn's period over
-          // the instant; an hourly restart would be a step of radians.
-          expect(moved).toBeLessThanOrEqual(1e-9)
-        },
-      ),
+      fc.property(rate, between(0, 3.2e8), (omega, time) => {
+        const step = 1 / 60
+        const before = fieldClock(weatherAt([omega, 0, 0]), time).turn[0]
+        const after = fieldClock(weatherAt([omega, 0, 0]), time + step).turn[0]
+        const moved = Math.abs(Math.sin((after - before - omega * step) / 2))
+        // Each reduction rounds once at the size of a turn's period over
+        // the instant; an hourly restart would be a step of radians.
+        expect(moved).toBeLessThanOrEqual(1e-9)
+      }),
     )
   })
 
@@ -224,10 +224,7 @@ const minus = (a: Vec3, b: Vec3): Vec3 => ({
 const length = (v: Vec3): number => Math.hypot(v.x, v.y, v.z)
 
 const unit = fc
-  .tuple(
-    fc.double({ min: -1, max: 1, noNaN: true }),
-    fc.double({ min: 0, max: 2 * Math.PI, noNaN: true }),
-  )
+  .tuple(between(-1, 1), between(0, 2 * Math.PI))
   .map(([y, longitude]): Vec3 => {
     const ring = Math.sqrt(1 - y * y)
     return { x: ring * Math.cos(longitude), y, z: ring * Math.sin(longitude) }
@@ -251,7 +248,15 @@ function asBuilt(weather: BodyWeather, sun: Vec3, p: Vec3, footprint: number) {
   if (k < 0) return { fraction: 0, sigma: 0, level: k }
   const spec = weather.levels[k]!
   const profile = levelProfile(spec)
-  const climate = weather.climate.sample(scale(p, 1 / length(p)), sun, 0)
+  // Normalized as the field normalizes, p/|p|: near a pole the latitude's
+  // arcsine turns a last-bit difference in y into 10⁻⁸ rad, which a band
+  // pattern's slope makes a difference in the cover.
+  const r = length(p)
+  const climate = weather.climate.sample(
+    { x: p.x / r, y: p.y / r, z: p.z / r },
+    sun,
+    0,
+  )
   const c = clamp01(climate.cover[k]!)
   const h01 = (height - spec.base) / Math.max(spec.top - spec.base, 1)
   const [shape, mean, , radius] = readLevelProfile(
@@ -290,8 +295,8 @@ describe('the field', () => {
       fc.property(
         unit,
         fc.integer({ min: 0, max: 2 }),
-        fc.double({ min: 0, max: 1, noNaN: true }),
-        fc.double({ min: 0, max: 5, noNaN: true }),
+        between(0, 1),
+        between(0, 5),
         (direction, k, h, cells) => {
           const level = weather.levels[k]!
           const r =
@@ -301,9 +306,17 @@ describe('the field', () => {
           const got = cloudFieldAt(weather, clock, sun, p, footprint)
           const want = asBuilt(weather, sun, p, footprint)
           expect(got.level).toBe(want.level)
-          expect(got.fraction).toBeCloseTo(want.fraction, 9)
-          expect(got.sigma).toBeCloseTo(want.sigma, 9)
-          if (want.level >= 0) expect(got.radius).toBeCloseTo(want.radius!, 9)
+          // The field reduces the lattice by its period before it divides
+          // by the cell, and phase 0's read does not: two float64 roundings
+          // of a coordinate 5 × 10⁴ texels out, through a remap that
+          // divides by the cover, measured at 5 × 10⁻¹⁰.
+          const ROUNDING = 1e-8
+          expect(Math.abs(got.fraction - want.fraction)).toBeLessThan(ROUNDING)
+          expect(Math.abs(got.sigma - want.sigma)).toBeLessThan(
+            ROUNDING * Math.max(1, want.sigma),
+          )
+          if (want.level >= 0)
+            expect(Math.abs(got.radius - want.radius!)).toBeLessThan(ROUNDING)
         },
       ),
       { numRuns: 150 },
@@ -316,7 +329,7 @@ describe('the field', () => {
     const level = weather.levels[0]!
     const profile = levelProfile(level)
     fc.assert(
-      fc.property(unit, fc.double({ min: 0.001, max: 0.999, noNaN: true }), (d, h) => {
+      fc.property(unit, between(0.001, 0.999), (d, h) => {
         const p = scale(
           d,
           world.radius + level.base + h * (level.top - level.base),
@@ -391,9 +404,12 @@ describe('a column', () => {
             ((sum * profile.sigma) / profile.scaled) * (thickness / 512)
           const got = columnDepth(weather, clock, sun, direction, k)
           // 256 midpoints against 512: the profile and the noise are
-          // piecewise linear between texels, so the two differ by the
-          // quadratures' error at the kinks, measured under 0.4%.
-          expect(Math.abs(got - want)).toBeLessThanOrEqual(5e-3 * want + 1e-9)
+          // piecewise linear between texels, so the two differ at the
+          // kinks by a share of one step's full depth, σ·T/256. Measured
+          // over 400 columns of each of these regimes: 0.021 of a step at
+          // worst, the anvil's; 0.1% of any column deeper than ten steps.
+          const step = (profile.sigma * thickness) / 256
+          expect(Math.abs(got - want)).toBeLessThanOrEqual(0.05 * step)
         }
       }),
       { numRuns: 25 },
@@ -407,63 +423,85 @@ describe('the field’s motion', () => {
     turn: [omega, omega, omega],
   })
   const point = fc
-    .tuple(unit, fc.double({ min: 0, max: 15_000, noNaN: true }))
+    .tuple(unit, between(0, 15_000))
     .map(([d, h]) => scale(d, world.radius + h))
+  const instant = between(0, 3.2e8)
 
   it('carries a cloud ten years past the epoch by the turn’s own step a frame, with no restart at any instant', () => {
     fc.assert(
-      fc.property(
-        rate,
-        fc.double({ min: 0, max: 3.2e8, noNaN: true }),
-        point,
-        (omega, time, p) => {
-          const weather = weatherOf(omega)
-          // The frame as float64 holds it at this instant: 1/60 s within
-          // one step of the instant's own grid.
-          const step = time + 1 / 60 - time
-          const before = fieldClock(weather, time)
-          const after = fieldClock(weather, time + 1 / 60)
-          // Where the lattice point under p has gone a frame later: turned
-          // east by ω·Δt and carried down the axis by w·Δt.
-          const moved = (() => {
-            const q = { x: p.x, y: p.y - weather.drift * step, z: p.z }
-            const a = omega * step
-            return {
-              x: Math.cos(a) * q.x + Math.sin(a) * q.z,
-              y: q.y,
-              z: -Math.sin(a) * q.x + Math.cos(a) * q.z,
-            }
-          })()
-          const there = levelLattice(after, 0, moved)
-          const here = levelLattice(before, 0, p)
-          // Rounding: a turn is reduced through the instant's remainder in
-          // its period, which is exact to the instant's own float64 step,
-          // so its angle is good to that step times ω, at the point's
-          // radius; the drift, 8 × 10⁷ m at ten years, to 1.5 × 10⁻⁸ m.
-          const grid = 2 ** (Math.floor(Math.log2(Math.max(time, 1))) - 52)
-          const bound = 4 * grid * Math.abs(omega) * length(p) + 1e-7
-          expect(length(minus(there, here))).toBeLessThan(bound)
-          // And no frame moves a point further than the turn and the drift
-          // can: an hourly restart is a jump of a kilometer.
-          const speed = Math.abs(omega) * length(p) + weather.drift
-          expect(length(minus(levelLattice(after, 0, p), here))).toBeLessThan(
-            speed * step * (1 + 1e-6) + bound,
-          )
-        },
-      ),
+      fc.property(rate, instant, point, (omega, time, p) => {
+        const weather = weatherOf(omega)
+        // The frame as float64 holds it at this instant: 1/60 s within
+        // one step of the instant's own grid.
+        const step = time + 1 / 60 - time
+        const before = fieldClock(weather, time)
+        const after = fieldClock(weather, time + 1 / 60)
+        // Where the lattice point under p has gone a frame later: turned
+        // east by ω·Δt and carried down the axis by w·Δt.
+        const moved = (() => {
+          const q = { x: p.x, y: p.y - weather.drift * step, z: p.z }
+          const a = omega * step
+          return {
+            x: Math.cos(a) * q.x + Math.sin(a) * q.z,
+            y: q.y,
+            z: -Math.sin(a) * q.x + Math.cos(a) * q.z,
+          }
+        })()
+        const there = levelLattice(after, 0, moved)
+        const here = levelLattice(before, 0, p)
+        // Rounding: a turn is reduced through the instant's remainder in
+        // its period, which is exact to the instant's own float64 step,
+        // so its angle is good to that step times ω, at the point's
+        // radius; the drift, 8 × 10⁷ m at ten years, to 1.5 × 10⁻⁸ m.
+        const grid = 2 ** (Math.floor(Math.log2(Math.max(time, 1))) - 52)
+        const bound = 4 * grid * Math.abs(omega) * length(p) + 1e-7
+        expect(length(minus(there, here))).toBeLessThan(bound)
+        // And no frame moves a point further than the turn and the drift
+        // can: an hourly restart is a jump of a kilometer.
+        const speed = Math.abs(omega) * length(p) + weather.drift
+        expect(length(minus(levelLattice(after, 0, p), here))).toBeLessThan(
+          speed * step * (1 + 1e-6) + bound,
+        )
+      }),
+      { numRuns: 500 },
+    )
+  })
+
+  it('turns and drifts by exactly the span between any two instants: no instant is a restart', () => {
+    // A frame's step can straddle a restart only once an hour, which a
+    // property drawing instants would not find; a span of up to twelve days
+    // straddles every one under it.
+    fc.assert(
+      fc.property(rate, instant, between(0, 1e6), (omega, time, span) => {
+        const weather = weatherOf(omega)
+        const later = time + span
+        const before = fieldClock(weather, time)
+        const after = fieldClock(weather, later)
+        const grid = 2 ** (Math.floor(Math.log2(Math.max(later, 1))) - 52)
+        // A point on the axis is carried by the drift alone.
+        const axis = { x: 0, y: world.radius, z: 0 }
+        const drifted =
+          levelLattice(after, 0, axis).y - levelLattice(before, 0, axis).y
+        expect(drifted).toBeCloseTo(weather.drift * (later - time), 4)
+        // A point on the equator is turned by the span's angle alone.
+        const equator = { x: world.radius, y: 0, z: 0 }
+        const a = levelLattice(before, 0, equator)
+        const b = levelLattice(after, 0, equator)
+        const turned = Math.atan2(b.z, b.x) - Math.atan2(a.z, a.x)
+        const apart = Math.sin((turned - omega * (later - time)) / 2)
+        expect(Math.abs(apart)).toBeLessThan(4 * grid * Math.abs(omega) + 1e-12)
+      }),
       { numRuns: 500 },
     )
   })
 
   it('maps a body point to one lattice point from any two eyes, modulo the noise’s period', () => {
     const period = BASE_NOISE_PERIOD * 1200
-    const offset = fc
-      .tuple(unit, fc.double({ min: 0, max: 2e6, noNaN: true }))
-      .map(([d, r]) => scale(d, r))
+    const offset = fc.tuple(unit, between(0, 2e6)).map(([d, r]) => scale(d, r))
     fc.assert(
       fc.property(
         rate,
-        fc.double({ min: 0, max: 3.2e8, noNaN: true }),
+        instant,
         point,
         offset,
         offset,
@@ -499,13 +537,14 @@ describe('the field’s motion', () => {
 describe('the sight count', () => {
   /*
    * §5.9's form, P(θ) = P₀^√(1 + (ℓ/c)²), against lines of sight counted
-   * through the field. Measured at G1 at t = 0, 2,304 lines a zenith angle
-   * 1.37 cells apart: fair-cumulus fits at c = 3.0 km, broken-horizon 2.7,
-   * near-gap-far 2.8, the cumulus under cirrus 2.7 and the anvil 24 km, each
-   * within 5% of its count at every angle; c is two to three of the noise's
-   * cells, not one. Lines closer than a cell share their cells, and 576 of
-   * them 410 m apart cover eight cells: the share is then that patch's, and
-   * a patch a kilometer over moves c by a quarter.
+   * through the field. Measured at G1 at t = 0 on 2,304 lines a zenith
+   * angle, 1.37 cells apart: fair-cumulus fits at c = 3.0 km, broken-horizon
+   * 2.7, near-gap-far 2.8, the cumulus under cirrus 2.7 and the anvil 24 km,
+   * each within 5% of its count at every angle; c is two to three of the
+   * noise's cells, not one. The test counts 1,024, within 5% likewise. Lines
+   * closer than a cell share their cells: 576 of them 410 m apart cover
+   * eight, the share is then that patch's, and a patch a kilometer over
+   * moves c by a quarter.
    */
   const ZENITHS = [0, 30, 45, 60, 70, 75, 80]
   const CUMULIFORM: readonly ScenarioId[] = [

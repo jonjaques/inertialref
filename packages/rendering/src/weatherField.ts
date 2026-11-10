@@ -241,7 +241,11 @@ export function cloudFieldAt(
   )
 }
 
-/** Midpoint steps a column is integrated with: under a hundredth of a percent from 512 on every regime. */
+/**
+ * Midpoint steps a column is integrated with. Against 512 it is within a
+ * twentieth of one step's full depth on every regime (measured worst 0.021,
+ * the anvil's), and within 0.1% of any column deeper than ten steps.
+ */
 export const COLUMN_STEPS = 256
 
 /**
