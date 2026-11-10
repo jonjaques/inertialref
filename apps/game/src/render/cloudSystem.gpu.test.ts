@@ -560,12 +560,12 @@ describe('what the device is asked for', () => {
     }
     const [width, height] = clouded.extent
     /*
-     * The history's frame counter, the trace's four step counters, the
+     * The history's frame counter, the trace's seven counters, the
      * residual meter's histograms, and the radiance meter's two floats a
      * trace texel, which is 1.04 MB at 1080p's 480 × 270. No buffer is in
      * `bytes`: the report declares textures.
      */
-    expect(kept).toEqual([4, 16, 1036, width * height * 8])
+    expect(kept).toEqual([4, 28, 1036, width * height * 8])
     expect(width * height * 8).toBe(1536)
     // Every key of the declaration is a resource's or the profile's.
     expect(Object.keys(clouded.report!.bytes).sort()).toEqual(

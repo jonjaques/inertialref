@@ -48,7 +48,7 @@ import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
  * textures of the real format and kind beside that analytic medium, so a
  * kernel compiled in a test binds what the real one binds: WebGPU's default
  * device allows 16 sampled and 4 storage textures a stage, the system's
- * trace binds 10 of the 16 and writes 4 of 4
+ * trace binds 11 of the 16 and writes 4 of 4
  * (`cloudTrace.gpu.test.ts` counts it), and a count that only integration
  * could see would be a format change after every package had built on the
  * old one.
@@ -221,6 +221,13 @@ export interface CloudJitterNodes {
    * a pixel.
    */
   at(pixel: Node<'uvec2'>, frame: Node<'uint'>): Node<'vec2'>
+  /**
+   * The four numbers in [0, 1) a ray is placed by, for its trace texel on a
+   * frame: `.x` the first step's share, `.yz` the point inside the texel's
+   * history pixel (less ½, the offset `traceScreen` takes), `.w` the
+   * handover's ξ.
+   */
+  draw(texel: Node<'uvec2'>, frame: Node<'uint'>): Node<'vec4'>
 }
 
 export interface CloudFarResult {
@@ -703,7 +710,7 @@ export const CLOUD_STAND_INS = {
   },
 
   /**
-   * One draw for every pixel and frame: `value` in both numbers, ½ by
+   * One draw for every pixel and frame: `value` in every number, ½ by
    * default. The mask is read as the real one is, by `textureLoad` from a
    * nearest texture, which binds no sampler.
    */
@@ -714,8 +721,8 @@ export const CLOUD_STAND_INS = {
     map.generateMipmaps = false
     map.needsUpdate = true
     const mask = texture3D(map)
-    return {
-      at: () => vec2(scalar(value).add(mask.load(ivec3(0, 0, 0)).x.mul(0))),
-    }
+    const drawn = (): Node<'float'> =>
+      scalar(value).add(mask.load(ivec3(0, 0, 0)).x.mul(0))
+    return { at: () => vec2(drawn()), draw: () => vec4(drawn()) }
   },
 }

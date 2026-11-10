@@ -12,7 +12,7 @@ import {
   UnsignedByteType,
   type WebGPURenderer,
 } from 'three/webgpu'
-import { Fn, If, instanceIndex, storage, uint, uvec2 } from 'three/tsl'
+import { Fn, If, instanceIndex, storage, uint, uvec2, vec4 } from 'three/tsl'
 import { BLUE_NOISE } from '@inertialref/rendering'
 import { createCloudField } from './cloudField.ts'
 import {
@@ -352,7 +352,7 @@ describe('the trace with the mask bound', () => {
     return map
   }
 
-  it('binds one more 3D texture over the system’s field, 11 sampled of the stage’s 16, and builds', async () => {
+  it('binds one 3D texture more than a trace placed by the gradient alone, 11 sampled of the stage’s 16, and builds', async () => {
     const field = createCloudField()
     const copy = depth()
     const deps = {
@@ -365,15 +365,27 @@ describe('the trace with the mask bound', () => {
       sky: field.sky,
       source: field.source,
     }
-    const asBuilt = new CloudTrace({ ...deps, jitter: field.jitter })
-    // The trace reads two numbers through `at`; reading them out of `draw`
-    // binds the mask as a trace that reads `draw` will.
-    const bound = new CloudTrace({
+    // A draw written out of the gradient alone reads no mask: what the
+    // lever's branch adds to the trace is the difference of the two.
+    const unbound = new CloudTrace({
       ...deps,
-      jitter: { at: (pixel, frame) => field.jitter.draw(pixel, frame).xy },
+      jitter: {
+        at: traceJitter,
+        draw: (texel, frame) =>
+          vec4(
+            traceJitter(texel, frame).x,
+            traceJitter(
+              texel.mul(uint(2)).add(uvec2(field.uniforms.trace.phase)),
+              frame,
+            ),
+            0,
+          ),
+      },
     })
+    const bound = new CloudTrace({ ...deps, jitter: field.jitter })
     try {
-      const before = census(asBuilt.kernels()[0]!)
+      const before = census(unbound.kernels()[0]!)
+      expect(field.jitter.bytes).toBe(0)
       const after = census(bound.kernels()[0]!)
       expect(before.sampled).toBe(10)
       expect(after.kinds).toEqual({
@@ -392,14 +404,14 @@ describe('the trace with the mask bound', () => {
       ).toEqual([])
       expect(field.jitter.bytes).toBe(64 * 64 * 16)
     } finally {
-      asBuilt.dispose()
+      unbound.dispose()
       bound.dispose()
       field.dispose()
       copy.dispose()
     }
   }, 120_000)
 
-  it('is not what the system draws: its trace builds no mask', async () => {
+  it('is what the system draws: its trace reads the draw, and its jitter holds the mask', async () => {
     const rig = cloudRig(gpu, 16, 16)
     try {
       await rig.system!.warm()
@@ -407,8 +419,8 @@ describe('the trace with the mask bound', () => {
         (held) => held.name === 'jitter',
       )
       expect(jitter).toBeDefined()
-      expect(jitter!.bytes).toBe(0)
-      expect(jitter!.textures()).toEqual([])
+      expect(jitter!.bytes).toBe(64 * 64 * 16)
+      expect(jitter!.textures()).toHaveLength(1)
     } finally {
       rig.dispose()
     }

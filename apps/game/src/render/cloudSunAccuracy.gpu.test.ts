@@ -48,7 +48,7 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 
 /*
  * The sun grid's optical depth against a march through the field (§5.5):
- * T_cloud's error at in-cloud samples, at lightTaps 2 and 4, in seven
+ * T_cloud's error at in-cloud samples, at lightTaps 2, 4, 6 and 8, in seven
  * regimes under three suns.
  *
  * **The population.** A regime is scored at five places, drawn by a seed
@@ -160,7 +160,7 @@ const REBUILD = {
   steadyRuns: 4,
 } as const
 
-const TAPS = [2, 4] as const
+const TAPS = [2, 4, 6, 8] as const
 const REFERENCE_STEPS = 256
 const PLACES = 5
 /** Degrees: the places stand between this latitude south and north. */
@@ -398,7 +398,7 @@ function landedCase(found: Case): Case {
   return pinned
 }
 
-/** Hold a case's every figure to its landed one, at both tap counts. */
+/** Hold a case's every figure to its landed one, at every tap count. */
 function hold(found: Case): void {
   const what = `${found.scenario} at ${found.sunDegrees}°, place ${found.place}`
   const pinned = landedCase(found)
@@ -495,7 +495,7 @@ function drive(): {
 }
 
 describe('the sun’s optical depth against the field', () => {
-  /** Score the grid at both tap counts on the real field: each regime at its places, under each of its suns. */
+  /** Score the grid at every tap count on the real field: each regime at its places, under each of its suns. */
   async function measure(
     population: typeof POPULATION,
     places: number,
