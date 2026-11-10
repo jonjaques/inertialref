@@ -24,7 +24,7 @@
 import { latest, measured } from './page.mjs'
 import { CLIPS, BANDS } from './noise.mjs'
 import { CAPS } from './sequence.mjs'
-import { ACCEPTANCE_ROWS, HELD_HZ } from './frame.mjs'
+import { ACCEPTANCE_ROWS, HELD_BY, HELD_HZ } from './frame.mjs'
 
 const ms = (x) => (Number.isFinite(x) ? `${x.toFixed(2)} ms` : '—')
 const pc = (x) => (Number.isFinite(x) ? `${(x * 100).toFixed(2)}%` : '—')
@@ -257,26 +257,48 @@ export function holdAccepted(docs) {
       accepted: false,
     }
   const accepted = rates.every(inBand)
+  const hold = rows[0].hold ?? 'none'
   return {
     id: 'hold',
     title: 'The 60 Hz hold',
     outcome: accepted ? 'pass' : 'miss',
     accepted,
+    hold,
     figures: [
-      `${rates.map((x) => x?.toFixed(1) ?? '—').join(', ')} Hz, held by ${rows[0].hold}`,
+      `${rates.map((x) => x?.toFixed(1) ?? '—').join(', ')} Hz, held by ${HELD_BY[hold] ?? hold}`,
+      // Under the band the page drew as fast as its callbacks came: no hold
+      // makes a slow display faster.
+      ...(rates.some((x) => x < HELD_HZ[0])
+        ? ['the hold was not reached: the frames came slower than 58 Hz']
+        : []),
     ],
   }
 }
 
-/** A rate-bound bar: recorded only, with its rate, until the hold is accepted. */
-const bound = (rule, docs) =>
-  holdAccepted(docs).accepted || rule.outcome === 'undecided'
-    ? rule
-    : {
+/**
+ * A rate-bound bar: recorded only, with its rate, until the hold is
+ * accepted, and read under the page's hold as the page's rate.
+ */
+function bound(rule, docs) {
+  const hold = holdAccepted(docs)
+  if (rule.outcome === 'undecided') return rule
+  if (!hold.accepted)
+    return {
+      ...rule,
+      outcome: 'recorded',
+      figures: [...rule.figures, 'no 60 Hz hold: recorded only'],
+    }
+  // The page's hold paces the frames drawn, not the ones presented (§7.5).
+  return hold.hold === 'page'
+    ? {
         ...rule,
-        outcome: 'recorded',
-        figures: [...rule.figures, 'no 60 Hz hold: recorded only'],
+        figures: [
+          ...rule.figures,
+          "held by the page: the rate is the page's, frames drawn and not frames the compositor presented",
+        ],
       }
+    : rule
+}
 
 /** B13: the largest of the first five intervals within 16.7 ms of the steady median. */
 function b13(docs) {

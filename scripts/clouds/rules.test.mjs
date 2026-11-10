@@ -169,6 +169,11 @@ describe('the hold and the bars that wait for it', () => {
       accepted: true,
     })
     expect(holdAccepted({ hold: hold(59.8, 63.0, 60.0) }).accepted).toBe(false)
+    // Slower than the band: the record says the hold was not reached.
+    expect(holdAccepted({ hold: hold(59.8, 51.2, 60.0) }).figures).toEqual([
+      '59.8, 51.2, 60.0 Hz, held by the page: frames drawn, not frames presented',
+      'the hold was not reached: the frames came slower than 58 Hz',
+    ])
     expect(holdAccepted({ hold: hold(59.8, 60.0) })).toMatchObject({
       outcome: 'undecided',
       accepted: false,
@@ -186,6 +191,12 @@ describe('the hold and the bars that wait for it', () => {
     const held = hold(60, 60, 60)
     expect(byId(evaluate({ hold: held, pace: late(3) }), 'B14').outcome).toBe(
       'pass',
+    )
+    // Held by the page, the reading says it is the page's.
+    expect(
+      byId(evaluate({ hold: held, pace: late(3) }), 'B14').figures,
+    ).toContain(
+      "held by the page: the rate is the page's, frames drawn and not frames the compositor presented",
     )
     expect(byId(evaluate({ hold: held, pace: late(4) }), 'B14').outcome).toBe(
       'miss',

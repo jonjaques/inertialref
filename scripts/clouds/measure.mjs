@@ -513,7 +513,9 @@ const radiance = (group, label, scenario, size, threshold, comparisons) => ({
  * differs from the next larger one's by under 1% radiance RMSE, the jitter
  * held. `lightTaps` climbs the lever's own list, so a rung the contract adds
  * is a rung the ladder takes. `maxSteps` and `farFootprint` are free numbers
- * in the contract, with no list to read, so their rungs are §7.3's.
+ * in the contract, with no list to read, so their rungs here are copies of
+ * §7.3's: each is to read its export in `cloudLevers.ts`, `CLOUD_MAX_STEPS`
+ * and `CLOUD_FAR_FOOTPRINTS`, once the merge adds them.
  */
 export const LADDERS = Object.freeze({
   maxSteps: [96, 128, 192, 256],
@@ -1291,7 +1293,7 @@ export function dryRun(options) {
       ...(run.arm == null
         ? []
         : [
-            `  arm: display ${run.arm.display}, window ${run.arm.window}, presentation ${run.arm.presentation}${refused ? `; not taken now: ${refused}` : ''}`,
+            `  arm: display ${run.arm.display}, window ${run.arm.window}, presentation ${run.arm.presentation}${refused ? `; not taken now: ${refused.why}; to take it: ${refused.ask}` : ''}`,
           ]),
       `  node scripts/drive.mjs ${args.map(shown).join(' ')}`,
     ].join('\n')

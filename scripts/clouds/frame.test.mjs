@@ -22,7 +22,7 @@ import {
   parseOptions,
   session,
 } from './measure.mjs'
-import { figures, plan, unfit } from './page.mjs'
+import { figures, plan, tables, unfit } from './page.mjs'
 
 /*
  * The whole frame, the frame log and the pacing study without a browser or
@@ -294,25 +294,77 @@ describe('the pacing study', () => {
     }
   })
 
-  it('records an arm the machine cannot give as not taken, and never unlocks', () => {
+  it('records an arm the machine cannot give as not taken, and the one thing a person would do', () => {
+    const arm = (display, window, presentation) => ({
+      display,
+      window,
+      presentation,
+    })
     expect(
-      armRefusal(
-        { display: 'asleep', window: 'occluded', presentation: 'presented' },
-        machine(),
+      armRefusal(arm('asleep', 'occluded', 'presented'), machine()),
+    ).toEqual({
+      why: expect.stringMatching(/presentation=occluded on every URL/),
+      ask: expect.stringMatching(
+        /^nothing at the machine: drive\.mjs needs a flag/,
       ),
-    ).toMatch(/presentation=occluded on every URL/)
+    })
     expect(
       armRefusal(
-        { display: 'awake', window: 'occluded', presentation: 'occluded' },
+        arm('awake', 'occluded', 'occluded'),
         machine({ locked: true }),
       ),
-    ).toMatch(/session is locked.* unlocks nothing/)
+    ).toEqual({
+      why: expect.stringMatching(/session is locked.* unlocks nothing/),
+      ask: 'unlock the session and leave it unlocked for the arm; the runner wakes the display itself',
+    })
+    // Nothing comes in front of a lock screen, a dark display or not.
     expect(
-      armRefusal(
-        { display: 'awake', window: 'occluded', presentation: 'occluded' },
-        machine({ locked: false }),
-      ),
-    ).toBeNull()
+      armRefusal(arm('asleep', 'front', 'occluded'), machine({ locked: true }))
+        ?.ask,
+    ).toBe('unlock the session; the runner brings the window forward itself')
+    for (const display of ['asleep', 'awake'])
+      for (const window of ['occluded', 'front'])
+        expect(
+          armRefusal(
+            arm(display, window, 'occluded'),
+            machine({ locked: false }),
+          ),
+        ).toBeNull()
+    // On a locked machine one arm of the eight is taken: asleep, occluded.
+    const taken = arms.filter(
+      (r) => armRefusal(r.arm, machine({ locked: true })) === null,
+    )
+    expect(taken.map((r) => r.id.split('/').slice(-3).join(' '))).toEqual([
+      'asleep occluded occluded',
+    ])
+  })
+
+  it('says, under its table, what a person would do for every arm not taken', async () => {
+    const rows = []
+    for (const run of arms) {
+      const { out } = await studyArm(
+        run,
+        { port: PORTS.rig },
+        invoke([]),
+        machine({ locked: true }),
+      )
+      if (out.notTaken !== undefined)
+        rows.push({ ...figures(run, [], out), quiet: { ok: true } })
+    }
+    expect(rows).toHaveLength(7)
+    const text = tables({ rows })
+    expect(text).toMatch(
+      /What a person at the machine would do for the arms not taken:\n- nothing at the machine: .*: 4 arms \(/,
+    )
+    expect(text).toMatch(
+      /- unlock the session and leave it unlocked for the arm; the runner wakes the display itself: 2 arms \(awake occluded occluded; awake front occluded\)/,
+    )
+    expect(text).toMatch(
+      /- unlock the session; the runner brings the window forward itself: 1 arm \(asleep front occluded\)/,
+    )
+    expect(text).toMatch(
+      /- for each other refresh mode the display offers: set it in System Settings › Displays/,
+    )
   })
 
   it('raises the window between two invocations, and leaves a dark display dark', async () => {
@@ -364,7 +416,7 @@ describe('the pacing study', () => {
       /arm: display asleep, window occluded, presentation occluded\n/,
     )
     expect(text).toMatch(
-      /arm: display asleep, window occluded, presentation presented; not taken now: drive\.mjs sets/,
+      /arm: display asleep, window occluded, presentation presented; not taken now: drive\.mjs sets.*; to take it: nothing at the machine/,
     )
   })
 })

@@ -830,6 +830,7 @@ export function figures(run, steps, out) {
     },
     errors: out.errors ?? [],
     notTaken,
+    ask: out.ask ?? null,
     ...(out.window ? { window: out.window } : {}),
     // A row not taken keeps whatever its steps read, and owes nothing.
     ...(notTaken === null ? read(run, value) : readable(read, run, value)),

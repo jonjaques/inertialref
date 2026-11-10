@@ -251,38 +251,53 @@ addKind('pace', {
     return blind === undefined ? null : `no frame log for ${blind.name}`
   },
   table: (rows) =>
-    table(
-      rows.flatMap((r) =>
-        r.notTaken != null
-          ? [{ ...r, armName: '—', armRate: null }]
-          : r.arms.map((a) => ({
-              ...r,
-              ...a,
-              armName: a.name,
-              armRate: a.rate,
-            })),
-      ),
-      [
-        ...NAMED,
-        ['Batch', (r) => r.batch],
-        ['Arm', (r) => r.armName],
-        ['held by', (r) => r.hold ?? '—'],
-        ['study arm', (r) => (r.arm ? armName(r.arm) : '—')],
-        ['drawn Hz (median)', (r) => fixed(r.armRate?.median, 1)],
-        ['one rate', (r) => (r.armRate ? (r.armRate.one ? 'yes' : 'no') : '—')],
+    [
+      table(
+        rows.flatMap((r) =>
+          r.notTaken != null
+            ? [{ ...r, armName: '—', armRate: null }]
+            : r.arms.map((a) => ({
+                ...r,
+                ...a,
+                armName: a.name,
+                armRate: a.rate,
+              })),
+        ),
         [
-          'presented Hz',
-          (r) =>
-            r.samples?.map((s) => fixed(s?.presentedHz, 1)).join(', ') ?? '—',
+          ...NAMED,
+          ['Batch', (r) => r.batch],
+          ['Arm', (r) => r.armName],
+          ['held by', (r) => HELD_BY[r.hold] ?? '—'],
+          ['study arm', (r) => (r.arm ? armName(r.arm) : '—')],
+          ['drawn Hz (median)', (r) => fixed(r.armRate?.median, 1)],
+          [
+            'one rate',
+            (r) => (r.armRate ? (r.armRate.one ? 'yes' : 'no') : '—'),
+          ],
+          // rAF's callbacks: under the page's hold these run at the display's
+          // rate and the frames drawn at 60, and neither is the compositor's.
+          [
+            'rAF Hz',
+            (r) =>
+              r.samples?.map((s) => fixed(s?.presentedHz, 1)).join(', ') ?? '—',
+          ],
+          ['late (median)', (r) => fixed(r.late, 0)],
+          ['frames (median)', (r) => fixed(r.frames, 0)],
+          ['sensor ms', (r) => fixed(r.sensorMs)],
+          ['not taken', (r) => r.notTaken ?? '—'],
+          ['to take it', (r) => r.ask ?? '—'],
+          ...OPERATING,
+          ['quiet', standing],
         ],
-        ['late (median)', (r) => fixed(r.late, 0)],
-        ['frames (median)', (r) => fixed(r.frames, 0)],
-        ['sensor ms', (r) => fixed(r.sensorMs)],
-        ['not taken', (r) => r.notTaken ?? '—'],
-        ...OPERATING,
-        ['quiet', standing],
-      ],
-    ),
+      ),
+      ...(rows.some((r) => r.batch === 'study')
+        ? [
+            '',
+            'What a person at the machine would do for the arms not taken:',
+            studyAsks(rows.filter((r) => r.batch === 'study')),
+          ]
+        : []),
+    ].join('\n'),
   progress: (r) =>
     r.notTaken ??
     r.arms
@@ -294,6 +309,17 @@ addKind('pace', {
 })
 
 /* ------------------------------------------------------------ the pacing study ---- */
+
+/**
+ * How a row's rate was held, as its table says it. The page's hold holds the
+ * rate of the frames drawn and does not make the compositor present them, so
+ * a figure read under it, B15's among them, is the page's (§7.5).
+ */
+export const HELD_BY = Object.freeze({
+  none: 'nothing',
+  display: 'the display',
+  page: 'the page: frames drawn, not frames presented',
+})
 
 /** The study's arms: every way the rate might be set that the study can name. */
 export const STUDY = Object.freeze({
@@ -382,18 +408,53 @@ async function placeWindow(port, bounds) {
 }
 
 /**
- * Why an arm cannot be taken on this machine now, or null. The page is told
- * it is occluded by drive.mjs on every URL (`scripts/driveUrl.mjs`), with no
- * flag to leave it off, so a presented arm needs a driver that offers one.
- * An awake display over a locked session shows the lock screen over the rig,
- * which phase 0 found paces it at 51 to 68 Hz, and the study unlocks nothing.
+ * Why an arm cannot be taken on this machine now, and the one thing a
+ * person at the machine would do so it can be, or null. The page is told it
+ * is occluded by drive.mjs on every URL (`scripts/driveUrl.mjs`), with no
+ * flag to leave it off, so a presented arm needs a driver that offers one,
+ * which no one at the machine can give. An awake display over a locked
+ * session shows the lock screen over the rig, which phase 0 found paces it
+ * at 51 to 68 Hz, and nothing comes in front of a lock screen: both wait for
+ * someone to unlock, and the study unlocks nothing.
  */
 export function armRefusal(arm, machine = MACHINE) {
   if (arm.presentation === 'presented')
-    return 'drive.mjs sets ?presentation=occluded on every URL and offers no flag to leave it off'
+    return {
+      why: 'drive.mjs sets ?presentation=occluded on every URL and offers no flag to leave it off',
+      ask: 'nothing at the machine: drive.mjs needs a flag that leaves the query off (scripts/driveUrl.mjs)',
+    }
   if (arm.display === 'awake' && machine.locked())
-    return 'the session is locked, so an awake display shows the lock screen over the rig; the runner unlocks nothing'
+    return {
+      why: 'the session is locked, so an awake display shows the lock screen over the rig; the runner unlocks nothing',
+      ask: 'unlock the session and leave it unlocked for the arm; the runner wakes the display itself',
+    }
+  if (arm.window === 'front' && machine.locked())
+    return {
+      why: 'the session is locked, so no window comes in front of the lock screen; the runner unlocks nothing',
+      ask: 'unlock the session; the runner brings the window forward itself',
+    }
   return null
+}
+
+/** What no arm can change, and a person can: the display's refresh mode. */
+export const REFRESH_ASK =
+  'for each other refresh mode the display offers: set it in System Settings › Displays, then node scripts/clouds/campaign.mjs start pace-study --refresh <mode>'
+
+/**
+ * What a person at the machine would do for the study's arms not taken,
+ * each once with the arms it would give, and the refresh modes after.
+ */
+export function studyAsks(rows) {
+  const asks = new Map()
+  for (const r of rows)
+    if (r.ask != null) asks.set(r.ask, [...(asks.get(r.ask) ?? []), r.id])
+  return [
+    ...[...asks].map(
+      ([ask, ids]) =>
+        `- ${ask}: ${ids.length} arm${ids.length === 1 ? '' : 's'} (${ids.map((id) => id.split('/').slice(-3).join(' ')).join('; ')})`,
+    ),
+    `- ${REFRESH_ASK}`,
+  ].join('\n')
 }
 
 /** An arm's steps in order: the plan, the window moved after the stance where the arm asks. */
@@ -409,11 +470,16 @@ export function armPlan(run) {
  */
 export async function studyArm(run, ctx, invoke, machine = MACHINE) {
   const arm = run.arm
-  const why = armRefusal(arm, machine)
-  if (why !== null)
+  const refused = armRefusal(arm, machine)
+  if (refused !== null)
     return {
       steps: [],
-      out: { results: [], operatingPoint: {}, notTaken: why },
+      out: {
+        results: [],
+        operatingPoint: {},
+        notTaken: refused.why,
+        ask: refused.ask,
+      },
     }
   const dark = machine.asleep()
   const release = arm.display === 'awake' ? machine.wake() : null

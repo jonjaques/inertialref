@@ -101,16 +101,35 @@ const batch = (name, extra = {}) => ({
   ...extra,
 })
 
-/** The seven opt-in GPU instruments of §7.2; the stage takes the ones the tree holds. */
-export const INSTRUMENT_NAMES = Object.freeze([
-  'cloudCumulus',
-  'cloudGlory',
-  'cloudHandover',
-  'cloudFarCompare',
-  'cloudSunAccuracy',
-  'cloudCompositeError',
-  'cloudPathTrace',
-])
+/**
+ * The seven opt-in GPU instruments of §7.2, each with the package that
+ * builds it (§10.2); the stage takes the ones the tree holds and names the
+ * rest with their packages.
+ */
+export const INSTRUMENT_OWNERS = Object.freeze({
+  cloudCumulus: 'N',
+  cloudGlory: 'M2',
+  cloudHandover: 'X',
+  cloudFarCompare: 'phase 0',
+  cloudSunAccuracy: 'phase 0',
+  cloudCompositeError: 'phase 0',
+  cloudPathTrace: 'R2',
+})
+export const INSTRUMENT_NAMES = Object.freeze(Object.keys(INSTRUMENT_OWNERS))
+
+/** What an instruments stage runs today, and what it waits for and from whom. */
+export function instrumentsText(names, exists = existsSync) {
+  const on = present(names, exists)
+  const off = names.filter((n) => !on.includes(n))
+  return [
+    `runs ${on.join(', ') || 'none'}`,
+    ...(off.length > 0
+      ? [
+          `not in the tree yet: ${off.map((n) => `${n} (package ${INSTRUMENT_OWNERS[n]})`).join(', ')}`,
+        ]
+      : []),
+  ].join('; ')
+}
 const instrumentFile = (name) =>
   path.join(ROOT, 'apps/game/src/render', `${name}.gpu.test.ts`)
 
@@ -739,6 +758,7 @@ export function summarize(state) {
     const spec = CAMPAIGNS[state.name]?.stages.find(
       (s) => s.name === stage.name,
     )
+    if (spec?.instruments) parts.push(instrumentsText(spec.instruments))
     for (const file of spec?.outputs ?? []) {
       const at = path.join(ROOT, file)
       const fresh =
@@ -900,7 +920,7 @@ export function planText(name, options = {}) {
         state,
       )
       parts.push(
-        `## ${spec.name}: ${commands.length} commands, about ${minutes(seconds)} (as written)`,
+        `## ${spec.name}: ${commands.length} commands, about ${minutes(seconds)} (as written)${spec.instruments ? `; ${instrumentsText(spec.instruments)}` : ''}`,
         ...commands.map((c) => `  ${c.join(' ')}`),
       )
     }

@@ -4,9 +4,11 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   CAMPAIGNS,
+  INSTRUMENT_NAMES,
   captureTakesLever,
   child,
   eta,
+  instrumentsText,
   minutesOf,
   notTaken,
   outcome,
@@ -369,6 +371,21 @@ describe('a campaign', () => {
     expect(
       notTaken(requires, state({ hold: { accepted: true } }), tools),
     ).toBeNull()
+  })
+
+  it('names the instruments it runs, and the packages that bring the rest', () => {
+    const today = new Set([
+      'cloudFarCompare',
+      'cloudSunAccuracy',
+      'cloudCompositeError',
+    ])
+    expect(
+      instrumentsText(INSTRUMENT_NAMES, (file) =>
+        today.has(path.basename(file, '.gpu.test.ts')),
+      ),
+    ).toBe(
+      'runs cloudFarCompare, cloudSunAccuracy, cloudCompositeError; not in the tree yet: cloudCumulus (package N), cloudGlory (package M2), cloudHandover (package X), cloudPathTrace (package R2)',
+    )
   })
 
   it('keeps every stage’s attempts across a resume', () => {
