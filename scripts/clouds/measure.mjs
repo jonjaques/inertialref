@@ -118,6 +118,17 @@ const basin = (height, pitch) =>
   visit(FAR, { site: 'basin', height, heading: 90, pitch })
 const earth = (height, pitch) =>
   visit(EARTH, { latitude: 0, longitude: 0, height, heading: 90, pitch })
+/**
+ * The ground stance under fair-cumulus. The basin stands in one of the
+ * scenario's clear blob cells, about 80 km across: from it at pitch 10° 2%
+ * of the trace's texels are cloud, at every heading under 4.2%, which is a
+ * clear sky and not §9's ground under cumulus. One degree north, moved along
+ * the line the sun's elevation holds on, 38.8% are, under the same 37.5°
+ * sun; that line runs nearly north, since the sun falls about 0.95° a degree
+ * east and 0.13° a degree north here.
+ */
+const cumulus = (height, pitch) =>
+  visit(FAR, { latitude: 18.5, longitude: 172.63, height, heading: 90, pitch })
 
 /**
  * The scenarios: stances, and the levers each sets over the defaults. Heights
@@ -127,7 +138,7 @@ const earth = (height, pitch) =>
  * 400 km and −35°. A scenario boots at far-shore unless it names a preset.
  */
 export const SCENARIOS = Object.freeze({
-  ground: { stance: basin(2, 10), levers: { scenario: 'fair-cumulus' } },
+  ground: { stance: cumulus(2, 10), levers: { scenario: 'fair-cumulus' } },
   horizon: { stance: basin(2, 2), levers: { scenario: 'broken-horizon' } },
   inside: { stance: basin(1200, 0), levers: { scenario: 'inside' } },
   decks: { stance: basin(2, 30), levers: { scenario: 'two-decks' } },
@@ -146,7 +157,7 @@ export const SCENARIOS = Object.freeze({
     levers: { scenario: 'fair-cumulus', served: MOON, second: FAR },
   },
   'pair-neighbor': {
-    stance: basin(2, 10),
+    stance: cumulus(2, 10),
     levers: { scenario: 'fair-cumulus', second: NEIGHBOR },
   },
   'earth-ground': {

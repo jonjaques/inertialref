@@ -202,12 +202,16 @@ describe('the batches', () => {
 
   it('stands each scenario where the design puts it', () => {
     const at = (id) => SCENARIOS[id].stance
+    // Under fair-cumulus's cloud, not in the basin's clear blob cell.
     expect(at('ground').options).toEqual({
-      site: 'basin',
+      latitude: 18.5,
+      longitude: 172.63,
       height: 2,
       heading: 90,
       pitch: 10,
     })
+    expect(at('pair-neighbor')).toEqual(at('ground'))
+    expect(at('fog').options).toMatchObject({ site: 'basin', pitch: 10 })
     expect(at('inside').options.height).toBe(1200)
     expect(at('orbit').options).toMatchObject({
       latitude: 15,
