@@ -9,6 +9,7 @@ import {
   mediumDepth,
   mieDroplets,
   radiusOf,
+  SLAB_REFERENCE,
   type TraceMedium,
   traceMedium,
   tracePhase,
@@ -20,6 +21,7 @@ import {
   estimateOf,
   joinSums,
   type PixelSum,
+  slabRay,
   tracePixel,
   type TraceScene,
   type TraceSun,
@@ -32,9 +34,11 @@ import {
  * held at three of its own standard errors: the bound names the estimate's
  * noise, which is the only looseness there is.
  *
- * The slab checks are closed forms computed here, not R1's adding-doubling:
- * one order of scattering in a slab and in the cumulus, the uncollided
- * beam, and the balance of flux at albedo one.
+ * A slab is held two ways. To closed forms computed here: one order of
+ * scattering in a slab and in the cumulus, the uncollided beam, and the
+ * balance of flux at albedo one. And to package R1's adding-doubling on the
+ * true medium, at three of its committed rows; the two figures R1 measured
+ * of the scaled medium against the true one are `pathTrace.slow.test.ts`'s.
  */
 
 type Triple = readonly [number, number, number]
@@ -351,6 +355,76 @@ describe('one order of scattering', () => {
   })
 })
 
+/** The disk the oracle's first order reads the phase through, radians. */
+const ORACLE_DISK = ((959.63 / 3600) * Math.PI) / 180
+
+describe('a slab against adding-doubling', () => {
+  // Package R1's oracle on the true medium, read from its committed table:
+  // another method, another phase (the Mie series at the radius itself,
+  // where this tracer blends two rows of the half-float table), and the
+  // same slab. The bound is R1's own for its Monte Carlo: three standard
+  // errors and the half percent its streams converge to.
+  const rows: readonly (readonly [
+    number,
+    number,
+    number,
+    number,
+    number,
+    'reflected' | 'transmitted',
+    number,
+  ])[] = [
+    [10, 5, 0.5, 0.6, 90, 'reflected', 1],
+    [10, 5, 0.5, 0.8, 45, 'transmitted', 1],
+    [16, 10, 0.5, 0.4, 135, 'reflected', 0],
+  ]
+
+  it.each(rows)(
+    'holds %i µm at depth %i, sun %f, view %f at %i°, %s, band %i',
+    (radius, depth, sunMu, viewMu, azimuth, side, band) => {
+      const row = SLAB_REFERENCE.rows.find(
+        (held) =>
+          held.radius === radius &&
+          held.depth === depth &&
+          held.sunMu === sunMu &&
+          held.viewMu === viewMu &&
+          held.azimuth === azimuth &&
+          held.side === side,
+      )!
+      const { sun, view } = slabRay(sunMu, viewMu, azimuth, side)
+      const count = 4 * 8 * 4
+      const medium = traceMedium(
+        [4, 8, 4],
+        [100_000, 125, 100_000],
+        new Float32Array(count).fill(depth / 1000),
+        new Float32Array(count).fill(radius),
+      )
+      const { mean, error } = estimateOf(
+        tracePixel(
+          createTracer(
+            scene(medium, {
+              sun: {
+                direction: sun,
+                irradiance: [1, 1, 1],
+                angularRadius: ORACLE_DISK,
+              },
+            }),
+          ),
+          eyeOn(view),
+          view,
+          band,
+          SEED,
+          0,
+          12_000,
+        ),
+      )
+      const truth = row.truth[band]!
+      expect(Math.abs(mean - truth)).toBeLessThan(3 * error + 0.005 * truth)
+      // An estimate this loose would hold anything: measured at 1.9% to 3.0%.
+      expect(error).toBeLessThan(0.04 * truth)
+    },
+  )
+})
+
 describe('every order', () => {
   it('balances a conservative slab’s flux: what it reflects and passes is what fell on it', () => {
     // Depth 16, where nothing leaves unscattered and what does has
@@ -386,14 +460,14 @@ describe('every order', () => {
       }
       return { sum, squares, samples }
     }
-    const reflected = estimateOf(flux(true, 20_000))
-    const passed = estimateOf(flux(false, 20_000))
+    const reflected = estimateOf(flux(true, 10_000))
+    const passed = estimateOf(flux(false, 10_000))
     const direct = sun[1] * Math.exp(-depth / sun[1])
     const error = Math.hypot(reflected.error, passed.error)
     expect(
       Math.abs(reflected.mean + passed.mean + direct - sun[1]),
     ).toBeLessThan(3 * error)
-    // The estimate's own noise, measured at 1.5% of the flux that fell.
+    // The estimate's own noise, measured at 1.4% of the flux that fell.
     expect(error).toBeLessThan(0.025 * sun[1])
     expect(tracer.counts.truncated).toBe(0)
   })

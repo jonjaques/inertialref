@@ -671,6 +671,29 @@ export function createTracer(scene: TraceScene): Tracer {
   }
 }
 
+/**
+ * A slab row of the oracle's as a ray: the sun's direction, and the eye's
+ * line for light leaving at `viewMu`, `azimuth` degrees from the sun's
+ * bearing (`addingDoubling.ts`, `scatteringCosine`).
+ */
+export function slabRay(
+  sunMu: number,
+  viewMu: number,
+  azimuth: number,
+  side: 'reflected' | 'transmitted',
+): { readonly sun: Triple; readonly view: Triple } {
+  const flat = Math.sqrt(1 - viewMu * viewMu)
+  const bearing = (azimuth * Math.PI) / 180
+  return {
+    sun: [Math.sqrt(1 - sunMu * sunMu), sunMu, 0],
+    view: [
+      flat * Math.cos(bearing),
+      side === 'reflected' ? -viewMu : viewMu,
+      -flat * Math.sin(bearing),
+    ],
+  }
+}
+
 /* ------------------------------------------------------------------------- */
 /* A pixel's estimate                                                         */
 /* ------------------------------------------------------------------------- */
