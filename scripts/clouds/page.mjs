@@ -235,11 +235,30 @@ export async function cloudStep(step) {
     on() {
       ir.timing.mark(step.mark)
       set(step.levers)
+      /*
+       * Each animation frame's own timestamp, from the frame the levers first
+       * draw in, which `hitch` differences into frame times. The sampler
+       * starts here, in the task that set the levers: one a later step starts
+       * is a DevTools round trip behind them, and where the first frame has
+       * drawn by then, its length — the hitch — lies between no two samples.
+       * The engine's `frameMs` is no substitute: it is the step averaged over
+       * about ten frames, without the draw.
+       */
+      const frames = []
+      globalThis.irCloudFrames = new Promise((done) => {
+        const tick = (at) => {
+          frames.push(at)
+          if (frames.length < step.frames) requestAnimationFrame(tick)
+          else done(frames)
+        }
+        requestAnimationFrame(tick)
+      })
       return { at: step.mark }
     },
-    first() {
-      // The first `sensor` span after the mark is the first frame the levers
-      // drew; the sample step between holds the frame times around it.
+    async first() {
+      // Waits out the frames `on` began sampling. The first `sensor` span
+      // after the mark is the first frame the levers drew.
+      const frames = (await globalThis.irCloudFrames) ?? null
       const entries = ir.timing.drain()
       const mark = entries.find((e) => e.name === step.mark)
       const sensor = entries.find(
@@ -254,6 +273,7 @@ export async function cloudStep(step) {
         sensorMs: sensor?.durationMs ?? null,
         pipelines: r?.pipelines ?? null,
         bytes: r?.bytes ?? null,
+        frames,
       }
     },
     async verify() {
@@ -361,8 +381,12 @@ export function plan(run, shots = {}) {
       js('boot', { kind: 'boot', label: 'warming the clouds' }),
       ...(run.flag
         ? [
-            js('on', { kind: 'on', mark: MARK, levers: run.levers }),
-            flag('sample', '--sample', '60'),
+            js('on', {
+              kind: 'on',
+              mark: MARK,
+              levers: run.levers,
+              frames: HITCH_FRAMES + 1,
+            }),
             js('first', { kind: 'first', mark: MARK }),
           ]
         : []),
@@ -396,10 +420,19 @@ export function summarize(pairs) {
   }
 }
 
-/** A cold boot's first lever-on frames: the largest of the first five frame
- *  times against the median of the last thirty. */
+/** Frame times a cold boot reads, from the frame the levers first draw in. */
+const HITCH_FRAMES = 60
+
+/**
+ * A cold boot's first lever-on frames: the largest of the first five frame
+ * times against the median of the last thirty. A sample is one animation
+ * frame's timestamp, the first the frame the levers first drew in, and a
+ * frame time the step from one to the next, so a frame that ran long shows
+ * whole, as the delay of the frame after it.
+ */
 export function hitch(samples) {
-  const ms = samples.map((s) => s?.frameMs).filter(Number.isFinite)
+  const at = samples.filter(Number.isFinite)
+  const ms = at.slice(1).map((t, i) => t - at[i])
   if (ms.length < 35) return null
   return { first: Math.max(...ms.slice(0, 5)), steady: median(ms.slice(-30)) }
 }
@@ -493,13 +526,13 @@ const READ = {
       total: histogramStats(residual?.total),
     }
   },
-  cold(run, value, by) {
+  cold(run, value) {
     const first = value('first') ?? {}
     return {
       flag: run.flag,
       boot: run.boot,
       spans: value('boot') ?? null,
-      hitch: run.flag ? hitch(by.get('sample')?.samples ?? []) : null,
+      hitch: run.flag ? hitch(first.frames ?? []) : null,
       sensorMs: first.sensorMs ?? null,
       pipelines: first.pipelines ?? null,
       bytes: first.bytes?.total ?? null,
@@ -528,7 +561,7 @@ export function figures(run, steps, out) {
     scene: by.get('settle') ?? null,
     operatingPoint: out.operatingPoint ?? null,
     errors: out.errors ?? [],
-    ...READ[run.type](run, value, by),
+    ...READ[run.type](run, value),
   }
 }
 
