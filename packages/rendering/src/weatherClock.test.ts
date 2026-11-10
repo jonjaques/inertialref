@@ -185,38 +185,50 @@ describe('the weather clock', () => {
 
   it('drifts by the wind times the hour so far, never more than an hour of it', () => {
     const speed = fc.double({ min: -50, max: 50, noNaN: true })
-    fc.assert(
-      fc.property(
-        speed,
-        speed,
-        speed,
-        fc.double({ min: 0, max: LIMIT, noNaN: true }),
-        fc.constantFrom(9600, 72_000, 240_000),
-        (vx, vy, vz, t, period) => {
-          const drift = driftOffset({ x: vx, y: vy, z: vz }, t, period)
-          const seconds = reduceSeconds(t, CLOUD_ADVECTION_PERIOD)
-          expect(seconds).toBeLessThan(CLOUD_ADVECTION_PERIOD)
-          // The displacement the drift stands for is the wind times the
-          // seconds into the hour, so it is bounded by an hour of the wind.
-          const speedTotal = Math.hypot(vx, vy, vz)
-          expect(
-            Math.hypot(vx * seconds, vy * seconds, vz * seconds),
-          ).toBeLessThanOrEqual(
-            speedTotal * CLOUD_ADVECTION_PERIOD * (1 + 1e-12),
-          )
-          for (const [value, velocity] of [
-            [drift.x, vx],
-            [drift.y, vy],
-            [drift.z, vz],
-          ] as const) {
-            expect(value).toBeGreaterThanOrEqual(0)
-            expect(value).toBeLessThan(period)
-            expect(value).toBe(reduceSeconds(velocity * seconds, period))
-          }
-        },
-      ),
-      { numRuns: 2000 },
+    const drifts = fc.property(
+      speed,
+      speed,
+      speed,
+      fc.double({ min: 0, max: LIMIT, noNaN: true }),
+      fc.constantFrom(9600, 72_000, 240_000),
+      (vx, vy, vz, t, period) => {
+        const drift = driftOffset({ x: vx, y: vy, z: vz }, t, period)
+        const seconds = reduceSeconds(t, CLOUD_ADVECTION_PERIOD)
+        expect(seconds).toBeLessThan(CLOUD_ADVECTION_PERIOD)
+        // The displacement the drift stands for is the wind times the
+        // seconds into the hour, so it is bounded by an hour of the wind.
+        // `hypot` rounds the speed to half a float step, which is relative
+        // for a normal speed and absolute for a subnormal one: two
+        // components of 5 × 10⁻³²⁴ m/s have a speed of 7 × 10⁻³²⁴ that
+        // rounds to 5 × 10⁻³²⁴, while the displacement, formed from the
+        // components times the seconds, keeps its √2. The bound carries a
+        // whole subnormal step of speed through the hour.
+        const speedTotal = Math.hypot(vx, vy, vz)
+        expect(
+          Math.hypot(vx * seconds, vy * seconds, vz * seconds),
+        ).toBeLessThanOrEqual(
+          speedTotal * CLOUD_ADVECTION_PERIOD * (1 + 1e-12) +
+            Number.MIN_VALUE * CLOUD_ADVECTION_PERIOD,
+        )
+        for (const [value, velocity] of [
+          [drift.x, vx],
+          [drift.y, vy],
+          [drift.z, vz],
+        ] as const) {
+          expect(value).toBeGreaterThanOrEqual(0)
+          expect(value).toBeLessThan(period)
+          expect(value).toBe(reduceSeconds(velocity * seconds, period))
+        }
+      },
     )
+    fc.assert(drifts, {
+      numRuns: 2000,
+      // The shrunk case the seed below found in a full check: a wind of two
+      // subnormal components, where the bound itself was wrong.
+      examples: [[0, 5e-324, -5e-324, 1_888_303_345.5, 9600]],
+    })
+    // That run, replayed whole: the regression is the seed's, not one case.
+    fc.assert(drifts, { numRuns: 2000, seed: -779636656 })
   })
 
   it('moves the drift continuously inside an hour, by the wind times the interval', () => {
