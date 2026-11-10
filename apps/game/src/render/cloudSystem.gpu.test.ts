@@ -17,10 +17,20 @@ import {
 import { logHub, RingBufferSink } from '@inertialref/shared'
 import { cloudRadianceDifference } from '@inertialref/devtools'
 import type { CloudHistory } from './cloudHistory.ts'
-import { type CloudLevers, cloudLeversHash } from './cloudLevers.ts'
+import {
+  type CloudLevers,
+  cloudLeversHash,
+  DEFAULT_CLOUD_LEVERS,
+} from './cloudLevers.ts'
 import type { CloudResource } from './cloudNodes.ts'
+import { CLOUD_SUN_GRID_LABEL, SUN_GRID_SIZE } from './cloudSunGrid.ts'
 import type { CloudTrace } from './cloudTrace.ts'
 import { type CloudRig, cloudRig } from './cloudSystemRig.ts'
+import {
+  CLOUD_VOLUME_HELD,
+  CLOUD_VOLUME_LABEL,
+  CLOUD_VOLUME_SLICES,
+} from './cloudVolume.ts'
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 
@@ -188,14 +198,12 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
 
   it('is §4.2’s inside pass B, the converging frame tracing once and the immediate four times', async () => {
     const steady = await order({ force: 'none' })
-    // The volume before the sun grid that sums through it, each refreshing
-    // a share of its slices a frame: the volume's budget of 8, the grid's 4.
+    // Under the rig's held clock nothing a steady frame draws has moved, so
+    // the volume and the sun grid bake no slice (cloudSunSchedule.ts).
     expect(steady).toEqual([
       ['scene over clouds', 1],
       ['cloud maps', 1],
       ['cloud clipmap', 1],
-      ['cloud volume', 8],
-      ['cloud sun grid', 4],
       ['cloud far atlas', 1],
       ['cloud depth', 1],
       ['cloud trace', 1],
@@ -207,6 +215,60 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     )
     expect(immediate.find(([label]) => label === 'cloud trace')?.[1]).toBe(4)
     expect(immediate.find(([label]) => label === 'cloud history')?.[1]).toBe(4)
+  }, 120_000)
+
+  /** One frame's cloud passes by label, each its count. */
+  async function passesOfOne(): Promise<ReadonlyMap<string, number>> {
+    const stop = installPassTimeline(gpu.renderer as WebGPURenderer)
+    try {
+      const timeline = passTimelineOf(gpu.renderer as WebGPURenderer)!
+      const read = await timeline.measure(() => rig.frame(), 1)
+      expect(read.dropped).toBe(0)
+      return new Map(read.passes.map((pass) => [pass.label, pass.count]))
+    } finally {
+      stop()
+    }
+  }
+
+  /** `total` in pieces of `cap`, the last the remainder: a cap a frame. */
+  const pieces = (total: number, cap: number): number[] =>
+    Array.from({ length: Math.ceil(total / cap) }, (_, k) =>
+      Math.min(cap, total - k * cap),
+    )
+
+  it('rebuilds after a field event by slices: the volume at the cap a frame, then the grid from the frame after, then nothing', async () => {
+    set({ force: 'none' })
+    frames(50)
+    // Another weather is another field: every slice of both caches starts
+    // over. The counts are cloudSunSchedule.test.ts's: three levels of 34
+    // slices (the stack and a slice each side), the grid's 32, 8 a frame.
+    const cap = DEFAULT_CLOUD_LEVERS.sunSlices
+    const stack = CLOUD_VOLUME_SLICES + 2
+    const volume: number[] = []
+    const grid: number[] = []
+    set({ weather: 'stratocumulus' })
+    try {
+      for (let n = 0; n < 60; n += 1) {
+        const passes = await passesOfOne()
+        volume.push(passes.get(CLOUD_VOLUME_LABEL) ?? 0)
+        grid.push(passes.get(CLOUD_SUN_GRID_LABEL) ?? 0)
+      }
+    } finally {
+      set({ weather: 'overcast' })
+      frames(60)
+    }
+    // Frames the maps owe work bake nothing; the rebuild starts after them.
+    expect(volume.filter((n) => n > 0)).toEqual(
+      pieces(CLOUD_VOLUME_HELD.length * stack, cap),
+    )
+    expect(grid.filter((n) => n > 0)).toEqual(pieces(SUN_GRID_SIZE[2], cap))
+    const lastVolume = volume.findLastIndex((n) => n > 0)
+    const firstGrid = grid.findIndex((n) => n > 0)
+    expect(firstGrid).toBe(lastVolume + 1)
+    // Whole again, under a held clock: no slice of either.
+    const lastGrid = grid.findLastIndex((n) => n > 0)
+    expect(volume.slice(lastGrid + 1).every((n) => n === 0)).toBe(true)
+    expect(grid.slice(lastGrid + 1).every((n) => n === 0)).toBe(true)
   }, 120_000)
 })
 
