@@ -9,7 +9,7 @@
  *     [--experiment <record.json>]          its candidates are the experiment
  *     [--deck <record.json>]                take the deck arm from this one only
  *     [--guard-base <record.json>]          a moved guard's last accepted plate
- *     [--anchors <dir>] [--anchor-table <md>]   the stills, and a table of them
+ *     [--anchors <dir>]                      the real-time anchor stills
  *     [--references <md>] [--only e1,g1]
  *     [--seats a,b,c] [--allow <path prefix>] ...
  *
@@ -212,13 +212,12 @@ export function parseReferences(text) {
 }
 
 /**
- * The real-time anchor stills by picture tag, from any table whose header
- * has `Picture` and `SHA-256`: references.md's anchor rows once the
- * orchestrator lists them, or the frozen table itself by `--anchor-table`.
- * The file is the first code span of the `Anchor`, `File` or `Id` cell; a
- * row with none ("no matched anchor") records that its picture has none.
- * Any other column rides along into the round's record. An anchor is never
- * captioned in a packet: it is an arm, and a caption would name it.
+ * The real-time anchor stills by picture tag, from references.md's table
+ * whose header has both `Picture` and `SHA-256`, the one table there that
+ * does. The file is the `File` cell's code span; a row with none ("no
+ * matched anchor") records that its picture has none. The other columns
+ * ride along into the round's record. An anchor is never captioned in a
+ * packet: it is an arm, and a caption would name it.
  */
 export function parseAnchors(text) {
   const anchors = {}
@@ -228,10 +227,10 @@ export function parseAnchors(text) {
     if (!rows[0] || !('Picture' in rows[0]) || !('SHA-256' in rows[0])) continue
     for (const row of rows) {
       const tag = row.Picture.toLowerCase()
-      const [file] = ticked(row.Anchor ?? row.File ?? row.Id ?? '')
+      const [file] = ticked(row.File)
       anchors[tag] ??= []
       if (file === undefined) continue
-      const { Picture: _, 'SHA-256': hash, ...about } = row
+      const { Picture: _, File: __, 'SHA-256': hash, ...about } = row
       anchors[tag].push({ file, sha256: ticked(hash)[0], about })
     }
   }
@@ -332,8 +331,15 @@ export function checkArm(plate, arm, { references }) {
     refuse(`its stance is ${plate.stance?.id}`)
   if (plate.processing !== PROCESSING)
     refuse(`it was taken under ${plate.processing}`)
+  // A plate is compared only under the references it was taken with
+  // (rubric §3.2). A record taken before references.md last changed is
+  // retaken, never let through: phase 0's baseline is retaken in the next
+  // machine window, on the capture's second pass.
   if (plate.fixtures?.references !== references)
-    refuse(`its references hash is not this references.md's`)
+    refuse(
+      `its record carries references.md at ${plate.fixtures?.references}, and the file is ${references} now. ` +
+        'A plate is compared only under the references it was taken with; the baseline is retaken in the next machine window, on the capture’s second pass',
+    )
 }
 
 /**
@@ -413,7 +419,12 @@ function layoutOf(round, scenes, photos, seat, attempt) {
       )
       .map(([arm, plate]) => ({ arm, sha256: plate.sha256, file: plate.file }))
     for (const anchor of scene.anchors ?? [])
-      sources.push({ arm: 'anchor', sha256: anchor.sha256, file: anchor.path })
+      sources.push({
+        arm: 'anchor',
+        sha256: anchor.sha256,
+        file: anchor.path,
+        own: anchor.crops,
+      })
     let references = photos[scene.picture] ?? []
     if (everyScene || photographAt === scene.picture) {
       const withheld = references[draw() < 0.5 ? 0 : 1]
@@ -488,6 +499,8 @@ export const cropCell = (crop) => {
   return { width, height }
 }
 
+const pixelRect = ({ x, y, w, h }) => ({ left: x, top: y, width: w, height: h })
+
 async function inCell(pipeline, cell) {
   const { data, info } = await pipeline
     .resize({ ...cell, fit: 'inside', withoutEnlargement: true })
@@ -515,8 +528,12 @@ async function inCell(pipeline, cell) {
   return sharp(placed.data, { raw: placed.info }).removeAlpha().png().toBuffer()
 }
 
-/** One source as the packet shows it: the full frame, then each crop. */
-async function render(file, crops) {
+/**
+ * One source as the packet shows it: the full frame, then each crop. `own`
+ * is an anchor's own rectangles in its pixels, which replace the scene's
+ * shared fractions for that image alone.
+ */
+async function render(file, crops, own = {}) {
   const { data, info } = await sharp(file)
     .rotate()
     .removeAlpha()
@@ -528,7 +545,11 @@ async function render(file, crops) {
   const cut = {}
   for (const [name, crop] of Object.entries(crops))
     cut[name] = await inCell(
-      raw().extract(rectOf(crop, info.width, info.height)),
+      raw().extract(
+        own[name]
+          ? pixelRect(own[name])
+          : rectOf(crop, info.width, info.height),
+      ),
       cropCell(crop),
     )
   return { full, crops: cut }
@@ -633,7 +654,38 @@ async function readInputs(options) {
 }
 
 /** Every photograph and anchor of the round's scenes, read and checked. */
-async function sourcesOf(scenes, refs, anchors, options) {
+/**
+ * An anchor's own crops from crops.json, refused unless they are frozen for
+ * this very image, name exactly the picture's crops, and fit both the image
+ * and the picture's crop cell, so the cut is never scaled.
+ */
+function anchorCrops(one, scene, { crops, anchors }) {
+  const own = anchors[one.file]
+  const names = Object.keys(crops[scene.picture] ?? {})
+  const refuse = (why) => {
+    throw new Error(`the anchor ${one.file} has ${why} in crops.json`)
+  }
+  if (own === undefined) refuse('no crop of its own')
+  if (own.sha256 !== one.sha256 || own.picture !== scene.picture)
+    refuse('a crop frozen for another image or picture')
+  if (
+    canonical(Object.keys(own).filter((k) => names.includes(k))) !==
+    canonical(names)
+  )
+    refuse(`not the crops ${names.join(' and ')}`)
+  const [width, height] = own.pixels
+  for (const name of names) {
+    const r = own[name]
+    const cell = cropCell(crops[scene.picture][name])
+    if (r.x < 0 || r.y < 0 || r.x + r.w > width || r.y + r.h > height)
+      refuse(`a ${name} outside its ${width} × ${height} frame`)
+    if (r.w > cell.width || r.h > cell.height)
+      refuse(`a ${name} larger than its ${cell.width} × ${cell.height} cell`)
+  }
+  return Object.fromEntries(names.map((name) => [name, own[name]]))
+}
+
+async function sourcesOf(scenes, refs, options, cropsJson) {
   const photos = {}
   for (const scene of scenes.filter((one) => one.kind === 'still')) {
     photos[scene.picture] = []
@@ -646,10 +698,11 @@ async function sourcesOf(scenes, refs, anchors, options) {
       throw new Error(`${scene.picture} has fewer than two frozen photographs`)
     scene.anchors = []
     if (options.kind !== 'calibration') continue
-    for (const one of anchors[scene.tag] ?? [])
+    for (const one of refs.anchors[scene.tag] ?? [])
       scene.anchors.push({
         ...one,
         path: await verified(options.anchors, one.file, one.sha256),
+        crops: anchorCrops(one, scene, cropsJson),
       })
   }
   return photos
@@ -673,7 +726,12 @@ async function writeSeat(out, round, { seat, layout }, context) {
     const images = []
     key.scenes[name] = {}
     for (const [source, letter] of letters) {
-      const drawn = await context.render(source.file, source.sha256, crops)
+      const drawn = await context.render(
+        source.file,
+        source.sha256,
+        crops,
+        source.own,
+      )
       const full = `${name}/${letter}.png`
       await writeFile(path.join(dir, full), drawn.full)
       const cut = []
@@ -729,15 +787,16 @@ const PLATE_FIELDS = ['file', 'sha256', 'role', 'commit', 'levers']
 
 /**
  * What a picture's anchors were, for the round's record. A picture with
- * none says so (rubric §3.5). E2's anchor is matched to its terminator crop
- * alone, so its band is recorded as unmatched too (the orchestrator's
- * freeze of the anchors, 2026-11-10).
+ * none says so (rubric §3.5). E2's still is matched to its terminator crop
+ * alone, so its band is recorded as unmatched too (references.md, "The
+ * real-time anchor").
  */
 function anchorRecord(scene) {
   // The local path differs by machine; the record keeps the file and hash.
-  const stills = scene.anchors.map(({ file, sha256: hash, about }) => ({
+  const stills = scene.anchors.map(({ file, sha256: hash, about, crops }) => ({
     file,
     sha256: hash,
+    crops,
     about,
   }))
   const unmatched =
@@ -788,13 +847,11 @@ export async function buildRound(options) {
   })
   if (!scenes.some((scene) => scene.kind === 'still'))
     throw new Error('a round needs at least one still picture')
-  const anchorTable = options.anchorTable ?? null
-  const anchors = anchorTable
-    ? parseAnchors(await readFile(anchorTable, 'utf8'))
-    : refs.anchors
-  const photos = await sourcesOf(scenes, refs, anchors, options)
-  const crops = (await readJson(options.crops ?? path.join(HERE, 'crops.json')))
-    .crops
+  const cropsJson = await readJson(
+    options.crops ?? path.join(HERE, 'crops.json'),
+  )
+  const crops = cropsJson.crops
+  const photos = await sourcesOf(scenes, refs, options, cropsJson)
   const templateFile = options.template ?? path.join(HERE, 'brief.template.md')
   const round = {
     format: 'inertialref/panel-round',
@@ -811,9 +868,9 @@ export async function buildRound(options) {
     notes: refs.notes,
     allowed: round.allowed,
     template: await readFile(templateFile, 'utf8'),
-    render: (file, sha, picked) => {
-      const id = `${sha}:${canonical(picked)}`
-      if (!cache.has(id)) cache.set(id, render(file, picked))
+    render: (file, sha, picked, own) => {
+      const id = `${sha}:${canonical([picked, own ?? null])}`
+      if (!cache.has(id)) cache.set(id, render(file, picked, own))
       return cache.get(id)
     },
   }
@@ -824,7 +881,7 @@ export async function buildRound(options) {
   const record = {
     ...round,
     references: { file: referencesFile, sha256: references },
-    crops: sha256(canonical(crops)),
+    crops: sha256(canonical(cropsJson)),
     template: await hashFile(templateFile),
     records: await Promise.all(
       inputs.map(async (one) => ({
@@ -834,10 +891,6 @@ export async function buildRound(options) {
         supplied: one.supplied ?? null,
       })),
     ),
-    anchors: anchorTable && {
-      file: anchorTable,
-      sha256: await hashFile(anchorTable),
-    },
     scenes: scenes.map((scene) => sceneRecord(scene, photos, round.kind)),
   }
   await writeFile(
@@ -856,7 +909,6 @@ if (import.meta.main) {
       out: { type: 'string' },
       photos: { type: 'string' },
       anchors: { type: 'string' },
-      'anchor-table': { type: 'string' },
       references: { type: 'string' },
       baseline: { type: 'string' },
       record: { type: 'string', multiple: true },
@@ -884,7 +936,6 @@ if (import.meta.main) {
       out: resolve(values.out),
       photos: resolve(values.photos),
       anchors: resolve(values.anchors),
-      anchorTable: resolve(values['anchor-table']),
       references: resolve(values.references),
       baseline: resolve(values.baseline),
       record: values.record?.map(resolve),

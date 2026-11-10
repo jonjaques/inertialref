@@ -23,9 +23,13 @@ import {
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const hash = (data) => createHash('sha256').update(data).digest('hex')
-const crops = JSON.parse(
+const cropsJson = JSON.parse(
   await readFile(path.join(ROOT, 'scripts/panel/crops.json'), 'utf8'),
-).crops
+)
+const crops = cropsJson.crops
+const references = parseReferences(
+  await readFile(path.join(ROOT, 'design/plans/weather/references.md'), 'utf8'),
+)
 
 describe('crops.json', () => {
   it('gives every still cornerstone a crop inside its frame, and E2 a terminator', () => {
@@ -45,15 +49,43 @@ describe('crops.json', () => {
       'terminator',
     ])
   })
+
+  it('gives every frozen anchor its own crops, inside its image and no larger than the cell', () => {
+    const frozen = Object.values(references.anchors).flat()
+    expect(frozen).toHaveLength(9)
+    expect(Object.keys(cropsJson.anchors).sort()).toEqual(
+      frozen.map((one) => one.file).sort(),
+    )
+    for (const one of frozen) {
+      const own = cropsJson.anchors[one.file]
+      const picture = own.picture
+      expect(own.sha256, one.file).toBe(one.sha256)
+      // The pixels the rectangles are checked against are the frozen row's.
+      expect(own.pixels.join(' × '), one.file).toBe(one.about.Pixels)
+      const names = Object.keys(crops[picture])
+      const [width, height] = own.pixels
+      for (const name of names) {
+        const r = own[name]
+        const cell = rectOf(
+          crops[picture][name],
+          RIG.width * RIG.dpr,
+          RIG.height * RIG.dpr,
+        )
+        expect(r.x >= 0 && r.y >= 0, one.file).toBe(true)
+        expect(r.x + r.w <= width && r.y + r.h <= height, one.file).toBe(true)
+        expect([r.w, r.h], one.file).toEqual([
+          Math.min(cell.width, width),
+          Math.min(cell.height, height),
+        ])
+        expect(r.why.length, one.file).toBeGreaterThan(20)
+      }
+    }
+  })
 })
 
 describe('references.md', () => {
-  it('reads the frozen 40 in rank order, each with a hash and a caption', async () => {
-    const text = await readFile(
-      path.join(ROOT, 'design/plans/weather/references.md'),
-      'utf8',
-    )
-    const { pictures, notes } = parseReferences(text)
+  it('reads the frozen 40 in rank order, each with a hash and a caption', () => {
+    const { pictures, notes } = references
     const all = Object.values(pictures).flat()
     expect(all).toHaveLength(40)
     expect(pictures.e1[0].file).toBe('e1/iss061-e-59841-amazon-210mm.jpg')
@@ -66,37 +98,46 @@ describe('references.md', () => {
     expect(notes.some((note) => note.startsWith('**2026'))).toBe(false)
   })
 
-  it('reads an anchor table, a picture with none recorded as having none', () => {
+  it('reads the anchor table, a picture with none recorded as having none', () => {
     const table = [
-      '| Picture | Anchor | Engine | SHA-256 |',
+      '| Picture | File | Engine | SHA-256 |',
       '| --- | --- | --- | --- |',
       '| E1 | `a-e1.png` | Unreal | `aa` |',
-      '| E3 | no matched anchor | — | — |',
+      '| E3 | no matched anchor | none | none |',
       '| G1 | `a-g1-1.jpg` | Decima | `bb` |',
       '| G1 | `a-g1-2.png` | Unity | `cc` |',
     ].join('\n')
-    expect(parseAnchors(`# Frozen\n\n${table}\n\nprose`)).toEqual({
-      e1: [
-        {
-          file: 'a-e1.png',
-          sha256: 'aa',
-          about: { Anchor: '`a-e1.png`', Engine: 'Unreal' },
-        },
-      ],
+    expect(parseAnchors(`## Anchors\n\n${table}\n\nprose`)).toEqual({
+      e1: [{ file: 'a-e1.png', sha256: 'aa', about: { Engine: 'Unreal' } }],
       e3: [],
       g1: [
-        {
-          file: 'a-g1-1.jpg',
-          sha256: 'bb',
-          about: { Anchor: '`a-g1-1.jpg`', Engine: 'Decima' },
-        },
-        {
-          file: 'a-g1-2.png',
-          sha256: 'cc',
-          about: { Anchor: '`a-g1-2.png`', Engine: 'Unity' },
-        },
+        { file: 'a-g1-1.jpg', sha256: 'bb', about: { Engine: 'Decima' } },
+        { file: 'a-g1-2.png', sha256: 'cc', about: { Engine: 'Unity' } },
       ],
     })
+    // The frozen nine, E3 with none.
+    expect(references.anchors.e3).toEqual([])
+    expect(references.anchors.e2.map((one) => one.file)).toEqual([
+      'a-e2-ue4-1.jpg',
+    ])
+  })
+
+  /*
+   * A seat knows nothing of the project, so no caption or note a packet
+   * carries may use its words: the preset, the render, the scenario, the
+   * MVP, the rubric, a cornerstone, a phase, the continuity check, or a
+   * regime's name. "Render" in any form is on the list, since a seat cannot
+   * tell the project's sense from a camera's.
+   */
+  const PROJECT_WORDS =
+    /\b(presets?|render\w*|scenarios?|MVP|rubric|cornerstones?|phases?|continuity|fair-cumulus|cirrus-over-cumulus|dusk-altocumulus)\b/i
+
+  it('carries no project word in a caption or a note a packet reads', () => {
+    const captions = Object.values(references.pictures)
+      .flat()
+      .map((one) => one.caption)
+    for (const text of [...captions, ...references.notes])
+      expect(text).not.toMatch(PROJECT_WORDS)
   })
 })
 
@@ -146,12 +187,41 @@ beforeAll(async () => {
     frozen.push(`| ${tag.toUpperCase()} | 3 | ${files.join(', ')} |`)
   }
   // Two anchors: one smaller than its cell, one larger. G1 has none.
+  // Two anchors: one smaller than its cell, and one 4K still whose every
+  // pixel differs from its neighbors, so a crop that was scaled shows.
   await solid(path.join(anchors, 'a-e1.png'), 400, 250, [250, 10, 10])
-  await solid(path.join(anchors, 'a-e2.jpg'), 3840, 2160, [10, 250, 10], 'jpeg')
+  const pattern = Buffer.alloc(3840 * 2160 * 3)
+  for (let i = 0; i < 3840 * 2160; i++) {
+    const x = i % 3840
+    const y = Math.floor(i / 3840)
+    pattern.set([x % 251, y % 241, (x * 7 + y * 13) % 256], i * 3)
+  }
+  await sharp(pattern, { raw: { width: 3840, height: 2160, channels: 3 } })
+    .png()
+    .toFile(path.join(anchors, 'a-e2.png'))
   const anchorSha = {
     e1: hash(await readFile(path.join(anchors, 'a-e1.png'))),
-    e2: hash(await readFile(path.join(anchors, 'a-e2.jpg'))),
+    e2: hash(await readFile(path.join(anchors, 'a-e2.png'))),
   }
+  const fixtureCrops = {
+    crops,
+    anchors: {
+      'a-e1.png': {
+        picture: ID.e1,
+        sha256: anchorSha.e1,
+        pixels: [400, 250],
+        crop: { x: 0, y: 0, w: 400, h: 250, why: 'the whole small still' },
+      },
+      'a-e2.png': {
+        picture: ID.e2,
+        sha256: anchorSha.e2,
+        pixels: [3840, 2160],
+        crop: { x: 100, y: 200, w: 720, h: 450, why: 'one place' },
+        terminator: { x: 3000, y: 1700, w: 720, h: 450, why: 'another' },
+      },
+    },
+  }
+  await writeFile(path.join(dir, 'crops.json'), JSON.stringify(fixtureCrops))
   const references = [
     '# Fixture references',
     '',
@@ -181,7 +251,7 @@ beforeAll(async () => {
     '| Picture | File | Engine | SHA-256 |',
     '| --- | --- | --- | --- |',
     `| E1 | \`a-e1.png\` | Unreal | \`${anchorSha.e1}\` |`,
-    `| E2 | \`a-e2.jpg\` | Unreal | \`${anchorSha.e2}\` |`,
+    `| E2 | \`a-e2.png\` | Unreal | \`${anchorSha.e2}\` |`,
     '| G1 | no matched anchor | — | — |',
     '',
   ].join('\n')
@@ -238,7 +308,9 @@ beforeAll(async () => {
     dir,
     baselineRecord: baseline,
     referencesSha,
+    pattern,
     options: (out, kind, seed = 'fixture') => ({
+      crops: path.join(dir, 'crops.json'),
       round: `${kind}-1`,
       kind,
       seed,
@@ -346,7 +418,9 @@ describe('the record reader', () => {
     ).toThrow(/taken under standard/)
     expect(() =>
       checkArm({ ...good, fixtures: { references: 'g' } }, 'candidate', refs),
-    ).toThrow(/references hash/)
+    ).toThrow(
+      'its record carries references.md at g, and the file is f now. A plate is compared only under the references it was taken with; the baseline is retaken in the next machine window, on the capture’s second pass',
+    )
   })
 })
 
@@ -587,7 +661,63 @@ describe('the calibration round’s packets', () => {
     expect(await pixel(small, 920, 575)).toEqual(ground)
     // 3840 × 2160 fits as 1440 × 810, with the ground above and below.
     const large = `e2/${letter('e2')}.png`
-    expect(await pixel(large, 720, 40)).toEqual(ground)
-    expect((await pixel(large, 720, 50))[1]).toBeGreaterThan(240)
+    expect(await pixel(large, 720, 44)).toEqual(ground)
+    expect(await pixel(large, 720, 45)).not.toEqual(ground)
+  })
+
+  it('cut each anchor at its own rectangle, at native pixels, never scaled', async () => {
+    const key = keys[1]
+    const dir = path.join(out, 'packets', key.packet)
+    const [letter] = Object.entries(key.scenes.e2).find(
+      ([, one]) => one.arm === 'anchor',
+    )
+    const region = (x, y) => {
+      const rows = []
+      for (let row = y; row < y + 450; row++)
+        rows.push(
+          fx.pattern.subarray((row * 3840 + x) * 3, (row * 3840 + x + 720) * 3),
+        )
+      return Buffer.concat(rows)
+    }
+    for (const [crop, x, y] of [
+      ['crop', 100, 200],
+      ['terminator', 3000, 1700],
+    ]) {
+      const cut = await sharp(path.join(dir, `e2/${letter}.${crop}.png`))
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+      expect([cut.info.width, cut.info.height]).toEqual([720, 450])
+      expect(cut.data.equals(region(x, y)), crop).toBe(true)
+    }
+    // A still smaller than its cell is cut whole and sits on the ground.
+    const [small] = Object.entries(key.scenes.e1).find(
+      ([, one]) => one.arm === 'anchor',
+    )
+    const { data } = await sharp(path.join(dir, `e1/${small}.crop.png`))
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+    const at = (x, y) => [
+      ...data.subarray((y * 720 + x) * 3, (y * 720 + x) * 3 + 3),
+    ]
+    expect(at(159, 99)).toEqual([GROUND.r, GROUND.g, GROUND.b])
+    expect(at(160, 100)).toEqual([250, 10, 10])
+    const record = JSON.parse(
+      await readFile(path.join(out, 'round.json'), 'utf8'),
+    )
+    const e2 = record.scenes.find((one) => one.picture === ID.e2)
+    expect(e2.anchors.stills[0].crops.terminator).toMatchObject({
+      x: 3000,
+      y: 1700,
+    })
+  })
+
+  it('refuse an anchor with no crop of its own', async () => {
+    const bare = path.join(fx.dir, 'bare-crops.json')
+    await writeFile(bare, JSON.stringify({ crops, anchors: {} }))
+    await expect(
+      buildRound({ ...fx.options('cal-bare', 'calibration'), crops: bare }),
+    ).rejects.toThrow(
+      'the anchor a-e1.png has no crop of its own in crops.json',
+    )
   })
 })
