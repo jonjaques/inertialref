@@ -28,7 +28,6 @@ import {
 import {
   CLOUD_GENERA,
   cloudExtents,
-  curlNoise,
   genusProfile,
   horizonBasis,
   levelFrames,
@@ -41,20 +40,13 @@ import {
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
 import { CloudClipmap } from './cloudClipmap.ts'
-import {
-  analyticMedium,
-  fieldMedium,
-  SWEEP_READS_MAX,
-  SWEEP_STRIDE,
-  sweepMedium,
-  synopticMedium,
-} from './cloudDensity.ts'
+import { analyticMedium, fieldMedium, synopticMedium } from './cloudDensity.ts'
 import {
   CLOUD_CLIPMAP_SIZE,
   CLOUD_CLIPMAP_TEXELS,
   type CloudFrame,
 } from './cloudFrame.ts'
-import { CLOUD_SWEEP_EXTRAS, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
+import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { CloudMaps } from './cloudMaps.ts'
 import type { CloudBudget, CloudMediumFn, CloudSample } from './cloudNodes.ts'
 import { CloudNoise } from './cloudNoise.ts'
@@ -670,7 +662,6 @@ describe('the three media are §5.6, differing only in their coverage', () => {
       fieldMedium(deps),
       synopticMedium(deps),
       analyticMedium(deps),
-      sweepMedium(deps),
     ]) {
       const read = await evaluate(outside, medium, field.uniforms)
       for (let n = 0; n < outside.length; n += 1) {
@@ -729,104 +720,6 @@ describe('the three media are §5.6, differing only in their coverage', () => {
   })
 })
 
-describe('the sweep', () => {
-  it('sums exactly `sweepReads` base fetches, and adds one of `sweepExtra`’s type', async () => {
-    const scenario = WEATHER_SCENARIOS['two-decks']
-    const field = bakeField(scenario)
-    const sweep = sweepMedium({
-      uniforms: field.uniforms,
-      clipmap: field.clipmap.nodes,
-      noise: noise.nodes,
-      profile,
-    })
-    const points = placePoints(scenario, 17).slice(0, 24)
-    // R8 is bound: a fetch folds to 0.4·r + 0.1 (WebGPU reads (r, 0, 0, 1)).
-    const fetches = await loadTexels(
-      noiseTexture('cloud base noise'),
-      '3d',
-      points.flatMap((p) =>
-        Array.from(
-          { length: SWEEP_READS_MAX },
-          (_, r) =>
-            p.base.map((t, a) => (t + SWEEP_STRIDE[a]! * r) % 128) as [
-              number,
-              number,
-              number,
-            ],
-        ),
-      ),
-    )
-    const trace = field.uniforms.trace
-    for (const reads of [1, 2, 4, 6]) {
-      trace.sweepReads.value = reads
-      trace.sweepExtra.value = 0
-      const read = await evaluate(points, sweep, field.uniforms)
-      points.forEach((point, n) => {
-        let sum = 0
-        for (let r = 0; r < reads; r += 1)
-          sum += 0.4 * fetches[(n * SWEEP_READS_MAX + r) * 4]! + 0.1
-        const spec = scenario.layers[point.layer]!
-        const want = spec.sigma * saturate(sum / (reads + 1))
-        expect(Math.abs(read[n * 8 + 1]! - want) / spec.sigma).toBeLessThan(
-          1e-5,
-        )
-      })
-    }
-
-    // One extra of each type: its value is what that read alone returns.
-    trace.sweepReads.value = 1
-    const base = await evaluate(points, sweep, field.uniforms)
-    const clip = Math.round(0.6 * 255) / 255
-    const stored = await storedNoise(points)
-    const table = profile.texture.image.data as Uint8Array
-    for (const name of CLOUD_SWEEP_EXTRAS) {
-      if (name === 'none') continue
-      trace.sweepExtra.value = CLOUD_SWEEP_EXTRAS.indexOf(name)
-      const read = await evaluate(points, sweep, field.uniforms)
-      points.forEach((point, n) => {
-        const spec = scenario.layers[point.layer]!
-        const row = CLOUD_GENERA.indexOf(spec.genus)
-        const cell = spec.cellMeters
-        const cells = [point.offset.x, point.offset.z].map(
-          (o, a) =>
-            (o +
-              [NOISE_ORIGIN.x, NOISE_ORIGIN.z][a]! -
-              [DRIFT.x, DRIFT.z][a]!) /
-            cell,
-        )
-        const curl = curlNoise(cells[0]! / 8, cells[1]! / 8)[0]
-        const extra =
-          name === 'clipmap' || name === 'level'
-            ? clip
-            : name === 'profile'
-              ? table[(row * 64 + point.height) * 4]! / 255
-              : name === 'detail'
-                ? stored.detail[n]!
-                : curl
-        const sum = (base[n * 8 + 1]! / spec.sigma) * 2
-        const want = spec.sigma * saturate((sum + extra) / 2)
-        // The curl is read filtered between its texels, at 8-bit storage.
-        const bound = name === 'curl' ? 0.02 : 1e-5
-        expect(
-          Math.abs(read[n * 8 + 1]! - want) / spec.sigma,
-          `${name} at ${n}`,
-        ).toBeLessThan(bound)
-      })
-    }
-    trace.sweepExtra.value = 0
-    trace.sweepReads.value = 0
-    field.dispose()
-  })
-})
-
-/*
- * The structure test. A fragment shader reading a texture with
- * `textureSample` in non-uniform control flow — after a `Break` in a loop —
- * is a module Tint refuses, so every medium must name level 0 at every read.
- * The check runs on the WGSL a fragment material running each medium in such
- * a loop compiles to, and a variant with one plain `.sample()` shows the
- * check can fail.
- */
 describe('every read names level 0', () => {
   const camera = new OrthographicCamera(-1, 1, 1, -1, 0, 2)
   camera.position.z = 1
@@ -876,7 +769,6 @@ describe('every read names level 0', () => {
     ['fieldMedium', 5],
     ['synopticMedium', 4],
     ['analyticMedium', 3],
-    ['sweepMedium', SWEEP_READS_MAX + 5],
   ] as const)(
     '%s: no bare textureSample, and a textureSampleLevel for each of its %i reads',
     async (name, count) => {
@@ -892,7 +784,6 @@ describe('every read names level 0', () => {
         fieldMedium,
         synopticMedium,
         analyticMedium,
-        sweepMedium,
       }[name](deps)
       const wgsl = await marched(medium, field.uniforms, false)
       expect(reads(wgsl, 'textureSample')).toBe(0)

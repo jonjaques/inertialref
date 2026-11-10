@@ -24,21 +24,8 @@ export const CLOUD_FORCES = [
 ] as const
 export type CloudForce = (typeof CLOUD_FORCES)[number]
 
-/** The one read type the sweep adds to its base fetches (§8.4). */
-export const CLOUD_SWEEP_EXTRAS = [
-  'none',
-  'clipmap',
-  'profile',
-  'detail',
-  'curl',
-  'level',
-] as const
-export type CloudSweepExtra = (typeof CLOUD_SWEEP_EXTRAS)[number]
-
 const LIGHT_TAP_COUNTS = [0, 2, 4] as const
 const TRACE_SCALES = [0.5, 1, 2] as const
-const SWEEP_READS = [0, 1, 2, 4, 6] as const
-const NOISE_FORMATS = ['r8', 'rgba8'] as const
 const DECKS = ['auto', 'hidden'] as const
 
 /** Read by the chain every render call. Scripts write `engine.clouds = { ...engine.clouds, … }`. */
@@ -58,12 +45,6 @@ export interface CloudLevers {
   readonly flySpeed: number
   readonly traceScale: (typeof TRACE_SCALES)[number]
   readonly maxSteps: number
-  /** >0 selects the sweep kernel: exactly this many 4 m steps a ray (§8.4). With sweepReads ≥ 1. */
-  readonly fixedSteps: number
-  /** Base-noise fetches a sweep step makes, at decorrelated offsets; 0 outside the sweep. */
-  readonly sweepReads: (typeof SWEEP_READS)[number]
-  readonly sweepExtra: CloudSweepExtra
-  readonly noiseFormat: (typeof NOISE_FORMATS)[number]
   /**
    * The trace's jitter held at this frame index; null, the default, steps it
    * with the frame. A measurement lever: held, a held still repeats every
@@ -101,10 +82,6 @@ export const DEFAULT_CLOUD_LEVERS: CloudLevers = Object.freeze({
   flySpeed: 250,
   traceScale: 1,
   maxSteps: 192,
-  fixedSteps: 0,
-  sweepReads: 0,
-  sweepExtra: 'none',
-  noiseFormat: 'r8',
   jitterFrame: null,
   served: null,
   second: null,
@@ -135,11 +112,6 @@ const FIELDS: Readonly<Record<keyof CloudLevers, (value: unknown) => boolean>> =
     flySpeed: (value) => finite(value) && value >= 0,
     traceScale: oneOf(TRACE_SCALES),
     maxSteps: (value) => Number.isSafeInteger(value) && (value as number) > 0,
-    fixedSteps: (value) =>
-      Number.isSafeInteger(value) && (value as number) >= 0,
-    sweepReads: oneOf(SWEEP_READS),
-    sweepExtra: oneOf(CLOUD_SWEEP_EXTRAS),
-    noiseFormat: oneOf(NOISE_FORMATS),
     jitterFrame: (value) =>
       value === null || (Number.isSafeInteger(value) && (value as number) >= 0),
     served: address,
@@ -148,12 +120,7 @@ const FIELDS: Readonly<Record<keyof CloudLevers, (value: unknown) => boolean>> =
     stats: (value) => typeof value === 'boolean',
   }
 
-/**
- * Every field one of its values, no field the levers do not have, and the
- * sweep's two levers together: `fixedSteps > 0` exactly when `sweepReads ≥ 1`.
- * One without the other selects a kernel that either reads nothing a step or
- * never stops reading.
- */
+/** Every field one of its values, and no field the levers do not have. */
 export function isCloudLevers(value: unknown): value is CloudLevers {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
@@ -167,8 +134,7 @@ export function isCloudLevers(value: unknown): value is CloudLevers {
     const test = FIELDS[key as keyof CloudLevers]
     if (!test(record[key])) return false
   }
-  const levers = value as CloudLevers
-  return levers.fixedSteps > 0 === levers.sweepReads >= 1
+  return true
 }
 
 /**
@@ -182,10 +148,6 @@ export function cloudResetKey(levers: CloudLevers): string {
     levers.farFootprint,
     levers.composite,
     levers.traceScale,
-    levers.noiseFormat,
-    levers.fixedSteps,
-    levers.sweepReads,
-    levers.sweepExtra,
     levers.served,
     levers.second,
   ])

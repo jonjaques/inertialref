@@ -4,7 +4,6 @@ import { SCENARIO_IDS } from '@inertialref/rendering'
 import {
   CLOUD_COMPOSITES,
   CLOUD_FORCES,
-  CLOUD_SWEEP_EXTRAS,
   type CloudLevers,
   cloudResetKey,
   DEFAULT_CLOUD_LEVERS,
@@ -17,10 +16,6 @@ const RESET_LEVERS = [
   'farFootprint',
   'composite',
   'traceScale',
-  'noiseFormat',
-  'fixedSteps',
-  'sweepReads',
-  'sweepExtra',
   'served',
   'second',
 ] as const satisfies readonly (keyof CloudLevers)[]
@@ -38,10 +33,6 @@ const MALFORMED: Record<keyof CloudLevers, readonly unknown[]> = {
   flySpeed: [-1, Number.NaN],
   traceScale: [0.25, 4, '1'],
   maxSteps: [0, -8, 1.5, Infinity],
-  fixedSteps: [-1, 2.5, Number.NaN],
-  sweepReads: [3, 8, -1],
-  sweepExtra: ['noise', null],
-  noiseFormat: ['r16f', ''],
   jitterFrame: [-1, 2.5, Number.NaN, '0', undefined],
   served: [0, undefined, {}],
   second: [false, undefined],
@@ -50,37 +41,24 @@ const MALFORMED: Record<keyof CloudLevers, readonly unknown[]> = {
 }
 
 /** Every lever set the guard accepts. */
-const levers: fc.Arbitrary<CloudLevers> = fc
-  .record({
-    on: fc.boolean(),
-    scenario: fc.constantFrom(...SCENARIO_IDS),
-    farFootprint: fc.constantFrom(100, 400, 1600),
-    lightTaps: fc.constantFrom(0 as const, 2 as const, 4 as const),
-    composite: fc.constantFrom(...CLOUD_COMPOSITES),
-    force: fc.constantFrom(...CLOUD_FORCES),
-    warp: fc.constantFrom(1, 1000),
-    scrubSeconds: fc.constantFrom(-3600, 10_800),
-    flySpeed: fc.constantFrom(0, 250, 7700),
-    traceScale: fc.constantFrom(0.5 as const, 1 as const, 2 as const),
-    maxSteps: fc.constantFrom(64, 192),
-    sweep: fc.constantFrom(
-      [0, 0] as const,
-      [512, 1] as const,
-      [512, 6] as const,
-    ),
-    sweepExtra: fc.constantFrom(...CLOUD_SWEEP_EXTRAS),
-    noiseFormat: fc.constantFrom('r8' as const, 'rgba8' as const),
-    jitterFrame: fc.constantFrom(null, 0, 41, 2 ** 32 + 5),
-    served: fc.constantFrom(null, 's:3/b:2', 'b:4.0'),
-    second: fc.constantFrom(null, 'b:4'),
-    deck: fc.constantFrom('auto' as const, 'hidden' as const),
-    stats: fc.boolean(),
-  })
-  .map(({ sweep: [fixedSteps, sweepReads], ...rest }) => ({
-    ...rest,
-    fixedSteps,
-    sweepReads,
-  }))
+const levers: fc.Arbitrary<CloudLevers> = fc.record({
+  on: fc.boolean(),
+  scenario: fc.constantFrom(...SCENARIO_IDS),
+  farFootprint: fc.constantFrom(100, 400, 1600),
+  lightTaps: fc.constantFrom(0 as const, 2 as const, 4 as const),
+  composite: fc.constantFrom(...CLOUD_COMPOSITES),
+  force: fc.constantFrom(...CLOUD_FORCES),
+  warp: fc.constantFrom(1, 1000),
+  scrubSeconds: fc.constantFrom(-3600, 10_800),
+  flySpeed: fc.constantFrom(0, 250, 7700),
+  traceScale: fc.constantFrom(0.5 as const, 1 as const, 2 as const),
+  maxSteps: fc.constantFrom(64, 192),
+  jitterFrame: fc.constantFrom(null, 0, 41, 2 ** 32 + 5),
+  served: fc.constantFrom(null, 's:3/b:2', 'b:4.0'),
+  second: fc.constantFrom(null, 'b:4'),
+  deck: fc.constantFrom('auto' as const, 'hidden' as const),
+  stats: fc.boolean(),
+})
 
 describe('the cloud levers', () => {
   it('default to off, and the defaults are levers', () => {
@@ -119,15 +97,6 @@ describe('the cloud levers', () => {
       expect(isCloudLevers({ ...missing, [name]: 1 })).toBe(false)
   })
 
-  it('take the sweep only whole: fixed steps exactly with reads', () => {
-    const sweep = (fixedSteps: number, sweepReads: number) =>
-      isCloudLevers({ ...DEFAULT_CLOUD_LEVERS, fixedSteps, sweepReads })
-    expect(sweep(0, 0)).toBe(true)
-    expect(sweep(512, 1)).toBe(true)
-    expect(sweep(512, 0)).toBe(false)
-    expect(sweep(0, 2)).toBe(false)
-  })
-
   it('accept every lever set the generator draws', () => {
     fc.assert(fc.property(levers, (set) => isCloudLevers(set)))
   })
@@ -147,8 +116,6 @@ describe('the reset key', () => {
       flySpeed: 7700,
       traceScale: 2,
       maxSteps: 64,
-      sweepExtra: 'curl',
-      noiseFormat: 'rgba8',
       jitterFrame: 7,
       served: 'b:2',
       second: 'b:4',
@@ -162,14 +129,6 @@ describe('the reset key', () => {
         (RESET_LEVERS as readonly string[]).includes(field),
       )
     }
-    // The sweep's pair moves together, and moves the key.
-    expect(
-      cloudResetKey({
-        ...DEFAULT_CLOUD_LEVERS,
-        fixedSteps: 512,
-        sweepReads: 2,
-      }),
-    ).not.toBe(base)
   })
 
   it('is equal for two lever sets exactly when their reset levers are', () => {

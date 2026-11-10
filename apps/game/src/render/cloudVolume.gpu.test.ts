@@ -226,9 +226,7 @@ function frameAt(
 /** Noise nodes that read nothing: the scenario erodes nothing. */
 const NO_NOISE: CloudNoiseNodes = {
   base: () => float(0),
-  baseWide: () => vec3(0).xyzz,
   detail: () => float(0),
-  curl: () => vec3(0).xy,
 }
 
 interface Rig {

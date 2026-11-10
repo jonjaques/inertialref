@@ -6,11 +6,11 @@
  *     pnpm preview                                  # builds, then serves 8787
  *     node scripts/clouds/measure.mjs --batch stances
  *     node scripts/clouds/measure.mjs --batch targets --gpu-wait 900
- *     node scripts/clouds/measure.mjs --batch sweep --dry-run      # the plan; nothing launches
+ *     node scripts/clouds/measure.mjs --batch images --dry-run     # the plan; nothing launches
  *
  * `stances` shows every scenario's sun, its passes and a still before a batch
- * stands on it; `sweep` measures the fetch rate, and `images` the radiance
- * differences §8.7's quality ladders read; `targets`, `memory` and `error`
+ * stands on it; `images` measures the radiance differences §8.7's quality
+ * ladders read; `targets`, `memory` and `error`
  * measure the landed code. A run's steps
  * are `page.mjs`'s; its figures land in `.data/clouds/<batch>-<time>.json`
  * and in the Markdown tables printed at the end, from which the choices are
@@ -62,7 +62,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import {
-  CLOUD_SWEEP_EXTRAS,
   DEFAULT_CLOUD_LEVERS,
   isCloudLevers,
 } from '../../apps/game/src/render/cloudLevers.ts'
@@ -86,8 +85,8 @@ export const FAILS = 3
  * DevTools channel's own 120 s cap (`scripts/cdp.mjs`). A step that hangs in
  * the page is already caught by that cap, and drive.mjs exits; this catches
  * what it cannot, a Chrome that never answers its launch or a process that
- * never exits. It is a bound, not an estimate: a sweep of 74 steps gets
- * 2.6 hours and takes about ten minutes.
+ * never exits. It is a bound, not an estimate: a `targets` run of twelve
+ * steps gets 29 minutes and takes one or two.
  */
 const budgetMs = (steps) => 300_000 + steps.length * 120_000
 /** What `budgetMs` leaves a child after SIGTERM before SIGKILL. */
@@ -283,49 +282,6 @@ const targets = (size) => [
   ]),
 ]
 
-/** Each other read type's marginal is taken here, against `none` in the same run. */
-const MARGINAL = {
-  traceScale: 1,
-  fixedSteps: 64,
-  sweepReads: 1,
-  noiseFormat: 'r8',
-}
-
-const sweepRun = (size, label, cells) => ({
-  id: `sweep/${label}/overcast/${size}`,
-  type: 'sweep',
-  batch: 'sweep',
-  label,
-  ...stood('overcast', size),
-  cells: cells.map((cell) => levers('overcast', { on: true, ...cell })),
-})
-
-// Both formats in one run, so R8 against RGBA8 is read in one boot.
-const sweep = (size) => [
-  ...[0.5, 1, 2].map((traceScale) =>
-    sweepRun(
-      size,
-      `scale-${traceScale}`,
-      ['r8', 'rgba8'].flatMap((noiseFormat) =>
-        [32, 64, 128].flatMap((fixedSteps) =>
-          [1, 2, 4, 6].map((sweepReads) => ({
-            traceScale,
-            fixedSteps,
-            sweepReads,
-            noiseFormat,
-            sweepExtra: 'none',
-          })),
-        ),
-      ),
-    ),
-  ),
-  sweepRun(
-    size,
-    'marginals',
-    CLOUD_SWEEP_EXTRAS.map((sweepExtra) => ({ ...MARGINAL, sweepExtra })),
-  ),
-]
-
 // Three boots with the flag and three without, each on a deleted profile.
 const memory = (size) =>
   [true, false].flatMap((flag) =>
@@ -419,7 +375,6 @@ const stances = (size) =>
 export const BATCHES = Object.freeze({
   stances,
   images,
-  sweep,
   targets,
   memory,
   error,

@@ -93,12 +93,7 @@ describe('the declared bytes', () => {
   it('count each resource as §3.19 does, at one level', () => {
     const rows: readonly [string, number, number][] = [
       ['base noise, R8 128³', textureBytes(128, 128, 128, 1), 2.1],
-      ['base noise sweep, RGBA8 128³', textureBytes(128, 128, 128, 4), 8.39],
-      [
-        'detail R8 32³ and curl RG8 128²',
-        textureBytes(32, 32, 32, 1) + textureBytes(128, 128, 1, 2),
-        0.07,
-      ],
+      ['detail R8 32³', textureBytes(32, 32, 32, 1), 0.03],
       [
         'profile RGBA8 64 × 8 and phase RGBA16F 1024 × 32',
         textureBytes(64, 8, 1, 4) + textureBytes(1024, 32, 1, 8),
@@ -146,13 +141,12 @@ describe('the declared bytes', () => {
     expect(history(retina.history) / MB).toBeCloseTo(15.55, 2)
   })
 
-  it('add up to the landed set: 91.7 MB at 1080p and 85.0 MB at Retina', () => {
+  it('add up to the landed set: 91.6 MB at 1080p and 85.0 MB at Retina', () => {
     // The field, the volume and the sun grid summed through it, and the
     // atlas, with everything every frame holds.
     const fixed =
       textureBytes(128, 128, 128, 1) +
       textureBytes(32, 32, 32, 1) +
-      textureBytes(128, 128, 1, 2) +
       textureBytes(64, 8, 1, 4) +
       textureBytes(1024, 32, 1, 8) +
       4 * textureBytes(1542, 1028, 1, 4) +
@@ -170,7 +164,7 @@ describe('the declared bytes', () => {
       )
     }
     expect(atSize(extent(1920, 1080), extent(1920, 1080)) / MB).toBeCloseTo(
-      91.7,
+      91.6,
       1,
     )
     expect(atSize(extent(2880, 1800), extent(1440, 900)) / MB).toBeCloseTo(

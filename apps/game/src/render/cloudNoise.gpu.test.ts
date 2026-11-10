@@ -15,19 +15,10 @@ import {
   uint,
   vec4,
 } from 'three/tsl'
-import {
-  baseNoise,
-  baseNoiseWide,
-  curlNoise,
-  detailNoise,
-} from '@inertialref/rendering'
-import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
-import type { CloudBudget } from './cloudNodes.ts'
-import type { CloudFrame } from './cloudFrame.ts'
+import { baseNoise, detailNoise } from '@inertialref/rendering'
 import {
   CLOUD_BASE_CELLS,
   CLOUD_BASE_TEXELS,
-  CLOUD_CURL_TEXELS,
   CLOUD_DETAIL_TEXELS,
   CloudNoise,
 } from './cloudNoise.ts'
@@ -152,15 +143,6 @@ const texture = (name: string): Texture => {
   return found
 }
 
-const budget: CloudBudget = {
-  slices: 0,
-  tiles: 0,
-  jump: false,
-  sunTexelSteps: 0,
-}
-const frameWith = (noiseFormat: 'r8' | 'rgba8'): CloudFrame =>
-  ({ levers: { ...DEFAULT_CLOUD_LEVERS, noiseFormat } }) as CloudFrame
-
 describe('the baked noise is weatherNoise at every texel center', () => {
   it('the base: R8, the Perlin–Worley shape', async () => {
     const at = randomTexels(CLOUD_BASE_TEXELS, CLOUD_BASE_TEXELS, 1)
@@ -188,24 +170,6 @@ describe('the baked noise is weatherNoise at every texel center', () => {
         z: center(k, DETAIL_PER_CELL),
       })
       worst = Math.max(worst, Math.abs(read[n * 4]! - expected))
-    })
-    expect(worst).toBeLessThanOrEqual(BYTE_BOUND)
-  })
-
-  it('the curl: RG8, stored as ½ + ½·curl, the unit square across 128 texels', async () => {
-    const at = randomTexels(CLOUD_CURL_TEXELS, 1, 3)
-    const read = await loadTexels(texture('cloud curl'), '2d', at)
-    let worst = 0
-    at.forEach(([i, j], n) => {
-      const [cx, cy] = curlNoise(
-        center(i, CLOUD_CURL_TEXELS),
-        center(j, CLOUD_CURL_TEXELS),
-      )
-      worst = Math.max(
-        worst,
-        Math.abs(read[n * 4]! - (0.5 + 0.5 * cx)),
-        Math.abs(read[n * 4 + 1]! - (0.5 + 0.5 * cy)),
-      )
     })
     expect(worst).toBeLessThanOrEqual(BYTE_BOUND)
   })
@@ -265,67 +229,6 @@ describe('the field reads it through its nodes', () => {
     expect(Math.abs(detail[0]! - (near + far) / 2)).toBeLessThanOrEqual(
       BYTE_BOUND,
     )
-
-    const curl = await readNodes([[1, center(64, 128), 0]], (p) =>
-      vec4(noise.nodes.curl(p.xy), 0, 0),
-    )
-    const [ax] = curlNoise(center(127, 128), center(64, 128))
-    const [bx] = curlNoise(center(0, 128), center(64, 128))
-    // Decoded as 2v − 1, so two 8-bit steps.
-    expect(Math.abs(curl[0]! - (ax + bx) / 2)).toBeLessThanOrEqual(
-      2 * BYTE_BOUND,
-    )
-  })
-})
-
-describe('the sweep’s RGBA8 base', () => {
-  it('waits for a frame that selects it, then bakes base and three octaves into the same binding', async () => {
-    const at = randomTexels(CLOUD_BASE_TEXELS, CLOUD_BASE_TEXELS, 4)
-    const points = at.map(
-      ([i, j, k]) =>
-        [
-          center(i, BASE_PER_CELL),
-          center(j, BASE_PER_CELL),
-          center(k, BASE_PER_CELL),
-        ] as const,
-    )
-    const narrow = await readNodes(points.slice(0, 8), (p) =>
-      noise.nodes.baseWide(p),
-    )
-    // R8 has no other channels: WebGPU reads them as (r, 0, 0, 1).
-    expect([narrow[1], narrow[2], narrow[3]]).toEqual([0, 0, 1])
-
-    const pipelines = gpu.pipelinesBuilt()
-    noise.setFormat('rgba8')
-    expect(noise.pending).toBe(true)
-    noise.render(renderer, frameWith('rgba8'), budget)
-    expect(noise.pending).toBe(false)
-    // Warmed against its 1 × 1 × 1 stand-in: the real bake builds nothing.
-    expect(gpu.pipelinesBuilt()).toBe(pipelines)
-
-    const wide = await loadTexels(texture('cloud base noise, sweep'), '3d', at)
-    const through = await readNodes(points, (p) => noise.nodes.baseWide(p))
-    let worst = 0
-    let channel = 0
-    points.forEach(([x, y, z], n) => {
-      const expected = baseNoiseWide({ x, y, z })
-      for (let c = 0; c < 4; c += 1) {
-        worst = Math.max(worst, Math.abs(wide[n * 4 + c]! - expected[c]!))
-        // The node reads the swapped texture at a texel center, so exactly it.
-        channel = Math.max(
-          channel,
-          Math.abs(through[n * 4 + c]! - wide[n * 4 + c]!),
-        )
-      }
-    })
-    expect(worst).toBeLessThanOrEqual(BYTE_BOUND)
-    expect(channel).toBeLessThanOrEqual(1e-6)
-
-    noise.render(renderer, frameWith('r8'), budget)
-    const back = await readNodes(points.slice(0, 8), (p) =>
-      noise.nodes.baseWide(p),
-    )
-    expect([back[1], back[2], back[3]]).toEqual([0, 0, 1])
   })
 })
 
@@ -352,8 +255,8 @@ describe('what it holds', () => {
         channels
     }
     expect(noise.bytes).toBe(bytes)
-    // 2.10 MB of base, 8.39 MB of the sweep's, 32 KB each of detail and curl.
-    expect(noise.bytes).toBe(128 ** 3 * 5 + 32 ** 3 + 128 ** 2 * 2)
+    // 2.10 MB of base and 32 KB of detail.
+    expect(noise.bytes).toBe(128 ** 3 + 32 ** 3)
   })
 
   it('a fresh noise holds nothing before it warms, and nothing once disposed', async () => {
@@ -362,8 +265,8 @@ describe('what it holds', () => {
     expect(fresh.textures()).toEqual([])
     expect(fresh.pending).toBe(false)
     await fresh.warm(renderer)
-    // The sweep's stand-in is warmed at 1 × 1 × 1, and the rest are baked.
-    expect(fresh.bytes).toBe(128 ** 3 + 4 + 32 ** 3 + 128 ** 2 * 2)
+    // Both are baked by the warm-up.
+    expect(fresh.bytes).toBe(128 ** 3 + 32 ** 3)
     fresh.dispose()
     expect(fresh.bytes).toBe(0)
     expect(fresh.textures()).toEqual([])

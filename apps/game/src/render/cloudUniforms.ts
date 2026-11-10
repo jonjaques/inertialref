@@ -22,7 +22,6 @@ import type {
   CloudCameraFrame,
   CloudFrame,
 } from './cloudFrame.ts'
-import { CLOUD_SWEEP_EXTRAS } from './cloudLevers.ts'
 
 /*
  * The one uniform bundle every cloud module is constructed with and reads.
@@ -134,10 +133,6 @@ export interface CloudTraceUniforms {
   readonly farDistance: UniformNode<'float', number>
   /** maxSteps, or maxSteps/4 in the immediate regime. */
   readonly maxSteps: UniformNode<'float', number>
-  readonly fixedSteps: UniformNode<'float', number>
-  readonly sweepReads: UniformNode<'float', number>
-  /** `CLOUD_SWEEP_EXTRAS`'s index. */
-  readonly sweepExtra: UniformNode<'float', number>
   readonly lightTaps: UniformNode<'float', number>
   readonly immediate: UniformNode<'float', number>
   readonly thin: UniformNode<'float', number>
@@ -450,9 +445,6 @@ function createTraceUniforms(): CloudTraceUniforms {
     frame: uniform(0, 'uint'),
     farDistance: uniform(0),
     maxSteps: uniform(0),
-    fixedSteps: uniform(0),
-    sweepReads: uniform(0),
-    sweepExtra: uniform(0),
     lightTaps: uniform(0),
     immediate: uniform(0),
     thin: uniform(0),
@@ -487,9 +479,6 @@ function writeTrace(uniforms: CloudTraceUniforms, frame: CloudFrame): void {
     uniforms.maxSteps,
     immediate ? Math.ceil(levers.maxSteps / 4) : levers.maxSteps,
   )
-  setNumber(uniforms.fixedSteps, levers.fixedSteps)
-  setNumber(uniforms.sweepReads, levers.sweepReads)
-  setNumber(uniforms.sweepExtra, CLOUD_SWEEP_EXTRAS.indexOf(levers.sweepExtra))
   setNumber(uniforms.lightTaps, levers.lightTaps)
   setNumber(uniforms.immediate, immediate ? 1 : 0)
   setNumber(uniforms.thin, levers.composite === 'thin' ? 1 : 0)

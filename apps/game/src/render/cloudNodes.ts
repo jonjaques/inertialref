@@ -42,7 +42,7 @@ import type { CloudBodyUniforms } from './cloudUniforms.ts'
  * textures of the real format and kind beside that analytic medium, so a
  * kernel compiled in a test binds what the real one binds: WebGPU's default
  * device allows 16 sampled and 4 storage textures a stage, the trace sits at
- * 13 of 16 (15 with the volume) and writes 4 of 4, and a count that only
+ * 12 of 16 and writes 4 of 4, and a count that only
  * integration could see would be a format change after every package had
  * built on the old one.
  */
@@ -430,7 +430,7 @@ function withReads(medium: CloudMedium, reads: Node<'float'>): CloudMedium {
  * each binding 1 × 1 textures in its real module's number and kind (§3.7):
  *
  * - `field`: the clipmap's textures 0–2 (2D arrays), the base and detail
- *   noises (3D), the curl and the profile (2D): 7;
+ *   noises (3D) and the profile (2D): 6;
  * - `volume`: the volume (3D): 1;
  * - `sunDepth`: the sun grid (3D): 1;
  * - `phase`: the Mie table (2D): 1;
@@ -445,7 +445,6 @@ export const CLOUD_STAND_INS = {
     const clipmap = [layered(), layered(), layered()]
     const base = texture3D(cloudStandInTexture('3d', 'r8'))
     const detail = texture3D(cloudStandInTexture('3d', 'r8'))
-    const curl = texture(cloudStandInTexture('2d', 'rg8'))
     const profile = texture(cloudStandInTexture('2d', 'rgba8'))
     return (sample, body) =>
       withReads(
@@ -454,7 +453,6 @@ export const CLOUD_STAND_INS = {
           ...clipmap.map((map) => cloudStandInBinding(map, '2d-array')),
           cloudStandInBinding(base, '3d'),
           cloudStandInBinding(detail, '3d'),
-          cloudStandInBinding(curl, '2d'),
           cloudStandInBinding(profile, '2d'),
         ]),
       )

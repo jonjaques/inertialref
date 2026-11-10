@@ -204,7 +204,6 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
   const trace = new CloudTrace({
     uniforms,
     medium: field.medium,
-    sweep: field.sweep,
     sun: field.sun,
     phase: field.phase,
     far: field.farAtlas.far,

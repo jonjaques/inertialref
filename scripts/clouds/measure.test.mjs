@@ -38,13 +38,11 @@ import {
   PASS_LIMIT,
   RADIANCE_FRAMES,
   figures,
-  fitSweep,
   hitch,
   median,
   memoryTable,
   plan,
   summarize,
-  sweepTables,
   table,
   tables,
 } from './page.mjs'
@@ -59,7 +57,7 @@ import {
 
 const SIZES = ['1080p', 'retina']
 const ALL = Object.fromEntries(
-  ['stances', 'images', 'sweep', 'targets', 'memory', 'error'].map((b) => [
+  ['stances', 'images', 'targets', 'memory', 'error'].map((b) => [
     b,
     batchRuns(b, SIZES),
   ]),
@@ -100,34 +98,6 @@ describe('the batches', () => {
       expect(r.candidate).toMatchObject({ on: false, deck: 'auto' })
     expect(count(earth, (r) => r.group === 'landed' && r.candidate.on)).toBe(8)
     expect(ALL.targets).toHaveLength(58)
-  })
-
-  it('sweeps 72 cells a size at constant work, and the five other read types', () => {
-    for (const size of SIZES) {
-      const runs = ALL.sweep.filter((r) => r.size === size)
-      const cells = runs.flatMap((r) => r.cells)
-      const grid = cells.filter((c) => c.sweepExtra === 'none')
-      expect(
-        runs.filter((r) => r.label !== 'marginals').flatMap((r) => r.cells),
-      ).toHaveLength(72)
-      expect(new Set(grid.map((c) => c.fixedSteps))).toEqual(
-        new Set([32, 64, 128]),
-      )
-      expect(new Set(grid.map((c) => c.sweepReads))).toEqual(
-        new Set([1, 2, 4, 6]),
-      )
-      const marginals = runs.find((r) => r.label === 'marginals').cells
-      expect(marginals.map((c) => c.sweepExtra)).toEqual([
-        'none',
-        'clipmap',
-        'profile',
-        'detail',
-        'curl',
-        'level',
-      ])
-      for (const c of cells)
-        expect(c).toMatchObject({ on: true, scenario: 'overcast' })
-    }
   })
 
   it('takes the error batch twice a stance, Enhanced off and on, and twelve cold boots', () => {
@@ -201,7 +171,7 @@ describe('the images', () => {
       expect(r.levers.jitterFrame).toBeNull()
       expect([r.identity.jitterFrame, r.thin.jitterFrame]).toEqual([0, 0])
     }
-    for (const batch of ['sweep', 'targets', 'memory', 'stances'])
+    for (const batch of ['targets', 'memory', 'stances'])
       for (const r of ALL[batch])
         for (const set of [r.base, r.candidate, r.levers, ...(r.cells ?? [])])
           if (set !== undefined) expect(set.jitterFrame, r.id).toBeNull()
@@ -266,12 +236,12 @@ describe('the command line', () => {
     for (const argv of [
       [],
       ['--batch', 'everything'],
-      ['--batch', 'sweep', '--sizes', '4k'],
-      ['--batch', 'sweep', '--gpu-wait', '5s'],
-      ['--batch', 'sweep', '--max-load', '-1'],
-      ['--batch', 'sweep', '--runs', 'nothing-is-called-this'],
-      ['--batch', 'sweep', '--url', 'not a url'],
-      ['--batch', 'sweep', '--port', '9333'],
+      ['--batch', 'targets', '--sizes', '4k'],
+      ['--batch', 'targets', '--gpu-wait', '5s'],
+      ['--batch', 'targets', '--max-load', '-1'],
+      ['--batch', 'targets', '--runs', 'nothing-is-called-this'],
+      ['--batch', 'targets', '--url', 'not a url'],
+      ['--batch', 'targets', '--port', '9333'],
     ])
       expect(() => parseOptions(argv), argv.join(' ')).toThrow()
     expect(parseOptions(['--help'])).toEqual({ help: true })
@@ -681,8 +651,6 @@ describe('the page steps', () => {
     const report = {
       settle: { pending: false },
       extents: { trace: [480, 270] },
-      steps: { mean: 64, max: 64, exhausted: 0 },
-      levers: { stats: true },
       residual: {
         thin: { bins: [4], samples: 4 },
         light: { bins: [4], samples: 4 },
@@ -736,14 +704,6 @@ describe('the page steps', () => {
     expect(await send(page, landed, 'report')).toMatchObject({
       build: { id: 'b1' },
       lens: { focalLength: 21 },
-    })
-
-    const sweep = ALL.sweep.find((r) => r.label === 'scale-1')
-    const cell = sweep.cells.findIndex((c) => c.fixedSteps === 64)
-    expect(await send(page, sweep, `cell:${cell}`)).toMatchObject({
-      accepted: true,
-      trace: { ms: 1.2 },
-      frames: 45,
     })
 
     const residual = ALL.error.find((r) => r.mode === 'automatic')
@@ -966,65 +926,6 @@ describe('the arithmetic', () => {
     // A boot without the flag sets no lever, and has no first frame to read.
     const plain = ALL.memory.find((r) => !r.flag)
     expect(figures(plain, plan(plain), { results: [] }).hitch).toBeNull()
-  })
-
-  it('recovers the per-ray, per-step and per-fetch costs a sweep is made of', () => {
-    // α 2 ns a ray, β 0.9 ns a ray-step, γ 0.35 ns a fetch: a 480 × 270
-    // trace at 64 steps and two reads costs 0.26 + 7.46 + 5.81 ms.
-    const truth = { alpha: 2e-6, beta: 9e-7, gamma: 3.5e-7 }
-    const cells = []
-    for (const rays of [240 * 135, 480 * 270, 960 * 540])
-      for (const steps of [32, 64, 128])
-        for (const reads of [1, 2, 4, 6])
-          cells.push({
-            rays,
-            steps,
-            reads,
-            ms:
-              truth.alpha * rays +
-              truth.beta * rays * steps +
-              truth.gamma * rays * steps * reads,
-          })
-    const fit = fitSweep(cells)
-    for (const key of ['alpha', 'beta', 'gamma'])
-      expect(fit[key] / truth[key]).toBeCloseTo(1, 9)
-    expect(fit.residual).toBeLessThan(1e-9)
-    expect((fit.fetchesPerSecond * truth.gamma) / 1e3).toBeCloseTo(1, 9)
-    // Noise of a known size leaves a residual of that size, not a wrong fit.
-    const noisy = cells.map((c, i) => ({
-      ...c,
-      ms: c.ms + (i % 2 ? 0.01 : -0.01),
-    }))
-    expect(fitSweep(noisy).residual).toBeCloseTo(0.01, 2)
-    expect(fitSweep(cells.slice(0, 2))).toBeNull()
-    expect(
-      fitSweep(cells.filter((c) => c.rays === 480 * 270 && c.steps === 64)),
-    ).toBeNull()
-  })
-
-  it('prints the fit and the format beside the cells', () => {
-    const cell = (run, format, extra, reads, ms) => ({
-      size: '1080p',
-      run,
-      rays: 129_600,
-      steps: 64,
-      reads,
-      format,
-      extra,
-      ms,
-      fetchesPerSecond: 1e9,
-      accepted: true,
-    })
-    const text = sweepTables([
-      cell('scale-1', 'r8', 'none', 2, 10),
-      cell('scale-1', 'rgba8', 'none', 2, 12),
-      cell('marginals', 'r8', 'none', 1, 6),
-      cell('marginals', 'r8', 'curl', 1, 6.5),
-    ])
-    // 2 ms more over 129,600 rays × 64 steps × 2 reads is 0.1206 ns a fetch.
-    expect(text).toContain('| 1080p | rgba8 − r8 at 2 reads | 0.1206 |')
-    // 0.5 ms over 129,600 × 64 ray-steps is 0.0603 ns each.
-    expect(text).toContain('| 1080p | curl | 0.0603 |')
   })
 
   it('states what the flag adds to a boot, and says the OS cache may be warm', () => {

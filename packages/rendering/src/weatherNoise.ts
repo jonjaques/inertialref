@@ -242,7 +242,8 @@ export function curlNoise(u: number, v: number): readonly [number, number] {
 /**
  * The base texture's four channels at a point in base cells (period
  * `BASE_NOISE_PERIOD`): the Perlin–Worley base shape, then the three Worley
- * octaves its erosion is made of, as the sweep's RGBA8 variant stores them.
+ * octaves its dilation is made of. The bake stores the first; the octaves
+ * are what `weatherNoise.test.ts` holds to their own tiling and range.
  *
  * The curl is folded in here, at the bake: the point is displaced across its
  * xz plane by up to `CURL_REACH` of a cell before any lattice is read, so the

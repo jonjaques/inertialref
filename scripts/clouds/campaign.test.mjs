@@ -10,11 +10,11 @@ import { FAILS, HELD, batchRuns, parseOptions, resumeFrom } from './measure.mjs'
 
 const SIZES = ['1080p', 'retina']
 const HEAD = 'a'.repeat(40)
-const runs = batchRuns('sweep', SIZES)
-const want = { batch: 'sweep', head: HEAD, sizes: SIZES, held: HELD, runs }
+const runs = batchRuns('images', SIZES)
+const want = { batch: 'images', head: HEAD, sizes: SIZES, held: HELD, runs }
 const row = (id, ok) => ({ id, quiet: { ok } })
 const doc = (over = {}) => ({
-  batch: 'sweep',
+  batch: 'images',
   identity: { head: HEAD },
   sizes: SIZES,
   held: HELD,
@@ -39,7 +39,7 @@ describe('a continued document', () => {
 
   it('refuses one of another batch, commit, list of sizes or held jitter', () => {
     for (const [over, says] of [
-      [{ batch: 'images' }, /of images, not sweep/],
+      [{ batch: 'targets' }, /of targets, not images/],
       [{ identity: { head: 'b'.repeat(40) } }, /measured at bbbbbbbbbbbb/],
       [{ identity: undefined }, /measured at no commit/],
       [{ sizes: ['retina'] }, /sizes retina, not 1080p,retina/],
@@ -73,15 +73,15 @@ describe('a continued document', () => {
   it('is named on the command line, which keeps the sizes it was asked for', () => {
     const options = parseOptions([
       '--batch',
-      'sweep',
+      'images',
       '--sizes',
       'retina',
       '--resume',
-      '.data/clouds/sweep.json',
+      '.data/clouds/images.json',
     ])
-    expect(options.resume).toMatch(/^\/.*\/\.data\/clouds\/sweep\.json$/)
+    expect(options.resume).toMatch(/^\/.*\/\.data\/clouds\/images\.json$/)
     expect(options.sizes).toEqual(['retina'])
-    expect(parseOptions(['--batch', 'sweep']).resume).toBeNull()
+    expect(parseOptions(['--batch', 'images']).resume).toBeNull()
   })
 })
 
@@ -131,7 +131,7 @@ describe('a campaign', () => {
     expect(
       Object.values(CAMPAIGNS).map((c) => c.stages.map((s) => s.name)),
     ).toEqual([
-      ['sweep', 'images', 'instruments'],
+      ['images', 'instruments'],
       ['targets', 'memory', 'error'],
     ])
     for (const s of Object.values(CAMPAIGNS).flatMap((c) => c.stages))

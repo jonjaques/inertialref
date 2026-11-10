@@ -147,11 +147,9 @@ describe('every lever set', () => {
       frames(2)
       set({ composite: 'residual' })
       frames(2)
-      set({ composite: 'identity', fixedSteps: 64, sweepReads: 2 })
+      set({ composite: 'identity', stats: true })
       frames(2)
-      set({ fixedSteps: 0, sweepReads: 0, noiseFormat: 'rgba8', stats: true })
-      frames(2)
-      set({ noiseFormat: 'r8', stats: false })
+      set({ stats: false })
       await gpu.read(rig.target)
     } finally {
       detach()
@@ -226,35 +224,27 @@ describe('what the resources hold', () => {
       get(texture: object): { texture?: GPUTexture }
     }
 
-  it.each([
-    ['the defaults', {}],
-    ['the sweep’s RGBA8 noise', { noiseFormat: 'rgba8' }],
-  ] as const)(
-    'under %s: every texture one level, every resource’s bytes its GPU textures’',
-    async (_, levers) => {
-      set({ force: 'none', ...levers })
-      frames(4)
-      await gpu.read(rig.target)
-      for (const held of rig.system!.resources) {
-        let sum = 0
-        for (const map of held.textures()) {
-          const texture = backend().get(map).texture
-          expect(texture, `${held.name}: ${map.name}`).toBeDefined()
-          expect(texture!.mipLevelCount, `${held.name}: ${map.name}`).toBe(1)
-          const bytes = BYTES[texture!.format]
-          expect(bytes, `${held.name}: ${texture!.format}`).toBeDefined()
-          sum +=
-            texture!.width *
-            texture!.height *
-            texture!.depthOrArrayLayers *
-            bytes!
-        }
-        expect(held.bytes, held.name).toBe(sum)
+  it('every texture one level, every resource’s bytes its GPU textures’', async () => {
+    set({ force: 'none' })
+    frames(4)
+    await gpu.read(rig.target)
+    for (const held of rig.system!.resources) {
+      let sum = 0
+      for (const map of held.textures()) {
+        const texture = backend().get(map).texture
+        expect(texture, `${held.name}: ${map.name}`).toBeDefined()
+        expect(texture!.mipLevelCount, `${held.name}: ${map.name}`).toBe(1)
+        const bytes = BYTES[texture!.format]
+        expect(bytes, `${held.name}: ${texture!.format}`).toBeDefined()
+        sum +=
+          texture!.width *
+          texture!.height *
+          texture!.depthOrArrayLayers *
+          bytes!
       }
-      set({ noiseFormat: 'r8' })
-    },
-    60_000,
-  )
+      expect(held.bytes, held.name).toBe(sum)
+    }
+  }, 60_000)
 
   it('bakes cloud into the far atlas at every face’s center, past the clipmap’s reach', async () => {
     // Overcast covers the whole body: a face's center 90° from the eye is

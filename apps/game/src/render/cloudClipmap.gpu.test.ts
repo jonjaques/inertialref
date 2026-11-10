@@ -663,9 +663,9 @@ describe('a lookup', () => {
       const sample = sampleAt(offset)
       return vec4(
         clipmap.nodes.coverage(sample, uniforms.served).x,
-        clipmap.nodes.level(sample, uniforms.served, 2).x,
-        clipmap.nodes.level(sample, uniforms.served, 3).x,
         clipmap.nodes.columnMeters(sample, uniforms.served),
+        0,
+        0,
       )
     })
     const fades = offsets.map((offset) => {
@@ -679,11 +679,7 @@ describe('a lookup', () => {
     })
     const decksCover = Math.round(0.6 * 255) / 255
     offsets.forEach((_, n) => {
-      const [cover, here, there, meters] = [0, 1, 2, 3].map(
-        (c) => read[n * 4 + c]!,
-      )
-      expect(Math.abs(here! - decksCover)).toBeLessThan(1e-6)
-      expect(there).toBe(1)
+      const [cover, meters] = [0, 1].map((c) => read[n * 4 + c]!)
       if (n === 0) {
         // Inside level 1's window: level 1 alone.
         expect(meters).toBe(500)

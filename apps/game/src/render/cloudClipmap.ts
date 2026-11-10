@@ -109,8 +109,6 @@ export interface CloudClipmapNodes {
   ): Node<'vec3'>
   /** The texel size of the level `coverage` reads: the column a segment may span. */
   columnMeters(sample: CloudSample, body: CloudBodyUniforms): Node<'float'>
-  /** Texture 0 of level `k` alone, at the sample: one read, the sweep's clipmap fetch. */
-  level(sample: CloudSample, body: CloudBodyUniforms, k: number): Node<'vec4'>
 }
 
 /** Which level a sample reads, and how far into its fade band it is. */
@@ -284,10 +282,6 @@ export class CloudClipmap implements CloudResource {
         )
       },
       columnMeters: (sample, body) => pickOf(sample, body).blend.y,
-      level: (sample, body, k) => {
-        const level = body.clipmap[k]!
-        return readLevel(cover, locate(level, sample.offset, body).at, int(k))
-      },
     }
     this.#materials = uniforms.served.clipmap
       .slice(0, CLOUD_CLIPMAP_LEVELS)

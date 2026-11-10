@@ -304,11 +304,7 @@ describe('the cloud uniforms', () => {
     const uniforms = createCloudUniforms()
     uniforms.write(
       cloudFrame({
-        levers: {
-          ...DEFAULT_CLOUD_LEVERS,
-          composite: 'thin',
-          sweepExtra: 'curl',
-        },
+        levers: { ...DEFAULT_CLOUD_LEVERS, composite: 'thin' },
       }),
     )
     const t = uniforms.trace
@@ -317,7 +313,6 @@ describe('the cloud uniforms', () => {
     expect(t.render.value.toArray()).toEqual([1920, 1080])
     expect(t.farDistance.value).toBeCloseTo(400 / 0.002, 9)
     expect(t.thin.value).toBe(1)
-    expect(t.sweepExtra.value).toBe(4)
     expect(t.wind.value.toArray()).toEqual([10, 0, -2])
     expect(uniforms.period.value.toArray()).toEqual([7, 0])
   })

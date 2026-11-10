@@ -1,12 +1,7 @@
 import type { WebGPURenderer } from 'three/webgpu'
 import { mieDroplets } from '@inertialref/rendering'
 import { CloudClipmap } from './cloudClipmap.ts'
-import {
-  analyticMedium,
-  fieldMedium,
-  sweepMedium,
-  synopticMedium,
-} from './cloudDensity.ts'
+import { analyticMedium, fieldMedium, synopticMedium } from './cloudDensity.ts'
 import { CloudFarAtlas } from './cloudFarAtlas.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import { CloudMaps, writeScenarioPattern } from './cloudMaps.ts'
@@ -29,7 +24,7 @@ import { CloudVolume } from './cloudVolume.ts'
  * the profile, the maps and the clipmap, the four media, the volume and the
  * sun grid summed through it with the light through that, the droplets'
  * phase and the two far atlases, each built once and handed to every module
- * that reads it. The trace's 13 sampled bindings of WebGPU's 16 are counted
+ * that reads it. The trace's 12 sampled bindings of WebGPU's 16 are counted
  * on shared nodes: a second medium built over the same textures is a second
  * set of bindings.
  *
@@ -53,8 +48,6 @@ export interface CloudField {
   readonly phase: CloudPhase
   /** The light a cloud sample sees through the sun grid; the taps read the field's own textures. */
   readonly sun: CloudSunFn
-  /** The sweep's constant-work medium (§8.4). */
-  readonly sweep: CloudMediumFn
   /** The served body's far atlas, baked from the cube's coverage. */
   readonly farAtlas: CloudFarAtlas
   /** The second clouded body's atlas, baked from the analytic medium. */
@@ -109,7 +102,6 @@ export function createCloudField(): CloudField {
     grid,
     phase,
     sun: cloudSunFn({ uniforms, medium, depth: grid }),
-    sweep: sweepMedium({ ...recipe, clipmap: clipmap.nodes }),
     farAtlas,
     farSecond,
     bakes,

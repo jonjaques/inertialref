@@ -10,8 +10,7 @@
  * runs its source in a context that holds nothing else. A committed `--file`
  * body would need a top-level `return`, which oxlint does not parse. The rest
  * is the protocol's Node half: `plan`, the drive.mjs steps of a run;
- * `figures`, what their results say; and the sweep's fit and the tables the
- * ADRs copy.
+ * `figures`, what their results say; and the tables the ADRs copy.
  *
  * A step is small on purpose. The rig's DevTools channel times every command
  * out at 120 s (`scripts/cdp.mjs`), and five A/B pairs in one evaluation take
@@ -175,37 +174,6 @@ export async function cloudStep(step) {
         picture: ir.picture(),
         build: ir.build(),
         processing: processing(),
-      }
-    },
-    async sweep() {
-      // Accepted only once an untimed frame with stats on counts exactly
-      // `fixedSteps` a ray, mean and max; the timed read runs with stats off,
-      // because its atomics cost.
-      set({ ...step.levers, stats: true })
-      let stats = null
-      for (let i = 0; i < step.statsFrames; i += 1) {
-        await frame()
-        const r = report()
-        if (i < 4 || r?.steps == null || r.levers?.stats !== true) continue
-        stats = r.steps
-        if (stats.mean === stats.max && stats.max === step.levers.fixedSteps)
-          break
-      }
-      const accepted =
-        stats !== null &&
-        stats.mean === step.levers.fixedSteps &&
-        stats.max === step.levers.fixedSteps
-      set({ ...step.levers, stats: false })
-      const settled = await settle(step.settleCap)
-      const read = await readPasses(step.limit)
-      return {
-        accepted,
-        stats,
-        settled,
-        trace: read.labels['cloud trace'] ?? null,
-        perFrame: read.perFrame,
-        frames: read.frames,
-        extents: report()?.extents ?? null,
       }
     },
     async residual() {
@@ -420,16 +388,6 @@ const STEPS = {
     }),
     js('report', { kind: 'report', levers: run.base, ...at }),
   ],
-  sweep: (run) =>
-    run.cells.map((levers, i) =>
-      js(`cell:${i}`, {
-        kind: 'sweep',
-        levers,
-        statsFrames: 64,
-        limit: PASS_LIMIT,
-        ...at,
-      }),
-    ),
   residual: (run, shots) => [
     js('residual', {
       kind: 'residual',
@@ -570,29 +528,6 @@ const READ = {
       bytes: passes?.clouds?.bytes?.total ?? null,
     }
   },
-  sweep(run, value) {
-    const cells = run.cells.map((levers, i) => {
-      const r = value(`cell:${i}`)
-      const [w, h] = r?.extents?.trace ?? [NaN, NaN]
-      const ms = r?.trace?.ms ?? NaN
-      return {
-        size: run.size,
-        run: run.label,
-        scale: levers.traceScale,
-        rays: w * h,
-        steps: levers.fixedSteps,
-        reads: levers.sweepReads,
-        format: levers.noiseFormat,
-        extra: levers.sweepExtra,
-        ms,
-        fetchesPerSecond:
-          (w * h * levers.fixedSteps * levers.sweepReads) / (ms * 1e-3),
-        accepted: r?.accepted === true,
-        stats: r?.stats ?? null,
-      }
-    })
-    return { cells }
-  },
   residual(run, value) {
     const r = value('residual')
     const wanted = run.mode === 'enhanced' ? 'enhanced' : 'photographic'
@@ -672,83 +607,12 @@ export function figures(run, steps, out) {
   }
 }
 
-/* ------------------------------------------------------------------ the fit ---- */
-
-/** `x` solving `a·x = b` by elimination with partial pivoting; null when singular. */
-function solve(a, b) {
-  const m = a.map((row, i) => [...row, b[i]])
-  const n = b.length
-  for (let c = 0; c < n; c += 1) {
-    const p = m.reduce(
-      (best, row, r) =>
-        r >= c && Math.abs(row[c]) > Math.abs(m[best][c]) ? r : best,
-      c,
-    )
-    if (Math.abs(m[p][c]) < 1e-12) return null
-    ;[m[c], m[p]] = [m[p], m[c]]
-    for (let r = c + 1; r < n; r += 1) {
-      const f = m[r][c] / m[c][c]
-      for (let k = c; k <= n; k += 1) m[r][k] -= f * m[c][k]
-    }
-  }
-  const x = Array(n).fill(0)
-  for (let r = n - 1; r >= 0; r -= 1) {
-    let s = m[r][n]
-    for (let k = r + 1; k < n; k += 1) s -= m[r][k] * x[k]
-    x[r] = s / m[r][r]
-  }
-  return x
-}
-
-/**
- * The sweep's fit, `ms = α·rays + β·rays·steps + γ·rays·steps·reads`, by least
- * squares over accepted cells of one format: per-ray overhead, the per-step
- * floor, and the base fetch, whose inverse is the base noise's fetch rate.
- * Each column is scaled to unit norm first, because rays and ray-steps differ
- * by two orders and the normal equations square that.
- */
-export function fitSweep(cells) {
-  const xs = cells.map((c) => [
-    c.rays,
-    c.rays * c.steps,
-    c.rays * c.steps * c.reads,
-  ])
-  const norm = [0, 1, 2].map((j) => Math.hypot(...xs.map((x) => x[j])) || 1)
-  const z = xs.map((x) => x.map((v, j) => v / norm[j]))
-  const gram = [0, 1, 2].map((i) =>
-    [0, 1, 2].map((j) => z.reduce((s, x) => s + x[i] * x[j], 0)),
-  )
-  const solved =
-    cells.length < 3
-      ? null
-      : solve(
-          gram,
-          [0, 1, 2].map((i) =>
-            z.reduce((s, x, k) => s + x[i] * cells[k].ms, 0),
-          ),
-        )
-  if (solved === null) return null
-  const [alpha, beta, gamma] = solved.map((v, j) => v / norm[j])
-  const miss = cells.map(
-    (c, k) => c.ms - (alpha * xs[k][0] + beta * xs[k][1] + gamma * xs[k][2]),
-  )
-  return {
-    alpha,
-    beta,
-    gamma,
-    residual: Math.sqrt(miss.reduce((s, d) => s + d * d, 0) / miss.length),
-    // γ is milliseconds a fetch.
-    fetchesPerSecond: gamma > 0 ? 1e3 / gamma : null,
-  }
-}
-
 /* --------------------------------------------------------------- the tables ---- */
 
 const fixed = (x, digits = 2) => (Number.isFinite(x) ? x.toFixed(digits) : '—')
 const pct = (x, digits = 1) =>
   Number.isFinite(x) ? `${(x * 100).toFixed(digits)}%` : '—'
 const mb = (bytes) => fixed(bytes == null ? NaN : bytes / 1e6)
-const rate = (x) => (Number.isFinite(x) ? x.toExponential(3) : '—')
 const yes = (x) => (x ? 'yes' : 'no')
 const unique = (xs) => [...new Set(xs)]
 
@@ -786,78 +650,6 @@ export const AB_COLUMNS = [
   ['bytes MB', (r) => mb(r.bytes)],
   ['quiet', (r) => yes(r.quiet.ok)],
 ]
-
-const CELL_COLUMNS = [
-  ['Size', (c) => c.size],
-  ['Rays', (c) => c.rays],
-  ['Steps', (c) => c.steps],
-  ['Reads', (c) => c.reads],
-  ['Format', (c) => c.format],
-  ['Extra', (c) => c.extra],
-  ['trace ms', (c) => fixed(c.ms)],
-  ['fetches/s', (c) => rate(c.fetchesPerSecond)],
-  ['accepted', (c) => yes(c.accepted)],
-]
-
-const FIT_COLUMNS = [
-  ['Size', (f) => f.size],
-  ['Format', (f) => f.format],
-  ['α ns a ray', (f) => fixed(f.alpha * 1e6, 3)],
-  ['β ns a ray-step', (f) => fixed(f.beta * 1e6, 4)],
-  ['γ ns a fetch', (f) => fixed(f.gamma * 1e6, 4)],
-  ['residual ms', (f) => fixed(f.residual, 3)],
-  ['fetches/s (1/γ)', (f) => rate(f.fetchesPerSecond)],
-]
-
-/** The sweep's cells, the fit per size and format, each other read type's
- *  marginal per ray-step, and RGBA8 against R8 per fetch. */
-export function sweepTables(cells) {
-  const fits = []
-  const marginals = []
-  for (const size of unique(cells.map((c) => c.size))) {
-    const ok = cells.filter((c) => c.size === size && c.accepted)
-    for (const format of ['r8', 'rgba8'])
-      fits.push({
-        size,
-        format,
-        ...fitSweep(
-          ok.filter((c) => c.format === format && c.run !== 'marginals'),
-        ),
-      })
-    const none = ok.find((c) => c.run === 'marginals' && c.extra === 'none')
-    for (const c of ok.filter((c) => c.run === 'marginals' && c !== none))
-      marginals.push([
-        size,
-        c.extra,
-        ((c.ms - none?.ms) * 1e6) / (c.rays * c.steps),
-      ])
-    for (const reads of [2, 4]) {
-      const pick = (format) =>
-        ok.find(
-          (c) =>
-            c.run === 'scale-1' &&
-            c.steps === 64 &&
-            c.reads === reads &&
-            c.format === format,
-        )
-      const [r8, rgba8] = [pick('r8'), pick('rgba8')]
-      marginals.push([
-        size,
-        `rgba8 − r8 at ${reads} reads`,
-        ((rgba8?.ms - r8?.ms) * 1e6) / (r8?.rays * 64 * reads),
-      ])
-    }
-  }
-  return [
-    table(cells, CELL_COLUMNS),
-    table(fits, FIT_COLUMNS),
-    table(marginals, [
-      ['Size', (m) => m[0]],
-      ['Read', (m) => m[1]],
-      ['ns a ray-step, or a fetch for the format', (m) => fixed(m[2], 4)],
-    ]),
-  ].join('\n\n')
-}
 
 const share = (stats, threshold) =>
   stats?.over.find(([t]) => t === threshold)?.[1]
@@ -969,7 +761,6 @@ export function tables(doc) {
   const of = (type) => rows.filter((r) => r.type === type)
   return [
     of('ab').length > 0 && table(of('ab'), AB_COLUMNS),
-    of('sweep').length > 0 && sweepTables(of('sweep').flatMap((r) => r.cells)),
     of('residual').length > 0 && table(of('residual'), ERROR_COLUMNS),
     of('cold').length > 0 && memoryTable(of('cold')),
     of('verify').length > 0 && table(of('verify'), STANCE_COLUMNS),
@@ -990,8 +781,6 @@ export const progress = (r) =>
   ({
     ab: () =>
       `Δ ${fixed(r.summary.delta)} ms (spread ${fixed(r.summary.spread)}), base ${fixed(r.summary.base)}`,
-    sweep: () =>
-      `${r.cells.filter((c) => c.accepted).length} of ${r.cells.length} cells accepted`,
     residual: () =>
       r.refused ??
       `thin p95 ${pct(r.thin?.p95)}, display RMSE ${fixed(r.display?.rmse, 4)}`,

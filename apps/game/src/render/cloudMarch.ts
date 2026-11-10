@@ -32,7 +32,6 @@ import { type CloudKnotWriter, KNOT_TRANSMITTANCE } from './cloudKnots.ts'
 import type {
   CloudFarResult,
   CloudMedium,
-  CloudMediumFn,
   CloudRay,
   CloudSample,
 } from './cloudNodes.ts'
@@ -97,7 +96,7 @@ export interface CloudMarchResult {
  */
 export type CloudAirFn = typeof airMediumAt
 
-export type CloudMarchDeps = Omit<CloudTraceDeps, 'far' | 'depth' | 'sweep'>
+export type CloudMarchDeps = Omit<CloudTraceDeps, 'far' | 'depth'>
 
 /** Out of cloud: from 50 m, growing 1% a step, to 1 km (plan §5.2). */
 const STEP_FIRST = 50
@@ -127,8 +126,6 @@ const AHEAD = 1e-3
 const AHEAD_RELATIVE = 2e-7
 /** Farther than any ray reaches: a boundary the ray does not cross. */
 const NEVER = 1e30
-/** The sweep's step (§8.4). */
-const SWEEP_STEP = 4
 /** The air past an early exit: `airToward`'s four samples, the composite's surface segment. */
 const BEHIND_SAMPLES = 4
 
@@ -660,65 +657,4 @@ export function marchFar(
     },
   )
   return { ...fine, ...out }
-}
-
-/* ------------------------------------------------------------------------- */
-/* The sweep                                                                  */
-/* ------------------------------------------------------------------------- */
-
-/**
- * The sweep's march (§8.4): `fixedSteps` steps of 4 m from t₀, no stop at t₁,
- * no early exit, no sun, no air, no far march; the sweep medium every step.
- * Constant work by construction, which the fine march cannot give under any
- * step count: it stops at t₁, its in-cloud step follows σ, and every in-cloud
- * step reads the sun's depth and the air besides the medium.
- */
-export function cloudSweepMarch(
-  ray: CloudRay,
-  jitter: Node<'float'>,
-  deps: { readonly uniforms: CloudUniforms; readonly medium: CloudMediumFn },
-): CloudMarchResult {
-  const { uniforms } = deps
-  const body = uniforms.served
-  const t = ray.start.add(jitter.mul(SWEEP_STEP)).toVar()
-  const transmittance = float(1).toVar()
-  const light = float(0).toVar()
-  const steps = float(0).toVar()
-  Loop(
-    {
-      start: int(0),
-      end: int(uniforms.trace.fixedSteps),
-      type: 'int',
-      condition: '<',
-    },
-    () => {
-      const sample = cloudSample(ray, t, body, uniforms.camera.pixelAngle)
-      const m = deps.medium(sample, body)
-      // Both of the medium's values reach the output, so no fetch it summed
-      // into them can be dropped.
-      const passed = mix(
-        float(1),
-        exp(m.sigma.mul(SWEEP_STEP).negate()),
-        m.fraction,
-      )
-      light.addAssign(transmittance.mul(oneMinus(passed)))
-      transmittance.mulAssign(passed)
-      t.addAssign(SWEEP_STEP)
-      steps.addAssign(1)
-    },
-  )
-  return {
-    light: vec3(light),
-    air: vec3(0),
-    transmittance,
-    reproject: ray.end,
-    end: ray.end,
-    front: ray.end,
-    deviation: float(0),
-    stopped: t,
-    throughput: vec3(1),
-    opacity: oneMinus(transmittance),
-    steps,
-    exhausted: float(0),
-  }
 }

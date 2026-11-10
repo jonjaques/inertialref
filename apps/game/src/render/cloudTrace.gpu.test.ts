@@ -70,7 +70,7 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
 /*
  * The trace on the GPU (§9): its kernels against the stand-ins, the march
  * against analytic slabs to float32's bound, and the kernels' outputs — the
- * immediate regime's addressing, the knots, the sweep's constant work —
+ * immediate regime's addressing, the knots, the step counters —
  * through the half-float textures the history and `cloudFront` read.
  *
  * A march held to 10⁻⁴ is read out of a float32 buffer by a probe kernel the
@@ -218,7 +218,6 @@ function standIns(
     deps: {
       uniforms,
       medium: field,
-      sweep: field,
       sun: testSun(field, CLOUD_STAND_INS.sunDepth()),
       phase: options.phase ?? CLOUD_STAND_INS.phase(),
       far: CLOUD_STAND_INS.far(),
@@ -358,18 +357,18 @@ function bindings(wgsl: string): { sampled: number; storage: number } {
 }
 
 describe('the kernels', () => {
-  it('all three compile against the stand-ins, and bind within the stage’s limits', async () => {
+  it('both compile against the stand-ins, and bind within the stage’s limits', async () => {
     const uniforms = createCloudUniforms()
     const sky = depthTexture(4, 4, () => SKY_KM)
     const { deps } = standIns(uniforms, slabMedium([]), () => sky)
     const trace = new CloudTrace(deps)
     const kernels = trace.kernels()
-    // The fine march's, the sweep's, and the counters' clear.
-    expect(kernels).toHaveLength(3)
+    // The march's and the counters' clear.
+    expect(kernels).toHaveLength(2)
     const from = gpu.reported().length
     const before = gpu.computePipelinesBuilt()
     await trace.warm(renderer)
-    expect(gpu.computePipelinesBuilt() - before).toBe(3)
+    expect(gpu.computePipelinesBuilt() - before).toBe(2)
     expect(
       gpu
         .reported()
@@ -385,14 +384,11 @@ describe('the kernels', () => {
       expect(sampled).toBeLessThanOrEqual(16)
       expect(storage).toBeLessThanOrEqual(4)
     }
-    const traces = counted.slice(0, 2)
-    // The design's census (§3.7): the field's 7, the sun grid, the air's 2,
-    // the phase, the far atlas and the depth copy; the sweep's field and
-    // depth alone. A floor as well as a ceiling:
-    // the counts are a regex over three's WGSL, and a spelling that stopped
-    // matching would pass the ceiling at zero.
-    expect(traces.map(({ sampled }) => sampled)).toEqual([13, 8])
-    expect(traces.map(({ storage }) => storage)).toEqual(Array(2).fill(4))
+    // The design's census (§3.7): the field's 6, the sun grid, the air's 2,
+    // the phase, the far atlas and the depth copy. A floor as well as a
+    // ceiling: the counts are a regex over three's WGSL, and a spelling that
+    // stopped matching would pass the ceiling at zero.
+    expect(counted[0]).toMatchObject({ sampled: 12, storage: 4 })
     expect(new Set(counted.map(({ name }) => name))).toEqual(
       new Set(['cloud trace', 'cloud stats']),
     )
@@ -1372,24 +1368,11 @@ describe('the jitter', () => {
 })
 
 describe('the step counters', () => {
-  it('count exactly fixedSteps steps a ray under the sweep kernel', async () => {
-    // Standing in an overcast deck, as the sweep does (§8.4).
+  it('count each ray’s steps under stats, and nothing without', async () => {
+    // Standing in an overcast deck: a budget of four steps runs out on every
+    // ray before the deck's top.
     const deck = slabMedium([{ base: 100, top: 1100, sigma: 0.03 }])
     const traced = await rig(deck, 4, 4, { eye: 2, layers: [[100, 1100]] })
-    traced.uniforms.trace.fixedSteps.value = 32
-    const sweep = { fixedSteps: 32, sweepReads: 1, stats: true } as const
-    traced.trace.render(
-      renderer,
-      frameOf({ width: 4, height: 4 }, sweep),
-      BUDGET,
-    )
-    expect(await stepsOf(traced.trace)).toEqual({
-      mean: 32,
-      max: 32,
-      exhausted: 0,
-    })
-    // The control: the fine march's count follows each ray, and a budget of
-    // four steps runs out on every one of them before the deck's top.
     const off = frameOf({ width: 4, height: 4 }, { stats: false })
     traced.trace.render(renderer, off, BUDGET)
     expect(traced.trace.steps).toBeNull()

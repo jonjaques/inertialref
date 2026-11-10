@@ -6,11 +6,8 @@ import {
   NodeMaterial,
   QuadMesh,
   RedFormat,
-  RenderTarget,
   RenderTarget3D,
   RepeatWrapping,
-  RGBAFormat,
-  RGFormat,
   type Texture,
   UnsignedByteType,
   type WebGPURenderer,
@@ -18,7 +15,6 @@ import {
 import {
   float,
   screenCoordinate,
-  texture,
   texture3D,
   uniform,
   vec3,
@@ -39,9 +35,9 @@ import { runQuadPasses } from './quadPass.ts'
 import { warmSensorPass } from './warmup.ts'
 
 /*
- * The noises the field reads every step: a tiling Perlin–Worley base shape, a
- * Worley detail and a 2D curl, baked once into one-level targets and read at
- * level 0. Held texel by texel to `weatherNoise.ts`, which every WGSL
+ * The noises the field reads every step: a tiling Perlin–Worley base shape,
+ * its edges torn by a 2D curl folded in at the bake, and a Worley detail,
+ * baked once into one-level targets and read at level 0. Held texel by texel to `weatherNoise.ts`, which every WGSL
  * function below ports line for line, in the same order of operations.
  *
  * **Fragment slices, not compute.** Each 3D noise is a `RenderTarget3D` drawn
@@ -49,35 +45,23 @@ import { warmSensorPass } from './warmup.ts'
  * `r8unorm` storage texture needs `texture-formats-tier1` (§3.8). A target's
  * textures have one level by default, so nothing allocates a chain the bake
  * never fills.
- *
- * **The sweep's RGBA8 base** (base, then the three Worley octaves) is the same
- * binding as the R8 one: `setFormat` is a value swap between two textures of
- * one binding type, `texture_3d<f32>`, so the program a kernel compiled with
- * either reads the other. It is 8.4 MB against 2.1, so it is held at 1 × 1 × 1
- * until a frame selects it, and baked the first render that does.
  */
 
 const log = getLogger('game.clouds')
 
-/** Perlin–Worley, R8 (and an RGBA8 sweep variant). */
+/** Perlin–Worley, R8. */
 export const CLOUD_BASE_TEXELS = 128
 /** Worley cells a period: one cell = 16 texels. */
 export const CLOUD_BASE_CELLS = BASE_NOISE_PERIOD
 /** Worley, R8, 4 cells a period. */
 export const CLOUD_DETAIL_TEXELS = 32
-/** 2D curl, RG8. */
-export const CLOUD_CURL_TEXELS = 128
-
 /** The bake's pass on the timeline: every slice of every noise. */
 export const CLOUD_NOISE_LABEL = 'cloud noise'
 
 export interface CloudNoiseNodes {
   /** The base shape at a point in base-cell units (the period is CLOUD_BASE_CELLS). Level 0. */
   base(cells: Node<'vec3'>): Node<'float'>
-  /** The same texel's four channels (base, and three octaves): the sweep's RGBA8 read. */
-  baseWide(cells: Node<'vec3'>): Node<'vec4'>
   detail(cells: Node<'vec3'>): Node<'float'>
-  curl(uv: Node<'vec2'>): Node<'vec2'>
 }
 
 /* ------------------------------------------------------------------------- */
@@ -341,13 +325,10 @@ const detailCode = /*@__PURE__*/ wgslFn(
 /* The resource                                                               */
 /* ------------------------------------------------------------------------- */
 
-/** A one-level, repeat-wrapped, linearly filtered 3D noise of `size`³ texels. */
-function noiseVolume(
-  size: number,
-  format: typeof RedFormat | typeof RGBAFormat,
-): RenderTarget3D {
+/** A one-level, repeat-wrapped, linearly filtered R8 3D noise of `size`³ texels. */
+function noiseVolume(size: number): RenderTarget3D {
   const volume = new RenderTarget3D(size, size, size, {
-    format,
+    format: RedFormat,
     type: UnsignedByteType,
     depthBuffer: false,
     // A `Data3DTexture` magnifies with `NearestFilter` unless told otherwise,
@@ -369,118 +350,71 @@ const LEVEL0 = /*@__PURE__*/ float(0)
 
 /** Bytes a texel of each target holds. */
 const BASE_BYTES = 1
-const WIDE_BYTES = 4
 const DETAIL_BYTES = 1
-const CURL_BYTES = 2
 
-type Bake = 'base' | 'wide' | 'detail' | 'curl'
+type Bake = 'base' | 'detail'
+const BAKES = ['base', 'detail'] as const
 
 export class CloudNoise implements CloudResource {
   readonly name = 'noise'
   readonly nodes: CloudNoiseNodes
 
-  readonly #base = noiseVolume(CLOUD_BASE_TEXELS, RedFormat)
-  /** The sweep's RGBA8 base: 1 × 1 × 1 until a frame selects it. */
-  readonly #wide = noiseVolume(1, RGBAFormat)
-  readonly #detail = noiseVolume(CLOUD_DETAIL_TEXELS, RedFormat)
-  readonly #curl = new RenderTarget(CLOUD_CURL_TEXELS, CLOUD_CURL_TEXELS, {
-    format: RGFormat,
-    type: UnsignedByteType,
-    depthBuffer: false,
-    magFilter: LinearFilter,
-    minFilter: LinearFilter,
-    wrapS: RepeatWrapping,
-    wrapT: RepeatWrapping,
-  })
-  /** The one node both base reads go through, so `setFormat` swaps one binding's value. */
-  readonly #baseRead = texture3D(this.#base.texture)
-  /** The slice a 3D bake's quad draws, as its texel center. */
+  readonly #base = noiseVolume(CLOUD_BASE_TEXELS)
+  readonly #detail = noiseVolume(CLOUD_DETAIL_TEXELS)
+  /** The slice a bake's quad draws, as its texel center. */
   readonly #slice = uniform(0.5)
   readonly #quad = new QuadMesh()
   readonly #materials: Readonly<Record<Bake, NodeMaterial>>
   readonly #baked = new Set<Bake>()
   /** What exists on the GPU: a warm-up or a bake has bound it. */
   readonly #allocated = new Set<Bake>()
-  #format: 'r8' | 'rgba8' = 'r8'
   #warm: Promise<void> | null = null
   #disposed = false
 
   constructor() {
     this.#base.texture.name = 'cloud base noise'
-    this.#wide.texture.name = 'cloud base noise, sweep'
     this.#detail.texture.name = 'cloud detail noise'
-    this.#curl.texture.name = 'cloud curl'
+    const baseRead = texture3D(this.#base.texture)
     const detailRead = texture3D(this.#detail.texture)
-    const curlRead = texture(this.#curl.texture)
-    const base = this.#baseRead
     this.nodes = {
-      base: (cells) => base.sample(cells.div(CLOUD_BASE_CELLS)).level(LEVEL0).x,
-      baseWide: (cells) =>
-        vec4(base.sample(cells.div(CLOUD_BASE_CELLS)).level(LEVEL0)),
+      base: (cells) =>
+        baseRead.sample(cells.div(CLOUD_BASE_CELLS)).level(LEVEL0).x,
       detail: (cells) =>
         detailRead.sample(cells.div(DETAIL_NOISE_PERIOD)).level(LEVEL0).x,
-      curl: (uv) => curlRead.sample(uv).level(LEVEL0).xy.mul(2).sub(1),
     }
     this.#materials = {
       base: this.#bakeMaterial('base', CLOUD_BASE_TEXELS / CLOUD_BASE_CELLS),
-      wide: this.#bakeMaterial('wide', CLOUD_BASE_TEXELS / CLOUD_BASE_CELLS),
       detail: this.#bakeMaterial(
         'detail',
         CLOUD_DETAIL_TEXELS / DETAIL_NOISE_PERIOD,
       ),
-      curl: this.#bakeMaterial('curl', CLOUD_CURL_TEXELS),
     }
   }
 
   /**
-   * One noise's bake: the fragment's texel center in the noise's own units
-   * (base or detail cells, or the curl's unit square), `perUnit` texels a
-   * unit. A fragment coordinate is a texel center already, (i + ½, j + ½).
+   * One noise's bake: the fragment's texel center in the noise's own cells,
+   * `perUnit` texels a cell. A fragment coordinate is a texel center already,
+   * (i + ½, j + ½).
    */
   #bakeMaterial(bake: Bake, perUnit: number): NodeMaterial {
     const material = new NodeMaterial()
     material.name = `cloud noise ${bake}`
-    const at = screenCoordinate.xy.div(perUnit)
-    if (bake === 'curl') {
-      const curl = curlCode({ uv: at }) as unknown as Node<'vec2'>
-      material.fragmentNode = vec4(curl.mul(0.5).add(0.5), 0, 1)
-      return material
-    }
-    const p = vec3(at, this.#slice.div(perUnit))
-    if (bake === 'detail') {
-      const value = detailCode({ p }) as unknown as Node<'float'>
-      material.fragmentNode = vec4(value, 0, 0, 1)
-      return material
-    }
-    const wide = baseCode({ p }) as unknown as Node<'vec4'>
-    material.fragmentNode = bake === 'wide' ? wide : vec4(wide.x, 0, 0, 1)
+    const p = vec3(screenCoordinate.xy.div(perUnit), this.#slice.div(perUnit))
+    const value =
+      bake === 'detail'
+        ? (detailCode({ p }) as unknown as Node<'float'>)
+        : (baseCode({ p }) as unknown as Node<'vec4'>).x
+    material.fragmentNode = vec4(value, 0, 0, 1)
     return material
   }
 
-  #target(bake: Bake): RenderTarget {
-    return bake === 'base'
-      ? this.#base
-      : bake === 'wide'
-        ? this.#wide
-        : bake === 'detail'
-          ? this.#detail
-          : this.#curl
+  #target(bake: Bake): RenderTarget3D {
+    return bake === 'base' ? this.#base : this.#detail
   }
 
-  /** A value swap between two textures of one binding type; the RGBA8 one reads from the render after it is baked. */
-  setFormat(format: 'r8' | 'rgba8'): void {
-    this.#format = format
-    this.#baseRead.value =
-      format === 'rgba8' && this.#baked.has('wide')
-        ? this.#wide.texture
-        : this.#base.texture
-  }
-
-  /** The selected sweep variant, until the render that bakes it. */
+  /** Baked once, by the warm-up or the first render: nothing is ever owed after. */
   get pending(): boolean {
-    return (
-      !this.#disposed && this.#format === 'rgba8' && !this.#baked.has('wide')
-    )
+    return false
   }
 
   get bytes(): number {
@@ -488,28 +422,22 @@ export class CloudNoise implements CloudResource {
     let bytes = 0
     if (this.#allocated.has('base'))
       bytes += CLOUD_BASE_TEXELS ** 3 * BASE_BYTES
-    if (this.#allocated.has('wide')) bytes += this.#wide.width ** 3 * WIDE_BYTES
     if (this.#allocated.has('detail'))
       bytes += CLOUD_DETAIL_TEXELS ** 3 * DETAIL_BYTES
-    if (this.#allocated.has('curl'))
-      bytes += CLOUD_CURL_TEXELS ** 2 * CURL_BYTES
     return bytes
   }
 
   textures(): readonly Texture[] {
     if (this.#disposed) return []
-    const held: Texture[] = []
-    for (const bake of ['base', 'wide', 'detail', 'curl'] as const)
-      if (this.#allocated.has(bake)) held.push(this.#target(bake).texture)
-    return held
+    return BAKES.filter((bake) => this.#allocated.has(bake)).map(
+      (bake) => this.#target(bake).texture,
+    )
   }
 
   /**
-   * Compile every bake's pipeline, then bake the noise the field reads, so
-   * the first frame reads baked noise (§4.5). The sweep variant is compiled
-   * against its 1 × 1 × 1 target and baked only if it is already selected.
-   * A failure is logged and swallowed, as `warmCompile`'s is: the next
-   * render bakes whatever is missing.
+   * Compile every bake's pipeline, then bake the noise, so the first frame
+   * reads baked noise (§4.5). A failure is logged and swallowed, as
+   * `warmCompile`'s is: the next render bakes whatever is missing.
    */
   warm(renderer: WebGPURenderer): Promise<void> {
     if (this.#disposed) return Promise.resolve()
@@ -520,11 +448,10 @@ export class CloudNoise implements CloudResource {
   }
 
   async #compileAndBake(renderer: WebGPURenderer): Promise<void> {
-    const bakes = ['base', 'wide', 'detail', 'curl'] as const
     await warmSensorPass(
       renderer,
       this.#quad,
-      bakes.map((bake) => ({
+      BAKES.map((bake) => ({
         target: this.#target(bake),
         material: this.#materials[bake],
       })),
@@ -533,47 +460,31 @@ export class CloudNoise implements CloudResource {
     // targets already disposed, and three makes a disposed target's texture
     // again at its next draw, with nothing left to dispose it.
     if (this.#disposed) return
-    for (const bake of bakes) this.#allocated.add(bake)
+    for (const bake of BAKES) this.#allocated.add(bake)
     this.#bake(renderer)
   }
 
-  /** Bake what the frame's levers need and the noise does not yet hold; nothing else. */
+  /** Bake what the noise does not yet hold; nothing else. */
   render(
     renderer: WebGPURenderer,
-    frame: CloudFrame,
+    _frame: CloudFrame,
     _budget?: CloudBudget,
   ): void {
     if (this.#disposed) return
-    this.setFormat(frame.levers.noiseFormat)
     this.#bake(renderer)
   }
 
   /** Draw every noise that is due, a quad a slice, under one label. */
   #bake(renderer: WebGPURenderer): void {
-    const due = (['base', 'detail', 'curl'] as const).filter(
-      (bake) => !this.#baked.has(bake),
-    ) as Bake[]
-    if (this.#format === 'rgba8' && !this.#baked.has('wide')) {
-      this.#wide.setSize(
-        CLOUD_BASE_TEXELS,
-        CLOUD_BASE_TEXELS,
-        CLOUD_BASE_TEXELS,
-      )
-      due.push('wide')
-    }
+    const due = BAKES.filter((bake) => !this.#baked.has(bake))
     if (due.length === 0) return
     const slice = this.#slice
     runQuadPasses(renderer, this.#quad, { linear: true }, (draw) => {
       for (const bake of due) {
         const target = this.#target(bake)
-        const material = this.#materials[bake]
-        if (bake === 'curl') {
-          draw(CLOUD_NOISE_LABEL, target, material)
-          continue
-        }
         for (let z = 0; z < target.depth; z += 1) {
           slice.value = z + 0.5
-          draw(CLOUD_NOISE_LABEL, target, material, z)
+          draw(CLOUD_NOISE_LABEL, target, this.#materials[bake], z)
         }
       }
     })
@@ -581,13 +492,12 @@ export class CloudNoise implements CloudResource {
       this.#baked.add(bake)
       this.#allocated.add(bake)
     }
-    this.setFormat(this.#format)
   }
 
   dispose(): void {
     if (this.#disposed) return
     this.#disposed = true
-    for (const bake of ['base', 'wide', 'detail', 'curl'] as const) {
+    for (const bake of BAKES) {
       this.#target(bake).dispose()
       this.#materials[bake].dispose()
     }

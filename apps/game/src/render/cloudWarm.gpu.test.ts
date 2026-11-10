@@ -70,7 +70,7 @@ function built(run: () => void): string[] {
   return labels
 }
 
-/** Every lever set the decisions, sweep, targets and error batches draw. */
+/** Every lever set the targets, memory, error and images batches draw. */
 function leverSets(): [string, Partial<CloudLevers>][] {
   const sets: [string, Partial<CloudLevers>][] = []
   sets.push(['the defaults', {}])
@@ -79,11 +79,6 @@ function leverSets(): [string, Partial<CloudLevers>][] {
   sets.push(['thin', { composite: 'thin' }])
   sets.push(['residual', { composite: 'residual' }])
   sets.push(['stats', { stats: true }])
-  sets.push(['sweep', { fixedSteps: 64, sweepReads: 2, sweepExtra: 'curl' }])
-  sets.push([
-    'sweep in RGBA8',
-    { fixedSteps: 64, sweepReads: 4, noiseFormat: 'rgba8' },
-  ])
   sets.push(['deck hidden', { on: false, deck: 'hidden' }])
   return sets
 }

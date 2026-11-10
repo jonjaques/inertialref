@@ -10,12 +10,9 @@ import {
   select,
   smoothstep,
   step,
-  vec2,
   vec3,
-  vec4,
 } from 'three/tsl'
 import { DETAIL_NOISE_PERIOD } from '@inertialref/rendering'
-import { CLOUD_SWEEP_EXTRAS } from './cloudLevers.ts'
 import type { CloudClipmapNodes } from './cloudClipmap.ts'
 import {
   CLOUD_CUBE_TILE,
@@ -296,85 +293,4 @@ export function analyticMedium(deps: {
       ),
       column: cubeTexel(body),
     }))
-}
-
-/* ------------------------------------------------------------------------- */
-/* The sweep                                                                  */
-/* ------------------------------------------------------------------------- */
-
-/** The most base fetches a sweep step makes (`CloudLevers.sweepReads`). */
-export const SWEEP_READS_MAX = 6
-
-/**
- * Each fetch's offset from the last, in base texels (1/16 of a cell): odd
- * and far apart, so no two of a step's fetches share a texel or a cache
- * line, and each still lands at a texel center wherever the first does.
- */
-export const SWEEP_STRIDE = [37, 61, 17] as const
-
-/** The RGBA8 variant's four channels folded into one, so a narrower read cannot serve the fetch. */
-const FOLD = /*@__PURE__*/ vec4(0.4, 0.3, 0.2, 0.1)
-
-/**
- * The sweep's medium (§8.4): `sweepReads` base-noise fetches at decorrelated
- * offsets, summed so none can be dropped, plus one read of `sweepExtra`'s
- * type. Constant work by construction: the fetches happen at every step,
- * inside a layer or not, each behind a branch on a uniform, so every ray
- * takes the same ones and nothing diverges; the density they make is
- * masked by the layer only after they are summed.
- */
-export function sweepMedium(deps: FieldMediumDeps): CloudMediumFn {
-  const trace = deps.uniforms.trace
-  return (sample, body) => {
-    const layer = layerAt(deps.uniforms.layers, sample.altitude)
-    const cells = baseCells(sample, body, layer)
-    const reads = trace.sweepReads
-    let sum: Node<'float'> = float(0)
-    for (let r = 0; r < SWEEP_READS_MAX; r += 1) {
-      const at = cells.add(
-        vec3(...SWEEP_STRIDE)
-          .mul(r)
-          .div(16),
-      )
-      sum = sum.add(
-        select(
-          reads.greaterThan(r),
-          dot(deps.noise.baseWide(at), FOLD),
-          float(0),
-        ),
-      )
-    }
-    const kind = trace.sweepExtra
-    const is = (name: (typeof CLOUD_SWEEP_EXTRAS)[number]): Node<'bool'> =>
-      kind.equal(float(CLOUD_SWEEP_EXTRAS.indexOf(name)))
-    const extraRead = select(
-      is('clipmap'),
-      deps.clipmap.level(sample, body, 0).x,
-      select(
-        is('profile'),
-        deps.profile.profile(layer.genus, layer.h01),
-        select(
-          is('detail'),
-          deps.noise.detail(detailCells(sample, body, layer.cell)),
-          select(
-            is('curl'),
-            deps.noise.curl(vec2(cells.x, cells.z).div(8)).x,
-            select(
-              is('level'),
-              deps.clipmap.level(sample, body, 1).x,
-              float(0),
-            ),
-          ),
-        ),
-      ),
-    )
-    const density = saturate(sum.add(extraRead).div(reads.add(1)))
-    return {
-      fraction: layer.inside,
-      sigma: layer.sigma.mul(density).mul(layer.inside),
-      layer: layer.index,
-      column: float(UNBOUNDED_COLUMN),
-      radius: layerRadius(layer),
-    }
-  }
 }

@@ -39,12 +39,10 @@ import {
   viewDirection,
 } from './cloudGeometry.ts'
 import { cloudKnotWriter } from './cloudKnots.ts'
-import type { CloudLevers } from './cloudLevers.ts'
 import {
   type CloudAirFn,
   cloudMarch,
   type CloudMarchResult,
-  cloudSweepMarch,
   marchFar,
 } from './cloudMarch.ts'
 import {
@@ -62,14 +60,14 @@ import type { CloudUniforms } from './cloudUniforms.ts'
 import { warmCompute } from './warmup.ts'
 
 /*
- * The trace: one compute kernel that marches the field, and the sweep's,
- * each named `cloud trace`, at a quarter of the display's axes. A
+ * The trace: one compute kernel that marches the field, named `cloud trace`,
+ * at a quarter of the display's axes. A
  * converging frame dispatches once at this frame's interleave phase; the
  * immediate regime dispatches four times at the same extent, a quarter of
  * the step budget each, so every store stays inside its texture (§5.14).
  *
- * The kernel binds the field (7), the sun grid, the served air (2), the
- * phase, the far atlas and the depth copy: 13 of the stage's 16 sampled
+ * The kernel binds the field (6), the sun grid, the served air (2), the
+ * phase, the far atlas and the depth copy: 12 of the stage's 16 sampled
  * textures. It writes the four outputs, which is the stage's limit of
  * storage textures, so the trace has no room for a fifth.
  *
@@ -95,8 +93,6 @@ export interface CloudTraceDeps {
   readonly uniforms: CloudUniforms
   /** What the fine march reads: the field (§5.6). */
   readonly medium: CloudMediumFn
-  /** The sweep's constant-work medium (§8.4). */
-  readonly sweep: CloudMediumFn
   /** The light a cloud sample sees: the taps, then the sun grid. */
   readonly sun: CloudSunFn
   readonly phase: CloudPhaseNodes
@@ -128,10 +124,6 @@ const TEXEL_BYTES = 72
 
 /** Sum of steps, the largest, rays, rays whose budget ran out. */
 const STAT_SLOTS = 4
-
-const FINE = 'fine'
-const SWEEP = 'sweep'
-type KernelKind = typeof FINE | typeof SWEEP
 
 /** Meters → the textures' kilometers, held under the clamp a half float carries. */
 const kilometers = (meters: Node<'float'>): Node<'float'> =>
@@ -229,7 +221,6 @@ function traceKernel(
   outputs: CloudTraceTextures,
   depth: TextureNode,
   stats: Stats,
-  kind: KernelKind,
 ): ComputeNode {
   const { uniforms } = deps
   const body = uniforms.served
@@ -242,21 +233,13 @@ function traceKernel(
       const { ray, sky } = traceView(uniforms, depth, texel)
       const knots = cloudKnotWriter(outputs)
       const jitter = traceJitter(texel, uniforms.trace.frame).x
-      let result: CloudMarchResult
-      if (kind === SWEEP)
-        result = cloudSweepMarch(ray, jitter, {
-          uniforms,
-          medium: deps.sweep,
-        })
-      else {
-        const fine = cloudMarch(ray, jitter, sky, deps, knots)
-        result = marchFar(
-          fine,
-          ray,
-          (from) => deps.far(ray, from, body, sky),
-          knots,
-        )
-      }
+      const fine = cloudMarch(ray, jitter, sky, deps, knots)
+      const result = marchFar(
+        fine,
+        ray,
+        (from) => deps.far(ray, from, body, sky),
+        knots,
+      )
       store(outputs, texel, result, knots.count)
       knots.flush(texel)
       count(stats, result)
@@ -272,7 +255,7 @@ export class CloudTrace implements CloudResource {
   readonly #deps: CloudTraceDeps
   readonly #stats: Stats
   #outputs: CloudTraceTextures
-  #kernels: Map<KernelKind, ComputeNode> | null = null
+  #kernel: ComputeNode | null = null
   #clear: ComputeNode | null = null
   #depth: TextureNode | null = null
   #steps: CloudTrace['steps'] = null
@@ -328,19 +311,14 @@ export class CloudTrace implements CloudResource {
   }
 
   /**
-   * Every kernel the trace dispatches, the counters' clear included: the
-   * warm-up's subject. Built on first ask, so constructing a trace reads
+   * Every kernel the trace dispatches, the march's and the counters' clear:
+   * the warm-up's subject. Built on first ask, so constructing a trace reads
    * nothing of its deps, the depth copy's texture among them.
    */
   kernels(): readonly ComputeNode[] {
-    if (this.#kernels === null) {
+    if (this.#kernel === null) {
       const depth = texture(this.#deps.depth())
-      const kernels = new Map<KernelKind, ComputeNode>()
-      for (const kind of [FINE, SWEEP] as const)
-        kernels.set(
-          kind,
-          traceKernel(this.#deps, this.#outputs, depth, this.#stats, kind),
-        )
+      const kernel = traceKernel(this.#deps, this.#outputs, depth, this.#stats)
       const { counts } = this.#stats
       this.#clear = Fn(() => {
         If(instanceIndex.lessThan(uint(STAT_SLOTS)), () => {
@@ -350,9 +328,9 @@ export class CloudTrace implements CloudResource {
         .compute(STAT_SLOTS)
         .setName(CLOUD_STATS_LABEL)
       this.#depth = depth
-      this.#kernels = kernels
+      this.#kernel = kernel
     }
-    return [...this.#kernels.values(), this.#clear!]
+    return [this.#kernel, this.#clear!]
   }
 
   warm(renderer: WebGPURenderer): Promise<void> {
@@ -362,7 +340,7 @@ export class CloudTrace implements CloudResource {
     return this.#warm
   }
 
-  /** The converging regime: one dispatch of the selected kernel at this frame's interleave phase. */
+  /** The converging regime: one dispatch at this frame's interleave phase. */
   render(
     renderer: WebGPURenderer,
     frame: CloudFrame,
@@ -386,7 +364,7 @@ export class CloudTrace implements CloudResource {
   dispose(): void {
     if (this.#disposed) return
     this.#disposed = true
-    for (const kernel of this.#kernels?.values() ?? []) kernel.dispose()
+    this.#kernel?.dispose()
     this.#clear?.dispose()
     const { light, aux, knotDepth, knotLight } = this.#outputs
     for (const map of [light, aux, knotDepth, knotLight]) map.dispose()
@@ -401,7 +379,7 @@ export class CloudTrace implements CloudResource {
     last: boolean,
   ): void {
     if (this.#disposed) return
-    const kernel = this.#kernel(frame.levers)
+    const [kernel] = this.kernels()
     const { width, height } = frame.extents.trace
     this.#size(width, height)
     const depth = this.#deps.depth()
@@ -416,17 +394,12 @@ export class CloudTrace implements CloudResource {
       this.#stats.on.value = this.#counting ? 1 : 0
     }
     this.#deps.uniforms.trace.phase.value.set(phase[0], phase[1])
-    renderer.compute(kernel, [
+    renderer.compute(kernel!, [
       Math.ceil(width / WORKGROUP),
       Math.ceil(height / WORKGROUP),
       1,
     ])
     if (last && this.#counting) this.#read(renderer)
-  }
-
-  #kernel(levers: CloudLevers): ComputeNode {
-    this.kernels()
-    return this.#kernels!.get(levers.fixedSteps > 0 ? SWEEP : FINE)!
   }
 
   /** The outputs at the frame's extent, reallocated only when it changes. */
