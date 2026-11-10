@@ -18,6 +18,8 @@ import {
 } from 'three/tsl'
 import {
   cloudExtents,
+  crossingExponent,
+  crossingTransmittance,
   directionOf,
   genusProfileMean,
   type LevelFrame,
@@ -25,6 +27,7 @@ import {
   reducePoint,
   shellBoundaries,
   shellHeights,
+  SIGHT_CELLS,
   type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
@@ -1012,22 +1015,34 @@ describe('the layers’ statistics', () => {
         }),
       )
     })
+    // The columns the sun's ray counts across a level beyond the sample's:
+    // its run over the level's thickness, by the level's sight length.
+    const { cell } = uniforms.served.layers
+    const sights = [cell.value.x, cell.value.y, cell.value.z].map(
+      (meters) => SIGHT_CELLS * meters,
+    )
+    const thickness = [LOW, MID, HIGH].map(([base, top]) => top - base)
     cases.forEach((one, k) => {
       const above = Math.fround(one.sunMu) >= 0
       const mu = Math.max(Math.abs(one.sunMu), 0.05)
-      const pass = (cover: number, depth: number): number =>
-        1 - cover + cover * Math.exp(-depth)
+      const lean = Math.sqrt(Math.max(1 - mu * mu, 0)) / mu
       let expected = 1
       if (one.level >= 0) {
         const up = one.whole * one.share
         const column = above ? up : one.whole - up
-        expected = pass(
+        // The sample's own column is one column.
+        expected = crossingTransmittance(
           one.cover[one.level]!,
           Math.max(column / mu - one.taps, 0),
+          1,
         )
         for (let j = 0; j < 3; j += 1)
           if (above ? j > one.level : j < one.level)
-            expected *= pass(one.cover[j]!, mean[j]! / mu)
+            expected *= crossingTransmittance(
+              one.cover[j]!,
+              mean[j]! / mu,
+              crossingExponent(thickness[j]! * lean, sights[j]!),
+            )
       }
       expect(Math.abs(out[k]! - expected)).toBeLessThan(2e-5)
     })
