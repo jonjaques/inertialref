@@ -379,6 +379,7 @@ describe('the over pass', () => {
         seen.runs += 1
         seen.target = three.getRenderTarget() === frame.scenePass.renderTarget
       },
+      failed() {},
     })
     // The composite: opaque on the OVER layer, first in pass B.
     // It covers the left half at 2 m with the kernel's value; a square after
@@ -499,7 +500,7 @@ const treeOf = (three: WebGPURenderer) => {
  * so a frame with it draws exactly `LAYERED`.
  */
 function framed(scene: Scene, run: (three: WebGPURenderer) => void) {
-  const driver = { inFrame: true, runs: 0, run }
+  const driver = { inFrame: true, runs: 0, failures: 0, run }
   const node = new CloudFrameNode({
     get inFrame() {
       return driver.inFrame
@@ -507,6 +508,9 @@ function framed(scene: Scene, run: (three: WebGPURenderer) => void) {
     run(three) {
       driver.runs += 1
       driver.run(three)
+    },
+    failed() {
+      driver.failures += 1
     },
   })
   const composite = facing(
@@ -565,6 +569,9 @@ describe('the frame node in pass B', () => {
       // Both frames whole: the overlays pass B draws after the composite
       // landed on pass A's color, and three's tree is the top level's again.
       expect(driver.runs).toBe(3)
+      // Told every time, though reported once: each frame's composite is
+      // made inert by its own frame's failure.
+      expect(driver.failures).toBe(2)
       expect(draws.draws).toEqual([2, 2, 2])
       expectNear(
         await texels(frame.scenePass.renderTarget.texture, QUADRANTS),

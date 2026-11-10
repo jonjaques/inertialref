@@ -218,6 +218,8 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
   let frame: CloudFrame | null = null
   let levers: CloudLevers | null = null
   let inFrame = false
+  /** This frame's cloud work threw: its composite and its measurements read nothing. */
+  let failed = false
   let layered = false
   let frames = 0
   let disposed = false
@@ -254,6 +256,19 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       return inFrame && frame !== null
     },
     run,
+    /*
+     * The composite was shown at `beginFrame` and reads the history under
+     * this frame's camera, so a throw that leaves the history as the last
+     * good frame drew it composites that frame's cloud where the view has
+     * since moved, and one partway through an immediate frame's four phases
+     * composites a mix. The composite draws nothing this frame, and the next
+     * converging frame keeps none of the history.
+     */
+    failed() {
+      failed = true
+      composite.inert()
+      history.reset()
+    },
   }
   const frameNode = new CloudFrameNode(driver)
   const composite = new CloudComposite({
@@ -324,6 +339,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     beginFrame(inputs, sensor) {
       if (disposed) return
       levers = inputs?.levers ?? null
+      failed = false
       const previous = frame
       const extents = extentsOf(renderer, scenePass, css, buffer)
       // Off is a fresh start: the next frame on is a first frame, which
@@ -364,9 +380,15 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       }
     },
     afterFrame(target) {
-      if (frame?.levers.composite === 'residual')
+      // A failed frame drew no cloud, so a capture of it answers null, as on
+      // a frame the clouds are off, rather than the history it abandoned.
+      if (frame?.levers.composite === 'residual' && !failed)
         composite.measureResidual(target, scenePass.renderTarget)
-      radiance.measure(target, scenePass.renderTarget, frame !== null)
+      radiance.measure(
+        target,
+        scenePass.renderTarget,
+        frame !== null && !failed,
+      )
     },
     captureRadiance() {
       return radiance.request()

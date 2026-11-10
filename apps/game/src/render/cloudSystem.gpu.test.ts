@@ -19,6 +19,7 @@ import { cloudRadianceDifference } from '@inertialref/devtools'
 import type { CloudHistory } from './cloudHistory.ts'
 import type { CloudLevers } from './cloudLevers.ts'
 import type { CloudResource } from './cloudNodes.ts'
+import type { CloudTrace } from './cloudTrace.ts'
 import { type CloudRig, cloudRig } from './cloudSystemRig.ts'
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
@@ -443,6 +444,77 @@ describe('a warm-up that arrives after the caches are whole', () => {
       await gpu.read(late.target)
     } finally {
       late.dispose()
+    }
+  }, 120_000)
+})
+
+describe('a frame whose cloud work throws', () => {
+  /*
+   * The composite reads the history under the frame's own camera, so a
+   * trace that throws after converged frames leaves it holding their cloud,
+   * and a composite left live draws that cloud on a frame that traced none.
+   * The camera here holds still, so the stale cloud lands exactly where the
+   * last good frame put it and the failed frame would read as a clouded one.
+   */
+  it('composites none of the history it abandoned, captures nothing, and draws cloud again from a reset', async () => {
+    const trace = resource<CloudTrace>('trace')
+    const history = resource<CloudHistory>('history')
+    const sink = new RingBufferSink()
+    const detach = logHub.addSink(sink)
+    /** The largest difference in any channel of any texel, over the larger image's peak. */
+    const apart = (
+      a: Float32Array | Uint8Array,
+      b: Float32Array | Uint8Array,
+    ) => {
+      let peak = 0
+      let worst = 0
+      for (let i = 0; i < a.length; i += 1) {
+        peak = Math.max(peak, Math.abs(a[i]!), Math.abs(b[i]!))
+        worst = Math.max(worst, Math.abs(a[i]! - b[i]!))
+      }
+      return worst / peak
+    }
+    const image = async () => (await gpu.read(rig.target)).data.slice()
+    const { render, dispatchPhase } = trace
+    try {
+      set({ on: false })
+      rig.frame()
+      const plain = await image()
+      set({ on: true, force: 'none', composite: 'identity', lightTaps: 2 })
+      frames(20)
+      const clouded = await image()
+      // The control: the deck over the image's top half is in the frame.
+      expect(apart(clouded, plain)).toBeGreaterThan(0.05)
+
+      const fail = (): never => {
+        throw new Error('the trace failed')
+      }
+      trace.render = fail
+      trace.dispatchPhase = fail
+      const resets = history.report.resets
+      const asked = rig.system!.captureRadiance()
+      rig.frame()
+      trace.render = render
+      trace.dispatchPhase = dispatchPhase
+      // The frame is the clouds-off frame: the composite drew nothing.
+      expect(apart(await image(), plain)).toBeLessThan(1e-3)
+      await expect(asked).resolves.toBeNull()
+      expect(
+        sink
+          .records()
+          .filter((record) => record.scope === 'game.clouds')
+          .map((record) => record.level),
+      ).toEqual(['warn'])
+
+      // The next frame keeps none of the history, and the cloud comes back.
+      rig.frame()
+      expect(history.report.resets).toBe(resets + 1)
+      frames(20)
+      expect(apart(await image(), plain)).toBeGreaterThan(0.05)
+    } finally {
+      trace.render = render
+      trace.dispatchPhase = dispatchPhase
+      detach()
     }
   }, 120_000)
 })
