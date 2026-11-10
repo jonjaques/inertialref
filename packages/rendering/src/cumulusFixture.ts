@@ -761,8 +761,6 @@ export function viewRay(
 /* A reference and the field it was traced through                            */
 /* ------------------------------------------------------------------------- */
 
-type Bands = readonly [number, number, number]
-
 /** A case of a reference: one subject seen one way, and the light it stands in. */
 export interface CumulusCase {
   readonly id: string
@@ -775,9 +773,9 @@ export interface CumulusCase {
   readonly sunRadius: number
   /** The sky's mean radiance and its two irradiance differences (§5.6), per band, in the sun's irradiance. */
   readonly sky: {
-    readonly mean: Bands
-    readonly up: Bands
-    readonly sunward: Bands
+    readonly mean: readonly [number, number, number]
+    readonly up: readonly [number, number, number]
+    readonly sunward: readonly [number, number, number]
   }
   /** A Lambertian ground, its height in meters from the grid's low corner, or none. */
   readonly ground: { readonly height: number; readonly albedo: number } | null
@@ -792,8 +790,8 @@ export interface CumulusProbe {
   readonly pixel: readonly [number, number]
   /** Its unscaled line-of-sight depth through the fixture. */
   readonly depth: number
-  readonly radiance: Bands
-  readonly error: Bands
+  readonly radiance: readonly [number, number, number]
+  readonly error: readonly [number, number, number]
 }
 
 /**
@@ -814,10 +812,10 @@ export interface CumulusCurve {
 /** A case's absolute levels: the medians of its core and base pixels, per band. */
 export interface CumulusMedians {
   readonly case: string
-  readonly core: Bands
-  readonly coreError: Bands
-  readonly base: Bands
-  readonly baseError: Bands
+  readonly core: readonly [number, number, number]
+  readonly coreError: readonly [number, number, number]
+  readonly base: readonly [number, number, number]
+  readonly baseError: readonly [number, number, number]
 }
 
 /** The generated reference's form (`cumulusReference.generated.ts`). */
