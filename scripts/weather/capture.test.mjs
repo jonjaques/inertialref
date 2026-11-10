@@ -595,6 +595,22 @@ describe('what the capture refuses', () => {
     })
     expect(thinned.coverage).toBeCloseTo(1 / 3, 2)
     expect(thinned.retake).toBe(true)
+    // One path frame shown twice and the next skipped, every other pair:
+    // as many frames as path frames, and three quarters of the path.
+    const page = log(60, 400)
+    const doubled = page.flatMap((one, k) =>
+      k % 4 === 1 ? [] : k % 4 === 0 ? [one.at, one.at + 1] : [one.at],
+    )
+    const halved = checkCast(
+      'c',
+      page,
+      doubled.map((ms) => ms / 1000),
+      {
+        frames: 300,
+      },
+    )
+    expect(halved.coverage).toBeCloseTo(0.75, 2)
+    expect(halved.retake).toBe(false)
     // No instants, no figure: the record says so rather than guessing.
     expect(checkCast('c', log(60), null, cast)).toMatchObject({
       coverage: null,

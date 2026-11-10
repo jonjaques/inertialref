@@ -721,22 +721,31 @@ export function checkCast(name, log, instants, cast, held = CAST_RATE.held) {
 }
 
 /**
- * The share of a path's frames the screencast holds: its frames whose
- * instant, epoch seconds as `timestamps.json` keeps them, falls between the
- * path's first frame and its last in the page's log, over the path's
- * frames. Null without the instants.
+ * The share of a path's frames the screencast holds: each frame is the path
+ * frame of the last log entry at or before its instant (epoch seconds, as
+ * `timestamps.json` keeps them), and the share is the distinct path frames
+ * so held over the path's frames. Null without the instants.
  *
- * Not the frames captured over the frames asked for: the screencast stops
- * once it holds the count asked for, so that share is one unless its
- * deadline lapses, and a stream encoded at a third of the page's rate
- * read as the whole path while its clip held every third frame of it.
+ * Distinct path frames, not frames: a stream that shows one path frame
+ * twice and skips the next counts whole by its frames. The smoke's G5
+ * flight read 100% that way where `castSteps`, aligning as this does, read
+ * 92.2% with 125 path frames missing. And not the frames captured over the
+ * frames asked for either: the screencast stops once it holds that count,
+ * so the share was one unless its deadline lapsed.
  */
 export function coverageOf(instants, log, frames) {
   if (instants === null || log.length < 2) return null
   const last = Math.min(frames, log.length - 1)
-  const [from, to] = [log[0].at, log[last].at]
-  const inside = instants.filter((s) => s * 1000 >= from && s * 1000 < to)
-  return inside.length / last
+  const held = new Set()
+  let entry = 0
+  for (const seconds of [...instants].sort((a, b) => a - b)) {
+    const ms = seconds * 1000
+    if (ms < log[0].at) continue
+    while (entry + 1 < log.length && log[entry + 1].at <= ms) entry += 1
+    const k = log[entry].k ?? entry
+    if (k < last) held.add(k)
+  }
+  return held.size / last
 }
 
 /**
