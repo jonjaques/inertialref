@@ -85,10 +85,11 @@ export const SOURCE_AXES = {
 export const THREE_GRID: SourceGrid = { ...SOURCE_AXES, nodes: 16, suns: 8 }
 
 /**
- * The view table's grid. Eight suns leave the table's own interpolation 16%
- * off at worst and fifteen leave it 8%, which twenty-nine do not better;
- * sixteen depth nodes read 7.7% where twenty read 5.6%, and thirty-two read
- * the same 5.6%, which is the one table's distance from the other radii.
+ * The view table's grid. At sixteen depth nodes, eight suns leave the
+ * table's own interpolation 16% off at worst, fifteen 8.0% and twenty-nine
+ * 7.5%. Sixteen depth nodes read 7.5% where twenty read 5.6%, and
+ * thirty-two read 5.7%: what is left at twenty is the one table's distance
+ * from the other radii, which no node count shortens.
  */
 export const VIEW_GRID: SourceGrid = { ...SOURCE_AXES, nodes: 20, suns: 15 }
 
@@ -101,7 +102,8 @@ export const VIEW_BEARINGS: SourceBearings = { count: 33, ends: true }
 /**
  * Where the view table's cosines are sought, each hemisphere; the table's
  * are the oracle's quadrature cosines nearest them. The two ends are the
- * horizon and the normal: without them a grazing ray reads a node 30% off.
+ * horizon and the normal: without them the worst radiance is 31% off, at a
+ * grazing view.
  */
 export const VIEW_COSINES = [
   0, 0.04, 0.12, 0.24, 0.38, 0.53, 0.68, 0.82, 0.94, 1,
