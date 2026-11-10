@@ -23,7 +23,14 @@ import {
   type RenderBody,
 } from '@inertialref/rendering'
 import type { WorkerPool } from '@inertialref/workers'
-import { bakeAirTables, bakeAtmosphereTask } from './atmosphereTask.ts'
+import {
+  type AirTableName,
+  type AirTableSet,
+  bakeAirTables,
+  bakeAtmosphereTask,
+  type BakeAtmosphereRequest,
+  type BakeAtmosphereResponse,
+} from './atmosphereTask.ts'
 import { scatteringKey } from './preloadPlan.ts'
 import type { Rgb } from './bodyUniforms.ts'
 
@@ -36,9 +43,15 @@ import type { Rgb } from './bodyUniforms.ts'
  * for `rgba32float` — and the cache, keyed on everything the recipe reads,
  * so two bodies with the same authored haze and shell share one bake.
  *
- * The set is three tables: the transmittance and Ψ, which every surface in
- * the air marches through, and the sky table, which only the clouds read
- * (`bakeSkyMoments`).
+ * The set is the transmittance and Ψ, which every surface in the air
+ * marches through, and the sky table where it is wanted, which only the
+ * clouds read (`bakeSkyMoments`). It is wanted on a page that built the
+ * cloud system (`scatteringOf`), and on no other: there nothing reads it,
+ * and it would cost about 1.2 times the other two tables' bake and 13 KB a
+ * haze for nothing. A haze baked without it and later wanted with it takes
+ * it as a job of its own under the same key (`skyFor`, `warmSky`), and the
+ * set it lands in is a new object, so the cloud's `air.bind`, which binds
+ * on a change of set, binds it on the frame it lands.
  *
  * Baking is lazy, on the first ask for a body's shell, and it runs in one of
  * two places. On the pool, through `render.bakeAtmosphere` — `warmScattering`
@@ -62,9 +75,8 @@ export interface AtmosphereScattering {
    * 13,056 B: what `AirUniforms.sky` binds through `bind`, which reads this
    * set as `AirTables`. Only the cloud passes read it, so the shell, the
    * sphere, the ground and the sea that bind the same set compile no
-   * binding for it. Both bakes make one; it is optional because
-   * `AirTables`' is, so a set built by hand for a test binds the dark
-   * stand-in in its place.
+   * binding for it. Absent where no ask wanted it (`ScatteringWants`), and
+   * the bundle then binds the dark stand-in in its place.
    */
   readonly sky?: Texture
   /**
@@ -76,9 +88,52 @@ export interface AtmosphereScattering {
   readonly multiScatterTable: ScatteringLut
 }
 
+/** What an ask wants of a bake beyond the air's own two tables. */
+export interface ScatteringWants {
+  /** The sky table, which only the clouds read. */
+  readonly sky?: boolean
+}
+
+const NOTHING_MORE: ScatteringWants = {}
+
+function wantedOf(wants: ScatteringWants): readonly AirTableName[] {
+  return wants.sky === true ? ['sky'] : []
+}
+
 const cache = new Map<string, AtmosphereScattering>()
 /** Bakes in flight on the pool, so two asks for one key submit one job. */
 const pending = new Map<string, Promise<AtmosphereScattering>>()
+/** Sky tables in flight on the pool for a haze already cached without one. */
+const pendingSky = new Map<string, Promise<AtmosphereScattering>>()
+
+/**
+ * `set` with the derived tables `tables` holds, as a new object when there
+ * are any, so a reader comparing sets sees the change; `set` itself when
+ * there are none.
+ */
+function withTables(
+  set: AtmosphereScattering,
+  tables: AirTableSet,
+): AtmosphereScattering {
+  return tables.sky === undefined ? set : { ...set, sky: toTexture(tables.sky) }
+}
+
+/** What the bakes have made: tables, and the bytes their textures hold. */
+export function scatteringCensus(): {
+  readonly hazes: number
+  readonly skies: number
+  readonly skyBytes: number
+} {
+  let skies = 0
+  let skyBytes = 0
+  for (const set of cache.values()) {
+    if (set.sky === undefined) continue
+    skies += 1
+    const image = set.sky.image as { readonly data: Uint16Array }
+    skyBytes += image.data.byteLength
+  }
+  return { hazes: cache.size, skies, skyBytes }
+}
 
 function toTexture(lut: ScatteringLut): DataTexture {
   const half = new Uint16Array(lut.data.length)
@@ -101,18 +156,25 @@ function toTexture(lut: ScatteringLut): DataTexture {
   return map
 }
 
-/** The tables for one body's haze, baking them on the first ask. */
+/**
+ * The tables for one body's haze, baking them on the first ask, and the sky
+ * table on the first ask that wants it.
+ */
 export function scatteringFor(
   haze: HazeAuthoring,
   topRatio: number,
   heights: AirHeights,
+  wants: ScatteringWants = NOTHING_MORE,
 ): AtmosphereScattering {
   const { thickness } = haze
   // The key lives in `preloadPlan.ts` so the boot prebake and this cache
   // cannot disagree about what "the same atmosphere" means.
   const key = scatteringKey(haze, topRatio, heights)
   const cached = cache.get(key)
-  if (cached !== undefined) return cached
+  if (cached !== undefined)
+    return wants.sky === true && cached.sky === undefined
+      ? skyFor(key, cached)
+      : cached
 
   const started = performance.now()
   const recipe = atmosphereRecipe(haze, topRatio, heights)
@@ -122,15 +184,22 @@ export function scatteringFor(
   // table is new to this bake and its cost is a figure the design leaves to
   // measure.
   const airBaked = performance.now()
-  const tables = bakeAirTables(recipe, transmittance, multiScatter)
-  const skyBaked = performance.now()
-  const set: AtmosphereScattering = {
+  const tables = bakeAirTables(
     recipe,
-    transmittance: toTexture(transmittance),
-    multiScatter: toTexture(multiScatter),
-    sky: toTexture(tables.sky),
-    multiScatterTable: multiScatter,
-  }
+    transmittance,
+    multiScatter,
+    wantedOf(wants),
+  )
+  const skyBaked = performance.now()
+  const set = withTables(
+    {
+      recipe,
+      transmittance: toTexture(transmittance),
+      multiScatter: toTexture(multiScatter),
+      multiScatterTable: multiScatter,
+    },
+    tables,
+  )
   cache.set(key, set)
   const finished = performance.now()
   /*
@@ -171,6 +240,79 @@ export function scatteringFor(
 }
 
 /**
+ * The sky table for a haze cached without one, on this thread. Ψ's floats
+ * are kept and the transmittance's are not, so the transmittance is marched
+ * again: deterministic, so the table is the one a whole bake would have
+ * made.
+ */
+function skyFor(
+  key: string,
+  cached: AtmosphereScattering,
+): AtmosphereScattering {
+  const started = performance.now()
+  const transmittance = bakeTransmittance(cached.recipe)
+  const set = withTables(
+    cached,
+    bakeAirTables(cached.recipe, transmittance, cached.multiScatterTable, [
+      'sky',
+    ]),
+  )
+  cache.set(key, set)
+  log.info('sky table baked', { ms: Math.round(performance.now() - started) })
+  return set
+}
+
+/**
+ * The sky table for a haze cached without one, on the pool: the whole bake
+ * asked again with the sky wanted, of which the sky alone is kept, since
+ * the task has no form that takes the air's tables in. Dropped if the set
+ * has gained a sky by the time it lands, by either path.
+ */
+function warmSky(
+  pool: WorkerPool,
+  request: Omit<BakeAtmosphereRequest, 'wanted'>,
+  key: string,
+): Promise<AtmosphereScattering> {
+  const inFlight = pendingSky.get(key)
+  if (inFlight !== undefined) return inFlight
+  let job: Promise<AtmosphereScattering>
+  try {
+    job = pool
+      .submit(bakeAtmosphereTask, { ...request, wanted: ['sky'] })
+      .result.then((baked) => {
+        const current = cache.get(key)
+        // The set is cached before a sky is ever asked of it, and nothing
+        // evicts it, so `current` is there; a sky it already has stands.
+        if (current === undefined || current.sky !== undefined)
+          return current ?? fromBake(baked)
+        const set = withTables(current, baked.tables)
+        cache.set(key, set)
+        return set
+      })
+      .finally(() => pendingSky.delete(key))
+  } catch (cause: unknown) {
+    return Promise.reject(
+      cause instanceof Error ? cause : new Error(String(cause)),
+    )
+  }
+  pendingSky.set(key, job)
+  return job
+}
+
+/** A pool's answer as a set, its derived tables included. */
+function fromBake(baked: BakeAtmosphereResponse): AtmosphereScattering {
+  return withTables(
+    {
+      recipe: baked.recipe,
+      transmittance: toTexture(baked.transmittance),
+      multiScatter: toTexture(baked.multiScatter),
+      multiScatterTable: baked.multiScatter,
+    },
+    baked.tables,
+  )
+}
+
+/**
  * The tables for one body's haze, baked on the pool.
  *
  * The same recipe and the same two tables `scatteringFor` makes, made by
@@ -185,10 +327,14 @@ export function warmScattering(
   haze: HazeAuthoring,
   topRatio: number,
   heights: AirHeights,
+  wants: ScatteringWants = NOTHING_MORE,
 ): Promise<AtmosphereScattering> {
   const key = scatteringKey(haze, topRatio, heights)
   const cached = cache.get(key)
-  if (cached !== undefined) return Promise.resolve(cached)
+  if (cached !== undefined)
+    return wants.sky === true && cached.sky === undefined
+      ? warmSky(pool, { haze, topRatio, heights }, key)
+      : Promise.resolve(cached)
   const inFlight = pending.get(key)
   if (inFlight !== undefined) return inFlight
 
@@ -207,17 +353,24 @@ export function warmScattering(
   let job: Promise<AtmosphereScattering>
   try {
     job = pool
-      .submit(bakeAtmosphereTask, { haze, topRatio, heights })
+      .submit(bakeAtmosphereTask, {
+        haze,
+        topRatio,
+        heights,
+        wanted: wantedOf(wants),
+      })
       .result.then((baked) => {
         const raced = cache.get(key)
-        if (raced !== undefined) return raced
-        const set: AtmosphereScattering = {
-          recipe: baked.recipe,
-          transmittance: toTexture(baked.transmittance),
-          multiScatter: toTexture(baked.multiScatter),
-          sky: toTexture(baked.tables.sky),
-          multiScatterTable: baked.multiScatter,
+        if (raced !== undefined) {
+          // The set this thread baked stands, as every material holds it;
+          // a sky the answer carries and it lacks joins it.
+          if (raced.sky !== undefined || baked.tables.sky === undefined)
+            return raced
+          const joined = withTables(raced, baked.tables)
+          cache.set(key, joined)
+          return joined
         }
+        const set = fromBake(baked)
         cache.set(key, set)
         log.info('scattering tables baked on the pool', {
           ms: Math.round(performance.now() - started),
@@ -250,10 +403,21 @@ export function scatteringVia(
   haze: HazeAuthoring,
   topRatio: number,
   heights: AirHeights,
+  wants: ScatteringWants = NOTHING_MORE,
 ): AtmosphereScattering | null {
-  const cached = cache.get(scatteringKey(haze, topRatio, heights))
-  if (cached !== undefined) return cached
-  void warmScattering(pool, haze, topRatio, heights).catch(() => {
+  const key = scatteringKey(haze, topRatio, heights)
+  const cached = cache.get(key)
+  if (cached !== undefined) {
+    // The set without its sky until the sky lands: the cloud binds the
+    // stand-in meanwhile, which draws no sky light, and everything else
+    // never reads it.
+    if (wants.sky === true && cached.sky === undefined)
+      void warmSky(pool, { haze, topRatio, heights }, key).catch(() => {
+        // As below: a pool gone away, and the next frame asks again.
+      })
+    return cached
+  }
+  void warmScattering(pool, haze, topRatio, heights, wants).catch(() => {
     // The one rejection is a pool that has gone away — a dispose during a
     // reload, which `warmScattering` turns into a rejection because `submit`
     // raises it as a throw. The next frame asks again, and a session that
@@ -349,15 +513,26 @@ export function airOverheadRgb(
  * the shell, the sphere, the ground and the sea asking every frame share
  * one bake; each ask still builds the key, so a caller drawing several of
  * them asks once. Null for a body with no haze.
+ *
+ * The sky table is wanted where the page built the cloud system, which the
+ * engine says by holding `?clouds=1`'s factory (`cloudSystemFactory`, set
+ * before anything that asks here is mounted, and for the page's lifetime).
+ * A caller that knows better, a rig with no engine, says so in `wants`.
  */
 export function scatteringOf(
-  engine: { pool(): WorkerPool | null },
+  engine: {
+    pool(): WorkerPool | null
+    readonly cloudSystemFactory?: unknown
+  },
   body: RenderBody,
+  wants: ScatteringWants = {
+    sky: (engine.cloudSystemFactory ?? null) !== null,
+  },
 ): AtmosphereScattering | null {
   const haze = body.appearance.haze
   if (haze === null) return null
   const pool = engine.pool()
   return pool === null
-    ? scatteringFor(haze, body.airTop, body.airHeights)
-    : scatteringVia(pool, haze, body.airTop, body.airHeights)
+    ? scatteringFor(haze, body.airTop, body.airHeights, wants)
+    : scatteringVia(pool, haze, body.airTop, body.airHeights, wants)
 }

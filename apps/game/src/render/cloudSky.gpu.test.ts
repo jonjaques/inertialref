@@ -52,10 +52,15 @@ afterAll(() => {
 const f32 = Math.fround
 const earth = SOLAR_PLANETS.find((body) => body.name === 'Earth')!
 const haze = earth.haze!
-const scattering = scatteringFor(haze, 1 + haze.height / earth.radius, {
-  rayleigh: earth.atmosphere!.scaleHeight / earth.radius,
-  aerosol: haze.aerosolHeight / earth.radius,
-})
+const scattering = scatteringFor(
+  haze,
+  1 + haze.height / earth.radius,
+  {
+    rayleigh: earth.atmosphere!.scaleHeight / earth.radius,
+    aerosol: haze.aerosolHeight / earth.radius,
+  },
+  { sky: true },
+)
 
 /** A seeded uniform draw, so a failure reproduces. */
 function draws(seed: number): () => number {
