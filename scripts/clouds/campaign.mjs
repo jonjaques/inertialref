@@ -54,7 +54,7 @@ import {
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { parseCapture } from '../weather/capture.mjs'
+import { parseCapture, planOf as capturePlan } from '../weather/capture.mjs'
 import { armPlan } from './frame.mjs'
 import {
   HELD,
@@ -164,7 +164,7 @@ const castAt = (only, lever, value, extra = []) => [
   process.execPath,
   'scripts/weather/capture.mjs',
   ...['--phase', '1', '--url', URL_, '--gpu-wait', GPU_WAIT],
-  ...['--only', only, '--no-samples', '--baseline-casts'],
+  ...['--only', only, '--no-default-samples', '--baseline-casts'],
   ...['--lever', `${lever}=${value}`],
   ...extra,
 ]
@@ -256,9 +256,30 @@ export const CAMPAIGNS = Object.freeze({
 const runsOf = (stage, options = {}) =>
   batchRuns(stage.name, Object.keys(SIZES), HELD, options)
 
-/** A stage's estimate in minutes: a batch's from its runs, a command's as written. */
+/**
+ * A capture command's seconds by the capture's own plan (`planOf`, its
+ * per-take arithmetic), or null for a command that is not the capture's.
+ */
+export function captureSeconds(command) {
+  const at = command.indexOf('scripts/weather/capture.mjs')
+  if (at < 0) return null
+  return capturePlan(parseCapture(command.slice(at + 1))).reduce(
+    (sum, take) => sum + take.seconds,
+    0,
+  )
+}
+
+/**
+ * A stage's estimate in minutes: a batch's from its runs, a stage of
+ * captures from the capture's own plan, and any other command's as written.
+ */
 export function minutesOf(stage, options = {}) {
-  if (stage.kind !== 'batch') return stage.minutes
+  if (stage.kind !== 'batch') {
+    const seconds = (stage.commands ?? []).map(captureSeconds)
+    return seconds.length > 0 && seconds.every(Number.isFinite)
+      ? seconds.reduce((sum, x) => sum + x, 0) / 60
+      : stage.minutes
+  }
   const booted = new Map()
   const seconds = runsOf(stage, options).reduce(
     (sum, run) =>
@@ -920,7 +941,7 @@ export function planText(name, options = {}) {
         state,
       )
       parts.push(
-        `## ${spec.name}: ${commands.length} commands, about ${minutes(seconds)} (as written)${spec.instruments ? `; ${instrumentsText(spec.instruments)}` : ''}`,
+        `## ${spec.name}: ${commands.length} commands, about ${minutes(seconds)} (${spec.commands?.every((c) => captureSeconds(c) !== null) ? "the capture's plan" : 'as written'})${spec.instruments ? `; ${instrumentsText(spec.instruments)}` : ''}`,
         ...commands.map((c) => `  ${c.join(' ')}`),
       )
     }

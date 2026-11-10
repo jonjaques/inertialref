@@ -10,6 +10,7 @@ import { getLogger, getTimer } from '@inertialref/shared'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import type { RendererHandle } from './createRenderer.ts'
+import type { CloudFrontHandle } from './cloudSystem.ts'
 import { scatteringFor, warmScattering } from './atmosphereLuts.ts'
 import { createAtmosphereMaterial, createStarMaterial } from './materials.ts'
 import {
@@ -109,7 +110,7 @@ function warmAnnulus(): BufferGeometry {
  * in the same census now, so "what boot warms" is a list rather than a
  * disclaimer.
  */
-function buildWarmGroup(): Group {
+function buildWarmGroup(front?: CloudFrontHandle): Group {
   const group = new Group()
   const sphere = new SphereGeometry(1, 8, 4)
 
@@ -117,7 +118,8 @@ function buildWarmGroup(): Group {
   group.add(new Mesh(sphere, createAtmosphereMaterial().material))
   group.add(new Mesh(sphere, createCloudMaterial().material))
   group.add(new Mesh(sphere, createStarMaterial().material))
-  group.add(new Mesh(warmAnnulus(), createRingMaterial().material))
+  // The ring the page draws: seen through the clouds when it has a handle.
+  group.add(new Mesh(warmAnnulus(), createRingMaterial(front).material))
 
   group.traverse((object) => {
     object.visible = true
@@ -228,7 +230,7 @@ async function warm(
     run: async (done) => {
       const view = await sceneView(engine)
       if (view === null) return
-      warmGroup ??= buildWarmGroup()
+      warmGroup ??= buildWarmGroup(engine.cloudFront ?? undefined)
       await warmCompile(warmRenderer(renderer, engine.sceneLayout(renderer)), {
         object: warmGroup,
         camera: view.camera,

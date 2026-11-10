@@ -121,13 +121,28 @@ that `findPicture` searches and no player-facing list reads.**
   are its verbs. The place may move: a station's sub-point is sampled at
   each instant beside the sun, and the search steps through the station's
   orbit, since the sun over the sub-point goes round once an orbit
-  (`solveStationSun`). The ledger solves the overlay guard that way, E1's
-  picture from 2.5 km off the ISS at the first crossing of E1's sun whose
-  ground behind the station holds cloud, and holds the committed picture
-  equal to the one it solves. `cornerstoneLedger.test.ts` holds each
+  (`solveStationSun`). The overlay guard is solved that way, E1's picture
+  from 2.5 km off the ISS at the first crossing of E1's sun with cloud
+  behind the station's silhouette, and the ledger holds the committed
+  picture equal to the one it solves. `cornerstoneLedger.test.ts` holds each
   cornerstone's sun to its target within half a degree, in Node, against the
   real catalog: a change to a body's frames that moves a cornerstone's sun
   fails there, before a plate is taken.
+- **Each picture's weather is held on the CPU field** (`weatherField.ts`)
+  under its regime, by a clause stated once in
+  `apps/headless/src/cornerstoneSolve.ts` and asserted by the ledger: fair
+  weather few to scattered and overcast seven oktas or more, in the frame's
+  columns at an unscaled depth of 0.3; a deck broken or more; G3's deck
+  ending sunward over a clear slot; E1's cells leaving two columns in five
+  clear for their shadows; E2's limb at a band's crest in the frame's
+  center; G5's flight clear 2 km and a margin ahead at its first and last
+  frames with a cloud entered between (C6), with the field held and turned
+  by the cast's seconds; and cloud on the ring the guard's silhouette stands
+  over. Where a cloud stands moves as the field's packages land, so a
+  stance that depends on one is the answer of a search, not a number to
+  keep: `node apps/headless/src/cornerstoneSolve.ts g5 e2 guard --write`
+  places each where its clause holds, and `pnpm cornerstones:ledger`
+  records it.
 - `ir.settled()` waits on the clouds: the system's own settle, every cache's
   owed work done and 32 frames since the history last reset, which is when
   the history's 1/8 floor has every pixel holding eight samples.

@@ -23,6 +23,7 @@ import {
   session,
 } from './measure.mjs'
 import { figures, plan, tables, unfit } from './page.mjs'
+import { sameBuild } from '../weather/sheet.mjs'
 
 /*
  * The whole frame, the frame log and the pacing study without a browser or
@@ -92,6 +93,19 @@ describe('every run', () => {
       "the page is build abed0719, and the tree is abed0719-dirty; serve this tree's build",
     )
     expect(buildRefusal(null, 'abed0719')).toMatch(/nobody named/)
+    // A tree measured dirty on purpose (`--allow-dirty`) is served by the
+    // same test: its build's id ends `-dirty` as the tree's does.
+    expect(buildRefusal('abed0719-dirty', 'abed0719-dirty')).toBeNull()
+    // One equality for the runner and the capture.
+    for (const [page, tree] of [
+      ['abed0719', 'abed0719'],
+      ['abed0719-dirty', 'abed0719-dirty'],
+      ['abed0719', 'abed0719-dirty'],
+      [null, 'abed0719'],
+    ])
+      expect(buildRefusal(page, tree) === null, `${page} ${tree}`).toBe(
+        sameBuild(page, tree),
+      )
   })
 })
 
@@ -250,7 +264,68 @@ describe('the hold’s batches', () => {
       ['picture=temporal:quality'],
       ['picture=temporal:quality'],
     ])
-    expect(over.filter((r) => r.group === 'form')).toHaveLength(20)
+    expect(over).toHaveLength(19)
+  })
+
+  it('take package Y’s six rows, each in a group of its own', () => {
+    const over = batchRuns('over', SIZES).filter((r) => r.type === 'ab')
+    const rows = (group) =>
+      over
+        .filter((r) => r.group === group)
+        .map((r) => [
+          r.scenario,
+          r.size,
+          r.base.over ?? 'off',
+          r.candidate.over,
+        ])
+    // 1. The chain rule's: chain against passes, and B10's, chain against
+    // the clouds off, on orbit and horizon at both sizes.
+    expect(rows('chain')).toEqual([
+      ['orbit', '1080p', 'passes', 'chain'],
+      ['horizon', '1080p', 'passes', 'chain'],
+      ['orbit', 'retina', 'passes', 'chain'],
+      ['horizon', 'retina', 'passes', 'chain'],
+    ])
+    for (const r of over.filter((r) => r.group === 'clouds')) {
+      expect(r.base.on).toBe(false)
+      expect(r.candidate).toMatchObject({ on: true, over: 'chain' })
+    }
+    // 2. lean on the overlay at Retina; 3. chain on the overlay, lit.
+    expect(rows('lean')).toEqual([['overlay', 'retina', 'passes', 'lean']])
+    expect(rows('overlay').map(([, size]) => size)).toEqual(['1080p', 'retina'])
+    for (const r of over.filter((r) => r.scenario === 'overlay'))
+      expect(r.lit).toBe(true)
+    // 5. The guard's stance, its own picture: an opaque station in front of
+    // the deck and nothing marked, both forms at both sizes.
+    const guard = over.filter((r) => r.group === 'guard')
+    expect(guard.map((r) => [r.size, r.label])).toEqual([
+      ['1080p', 'chain'],
+      ['1080p', 'lean'],
+      ['retina', 'chain'],
+      ['retina', 'lean'],
+    ])
+    expect(guard[0]).toMatchObject({
+      preset: 'weather-guard-station',
+      stance: { kind: 'preset' },
+      lit: false,
+    })
+    // 6. The temporal picture, both forms, at 1080p.
+    expect(rows('temporal')).toEqual([
+      ['horizon', '1080p', 'passes', 'chain'],
+      ['horizon', '1080p', 'passes', 'lean'],
+    ])
+    // Every form row reads both sides' passes; every row its hash and lens.
+    for (const r of over.filter((r) => r.group !== 'clouds'))
+      expect(r.timelineBase, r.id).toBe(true)
+    for (const r of over) {
+      expect(r.leversHash).toMatch(/^[0-9a-f]{8}$/)
+      expect(r.lens).toBeDefined()
+    }
+    expect(
+      plan(over[0])
+        .map((s) => s.tag)
+        .slice(-3),
+    ).toEqual(['timeline', 'timeline:base', 'report'])
   })
 })
 

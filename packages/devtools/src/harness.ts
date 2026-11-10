@@ -109,6 +109,7 @@ import {
   type TravelTargetOptions,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
+import { engineLight } from './engineLight.ts'
 import {
   runClock,
   solveSun,
@@ -281,6 +282,8 @@ export class GameHarness {
   readonly #maneuvers: Maneuvers
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
+  /** A drive lit in front of the lens, drawn only: `engineLight.ts`. */
+  readonly lightEngine = engineLight()
 
   constructor(host: Host, scripts: readonly CutsceneScript[] = CUTSCENES) {
     this.#host = host
@@ -1854,6 +1857,7 @@ export class GameHarness {
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation,throttle}) / ir.throttle(0..1) / ir.hold()',
+      '  ir.lightEngine(on?)           a drive lit in front of the lens at a held throttle, drawn only; false releases it',
       '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',

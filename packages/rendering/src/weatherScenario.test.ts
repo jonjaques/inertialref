@@ -258,7 +258,7 @@ describe('the cornerstones’ decks', () => {
     expect(alto).toMatchObject({
       genus: 'altocumulus',
       base: 4000,
-      top: 4800,
+      top: 4400,
       coverage: 0.7,
       cellMeters: 1000,
     })
