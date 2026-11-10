@@ -2151,7 +2151,8 @@ describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
   /*
    * GPU milliseconds a frame of the `cloud trace` pass on the timeline, in
    * the system's own chain, at two target sizes under three regimes and at
-   * each tap count the lever admits from four up: the eye 100 m up, looking
+   * each tap count the lever admits, none included, so the taps' share is a
+   * difference of two rows: the eye 100 m up, looking
    * straight up through a 60° lens, the air on, the converging regime, the
    * median of five runs of eight frames after 140 frames of settling. A
    * test's figure, of this stance on this adapter, beside the steps a ray
@@ -2159,7 +2160,7 @@ describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
    * these. Written to `.data/clouds/traceCost.json` and held to nothing but
    * being a number.
    */
-  it('is timed at 1920 × 1080 and 2880 × 1800, under three regimes, at four, six and eight taps, and written', async () => {
+  it('is timed at 1920 × 1080 and 2880 × 1800, under three regimes, at every tap count the lever admits, and written', async () => {
     const rows: unknown[] = []
     for (const [width, height] of [
       [1920, 1080],
@@ -2181,7 +2182,7 @@ describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
         const stop = installPassTimeline(own.renderer)
         try {
           const timeline = passTimelineOf(own.renderer)!
-          for (const lightTaps of [4, 6, 8] as const) {
+          for (const lightTaps of [0, 2, 4, 6, 8] as const) {
             chain.levers = { ...chain.levers, lightTaps, stats: false }
             for (let k = 0; k < 140; k += 1) chain.frame()
             await own.read(chain.target)
