@@ -27,6 +27,8 @@ export const CLOUD_GENERA = [
   'cirrus',
   'cumulonimbus',
   'fog',
+  // Last, so every genus before it keeps its row of the profile table.
+  'altostratus',
 ] as const
 export type CloudGenus = (typeof CLOUD_GENERA)[number]
 
@@ -510,6 +512,8 @@ const PROFILES: Readonly<
   cirrus: { rise: 0.3, fall: 0.5 },
   cumulonimbus: { rise: 0.03, fall: 0.85 },
   fog: { rise: 0.02, fall: 0.25 },
+  // A sheet like stratus, with a softer base: its water is flat (§5.2).
+  altostratus: { rise: 0.15, fall: 0.75 },
 }
 
 /**
