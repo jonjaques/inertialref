@@ -42,7 +42,13 @@ import type {
  * plus the drift modulo the noise's period for any eye. The eye enters only
  * as the point the float32 offset is measured from (rule 58).
  *
- * A step reads the cover and the kind (each twice in a clipmap level's fade
+ * Each level's noise is read displaced over tens of kilometers
+ * (`weatherField.ts`'s mesoscale waves). The fine medium takes the
+ * displacement from the clipmap, carried at the level's middle height with
+ * its rate with height, so a march step pays no sine for it; the far media,
+ * which only bakes read, evaluate it where they read it.
+ *
+ * A fine step reads the clipmap's two targets (each twice in a level's fade
  * band), the profile, the base noise and the detail noise. The curl that
  * tears the edges is in the base noise already (`weatherNoise.ts`), so it
  * costs a step nothing. Every read names level 0, so the media compile in a

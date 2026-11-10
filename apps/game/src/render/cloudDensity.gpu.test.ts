@@ -807,3 +807,359 @@ describe('every read names level 0', () => {
     60_000,
   )
 })
+
+/* ------------------------------------------------------------------------- */
+/* No tile from orbit                                                         */
+/* ------------------------------------------------------------------------- */
+
+/** In-place radix-2 FFT of one row or column: `weatherField.test.ts`'s. */
+function fft(re: Float64Array, im: Float64Array, inverse: boolean): void {
+  const n = re.length
+  for (let i = 1, j = 0; i < n; i += 1) {
+    let bit = n >> 1
+    for (; j & bit; bit >>= 1) j ^= bit
+    j ^= bit
+    if (i < j) {
+      ;[re[i], re[j]] = [re[j]!, re[i]!]
+      ;[im[i], im[j]] = [im[j]!, im[i]!]
+    }
+  }
+  for (let size = 2; size <= n; size <<= 1) {
+    const turn = ((inverse ? 2 : -2) * Math.PI) / size
+    const wr = Math.cos(turn)
+    const wi = Math.sin(turn)
+    for (let start = 0; start < n; start += size) {
+      let cr = 1
+      let ci = 0
+      for (let j = 0; j < size / 2; j += 1) {
+        const a = start + j
+        const b = a + size / 2
+        const vr = re[b]! * cr - im[b]! * ci
+        const vi = re[b]! * ci + im[b]! * cr
+        re[b] = re[a]! - vr
+        im[b] = im[a]! - vi
+        re[a] = re[a]! + vr
+        im[a] = im[a]! + vi
+        const next = cr * wr - ci * wi
+        ci = cr * wi + ci * wr
+        cr = next
+      }
+    }
+  }
+  if (inverse)
+    for (let i = 0; i < n; i += 1) {
+      re[i] = re[i]! / n
+      im[i] = im[i]! / n
+    }
+}
+
+/** A map's correlation with itself at every lag, as sums, on a grid padded to twice its size. */
+function selfCorrelation(
+  map: Float64Array,
+  n: number,
+  size: number,
+): Float64Array {
+  const re = new Float64Array(size * size)
+  const im = new Float64Array(size * size)
+  for (let y = 0; y < n; y += 1)
+    for (let x = 0; x < n; x += 1) re[y * size + x] = map[y * n + x]!
+  const pass = (inverse: boolean) => {
+    const r = new Float64Array(size)
+    const i = new Float64Array(size)
+    for (const rows of [true, false])
+      for (let a = 0; a < size; a += 1) {
+        for (let b = 0; b < size; b += 1) {
+          const at = rows ? a * size + b : b * size + a
+          r[b] = re[at]!
+          i[b] = im[at]!
+        }
+        fft(r, i, inverse)
+        for (let b = 0; b < size; b += 1) {
+          const at = rows ? a * size + b : b * size + a
+          re[at] = r[b]!
+          im[at] = i[b]!
+        }
+      }
+  }
+  pass(false)
+  for (let k = 0; k < size * size; k += 1) {
+    re[k] = re[k]! * re[k]! + im[k]! * im[k]!
+    im[k] = 0
+  }
+  pass(true)
+  return re
+}
+
+/** The largest normalized autocorrelation at any lag from 2 km to half the map's width, and its cloudy share. */
+function largestRepeat(
+  map: Uint8Array,
+  n: number,
+  grid: number,
+): { readonly peak: number; readonly cloudy: number } {
+  let cloudy = 0
+  for (const value of map) cloudy += value
+  cloudy /= map.length
+  let size = 1
+  while (size < 2 * n) size <<= 1
+  const centered = new Float64Array(n * n)
+  const ones = new Float64Array(n * n).fill(1)
+  map.forEach((value, k) => (centered[k] = value - cloudy))
+  const sums = selfCorrelation(centered, n, size)
+  const counts = selfCorrelation(ones, n, size)
+  const variance = cloudy * (1 - cloudy)
+  const reach = Math.floor((n - 1) / 2)
+  let peak = -1
+  for (let dy = -reach; dy <= reach; dy += 1)
+    for (let dx = 0; dx <= reach; dx += 1) {
+      const lag = Math.hypot(dx, dy) * grid
+      if (lag < 2000 || lag > reach * grid) continue
+      const k = ((dy + size) % size) * size + dx
+      peak = Math.max(peak, sums[k]! / Math.round(counts[k]!) / variance)
+    }
+  return { peak, cloudy }
+}
+
+describe('no tile from orbit, as drawn', () => {
+  /*
+   * D's measure, through the drawn field: a cloud-or-clear map at 200 m
+   * over 80 km about E1's stance at its instant, a column cloudy where any
+   * of five heights through the low level holds σ′·fraction over 10⁻⁵ 1/m.
+   * D's CPU field peaks at 0.249 there, 0.876 without the displacement.
+   */
+  it('E1: no lag from 2 to 40 km repeats the field by 0.3, and the map is the CPU’s', async () => {
+    const latitude = -0.08726646259971647
+    const longitude = -1.0471975511965976
+    const time = 17424.925169385428
+    const up = {
+      x: Math.cos(latitude) * Math.cos(longitude),
+      y: Math.sin(latitude),
+      z: -Math.cos(latitude) * Math.sin(longitude),
+    }
+    const east = { x: -Math.sin(longitude), y: 0, z: -Math.cos(longitude) }
+    const north = {
+      x: -Math.sin(latitude) * Math.cos(longitude),
+      y: Math.cos(latitude),
+      z: Math.sin(latitude) * Math.sin(longitude),
+    }
+    const weather = regimeWeather(SERVED_EARTH, 'fair-cumulus')
+    const eye = scaled(up, EARTH + 1500)
+    const field = bakeField(weather, 'fair-cumulus', eye, time)
+    const half = 40_000
+    const grid = 200
+    const n = Math.round((2 * half) / grid) + 1
+    const level = weather.levels[0]!
+    const heights = [0.15, 0.3, 0.45, 0.6, 0.75]
+    const points: Point[] = []
+    for (let j = 0; j < n; j += 1)
+      for (let i = 0; i < n; i += 1) {
+        const d = unit(
+          added(
+            up,
+            added(
+              scaled(east, (-half + i * grid) / EARTH),
+              scaled(north, (-half + j * grid) / EARTH),
+            ),
+          ),
+        )
+        for (const h of heights)
+          points.push({
+            position: scaled(d, EARTH + level.base + h * (level.top - level.base)),
+            footprint: 0,
+          })
+      }
+    const read = await evaluate(points, eye, field.media.field, field.uniforms)
+    const clock = fieldClock(weather, time)
+    const drawn = new Uint8Array(n * n)
+    const cpu = new Uint8Array(n * n)
+    for (let c = 0; c < n * n; c += 1)
+      for (let h = 0; h < heights.length; h += 1) {
+        const at = c * heights.length + h
+        if (read[at * 8]! * read[at * 8 + 1]! > 1e-5) drawn[c] = 1
+        const want = cloudFieldAt(weather, clock, up, points[at]!.position, 0)
+        if (want.fraction * want.sigma > 1e-5) cpu[c] = 1
+      }
+    let agree = 0
+    for (let c = 0; c < n * n; c += 1) if (drawn[c] === cpu[c]) agree += 1
+    const drawnRepeat = largestRepeat(drawn, n, grid)
+    const cpuRepeat = largestRepeat(cpu, n, grid)
+    console.info(
+      `E1 as drawn: peak ${drawnRepeat.peak.toFixed(3)}, cloudy ${drawnRepeat.cloudy.toFixed(3)}; cloudFieldAt: peak ${cpuRepeat.peak.toFixed(3)}, cloudy ${cpuRepeat.cloudy.toFixed(3)}; columns agreeing ${(agree / (n * n)).toFixed(4)}`,
+    )
+    expect(drawnRepeat.peak).toBeLessThan(0.3)
+    expect(drawnRepeat.cloudy).toBeGreaterThan(0.19)
+    expect(drawnRepeat.cloudy).toBeLessThan(0.24)
+    expect(agree / (n * n)).toBeGreaterThan(0.99)
+    field.dispose()
+  }, 120_000)
+})
+
+/* ------------------------------------------------------------------------- */
+/* The frame                                                                  */
+/* ------------------------------------------------------------------------- */
+
+describe('the frame’s clouds are the CPU field’s', () => {
+  /*
+   * Each stance's frame drawn through the fine medium and through
+   * `cloudFieldAt`, ray for ray: 64 × 64 rays of the stance's lens, each marched in
+   * 96 midpoint steps through the levels' union, its transmittance the
+   * product of `e^(−fraction·σ′·Δs)` and its footprint the lens's pixel at
+   * the step's distance. The march is this test's, the same on both sides,
+   * so what differs is the medium alone. The CPU field has no cube: a line
+   * at the cube cell's frequency, or at a clipmap level's edge, is a
+   * difference between the two frames, and the per-pixel bound bounds it.
+   */
+  const SIDE = 64
+  const STEPS = 96
+
+  /** A ray's span through the shell from radius `low` to `high`, from an eye at `eye` along unit `d`: [t₀, t₁], or null. */
+  function span(
+    eye: Vec3,
+    d: Vec3,
+    low: number,
+    high: number,
+    reach: number,
+  ): readonly [number, number] | null {
+    const b = eye.x * d.x + eye.y * d.y + eye.z * d.z
+    const c = eye.x * eye.x + eye.y * eye.y + eye.z * eye.z
+    const hit = (r: number): readonly [number, number] | null => {
+      const disc = b * b - (c - r * r)
+      if (disc < 0) return null
+      const root = Math.sqrt(disc)
+      return [-b - root, -b + root]
+    }
+    const top = hit(high)
+    if (top === null || top[1] <= 0) return null
+    const ground = hit(low)
+    const start = Math.max(0, top[0])
+    const end = Math.min(
+      reach,
+      ground !== null && ground[0] > 0 ? ground[0] : top[1],
+    )
+    return end > start ? [start, end] : null
+  }
+
+  it.each([
+    {
+      name: 'the horizon from 1.5 km, under stratocumulus',
+      regime: 'stratocumulus',
+      height: 1500,
+      // Along east, 3° down, through a 60° lens.
+      pitch: -0.05,
+      fov: Math.PI / 3,
+      reach: 80_000,
+    },
+    {
+      name: 'above the deck at 6 km, 40° down',
+      regime: 'stratocumulus',
+      height: 6000,
+      pitch: -0.7,
+      fov: Math.PI / 3,
+      reach: 40_000,
+    },
+    {
+      // Through a 1° lens: 7 km of ground, a pixel 110 m, under a quarter
+      // of a cumulus cell, so the frame is resolved cells and clear sky.
+      // Wider, the footprint's unresolved share spreads the cells' mean
+      // density over every clear column, on both sides alike, and every
+      // ray of the frame is over half opaque.
+      name: 'straight down from 400 km, over fair-cumulus',
+      regime: 'fair-cumulus',
+      height: 400_000,
+      pitch: -Math.PI / 2,
+      fov: Math.PI / 180,
+      reach: 500_000,
+    },
+  ] as const)('$name', async ({ regime, height, pitch, fov, reach }) => {
+    const weather = regimeWeather(SERVED_EARTH, regime)
+    const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
+    const eye = scaled(ground, EARTH + height)
+    const field = bakeField(weather, regime, eye)
+    const pixelAngle = fov / SIDE
+    const { east, north, up } = horizonBasis(ground)
+    const forward = unit(
+      added(scaled(east, Math.cos(pitch)), scaled(up, Math.sin(pitch))),
+    )
+    const right = unit({
+      x: forward.y * up.z - forward.z * up.y,
+      y: forward.z * up.x - forward.x * up.z,
+      z: forward.x * up.y - forward.y * up.x,
+    })
+    const above = pitch < -1.5 ? north : unit({
+      x: right.y * forward.z - right.z * forward.y,
+      y: right.z * forward.x - right.x * forward.z,
+      z: right.x * forward.y - right.y * forward.x,
+    })
+    const across = pitch < -1.5 ? east : right
+    const lows = weather.levels.filter((level) => level.top > level.base)
+    const low = EARTH + Math.min(...lows.map((level) => level.base))
+    const high = EARTH + Math.max(...lows.map((level) => level.top))
+    const tan = Math.tan(fov / 2)
+    const points: Point[] = []
+    const lengths: number[] = []
+    const crossed: boolean[] = []
+    for (let j = 0; j < SIDE; j += 1)
+      for (let i = 0; i < SIDE; i += 1) {
+        const d = unit(
+          added(
+            forward,
+            added(
+              scaled(across, ((2 * (i + 0.5)) / SIDE - 1) * tan),
+              scaled(above, (1 - (2 * (j + 0.5)) / SIDE) * tan),
+            ),
+          ),
+        )
+        const through = span(eye, d, low, high, reach)
+        crossed.push(through !== null)
+        const [t0, t1] = through ?? [0, 0]
+        const length = (t1 - t0) / STEPS
+        lengths.push(length)
+        for (let s = 0; s < STEPS; s += 1) {
+          const t = t0 + (s + 0.5) * length
+          points.push({
+            position: added(eye, scaled(d, t)),
+            footprint: t * pixelAngle,
+          })
+        }
+      }
+    const read = await evaluate(points, eye, field.media.field, field.uniforms)
+    const clock = fieldClock(weather, TIME)
+    let drawnCloudy = 0
+    let cpuCloudy = 0
+    let rays = 0
+    const differences: number[] = []
+    for (let r = 0; r < SIDE * SIDE; r += 1) {
+      if (!crossed[r]) continue
+      rays += 1
+      let drawn = 0
+      let cpu = 0
+      for (let s = 0; s < STEPS; s += 1) {
+        const n = r * STEPS + s
+        drawn += read[n * 8]! * read[n * 8 + 1]! * lengths[r]!
+        const want = cloudFieldAt(
+          weather,
+          clock,
+          SUN,
+          points[n]!.position,
+          points[n]!.footprint,
+        )
+        cpu += want.fraction * want.sigma * lengths[r]!
+      }
+      const opacity = 1 - Math.exp(-drawn)
+      const expected = 1 - Math.exp(-cpu)
+      if (opacity > 0.5) drawnCloudy += 1
+      if (expected > 0.5) cpuCloudy += 1
+      differences.push(Math.abs(opacity - expected))
+    }
+    console.info(
+      `frame, ${height} m: cloud fraction drawn ${(drawnCloudy / rays).toFixed(4)}, cloudFieldAt ${(cpuCloudy / rays).toFixed(4)}; opacity difference p99 ${quantile(differences, 0.99).toExponential(2)}, worst ${Math.max(...differences).toExponential(2)}; rays ${rays}`,
+    )
+    expect(rays).toBeGreaterThan(SIDE * SIDE * 0.4)
+    expect(Math.abs(drawnCloudy - cpuCloudy) / rays).toBeLessThanOrEqual(0.01)
+    // Opacity, measured: p99 at most 2.2 × 10⁻², worst 3.5 × 10⁻²; held at
+    // twice the p99.
+    expect(quantile(differences, 0.99)).toBeLessThanOrEqual(0.045)
+    expect(drawnCloudy).toBeGreaterThan(0)
+    expect(drawnCloudy).toBeLessThan(rays)
+    field.dispose()
+  }, 180_000)
+})

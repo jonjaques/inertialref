@@ -1,18 +1,25 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  DataTexture,
+  LinearFilter,
   type Node,
+  RGBAFormat,
   StorageBufferAttribute,
   type Texture,
+  UnsignedByteType,
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
+  float,
   Fn,
   If,
   instanceIndex,
   storage,
+  texture as sampled,
   texture3D,
   textureLoad,
   uint,
+  vec2,
   vec4,
 } from 'three/tsl'
 import { baseNoise, detailNoise } from '@inertialref/rendering'
@@ -298,5 +305,52 @@ describe('what it holds', () => {
       device.createCommandEncoder = create
     }
     expect(passes).toBe(0)
+  })
+})
+
+describe('the sampler’s weights', () => {
+  /*
+   * What a filtered read can differ from the CPU's exact interpolation by,
+   * apart from the bytes: the fixed-point precision of the weight the
+   * sampler gives each texel. Every CPU twin of a GPU read here
+   * (`readTexels`, `readLevelProfile`) takes exact weights. Measured on a
+   * ramp of one 8-bit texel from 0 to 1, at 4,096 positions between the two
+   * centers.
+   */
+  it('weighs two texels to a 256th of their difference: 8 bits of fraction, measured 1.95 × 10⁻³ of the step at worst (this Mac mini, Apple M6)', async () => {
+    const ramp = new DataTexture(
+      new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]),
+      2,
+      1,
+      RGBAFormat,
+      UnsignedByteType,
+    )
+    ramp.magFilter = LinearFilter
+    ramp.minFilter = LinearFilter
+    ramp.generateMipmaps = false
+    ramp.needsUpdate = true
+    const count = 4096
+    const output = new StorageBufferAttribute(new Float32Array(count * 4), 4)
+    const into = storage(output, 'vec4', count)
+    const read = sampled(ramp)
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(count)), () => {
+        const f = instanceIndex.toFloat().add(0.5).div(count)
+        into
+          .element(instanceIndex)
+          .assign(vec4(read.sample(vec2(f.add(0.5).div(2), 0.5)).level(float(0))))
+      })
+    })().compute(count)
+    await gpu.compute(kernel)
+    const values = new Float32Array(await gpu.readBuffer(output))
+    let worst = 0
+    for (let n = 0; n < count; n += 1)
+      worst = Math.max(worst, Math.abs(values[n * 4]! - (n + 0.5) / count))
+    console.info(`sampler weight error: ${worst.toExponential(3)} of the step`)
+    expect(worst).toBeLessThanOrEqual(1 / 256)
+    // And not exact: a CPU twin that assumed exact weights would hold a
+    // bound the GPU cannot.
+    expect(worst).toBeGreaterThan(1e-5)
+    ramp.dispose()
   })
 })
