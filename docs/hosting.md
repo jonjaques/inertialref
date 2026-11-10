@@ -433,12 +433,18 @@ export default defineConfig({
 `cf` 1.0.0-beta.5 with `wrangler` ^4.142.0 beside it as a devDependency of
 `apps/server`; `cf` requires Wrangler ≥ 4.136.0.
 
-`main` builds every API reference page as HTML. Review builds keep prose HTML
-and a shared `/docs/api` loading shell, with exact `_redirects` proxies for
-known API pages. The browser fetches their articles from `doc-content`; unknown
-addresses still return 404. TypeDoc validation runs in both builds.
-`IR_PRERENDER_API=1 pnpm build` verifies the full production output from another
-branch. See the [development guide](guides/development.md#toolchain) and
+Every build renders prose, the `/docs/api` loading shell and each package's own
+API page as HTML, and no member page. `_redirects` sends each package's members
+to the shell with one splat rewrite per package, `/docs/api/<package>/*`, and
+the browser fetches their articles from `doc-content`. The table holds those
+rewrites, the trailing-slash and `.html` normalization rules ahead of them, and
+an exact 301 for each case-colliding export's alias, so it grows with the
+package count rather than the export count. An unknown address under a known
+package reaches the shell's not-found state with a 200 rather than a 404; an
+address under no package is still a 404. The build refuses a table past
+Cloudflare's 2,000 static or 100 dynamic rules, which Cloudflare would
+otherwise truncate without a word. See the [development
+guide](guides/development.md#toolchain) and
 [ADR-0039](adr/0039-the-shell-before-the-scene.md).
 
 The checked-in configuration binds no Durable Object and has no `exports`
@@ -688,9 +694,14 @@ JSON-LD tags from `src/site.ts` and the article's title and lead. A scraper sees
 the page it requested before JavaScript runs. `pages/DocumentMeta.tsx` uses the
 same metadata resolver after React Router navigation.
 
-`@astrojs/sitemap` enumerates the rendered routes, including every published
-documentation page. `robots.txt` points at `/sitemap-index.xml`; account stubs,
-settings and missing pages carry `noindex` and stay out of the sitemap.
+`@astrojs/sitemap` enumerates the rendered routes: every prose page, the
+`/docs/api` shell and each package's page. An API member page is not one of
+them. Its first response is the shared loading shell, whose canonical URL is
+`/docs/api`, so a crawler that runs no script sees the shell there; the package
+page links every member, and `DocumentMeta.tsx` writes the member's own title
+and canonical URL once its article loads. `robots.txt` points at
+`/sitemap-index.xml`; account stubs, settings and missing pages carry `noindex`
+and stay out of the sitemap.
 
 **Request-time rendering remains an adapter choice.** The build uses Astro's
 static output. A route that needs request data can opt out of prerendering once
