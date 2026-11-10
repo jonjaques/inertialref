@@ -387,15 +387,26 @@ export function checkCast(name, log, captured, cast, held = CAST_RATE.held) {
    * 1.5 medians would read that cadence as drops. An interval of two
    * medians is a frame that did not present.
    */
-  const dropped = intervals.filter(
-    (interval) => interval >= CAST_RATE.dropped * median,
-  ).length
-  if (dropped > 0)
+  // Where each dropped frame fell: the log entry after the gap, with what
+  // the page read there, so a refusal says what the descent was crossing.
+  const dropped = intervals.flatMap((interval, i) =>
+    interval >= CAST_RATE.dropped * median
+      ? [
+          {
+            frame: log[i + 1].k ?? i + 1,
+            ms: interval,
+            height: log[i + 1].height ?? null,
+            resets: log[i + 1].resets ?? null,
+          },
+        ]
+      : [],
+  )
+  if (dropped.length > 0)
     throw Object.assign(
       new Error(
-        `${name}: ${dropped} interval${dropped === 1 ? '' : 's'} of at least ${CAST_RATE.dropped} × the median ${median.toFixed(1)} ms, the longest ${longest.toFixed(1)} ms: a frame was dropped mid-run; take it again`,
+        `${name}: ${dropped.length} interval${dropped.length === 1 ? '' : 's'} of at least ${CAST_RATE.dropped} × the median ${median.toFixed(1)} ms, the longest ${longest.toFixed(1)} ms, at frame${dropped.length === 1 ? '' : 's'} ${dropped.map((one) => one.frame).join(', ')}: a frame was dropped mid-run`,
       ),
-      { dropped },
+      { dropped, hz },
     )
   const atSixty = hz >= CAST_RATE.low && hz <= CAST_RATE.high
   if (held && !atSixty)
@@ -524,6 +535,7 @@ async function main() {
     twice: [],
     cuts: [],
     casts: [],
+    refused: [],
   }
 
   try {
@@ -608,6 +620,7 @@ async function main() {
         // A dropped frame is taken again, from a fresh boot, before the run
         // gives up on the cast: the rubric retakes a cast with a gap rather
         // than reading continuity across it.
+        const attempts = []
         for (let attempt = 1; verdict === undefined; attempt += 1) {
           result = await drive(castArgs(cast, clouds))
           castStep = result.results.find((one) => one.step === 'cast')
@@ -623,10 +636,23 @@ async function main() {
           try {
             verdict = checkCast(name, stop.log, castStep?.frames ?? 0, cast)
           } catch (error) {
-            if (error.dropped === undefined || attempt >= CAST_ATTEMPTS)
-              throw error
+            if (error.dropped === undefined) throw error
             say(`  ${error.message}`)
+            attempts.push({ hz: error.hz, dropped: error.dropped })
+            if (attempt >= CAST_ATTEMPTS) break
           }
+        }
+        // Refused at every boot: recorded with where each boot dropped, and
+        // the run goes on to the next cast rather than losing them all.
+        if (verdict === undefined) {
+          record.refused.push({
+            name,
+            id: cast.id,
+            speed: cast.speed,
+            clouds,
+            attempts,
+          })
+          continue
         }
         const dir = path.join(out, name)
         await rm(dir, { recursive: true, force: true })

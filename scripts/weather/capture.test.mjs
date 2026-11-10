@@ -227,6 +227,12 @@ describe('what the capture refuses', () => {
       const gap = log(hz)
       for (let k = 80; k < gap.length; k += 1) gap[k].at += 1000 / hz
       expect(() => checkCast('c', gap, 190, cast)).toThrow(/dropped/)
+      // The refusal names the frame after the gap, for the record.
+      try {
+        checkCast('c', gap, 190, cast)
+      } catch (error) {
+        expect(error.dropped.map((one) => one.frame)).toEqual([80])
+      }
       expect(() => checkCast('c', gap, 190, cast, true)).toThrow(
         hz === 60 ? /dropped/ : /dropped|60 Hz/,
       )
