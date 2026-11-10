@@ -125,9 +125,14 @@ describe('a cap’s moments', () => {
       fc.property(fc.double({ min: 1e-4, max: 1.5, noNaN: true }), (alpha) => {
         const c = capMoments(alpha, 4)
         expect(c[0]).toBe(1)
-        // The mean of cos θ over a uniform cap; 10⁻⁸ is the difference
-        // P₀ − P₂ at a cap of 10⁻⁴ rad, eight digits under one.
-        expect(Math.abs(c[1]! - (1 + Math.cos(alpha)) / 2)).toBeLessThan(1e-8)
+        // The mean of cos θ over a uniform cap. The form subtracts P₂ from
+        // P₀, two numbers 1.5·α² apart and each rounded to float64, so what
+        // is left of sixteen digits is the sixteen less the cap's own: two
+        // roundings over α², 4 × 10⁻⁸ at the smallest cap here and 2 × 10⁻¹¹
+        // at a sun's disk.
+        expect(Math.abs(c[1]! - (1 + Math.cos(alpha)) / 2)).toBeLessThan(
+          (2 * Number.EPSILON) / (alpha * alpha) + 1e-12,
+        )
       }),
     )
   })
