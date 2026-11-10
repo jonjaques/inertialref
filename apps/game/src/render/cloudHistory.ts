@@ -49,7 +49,7 @@ import {
   cloudStorageTexture,
   finiteOr,
 } from './cloudNodes.ts'
-import type { CloudTraceTextures } from './cloudTrace.ts'
+import { CLOUD_TRACE_PHASES, type CloudTraceTextures } from './cloudTrace.ts'
 import type { CloudUniforms } from './cloudUniforms.ts'
 import { warmCompute } from './warmup.ts'
 
@@ -93,13 +93,12 @@ export interface CloudHistoryTextures {
   readonly extent: Extent
 }
 
-/** The interleave in Bayer order: a converging frame n samples phase n mod 4. */
-const PHASES = [
-  [0, 0],
-  [1, 1],
-  [1, 0],
-  [0, 1],
-] as const
+/**
+ * The interleave is the trace's own table: a converging frame n samples phase
+ * n mod 4, and a second copy here that fell out of step with it would file
+ * every trace texel under a pixel it did not sample.
+ */
+const PHASES = CLOUD_TRACE_PHASES
 /** Frames until every pixel's own phase has come round once. */
 const CYCLE = PHASES.length
 const WORKGROUP = 8
