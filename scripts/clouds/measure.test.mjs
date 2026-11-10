@@ -10,12 +10,16 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { isCloudLevers } from '../../apps/game/src/render/cloudLevers.ts'
+import {
+  CLOUD_LIGHT_TAPS,
+  isCloudLevers,
+} from '../../apps/game/src/render/cloudLevers.ts'
 import { wrap } from '../driveScript.mjs'
 import { binEdge, difference, histogramStats, parseRmse } from './diff.mjs'
 import {
   HELD,
   LADDERS,
+  LADDER_STANCES,
   PORTS,
   SCENARIOS,
   batchRuns,
@@ -40,6 +44,7 @@ import {
   RADIANCE_FRAMES,
   figures,
   hitch,
+  lensRefusal,
   measured,
   median,
   memoryTable,
@@ -59,8 +64,10 @@ import {
  */
 
 const SIZES = ['1080p', 'retina']
+/** Far-shore's lens, which every far-shore stance names: 60° at the 24 mm gauge. */
+const FAR_SHORE_MM = 20.784609690826528
 const ALL = Object.fromEntries(
-  ['stances', 'images', 'targets', 'memory', 'error'].map((b) => [
+  ['stances', 'ladders', 'targets', 'memory', 'error'].map((b) => [
     b,
     batchRuns(b, SIZES),
   ]),
@@ -93,28 +100,37 @@ describe('the batches', () => {
 
   it('prices Earth against its deck hidden, and the deck alone', () => {
     const earth = ALL.targets.filter((r) => r.scenario.startsWith('earth'))
-    expect(earth).toHaveLength(12)
+    expect(earth).toHaveLength(10)
     for (const r of earth)
       expect(r.base).toMatchObject({ on: false, deck: 'hidden' })
     const deck = earth.filter((r) => r.group === 'deck')
     for (const r of deck)
       expect(r.candidate).toMatchObject({ on: false, deck: 'auto' })
-    expect(count(earth, (r) => r.group === 'landed' && r.candidate.on)).toBe(8)
-    expect(ALL.targets).toHaveLength(58)
+    expect(count(earth, (r) => r.group === 'landed' && r.candidate.on)).toBe(6)
+    // Phase 0's nine stances and phase 1's three, steady; fly on two; the
+    // deck alone on two: sixteen a size, each of five pairs.
+    expect(ALL.targets).toHaveLength(32)
+    for (const r of ALL.targets) expect(r.pairs).toBe(5)
   })
 
-  it('takes the error batch twice a stance, Enhanced off and on, and twelve cold boots', () => {
-    expect(ALL.error).toHaveLength(16)
-    expect(count(ALL.error, (r) => r.mode === 'enhanced')).toBe(8)
+  it('takes the error batch twice a stance, Enhanced off and on, and eighteen cold boots', () => {
+    // Phase 0's four scenarios and the two `pair` stances, both sizes.
+    expect(ALL.error).toHaveLength(24)
+    expect(count(ALL.error, (r) => r.mode === 'enhanced')).toBe(12)
+    expect(count(ALL.error, (r) => r.scenario.startsWith('pair-'))).toBe(8)
     for (const r of ALL.error) {
       expect(r.levers.composite).toBe('residual')
       expect([r.identity.composite, r.thin.composite]).toEqual([
         'identity',
         'thin',
       ])
+      // The display pair is shot at a held exposure.
+      expect(r.exposure).toBe('held')
     }
-    expect(ALL.memory).toHaveLength(12)
-    expect(count(ALL.memory, (r) => r.flag)).toBe(6)
+    // Three boots plain, three with one body and three with two, a size.
+    expect(ALL.memory).toHaveLength(18)
+    expect(count(ALL.memory, (r) => r.flag)).toBe(12)
+    expect(count(ALL.memory, (r) => r.bodies === 2)).toBe(6)
     expect(ALL.stances).toHaveLength(Object.keys(SCENARIOS).length)
     expect(new Set(ALL.stances.map((r) => r.size))).toEqual(new Set(['1080p']))
   })
@@ -151,13 +167,18 @@ describe('the batches', () => {
   })
 })
 
-describe('the images', () => {
-  it('climb each quality lever’s ladder a value against the next, under 1%, in horizon and inside', () => {
-    const ladders = ALL.images.filter((r) => r.group === 'ladder')
-    expect(ladders).toHaveLength(Object.keys(LADDERS).length * 2 * 2)
+describe('the ladders', () => {
+  it('climb each quality lever’s ladder a value against the next, under 1%, at three stances', () => {
+    const ladders = ALL.ladders.filter((r) => r.group === 'ladder')
+    expect(ladders).toHaveLength(Object.keys(LADDERS).length * 3 * 2)
+    // The taps' rungs are the lever's own list, six and eight among them.
+    expect(LADDERS.lightTaps).toBe(CLOUD_LIGHT_TAPS)
+    expect(LADDERS.lightTaps).toEqual([0, 2, 4, 6, 8])
     for (const r of ladders) {
       const values = LADDERS[r.label]
-      expect(['horizon', 'inside']).toContain(r.scenario)
+      expect(LADDER_STANCES).toContain(r.scenario)
+      // Each rung's cost rides with the comparisons: its trace and its steps.
+      expect(r.costs.map((c) => c.levers[r.label])).toEqual([...values])
       expect(r.comparisons.map((c) => [c.a[r.label], c.b[r.label]])).toEqual(
         values.slice(0, -1).map((v, i) => [v, values[i + 1]]),
       )
@@ -167,6 +188,22 @@ describe('the images', () => {
         expect([c.a.jitterFrame, c.b.jitterFrame]).toEqual([0, 0])
       }
     }
+  })
+
+  it('take their stances as a parameter, and refuse one the runner does not have', () => {
+    const at = (argv) =>
+      new Set(
+        parseOptions(['--batch', 'ladders', ...argv]).runs.map(
+          (r) => r.scenario,
+        ),
+      )
+    expect(at([])).toEqual(new Set(LADDER_STANCES))
+    expect(at(['--stances', 'earth-limb,descent-150'])).toEqual(
+      new Set(['earth-limb', 'descent-150']),
+    )
+    expect(() =>
+      parseOptions(['--batch', 'ladders', '--stances', 'moon']),
+    ).toThrow(/no stance moon/)
   })
 
   it('hold the jitter nowhere else but the error batch’s screenshot pair', () => {
@@ -190,7 +227,7 @@ describe('the command line', () => {
       gpuWait: 0,
       dryRun: false,
     })
-    expect(options.runs).toHaveLength(58)
+    expect(options.runs).toHaveLength(32)
     expect(
       parseOptions(['--batch', 'memory', '--gpu-wait', '900']).gpuWait,
     ).toBe(900_000)
@@ -207,8 +244,6 @@ describe('the command line', () => {
     ])
     expect(options.runs.map((r) => r.id)).toEqual([
       'targets/landed/landed/horizon/retina/steady',
-      'targets/landed/landed/horizon/retina/cut',
-      'targets/landed/landed/horizon/retina/scrub',
     ])
   })
 
@@ -219,18 +254,18 @@ describe('the command line', () => {
         .flatMap((c) => (c.a === undefined ? [c] : [c.a, c.b]))
         .map((set) => set.jitterFrame)
         .filter((index) => index !== null)
-    // The ten ladder steps, both sides, at two stances, on both sizes.
-    expect(held(['--batch', 'images'])).toEqual(Array(2 * 2 * 20).fill(0))
-    expect(held(['--batch', 'images', '--jitter-frame', '17'])).toEqual(
-      Array(2 * 2 * 20).fill(17),
+    // The ten ladder steps, both sides, at three stances, on both sizes.
+    expect(held(['--batch', 'ladders'])).toEqual(Array(3 * 2 * 20).fill(0))
+    expect(held(['--batch', 'ladders', '--jitter-frame', '17'])).toEqual(
+      Array(3 * 2 * 20).fill(17),
     )
     expect(held(['--batch', 'error', '--jitter-frame', '5'])).toEqual(
-      Array(2 * 16).fill(5),
+      Array(2 * 24).fill(5),
     )
-    expect(parseOptions(['--batch', 'images']).held).toEqual(HELD)
+    expect(parseOptions(['--batch', 'ladders']).held).toEqual(HELD)
     for (const index of ['1.5', 'x', '', '9007199254740993'])
       expect(
-        () => parseOptions(['--batch', 'images', '--jitter-frame', index]),
+        () => parseOptions(['--batch', 'ladders', '--jitter-frame', index]),
         index,
       ).toThrow(/whole number/)
   })
@@ -347,7 +382,7 @@ describe('the invocations', () => {
       'settle',
       'wait',
       'rate',
-      ...[0, 1, 2].flatMap((p) => [`base:${p}`, `candidate:${p}`]),
+      ...[0, 1, 2, 3, 4].flatMap((p) => [`base:${p}`, `candidate:${p}`]),
       'timeline',
       'report',
     ])
@@ -384,14 +419,26 @@ describe('the invocations', () => {
         .map((l) => l.includes('--keep-storage'))
     // A cold boot attaches to nothing, the second and third as the first.
     expect(kept(ALL.memory)).toEqual(ALL.memory.map(() => false))
-    expect(kept(ALL.memory)).toHaveLength(12)
+    expect(kept(ALL.memory)).toHaveLength(18)
     // Far-shore, then Earth's two on blue-marble, then far-shore again: the
     // port holds one page, so the return is a boot and not an attach.
     const stances = ALL.stances.map((run) => run.scenario)
     const booted = kept(ALL.stances).flatMap((keep, i) =>
       keep ? [] : [stances[i]],
     )
-    expect(booted).toEqual(['ground', 'earth-ground', 'sunset'])
+    // A preset stance is a page of its own, the ten cornerstones among them.
+    expect(booted).toEqual([
+      'ground',
+      'earth-ground',
+      'sunset',
+      'over-deck',
+      'earth-orbit-long',
+      'earth-limb',
+      'descent-150',
+      'shore',
+      'overlay',
+      ...['e1', 'e2', 'e3', 'g1', 'g2', 'g3', 'g4', 'g5', 'g6', 'guard'],
+    ])
     // A cold boot closes the measurement rig, so nothing is left to attach to.
     const [, after] = kept([ALL.memory[0], ALL.targets[0]])
     expect(after).toBe(false)
@@ -516,6 +563,18 @@ function fakePage({
       }),
     },
   }
+  // The focal length each wearer gives: far-shore's own, a composition's
+  // solved one, and whatever a rise solves.
+  const focal = {
+    'far-shore': FAR_SHORE_MM,
+    'blue-marble': 18.84,
+    'the rise': 85,
+  }
+  ir.lens = () => ({
+    focalLength: focal[calls.lens] ?? 50,
+    verticalFovDegrees: 60,
+  })
+  ir.build = () => ({ id: 'abed0719', tree: null })
   const context = vm.createContext({
     engine,
     ir,
@@ -584,16 +643,16 @@ describe('the page steps', () => {
   })
 
   it('capture each side of a comparison from a reset, then difference them', async () => {
-    const ladder = ALL.images.find(
-      (r) => r.id === 'images/ladder/maxSteps/horizon/1080p',
+    const ladder = ALL.ladders.find(
+      (r) => r.id === 'ladders/ladder/maxSteps/horizon/1080p',
     )
     const page = fakePage()
     const step = await send(page, ladder, 'radiance:0')
     // Each side the mean of its captures, the first side's halves the floor.
     expect(page.calls.captures).toBe(2 * RADIANCE_FRAMES)
     expect(step.extent).toEqual([2, 1])
-    // 64 against 96 steps: the fake lights a texel by its budget.
-    expect(step.difference).toEqual({ texels: 2, relative: 0.5 })
+    // 96 against 128 steps: the fake lights a texel by its budget.
+    expect(step.difference).toEqual({ texels: 2, relative: 32 / 96 })
     expect(step.floor).toEqual({ texels: 2, relative: 0 })
     // In the interleave's order, so each half of a side holds every phase
     // eight times.
@@ -642,20 +701,87 @@ describe('the page steps', () => {
     // at the ground's stance, or the horizon's, through the rise's lens.
     for (const id of [
       'targets/landed/landed/pair-neighbor/1080p/steady',
-      'targets/landed/landed/ground/1080p/cut',
-      'targets/landed/landed/horizon/retina/scrub',
+      'targets/landed/landed/ground/1080p/fly',
+      'targets/landed/landed/horizon/retina/steady',
       'targets/landed/landed/orbit/1080p/fly',
     ]) {
       await send(page, moon, 'stance')
-      await send(page, target(id), 'stance')
+      const stood = await send(page, target(id), 'stance')
       expect(page.calls.lens, id).toBe('far-shore')
+      // The row reads the lens back, and it is the one its stance names.
+      expect(target(id).lens).toBeCloseTo(FAR_SHORE_MM, 12)
+      expect(stood.lens.focalLength).toBeCloseTo(FAR_SHORE_MM, 12)
+      expect(
+        lensRefusal({ lens: { named: target(id).lens, worn: stood.lens } }),
+      ).toBeNull()
     }
+    // A row that wore the rise's lens at a far-shore stance does not stand.
+    const worn = await send(page, moon, 'stance')
+    expect(
+      lensRefusal({
+        lens: {
+          named: target('targets/landed/landed/ground/1080p/steady').lens,
+          worn: worn.lens,
+        },
+      }),
+    ).toBe("the lens is 85.00 mm, not the stance's 20.78 mm")
+    // A rise names no lens to hold it to; a composition names the one it solves.
+    expect(lensRefusal({ lens: { named: 'rise', worn: worn.lens } })).toBeNull()
+    expect(
+      lensRefusal({
+        lens: {
+          named: 'composition',
+          worn: { focalLength: 18.84 },
+          composed: 18.84,
+        },
+      }),
+    ).toBeNull()
     await send(
       page,
-      target('targets/landed/clouds/earth-ground/1080p/fly'),
+      target('targets/landed/clouds/earth-ground/1080p/steady'),
       'stance',
     )
     expect(page.calls.lens).toBe('blue-marble')
+  })
+
+  it('run the game’s own clock for a warp row, and put it back at the run’s end', async () => {
+    const page = fakePage()
+    let scale = 1
+    Object.assign(page.context.ir, {
+      timeWarp: (x) => (scale = x),
+      status: () => ({ world: { timeScale: scale } }),
+    })
+    const warp = batchRuns('warp', ['1080p']).find(
+      (r) => r.label === '1000x' && r.scenario === 'horizon',
+    )
+    expect(warp.clock).toBe(1000)
+    // Both sides at the clock: the steady levers, no force.
+    expect([warp.base.force, warp.candidate.force]).toEqual(['none', 'none'])
+    await send(page, warp, 'stance')
+    expect(scale).toBe(1000)
+    expect(plan(warp).at(-1).tag).toBe('unwarp')
+    expect(await send(page, warp, 'unwarp')).toEqual({ timeScale: 1 })
+  })
+
+  it('record a stance whose engine nothing can light as not taken, not failed', async () => {
+    const page = fakePage()
+    const overlay = target('targets/landed/landed/overlay/1080p/steady')
+    const stood = await send(page, overlay, 'stance')
+    expect(stood.unlit).toMatch(/no ir\.lightEngine\(\)/)
+    const steps = plan(overlay)
+    const row = figures(overlay, steps, {
+      results: steps.map((s) => (s.tag === 'stance' ? { value: stood } : {})),
+    })
+    expect(row.notTaken).toBe(stood.unlit)
+    expect(measured({ ...row, quiet: { ok: true } })).toBe(true)
+    expect(tables({ rows: [{ ...row, quiet: { ok: true } }] })).toMatch(
+      /\| not taken: this page offers no ir\.lightEngine\(\), so nothing is drawn over the clouds at this stance \|$/m,
+    )
+    // Lit where the page can.
+    let lit = null
+    page.context.ir.lightEngine = (on) => (lit = on)
+    expect((await send(page, overlay, 'stance')).unlit).toBeNull()
+    expect(lit).toBe(true)
   })
 
   it('refuse a page with no cloud system before standing anywhere', async () => {
@@ -749,6 +875,12 @@ describe('the page steps', () => {
     engine.sensorSettings = { mode: 'enhanced', look: 'neutral' }
     engine.requestSensorSettings = (settings) => {
       page.calls.settings = settings
+      page.calls.asked = [...(page.calls.asked ?? []), settings]
+      if (settings.rate !== undefined)
+        engine.sensorSettings = {
+          ...engine.sensorSettings,
+          rate: settings.rate,
+        }
       engine.exposure = {
         processing: settings.mode === 'enhanced' ? 'enhanced' : 'photographic',
       }
@@ -765,7 +897,14 @@ describe('the page steps', () => {
       processing: 'photographic',
       residual: { classDisagreement: 2 },
     })
-    expect(page.calls.settings).toEqual({ mode: 'automatic', look: 'neutral' })
+    // The mode asked for, then the exposure held there for the display pair,
+    // and the meter let go again by the run's last step.
+    expect(page.calls.asked).toEqual([
+      { mode: 'automatic', look: 'neutral' },
+      { mode: 'automatic', look: 'neutral', rate: 0 },
+    ])
+    expect(residual.exposure).toBe('held')
+    expect(await send(page, residual, 'release')).toEqual({ rate: 1 })
     expect(await send(page, residual, 'show:identity')).toMatchObject({
       settled: 5,
     })
@@ -807,6 +946,8 @@ describe('the figures', () => {
     const [arm, p] = tag.split(':')
     if (arm === 'base') return { ms: 10 + Number(p) * 0.01, settled: 5 }
     if (arm === 'candidate') return { ms: 10.4 + Number(p) * 0.02, settled: 5 }
+    if (tag === 'stance') return STOOD
+    if (tag === 'rate') return { hz: 118.2, intervalMs: 8.4, build: 'abed0719' }
     if (tag === 'timeline')
       return {
         perFrame: 35,
@@ -820,8 +961,10 @@ describe('the figures', () => {
       }
     return {}
   }
-  // drive.mjs's settle answers with its own fields, not a `value`.
+  // drive.mjs's settle answers with its own fields, not a `value`. A
+  // stance answers with the lens it left the camera wearing.
   const settled = { step: 'settle', settled: true, ok: true }
+  const STOOD = { lens: { focalLength: FAR_SHORE_MM, verticalFovDegrees: 60 } }
   const out = {
     results: planned.map((s) =>
       s.tag === 'settle' ? settled : { step: 'js', value: answer(s.tag) },
@@ -835,8 +978,21 @@ describe('the figures', () => {
     row.pairs.forEach((pair, p) =>
       expect(pair.delta).toBeCloseTo(0.4 + 0.01 * p, 12),
     )
-    expect(row.summary.delta).toBeCloseTo(0.41, 12)
-    expect(row.summary.spread).toBeCloseTo(0.02, 12)
+    expect(row.pairs).toHaveLength(5)
+    // The Δ is the median of the five pairs' own Δs, beside the two sides'
+    // medians, and the allowance is twice the pairs' spread.
+    expect(row.summary.delta).toBeCloseTo(0.42, 12)
+    expect(row.summary.spread).toBeCloseTo(0.04, 12)
+    expect(row.summary.allowance).toBeCloseTo(0.08, 12)
+    expect(row.summary).toMatchObject({ base: 10.02, candidate: 10.44 })
+    // What the row was taken at: its rate, the lens and the levers' hash.
+    expect(row.operatingPoint).toMatchObject({
+      presentHz: 118.2,
+      intervalMs: 8.4,
+    })
+    expect(row.build).toBe('abed0719')
+    expect(row.lens.worn.focalLength).toBe(FAR_SHORE_MM)
+    expect(row.leversHash).toMatch(/^[0-9a-f]{8}$/)
     expect(row).toMatchObject({
       sceneOver: 0.3,
       trace: 1.1,
@@ -869,7 +1025,9 @@ describe('the figures', () => {
               value:
                 s.tag === 'residual'
                   ? { processing: 'enhanced', residual: null }
-                  : null,
+                  : s.tag === 'stance'
+                    ? STOOD
+                    : null,
             },
       ),
     })
@@ -978,18 +1136,19 @@ describe('the figures', () => {
     const row = { ...figures(run, planned, out), quiet: { ok: true } }
     const text = table([row], AB_COLUMNS)
     const [header, rule, line] = text.split('\n')
+    // Which median is which, and the Δ as the pairs' own.
     expect(header).toBe(
-      '| Scenario | Size | Kind | Lever | Base ms | Candidate ms | Δ ms (spread) | scene over clouds | cloud trace | cloud history | cloud depth | bakes | passes/frame | bytes MB | quiet |',
+      '| Scenario | Size | Kind | Lever | base: median of sides ms | candidate: median of sides ms | Δ: median of pairs ms (spread) | allowance ms | Hz | lens mm | levers | scene over clouds | cloud trace | cloud history | cloud depth | bakes | passes/frame | bytes MB | quiet |',
     )
     expect(rule).toMatch(/^\| --- (\| --- )+\|$/)
     expect(line).toBe(
-      '| orbit | retina | steady | landed | 10.01 | 10.42 | 0.41 (0.02) | 0.30 | 1.10 | — | — | 0.05 | 35 | 83.50 | yes |',
+      `| orbit | retina | steady | landed | 10.02 | 10.44 | 0.42 (0.04) | 0.08 | 118 | 20.8 | ${run.leversHash} | 0.30 | 1.10 | — | — | 0.05 | 35 | 83.50 | yes |`,
     )
   })
 
   it('read a radiance run a comparison a row, and say which pass their threshold', () => {
-    const ladder = ALL.images.find(
-      (r) => r.id === 'images/ladder/maxSteps/inside/retina',
+    const ladder = ALL.ladders.find(
+      (r) => r.id === 'ladders/ladder/maxSteps/inside/retina',
     )
     const p = plan(ladder)
     const values = [
@@ -1012,7 +1171,9 @@ describe('the figures', () => {
             : {
                 value: s.tag.startsWith('radiance:')
                   ? values[Number(s.tag.split(':')[1])]
-                  : null,
+                  : s.tag === 'stance'
+                    ? STOOD
+                    : null,
               },
         ),
       }),
@@ -1022,23 +1183,21 @@ describe('the figures', () => {
       [0.0021, 0.01],
       [0.042, 0.01],
       [null, 0.01],
-      [null, 0.01],
-      [null, 0.01],
     ])
     const lines = tables({ rows: [row] }).split('\n')
     expect(lines[0]).toBe(
-      '| Scenario | Size | Group | Lever | Comparison | jitter | radiance RMSE | noise floor | under | passes | cloud texels | quiet |',
+      '| Scenario | Size | Group | Lever | Comparison | jitter | radiance RMSE | noise floor | under | passes | cloud texels | Hz | lens mm | levers | quiet |',
     )
     // The rest answered nothing here, so each reads as a dash, and the run,
     // quiet as it was, does not stand: its `quiet` column says why.
-    const missing = 'no radiance capture for 128 against 192'
+    const missing = 'no radiance capture for 192 against 256'
     expect(lines[2]).toBe(
-      `| inside | retina | ladder | maxSteps | 64 against 96 | held at 0 | 0.21% | 0.04% | 1.0% | yes | 900 | ${missing} |`,
+      `| inside | retina | ladder | maxSteps | 96 against 128 | held at 0 | 0.21% | 0.04% | 1.0% | yes | 900 | — | 20.8 | ${ladder.leversHash} | ${missing} |`,
     )
     expect(lines[3]).toMatch(
-      /96 against 128 \| held at 0 \| 4\.20% \| 0\.05% \| 1\.0% \| no \| 880 \| no radiance capture/,
+      /128 against 192 \| held at 0 \| 4\.20% \| 0\.05% \| 1\.0% \| no \| 880 \| .* \| no radiance capture/,
     )
-    expect(lines[4]).toMatch(/128 against 192 \| held at 0 \| — \| — \|/)
+    expect(lines[4]).toMatch(/192 against 256 \| held at 0 \| — \| — \|/)
     expect(measured(row)).toBe(false)
   })
 

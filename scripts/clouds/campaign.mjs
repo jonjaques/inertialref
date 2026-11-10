@@ -54,16 +54,24 @@ import {
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { parseCapture } from '../weather/capture.mjs'
+import { armPlan } from './frame.mjs'
 import {
+  HELD,
+  HOLDS,
   SIZES,
   answers,
   batchRuns,
+  boots,
   bundled,
+  dryRun,
   git,
   listeners,
   processes,
 } from './measure.mjs'
-import { measured, rateNote, tables } from './page.mjs'
+import { CLIPS, BANDS } from './noise.mjs'
+import { estimate, measured, minutes, plan, rateNote, tables } from './page.mjs'
+import { evaluate, holdAccepted, rulesTable } from './rules.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const SELF = fileURLToPath(import.meta.url)
@@ -78,56 +86,189 @@ const GPU_WAIT = '1800'
 
 /* -------------------------------------------------------------- the stages ---- */
 
-/** A batch of the runner; `minutes` is the estimate the ETA starts from. */
-const batch = (name, minutes) => ({ name, kind: 'batch', minutes, attempts: 8 })
+/**
+ * A batch of the runner. Its `minutes` are the runner's own estimate of its
+ * rows (`estimate` in `measure.mjs`), which the ETA starts from. `hold` says
+ * what a batch that reads a rate does when the hold's acceptance failed:
+ * `record`, its rows taken at whatever rate the machine gives and bound by
+ * nothing; `require`, not taken. `when` names a start option the stage waits
+ * for, so a stage whose subject may not exist is taken only when asked.
+ */
+const batch = (name, extra = {}) => ({
+  name,
+  kind: 'batch',
+  attempts: 8,
+  ...extra,
+})
 
-/** The three opt-in GPU instruments, each against its reference, written to
- *  `.data/clouds/<name>.json` in place, which is why a campaign's summary
- *  names whether this campaign wrote each one. */
+/**
+ * The seven opt-in GPU instruments of §7.2, each with the package that
+ * builds it (§10.2); the stage takes the ones the tree holds and names the
+ * rest with their packages.
+ */
+export const INSTRUMENT_OWNERS = Object.freeze({
+  cloudCumulus: 'N',
+  cloudGlory: 'M2',
+  cloudHandover: 'X',
+  cloudFarCompare: 'phase 0',
+  cloudSunAccuracy: 'phase 0',
+  cloudCompositeError: 'phase 0',
+  cloudPathTrace: 'R2',
+})
+export const INSTRUMENT_NAMES = Object.freeze(Object.keys(INSTRUMENT_OWNERS))
+
+/** What an instruments stage runs today, and what it waits for and from whom. */
+export function instrumentsText(names, exists = existsSync) {
+  const on = present(names, exists)
+  const off = names.filter((n) => !on.includes(n))
+  return [
+    `runs ${on.join(', ') || 'none'}`,
+    ...(off.length > 0
+      ? [
+          `not in the tree yet: ${off.map((n) => `${n} (package ${INSTRUMENT_OWNERS[n]})`).join(', ')}`,
+        ]
+      : []),
+  ].join('; ')
+}
+const instrumentFile = (name) =>
+  path.join(ROOT, 'apps/game/src/render', `${name}.gpu.test.ts`)
+
+/** A vitest run of GPU instruments under `IR_CLOUD_MEASURE`, each writing its own document. */
+const vitest = (names) => [
+  'pnpm',
+  'vitest',
+  'run',
+  '--config',
+  'apps/game/vitest.gpu.config.ts',
+  ...names,
+]
+
+/** The instruments, each against its reference, written to `.data/clouds/` in place. */
 const INSTRUMENTS = {
   name: 'instruments',
   kind: 'command',
-  minutes: 1,
+  // The path tracer runs up to 45 minutes (research §3.3, an estimate).
+  minutes: 60,
   // An instrument that fails its sanity bound fails again, so it gets
   // one more try for a crash and no more.
   attempts: 2,
-  command: [
-    'pnpm',
-    'vitest',
-    'run',
-    '--config',
-    'apps/game/vitest.gpu.config.ts',
-    'cloudFarCompare',
-    'cloudSunAccuracy',
-    'cloudCompositeError',
-  ],
+  instruments: INSTRUMENT_NAMES,
   env: { IR_CLOUD_MEASURE: '1', IR_GPU_WAIT: GPU_WAIT },
   outputs: ['farCompare', 'sunAccuracy', 'compositeError'].map((n) =>
     path.join('.data/clouds', `${n}.json`),
   ),
 }
 
+/** A cast through the capture at one lever's value: `capture.mjs`'s `--lever`. */
+const castAt = (only, lever, value, extra = []) => [
+  process.execPath,
+  'scripts/weather/capture.mjs',
+  ...['--phase', '1', '--url', URL_, '--gpu-wait', GPU_WAIT],
+  ...['--only', only, '--no-samples', '--baseline-casts'],
+  ...['--lever', `${lever}=${value}`],
+  ...extra,
+]
+
 /**
- * Each campaign: whether it builds always or only a bundle not HEAD's,
- * and its stages. The minutes are the measured pace, a row a minute over
- * both sizes (78 A/B rows in 78 minutes on the mini), where a batch is rows
- * of that kind, and §8.8's estimate where it is not.
+ * The casts §7.4's band and clip rules read: the zoom from 400 km and the
+ * slow descent at each band, the pass at 2 m and the fast descent at each
+ * clip, each with its clouds-off control and the detector's held controls.
+ * `castSteps` classifies them in the capture's record.
+ */
+const CASTS = {
+  name: 'casts',
+  kind: 'command',
+  minutes: 60,
+  attempts: 2,
+  needs: 'lever',
+  commands: [
+    ...BANDS.map((b) => castAt('g6', 'handoverBand', b)),
+    ...CLIPS.map((c) => castAt('g6,g1', 'clip', c)),
+  ],
+}
+
+/** The sun's accuracy on the two-level volume, at phase 0's two suns and G3's. */
+const SUN = {
+  name: 'sun',
+  kind: 'command',
+  minutes: 10,
+  attempts: 2,
+  instruments: ['cloudSunAccuracy'],
+  env: { IR_CLOUD_MEASURE: '1', IR_GPU_WAIT: GPU_WAIT },
+}
+
+/** The wake cast and a cut cast at each `sunRamp`, for the ramp's rule. */
+const SUN_CASTS = {
+  name: 'sun-casts',
+  kind: 'command',
+  minutes: 20,
+  attempts: 2,
+  needs: 'lever',
+  commands: [8, 16, 32].map((r) => castAt('g6', 'sunRamp', r, ['--cut', 'e1'])),
+}
+
+/**
+ * Each campaign: whether it builds always or only a bundle not HEAD's, and
+ * its stages (design §7.2). Each begins with its own pacing, one profiled
+ * row and its rate, before any batch measures (§7.5). `pace-study` is the
+ * study of what sets the rate, which nothing can be held before.
  */
 export const CAMPAIGNS = Object.freeze({
   choices: {
     build: 'stale',
-    stages: [batch('images', 60), INSTRUMENTS],
+    stages: [
+      batch('pacing'),
+      batch('phase'),
+      batch('jitter'),
+      batch('handover'),
+      batch('clip'),
+      batch('transport', { when: 'transport' }),
+      CASTS,
+      INSTRUMENTS,
+      batch('over', { hold: 'record' }),
+      batch('reset'),
+      SUN,
+      SUN_CASTS,
+    ],
   },
   landed: {
     build: 'always',
     stages: [
-      batch('targets', 60),
-      batch('memory', 20),
-      batch('error', 20),
-      INSTRUMENTS,
+      batch('pacing'),
+      batch('ladders'),
+      batch('targets'),
+      batch('frame'),
+      batch('sequences'),
+      batch('warp'),
+      batch('hold'),
+      batch('pace', { hold: 'record' }),
+      batch('memory'),
+      batch('error'),
     ],
   },
+  'pace-study': {
+    build: 'stale',
+    stages: [batch('study')],
+  },
 })
+
+/** A batch stage's runs, as the runner would take them with these start options. */
+const runsOf = (stage, options = {}) =>
+  batchRuns(stage.name, Object.keys(SIZES), HELD, options)
+
+/** A stage's estimate in minutes: a batch's from its runs, a command's as written. */
+export function minutesOf(stage, options = {}) {
+  if (stage.kind !== 'batch') return stage.minutes
+  const booted = new Map()
+  const seconds = runsOf(stage, options).reduce(
+    (sum, run) =>
+      sum + estimate(planOf(run), boots(booted, run) || run.type === 'cold'),
+    0,
+  )
+  return seconds / 60
+}
+
+const planOf = (run) => (run.arm == null ? plan(run) : armPlan(run))
 
 /**
  * What a stage's exit means: done, tried again, or the campaign stopped. A
@@ -152,7 +293,7 @@ export function outcome(stage, code) {
 export function eta(stages, now) {
   let at = now
   for (const s of stages) {
-    if (s.status === 'done') continue
+    if (s.status === 'done' || s.status === 'not taken') continue
     const left = s.total ? 1 - s.done / s.total : 1
     const landed = s.done - (s.from ?? 0)
     at +=
@@ -218,10 +359,12 @@ function save(state) {
   writeFileSync(statePath(state.name), `${JSON.stringify(state, null, 2)}\n`)
 }
 
-function initial(name, stamp, head) {
+function initial(name, stamp, head, options) {
   return {
     name,
     head,
+    options,
+    hold: null,
     pid: process.pid,
     status: 'running',
     reason: null,
@@ -233,18 +376,16 @@ function initial(name, stamp, head) {
     stages: CAMPAIGNS[name].stages.map((s) => ({
       name: s.name,
       kind: s.kind,
-      minutes: s.minutes,
+      minutes: minutesOf(s, options),
       allowed: s.attempts,
       status: 'pending',
       attempts: 0,
       exit: null,
       file:
         s.kind === 'batch' ? path.join(OUT, `${s.name}-${stamp}.json`) : null,
-      total:
-        s.kind === 'batch'
-          ? batchRuns(s.name, Object.keys(SIZES)).length
-          : null,
+      total: s.kind === 'batch' ? runsOf(s, options).length : null,
       done: 0,
+      next: 0,
     })),
   }
 }
@@ -450,24 +591,95 @@ async function stopPreview(ctx) {
 
 /* --------------------------------------------------------------- the run ---- */
 
-function commandOf(stage) {
-  const spec = Object.values(CAMPAIGNS)
-    .flatMap((c) => c.stages)
-    .find((s) => s.name === stage.name)
-  if (stage.kind === 'command') return { command: spec.command, env: spec.env }
-  return {
-    command: [
-      process.execPath,
-      MEASURE,
-      ...['--batch', stage.name, '--resume', stage.file],
-      ...['--gpu-wait', GPU_WAIT],
-    ],
-    env: {},
+const specOf = (state, stage) =>
+  CAMPAIGNS[state.name].stages.find((s) => s.name === stage.name)
+
+/** Whether the capture takes a lever's value for its casts, which the cast stages need. */
+export function captureTakesLever(parse = parseCapture) {
+  try {
+    parse(['--phase', '1', '--dry-run', '--lever', 'clip=1.5'])
+    return true
+  } catch {
+    return false
   }
+}
+
+/** The instruments the tree holds, of those a stage names. */
+const present = (names, exists = existsSync) =>
+  names.filter((name) => exists(instrumentFile(name)))
+
+/**
+ * Why a stage is not taken in this campaign, or null: a start option it
+ * waits for and was not given, a hold it requires that failed, a tool it
+ * needs that the tree does not offer, or no instrument of its list on disk.
+ */
+export function notTaken(spec, state, tools = {}) {
+  const lever = tools.lever ?? captureTakesLever
+  const exists = tools.exists ?? existsSync
+  if (spec.when !== undefined && state.options?.[spec.when] !== true)
+    return `taken only when the campaign is started with --${spec.when}`
+  if (spec.hold === 'require' && state.hold?.accepted !== true)
+    return `the 60 Hz hold was not accepted: ${state.hold?.figures?.join('; ') ?? 'no acceptance stage ran'}`
+  if (spec.needs === 'lever' && !lever())
+    return 'scripts/weather/capture.mjs takes no --lever, so no cast can be taken at a band, a clip or a ramp'
+  if (
+    spec.instruments !== undefined &&
+    present(spec.instruments, exists).length === 0
+  )
+    return `none of ${spec.instruments.join(', ')} is in the tree`
+  return null
+}
+
+/** A stage's commands and their environment, from the one it stopped at. */
+function commandsOf(stage, state) {
+  const spec = specOf(state, stage)
+  if (spec.kind === 'command')
+    return {
+      commands: spec.instruments
+        ? [vitest(present(spec.instruments))]
+        : spec.commands,
+      env: spec.env ?? {},
+    }
+  return {
+    commands: [
+      [
+        process.execPath,
+        MEASURE,
+        ...['--batch', stage.name, '--resume', stage.file],
+        ...['--gpu-wait', GPU_WAIT],
+        ...['--hold', state.options?.hold ?? 'none'],
+        ...(state.options?.refresh ? ['--refresh', state.options.refresh] : []),
+      ],
+    ],
+    // How Chrome was started, which every row records.
+    env: { IR_CAMPAIGN: '1' },
+  }
+}
+
+/**
+ * One attempt at a stage: its commands in order from the one it stopped at,
+ * until one fails. A batch is one command, run whole every attempt, since
+ * its document is what continues it.
+ */
+async function attemptStage(stage, state, ctx) {
+  const { commands, env } = commandsOf(stage, state)
+  if (stage.kind === 'batch') return await child(commands[0], env, ctx)
+  for (; stage.next < commands.length; stage.next += 1) {
+    const result = await child(commands[stage.next], env, ctx)
+    if (result.code !== 0) return result
+    save(state)
+  }
+  return { code: 0, tail: '' }
 }
 
 /** One stage, attempt after attempt, until it is done or the campaign stops. */
 async function runStage(stage, state, ctx) {
+  const why = notTaken(specOf(state, stage), state)
+  if (why !== null) {
+    Object.assign(stage, { status: 'not taken', reason: why })
+    console.log(`${new Date().toISOString()} ${stage.name}: not taken, ${why}`)
+    return save(state)
+  }
   stage.status = 'running'
   progress(stage)
   stage.startedAt = new Date().toISOString()
@@ -488,8 +700,7 @@ async function runStage(stage, state, ctx) {
     console.log(
       `${new Date().toISOString()} ${stage.name}: attempt ${stage.attempts}`,
     )
-    const { command, env } = commandOf(stage)
-    const { code, tail } = await child(command, env, ctx)
+    const { code, tail } = await attemptStage(stage, state, ctx)
     stage.exit = code
     progress(stage)
     const next = ctx.stop.signal.aborted ? 'stop' : outcome(stage, code)
@@ -499,6 +710,9 @@ async function runStage(stage, state, ctx) {
     if (next === 'done') {
       stage.status = 'done'
       stage.finishedAt = new Date().toISOString()
+      // What the stages after it that read a rate are bound by.
+      if (stage.name === 'hold')
+        state.hold = holdAccepted({ hold: documentAt(stage.file) })
       return save(state)
     }
     if (next === 'stop') {
@@ -524,7 +738,9 @@ export function summarize(state) {
     `${state.status} at ${state.finishedAt}${state.reason ? `: ${state.reason}` : ''}. Started ${state.startedAt}.`,
   ]
   for (const stage of state.stages) {
-    parts.push(`## ${stage.name}: ${stage.status}, ${stage.attempts} attempts`)
+    parts.push(
+      `## ${stage.name}: ${stage.status}, ${stage.attempts} attempts${stage.status === 'not taken' ? `: ${stage.reason}` : ''}`,
+    )
     // The same guarded read as `progress`: this runs in `run`'s `finally`,
     // and a throw here would lose the summary of a campaign that measured.
     const doc = stage.kind === 'batch' ? documentAt(stage.file) : null
@@ -539,8 +755,11 @@ export function summarize(state) {
         rateNote(doc.rows),
       )
     }
-    const spec = CAMPAIGNS[state.name].stages.find((s) => s.name === stage.name)
-    for (const file of spec.outputs ?? []) {
+    const spec = CAMPAIGNS[state.name]?.stages.find(
+      (s) => s.name === stage.name,
+    )
+    if (spec?.instruments) parts.push(instrumentsText(spec.instruments))
+    for (const file of spec?.outputs ?? []) {
       const at = path.join(ROOT, file)
       const fresh =
         stage.startedAt !== undefined &&
@@ -551,10 +770,63 @@ export function summarize(state) {
       )
     }
   }
+  const docs = Object.fromEntries(
+    state.stages
+      .filter((stage) => stage.kind === 'batch')
+      .map((stage) => [stage.name, documentAt(stage.file)])
+      .filter(([, doc]) => doc !== null),
+  )
+  parts.push(
+    '## The rules, as the runner computes them',
+    rulesTable(evaluate(docs, readInputs())),
+  )
   writeFileSync(state.summary, `${parts.join('\n\n')}\n`)
 }
 
-async function run(name, { stamp, resume }) {
+/**
+ * What the rules read that no batch carries, as the orchestrator records it
+ * once the casts are classified and the instruments have run:
+ * `{ handoverB, chainEqual, leanEqual, casts: { band, clip, ramp } }`, each
+ * cast's verdict `'clean'` or `'step'` (`'trail'` for a clip). Absent, the
+ * rules that need it say so.
+ */
+export const INPUTS = path.join(HOME, 'inputs.json')
+const readInputs = () => documentAt(INPUTS) ?? {}
+
+/**
+ * A campaign's state as a run takes it up: every stage not done is pending
+ * again, and keeps its attempts. They bound a stage's whole life; reset on
+ * every resume, they bounded nothing, and a stage that failed eight times
+ * was given eight more by each resume.
+ */
+export function resumed(state) {
+  for (const stage of state.stages)
+    if (stage.status !== 'done') stage.status = 'pending'
+  return state
+}
+
+/**
+ * The run's signal handler: the first signal stops the campaign and passes
+ * one SIGTERM to the stage's process group; every later one is let go. The
+ * runner closes its rigs and releases the GPU lock on its first signal, and
+ * a second one landing mid-close killed it there and orphaned Chrome with
+ * the lock held, so a second `stop` waits for the first.
+ */
+export function stopper(ctx, kill = killGroup) {
+  return (signal) => {
+    if (ctx.stop.signal.aborted) {
+      console.log(
+        `${new Date().toISOString()} ${signal}: already stopping; waiting for the stage to close its rigs`,
+      )
+      return
+    }
+    console.log(`${new Date().toISOString()} ${signal}: stopping`)
+    ctx.stop.abort()
+    if (ctx.current) kill(ctx.current, 'SIGTERM')
+  }
+}
+
+async function run(name, { stamp, resume, ...options }) {
   const ctx = {
     current: null,
     preview: null,
@@ -572,17 +844,12 @@ async function run(name, { stamp, resume }) {
     console.log(`${new Date().toISOString()} refused: ${why}`)
     return 2
   }
-  const state = was ?? initial(name, stamp, head)
+  const state = was ?? initial(name, stamp, head, options)
   Object.assign(state, { pid: process.pid, status: 'running', reason: null })
-  for (const stage of state.stages)
-    if (stage.status !== 'done')
-      Object.assign(stage, { status: 'pending', attempts: 0 })
+  resumed(state)
+  const stopping = stopper(ctx)
   for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'])
-    process.on(signal, () => {
-      console.log(`${new Date().toISOString()} ${signal}: stopping`)
-      ctx.stop.abort()
-      if (ctx.current) killGroup(ctx.current, 'SIGTERM')
-    })
+    process.on(signal, stopping)
   try {
     save(state)
     if (CAMPAIGNS[name].build === 'always' || !bundled()) {
@@ -594,7 +861,7 @@ async function run(name, { stamp, resume }) {
     for (const stage of state.stages) {
       if (stage.status === 'done') continue
       await runStage(stage, state, ctx)
-      if (stage.status !== 'done')
+      if (stage.status !== 'done' && stage.status !== 'not taken')
         throw new Error(`${stage.name} ${stage.status}: ${stage.reason ?? ''}`)
     }
     state.status = 'done'
@@ -615,7 +882,54 @@ async function run(name, { stamp, resume }) {
 
 /* ------------------------------------------------------------- the command ---- */
 
-async function start(name, resume) {
+/** The start options a campaign's run is handed, as its own arguments. */
+const optionArgs = (options) => [
+  ...(options.hold ? ['--hold', options.hold] : []),
+  ...(options.transport ? ['--transport'] : []),
+  ...(options.refresh ? ['--refresh', options.refresh] : []),
+]
+
+/**
+ * The campaign as it would run, launching nothing: each batch's rows with
+ * their stance, lens, levers and seconds (`measure.mjs --dry-run`), each
+ * command stage's commands, the stages it would not take and why, and the
+ * totals a stage and the campaign. A stage not taken here is not taken on
+ * the machine either, except the hold's, which a run decides.
+ */
+export function planText(name, options = {}) {
+  const state = { name, options, hold: null }
+  let total = 0
+  const parts = [`# Campaign ${name}`]
+  for (const spec of CAMPAIGNS[name].stages) {
+    const why = notTaken(spec, state)
+    if (why !== null) {
+      parts.push(`## ${spec.name}: not taken, ${why}`)
+      continue
+    }
+    const seconds = Math.round(minutesOf(spec, options) * 60)
+    total += seconds
+    if (spec.kind === 'batch') {
+      const runs = runsOf(spec, options)
+      parts.push(
+        `## ${spec.name}: ${runs.length} rows, about ${minutes(seconds)}${spec.hold ? `; without an accepted hold, ${spec.hold === 'record' ? 'recorded only' : 'not taken'}` : ''}`,
+        dryRun({ url: URL_, runs }),
+      )
+    } else {
+      const { commands } = commandsOf(
+        { name: spec.name, kind: spec.kind },
+        state,
+      )
+      parts.push(
+        `## ${spec.name}: ${commands.length} commands, about ${minutes(seconds)} (as written)${spec.instruments ? `; ${instrumentsText(spec.instruments)}` : ''}`,
+        ...commands.map((c) => `  ${c.join(' ')}`),
+      )
+    }
+  }
+  parts.push(`campaign ${name}: about ${minutes(total)} before any resume`)
+  return parts.join('\n\n')
+}
+
+async function start(name, resume, options = {}) {
   const why = await refusal()
   if (why !== null) throw new Error(why)
   const was = readState(name)
@@ -643,6 +957,7 @@ async function start(name, resume) {
       '--stamp',
       stamp,
       ...(resume ? ['--resume'] : []),
+      ...optionArgs(options),
     ],
     { cwd: ROOT, stdio: ['ignore', out, out], detached: true },
   )
@@ -689,10 +1004,14 @@ function stop(name) {
   console.log(`stopping ${s.name} (pid ${s.pid}); status shows when it has`)
 }
 
-const USAGE = `node scripts/clouds/campaign.mjs <start|status|stop> [${Object.keys(CAMPAIGNS).join('|')}] [--resume]
+const USAGE = `node scripts/clouds/campaign.mjs <start|status|stop> [${Object.keys(CAMPAIGNS).join('|')}] [options]
 
   start <name>           build if needed, serve 8787 and run the stages, detached
   start <name> --resume  continue the last campaign of that name at the same commit
+  start <name> --dry-run every stage's rows, lens, levers and seconds; launches nothing
+    --hold <how>         pace the rows that read a rate: none (default), display, page
+    --transport          take the transport batch: O was built
+    --refresh <label>    the display's refresh mode, set by hand, for the study's record
   status [name]          the latest campaign, or the one named
   stop [name]            end the running campaign; what it measured is kept`
 
@@ -703,8 +1022,21 @@ async function main(argv) {
     options: {
       stamp: { type: 'string' },
       resume: { type: 'boolean', default: false },
+      'dry-run': { type: 'boolean', default: false },
+      hold: { type: 'string', default: 'none' },
+      transport: { type: 'boolean', default: false },
+      refresh: { type: 'string' },
     },
   })
+  if (!HOLDS.includes(values.hold)) {
+    console.error(`--hold is one of ${HOLDS.join(', ')}\n\n${USAGE}`)
+    return 2
+  }
+  const options = {
+    hold: values.hold,
+    transport: values.transport,
+    refresh: values.refresh ?? null,
+  }
   const [command, name] = positionals
   if (name !== undefined && !Object.hasOwn(CAMPAIGNS, name)) {
     console.error(`no campaign ${name}\n\n${USAGE}`)
@@ -716,12 +1048,18 @@ async function main(argv) {
     console.error(USAGE)
     return 2
   }
-  if (command === 'run') return await run(name, values)
+  if (command === 'run')
+    return await run(name, {
+      stamp: values.stamp,
+      resume: values.resume,
+      ...options,
+    })
   if (command !== 'start') {
     console.error(USAGE)
     return 2
   }
-  return await start(name, values.resume).then(
+  if (values['dry-run']) return console.log(planText(name, options)) ?? 0
+  return await start(name, values.resume, options).then(
     () => 0,
     (error) => (console.error(`refused: ${error.message}`), 2),
   )
