@@ -1,4 +1,3 @@
-import { getLogger } from '@inertialref/shared'
 import {
   LinearFilter,
   type Node,
@@ -43,7 +42,7 @@ import {
   type CloudUniforms,
 } from './cloudUniforms.ts'
 import { runQuadPasses } from './quadPass.ts'
-import { warmSensorPass } from './warmup.ts'
+import { warmByDrawing } from './warmup.ts'
 
 /*
  * What the fine march reads a step: six eye-anchored levels of 256² texels,
@@ -79,8 +78,6 @@ import { warmSensorPass } from './warmup.ts'
  * drawn from the same arithmetic a full bake uses, and a strip update is
  * that bake, texel for texel.
  */
-
-const log = getLogger('game.clouds')
 
 /** The bake's pass on the timeline: a whole level, a strip or a refresh slice, each one quad. */
 export const CLOUD_CLIPMAP_LABEL = 'cloud clipmap'
@@ -393,22 +390,29 @@ export class CloudClipmap implements CloudResource {
       : this.#target.textures
   }
 
+  /**
+   * Every layer's bake against the target, drawn (an RG8 target, which
+   * `warmByDrawing` says why); a renderer with no backend builds nothing.
+   */
   warm(renderer: WebGPURenderer): Promise<void> {
-    if (this.#disposed) return Promise.resolve()
-    this.#warm ??= this.#compile(renderer).catch((cause: unknown) => {
-      log.warn('the cloud clipmap did not warm', { cause: String(cause) })
-    })
+    if (this.#disposed || renderer?.backend === undefined)
+      return Promise.resolve()
+    if (this.#warm === null) {
+      warmByDrawing(
+        renderer,
+        this.#quad,
+        CLOUD_CLIPMAP_LABEL,
+        this.#materials.map((material) => ({ target: this.#target, material })),
+      )
+      if (this.#allocated === 'none') this.#allocated = 'stand-in'
+      // The draws land on the first layer with whatever the bakes' uniforms
+      // last held. A warm-up after a frame has baked, a chain rebuilt with
+      // the levers on, draws over level 0's low layer while its record says
+      // whole, so every level at its real size is owed again.
+      if (this.#target.width !== 1) this.#readGeneration.fill(-1)
+      this.#warm = Promise.resolve()
+    }
     return this.#warm
-  }
-
-  async #compile(renderer: WebGPURenderer): Promise<void> {
-    const compiled = warmSensorPass(
-      renderer,
-      this.#quad,
-      this.#materials.map((material) => ({ target: this.#target, material })),
-    )
-    if (this.#allocated === 'none') this.#allocated = 'stand-in'
-    await compiled
   }
 
   /**
