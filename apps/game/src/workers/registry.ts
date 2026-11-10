@@ -3,6 +3,7 @@ import {
   bakeAtmosphereTask,
   convolvePhaseTask,
 } from '../render/atmosphereTask.ts'
+import { cloudStatisticsTask } from '../render/cloudStatisticsTask.ts'
 
 /**
  * What this client's workers serve: the shared registry, plus the tasks only
@@ -20,5 +21,6 @@ export function createGameTaskRegistry(): TaskRegistry {
   const registry = createTaskRegistry()
   registry.register(bakeAtmosphereTask)
   registry.register(convolvePhaseTask)
+  registry.register(cloudStatisticsTask)
   return registry
 }

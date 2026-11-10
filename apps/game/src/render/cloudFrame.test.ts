@@ -437,7 +437,7 @@ describe('a body’s weather in its frame', () => {
   })
 
   it.each(SCENARIO_IDS)(
-    '%s: lays the scenario’s layers out as three levels, the absent ones at the union’s top with nothing in them',
+    '%s: lays the scenario’s layers out as three levels by the field’s own profile, the absent ones at the union’s top with nothing in them',
     (id) => {
       const scenario = WEATHER_SCENARIOS[id]
       const [frame] = run([inputs({}, { weather: id })])
@@ -450,11 +450,32 @@ describe('a body’s weather in its frame', () => {
         expect([level.base, level.top]).toEqual(
           layer === undefined ? [top, top] : [layer.base, layer.top],
         )
-        expect(level.sigma).toBe(layer?.sigma ?? 0)
-        expect(level.radius).toBe(layer?.radius ?? 10)
-        expect(level.radiusRange).toEqual([level.radius, level.radius])
-        expect(level.cell).toBe(layer?.cellMeters ?? 1)
-        expect(level.erosion).toBe(layer?.erosion ?? 0)
+        // Each number is the field's own profile's, as the CPU field draws
+        // the regime (`cloudFieldAt` reads `levelProfile`): σ′, the radius,
+        // the cell, the erosion and each end's mean depth, so the frame and
+        // the oracle the drawn field is held to are one weather.
+        if (layer === undefined) {
+          expect([level.sigma, level.cell, level.erosion]).toEqual([0, 1, 0])
+        } else {
+          const profile = levelProfile({
+            base: layer.base,
+            top: layer.top,
+            stratiform: layer.genus,
+            cumuliform: layer.genus,
+          })
+          expect(level.sigma).toBe(profile.scaled)
+          expect(level.radius).toBe(profile.radius)
+          expect(level.radiusRange[1]).toBe(profile.radius)
+          expect(level.cell).toBe(profile.cell)
+          expect(level.erosion).toBe(profile.erosion)
+          const thickness = layer.top - layer.base
+          expect(level.meanDepth).toEqual(
+            [0, 1].map(
+              (v) =>
+                profile.scaled * thickness * readLevelProfile(profile, 0, v)[1],
+            ),
+          )
+        }
         // The medium is the unscaled one. Every level turns at the regime's
         // eastward wind over the body's radius, by its clock's reduced angle.
         expect([level.gain, level.transport]).toEqual([1, 1])
@@ -469,6 +490,7 @@ describe('a body’s weather in its frame', () => {
           expect(level.detailOrigin[axis]).toBeLessThan(level.cell)
         }
         expect(level.phaseRows).toBeGreaterThan(0)
+        // One genus at both ends of a regime's level: one mean depth.
         expect(level.meanDepth[0]).toBe(level.meanDepth[1])
         expect(level.meanDepth[0] > 0).toBe(layer !== undefined)
       })

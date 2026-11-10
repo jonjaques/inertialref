@@ -33,6 +33,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
+import { UNSPREAD_SHAPE } from '@inertialref/rendering'
 import { sunThroughAt } from './air.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
@@ -78,6 +79,28 @@ export interface CloudSample {
   readonly sunMu: Node<'float'>
   /** Meters a trace texel spans at t. */
   readonly footprint: Node<'float'>
+  /**
+   * The ray's dither in [0, 1], one value along a ray: where its footprint
+   * stops reading the resolved field and reads its level's statistics,
+   * `cell·4^(dither − 1)` (`statisticsFootprint`). Absent, 0.5.
+   */
+  readonly dither?: Node<'float'>
+}
+
+/**
+ * A level's statistics at a sample's column (`readLevelStatistics`): what a
+ * crossing that reads them, rather than the resolved field, passes
+ * (`crossingForm`).
+ */
+export interface CloudLevelStatistics {
+  /** The share of the level's vertical columns that hold cloud. */
+  readonly fraction: Node<'float'>
+  /** The scaled vertical depth whose transmittance is the cloudy columns' mean. */
+  readonly depth: Node<'float'>
+  /** The gamma shape of the cloudy columns' depths. */
+  readonly shape: Node<'float'>
+  /** §5.9's sight length, meters. */
+  readonly sight: Node<'float'>
 }
 
 export interface CloudMedium {
@@ -97,6 +120,8 @@ export interface CloudMedium {
    * statistics are weighed by. Zero outside every level.
    */
   readonly depth: Node<'vec2'>
+  /** The sample's level's statistics at its column; absent where a medium has none. */
+  readonly statistics?: CloudLevelStatistics
 }
 
 export type CloudMediumFn = (
@@ -371,6 +396,14 @@ export function slabMedium(slabs: readonly CloudSlab[]): CloudMediumFn {
     let radius: Node<'float'> = float(SLAB_RADIUS)
     let column: Node<'float'> = float(UNBOUNDED_COLUMN)
     let depth: Node<'vec2'> = vec2(0)
+    // A slab is one column: its own share, its own vertical depth, no spread
+    // of depths, and its horizontal extent for the sight length.
+    let statistics: CloudLevelStatistics = {
+      fraction: float(0),
+      depth: float(0),
+      shape: float(UNSPREAD_SHAPE),
+      sight: float(UNBOUNDED_COLUMN),
+    }
     // Last to first, so the first slab holding the sample is the last select.
     for (let k = slabs.length - 1; k >= 0; k -= 1) {
       const slab = slabs[k]!
@@ -387,8 +420,26 @@ export function slabMedium(slabs: readonly CloudSlab[]): CloudMediumFn {
         vec2(top.sub(h), top.sub(base)).mul(scalar(slab.sigma)),
         depth,
       )
+      statistics = {
+        fraction: select(
+          inside,
+          scalar(slab.fraction ?? 1),
+          statistics.fraction,
+        ),
+        depth: select(
+          inside,
+          top.sub(base).mul(scalar(slab.sigma)),
+          statistics.depth,
+        ),
+        shape: statistics.shape,
+        sight: select(
+          inside,
+          scalar(slab.column ?? UNBOUNDED_COLUMN),
+          statistics.sight,
+        ),
+      }
     }
-    return { sigma, fraction, layer, radius, column, depth }
+    return { sigma, fraction, layer, radius, column, depth, statistics }
   }
 }
 

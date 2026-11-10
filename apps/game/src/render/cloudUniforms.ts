@@ -105,6 +105,12 @@ export interface CloudLayerUniforms {
     UniformNode<'vec3', Vector3>,
     UniformNode<'vec3', Vector3>,
   ]
+  /** Each level's six mesoscale waves' phases at the eye, three and three (`CloudLevelFrame.mesoscale`). */
+  readonly mesoscale: readonly [
+    readonly [UniformNode<'vec3', Vector3>, UniformNode<'vec3', Vector3>],
+    readonly [UniformNode<'vec3', Vector3>, UniformNode<'vec3', Vector3>],
+    readonly [UniformNode<'vec3', Vector3>, UniformNode<'vec3', Vector3>],
+  ]
 }
 
 /** The zonal law's kind and a regime's pattern, as numbers a shader compares. */
@@ -475,6 +481,7 @@ function createLayerUniforms(): CloudLayerUniforms {
     turn: triple(() => uniform(new Matrix3())),
     noiseOrigin: triple(() => vec3Uniform()),
     detailOrigin: triple(() => vec3Uniform()),
+    mesoscale: triple(() => [vec3Uniform(), vec3Uniform()] as const),
   }
 }
 
@@ -553,6 +560,10 @@ function writeLayers(
     setMatrix(uniforms.turn[k]!.value, 3, level.turn)
     setVec3(uniforms.noiseOrigin[k]!.value, level.noiseOrigin)
     setVec3(uniforms.detailOrigin[k]!.value, level.detailOrigin)
+    const phases = level.mesoscale ?? []
+    const [first, second] = uniforms.mesoscale[k]!
+    setVector3(first.value, phases[0] ?? 0, phases[1] ?? 0, phases[2] ?? 0)
+    setVector3(second.value, phases[3] ?? 0, phases[4] ?? 0, phases[5] ?? 0)
   })
   // Never zero: the volume divides by it to decode.
   setNumber(
