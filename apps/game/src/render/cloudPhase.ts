@@ -82,6 +82,22 @@ const TEXEL_BYTES = 8
  */
 const RECONVOLVE = 0.01
 
+/**
+ * The committed tables' atlas under a point sun, in halves: what every
+ * system's phase starts from. Its ice block is convolved with
+ * `ICE_DISK_FLOOR`'s disk, the one convolution a system's construction runs
+ * on this thread, 20 to 40 ms on this Mac mini under load. It runs once a
+ * page, in the sensor's mount on a page with clouds, and every system
+ * built after it (a picture preference's remount, a rig) copies it.
+ */
+let committedPointSun: Uint16Array | null = null
+
+/** The committed tables' point-sun atlas, built on the first ask. */
+function pointSunOf(droplets: MieTable, ice: IceTable): Uint16Array {
+  committedPointSun ??= toHalves(phaseAtlas(droplets, ice, 0).texels)
+  return committedPointSun
+}
+
 /** Whether a radius is within the 1% of `held` that leaves the atlas as it is. */
 function holds(angularRadius: number, held: number): boolean {
   return Math.abs(angularRadius - held) <= RECONVOLVE * held
@@ -146,7 +162,12 @@ export class CloudPhase implements CloudResource, CloudPhaseNodes {
     map.generateMipmaps = false
     map.name = 'cloud phase'
     this.#map = map
-    this.#land(toHalves(phaseAtlas(droplets, ice, 0).texels), 0)
+    this.#land(
+      pooled
+        ? pointSunOf(droplets, ice)
+        : toHalves(phaseAtlas(droplets, ice, 0).texels),
+      0,
+    )
     this.#node = texture(map)
   }
 

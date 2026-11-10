@@ -961,6 +961,27 @@ describe('the atlas convolved on the pool', () => {
     }
   })
 
+  it('holds the real ice inside half float’s range on the device from construction, before any sun is served', async () => {
+    // The point sun's atlas: the droplets as generated, the ice spread by
+    // `ICE_DISK_FLOOR`'s disk, so the 120 µm row's forward peak is 61,368
+    // sr⁻¹ where unspread it would be an infinity in RGBA16F.
+    // Nor does it warn: three's `toHalfFloat` warned once a texel it
+    // clamped, 171 of them a system on the real ice.
+    const warned = vi.spyOn(console, 'warn')
+    const phase = systemPhase()
+    try {
+      await phase.warm(gpu.renderer)
+      expect(warned).not.toHaveBeenCalled()
+      const held = await deviceTexels(phase.texture)
+      expect(held.every(Number.isFinite)).toBe(true)
+      expect(held.reduce((most, v) => Math.max(most, v), 0)).toBeLessThan(65504)
+      expect(held).toEqual(halves(0))
+    } finally {
+      warned.mockRestore()
+      phase.dispose()
+    }
+  })
+
   it('lands on the device half for half what the main thread convolves', async () => {
     const pool = inlinePool()
     const phase = systemPhase()
@@ -1029,13 +1050,15 @@ describe('the atlas convolved on the pool', () => {
   })
 
   it('convolves inside the call where there is no pool, and for tables the pool does not hold', () => {
+    // The point sun's atlas, its ice spread by the floor's disk, is
+    // convolved once a page and copied by every system after: a second
+    // system convolves nothing.
+    systemPhase().dispose()
     const before = convolutions.count
     const phase = systemPhase()
-    // Construction lays out the point sun's atlas, which convolves nothing
-    // (`convolveDisk` at a radius of zero is a copy), and is counted.
-    expect(convolutions.count).toBe(before + 1)
+    expect(convolutions.count).toBe(before)
     expect(phase.serve(EARTH_SUN, null)).toBe('convolved')
-    expect(convolutions.count).toBe(before + 2)
+    expect(convolutions.count).toBe(before + 1)
     expect(phase.angularRadius).toBe(EARTH_SUN)
     phase.dispose()
     const pool = inlinePool()
