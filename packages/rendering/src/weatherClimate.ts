@@ -1,15 +1,19 @@
 import { deriveSeed, type Seed } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
 import type { Body } from '@inertialref/universe'
-import { reduceTurns } from './weatherClock.ts'
+import { periodIndex, reduceTurns } from './weatherClock.ts'
 import { GENUS_TABLE } from './weatherGenus.ts'
 import { baseNoiseTexture } from './weatherNoise.ts'
 import {
+  BLOB_MEAN,
+  blobCells,
+  blobThreshold,
   type CloudGenus,
   MAX_CLOUD_LAYERS,
   type ScenarioId,
   scenarioCoverage,
   shellUnion,
+  terminatorSines,
   WEATHER_SCENARIOS,
   type WeatherScenario,
   wetWorld,
@@ -59,6 +63,49 @@ export interface BodyClimate {
    * instant, and of no observer.
    */
   sample(direction: Vec3, sun: Vec3, time: number): ClimateSample
+  /**
+   * The climate as the frame's uniforms take it, under a sun at an instant:
+   * plain numbers to copy into `CloudClimateUniforms`, slot for slot, which
+   * the GPU's port of `sample` evaluates at every texel.
+   */
+  coefficients(sun: Vec3, time: number): ClimateCoefficients
+}
+
+/**
+ * A climate as numbers, one member a slot of `CloudClimateUniforms`
+ * (`render/cloudUniforms.ts`) and of the frame's `CloudClimateFrame`, with
+ * the same names. What each kind reads:
+ *
+ * - **`'regime'`**: the pattern, its scale, cells and period, the
+ *   terminator, and each level's cover and convective share; the blob
+ *   threshold and floor are formed for a pattern of blobs and no regime's
+ *   climate draws one (`drawnPattern`). The law is zeros.
+ * - **`'zonal'`**: the law and κ. `law` is §5.3's sixteen coefficients,
+ *   row-major as a `mat4` is read: row k (0 low, 1 middle, 2 high) is
+ *   `[base_k, itcz_k, dry_k, storm_k]` and row 3 the four shared angles,
+ *   `[φ_I, φ_H, φ_S, w]`, radians, with the convergence zone already at
+ *   `ι·δ` for the sun given. `convective` holds κ, each level's share at the
+ *   zone's center, not a share. The synoptic factor is the base noise at the
+ *   direction turned with the low level, times the datum radius over
+ *   `SYNOPTIC_CELL`. `cover` is zeros: under this kind the cover is the
+ *   law's, at each place.
+ */
+export interface ClimateCoefficients {
+  readonly kind: BodyClimate['kind']
+  readonly law: readonly number[]
+  readonly pattern: WeatherScenario['pattern']
+  readonly patternScale: number
+  readonly patternCells: number
+  /** `periodIndex(time, the pattern's period)`: two u32 halves. */
+  readonly period: readonly [number, number]
+  /** The terminator's sines, full and clear (`terminatorSines`). */
+  readonly terminator: readonly [number, number]
+  readonly blobThreshold: readonly [number, number, number]
+  readonly blobFloor: readonly [number, number, number]
+  readonly cover: readonly [number, number, number]
+  readonly convective: readonly [number, number, number]
+  readonly ice: number
+  readonly deep: number
 }
 
 export interface BodyWeather {
@@ -84,6 +131,13 @@ export const CLIMATE_REGIME: ScenarioId = 'fair-cumulus'
 
 /** The texture's drift along the spin axis, m/s: what changes the slice of noise a level cuts. */
 export const WEATHER_AXIAL_DRIFT = 0.25
+
+type Triple = readonly [number, number, number]
+
+/** A regime's law: none. */
+const NO_LAW: readonly number[] = /*@__PURE__*/ Object.freeze(
+  new Array<number>(16).fill(0),
+)
 
 const TURN = 2 * Math.PI
 
@@ -164,8 +218,34 @@ function regimeClimate(scenario: WeatherScenario): BodyClimate {
   ]
   const middle = genus(1)
   const ice = middle !== undefined && GENUS_TABLE[middle].class === 'ice'
+  const level = (k: number): number =>
+    Math.min(1, Math.max(0, drawn.layers[k]?.coverage ?? 0))
+  const covers: Triple = [level(0), level(1), level(2)]
+  const floor = (c: number): number =>
+    Math.max(0, (c - BLOB_MEAN) / (1 - BLOB_MEAN))
   return {
     kind: 'regime',
+    coefficients(_sun, time) {
+      return {
+        kind: 'regime',
+        law: NO_LAW,
+        pattern: drawn.pattern,
+        patternScale: drawn.patternScale,
+        patternCells: blobCells(drawn.patternScale),
+        period: periodIndex(time, drawn.patternPeriod),
+        terminator: terminatorSines(drawn),
+        blobThreshold: [
+          blobThreshold(covers[0]),
+          blobThreshold(covers[1]),
+          blobThreshold(covers[2]),
+        ],
+        blobFloor: [floor(covers[0]), floor(covers[1]), floor(covers[2])],
+        cover: covers,
+        convective: share,
+        ice: ice ? 1 : 0,
+        deep: 0,
+      }
+    },
     sample(direction, sun, time) {
       const cover = (k: number): number =>
         scenarioCoverage(drawn, k, direction, time, sun)
@@ -249,8 +329,6 @@ export const CLIMATE_WINDS: readonly [number, number, number] = [8, 15, 25]
 /* ------------------------------------------------------------------------- */
 /* A world's own: the zonal law                                               */
 /* ------------------------------------------------------------------------- */
-
-type Triple = readonly [number, number, number]
 
 /**
  * The zonal law of §5.3, per level k, at latitude φ under a sub-solar
@@ -347,6 +425,9 @@ export function zonalLaw(body: Body): ZonalLaw {
   return { ...EARTH_ZONAL_LAW, hadley, storms: hadley + STORM_OFFSET }
 }
 
+/** `terminatorSines` with no terminator: sines no sun reaches. */
+const NO_TERMINATOR: readonly [number, number] = [2, 3]
+
 const gaussian = (x: number, width: number): number =>
   Math.exp((-0.5 * x * x) / (width * width))
 
@@ -410,11 +491,51 @@ export function synopticFactor(
   return 1 + 0.5 * (n - 0.5)
 }
 
+/**
+ * A zonal law under a sub-solar latitude as `ClimateCoefficients.law`'s
+ * sixteen numbers: rows low, middle and high of `[base, itcz, dry, storm]`,
+ * then `[φ_I, φ_H, φ_S, w]` with `φ_I = ι·δ`.
+ */
+export function packZonalLaw(law: ZonalLaw, subsolar: number): number[] {
+  const row = (k: number): number[] => [
+    law.base[k]!,
+    law.itcz[k]!,
+    law.dry[k]!,
+    law.storm[k]!,
+  ]
+  return [
+    ...row(0),
+    ...row(1),
+    ...row(2),
+    law.follow * subsolar,
+    law.hadley,
+    law.storms,
+    law.width,
+  ]
+}
+
 function zonalClimateOf(body: Body, lowRate: number): BodyClimate {
   const law = zonalLaw(body)
   const radius = body.radius
   return {
     kind: 'zonal',
+    coefficients(sun) {
+      return {
+        kind: 'zonal',
+        law: packZonalLaw(law, latitudeOf(sun)),
+        pattern: 'uniform',
+        patternScale: 0,
+        patternCells: blobCells(0),
+        period: [0, 0],
+        terminator: NO_TERMINATOR,
+        blobThreshold: [0, 0, 0],
+        blobFloor: [0, 0, 0],
+        cover: [0, 0, 0],
+        convective: law.convective,
+        ice: 0,
+        deep: 0,
+      }
+    },
     sample(direction, sun, time) {
       const zonal = zonalClimate(law, latitudeOf(direction), latitudeOf(sun))
       const factor = synopticFactor(direction, radius, turnAngle(lowRate, time))

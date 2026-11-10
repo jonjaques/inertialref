@@ -21,6 +21,7 @@ import {
   hadleyEdge,
   HADLEY_EDGE_RANGE,
   LEVEL_HEIGHTS,
+  type ClimateCoefficients,
   regimeWeather,
   synopticFactor,
   turnAngle,
@@ -522,6 +523,142 @@ describe('the cover from orbit', () => {
           expect(high).toBe(low)
         }
       }
+    },
+  )
+})
+
+/* ------------------------------------------------------------------------- */
+/* The climate as the frame's uniforms                                        */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * A climate's coefficients evaluated as the GPU's port of `sample` will
+ * read them, from the numbers alone: the law unpacked by its documented
+ * layout, a regime's pattern by its kind. The synoptic factor is the one
+ * term not in the numbers: the GPU reads it from its noise and the low
+ * level's turn, as `synopticFactor` does.
+ */
+function fromCoefficients(
+  data: ClimateCoefficients,
+  direction: Vec3,
+  sun: Vec3,
+  synoptic: number,
+): { readonly cover: number[]; readonly convective: number[] } {
+  const clamp = (x: number) => Math.min(1, Math.max(0, x))
+  const latitude = Math.asin(Math.min(1, Math.max(-1, direction.y)))
+  if (data.kind === 'zonal') {
+    const law = data.law
+    const [zone, hadley, storms, width] = law.slice(12) as [
+      number,
+      number,
+      number,
+      number,
+    ]
+    const g = (x: number) => Math.exp((-0.5 * x * x) / (width * width))
+    const levels = [0, 1, 2]
+    return {
+      cover: levels.map((k) =>
+        clamp(
+          (law[4 * k]! +
+            law[4 * k + 1]! * g(latitude - zone) -
+            law[4 * k + 2]! * (g(latitude - hadley) + g(latitude + hadley)) +
+            law[4 * k + 3]! * (g(latitude - storms) + g(latitude + storms))) *
+            synoptic,
+        ),
+      ),
+      convective: levels.map((k) =>
+        clamp(data.convective[k]! * g(latitude - zone)),
+      ),
+    }
+  }
+  expect(data.pattern).not.toBe('blobs')
+  const up = direction.x * sun.x + direction.y * sun.y + direction.z * sun.z
+  const [full, clear] = data.terminator
+  const t = clamp((up - full) / (clear - full))
+  const share = 1 - t * t * (3 - 2 * t)
+  const band = (c: number) => {
+    if (data.pattern !== 'bands' || !(data.patternScale > 0)) return c
+    const swing = c <= 0.5 ? 1 : (1 - c) / c
+    return c * (1 + swing * Math.cos((Math.PI * latitude) / data.patternScale))
+  }
+  return {
+    cover: data.cover.map((c) => share * band(c)),
+    convective: [...data.convective],
+  }
+}
+
+describe('the climate as the frame’s uniforms', () => {
+  const instants = [0, 7_200, 98_977.5, 1.17e8]
+  const suns = [-23.4, 0, 15].map((degrees) => ({
+    x: Math.cos(degrees * DEG),
+    y: Math.sin(degrees * DEG),
+    z: 0,
+  }))
+  const places = Array.from({ length: 17 }, (_, i) => (i - 8) * 10).flatMap(
+    (latitude) =>
+      [0, 1.3, 2.9, 4.4].map((longitude) => ({
+        x: Math.cos(latitude * DEG) * Math.cos(longitude),
+        y: Math.sin(latitude * DEG),
+        z: -Math.cos(latitude * DEG) * Math.sin(longitude),
+      })),
+  )
+
+  it('lays a world’s law out as documented and reproduces its sample at every latitude, season and instant', () => {
+    for (const one of [earth, cornerstones]) {
+      const weather = bodyWeather(one)!
+      const law = zonalLaw(one)
+      for (const sun of suns)
+        for (const time of instants) {
+          const data = weather.climate.coefficients(sun, time)
+          expect(data.kind).toBe('zonal')
+          expect(data.law).toHaveLength(16)
+          const shared = [
+            law.follow * Math.asin(sun.y),
+            law.hadley,
+            law.storms,
+            law.width,
+          ]
+          data.law
+            .slice(12)
+            .forEach((value, i) => expect(value).toBeCloseTo(shared[i]!, 14))
+          const angle = turnAngle(weather.turn[0], time)
+          for (const direction of places) {
+            const want = weather.climate.sample(direction, sun, time)
+            const got = fromCoefficients(
+              data,
+              direction,
+              sun,
+              synopticFactor(direction, one.radius, angle),
+            )
+            for (let k = 0; k < 3; k += 1) {
+              expect(got.cover[k]).toBeCloseTo(want.cover[k]!, 12)
+              expect(got.convective[k]).toBeCloseTo(want.convective[k]!, 12)
+            }
+            expect([want.ice, want.deep]).toEqual([data.ice, data.deep])
+          }
+        }
+    }
+  })
+
+  it.each(SCENARIO_IDS)(
+    '%s: carries its pattern as numbers that reproduce its sample, with no law',
+    (id) => {
+      const { climate } = regimeWeather(cornerstones, id)
+      for (const sun of suns)
+        for (const time of instants) {
+          const data = climate.coefficients(sun, time)
+          expect(data.kind).toBe('regime')
+          expect(data.law).toEqual(new Array<number>(16).fill(0))
+          for (const direction of places) {
+            const want = climate.sample(direction, sun, time)
+            const got = fromCoefficients(data, direction, sun, 1)
+            for (let k = 0; k < 3; k += 1) {
+              expect(got.cover[k]).toBeCloseTo(want.cover[k]!, 12)
+              expect(got.convective[k]).toBe(want.convective[k])
+            }
+            expect([want.ice, want.deep]).toEqual([data.ice, data.deep])
+          }
+        }
     },
   )
 })
