@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   atmosphereRecipe,
   bakeMultipleScattering,
+  bakeSkyMoments,
   bakeTransmittance,
+  SKY_TABLE_HEIGHT,
+  SKY_TABLE_WIDTH,
 } from '@inertialref/rendering'
 import {
   createInlineWorker,
@@ -10,7 +13,7 @@ import {
   runInline,
   WorkerPool,
 } from '@inertialref/workers'
-import { bakeAtmosphereTask } from './atmosphereTask.ts'
+import { bakeAirTables, bakeAtmosphereTask } from './atmosphereTask.ts'
 import { createGameTaskRegistry } from '../workers/registry.ts'
 
 /*
@@ -39,6 +42,7 @@ describe('render.bakeAtmosphere', () => {
     const recipe = atmosphereRecipe(haze, topRatio, heights)
     const transmittance = bakeTransmittance(recipe)
     const multiScatter = bakeMultipleScattering(recipe, transmittance)
+    const sky = bakeSkyMoments(recipe, transmittance, multiScatter)
 
     const response = await runInline(bakeAtmosphereTask, {
       haze,
@@ -48,6 +52,10 @@ describe('render.bakeAtmosphere', () => {
     expect(response.recipe).toEqual(recipe)
     expect(response.transmittance).toEqual(transmittance)
     expect(response.multiScatter).toEqual(multiScatter)
+    expect(response.tables).toEqual(
+      bakeAirTables(recipe, transmittance, multiScatter),
+    )
+    expect(response.tables.sky).toEqual(sky)
   })
 
   it('crosses the worker boundary intact, through the game registry', async () => {
@@ -73,6 +81,14 @@ describe('render.bakeAtmosphere', () => {
       ])
       expect([...crossed.multiScatter.data]).toEqual([
         ...expected.multiScatter.data,
+      ])
+      expect(Object.keys(crossed.tables)).toEqual(Object.keys(expected.tables))
+      expect([crossed.tables.sky.width, crossed.tables.sky.height]).toEqual([
+        SKY_TABLE_WIDTH,
+        SKY_TABLE_HEIGHT,
+      ])
+      expect([...crossed.tables.sky.data]).toEqual([
+        ...expected.tables.sky.data,
       ])
       expect(crossed.recipe).toEqual(expected.recipe)
     } finally {

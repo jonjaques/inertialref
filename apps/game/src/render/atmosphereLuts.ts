@@ -23,7 +23,7 @@ import {
   type RenderBody,
 } from '@inertialref/rendering'
 import type { WorkerPool } from '@inertialref/workers'
-import { bakeAtmosphereTask } from './atmosphereTask.ts'
+import { bakeAirTables, bakeAtmosphereTask } from './atmosphereTask.ts'
 import { scatteringKey } from './preloadPlan.ts'
 import type { Rgb } from './bodyUniforms.ts'
 
@@ -35,6 +35,10 @@ import type { Rgb } from './bodyUniforms.ts'
  * guarantees `rgba16float` is filterable and guarantees nothing of the sort
  * for `rgba32float` — and the cache, keyed on everything the recipe reads,
  * so two bodies with the same authored haze and shell share one bake.
+ *
+ * The set is three tables: the transmittance and Ψ, which every surface in
+ * the air marches through, and the sky table, which only the clouds read
+ * (`bakeSkyMoments`).
  *
  * Baking is lazy, on the first ask for a body's shell, and it runs in one of
  * two places. On the pool, through `render.bakeAtmosphere` — `warmScattering`
@@ -53,6 +57,16 @@ export interface AtmosphereScattering {
   readonly recipe: AtmosphereRecipe
   readonly transmittance: Texture
   readonly multiScatter: Texture
+  /**
+   * The sky's light on a cloud (`bakeSkyMoments`), 102 × 16 RGBA16F,
+   * 13,056 B: what `AirUniforms.sky` binds through `bind`, which reads this
+   * set as `AirTables`. Only the cloud passes read it, so the shell, the
+   * sphere, the ground and the sea that bind the same set compile no
+   * binding for it. Both bakes make one; it is optional because
+   * `AirTables`' is, so a set built by hand for a test binds the dark
+   * stand-in in its place.
+   */
+  readonly sky?: Texture
   /**
    * The multiple-scattering table's own floats — ln Ψ — kept for
    * `airOverhead`. 8 KB a haze; the transmittance table is 64 times that and
@@ -104,10 +118,17 @@ export function scatteringFor(
   const recipe = atmosphereRecipe(haze, topRatio, heights)
   const transmittance = bakeTransmittance(recipe)
   const multiScatter = bakeMultipleScattering(recipe, transmittance)
+  // The derived tables' own share, read from one more clock read: the sky
+  // table is new to this bake and its cost is a figure the design leaves to
+  // measure.
+  const airBaked = performance.now()
+  const tables = bakeAirTables(recipe, transmittance, multiScatter)
+  const skyBaked = performance.now()
   const set: AtmosphereScattering = {
     recipe,
     transmittance: toTexture(transmittance),
     multiScatter: toTexture(multiScatter),
+    sky: toTexture(tables.sky),
     multiScatterTable: multiScatter,
   }
   cache.set(key, set)
@@ -142,6 +163,7 @@ export function scatteringFor(
     )
   log.info('scattering tables baked', {
     ms: Math.round(finished - started),
+    skyMs: Math.round(skyBaked - airBaked),
     topRatio: Number(topRatio.toFixed(4)),
     thickness,
   })
@@ -193,6 +215,7 @@ export function warmScattering(
           recipe: baked.recipe,
           transmittance: toTexture(baked.transmittance),
           multiScatter: toTexture(baked.multiScatter),
+          sky: toTexture(baked.tables.sky),
           multiScatterTable: baked.multiScatter,
         }
         cache.set(key, set)
