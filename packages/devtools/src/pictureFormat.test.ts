@@ -80,6 +80,48 @@ describe('portable pictures', () => {
     }
     expect(() => decodePictures({ ...encoded, version: 1 })).toThrow()
   })
+  it('writes version 3 only for a picture with weather, and holds the field to one regime', () => {
+    const picture = { ...PICTURES[0]!, processing: enhanced }
+    const held = {
+      ...picture,
+      id: 'held',
+      weather: { regime: 'stratocumulus' },
+    }
+    const encoded = JSON.parse(encodePictures([picture, held]))
+    expect(encoded.version).toBe(3)
+    expect(decodePictures(encoded)).toEqual([picture, held])
+    expect(JSON.parse(encodePictures([picture])).version).toBe(2)
+    // A regime this build does not know decodes; the page reports it.
+    expect(
+      decodePictures({
+        ...encoded,
+        pictures: [{ ...held, weather: { regime: 'squall-line' } }],
+      })[0]!.weather,
+    ).toEqual({ regime: 'squall-line' })
+    for (const weather of [
+      null,
+      {},
+      { regime: '' },
+      { regime: 7 },
+      { regime: 'Fair Cumulus' },
+      { regime: 'x'.repeat(65) },
+      { regime: 'overcast', cover: 0.5 },
+    ])
+      expect(() =>
+        decodePictures({ ...encoded, pictures: [{ ...held, weather }] }),
+      ).toThrow(/Invalid preset/)
+    // Weather in a version that predates it is refused, not dropped.
+    expect(() => decodePictures({ ...encoded, version: 2 })).toThrow(
+      /Invalid preset/,
+    )
+    expect(() =>
+      decodePictures({
+        ...encoded,
+        version: 1,
+        pictures: [{ ...PICTURES[0]!, weather: held.weather }],
+      }),
+    ).toThrow(/Invalid preset/)
+  })
   it('captures and restores selected processing without changing canonical state', () => {
     const liveRange = { bright: 10, dark: 12 }
     let processing: PictureProcessing = {
