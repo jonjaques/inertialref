@@ -12,10 +12,12 @@ import { float } from 'three/tsl'
 
 /*
  * The node that drives a frame's cloud work. It lives in the composite's
- * material, so its `updateBefore` runs at the composite's draw, inside pass B.
- * The cloud passes are issued from inside that open render, each its own
- * encoder submitted as it finishes, and the outer render's context and target
- * are intact after them (the premise spike, `cloudPremises.gpu.test.ts`).
+ * material, so its `updateBefore` runs at the composite's draw: inside pass
+ * B, or inside the chain form's draw over the resolved rows
+ * (`cloudOverPass.ts`). The cloud passes are issued from inside that open
+ * render, each its own encoder submitted as it finishes, and the outer
+ * render's context and target are intact after them (the premise spike,
+ * `cloudPremises.gpu.test.ts`).
  *
  * `compileAsync` runs `updateBefore` while warming (`upscale.ts:205`), so it
  * does nothing outside a frame, and warming the composite runs no cloud work.
@@ -96,8 +98,8 @@ export interface CloudFrameDriver {
   run(renderer: WebGPURenderer): void
   /**
    * `run` threw this frame: whatever it wrote is partial, and the composite
-   * drawing next in this same render would read it. Called before pass B
-   * draws on, so what it changes holds for this frame's composite.
+   * drawing next in this same render would read it. Called before that
+   * render draws on, so what it changes holds for this frame's composite.
    */
   failed(): void
 }
@@ -125,13 +127,14 @@ export class CloudFrameNode extends TempNode<'float'> {
    * The driver's `run`, in a frame; nothing outside one.
    *
    * A throw in the cloud work is the clouds', not the frame's: the renderer
-   * is put back, the driver is told, and pass B draws on without them. The
-   * renderer alone is not enough: the composite this node sits in draws
-   * next, from a history that holds the last good frame's cloud or part of
-   * this one's, so the driver makes it inert. Left to escape, the throw would
-   * leave the render it is nested in — pass B, and the post chain around it —
-   * with no `finishRender`, its pass open and three's render tree pointing
-   * into it, and every later frame drawing through that.
+   * is put back, the driver is told, and the render this is nested in draws
+   * on without them. The renderer alone is not enough: the composite this
+   * node sits in draws next, from a history that holds the last good frame's
+   * cloud or part of this one's, so the driver makes it inert. Left to
+   * escape, the throw would leave that render — pass B or the chain form's
+   * draw, and the post chain around it — with no `finishRender`, its pass
+   * open and three's render tree pointing into it, and every later frame
+   * drawing through that.
    */
   override updateBefore(frame: NodeFrame): undefined {
     const driver = this.#driver

@@ -6,6 +6,7 @@ import {
   Matrix3,
   Mesh,
   MeshBasicNodeMaterial,
+  type NodeFrame,
   PerspectiveCamera,
   PlaneGeometry,
   RenderTarget,
@@ -49,6 +50,7 @@ import { CloudFrameNode } from './cloudFrameNode.ts'
 import { traceScreen, viewDirection } from './cloudGeometry.ts'
 import type { CloudHistoryTextures } from './cloudHistory.ts'
 import { OVER_CLOUDS_LAYER } from './cloudLayers.ts'
+import { CloudOverPassNode } from './cloudOverPass.ts'
 import {
   CLOUD_STAND_INS,
   type CloudFarFn,
@@ -77,9 +79,10 @@ import { sensorMrt } from './sensorMrt.ts'
  * four samples, or the temporal rows — the sensor's MRT, a renderer with the
  * scene's order, and a depth copy tied to the target and drawn by a real
  * frame node inside pass B, the OVER layer drawn over the pass under the
- * clouds. The
- * history is written by a kernel here, so every case states exactly what the
- * trace and the history would have left.
+ * clouds, or in the chain form, the composite alone drawn over the target's
+ * resolved rows by the over pass's own node. The history is written by a
+ * kernel here, so every case states exactly what the trace and the history
+ * would have left.
  *
  * The scene's exposure carries a gain of 4 throughout: a composite that
  * carried the gain itself would draw its cloud at 16.
@@ -433,6 +436,15 @@ function rig({
   })
   const writer = historyWriter(uniforms, history)
   const read = reader(session)
+  // The chain form's draw, as the system's own node makes it. Pass B is
+  // drawn by hand below, so the node's scene is never read.
+  const over = new CloudOverPassNode(
+    new Scene(),
+    camera,
+    target,
+    mrt,
+    composite,
+  )
   const named = (name: SceneAttachmentName): Texture =>
     target.textures[layout.attachments.findIndex((row) => row.name === name)]!
   return {
@@ -442,30 +454,42 @@ function rig({
     camera,
     halfTan,
     composite,
+    over,
     depth,
     async write(written: Written): Promise<void> {
       writer.set(written)
       await session.compute(writer.kernel)
     },
-    /** One frame of `scene`, with the composite in pass B or without it. */
-    async frame(scene: Scene, on: boolean): Promise<void> {
+    /**
+     * One frame of `scene`: with the composite in pass B, without it, or in
+     * the chain form, where the scene is one pass and the composite is drawn
+     * over the target's resolved rows.
+     */
+    async frame(scene: Scene, on: boolean | 'chain'): Promise<void> {
       scene.add(composite.mesh)
-      composite.show(on)
+      composite.show(on === true)
       const mask = camera.layers.mask
       await checked(session, () => {
         renderer.setRenderTarget(target)
         renderer.setMRT(mrt)
-        driver.inFrame = on
+        driver.inFrame = on !== false
         try {
           camera.layers.set(0)
           renderer.render(scene, camera)
           // Pass B: the OVER layer onto what the pass under the clouds left.
-          if (on) {
+          if (on === true) {
             camera.layers.set(OVER_CLOUDS_LAYER)
             renderer.autoClear = false
             renderer.render(scene, camera)
           }
+          if (on === 'chain') {
+            renderer.setMRT(null)
+            renderer.setRenderTarget(null)
+            over.form = 'chain'
+            over.updateBefore({ renderer } as unknown as NodeFrame)
+          }
         } finally {
+          over.form = null
           driver.inFrame = false
           camera.layers.mask = mask
           renderer.autoClear = true
@@ -484,6 +508,7 @@ function rig({
       return all
     },
     dispose(): void {
+      over.dispose()
       composite.dispose()
       depth.dispose()
       target.dispose()
@@ -520,15 +545,17 @@ describe('off changes nothing', () => {
       const scene = usual()
       await f.frame(scene, false)
       const alone = await f.readAll()
-      for (const mode of ['identity', 'thin', 'residual'] as const) {
-        f.composite.setMode(mode)
-        await f.frame(scene, true)
-        const drawn = await f.readAll()
-        for (const [name, values] of alone)
-          expect(bits(drawn.get(name)!), `${mode}: ${name}`).toEqual(
-            bits(values),
-          )
-      }
+      for (const form of [true, 'chain'] as const)
+        for (const mode of ['identity', 'thin', 'residual'] as const) {
+          f.composite.setMode(mode)
+          await f.frame(scene, form)
+          const drawn = await f.readAll()
+          for (const [name, values] of alone)
+            expect(
+              bits(drawn.get(name)!),
+              `${mode}, ${form === true ? 'pass B' : 'chain'}: ${name}`,
+            ).toEqual(bits(values))
+        }
       f.dispose()
     },
   )
@@ -892,6 +919,80 @@ describe('the class', () => {
   )
 })
 
+describe('the two forms', () => {
+  /*
+   * One plane, one material and one blend, landing on the scene target's
+   * samples in pass B and on its resolved rows in the chain form. The
+   * fragment runs once a pixel and the blend is linear in what it lands on,
+   * so resolving before it or after it differs by rounding alone: a sample
+   * and a resolve each round to half a step in pass B, and the blend once
+   * more in the chain. The scene's edges fall inside pixels, so the four
+   * samples of an edge pixel differ and the two orders are two computations.
+   */
+  it.each([
+    ['four samples', DEFAULT_PICTURE],
+    ['the temporal rows', TEMPORAL],
+  ] as const)(
+    'draw one frame: the chain form is pass B’s within a half float’s step in every row (%s)',
+    async (_, picture) => {
+      const f = rig({ picture })
+      serve(f.uniforms.served, 1_000, 0, 3_000)
+      const scene = sceneOf(
+        facing(50_000, [-1.5, 1.5, -1.5, 1.5], colored([0.3, 0.2, 0.1])),
+        facing(200, [-1.5, 0.03, 0.07, 1.5], colored([0.05, 0.6, 0.2])),
+        facing(
+          60_000,
+          [0.11, 1.5, -1.5, -0.04],
+          colored([0.4, 0.4, 0.4], true),
+        ),
+      )
+      await f.frame(scene, false)
+      const alone = await f.readAll()
+      // A cloud 3 km out, a quarter clear, its light a ramp down the image,
+      // some air blocked, the eye moving: every row is written.
+      f.uniforms.camera.translation.value.set(5, 0, 0)
+      await f.write({
+        light: [0.1, 0.2, 0.3, 0.25],
+        air: [-0.02, -0.02, -0.02, 0],
+        viewDepth: 3,
+        ramp: true,
+      })
+      await f.frame(scene, true)
+      const passB = await f.readAll()
+      await f.frame(scene, 'chain')
+      const chain = await f.readAll()
+      f.uniforms.camera.translation.value.set(0, 0, 0)
+      // The control: the cloud is in the frame, over the wall.
+      expect(at(passB.get('output')!, 20, 4)).not.toBe(
+        at(alone.get('output')!, 20, 4),
+      )
+      for (const row of f.layout.attachments) {
+        const a = passB.get(row.name)!
+        const b = chain.get(row.name)!
+        if (row.name === 'meterMask') {
+          // Neither form writes it.
+          expect(bits(b), row.name).toEqual(bits(alone.get(row.name)!))
+          expect(bits(a), row.name).toEqual(bits(alone.get(row.name)!))
+          continue
+        }
+        let worst = 0
+        for (let i = 0; i < a.length; i += 1) {
+          const step =
+            row.storage === 'half'
+              ? HALF * Math.max(Math.abs(a[i]!), Math.abs(b[i]!)) + 1e-7
+              : 1 / 255 + 1e-7
+          worst = Math.max(worst, Math.abs(a[i]! - b[i]!) / step)
+        }
+        expect(
+          worst,
+          `${row.name}, in steps of its storage`,
+        ).toBeLessThanOrEqual(1)
+      }
+      f.dispose()
+    },
+  )
+})
+
 describe('at a render compression', () => {
   /*
    * A body past the near field is drawn smaller than life, by a factor the
@@ -1222,9 +1323,14 @@ describe('the warm-up', () => {
       // The scene's own pipelines, which are not the composite's to warm.
       await f.frame(scene, false)
       await f.composite.warm(fresh.renderer, f.layout, f.camera, scene)
+      // The chain form's pipeline is the over pass's to warm: it is keyed on
+      // the resolved rows' shape, which the scene's layout does not have.
+      await f.over.warm(fresh.renderer)
       const render = fresh.pipelinesBuilt()
       const compute = fresh.computePipelinesBuilt()
       await f.frame(scene, true)
+      expect(fresh.pipelinesBuilt()).toBe(render)
+      await f.frame(scene, 'chain')
       expect(fresh.pipelinesBuilt()).toBe(render)
       f.composite.setMode('residual')
       f.composite.measureResidual(fresh.renderer, f.target)
