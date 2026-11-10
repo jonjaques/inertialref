@@ -90,9 +90,10 @@ none is fixed.
 - **A step's light source is taken at the step's start,** which biases
   first-order light high by `2/(1+e^−τ) − 1` a step on a uniform slab at equal
   sun and view angles. That is 15% only near the eye, where a step holds τ at
-  0.3; past the step's floor τ grows with distance, to +52% at 8 km and +70%
-  or more at the far comparison's 55 km handover. Every radiance figure of
-  phase 0 is against a march with that bias.
+  0.3; past the step's floor τ grows with distance, to +52% at 8 km and about
+  +100% at the far comparison's 55 km handover, where the floor makes a step
+  209 m and τ 7.3. Every radiance figure of phase 0 is against a march with
+  that bias.
 - **The sun's depth misses its 3% in most cases,** two decks under a high sun
   by 0.097 at four taps, and single samples reach a full-scale error of 1.00
   there. The gate scored one place a scenario, four of five at latitude 86 to
@@ -231,9 +232,11 @@ On the Mac mini, at `8cfd71a0`, whose code is the tip's:
   124 px.
 - `pnpm presets:ledger` leaves no diff, and `pnpm sim --self-test` passes 12
   of 12.
-- The `stances` batch at `d03b8420`: thirteen stances, each settled and
-  quiet, with a still of each. The steady frame's passes are the nineteen
-  ADR-0063 lists. The landing step's report records one observation from the
+- The `stances` batch at `d03b8420`: thirteen stances, each quiet, with a
+  still of each, and twelve settled. `earth-orbit` at 1080p reached the 30 s
+  settle with its deposits still building, a row the runner rejects from
+  `f9746fd3`; Earth's still above is that row's. The steady frame's passes
+  are the nineteen ADR-0063 lists. The landing step's report records one observation from the
   stills, that the landed `orbit` draws almost none of the cloud texture
   campaign 1's showed (ADR-0064 has the pair); no record says each still was
   looked at.
@@ -261,10 +264,17 @@ Each can still be overridden:
 - `?clouds=1` works in production builds, as `producer=cpu` does.
 - A second clouded body draws its far march in the composite, not in the
   sphere material. Phase 1 decides whether it moves.
-- The docs routing fix changes ADR-0039's behavior past Cloudflare's
-  2,000-rule cap: an unknown API address under the collapsed package reaches
-  the shell's not-found state with a 200 rather than a 404. The alternative,
-  prerendering every API page on review builds, costs each build about 54 s.
+
+## The docs routing
+
+The weather's exports push a review build's `_redirects` past Cloudflare's
+2,000 static rules. The owner was asked and answered: "cut docs prerender to
+just the top level pages, it takes way to long as is". That redesign lands on
+`main` through its own pull request and is not started. Until it merges and
+is merged back into this stack, this branch keeps its interim fix,
+`fabbdc5c`: past the cap the largest package's API routes collapse into one
+splat, so an unknown address under that package reaches the shell's
+not-found state with a 200 where an exact table answered 404.
 
 ## Defects found and fixed on the way
 
