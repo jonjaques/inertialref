@@ -84,9 +84,10 @@ import { warmSensorPass } from './warmup.ts'
  * sun is unshadowed beyond the taps.
  *
  * **Under the shared cap** (`CloudBudget.sunTexelSteps`, one grid rebuild):
- * the strips, then one stale cascade rebuilt whole, inner first, then one
- * 64-row slice of the time refresh, round-robin over the 24; what does not
- * fit waits a frame and holds `pending`.
+ * the strips, then one stale cascade rebuilt whole, the longest stale first
+ * and the inner of those stale together, then one 64-row slice of the time
+ * refresh, round-robin over the 24; what does not fit waits a frame and
+ * holds `pending`.
  */
 
 /** Meters; texels of 25, 100 and 400 m. */
@@ -240,6 +241,9 @@ export class CloudSunCascades implements CloudResource, CloudSunDepthNodes {
   )
   /** Set when a cascade's texels stop meaning this frame's: cleared when it is drawn whole. */
   readonly #stale: boolean[] = Array.from({ length: CASCADES }, () => true)
+  /** The render each stale cascade went stale on: the longest stale is rebuilt first. */
+  readonly #staleSince: number[] = Array.from({ length: CASCADES }, () => 0)
+  #renders = 0
   #refresh = 0
   #spent = 0
   #rebuilt: number | null = null
@@ -426,6 +430,8 @@ export class CloudSunCascades implements CloudResource, CloudSunDepthNodes {
     this.#allocate()
     const { served } = frame
     const update = served.cascades
+    const now = this.#renders
+    this.#renders += 1
     // A first frame, a cut and a new picture leave nothing worth reading:
     // each cascade reads as clear until it is drawn. A turned sun or a jump
     // leaves it stale but still read as it stands until its turn comes.
@@ -440,11 +446,12 @@ export class CloudSunCascades implements CloudResource, CloudSunDepthNodes {
     ) {
       this.#drawn.fill(null)
       this.#stale.fill(true)
+      this.#staleSince.fill(now)
     }
     this.#scenario = frame.scenario
     this.#address = served.address
     update.stale.forEach((stale, c) => {
-      if (stale || budget.jump) this.#stale[c] = true
+      if (stale || budget.jump) this.#stales(c, now)
     })
     const draws: Draw[] = []
     let left = budget.sunTexelSteps
@@ -452,23 +459,33 @@ export class CloudSunCascades implements CloudResource, CloudSunDepthNodes {
     update.cascades.forEach((cascade, c) => {
       const drawn = this.#drawn[c] ?? null
       if (this.#stale[c] || drawn === null || !sameFrame(drawn, cascade)) {
-        this.#stale[c] = true
+        this.#stales(c, now)
         return
       }
       const rects = update.dirty[c] ?? []
       const cost = rects.reduce((sum, rect) => sum + steps(rect), 0)
       if (cost > left) {
-        this.#stale[c] = true
+        this.#stales(c, now)
         return
       }
       for (const rect of rects) draws.push({ cascade: c, rect })
       drawn.origin = cascade.origin
       left -= cost
     })
-    // One stale cascade whole, inner first.
-    const rebuilt = this.#stale.findIndex(
-      (stale, c) => stale && update.cascades[c] !== undefined,
-    )
+    /*
+     * One stale cascade whole: the longest stale, the inner of those that
+     * went stale together. A warp of a thousand turns Earth's sun 0.07° a
+     * frame, past the 0.05° that re-orients, and a scrub jumps every frame,
+     * so all three are stale again each frame, and the inner one first every
+     * time is the inner one alone forever, the outer two read at the sun
+     * they were last drawn under.
+     */
+    let rebuilt = -1
+    this.#stale.forEach((stale, c) => {
+      if (!stale || update.cascades[c] === undefined) return
+      if (rebuilt < 0 || this.#staleSince[c]! < this.#staleSince[rebuilt]!)
+        rebuilt = c
+    })
     this.#rebuilt = null
     if (rebuilt >= 0 && steps(WHOLE) <= left) {
       this.#drawn[rebuilt] = drawnFrom(update.cascades[rebuilt]!, served.eye)
@@ -501,6 +518,13 @@ export class CloudSunCascades implements CloudResource, CloudSunDepthNodes {
       writeCascade(target, this.#drawn[c] ?? null, served.eye),
     )
     this.#last = frame.frameIndex
+  }
+
+  /** Cascade `c` is stale from render `now`, unless it already is from an earlier one. */
+  #stales(c: number, now: number): void {
+    if (this.#stale[c] === true) return
+    this.#stale[c] = true
+    this.#staleSince[c] = now
   }
 
   #draw(renderer: WebGPURenderer, draws: readonly Draw[], eye: Vec3): void {

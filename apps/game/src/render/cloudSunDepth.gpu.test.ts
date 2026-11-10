@@ -830,6 +830,21 @@ describe('a candidate that moves', () => {
     dispose(test)
   })
 
+  it('rebuilds every cascade in turn while the sun keeps turning, the longest stale first', () => {
+    // A sun that turns 0.08° a frame, as a warp of a thousand does: every
+    // cascade is stale again every frame, and each still gets its turn.
+    const test = rig('cascades', field, scenario)
+    const eye = eyeAt(EYE)
+    test.settle(eye, SUN)
+    const order: (number | null)[] = []
+    for (let k = 1; k <= 6; k += 1) {
+      test.step(eye, sunAt(37.5, 20 + 0.1 * k))
+      order.push((test.depth as CloudSunCascades).rebuilt)
+    }
+    expect(order).toEqual([0, 1, 2, 0, 1, 2])
+    dispose(test)
+  })
+
   it('spends no frame past the cap: a cut, a jump, a turning sun, a flight', () => {
     for (const kind of ['cascades', 'grid'] as const) {
       const test = rig(kind, field, scenario)
