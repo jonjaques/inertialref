@@ -13,7 +13,7 @@
  *     --samples <cast>:<a>..<b>   settled stills at a path's frames a to b
  *     --role <role>       the volume arm's role: candidate, low-anchor, last-accepted
  *     --base <dir|record> the last phase's plates, for the sheets
- *     --cast <id>-<speed>  that cast alone, as weather-g5-inside-fly
+ *     --cast <id>-<speed>[-on|-off]  that cast alone, or one arm of it
  *     --lever <name>=<value>  a cloud lever on every volume arm, repeatable
  *     --no-casts --no-default-samples --baseline-casts
  *     --dry-run           print every take, its preset, role, arm and frames
@@ -251,10 +251,15 @@ export function parseCapture(argv) {
     .map((id) => cutCast(id, cutFrom(id)))
   // `--cast <id>-<speed>` takes those casts alone, retired or not: one an
   // invocation keeps a run's hold on the GPU lock short on a shared machine.
+  // `<id>-<speed>-<on|off>` takes that arm alone: a control and the cast
+  // read against it in one short run and one record.
   const named = (values.cast ?? []).map((key) => {
-    const cast = castByKey(key)
+    const arm = /-(on|off)$/.exec(key)?.[1]
+    const cast = castByKey(
+      arm === undefined ? key : key.slice(0, -arm.length - 1),
+    )
     if (cast === undefined) throw new Error(`--cast ${key} names no cast`)
-    return cast
+    return arm === undefined ? cast : { ...cast, arms: [arm] }
   })
   const casts =
     named.length > 0

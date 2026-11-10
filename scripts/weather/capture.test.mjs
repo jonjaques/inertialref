@@ -238,6 +238,21 @@ describe('the capture’s plan', () => {
     expect(() =>
       parseCapture(['--phase', '1', '--dry-run', '--cast', 'weather-g9']),
     ).toThrow(/names no cast/)
+    // One arm by its name: C4's cast beside the control it is read against.
+    const pair = parseCapture([
+      '--phase',
+      '1',
+      '--dry-run',
+      '--cast',
+      'weather-g6-descent-climate',
+      '--cast',
+      'weather-g6-descent-slow-off',
+    ])
+    expect(
+      planOf(pair)
+        .filter((take) => take.kind === 'cast')
+        .map((take) => `${take.preset} ${take.arm}`),
+    ).toEqual(['weather-g6-descent climate on', 'weather-g6-descent slow off'])
   })
 
   it('plans each take with its preset, role, arm and frames, and the noise floor as ten boots a still', () => {
