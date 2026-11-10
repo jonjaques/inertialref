@@ -185,7 +185,10 @@ describe('the field’s shape', () => {
     expect(fieldLevel(weather, 4800)).toBe(-1)
     expect(cloudFieldAt(weather, clock, sun, up(1500), 50).level).toBe(0)
     expect(cloudFieldAt(weather, clock, sun, up(3000), 50).level).toBe(-1)
-  })
+    // 2.3 to 4.0 s in the root suite on this Mac mini (Apple M6), four
+    // workers; CI's hosted runner is 2.1 to 3.9 times slower, up to 16 s.
+    // Five times that.
+  }, 80_000)
 
   it('answers every point and column with a sample and a depth that are finite', () => {
     const sample = cloudFieldAt(weather, clock, sun, up(1500), 50)
@@ -1064,6 +1067,10 @@ describe('the field from orbit', () => {
         expect(cloudy).toBeLessThan(0.8)
       }
     },
+    // E1, the slowest case: 2.8 s in the root suite on this Mac mini (Apple
+    // M6), four workers; CI's hosted runner is 2.1 to 3.9 times slower, up
+    // to 11 s. Five times that.
+    60_000,
   )
 })
 
@@ -1274,6 +1281,8 @@ describe('a footprint keeps the resolved field’s light (§6.2)', () => {
   ]
   const ZENITHS = [0, Math.PI / 4, (80 * Math.PI) / 180]
 
+  // 3.7 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 14 s. Five times that.
   it('holds a level read at any footprint and dither to the resolved field’s mean, at three angles', () => {
     fc.assert(
       fc.property(
@@ -1321,7 +1330,7 @@ describe('a footprint keeps the resolved field’s light (§6.2)', () => {
       ),
       { numRuns: 24, seed: 0x5eed },
     )
-  })
+  }, 80_000)
 
   it('keeps broken-horizon’s crossing straight down at a quarter, a half and a whole cell, as the port measures it', () => {
     const weather = regimeWeather(world, 'broken-horizon')

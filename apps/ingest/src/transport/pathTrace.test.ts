@@ -426,6 +426,8 @@ describe('a slab against adding-doubling', () => {
 })
 
 describe('every order', () => {
+  // 2.9 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 11 s. Five times that.
   it('balances a conservative slab’s flux: what it reflects and passes is what fell on it', () => {
     // Depth 16, where nothing leaves unscattered and what does has
     // scattered dozens of times: a walk that lost or made light at any
@@ -470,7 +472,7 @@ describe('every order', () => {
     // The estimate's own noise, measured at 1.4% of the flux that fell.
     expect(error).toBeLessThan(0.025 * sun[1])
     expect(tracer.counts.truncated).toBe(0)
-  })
+  }, 60_000)
 
   it('finds one radiance by both estimators where the phase has no peak to tell them apart', () => {
     // Henyey–Greenstein at g = 0.8 in the table's own layout: smooth enough

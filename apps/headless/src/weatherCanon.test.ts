@@ -41,6 +41,8 @@ function earth(session: ReturnType<typeof openSession>) {
 }
 
 describe('the weather is not canonical', () => {
+  // 5.8 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 23 s. Five times that.
   it('leaves the world’s hash as it was when the field is asked between every tick', () => {
     const plain = openSession({ catalog: loadStarCatalog(), workers: null })
     const asked = openSession({ catalog: loadStarCatalog(), workers: null })
@@ -79,7 +81,7 @@ describe('the weather is not canonical', () => {
       plain.dispose()
       asked.dispose()
     }
-  })
+  }, 120_000)
 
   it('reads no simulation, no wall clock and no random source', () => {
     const files = globSync('packages/rendering/src/weather*.ts', {
