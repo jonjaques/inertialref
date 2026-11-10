@@ -14,6 +14,7 @@ import {
   walkBodies,
 } from '@inertialref/universe'
 import { type BodyWeather, regimeWeather } from './weatherClimate.ts'
+import { latticeOrigin, turnBack } from './weatherClock.ts'
 import {
   clearSightShare,
   cloudFieldAt,
@@ -513,6 +514,25 @@ describe('the field’s motion', () => {
           // The unreduced form rounds at its own size, 8 × 10⁷ m of drift
           // at ten years: 1.5 × 10⁻⁸ m a step, a few steps in all.
           expect(Math.min(apart, period - apart)).toBeLessThan(1e-6)
+        }
+      }),
+      { numRuns: 300 },
+    )
+  })
+
+  it('places every level’s noise exactly where the frame does: one lattice for the field and the drawn frame', () => {
+    // The frame writes each level's origin and turn with `latticeOrigin`
+    // and `turnBack`; the field must read the same lattice to the bit, or
+    // the CPU oracle and the drawn noise disagree by a reduction's rounding.
+    const period = BASE_NOISE_PERIOD * 1200
+    fc.assert(
+      fc.property(rate, instant, point, (omega, time, p) => {
+        const clock = fieldClock(weatherOf(omega), time)
+        for (const k of [0, 1, 2] as const) {
+          expect(levelOrigin(clock, k, p, period)).toEqual(
+            latticeOrigin(p, clock.turn[k], clock.drift, period),
+          )
+          expect(levelTurnMatrix(clock, k)).toEqual(turnBack(clock.turn[k]))
         }
       }),
       { numRuns: 300 },

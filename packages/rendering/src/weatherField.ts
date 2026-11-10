@@ -5,7 +5,7 @@ import {
   turnAngle,
   unturn,
 } from './weatherClimate.ts'
-import { reducePoint, reduceSeconds } from './weatherClock.ts'
+import { latticeOrigin, turnBack } from './weatherClock.ts'
 import {
   type LevelProfile,
   levelProfile,
@@ -98,16 +98,14 @@ export function levelLattice(
 
 /**
  * Level k's turn as the row-major matrix `M_k = R_y(−θ_k)`: what the GPU
- * multiplies an eye-relative offset by, in float32.
+ * multiplies an eye-relative offset by, in float32. The frame's own
+ * `turnBack`, so the field and the drawn frame turn a level by one matrix.
  */
 export function levelTurnMatrix(
   clock: FieldClock,
   level: number,
 ): readonly number[] {
-  const angle = clock.turn[level] ?? 0
-  const c = Math.cos(angle)
-  const s = Math.sin(angle)
-  return [c, 0, -s, 0, 1, 0, s, 0, c]
+  return turnBack(clock.turn[level] ?? 0)
 }
 
 /**
@@ -117,12 +115,9 @@ export function levelTurnMatrix(
  * which is `M_k·p + ŷ·D` for any eye, modulo the period, so the eye enters
  * as the point the float32 offset is measured from and nowhere else.
  *
- * The drift is reduced by the period before it is added. Unreduced it is a
- * quarter of a meter a second since J2000, 8 × 10¹¹ m at the far end of
- * `periodIndex`'s range, where a float64 resolves a tenth of a millimeter.
- * This is the arithmetic of the frame's `latticeOrigin` (`weatherClock.ts`,
- * package H) step for step, so the field and the frame place every level's
- * noise alike.
+ * It is the frame's `latticeOrigin`, which reduces the drift by the period
+ * before adding it, so the field and the drawn frame place every level's
+ * noise by one function rather than two copies that agree today.
  */
 export function levelOrigin(
   clock: FieldClock,
@@ -130,15 +125,7 @@ export function levelOrigin(
   point: Vec3,
   period: number,
 ): Vec3 {
-  const turned = unturn(point, clock.turn[level] ?? 0)
-  return reducePoint(
-    {
-      x: turned.x,
-      y: turned.y + reduceSeconds(clock.drift, period),
-      z: turned.z,
-    },
-    period,
-  )
+  return latticeOrigin(point, clock.turn[level] ?? 0, clock.drift, period)
 }
 
 /** The base noise's cells at a body point: its place in the level's frame over eight cells, over the cell. */
