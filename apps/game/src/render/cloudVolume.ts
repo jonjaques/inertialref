@@ -51,7 +51,12 @@ import {
   textureBytes,
   type WeatherScenario,
 } from '@inertialref/rendering'
-import { detailCells, detailReach } from './cloudDensity.ts'
+import {
+  detailCells,
+  detailReach,
+  layerAt,
+  layerRadius,
+} from './cloudDensity.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import type { CloudLevers } from './cloudLevers.ts'
 import { levelOffset, levelPlane, sunMuAt } from './cloudGeometry.ts'
@@ -67,7 +72,6 @@ import {
 import type { CloudNoiseNodes } from './cloudNoise.ts'
 import type {
   CloudBodyUniforms,
-  CloudLayerUniforms,
   CloudLevelUniforms,
   CloudUniforms,
 } from './cloudUniforms.ts'
@@ -170,38 +174,6 @@ export function wrapped(
 ): Node<'float'> | Node<'vec2'> {
   const value = x as Node<'vec2'>
   return value.sub(floor(value.div(n)).mul(n))
-}
-
-/** The layer whose shell holds `height`, by component, and its numbers. */
-function layerAt(
-  layers: CloudLayerUniforms,
-  height: Node<'float'>,
-): {
-  readonly index: Node<'int'>
-  readonly sigma: Node<'float'>
-  readonly erosion: Node<'float'>
-  readonly cell: Node<'float'>
-  readonly radius: Node<'float'>
-} {
-  const components = ['x', 'y', 'z'] as const
-  let index: Node<'int'> = int(-1)
-  let sigma: Node<'float'> = float(0)
-  let erosion: Node<'float'> = float(0)
-  let cell: Node<'float'> = float(1)
-  let radius: Node<'float'> = float(10)
-  // Top layer first, so the lowest that holds the sample is the last select.
-  for (let k = components.length - 1; k >= 0; k -= 1) {
-    const c = components[k]!
-    const inside = height
-      .greaterThanEqual(layers.base[c])
-      .and(height.lessThan(layers.top[c]))
-    index = select(inside, int(k), index)
-    sigma = select(inside, layers.sigma[c], sigma)
-    erosion = select(inside, layers.erosion[c], erosion)
-    cell = select(inside, layers.cell[c], cell)
-    radius = select(inside, layers.radius[c], radius)
-  }
-  return { index, sigma, erosion, cell, radius }
 }
 
 /** TSL's `Loop` over three ranges, which `@types/three` declares up to two of. */
@@ -433,7 +405,7 @@ export class CloudVolume implements CloudResource {
       fraction.assign(read.y)
       layer.assign(shell.index)
       column.assign(held.texel)
-      radius.assign(shell.radius)
+      radius.assign(layerRadius(shell))
     }).Else(() => {
       const field = this.#deps.bake(sample, body)
       sigma.assign(field.sigma)

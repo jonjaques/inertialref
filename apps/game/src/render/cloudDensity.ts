@@ -76,7 +76,7 @@ const NO_RADIUS = 10
 const TINY = 1e-6
 
 /** The layer a sample is in, by altitude, as one-hot weights over the three. */
-interface Layer {
+export interface Layer {
   readonly weights: Node<'vec3'>
   /** 1 inside a layer, 0 outside every one. */
   readonly inside: Node<'float'>
@@ -96,7 +96,10 @@ interface Layer {
  * dot product rather than a branch. An absent layer has no thickness at the
  * union's top and holds nothing.
  */
-function layerAt(layers: CloudLayerUniforms, altitude: Node<'float'>): Layer {
+export function layerAt(
+  layers: CloudLayerUniforms,
+  altitude: Node<'float'>,
+): Layer {
   const h = vec3(altitude)
   const weights = step(layers.base, h).mul(
     vec3(1).sub(step(layers.top, h)),
@@ -116,6 +119,13 @@ function layerAt(layers: CloudLayerUniforms, altitude: Node<'float'>): Layer {
     genus: of(layers.genus),
   }
 }
+
+/**
+ * A sample's droplet radius, µm: its layer's, and the analytic media's
+ * outside every layer, where a filtered read can still hold cloud.
+ */
+export const layerRadius = (layer: Layer): Node<'float'> =>
+  mix(float(NO_RADIUS), layer.radius, layer.inside)
 
 /**
  * The base noise's lattice at a sample, in the layer's base cells (§5.4): no
@@ -226,7 +236,7 @@ function recipe(
     sigma: values.y,
     layer: layer.index,
     column: values.z,
-    radius: mix(float(NO_RADIUS), layer.radius, layer.inside),
+    radius: layerRadius(layer),
   }
 }
 
@@ -364,7 +374,7 @@ export function sweepMedium(deps: FieldMediumDeps): CloudMediumFn {
       sigma: layer.sigma.mul(density).mul(layer.inside),
       layer: layer.index,
       column: float(UNBOUNDED_COLUMN),
-      radius: mix(float(NO_RADIUS), layer.radius, layer.inside),
+      radius: layerRadius(layer),
     }
   }
 }
