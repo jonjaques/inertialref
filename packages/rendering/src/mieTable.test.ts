@@ -533,7 +533,12 @@ describe('the phase atlas', () => {
     const atlas = phaseAtlas(table, iceAggregate(), EARTH_SUN)
     expect([atlas.width, atlas.height]).toEqual([1024, rows])
     expect(atlas.texels).toHaveLength(1024 * 64 * 4)
-    expect([atlas.dropletRows, atlas.iceRows]).toEqual([32, 2])
+    // The committed ice is Baum's 23 diameters, the whole of the block the
+    // atlas holds for it.
+    expect([atlas.dropletRows, atlas.iceRows]).toEqual([
+      32,
+      PHASE_ATLAS.iceRows,
+    ])
     const droplets = convolveDisk(table, EARTH_SUN)
     for (let row = 0; row < table.radii; row += 1) {
       const gain = 1 / (1 - 1 / table.bulk[row]!.extinction)
@@ -543,21 +548,27 @@ describe('the phase atlas', () => {
           Math.fround(gain),
         ])
     }
-    // The committed ice is a stand-in on three angles: isotropic, resampled
-    // onto the droplets' axis and convolved, it is the same half float
-    // everywhere; Q_ext of 2 is a gain of 2.
-    const isotropic = iceAggregate().phase[0]!
-    for (const row of [iceRow, iceRow + 1])
+    // The ice is generated on the droplets' axis, so it is placed as it is,
+    // convolved with the same sun, each row with its own Q_ext's gain.
+    const ice = iceAggregate()
+    const convolved = convolveDisk(ice, EARTH_SUN)
+    for (let row = 0; row < ice.diameters; row += 1) {
+      const gain = Math.fround(1 / (1 - 1 / ice.bulk[row]!.extinction))
       for (let i = 0; i < 1024; i += 1)
-        expect(texel(atlas, row, i)).toEqual([
-          isotropic,
-          isotropic,
-          isotropic,
-          2,
+        expect(texel(atlas, iceRow + row, i)).toEqual([
+          ...convolved.subarray((row * 1024 + i) * 3, (row * 1024 + i) * 3 + 3),
+          gain,
         ])
-    for (let row = iceRow + 2; row < rows; row += 1)
+    }
+    for (let row = iceRow + ice.diameters; row < rows; row += 1)
       for (const i of [0, 512, 1023])
         expect(texel(atlas, row, i)).toEqual([0, 0, 0, 0])
+    // Under Earth's sun the atlas is inside RGBA16F's range: the largest
+    // crystal's forward peak, 188,416 sr⁻¹ in blue before the disk, is
+    // 6,572 after it.
+    expect(atlas.texels.every((v) => Number.isFinite(v) && v < 65504)).toBe(
+      true,
+    )
   })
 
   it('places a full ice table at rows 32 to 54, each row convolved and gained as its own', () => {
