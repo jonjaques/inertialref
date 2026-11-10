@@ -977,8 +977,11 @@ keeps its state, its log and its summary in `.data/clouds/campaign/`.
   the second scene pass's traversal is a CPU cost. Every invocation passes
   `--no-serve` against the preview, and the runner refuses a URL that does not
   answer. The preview names no tree, so a figure is tied to the code by the
-  commit, a clean status and a build no older than the commit; a dirty tree is
-  refused without `--allow-dirty`, which marks every row.
+  commit, a clean status and a build that carries the commit's build id (the
+  `git describe` that `vite.config.ts` defines into the bundle). A file's time
+  cannot say it: a bundle built at one commit is newer than an older commit
+  checked out after it. A dirty tree is refused without `--allow-dirty`, which
+  marks every row.
 - **A quiet machine is checked, not assumed.** The GPU lock keeps other GPU
   jobs off the machine and nothing else. Before and after every run the runner
   reads the one-minute load and scans the process table for `vitest`, `tsc`,
