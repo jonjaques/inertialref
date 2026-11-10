@@ -385,14 +385,15 @@ function placePoints(
     )
     const origin = [NOISE_ORIGIN.x, NOISE_ORIGIN.y, NOISE_ORIGIN.z]
     const drift = [DRIFT.x, DRIFT.y, DRIFT.z]
+    // The lattice is read at origin − drift + offset: the wind carries it.
     const offset = [0, 1, 2].map(
       (a) =>
         ((texel[a]! + 0.5) / 16 + 8 * shift[a]!) * cell -
-        origin[a]! -
+        origin[a]! +
         drift[a]!,
     )
     const detail = offset.map((o, a) => {
-      const at = (8 * 4 * (origin[a]! + lead + drift[a]! + o)) / cell
+      const at = (8 * 4 * (origin[a]! + lead - drift[a]! + o)) / cell
       expect(Math.abs(fract(at) - 0.5)).toBeLessThan(1e-6)
       return ((Math.floor(at) % 32) + 32) % 32
     })
@@ -648,6 +649,51 @@ describe('the three media are §5.6, differing only in their coverage', () => {
     }
     field.dispose()
   })
+
+  it('rides the wind: a point the drift has carried reads the density it had', async () => {
+    /*
+     * The history follows a cloud from X − wind·Δt to X (`cloudHistory.ts`),
+     * and the composite writes that motion. So the field at a point moved
+     * by δ, under a drift δ longer, is the field where the point was. Two
+     * decks' coverage is uniform, so nothing else moves with the point.
+     */
+    const scenario = WEATHER_SCENARIOS['two-decks']
+    const field = bakeField(scenario)
+    const medium = analyticMedium({
+      uniforms: field.uniforms,
+      noise: noise.nodes,
+      profile,
+    })
+    const points = placePoints(scenario, 23)
+    const before = await evaluate(points, medium, field.uniforms)
+    const carried: Vec3 = { x: 400, y: -250, z: 130 }
+    const drift = added(DRIFT, carried)
+    field.uniforms.served.drift.value.set(drift.x, drift.y, drift.z)
+    const after = await evaluate(
+      points.map((point) => ({
+        ...point,
+        offset: added(point.offset, carried),
+      })),
+      medium,
+      field.uniforms,
+    )
+    let worst = 0
+    let clouded = 0
+    points.forEach((point, n) => {
+      const sigma = scenario.layers[point.layer]!.sigma
+      worst = Math.max(
+        worst,
+        Math.abs(after[n * 8 + 1]! - before[n * 8 + 1]!) / sigma,
+      )
+      if (before[n * 8 + 1]! > 0) clouded += 1
+    })
+    // Whole meters carried, so the two lattice coordinates round alike and
+    // the reads measure the same to the bit; with the drift added to the
+    // point they measure 0.78 of σ apart. The bound is the references' own.
+    expect(worst).toBeLessThanOrEqual(1e-3)
+    expect(clouded).toBeGreaterThan(40)
+    field.dispose()
+  })
 })
 
 describe('the sweep', () => {
@@ -711,7 +757,7 @@ describe('the sweep', () => {
         const cells = [point.offset.x, point.offset.z].map(
           (o, a) =>
             (o +
-              [NOISE_ORIGIN.x, NOISE_ORIGIN.z][a]! +
+              [NOISE_ORIGIN.x, NOISE_ORIGIN.z][a]! -
               [DRIFT.x, DRIFT.z][a]!) /
             cell,
         )

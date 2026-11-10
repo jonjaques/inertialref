@@ -117,24 +117,42 @@ function layerAt(layers: CloudLayerUniforms, altitude: Node<'float'>): Layer {
   }
 }
 
-/** The base noise's lattice at a sample, in the layer's base cells (§5.4): no absolute position. */
+/**
+ * The base noise's lattice at a sample, in the layer's base cells (§5.4): no
+ * absolute position. The drift is taken off the point, so a feature of the
+ * lattice stands where the wind has carried it, at +wind·t: the motion the
+ * history reprojects by and the composite writes. Added, the field moves
+ * against the wind and each of them follows it the wrong way.
+ */
 const baseCells = (
   sample: CloudSample,
   body: CloudBodyUniforms,
   layer: Layer,
 ): Node<'vec3'> =>
-  body.noiseOrigin.add(body.drift).add(sample.offset).div(layer.cell)
+  body.noiseOrigin.sub(body.drift).add(sample.offset).div(layer.cell)
 
 /** The detail's lattice, in its own cells: four a base cell, tiling once a base cell. */
-const detailCells = (
+export const detailCells = (
   sample: CloudSample,
   body: CloudBodyUniforms,
-  layer: Layer,
+  cell: Node<'float'>,
 ): Node<'vec3'> =>
   body.detailOrigin
-    .add(body.drift)
+    .sub(body.drift)
     .add(sample.offset)
-    .mul(float(DETAIL_NOISE_PERIOD).div(layer.cell))
+    .mul(float(DETAIL_NOISE_PERIOD).div(cell))
+
+/**
+ * The share of the detail's erosion a footprint keeps, §5.6's fade: all of it
+ * under a sixteenth of a cell, none past a quarter. The volume reads it at
+ * two footprints, its bake's and the sample's, to add back what its bake
+ * faded out.
+ */
+export const detailReach = (
+  footprint: Node<'float'>,
+  cell: Node<'float'>,
+): Node<'float'> =>
+  float(1).sub(smoothstep(cell.div(16), cell.div(4), footprint))
 
 /** Where a layer's coverage comes from, read inside the layer's branch. */
 type CoverageOf = (layer: Layer) => {
@@ -167,11 +185,11 @@ function recipe(
     const base = deps.noise.base(baseCells(sample, body, layer))
     const cell = layer.cell
     const footprint = sample.footprint
-    const reach = float(1).sub(smoothstep(cell.div(16), cell.div(4), footprint))
+    const reach = detailReach(footprint, cell)
     const erosion = select(
       reach.greaterThan(0),
       deps.noise
-        .detail(detailCells(sample, body, layer))
+        .detail(detailCells(sample, body, layer.cell))
         .mul(layer.erosion)
         .mul(reach),
       float(0),
@@ -318,7 +336,7 @@ export function sweepMedium(deps: FieldMediumDeps): CloudMediumFn {
         deps.profile.profile(layer.genus, layer.h01),
         select(
           is('detail'),
-          deps.noise.detail(detailCells(sample, body, layer)),
+          deps.noise.detail(detailCells(sample, body, layer.cell)),
           select(
             is('curl'),
             deps.noise.curl(vec2(cells.x, cells.z).div(8)).x,

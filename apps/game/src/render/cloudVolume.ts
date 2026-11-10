@@ -34,7 +34,6 @@ import {
   saturate,
   screenCoordinate,
   select,
-  smoothstep,
   sqrt,
   storageTexture3D,
   texture3D,
@@ -52,6 +51,7 @@ import {
   textureBytes,
   type WeatherScenario,
 } from '@inertialref/rendering'
+import { detailCells, detailReach } from './cloudDensity.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import type { CloudLevers } from './cloudLevers.ts'
 import { levelOffset, levelPlane, sunMuAt } from './cloudGeometry.ts'
@@ -215,13 +215,6 @@ const loopOver3 = Loop as unknown as (
     readonly k: Node<'int'>
   }) => void,
 ) => void
-
-/** The detail the field keeps at a footprint, §5.6's fade_d. */
-const detailFade = (
-  footprint: Node<'float'>,
-  cell: Node<'float'>,
-): Node<'float'> =>
-  float(1).sub(smoothstep(cell.div(16), cell.div(4), footprint))
 
 /** Where in the volume a point is read: its level, or 3 where none is trusted. */
 interface Held {
@@ -418,16 +411,15 @@ export class CloudVolume implements CloudResource {
       const cached = read.x.mul(read.x).mul(layers.sigmaScale).toVar()
       // The detail the bake's footprint faded out and this one keeps.
       const erosion = max(
-        detailFade(sample.footprint, shell.cell).sub(
-          detailFade(held.texel, shell.cell),
+        detailReach(sample.footprint, shell.cell).sub(
+          detailReach(held.texel, shell.cell),
         ),
         0,
       ).mul(shell.erosion)
       If(erosion.greaterThan(0).and(shell.sigma.greaterThan(0)), () => {
-        const cells = body.detailOrigin
-          .add(sample.offset)
-          .add(body.drift)
-          .mul(float(4).div(shell.cell))
+        // The field's own detail lattice, so what is eaten here is what the
+        // field eats there.
+        const cells = detailCells(sample, body, shell.cell)
         const eaten = this.#deps.detail.detail(cells).mul(erosion)
         const density = saturate(
           cached
