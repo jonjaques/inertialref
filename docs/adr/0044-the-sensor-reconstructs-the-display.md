@@ -1,8 +1,10 @@
 # ADR-0044: The sensor reconstructs a smaller scene at display size
 
-Status: accepted · 19 Sep 2026. Supersedes the logarithmic WebGPU depth
-convention of [ADR-0003](0003-render-coordinates.md) and the anti-aliasing
-renderer remount described in [ADR-0029](0029-the-sensor-spine.md).
+Status: accepted · 19 Sep 2026 · amended 10 Nov 2026: reconstruction reads
+the optics' masked `motion` and the temporal layout adds reactivity alone.
+Supersedes the logarithmic WebGPU depth convention of
+[ADR-0003](0003-render-coordinates.md) and the anti-aliasing renderer remount
+described in [ADR-0029](0029-the-sensor-spine.md).
 
 ## Context
 
@@ -77,7 +79,22 @@ because its separately composed sky and surfaces do not share one physical
 exposure scalar. FSR's own automatic meter is disabled. Reconstruction does
 not introduce another tone curve or change the opaque output guarantee.
 
-The scene's temporal layout adds velocity and an RGBA8 reactive attachment.
+The scene's temporal layout adds an RGBA8 reactive attachment and nothing
+else. Reconstruction's motion is the optics' `motion` attachment, which every
+layout carries: FSR reads `.xy` of an RGBA16F NDC delta, now minus then, which
+is that attachment's format and its first two channels. The one `velocity`
+node writes it, and the temporal path points that node at the kernel's
+unjittered projection. `motion` blends `over` by source alpha and an overlay
+writes alpha zero, so a flare, a plume, a warp streak or an entry trace leaves
+the surface's vector under it; a vector of the overlay's own would be
+reprojected, dilated and locked from for neighbors it never covered, and
+reactivity cannot repair that, because it suppresses history only where the
+overlay drew. The cloud composite writes `motion` by its opacity, so a thin
+cloud hands FSR the cloud's vector and the surface's in the share each holds.
+`apps/game/src/render/upscale.gpu.test.ts` holds it with a 0.5 × 0.5 overlay
+traveling with the eye over a surface 4 m out: after a 0.25 m pan, the bare
+edge and the covered center both read −0.108 of clip space.
+
 Red carries rejection coverage; alpha carries material opacity for independent
 coverage blending. Opaque surfaces replace the hidden background, and
 translucent coverage combines as a union. Max blending retained the galaxy
@@ -89,11 +106,11 @@ additive overlays and instrument geometry write one, including flares, plumes,
 warp effects and traces. The shared `sensorRadiance` wrapper supplies the
 coverage, so an overlay does not need to name a render-target layout.
 
-The existing optical motion/depth attachment remains separate: it preserves the
-surface behind additive overlays and stores reciprocal view distance. FSR's
+The optical contract does not move with it. `motion` stays undilated surface
+motion beside reciprocal view distance, and FSR dilates its own copy. FSR's
 temporal guides carry closest-depth-dilated UV motion and linear depth, which
-do not supply that same contract. Defocus and shutter motion do not reuse them;
-a conversion would need separate compatibility measurements.
+do not supply the optics' contract; defocus and shutter motion do not reuse
+them, and a conversion would need separate compatibility measurements.
 
 ## Alternatives considered
 
@@ -102,6 +119,15 @@ a conversion would need separate compatibility measurements.
   including repeated measurement renders in one task.
 - Feeding logarithmic depth into the perspective reconstruction formula gives
   a monotone value with the wrong distance, corrupting disocclusion tests.
+- A two-channel velocity attachment of reconstruction's own cannot take the
+  overlay mask. Dawn refuses a blend that reads source alpha on a fragment
+  output without one — `srcFactor (BlendFactor::SrcAlpha) … is reading alpha
+but it is missing from fragment output` — and three emits two components
+  for an RG attachment; `render/sceneLayout.test.ts` refuses that row in Node.
+  Masking it without the blend writes zero where the surface's vector belongs,
+  which tells reconstruction the ground is still. Widening it to RGBA16F buys
+  the mask that `motion` already carries, for 4 B a render pixel more of MRT
+  writes.
 - A second scene render for an automatically generated reactive mask spends
   the scene work reconstruction is intended to reduce. An MRT attachment
   carries reactivity in the existing draw.
@@ -149,7 +175,10 @@ was 1600 × 900 CSS pixels at DPR 1 and 2. Each entry below is milliseconds
 per complete presented frame: the median of five 60-frame batches after a
 discarded warm-up batch, with timing instrumentation off. Detailed GPU pass
 timings were sampled separately. All reconstruction settings used standard
-sharpness; spatial rows retained four-sample MSAA.
+sharpness; spatial rows retained four-sample MSAA. The three temporal columns
+were taken on a layout with one attachment more than the current one, a
+two-channel velocity row of 4 B a render pixel, and they stand until both
+presets are measured at both ratios on the layout above.
 
 | Preset        | DPR | Native MSAA | Spatial Quality | Spatial Performance | Temporal Native | Temporal Quality | Temporal Performance |
 | ------------- | --: | ----------: | --------------: | ------------------: | --------------: | ---------------: | -------------------: |
