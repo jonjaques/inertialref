@@ -5,6 +5,8 @@ import {
   halfFloatsFromBase64,
 } from '@inertialref/rendering'
 import { beforeAll, describe, expect, it } from 'vitest'
+// The texels are reached by path: the package's index does not export them.
+import { SLAB_VIEW_SOURCE_TEXELS } from '../../../../packages/rendering/src/slabSourceTexels.generated.ts'
 import { tabulate } from './slabForms.ts'
 import { MIDPOINT_BEARINGS } from './slabSource.ts'
 import {
@@ -176,7 +178,7 @@ describe('the source tables’ cells, recomputed', () => {
     const { nodes, suns, cosines } = SLAB_VIEW_SOURCE
     const slabs = 2 * cosines.length
     const committed = halfFloatsFromBase64(
-      SLAB_VIEW_SOURCE.texels,
+      SLAB_VIEW_SOURCE_TEXELS.texels,
       nodes * nodes * suns * slabs * 4,
       'the view table',
     )

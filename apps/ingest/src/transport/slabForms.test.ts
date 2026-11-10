@@ -413,7 +413,8 @@ describe('a form tabulated from the oracle', () => {
     const form = forms[0]!
     const table: SourceTable = { ...grid, slabs: 1, terms: absolute }
     const depths = [0.5, 2, 5, 12]
-    // The table's own suns, so the read is between depth nodes alone.
+    // The table's own suns, read on them rather than a 64th of a slice in,
+    // so the read is between depth nodes alone.
     const suns = [1, 0.6, 0.2]
     const views = [0.3, 0.7, 1]
     const oracle = solveSlab({
@@ -432,7 +433,9 @@ describe('a form tabulated from the oracle', () => {
             const view = { depth, sunMu, viewMu, azimuth: 0, side }
             const rebuilt =
               firstOrder(depth, sunMu, viewMu, side) / (4 * Math.PI) +
-              higherOrders(table, form.reads(slabRay(view)), view, 0)
+              higherOrders(table, form.reads(slabRay(view)), view, 0, {
+                holdSun: false,
+              })
             // What is left is the read between 24 nodes a depth axis:
             // measured, 0.55% at worst, through the deepest slab.
             expect(Math.abs(rebuilt / oracle[side][cell]! - 1)).toBeLessThan(

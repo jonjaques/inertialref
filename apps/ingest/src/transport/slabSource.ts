@@ -10,6 +10,7 @@ import {
 import {
   sourceAt,
   type SlabSourceGrid,
+  type SlabSourceReadOptions,
   type SlabSourceRay,
   type SlabSourceRead,
   type SlabSourceTable,
@@ -419,6 +420,7 @@ export function higherOrders(
   reads: readonly SlabSourceRead[],
   view: SlabView,
   asymmetry: number,
+  options: SlabSourceReadOptions = {},
 ): number {
   // Panel edges as shares of the depth: 2⁻¹⁴ … ½ from the lit face, and the same from the far one.
   const edges = [0]
@@ -439,6 +441,7 @@ export function higherOrders(
         (1 - asymmetry) * (view.depth - depth),
         view.sunMu,
         texel,
+        options,
       )
       const path = view.side === 'reflected' ? depth : view.depth - depth
       sum +=

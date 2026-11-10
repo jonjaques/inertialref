@@ -1,3 +1,4 @@
+import * as rendering from '@inertialref/rendering'
 import {
   SLAB_REFERENCE,
   SLAB_SOURCE,
@@ -6,6 +7,9 @@ import {
 } from '@inertialref/rendering'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
+// The texels are reached by path: the package's index does not export them.
+import { SLAB_VIEW_SOURCE_TEXELS } from '../../../../packages/rendering/src/slabSourceTexels.generated.ts'
+import { iceTransport } from './slabIce.ts'
 import { quadratureCosines } from './slabForms.ts'
 import { judge, type SlabScale } from './slabJudge.ts'
 import type { SourceTable } from './slabSource.ts'
@@ -44,8 +48,8 @@ describe('the view table', () => {
   const { nodes, suns, cosines, transport } = SLAB_VIEW_SOURCE
   const slabs = 2 * cosines.length
   const texels = halfFloatsFromBase64(
-    SLAB_VIEW_SOURCE.texels,
-    nodes * nodes * suns * slabs * 4,
+    SLAB_VIEW_SOURCE_TEXELS.texels,
+    SLAB_VIEW_SOURCE.texelCount,
     'the view table',
   )
   const table: SourceTable = {
@@ -83,6 +87,18 @@ describe('the view table', () => {
     expect(SLAB_VIEW_SOURCE.stretch).toBe(VIEW_STRETCH)
     // Four half floats a texel: what the table costs on the GPU.
     expect(nodes * nodes * suns * slabs * 8).toBeLessThanOrEqual(1_000_000)
+    expect(SLAB_VIEW_SOURCE.texelCount).toBe(nodes * nodes * suns * slabs * 4)
+    expect(SLAB_VIEW_SOURCE_TEXELS.count).toBe(SLAB_VIEW_SOURCE.texelCount)
+  })
+
+  it('keeps its texels in a module of their own, which the package’s index does not export', () => {
+    // 1,280,000 characters: a module that reads the table's constants
+    // must not carry them, and a page reaches them by import().
+    expect(SLAB_VIEW_SOURCE_TEXELS.texels).toHaveLength(
+      (SLAB_VIEW_SOURCE.texelCount * 2 * 4) / 3,
+    )
+    expect(SLAB_VIEW_SOURCE).not.toHaveProperty('texels')
+    expect(rendering).not.toHaveProperty('SLAB_VIEW_SOURCE_TEXELS')
   })
 
   it('is tabulated at the oracle’s own cosines, the horizon and the normal among them', () => {
@@ -136,13 +152,15 @@ describe('the view table', () => {
     expect(rebuilt.worst).not.toBe('')
   })
 
-  it('is inside the rubric’s 2% in the reflected flux, and over its 5% in a radiance', () => {
-    // The forecast for the rubric's rows 1 and 2, in Node. Row 2 is met.
-    // Row 1 is a declared miss, and this is its size: when the first line
-    // turns, the row is met in Node and the line goes.
+  it('is at the rubric’s 2% in the reflected flux, and over its 5% in a radiance', () => {
+    // The forecast for the rubric's rows 1 and 2, in Node, both declared
+    // misses at these sizes. Row 2 reads 2.00%: the sun's coordinate held
+    // a 64th of a slice inside its slab costs 0.06 point of it under a sun
+    // straight above, where the read takes a 64th of the next sun's slice.
+    // When either line turns, its row is met in Node and the line goes.
     expect(SLAB_VIEW_SOURCE.reconstructionError).toBeGreaterThan(0.05)
     expect(SLAB_VIEW_SOURCE.reconstructionError).toBeLessThan(0.06)
-    expect(SLAB_VIEW_SOURCE.reconstruction.flux).toBeLessThan(0.02)
+    expect(SLAB_VIEW_SOURCE.reconstruction.flux).toBeLessThan(0.0201)
     // The miss is a few radiances in a thousand: 99% are inside 4%.
     const { over, count, ninetyNinth, rms } = SLAB_VIEW_SOURCE.reconstruction
     expect(count).toBe(
@@ -205,6 +223,25 @@ describe('the view table', () => {
     expect(byFormula.flux).toBeGreaterThan(
       SLAB_VIEW_SOURCE.reconstruction.flux + 0.005,
     )
+  })
+})
+
+describe('the ice rows’ transport scale', () => {
+  it('is 1 − χ′₁ of each committed ice row, about twice the droplets’', () => {
+    const rows = iceTransport()
+    const { radii, scales } = SLAB_VIEW_SOURCE.iceTransport
+    expect(rows.map((row) => row.radius)).toEqual(radii)
+    rows.forEach((row, i) => {
+      // Printed to six figures.
+      expect(Math.abs(1 - row.moment - scales[i]!)).toBeLessThan(1e-6)
+      // The clipped peak's mean cosine is near one, so χ′₁ is near the
+      // formula's g′. They are 0.0024 apart at most, at 120 µm: the
+      // table's own first moment is under its bulk g by 0.16% there, the
+      // reduction's limit (package T4's), and χ′₁ carries it over 1 − f_δ.
+      expect(Math.abs(row.moment - row.asymmetry)).toBeLessThan(0.0025)
+    })
+    const droplet = SLAB_VIEW_SOURCE.transport.scales
+    expect(Math.min(...scales)).toBeGreaterThan(1.6 * Math.max(...droplet))
   })
 })
 

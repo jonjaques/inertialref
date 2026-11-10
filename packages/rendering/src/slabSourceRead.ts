@@ -46,10 +46,70 @@ export function depthCoordinate(grid: SlabSourceGrid, depth: number): number {
 }
 
 /**
+ * How far inside its slab's first and last slices the sun's coordinate
+ * s·(suns − 1) is held, in slices. In exact arithmetic s = 0 and s = 1 land
+ * on those slices' centers, but the texture coordinate formed in float32
+ * lands up to 1.5 × 10⁻⁵ of a texel past them in 18 of the 20 slabs, and
+ * the slice past is the next slab's, whose mean term is 42 times the read's
+ * at the median and 90 at worst. A sampler that weighs exactly adds 0.13%
+ * there; one that floors its weight to 1/256 adds 16% at the median, on
+ * every sample under the sun's floor. A 64th moves the sun's cosine by
+ * 0.001 at the two ends and keeps the read a slice's 64th clear.
+ */
+export const SLAB_SUN_HOLD = 1 / 64
+
+/**
+ * Twice the diffusion's extrapolation length, 2 × 0.7104 transport depths:
+ * how far past each face the diffuse light's linear fall reaches zero.
+ */
+export const SLAB_DIFFUSION_REACH = 1.42
+
+/** The read's two conventions, each on unless it is named off. */
+export interface SlabSourceReadOptions {
+  /** Hold the sun's coordinate `SLAB_SUN_HOLD` inside its slab. */
+  readonly holdSun?: boolean
+  /**
+   * Past the last depth node from the lit face, extend the clamped read by
+   * diffusion's law rather than hold it.
+   */
+  readonly extend?: boolean
+}
+
+/**
+ * Deep in a slab the diffuse light falls linearly to the far face, so the
+ * source at depths (t_d, t_b) from the two faces goes as
+ * (t_b + q)/(t_d + t_b + 2q), q the extrapolation length. Past the last
+ * node from the lit face the read is at (depthMax, min(t_b, depthMax)), and
+ * this is what turns it into the source at (t_d, t_b): where t_b is inside
+ * the table it is (depthMax + t_b + 2q)/(t_d + t_b + 2q). Held instead,
+ * transmitted light reads +62% at τ 200 and +217% at τ 400, at 10 µm. The
+ * reflected side, a far face past the last node under a lit face inside
+ * it, is held: its light is made near the lit face.
+ */
+export function diffusionExtension(
+  grid: SlabSourceGrid,
+  top: number,
+  bottom: number,
+): number {
+  if (!(top > grid.depthMax)) return 1
+  const reach = SLAB_DIFFUSION_REACH
+  const far = Math.min(Math.max(0, bottom), grid.depthMax)
+  const factor = (grid.depthMax + far + reach) / (top + far + reach)
+  if (!(bottom > grid.depthMax)) return factor
+  // The far face past the node as well: its own share of the source grows.
+  return (
+    factor *
+    ((bottom + reach / 2) / (grid.depthMax + reach / 2)) *
+    ((top + grid.depthMax + reach) / (top + bottom + reach))
+  )
+}
+
+/**
  * A texel's four channels at transport depths `top` and `bottom` from the
  * two faces under a sun at `sunMu`, in one slab: the trilinear read a linear
- * 3D texture returns, clamped at the depths' ends and at the slab's own
- * first and last slices, so that no read blends two slabs.
+ * 3D texture returns, clamped at the depths' ends and held inside the slab's
+ * own first and last slices, so that no read blends two slabs, then
+ * extended past the last node from the lit face (`diffusionExtension`).
  */
 export function readSource(
   table: SlabSourceTable,
@@ -58,14 +118,16 @@ export function readSource(
   bottom: number,
   sunMu: number,
   out: Float64Array,
+  options: SlabSourceReadOptions = {},
 ): void {
   const last = table.nodes - 1
   const x = depthCoordinate(table, top) * last
   const y = depthCoordinate(table, bottom) * last
+  const hold = options.holdSun === false ? 0 : SLAB_SUN_HOLD
   const z = Math.min(
-    table.suns - 1,
+    table.suns - 1 - hold,
     Math.max(
-      0,
+      hold,
       ((sunMu - table.sunMuMin) / (1 - table.sunMuMin)) * (table.suns - 1),
     ),
   )
@@ -89,6 +151,11 @@ export function readSource(
     for (let channel = 0; channel < 4; channel += 1)
       out[channel] = out[channel]! + weight * table.terms[cell + channel]!
   }
+  if (options.extend === false) return
+  const extension = diffusionExtension(table, top, bottom)
+  if (extension !== 1)
+    for (let channel = 0; channel < 4; channel += 1)
+      out[channel] = out[channel]! * extension
 }
 
 /** One read of the table a step: a slab, and what its four channels are summed by. */
@@ -216,10 +283,11 @@ export function sourceAt(
   bottom: number,
   sunMu: number,
   texel: Float64Array = new Float64Array(4),
+  options: SlabSourceReadOptions = {},
 ): number {
   let source = 0
   for (const read of reads) {
-    readSource(table, read.slab, top, bottom, sunMu, texel)
+    readSource(table, read.slab, top, bottom, sunMu, texel, options)
     for (let channel = 0; channel < 4; channel += 1)
       source += texel[channel]! * read.weights[channel]!
   }

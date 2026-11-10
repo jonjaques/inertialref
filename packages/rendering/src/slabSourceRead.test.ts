@@ -1,14 +1,18 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import {
+  SLAB_DIFFUSION_REACH,
+  SLAB_SUN_HOLD,
   bearingCosine,
   depthCoordinate,
+  diffusionExtension,
   readSource,
   sourceAt,
   stretchedHarmonic,
   viewReads,
   viewSlabs,
   type SlabSourceGrid,
+  type SlabSourceReadOptions,
   type SlabSourceTable,
 } from './slabSourceRead.ts'
 
@@ -17,6 +21,8 @@ import {
  * of their coordinates: what a node on the GPU is held to.
  */
 
+/** The read as a clamped texture returns it, neither convention applied. */
+const OFF: SlabSourceReadOptions = { holdSun: false, extend: false }
 const AXES = { suns: 3, sunMuMin: 0.2, depthScale: 0.02, depthMax: 16 } as const
 const sunNode = (grid: SlabSourceGrid, k: number): number =>
   grid.sunMuMin + (k * (1 - grid.sunMuMin)) / (grid.suns - 1)
@@ -66,7 +72,7 @@ describe('the table’s read', () => {
         fc.double({ min: 0, max: 16, noNaN: true }),
         fc.double({ min: 0.2, max: 1, noNaN: true }),
         (slab, top, bottom, sunMu) => {
-          readSource(table, slab, top, bottom, sunMu, out)
+          readSource(table, slab, top, bottom, sunMu, out, OFF)
           const x = depthCoordinate(grid, top)
           const y = depthCoordinate(grid, bottom)
           expect(out[0]).toBeCloseTo(100 * slab + 1 + 2 * x - y + 3 * sunMu, 9)
@@ -78,16 +84,75 @@ describe('the table’s read', () => {
     )
   })
 
-  it('holds the end’s value past either end, and never blends two slabs', () => {
+  it('with both conventions off, holds the end’s value past either end, and never blends two slabs', () => {
     const out = new Float64Array(4)
     // Under the first sun and over the last: a clamped texture's read, and
     // the first slab's last slice is not blended with the second's first.
-    readSource(table, 0, 99, 0, 0.01, out)
+    readSource(table, 0, 99, 0, 0.01, out, OFF)
     expect(out[0]).toBeCloseTo(1 + 2 + 3 * 0.2, 12)
-    readSource(table, 0, 0, 0, 1.5, out)
+    readSource(table, 0, 0, 0, 1.5, out, OFF)
     expect(out[0]).toBeCloseTo(1 + 3, 12)
-    readSource(table, 1, 0, 0, 0.01, out)
+    readSource(table, 1, 0, 0, 0.01, out, OFF)
     expect(out[0]).toBeCloseTo(100 + 1 + 3 * 0.2, 12)
+  })
+
+  it('holds the sun’s coordinate a 64th of a slice inside its slab, by default', () => {
+    const out = new Float64Array(4)
+    const step = (1 - grid.sunMuMin) / (grid.suns - 1)
+    // At and past either end the read is a 64th of a slice in from it: the
+    // slice past belongs to the next slab, a hundred over.
+    for (const [sunMu, slice] of [
+      [0.01, SLAB_SUN_HOLD],
+      [grid.sunMuMin, SLAB_SUN_HOLD],
+      [1, grid.suns - 1 - SLAB_SUN_HOLD],
+      [1.5, grid.suns - 1 - SLAB_SUN_HOLD],
+    ] as const)
+      for (const slab of [0, 1]) {
+        readSource(table, slab, 0, 0, sunMu, out)
+        expect(out[0]).toBeCloseTo(
+          100 * slab + 1 + 3 * (grid.sunMuMin + slice * step),
+          12,
+        )
+        readSource(table, slab, 0, 0, sunMu, out, { holdSun: false })
+        expect(out[0]).toBeCloseTo(
+          100 * slab + 1 + 3 * Math.min(1, Math.max(grid.sunMuMin, sunMu)),
+          12,
+        )
+      }
+    // Inside the hold nothing moves.
+    readSource(table, 0, 0, 0, 0.6, out)
+    expect(out[0]).toBeCloseTo(1 + 3 * 0.6, 12)
+  })
+
+  it('extends a read past the last node from the lit face by diffusion’s law, by default', () => {
+    const out = new Float64Array(4)
+    const held = new Float64Array(4)
+    const reach = SLAB_DIFFUSION_REACH
+    fc.assert(
+      fc.property(
+        fc.double({ min: 16.001, max: 400, noNaN: true }),
+        fc.double({ min: 0, max: 16, noNaN: true }),
+        (top, bottom) => {
+          readSource(table, 0, top, bottom, 0.6, out)
+          readSource(table, 0, top, bottom, 0.6, held, { extend: false })
+          const factor = (16 + bottom + reach) / (top + bottom + reach)
+          for (let c = 0; c < 4; c += 1)
+            expect(out[c]).toBeCloseTo(held[c]! * factor, 12)
+        },
+      ),
+    )
+    // Continuous at the node, and nothing moves inside the table, nor on
+    // the reflected side of a deep slab: a far face past the node alone.
+    expect(diffusionExtension(grid, 16, 3)).toBe(1)
+    expect(diffusionExtension(grid, 16 + 1e-9, 3)).toBeCloseTo(1, 9)
+    expect(diffusionExtension(grid, 3, 300)).toBe(1)
+    // Both faces past the node: the diffuse light's linear fall, which is
+    // half its level at the middle of any slab deep enough.
+    expect(diffusionExtension(grid, 200, 200)).toBeCloseTo(1, 12)
+    expect(diffusionExtension(grid, 300, 100)).toBeCloseTo(
+      (2 * (100 + reach / 2)) / (400 + reach),
+      12,
+    )
   })
 
   it('sums a ray’s reads, each channel by its own weight', () => {
