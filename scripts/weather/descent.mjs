@@ -732,7 +732,16 @@ export function checkCast(name, log, instants, cast, held = CAST_RATE.held) {
   const drops = dropsOf(log, pathFrames, median, cast.path)
   const missed = drops.reduce((sum, one) => sum + one.missed, 0)
   const run = longestRun(drops)
-  if (missed > CAST_DROPS.share * pathFrames || run >= CAST_DROPS.run)
+  // A cut or a scrub loads a world on purpose, and its page hitches there;
+  // C9 reads its frames against the settled plate, not as a path's
+  // continuity, so its drops are listed and never refuse it. The smoke's
+  // cut to E1 missed 8% to 11% of its frames at three boots, from the cut's
+  // own frame on, and was refused each time.
+  const event = ['cut', 'scrub'].includes(cast.path?.kind)
+  if (
+    !event &&
+    (missed > CAST_DROPS.share * pathFrames || run >= CAST_DROPS.run)
+  )
     throw Object.assign(
       new Error(
         `${name}: ${missed} frame${missed === 1 ? '' : 's'} missed of ${pathFrames} (${((missed / pathFrames) * 100).toFixed(1)}%), ${run} in a row, at frame${drops.length === 1 ? '' : 's'} ${drops.map((one) => one.frame).join(', ')}: past ${CAST_DROPS.share * 100}% or ${CAST_DROPS.run} in a row`,

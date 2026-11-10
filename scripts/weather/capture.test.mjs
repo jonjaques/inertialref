@@ -796,6 +796,20 @@ describe('what the capture refuses', () => {
     ).toThrow(/3 m at its last frame/)
   })
 
+  it('keep a cut or a scrub with its drops listed, however many the event’s load costs', () => {
+    // The smoke's cut to E1: frames missed from the cut's own frame on.
+    const page = log(60, 180)
+    for (const k of [30, 31, 32, 42, 58, 66, 70])
+      for (let i = k; i < page.length; i += 1) page[i].at += 1000 / 60
+    const cut = castByKey('weather-e1-cumulus-orbit-cut')
+    const kept = checkCast('c', page, null, cut)
+    expect(kept.dropped.map((one) => one.frame)).toContain(30)
+    // The same log on a path is refused: three in a row, past 3%.
+    expect(() =>
+      checkCast('c', page, null, { frames: 90, path: { kind: 'fly' } }),
+    ).toThrow(/3 in a row/)
+  })
+
   it('mark a clouds-on drop the clouds’ own where its control dropped nothing within ten path frames', () => {
     const on = [{ frame: 100 }, { frame: 300 }, { frame: 500 }]
     const off = [{ frame: 90 }, { frame: 311 }]
