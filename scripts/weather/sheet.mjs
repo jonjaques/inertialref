@@ -27,11 +27,12 @@
  * plate whose commit, stance, fixtures, processing, levers or role is not
  * on record cannot be matched to anything, so it is laid beside nothing.
  */
-import { execFile } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { parseArgs, promisify } from 'node:util'
+import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { verticalFov } from '../../packages/rendering/src/index.ts'
 import { armsOfCast, castName, CASTS } from './descent.mjs'
@@ -221,6 +222,58 @@ export function sunInFrame(read) {
       antisolar.y >= 0 &&
       antisolar.y <= height,
   }
+}
+
+const TREE = fileURLToPath(new URL('../../', import.meta.url))
+
+/**
+ * Whether a page was built from the tree it is measured against: their
+ * build ids, `git describe --always --dirty --abbrev=8` each, are one. An
+ * equality, not a commit's prefix inside the page's id, so a tree measured
+ * dirty on purpose (the runner's `--allow-dirty`) is served by the same
+ * test as a clean one: an edited tree's id ends `-dirty`, and so does the
+ * id of a build made from it.
+ */
+export function sameBuild(page, tree) {
+  return typeof page === 'string' && typeof tree === 'string' && page === tree
+}
+
+/** The tree's own build id, as `apps/game/vite.config.ts` forms the page's. */
+export function treeBuild(cwd = TREE) {
+  return execFileSync(
+    'git',
+    ['describe', '--always', '--dirty', '--abbrev=8'],
+    {
+      cwd,
+      encoding: 'utf8',
+    },
+  ).trim()
+}
+
+/**
+ * Refuse a take whose page was not built from this tree, or was built from
+ * an edited one.
+ *
+ * The capture photographs a preview it does not start, and `drive.mjs`
+ * cannot hold a production build to a tree: it names none. Without this a
+ * record said one commit for plates of another: the baseline's E1 and E2
+ * were recorded at `ab301957` from a build of `23f173bc`. Every take is held
+ * to the one tree, so a run cannot mix two builds either, and a capture
+ * takes no plate of a tree that is not committed.
+ */
+export function checkBuild(name, read, tree) {
+  const id = read?.build?.id
+  if (typeof id !== 'string')
+    throw new Error(`${name}: the page names no build; refused`)
+  if (!sameBuild(id, tree))
+    throw new Error(
+      `${name}: the page was built as ${id}, and the tree is ${tree}; build the preview from this tree; refused`,
+    )
+  if (tree.endsWith('-dirty'))
+    throw new Error(
+      `${name}: the tree is edited (${tree}); a capture takes plates of a committed tree; refused`,
+    )
+  return id
 }
 
 /** The width a plate is laid at in a sheet, pixels: a quarter of a Retina plate. */

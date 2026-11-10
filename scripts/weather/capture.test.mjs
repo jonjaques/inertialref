@@ -15,8 +15,8 @@ import { wrap } from '../driveScript.mjs'
 import {
   armsOf,
   castArgs,
+  castLevers,
   castReads,
-  checkBuild,
   checkStill,
   cutFrom,
   dataRoot,
@@ -51,6 +51,7 @@ import {
   HELD,
   INSTALL_PATH,
   markCloudsOnly,
+  parseLevers,
   presentationRate,
   SAMPLES,
   seekPath,
@@ -62,6 +63,7 @@ import {
 import {
   baseSource,
   buildSheets,
+  checkBuild,
   checkRecord,
   checkTake,
   keptClip,
@@ -71,10 +73,12 @@ import {
   provenance,
   shotOf,
   RECORD_FIELDS,
+  sameBuild,
   sheetPlate,
   role,
   ROLES,
   sunInFrame,
+  treeBuild,
 } from './sheet.mjs'
 
 /*
@@ -547,21 +551,86 @@ describe('what the capture refuses', () => {
     )
   })
 
-  it('a take whose page was built from another commit, or from an edited tree', () => {
-    const commit = 'abcdef1234567890abcdef1234567890abcdef12'
+  it('a take whose page was built from another tree, or from an edited one', () => {
     const at = (id) => ({ build: { id, tree: null } })
-    expect(checkBuild('e1', at('abcdef12'), commit)).toBe('abcdef12')
-    // A tag's describe, and CI's branch form, both name the commit.
-    expect(checkBuild('e1', at('v1.0-3-gabcdef12'), commit)).toBeTruthy()
-    expect(checkBuild('e1', at('weather-p1-u@abcdef12'), commit)).toBeTruthy()
-    for (const bad of [
-      at('abcdef12-dirty'),
+    expect(checkBuild('e1', at('abcdef12'), 'abcdef12')).toBe('abcdef12')
+    expect(
+      checkBuild('e1', at('v1.0-3-gabcdef12'), 'v1.0-3-gabcdef12'),
+    ).toBeTruthy()
+    for (const [bad, tree] of [
       // The baseline's own case: plates of 23f173bc, recorded at ab301957.
-      at('23f173bc'),
-      {},
-      undefined,
+      [at('23f173bc'), 'ab301957'],
+      // A prefix is not the tree: an equality, not a substring.
+      [at('abcdef12'), 'abcdef123'],
+      // An edited tree, built as it stands: the same id, and still refused.
+      [at('abcdef12-dirty'), 'abcdef12-dirty'],
+      // Built clean, measured on an edited tree.
+      [at('abcdef12'), 'abcdef12-dirty'],
+      [{}, 'abcdef12'],
+      [undefined, 'abcdef12'],
     ])
-      expect(() => checkBuild('e1', bad, commit)).toThrow(/refused/)
+      expect(() => checkBuild('e1', bad, tree), JSON.stringify(bad)).toThrow(
+        /refused/,
+      )
+  })
+
+  it('hold a page to its tree by equality, a dirty tree measured on purpose included', () => {
+    expect(sameBuild('abcdef12', 'abcdef12')).toBe(true)
+    // The runner's --allow-dirty: built from the edited tree it measures.
+    expect(sameBuild('abcdef12-dirty', 'abcdef12-dirty')).toBe(true)
+    expect(sameBuild('abcdef12', 'abcdef12-dirty')).toBe(false)
+    expect(sameBuild('abcdef12-dirty', 'abcdef12')).toBe(false)
+    expect(sameBuild(undefined, 'abcdef12')).toBe(false)
+    // The tree's id has the page's form.
+    expect(treeBuild()).toMatch(/^[\w.@-]+$/)
+  })
+
+  it('read --lever against the engine’s own table before anything boots, and set it on every volume arm', () => {
+    expect(parseLevers([])).toBeNull()
+    expect(parseLevers(['maxSteps=24', 'composite=identity'])).toEqual({
+      maxSteps: 24,
+      composite: 'identity',
+    })
+    expect(() => parseLevers(['handoverBnd=1'])).toThrow(/no lever/)
+    expect(() => parseLevers(['maxSteps=-1'])).toThrow(/refuses/)
+    expect(() => parseLevers(['maxSteps'])).toThrow(/<name>=<value>/)
+    expect(() =>
+      parseCapture(['--phase', '1', '--dry-run', '--lever', 'nope=1']),
+    ).toThrow(/no lever/)
+    const levers = { maxSteps: 24 }
+    const set = setLevers(levers)
+    // A still's volume arm sets them after its first settle; its deck does not.
+    const volume = stillArgs(
+      'weather-e1-cumulus-orbit',
+      'volume',
+      'a.png',
+      levers,
+    )
+    expect(jsOf(volume)[0]).toBe(set)
+    expect(volume.indexOf(set)).toBeLessThan(volume.indexOf(READ))
+    expect(
+      jsOf(stillArgs('weather-e1-cumulus-orbit', 'deck', 'b.png', levers)),
+    ).not.toContain(set)
+    // A cast's clouds-on arm over its own; its control keeps its own alone.
+    const injected = castByKey('weather-g6-descent-injected')
+    expect(castLevers(injected, true, levers)).toEqual({
+      ...injected.levers,
+      maxSteps: 24,
+    })
+    expect(castLevers(CASTS[0], false, levers)).toBeNull()
+    const on = castArgs(CASTS[0], true, null, levers)
+    expect(jsOf(on)[0]).toBe(set)
+    const answer = (values) => ({
+      results: values.map((value) => ({ step: 'js', value })),
+    })
+    expect(
+      castReads(CASTS[0], true, answer(jsOf(on).map((_, i) => i)), levers)
+        .levers,
+    ).toBe(0)
+    // Settled stills set them before the install.
+    expect(
+      jsOf(sampleArgs(CASTS[1], [75], ['a.png'], levers)).slice(0, 2),
+    ).toEqual([set, INSTALL_PATH])
   })
 
   const log = (hz, n = 120) =>

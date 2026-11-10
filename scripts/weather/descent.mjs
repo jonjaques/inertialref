@@ -41,6 +41,10 @@
  */
 
 import { clockStart, CORNERSTONES } from '../../packages/devtools/src/index.ts'
+import {
+  DEFAULT_CLOUD_LEVERS,
+  isCloudLevers,
+} from '../../apps/game/src/render/cloudLevers.ts'
 
 /**
  * @param {{verb: 'start' | 'seek', path: object, frame?: number} | {verb: 'stop'}} command
@@ -243,6 +247,38 @@ export const stopPath = () => `globalThis.irWeatherPath({ verb: 'stop' })`
  */
 export const setLevers = (levers) =>
   `(() => { try { engine.clouds = { ...engine.clouds, ...${JSON.stringify(levers)} }; return 'set' } catch (error) { return 'unavailable: ' + error.message } })()`
+
+/**
+ * `--lever <name>=<value>` as levers over the picture's: the value read as
+ * JSON where it is (a number, a boolean, null), else as a string. Each is
+ * held to the engine's own lever table before anything boots, so a name the
+ * levers do not have, or a value outside a lever's set, stops the run here
+ * rather than recording every cast unavailable in the window.
+ */
+export function parseLevers(texts) {
+  if (texts.length === 0) return null
+  const levers = {}
+  for (const text of texts) {
+    const at = text.indexOf('=')
+    if (at <= 0) throw new Error(`--lever ${text}: want <name>=<value>`)
+    const name = text.slice(0, at)
+    const raw = text.slice(at + 1)
+    let value
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      value = raw
+    }
+    if (!Object.hasOwn(DEFAULT_CLOUD_LEVERS, name))
+      throw new Error(`--lever ${text}: the clouds have no lever ${name}`)
+    levers[name] = value
+  }
+  if (!isCloudLevers({ ...DEFAULT_CLOUD_LEVERS, ...levers }))
+    throw new Error(
+      `--lever: the engine refuses ${JSON.stringify(levers)}; a value is outside its lever's set`,
+    )
+  return levers
+}
 
 /** A descent from `h₀` to 2 m at `rate` of the height a frame: frames to the ground. */
 export const descentFrames = (h0, rate) =>
