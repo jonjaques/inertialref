@@ -13,7 +13,8 @@
  *     --samples <cast>:<a>..<b>   settled stills at a path's frames a to b
  *     --role <role>       the volume arm's role: candidate, low-anchor, last-accepted
  *     --base <dir|record> the last phase's plates, for the sheets
- *     --no-casts --no-samples --baseline-casts
+ *     --cast <id>-<speed>  that cast alone, as weather-g5-inside-fly
+ *     --no-casts --no-default-samples --baseline-casts
  *     --dry-run           print every take, its preset, role, arm and frames
  *
  * The rig is the rubric's: one session of `scripts/drive.mjs` at 1440 × 900
@@ -190,6 +191,7 @@ export function parseCapture(argv) {
       role: { type: 'string', default: 'candidate' },
       base: { type: 'string' },
       casts: { type: 'boolean', default: true },
+      cast: { type: 'string', multiple: true },
       'baseline-casts': { type: 'boolean', default: false },
       'default-samples': { type: 'boolean', default: true },
       'dry-run': { type: 'boolean', default: false },
@@ -230,13 +232,23 @@ export function parseCapture(argv) {
   const cuts = (values.cut ?? [])
     .map((tag) => STILLS.find((id) => tagOf(id) === tag))
     .map((id) => cutCast(id, cutFrom(id)))
-  const casts = values.casts
-    ? [...CASTS, ...HELD].filter(
-        (cast) =>
-          wanted(cast.id) &&
-          (cast.checks.length > 0 || values['baseline-casts']),
-      )
-    : []
+  // `--cast <id>-<speed>` takes those casts alone, retired or not: one an
+  // invocation keeps a run's hold on the GPU lock short on a shared machine.
+  const named = (values.cast ?? []).map((key) => {
+    const cast = castByKey(key)
+    if (cast === undefined) throw new Error(`--cast ${key} names no cast`)
+    return cast
+  })
+  const casts =
+    named.length > 0
+      ? named
+      : values.casts
+        ? [...CASTS, ...HELD].filter(
+            (cast) =>
+              wanted(cast.id) &&
+              (cast.checks.length > 0 || values['baseline-casts']),
+          )
+        : []
   for (const cut of cuts)
     if (!casts.some((one) => castName(one, true) === castName(cut, true)))
       casts.push(cut)

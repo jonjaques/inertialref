@@ -212,6 +212,30 @@ describe('the capture’s plan', () => {
       expect(() => parseCapture(argv), argv.join(' ')).toThrow()
   })
 
+  it('takes one named cast alone, so an invocation holds the lock for one', () => {
+    const one = parseCapture([
+      '--phase',
+      '1',
+      '--dry-run',
+      '--only',
+      'g5',
+      '--cast',
+      'weather-g5-inside-fly',
+      '--no-default-samples',
+    ])
+    expect(one.casts.map((cast) => castName(cast, true))).toEqual([
+      'weather-g5-inside-fly-on',
+    ])
+    expect(
+      planOf(one)
+        .filter((take) => take.kind === 'cast')
+        .map((take) => take.arm),
+    ).toEqual(['on', 'off'])
+    expect(() =>
+      parseCapture(['--phase', '1', '--dry-run', '--cast', 'weather-g9']),
+    ).toThrow(/names no cast/)
+  })
+
   it('plans each take with its preset, role, arm and frames, and the noise floor as ten boots a still', () => {
     const plan = planOf(parseCapture(['--phase', '1', '--dry-run']))
     expect(plan.filter((one) => one.kind === 'still')).toHaveLength(12)
