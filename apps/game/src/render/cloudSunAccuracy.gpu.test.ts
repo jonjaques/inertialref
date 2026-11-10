@@ -45,6 +45,7 @@ import {
 } from './cloudSystemRig.ts'
 import landed from './cloudSunAccuracy.landed.json' with { type: 'json' }
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
+import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 
 /*
  * The sun grid's optical depth against a march through the field (§5.5):
@@ -63,11 +64,13 @@ import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
  * holds cloud at, and whose sun ray clears the ground, is scored: the
  * light's T_cloud, its taps and then the grid's optical depth beyond them,
  * against exp(−∫σ·f ds) by 256 steps of the same field medium through each
- * stretch of the ray inside the union, f the medium's fraction, as the grid
- * stores σ·f. A sun over the horizon has one stretch, to the union's top. A
- * sun under it has two where the ray leaves through the base: to that exit,
- * and from where the ray comes back up through the base to the top. Every
- * sample is resolved, its footprint 0.
+ * stretch of the ray inside a level, f the medium's fraction, as the grid
+ * stores σ·f. A ray has up to two stretches a level: down to the level's
+ * base, or through the level whole where it never reaches that base, and up
+ * from the base to the level's top. Under the horizon a ray leaves a deck
+ * through its base and comes back up through it 300 km sunward, and 256
+ * steps over that whole chord would put a dozen in the deck. Every sample is
+ * resolved, its footprint 0.
  *
  * **The suns** are phase 0's two, 37.5° and 5°, and the dusk cornerstone's,
  * 1.5° under the horizon. `dusk-altocumulus`, the cornerstone's own regime,
@@ -99,6 +102,7 @@ import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
 const OUT = '.data/clouds/sunAccuracy.json'
+const REBUILD_OUT = '.data/clouds/sunRebuild.json'
 /** The adapter the landed figures were taken on is a workstation's: it offers timestamps. */
 const WORKSTATION = await adapterOffers('timestamp-query')
 /** A figure may pass its landed value by a tenth (phase 1 design §6.3). */
@@ -143,6 +147,16 @@ const ALWAYS: typeof POPULATION = [
   { scenario: 'two-decks', suns: [37.5] },
 ]
 
+/** The rebuild the instrument times: its field, the runs it takes the median of, and the frames it follows. */
+const REBUILD = {
+  scenario: 'two-decks',
+  sunDegrees: 37.5,
+  runs: 5,
+  frames: 56,
+  steady: 60,
+  steadyRuns: 4,
+} as const
+
 const TAPS = [2, 4] as const
 const REFERENCE_STEPS = 256
 const PLACES = 5
@@ -166,8 +180,8 @@ const TIME = 50_000
  * level a frame.
  */
 const MAPS_FRAMES = 64
-/** Frames a settle rests with nothing owed: a refresh of the volume and of the grid from it, where they refresh at rest. */
-const REST_FRAMES = 24
+/** Frames a settle rests with nothing owed. */
+const REST_FRAMES = 8
 const SETTLE_MAX = 400
 
 const R = RIG_EARTH_RADIUS
@@ -347,21 +361,18 @@ function score(miss: readonly number[]): Scored {
   }
 }
 
-/** Every case of one regime under one sun, as one population: the gate's row. */
-function pooled(cases: readonly Case[], taps: number): Scored {
-  const n = cases.reduce((s, one) => s + one.grid[taps]!.samples, 0)
+/** Several places' figures as one population: the gate's row. */
+function pooled(parts: readonly Scored[]): Scored {
+  const n = parts.reduce((s, one) => s + one.samples, 0)
   const sum = (of: (scored: Scored) => number): number =>
-    cases.reduce(
-      (s, one) => s + of(one.grid[taps]!) * one.grid[taps]!.samples,
-      0,
-    )
+    parts.reduce((s, one) => s + of(one) * one.samples, 0)
   return {
     samples: n,
     rms: Math.sqrt(sum((scored) => scored.rms ** 2) / Math.max(n, 1)),
     bias: sum((scored) => scored.bias) / Math.max(n, 1),
-    worst: Math.max(0, ...cases.map((one) => one.grid[taps]!.worst)),
+    worst: Math.max(0, ...parts.map((one) => one.worst)),
     // A percentile does not pool from its parts: the largest of the places'.
-    p99: Math.max(0, ...cases.map((one) => one.grid[taps]!.p99)),
+    p99: Math.max(0, ...parts.map((one) => one.p99)),
   }
 }
 
@@ -409,13 +420,81 @@ function hold(found: Case): void {
   }
 }
 
+/**
+ * Frames of the system's own field, built as the sensor builds them, and a
+ * settle that leaves a case's field its own.
+ */
+function drive(): {
+  frameAt(
+    stance: RigStance,
+    levers: CloudLevers,
+    rebuild?: boolean,
+    seconds?: number,
+  ): CloudFrame
+  settle(stance: RigStance, levers: CloudLevers, maps?: boolean): void
+} {
+  let previous: CloudFrame | null = null
+  /** Seconds the field's clock has run since the rig's instant. */
+  let clock = 0
+  const frameAt = (
+    stance: RigStance,
+    levers: CloudLevers,
+    rebuild = false,
+    seconds = 0,
+  ): CloudFrame => {
+    clock += seconds
+    const inputs = rigFrameInputs(stance, levers, CSS)
+    const frame = cloudFrame(
+      { ...inputs, renderTime: inputs.renderTime + clock },
+      previous,
+    )
+    if (frame === null) throw new Error('no frame: nothing served')
+    previous = frame
+    // The system's own budget: eight slices of the volume, and the grid whole.
+    const budget: CloudBudget = {
+      slices: 8,
+      tiles: 1,
+      jump: frame.jump || rebuild,
+      sunSlices: SUN_GRID_SIZE[2],
+    }
+    field.write(frame)
+    field.render(gpu.renderer, frame, budget)
+    return frame
+  }
+  /*
+   * A case's field is its own, whatever case ran before it. The maps owe
+   * nothing from the frame their levels are redrawn, while those levels
+   * still hold texels drawn from cube faces of the last weather or the
+   * last sun, and a slice of the volume baked from them holds that field
+   * until it is next redrawn. So the maps are given the frames they take
+   * to hold this case whole, and then every cache is rebuilt from them.
+   */
+  const settle = (
+    stance: RigStance,
+    levers: CloudLevers,
+    maps = true,
+  ): void => {
+    if (maps) {
+      for (let n = 0; n < MAPS_FRAMES; n += 1) frameAt(stance, levers)
+      frameAt(stance, levers, true)
+    }
+    let rest = 0
+    for (let n = 0; n < SETTLE_MAX; n += 1) {
+      frameAt(stance, levers)
+      rest = field.bakes.some((bake) => bake.pending) ? 0 : rest + 1
+      if (rest >= REST_FRAMES) return
+    }
+    throw new Error(`the bakes still owe work after ${SETTLE_MAX} frames`)
+  }
+  return { frameAt, settle }
+}
+
 describe('the sun’s optical depth against the field', () => {
   /** Score the grid at both tap counts on the real field: each regime at its places, under each of its suns. */
   async function measure(
     population: typeof POPULATION,
     places: number,
   ): Promise<Case[]> {
-    const renderer = gpu.renderer
     const offsets = new StorageBufferAttribute(new Float32Array(POINTS * 4), 4)
     const out = new StorageBufferAttribute(new Float32Array(POINTS * 2), 1)
     const count = uniform(0, 'uint')
@@ -445,86 +524,56 @@ describe('the sun’s optical depth against the field', () => {
       })().compute(POINTS)
     }
     // exp(−∫σ·f ds) by 256 steps of the field through each stretch of the
-    // sun's ray inside the union.
+    // sun's ray inside a level: on its way down to the level's base, or
+    // through the level whole, and on its way up from that base.
     const reference = pointKernel((sample) => {
-      const { sun } = body
-      const top = shellCrossingFrom(
-        body,
-        sample.offset,
-        sun,
-        body.boundariesHigh.y,
-      )
-      const base = shellCrossingFrom(
-        body,
-        sample.offset,
-        sun,
-        body.boundaries.x,
-      )
-      const end = select(top.hit, max(top.far, 0), float(0)).toVar()
-      // Heading down to a base it has yet to cross: out through it, and back.
-      const dips = sample.sunMu
-        .lessThan(0)
-        .and(base.hit)
-        .and(base.far.greaterThan(0))
-      const out = select(dips, max(base.near, 0), end).toVar()
-      const back = select(dips, base.far, end).toVar()
+      const { sun, layers } = body
       const tau = float(0).toVar()
-      const stretch = (from: Node<'float'>, to: Node<'float'>): void => {
-        const step = max(to.sub(from), 0).div(REFERENCE_STEPS).toVar()
+      const stretch = (from: Node<'float'>, span: Node<'float'>): void => {
+        const start = from.toVar()
+        const step = span.div(REFERENCE_STEPS).toVar()
         Loop(REFERENCE_STEPS, ({ i }: { i: Node<'int'> }) => {
           const point = sample.offset.add(
-            sun.mul(from.add(float(i).add(0.5).mul(step))),
+            sun.mul(start.add(float(i).add(0.5).mul(step))),
           )
           const medium = field.medium(sampleOf(point), body)
           tau.addAssign(medium.sigma.mul(medium.fraction).mul(step))
         })
       }
-      stretch(float(0), out)
-      stretch(back, end)
+      const levels = [
+        [layers.base.x, layers.top.x],
+        [layers.base.y, layers.top.y],
+        [layers.base.z, layers.top.z],
+      ] as const
+      for (const [low, high] of levels) {
+        const top = shellCrossingFrom(body, sample.offset, sun, high)
+        const base = shellCrossingFrom(body, sample.offset, sun, low)
+        const reached = top.hit.and(high.greaterThan(low))
+        const enter = max(top.near, 0)
+        const leave = max(top.far, 0)
+        // The base is ahead of the ray, or all round it.
+        const ahead = base.hit.and(base.far.greaterThan(0))
+        const back = max(base.far, 0)
+        stretch(
+          enter,
+          select(
+            reached,
+            max(select(ahead, max(base.near, 0), leave).sub(enter), 0),
+            float(0),
+          ),
+        )
+        stretch(
+          back,
+          select(reached.and(ahead), max(leave.sub(back), 0), float(0)),
+        )
+      }
       return exp(tau.negate())
     })
     const grid = pointKernel(
       (sample) => field.sun(sample, field.medium(sample, body), body).cloud,
     )
 
-    let previous: CloudFrame | null = null
-    const frameAt = (
-      stance: RigStance,
-      levers: CloudLevers,
-      rebuild = false,
-    ): CloudFrame => {
-      const frame = cloudFrame(rigFrameInputs(stance, levers, CSS), previous)
-      if (frame === null) throw new Error('no frame: nothing served')
-      previous = frame
-      const budget: CloudBudget = {
-        slices: 8,
-        tiles: 1,
-        jump: frame.jump || rebuild,
-        sunSlices: SUN_GRID_SIZE[2],
-      }
-      field.write(frame)
-      field.render(renderer, frame, budget)
-      return frame
-    }
-    /*
-     * A case's field is its own, whatever case ran before it. The maps owe
-     * nothing from the frame their levels are redrawn, while those levels
-     * still hold texels drawn from cube faces of the last weather or the
-     * last sun, and a slice of the volume baked from them holds that field
-     * until it is next redrawn. So the maps are given the frames they take
-     * to hold this case whole, and then every cache is rebuilt from them.
-     */
-    const settle = (stance: RigStance, levers: CloudLevers): void => {
-      for (let n = 0; n < MAPS_FRAMES; n += 1) frameAt(stance, levers)
-      frameAt(stance, levers, true)
-      let rest = 0
-      for (let n = 0; n < SETTLE_MAX; n += 1) {
-        frameAt(stance, levers)
-        rest = field.bakes.some((bake) => bake.pending) ? 0 : rest + 1
-        if (rest >= REST_FRAMES) return
-      }
-      throw new Error(`the bakes still owe work after ${SETTLE_MAX} frames`)
-    }
+    const { frameAt, settle } = drive()
     const read = async (kernel: ComputeNode): Promise<Float32Array> => {
       await gpu.compute(kernel)
       return new Float32Array(await gpu.readBuffer(out))
@@ -569,12 +618,16 @@ describe('the sun’s optical depth against the field', () => {
           )
           const all: Record<string, Scored> = {}
           const rings: Record<string, Scored[]> = {}
-          for (const taps of TAPS) {
+          const scoreAt = async (
+            taps: (typeof TAPS)[number],
+          ): Promise<(k: number) => number> => {
             // The taps are a uniform: one frame writes it, and builds nothing.
             frameAt(stance, levers(taps))
             const got = await read(grid)
-            const miss = (k: number): number =>
-              got[2 * k + 1]! - truth[2 * k + 1]!
+            return (k) => got[2 * k + 1]! - truth[2 * k + 1]!
+          }
+          for (const taps of TAPS) {
+            const miss = await scoreAt(taps)
             all[taps] = score(lit.map(miss))
             rings[taps] = RINGS.map((edge, ring) => {
               const from = ring === 0 ? 0 : RINGS[ring - 1]!
@@ -634,7 +687,7 @@ describe('the sun’s optical depth against the field', () => {
         OUT,
         `${JSON.stringify(
           {
-            note: 'cloudSunAccuracy.gpu.test.ts: T_cloud through the sun grid against a 256-step march of the field through each stretch of the sun’s ray inside the union, at in-cloud samples the planet does not shadow (phase 1 design §5.5)',
+            note: 'cloudSunAccuracy.gpu.test.ts: T_cloud through the sun grid against a 256-step march of the field through each stretch of the sun’s ray inside a level, at in-cloud samples the planet does not shadow (phase 1 design §5.5)',
             body: 'Earth',
             eyeMeters: EYE,
             population: {
@@ -654,13 +707,16 @@ describe('the sun’s optical depth against the field', () => {
                   (one) =>
                     one.scenario === scenario && one.sunDegrees === sunDegrees,
                 )
-                return {
-                  scenario,
-                  sunDegrees,
-                  grid: Object.fromEntries(
-                    TAPS.map((taps) => [taps, pooled(cases, taps)]),
-                  ),
-                }
+                const by = (
+                  of: (one: Case) => Readonly<Record<string, Scored>>,
+                ): Record<string, Scored> =>
+                  Object.fromEntries(
+                    TAPS.map((taps) => [
+                      taps,
+                      pooled(cases.map((one) => of(one)[taps]!)),
+                    ]),
+                  )
+                return { scenario, sunDegrees, grid: by((one) => one.grid) }
               }),
             ),
             cases: results,
@@ -673,5 +729,129 @@ describe('the sun’s optical depth against the field', () => {
       for (const found of results) hold(found)
     },
     1_800_000,
+  )
+
+  /*
+   * What a change of the field costs the sun's depth, frame by frame, and
+   * what a running clock costs it: GPU time by pass on the timeline, the
+   * median of five rebuilds a frame, on two decks under the high sun. A
+   * rebuild is every cache starting over at once, as a jump of the field's
+   * time starts them; the frames here are the caches' own, with no trace
+   * and no scene, so a figure is a pass's and not a frame's.
+   */
+  it.skipIf(!MEASURE || !WORKSTATION)(
+    'times a rebuild frame by frame and a clock running at 1×, and writes both',
+    async () => {
+      const { frameAt, settle } = drive()
+      const [place] = placesOf(REBUILD.scenario)
+      const stance: RigStance = {
+        eye: EYE,
+        looking: LOOKING_UP,
+        turn: turnOnto(place!),
+        air: true,
+        sun: {
+          x: 0,
+          y: Math.sin(radians(REBUILD.sunDegrees)),
+          z: -Math.cos(radians(REBUILD.sunDegrees)),
+        },
+      }
+      const levers: CloudLevers = {
+        ...DEFAULT_CLOUD_LEVERS,
+        on: true,
+        weather: REBUILD.scenario,
+      }
+      settle(stance, levers)
+      const stop = installPassTimeline(gpu.renderer)
+      try {
+        const timeline = passTimelineOf(gpu.renderer)
+        expect(timeline).not.toBeNull()
+        type Passes = Record<string, { count: number; ms: number }>
+        const timed = async (
+          draw: () => void,
+          frames: number,
+        ): Promise<Passes> => {
+          const result = await timeline!.measure(draw, frames)
+          expect(result.dropped).toBe(0)
+          return Object.fromEntries(
+            result.passes.map(({ label, count, ms }) => [label, { count, ms }]),
+          )
+        }
+        const runs: { passes: Passes; weight: number }[][] = []
+        for (let run = 0; run < REBUILD.runs; run += 1) {
+          settle(stance, levers, false)
+          const frames: { passes: Passes; weight: number }[] = []
+          for (let n = 0; n < REBUILD.frames; n += 1) {
+            const passes = await timed(
+              () => frameAt(stance, levers, n === 0),
+              1,
+            )
+            frames.push({
+              passes,
+              weight: field.uniforms.trace.sunWeight.value,
+            })
+          }
+          runs.push(frames)
+        }
+        const median = (values: readonly number[]): number =>
+          [...values].sort((a, b) => a - b)[values.length >> 1] ?? 0
+        const labels = [
+          ...new Set(
+            runs.flatMap((frames) =>
+              frames.flatMap((one) => Object.keys(one.passes)),
+            ),
+          ),
+        ]
+        const frames = Array.from({ length: REBUILD.frames }, (_, n) => ({
+          frame: n,
+          weight: runs[0]![n]!.weight,
+          passes: Object.fromEntries(
+            labels.map((label) => [
+              label,
+              {
+                count: median(
+                  runs.map((one) => one[n]!.passes[label]?.count ?? 0),
+                ),
+                ms: median(runs.map((one) => one[n]!.passes[label]?.ms ?? 0)),
+              },
+            ]),
+          ),
+        }))
+        const whole = frames.findIndex((one) => one.weight === 1)
+        settle(stance, levers, false)
+        // In runs the timeline's query set holds: 2,048 passes a run.
+        const steady: Passes = {}
+        for (let run = 0; run < REBUILD.steadyRuns; run += 1) {
+          const passes = await timed(
+            () => frameAt(stance, levers, false, 1 / 60),
+            REBUILD.steady,
+          )
+          for (const [label, { count, ms }] of Object.entries(passes)) {
+            const sum = (steady[label] ??= { count: 0, ms: 0 })
+            sum.count += count / REBUILD.steadyRuns
+            sum.ms += ms / REBUILD.steadyRuns
+          }
+        }
+        mkdirSync('.data/clouds', { recursive: true })
+        writeFileSync(
+          REBUILD_OUT,
+          `${JSON.stringify(
+            {
+              note: 'cloudSunAccuracy.gpu.test.ts: the caches’ passes after every cache starts over, the median of the runs a frame, and with the clock running at 1× and 60 Hz; GPU ms by pass on the timeline, with no trace and no scene drawn',
+              ...REBUILD,
+              framesToWhole: whole < 0 ? null : whole + 1,
+              frames,
+              steady,
+            },
+            null,
+            2,
+          )}\n`,
+        )
+        // The grid is whole on the frame that starts it over.
+        expect(whole).toBe(0)
+      } finally {
+        stop()
+      }
+    },
+    600_000,
   )
 })
