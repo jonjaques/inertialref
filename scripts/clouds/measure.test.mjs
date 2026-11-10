@@ -21,6 +21,7 @@ import {
   batchRuns,
   boots,
   busy,
+  carries,
   closeOurs,
   dryRun,
   freshProfile,
@@ -1131,15 +1132,37 @@ describe('the rigs and their profiles', () => {
 
   it('ties a figure to a commit, and the preview to a build no older than it', () => {
     const id = { clean: true, committedAt: 2_000, builtAt: 3_000 }
-    expect(identityRefusal(id)).toBeNull()
-    expect(identityRefusal({ ...id, clean: false })).toMatch(/uncommitted/)
+    const ours = { bundled: true }
+    expect(identityRefusal(id, ours)).toBeNull()
+    expect(identityRefusal({ ...id, clean: false }, ours)).toMatch(
+      /uncommitted/,
+    )
     expect(
-      identityRefusal({ ...id, clean: false }, { allowDirty: true }),
+      identityRefusal({ ...id, clean: false }, { ...ours, allowDirty: true }),
     ).toBeNull()
-    expect(identityRefusal({ ...id, builtAt: null })).toMatch(/does not exist/)
-    expect(identityRefusal({ ...id, builtAt: 1_000 })).toMatch(
+    expect(identityRefusal({ ...id, builtAt: null }, ours)).toMatch(
+      /does not exist/,
+    )
+    expect(identityRefusal({ ...id, builtAt: 1_000 }, ours)).toMatch(
       /older than HEAD/,
     )
+  })
+
+  it('takes a bundle newer than the commit for HEAD’s only when it carries HEAD’s build id', () => {
+    // Built at one commit, then an older one checked out: newer, and not its.
+    const id = { clean: true, committedAt: 2_000, builtAt: 3_000 }
+    expect(identityRefusal(id, { bundled: false })).toMatch(
+      /not the build of HEAD/,
+    )
+    expect(identityRefusal(id)).toMatch(/not the build of HEAD/)
+    // The id stands whole between quotes, as the minifier writes a define.
+    expect(carries('var An=`aa971ecc`;', 'aa971ecc')).toBe(true)
+    expect(carries('An="aa971ecc",', 'aa971ecc')).toBe(true)
+    expect(carries("An='v1.2-3-gaa971ecc'", 'v1.2-3-gaa971ecc')).toBe(true)
+    expect(carries('An=`aa971ecc-dirty`', 'aa971ecc')).toBe(false)
+    expect(carries('An=`aa971ecc`', 'aa971ecc-dirty')).toBe(false)
+    expect(carries('An=`7126b030`', 'aa971ecc')).toBe(false)
+    expect(carries('An=`xaa971ecc`', 'aa971ecc')).toBe(false)
   })
 })
 

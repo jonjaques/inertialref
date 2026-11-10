@@ -19,7 +19,8 @@
  * the second scene pass's traversal is a CPU cost, so every invocation passes
  * `--no-serve` against the preview, and the runner refuses a URL that does not
  * answer. The preview names no tree, so the figures are tied to the code by
- * the commit, a clean status, and a build no older than the commit.
+ * the commit, a clean status, and a bundle no older than the commit that
+ * carries its build id.
  *
  * A quiet machine is checked, not assumed: the GPU lock keeps other GPU jobs
  * off it and nothing else, and a Stop-hook gate beside a run takes a worker
@@ -53,6 +54,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -576,11 +578,36 @@ const answers = (url) =>
   )
 const chromeOn = (port) => answers(`http://127.0.0.1:${port}/json/version`)
 
-/** The commit the figures are of, and whether the preview can be serving it.
- *  git throws rather than answer empty: an empty status reads as clean. */
+/** git in the checkout. It throws rather than answer empty: an empty status
+ *  reads as clean. */
+export const git = (...args) =>
+  execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8' }).trim()
+
+/** Whether a script holds `id` whole, between the quotes a minifier writes a
+ *  define's string in: `aa971ecc` is not `aa971ecc-dirty`'s. */
+export const carries = (text, id) =>
+  new RegExp(`[\`"']${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\`"']`).test(
+    text,
+  )
+
+/**
+ * Whether apps/game/dist is the build of the tree as it stands: one of its
+ * scripts carries the id `vite.config.ts`'s `buildId` gives this tree, from
+ * the same `git describe`. A file's time cannot say it: built at one commit,
+ * with an older one checked out minutes later, the bundle is newer than HEAD
+ * and is not HEAD's.
+ */
+export function bundled() {
+  const assets = path.join(ROOT, 'apps/game/dist/assets')
+  if (!existsSync(assets)) return false
+  const id = git('describe', '--always', '--dirty', '--abbrev=8')
+  return readdirSync(assets)
+    .filter((name) => name.endsWith('.js'))
+    .some((name) => carries(readFileSync(path.join(assets, name), 'utf8'), id))
+}
+
+/** The commit the figures are of, and whether the preview can be serving it. */
 function identity() {
-  const git = (...args) =>
-    execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8' }).trim()
   const dist = path.join(ROOT, 'apps/game/dist')
   // The page the build wrote, and the directory only where it wrote none: a
   // directory's time moves whenever anything adds a file to it, and the later
@@ -596,14 +623,20 @@ function identity() {
   }
 }
 
-/** Why the preview cannot be tied to the commit, or null. */
-export function identityRefusal(id, { allowDirty = false } = {}) {
+/** Why the preview cannot be tied to the commit, or null. `bundled` is
+ *  `bundled()`'s answer, and nothing passed is no. */
+export function identityRefusal(
+  id,
+  { allowDirty = false, bundled: ours = false } = {},
+) {
   if (!id.clean && !allowDirty)
     return 'the tree has uncommitted changes, and a figure is tied to a commit; --allow-dirty takes it anyway and marks every row'
   if (id.builtAt === null)
     return 'apps/game/dist does not exist; pnpm preview builds it'
   if (id.builtAt < id.committedAt)
     return 'apps/game/dist is older than HEAD, so the preview serves another build; stop it and run pnpm preview again'
+  if (!ours)
+    return "apps/game/dist is not the build of HEAD: no script carries HEAD's build id; stop the preview and run pnpm preview again"
   return null
 }
 
@@ -964,7 +997,7 @@ async function measure(options) {
       `nothing answers ${options.url}; pnpm preview builds the bundle and serves it on 8787`,
     )
   const id = identity()
-  const refusal = identityRefusal(id, options)
+  const refusal = identityRefusal(id, { ...options, bundled: bundled() })
   if (refusal !== null) throw new Refusal(refusal)
   const began = Date.now()
   const { file, doc, runs } = documentOf(options, id, began)

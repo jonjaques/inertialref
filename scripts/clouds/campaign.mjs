@@ -52,7 +52,7 @@ import {
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { SIZES, batchRuns } from './measure.mjs'
+import { SIZES, batchRuns, bundled } from './measure.mjs'
 import { rateNote, tables } from './page.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
@@ -98,7 +98,7 @@ const INSTRUMENTS = {
 }
 
 /**
- * Each campaign: whether it builds always or only a bundle older than HEAD,
+ * Each campaign: whether it builds always or only a bundle not HEAD's,
  * and its stages. The minutes are the measured pace, a row a minute over
  * both sizes (78 A/B rows in 78 minutes on the mini), where a batch is rows
  * of that kind, and §8.8's estimate where it is not.
@@ -257,13 +257,6 @@ async function refusal() {
   if (await answers(URL_))
     return `something already answers ${URL_}; stop it, so the campaign serves the build it checked`
   return null
-}
-
-/** Whether apps/game/dist was written after HEAD was committed. */
-function built() {
-  const page = path.join(ROOT, 'apps/game/dist/index.html')
-  const committed = Number(git('log', '-1', '--format=%ct', 'HEAD')) * 1000
-  return existsSync(page) && statSync(page).mtimeMs >= committed
 }
 
 /**
@@ -473,7 +466,7 @@ async function run(name, { stamp, resume }) {
     const why = await refusal()
     if (why !== null) throw new Error(why)
     save(state)
-    if (CAMPAIGNS[name].build === 'always' || !built()) {
+    if (CAMPAIGNS[name].build === 'always' || !bundled()) {
       console.log(`${new Date().toISOString()} building`)
       const { code } = await child(['pnpm', 'build'], {}, ctx)
       if (code !== 0) throw new Error(`pnpm build exited ${code}`)
