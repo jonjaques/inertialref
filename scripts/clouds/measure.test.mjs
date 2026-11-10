@@ -11,7 +11,10 @@ import path from 'node:path'
 import vm from 'node:vm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  CLOUD_FAR_FOOTPRINTS,
   CLOUD_LIGHT_TAPS,
+  CLOUD_MAX_STEPS,
+  DEFAULT_CLOUD_LEVERS,
   isCloudLevers,
 } from '../../apps/game/src/render/cloudLevers.ts'
 import { wrap } from '../driveScript.mjs'
@@ -174,6 +177,20 @@ describe('the ladders', () => {
     // The taps' rungs are the lever's own list, six and eight among them.
     expect(LADDERS.lightTaps).toBe(CLOUD_LIGHT_TAPS)
     expect(LADDERS.lightTaps).toEqual([0, 2, 4, 6, 8])
+    // The free levers' rungs are cloudLevers.ts's, §7.3's values, each one
+    // the lever takes, the defaults among them.
+    expect(LADDERS.maxSteps).toBe(CLOUD_MAX_STEPS)
+    expect(LADDERS.farFootprint).toBe(CLOUD_FAR_FOOTPRINTS)
+    expect(LADDERS.maxSteps).toEqual([96, 128, 192, 256])
+    expect(LADDERS.farFootprint).toEqual([200, 400, 800, 1600])
+    for (const [lever, rungs] of Object.entries(LADDERS)) {
+      expect(rungs, lever).toContain(DEFAULT_CLOUD_LEVERS[lever])
+      for (const value of rungs)
+        expect(
+          isCloudLevers({ ...DEFAULT_CLOUD_LEVERS, [lever]: value }),
+          `${lever} ${value}`,
+        ).toBe(true)
+    }
     for (const r of ladders) {
       const values = LADDERS[r.label]
       expect(LADDER_STANCES).toContain(r.scenario)

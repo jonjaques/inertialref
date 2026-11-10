@@ -75,7 +75,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import {
+  CLOUD_FAR_FOOTPRINTS,
   CLOUD_LIGHT_TAPS,
+  CLOUD_MAX_STEPS,
   DEFAULT_CLOUD_LEVERS,
   cloudLeversHash,
   isCloudLevers,
@@ -511,16 +513,15 @@ const radiance = (group, label, scenario, size, threshold, comparisons) => ({
 /**
  * Each quality lever's ladder (§7.3): the smallest value whose image
  * differs from the next larger one's by under 1% radiance RMSE, the jitter
- * held. `lightTaps` climbs the lever's own list, so a rung the contract adds
- * is a rung the ladder takes. `maxSteps` and `farFootprint` are free numbers
- * in the contract, with no list to read, so their rungs here are copies of
- * §7.3's: each is to read its export in `cloudLevers.ts`, `CLOUD_MAX_STEPS`
- * and `CLOUD_FAR_FOOTPRINTS`, once the merge adds them.
+ * held. Each climbs its list in `cloudLevers.ts`: `lightTaps` the lever's
+ * own values, so a rung the contract adds is a rung the ladder takes, and
+ * `maxSteps` and `farFootprint`, free numbers in the contract, the rungs
+ * exported beside it.
  */
 export const LADDERS = Object.freeze({
-  maxSteps: [96, 128, 192, 256],
+  maxSteps: CLOUD_MAX_STEPS,
   lightTaps: CLOUD_LIGHT_TAPS,
-  farFootprint: [200, 400, 800, 1600],
+  farFootprint: CLOUD_FAR_FOOTPRINTS,
 })
 /** Where the ladders stand unless asked: `earth-limb` holds the band at every footprint. */
 export const LADDER_STANCES = Object.freeze(['horizon', 'inside', 'earth-limb'])
