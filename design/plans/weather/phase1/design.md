@@ -1,32 +1,49 @@
 # The weather, phase 1 (the volume and its light): engineering design
 
-**Draft 3.** The plan is `design/plans/the-weather.md`, and this design covers
-its §10 row 1 as the road to the MVP re-slices it (§0). The tree is
-`weather/phase-0` at `25df44ab`, three 0.185.1, with phase 0's landing in
-progress on it: the losers of its choices are being deleted, so a line number
-in `cloudSplit.ts`, `cloudSunCascades.ts`, `cloudFarSpheres.ts` or a file the
-landing rewrites is the campaign commit's and is read again at the landing
-commit. The rubric the finished work is judged against is
-`.scratch/weather/mvp.md`, as edited after draft 1.
+**Draft 4.** The plan is `design/plans/the-weather.md`, and this design covers
+its §10 row 1 as the road to the MVP re-slices it (§0).
 
-Phase 0's choices are decided (2026-11-10, from its first campaign,
-`.data/clouds/campaign/choices-2026-11-10T05-25-52Z.md`), and every section
-that waited on one is resolved to it. The record of that is the next section
-and the note **After the decisions** at the end.
+**The rubric is `design/plans/weather/mvp.md`,** settled on 2026-11-10 by its
+council of three. It is what the finished work is scored against, and where
+this design and the rubric disagree, the rubric holds. This design cites it
+by its own numbers: its sections as "rubric §n", its continuity checks C1 to
+C11, its budget bars B1 to B15, and the rows 1 to 21 of its acceptance table.
+§11.2 lists every place this design still departs from it, and what it asks
+the rubric's council to amend.
+
+**The tree.** Phase 0 is landed, measured and documented on `weather/phase-0`
+(`51c96da4`): ADR-0063 to ADR-0066 under `docs/adr/`, and the evidence under
+`design/plans/weather/phase0/measurements/`. "Landed" beside a figure here
+means its second campaign, at `bbea04da`
+(`landed-2026-11-10T09-05-32Z.md` there). Wave 0 of this phase, packages K and
+V, is built and merged as `weather/p1-cornerstones`. Three is 0.185.1. A line
+number cited here is the campaign commits' (`8a01d311`, `25df44ab`) unless its
+section says the landed tree was read, and a package reads the line again at
+its own base.
+
+**This document stands alone.** It is committed as
+`design/plans/weather/phase1/design.md`. The working files it was written
+from are not in the tree: the orchestrator's ledger and rulings, the two
+critiques of draft 1, and the rubric council's reviews. What a package needs
+of them is restated here, in the record below, the critique log, §11.5 and
+**What draft 3 and draft 4 changed** at the end.
 
 I read the rubric, the plan, the as-built map, the neighbors map, the transport
-research and the phase 0 package reports in full, and phase 0's design by
-section. Every interface this design leans on was re-read in the code or
-surveyed read-only for it; §11.4 lists which is which. Nothing was built, run,
-tested or measured: a measurement campaign holds the machine. A figure this
-design wants and could not compute by hand is marked **to measure**.
+research and the phase 0 package reports in full, phase 0's design by section,
+and its landed campaign's tables. Every interface this design leans on was
+re-read in the code or surveyed read-only for it; §11.4 lists which is which.
+Nothing was built, run, tested or measured for this design: another agent
+holds the machine. A figure this design wants and could not compute by hand is
+marked **to measure**.
 
-This revision answers two adversarial reviews, of the physics and of the
-engineering, and folds in the orchestrator's rulings
-(`.scratch/weather/phase1/rulings.md`). Each finding was checked against the
-code, the plan or a computation, and the design was changed in place; the
-**critique log** at the end lists every finding, its verdict and what changed.
-Draft 1 is kept beside this file as `design-draft1.md`.
+Draft 2 answered two adversarial reviews, of the physics and of the
+engineering, and the orchestrator's rulings on draft 1. A "ruling n" cited
+here is the nth of those seven, restated in §11.1. Each finding was checked
+against the code, the plan or a computation; the **critique log** at the end
+lists every finding, its verdict and what changed. Draft 3 resolved
+the sections that waited on phase 0's choices. Draft 4 brings the design into
+line with the settled rubric, the thin form's decision, phase 0's landed
+figures and what its review left for this phase.
 
 Borrowed facts keep the research file's tags: **R** read at its source, **S**
 read in a snippet or an abstract, **M** recalled and not checked, **D** derived
@@ -43,31 +60,70 @@ orchestrator and does not invent it.
 
 ## What phase 0 decided, and what each section assumes
 
-Phase 0's first campaign decided three choices and its ladders by the rules
-its design fixed (§8.7 there). The figures are the campaign's, as
-`.scratch/weather/ORCHESTRATION.md` records them under "Decisions".
+Phase 0's two campaigns decided four choices and its ladders by the rules its
+design fixed (§8.7 there). ADR-0063 and ADR-0064 record them, and the figures
+are in `design/plans/weather/phase0/measurements/`.
 
-| Choice              | Decided                                                                                                             | What settled it                                                                                                                                                                 | Sections that assume it                                      |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Placement           | **A, `passes`:** two scene passes over a layer split                                                                | B is cheaper nowhere (Retina steady, split against passes: 6.79 / 6.88, 7.98 / 8.00 and 5.66 / 5.66 ms), and the CPU clause fires in no cell                                    | §4.7, §4.9, §4.12, §10.4                                     |
-| Far field           | **The atlas**                                                                                                       | Its worst footprint error over the four handover cases is 1.643 against the spheres' 2.087, and neither exception clause fires                                                  | §4.5, §5.8, §5.9, §10.4                                      |
-| Cache × sun's depth | **`(field, grid)`:** the march reads the field, and the sun's depth is the grid, whose bake sums through the volume | The volume fails `horizon` at both sizes (6.26% to 6.88% against 3%). Neither sun depth passes at two taps, and the grid is the more accurate (worst case 0.192 against 0.492)  | §2.5, §4.3, §4.5, §4.7, §5.3, §5.5, §10.4                    |
-| Ladders             | `maxSteps` 192. `lightTaps` 4, not shown converged. `farFootprint` 800 m                                            | 192 against 256 steps is 0.02%. Two against four taps is 1.04% and four has no larger neighbor measured. 800 against 1,600 m is 0.01%, where 400 against 800 is 7.18% at Retina | §4.6, §5.4, §5.8, §7.3                                       |
-| Thin form           | **Undecided** until phase 0's second campaign reads `error` on the landed code. The identity draws everywhere       | —                                                                                                                                                                               | §4.10 and §7.2's `error` batch, which keep `[depends: thin]` |
+| Choice              | Decided                                                                                                             | What settled it                                                                                                                                                                                                                                                                                               | Sections that assume it                   |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Placement           | **A, `passes`:** two scene passes over a layer split                                                                | B is cheaper on the GPU nowhere (Retina steady, split against passes: 6.79 / 6.88, 7.98 / 8.00 and 5.66 / 5.66 ms). **A stands as an exception:** by §8.7 as written the CPU clause fires at Retina `inside`, and ADR-0063 argues it with figures (§4.12, §7.4)                                               | §4.7, §4.9, §4.12, §10.4                  |
+| Far field           | **The atlas**                                                                                                       | Its worst footprint error over the four handover cases at 400 m is 1.643 against the spheres' 2.087, and neither exception clause fires. The gap is one case, at 1,600 m the spheres lead in all four, and the landed 800 m was not scored: the choice is provisional until it is (§5.9)                      | §4.5, §5.8, §5.9, §10.4                   |
+| Cache × sun's depth | **`(field, grid)`:** the march reads the field, and the sun's depth is the grid, whose bake sums through the volume | The volume fails `horizon` at both sizes (6.26% to 6.88% against 3%). Neither sun depth passes at two taps, and the grid is the more accurate (worst case 0.192 against 0.492)                                                                                                                                | §2.5, §4.3, §4.5, §4.7, §5.3, §5.5, §10.4 |
+| Ladders             | `maxSteps` 192. `lightTaps` 4, not shown converged. `farFootprint` 800 m                                            | 192 against 256 steps is 0.02%. Two against four taps is 1.04% and four has no larger neighbor measured. 800 against 1,600 m is 0.01%, where 400 against 800 is 7.18% at Retina. Each ladder was taken with the cascades, two taps and 400 m: the landed set has no ladder of its own until window 1's (§7.3) | §4.6, §5.4, §5.8, §7.3                    |
+| Thin form           | **Allowed from orbit only.** Phase 1 draws the identity everywhere, the second body included                        | The landed `error` batch: from orbit 0.1% at the 95th percentile and 0.4% to 1.8% at worst; `sunset` 27% to 32% and 100%; `fog` 4.2% to 4.9%; `horizon-2.4km` 3.2% to 3.7%                                                                                                                                    | §4.10, §7.2                               |
 
-Three things the campaign found are answered where they bind:
+**Where phase 0 lands** (steady, in ms; the frame of a cut and of a scrub is
+the clouds' Δ on that frame):
 
-- **The second scene pass is the largest cloud cost in the frame,** 1.5 to
-  2.1 ms at 1080p and 3.9 to 5.1 ms at Retina. §4.12 says what the pass
-  stores and reloads, what phase 1 does about it and why placement C is not
-  built. Package Y.
-- **The grid's rebuild is the reset frame,** 19.69 ms on a cut and 14.54 on a
-  scrub at 1080p. §4.7 spreads it and removes the one that recurs every 12
-  seconds of an Earth day. Package L.
-- **A profile's figures follow the presentation rate.** §7.5 records the rate
-  in every row and names the figures that move with it.
+| Stance                  | 1080p Δ | Of it: trace | Over pass | Bakes | Retina Δ | 1080p: a cut's frame | A scrub's |
+| ----------------------- | ------- | ------------ | --------- | ----- | -------- | -------------------- | --------- |
+| `ground`, under cumulus | 7.12    | 3.72         | 1.70      | 1.62  | 8.91     | 23.50                | 16.27     |
+| `horizon`               | 5.67    | 2.45         | 1.52      | 1.61  | 7.70     | 20.61                | 14.88     |
+| `inside`                | 5.07    | 1.27         | 2.08      | 1.56  | 7.70     | 24.60                | 16.95     |
+| `decks`                 | 7.55    | 2.90         | 2.19      | 2.25  | 9.79     | 19.04                | 15.31     |
+| `orbit`                 | 3.03    | 0.09         | 1.84      | 0.84  | 5.54     | 3.00                 | 3.04      |
+| `pair-moon`, two bodies | 9.38    | 4.75         | 1.96      | 2.36  | 10.21    | 35.27                | 29.43     |
 
-The order of work (§10.3) starts from the landing commit.
+- Memory is 91.62 MB at 1080p and 85.01 MB at Retina, 96.41 and 89.80 with a
+  second clouded body.
+- The first five frames with the clouds on hold one of 50.8 to 66.8 ms at
+  1080p, against a steady 16.7.
+- With four taps the trace is the largest cost at 1080p. The second scene
+  pass is the largest at Retina, 3.88 to 5.32 ms.
+- A pass's time is latency and not share (rubric §5), so these columns say
+  where to look and no bar is formed from one.
+- **The cut's and the scrub's columns are at an unknown field of view.** The
+  landed campaign's `cut`, `scrub`, `fly` and `pair-neighbor` rows ran through
+  the lens the `pair-moon` stance left behind: its rise framing fits the
+  flight lens, and `ir.visit` sets none. The clouds-off base on `ground` reads
+  5.87 ms steady and 6.92 to 7.29 in those rows. They are being retaken on
+  phase 0's branch. The steady rows above were taken before `pair-moon` and
+  stand, and the grid's share of a reset does not depend on the view. In
+  phase 1 every stance sets its own lens (§7.2).
+
+What the campaigns and phase 0's review found, and where each is answered:
+
+| Finding                                                                                                                              | Answered in | Package |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ----------- | ------- |
+| The second scene pass costs 1.5 to 2.2 ms at 1080p and 3.9 to 5.3 ms at Retina                                                       | §4.12       | Y       |
+| The grid's rebuild is the reset frame: a cut's frame is 14.9 ms over the steady Δ on `horizon` and a scrub's 9.2                     | §4.7        | L       |
+| The grid is rebuilt whole every frame the sun moves over 0.05°, so sustained warp is a permanent reset, and no warp row was recorded | §4.7, §7.2  | L, Q    |
+| A profile's figures follow the presentation rate, and no campaign can hold 60 Hz on demand                                           | §7.5        | Q       |
+| The landed defaults have no ladder; `LIGHT_TAP_COUNTS` and the `images` batch's stances are hard-coded                               | §7.3        | Q       |
+| The three accuracy instruments assert only that their figures are finite                                                             | §6.3        | C       |
+| The atlas is unscored at the landed 800 m                                                                                            | §5.9        | X       |
+| A second clouded body always composites through the thin form, in a regime never measured                                            | §4.10       | N       |
+| The placeholder's drift is derived from the observer, so moving the eye at a held time changes the density at a fixed point          | §5.3        | D, F, H |
+| The sun gate that chose the grid is a figure about the inner 4 km, and at four taps the grid is within 3% in four cases of ten       | §5.5        | L, M1   |
+| The first frames with the clouds on are a hitch, not shown to be a compile                                                           | §4.7        | L, N    |
+| The boot's `warming the clouds` span came back empty in all six boots                                                                | §4.7        | N       |
+
+Phase 0's council read the landed code as well, and §11.5 gives each of its
+findings a package and a test. Two faults it found are fixed on phase 0's own
+branch and are not designed around here: the cloud pass's handling of an
+exception, and the runner's handling of a refused row.
+
+The order of work (§10.3) starts from wave 0's merge.
 
 ---
 
@@ -111,9 +167,10 @@ W holds up under test, and one addition gives it A's only advantage.
   form and home are phase 3's design, made with its reader (§4.1). The ingest
   still reads all 120 files in phase 1, so the reader, the fill and the
   manifest are proven now.
-- Its cost is one more package in an already large phase. It is the one
-  package that may slip to phase 2 without holding phase 1's pull request,
-  because nothing phase 1 draws reads it.
+- Its cost is one more package in an already large phase. Nothing phase 1
+  draws reads it, but one row of the rubric does: row 9 holds each genus's
+  mean `τ` within 15% of ISCCP-H's for its type. So the small table is due
+  before package G, and only the gridded climatology's own work may slip.
 
 **(b) The reflection probe moves to phase 2. Adopted.**
 
@@ -141,9 +198,12 @@ Adopted, beside the cornerstones and not ahead of them.**
   disjoint files, run in the same wave, and are the phase's first pull request
   together (§10.5).
 
-**The addition: the picture panel judges E1 and E2 in the forced arm at the end
-of phase 2.** A is the one alternative that reaches a judged Earth-from-orbit
-picture a phase sooner, and it pays three prices for it:
+**The addition: the picture panel scores E1 and E2 in the forced arm at the
+end of phase 2.** The rubric takes it as one recorded round that banks
+nothing (§2 there), because the plate moves when the climate draws it; the
+two confirming rounds are of the climate plates, at the verdict. A is the one
+alternative that reaches a judged Earth-from-orbit picture a phase sooner, and
+it pays three prices for it:
 
 - it couples two unrelated risks in one phase, the rule-59 shadow across four
   materials and the climatology with the deck's retirement;
@@ -158,9 +218,10 @@ shadow and the shadowed air, and they do not need the climatology: a
 fair-weather field over a continent and layered tops along a limb are what a
 held weather regime draws (§3.3). Every phase takes them with the volume forced
 onto Earth already. So at the end of phase 2 the panel scores the forced arm of
-E1 and E2 against their photographs and against the deck arm. Only E3 and the
-deck's retirement wait for phase 3, and no frame on the default path loses
-Earth's clouds on the way.
+E1 and E2 against their photographs and against the deck arm, once, for the
+record. E3, the deck's retirement and every Earth picture's confirmation wait
+for phase 3, and no frame on the default path loses Earth's clouds on the
+way.
 
 **The two rules hold.** Each phase lands green on its own (§0.4, §0.5 and §2
 give each phase's gate). No frame takes Earth's clouds away before the volume
@@ -177,7 +238,7 @@ arm, never a default.
 | Phase 3 holds the ISCCP-H ingest                                                           | The ingest and its CPU statistics are a phase 1 package; the wiring stays in phase 3                                 | §0.2 (a)                                                                                                                                                                                                                                                                                                             |
 | The upscaler's fix lands on `main` (`the-upscaler.md:40-45`)                               | It lands on the stack, in phase 1's first wave                                                                       | §0.2 (c)                                                                                                                                                                                                                                                                                                             |
 | Plates exist when a phase is done                                                          | The cornerstone presets, their capture path and the settle land before anything they judge                           | Jon: "fix this by adding a few test presets ahead of tine as cornerstones"                                                                                                                                                                                                                                           |
-| "A generated world takes the volume before Earth does" reads as on by default from phase 1 | The served set and its plumbing land in phase 1; **the default turns on with phase 2's integration**                 | A cloud field with no shadow on the ground is the regression a guard verdict exists to block (rubric §3.5). Every wet generated world's committed plate would move in phase 1, be judged against its clear plate with clouds that cast nothing, and move again in phase 2. One move, with the shadow, is one verdict |
+| "A generated world takes the volume before Earth does" reads as on by default from phase 1 | The served set and its plumbing land in phase 1; **the default turns on with phase 2's integration**                 | A cloud field with no shadow on the ground is the regression a guard verdict exists to block (rubric §3.8). Every wet generated world's committed plate would move in phase 1, be judged against its clear plate with clouds that cast nothing, and move again in phase 2. One move, with the shadow, is one verdict |
 | Earth is not drawn by the volume before phase 3                                            | Every phase takes E1–E3 with the volume forced onto Earth, beside the deck, and records it                           | Jon: "defer earth is ok but keep testing progress, record it"                                                                                                                                                                                                                                                        |
 | Neyret's three-phase advection carries the texture (plan §4.5)                             | In phases 1–3 each layer turns rigidly about the spin axis; bounded advection arrives with the wind field in phase 4 | The drift phase 0 draws starts over every hour and counts as a jump (`cloudFrame.ts:467-472`), which is a visible step once an hour on a default path. A rigid turn is exact on a sphere, continuous for ever and costs no fetch (§5.3)                                                                              |
 | The primary bow is a phase 1 number (plan §10, rubric §6)                                  | The cloudbow is. Rain's table lands with rain in phase 4                                                             | The primary bow is a raindrop's, and rain is outside the MVP (rubric §8). §5.4 settles the generator now                                                                                                                                                                                                             |
@@ -223,10 +284,15 @@ arm, never a default.
   batch records that span and those bytes (§7.2), so phase 2 starts from a
   figure. Every committed plate of a wet generated world is re-taken and takes
   its guard verdict.
-- Instruments: the picture panel's packet builder, shuffler, controls and
-  ledger under `scripts/panel/`; the limb's band profiler; the shadow-offset
-  measure for E1.
-- Pictures: G1, G2, G3 and G4 judged; E1 and E2 judged in the forced arm.
+- Instruments: the shadow-offset measure for E1 and the share of cloud pixels
+  at display white (rubric §3.9, advisory), and the tests of the rubric's rows
+  12 to 15. The panel's tools and its calibration round are phase 1's (§8.6),
+  so phase 2's first judged round starts from a fixed bar.
+- Pictures: G1, G2, G3 and G4 judged, two confirming rounds each; E1 and E2
+  in the forced arm take one recorded round; the overlay guard and every
+  moved guard take their verdicts (rubric §3.8). Closing the air's two
+  skylight defects moves every scene with a sky on purpose, and each of those
+  is a guard.
 
 **Needs phase 1 to have left in place.**
 
@@ -242,10 +308,12 @@ arm, never a default.
 | The served set as one predicate                                                                                 | §4.8                                                                                         | Turning the default on is one line and one set of plates                |
 | A `'picture'` reset that restarts the history and rebuilds no cache                                             | §4.7                                                                                         | The reset frame's budget row                                            |
 
-**Lands green when** the rubric's phase 2 numbers hold (§6 there): one cloud
-shadow at the descent gate within 1%, one air under a cloud's shadow, downward
-light under a deck within 10% of the column, and `presets:compare --all` moves
-only the plates of clouded bodies.
+**Lands green when** the rubric's phase 2 rows hold: one cloud shadow at the
+descent gate within 0.01 absolute between any two of the three materials (row
+12), one air under a cloud's shadow within 1% (row 13), downward light under
+a deck within 10% of the column (row 14), the skylight within 1% of the sky
+table at eight points (row 15), G4's ring within 0.2° on the plate (row 8),
+C10, and every plate `presets:compare --all` moves has its guard's verdict.
 
 ### 0.5 Phase 3 on one page: Earth
 
@@ -259,9 +327,10 @@ only the plates of clouded bodies.
   phase's design decides between HGH and an analytic clock at the measured
   phases.
 - Orography in the maps: elevation and its slope against the wind.
-- The statistics, counted on the CPU over the sphere and over simulated years:
-  global cover and each 10° band against ISCCP-H's own means (rubric §10 item
-  1), and each type's optical-depth histogram.
+- The statistics, counted on the CPU by the rubric's own protocol (§6.3
+  there; row 16): global, land and ocean cover and each 10° band against
+  ISCCP-H's 2007–2016 means, over 480 instants of ten simulated years. Each
+  type's optical-depth histogram is recorded with no bar.
 - The deck retires for Earth: its `SolarClouds` record
   (`packages/universe/src/solar/bodies.ts:574`), its map source
   (`apps/ingest/src/textureSources.ts:139-147`) and the 0.4% floor on the lift
@@ -269,9 +338,13 @@ only the plates of clouded bodies.
   reached. Venus keeps its deck and the deck's material. Earth joins the served
   set by losing its authored deck (§4.8), and the dossier reads `cloudsServed`
   where it reads `appearance.clouds` (`packages/devtools/src/dossier.ts:1203-1209`).
-- Pictures: E3 judged against EPIC; E1 and E2 re-judged on the climate; the
-  descent on Earth checked for defects, not against photographs.
-- The council's verdict on the MVP.
+- Pictures: E1 to E3 taken under Earth's own climate with nothing forced,
+  each cornerstone's place and instant re-solved once to where the climate
+  holds the pictured weather; two confirming rounds each, E3 against EPIC,
+  with its forced ranking against the deck. C5, G6's slow path from E1's
+  stance on Earth, is read against its clouds-off control with no panel.
+- The verdict commit's full set: every plate, cast, cost and test at one
+  commit and one lever hash (rubric §9), then the council's verdict.
 
 **Needs phase 1 to have left in place.**
 
@@ -301,9 +374,15 @@ Earth, and `presets:ledger` shows Earth's plates and nothing else moved.
   (`apps/game/src/pages/paths.ts:353-360`). `presets:compare --all` reports 0
   moved. The default turns on with phase 2, which also retires the flag (§0.4).
 - It lands the instruments the MVP is judged with before the work they judge:
-  nine cornerstone presets with their six casts, a capture set that shows each
-  beside the last phase's plate, a settle that waits on the clouds, a solver
-  for the sun's place, and a step detector for a moving camera.
+  nine cornerstone presets and the overlay guard, the casts of the rubric's
+  continuity checks with their controls, a capture set that shows each beside
+  the last phase's plate with its provenance, a settle that waits on the
+  clouds, a solver for the sun's place, a step detector whose findings are
+  classified, the panel's tools with the calibration round that fixes the pass
+  bar, and a 60 Hz presentation held on demand.
+- **It is held to the rubric's phase 1 rows:** rows 1 to 11 and 17 to 21 of
+  its acceptance table, C1 to C4, C6 to C9 and C11, and the budget's bars as
+  far as phase 1's work moves them (§2.1, §2.6).
 - It is two stacked pull requests. The cornerstones and the `velocity` fix are
   the first, small and early, with the baseline media. Everything else is the
   second, opened as a draft once the contracts merge so that every later push
@@ -372,8 +451,10 @@ Earth, and `presets:ledger` shows Earth's plates and nothing else moved.
 15. **The cornerstones are presets in their own list.** Picture format 3 adds
     an optional `weather`. `findPicture` resolves a cornerstone, and the
     planetarium's lists do not show one (§3).
-16. **`ir.settled()` waits on the clouds,** and the clouds settle after 32
-    frames, the history's eight samples a pixel (§3.5).
+16. **`ir.settled()` waits on the clouds,** and the clouds settle when the
+    field is whole by the rubric's definition: the history's eight samples a
+    pixel, 32 frames; the sun grid at full weight; and every block of the far
+    atlas in view baked (§3.5).
 17. **The references live in `apps/ingest` and commit tables.** The cumulus
     reference is a float64 path tracer in Node that checks a WebGPU one, both
     on a fixture built from the noise's CPU twin, which the tree already holds
@@ -401,12 +482,36 @@ Earth, and `presets:ledger` shows Earth's plates and nothing else moved.
     statistics stand in, faded out by a weight that is continuous in the
     camera and in time (§4.7, §5.5).
 25. **The volume is the grid's source and nothing else:** two levels, no
-    bound, every slice under the budget. That returns 4.8 MB, and it is what
-    holds the memory row (§2.5).
+    bound, every slice under the budget. That returns 4.8 MB under B12's
+    80 MB, and takes a third of the volume's slices out of every bake (§2.5).
 26. **The composite draws in the sensor's chain when nothing draws over the
     clouds,** and the second scene pass runs only on a frame that has an
     overlay, storing its samples once. Placement C is reconsidered, as phase
     0's rule requires, and is not built (§4.12).
+27. **The march is held to the oracle on its own scaled medium,** as the
+    rubric splits it (rows 1 and 2). The scaled medium's distance from the
+    true one is the oracle's own figure, declared at 3% (row 3), and the
+    path-traced cumulus is what still judges the march against the true
+    medium (row 6; §5.11, §7.4).
+28. **The identity draws every cloud, the second body's included.** The thin
+    form passes from orbit alone, where it is the same fragment with one term
+    zeroed, so it buys no cost and would need a regime boundary on the way
+    down. It stays a measurement control for row 20 (§4.10).
+29. **A cache is refreshed at the pace its field moves,** not at a fixed
+    count a frame: a texel is redrawn before its layer turns a tenth of it.
+    From orbit that takes the bakes out of the steady frame (§4.7).
+30. **A light tap reuses its step's `cover` and `kind`,** which do not vary
+    over a tap's reach: 17 reads a step at four taps where the landed march
+    makes 25 (§5.4).
+31. **The panel's tools, the noise floor and the calibration round are phase
+    1's,** before any plate of this phase's light exists (§8.6).
+32. **The zoom cast stands where the handover's band is.** At G4's pose the
+    farthest cloud in frame is 34 km off and the band starts at 172 km, so a
+    zoom there crosses nothing. It is taken from 400 km at pitch −45°, and
+    §11.2 asks the rubric's council to amend C1 (§8.2).
+33. **The texture's motion is the body's, and a test holds it from two
+    eyes.** Phase 0's drift is built on the observer's tangent basis, so the
+    density at a fixed point changes as the eye moves at a held time (§5.3).
 
 ---
 
@@ -414,34 +519,47 @@ Earth, and `presets:ledger` shows Earth's plates and nothing else moved.
 
 ### 2.1 What lands, and when each is done
 
-| #   | Item                           | What lands                                                                                                                                                                                                                  | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                 | Package        |
-| --- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| 1   | **The cornerstones**           | Picture format 3; nine presets; the weather a picture holds applied by `takePicture` and released on leaving it; `ir.settled()` on the clouds; the capture set, its casts and its sheets; the solar solver                  | A headless test holds each cornerstone's sun to its constraint within 0.5° and G1's and G3's ground above the sea; every cornerstone round-trips `pictureLink`; one capture run takes the seven stills in both arms from two boots, and the two boots agree under the rig's noise floor; one still taken by a cut inside a boot agrees with its fresh boot; the six casts are taken with the clouds on and off; all recorded              | K              |
-| 2   | **The `velocity` fix**         | FSR reads `motion.rg`; the row goes                                                                                                                                                                                         | `sceneLayout.test.ts` holds a temporal layout with no `velocity` row; the overlay probe of `the-upscaler.md:47-54` reads −0.108 at the bare edge and under the overlay; both temporal presets re-measured at both ratios, recorded                                                                                                                                                                                                        | V              |
-| 3   | **The weather per body**       | `bodyWeather`, layers in each body's uniforms, the `weather` lever, the served set, the frame's derivation                                                                                                                  | Earth is not served by default and is when forced (Node); two bodies in one frame draw two layer sets (GPU)                                                                                                                                                                                                                                                                                                                               | C, H, N        |
-| 4   | **The slab references**        | Adding-doubling on the true medium and on the renderer's, with the single-scattering correction; a seeded backward Monte Carlo on the true medium; their generated tables, and the black-surface flux the calibration reads | `R + T = 1` to 10⁻⁶ at albedo one; the HG cases at `g` 0.75 and 0.875 equal the committed `iadpython` fixture and van de Hulst's rows within 0.5%; the Mie case equals the PythonicDISORT fixture within 0.5%; 64 and 128 streams differ under 0.5% in the declared domain; every committed Monte Carlo row is within `3·SE + 0.5%` of adding-doubling; the scaled medium's own distance from the true one is recorded over the domain    | R1             |
-| 5   | **The path-traced cumulus**    | A float64 tracer in Node; a WebGPU tracer in the GPU suite; the fixture and its probes                                                                                                                                      | The furnace holds with zero variance at one sample a pixel on both tiers; of the GPU tier's 288 probe pixels at most three are beyond three combined standard errors of the CPU tier's and none beyond five; the reference curves and the core's and base's medians are written; a Node test fails when the fixture no longer equals `cloudFieldAt`                                                                                       | R2             |
-| 6   | **Density from microphysics**  | The genus table, the adiabatic profile, the radius by height, the climate, the CPU field                                                                                                                                    | Each genus's detected pixels fall in its ISCCP class by §5.2's shares, on 5 km pixels, radiatively averaged, with at least half its cloudy pixels detected; the fair-weather field's cell sizes follow the power law within §5.2's bound; the climate's zonal means match its law                                                                                                                                                         | D, G           |
-| 7   | **The field on the GPU**       | Two-texture maps, the per-body profile with its cumulative column, the media                                                                                                                                                | Each medium equals the CPU field at 1,000 sampled points within one 8-bit step of extinction; a far texel 1,800 km out bakes the climate's cover; the transmittance over one field at footprints of a quarter, a half and a whole cell, mixed by §5.9's law, is within 10% of the resolved field's                                                                                                                                        | F              |
-| 8   | **The light's tables**         | The phase atlas with its gain, the disk convolution and Baum's ice rows; the sky table; the blue-noise mask                                                                                                                 | The convolved phase keeps its integral to 10⁻⁴ and reduces to the table as the disk shrinks; the ice rows keep theirs and equal the source at its own angles; the sky table's mean and its two sides' irradiance difference equal a quadrature of the air's own march within 1%; the mask's spectrum test passes                                                                                                                          | T1, T2, T3, T4 |
-| 9   | **The march's light**          | The scaled medium, the step's source integral, the prefetched phase, taps spaced in optical depth, the higher orders, the split sky, the budget's floor                                                                     | A slab's radiance within 5% of the true medium's reference over §5.11's domain and its held-out points, and its reflected flux within 2%, with the exact sun and again with the shipped one; the furnace to 10⁻³; a layer's transmittance unchanged and its light within 1% as `maxSteps` runs from 16 to 192; the glory's ring and the cloudbow at the table's angles; the kernel's WGSL binds at most 16 sampled and 4 storage textures | M1, M2         |
-| 10  | **The far march's light**      | Mixing by the field's own law, the sky term and the higher orders at the depth the view weighs, the cut and the code on the unscaled depth                                                                                  | A uniform slab still equals the fine march to 10⁻³; over broken cumulus, in each pitch bin, the footprint-averaged transmittance is within 10% of the fine march's and the light within 15%, recorded by `cloudFarCompare`; a deck's higher orders from above are within 5% of the fine march's                                                                                                                                           | X              |
-| 11  | **The handover**               | The dithered band                                                                                                                                                                                                           | A GPU test holds the fine and the far march to one radiance and one transmittance across the band within the bound the campaign measures; a zoom cast and a descent cast across it show no step the clouds-off cast lacks                                                                                                                                                                                                                 | M1, X, N       |
-| 12  | **The history**                | Per-pixel motion, the clip's width, the jitter                                                                                                                                                                              | The regime stays `converging` through a boundary crossing at 250 m/s (GPU, through the real `cloudFrame`); the trail measure of §8.1 is under its floor in the two fly casts                                                                                                                                                                                                                                                              | H              |
-| 13  | **World transparency**         | `cloudFront` in the ring, the plumes and the entry trace, through the engine's handle                                                                                                                                       | A ring behind a cloud is dimmed by the knots' transmittance, and one in front is not (GPU, on the real ring material); without a handle the three materials' WGSL is hash-equal to today's                                                                                                                                                                                                                                                | W              |
-| 14  | **The instruments**            | The step detector and its trail measure, the glory profiler, the range readout                                                                                                                                              | The detector flags a synthetic step and passes a synthetic drift (Node); G5's and G6's casts are read against their controls and against the baseline's, recorded                                                                                                                                                                                                                                                                         | I              |
-| 15  | **ISCCP-H's ingest**           | The fetch, the manifest, the reader, the CPU statistics, and the small table phase 1 reads: zonal means and each type's mean depth                                                                                          | The 2007–2016 means are 64.75 ± 0.5% global, with ocean over land by 10 to 17 points (`isccp-h-research.md:408-423`)                                                                                                                                                                                                                                                                                                                      | E              |
-| 16  | **The runner**                 | Phase 1's batches, its two campaigns, the `noise` step and the casts' stage                                                                                                                                                 | `--dry-run` plans every batch; `measure.test.mjs` and `campaign.test.mjs` pin them                                                                                                                                                                                                                                                                                                                                                        | Q              |
-| 17  | **The choices, measured**      | The phase 1 campaign; the winners as defaults; the losers deleted                                                                                                                                                           | §7.4's rules applied to the campaign's tables, in the ADRs                                                                                                                                                                                                                                                                                                                                                                                | N              |
-| 18  | **The frame, measured**        | The rubric's budget rows that phase 1 can fill, E1's lens among them                                                                                                                                                        | Steady, reset, memory and cold-compile figures at both sizes on the mini, from the landed code, with the boot's `warming the clouds` span, recorded                                                                                                                                                                                                                                                                                       | N              |
-| 19  | **Earth's progress**           | E1–E3 in the forced arm beside the deck                                                                                                                                                                                     | The record's table carries a row for each, with the plates and what is missing (§3.7)                                                                                                                                                                                                                                                                                                                                                     | K, N           |
-| 20  | **The sun's depth, refreshed** | The grid's refresh with no rebuild in a frame; the volume as its source alone, two levels and no bound; the statistics that stand in, and the grid's weight                                                                 | A sun turning through 0.05° bakes no more slices than the frame before it; after a jump of the field no frame bakes more than the cap, and the grid's weight rises from zero over its ramp (Node, on the schedule; GPU, on a real frame); the sun gate's RMS at both of phase 0's suns is no worse than phase 0's by more than 0.01, and is recorded at G3's sun; declared bytes equal the GPU's                                          | L              |
-| 21  | **The over pass's price**      | The composite as a term of the chain when nothing draws over the clouds; the second scene pass storing its samples once; the count of what is marked over the clouds                                                        | A frame with nothing over the clouds has no `scene over clouds` pass and equals the same frame through pass B within one half-float step; with an overlay in frame the pixels equal today's and the pass discards its multisampled color after resolving it; no pipeline on the first frame of either form; §4.12's batch recorded at both sizes                                                                                          | Y              |
+| #   | Item                              | What lands                                                                                                                                                                                                                                                                                  | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Package             |
+| --- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| 1   | **The cornerstones**              | Picture format 3; nine presets; the weather a picture holds applied by `takePicture` and released on leaving it; `ir.settled()` on the clouds; the capture set, its casts and its sheets; the solar solver                                                                                  | A headless test holds each cornerstone's sun to its constraint within 0.5° and G1's and G3's ground above the sea; every cornerstone round-trips `pictureLink`; one capture run takes the seven stills in both arms from two boots, and the two boots agree under the rig's noise floor; one still taken by a cut inside a boot agrees with its fresh boot; the six casts are taken with the clouds on and off; all recorded                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | K                   |
+| 2   | **The `velocity` fix**            | FSR reads `motion.rg`; the row goes                                                                                                                                                                                                                                                         | `sceneLayout.test.ts` holds a temporal layout with no `velocity` row; the overlay probe of `the-upscaler.md:47-54` reads −0.108 at the bare edge and under the overlay; both temporal presets re-measured at both ratios, recorded                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | V                   |
+| 3   | **The weather per body**          | `bodyWeather`, layers in each body's uniforms, the `weather` lever, the served set, the frame's derivation                                                                                                                                                                                  | Earth is not served by default and is when forced (Node); two bodies in one frame draw two layer sets (GPU)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | C, H, N             |
+| 4   | **The slab references**           | Adding-doubling on the true medium and on the renderer's, with the single-scattering correction; a seeded backward Monte Carlo on the true medium; their generated tables, and the black-surface flux the calibration reads                                                                 | `R + T = 1` to 10⁻⁶ at albedo one; the HG cases at `g` 0.75 and 0.875 equal the committed `iadpython` fixture and van de Hulst's rows within 0.5%; the Mie case equals the PythonicDISORT fixture within 0.5%; 64 and 128 streams differ under 0.5% in the declared domain; every committed Monte Carlo row is within `3·SE + 0.5%` of adding-doubling; the largest relative difference in radiance between the oracle's two solutions over the rubric's domain is in the committed table, and `slabTables.test.ts` recomputes it and holds it to 3% (row 3, declared)                                                                                                                                                                                                                                                                                                                                                                              | R1                  |
+| 5   | **The path-traced cumulus**       | A float64 tracer in Node; a WebGPU tracer in the GPU suite; the fixture and its probes                                                                                                                                                                                                      | The furnace holds with zero variance at one sample a pixel on both tiers; of the GPU tier's 288 probe pixels at most three are beyond three combined standard errors of the CPU tier's and none beyond five; the reference curves and the core's and base's medians are written; a Node test fails when the fixture no longer equals `cloudFieldAt`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | R2                  |
+| 6   | **Density from microphysics**     | The genus table, the adiabatic profile, the radius by height, the climate, the CPU field                                                                                                                                                                                                    | Each genus's detected pixels fall in its ISCCP class by §5.2's shares, on 5 km pixels, radiatively averaged, with at least half its cloudy pixels detected, no share moving ten points at `μ₀` 0.4, and each genus's mean `τ` within 15% of ISCCP-H's for its type (row 9, declared); the fair-weather field's exponent is 2.19 ± 0.4 on a 60 km square at 100 m (row 10, advisory); the climate's zonal means match its law; the field at `t` and at `t + 1/60 s` differ by the turn alone to 3.2 × 10⁸ s (row 19); the density at one body point and instant is one value from two eyes (§5.3)                                                                                                                                                                                                                                                                                                                                                    | D, G                |
+| 7   | **The field on the GPU**          | Two-texture maps, the per-body profile with its cumulative column, the media                                                                                                                                                                                                                | Each medium equals the CPU field at 1,000 sampled points within one 8-bit step of extinction; a far texel 1,800 km out bakes the climate's cover; the transmittance over one field at footprints of a quarter, a half and a whole cell, mixed by §5.9's law, is within 10% of the resolved field's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | F                   |
+| 8   | **The light's tables**            | The phase atlas with its gain, the disk convolution and Baum's ice rows; the sky table; the blue-noise mask                                                                                                                                                                                 | The convolved phase keeps its integral to 10⁻⁴ and reduces to the table as the disk shrinks; the ice rows keep theirs and equal the source at its own angles; the sky table's mean and its two sides' irradiance difference equal a quadrature of the air's own march within 1%; the mask's spectrum test passes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | T1, T2, T3, T4      |
+| 9   | **The march's light**             | The scaled medium, the step's source integral, the prefetched phase, taps spaced in optical depth, the higher orders, the split sky, the budget's floor                                                                                                                                     | A slab's radiance within 5% of the oracle's on the renderer's own scaled medium, at every grid and held-out point of the rubric's §6.1, and its reflected flux within 2%, with the shipped sun; the exact sun's run is recorded beside it (rows 1 and 2, declared); the furnace to 10⁻³ on a slab and a broken field (row 4); a uniform slab's transmittance within 10⁻⁴ of its closed form, and a layer's light within 1% of its 192-step value as `maxSteps` runs from 16 (row 5); the first red maximum within one atlas texel of the table's ring, the ring's peak over its trough within 10% of the scaled medium's reference, and the cloudbow's peak between 139.7° and 142.0° (row 8); the phase shortcut within 3% RMS and 0.1° of the per-sample phase (row 7, declared); the range readout within 25% of `3.912/σ′` in a uniform medium at each genus's `σ′` (row 21); the kernel's WGSL binds at most 16 sampled and 4 storage textures | M1, M2              |
+| 10  | **The far march's light**         | Mixing by the field's own law, the sky term and the higher orders at the depth the view weighs, the cut and the code on the unscaled depth                                                                                                                                                  | The atlas's score at the landed 800 m is in the record before any of this is built on it; a uniform slab still equals the fine march to 10⁻³; over the real field, in each pitch bin, the footprint-averaged transmittance is within 10% of the fine march's and the radiance within 15% (row 11, declared), by `cloudFarCompare`, whose bounds a test now holds; a deck's higher orders from above are within 5% of the fine march's; the far furnace to 10⁻³ (row 4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | X                   |
+| 11  | **The handover**                  | The dithered band                                                                                                                                                                                                                                                                           | `cloudHandover.gpu.test.ts` holds the two marches on the real field, across footprints from `farFootprint` to the band's far edge, by pitch bin, within row 11's 10% and 15%; the zoom cast and the slow descent each cross the band with no error step (C1, C2)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | M1, X, N            |
+| 12  | **The history**                   | Per-pixel motion, the clip's width, the jitter                                                                                                                                                                                                                                              | The regime stays `converging` through a boundary crossing at 250 m/s (GPU, through the real `cloudFrame`); in the pass at 2 m and in the fast descent the trail measure is under its floor between frames 3 and 32 after the stop, and against a settled still at a quarter, a half and three quarters of the motion (C8); after a cut no frame's RMSE against the settled plate rises and no cell overshoots (C9)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | H                   |
+| 13  | **World transparency**            | `cloudFront` in the ring, the plumes and the entry trace, through the engine's handle                                                                                                                                                                                                       | A ring behind a cloud is dimmed by the knots' transmittance, and one in front is not (GPU, on the real ring material); without a handle the three materials' WGSL is hash-equal to today's                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | W                   |
+| 14  | **The instruments**               | The step detector and its trail measure, the glory profiler, the range readout                                                                                                                                                                                                              | The detector flags a synthetic step and passes a synthetic drift (Node); in one run it flags the injected step, which the classification calls an error step, and flags nothing on G5's settled stills where the served opacity is steady; every flagged step of every cast is classified against settled samples and the eye's place at a cloud's boundary, with the frames and the reason in the record (rubric §4); the drawn field's displacement on the 100× cast is within 10% of the CPU turn's (C7)                                                                                                                                                                                                                                                                                                                                                                                                                                         | I                   |
+| 15  | **ISCCP-H's ingest**              | The fetch, the manifest, the reader, the CPU statistics, and the small table phase 1 reads: zonal means and each type's mean depth                                                                                                                                                          | The 2007–2016 means are 64.75 ± 0.5% global, with ocean over land by 10 to 17 points (`isccp-h-research.md:408-423`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | E                   |
+| 16  | **The runner**                    | Phase 1's batches, its two campaigns, the `noise` step and the casts' stage                                                                                                                                                                                                                 | `--dry-run` plans every batch; `measure.test.mjs` and `campaign.test.mjs` pin them; every row carries its presentation rate and the hash of the levers resolved at its size; a clouds-off row on `horizon` presents at 58 to 62 Hz on demand, three times running (§7.5); the whole frame's 95th percentile is a step of its own; the ladders take their values and stances from the levers' own lists                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Q                   |
+| 17  | **The choices, measured**         | The phase 1 campaign; the winners as defaults; the losers deleted                                                                                                                                                                                                                           | §7.4's rules applied to the campaign's tables, in the ADRs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | N                   |
+| 18  | **The frame, measured**           | The rubric's budget rows that phase 1 can fill, E1's lens among them                                                                                                                                                                                                                        | B1 to B15 each have a row from the landed code at both sizes on the mini, with its rate and lever hash: the steady Δs, the whole frame's 95th percentile on every stance and cornerstone, the four reset sequences, the overlay, memory, the first five frames and the boot's `warming the clouds` span, with a figure in it. A bar this phase's work was to meet and did not is in the record with its figure (§2.6)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | N                   |
+| 19  | **Earth's progress**              | E1–E3 in the forced arm beside the deck                                                                                                                                                                                                                                                     | The record's table carries a row for each, with the plates and what is missing (§3.7)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | K, N                |
+| 20  | **The sun's depth, refreshed**    | The grid's refresh with no rebuild in a frame; the volume as its source alone, two levels and no bound; the statistics that stand in, and the grid's weight                                                                                                                                 | A sun turning through 0.05° bakes no more slices than the frame before it; after a jump of the field no frame bakes more than the cap, and the grid's weight rises from zero over its ramp (Node, on the schedule; GPU, on a real frame); on `horizon` a cut, a scrub, a change of weather and a wake from orbit each cost no more than 4 ms over the steady Δ on the event's frame and 2 ms on any later one, and the field is whole within 48 frames (B7); a warp of 100× and of 1,000× has a steady row; a steady frame bakes what its field's motion asks and no more; the sun gate's RMS at both of phase 0's suns is no worse than the landed figure by more than 0.01, and is recorded at G3's sun; declared bytes equal the GPU's                                                                                                                                                                                                           | L                   |
+| 21  | **The over pass's price**         | The composite as a term of the chain when nothing draws over the clouds; the second scene pass storing its samples once; the count of what is marked over the clouds                                                                                                                        | A frame with nothing over the clouds has no `scene over clouds` pass and equals the same frame through pass B within one half-float step; with an overlay in frame the pixels equal today's and the pass discards its multisampled color after resolving it; no pipeline on the first frame of either form; the steady Δ on `overlay` is at most 1.0 ms over `horizon`'s (B11, declared); §4.12's batch recorded at both sizes, with the placement's cell at one rate                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Y                   |
+| 22  | **The panel's tools and its bar** | Under `scripts/panel/`: the packet builder with lettered arms and frozen crops, the shuffler, the three controls and their discard rules, the validator of `review.json`, the artifact vocabulary with regions, the ledger, kept packets; the noise floor by picture; the calibration round | A packet built twice from one seed is byte-equal, and no file in a seat's packet names an arm; the validator refuses a review outside the vocabulary; the ledger computes `B_form`, `B_light` and F from a fixture round by the rubric's rounding, and reads a pass, a void round and a block as §3.5 and §3.6 there say (Node); each baseline still's floor is taken from five pairs of boots with its RMSE at or under 0.005; the calibration round is run with three valid seats and its scores are in the record, before any plate of this phase's light                                                                                                                                                                                                                                                                                                                                                                                        | J, the orchestrator |
+| 23  | **The capture's second pass**     | The casts the rubric's checks name and K's six do not hold, with their controls; settled stills at a path's own frames; the frames after a cut; the overlay guard; the record's provenance and roles                                                                                        | Every cast of C1 to C9 is taken with its clouds-off control; the zoom cast and the slow descent each hold frames on both sides of the band (Node, from the path and the lens); the overlay guard's ledger clause holds the station inside the frame; a capture record carries the commit, the stance, the fixtures' hash, the processing mode, the levers' hash at its size and its role, and a record missing one is refused                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | U                   |
+| 24  | **The thin form's row**           | The identity for a second body; the `error` batch on six scenarios; the `composite` lever as a measurement control                                                                                                                                                                          | No regime of the shipped game draws through the thin form (row 20); the batch runs on the landed commit at both sizes with Enhanced off and on, the two `pair` stances among its scenarios                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | N, Q                |
+| 25  | **Accuracy that can fail**        | The three instruments' landed figures as bounds                                                                                                                                                                                                                                             | `cloudFarCompare`, `cloudSunAccuracy` and `cloudCompositeError` each fail when a figure passes its landed value by more than a tenth, watched failing with a defect put back; the bounds only tighten from there                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | C, then X, L and N  |
 
 **"Fair weather, inside, over the deck and cumulus from orbit taken"** (plan
 §10) is item 1's capture run repeated on the landed code. **"The descent
-recording with no frame that steps"** is items 11 and 14. **"§9 met at both
-sizes"** is item 18 against the figures ADR-0063 and ADR-0064 re-base.
+recording with no frame that steps"** is items 11, 14 and 23, read as the
+rubric reads a cast: an error step fails, and a flagged step is classified
+first. **"§9 met at both sizes"** is item 18 against the rubric's bars.
+
+**Which of the rubric's rows phase 1 closes, and which it only moves.** The
+tests of rows 1 to 11 and 17 to 21, and C1 to C4, C6 to C9 and C11, land in
+this phase and are green or declared at its end. The pictures are judged
+from phase 2 and the verdict is phase 3's, so B1 to B15 gate there: phase 1
+records each and says where its work leaves it (§2.6). Rows 12 to 15, C10
+and the panel's first judged round are phase 2's. Row 16, C5 and the climate
+plates are phase 3's.
 
 ### 2.2 What Jon's instructions change
 
@@ -468,7 +586,7 @@ sizes"** is item 18 against the figures ADR-0063 and ADR-0064 re-base.
 | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | `cloudSunlight` in the ground, sea, sphere, hull and flare; the shadowed air; the energy balance; the probe                                           | Rule 59: all surfaces at once, or none                                                                                                        | Phase 2     |
 | The volume on by default, and the flag's retirement                                                                                                   | §0.3                                                                                                                                          | Phase 2     |
-| The panel's packets, seats and ledger                                                                                                                 | The first judged pictures are phase 2's. Phase 1 lands the capture, the sheets and the frozen references they need                            | Phase 2     |
+| The panel's judged rounds                                                                                                                             | The first judged pictures are phase 2's. Phase 1 lands the panel's tools, the noise floor and the calibration round that fixes the bar (§8.6) | Phase 2     |
 | ISCCP-H wired into Earth's climate; its gridded artifact; the overlap rule; the diurnal clock; orography; the land and sea contrast in droplet number | They need a land mask and a slope in the maps, and the artifact's form is phase 3's design                                                    | Phase 3     |
 | Earth's deck retired                                                                                                                                  | The volume draws no shadow yet                                                                                                                | Phase 3     |
 | Rain's phase rows, shafts, lightning, fog's physics and its calibration row, cyclones, bounded advection, the warp fade, the temperature profile      | Storms                                                                                                                                        | Phase 4     |
@@ -527,23 +645,24 @@ Changes against the as-built declaration, computed from dimensions:
 The grid reads its ray's whole from a second cell and stores nothing more
 (§5.5).
 
-**The total, for `(field, grid)` with the atlas and one clouded body.** A
-megabyte is 10⁶ bytes, as the campaign prints it.
+**The total.** A megabyte is 10⁶ bytes, as the campaign prints it.
 
-| Size               | Phase 0 as landed (campaign 1) | Phase 1, as designed | Phase 1 if the volume keeps level 0 and its bound |
-| ------------------ | ------------------------------ | -------------------- | ------------------------------------------------- |
-| 1920 × 1080, DPR 1 | 92.05 MB                       | **71.80 MB**         | 76.65 MB                                          |
-| 1440 × 900, DPR 2  | 85.44 MB                       | **65.19 MB**         | 70.04 MB                                          |
+| Size, and bodies              | Phase 0 as landed | Phase 1, as designed | Phase 1 if the volume keeps level 0 and its bound |
+| ----------------------------- | ----------------- | -------------------- | ------------------------------------------------- |
+| 1920 × 1080, one served body  | 91.62 MB          | **71.37 MB**         | 76.22 MB                                          |
+| 1440 × 900 at DPR 2, one body | 85.01 MB          | **64.76 MB**         | 69.61 MB                                          |
+| 1920 × 1080, two clouded      | 96.41 MB          | **76.16 MB**         | 81.01 MB                                          |
 
-- The rubric's row is 76 MB at 1080p. Phase 1 holds it with 4.2 MB in hand,
-  and misses it by 0.65 MB without the volume's cut. The mask and the largest
-  slab table are counted; without the mask the total is 0.07 MB less.
+- **B12 is 80 MB with one served body, declared.** Phase 1 holds it with
+  8.6 MB in hand, and with 3.8 MB if the sun gate refuses the volume's cut.
+  The mask and the largest slab table are counted; without the mask the
+  total is 0.07 MB less. Phase 2's reflection probe is what the room is for.
 - A second clouded body adds its own far atlas, 4,792,608 B (the as-built
-  map). Its sky table is in the table above.
-- Of phase 0's 92.05 MB the sun's depth is 14.81: the volume 13,369,344 B, its
-  bound 393,216 B and the grid 1,048,576 B (the as-built map). The cascades
-  it beat were 6.29 MB (**D**: the campaign's 83.53 MB less what the two
-  totals share).
+  map). Its sky table is in the table above. The rubric records the pair's
+  bytes with no bar.
+- Of the landed 91.62 MB the sun's depth is 14.81: the volume 13,369,344 B,
+  its bound 393,216 B and the grid 1,048,576 B (the as-built map; ADR-0064's
+  byte table has each resource).
 
 **Why the volume loses a level and its bound.** Under `(field, grid)` the
 volume has one reader, the grid's bake, which sums through
@@ -565,18 +684,84 @@ it.
   every volume slice a reset frame draws.
 - **The sun gate judges the cut.** Phase 0's `sunAccuracy` instrument runs
   again at its two suns, 37.5° and 5°, at four taps. The cut stands if no
-  scenario's RMS is worse than phase 0's by more than 0.01 (§7.4). If it
-  fails, level 0 returns, the total is 76.65 MB, and the rubric's row is
-  re-based to that figure in ADR-0073.
+  scenario's RMS is worse than the landed figure by more than 0.01 (§7.4). If
+  it fails, level 0 returns and the total is 76.22 MB, still inside B12.
+- **What the instrument does not reach.** It scores samples within 4 km of an
+  eye at 2 m, so the figure that chose the grid is about the inner 4 km, and
+  level 0's window is 12.8 km. Package L widens the instrument to the grid's
+  whole window, 25.6 km, before it reads the cut, and the landed code's score
+  on the wider window is the "before" (§5.5).
+
+### 2.6 The budget, bar by bar
+
+The rubric's bars gate at the verdict, in phase 3. Most of their cost is
+spent or saved in this phase, so each has a plan here, and window 3 records
+where the phase leaves it (§7.2). A bar is at 1080p unless its row says
+otherwise, and "nothing over" is a frame with nothing drawn over the clouds.
+
+| Bar | It asks                                                                                                                | Landed                                       | What phase 1 does                                                                                                    | Package     |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------- |
+| B1  | Steady Δ on `ground`, nothing over: ≤ 5.0 ms (provisional)                                                             | 7.12                                         | The plan by term, below                                                                                              | Y, M1, L, F |
+| B2  | On `horizon`: ≤ 4.0 ms (provisional)                                                                                   | 5.67                                         | The same                                                                                                             | The same    |
+| B3  | On `inside`: ≤ 4.0 ms (provisional)                                                                                    | 5.07                                         | The same                                                                                                             | The same    |
+| B4  | From orbit at a 60° lens, on `orbit` and `earth-orbit`: ≤ 1.6 ms                                                       | 3.03, 3.00                                   | The second scene pass goes, 1.84 of it, and the bakes follow the field's motion, 0.84 of it                          | Y, F, X     |
+| B5  | From orbit at E1's lens: recorded                                                                                      | None                                         | The `earth-orbit-long` stance                                                                                        | Q           |
+| B6  | The whole frame's 95th percentile under 14.7 ms on every cornerstone and campaign stance, the overlay guard among them | Medians of 6.23 to 13.94                     | B1 to B4's savings. `pair-neighbor` is nearest the bar. The `frame` step reads the percentile, which no campaign has | Q, N        |
+| B7  | A reset on `horizon`: the event's frame ≤ 4 ms over the steady Δ, later frames ≤ 2 ms, whole within 48 frames at 60 Hz | A cut's frame 14.9 over, a scrub's 9.2       | §4.7                                                                                                                 | L, X, F     |
+| B8  | Retina: no cornerstone's 95th percentile over 33.3 ms                                                                  | Medians of 13.4 to 23.2                      | Recorded. It holds as landed                                                                                         | Q           |
+| B9  | Retina against 60 Hz: a stance that holds it without the clouds and not with them is a miss. Declared, the owner's     | Every ground stance                          | Recorded by stance. Levers resolve by size (§4.6), so a cheaper Retina default is one table if the owner asks for it | C, Q        |
+| B10 | Retina's steady Δ within 0.5 ms of 1080p's, nothing over. Declared                                                     | 1.8 to 2.6 over                              | `chain` removes the pass that scales with the target. The composite's fragment and the depth copy still do           | Y           |
+| B11 | The steady Δ on `overlay` at most 1.0 ms over `horizon`'s. Declared                                                    | None                                         | `lean`: the break without it is 1.0 ms by itself                                                                     | Y           |
+| B12 | Memory, one served body: ≤ 80 MB. Declared                                                                             | 91.62 MB                                     | 71.37 MB (§2.5)                                                                                                      | F, L        |
+| B13 | The largest of the first five intervals within 16.7 ms of the steady median, at 60 Hz. Declared                        | 50.8 to 66.8 ms against 16.7, at 81 to 89 Hz | The first frame is a reset under §4.7's caps, and what is not a reset moves into the boot's warm-up                  | L, N        |
+| B14 | Late frames: the clouds add at most 2 over 3 s, at 60 Hz. Declared                                                     | None at 60 Hz                                | Waits for the hold                                                                                                   | Q           |
+| B15 | Pacing: each of B6's frames presents at 58 Hz or more over 3 s, at a held 60 Hz. Declared                              | None at 60 Hz                                | The hold itself (§7.5)                                                                                               | Q           |
+
+**The plan for B1 to B4, by term.** In ms at 1080p. The landed figures are
+pass times from the landed campaign's table. The plan's are estimates
+(**E**), written so each package knows its share, and none is a bar: a bar is
+the A/B Δ.
+
+| Term                        | `ground`   | `horizon`  | `inside`   | `orbit`    | What moves it                                                                                                                                                                           |
+| --------------------------- | ---------- | ---------- | ---------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The composite               | 1.70 → 0.6 | 1.52 → 0.5 | 2.08 → 1.0 | 1.84 → 0.6 | `chain`: the break goes and the fragment stays. The empty split is 1.0 ms of the landed pass (campaign 1)                                                                               |
+| The trace                   | 3.72 → 2.6 | 2.45 → 1.8 | 1.27 → 1.2 | 0.09 → 0.1 | The scaled medium doubles a step's length in cloud, and a tap reads three textures where it read five. Against that, the slab source and the grid's second read are a fetch each a step |
+| The history, the depth copy | 0.38 → 0.4 | 0.40 → 0.4 | 0.40 → 0.4 | 0.38 → 0.4 | Nothing                                                                                                                                                                                 |
+| The bakes                   | 1.62 → 0.4 | 1.61 → 0.4 | 1.56 → 0.4 | 0.84 → 0.1 | Each cache at its field's pace (§4.7), two map targets, the volume's two levels                                                                                                         |
+| **Sum**                     | 7.42 → 4.0 | 5.98 → 3.1 | 5.31 → 3.0 | 3.15 → 1.2 |                                                                                                                                                                                         |
+| **The bar**                 | 5.0        | 4.0        | 4.0        | 1.6        |                                                                                                                                                                                         |
+
+- **The composite's own fragment has no figure.** The landed pass holds the
+  break and the fragment together, and 0.5 to 1.0 ms is that pass less the
+  empty split. The `over` batch's first row measures it.
+- **The trace is the least sure.** Four things move it and none is measured.
+  If it cannot come under its share at four taps, the levers are the taps'
+  count, which the ladder may return to two once they are spaced in optical
+  depth (§7.3), and their reach.
+- **B10 is likely to be missed by a few tenths.** With the pass gone, Retina's
+  Δ over 1080p's is the composite's fragment and the depth copy at 2.5 times
+  the pixels, less a trace that is cheaper at Retina by 0.3 to 0.6 ms
+  (landed). It is declared, and the record carries the figure.
+- **A bar still missed at window 3** is in the record with the term that
+  holds it. It stays the verdict's gate, and phase 2's design starts from the
+  figure.
 
 ---
 
-## 3. The cornerstones (package K)
+## 3. The cornerstones (packages K and U)
 
 A cornerstone is a preset: an address, a stance, a lens, an instant and its
 weather, so it is one command to take and the same picture every time. Package
 K lands the nine the rubric requires, and what a preset needs to hold weather
 at all.
+
+**K is built** and merged as `weather/p1-cornerstones`, with ADR-0067. §3.1
+to §3.7 are its specification, and where it landed otherwise the text says
+"as built". The settled rubric asks more of the capture than K was given: the
+casts of its continuity checks, settled stills along a path, the frames after
+a cut, the overlay guard, a record with provenance and roles, and a noise
+floor by picture. Those are package U's (§3.8), which owns K's capture files
+from wave 2.
 
 ### 3.1 A picture holds its weather
 
@@ -683,36 +868,48 @@ the orbit arm's 1.5 R floor (`observer.ts:129`), pitch stops at ±88°
 (`surfaceStance.ts:61`), and `compose` refuses a station
 (`observatory.ts:1288-1291`).
 
-**The generated world.** The rule is draft 1's, and the orchestrator has
-accepted it and expects it to fire (ruling 2): far-shore V,
-`g:milky-way/s:P222_1_0_9/b:4`, unless its noon zenith is not blue-dominant by
-the air's own `zenithSkyRadiance` (`packages/rendering/src/atmosphere.ts:1055`,
-B > R at a 60° sun). Phase 0's stance stills show a tan sky there at a 37.5°
-sun, so the replacement is the likely outcome: the first body, in catalog
-order from far-shore's system, that passes `wetWorld`, has a haze under τ 0.15,
-a ground between 250 and 310 K, a rotation between 10 and 60 hours, a radius
-over 3,000 km and a `shore` site, found by a headless probe in `.scratch/`.
-Package K reports the probe's result to the orchestrator before the baseline
-is taken. **The campaign's stances stay on far-shore V** (§7.2), where every
-phase 0 figure was taken: a cost depends on the geometry and the weather, not
-on the sky's color.
+**The generated world is `g:milky-way/s:P222_1_0_7/b:2`,** P222_1_0_7 III.
+The rule is draft 1's (ruling 2): far-shore V unless its noon zenith is not
+blue-dominant by the air's own `zenithSkyRadiance`
+(`packages/rendering/src/atmosphere.ts:1055`, B > R at a 60° sun); then the
+first body in catalog order from far-shore's cell that passes `wetWorld`, has
+a haze under τ 0.15, a ground between 250 and 310 K, a rotation between 10
+and 60 hours, a radius over 3,000 km and a `shore` site.
+
+| Body           | Zenith at a 60° sun, R, G, B | Haze   | Ground  | Day     | Radius   |
+| -------------- | ---------------------------- | ------ | ------- | ------- | -------- |
+| Far-shore V    | 0.246, 0.189, 0.140          | τ 0.4  | 343 K   | 61.7 h  | —        |
+| P222_1_0_7 III | 0.092, 0.123, 0.169          | τ 0.12 | 274.4 K | 10.08 h | 6,102 km |
+
+- Far-shore V fails on its sky, its haze, its ground and its day. P222_1_0_7
+  III is wet, has no authored deck, and is the only body in far-shore's cell
+  that passes (K's probe, confirmed by the orchestrator).
+- **Its day is 10.08 hours,** so its sun moves 0.05° in 5 s, 2.4 times
+  Earth's rate (**D**). The landed grid's whole rebuild on a turning sun
+  (§4.7) comes that much more often here than on Earth.
+- **The campaign's stances stay on far-shore V** (§7.2), where every phase 0
+  figure was taken: a cost depends on the geometry and the weather, not on
+  the sky's color, and the rubric fixes a stance to the world its landed
+  figure was taken on (§5 there). B6 reads the cornerstones' own frames on
+  this world as well.
 
 **Where the ground pictures stand.** `site: 'basin'` on a body with a sea is
 the deepest seabed read at the sea's surface
 (`packages/universe/src/surveySites.ts:334-345`), open water. So:
 
 - **The shore stance, S,** is the world's `shore` site (`:327-348`), facing the
-  sea. If the world stays far-shore V it is the `far-shore` picture's own
-  latitude, longitude and heading (`pictures.json:272-314`).
-- **The land stance, L,** is the first point inland of S along the bearing away
-  from the sea, between 5 and 50 km in, whose ground is at least 20 m over the
-  sea and stays above it for 10 km along G1's heading. The probe finds it.
-  `cornerstoneLedger.test.ts` holds the ground under G1, G3 and G6's last
-  frame above sea level.
+  sea: 40.8468° S, 28.1565° W.
+- **The land stance, L,** is 41.1208° S, 28.1819° W: 29.25 km from S at
+  bearing 184°, 20.3 m over the sea and 12.75 km from water. The rule was the
+  first point inland of S along the bearing away from the sea whose ground is
+  at least 20 m over the sea. **As built it is off that line,** because the
+  coastal plain there stays 0 to 7 m over the sea for 50 km. The orchestrator
+  confirmed the stance. `cornerstoneLedger.test.ts` holds the ground under
+  G1, G3 and G6's last frame above sea level.
 
 | Id                          | Body, stance                                                                              | Lens            | Sun at the stance (§3.4) | Weather                                                       | Kind  |
 | --------------------------- | ----------------------------------------------------------------------------------------- | --------------- | ------------------------ | ------------------------------------------------------------- | ----- |
-| `weather-e1-cumulus-orbit`  | Earth; latitude −5, longitude −60, height 400,000, heading 0, pitch −88                   | 120.2 mm, 11.4° | 50° and falling          | `fair-cumulus`                                                | Still |
+| `weather-e1-cumulus-orbit`  | Earth; latitude −5, longitude −60, height 400,000, heading 0, pitch −87.995               | 120.2 mm, 11.4° | 50° and falling          | `fair-cumulus`                                                | Still |
 | `weather-e2-limb-dusk`      | Earth; latitude 20, longitude −30, height 400,000, heading the sun's azimuth, pitch −19.8 | 120.2 mm, 11.4° | −21° and falling         | `cirrus-over-cumulus`                                         | Still |
 | `weather-e3-whole-face`     | Earth; `compose` framing `blue-marble`, `fovDeg` 65, time 0 (`pictures.json:23-42`)       | —               | As held                  | `cirrus-over-cumulus`, then `climate` when package N lands it | Still |
 | `weather-g1-fair`           | G world; L, height 40, heading the sun's azimuth + 120, pitch 4                           | 25.7 mm, 50°    | Local noon               | `fair-cumulus`                                                | Still |
@@ -720,11 +917,18 @@ the deepest seabed read at the sea's surface
 | `weather-g3-underlit-dusk`  | G world; L, height 2, heading the sun's azimuth, pitch 15                                 | 23.05 mm, 55°   | −1.5° and falling        | `dusk-altocumulus`                                            | Still |
 | `weather-g4-over-deck`      | G world; S's place, height 4,300, heading the sun's azimuth + 180, pitch −35              | 17.14 mm, 70°   | 35° and falling          | `stratocumulus`                                               | Still |
 | `weather-g5-inside`         | G world; L's place, height 1,700, heading 90, pitch 0                                     | 20.78 mm, 60°   | 45° and rising           | `fair-cumulus`                                                | Cast  |
-| `weather-g6-descent`        | G world; L's place, height 400,000, heading 90, pitch −88                                 | 20.78 mm, 60°   | 45° and rising           | `stratocumulus`                                               | Cast  |
+| `weather-g6-descent`        | G world; L's place, height 400,000, heading 90, pitch −87.995                             | 20.78 mm, 60°   | 45° and rising           | `stratocumulus`                                               | Cast  |
+
+**As built.** E1's and G6's pitch is −87.995°, because −88° is past the
+stance's limit. The solved suns are E1 50° and falling, E2 −21° and falling,
+G1 noon at 58.99°, G2 35° and rising, G3 −1.5° and falling with the base's
+horizon dipping 2.074°, a margin of 0.574°, G4 35° and falling, G5 and G6 45°
+and rising. On this world's 6,102 km radius G3's ray returns into its layer
+about 320 km sunward where the text below says 334 km for Earth's (**D**).
 
 What each geometry is for, with what the gathered references say of it
-(`.scratch/weather/references.md`, 70 candidates; observations from
-photographs, not rulings):
+(`design/plans/weather/references.md`; observations from photographs, not
+rulings):
 
 - **E1.** At 400 km an 11.4° field spans 79.8 km top to bottom (**D**:
   `2·400·tan 5.7°`), 88.7 m a CSS pixel at 900 lines, so a kilometer cell is 11
@@ -758,18 +962,17 @@ photographs, not rulings):
 - **G1** stands 40 m up, on land, with its pitch low. From 2 m on flat ground
   the shadows of clouds on the ground are barely visible in real photographs;
   a rise of tens of meters shows them crossing the ground to the horizon. The
-  rubric's "standing at noon" becomes "from a rise at noon" (§11.2). The
+  rubric's G1 is "from a rise 40 m up" for that reason. The
   shadows themselves are phase 2's; in phase 1 the picture shows bases and
   tops.
 - **G3.** A mid-level layer is lit from below only while the sun is higher
-  than the layer base's own horizon dips, `acos(R/(R + h))`: 2.57° for a
-  4,000 m base on far-shore V and 2.03° on a world of Earth's radius (**D**).
-  At the rubric's −2° an Earth-sized world leaves 0.03° of margin, and a small
-  error in the sun or the base flips the picture between lit and dark. So the
-  target is −1.5°, and the ledger test holds the base's dip at least 0.5° past
-  the sun's depression on whichever world is chosen: 1.07° on far-shore V,
-  0.53° at Earth's radius (**D**). The radius floor in the world's rule keeps
-  that margin.
+  than the layer base's own horizon dips, `acos(R/(R + h))`: 2.03° for a
+  4,000 m base on a world of Earth's radius and 2.07° on the cornerstones'
+  world (**D**; 2.074° as built). At −2° an Earth-sized world leaves 0.03° of
+  margin, and a small error in the sun or the base flips the picture between
+  lit and dark. So the sun is 1.5° under, and the ledger test holds the
+  base's dip at least 0.5° past the sun's depression: 0.574° as built. The
+  radius floor in the world's rule keeps that margin.
   - **The layer has to end before its own light comes in.** A base's ray to a
     sun `e` under its horizon dips under the layer and comes back up into it
     where the local sun stands `e` over the horizon: 334 to 362 km sunward of
@@ -787,7 +990,10 @@ photographs, not rulings):
     Earth's radius), which is the photographs' clear slot.
   - The ledger test holds it: at G3's instant no cloud of the layer stands at
     the re-entry point of a base's ray, for the base over the stance and for
-    one 150 km sunward of it.
+    bases sunward of it. As built the clause walks sunward under the whole
+    deck, where this design asked for one point 150 km out. The scenario
+    carries the edge as `terminator: { full: −0.1, clear: 0.1 }`, in degrees
+    of the local sun's elevation (`weatherScenario.ts`).
 - **G4.** The eye stands 3 km over the regime's 1,300 m top, looking at the
   antisolar point: pitch is the sun's elevation negated. At 70° a degree is
   12.9 CSS pixels, so a glory ring near 2.4° is 31 CSS pixels from the point,
@@ -802,7 +1008,8 @@ photographs, not rulings):
 - **G5** is short of references: no clearly licensed footage of flying into
   and out of a cumulus was found, and the candidates are stratus. Its judgment
   leans on the cast's continuity check and the range readout (§8.5) more than
-  on photographs, and §11.2 proposes the rubric say so.
+  on photographs. The rubric passes G5 by C6, with the panel's scores
+  advisory, and its photographs illustrate the stages.
 - **G5 and G6** are start poses. §8.2 gives the paths.
 
 Package K adds three scenarios the table needs to
@@ -813,15 +1020,16 @@ cells, with no deck under it to block a sun under the horizon;
 `stratocumulus`, one layer at 800–1,300 m, cover 0.9, 1,800 m cells, radius
 10 µm. The edge is cover as a function of the local sun's elevation, which
 the cover's bake already receives (`scenarioCoverageNode(direction, sun, …)`,
-`render/cloudMaps.ts:337`). If no existing pattern expresses it, K adds one
-optional field to the scenario's record and its one use in that function and
-in its CPU twin, and says so in its report. A regime's id is part of a committed format from here on: the ids are
+`render/cloudMaps.ts`). As built it is one optional field of the scenario's
+record, `terminator`, read in that function and in its CPU twin. A regime's id is part of a committed format from here on: the ids are
 stable, and a picture naming one the build does not know decodes and reports
 `'unavailable'`.
 
 Every cornerstone carries `processing`, the build's default sensor settings,
 as `ir.capturePicture` records them (`harness.ts:1196-1215`). The capture
-record names the mode (rubric §10 item 7).
+record names the mode: the rubric's rig is Enhanced, the mode the game ships
+with, and a change of the shipped default re-takes every cornerstone under
+both (§3.2 there).
 
 ### 3.4 The instant is solved, and a test holds it
 
@@ -877,12 +1085,11 @@ export function solveSun(
   satisfies both.
 - The harness gains `ir.sun(address, place, time?)` and `ir.solveSun(…)`, in
   degrees as `ir.visit` takes them.
-- `after` is 0 for the Earth cornerstones. For the generated world's it is
-  the `far-shore` picture's own time, 100,331.95 s, if the world stays
-  far-shore V, and 0 on a replacement.
+- `after` is 0 for every cornerstone: Earth's, and the generated world's,
+  which is a replacement.
 
-The solved times are written into `cornerstones.json` by the package, since
-nothing could be run for this design. `cornerstoneLedger.test.ts` then holds
+The solved times are in `cornerstones.json`, written by package K.
+`cornerstoneLedger.test.ts` holds
 each to the table: elevation within 0.5° of its target, the trend, and for
 `heading the sun's azimuth` a heading within 0.5° of the solved azimuth plus
 its offset. A change to a body's frames that moves a cornerstone's sun fails
@@ -914,6 +1121,18 @@ const clouds = this.#host.render.clouds()?.settle ?? null
   gain the clouds.
 - A forced path never settles (`clouds.ts:111-112`). No cornerstone forces
   one.
+- **Settled is the rubric's "whole"** (§3.2 and §5 there): the history's 32
+  frames, the sun grid at full weight or idle, and every block of the far
+  atlas in view baked since the field last changed. K's settle is the first
+  of the three. Package L adds the grid's weight to the report's `settle`
+  when it builds the weight, and package X the atlas's blocks in view, so a
+  plate cannot be taken while the statistics still stand in for the grid
+  where the grid will draw.
+- **Weather asked for before the clouds arrive is drawn when they do** (as
+  built): the cloud chunk loads lazily, and a picture taken first holds its
+  weather until the system exists.
+- **`'climate'` reports unavailable until package C widens the lever** (as
+  built). No cornerstone but E3's last form and C4's cast names it.
 
 ### 3.6 The capture set, and the media a pull request carries
 
@@ -951,8 +1170,16 @@ clouds=1`. E1–E3 also have a `deck` arm, taken without the flag: the picture's
 - **`--twice` is two boots.** Each still is taken, the page is closed, and it
   is taken again from a fresh boot. The pair's changed pixels, by
   `compare.mjs`'s measure (`scripts/presets/compare.mjs:267-277`), are the
-  rig's noise floor, and they are the rubric's "two boots at one instant draw
-  one plate". A review counts only when the pair is under the floor.
+  rubric's row 17: two boots at one instant draw one plate, within the noise
+  floor. The floor itself is five pairs, which is package U's `--pairs`
+  (§3.8).
+- **A cast records the rate it was taken at.** As built `capture.mjs` reads
+  the rate from the page's own frame log over the cast's first 30 frames and
+  refuses a cast outside 58 to 62 Hz. The rubric refuses only once a 60 Hz
+  presentation can be held on demand, and until then asks for the rate in the
+  cast's record (§4 there). Package U makes the refusal the hold's: before the
+  hold exists a cast outside the band is kept, marked with its rate, and
+  counts for no check that §7.5 lists as moving with the rate.
 - **`--cut` is the rubric's "a cut lands on the right sky".** In one boot the
   tool takes another preset, settles, cuts to the named cornerstone, settles
   and shoots, and reports that plate against the fresh boot's. §4.7 keeps
@@ -979,7 +1206,11 @@ clouds=1`. E1–E3 also have a `deck` arm, taken without the flag: the picture's
   throughout" is the instruction this serves; nothing else is uploaded.
 - **The baseline.** Package K's own capture is phase 0's arm: the landed
   defaults' light, with the placeholder density, stills and casts both. Every
-  later sheet's left column starts there, G5's and G6's included.
+  later sheet's left column starts there, G5's and G6's included. It is also
+  the panel's low anchor (rubric §3.3). Its casts carry phase 0's
+  observer-built drift (§5.3): the density at a fixed point changes as the
+  eye moves at a held time, so a step the detector finds in a baseline cast
+  may be the placeholder's, and the baseline's casts pass no check.
 
 A pull request that moves no cornerstone says so and shows the measurement it
 does have.
@@ -987,20 +1218,111 @@ does have.
 ### 3.7 The record
 
 `design/plans/weather/README.md` gains one table, a row a cornerstone and a
-column a phase: the sheet's URL, the commit, the numbers of the rubric's §3.6
+column a phase: the sheet's URL, the commit, the numbers of the rubric's §3.9
 that exist yet, and the panel's scores where a panel has sat. Earth's rows say
 what the forced arm lacks at that phase: in phase 1, no shadow on the ground
 and a regime in place of the climatology. E3's row says when its weather
 changes from a regime to the climate, because the sheet across that change
 compares two weathers. The uploaded plates make the table the durable index.
 Package K writes the table with the baseline's column; package N writes phase
-1's.
+1's. Only the verdict commit's full set gates; every earlier phase's plates
+are the record (rubric §2). Jon is shown the sheet at the phase's end, before
+any score, and is not a gate on it (rubric §9).
 
 **The references are frozen before the baseline is taken** (rubric §3.1), by
-the orchestrator (ruling 3): three to five a picture from the gathered
-candidates, with source, credit, license and hash, in
-`design/plans/weather/references.md`; the images stay in
+the orchestrator (ruling 3): 40 photographs, four or five a picture, with
+source, credit, license, hash, capture metadata, a caption and a one-line
+"misleads" note, in `design/plans/weather/references.md`; the images stay in
 `.data/weather/references/`. Jon is shown the set and is not a gate on it.
+E2's captions take the preset's 11.4° lens and its sun 21° under the horizon
+by a dated note there, before the first packet is built.
+
+### 3.8 What the settled rubric adds to the capture (package U)
+
+Package U owns `scripts/weather/capture.mjs`, `descent.mjs` and `sheet.mjs`
+after K, with `cornerstones.json` and the ledger test.
+
+**The record carries provenance and a role** (rubric §3.2, §9).
+
+| Field             | What it is                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `commit`, `clean` | As built                                                                                                                                                                                          |
+| `stance`          | The preset's id and its resolved pose, lens and instant                                                                                                                                           |
+| `fixtures`        | The hash of the frozen references and of `cornerstones.json`                                                                                                                                      |
+| `processing`      | The mode the plate was taken under. The rig's is Enhanced, the mode the game ships with                                                                                                           |
+| `levers`          | The hash of the cloud levers as resolved at the capture's size, from `ir.clouds()` (§4.6)                                                                                                         |
+| `role`            | `candidate`, `deck`, `last-accepted`, `low-anchor`, `guard-pair`, `clouds-off`, `injected-defect`, `reference-run` or `settled-sample`, with the differences the comparison exists to make, named |
+| `rate`            | For a cast, the presentation rate and whether the hold was on                                                                                                                                     |
+
+- A record missing a field is refused by the tools that read it: the panel's
+  packet builder, `castSteps` and the sheet.
+- **A candidate is matched by commit and lever hash,** within a size. A
+  comparator is matched by rig, stance, fixtures and processing mode, and its
+  commit and levers are what the comparison is between.
+
+**The noise floor is five pairs of boots a picture.** `--pairs 5` takes each
+baseline still from ten boots, two at a time. A picture's floor is the
+largest difference in any of its pairs, as a changed-pixel count by
+`presets:compare`'s measure and as an RMSE, written to the record as
+`floor.json`. An RMSE over 0.005 stops the run: the rig is repaired before
+any review counts (rubric §3.2). It is taken once, on the baseline, before
+any plate of this phase's light.
+
+**The casts the rubric's checks name.** K's six are in §8.2. These are added
+or changed:
+
+| Check  | Cast                                                                                                                                                      | Why K's set does not hold it                                   |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| C1, C2 | **The zoom, from 400 km.** G6's start with pitch −45°, 60° to 11.4° in 300 frames                                                                         | At G4's pose the band is never in frame (§8.2)                 |
+| C4     | G6's slow path under the world's own climate, `regime: 'climate'`                                                                                         | The lever names no climate until package C                     |
+| C6     | G5 over 1,600 frames, with 2 km of clear range ahead at its first frame and at its last (§8.5)                                                            | K's 600 frames are 1.5 km                                      |
+| C7     | The clock: the camera held at E1's stance at 1×, 100× and 1,000×, and at G1's at 1×, 300 frames each, started so a reduction falls inside the cast (§5.3) | K's paths hold the instant                                     |
+| C8     | Settled stills at a quarter, a half and three quarters of the pass at 2 m and of the fast descent                                                         | K's casts have no settled sample                               |
+| C9     | The frames from a cut to its settle, 60 of them, and the same for a scrub                                                                                 | `--cut` keeps the settled plate alone                          |
+| §4     | **The continuous entry:** G5's path as settled stills, one a path frame, 600                                                                              | The detector's second control                                  |
+| §4     | **The injected step:** the slow descent at `handoverBand` 1 with `maxSteps` 24                                                                            | K's positive control is named in §8.1 and not in its cast list |
+| §4     | Settled stills at any path's frames `a..b`, for classifying a flagged step                                                                                | —                                                              |
+
+- K's orbit fly, E1's pose at 7.7 km/s through a 60° lens, moves the ground a
+  quarter of a pixel a frame and cannot ghost (rubric §4). It leaves the
+  checks. Its baseline stays in the record.
+- **A settled still along a path** is the path driven to frame `k` by its own
+  schedule with no screencast, held, settled and shot. It has the role
+  `settled-sample`, and it is what a flagged step is classified against
+  (§8.1).
+- **The clock's path** needs a preset's held instant released at a rate.
+  `heldTime.ts` holds it (§8.2); package U adds the harness's verb for
+  running it at a warp from a start instant and reads back the instant each
+  frame into the log. The start is solved from `weatherClock.ts`'s reduction
+  so that a layer's turn or the noise's origin is reduced inside the cast.
+
+**The overlay guard** (rubric §2, §3.8) is a tenth preset,
+`weather-guard-station`, in the cornerstones' list.
+
+- **It is E1's picture with the station in it.** The observatory holds the
+  station as its subject (`packages/devtools/src/observatory.ts`, a station
+  is a subject of kind `'station'`; ADR-0060), from 1 km above it, looking
+  down, through E1's 11.4° lens, with `fair-cumulus` forced. The station
+  orbits at E1's height, so the field under it is E1's, 400 km off.
+- **Its place is the station's, so its instant is solved for the sun.** The
+  solver takes a place that moves: the first instant after J2000 at which the
+  sun at the station's sub-point is 50° up and falling.
+- The ledger test holds the station's bounding sphere wholly inside the
+  frame and between a twentieth and a third of its height.
+- It has a deck arm, which is its first accepted plate, and a volume arm. It
+  is taken at every phase, read by B6, and judged from phase 2.
+- **Nothing in it is drawn over the clouds,** as far as this design read: the
+  station is opaque and writes the depth the trace stops at, so it carries no
+  over-clouds mark and the `chain` form serves it (§4.12). Package U confirms
+  that by the timeline, which holds no `scene over clouds` on the frame. What
+  it tests
+  is the composite's upsample at a hull's silhouette, where one transmittance
+  a pixel meets an edge the scene antialiased by the sample. A halo there is
+  one pixel wide, the same in both forms, and the rubric's artifact class for
+  it is Halo.
+- If the observatory cannot hold that pose on a station, package U reports
+  it before it builds anything else, and the guard is a hull's: the ship at
+  400 km through the flight camera.
 
 ---
 
@@ -1468,23 +1790,58 @@ by this phase. Each lever's uniform is declared by the contracts package in
 `CloudTraceUniforms` (`render/cloudUniforms.ts:123-150`), because that file is
 closed to later packages.
 
-| Lever                                                                                                                                                        | Values                                                                                                                        | Its uniform                                                         | Kind                                                | Fate                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------- |
-| `scenario` → **`weather`**                                                                                                                                   | `'climate' \| ScenarioId`, default `'climate'`                                                                                | None: it chooses the body's weather on the CPU                      | What is drawn                                       | Stays                                                       |
-| `phaseMode`                                                                                                                                                  | `'mean' \| 'bins' \| 'sample'`                                                                                                | None: a kernel variant                                              | Measured choice                                     | Deleted; `'sample'` stays in the test that holds the winner |
-| `phaseBins`                                                                                                                                                  | 2, 3, 4                                                                                                                       | `trace.phaseBins`, a `uint`                                         | Measured choice                                     | Deleted                                                     |
-| `jitter`                                                                                                                                                     | `'ign' \| 'stbn'`                                                                                                             | `trace.jitter`, a `uint`                                            | Measured choice                                     | Deleted                                                     |
-| `transport`                                                                                                                                                  | `'slab' \| 'octaves'`                                                                                                         | `trace.transport`, a `uint`                                         | Exists only if the octave fit passes in Node (§7.4) | Deleted                                                     |
-| `handoverBand`                                                                                                                                               | A ratio ≥ 1, default 2                                                                                                        | `trace.handoverBand`                                                | Quality step                                        | Stays, at its measured value                                |
-| `clip`                                                                                                                                                       | The history's clip width in σ, default 1.25                                                                                   | `trace.clip`                                                        | Quality step                                        | Stays, at its measured value                                |
-| `lightTaps`                                                                                                                                                  | 0, 2, 4, 6, 8, default 4, spaced in optical depth (§5.4)                                                                      | As built                                                            | Quality step                                        | Stays                                                       |
-| `maxSteps`, `farFootprint`, `traceScale`, `composite`, `force`, `warp`, `scrubSeconds`, `flySpeed`, `jitterFrame`, `served`, `second`, `deck`, `stats`, `on` | As built                                                                                                                      | As built                                                            |                                                     | Stay                                                        |
-| `over`                                                                                                                                                       | `'passes' \| 'lean' \| 'chain'`, default `'passes'`                                                                           | None: it chooses the composite's form and pass B's store on the CPU | Measured choice (§4.12)                             | Deleted; the winner is the default                          |
-| `sunSlices`, `sunRamp`                                                                                                                                       | Slices a frame a rebuild may bake, 4, 8 or 16, default 8; frames the grid's weight takes to rise, 8, 16, 32 or 64, default 16 | None: the grid's schedule; `trace.sunWeight` carries the weight     | Measured choice (§4.7)                              | Deleted; the values become constants                        |
+| Lever                                                                                                                                                        | Values                                                                                                                                                                            | Its uniform                                                         | Kind                                                | Fate                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------- |
+| `scenario` → **`weather`**                                                                                                                                   | `'climate' \| ScenarioId`, default `'climate'`                                                                                                                                    | None: it chooses the body's weather on the CPU                      | What is drawn                                       | Stays                                                       |
+| `phaseMode`                                                                                                                                                  | `'mean' \| 'bins' \| 'sample'`                                                                                                                                                    | None: a kernel variant                                              | Measured choice                                     | Deleted; `'sample'` stays in the test that holds the winner |
+| `phaseBins`                                                                                                                                                  | 2, 3, 4                                                                                                                                                                           | `trace.phaseBins`, a `uint`                                         | Measured choice                                     | Deleted                                                     |
+| `jitter`                                                                                                                                                     | `'ign' \| 'stbn'`                                                                                                                                                                 | `trace.jitter`, a `uint`                                            | Measured choice                                     | Deleted                                                     |
+| `transport`                                                                                                                                                  | `'slab' \| 'octaves'`                                                                                                                                                             | `trace.transport`, a `uint`                                         | Exists only if the octave fit passes in Node (§7.4) | Deleted                                                     |
+| `handoverBand`                                                                                                                                               | A ratio ≥ 1, default 2                                                                                                                                                            | `trace.handoverBand`                                                | Quality step                                        | Stays, at its measured value                                |
+| `clip`                                                                                                                                                       | The history's clip width in σ, default 1.25                                                                                                                                       | `trace.clip`                                                        | Quality step                                        | Stays, at its measured value                                |
+| `lightTaps`                                                                                                                                                  | 0, 2, 4, 6, 8, default 4, spaced in optical depth (§5.4)                                                                                                                          | As built                                                            | Quality step                                        | Stays                                                       |
+| `maxSteps`, `farFootprint`, `traceScale`, `composite`, `force`, `warp`, `scrubSeconds`, `flySpeed`, `jitterFrame`, `served`, `second`, `deck`, `stats`, `on` | As built                                                                                                                                                                          | As built                                                            |                                                     | Stay                                                        |
+| `over`                                                                                                                                                       | `'passes' \| 'lean' \| 'chain'`, default `'passes'`                                                                                                                               | None: it chooses the composite's form and pass B's store on the CPU | Measured choice (§4.12)                             | Deleted; the winner is the default                          |
+| `sunSlices`, `sunRamp`, `farBlocks`                                                                                                                          | Slices a frame a rebuild may bake, 4, 8 or 16, default 8; frames the grid's weight takes to rise, 8, 16 or 32, default 16; atlas blocks a frame after an event, 1 or 2, default 1 | None: the caches' schedules; `trace.sunWeight` carries the weight   | Measured choice (§4.7)                              | Deleted; the values become constants                        |
 
 The decided ladders are the defaults the landing sets: `maxSteps` 192,
 `lightTaps` 4 and `farFootprint` 800 m. `lightTaps` admits 6 and 8 for the
-ladder that is taken again (§7.3).
+ladder that is taken again (§7.3), and its list, `CLOUD_LIGHT_TAPS`, is
+exported so the runner's ladder reads it and holds no copy.
+
+**Levers resolve by size, and the resolved set has a hash.** The rubric binds
+a candidate's evidence by a hash of the levers as resolved at the capture's
+size (§9 there), and offers a cheaper lever at Retina as the answer to B9.
+
+```ts
+/** The levers a frame of this drawing-buffer size and pixel ratio draws with. */
+export function resolveCloudLevers(
+  levers: CloudLevers,
+  size: { width: number; height: number; dpr: number },
+): CloudLevers
+/** Eight hex digits over the resolved levers' canonical JSON, keys sorted. */
+export function cloudLeversHash(resolved: CloudLevers): string
+```
+
+- `resolveCloudLevers` is the identity in phase 1, apart from what the trace's
+  extents already do by size (`render/cloudFrame.ts`, `extents`). It is the
+  one place a size-specific default can be written, which is what B9's second
+  answer needs.
+- The hash leaves out the levers that only steer a measurement, `force`,
+  `warp`, `scrubSeconds`, `flySpeed`, `jitterFrame` and `stats`, so a forced
+  row and its steady row share one hash. The report says which were set.
+- `ir.clouds()` carries `levers`, the hash (`packages/devtools/src/clouds.ts`).
+  The capture's record and every campaign row read it there (§3.8, §7.2).
+- The contracts package declares both and tests that two lever sets differ in
+  hash exactly when a shipped lever differs.
+
+**Which levers stay, and as what.** The rubric asks that each lever left at
+the verdict be a quality step or a measurement control, named as such in its
+ADR (§7 there). After this phase's landing: `weather`, `maxSteps`,
+`lightTaps`, `farFootprint`, `traceScale`, `handoverBand` and `clip` are
+quality steps; `composite`, `force`, `warp`, `scrubSeconds`, `flySpeed`,
+`jitterFrame`, `served`, `second`, `deck`, `stats` and `on` are measurement
+controls. `composite` keeps `'thin'` for row 20's batch alone (§4.10).
 
 `bins` is one kernel for every `phaseBins`: it holds four phases a level and
 fetches the first `phaseBins` of them, so the trace has three variants during
@@ -1530,15 +1887,18 @@ the candidates the landing deleted. `CloudResetReason` (`cloudFrame.ts:121-122`)
 is `'none' | 'first' | 'field' | 'picture' | 'jump' | 'resize' | 'cut' |
 'force'`; `'motion'` goes (§5.10). The contracts package adds the two new
 reasons beside the old ones, and package H makes the split and removes
-`'key'` and `'motion'` (§4.11). The rubric's reset row (§5 there) records a
-cut, a scrub and a change of field apart, and a cut is the cheap one.
+`'key'` and `'motion'` (§4.11). The rubric's B7 reads a cut, a scrub, a
+change of weather and a wake from orbit each as its own sequence, and a cut
+is the cheap one.
 `capture.mjs --cut` checks that the caches a cut keeps are the right ones
 (§3.6).
 
 **The grid's rebuild is the reset frame, and it is spread.** With the grid a
 cut costs 19.69 ms and a scrub 14.54 ms at 1080p, against 7.83 and 9.86 with
 the cascades: the frame's bakes are 13.79 and 8.64 ms where they were 1.71
-and 3.90 (campaign 1). Three things make that frame, read in the code:
+and 3.90 (campaign 1, on `horizon`). The landed campaign reads 20.61 and
+14.88 ms, through another stance's lens. The rubric's B7 allows the event's
+frame 4 ms over the steady Δ. Four things make that frame, read in the code:
 
 - **Every event rebuilds all 32 slices at once.** The first frame, a frame
   index that skipped, a jump, a new scenario, a new address, level 1's anchor
@@ -1555,17 +1915,29 @@ and 3.90 (campaign 1). Three things make that frame, read in the code:
   0.05° in 12 s (phase 0 design §3.12), so the grid is rebuilt whole every 12
   seconds of ordinary play. No `ir.gpu` row holds that frame: the runner's
   held loop freezes `renderTime` (phase 0 design §4.1), and the sun with it.
-  A 3 s profile whose clock ran would meet it one time in four.
+  A 3 s profile whose clock ran would meet it one time in four. On the
+  cornerstones' world, with its 10 hour day, it is every 5 s.
+- **The game's own warp is a jump every frame.** `jumped`
+  (`render/cloudFrame.ts:420-448`) expects a frame's step of world time to be
+  the wall's, and calls anything over `max(1 s, 4·delta)` a jump unless the
+  `force: 'warp'` lever is set. The dock's ladder is 1, 5, 25, 100 and up
+  (`hud/warp.ts:15`), and at 100× a 60 Hz frame is 1.67 s of world time. So
+  from 100× every frame takes the reset path: the immediate regime, and every
+  cache rebuilt. The lever measures a path the game does not take (phase 0's
+  council).
 
-The refresh that replaces it is package L's:
+The refresh that replaces it is package L's, with the frame's jump test
+package H's:
 
 | Event                                                                                     | Today                                  | Phase 1                                                                                                                                                            |
 | ----------------------------------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The sun turns                                                                             | All 32 slices that frame, every 0.05°  | Not an event. The steady refresh bakes four slices a frame under the frame's sun, so no slice is more than eight frames old                                        |
+| The sun turns                                                                             | All 32 slices that frame, every 0.05°  | Not an event. The steady refresh bakes under the frame's sun, and its pace follows the sun's (below)                                                               |
+| The clock runs at a warp, at any rate of the dock's ladder                                | A jump every frame from 100×           | Not an event. A frame's step of world time is compared with the clock's own rate, so only a step the rate does not explain is a jump                               |
 | A cut that keeps the body, the place and the time (`'picture'`)                           | All 32, and the volume's 34 at once    | Nothing. The history restarts and the caches stand                                                                                                                 |
 | The eye moves                                                                             | Six slices a frame at the new window   | As built                                                                                                                                                           |
 | A jump of the field's time, a new weather or address (`'field'`), an anchor past a window | All 32, and the volume's 34 at once    | A rebuild under the cap: the volume's two levels at `sunSlices` a frame, then the grid's 32 at `sunSlices` a frame from the trusted volume, then the weight's ramp |
 | A wake from idle, on the way down from orbit                                              | All 32 that frame, and the shadows pop | The same rebuild, started at the wake; the weight rises with the eye's descent                                                                                     |
+| The first frame with the clouds on (`'first'`)                                            | Every cache at once: 51 to 67 ms       | The same rebuild. What is not a rebuild moves into the boot's warm-up (below)                                                                                      |
 
 - **Why a turning sun needs no rebuild.** The grid's cells are level 1's,
   fixed to the body and anchored at the eye; the sun's direction is only the
@@ -1575,18 +1947,69 @@ The refresh that replaces it is package L's:
   because their texels are in the sun's own frame. The steady refresh redraws
   all 32 slices in eight frames, in which Earth's sun turns 0.0006° (**D**:
   `360°/86,164 s × 8/60 s`).
-- **Under warp the refresh follows the sun.** The slices a frame are
-  `clamp(32·δ/0.25°, 4, sunSlices)`, `δ` the sun's turn since the last frame,
-  so the oldest slice is under 0.25° old, 44 m of shadow in 10 km of chord
-  (**D**). At eight a frame that holds to a warp of 900 at Earth's rotation
-  (**D**: `0.25°·8/32` a frame against `0.0696°` a frame at warp 1,000). Past
-  it the grid lags the sun by four frames, and ADR-0073 says so.
+- **A jump is a step the clock's rate does not explain.** Package H's
+  `jumped` takes the clock's own rate from the frame's inputs
+  (`scene/Sensor.tsx:201-203` hands it the world's step and the wall's), and
+  a frame jumps when `|Δt_world − rate·Δt_wall|` passes
+  `max(1 s, 4·rate·Δt_wall)`. A steady warp at any rate of the dock's ladder
+  is then continuous, and a scrub is still a jump. The `force: 'warp'` lever
+  drives the same path the game takes. The rigid turn (§5.3) is what makes
+  that safe: at 1,000× a layer moves 133 m a frame at 8 m/s, which the
+  history reprojects by the layer's own turn (§5.10).
+- **Every cache is refreshed at the pace its field moves.** A cache's texel
+  is redrawn before the fastest thing it holds moves a tenth of it:
+
+| Cache                | Texel            | What moves in it                 | At 1×, whole within      | Landed: whole within                  |
+| -------------------- | ---------------- | -------------------------------- | ------------------------ | ------------------------------------- |
+| Cube, 6 faces        | 19.6 km on Earth | A layer's turn, 25 m/s at most   | 78 s                     | 6 frames                              |
+| Clipmap, 6 levels    | By level         | The same                         | By level, from its texel | An eighth of a level a frame          |
+| Far atlas, 45 blocks | 24 to 39 km      | The same                         | 96 to 156 s              | 45 frames, at 0.80 to 1.59 ms a block |
+| Volume, two levels   | 200 m, 800 m     | The same                         | 0.8 s, 3.2 s             | 9 frames                              |
+| Sun grid, 32 slices  | 400 m            | The turn, and the sun's own turn | 1.6 s, or 0.25° of sun   | 8 frames                              |
+
+- The pace is `texel/(10·u)` for a layer speed `u`, and under a warp `u` is
+  the warp's (**D** for each row at 25 m/s). The grid's second clock is the
+  sun: its slices are never more than 0.25° of sun apart, 44 m of shadow in
+  10 km of chord (**D**).
+- **It takes the bakes out of the steady frame.** At 1× the volume and the
+  grid together bake about one slice a frame where they bake twelve, and
+  the cube and the atlas a face and a block every few seconds where they
+  bake one of each every frame. From orbit, where the volume and the grid
+  idle, the steady frame bakes almost nothing (§2.6). The frame that does
+  bake an atlas block still pays its 0.8 to 1.6 ms, once in about 130
+  frames.
+- **Each cache's cap is its event rate,** which the landed code spends on
+  every frame: the cube a face a frame, the atlas `farBlocks` a frame, the
+  volume and the grid `sunSlices` each. Under a warp the pace rises toward
+  the cap and stops there. At eight slices a frame the grid follows a sun
+  to a warp of 900 at Earth's rotation (**D**: `0.25°·8/32` a frame against
+  `0.0696°` at 1,000×), and past that it lags by four frames, which
+  ADR-0073 declares. The plan accepts a cache that lags under warp (§12
+  there); it does not accept one that rebuilds.
+- The schedule is arithmetic, in `packages/rendering/src/cloudSunSchedule.ts`
+  for the grid and its source and in the same shape for the cube, the
+  clipmap and the atlas, each in its own package's file. Package L writes
+  the function all four call.
 - **The grid waits for its source.** A slice is baked only when both of the
   volume's levels are trusted, so no step of a rebuild takes the field's five
   reads. With two levels the source is 68 slices: nine frames at eight a
   frame. Then the grid is four frames. Then the weight ramps over `sunRamp`
   frames, 16 by default: 29 frames from the event to the grid at full weight,
   inside the 32 the history itself takes to settle (§3.5).
+- **A cache is fresh only from a fresh source.** After a jump the landed
+  clipmap and atlas rebuild from cube faces not yet rebaked and mark
+  themselves fresh (phase 0's council), so a settle can pass on the old
+  weather. Each cache records the generation of what it read: the clipmap and
+  the atlas the cube face's, the grid the volume's. A cache whose source is
+  older than the field is pending and is baked again when the source
+  arrives. The cube bakes the faces in view first, and an atlas block waits
+  for its face.
+- **After an event the atlas bakes the blocks in view first,** `farBlocks` a
+  frame, one by default. Half the body at most is in view, so 23 blocks and
+  the three faces before them are whole within about 26 frames (**D**). If a
+  block's 0.8 to 1.6 ms does not fit under B7's later frames beside the
+  grid's slices, package X cuts the block from 192 texels to 128, a hundred
+  blocks a cycle at under half the cost each, and §7.4's rule chooses.
 - **Nothing is unshadowed meanwhile.** While the grid is not whole, the sun's
   depth past the taps is the layers' own statistics (§5.5), which is also what
   draws from orbit and past the grid's window. The grid replaces them through
@@ -1608,27 +2031,63 @@ The refresh that replaces it is package L's:
   which the row wants, and the frames after it are measured as a sequence
   (§7.2).
 
-`sunSlices` and `sunRamp` are set by §7.4's rule from the reset sequences.
+`sunSlices`, `sunRamp` and `farBlocks` are set by §7.4's rule from the reset
+sequences.
 
-**The budget's reset row is a sequence, and it is in GPU time.** "Drops at
-most one frame" depends on the presentation rate (§7.5), and a steady window
-cannot see a frame that is long and alone. The row becomes: for a cut, a
-scrub, a change of field and a wake from orbit, each taken as the 33 frames
-from the event by `ir.passes`, at 1080p,
+**B7 is the rubric's, and this is how the design meets it.** A cut, a scrub,
+a change of weather and a wake from orbit are each read as a sequence on GPU
+timestamps, on `horizon` at 1080p:
 
-- the event's frame adds no more over the steady frame than the immediate
-  regime adds, its four trace dispatches and their history against a steady
-  frame's one;
-- no later frame adds more than 0.5 ms over the steady frame;
-- the grid is at full weight within 48 frames.
+| B7 asks                                                                                                                                      | What spends it                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The event's own frame, which traces every pixel once, is no more than 4 ms over the steady Δ                                                 | The immediate regime: four trace dispatches at a quarter of the steps each. On `horizon` the landed cut's trace is 6.00 ms against a steady 2.45, so the regime alone is 3.5 ms. The bakes that frame are a cube face and `sunSlices` of the volume, no more than a steady frame at its cap |
+| No later frame is over the steady Δ by more than 2 ms                                                                                        | The caps: `sunSlices` of the volume or the grid, a cube face, `farBlocks` of the atlas                                                                                                                                                                                                      |
+| The field is whole within 48 frames at 60 Hz: the grid at full weight, eight samples a pixel in the history, every atlas block in view baked | 29 frames for the grid at the defaults, 32 for the history, about 26 for the atlas                                                                                                                                                                                                          |
 
-In campaign 1's figures the first clause is about 8 ms on `horizon`, the
-steady 5.11 ms and the 2.9 ms a cut added under the cascades (**D**), where
-the whole rebuild cost 19.69. The phase's own figures are window 3's.
+- **The event's frame has half a millisecond to spare,** and the trace's own
+  cost decides it. The regime's premium is 1.45 times the steady trace
+  (**D**: `6.00/2.45 − 1`), so at B2's bar, where the plan's trace is 1.8 ms,
+  it is 2.6 ms (§2.6). If the trace does not come down, B7's first clause is
+  the one that fails, and the lever is the immediate regime's share of the
+  steps.
+- **The caps and the ramp have to fit 48 frames together.** `sunSlices` 4
+  with `sunRamp` 16 is 41 frames; 8 with 32 is 45; 4 with 32 is 57 and is not
+  a choice. `sunRamp` is 8, 16 or 32.
+- **The sequence is 60 frames,** 48 and a margin, read by the `sequence`
+  step (§7.2). "Whole" is read from `ir.clouds()`: the grid's weight, the
+  history's count and the atlas's pending blocks in view.
+- **The landed figure B7 quotes is at an unknown field of view** (the record
+  at the top). The bar's own derivation is from `horizon`'s steady row and
+  stands.
 
-**Warm-up** (`cloudSystem.ts:394-410`) is unchanged in shape: one registration,
+**The first frames are a reset and a warm-up, and B13 wants both.** The
+largest of the first five intervals with the clouds on is 50.8 to 66.8 ms at
+1080p against a steady 16.7, and it is not shown to be a compile: the
+pipelines are 10 and 8 on every boot, and a cut alone costs 19 to 25 ms of
+GPU (landed).
+
+- **The reset's share is this section's:** the first frame is `'first'`, and
+  it rebuilds under the same caps as any change of field.
+- **The rest is not a rebuild and moves into the boot.** What the first
+  frames spend beyond a reset has not been decomposed. The candidates are the
+  system's textures being allocated, the noise being baked and the tables
+  being uploaded. Package N reads the first five frames by pass and by CPU
+  span, and whatever of those it finds there moves into the boot's warm-up
+  under the `warming the clouds` span, through `render/warmup.ts` (rule 61).
+- **That span came back empty in all six landed boots.** Package N's first
+  act is to find why: whether the registration emits it, and whether the
+  runner reads it. A span that is not recorded cannot hold B13 or the plan's
+  cold-compile row.
+- B13 binds from the first campaign that can hold 60 Hz (§7.5). Until then
+  the `memory` batch records the five intervals with their rate, and beside
+  them each of those frames' GPU time by pass, which does not move with the
+  rate and says what the first frames spend.
+
+**Warm-up** (`cloudSystem.ts:394-410`) keeps its shape: one registration,
 every kernel and material compiled against stand-ins, `cloudWarm.gpu.test.ts`
-holding the first frame of every lever set to no new pipeline.
+holding the first frame of every lever set to no new pipeline. The lever sets
+it holds gain one with `served` set and one with `second`, which the landed
+test never exercises (phase 0's council).
 
 ### 4.8 The served set, and Earth
 
@@ -1660,6 +2119,15 @@ export function cloudsServed(body: Body): boolean {
   `weatherScenario.test.ts:165-222` does, and holds: far-shore V served,
   Earth not, Earth served when forced, and the deck's shadow 0 exactly when
   the deck is hidden.
+- **As built,** `cloudsServed` is in `weatherScenario.ts` with its test
+  (package K), and `cloudFrame` still calls `wetWorld`. Package C wires the
+  frame to it.
+- **C11 is this section's test** (`weatherScenario.test.ts`,
+  `cloudFrame.test.ts`): on WebGPU, Earth's deck is hidden only on a frame
+  where the volume serves Earth, and Earth joins the served set when its
+  deck's record goes, which the test shows by building Earth's record without
+  one. A frame of Earth with neither a deck nor the volume fails it. Its
+  phase 3 half is the same test on the record as it then stands.
 
 ### 4.9 What draws after the composite reads the knots
 
@@ -1668,6 +2136,36 @@ returns the transmittance and the light in front of a point, and only its
 tests call it. Every overlay draws over the clouds unattenuated today. A ring
 passing behind a limb's clouds, a plume inside a deck and an entry trace under
 one are each a pasted layer.
+
+**A knot is a level's crossing, not a column's.** As landed, the march closes
+a segment at each clipmap texel of horizontal run and records a knot at each
+close whose own transmittance is under 0.98, and the fourth knot absorbs the
+rest (`render/cloudMarch.ts:357, :447-449`, `render/cloudKnots.ts`). On the
+real field four knots are then the first four columns, about 250 m each.
+Looking up 30° through a kilometer of cumulus under cirrus, knots 0 to 2 are
+the first 750 m and the fourth runs from there through the cirrus, so an
+object in the clear gap takes a depth-proportional share of the cirrus behind
+it. A cloud thin in every column records nothing, and `cloudFront` answers
+`T = 1` (phase 0's council). The landed tests see neither, because they are
+on slabs, whose column has no end.
+
+- §5.9's law removes the column's close, and the knot's trigger with it.
+  **Package M1 records one knot a crossing of a level:** its entry is the
+  crossing's first cloudy step and its exit the last, with the transmittance
+  and the light so far at the exit. A crossing whose own transmittance is
+  over 0.999 records none.
+- Four knots hold three levels and one level crossed twice, which is a
+  grazing ray's. Past four the fourth absorbs the rest, as now.
+- Inside a knot `cloudFront` interpolates between entry and exit, as now.
+  Between two knots it is flat, which is the clear gap between two layers.
+- The layout does not change: four entries and exits, and four `(L, T)`
+  (`cloudKnots.ts`).
+- **The tests are on the real field** (`cloudFront.gpu.test.ts`, package M1).
+  Under `cirrus-over-cumulus`, looking up 30°, a point in the gap reads the
+  cumulus's transmittance within 2% of a march stopped there. A layer of `τ`
+  0.1 in every column reads within 0.01 of the march's transmittance behind
+  it, and not 1. `cloudFront` at the ray's end equals the trace's own
+  `(T, L)` within 1%.
 
 **Nothing hands a scene material the trace today.** The system is made inside
 the sensor (`render/sensor.ts:224-227`) from a factory in a lazily loaded
@@ -1727,25 +2225,69 @@ export interface CloudFrontHandle {
 - `createRingMaterial` is the one function of `planet.ts` this phase edits.
   The sphere's material in the same file is not touched (§2.4).
 
-### 4.10 The composite's form by regime `[depends: thin]`
+### 4.10 The composite's form: the identity, everywhere
 
 Phase 0's rule allows the thin form only in a regime where its error against
 the identity is under 1% at the 95th percentile and under 5% at worst (phase 0
-design §8.7). That error was measured on the placeholder's light. **It is the
-one choice phase 0 has not made:** its second campaign reads `error` on the
-landed code, and the landing ships the identity everywhere. Until that record
-exists this section holds both outcomes.
+design §8.7), and the rubric makes that a gate on the verdict commit (row
+20). The landed `error` batch decided it:
 
-- **If no regime passes,** the identity draws everything, and this section is
-  empty.
-- **If a regime passes** (from orbit is the likely one), the cornerstones in
-  it, E1–E3 and G6's first frames, draw through the thin form. The identity's
-  blocked-air term `B` scales with the cloud's opacity, which the scaled
-  medium changes, so the phase 1 campaign re-runs phase 0's `error` batch on
-  the landed code (§7.2), and a regime keeps the thin form only if it passes
-  the same rule again.
-- The second body draws through the thin form under either outcome
-  (`cloudComposite.ts:441-489`); its error is in the same batch.
+| Scenario        | Thin's error at the 95th percentile | At worst       | Allowed |
+| --------------- | ----------------------------------- | -------------- | ------- |
+| `orbit`         | 0.1%                                | 0.4% to 1.8%   | Yes     |
+| `sunset`        | 27.4% to 31.6%                      | 100%           | No      |
+| `fog`           | 4.2% to 4.9%                        | 10.0% to 15.4% | No      |
+| `horizon-2.4km` | 3.2% to 3.7%                        | 17.8% to 20.5% | No      |
+
+**The thin form is allowed from orbit and nowhere else, and phase 1 does not
+use the allowance.** The identity draws every pixel of every clouded body.
+
+- **It buys no cost.** The two forms are one fragment: the thin form is the
+  identity with its blocked-air term selected to zero and its air taken to
+  the cloud's mean depth where the identity takes it to the ray's end
+  (`render/cloudComposite.ts`, the `thin` select). There is no cheaper
+  shader to switch to.
+- **It buys no picture.** Where it is allowed it is within 0.1% of the
+  identity.
+- **It would need a boundary on the way down.** A regime that draws thin from
+  orbit and by the identity below hands over somewhere on G6's descent, and
+  C1 allows no switch that can flip between two frames. A band that fades
+  between two forms 3% apart is work that buys nothing.
+- **The evidence for "from orbit" is one stance at one sun,** 4.4° up (phase
+  0's council). Using the allowance would need more of it. Not using it needs
+  none.
+
+**The second body draws by the identity too.** As landed its far march is
+composited through the thin form always, with no blocked air and its air
+taken to the cloud's mean depth (`cloudComposite.ts`, the second body's
+branch), in a geometry no `error` scenario holds: a distant disk seen
+through the served body's near air. Row 20 lets a regime draw thin only
+where its error passes on the verdict commit.
+
+- Package N gives the second body's term the identity's form: the air to the
+  ray's end, and the far march's blocked air. Whether `CloudFarResult`
+  carries the blocked air to the composite's fragment is the package's first
+  reading; where it does not, `FarMarch` returns it.
+- **The `error` batch gains the two `pair` stances** (§7.2), thin against the
+  identity for the second body's term, so the record holds what the landed
+  form cost in error. It decides nothing: the identity draws either way.
+- If the identity's second body costs more than the protocol's resolution on
+  `pair-moon` and `pair-neighbor`, the figure is recorded against B6. It is
+  not a reason to draw thin unmeasured.
+
+**What stays of the thin form** is the `composite` lever's `'thin'` value, a
+measurement control (§4.6). Row 20 is read from the `error` batch on the
+verdict commit, at both sizes with Enhanced off and on, and it holds while no
+regime of the shipped game draws through the thin form. If a later phase
+wants the allowance, it brings the evidence and the band.
+
+**One column of that batch is not evidence.** Its display-referred pair, two
+screenshots, contradicts its own meter: `horizon-2.4km` at Retina has every
+pixel over 3% where the meter puts 2.9% of texels over 5%, and from orbit
+with Enhanced off the pair differs by 0.068 to 0.111 in display RMSE where
+the residual says 0.1%. The pair is taken under a meter that settles between
+the two shots. Package Q takes it at a held exposure or drops the column
+(§7.2).
 
 ### 4.11 How the contracts land on a system that is already built
 
@@ -1871,22 +2413,25 @@ records each in the constant's own comment:
 
 **What the campaign found.** Under placement A the composite and everything
 drawn over the clouds are a second render of the scene into the scene's own
-target, `scene over clouds` on the timeline (`render/cloudOverPass.ts`). It is
-the largest cloud cost in the frame (campaign 1, steady, ms):
+target, `scene over clouds` on the timeline (`render/cloudOverPass.ts`). At
+Retina it is the largest cloud cost in the frame, and at 1080p the second,
+behind the trace at four taps (landed, steady, ms; the empty split is campaign
+1's, the only place B was measured):
 
 | Stance                              | 1080p: the clouds' Δ | Of it, `scene over clouds` | Retina: Δ        | Of it, `scene over clouds` |
 | ----------------------------------- | -------------------- | -------------------------- | ---------------- | -------------------------- |
-| `horizon`                           | 4.91                 | 1.53                       | 6.88             | 3.89                       |
-| `inside`                            | 5.14                 | 2.09                       | 8.00             | 5.05                       |
-| `orbit`                             | 3.08                 | 1.74                       | 5.66             | 4.34                       |
+| `horizon`                           | 5.67                 | 1.52                       | 7.70             | 3.88                       |
+| `inside`                            | 5.07                 | 2.08                       | 7.70             | 5.05                       |
+| `decks`                             | 7.55                 | 2.19                       | 9.79             | 5.32                       |
+| `orbit`                             | 3.03                 | 1.84                       | 5.54             | 4.45                       |
 | The empty split, B with nothing run | 1.04, 0.98, 1.02     | —                          | 2.45, 2.42, 2.49 | —                          |
 
-- **From orbit the trace is 0.10 ms and the over pass 1.74.** The rubric's
-  orbit row is 1.6 ms, and the pass alone spends it.
-- **The rubric's Retina rule fails on this pass and nothing else.** "The
-  clouds add no more than they add at 1080p" is missed by 2.0 to 2.9 ms. The
-  over pass grows by 2.4 to 3.0 ms between the sizes, and the trace falls
-  (1.79 to 1.41 ms on `horizon`), because the ray budget is held.
+- **From orbit the trace is 0.09 ms and the over pass 1.84.** B4 is 1.6 ms,
+  and the pass alone spends it.
+- **B10 fails on this pass and nothing else.** Retina's Δ is to be within
+  0.5 ms of 1080p's and is 1.8 to 2.6 ms over. The over pass grows by 2.4 to
+  3.0 ms between the sizes, and the trace falls (2.45 to 2.19 ms on
+  `horizon`), because the ray budget is held.
 - **The price is the target's bytes.** The empty split is the break with
   nothing drawn: 1.0 ms at 1080p and 2.45 at Retina, 2.4 times, on a target
   with 2.5 times the pixels.
@@ -1976,6 +2521,17 @@ frame with one, 84 of them are.
    - **If the spike cannot reach the descriptor without patching three,**
      `lean` is not built, and the report says what three would have to expose.
 
+**What the composite's tests do not hold today, and package Y adds** (phase
+0's council). Y builds a second form of the composite, so the first has to
+be pinned before it:
+
+| Unheld today                                                                                                                                          | The test Y adds, in `cloudComposite.gpu.test.ts` unless named                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Every case sets the render compression to 1, and from orbit it is not                                                                                 | One slab at orbit's compression draws the frame the uncompressed case draws, within a half-float step                             |
+| Its only air has no in-scatter, and no always-on test calls `compositeAir`: the identity's `(1 − T_c)·L_a(0, t₁)` can be deleted and the suite passes | One slab in an in-scattering air, held within 1% of the joint march `cloudCompositeError` uses. Watched failing with the term out |
+| No test draws the real composite with a marked overlay                                                                                                | `cloudOverPass.gpu.test.ts`: a marked mesh in front of a slab and one behind it, through the system's own composite               |
+| No test compares a frame after the clouds are turned off with one that never had them                                                                 | `cloudSensor.gpu.test.ts`: on, then off, then a frame equal to the chain without clouds                                           |
+
 **What phase 1 does not build.**
 
 - **The overlays in a target of their own:** cleared, not loaded, testing
@@ -2008,23 +2564,50 @@ frame with one, 84 of them are.
 
 **The measurement** is the `over` batch of §7.2, and its rules are §7.4's.
 
-**The cell carried from phase 0.** At Retina inside a cloud, A's `sensor`
-mean is above B's in all three samples: 10.71, 13.63 and 11.57 ms against
-9.20, 10.12 and 6.93, 3.2 ms in the mean and 0.06 ms short of twice the
-spread. The frames delivered are the same (132, 133, 132 against 130, 131, 130) and A has no more late frames, so A stands by the rule. Three samples in
-two pacing regimes (§7.5) do not settle it.
+**B11 is `lean`'s row.** The steady Δ on `overlay`, `horizon`'s pose with
+the engine lit, is to be at most 1.0 ms over `horizon`'s. With `chain` on
+`horizon`, that difference is the whole price of pass B: the break, the
+second traversal and the plume's own fragments. The break alone is 1.0 ms
+(the empty split), so `passes` as landed cannot hold the row and `lean` has
+to. If `lean` cannot be built, or leaves the difference over 1.0 ms, B11 is a
+declared miss with its figure in ADR-0074, and the overlays' own target goes
+to phase 2's design.
 
-- **What it would be, if it is real,** is pass B's second `renderer.render`:
-  a second traversal, cull and sort of the scene on the CPU. `chain` removes
-  that render on a frame with no overlay.
-- **The `over` batch takes this cell with proper repeats:** the `sensor` span
-  at Retina on `inside`, nine samples a side at one recorded rate, `passes`
-  against `chain` and against `lean`, read by phase 0's clause (a mean higher
-  by more than 0.3 ms and by more than twice the larger sample deviation).
+**Placement A stands as an exception, and one cell can send it back.** By
+phase 0's rule as written (§8.7 there), A loses if its `sensor` mean exceeds
+B's by more than 0.3 ms on any of three stances at either size. At Retina
+inside a cloud it does, in all three samples: 10.71, 13.63 and 11.57 ms
+against 9.20, 10.12 and 6.93, which is 1.51, 3.51 and 4.64 ms over, at two
+presentation rates. ADR-0063 keeps A as the exception the rule allows with
+figures: the GPU cost is equal, the frames delivered are equal (132, 133, 132
+against 130, 131, 130), A has no more late frames, the 1080p cells show no
+difference, and B draws the opaque instruments under the clouds and reaches
+under three's surface.
+
+- **What the excess would be, if it is real,** is pass B's second
+  `renderer.render`: a second traversal, cull and sort of the scene on the
+  CPU. `chain` removes that render on a frame with no overlay, so from here
+  the question is only about a frame that has one.
+- **The `over` batch takes the cell at one rate:** the `sensor` span and the
+  frames presented at Retina on `inside` and on `overlay`, nine samples a
+  side at a held 60 Hz, for `passes`, `chain` and `lean` (§7.2).
+- **What sends the placement back** is §7.4's rule: evidence that pass B
+  costs a frame, where phase 0 had evidence only that it costs CPU time.
+- **What going back costs.** B exists at `25df44ab`. With `chain` in place B
+  would serve only a frame that has an overlay, in place of pass B: the split
+  after the sea's sheet and its test restored, the scene's marks turned back
+  into draw orders, the plumes and the entry trace given an order past the
+  composite's, and `lean` dropped, since a split's first half must store what
+  its second loads. That is one package of about 1,200 lines (**E**, from
+  the split's landed size and the seven scene components), one window of
+  about an hour and a half for the `over` batch and the placement's cells
+  again, and ADR-0063 superseded. It also brings back what B was declined
+  for: the entry trace's opaque inks under the clouds, and a swap of three's
+  encoder.
 - **A against B itself can be taken again only where both exist,** at
-  `25df44ab`. That is one stage of window 1 from a worktree at that commit,
-  about ten minutes, and it is asked of the orchestrator (§11.1). Phase 1
-  rebuilds neither B nor C to measure them.
+  `25df44ab`, from a worktree at that commit: about ten minutes at a held
+  rate. The orchestrator has declined it for now, and the commit stays in
+  the branch's history. Phase 1 rebuilds neither B nor C to measure them.
 
 ---
 
@@ -2140,8 +2723,8 @@ the calibration and ISCCP are unscaled throughout. ISCCP retrieves `τ` at
 - **Visibility inside a cloud is `3.912/σ′`** for those shapes: about 110 m at
   the plan's 68 km⁻¹ for continental cumulus and 145 m at the marine 52 the
   genus table uses on every body in phases 1 and 2 (**D**:
-  `3.912/(0.52·0.052)`). §8.5 measures it and §11.2 gives the rubric's
-  sentence.
+  `3.912/(0.52·0.052)`). §8.5 measures it, in a uniform medium, where the
+  rubric's row 21 holds it.
 
 ### 5.2 Density is water
 
@@ -2296,6 +2879,18 @@ every layer, starts over every hour, and the hour is a jump
 a history restart and a far-bake restart once an hour of simulated time. On a
 default path that is a step in every hour's cast.
 
+**And phase 0's drift is the observer's.** The wind is built in the eye's own
+tangent basis, `horizonBasis(eye)`, and the accumulated drift is that wind
+times up to 3,600 s (`render/cloudFrame.ts:352-357, :375`);
+`render/cloudDensity.ts:139` subtracts it from every sample. So at a held
+time, moving the eye turns the whole lattice: the density at a fixed body
+point changes with where it is seen from, by about 0.9 m/s of false drift at
+250 m/s on far-shore V, and sharply near a pole, where the tangent basis
+turns fastest. The history's reprojection cannot follow a motion that is not
+in time. The plan asks for a pure function of `(body, place, renderTime)`,
+the rubric's row 17 gates it, and every cast that moves the camera at a held
+instant would read the defect as the field's (phase 0's council, two seats).
+
 - **Each level's noise frame turns rigidly about the spin axis** at its own
   rate, `ω_k`, against the ground: a zonal wind `u = ω_k·a·cos φ`. A rigid turn
   of a lattice has no shear, is exact on a sphere at every latitude, and is
@@ -2326,6 +2921,28 @@ default path that is a step in every hour's cast.
   of its levels. Its `wind.north` is not drawn.
 - `CLOUD_ADVECTION_PERIOD`, the hourly jump and `driftOffset`'s restart go.
   `periodIndex` stays for the regimes' blob redraw, which no cornerstone uses.
+- **Nothing in the lookup is the observer's.** The turn is about the body's
+  spin axis and the drift along it, both in body-fixed axes. The eye enters
+  only as the origin the float32 offset is measured from, and
+  `M_k·eye + M_k·offset` is `M_k·p` for any eye. `horizonBasis` leaves the
+  field's derivation in `cloudFrame.ts` (package H); it stays where a stance
+  needs an east and a north.
+- **Three tests hold it from two eyes.** In Node, `weatherField.test.ts`
+  (package D): for any body point, instant and pair of eyes, the level
+  frames built for each eye map the point to one lattice coordinate modulo
+  the noise's period, to float64 rounding (**property**). In Node,
+  `cloudFrame.test.ts` (package H): the same on the frame's own `turn` and
+  `noiseOrigin`, with one eye at a pole. On the GPU, `cloudDensity.gpu.test.ts`
+  (package F): the extinction at one body point and instant, read through
+  `fieldMedium` from an eye 10 km off and from one 2,000 km off, is equal
+  within one 8-bit step. Each is watched failing with phase 0's
+  `horizonBasis(eye)` put back.
+- **The drift's sign has a test of its own.** The landed history's oracle is
+  built from the same `served.wind` the frame hands the kernel, so negating
+  the drift passes (phase 0's council). The history's test takes its
+  expected displacement from the CPU field, `cloudFieldAt` at `t` and at
+  `t + Δt` (package H), and C7's cast measures the drawn field's displacement
+  against the CPU turn's, sign and all (§8.1).
 - Neyret's bounded advection, a wind that varies over the body and a new seed
   each period are phase 4's, with the wind field they need.
 
@@ -2359,6 +2976,15 @@ march / exact = k·(1 − e^(−Δ)) / (1 − e^(−kΔ))     1.149 at k = 2,  1
 (the physics critique's finding 1, **D** there and redone here). The jitter
 does not remove it, no step count sees it, and a longer step makes it worse.
 
+**And the landed step does get longer with distance.** The 0.3 holds until
+the schedule's floor, `3 m + 0.00375·t`, passes `0.3/σ`: 1.5 km out for
+`fair-cumulus` at 35 km⁻¹. At 8 km a step is 33 m, a depth of 1.16, and
+first order is 52% high at `k = 2`. At the far comparison's 55 km handover a
+step is 50 m or more, and it is 70% high or more (phase 0's council; **D**:
+`2/(1 + e^(−Δ)) − 1`). So the bias is 15% only near the eye, and the far
+comparison's own reference carries the most of it exactly where the two
+marches are compared.
+
 - **The step's source is log-linear between its two ends.** With `S₀` and `S₁`
   the source at a step's start and end and `κ = ln(S₀/S₁)/Δτ′`, the step adds
   `S₀·(1 − e^(−(1 + κ)·Δτ′))/(1 + κ)`, per band. That is exact for a source
@@ -2375,6 +3001,16 @@ does not remove it, no step count sees it, and a longer step makes it worse.
   which falls with the same beam.
 - **It is a defect of phase 0's march, fixed by package M1.** How it bears on
   phase 0's own figures is at the end of this section.
+- **Its test is at the steps the march really takes** (`cloudTrace.gpu.test.ts`,
+  package M1): a uniform slab's first-order radiance is within 1% of its
+  closed form at step depths of 0.3, 1.16 and 2, where the landed step is
+  15%, 52% and 76% high.
+- **The far comparison is re-based once, when this lands.** Package C pins
+  `cloudFarCompare`'s landed figures as bounds (§6.3), and those figures are
+  against a reference that is up to 70% high. M1's change moves the reference
+  for a stated reason, so the package that lands it re-takes the instrument
+  and writes the old and the new figures into the record in one commit. After
+  that the bounds only tighten.
 
 **First order.** A step's source, per band:
 
@@ -2404,11 +3040,21 @@ there). That is where all of first order's light is.
   fair cumulus; six reach `31.5/σ′`, about 890 m; and eight are clipped by
   the 1 km reach (**D**, at the 35 km⁻¹ the line above implies). So 8 against
   6 tests the reach, and 6 against 4 the count.
+- **A tap reuses its step's `cover` and `kind`.** Those two texels hold the
+  climate's or the regime's cover and its convective share, which vary over
+  the maps' texels, kilometers, and a tap's whole reach is a kilometer at
+  most. So a tap reads the base noise, the detail and the profile at its own
+  point and takes the cover and the kind its step fetched: three reads where
+  the landed tap makes five, 17 a step at four taps where it makes 25
+  (**D**). The sun gate judges it with the rest of the taps' changes.
 - **Past the taps the sun's depth is the grid's,** read at the taps' end, or
-  the statistics that stand in for it (§5.5). The sun gate's shortfall at four
-  taps is the grid's own: an RMS of 0.097 on `two-decks` and 0.082 on
-  `cirrus-over-cumulus`, where the rule asks 0.03 (phase 0's `sunAccuracy`),
-  taken with the taps as built. Package M1 takes it again with these.
+  the statistics that stand in for it (§5.5). At four taps the landed grid is
+  within the gate's 3% in four cases of ten. Its RMS is 0.097 on `two-decks`
+  at 37.5° and 0.054 at 5°, 0.082 on `cirrus-over-cumulus` at 5°, 0.046 and
+  0.032 on `fair-cumulus`, and 0.040 on the anvil at 5°; and its worst sample
+  is 1.00, full scale, under two decks at a 5° sun, and 0.94 or more in five
+  cases of ten (the landed `sunAccuracy` document; ADR-0064). Those are with
+  the taps as built. Package M1 takes the gate again with these.
 - The gates run with an exact sun and with this one (§7.4), so the sun
   path's own error has a number.
 
@@ -2685,6 +3331,27 @@ own_k   = (1 − c_k) + c_k·e^(−max(d_k/μ₀ − τ′_taps, 0))
   measured at 37.5° and 5°. G3 stands at −1.5°, and E2's limb sees the sun
   1.2° under. Package L's instrument takes G3's sun on `altocumulus`, with
   the bake as built and as above, and the record carries both.
+- **The gate's population is thin, and package L widens it before it reads
+  anything** (`cloudSunAccuracy.gpu.test.ts`; phase 0's review and council):
+  - **Places.** It takes the first maximum of cover on a Fibonacci sphere, so
+    four of five scenarios stand at latitude 86° to 89°, one place each. The
+    rigid turn makes a pole a special place, where a layer's texture stands
+    still. Each scenario is scored at five places drawn by a seed between
+    60° S and 60° N.
+  - **Reach.** Its samples are within 4 km of an eye at 2 m, so the figure
+    that chose the grid is about the inner 4 km of a 25.6 km window. They run
+    to the window's edge and through the weight's ramp.
+  - **The worst sample.** The document holds each case's worst error and the
+    ADR's table did not; the only bound on it is `worst ≤ 1`, which cannot
+    fail. The worst is reported and held (§6.3).
+- **The window's edge is a seam as landed.** `select(inside, tau, 0)` ends
+  the grid in a step about 25 km out, shadowed on one side and lit on the
+  other (phase 0's council). The weight above replaces the step with a ramp
+  from the eye, and its test is on a line across it: under one layer shading
+  another, at samples 400 m apart from 18 km to 28 km out, the sun's
+  transmittance is the weight's mix of the grid's value and the statistics'
+  within 0.01, so no two neighbors differ by more than an eighth of what the
+  two disagree by (`cloudSunDepth.gpu.test.ts`, package L).
 - The light taps add their own depth to `τ′_sun` (`cloudSunlight.ts:74-88`).
 - `μ₀` is floored at 0.05, the table's first row.
 
@@ -2913,14 +3580,28 @@ what `maxSteps` buys and the taps are spaced anew.
   4.5% of the distance, 45 m at a kilometer (**D**: `4,960^(1/192) − 1`), where
   75 km gave 3.9%. After §5.9 makes the two marches one medium, the footprint
   ladder is the one most likely to move back, and 400 m and 200 m stay on it.
-- **The band is judged where it is in frame:** the zoom cast, the descent
-  cast, E2, and the `handover` batch's two stances (§7.2). G1 to G4 do not
+- **The band is judged where it is in frame:** the zoom cast, the slow
+  descent, E2, and the `handover` batch's two stances (§7.2). G1 to G4 do not
   show it.
+- **The zoom cast cannot stand at G4's pose.** There the eye is 3 km over
+  the deck's top looking 35° down, and at a 60° lens the farthest cloud in
+  frame is 34 km off (**D**: `3/sin 5°`), where the band begins 172 km out
+  and moves away as the lens lengthens. The zoom crosses nothing, at 800 m or
+  at 400 m. It is taken from G6's start, 400 km up, at pitch −45°: at 60° the
+  nearest ground in frame is 415 km off and the band ends at 344 km, so the
+  frame is all far march; at 11.4° the frame runs from 529 km to 666 km and
+  the band begins at 905 km, so it is all fine march (**D**, at Retina's 225
+  trace lines on a radius of 6,102 km). The band sweeps the whole frame in
+  between. The slow descent crosses it by distance: straight down from
+  400 km, the nadir is far march above 344 km and fine march below 172 km.
+  That is C1 and C2, one rule crossed by a lens and by a distance, and §11.2
+  asks the rubric's council to name this pose where C1 names G4's.
 
 ### 5.9 The far march
 
 The far march must be the fine march's own statistics, or the band shows it.
-Five changes, the first in the one recipe and the rest in `FarMarch`
+Six changes, the first in the one recipe, the last in the bake and the rest
+in `FarMarch`
 (`cloudFarAtlas.ts:602-770`), the atlas's march, which the served body and a
 second body share.
 
@@ -2964,8 +3645,8 @@ n_i = n·s_i/s,   T_i = ((1 − cover_i) + cover_i·e^(−τ′_i/n_i))^(n_i)
 - **It is the same expression in both marches,** so across the band they
   differ only in what resolution they read cover and depth at. In the fine
   march it replaces the open segment's registers and its close at `column`
-  (`cloudMarch.ts:233-251, :362-387`); a knot is recorded where a crossing's
-  running transmittance passes its threshold, as now. `CloudMedium.column` is
+  (`cloudMarch.ts:233-251, :362-387`); a knot is a level's crossing where it
+  is a column's close today (§4.9). `CloudMedium.column` is
   read by nothing after package M1 and is removed at integration. The CPU
   reference, `packages/rendering/src/cloudOverlap.ts`, is rewritten to the law
   by the same package, with its five properties (phase 0 design §5.7) restated
@@ -3030,8 +3711,50 @@ level's gain.
 over broken cumulus even after the transmittance is corrected (0.00198·1.30
 against 0.00392; the physics critique's finding 13, **D** there). Changes 1
 and 2 both move it. Item 10 holds, in each pitch bin, the transmittance within
-10% and the light within 15% of the fine march's, and a deck's higher orders
-from above within 5%.
+10% and the radiance within 15% of the fine march's, which is the rubric's
+row 11, and a deck's higher orders from above within 5%.
+
+**6. A clear texel holds the depth a cloud there would have.** The atlas
+keeps a fraction and the logarithm of an in-cloud depth, and a clear texel's
+depth is zero. A bilinear read between a cloudy texel and a clear one then
+filters the logarithm against that zero and returns `(1 + τ)^w − 1`: a depth
+of 8 at half weight reads 2, and the pair's opacity 0.43 where it is 0.50
+(`cloudFarAtlas.ts:430, :457, :965-967`; phase 0's council). It is one cause
+of the light the far field lets through.
+
+- A texel with no cloudy sub-column stores the level's own mean in-cloud
+  depth at that place, the statistic §5.5 already carries, and its fraction
+  stays zero. The filtered depth is then a blend of depths that mean
+  something, and the fraction alone carries the cover.
+- The channels and their code do not change. What a clear texel's second
+  channel means does, so the atlas's header comment and its test say so.
+- Its test (`cloudFar.gpu.test.ts`, package X): across the edge of a deck of
+  depth 8 beside clear sky, the far march's footprint-averaged opacity at the
+  boundary texel is within 2% of the fine march's.
+
+**Before any of the six: the atlas is scored where it will be used.** The
+far-field choice was made at 400 m. The landed footprint is 800 m, which no
+committed document scores, and at 1,600 m the spheres led in all four cases
+(ADR-0064). The instrument now takes 400, 800 and 1,600 m.
+
+- **Package X's first act is that score** on the landed code, from window
+  1's instrument run, written into the record as the "before". Nothing of
+  the band is built on the atlas until it is there.
+- **The instrument is made to measure what row 11 asks,** by package X:
+  - its reference is the fine march the far one takes over from, at the
+    shipped `maxSteps`, beside the 1,051-step march it uses today, so the
+    comparison is of the two marches a pixel in the band can draw;
+  - its errors are relative, by pitch bin and footprint from `farFootprint`
+    to the band's far edge. Today each case is normalized by its own mean
+    light, 8.4 × 10⁻⁵ for the anvil, so its "worst case" compares unlike
+    units (phase 0's council);
+  - it runs after M1's step integral, because until then its reference is
+    15% to 70% high in first order (§5.4).
+- **What the score can change.** If the atlas at 800 m is no better than at
+  400 m after the six changes, the footprint ladder says so (§7.3), and the
+  band's width is the lever (§7.4). The spheres are not rebuilt: both far
+  fields passed the same excess light for the same reason, mixing once a
+  texel, which change 1 removes from whichever representation draws.
 
 **For phase 2,** the bake's statistics (a fraction, an in-cloud depth, a base
 and a top a layer) stay readable from a fragment stage with the one binding
@@ -3058,7 +3781,16 @@ descent's detector exists to find.
   already refused (`cloudHistory.ts:391-395`), so a turn of any size needs no
   rule of its own.
 - The immediate regime stays for a discontinuity: `'first'`, `'field'`,
-  `'picture'`, `'jump'`, `'resize'`, `'cut'`, `'force'`.
+  `'picture'`, `'jump'`, `'resize'`, `'cut'`, `'force'`. A steady warp is not
+  one (§4.7).
+- **The landed rule has no floor, which is the same defect seen from level
+  flight.** Within ten frames' travel of any base or top, 42 m at 250 m/s,
+  every frame is immediate, so an aircraft cruising at a cloud's base never
+  accumulates a sample (`cloudFrame.ts:524-525`; phase 0's council). The
+  history's test gains that case (`cloudHistory.gpu.test.ts`, package H):
+  level flight 20 m under a base at 250 m/s for 120 frames stays
+  `converging`, `resets` does not rise, and a pixel on the horizon reaches
+  the history's eight samples.
 
 **The wind in reprojection is the level's turn.** `trace.wind` is one vector
 (`cloudUniforms.ts:147, :497`). The three rates land beside it as
@@ -3103,16 +3835,16 @@ inside the history pixel, and the handover's `ξ`.
 
 All live in `apps/ingest/src/transport/` and are Node-only. What the app and
 its tests read are generated tables in `packages/rendering`, each with a
-header naming its generator, its inputs, its machine and its runtime, as the
-Mie table's does (`mieDroplets.generated.ts:1-27`).
+header naming its generator, its inputs' hashes and its source, and nothing
+that differs between two runs (§10.1, rule 7).
 
 **The slab oracle solves two problems.**
 
-|                  | The true medium                                                                  | The renderer's medium                                                             |
-| ---------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Phase, depth     | `p`, `τ`                                                                         | `p′`, `τ′` (§5.1)                                                                 |
-| What it is for   | What the march is judged against: gate 1                                         | What the higher orders' table is cut from, in the march's own depth               |
-| Its own numerics | Delta-M at `2N` streams and the single-scattering correction, on the Mie moments | The same machinery on a phase with no diffraction peak, which it truncates little |
+|                  | The true medium                                                                                                  | The renderer's medium                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Phase, depth     | `p`, `τ`                                                                                                         | `p′`, `τ′` (§5.1)                                                                                                        |
+| What it is for   | What the scaled medium is measured against (row 3), and what the cumulus's tracer and the Monte Carlo slab trace | What the march is judged against (rows 1 and 2), and what the higher orders' table is cut from, in the march's own depth |
+| Its own numerics | Delta-M at `2N` streams and the single-scattering correction, on the Mie moments                                 | The same machinery on a phase with no diffraction peak, which it truncates little                                        |
 
 - Legendre moments of each row and band come from the Mie coefficients
   themselves (`apps/ingest/src/mie.ts:141-188`), averaged over the size
@@ -3137,13 +3869,25 @@ Mie table's does (`mieDroplets.generated.ts:1-27`).
   command. Both fixtures are generated once, in a virtual environment outside
   the tree (ruling 6), and each one's header names the tool, its version and
   the command.
-- **The scaling's own bill is reported first.** Package R1 records the largest
-  distance between the two problems' radiance over the domain, with the cone
-  left out. That number is what no higher-order form can win back. If it
-  passes 3% anywhere, the package stops and reports before M2 builds, because
-  the 5% gate then has under 2% left for the form.
+- **The scaling's own bill is the rubric's row 3, and it is reported first.**
+  Package R1 records the largest relative difference in radiance between the
+  two problems over the domain, with the cone left out. The rubric declares
+  it at 3%. The committed table holds both solutions, and
+  `slabTables.test.ts` recomputes the figure and holds it. Over 3% it is a
+  declared miss: the figure goes to the orchestrator the day it is known,
+  with the points that carry it, because it stands only by the council's
+  amendment (rubric §9). It does not stop package M2: the march's own bar
+  is against the scaled problem.
+- **Why the split is the right one.** Outside the diffraction cone the march
+  and the scaled oracle solve one problem. First order's unscaled source with
+  the whole Mie phase is `σ·p = σ′·p′ + σ·f_δ·p_diff` (**D**, from §5.1's
+  definition of `p′`), and `p_diff` is the Fraunhofer pattern, which the
+  domain leaves out with the forward cone. So what rows 1 and 2 hold is the
+  march's transport: the step's integral, the three-term source and its
+  table's read. What the medium itself costs is row 3's, and what a slab's
+  source costs on a cloud that is not a slab is row 6's.
 
-**The domain of "within 5%"** (the research's first question):
+**The domain of "within 5%"** is the rubric's §6.1, which took it from here:
 
 | Axis           | Values                                                                                                                                                 |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -3172,9 +3916,9 @@ Mie table's does (`mieDroplets.generated.ts:1-27`).
   critique's finding 4, **D** there), which §5.1 declares. PythonicDISORT says
   the same of its own correction: it "is applied to the intensity but not to
   the flux" (**W**).
-- **Under `τ = 5`** the rubric has no line. Package R1 records the
-  reconstruction's error at `τ` 0.5, 1 and 2, where cirrus, altocumulus and
-  every cloud's edge live, and ADR-0068 carries the figures.
+- **Under `τ = 5`** the rubric records and no row turns. Package R1 records
+  the reconstruction's error at `τ` 0.5, 1 and 2, where cirrus, altocumulus
+  and every cloud's edge live, and ADR-0068 carries the figures.
 
 **The black-surface flux the calibration reads.** `slabReference.generated.ts`
 also exports `R(τ, μ₀)` for the true medium over a black surface, at `μ₀` 0.7
@@ -3254,7 +3998,8 @@ phase 2's column in embryo.
   depth under 5, on the lit side), the curve of radiance over the core's
   median against line-of-sight depth, which is exact from the fixture.
   - **The curve error** is the largest relative error of any bin, over the two
-    masks. Gate 2 is that error under the tolerance in all six cases.
+    masks. Gate 2 is that error within 20% in all six cases, the rubric's row
+    6, or three standard errors of the reference's bin where that is larger.
   - **The silver lining is present** when the rim curve's peak is within 20%
     of the reference's in height and one bin in depth.
   - **The edge is present** when the sign of edge less core matches and its
@@ -3270,9 +4015,9 @@ phase 2's column in embryo.
 
 **The march's furnace** is a GPU test with its conditions stated: a uniform
 sky table, no sun, the air's extinction off, a background of `L̄`, a slab and a
-broken field. It is an identity of the weights' bookkeeping through steps,
-fractions and far steps, so it is held to 10⁻³, not the rubric's 2%, which
-would pass a missing 1% exit.
+broken field, for the fine march and the far one. It is an identity of the
+weights' bookkeeping through steps, fractions and far steps, so it is held to
+10⁻³, which is the rubric's row 4.
 
 ### 5.12 The research's open questions, settled
 
@@ -3340,7 +4085,7 @@ defect put back before it is kept (`.claude/rules/testing.md`).
 | `cloudPremises.gpu.test.ts` (existing)                                                                                  | C                          | §10.2's premises                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `cloudTrace.gpu.test.ts` (existing)                                                                                     | C, then M1                 | **The census of the real kernel:** at most 16 sampled and exactly 4 storage textures in the system's own trace WGSL. A slab's `T′ = e^(−σ′L)` to 10⁻⁴; **a layer's transmittance unchanged, and its light within 1%, as `maxSteps` runs from 16 to 192**; **a slab's reflected first order within 1% of its closed form at `μ/μ₀` of 1, 2 and 5 and step depths of 0.3 to 1.6**, with the left-endpoint variant built in the test failing it; a ray inside a slab toward a horizon 75 km out takes its first step at the schedule's length, not the budget's; `stop` inside the band for every `ξ`; no ray stops short of `stop` |
 | `cloudSunDepth.gpu.test.ts` (existing)                                                                                  | M1                         | `CloudSun.depth` on a slab: the depth to a sample and the ray's whole, each within 2% at samples deeper than one tap's width; with the taps spaced in depth, the transmittance within one scaled depth of a lit face within 15% of exact, where fixed taps are off by a factor                                                                                                                                                                                                                                                                                                                                                   |
-| `cloudSlab.gpu.test.ts`                                                                                                 | M2                         | **The slab gate:** the march on an injected slab against the true medium's reference over §5.11's domain and held-out points, radiance at 5% and reflected flux at 2%, at the three radius rows, once with `exactSlabSun` and once with the shipped sun                                                                                                                                                                                                                                                                                                                                                                          |
+| `cloudSlab.gpu.test.ts`                                                                                                 | M2                         | **The slab gate:** the march on an injected slab against the oracle's solution of the renderer's own scaled medium, over §5.11's domain and held-out points, radiance at 5% and reflected flux at 2%, at the three radius rows, with the shipped sun, which is the rubric's run, and with `exactSlabSun`, recorded beside it                                                                                                                                                                                                                                                                                                     |
 | `cloudFurnace.gpu.test.ts`                                                                                              | M2                         | Under a uniform sky table, with no sun, the air's extinction off and a background of `L̄`, a slab and a broken field return `L̄` to 10⁻³                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `cloudFarFurnace.gpu.test.ts`                                                                                           | X                          | The same through the far march                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `cloudGlory.gpu.test.ts`                                                                                                | M2                         | A deck of one radius row seen from above at the antisolar point: the red ring within one atlas texel of the table's ring; the ring's peak over its trough within 10% of the scaled medium's reference; the cloudbow's peak inside 139.7–142.0°. Its opt-in half scores `mean` and `bins` against `sample` on §7.4's three cases                                                                                                                                                                                                                                                                                                  |
@@ -3365,13 +4110,73 @@ defect put back before it is kept (`.claude/rules/testing.md`).
 | `cloudSunDepth.gpu.test.ts`, `cloudVolume.gpu.test.ts` (existing)                             | GPU   | L, then M1 | The volume has two levels and no bound, and its declared bytes are the GPU's; a slab's grid holds its depth within 2% from a sun 5° up and from one 1.5° under, where the bake stops at the base; with the weight at zero a sample's sun is the statistics', and it equals the grid's on a uniform layer within 2%                                                                                                              |
 | `cloudOverPass.gpu.test.ts`, `cloudComposite.gpu.test.ts`, `cloudWarm.gpu.test.ts` (existing) | GPU   | Y          | With nothing marked over the clouds the timeline holds no `scene over clouds` and the frame equals pass B's within one half-float step; with a marked object visible, pass B runs and the pixels are today's; under `lean` pass B's descriptor discards its multisampled color, its depth is read-only, and a frame is equal with it on and off; no pipeline on the first frame of either form or on the frame they change over |
 
-### 6.3 GPU, opt-in instruments
+**Added by the rubric and by phase 0's reviews.** Each row names what could
+not fail before it. A test here is kept only after it is watched failing
+with its defect put back, which the rubric asks of every instrument (§6
+there).
 
-| File                                     | Package | Scores                                                                                                                                                                          |
-| ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cloudCumulus.gpu.test.ts`               | N       | The march on the fixture against the reference: the curve error and the core's and base's medians, six cases, with the exact sun and with the shipped one: gate 2 of §7.4       |
-| `cloudHandover.gpu.test.ts`              | N       | The fine and the far march over the band on the real field: radiance and transmittance by footprint. After the campaign its measured bound is committed and the file joins §6.2 |
-| `cloudFarCompare.gpu.test.ts` (existing) | X       | The footprint-averaged transmittance and light again, by pitch bin                                                                                                              |
+| File                                                                                         | Suite | Package   | Pins                                                                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------- | ----- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cloudSlab.gpu.test.ts`                                                                      | GPU   | M2        | Rows 1 and 2: the march against the oracle on the scaled medium, 5% at every grid and held-out point and 2% in the reflected flux, with the shipped sun. The exact sun's run is written beside it                                                                                                                                                                              |
+| `apps/ingest/src/transport/slabTables.test.ts`                                               | Node  | R1        | Row 3: the scaled medium against the true one, recomputed from the committed table, 3%                                                                                                                                                                                                                                                                                         |
+| `cloudTrace.gpu.test.ts` (existing)                                                          | GPU   | M1        | Row 5: a uniform slab's transmittance within 10⁻⁴ of its closed form; a layer's light within 1% of its 192-step value from 16 steps up. And first order within 1% of its closed form at step depths of 0.3, 1.16 and 2 (§5.4)                                                                                                                                                  |
+| `cloudGlory.gpu.test.ts`                                                                     | GPU   | M2        | Row 8: the first red maximum within one atlas texel of the table's ring; the ring's peak over its trough within 10% of the scaled medium's reference; the cloudbow's peak between 139.7° and 142.0°. Row 7 is its measured half                                                                                                                                                |
+| `cloudRange.gpu.test.ts`                                                                     | GPU   | M1        | Row 21: in a uniform medium at each genus's `σ′`, with the eye inside, the range readout is within 25% of `3.912/σ′`                                                                                                                                                                                                                                                           |
+| `cloudFront.gpu.test.ts` (existing)                                                          | GPU   | M1        | The knots on the real field: a point in the gap between two layers, a layer thin in every column, and the ray's end (§4.9)                                                                                                                                                                                                                                                     |
+| `cloudHandover.gpu.test.ts`, `cloudFar.gpu.test.ts`                                          | GPU   | X         | Row 11: transmittance within 10% and radiance within 15% across the band, by pitch bin, and 10⁻³ on a slab. A deck's edge beside clear sky within 2% in opacity (§5.9). No atlas block reports fresh while it holds a field older than its face                                                                                                                                |
+| `cloudClipmap.gpu.test.ts` (existing)                                                        | GPU   | F         | After a change of weather, with the cube baked a face a frame, no level reports fresh while it holds the old cover, and a texel read back after the settle holds the new                                                                                                                                                                                                       |
+| `weatherField.test.ts`, `cloudFrame.test.ts`, `cloudDensity.gpu.test.ts`                     | Both  | D, H, F   | One body point, one instant, two eyes, one density (§5.3)                                                                                                                                                                                                                                                                                                                      |
+| `cloudFrame.test.ts` (existing)                                                              | Node  | H         | At every rate of the dock's ladder a steady run of frames raises no jump and no reset; a step of three hours raises one (§4.7)                                                                                                                                                                                                                                                 |
+| `cloudHistory.gpu.test.ts` (existing)                                                        | GPU   | H         | Level flight 20 m under a base at 250 m/s accumulates; a feature's expected displacement comes from the CPU field at two instants, so a negated turn fails (§5.3, §5.10)                                                                                                                                                                                                       |
+| `cloudSunSchedule.test.ts`                                                                   | Node  | L         | Under a warp of 1,000× no frame bakes more than the cap, and no frame rebuilds the grid whole                                                                                                                                                                                                                                                                                  |
+| `cloudSystem.gpu.test.ts` (existing)                                                         | GPU   | C, then N | **The declared bytes are held to what the device was asked for.** The test wraps the device's `createTexture` and `createBuffer` for the system's life and compares their sum with the declaration. Today it sums each resource's own list, so a texture left off a list is unseen, and the radiance meter's buffer, about 1.0 MB at 1080p, and the composite's are outside it |
+| `cloudWarm.gpu.test.ts` (existing)                                                           | GPU   | C, then N | A lever set with `served` and one with `second` draw their first frame with no new pipeline                                                                                                                                                                                                                                                                                    |
+| `cloudLevers.test.ts` (existing)                                                             | Node  | C         | Two lever sets differ in hash exactly when a shipped lever differs; `lightTaps` 6 and 8 are valid; the resolved set at each size is the set's own in phase 1                                                                                                                                                                                                                   |
+| `weatherScenario.test.ts`, `cloudFrame.test.ts` (existing)                                   | Node  | C         | C11 (§4.8)                                                                                                                                                                                                                                                                                                                                                                     |
+| `scripts/panel/*.test.mjs`                                                                   | Node  | J         | §8.6's list                                                                                                                                                                                                                                                                                                                                                                    |
+| `scripts/weather/capture.test.mjs`, `apps/headless/src/cornerstoneLedger.test.ts` (existing) | Node  | U         | The zoom cast and the slow descent each hold frames on both sides of the band, from the path, the lens and the lever; the overlay guard's station is in frame; a record without its provenance or its role is refused; a cast before the hold is kept with its rate and after it is refused outside 58 to 62 Hz                                                                |
+| `scripts/castSteps.test.mjs`, `scripts/weather/classify.test.mjs`, `drift.test.mjs`          | Node  | I         | A flagged step is an entry, an exit or an error by the rubric's three cases, on fixtures of each; an unresolved one cannot pass; a cast with a gap at a suspected step is sent back, never divided; a synthetic field shifted by a known vector is measured within 2%, with its sign                                                                                           |
+| `scripts/clouds/measure.test.mjs`, `rules.test.mjs`, `campaign.test.mjs` (existing and new)  | Node  | Q         | A stance's row carries the stance's own lens after any other stance; every row carries its rate and its levers' hash; a run whose page's build id is not the tree's is refused; each rule of §7.4 and each bar is computed from the documents, with the allowance capped at 0.25 ms; a second stop waits for the first                                                         |
+
+**What CI does not run.** CI's adapter skips the tests that read the pass
+timeline (`.github/workflows/check.yml:146`), package Y's among them. That is
+the adapter's, and phase 1 does not change it. The orchestrator runs the GPU
+suite on the mini after each merge (§10.3), which is where those tests count.
+
+### 6.3 GPU instruments, and the three that could not fail
+
+`cloudFarCompare`, `cloudSunAccuracy` and `cloudCompositeError` are phase 0's
+accuracy instruments. Each runs only under `IR_CLOUD_MEASURE`, and each
+asserts that its figures are finite and under bounds no figure can reach:
+10⁷, 10, and `worst ≤ 1` for a quantity bounded by one. So far-field and sun
+accuracy can regress to any finite value with the suite green (phase 0's
+review and council).
+
+- **Phase 1's first test change pins them,** in package C. Each instrument's
+  document from window 1's run on the landed code is committed beside the
+  test, and the test fails when a figure passes its landed value by more
+  than a tenth: every case's RMS, bias and worst for the sun's depth; every
+  case's footprint transmittance and radiance at 400, 800 and 1,600 m for
+  the far field; the identity's residual at the 95th percentile for the
+  composite.
+- **One case of each joins the always-on suite,** so a regression fails
+  `pnpm test:gpu` and not only a campaign: `fair-cumulus` at a 37.5° sun for
+  the sun's depth, broken cumulus at 800 m for the far field, and one slab
+  for the composite. The full sets stay under the flag, and the campaigns'
+  `instruments` stage reads them.
+- **The bounds tighten and never loosen, with one stated exception.** Package
+  L replaces the sun's with the widened population's (§5.5), package X the
+  far field's with row 11's 10% and 15%, and the package that lands M1's
+  step re-bases the far comparison once (§5.4). Each replacement is a commit
+  that shows the old figure and the new.
+
+| File                                         | Package | Scores                                                                                                                                                                                                    |
+| -------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cloudCumulus.gpu.test.ts`                   | N       | The march on the fixture against the reference: the curve error and the core's and base's medians, six cases, with the exact sun and with the shipped one: gate 2 of §7.4                                 |
+| `cloudHandover.gpu.test.ts`                  | X       | The fine and the far march over the band on the real field, by footprint and pitch bin, on every regime. Its bounds are row 11's and are in §6.2 from the start; under the flag it writes the whole table |
+| `cloudSunAccuracy.gpu.test.ts` (existing)    | L       | The sun's depth against a 256-step march: five scenarios at five seeded places each, three suns, to the window's edge; RMS, bias and worst                                                                |
+| `cloudCompositeError.gpu.test.ts` (existing) | N, Y    | The identity and the thin form against a joint march on analytic slabs                                                                                                                                    |
+| `cloudFarCompare.gpu.test.ts` (existing)     | X       | The footprint-averaged transmittance and light again, by pitch bin                                                                                                                                        |
 
 ---
 
@@ -3393,70 +4198,116 @@ the output are phase 0's (its §8.1, §8.3, §8.8, §8.9), as
   (`campaign.mjs:74-109, :141`).
 
 A phase 1 campaign is new entries in two tables: a batch in `BATCHES`
-(`measure.mjs:474-482`) with its step list, reader and table in `page.mjs`,
-and a campaign in `CAMPAIGNS`, whose stage lists `campaign.test.mjs:130-141`
-pins. Package Q writes them against the contracts' levers and proves them with
-`--dry-run`, as phase 0's runner was written before the system it drove (phase
-0 package report, WP10). `measure.mjs` and `page.mjs` score 78.3 and 77.3
-against fta's 91 (same report), so the new step and its table go in a file of
-their own, `scripts/clouds/noise.mjs`.
+(`scripts/clouds/measure.mjs`) with its step list, reader and table in
+`page.mjs`, and a campaign in `CAMPAIGNS`, whose stage lists
+`campaign.test.mjs` pins. Package Q writes them against the contracts' levers
+and proves them with `--dry-run`, as phase 0's runner was written before the
+system it drove (phase 0 package report, WP10). `measure.mjs` and `page.mjs`
+score 78.3 and 77.3 against fta's 91 (same report), so each new step and its
+table goes in a file of its own: `noise.mjs`, `sequence.mjs`, `frame.mjs` and
+`rules.mjs`.
 
-### 7.2 Stances and batches `[depends: thin]`
+**What the rubric fixes of the protocol** (§5 there), and package Q builds
+into the runner:
+
+- **A steady Δ is the median of five A/B pairs.** The table prints that
+  median beside the two sides' medians and says which is which. Today it
+  prints a median of deltas beside two independent medians, which need not
+  agree: 18.83 and 18.92 beside a Δ of −0.06 (phase 0's council).
+- **The allowance is twice the pairs' spread, at least 0.05 ms and at most
+  0.25 ms.** A row whose spread would allow more is taken again. It does not
+  enlarge the bar.
+- **A bar is an A/B Δ or a whole frame.** A pass's time is recorded beside a
+  row and no bar is formed from one.
+- **Every row carries** its presentation rate (§7.5), the hash of the levers
+  resolved at its size (§4.6), and the lens it was taken through.
+- **The runner computes each rule's outcome.** `scripts/clouds/rules.mjs`
+  holds every rule of §7.4 and every bar of the rubric that a campaign can
+  read, as a function of the batch documents, with its allowance. Phase 0's
+  rules were each applied by hand (phase 0's council). A summary prints the
+  outcome beside the figures it was computed from.
+- **A run is tied to its build.** Every run, a campaign's or one started by
+  hand, compares the page's `ir.build().id` with the tree's and refuses on a
+  difference. Phase 0's placement repeats were started by hand and compared
+  nothing.
+
+### 7.2 Stances and batches
+
+**A stance owns its lens.** The landed campaign's `cut`, `scrub`, `fly` and
+`pair-neighbor` rows were taken through the lens `pair-moon` left behind,
+because a rise framing fits the flight lens and `ir.visit` sets none, and the
+runs of one size share a page. Their clouds-off base on `ground` moved from
+5.87 ms to 6.92 to 7.29 ms. So every stance in the runner names a focal
+length, the runner sets it on entering the stance and reads the lens back
+into the row, and a row whose lens is not its stance's is refused
+(`measure.test.mjs` holds it by taking a `rise` stance before another). Until
+phase 0's retaken rows exist, its reset, fly and `pair-neighbor` figures are
+at an unknown field of view, and nothing here leans on them.
 
 The stances are phase 0's (`scripts/clouds/measure.mjs`, `STANCES`), on
-far-shore V, with `weather` where they set `scenario`, and seven more:
+far-shore V, with `weather` where they set `scenario`, and these more:
 
-| Stance               | Pose                                            | For                                                                                 |
-| -------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `over-deck`          | G4's                                            | The phase's radius, from above                                                      |
-| `earth-orbit-long`   | E1's, with its 11.4° lens                       | The rubric's own budget row                                                         |
-| `cornerstone-ground` | G1's, on the cornerstones' world                | That world's one cost on record, if it is not far-shore V                           |
-| `earth-limb`         | E2's, with its lens                             | The handover's band in frame from orbit (§5.8)                                      |
-| `descent-150`        | Far-shore V, 150 km up, pitch −40, the 60° lens | The band in frame on the way down: the frame's center is 237 km off (**D**)         |
-| `shore`              | G2's                                            | A frame with the full sea in view, and so the sea's own split, for the `over` batch |
-| `overlay`            | `horizon`'s, with the engine lit                | A frame that keeps pass B, for the `over` batch and package W's cost                |
+| Stance             | Pose                                                      | For                                                                                   |
+| ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `over-deck`        | G4's                                                      | The phase's radius, from above                                                        |
+| `earth-orbit-long` | E1's, with its 11.4° lens                                 | B5, recorded                                                                          |
+| `earth-limb`       | E2's, with its lens                                       | The handover's band in frame from orbit (§5.8)                                        |
+| `descent-150`      | Far-shore V, 150 km up, pitch −40, the 60° lens           | The band in frame on the way down: the frame's center is 237 km off (**D**)           |
+| `shore`            | G2's                                                      | A frame with the full sea in view, and so the sea's own split, for the `over` batch   |
+| `overlay`          | `horizon`'s, with the engine lit                          | B11, the `over` batch and package W's cost                                            |
+| The ten presets    | Each cornerstone and the overlay guard, by its own preset | B6 and B8, which read every cornerstone's whole frame, on the cornerstones' own world |
 
 Every batch's base levers are the landing's defaults: the field, the grid,
 the atlas and two passes, at `maxSteps` 192, `lightTaps` 4 and `farFootprint`
 800 m. The candidates' names are gone from the runner (its `COMBOS`,
 `decisions`, `sweep` and the `cache` group of `images` are deleted at phase
-0's landing). Every row carries its presentation rate (§7.5).
+0's landing).
 
 **Campaign `choices`** (phase 1's replaces phase 0's of that name):
 
-| Batch         | Contents                                                                                                                                                                                                                   | Run type                                                              |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `phase`       | `mean` and `bins` at 2, 3, 4 against each other: steady on `over-deck` and `inside`, both sizes, five pairs                                                                                                                | `ab`                                                                  |
-| `jitter`      | `stbn` against `ign`: steady cost on `horizon`, `inside`; converged noise, the temporal RMS of 64 captures over cloud texels with the jitter moving; the error of the eighth frame after a reset against the 64-frame mean | `ab`, and the new `noise` step beside `radiance` (`page.mjs:240-321`) |
-| `handover`    | `handoverBand` 1, 1.5, 2 against 3 on `earth-limb` and `descent-150`: the 64-frame mean with the jitter moving                                                                                                             | `noise`                                                               |
-| `clip`        | `clip` 1.25, 1.5, 2 on `horizon`, `inside`: the bias, the mean of the history less the mean of its samples over 64 frames                                                                                                  | `noise`                                                               |
-| `transport`   | Only if the octave fit passed in Node: O against S, steady on `ground`, `inside`, `orbit`, both sizes, five pairs                                                                                                          | `ab`                                                                  |
-| `casts`       | The zoom and the slow descent at each `handoverBand`; the two fly casts at each `clip`; each with its clouds-off control: fourteen casts and their controls, read by `castSteps`                                           | A command stage (`campaign.mjs:88-97`) over `capture.mjs`             |
-| `instruments` | `cloudCumulus`, `cloudGlory`, `cloudHandover`, `cloudFarCompare`, `cloudPathTrace` under `IR_CLOUD_MEASURE=1`                                                                                                              | A command stage                                                       |
-
-Added by the decisions, to the same campaign:
-
-| Batch   | Contents                                                                                                                                                                                                                                                                                                                       | Run type                                |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------- |
-| `over`  | `chain` and `lean` each against `passes`: steady on `orbit`, `horizon`, `inside`, `shore` and `overlay`, both sizes, five pairs; one row of each at the temporal picture on `horizon`; and the carried cell, the `sensor` span at Retina on `inside`, nine samples a side at one rate (§4.12)                                  | `ab`, and the profile pair              |
-| `reset` | A cut, a scrub, a change of weather and a wake from orbit, each as the 33 frames from the event, on `horizon` at both sizes, at `sunSlices` 4, 8 and 16 and at the default `sunRamp`: each frame's cloud passes and bakes from `ir.passes`, the frame the grid's weight reaches one, and the profile's late frames over the 33 | The new `sequence` step, beside `noise` |
-| `sun`   | `cloudSunAccuracy` on the two-level volume at phase 0's two suns and at G3's, four taps; the wake cast and a cut cast at each `sunRamp`, read by `castSteps`                                                                                                                                                                   | A command stage                         |
+| Batch         | Contents                                                                                                                                                                                                                                                                                                                                        | Run type                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `phase`       | `mean` and `bins` at 2, 3, 4 against each other: steady on `over-deck` and `inside`, both sizes, five pairs                                                                                                                                                                                                                                     | `ab`                                                                  |
+| `jitter`      | `stbn` against `ign`: steady cost on `horizon`, `inside`; converged noise, the temporal RMS of 64 captures over cloud texels with the jitter moving; the error of the eighth frame after a reset against the 64-frame mean                                                                                                                      | `ab`, and the new `noise` step beside `radiance` (`page.mjs:240-321`) |
+| `handover`    | `handoverBand` 1, 1.5, 2 against 3 on `earth-limb` and `descent-150`: the 64-frame mean with the jitter moving                                                                                                                                                                                                                                  | `noise`                                                               |
+| `clip`        | `clip` 1.25, 1.5, 2 on `horizon`, `inside`: the bias, the mean of the history less the mean of its samples over 64 frames                                                                                                                                                                                                                       | `noise`                                                               |
+| `transport`   | Only if the octave fit passed in Node: O against S, steady on `ground`, `inside`, `orbit`, both sizes, five pairs                                                                                                                                                                                                                               | `ab`                                                                  |
+| `casts`       | The zoom from 400 km and the slow descent at each `handoverBand`; the pass at 2 m and the fast descent at each `clip`; each with its clouds-off control and the detector's two controls, read by `castSteps` and classified (§8.1)                                                                                                              | A command stage (`campaign.mjs`) over `capture.mjs`                   |
+| `instruments` | `cloudCumulus`, `cloudGlory`, `cloudHandover`, `cloudFarCompare`, `cloudSunAccuracy`, `cloudCompositeError`, `cloudPathTrace` under `IR_CLOUD_MEASURE=1`                                                                                                                                                                                        | A command stage                                                       |
+| `over`        | `chain` and `lean` each against `passes`: steady on `orbit`, `horizon`, `inside`, `shore` and `overlay`, both sizes, five pairs; one row of each at the temporal picture on `horizon`; and the placement's cell, the `sensor` span and the frames presented at Retina on `inside` and on `overlay`, nine samples a side at a held 60 Hz (§4.12) | `ab`, and the profile pair                                            |
+| `reset`       | A cut, a scrub, a change of weather and a wake from orbit, each as the 60 frames from the event, on `horizon` at both sizes, at `sunSlices` 4, 8 and 16, `sunRamp` 16 and `farBlocks` 1 and 2: each frame's GPU time by pass, and the frame at which the field is whole                                                                         | The new `sequence` step                                               |
+| `sun`         | `cloudSunAccuracy` on the two-level volume at phase 0's two suns and at G3's, four taps, on the widened population; the wake cast and a cut cast at each `sunRamp`, read by `castSteps`                                                                                                                                                         | A command stage                                                       |
 
 The `handover` batch stands on `earth-limb` and `descent-150`, where the band
 is in frame at 800 m; on `horizon` and `orbit` it is not (§5.8).
 
-**Campaign `landed`**, on the commit that deletes this phase's losers:
+**Campaign `landed`**, on the commit that deletes this phase's losers. It is
+the campaign that fills the rubric's rows for the phase:
 
-| Batch     | Contents                                                                                                                                                                                                                                                                                                                                                                                     |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ladders` | Phase 0's `LADDERS` (`measure.mjs:413-417`), re-run (§7.3)                                                                                                                                                                                                                                                                                                                                   |
-| `targets` | Phase 0's stances and the three new ones, steady, with phase 0's profile pair kept for the late-frames row; §4.7's reset sequences, a cut, a scrub, a change of weather and a wake from orbit, each apart, by the `sequence` step; `earth-orbit` for the rubric's first row, with the deck hidden; `pair-moon` and `pair-neighbor` for the second body's fragment march, which has no figure |
-| `memory`  | Cold boots, the declared bytes, and the boot's `warming the clouds` span, which is what a default boot will pay in phase 2                                                                                                                                                                                                                                                                   |
-| `error`   | Phase 0's `error` batch again, for §4.10                                                                                                                                                                                                                                                                                                                                                     |
+| Batch     | Contents                                                                                                                                                                                                           | The rubric's rows it fills   |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| `ladders` | The three ladders at the landed configuration, each from its lever's own list of values, on `horizon`, `inside` and `earth-limb` (§7.3)                                                                            | —                            |
+| `targets` | Steady, five pairs, both sizes: phase 0's nine stances, `decks` and both `pair` stances among them, and `earth-orbit-long`, `shore` and `overlay`. Fly on `ground` and `orbit`                                     | B1 to B5, B9, B10, B11       |
+| `frame`   | The whole GPU frame over 180 frames, clouds off and on, its median and its 95th percentile, on every stance of `targets` and on the ten presets, both sizes                                                        | B6, B8, and B9's two sides   |
+| `reset`   | The four sequences at the landed caps, on `horizon`, both sizes                                                                                                                                                    | B7                           |
+| `warp`    | Steady Δ with the clock at 100× and at 1,000×, on `horizon` and `orbit`, 1080p, five pairs, through the game's own clock and not the lever alone                                                                   | Recorded: no warp row exists |
+| `pace`    | With the presentation held at 60 Hz: the first five intervals of three cold boots, late frames over matched 3 s windows from `orbit` and `ground`, and the presented rate of each of `frame`'s rows over 3 s       | B13, B14, B15                |
+| `memory`  | Cold boots, the declared bytes against the device's, one body and two, and the boot's `warming the clouds` span                                                                                                    | B12                          |
+| `error`   | The thin form against the identity on phase 0's four scenarios and the two `pair` stances, both sizes, Enhanced off and on. The display-referred pair is taken at a held exposure or its column is dropped (§4.10) | Row 20                       |
 
-The capture set of §3.6, its casts among them, runs after `landed` under the
-same lock. §10.3 gives each window's length. The runner prints the real
-durations.
+- **`pace` waits for the hold.** If no campaign can hold 60 Hz when window 3
+  opens, the batch records its three rows with their rates, and B13 to B15
+  stay recorded only (§7.5).
+- **`frame` is one loop a row,** `ir.passes` summed over each of 180 frames
+  in a held pose. A held loop still steps the caches' refresh and the
+  jitter, so the percentile sees the frame that bakes a block.
+- **No row is from the M5 MacBook Air.** The rubric records one at the
+  verdict, with no bar (§8 there). Every figure here is the M6 mini's, and
+  the plan's own basis was an M5, unmeasured.
+
+The capture set of §3.6 and §3.8, its casts among them, runs after `landed`
+under the same lock. §10.3 gives each window's length. The runner prints the
+real durations.
 
 **The `velocity` fix is measured apart,** by ADR-0044's own protocol: both
 temporal presets at both ratios, on package V's base and on its tip. It runs
@@ -3465,8 +4316,24 @@ in the window K's baseline is taken in.
 ### 7.3 The ladders are taken again
 
 `maxSteps`, `lightTaps` and `farFootprint` start at phase 0's values: 192, 4
-and 800 m. Phase 1 changes what each buys: the scaled medium halves the depth
-a step crosses, the budget's floor ends exhaustion, the taps are spaced in
+and 800 m. **Those values have no ladder at the configuration that landed.**
+Each was read with the cascades, two taps and 400 m, and the landed set, the
+grid at four taps and 800 m, was measured for cost, memory and composite
+error with no images. Window 1 takes phase 0's ladders on the landed code,
+which is the first ladder the landed set has; by its own rule `lightTaps` is
+unset there, since four has no larger neighbor.
+
+**The runner cannot take the ladders this design asks for until two lists
+are opened.** `LIGHT_TAP_COUNTS` is `[0, 2, 4]` in `render/cloudLevers.ts`,
+and the `images` batch's stances are `horizon` and `inside` in
+`scripts/clouds/measure.mjs`, so six and eight taps and a stance that shows
+the band cannot be laddered without editing both (phase 0's review and
+council). Package C exports the lever's values as `CLOUD_LIGHT_TAPS`, with 6
+and 8. Package Q reads each ladder's values from its lever's list and takes
+the ladders' stances as a parameter.
+
+Phase 1 changes what each lever buys: the scaled medium halves the depth a
+step crosses, the budget's floor ends exhaustion, the taps are spaced in
 optical depth, and the higher orders move light deeper into a cloud than the
 taps reach. So the three are set again from `ladders`, by phase 0's rule, on
 the landed code.
@@ -3496,43 +4363,47 @@ argue an exception, with figures.
 
 **The higher orders.**
 
-| Step                             | Where                                        | Rule                                                                                                                                                                                                                                                                                             |
-| -------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The forecast                     | Node, package R1                             | S's reconstruction through its own table's read, and O's fit, each at the grid and the held-out points. **The Node figure is a forecast, never the gate.** O's GPU path is built only if its fit is within 5% at every held-out point                                                            |
-| Gate 1, the slab                 | `cloudSlab.gpu.test.ts`, with `exactSlabSun` | Every point of §5.11's domain and its held-out points within 5% of the true medium's reference, at the three radius rows; the reflected flux within 2%. A candidate that passes in Node and fails here has met a defect of the march, which is packages M1's and M2's to fix; it is not a result |
-| Gate 1 again, the product        | The same test with the shipped sun           | Recorded beside the first. The rubric's line is the product's, so the done-when is this run. Where it fails and the first passes, the bill is the sun path's, and ADR-0068 carries both tables                                                                                                   |
-| Gate 2, the cumulus              | `cloudCumulus`, both suns                    | The curve error inside §5.11's tolerance in all six cases, and the core's and the base's medians inside theirs                                                                                                                                                                                   |
-| The winner                       |                                              | A candidate that passes gate 1 and gate 2 draws everything. If two do, the one with the smaller steady Δ on `ground` and `inside` at both sizes                                                                                                                                                  |
-| S passes gate 1 and fails gate 2 |                                              | The dark-edge term (§5.7) is tried. If S with it passes both gates, it stays. If not, S draws without it, and the ADR records the curve error and the medians; if O was built and its curve error is smaller, O draws the cumuliform share of a sample, blended by the convective share          |
-| Nothing passes gate 1            |                                              | The smaller worst error draws, and the ADR records the shortfall and argues the rubric's 5% against the figures, starting from the scaling's own bill (§5.11)                                                                                                                                    |
-| A column under `τ = 5`           |                                              | The winner draws it. Its errors at `τ` 0.5, 1 and 2 are recorded and no rule turns on them                                                                                                                                                                                                       |
+| Step                             | Where                                         | Rule                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The forecast                     | Node, package R1                              | S's reconstruction through its own table's read, and O's fit, each at the grid and the held-out points. **The Node figure is a forecast, never the gate.** O's GPU path is built only if its fit is within 5% at every held-out point                                                                                                                         |
+| Gate 1, the slab                 | `cloudSlab.gpu.test.ts`, with the shipped sun | The rubric's rows 1 and 2: every point of §5.11's domain and its held-out points within 5% of the oracle's solution of the renderer's own scaled medium, at the three radius rows, and the reflected flux within 2%. A candidate that passes in Node and fails here has met a defect of the march, which is packages M1's and M2's to fix; it is not a result |
+| Gate 1 beside it, the exact sun  | The same test with `exactSlabSun`             | Recorded beside the first. Where the shipped sun fails and the exact one passes, the bill is the sun path's, and ADR-0068 carries both tables                                                                                                                                                                                                                 |
+| The medium's own bill            | `slabTables.test.ts`                          | The rubric's row 3: the scaled medium within 3% of the true one over the domain. It is the oracle's figure and no candidate's, so it chooses nothing here                                                                                                                                                                                                     |
+| Gate 2, the cumulus              | `cloudCumulus`, both suns                     | The rubric's row 6, against the tracer on the true medium: each bin within 20%, the rim's peak within 20% in height and one bin in depth, the edge's sign and its depth within 30%, the core's and the base's medians within 15%, each or three standard errors of the reference's bin where that is larger, in all six cases                                 |
+| The winner                       |                                               | A candidate that passes gate 1 and gate 2 draws everything. If two do, the one with the smaller steady Δ on `ground` and `inside` at both sizes                                                                                                                                                                                                               |
+| S passes gate 1 and fails gate 2 |                                               | The dark-edge term (§5.7) is tried. If S with it passes both gates, it stays. If not, S draws without it, and the ADR records the curve error and the medians; if O was built and its curve error is smaller, O draws the cumuliform share of a sample, blended by the convective share                                                                       |
+| Nothing passes gate 1            |                                               | The smaller worst error draws. Rows 1 and 2 are then declared misses: the ADR records the shortfall by point, and it stands only if the rubric's council accepts it by name (rubric §9)                                                                                                                                                                       |
+| A column under `τ = 5`           |                                               | The winner draws it. Its errors at `τ` 0.5, 1 and 2 are recorded and no rule turns on them                                                                                                                                                                                                                                                                    |
 
 **The rest.**
 
-| Choice                              | Rule                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **The octave count,** if O is built | The smallest `N` whose worst gate-1 error is within one point of the next `N`'s; 4 if 3 is not within a point of it                                                                                                                                                                                                              |
-| **The dark edge**                   | Built only on the row above. Kept only if the winner with it passes gate 1 again and gate 2 in all six cases                                                                                                                                                                                                                     |
-| **The phase's radius**              | The candidate with the fewest fetches a ray, among `mean` and `bins` at 2, 3 and 4, whose radiance within 8° of the antisolar point is within 3% RMS of `sample`'s on all three cases below and whose red ring is within 0.1° of `sample`'s. If none passes, `bins` at 4, with the shortfall recorded                            |
-| **Its three cases**                 | A stratocumulus deck with the adiabatic radius, 5 µm at its base to 12 µm at its top, from 3 km above; a 6 µm layer over a 14 µm deck, in two levels; a cumulus's flank, radius by height, seen across it                                                                                                                        |
-| **The jitter**                      | `stbn` replaces `ign` only if its converged noise is at least 20% lower on both stances at both sizes, its eighth-frame error is not higher, and its steady Δ is under 0.02 ms over the resolution. Otherwise `ign` stays                                                                                                        |
-| **The handover's band**             | The smallest of 1, 1.5, 2 and 3 whose zoom cast and descent cast show no step the clouds-off cast lacks (§8.1), and whose 64-frame mean is within `B` of band 3's over cloud texels, `B` the fine and far marches' footprint disagreement that `cloudHandover` measures. If none, 3, with the gap recorded against the far march |
-| **The clip**                        | The smallest of 1.25, 1.5 and 2 whose bias is under 1% at the worst cloud texel and whose two fly casts are under the trail floor (§8.1). If none does both, the widest that passes the trail floor, with its bias recorded                                                                                                      |
-| **The ladders**                     | Phase 0's rule: the smallest value whose image is within 1% radiance RMS of the next larger one's in `horizon` and `inside`, the jitter held; `farFootprint` on `earth-limb` as well (§7.3)                                                                                                                                      |
-| **The thin form**                   | Phase 0's rule, on the re-run `error` batch                                                                                                                                                                                                                                                                                      |
+| Choice                              | Rule                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The octave count,** if O is built | The smallest `N` whose worst gate-1 error is within one point of the next `N`'s; 4 if 3 is not within a point of it                                                                                                                                                                                                  |
+| **The dark edge**                   | Built only on the row above. Kept only if the winner with it passes gate 1 again and gate 2 in all six cases                                                                                                                                                                                                         |
+| **The phase's radius**              | The candidate with the fewest fetches a ray, among `mean` and `bins` at 2, 3 and 4, whose radiance within 8° of the antisolar point is within 3% RMS of `sample`'s on all three cases below and whose red ring is within 0.1° of `sample`'s. If none passes, `bins` at 4, with the shortfall recorded                |
+| **Its three cases**                 | A stratocumulus deck with the adiabatic radius, 5 µm at its base to 12 µm at its top, from 3 km above; a 6 µm layer over a 14 µm deck, in two levels; a cumulus's flank, radius by height, seen across it                                                                                                            |
+| **The jitter**                      | `stbn` replaces `ign` only if its converged noise is at least 20% lower on both stances at both sizes, its eighth-frame error is not higher, and its steady Δ is under 0.02 ms over the resolution. Otherwise `ign` stays                                                                                            |
+| **The handover's band**             | The smallest of 1, 1.5, 2 and 3 whose zoom cast and slow descent show no error step (C1, C2; §8.1), and whose 64-frame mean is within `B` of band 3's over cloud texels, `B` the fine and far marches' footprint disagreement that `cloudHandover` measures. If none, 3, with the gap recorded against the far march |
+| **The clip**                        | The smallest of 1.25, 1.5 and 2 whose bias is under 1% at the worst cloud texel and whose two casts of C8, the pass at 2 m and the fast descent, are under the trail floor after the stop and at the three quarter points (§8.1). If none does both, the widest that passes the trail floor, with its bias recorded  |
+| **The ladders**                     | Phase 0's rule: the smallest value whose image is within 1% radiance RMS of the next larger one's in `horizon` and `inside`, the jitter held; `farFootprint` on `earth-limb` as well (§7.3)                                                                                                                          |
+| **The thin form**                   | No regime draws through it (§4.10). Row 20 is read from the `error` batch on the landed commit                                                                                                                                                                                                                       |
 
 **What the decisions added.**
 
-| Choice                         | Rule                                                                                                                                                                                                                                                                                              |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **The composite in the chain** | `chain` is the form on a frame with nothing over the clouds if its frame equals pass B's within one half-float step and its steady Δ is under `passes`'s by more than the resolution on `orbit` and `horizon` at both sizes. Offered only at the pictures whose readers it can serve (§4.12)      |
-| **Pass B's store**             | `lean` stays if a frame is equal with it on and off and its steady Δ on `overlay` is under `passes`'s by more than the resolution at Retina. If the spike cannot reach the descriptor without patching three, it is not built                                                                     |
-| **The over pass after both**   | If `scene over clouds` on `overlay` is still over 1.0 ms at 1080p or 2.0 ms at Retina, the overlays' own target and placement C go to phase 2's design with the batch's figures. Neither is built in phase 1                                                                                      |
-| **The carried cell**           | Read by phase 0's clause on nine samples a side at one rate: a form whose `sensor` mean at Retina on `inside` is under `passes`'s by more than 0.3 ms and by more than twice the larger sample deviation is cheaper on the CPU. That breaks a tie in the two rows above and decides nothing alone |
-| **The grid's cap**             | The largest `sunSlices` of 4, 8 and 16 for which no frame after the event's adds more than 0.5 ms over the steady frame in any of the four sequences at 1080p. If none, 4, with the figure recorded                                                                                               |
-| **The grid's ramp**            | The smallest `sunRamp` of 8, 16, 32 and 64 whose wake cast and cut cast show no step their clouds-off casts lack (§8.1). If none, 64, with the step's size recorded against the statistics that stand in                                                                                          |
-| **The volume's cut**           | Two levels and no bound stay if no scenario's `T_cloud` RMS at four taps, at 37.5° or at 5°, is worse than phase 0's by more than 0.01. Otherwise level 0 returns, and the memory row is 76.65 MB                                                                                                 |
-| **The bake under the horizon** | The first-exit bake stays if its RMS at G3's sun is under the as-built bake's. Otherwise the as-built bake draws, and the record says what G3's bases are lit by                                                                                                                                  |
+| Choice                         | Rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **The composite in the chain** | `chain` is the form on a frame with nothing over the clouds if its frame equals pass B's within one half-float step and its steady Δ is under `passes`'s by more than the resolution on `orbit` and `horizon` at both sizes. Offered only at the pictures whose readers it can serve (§4.12)                                                                                                                                                                                                                                                                                                                           |
+| **Pass B's store**             | `lean` stays if a frame is equal with it on and off and its steady Δ on `overlay` is under `passes`'s by more than the resolution at Retina. If the spike cannot reach the descriptor without patching three, it is not built                                                                                                                                                                                                                                                                                                                                                                                          |
+| **The over pass after both**   | B11: the steady Δ on `overlay` is at most 1.0 ms over `horizon`'s at 1080p. If it is not, B11 is a declared miss with its figure, and the overlays' own target and placement C go to phase 2's design with the batch's figures. Neither is built in phase 1                                                                                                                                                                                                                                                                                                                                                            |
+| **The placement**              | **A goes back to the orchestrator if pass B costs a frame.** On `overlay` and `inside` at Retina, at a held 60 Hz, nine samples a side: `passes` or `lean` against `chain`'s frame of the same stance without the overlay. It goes back if the median of late frames over 3 s is higher by more than 2, or the frames presented are fewer by more than 2%. A `sensor` mean higher by any amount is recorded and sends nothing back: phase 0 already has that figure, and ADR-0063's exception is argued on it. If no campaign can hold 60 Hz, the cell is taken at the one rate the machine gives and is recorded only |
+| **The forms' CPU cost**        | A form whose `sensor` mean at Retina on `inside` is under `passes`'s by more than 0.3 ms and by more than twice the spread of the nine paired differences is cheaper on the CPU. That breaks a tie in the rows above and decides nothing alone                                                                                                                                                                                                                                                                                                                                                                         |
+| **The caps**                   | B7's own clauses. The largest `sunSlices` of 4, 8 and 16, with `farBlocks` 1 or 2, for which the event's frame is within 4 ms of the steady Δ and no later frame is over it by more than 1.5 ms, three quarters of B7's 2, in all four sequences on `horizon` at 1080p. If none, 4 and 1, and B7's figure is in the record                                                                                                                                                                                                                                                                                             |
+| **The grid's ramp**            | The smallest `sunRamp` of 8, 16 and 32 that, with the caps chosen, leaves the field whole within 44 frames and whose wake cast and cut cast show no error step (§8.1). If none does both, the one that keeps 48 frames, and the step goes to its check: C3 for the wake, C9 for the cut                                                                                                                                                                                                                                                                                                                                |
+| **The volume's cut**           | Two levels and no bound stay if no scenario's `T_cloud` RMS at four taps, at 37.5° or at 5°, on the widened population, is worse than the landed code's on the same population by more than 0.01. Otherwise level 0 returns, and the memory row is 76.22 MB                                                                                                                                                                                                                                                                                                                                                            |
+| **The second body's form**     | The identity (§4.10). The `error` batch's two `pair` stances record the thin form's error there, and decide nothing                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **A declared row that misses** | Rows 1 to 3, 6, 7, 9 and 11, and B10 to B13: the package that finds the miss reports the figure and the points that carry it to the orchestrator that day. The figure goes in the row's ADR and in the register (rubric §7), and it stands at the verdict only if all three seats accept it by name                                                                                                                                                                                                                                                                                                                    |
+| **The bake under the horizon** | The first-exit bake stays if its RMS at G3's sun is under the as-built bake's. Otherwise the as-built bake draws, and the record says what G3's bases are lit by                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 Why each rule reads as it does:
 
@@ -3548,16 +4419,51 @@ Why each rule reads as it does:
   apart moves a 2.4° ring by that much; an atlas texel there is 0.04° to 0.06°
   (the physics critique's finding 26, **D** there).
 
-### 7.5 The presentation rate is in every row
+### 7.5 The presentation rate, and a 60 Hz hold
 
 **What phase 0 found.** Every profile of its first campaign ran at a 60 Hz
-cap: 180 frames in 3 s on both sides of every cell. Two hand-started repeats
-ran the same bases at about 120 Hz at 1080p and 72 Hz at Retina. The `sensor`
-span's mean and the late-frame count follow the rate: a clouds-off base is 6.8
-to 7.1 ms at 60 Hz and 3.05 ms at 120 Hz. `ir.gpu`'s Δ does not: 0.1 ms across
-both. The cause is not established. The display was off for both, and what
-differed is how Chrome was started (`.scratch/weather/ORCHESTRATION.md`, "The
-pacing finding").
+cap on the clouds-off side: 180 frames in 3 s. Two hand-started repeats ran
+the same bases at about 120 Hz at 1080p and 64 to 78 Hz at Retina. The second
+campaign presented at 95 to 120 Hz at 1080p and at 59 to 120 Hz at Retina,
+and its cold boots at 81 to 89 and at 49 to 51 Hz; four of its scenarios have
+rows more than 15% apart in rate and are named as two operating points
+(ADR-0063; `landed-2026-11-10T09-05-32Z.md`). The `sensor` span's mean and the
+late-frame count follow the rate: a clouds-off base is 6.8 to 7.1 ms at 60 Hz
+and 3.05 ms at 120 Hz. `ir.gpu`'s Δ does not: 0.1 ms across both. **The cause
+is not established.** The display was off throughout, and how Chrome was
+started was ruled out.
+
+**The hold is an instrument phase 1 owes** (rubric §5): a presentation held
+at 60 Hz on demand. B13, B14 and B15 bind from the first campaign that has
+it, the casts are refused outside 58 to 62 Hz from then, and the placement's
+cell is read at it (§7.4). If it does not exist at the verdict, the three
+bars are declared misses. Package Q builds it, and it starts with a study,
+because nothing can be held until the cause is known.
+
+- **The study,** half an hour of the machine before window 2: the page's own
+  frame log on a clouds-off `horizon` at 1080p, 3 s at a time, with the
+  display asleep and awake, at each refresh mode the display offers, with the
+  window in front and occluded, and with the rig's `?presentation=occluded`
+  on and off. It records the rate each gives and which of them the rate
+  follows. The rig measures with the display dark and the page told it is
+  occluded (`.claude/rules/browser.md`), so the likeliest finding is that
+  nothing is pacing the page but the frame's own cost.
+- **The hold, in the order it is tried.**
+  1. **The display paces it.** The display awake in a 60 Hz mode and the
+     page presenting to it, for the rows that need a rate and for no others.
+     The steady A/B rows stay as they are: they do not move with the rate.
+  2. **The page paces itself,** if the display cannot: under a `pace=60`
+     query the frame loop draws on a 60 Hz grid from the host's clock and
+     skips a callback that arrives early. It holds the rate of the frames
+     drawn. It does not make the compositor present them, so B15's reading
+     under it is the page's and the record says so.
+- **Its acceptance** is one stage, run before any batch that needs it: three
+  consecutive clouds-off rows on `horizon` at 1080p each present at 58 to
+  62 Hz over 3 s, by the page's frame log. A campaign whose stage fails runs
+  its rate-free batches and marks the others not taken.
+- **What it costs the rig's rule.** A page the compositor presents is a page
+  the rig's occlusion rule exists to avoid measuring through. So the held
+  rows are a batch of their own, `pace`, and no steady Δ is taken in it.
 
 **The rule.**
 
@@ -3571,27 +4477,30 @@ pacing finding").
   as two cells and no rule reads it. A rule of §7.4 that reads a
   rate-dependent figure names the rate in its decision.
 - **A campaign checks its own pacing first.** Before its first batch the
-  runner takes one profiled row through `campaign.mjs` and the same row
-  started from a shell, and stops if their rates differ by more than 2%. That
-  is the setup thread's check before phase 0's second campaign, made a stage.
-- **A cast is taken at 60 Hz or refused.** Its paths are scheduled by frame
+  runner takes one profiled row and records its rate, and before any batch
+  that needs the hold it runs the hold's acceptance stage.
+- **A cast's rate is part of its reading.** Its paths are scheduled by frame
   index (§8.2), so at another rate the same path runs in other seconds and
-  the capture keeps another share of its steps. `capture.mjs` reads the rate
-  from the first 30 frames and stops outside 58 to 62 Hz.
+  the capture keeps another share of its steps. Until the hold exists a
+  cast's record says the rate it was taken at. From then a cast is taken at
+  58 to 62 Hz or refused (rubric §4; §3.6 says what package K built).
+- **A captured-frame gap is not divided away.** Where the difference across
+  a gap would be a step, the cast is taken again. So is a cast that captured
+  under two thirds of its path's frames.
 
 **Which figures move with the rate.**
 
-| Figure                                                          | Moves?          | Why, and what holds it                                                                                                                                                                                                                                                         |
-| --------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ir.gpu`'s Δ, `ir.passes`' passes, the `sequence` step's frames | No              | GPU time by timestamp query, in a held loop                                                                                                                                                                                                                                    |
-| Declared bytes, image errors, the `noise` step, the instruments | No              | Held frames, taken by index                                                                                                                                                                                                                                                    |
-| The `sensor` span's mean                                        | Yes             | 6.8 to 7.1 ms against 3.05 ms on one base                                                                                                                                                                                                                                      |
-| Late frames                                                     | Yes             | A count against the interval. The rubric's row is at 60 Hz, and says so (§11.2)                                                                                                                                                                                                |
-| The first-frame hitch, in `memory`                              | Yes             | It is read as an interval overrun. It is recorded with its rate, beside the pipelines compiled on that frame, which `cloudWarm` counts and which do not move                                                                                                                   |
-| A cast's frames                                                 | Yes             | The screencast takes presented frames, and the path advances a step a frame                                                                                                                                                                                                    |
-| The step detector (§8.1)                                        | Yes             | Its series is a first difference between captured frames, so a frame the capture skipped doubles one. It differences by the log's frame index, scales a difference by the indices it spans, and a cast that captured fewer than two thirds of its path's frames is taken again |
-| The trail measure (§8.1)                                        | Yes             | `k + 3` and `k + 32` are path frames, matched to captured frames by the log's timestamps. The history converges by frame, so in seconds a trail is half as long at 120 Hz                                                                                                      |
-| The grid's rebuild, the weight's ramp, the clouds' settle       | Yes, in seconds | Each is counted in frames: 29 frames is 0.48 s at 60 Hz and 0.24 s at 120 Hz                                                                                                                                                                                                   |
+| Figure                                                          | Moves?          | Why, and what holds it                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ir.gpu`'s Δ, `ir.passes`' passes, the `sequence` step's frames | No              | GPU time by timestamp query, in a held loop                                                                                                                                                                                                                                                                            |
+| Declared bytes, image errors, the `noise` step, the instruments | No              | Held frames, taken by index                                                                                                                                                                                                                                                                                            |
+| The `sensor` span's mean                                        | Yes             | 6.8 to 7.1 ms against 3.05 ms on one base                                                                                                                                                                                                                                                                              |
+| Late frames                                                     | Yes             | A count against the interval. B14 is at a held 60 Hz, over matched 3 s windows                                                                                                                                                                                                                                         |
+| The first-frame hitch, in `memory`                              | Yes             | It is read as an interval overrun. It is recorded with its rate, beside the pipelines compiled on that frame, which `cloudWarm` counts and which do not move                                                                                                                                                           |
+| A cast's frames                                                 | Yes             | The screencast takes presented frames, and the path advances a step a frame                                                                                                                                                                                                                                            |
+| The step detector (§8.1)                                        | Yes             | Its series is a first difference between captured frames, so a frame the capture skipped doubles one. Each captured frame is matched to the log's frame index. A gap is not divided away: where its difference would be a step, the cast is taken again, as is one that captured under two thirds of its path's frames |
+| The trail measure (§8.1)                                        | Yes             | `k + 3` and `k + 32` are path frames, matched to captured frames by the log's timestamps. The history converges by frame, so in seconds a trail is half as long at 120 Hz                                                                                                                                              |
+| The grid's rebuild, the weight's ramp, the clouds' settle       | Yes, in seconds | Each is counted in frames: 29 frames is 0.48 s at 60 Hz and 0.24 s at 120 Hz                                                                                                                                                                                                                                           |
 
 ---
 
@@ -3624,16 +4533,72 @@ strobes, by design.
   progress. A terrain patch that pops is the terrain's, and is listed apart.
 - **Each step** is reported with its frame, its height from the log, its cell
   and its size, and the tool writes the pair of frames either side.
-- **A difference is between path frames, not captured ones.** Each captured
-  frame is matched to the log's frame index by its timestamp, and a
-  difference that spans `m` indices is divided by `m`, so a frame the
-  screencast skipped is not read as a step. The cast's presentation rate is
-  in its report (§7.5).
+- **A gap in the capture is not divided away.** Each captured frame is
+  matched to the log's frame index by its timestamp. Where two captured
+  frames are more than one index apart and their difference would be a step,
+  the cast is taken again, and so is a cast that captured under two thirds
+  of its path's frames (rubric §4). The cast's presentation rate is in its
+  report (§7.5).
 
-**A trail is a number.** The rubric's "no trail survives three frames" names
-nothing a tool reports, and a ghost that fades over five frames is neither a
-step nor a burst. The fly paths stop: the camera moves for two thirds of the
-cast and holds for the rest, and the log marks the stop's frame, `k`.
+**A flagged step is a finding to classify, and it fails nothing on sight**
+(rubric §4). `scripts/weather/classify.mjs` (package I) takes each one
+through three questions, and writes the answers, both sets of frames and the
+reason into the cast's record.
+
+| Question                                                        | How it is answered                                                                                                                                                                                                              |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Do settled samples at the same poses and times hold the change? | Package U's settled stills at the path frames either side of the step (§3.8), differenced as the cast's frames are                                                                                                              |
+| If they do, is the eye at a cloud's boundary in those frames?   | The log's range readout crossing 2 km, or `cloudFieldAt` at the eye's body-fixed place and instant crossing from clear to cloud between the frames. The tool evaluates the CPU field in Node, from `packages/rendering`         |
+| What is it, then?                                               | **A real entry or exit** only if the settled samples hold it and the eye is at a boundary. **An error step** if the settled samples lack it, or hold it with the eye at no boundary. **Unresolved** if a sample cannot be taken |
+
+- An error step fails its check. An unresolved finding cannot pass.
+- **Agreement with the settled samples does not prove a physical cause:** a
+  switch that depends on pose sits in both. That is why the second question
+  exists, and why a change the settled samples hold away from any boundary is
+  an error.
+
+**The detector counts only from a run that proves it,** by two controls taken
+in that run (rubric §4):
+
+- **It flags the injected step,** the slow descent at `handoverBand` 1 with
+  `maxSteps` 24, and the classification calls it an error step.
+- **It passes the continuous entry:** G5's path as 600 settled stills, one a
+  path frame, on which it flags nothing where the served opacity is steady.
+  Settled stills remove the motion's history and not every discontinuity, so
+  a flag where the opacity itself steps is not the detector's failure.
+- A run that misses either says its detector is blind, and no cast of that
+  run counts.
+
+**The field has to move, and by the right amount** (C7).
+`scripts/weather/drift.mjs` (package I) measures the drawn field's
+displacement between the first frame and the last of the 100× cast at E1's
+stance, by the shift that best registers the two frames' luminance over the
+cloud pixels, searched to ±64 pixels on frames reduced by two.
+
+- The CPU turn's displacement is the level's `ω_k·a·cos φ·Δt` at the stance,
+  through the lens and the height into pixels: 4 km over the cast, 45 of
+  E1's pixels (the rubric's own derivation).
+- C7 holds the two within 10%, in size and in direction. A frozen field
+  measures zero and fails. So does a field that moves the wrong way.
+- At 1,000× a frame moves the low level 1.5 pixels; that cast and the two at
+  1× are read by the detector and by `frameDiff`'s strobe test alone.
+
+**After a cut, the frames approach the settled plate** (C9). The reader takes
+the 60 frames from a cut, or from a scrub, and the settled plate:
+
+- no frame's RMSE against the settled plate rises after the event's frame by
+  more than that picture's RMSE floor;
+- in no cell of the 4 × 3 grid does a frame's mean luminance lie outside the
+  span from the event's frame to the settled plate by more than the floor;
+- and the settled plate differs from a fresh boot's at that instant by no
+  more than the floor, which is `--cut`'s check as K built it.
+
+**A trail is a number** (C8). A ghost that fades over five frames is neither
+a step nor a burst. The paths that can ghost stop: the camera moves for two
+thirds of the cast and holds for the rest, and the log marks the stop's
+frame, `k`. They are the pass at 2 m under cumulus at 250 m/s and the fast
+descent. A cast at 7.7 km/s from 400 km moves the ground a quarter of a pixel
+a frame, cannot ghost, and is no check.
 
 - **The trail measure** is the mean absolute difference between frame `k + 3`
   and frame `k + 32`, each first blurred by a box the size of a trace texel at
@@ -3642,12 +4607,14 @@ cast and holds for the rest, and the log marks the stop's frame, `k`.
   noise at the scale of a pixel, and the blur removes it.
 - **Its floor** is the larger of 0.5% of full scale and twice the same measure
   on a held cast of the stop's pose, taken once.
-- A fly cast passes when its measure is under the floor.
+- **After the stop,** a cast passes when the measure between frames `k + 3`
+  and `k + 32` is under the floor.
+- **During the motion,** it passes when, at a quarter, a half and three
+  quarters of the motion, the same measure between the cast's frame and a
+  settled still of that pose is under the floor. A smear that keeps up with
+  the camera shows there and not after the stop.
 
-The thresholds are held by `castSteps.test.mjs` on synthetic series, and a
-positive control is part of every run: the same descent with `handoverBand: 1`
-and a deliberately short `maxSteps`, which must show a step, or the run says
-its detector is blind.
+The thresholds are held by `castSteps.test.mjs` on synthetic series.
 
 ### 8.2 Scripted, held paths
 
@@ -3701,10 +4668,28 @@ performance.now()`, the height, and from `ir.clouds()` the regime, the reset
 
 Each is taken with the clouds on and off, and read by §8.1. `--cast` stops at
 `max(10 s, n·200 ms)` (`cdp.mjs:173`), which 1,100 frames are far inside. A
-cast under 40 frames a second is reported as untrustworthy
-(`frameDiff.mjs:197`) and taken again. **The baseline's six casts are package
-K's,** on phase 0's landed light, so the phase's pull request has a "before"
-for each.
+cast that captured under two thirds of its path's frames is taken again.
+**The baseline's six casts are package K's,** on phase 0's landed light, so
+the phase's pull request has a "before" for each. As built, the pitch is
+−87.995°.
+
+**What the rubric's checks need of the casts, which is package U's** (§3.8):
+
+| Check  | Casts                                                                                                                   | Change from K's six                                                                                                  |
+| ------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| C1, C2 | The zoom, and G6 slow                                                                                                   | **The zoom moves** to G6's start at pitch −45°. At G4's pose it crosses nothing (§5.8). K's zoom stays as a baseline |
+| C3     | G6 slow and G6 fast                                                                                                     | None                                                                                                                 |
+| C4     | G6 slow under the world's own climate                                                                                   | New, once package C widens the lever                                                                                 |
+| C6     | G5, over 1,600 frames: started where the range ahead is over 2 km, through one cloud, ended where it is over 2 km again | **Longer.** K's 600 frames are 1.5 km, so a cloud entered in them is under 1.5 km ahead at the first frame (§8.5)    |
+| C7     | The clock at E1's stance at 1×, 100× and 1,000×, and at G1's at 1×: 300 frames each, the camera held                    | New: a path kind that runs the clock                                                                                 |
+| C8     | Fly, ground, and G6 fast, with settled stills at a quarter, a half and three quarters of each                           | The settled stills are new. Fly, orbit leaves the checks                                                             |
+| C9     | The 60 frames from a cut and from a scrub, at E1                                                                        | New: `--cut` keeps the frames                                                                                        |
+| §4     | The injected step: G6 slow at `handoverBand` 1 and `maxSteps` 24. The continuous entry: G5's path as 600 settled stills | New                                                                                                                  |
+
+That is 11 casts with their clouds-off controls, 600 settled stills for the
+continuous entry, six for C8, and as many again as the classification asks
+for: about 13,500 frames and 700 stills a run (**E**). The continuous entry
+is taken on K's own 600 frames of G5, which hold the entry.
 
 ### 8.3 The glory profiler
 
@@ -3714,23 +4699,29 @@ profile of `R/(R + G + B)` in 0.1° bins to 10°, and reports the first red
 maximum past the first interior minimum, the rule the Mie tests use (phase 0
 package report, WP2), beside the table's ring for the deck top's radius. It
 reports the ring's peak over its trough, which is the brightness the angle
-alone does not pin, and the cloudbow's peak. Those are the rubric's numbers
-for G4.
+alone does not pin, and the cloudbow's peak. On the plate the rubric holds
+the ring within 0.2° of the table's, two of the profiler's bins (row 8), and
+scores the bow when it is present. That half of row 8 gates from phase 2,
+when G4 is judged; phase 1 records it.
 
 ### 8.4 Which phase builds each
 
-| Instrument                                                                                                                              | Phase                 | Package                         |
-| --------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ------------------------------- |
-| A picture that holds weather; the capture set, its casts and sheets; the scripted paths; `ir.settled()` on the clouds; the solar solver | 1                     | K                               |
-| The step detector and the trail measure                                                                                                 | 1                     | I                               |
-| The glory profiler                                                                                                                      | 1                     | I                               |
-| The range readout                                                                                                                       | 1                     | M1 (the readout), I (its check) |
-| The cells' size distribution and the sight count, on the CPU field                                                                      | 1                     | G, D                            |
-| The frozen reference manifest                                                                                                           | 1, before K's capture | The orchestrator (ruling 3)     |
-| The panel's packets, shuffle, controls, ledger and proof-of-looking checks, under `scripts/panel/`                                      | 2                     | —                               |
-| E1's shadow offset against `height·tan z`; the limb's band profiler for E2; the terminator profiler                                     | 2                     | —                               |
-| The ground's illuminance under a deck against the Monte Carlo column                                                                    | 2                     | —                               |
-| E3's cover by 10° band from the CPU field, and the disk's reflectance against EPIC's                                                    | 3                     | —                               |
+| Instrument                                                                                                                              | Phase                 | Package                     |
+| --------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | --------------------------- |
+| A picture that holds weather; the capture set, its casts and sheets; the scripted paths; `ir.settled()` on the clouds; the solar solver | 1                     | K                           |
+| The step detector, the trail measure, the classification of a flagged step, the field's displacement, the frames after a cut            | 1                     | I                           |
+| The glory profiler                                                                                                                      | 1                     | I                           |
+| The range readout, and its fixture                                                                                                      | 1                     | M1                          |
+| The cells' size distribution and the sight count, on the CPU field                                                                      | 1                     | G, D                        |
+| The frozen reference manifest                                                                                                           | 1, before K's capture | The orchestrator (ruling 3) |
+| The casts of C1 to C9 with their controls, settled stills along a path, the overlay guard, the record's provenance, the noise floor     | 1                     | U                           |
+| The panel's packet builder, shuffler, controls, validator and ledger, under `scripts/panel/`                                            | 1                     | J                           |
+| The real-time anchor stills, frozen; the calibration round                                                                              | 1                     | The orchestrator            |
+| A 60 Hz presentation held on demand; the whole frame's 95th percentile; each rule's outcome computed                                    | 1                     | Q                           |
+| The levers' hash at a size                                                                                                              | 1                     | C                           |
+| E1's shadow offset against `h·tan z`; the share of cloud pixels at display white                                                        | 2                     | —                           |
+| The ground's illuminance under a deck against the Monte Carlo column                                                                    | 2                     | —                           |
+| Earth's cover by the rubric's §6.3                                                                                                      | 3                     | —                           |
 
 ### 8.5 The range inside a cloud, measured
 
@@ -3739,19 +4730,117 @@ measured a visibility. The physics critic settled what sets it (§5.1): inside
 a cumulus, shapes in the frame are lost at the scaled range, `3.912/σ′`, and
 detail narrower than the diffraction blur at half that.
 
-- **The readout.** Under the `stats` lever the trace already counts its steps
-  through a small buffer (`render/cloudTrace.ts:145-171, :240-248`). It gains
-  three slots: the sum of `1 − T′` over its rays, which is the served opacity
-  the casts' logs read, and the center texel's front depth and transmittance.
-  The front is where a ray's opacity first reaches a half
-  (`cloudMarch.ts:123-124, :442-450`), and in a uniform medium the 2% range is
-  5.64 fronts (**D**: `ln 50/ln 2`). The report carries `opacity` and
-  `range`, the range null where the center ray never loses half.
-- **The check for G5,** by `castSteps` on the cast's log: the least range over
-  the cast is within 25% of `3.912/σ′` for the regime's genus at the eye's
-  height, from `cloudFieldAt`; and the range is over 2 km, or null, before
-  the cloud and after it.
-- **The sentence for the rubric** is in §11.2.
+- **The readout is the rubric's:** the distance at which the optical depth
+  accumulated along the center ray reaches `ln 50`, 3.912 (row 21). Under the
+  `stats` lever the trace already counts its steps through a small buffer
+  (`render/cloudTrace.ts:145-171, :240-248`). It gains three slots: the sum
+  of `1 − T′` over its rays, which is the served opacity the casts' logs
+  read, and for the center texel the distance at which its scaled depth
+  passes 3.912, placed inside the step that crosses it by the step's own
+  extinction. The report carries `opacity` and `range`, the range null where
+  the center ray never reaches it.
+- **Its number is held where it is true** (row 21, a gate):
+  `cloudRange.gpu.test.ts` (package M1) puts the eye inside a uniform medium
+  at each genus's `σ′` and holds the readout within 25% of `3.912/σ′`. A
+  step crosses a scaled depth of 0.3, so the readout's own grain is 8%
+  (**D**).
+- **G5 is judged on entry, exit and continuity** (C6). An error step fails
+  it. So does a range under 2 km before the cloud or after it, or one that
+  never falls inside it. The least range over the cast is recorded and gates
+  nothing: in a heterogeneous cloud it is not `3.912/σ′` of anything.
+- **"Before" and "after" are the cast's first frame and its last.** The
+  readout is along the center ray, and G5 flies along it, so the range ahead
+  of a cloud is the distance to it: about 600 m from 500 m out, with nothing
+  wrong. Package U lengthens G5's cast to 1,600 frames, 4 km at 2.5 m a
+  frame, and the ledger test holds the path on the CPU field: the range along
+  the heading is over 2 km at the first frame and at the last, and under
+  500 m somewhere between. If the preset's heading gives no such path, U
+  re-solves the heading once and says so. §11.2 asks the rubric's council
+  for the wording.
+
+### 8.6 The panel's tools, the noise floor and the calibration round
+
+The rubric makes the panel's tools a package of phase 1 (§3.2 there),
+because one calibration round fixes the pass bar before any candidate plate
+exists (§3.5 there). Package J builds them under `scripts/panel/`, as Node
+scripts with their tests in the gate. They draw nothing and take no lock.
+
+| Tool           | What it does                                                                                                                                                                                                                                                                                                          | What its test holds                                                                                                             |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `packet.mjs`   | Builds one seat's packet for a round from capture records (§3.8). For each scene: the arms as lettered images, each the full plate at packet size and one native-pixel crop; the captioned references, less the one withheld from that seat; the frozen brief. Letters are shuffled by seat and by round, from a seed | A packet built twice from one seed is byte-equal. No file name, metadata or order in it names an arm. Two seats' letters differ |
+| The arms       | The candidate, the last accepted candidate, up to one experiment, the three controls, and on E1 to E3 the deck, each by its record's role                                                                                                                                                                             | A record with the wrong role, rig, stance, fixtures or processing mode for its arm is refused                                   |
+| The controls   | A duplicate pair, the low anchor (the baseline plate) and a photograph withheld from that seat's own set, each in a scene the seed chooses                                                                                                                                                                            | Each appears once a seat a round                                                                                                |
+| `crops.json`   | Each still cornerstone's crop as a fraction of the frame, frozen with the preset, the same for every arm and for a photograph. E2 has a second, at the terminator, where its Shadow is scored                                                                                                                         | Every still cornerstone has a crop inside its frame                                                                             |
+| `validate.mjs` | Checks a seat's `review.json`: an integer from 0 to 10 for each dimension the rubric gives that picture, for each arm; a strict ranking where one is asked; each artifact as one of the nine classes and a region, with whether it shows in the full plate; three observations about named images                     | A score out of range, a tie in a forced ranking, a class or a region outside the vocabulary, each refused                       |
+| `ledger.mjs`   | Reads a round's reviews with its letter maps and writes the ledger's rows: who is valid, each picture's pass, block or void, each guard's verdict, the streaks                                                                                                                                                        | The rules below, each on a fixture round                                                                                        |
+| `archive.mjs`  | Copies a round's packets, briefs and reviews into the main checkout's `.data/weather/panel/` and indexes them from the record                                                                                                                                                                                         | A round's ledger row is written only after its archive                                                                          |
+
+**The rules the ledger computes are the rubric's, and its tests are their
+fixtures** (§3.3, §3.5, §3.6 and §3.8 there):
+
+- **A seat is discarded** when its duplicate pair differs by more than a
+  point on any dimension, when it scores the low anchor 6 or more on Form, or
+  when it scores the withheld photograph under 7 on Form or Light. A false
+  observation discards it too, which the orchestrator finds and enters.
+- **`B_form` and `B_light`** are each the mean of that dimension over every
+  anchor still and valid seat of the calibration round, rounded to the
+  nearest half point with a quarter rounding down, and held within 7 to 8.
+  **F** is one under the lower B, rounded down, never under 6.
+- **A still passes a round** with three valid seats when every seat scores it
+  F or more on each of its dimensions, the means reach `B_form` and
+  `B_light`, no artifact blocks it, every seat ranks it above the deck on E1
+  and E2, and its rows of the acceptance table that name a plate hold. E3's
+  Form bar and floor are one point under.
+- **An artifact blocks** when two valid seats name one class in one region,
+  both in the full plate, both score Artifacts 8 or under, and neither names
+  the class on its photograph arm.
+- **A pass is confirmed by a second round on an unchanged plate.** A round
+  with a discarded or missing seat and nothing failing is void for the
+  streak. A plate has moved when its changed pixels or its RMSE against its
+  last accepted plate pass its picture's floor.
+- **A moved guard** is a blind pair, blocked when two valid seats call the
+  new plate worse on Integration or on Artifacts. The overlay guard also
+  needs every valid seat at F or more on both.
+
+**What is not package J's.** The seats are delegates the orchestrator
+launches, one model from each of three providers at high effort, fresh each
+round. The orchestrator checks each seat's observations against the pixels.
+The brief is the rubric's §3.7, frozen by the orchestrator; J ships its
+template and the packet's layout.
+
+**The real-time anchor stills are gathered by a research delegate and frozen
+by the orchestrator,** as the photographs were (ruling 3).
+
+- They are stills of shipped real-time volumetric clouds from other engines.
+  Each has its engine, its title, its source and a hash, and stays in
+  `.data/weather/references/anchors/`. None is committed.
+- The orchestrator assigns each to the one picture whose stance and genus it
+  matches, and lists it in `references.md` by a dated note, before the round.
+  A picture with no matched anchor says so in the record.
+- **Few engines draw a cloud field from 400 km,** so E1 to E3 may have none.
+  B is a mean over every anchor still, so it can rest on the ground
+  pictures' anchors alone; the record says how many it rests on.
+
+**The noise floor** is package U's `--pairs 5` on the baseline (§3.8), in a
+window of its own (§10.3).
+
+**The calibration round runs once, as soon as its five inputs exist, and
+before window 3.**
+
+| It needs                                           | From                                 |
+| -------------------------------------------------- | ------------------------------------ |
+| The tools                                          | Package J, merged                    |
+| The photographs and the anchors, frozen            | The orchestrator                     |
+| The baseline plate of each picture, the low anchor | Window 1, package K's capture        |
+| The deck arm of E1 to E3                           | The same capture, taken with no flag |
+| The noise floor by picture                         | Window 1b, package U's `--pairs`     |
+
+- It needs no GPU: its seats read images. It runs beside wave 2 or wave 3.
+- **No plate of this phase's light exists before it.** No package but the
+  capture opens a browser (§10.1), and the first capture on phase 1's light
+  is window 3's. The orchestrator does not take one sooner.
+- It publishes its scores in the record and fixes `B_form`, `B_light` and F
+  for good. Phase 2's first judged round starts from them.
 
 ---
 
@@ -3774,10 +4863,19 @@ this phase's measurement, both forms are given.
 
 Two more follow from phase 0's decisions:
 
-| ADR      | Lands in   | Title (house voice)                                                                            | Records                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------- | ---------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **0073** | The second | _The sun's depth is a grid that is refreshed, and the volume under it is read by nothing else_ | Why a turning sun is no event; the cap and the ramp, with the reset sequences before and after; the statistics that stand in from orbit, past the window and during a rebuild, and that they read a layer at the sample's own column; the wake by height; the bake under the horizon; the volume's two levels, the sun gate that judged the cut, and the memory row; the lag under warp |
-| **0074** | The second | _The composite draws in the chain when nothing draws over the clouds_                          | What the break between the two scene passes moves, by attachment and sample; the two forms and their equality; pass B's store; the `over` batch's figures at both sizes and at the temporal picture; placement C reconsidered and why it is not built; the cell carried from ADR-0063, with its repeats                                                                                 |
+| ADR      | Lands in   | Title (house voice)                                                                                   | Records                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------- | ---------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **0073** | The second | _A cache is refreshed at the pace its field moves, and none is rebuilt in a frame_                    | Why a turning sun and a running clock are no events, and what a jump is; each cache's pace and its cap, with B7's sequences before and after and the warp rows; a cache fresh only from a fresh source; the statistics that stand in from orbit, past the window and during a rebuild, at the sample's own column; the grid's weight and the wake by height; the bake under the horizon; the volume's two levels, the sun gate on its widened population, and the memory row; the lag under warp; the first frames |
+| **0074** | The second | _The composite is the identity everywhere, and draws in the chain when nothing draws over the clouds_ | What the break between the two scene passes moves, by attachment and sample; the two forms and their equality; pass B's store and B11; the `over` batch's figures at both sizes and at the temporal picture; placement C reconsidered and why it is not built; the placement's cell at one rate, and what would send A back; why no regime draws through the thin form, the second body's identity, and row 20's batch                                                                                             |
+
+The rubric's rows change what four of the others record: 0068 holds the
+slab's rows against the scaled medium, row 3's figure, and the knots as a
+level's crossing; 0071 holds the atlas's score at 800 m before and after,
+the clear texel's depth and the pose the zoom cast stands at; 0072 holds the
+jump test under a warp and the casts of C7 to C9; and package U amends
+ADR-0067 with the capture's provenance and roles, the overlay guard and the
+noise floor. Each ADR names every lever it leaves as a quality step or a
+measurement control (rubric §7).
 
 In the same change as each: a row in `docs/adr/README.md` and an entry at the
 end of `scripts/docs/wings.mjs`'s "Decision Records" (rule 46;
@@ -3817,15 +4915,16 @@ tried and rejected. Each defect a phase 1 test caught goes under
 
 ### 9.4 Docs that change with the code
 
-| File                                                                                   | Change                                                                                                                                                                                                                                 | With                           |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `docs/guides/harness.md`                                                               | The cornerstones and `scripts/weather/capture.mjs`; `ir.sun`, `ir.solveSun`; `ir.settled()`'s `clouds`; the scripted casts; that taking a picture with no weather turns the clouds off on a flagged page, for a person driving by hand | K, the first pull request      |
-| `docs/agents/driving.md`, `.claude/skills/drive/SKILL.md`, `scripts/drive.mjs:199-201` | `--settle` waits on the clouds                                                                                                                                                                                                         | K                              |
-| `docs/guides/harness.md`                                                               | `scripts/castSteps.mjs` and the trail; the `weather` lever and the levers that stay; `ir.clouds()`'s opacity and range; the generated tables' commands                                                                                 | The docs step, the second      |
-| `docs/concepts/rendering.md`                                                           | **Unchanged in phase 1.** A concept page says what the system does, and no body draws the volume unasked yet. Phase 2 writes the weather's section with the default                                                                    | —                              |
-| `design/plans/weather/README.md`                                                       | Where the work stands; the record's table (§3.7)                                                                                                                                                                                       | K, then N                      |
-| `design/plans/weather/mvp.md`, `references.md`                                         | The rubric, once a branch can carry it, and the frozen manifest                                                                                                                                                                        | The orchestrator, in the first |
-| `design/plans/weather/phase1/design.md`, `package-reports.md`                          | This document and its packages' reports                                                                                                                                                                                                | The orchestrator               |
+| File                                                                                   | Change                                                                                                                                                                                                                                 | With                      |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `docs/guides/harness.md`                                                               | The cornerstones and `scripts/weather/capture.mjs`; `ir.sun`, `ir.solveSun`; `ir.settled()`'s `clouds`; the scripted casts; that taking a picture with no weather turns the clouds off on a flagged page, for a person driving by hand | K, the first pull request |
+| `docs/agents/driving.md`, `.claude/skills/drive/SKILL.md`, `scripts/drive.mjs:199-201` | `--settle` waits on the clouds                                                                                                                                                                                                         | K                         |
+| `docs/guides/harness.md`                                                               | `scripts/castSteps.mjs` and the trail; the `weather` lever and the levers that stay; `ir.clouds()`'s opacity and range; the generated tables' commands                                                                                 | The docs step, the second |
+| `docs/concepts/rendering.md`                                                           | **Unchanged in phase 1.** A concept page says what the system does, and no body draws the volume unasked yet. Phase 2 writes the weather's section with the default                                                                    | —                         |
+| `design/plans/weather/README.md`                                                       | Where the work stands; the record's table (§3.7); **the register** the rubric asks for (§7 there): each declared row, its figure or its absence, and its ADR; the panel's ledger and the calibration round's scores                    | K, then N                 |
+| `design/plans/weather/mvp.md`, `references.md`                                         | The settled rubric and the frozen manifest, with the anchors' dated note                                                                                                                                                               | The orchestrator          |
+| `docs/guides/harness.md`                                                               | The panel's tools; the classification of a flagged step; the 60 Hz hold and which rows need it; the runner's rule outcomes                                                                                                             | J, I, Q                   |
+| `design/plans/weather/phase1/design.md`, `package-reports.md`                          | This document and its packages' reports                                                                                                                                                                                                | The orchestrator          |
 
 ---
 
@@ -3862,13 +4961,20 @@ apps/game/vitest.gpu.config.ts <names>`. Three hundred seconds is under a
      foreground call's ten-minute cap. A refusal means a rig or a campaign
      holds the lock while a package is in flight, which §10.3 forbids, so the
      package reports it and does not wait longer.
-6. **No package opens a browser** except K's capture, which the orchestrator
-   schedules in a window.
+6. **No package opens a browser** except the capture, K's and then U's, and
+   package Q's pacing study, each of which the orchestrator schedules in a
+   window. So no plate of this phase's light exists before window 3 (§8.6).
 7. **A generator** runs as `node apps/ingest/src/<file>.ts`, then
-   `pnpm exec prettier -w` on what it wrote, and records its machine and its
-   runtime in the file's header. One that runs for minutes is split by row
-   over processes from the command line: rule 8 keeps `worker_threads` out of
-   ingest.
+   `pnpm exec prettier -w` on what it wrote. **Its file's header carries
+   nothing that differs between two runs:** the generator, its inputs'
+   hashes and its source's citation, and not the machine, the Node version or
+   the seconds it took. Those go in the package's report and the commit's
+   body. The Mie generator writes them into its header
+   (`apps/ingest/src/mieTable.ts:445`), so regenerating an identical table
+   changes the file (phase 0's council); package T1 takes them out of it, and
+   the ice, slab, cumulus and mask generators never put them in. One that
+   runs for minutes is split by row over processes from the command line:
+   rule 8 keeps `worker_threads` out of ingest.
 8. **Commit each reversible step,** with an extended body. **Report:** the
    done command's output, the files changed, any contract missing, every
    figure as measured or not measured, and the fta score of any file within
@@ -3879,7 +4985,11 @@ apps/game/vitest.gpu.config.ts <names>`. Three hundred seconds is under a
 Sizes are in §10.6. Every done command starts with `IR_CHECK_JOBS=4 pnpm check
 --only gate`; what follows is what it adds.
 
-**Wave 0, the first pull request**
+**Wave 0, the first pull request. Built.** K and V are merged as
+`weather/p1-cornerstones`. K is twelve commits and about 4,500 lines of its
+own against this design's 2,100, which is phase 0's ratio again. Their lists
+below are what they were given, and package U owns K's capture files from
+wave 2.
 
 **K: the cornerstones.** Opus 5.5.
 
@@ -3888,9 +4998,9 @@ Sizes are in §10.6. Every done command starts with `IR_CHECK_JOBS=4 pnpm check
   `index.ts` and their tests; `apps/game/src/planetarium/presetUrl.ts` and its
   test; `apps/game/src/engine/GameEngine.ts` and `pictureWeather.ts` with its
   test; `apps/game/src/scene/Bodies.tsx` (the deck's shadow);
-  `packages/rendering/src/weatherScenario.ts` and its test (three scenarios),
-  with `scenarioCoverageNode` in `render/cloudMaps.ts` only if the dusk edge
-  needs a field (§3.3);
+  `packages/rendering/src/weatherScenario.ts` and its test (three scenarios
+  and `cloudsServed`), with `scenarioCoverageNode` in `render/cloudMaps.ts`
+  for the dusk edge's field (§3.3);
   `apps/headless/src/cornerstoneLedger.test.ts` and its snapshot;
   `scripts/weather/capture.mjs`, `sheet.mjs`, `descent.mjs`,
   `capture.test.mjs`; `scripts/drive.mjs` (help text);
@@ -3919,13 +5029,10 @@ presets:compare --all` at 0 moved and `pnpm presets:ledger` with no diff;
 - **Done:** `… upscale cloudComposite sensor radianceReactivity
 sensorMotion`, and §7.2's re-measurement in window 1.
 
-Four of these files are ones phase 0's landing rewrites: `render/sensor.ts`,
-`render/cloudComposite.ts` and its GPU test (the split's mesh and the
-placement loop go), and `packages/devtools/src/clouds.ts` (the volume cache's
-key goes). `scene/Bodies.tsx` is not among them: placement A stays, and its
-marks with it. K and V start from the landing commit (§10.3), so they meet
-those files as the landing left them, and the list is read against that
-commit's own diff before either starts.
+K and V started from phase 0's landing commit, so the four files of theirs
+the landing rewrote (`render/sensor.ts`, `render/cloudComposite.ts` and its
+GPU test, `packages/devtools/src/clouds.ts`) were met as the landing left
+them.
 
 **Wave 1**
 
@@ -3955,6 +5062,20 @@ commit's own diff before either starts.
   a stub that returns one, which is today's "no cloud past the taps"; and
   `packages/rendering/src/cloudSunSchedule.ts`, a stub that schedules as the
   grid does today.
+- **Declares what the rubric and phase 0's reviews added:**
+  `resolveCloudLevers` and `cloudLeversHash`, and the hash in `ir.clouds()`
+  (`packages/devtools/src/clouds.ts`; §4.6); `CLOUD_LIGHT_TAPS`, exported;
+  the `farBlocks` lever; the clock's own rate among the frame's inputs, with
+  the one line of `scene/Sensor.tsx` that passes it (§4.7); `'climate'` as a
+  value of the `weather` lever, which the landed page reports unavailable;
+  and `cloudFrame`'s `wet` predicate calling `cloudsServed`, with C11's test
+  (§4.8).
+- **Makes phase 1's first test change:** the three accuracy instruments'
+  landed figures as bounds, and one case of each in the always-on suite
+  (§6.3). It needs window 1's instrument documents from the landed code.
+- **Holds the declared bytes to the device:** `cloudSystem.gpu.test.ts`
+  wraps `createTexture` and `createBuffer` (§6.2), and `cloudWarm.gpu.test.ts`
+  gains the lever sets with `served` and `second`.
 - **Holds §4.11's authority** over every cloud module and cloud test, for
   mechanical propagation alone.
 - **The premise spike,** each with its fallback written into the contracts
@@ -3975,36 +5096,40 @@ cloudSensor cloudSecondBody materials`, every hash equal, and a frame of
 
 **Wave 2**
 
-| Package                          | Model     | Owns                                                                                                                                                                                                                                                                                                                | Done adds                                                                                                                                                                                                                                                  | GPU                                                 |
-| -------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **D: density and climate**       | Opus 5.5  | `weatherGenus.ts`, `weatherClimate.ts`, `weatherField.ts`, `weatherScenario.ts`, `weatherNoise.ts` and their tests; `apps/headless/src/weatherCanon.test.ts`                                                                                                                                                        | —                                                                                                                                                                                                                                                          | No                                                  |
-| **R1: the slab references**      | Fable 5.2 | `apps/ingest/src/transport/legendre.ts`, `moments.ts`, `addingDoubling.ts`, `monteCarloSlab.ts`, `slabTables.ts`, `octaveFit.ts` and tests; `slabReference.generated.ts`, `slabSource.generated.ts`, `cloudOctaves.ts`                                                                                              | `pnpm test:slow slabTables monteCarloSlab`, with the slow row's runtime; the report carries the scaling's bill, the reconstruction's error with and without `J_f`, at the nodes and between them, at `τ` 0.5, 1 and 2, and the octave fit's held-out error | No; CPU windows for the Monte Carlo rows            |
-| **T1: the phase atlas**          | Opus 5.5  | `packages/rendering/src/mieTable.ts` and its test; `render/cloudPhase.ts`; `cloudLight.gpu.test.ts`                                                                                                                                                                                                                 | `… cloudLight`                                                                                                                                                                                                                                             | Suite                                               |
-| **T2: the sky table**            | Opus 5.5  | `skyIrradiance.ts` and its test; `render/atmosphereTask.ts` and its test, `atmosphereLuts.ts`, `air.ts`, `cloudSky.ts`, `cloudSky.gpu.test.ts`                                                                                                                                                                      | `… cloudSky materials atmosphereSky surfaceVisibility`                                                                                                                                                                                                     | Suite                                               |
-| **H: the frame and the history** | Opus 5.5  | `render/cloudFrame.ts`, `cloudHistory.ts` and their tests; `packages/rendering/src/weatherClock.ts` and its test                                                                                                                                                                                                    | `… cloudHistory cloudSystem`                                                                                                                                                                                                                               | Suite                                               |
-| **T3: the mask**                 | Opus 5.5  | `apps/ingest/src/blueNoise.ts` and its test; `blueNoise.generated.ts`; `render/cloudJitter.ts`, `cloudJitter.gpu.test.ts`                                                                                                                                                                                           | `… cloudJitter`                                                                                                                                                                                                                                            | Suite; a CPU window                                 |
-| **T4: the ice rows**             | Opus 5.5  | `apps/ingest/src/iceTable.ts` and its test; `iceAggregate.generated.ts`; `packages/rendering/src/iceTable.ts` (its decoder) and its test                                                                                                                                                                            | The table generated from `.data/weather/baum/`; the source-row test run once locally                                                                                                                                                                       | No; a CPU window                                    |
-| **E: ISCCP-H's ingest**          | Opus 5.5  | `apps/ingest/src/isccp.ts`, `isccpSources.ts`, `main.ts` and tests; the root `package.json` (one script); `isccpZonal.ts`, `isccpZonal.generated.ts` and its test                                                                                                                                                   | —                                                                                                                                                                                                                                                          | No; a fetch of 518 MB                               |
-| **Q: the runner**                | Opus 5.5  | `scripts/clouds/measure.mjs`, `page.mjs`, `noise.mjs`, `sequence.mjs`, `campaign.mjs` and their tests; the rate in every row and the pacing stage (§7.5)                                                                                                                                                            | `--dry-run` of every batch of both campaigns                                                                                                                                                                                                               | No                                                  |
-| **W: world transparency**        | Opus 5.5  | `render/planet.ts` (`createRingMaterial` alone), `plumes.ts`, `entryTrace.ts`, `cloudFront.ts`, `preload.ts` (the ring's line); `rings`, `plumes`, `entryTrace`, `cloudFront` and `materials` GPU tests; `scene/Bodies.tsx` (the ring's handle), `ThrusterFx.tsx`, `EntryTrace.tsx`                                 | `… rings plumes entryTrace cloudFront materials`, and the three materials' WGSL hash-equal without a handle                                                                                                                                                | Suite                                               |
-| **I: the instruments**           | Opus 5.5  | `scripts/castSteps.mjs`, `scripts/weather/glory.mjs` and their tests; `scripts/frameDiff.mjs` (an export)                                                                                                                                                                                                           | The detector run on K's baseline casts                                                                                                                                                                                                                     | No                                                  |
-| **R2: the path tracer**          | Fable 5.2 | `apps/ingest/src/transport/pathTrace.ts`, `cumulusTables.ts` and tests; `cumulusFixture.ts` and its test, `cumulusReference.generated.ts`; `render/cloudPathTrace.ts`, `cloudPathTrace.gpu.test.ts`                                                                                                                 | `… cloudPathTrace`. Built and tested on an analytic fixture; the reference is generated after G merges                                                                                                                                                     | Suite; a CPU window; the long run is the campaign's |
-| **L: the sun's depth**           | Fable 5.2 | `render/cloudSunGrid.ts`, `cloudVolume.ts` and their GPU tests (`cloudSunDepth`, `cloudVolume`, `cloudSunAccuracy`); `packages/rendering/src/cloudSunSchedule.ts` and its test; `render/cloudMix.ts` (the statistics' function alone; the crossing's law in it is M1's); the budget's two lines in `cloudSystem.ts` | `… cloudSunDepth cloudVolume cloudSystem`; `rg` showing no reader of the bound before it goes; the sun gate at both of phase 0's suns and at G3's, recorded                                                                                                | Suite                                               |
-| **Y: the over pass**             | Fable 5.2 | `render/cloudOverPass.ts`, `cloudLayers.ts`, `cloudFrameNode.ts`, `cloudComposite.ts` (`compositeOver` and its two forms) and their GPU tests; the composite's term in `sensor.ts` and the frame's choice of form in `cloudSystem.ts`; `passTimeline.ts` only if the spike puts `lean`'s edit there                 | `… cloudOverPass cloudComposite cloudWarm cloudSensor`; the spike's finding on the descriptor; its reading of the composite's other attachments and their readers                                                                                          | Suite                                               |
+| Package                          | Model     | Owns                                                                                                                                                                                                                                                                                                                                                                                           | Done adds                                                                                                                                                                                                                                                  | GPU                                                 |
+| -------------------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **D: density and climate**       | Opus 5.5  | `weatherGenus.ts`, `weatherClimate.ts`, `weatherField.ts`, `weatherScenario.ts`, `weatherNoise.ts` and their tests; `apps/headless/src/weatherCanon.test.ts`                                                                                                                                                                                                                                   | —                                                                                                                                                                                                                                                          | No                                                  |
+| **R1: the slab references**      | Fable 5.2 | `apps/ingest/src/transport/legendre.ts`, `moments.ts`, `addingDoubling.ts`, `monteCarloSlab.ts`, `slabTables.ts`, `octaveFit.ts` and tests; `slabReference.generated.ts`, `slabSource.generated.ts`, `cloudOctaves.ts`                                                                                                                                                                         | `pnpm test:slow slabTables monteCarloSlab`, with the slow row's runtime; the report carries the scaling's bill, the reconstruction's error with and without `J_f`, at the nodes and between them, at `τ` 0.5, 1 and 2, and the octave fit's held-out error | No; CPU windows for the Monte Carlo rows            |
+| **T1: the phase atlas**          | Opus 5.5  | `packages/rendering/src/mieTable.ts` and its test; `render/cloudPhase.ts`; `cloudLight.gpu.test.ts`; `apps/ingest/src/mieTable.ts` (its header alone, §10.1)                                                                                                                                                                                                                                   | `… cloudLight`                                                                                                                                                                                                                                             | Suite                                               |
+| **T2: the sky table**            | Opus 5.5  | `skyIrradiance.ts` and its test; `render/atmosphereTask.ts` and its test, `atmosphereLuts.ts`, `air.ts`, `cloudSky.ts`, `cloudSky.gpu.test.ts`                                                                                                                                                                                                                                                 | `… cloudSky materials atmosphereSky surfaceVisibility`                                                                                                                                                                                                     | Suite                                               |
+| **H: the frame and the history** | Opus 5.5  | `render/cloudFrame.ts`, `cloudHistory.ts` and their tests; `packages/rendering/src/weatherClock.ts` and its test. With the reset's reasons: the jump test against the clock's rate (§4.7), the field's derivation with no `horizonBasis` (§5.3), the history's oracle from the CPU field and level flight at a base (§5.10)                                                                    | `… cloudHistory cloudSystem`                                                                                                                                                                                                                               | Suite                                               |
+| **T3: the mask**                 | Opus 5.5  | `apps/ingest/src/blueNoise.ts` and its test; `blueNoise.generated.ts`; `render/cloudJitter.ts`, `cloudJitter.gpu.test.ts`                                                                                                                                                                                                                                                                      | `… cloudJitter`                                                                                                                                                                                                                                            | Suite; a CPU window                                 |
+| **T4: the ice rows**             | Opus 5.5  | `apps/ingest/src/iceTable.ts` and its test; `iceAggregate.generated.ts`; `packages/rendering/src/iceTable.ts` (its decoder) and its test                                                                                                                                                                                                                                                       | The table generated from `.data/weather/baum/`; the source-row test run once locally                                                                                                                                                                       | No; a CPU window                                    |
+| **E: ISCCP-H's ingest**          | Opus 5.5  | `apps/ingest/src/isccp.ts`, `isccpSources.ts`, `main.ts` and tests; the root `package.json` (one script); `isccpZonal.ts`, `isccpZonal.generated.ts` and its test                                                                                                                                                                                                                              | —                                                                                                                                                                                                                                                          | No; a fetch of 518 MB                               |
+| **Q: the runner**                | Opus 5.5  | `scripts/clouds/measure.mjs`, `page.mjs`, `noise.mjs`, `sequence.mjs`, `frame.mjs`, `rules.mjs`, `campaign.mjs` and their tests: the batches of §7.2; a lens a stance; the rate, the lens and the levers' hash in every row; the build id compared; each rule's outcome computed; the pacing study and the 60 Hz hold (§7.5), with the frame loop's `pace` query if the display cannot hold it | `--dry-run` of every batch of both campaigns                                                                                                                                                                                                               | No                                                  |
+| **W: world transparency**        | Opus 5.5  | `render/planet.ts` (`createRingMaterial` alone), `plumes.ts`, `entryTrace.ts`, `cloudFront.ts`, `preload.ts` (the ring's line); `rings`, `plumes`, `entryTrace`, `cloudFront` and `materials` GPU tests; `scene/Bodies.tsx` (the ring's handle), `ThrusterFx.tsx`, `EntryTrace.tsx`                                                                                                            | `… rings plumes entryTrace cloudFront materials`, and the three materials' WGSL hash-equal without a handle                                                                                                                                                | Suite                                               |
+| **I: the instruments**           | Opus 5.5  | `scripts/castSteps.mjs`, `scripts/weather/glory.mjs`, `classify.mjs`, `drift.mjs` and their tests; `scripts/frameDiff.mjs` (an export)                                                                                                                                                                                                                                                         | The detector run on K's baseline casts; the classification on a fixture of each kind; the drift measure on a shifted field                                                                                                                                 | No                                                  |
+| **R2: the path tracer**          | Fable 5.2 | `apps/ingest/src/transport/pathTrace.ts`, `cumulusTables.ts` and tests; `cumulusFixture.ts` and its test, `cumulusReference.generated.ts`; `render/cloudPathTrace.ts`, `cloudPathTrace.gpu.test.ts`                                                                                                                                                                                            | `… cloudPathTrace`. Built and tested on an analytic fixture; the reference is generated after G merges                                                                                                                                                     | Suite; a CPU window; the long run is the campaign's |
+| **L: the sun's depth**           | Fable 5.2 | `render/cloudSunGrid.ts`, `cloudVolume.ts` and their GPU tests (`cloudSunDepth`, `cloudVolume`, `cloudSunAccuracy`); `packages/rendering/src/cloudSunSchedule.ts` and its test; `render/cloudMix.ts` (the statistics' function alone; the crossing's law in it is M1's); the budget's two lines in `cloudSystem.ts`                                                                            | `… cloudSunDepth cloudVolume cloudSystem`; `rg` showing no reader of the bound before it goes; the sun gate at both of phase 0's suns and at G3's, recorded                                                                                                | Suite                                               |
+| **Y: the over pass**             | Fable 5.2 | `render/cloudOverPass.ts`, `cloudLayers.ts`, `cloudFrameNode.ts`, `cloudComposite.ts` (`compositeOver` and its two forms) and their GPU tests; the composite's term in `sensor.ts` and the frame's choice of form in `cloudSystem.ts`; `passTimeline.ts` only if the spike puts `lean`'s edit there                                                                                            | `… cloudOverPass cloudComposite cloudWarm cloudSensor`; the spike's finding on the descriptor; its reading of the composite's other attachments and their readers; the composite's four unheld cases (§4.12)                                               | Suite                                               |
+| **J: the panel's tools**         | Opus 5.5  | `scripts/panel/packet.mjs`, `validate.mjs`, `ledger.mjs`, `archive.mjs`, `crops.json`, the brief's template, and their tests (§8.6)                                                                                                                                                                                                                                                            | The tests of §8.6 on fixture rounds; one packet built from the baseline's records, if window 1's exist                                                                                                                                                     | No                                                  |
+| **U: the capture's second pass** | Opus 5.5  | `scripts/weather/capture.mjs`, `descent.mjs`, `sheet.mjs`, `capture.test.mjs`; `packages/devtools/src/cornerstones.json` (the overlay guard), `solarTime.ts` (a place that moves), `harness.ts` (the clock's verb, one delegate); `apps/headless/src/cornerstoneLedger.test.ts`; ADR-0067's amendment                                                                                          | `capture.test.mjs`, the ledger test; then, in window 1b, `--pairs 5` on the baseline                                                                                                                                                                       | No; window 1b                                       |
 
-D, R1, T1, T2, H and L go first: wave 3 waits on them. The other eight start
-as slots free. L and Y each edit `cloudSystem.ts` in hunks of their own,
-`budgetOf` and `beginFrame`'s layers, and merge in that order.
+D, R1, T1, T2, H and L go first: wave 3 waits on them. J and U start with
+them, because neither waits on the contracts for anything but the lever's
+hash and the `'climate'` value, and the calibration round waits on both. The
+other eight start as slots free. L and Y each edit `cloudSystem.ts` in hunks
+of their own, `budgetOf` and `beginFrame`'s layers, and merge in that order.
 
 **Wave 3**
 
-| Package                             | Model     | Base              | Owns                                                                                                                                                                                                                                                                                                                             | Done adds                                                                                                                                                      |
-| ----------------------------------- | --------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **F: the field on the GPU**         | Opus 5.5  | D, H, T2 merged   | `render/cloudProfile.ts`, `cloudMaps.ts`, `cloudClipmap.ts`, `cloudDensity.ts`, `cloudNoise.ts`, and their GPU tests. The volume's bake calls its injected field, so F edits no line of `cloudVolume.ts`                                                                                                                         | `… cloudNoise cloudMaps cloudClipmap cloudDensity cloudSystem`                                                                                                 |
-| **M1: the march**                   | Fable 5.2 | T1, H, L merged   | `render/cloudMarch.ts`, `cloudKnots.ts`, `cloudTrace.ts`, `cloudSunlight.ts`, `cloudMix.ts` (the crossing's law); `packages/rendering/src/cloudOverlap.ts` and its test; `cloudTrace.gpu.test.ts`. It reads the sun's two depths and the weight through L's `CloudSunDepthNodes`, and takes the sun gate again with its own taps | `… cloudTrace cloudSunDepth cloudSystem`. The scaled medium, the step's integral, the crossing's law, the prefetch, the taps, the floor, the band, the readout |
-| **M2: the light after first order** | Fable 5.2 | M1, R1, T2 merged | `render/cloudMarch.ts`, `cloudSource.ts`; `cloudSlab.gpu.test.ts`, `cloudFurnace.gpu.test.ts`, `cloudGlory.gpu.test.ts`                                                                                                                                                                                                          | `… cloudSlab cloudFurnace cloudGlory cloudTrace`. The higher orders, the sky, the gates                                                                        |
-| **X: the far march's light**        | Fable 5.2 | M1, R1, T2 merged | `render/cloudFar.ts` and `cloudFarAtlas.ts`; `cloudFar.gpu.test.ts`, `cloudFarFurnace.gpu.test.ts`, `cloudFarCompare.gpu.test.ts`                                                                                                                                                                                                | `… cloudFar cloudFarFurnace cloudSystem`                                                                                                                       |
-| **G: the calibration**              | Opus 5.5  | D, R1 merged      | `packages/rendering/src/weatherCalibration.test.ts`; `weatherGenus.ts` (the ranges), `weatherScenario.ts` (each regime's thickness and cover)                                                                                                                                                                                    | —                                                                                                                                                              |
+| Package                             | Model     | Base              | Owns                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Done adds                                                                                                                                                      |
+| ----------------------------------- | --------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **F: the field on the GPU**         | Opus 5.5  | D, H, T2 merged   | `render/cloudProfile.ts`, `cloudMaps.ts`, `cloudClipmap.ts`, `cloudDensity.ts`, `cloudNoise.ts`, and their GPU tests. The volume's bake calls its injected field, so F edits no line of `cloudVolume.ts`. The cube's and the clipmap's pace and their freshness by generation (§4.7), and the two-eyes test on the GPU (§5.3)                                                                                                                                                      | `… cloudNoise cloudMaps cloudClipmap cloudDensity cloudSystem`                                                                                                 |
+| **M1: the march**                   | Fable 5.2 | T1, H, L merged   | `render/cloudMarch.ts`, `cloudKnots.ts`, `cloudTrace.ts`, `cloudSunlight.ts`, `cloudMix.ts` (the crossing's law); `packages/rendering/src/cloudOverlap.ts` and its test; `cloudTrace.gpu.test.ts`, `cloudFront.gpu.test.ts`, `cloudRange.gpu.test.ts`. It reads the sun's two depths and the weight through L's `CloudSunDepthNodes`, and takes the sun gate again with its own taps. The knots as a level's crossing (§4.9), a tap's three reads (§5.4), the range readout (§8.5) | `… cloudTrace cloudSunDepth cloudSystem`. The scaled medium, the step's integral, the crossing's law, the prefetch, the taps, the floor, the band, the readout |
+| **M2: the light after first order** | Fable 5.2 | M1, R1, T2 merged | `render/cloudMarch.ts`, `cloudSource.ts`; `cloudSlab.gpu.test.ts`, `cloudFurnace.gpu.test.ts`, `cloudGlory.gpu.test.ts`                                                                                                                                                                                                                                                                                                                                                            | `… cloudSlab cloudFurnace cloudGlory cloudTrace`. The higher orders, the sky, the gates                                                                        |
+| **X: the far march's light**        | Fable 5.2 | M1, R1, T2 merged | `render/cloudFar.ts` and `cloudFarAtlas.ts`; `cloudFar.gpu.test.ts`, `cloudFarFurnace.gpu.test.ts`, `cloudFarCompare.gpu.test.ts`, `cloudHandover.gpu.test.ts`. First the atlas's score at 800 m on its base; then §5.9's six changes, the instrument's reference and its relative errors, the atlas's pace, its blocks in view first and its freshness by generation (§4.7)                                                                                                       | `… cloudFar cloudFarFurnace cloudSystem`                                                                                                                       |
+| **G: the calibration**              | Opus 5.5  | D, R1, E merged   | `packages/rendering/src/weatherCalibration.test.ts`; `weatherGenus.ts` (the ranges), `weatherScenario.ts` (each regime's thickness and cover)                                                                                                                                                                                                                                                                                                                                      | —                                                                                                                                                              |
 
 M2 and X read the higher orders' source through the contracts' stub of
 `cloudSource.ts` until M2 fills it, so they run side by side.
@@ -4017,10 +5142,16 @@ M2 and X read the higher orders' source through the contracts' stub of
   `cloudComposite.ts` (the second body's bindings and the point source's
   split, §5.1) and its GPU test, `sensor.ts`, `scene/Sensor.tsx`,
   `engine/GameEngine.ts`; `cloudSystem`, `cloudWarm`, `cloudSensor`,
-  `cloudSecondBody`, `cloudHandover` and `cloudCumulus` GPU tests;
-  `packages/devtools/src/clouds.ts` (the report's `opacity` and `range`);
-  `packages/devtools/src/cornerstones.json` (E3's weather to `climate`);
-  `design/plans/weather/README.md` (phase 1's column).
+  `cloudSecondBody`, `cloudCompositeError` and `cloudCumulus` GPU tests;
+  `packages/devtools/src/clouds.ts` (the report's `opacity` and `range`, and
+  the three parts of "whole"); `packages/devtools/src/cornerstones.json`
+  (E3's weather to `climate`); `design/plans/weather/README.md` (phase 1's
+  column, and the register).
+- **Gives the second body the identity** (§4.10), with `cloudSecondBody`'s
+  cases for it.
+- **Takes the first frames apart** (§4.7): why the `warming the clouds` span
+  is empty, what the first five frames spend, and what of it moves into the
+  boot's warm-up.
 - **Removes the bridges' old members** §4.11 gives it: `droplets`,
   `CloudFrame.scenario`, `CloudMedium.column`, `cloudContracts.test.ts`.
 - **Authority over every cloud module for integration failures,** each fix its
@@ -4031,41 +5162,47 @@ M2 and X read the higher orders' source through the contracts' stub of
 
 ### 10.3 The order of work, and the machine's windows
 
-1. **Phase 0's first campaign has ended,** and placement, the far field, the
-   cache with the sun's depth and the ladders are decided (the record at the
-   top).
-2. **The landing is under way** on `weather/phase-0`, from `25df44ab`. The
-   orchestrator starts wave 0 after phase 0's second campaign, from the
-   landing commit, so K and V branch `weather/p1-cornerstones` from a tree
-   that already holds it and the four shared files (§10.2) are theirs to edit
-   once, with no merge to resolve.
-3. **Everything idles for phase 0's second campaign,** which starts on the
-   landing commit. A campaign discards a row taken beside any gate on the
-   machine (`scripts/clouds/measure.mjs`, the quiet check), so nothing of
-   phase 1 runs until it ends. It decides the thin form's regimes (§4.10) and
-   fills phase 0's rows of the budget (§11.2).
-4. **Window 1:** K's baseline and V's re-measurement, on the landed defaults.
-   The references are frozen before it (§3.7).
-5. **The first pull request is opened** (§10.5).
-6. **Wave 1: C,** on `weather/phase-1`, cut from `weather/p1-cornerstones`'
-   tip: the landing, K and V together. When C merges, **the second pull
-   request is opened as a draft.**
-7. **Wave 2,** from C, five in flight at most: D, R1, T1, T2 and H first, L as
-   the first slot frees, then Y, T3, T4, E, Q, W, I and R2. Each merges when
-   done; after each merge the orchestrator runs the gate and §4.11's four
-   system tests.
+1. **Done.** Phase 0 is landed, measured twice and documented. Wave 0, K and
+   V, is built and merged as `weather/p1-cornerstones`.
+2. **Window 1, under way:** K's baseline capture with `--twice` and `--cut`,
+   V's 32 cells into ADR-0044, and phase 0's ladders and instruments on the
+   landed code, which gives the landed set its first ladder and the atlas its
+   score at 800 m. Then **the first pull request is opened** (§10.5).
+3. **Phase 0's own fixes merge forward first.** Its council's record fixes,
+   the cloud pass's exception guard, the runner's refused rows, a stance's
+   lens and the rows retaken through it land on `weather/phase-0` and are
+   merged into `weather/p1-cornerstones` before C's base is cut. C pins
+   instrument figures and Q extends the runner, and neither should start from
+   a tree those fixes are about to change.
+4. **Wave 1: C,** on `weather/phase-1`, cut from that tip. **Beside it: J, U
+   and I,** from the same tip. They touch no file C does, and the
+   calibration round waits on J and U. When C merges, **the second pull
+   request is opened as a draft,** and J, U and I merge into it as each is
+   done.
+5. **Window 1b,** once U is in: the noise floor, five pairs of boots on the
+   baseline, and the pacing study (§7.5), which needs the landed runner and
+   the display and no package.
+6. **The anchors are frozen, and the calibration round runs.** It needs no
+   window. It has to close before window 3 (§8.6).
+7. **Wave 2,** from C, five in flight at most: D, R1, T1, T2, H and L first,
+   as slots free; then E, which package G now waits on; then Y, Q, W, T3, T4
+   and R2. Each merges when done; after each merge the orchestrator runs the
+   gate and §4.11's four system tests on the mini, where the tests CI skips
+   count.
 8. **Wave 3:** F from the merge of D, H and T2; M1 from the merge of T1, H and
-   L; then M2 and X when M1 is in; G when D and R1 are in. R2 generates its
-   reference after G, in a CPU window.
+   L; then M2 and X when M1 is in; G when D, R1 and E are in. R2 generates
+   its reference after G, in a CPU window.
 9. **Wave 4: N.** Then the full check and suite, `presets:compare --all` at 0
    moved and `presets:ledger` with no diff.
 10. **Window 2: campaign `choices`.**
-11. **Decide and land.** §7.4's rules on the tables; one commit deletes the
-    losers and sets the winners as defaults; the gate and the suite.
-12. **Window 3: campaign `landed`,** then the capture set with its casts on
-    the same commit.
+11. **Decide and land.** §7.4's rules on the tables, each computed by the
+    runner; one commit deletes the losers and sets the winners as defaults;
+    the gate and the suite.
+12. **Window 3: campaign `landed`,** then the capture set on the same commit:
+    the ten plates, the casts with their controls, the settled stills, and
+    each flagged step classified.
 13. **Record.** `chore(clouds): phase 1's figures, measured on the Mac mini`,
-    with the runner's tables.
+    with the runner's tables, each rule's outcome, and the register's rows.
 14. **Docs** (§9), then the review by layer and the council, once.
 15. **The second pull request is marked ready,** with the sheets in its body.
     Phase 2 branches from its tip.
@@ -4073,12 +5210,13 @@ M2 and X read the higher orders' source through the contracts' stub of
 **The windows.** In each the machine is held whole, with no package of any
 phase in flight. All are estimates, from phase 0's per-run arithmetic.
 
-| Window | Holds                                                                                                                                                                                                                                                                                                                                                                         | Estimate                                                |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| 1      | K's baseline: seven stills in their arms from two boots, the cut take, twelve casts with their controls, about 5,600 frames; V's re-measurement; if the orchestrator asks for it, the carried cell, A against B at `25df44ab`, nine samples a side, about ten minutes                                                                                                         | About 1 hour                                            |
-| 2      | `choices`: four batches, about 2.5 hours, and half an hour more if O was built; `over`, `reset` and `sun`, about an hour (**E**: 22 `ab` rows of five pairs, the carried cell, 24 sequences, three instrument suns, eight casts with their controls); the casts' stage, about half an hour; the instruments, with the GPU path tracer up to 45 minutes (research §3.3, **E**) | About 5 hours                                           |
-| 3      | `landed`, about 2.5 hours, its ladders now with two more tap values and a third stance for the footprint; the capture set and its casts, about 1 hour                                                                                                                                                                                                                         | About 4 hours                                           |
-|        |                                                                                                                                                                                                                                                                                                                                                                               | **About 10 hours, in three windows,** before any resume |
+| Window | Holds                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Estimate                                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| 1      | Under way: K's baseline, ten stills from two boots each, the cut take, twelve casts of about 6,700 frames; V's 32 cells; phase 0's ladders and instruments on the landed code                                                                                                                                                                                                                                                                                   | The wave-0 delegate's; about 2 hours                     |
+| 1b     | The noise floor: ten boots of the ten stills. The pacing study                                                                                                                                                                                                                                                                                                                                                                                                  | About 1.5 hours                                          |
+| 2      | `choices`: four batches, about 2.5 hours, and half an hour more if O was built; `over`, `reset` and `sun`, about 1.5 hours (**E**: 22 `ab` rows of five pairs, the placement's cell, 48 sequences, three instrument suns, six casts with their controls); the casts' stage with the rubric's set at each band and clip, about 30 casts and 600 settled stills, about an hour; the instruments, with the GPU path tracer up to 45 minutes (research §3.3, **E**) | About 6 hours                                            |
+| 3      | `landed`, about 3.5 hours: its ladders with two more tap values and a third stance, `frame` on 22 stances and presets, the four reset sequences, the warp rows, `pace` under the hold, `memory` and `error` with the two `pair` stances. The capture set, its casts, the settled stills and the classification, about 1.5 hours                                                                                                                                 | About 5 hours                                            |
+|        |                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | **About 14.5 hours, in four windows,** before any resume |
 
 Phase 0's campaign needed a detached driver with eight resumes a stage to
 finish at all (`scripts/clouds/campaign.mjs:60-66`), so the total is a floor.
@@ -4116,15 +5254,15 @@ CI, so one pull request at the phase's end would first meet CI's hosted
 adapter, and its 20-minute jobs, on the finished branch. Phase 1 is two
 stacked pull requests.
 
-|        | The first                                                                                                                                                                                                                                                                                                                                  | The second                                                                                                                                                               |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Branch | `weather/p1-cornerstones`                                                                                                                                                                                                                                                                                                                  | `weather/phase-1`                                                                                                                                                        |
-| Base   | `weather/phase-0` at its landing commit; `the-weather` once phase 0's pull request merges                                                                                                                                                                                                                                                  | `weather/p1-cornerstones`; then whatever is lowest and unmerged under it                                                                                                 |
-| Holds  | K and V                                                                                                                                                                                                                                                                                                                                    | Waves 1 to 4, the campaigns, the landing, the docs                                                                                                                       |
-| Opened | After window 1, ready                                                                                                                                                                                                                                                                                                                      | As a draft when C merges; ready at step 15                                                                                                                               |
-| Gate   | Full `pnpm check`; full `pnpm test:gpu`; `presets:compare --all` at 0 moved and `presets:ledger` with no diff; the capture's two boots under the noise floor and its cut take equal to its fresh boot; the sheets and the six baseline casts in its body; V's re-measured figures in ADR-0044; ADR-0067 with its `wings.mjs` row; CI green | §10.3 steps 9 to 14; every rule of §7.4 applied and its loser deleted; ADR-0068 to 0074; the capture's sheets, each cornerstone beside the baseline; CI green on the tip |
-| Review | `/code-review`; no council                                                                                                                                                                                                                                                                                                                 | By layer, then the council, once                                                                                                                                         |
-| Media  | The baseline: phase 0's landed light, stills and casts, and for E1–E3 the deck beside the forced volume                                                                                                                                                                                                                                    | Each cornerstone and cast beside the baseline's                                                                                                                          |
+|        | The first                                                                                                                                                                                                                                                                                                                                  | The second                                                                                                                                                                                                                                                                                                   |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Branch | `weather/p1-cornerstones`                                                                                                                                                                                                                                                                                                                  | `weather/phase-1`                                                                                                                                                                                                                                                                                            |
+| Base   | `weather/phase-0` at its landing commit; `the-weather` once phase 0's pull request merges                                                                                                                                                                                                                                                  | `weather/p1-cornerstones`; then whatever is lowest and unmerged under it                                                                                                                                                                                                                                     |
+| Holds  | K and V                                                                                                                                                                                                                                                                                                                                    | Waves 1 to 4, the campaigns, the landing, the docs                                                                                                                                                                                                                                                           |
+| Opened | After window 1, ready                                                                                                                                                                                                                                                                                                                      | As a draft when C merges; ready at step 15                                                                                                                                                                                                                                                                   |
+| Gate   | Full `pnpm check`; full `pnpm test:gpu`; `presets:compare --all` at 0 moved and `presets:ledger` with no diff; the capture's two boots under the noise floor and its cut take equal to its fresh boot; the sheets and the six baseline casts in its body; V's re-measured figures in ADR-0044; ADR-0067 with its `wings.mjs` row; CI green | §10.3 steps 9 to 14; every rule of §7.4 applied and its loser deleted; each of the rubric's phase 1 rows green, or declared in the register with its figure; the calibration round's scores in the record; ADR-0068 to 0074; the capture's sheets, each cornerstone beside the baseline; CI green on the tip |
+| Review | `/code-review`; no council                                                                                                                                                                                                                                                                                                                 | By layer, then the council, once                                                                                                                                                                                                                                                                             |
+| Media  | The baseline: phase 0's landed light, stills and casts, and for E1–E3 the deck beside the forced volume                                                                                                                                                                                                                                    | Each cornerstone and cast beside the baseline's                                                                                                                                                                                                                                                              |
 
 - Every push to the draft runs CI, and a superseded run is cancelled
   (`check.yml:29-31`), so the hosted adapter is met from wave 1 on.
@@ -4140,38 +5278,58 @@ Phase 0's packages landed at 1.9 times their estimates: 28,592 lines against
 critique's finding 11). "Estimate" below is this design's own count, tests
 included; "expected" is that count at phase 0's ratio.
 
-| Package | Estimate   | Expected   | On the critical path                          |
-| ------- | ---------- | ---------- | --------------------------------------------- |
-| K       | 2,100      | 4,000      | Yes: the first pull request, and C's base     |
-| V       | 300        | 600        | No, but it merges with K                      |
-| C       | 2,400      | 4,600      | Yes                                           |
-| D       | 1,600      | 3,000      | Yes: F, G                                     |
-| R1      | 2,300      | 4,400      | Yes: M2's tables and gates                    |
-| T1      | 600        | 1,100      | Yes: M1                                       |
-| T2      | 700        | 1,300      | Yes: M2                                       |
-| H       | 1,200      | 2,300      | Yes: F, M1                                    |
-| T3      | 500        | 950        | No                                            |
-| T4      | 500        | 950        | No                                            |
-| E       | 1,000      | 1,900      | No; it may slip a phase                       |
-| Q       | 700        | 1,300      | No; due by window 2                           |
-| W       | 900        | 1,700      | No                                            |
-| I       | 700        | 1,300      | No; due by window 2                           |
-| R2      | 1,800      | 3,400      | No; its reference is due by window 2, after G |
-| F       | 1,400      | 2,700      | Yes                                           |
-| M1      | 1,300      | 2,500      | Yes                                           |
-| M2      | 1,000      | 1,900      | Yes                                           |
-| X       | 900        | 1,700      | No; due before N                              |
-| G       | 500        | 950        | No; R2's reference waits on it                |
-| N       | 1,300      | 2,500      | Yes                                           |
-| L       | 600        | 1,150      | Yes: M1 reads the sun's depth through it      |
-| Y       | 700        | 1,350      | No; due before N, and by window 2             |
-| **Sum** | **25,000** | **47,500** |                                               |
+| Package | Estimate   | Draft 4 adds | Expected     | On the critical path                                       |
+| ------- | ---------- | ------------ | ------------ | ---------------------------------------------------------- |
+| K       | 2,100      | —            | Built: 4,500 | It was: the first pull request, and C's base               |
+| V       | 300        | —            | Built        | —                                                          |
+| C       | 2,700      | 300          | 5,100        | Yes. It waits on window 1's instrument documents           |
+| D       | 1,650      | 50           | 3,150        | Yes: F, G                                                  |
+| R1      | 2,300      | —            | 4,400        | Yes: M2's tables and gates                                 |
+| T1      | 600        | —            | 1,100        | Yes: M1                                                    |
+| T2      | 700        | —            | 1,300        | Yes: M2                                                    |
+| H       | 1,350      | 150          | 2,550        | Yes: F, M1                                                 |
+| L       | 800        | 200          | 1,500        | Yes: M1 reads the sun's depth through it                   |
+| T3      | 500        | —            | 950          | No                                                         |
+| T4      | 500        | —            | 950          | No                                                         |
+| E       | 1,000      | —            | 1,900        | **Now on the second path:** G's row 9 reads its table      |
+| Q       | 1,300      | 600          | 2,450        | No; due by window 2, and the hold by window 3              |
+| W       | 900        | —            | 1,700        | No                                                         |
+| I       | 1,200      | 500          | 2,300        | No; due by window 2                                        |
+| R2      | 1,800      | —            | 3,400        | No; its reference is due by window 2, after G              |
+| Y       | 850        | 150          | 1,600        | No; due before N, and by window 2                          |
+| J       | 1,300      | 1,300        | 2,450        | **The third path:** the calibration round, before window 3 |
+| U       | 1,200      | 1,200        | 2,300        | The third path, and every cast of window 2                 |
+| F       | 1,600      | 200          | 3,050        | Yes                                                        |
+| M1      | 1,600      | 300          | 3,050        | Yes                                                        |
+| M2      | 1,000      | —            | 1,900        | Yes                                                        |
+| X       | 1,200      | 300          | 2,300        | No; due before N                                           |
+| G       | 500        | —            | 950          | No; R2's reference waits on it                             |
+| N       | 1,550      | 250          | 2,950        | Yes                                                        |
+| **Sum** | **30,500** | **5,500**    | **58,000**   |                                                            |
 
-**The critical path** is the landing, K, window 1, C, then R1 beside the
-shorter D, T1, T2 and H, then M1, M2, N, window 2, the landing commit, window
-3, the docs and the council. R1 and the two halves of the march are the
-transport, and they are Fable's. A second path, D to G to R2's reference, has
-to close by window 2 and is the one most likely to be forgotten.
+**What draft 4 costs.** Two packages, J and U, and 5,500 lines by this
+design's count, about 10,500 at phase 0's ratio: 25 packages and 58,000 lines
+expected, of which wave 0's 5,000 are built. The machine's windows go from
+three and about 10 hours to four and about 14.5: the noise floor and the
+pacing study are new, and windows 2 and 3 take the rubric's casts, the
+settled stills, the whole-frame rows, the warp rows and the hold's.
+
+**The critical path** is window 1, phase 0's fixes merged forward, C, then R1
+beside the shorter D, T1, T2, H and L, then M1, M2, N, window 2, the landing
+commit, window 3, the docs and the council. R1 and the two halves of the
+march are the transport, and they are Fable's.
+
+- **What moved on it:** C now waits on window 1's instrument documents, which
+  it pins, and on phase 0's fixes. Nothing else of draft 4 is on the main
+  path: its work is in packages that were already off it, or in J and U.
+- **The second path** is D and E to G to R2's reference, and it has to close
+  by window 2. E joined it: the rubric's row 9 holds each genus's mean depth
+  to ISCCP-H's.
+- **The third path is new:** J and U, window 1b, the anchors frozen, the
+  calibration round. It has to close before window 3, and it is the one most
+  likely to be forgotten, because no code waits on it.
+- **The hold** has to exist by window 3's `pace` batch, or B13 to B15 stay
+  recorded only for another phase.
 
 ---
 
@@ -4196,83 +5354,119 @@ deletes or rewrites". It owns four, with placement A decided (§10.2), by the
 engineering critic's evidence, which the code bears out. Wave 0 now starts
 from the landing commit, so there is no merge to order (§10.3).
 
+**Settled since draft 3,** and folded in: K's world and its land stance
+(§3.3); G3's weather, which K built as `dusk-altocumulus`; the thin form
+(§4.10); the rubric's budget rows, which took draft 3's proposals as B4, B7,
+B10 and B11; and A against B at `25df44ab`, which the orchestrator declined
+for now (§4.12).
+
+**What each of the first packages needs from the orchestrator:**
+
+| Package            | Starts from                                                    | Needs                                                                                                                                                                                                           |
+| ------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **C**, wave 1      | `weather/p1-cornerstones`, with phase 0's fixes merged forward | Window 1's instrument documents from the landed code, the far comparison at 400, 800 and 1,600 m among them, which it pins. §4.11's authority. The rubric and this design committed in the tree it starts from  |
+| **J**, beside C    | The same tip                                                   | `references.md` as frozen, with its captions and "misleads" notes, for the packet's layout. The brief's text, or leave to draft it from the rubric's §3.7. Window 1's capture records, to build one real packet |
+| **U**, beside C    | The same tip                                                   | A ruling on the overlay guard's form if the observatory cannot hold the station's pose (§3.8). Window 1b once it merges                                                                                         |
+| **I**, beside C    | The same tip                                                   | K's baseline casts, to run the detector on                                                                                                                                                                      |
+| Wave 2's first six | C's merge                                                      | CPU windows for R1's rows; the 800 m score in the record before X is briefed                                                                                                                                    |
+
 **Still asked of the orchestrator:**
 
-1. **Package K's probe of the world,** and its land stance, before window 1.
-2. **G3's weather changes before K starts.** A deck held over the whole body
-   cannot be lit from below: it stands in its own light 334 km sunward. K's
-   brief names `dusk-altocumulus` and the ledger's new clause (§3.3).
-3. **Whether window 1 takes the carried cell,** A against B at Retina inside
-   a cloud, nine samples a side at one rate, from a worktree at `25df44ab`
-   where both placements exist (§4.12). It is ten minutes, and it is the only
-   way that cell is ever read again. Phase 1's own batch reads the cell for
-   the forms it builds.
-4. **The rubric's budget rows** take §11.2's second table when the council
-   sees the rubric: the orbit row and the Retina rule cannot be met while
-   pass B runs on every frame, and the reset row is a sequence.
-5. **A stop that may come from package R1.** If the scaled medium's own
-   distance from the true one passes 3% in the gate's domain, the 5% gate has
-   too little left for any form, and the choice returns to the orchestrator
-   before M2 builds (§5.11).
+1. **A research delegate for the real-time anchor stills,** and their freeze
+   in `references.md`, before the calibration round (§8.6).
+2. **The calibration round itself,** once J, U, window 1 and window 1b are
+   in, and before window 3.
+3. **Half an hour of the machine for the pacing study,** in window 1b (§7.5).
+   The 60 Hz hold cannot be designed further until the cause is known.
+4. **The rubric's council sees §11.2's amendments,** C1's pose first, before
+   package U builds the zoom cast.
+5. **A declared miss that may come early from package R1.** If the scaled
+   medium is more than 3% from the true one in the rubric's domain, row 3 is
+   missed, and the figure comes to the orchestrator the day it is known
+   (§5.11). It does not stop M2.
 6. **CPU windows** for R1's rows, R2's six processes, T3, T4 and E (§10.3).
-7. **The panel's brief** carries three things the references showed (§3.3):
-   E2 is judged on color and layering and not on the band's size; G4's glory
-   has no shadow at its center; G5 leans on its cast and its range.
+7. **Phase 0's retaken rows.** Its `cut`, `scrub`, `fly` and `pair-neighbor`
+   figures are at another stance's lens (§7.2). This design leans on none of
+   them, and B7's landed column in the rubric quotes two.
 
 **Asked of Jon:** nothing new. Package T4 reads
 `~/Downloads/polarization_models.zip`, by ruling 5, and extracts it into
-`.data/weather/baum/`.
+`.data/weather/baum/`. Three of the rubric's bars are his to confirm (§10
+there): the ground's, a Retina miss, and the deck's deletion.
 
-### 11.2 What the rubric should say, as it now reads
+### 11.2 Where this design departs from the rubric, and what it asks amended
 
-The rubric took draft 1's corrections. These follow from the critiques and the
-references:
+The rubric is settled, and the design follows it. Its rows, bars and checks
+are cited by number through this document, and §2.1's done-whens are theirs.
+These are the places the design still does something the rubric's words do
+not say, and why.
 
-| Rubric, as edited                                                                            | Proposed                                                                                                                                                                                                                                                                                                              | Why                                                                                                                                           |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| §6: "its fluxes within 2%"                                                                   | "its reflected flux within 2%"                                                                                                                                                                                                                                                                                        | A march's transmitted flux holds the diffraction half twice by construction, 24% high at `τ = 5` (§5.11)                                      |
-| §6: "radiatively averaged 10 km pixels"                                                      | "radiatively averaged 5 km pixels, of those detected"                                                                                                                                                                                                                                                                 | ISCCP-H retrieves at about 5 km and detects in radiance (§5.2)                                                                                |
-| §6: "follow the measured power law"                                                          | "an exponent of 2.19 ± 0.4 by maximum likelihood on the area-equivalent diameter, 200 m to 2 km"                                                                                                                                                                                                                      | The source's line fits give 1.88 to 3.18; the estimator is the claim (§5.2)                                                                   |
-| §6: "The glory's first ring and the cloudbow at the table's angles"                          | Add: "the ring's contrast is the scaled medium's, about twice the true one, declared"                                                                                                                                                                                                                                 | §5.1                                                                                                                                          |
-| §2, G5: "Visibility falls to the cloud's own measured range and returns, and no frame steps" | "Inside the cloud the range falls to `3.912/σ′`, about 110 m at 68 km⁻¹ and 145 m at the marine 52, and returns to kilometers on leaving it, and no frame steps. Detail narrower than the droplets' diffraction blur stays crisp to that range, where a real cloud loses it at half; the transport's ADR declares it" | The physics critic's answer (§5.1). The check is §8.5's: the least range in the cast within 25% of `3.912/σ′`, and over 2 km before and after |
-| §2, G5: judged against cockpit video                                                         | "The continuity specification and the range; cockpit footage where licensed footage exists"                                                                                                                                                                                                                           | No clearly licensed footage of a cumulus was found (§3.3)                                                                                     |
-| §2, G1: "standing at noon"                                                                   | "from a rise at noon"                                                                                                                                                                                                                                                                                                 | From 2 m on flat ground the shadows barely show in photographs (§3.3)                                                                         |
-| §2, G3: "the sun 2° under the horizon"                                                       | "the sun about 1.5° under, the layer's base still lit by at least half a degree"                                                                                                                                                                                                                                      | At 2° an Earth-sized world has 0.03° of margin (§3.3)                                                                                         |
-| §2, G4: "The glory at the antisolar point"                                                   | Add: "with no shadow at its center"                                                                                                                                                                                                                                                                                   | No hull stands at the observatory's eye (§3.3)                                                                                                |
-| §4, G6's check: "read by `scripts/traceFrames.mjs`"                                          | "read by `scripts/castSteps.mjs`"                                                                                                                                                                                                                                                                                     | `traceFrames` uses the detector that passes over a step (§8.1)                                                                                |
-| §4: "No trail survives three frames"                                                         | "Three frames after the camera stops, the trail measure is under its floor"                                                                                                                                                                                                                                           | A trail needs a number (§8.1)                                                                                                                 |
-| §3.2: "Two captures of one tree must agree"                                                  | "Two boots of one tree"                                                                                                                                                                                                                                                                                               | §3.6                                                                                                                                          |
-| §7: "`docs/concepts/rendering.md` has the weather's section"                                 | True at the tip; written in phase 2                                                                                                                                                                                                                                                                                   | §9.4                                                                                                                                          |
+| Rubric                                                                                                   | This design                                                                                                                                                     | Why                                                                                                                                                                                                   | Amendment asked |
+| -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| C1: "the zoom cast (G4's pose, 60° to 11.4° in 300 frames)" crosses the handover's band                  | The zoom is taken from G6's start, 400 km up, at pitch −45°. K's zoom at G4's pose stays in the record as a baseline and is read by no check                    | At G4's pose the farthest cloud in frame is 34 km off, and the band begins 172 km out at 60° and 905 km out at 11.4°. The cast crosses nothing, at the landed 800 m or at 400 m (§5.8)                | Yes, 1          |
+| C6: fails on "a range under 2 km before the cloud or after it"                                           | Read at the cast's first frame and at its last. G5's path is lengthened so that both can hold, and the ledger test holds the path to it on the CPU field (§8.2) | The readout is along the center ray, and G5 flies along it. Approaching a cloud head-on, the range ahead is the distance to the cloud: about 600 m when the eye is 500 m out, with no defect anywhere | Yes, 2          |
+| B7: whole when "every level of the far atlas in view is baked"                                           | Every block of the atlas in view                                                                                                                                | The atlas has faces, layers and blocks, and no levels (`cloudFarAtlas.ts`)                                                                                                                            | Yes, 3: wording |
+| §2: the overlay guard is "E1's stance and weather with the station or a hull in frame"                   | E1's height, lens, pitch, sun and weather, at the station's own place and at the instant its sub-point has E1's sun (§3.8)                                      | The station is where its orbit puts it. It passes over E1's place at E1's sun only by chance                                                                                                          | Yes, 4: reading |
+| §2: E1 and G6 at pitch −88°                                                                              | −87.995°, as built                                                                                                                                              | −88° is past the stance's limit                                                                                                                                                                       | No              |
+| Row 20: a regime may draw through the thin form where its error passes                                   | No regime does. The identity draws everything, the second body included, and the `error` batch gains the two `pair` stances (§4.10)                             | The form buys neither cost nor picture where it passes, and would need a boundary on the descent. This is inside the row, and stricter                                                                | No              |
+| §4: a cast is refused outside 58 to 62 Hz only once the hold exists; until then its record says its rate | K's capture refuses now. Package U makes the refusal the hold's                                                                                                 | K was built to draft 3. Until U merges, a baseline cast taken at another rate is refused where the rubric would keep it                                                                               | No              |
+| Row 9: each genus's mean `τ` within 15% of ISCCP-H's for its type                                        | Held where package E's table carries the type. Package G waits on E                                                                                             | If E slips, that clause is a declared miss and not a silent skip                                                                                                                                      | No              |
+| B13, B14, B15 bind from the first campaign that holds 60 Hz                                              | The hold is package Q's, after a study of why the rate moves (§7.5). Its second means, the page pacing itself, does not make the compositor present             | The cause of the rate's movement is not known, so the hold cannot be promised by a mechanism yet                                                                                                      | No              |
+| Row 20's batch: "every regime of the `error` batch, Enhanced off and on"                                 | The batch's display-referred pair is taken at a held exposure or dropped                                                                                        | The pair contradicts the batch's own meter under a meter that settles between two shots (§4.10)                                                                                                       | No              |
+| §3.2: the settle waits for "the shadow's slices and the cache levels in view"                            | In phase 1, the history, the grid's weight and the atlas's blocks in view (§3.5). The shadow's slices are phase 2's                                             | Nothing draws a shadow yet                                                                                                                                                                            | No              |
 
-The furnace's 2% may stay: the test holds 10⁻³ (§5.11).
+**What the design asks the rubric's council to amend.** Each goes by the
+rubric's own §9. The first two matter: without them a check fails, or passes,
+for a reason that is not the renderer's.
 
-One more follows from the sun's depth phase 0 chose: **G3's deck ends at the
-terminator,** with a clear slot under it at the horizon, because a deck held
-over the whole body stands in its own light (§3.3).
+1. **C1, the zoom's pose.** "G4's pose" becomes "G6's start, 400 km up, at
+   pitch −45°". The figure: at G4's pose the eye is 3 km over the deck's top
+   looking 35° down, so at a 60° lens the farthest cloud in frame is 34 km
+   off, where the band is 172 km to 344 km out at Retina and moves outward to
+   905 km as the lens lengthens. From 400 km at −45° the frame is all far
+   march at 60° and all fine march at 11.4°, and the band sweeps it between
+   (§5.8). C2's "one by a lens and one by distance" then holds as written.
+2. **C6, where the 2 km is read.** "A range under 2 km before the cloud or
+   after it" becomes "at the cast's first frame or its last". The figure: the
+   readout is the distance along the center ray at which the depth reaches
+   `ln 50`, about 110 m into a cumulus, so 500 m short of a cloud it reads
+   about 600 m. K's G5 path is 1.5 km long, so any cloud it enters is under
+   1.5 km ahead at its first frame, and the clause as written fails every
+   time.
+3. **B7, "every level of the far atlas".** The atlas has no levels; "every
+   block of the far atlas in view" is what can be read. And B7's landed
+   column, 14.9 and 9.2 ms, is from rows taken through another stance's lens,
+   which phase 0 is retaking: the bar's derivation does not use them and
+   stands.
+4. **The overlay guard's place.** "E1's stance and weather" read as E1's
+   height, lens, pitch, sun and weather, at the station's own place.
 
-**The budget's rows, after the decisions.** Figures are campaign 1's, on
-far-shore V with the field and the grid, at that campaign's base levers
-(`farFootprint` 400 m). Campaign 2 is phase 0's `landed`, on the landing
-commit and its defaults (four taps, 800 m).
+**One bar is not asked about yet, and may be.** B10 holds Retina's steady Δ
+within 0.5 ms of 1080p's with nothing over the clouds. With the second scene
+pass gone, what still grows with the target is the composite's fragment and
+the depth copy, and the trace falls by 0.02 ms from orbit and 0.3 to 0.6 ms
+on the ground (landed). From orbit that leaves Retina about 0.9 to 1.7 ms
+over (**E**: the depth copy's 0.2 ms and a fragment of 0.5 to 1.0 ms at
+1080p, 2.5 times at Retina). The figure is an estimate, so nothing is asked
+on it. If the `over` batch measures it so, B10 goes back to the council with
+that figure and the two-clause form: the trace, the history and the bakes no
+dearer at Retina, and the composite recorded apart.
 
-| Row, as the rubric has it                                             | What it should say                                                                                                                                                                                                                            | In hand                                                                                                                                                                                           | Waits for                                                                                                                            |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Steady, from orbit over Earth, 1080p, a 60° lens: ≤ 1.6 ms            | The bar stands **on a frame with nothing drawn over the clouds**. A second figure, with an overlay in frame, is recorded beside it                                                                                                            | `orbit`: 3.08 ms, of it `scene over clouds` 1.74, bakes 0.79, history 0.27, depth 0.12, trace 0.10. Less the over pass, 1.34                                                                      | Campaign 2, for `earth-orbit` as landed. Phase 1's `over` batch and window 3, for the chain form                                     |
-| Steady, from orbit, E1's 11.4° lens: its own row                      | As it reads. At 800 m the frame is all fine march, and the grid idles                                                                                                                                                                         | Nothing                                                                                                                                                                                           | Window 3 (`earth-orbit-long`)                                                                                                        |
-| Steady, on a generated world's ground, dry: ≤ 2.9 ms                  | The target stands until ADR-0063 re-bases it from campaign 2. Phase 1's row is then "no more than phase 0's landed figure, and less its over pass on a frame with nothing over the clouds"                                                    | `horizon` 5.11 ms and `inside` 5.19; under the cascades `horizon`'s 4.91 is over 1.53, trace 1.79, bakes 1.27, history 0.28, depth 0.10. The clear-sky `ground` is 6.22, a second operating point | Campaign 2: the fixed `ground` stance, at four taps and 800 m. Window 3 for phase 1's own                                            |
-| Retina, both stances: the clouds add no more than at 1080p            | Two clauses. **The trace, the history and the bakes cost no more than at 1080p.** The composite and the depth copy scale with the target and are recorded apart; with nothing over the clouds the whole adds no more than 0.5 ms over 1080p's | `orbit` 5.66 against 3.08, `horizon` 6.88 against 4.91, `inside` 8.00 against 5.14. The over pass alone grows 2.60, 2.36 and 2.96; the trace falls (1.41 against 1.79 on `horizon`)               | Campaign 2 for phase 0's as landed. The `over` batch for the 0.5 ms, which is a proposal until the chain form's fragment is measured |
-| A reset frame: at 1080p none drops more than one frame                | A sequence, in GPU time (§4.7): the event's frame adds no more than the immediate regime does; no later frame of the 33 adds more than 0.5 ms; the grid is at full weight within 48 frames. A cut, a scrub, a change of weather and a wake    | Cut 19.69 ms and scrub 14.54 at 1080p, 20.97 and 15.89 at Retina; under the cascades 7.83 and 9.86                                                                                                | Campaign 2 repeats those, as landed. Phase 1's `reset` batch, then window 3                                                          |
-| The first frame with the clouds on: no compile hitch                  | Add: the hitch is recorded with its presentation rate, as an overrun of that interval, beside the pipelines compiled on the frame                                                                                                             | Nothing usable: campaign 1's hitch reads pacing (§7.5)                                                                                                                                            | Campaign 2, after its pacing check                                                                                                   |
-| Memory, 1080p: ≤ 76 MB declared, and the declared bytes are the GPU's | The bar stands. Phase 0 lands over it, and ADR-0064 says so; phase 1 declares 71.80 MB, or 76.65 if the volume's cut fails its gate (§2.5)                                                                                                    | 92.05 MB at 1080p, 85.44 at Retina                                                                                                                                                                | Campaign 2 confirms the landed bytes. Window 3 for phase 1's                                                                         |
-| Late frames at 1080p: over 3 s the clouds add at most 2               | Add: **at 60 Hz, the rate recorded in the row**, and a reset sequence's 33 frames hold at most one                                                                                                                                            | Medians of 0 against 0 in every cell but Retina `inside` (21 against 25), in two pacing regimes                                                                                                   | Campaign 2, with rates recorded                                                                                                      |
+**What the rubric took from this design's earlier drafts** is in its text
+now: the reflected flux alone, 5 km pixels, the exponent's estimator, G1's
+rise, G3's sun and its sunward edge, G4's missing shadow, `castSteps` in
+place of `traceFrames`, the trail as a measure, two boots for a plate, the
+budget's rows as B4, B7, B10 and B11, and the slab's domain as its §6.1.
 
 ### 11.3 Risks, and what checks each
 
 1. **The scaled medium moves every phase 0 figure.** Costs fall and the
    ladders shift. `ladders`, `targets` and `error` are taken again on the
    landed code (§7.2), and §5.4 says how phase 0's own figures read.
-2. **The scaling's own bill may spend the gate.** It is the first number
-   package R1 reports, with a stop at 3% (§5.11).
+2. **The scaled medium may be more than 3% from the true one.** That is the
+   rubric's row 3, declared. It is the first number package R1 reports, and a
+   miss goes to the orchestrator that day (§5.11). It does not spend the
+   march's own gate.
 3. **Three terms may not hold a slab at every azimuth.** The reconstruction
    says so in Node, with and without the lobe, before any GPU work, and §7.4
    has a shortfall clause.
@@ -4302,19 +5496,21 @@ commit and its defaults (four taps, 800 m).
 11. **Two CPU jobs join a frame:** the sky table in the atmosphere task and
     the disk's convolution at a body change. Both are measured by C's spike
     and the boot timeline, and both have a place to move to.
-12. **A screencast drops frames.** The detector reads timestamps, and a cast
-    under 40 frames a second is taken again.
+12. **A screencast drops frames.** The detector matches each captured frame
+    to the path's index. A gap where a step would be sends the cast back, and
+    so does a capture of under two thirds of the path (§8.1).
 13. **The contracts change a live system.** §4.11's bridges and four system
     tests at every merge are the guard; C's done command holds a frame
     pixel-equal to its base's.
-14. **The cornerstones' world is not chosen.** Its probe comes first, and the
-    ledger test holds what the pictures need of it: land under three of them,
-    and G3's margin.
+14. **The cornerstones' world has a 10 hour day.** Its sun moves 2.4 times
+    as fast as Earth's, so whatever follows the sun is exercised harder there
+    than on the campaign's stances (§3.3). The ledger test holds what the
+    pictures need of the world: land under three of them, and G3's margin.
 15. **Three r185 premises** are read, not run: `mat3` uniforms and the two 3D
     reads in a compute kernel. C's spike settles each with a fallback.
-16. **Phase 1 is twenty-three packages and about 47,500 lines** at phase 0's
-    ratio, with about 10 hours of the machine held whole. Five run at once. E may
-    slip a phase; nothing else may.
+16. **Phase 1 is twenty-five packages and about 58,000 lines** at phase 0's
+    ratio, with about 14.5 hours of the machine held whole. Five run at once.
+    Nothing may slip a phase now: E's table is read by row 9.
 17. **Earth's forced arm draws no shadow and a regime's weather** in phase 1.
     The record says so beside every plate.
 18. **The grid's stand-in is a layer's statistics at the sample's own
@@ -4337,6 +5533,29 @@ commit and its defaults (four taps, 800 m).
     cannot supply one.
 23. **A rule may read two pacing regimes as one.** §7.5 refuses to pool them,
     and a campaign checks its own pacing before its first batch.
+24. **The 60 Hz hold may not be buildable from a page.** Its cause is not
+    known. If the display cannot pace the page and the page's own pacing does
+    not count, B13 to B15 are declared misses at the verdict by the rubric's
+    own clause, and the placement's cell stays recorded only.
+25. **The budget's plan rests on four estimates of the trace** (§2.6). The
+    bars gate at the verdict and not here, and window 3 says where each
+    stands; B7's first clause fails first if the trace does not come down.
+26. **The calibration round can be starved of anchors.** Few engines draw a
+    field from orbit. B is a mean over whatever anchors exist, and the record
+    says how many.
+27. **G5's path may not exist at its heading.** It needs 2 km of clear range
+    before one cloud and after it, in a field at a cover of 0.35. The ledger
+    test finds out on the CPU, and the heading is re-solved once if it must
+    be.
+28. **The knots change under world transparency.** Package W reads them and
+    package M1 changes what a knot is, a wave later. W's tests are on slabs
+    with one crossing, where both definitions agree; M1 re-runs them.
+29. **A cache refreshed slowly can hide a stale texel for longer.** At a
+    field's own pace a wrong atlas block stays 96 s where it stayed 45
+    frames. Freshness by generation (§4.7) is what makes a slow refresh safe,
+    and its tests are on the caches themselves.
+30. **Phase 0's reset figures are at an unknown lens** until its retaken rows
+    exist. Nothing here is derived from them.
 
 ### 11.4 Not verified for this design
 
@@ -4356,8 +5575,26 @@ commit and its defaults (four taps, 800 m).
   `packages/devtools/src/clouds.ts:100-130`; `.github/workflows/check.yml:17-31`;
   `scripts/gpuLock.mjs:86-96`; and the grep that finds no `requiredLimits` in
   `createRenderer.ts`, `capability.ts` or `gpuHarness.ts`.
+- **Read for draft 4:** the settled rubric whole, and the two sets of rulings
+  that shaped it; the landed campaign's summary
+  (`design/plans/weather/phase0/measurements/landed-2026-11-10T09-05-32Z.md`)
+  and the far comparison's document for its fields; phase 0's council, three
+  reviews; the orchestrator's ledger for K's report and the thin form's
+  decision; `render/cloudKnots.ts:1-125`; `render/cloudComposite.ts:396-500`
+  and its `thin` select; `render/cloudFarAtlas.ts:60-150` and its jump key;
+  and, from `weather/p1-cornerstones` by `git show`, K's cast list
+  (`scripts/weather/descent.mjs`), its capture's rate check and its
+  scenarios.
+- **Not read for draft 4, and each is named where it binds:** K's code beyond
+  those three; `cloudFrame.ts:420-448` and `:352-375`, which are quoted from
+  phase 0's council; `hud/warp.ts`; `scene/Sensor.tsx:201-203`; whether the
+  observatory can hold a station from above through a 11.4° lens; whether
+  `CloudFarResult` carries the blocked air; what the first five frames spend;
+  why the presentation rate moves; whether the retaken rows change any
+  landed figure quoted here; ADR-0063 to ADR-0066 as committed, beyond the
+  figures the measurements hold.
 - **Read for draft 3,** at `25df44ab` with the landing's edits in the tree:
-  `.scratch/weather/ORCHESTRATION.md`'s decisions and its pacing finding, and
+  the orchestrator's ledger for the decisions and the pacing finding, and
   the campaign's decision table by row; `render/cloudSunGrid.ts` whole;
   `cloudVolume.ts`'s header, its `medium`'s choice of level and its
   `#schedule`; `cloudSystem.ts`'s `budgetOf` and `run`; `cloudOverPass.ts`
@@ -4395,13 +5632,53 @@ commit and its defaults (four taps, 800 m).
   - whether a preset's flight lens yields to `engine.requestLens` a frame at a
     time, for the zoom cast;
   - what limits CI's adapter offers beyond the specification's defaults;
-  - `.scratch/weather/references.md`, beyond the six observations its author
-    passed on;
+  - `design/plans/weather/references.md`, beyond the six observations its
+    author passed on;
   - `the-upscaler.md`, ADR-0033, ADR-0037, ADR-0044 and ADR-0056 beyond what
     the maps and the surveys quote.
 - **The cornerstones' numbers are design values.** Each pose and each sun is
   checked by the package with `ir.light()` and the ledger test, and changed
   only through the orchestrator.
+
+### 11.5 What phase 0's reviews leave to phase 1
+
+Phase 0's code review and its council's first round (three seats, 7 of 10
+each) asked for record fixes before its merge and left these to phase 1. Each
+has a package and a test, or a reason it is not this phase's. F is the Fable
+seat's numbering, W the Wonder Full seat's, A the Astra seat's, R the code
+review's.
+
+| #         | Finding                                                                                                                                                                     | Package | What phase 1 does                                                                                                             | The test that can fail                                                                                                                               |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F5, W8    | Under the game's own warp, from 100×, every frame is a jump and takes the reset path; under any warp a sun past 0.05° a frame rebuilds the grid whole                       | H, L, Q | A jump is a step the clock's rate does not explain; no cache rebuilds on a turning sun; warp rows are recorded (§4.7)         | `cloudFrame.test.ts`: no jump at any rate of the dock's ladder. `cloudSunSchedule.test.ts`: no whole rebuild at 1,000×. C7's casts. The `warp` batch |
+| F6        | A knot is one of the first four 250 m columns, so `cloudFront` is wrong through layered cloud and answers `T = 1` for cloud thin in every column                            | M1      | A knot is a level's crossing (§4.9)                                                                                           | `cloudFront.gpu.test.ts` on the real field: the gap between two layers, a thin layer, the ray's end                                                  |
+| F7        | The step-start bias is 15% only near the eye: 52% at 8 km and 70% or more at the handover, in the far comparison's own reference                                            | M1, X   | The step's source is log-linear (§5.4); the far comparison is re-based once when it lands                                     | `cloudTrace.gpu.test.ts`: first order within 1% at step depths of 0.3, 1.16 and 2                                                                    |
+| F8        | No always-on test holds: a compression other than 1 in the composite; the air's in-scatter term; a marked overlay through the real composite; a frame after `on` goes false | Y       | Four cases, before the composite gains a second form (§4.12)                                                                  | `cloudComposite.gpu.test.ts`, `cloudOverPass.gpu.test.ts`, `cloudSensor.gpu.test.ts`, each watched failing                                           |
+| F8        | No test reads the drift, so its sign can be negated                                                                                                                         | H, I    | The history's expected displacement comes from the CPU field; C7 measures the drawn field's                                   | `cloudHistory.gpu.test.ts`; `drift.test.mjs` and the 100× cast                                                                                       |
+| F8        | The grid's only gate is a uniform slab; its accuracy on a real field is opt-in                                                                                              | C, L    | The instrument's landed figures are bounds, and one case runs always (§6.3)                                                   | `cloudSunAccuracy.gpu.test.ts`                                                                                                                       |
+| F8, W11   | The declared bytes sum each resource's own list, so a texture left off is unseen; the radiance meter's buffer and the composite's are outside the count                     | C, N    | The test wraps the device's `createTexture` and `createBuffer` (§6.2)                                                         | `cloudSystem.gpu.test.ts`                                                                                                                            |
+| F8        | CI's adapter skips the tests that read the pass order                                                                                                                       | —       | **Not phase 1's.** It is the hosted adapter's limit. The orchestrator runs the suite on the mini after each merge (§10.3)     | —                                                                                                                                                    |
+| F9, A     | The field is a function of the eye: the drift is built in the observer's tangent basis                                                                                      | D, H, F | The turn is the body's (§5.3)                                                                                                 | `weatherField.test.ts`, `cloudFrame.test.ts`, `cloudDensity.gpu.test.ts`: one point, two eyes                                                        |
+| F10       | The far atlas filters the logarithm of a depth against a clear texel's zero, and reads less opacity than is there                                                           | X       | A clear texel holds the level's own mean depth (§5.9)                                                                         | `cloudFar.gpu.test.ts`: a deck's edge within 2% in opacity                                                                                           |
+| F11       | The motion reset has no floor: level flight at a cloud's base never accumulates                                                                                             | H       | The `'motion'` reset goes (§5.10)                                                                                             | `cloudHistory.gpu.test.ts`: 120 frames 20 m under a base                                                                                             |
+| F12       | The runner computes no rule's outcome; a hand-started run compares no build id; its Δ sits beside two unrelated medians; a second stop orphans Chrome with the lock         | Q       | `rules.mjs`; the build id compared on every run; the table's columns named; a second stop waits (§7.1)                        | `rules.test.mjs`, `measure.test.mjs`, `campaign.test.mjs`                                                                                            |
+| F12, A    | A row counts as quiet with a null capture or an unsettled scene; a refused row counts as done                                                                               | —       | **Not phase 1's:** it is being fixed on phase 0's branch. Package Q keeps its tests green when it extends the runner          | Phase 0's own                                                                                                                                        |
+| F13       | The sun gate's places are at latitude 86° to 89°, one each; its worst sample is unbounded; its samples are within 4 km of the eye                                           | L       | Five seeded places a scenario within 60° of the equator, to the window's edge, the worst held (§5.5)                          | `cloudSunAccuracy.gpu.test.ts`                                                                                                                       |
+| F14       | The thin form's "from orbit" is one stance at a 4.4° sun, and its display-referred pair is uncontrolled                                                                     | N, Q    | No regime draws thin, so the evidence is not leaned on; the pair is held or dropped (§4.10)                                   | `measure.test.mjs`: the `error` rows say how the pair was exposed                                                                                    |
+| F, note   | The grid's window ends in a hard select, a lighting seam about 25 km out                                                                                                    | L       | The weight's ramp from the eye (§5.5)                                                                                         | `cloudSunDepth.gpu.test.ts`: a line across the edge                                                                                                  |
+| F, note   | After a jump the clipmap and the atlas rebuild from cube faces not yet rebaked and call themselves fresh                                                                    | F, X    | A cache is fresh only from a fresh source (§4.7)                                                                              | `cloudClipmap.gpu.test.ts`, `cloudFar.gpu.test.ts`                                                                                                   |
+| W5, R1    | The landed defaults have no ladder; `LIGHT_TAP_COUNTS` and the `images` batch's stances are hard-coded                                                                      | C, Q    | The lever exports its values; the ladders read them and take their stances as a parameter (§7.3)                              | `cloudLevers.test.ts`; `measure.test.mjs`: a row for every value and for `earth-limb`                                                                |
+| W7        | The three accuracy instruments assert only finiteness                                                                                                                       | C       | Phase 1's first test change (§6.3)                                                                                            | The three instruments                                                                                                                                |
+| W7        | The warm-up test never draws a lever set with `served` or `second`                                                                                                          | C, N    | Two lever sets more                                                                                                           | `cloudWarm.gpu.test.ts`                                                                                                                              |
+| W3        | The atlas is unscored at 800 m; its errors are normalized by each case's own mean light; its reference takes 1,051 steps where the shipped march takes 192                  | X       | The score first; relative errors by bin; the shipped march beside the long one (§5.9)                                         | `cloudFarCompare.gpu.test.ts`, `cloudHandover.gpu.test.ts`                                                                                           |
+| W9        | A second clouded body always draws through the thin form, in a regime never measured                                                                                        | N, Q    | The identity; the `pair` stances in the `error` batch (§4.10)                                                                 | `cloudSecondBody.gpu.test.ts`; row 20's batch                                                                                                        |
+| W10       | The trace binds 12 of 16 sampled and all 4 storage textures; the atlas bakes a block a frame whatever the budget, at 0.80 to 1.59 ms                                        | C, X    | 14 at worst and no fifth output (§4.5); the atlas at its field's pace, and `farBlocks` after an event (§4.7)                  | `cloudTrace.gpu.test.ts`'s census; the `reset` sequences                                                                                             |
+| W11       | A generator's header carries its runtime and machine, so regenerating an identical table changes the file                                                                   | T1      | Headers carry nothing that differs between runs (§10.1)                                                                       | `mieTable.test.ts`: the committed header holds no runtime, machine or version                                                                        |
+| W11       | `summarize` parses a batch document unguarded; a resume resets every stage's attempts                                                                                       | Q       | The guard `progress` already has; attempts kept across a resume                                                               | `campaign.test.mjs`                                                                                                                                  |
+| W6        | Every figure is the M6 mini's, and the plan's basis was an M5                                                                                                               | —       | **Not phase 1's.** The rubric puts hardware below the mini outside the claim and records one M5 row at the verdict (§8 there) | —                                                                                                                                                    |
+| F2        | The landed `cut`, `scrub`, `fly` and `pair-neighbor` rows ran through another stance's lens                                                                                 | Q       | A stance owns its lens (§7.2). The retake is phase 0's                                                                        | `measure.test.mjs`: a `rise` stance, then another                                                                                                    |
+| F1, W1, A | Placement A stands by an exception, and one cell fires the rule as written                                                                                                  | Y, Q    | The cell at one rate, and the rule that sends A back (§7.4)                                                                   | The `over` batch                                                                                                                                     |
+| F15, W2   | Cold compile was never measured: the `warming the clouds` span is empty in all six boots                                                                                    | N       | Why it is empty, first; then what the first frames spend (§4.7)                                                               | The `memory` batch reads a span that is there                                                                                                        |
 
 ---
 
@@ -4412,8 +5689,15 @@ tests and the decision rules (4 blockers, 16 majors, 11 minors); **E**, the
 interfaces, the packages, the schedule and the delivery (2 blockers, 17
 majors, 13 minors). Each finding was checked against the code, the plan or a
 computation. Of 63, 60 are accepted and 3 in part (P12, E13, E21); none is
-declined. **R** is
-the six observations of the delegate that gathered the reference photographs.
+declined. **R** is the six observations of the delegate that gathered the
+reference photographs.
+
+The log is draft 2's, and its section numbers are of that draft. Where a row
+cites §11.2, that section then held proposals to the rubric, which the
+settled rubric took; §11.2 now lists where the design departs from it. Where
+a row's change has since moved, **What draft 3 and draft 4 changed** says
+how: the slab's gate (P-rows on the scaling) is against the scaled medium
+now, and the thin form and the placement are decided.
 
 ### The physics
 
@@ -4502,86 +5786,100 @@ the six observations of the delegate that gathered the reference photographs.
 
 ---
 
-## After the decisions
+## What draft 3 and draft 4 changed
 
-Draft 3 resolves every section that waited on placement, the far field, the
-cache with the sun's depth, and the ladders. The thin form stays tagged
-(§4.10, §7.2).
+The critique log above is draft 2's. This is the record of the two rounds
+since, so a reader of the tree's copy can tell what moved and why.
 
-### What each section kept, and what it lost
+### Draft 3: phase 0's choices
 
-| Section | Kept                                                                                                          | Deleted                                                                     |
-| ------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| §2.5    | The field with the grid: 71.80 MB at 1080p and 65.19 MB at Retina, with the volume cut to what the grid reads | "−15.4 MB under any outcome"                                                |
-| §4.3    | Five reads a step; the volume as the grid's source through its injected field                                 | The volume as the march's medium                                            |
-| §4.5    | 12 bindings before this phase's choices and 14 at worst; the second body's own atlas                          | The volume's column, 14 to 16; the spheres for a second body                |
-| §4.6    | `lightTaps` 0 to 8, default 4; `over`, `sunSlices`, `sunRamp`                                                 | —                                                                           |
-| §4.7    | The frame node in pass B, or from the chain's term; the grid's refresh; the reset row as a sequence           | The split's branch; a `'field'` reset that rebuilds everything in its frame |
-| §4.9    | The three objects on the over-clouds layer, in pass B's list                                                  | The orders package W would have set under B                                 |
-| §4.12   | New: the over pass, the two forms, C reconsidered, the carried cell                                           | —                                                                           |
-| §5.3    | The turn as three matrices; no new cadence in the sun's depth                                                 | The volume's refresh by a tenth of a texel                                  |
-| §5.5    | The grid's two reads, the statistics that stand in, the weight, the bake under the horizon                    | The cascades' four loads; a blend over "the cache's last two texels"        |
-| §5.8    | 192 steps, four taps, 800 m, and where 800 m puts the band                                                    | "Whatever the ladders give"                                                 |
-| §5.9    | `ℓ` as a slab step's run; the sun's side by one function                                                      | The spheres' slant run                                                      |
-| §7.2    | The landed defaults as every batch's base; seven stances and three batches more                               | "Phase 0's winners, whatever they are"                                      |
-| §7.3    | The three ladders with their values, two more taps and a third stance                                         | The clause for ladders that name no value                                   |
-| §7.5    | New: the presentation rate                                                                                    | —                                                                           |
-| §10.4   | Fixed lists                                                                                                   | The table by outcome                                                        |
+Draft 3 resolved every section that waited on placement, the far field, the
+cache with the sun's depth, and the ladders, and added two packages, L and Y.
 
-### Which packages changed
+| Section | Kept                                                                                       | Deleted                                                                     |
+| ------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| §2.5    | The field with the grid, with the volume cut to what the grid reads                        | "−15.4 MB under any outcome"                                                |
+| §4.3    | Five reads a step; the volume as the grid's source through its injected field              | The volume as the march's medium                                            |
+| §4.5    | 12 bindings before this phase's choices and 14 at worst; the second body's own atlas       | The volume's column, 14 to 16; the spheres for a second body                |
+| §4.7    | The frame node in pass B, or from the chain's term; the grid's refresh                     | The split's branch; a `'field'` reset that rebuilds everything in its frame |
+| §4.9    | The three objects on the over-clouds layer, in pass B's list                               | The orders package W would have set under B                                 |
+| §4.12   | New: the over pass, the two forms, C reconsidered                                          | —                                                                           |
+| §5.3    | The turn as three matrices; no new cadence in the sun's depth                              | The volume's refresh by a tenth of a texel                                  |
+| §5.5    | The grid's two reads, the statistics that stand in, the weight, the bake under the horizon | The cascades' four loads; a blend over "the cache's last two texels"        |
+| §5.8    | 192 steps, four taps, 800 m, and where 800 m puts the band                                 | "Whatever the ladders give"                                                 |
+| §5.9    | `ℓ` as a slab step's run; the sun's side by one function                                   | The spheres' slant run                                                      |
+| §7.3    | The three ladders with their values, two more taps and a third stance                      | The clause for ladders that name no value                                   |
+| §10.4   | Fixed lists                                                                                | The table by outcome                                                        |
 
-| Package | Change                                                                                                                                                                                            |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| K       | Three scenarios where it had two, `dusk-altocumulus` for G3, and one more clause in the ledger test. Its capture refuses a cast outside 58 to 62 Hz. It starts from the landing commit, as V does |
-| C       | Declares the three levers, `lightTaps`' new values, `trace.sunWeight`, the sun depth's two depths and weight, `CloudBudget.sunSlices`, and two stubs (§10.2)                                      |
-| H       | Loses its one line in `cloudSunCascades.ts`. The file is gone                                                                                                                                     |
-| F       | Loses `cloudVolume.ts`. Its field reaches the volume through the bake's injected medium                                                                                                           |
-| M1      | Loses the sun depth's file. It reads through package L's nodes, its base gains L, and it takes the sun gate again with its own taps                                                               |
-| X       | Owns `cloudFarAtlas.ts` alone, and calls the statistics' function for the sun's side of a column                                                                                                  |
-| W       | Draws in pass B's list and sets no order                                                                                                                                                          |
-| Q       | Three batches more (`over`, `reset`, `sun`), the `sequence` step, the pacing stage, seven stances, and the rate in every row                                                                      |
-| I       | The detector differences by the log's frame index; the trail measure matches path frames by timestamp (§7.5)                                                                                      |
-| N       | Sets the winners of `over`, `sunSlices` and `sunRamp` as defaults; ADR-0073 and ADR-0074 join its docs                                                                                            |
-| **L**   | New, wave 2, Fable 5.2: the grid's refresh, the volume's cut, the statistics' function, the bake under the horizon. On the critical path, because M1 waits on it                                  |
-| **Y**   | New, wave 2, Fable 5.2: the composite's two forms, the count of what draws over the clouds, pass B's store                                                                                        |
+What the decisions exposed that neither critic of draft 1 had seen: the grid
+rebuilt whole on every 0.05° of sun; G3 as a gray deck under a layer held over
+the whole body; no sun's depth past the taps from orbit or past the grid's
+window; an unwhole grid reading as no cloud; the handover's band out of most
+frames at 800 m; and casts, the detector and the trail measure counted in
+frames.
 
-Twenty-three packages, 25,000 lines by this design's count and 47,500 at
-phase 0's ratio; about ten hours of the machine held whole.
+### Draft 4: the settled rubric, the thin form, phase 0 as landed and reviewed
 
-### What phase 1 declares in memory
+| What came in                                                                           | What changed                                                                                                                                                                                                   | Where                         |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| The rubric's rows 1 to 3                                                               | The march is held to the oracle on its own scaled medium. The scaled medium against the true one is the oracle's figure, declared at 3%, and does not stop M2                                                  | §2.1, §5.11, §7.4             |
+| The rubric's rows 4 to 11, 17 to 21                                                    | Each done-when takes the row's tolerance. The handover's bound is fixed at 10% and 15%. The range is held in a uniform medium                                                                                  | §2.1, §6.2, §8.5              |
+| The panel's tools as a phase 1 package, and the calibration round                      | Package J; the noise floor; who freezes the anchors; when the round runs                                                                                                                                       | §8.6, §10                     |
+| The continuity checks, C1 to C11                                                       | Package U: the casts K's six do not hold, settled stills, the frames after a cut. The classification of a flagged step, the two controls, the field's displacement                                             | §3.8, §8.1, §8.2              |
+| The budget's bars, B1 to B15                                                           | A plan by bar and by term; the reset as B7's sequence over 60 frames; a cache refreshed at its field's pace; the first frames; the whole frame's percentile; the 60 Hz hold                                    | §2.6, §4.7, §7.2, §7.5        |
+| Provenance, and comparators with roles                                                 | The levers resolve by size and hash; the capture's record carries the hash and a role                                                                                                                          | §3.8, §4.6                    |
+| The overlay guard                                                                      | A tenth preset, the station under E1's lens                                                                                                                                                                    | §3.8                          |
+| The thin form: from orbit only                                                         | The identity draws everything, the second body included. `[depends: thin]` is resolved                                                                                                                         | §4.10, §7.2                   |
+| Phase 0 as landed: 7.12, 5.67, 5.07 and 3.03 ms; 91.62 MB; first frames of 51 to 67 ms | The record at the top; the memory totals, 71.37 MB against B12's 80                                                                                                                                            | The record, §2.5, §2.6        |
+| Placement A as an exception                                                            | What sends it back, and what going back costs                                                                                                                                                                  | §4.12, §7.4                   |
+| Phase 0's review and council                                                           | The warp as no jump; knots as a level's crossing; the step's bias by distance; the field from two eyes; the atlas's clear texels; freshness by generation; the instruments pinned; the runner's rules computed | §11.5, and each section named |
+| Wave 0 as built                                                                        | The world, its stances, the pitch, K's casts and its rate check                                                                                                                                                | §3                            |
+| The lens the landed campaign's forced rows were taken through                          | A stance owns its lens; the landed reset figures are leaned on nowhere                                                                                                                                         | §7.2                          |
 
-For the field with the grid, the atlas and one clouded body: **71.80 MB at
-1920 × 1080 and 65.19 MB at 1440 × 900, DPR 2**, against the 92.05 and 85.44
-phase 0 lands with. Of the 20.25 MB returned, 15.83 is the maps cut from four
-textures to two, 4.85 is the volume's level 0 and its bound, and 0.43 is
-added back by the light's tables. If the sun gate refuses the volume's cut
-the totals are 76.65 and 70.04 MB, and the rubric's 76 MB row is missed by
-0.65.
+**Which packages changed in draft 4.**
 
-### What the decisions exposed that neither critic saw
+| Package | Change                                                                                                                                                                                 |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| K, V    | Built. K's capture files pass to U                                                                                                                                                     |
+| C       | The levers' resolution and hash, `CLOUD_LIGHT_TAPS`, `farBlocks`, the clock's rate in the frame's inputs, `'climate'`, C11; the three instruments pinned; the bytes held to the device |
+| D       | The two-eyes property                                                                                                                                                                  |
+| H       | The jump test against the clock's rate; the field's derivation with no observer's basis; the history's oracle from the CPU field; level flight at a base                               |
+| L       | The pace every cache is refreshed at; the instrument's population and reach; the window's seam; the first frame as a reset                                                             |
+| Y       | The composite's four unheld cases; B11                                                                                                                                                 |
+| Q       | A lens a stance; the rate, the lens and the hash in every row; `frame`, `warp`, `pace`; each rule's outcome; the build id; the pacing study and the hold                               |
+| I       | The classification, the field's displacement, the frames after a cut; a gap is never divided away                                                                                      |
+| T1      | The Mie generator's header                                                                                                                                                             |
+| E       | On the second path now: package G waits on its table                                                                                                                                   |
+| F       | The cube's and the clipmap's pace and freshness; two eyes on the GPU                                                                                                                   |
+| M1      | The knots as a level's crossing; a tap's three reads; the range readout and its fixture; the step's test at three depths                                                               |
+| X       | The atlas's score at 800 m first; the clear texel's depth; the instrument's reference and relative errors; `cloudHandover` with row 11's bounds; the atlas's pace and freshness        |
+| G       | Its base gains E                                                                                                                                                                       |
+| N       | The second body's identity; the first frames and the empty span; the three parts of "whole" in the report; the register                                                                |
+| **J**   | New, beside C, Opus 5.5: the panel's tools                                                                                                                                             |
+| **U**   | New, beside C, Opus 5.5: the capture's second pass                                                                                                                                     |
 
-1. **The grid is rebuilt whole every time the sun turns 0.05°,** 12 seconds
-   at Earth's rotation, and no campaign row holds that frame, because the
-   runner's held loop holds the sun still (§4.7).
-2. **G3 as specified is a gray deck.** A layer held over the whole body
-   stands in its own grazing light 334 km sunward, and the grid follows the
-   ray that far. The cornerstone's weather changes (§3.3), and the grid's bake
-   under the horizon has 11 km steps until package L cuts it at the base
-   (§5.5).
-3. **From orbit and past 25.6 km the fine march has no sun's depth past its
-   taps,** and the far march has one. That is a difference across the band,
-   and from orbit it is every cloud in E1 (§5.5).
-4. **An unwhole grid reads as no cloud.** Spreading the rebuild alone would
-   light every cloud for a quarter second and then shade it. The stand-in and
-   the weight come with the spread, or not at all (§4.7).
-5. **At 800 m the handover's band leaves most frames.** G1 to G4 and both
-   `handover` stances of draft 2 do not show it; E2 now stands in it; and the
-   footprint ladder may have converged by removing the far march (§5.8, §7.3).
-6. **Four taps under the field are five reads each a step,** where the
-   ladder that chose four was read on images alone (§4.3, §7.3).
-7. **The memory row is missed by 0.65 MB** unless the volume gives up what
-   only a march read (§2.5).
-8. **The rubric's Retina rule fails on the over pass alone,** and its orbit
-   row is spent by that pass before a ray is marched (§4.12).
-9. **The casts, the detector and the trail measure are counted in frames,**
-   so each is a different measurement at 120 Hz (§7.5).
+Twenty-five packages. 30,500 lines by this design's count and 58,000 at phase
+0's ratio, of which wave 0's are built. About 14.5 hours of the machine held
+whole, in four windows.
+
+**What draft 4 found that no review had.**
+
+1. **The zoom cast crosses nothing at G4's pose.** The farthest cloud in
+   frame is 34 km off and the band begins 172 km out. C1 and C2 need another
+   pose (§5.8, §11.2).
+2. **C6's 2 km fails by geometry.** The range ahead of a cloud is the
+   distance to it, and K's G5 path is 1.5 km long (§8.5, §11.2).
+3. **The landed caches refresh far faster than their fields move:** the cube
+   every six frames where its texel takes 13 minutes to cross, the atlas every
+   45 frames at 0.8 to 1.6 ms a block. Most of the steady frame's bakes are
+   that (§4.7).
+4. **B7's event frame is spent by the immediate regime alone,** 3.5 of its
+   4 ms on `horizon` as landed, so the trace's cost decides it (§4.7).
+5. **A tap is a whole medium,** five reads, and two of them cannot change
+   over a tap's reach (§5.4).
+6. **The thin form is the identity's own fragment with one term zeroed,** so
+   the allowance from orbit buys no cost (§4.10).
+7. **The cornerstones' world has a 10 hour day,** so the landed grid's whole
+   rebuild comes every 5 s there (§3.3).
+8. **K's capture refuses a cast the rubric would keep,** until the hold
+   exists (§3.6).
