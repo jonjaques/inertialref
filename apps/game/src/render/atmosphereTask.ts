@@ -15,10 +15,10 @@ import {
  *
  * The bake is pure arithmetic in `@inertialref/rendering` — a recipe from the
  * authored haze, then two tables marched from it and the sky table summed
- * from those two — and it costs 20 to 40 ms per atmosphere on the main
- * thread before the sky table, which adds about 50 more, which is the largest single thing left
- * in an arrival: a jump to a generated system lands a 39.7 ms bake inside a
- * 43.3 ms frame the first time one of its hazes is seen. Nothing in it needs
+ * from those two — and it is the largest single thing left in an arrival:
+ * before the sky table, a jump to a generated system landed a 39.7 ms bake
+ * inside a 43.3 ms frame the first time one of its hazes was seen, and the
+ * sky table costs about 1.2 times the other two together. Nothing in it needs
  * the main thread; it reads only what the request carries and is the same
  * function wherever it runs. So it runs on the pool, the way
  * `universe.prepareSurface` does for the same reason.

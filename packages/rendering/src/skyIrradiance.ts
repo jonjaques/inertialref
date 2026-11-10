@@ -67,10 +67,11 @@ export const SKY_GROUND_ALBEDO = 0.15
  *
  * Against 2,016 directions on Earth's air, at three suns and three cloud
  * heights, it holds L̄ to 0.92% and Δ and Δ_s to 0.005 and 0.008
- * (`skyIrradiance.test.ts`), and the bake costs 48 ms in Node on the Mac
- * mini (Mac18,5, Apple M6). Eight azimuths miss the
- * aerosol's forward lobe under a low sun, Δ_s by 0.016; sixteen heights over
- * the horizon buy L̄ 0.2% for 13 ms more.
+ * (`skyIrradiance.test.ts`), and the bake costs about 1.2 times the
+ * transmittance and Ψ together, in Node on the Mac mini (Mac18,5, Apple
+ * M6). Eight azimuths miss the aerosol's forward lobe under a low sun, Δ_s
+ * by 0.016; sixteen heights over the horizon buy L̄ 0.2% for a quarter
+ * more time.
  */
 export const SKY_ABOVE = 12
 export const SKY_BELOW = 6
@@ -446,9 +447,9 @@ function groundAt(ground: SkyGround, mu: number, out: number[]): void {
  * samples, their densities and the view's transmittance are the same under
  * any sun; only the sun's transmittance, Ψ and the phase move with it. So a
  * row of the table marches each direction once and lights it under all 32
- * suns: in Node on the Mac mini (Mac18,5, Apple M6), 94 ms became 46 on
- * one quadrature, and splitting each table read across its row and its
- * column (`rowOf`) took 46 to 39.
+ * suns, which halves the bake, and splitting each table read across its
+ * row and its column (`rowOf`) takes a sixth more off it, in Node on the
+ * Mac mini (Mac18,5, Apple M6).
  *
  * A sample is `RAY_STRIDE` numbers: its radius and its position's two
  * components in the sun's plane, its row places in the transmittance table
