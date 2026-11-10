@@ -87,9 +87,9 @@ import { sensorMrt } from './sensorMrt.ts'
  * The served body is placed by hand in body-fixed axes that are the render
  * axes: Earth's radius, one cloud layer, an air 100 km tall. Most cases put
  * the eye 1 km up inside a layer from the datum to 3 km, so every pixel's
- * ray holds a span. The air is the contracts' stub — none — unless a case
- * stands in a gray one of constant extinction, whose transmittance along a
- * ray is exactly exp(−σ·length).
+ * ray holds a span. The air is none, its coefficients the bundle's zeros,
+ * unless a case stands in a gray one of constant extinction, whose
+ * transmittance along a ray is exactly exp(−σ·length).
  */
 
 const SIZE = 32

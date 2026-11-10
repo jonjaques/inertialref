@@ -66,9 +66,9 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * the blocked air with the class's beam and the depth moments' mean — so the
  * case measures the composite and nothing of the trace's own schedule. The
  * air's per-sample terms are `marchAir`'s, reproduced as
- * `cloudCompositeAir.gpu.test.ts` reproduces them, standing in for the
- * contracts' stub of `airMediumAt`. Light is per unit sun irradiance
- * throughout: no day color, no π, no gain.
+ * `cloudCompositeAir.gpu.test.ts` reproduces them, apart from
+ * `airMediumAt`. Light is per unit sun irradiance throughout: no day color,
+ * no π, no gain.
  */
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined

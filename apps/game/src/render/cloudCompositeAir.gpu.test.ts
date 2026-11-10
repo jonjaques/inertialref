@@ -64,11 +64,10 @@ import { sensorMrt } from './sensorMrt.ts'
  * on the same segment to 10⁻⁵ — on the shell's rule (no clearing) and on
  * `airToward`'s (the beam cleared from orbit or not).
  *
- * Each sample's terms come from `airMediumAt`, whose body lands with the
- * light (`cloudLight.gpu.test.ts` holds it to `marchAir`'s terms). Until it
- * does, its stub returns zeros, so the march is held here with a
- * reproduction of those terms built below, node for node; the case on the
- * real function runs once the stub is gone.
+ * Each sample's terms come from `airMediumAt`, which
+ * `cloudLight.gpu.test.ts` holds to `marchAir`'s terms. The march is held
+ * here twice: on a reproduction of those terms built below, node for node,
+ * which stands whatever `airMediumAt` does, and on `airMediumAt` itself.
  *
  * Rays from 2 m, 1 km, 10 km and 400 km over Earth's datum, from 30° below
  * the horizon to the zenith, toward a sun 20° up, over segments from where
@@ -99,7 +98,7 @@ const tent = (
 
 /**
  * `marchAir`'s per-sample terms, node for node in its order: what
- * `airMediumAt` is specified to be, standing in for its stub.
+ * `airMediumAt` is specified to be, written apart from it.
  */
 const marchAirTerms: AirMediumFn = (air, height, muSun, phases, sunT, read) => {
   const height01 = saturate(height.div(max(air.top.sub(1), 1e-6)))
@@ -260,7 +259,7 @@ describe('each split march', () => {
     },
   )
 
-  it('equals marchAir with the real airMediumAt, once its body is written', async (context) => {
+  it('equals marchAir with airMediumAt itself, which has air at sea level on Earth', async () => {
     const probe = await gpu.drawGraph(
       Fn(() => {
         const terms = airMediumAt(
@@ -275,8 +274,8 @@ describe('each split march', () => {
       { float: true, width: 1, height: 1 },
     )
     const [extinction] = probe.at(0, 0)
-    // The contracts' stub: no air at sea level on Earth.
-    if (extinction === 0) context.skip()
+    // A march of nothing agrees with anything.
+    expect(extinction).toBeGreaterThan(0)
     for (const [, samples, clearBeam] of CASES) {
       const { worst } = await compared(samples, clearBeam, 0.5, airMediumAt)
       expect(worst).toBeLessThanOrEqual(SAME)
