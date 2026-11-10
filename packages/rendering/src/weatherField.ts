@@ -2,6 +2,7 @@ import type { Vec3 } from '@inertialref/spatial'
 import {
   type BodyWeather,
   type ClimateSample,
+  type LevelSpec,
   turnAngle,
   unturn,
 } from './weatherClimate.ts'
@@ -9,6 +10,7 @@ import { latticeOrigin, turnBack } from './weatherClock.ts'
 import {
   type LevelProfile,
   levelProfile,
+  PROFILE_ROWS,
   readLevelProfile,
 } from './weatherGenus.ts'
 import {
@@ -311,26 +313,47 @@ function detailCells(
 }
 
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))
-const smoothstep = (edge0: number, edge1: number, x: number): number => {
-  const t = clamp01((x - edge0) / (edge1 - edge0))
-  return t * t * (3 - 2 * t)
+
+/**
+ * The resolved recipe at one point of a level (§5.6, as phase 0 built it):
+ *
+ *     d = saturate(remap(n_b·R, 1 − c, 1, 0, 1)),  d = saturate(remap(d, n_d·erosion, 1, 0, 1))
+ *     fraction = 1,  σ′ = σ′_level·d
+ *
+ * with `R` the profile's extinction share at the height and convective
+ * share. The same at every footprint it is read at: the detail is never
+ * faded out of it, because a cell with its erosion taken away is a thicker
+ * cell, and the crossing it darkens is the one the footprint was meant to
+ * keep.
+ */
+function resolvedSample(
+  profile: LevelProfile,
+  shape: number,
+  cover: number,
+  base: number,
+  detail: number,
+): number {
+  const c = clamp01(cover)
+  const erosion = detail * profile.erosion
+  const shaped = clamp01((base * shape - (1 - c)) / Math.max(c, TINY))
+  const eroded = clamp01((shaped - erosion) / Math.max(1 - erosion, TINY))
+  return profile.scaled * eroded
 }
 
 /**
- * The recipe at one point of a level (§5.6, as phase 0 built it):
- *
- *     d     = saturate(remap(n_b·R, 1 − c, 1, 0, 1)),  d = saturate(remap(d, n_d, 1, 0, 1))
- *     f     = smoothstep(cell/4, cell, footprint)       the unresolved share of a cell
- *     fraction = mix(1, c, f),   fraction·σ′ = σ′_level·mix(d, c·Ḡ, f)
- *
- * with `R` the profile's extinction share at the height and convective
- * share, `Ḡ` its mean over the level, and
- * `n_d = detail·erosion·(1 − smoothstep(cell/16, cell/4, footprint))`, whose
- * read is skipped where that fade is 0. The two pictures of a cell are
- * blended by their mean extinction, so a cell with no cover holds none at
- * any footprint.
+ * The footprint at which a sample stops reading the resolved field and
+ * reads its level's statistics: a quarter of a cell at a dither of 0, a
+ * whole cell at 1, log-uniform between. A ray carries one dither, so over
+ * rays the switch is a band in footprint, as the handover is; along one ray
+ * it is a single footprint, so a crossing at one footprint is wholly one or
+ * the other.
  */
+export function statisticsFootprint(cell: number, dither: number): number {
+  return cell * 4 ** (clamp01(dither) - 1)
+}
+
 function levelSample(
+  spec: LevelSpec,
   profile: LevelProfile,
   level: number,
   cover: number,
@@ -339,33 +362,432 @@ function levelSample(
   clock: FieldClock,
   point: Vec3,
   footprint: number,
+  dither: number,
 ): FieldSample {
   const [shape, mean, , radius] = readLevelProfile(profile, h01, convective)
-  const c = clamp01(cover)
   const { cell } = profile
+  if (footprint > statisticsFootprint(cell, dither)) {
+    // What the footprint stands for: the resolved field's own cloudy share
+    // and its cloudy columns' transmittance, never a mean density.
+    const stats = readLevelStatistics(levelStatistics(spec), cover, convective)
+    const thickness = Math.max(spec.top - spec.base, 1)
+    return {
+      fraction: stats.fraction,
+      sigma:
+        stats.fraction > 0 && mean > 0
+          ? (stats.depth * shape) / (mean * thickness)
+          : 0,
+      radius: radius * profile.radius,
+      level,
+    }
+  }
   const w = mesoscaleDisplacement(
     mesoscalePhases(clock, level, point, cell),
     cell,
   )
-  const base = baseNoiseTexture(baseCells(clock, level, point, cell, w))
-  const reach = 1 - smoothstep(cell / 16, cell / 4, footprint)
-  const erosion =
-    reach > 0
-      ? detailNoiseTexture(detailCells(clock, level, point, cell, w)) *
-        profile.erosion *
-        reach
-      : 0
-  const shaped = clamp01((base * shape - (1 - c)) / Math.max(c, TINY))
-  const eroded = clamp01((shaped - erosion) / Math.max(1 - erosion, TINY))
-  const unresolved = smoothstep(cell / 4, cell, footprint)
-  const fraction = 1 + (c - 1) * unresolved
-  const extinction =
-    profile.scaled * (eroded + (c * mean - eroded) * unresolved)
   return {
-    fraction,
-    sigma: extinction / Math.max(fraction, TINY),
+    fraction: 1,
+    sigma: resolvedSample(
+      profile,
+      shape,
+      cover,
+      baseNoiseTexture(baseCells(clock, level, point, cell, w)),
+      detailNoiseTexture(detailCells(clock, level, point, cell, w)),
+    ),
     radius: radius * profile.radius,
     level,
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* A level's statistics                                                       */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * What a level at a cover is, read at a footprint that no longer resolves
+ * its cells: a cloud fraction and an in-cloud depth, mixed once a crossing,
+ * never a mean density (plan §3), with every number taken from the resolved
+ * field itself rather than from the cover and the profile's mean.
+ *
+ * - `fraction`, F: the share of vertical columns through the level that
+ *   hold any cloud.
+ * - `depth`, τ′: the scaled in-cloud depth whose transmittance is the mean
+ *   of the cloudy columns' own, `−ln mean(e^(−τ′))`. With F it makes a
+ *   vertical crossing pass exactly what the resolved field passes on
+ *   average, in §5.9's form as written; the mean of the depths would pass
+ *   less, by Jensen's inequality.
+ * - `shape`, k: how spread the cloudy columns' depths are, as a gamma
+ *   distribution's shape, matched to the cloudy columns' mean
+ *   transmittance at one and at two times their depth. One depth cannot
+ *   stand for a spread of depths on a slant: `(mean e^(−τ))^m` is under
+ *   `mean e^(−m·τ)` for every path factor m over one, and on a deck the
+ *   gap is the picture. Measured over 3,000 rays at two places, §5.9's
+ *   form with one depth misses the resolved field by up to 32% on
+ *   `overcast`, 19% on `inside` and `fog` and 13% on `stratocumulus` at
+ *   0°, 45° and 80° at its best sight length; with the gamma depth, by 9%
+ *   at most on any regime or climate.
+ * - `sight`, c: §5.9's sight length, fitted so the crossing passes the
+ *   resolved field's mean transmittance on rays at 45°, 65° and 80°.
+ *
+ * The crossing these make is `crossingForm`. Each number is measured on a
+ * fixed sample of the level's own field: 4,096 vertical columns, 512 rays
+ * at 45° and at 65° and 1,024 at 80°, from points spread by an additive
+ * recurrence over 256 cells and in directions spread over the sphere, read
+ * through the mesoscale displacement as the field is, so the table is a
+ * function of the level alone. A deck's grazing transmittance is mostly its
+ * clear holes raised to n, so its F is held to a few thousandths, which
+ * takes thousands of columns. The displacement keeps area, so it moves no
+ * vertical statistic, but it shears cells, which a slant ray meets.
+ */
+
+/** Covers the table holds: 0, 1/16, …, 1. */
+export const STATISTICS_COVERS = 17
+const STATISTICS_COLUMNS = 4096
+/** Rays at each slant: twice as many at the steepest, where a deck passes a hundredth. */
+const STATISTICS_RAYS = [512, 512, 1024]
+/** The slants the sight length is fitted at, radians. */
+const STATISTICS_SLANTS = [45, 65, 80].map(
+  (degrees) => (degrees * Math.PI) / 180,
+)
+/** Steps through a level's thickness: a slant ray takes as many per vertical thickness. */
+const STATISTICS_STEPS = 32
+/** Under this scaled depth a column holds no cloud. */
+const CLEAR_DEPTH = 1e-4
+/** Under this cloudy share a row's sight length is the next cover's. */
+const SPARSE = 0.02
+
+export interface LevelStatistics {
+  /** `[cover][row]`, row j at a convective share of j/7, as the profile's rows. */
+  readonly fraction: Float64Array
+  readonly depth: Float64Array
+  readonly shape: Float64Array
+  /** Meters. */
+  readonly sight: Float64Array
+}
+
+/** The gamma shape that stands for depths that do not spread: `(1 + τ/k)^(−k)` is then `e^(−τ)` to a part in 10⁴ at τ 1. */
+export const UNSPREAD_SHAPE = 1e4
+
+/** The additive recurrence of the plastic number's six-dimensional analogue: points spread with no hash and no draw. */
+function spread(index: number, dimension: number): number {
+  const root = 1.1127756842787055 // x⁷ = x + 1
+  const a = 1 / root ** (dimension + 1)
+  const x = 0.5 + index * a
+  return x - Math.floor(x)
+}
+
+interface Paths {
+  readonly length: number
+  readonly steps: number
+  /** Meters a step. */
+  readonly step: number
+  readonly base: Float32Array
+  readonly detail: Float32Array
+  /** The profile's R at each sample, at the stratiform end and at the cumuliform. */
+  readonly shape: readonly Float32Array[]
+}
+
+function samplePaths(
+  profile: LevelProfile,
+  thickness: number,
+  count: number,
+  zenith: number,
+  offset: number,
+): Paths {
+  const { cell } = profile
+  const step = thickness / STATISTICS_STEPS
+  const steps = Math.ceil(STATISTICS_STEPS / Math.cos(zenith))
+  const size = count * steps
+  const base = new Float32Array(size)
+  const detail = new Float32Array(size)
+  const shape = Array.from(
+    { length: PROFILE_ROWS },
+    () => new Float32Array(size),
+  )
+  for (let p = 0; p < count; p += 1) {
+    const n = p + offset
+    // Over 256 cells, so the mesoscale displacement, whose waves run 17 to
+    // 73 cells, takes every phase across the sample; the noise itself
+    // wraps every eight.
+    const origin = {
+      x: 256 * cell * spread(n, 0),
+      y: 256 * cell * spread(n, 1),
+      z: 256 * cell * spread(n, 2),
+    }
+    const y = 2 * spread(n, 3) - 1
+    const around = 2 * Math.PI * spread(n, 4)
+    const ring = Math.sqrt(1 - y * y)
+    const up = { x: ring * Math.cos(around), y, z: ring * Math.sin(around) }
+    const seed =
+      Math.abs(up.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 }
+    const east = normalize(cross(seed, up))
+    const north = cross(up, east)
+    const turn = 2 * Math.PI * spread(n, 5)
+    const across = {
+      x: Math.cos(turn) * east.x + Math.sin(turn) * north.x,
+      y: Math.cos(turn) * east.y + Math.sin(turn) * north.y,
+      z: Math.cos(turn) * east.z + Math.sin(turn) * north.z,
+    }
+    const along = {
+      x: Math.cos(zenith) * up.x + Math.sin(zenith) * across.x,
+      y: Math.cos(zenith) * up.y + Math.sin(zenith) * across.y,
+      z: Math.cos(zenith) * up.z + Math.sin(zenith) * across.z,
+    }
+    const chord = thickness / Math.cos(zenith)
+    for (let i = 0; i < steps; i += 1) {
+      const at = p * steps + i
+      const distance = Math.min(chord, (i + 0.5) * step)
+      const h01 = Math.min(1, (distance * Math.cos(zenith)) / thickness)
+      const point = {
+        x: origin.x + along.x * distance,
+        y: origin.y + along.y * distance,
+        z: origin.z + along.z * distance,
+      }
+      // Read where the field reads: displaced, since the displacement
+      // shears cells, and a slant ray meets a sheared cell otherwise.
+      const w = mesoscaleDisplacement(
+        MESOSCALE_WAVES.map(
+          ({ along: k, wavelength }) =>
+            ((2 * Math.PI) / (wavelength * cell)) * dot(k, point),
+        ),
+        cell,
+      )
+      const q = { x: point.x + w.x, y: point.y + w.y, z: point.z + w.z }
+      base[at] = baseNoiseTexture({
+        x: q.x / cell,
+        y: q.y / cell,
+        z: q.z / cell,
+      })
+      const scale = DETAIL_NOISE_PERIOD / cell
+      detail[at] = detailNoiseTexture({
+        x: q.x * scale,
+        y: q.y * scale,
+        z: q.z * scale,
+      })
+      for (let j = 0; j < PROFILE_ROWS; j += 1)
+        shape[j]![at] = readLevelProfile(
+          profile,
+          h01,
+          j / (PROFILE_ROWS - 1),
+        )[0]
+    }
+  }
+  return { length: count, steps, step, base, detail, shape }
+}
+
+/** Each path's scaled depth through the level at a cover, at one end of the blend. */
+function pathDepths(
+  profile: LevelProfile,
+  paths: Paths,
+  cover: number,
+  row: number,
+  thickness: number,
+  zenith: number,
+): Float64Array {
+  const depths = new Float64Array(paths.length)
+  const chord = thickness / Math.cos(zenith)
+  for (let p = 0; p < paths.length; p += 1) {
+    let depth = 0
+    for (let i = 0; i < paths.steps; i += 1) {
+      const at = p * paths.steps + i
+      const length = Math.min(paths.step, chord - i * paths.step)
+      if (!(length > 0)) break
+      depth +=
+        resolvedSample(
+          profile,
+          paths.shape[row]![at]!,
+          cover,
+          paths.base[at]!,
+          paths.detail[at]!,
+        ) * length
+    }
+    depths[p] = depth
+  }
+  return depths
+}
+
+/**
+ * A crossing of a level `thickness` thick at `zenith` by a footprint that
+ * reads its statistics: §5.9's `n = √(1 + (ℓ/c)²)` cells crossed, each
+ * cloudy with probability F and holding a gamma-distributed share of the
+ * crossing's depth,
+ *
+ *     T = ((1 − F) + F·(1 + τ̄·m/(n·k))^(−k))^n,   τ̄ = k·(e^(τ′/k) − 1),
+ *
+ * with m the path factor `1/cos θ` and τ′ the vertical depth `depth`, whose
+ * own transmittance is the cloudy columns' mean: straight down this is
+ * `1 − F + F·e^(−τ′)`, §5.9's form as written, at any shape.
+ */
+export function crossingForm(
+  fraction: number,
+  depth: number,
+  shape: number,
+  sight: number,
+  thickness: number,
+  zenith: number,
+): number {
+  if (!(fraction > 0)) return 1
+  const n = Math.sqrt(1 + ((thickness * Math.tan(zenith)) / sight) ** 2)
+  const mean = shape * Math.expm1(depth / shape)
+  const cell = (1 + mean / (Math.cos(zenith) * n * shape)) ** -shape
+  return (1 - fraction + fraction * cell) ** n
+}
+
+/** The gamma shape whose transmittance at twice the depth is `twice`, where at once it is `once`. */
+function gammaShape(once: number, twice: number): number {
+  // `twice` lies between once² (depths that do not spread, k → ∞) and once
+  // (k → 0); the transmittance at twice the depth falls as k grows.
+  if (!(twice > once * once * (1 + 1e-9))) return UNSPREAD_SHAPE
+  let low = Math.log(1e-3)
+  let high = Math.log(UNSPREAD_SHAPE)
+  for (let i = 0; i < 80; i += 1) {
+    const k = Math.exp((low + high) / 2)
+    const mean = k * (once ** (-1 / k) - 1)
+    if ((1 + (2 * mean) / k) ** -k > twice) low = (low + high) / 2
+    else high = (low + high) / 2
+  }
+  return Math.exp((low + high) / 2)
+}
+
+function buildStatistics(
+  spec: LevelSpec,
+  profile: LevelProfile,
+): LevelStatistics {
+  const thickness = Math.max(spec.top - spec.base, 1)
+  const size = STATISTICS_COVERS * PROFILE_ROWS
+  const fraction = new Float64Array(size)
+  const depth = new Float64Array(size)
+  const shape = new Float64Array(size).fill(UNSPREAD_SHAPE)
+  const sight = new Float64Array(size).fill(2.5 * profile.cell)
+  const columns = samplePaths(profile, thickness, STATISTICS_COLUMNS, 0, 0)
+  const rays = STATISTICS_SLANTS.map((zenith, j) =>
+    samplePaths(
+      profile,
+      thickness,
+      STATISTICS_RAYS[j]!,
+      zenith,
+      STATISTICS_COLUMNS + j * 1024,
+    ),
+  )
+  for (let i = 0; i < STATISTICS_COVERS; i += 1) {
+    const cover = i / (STATISTICS_COVERS - 1)
+    for (let row = 0; row < PROFILE_ROWS; row += 1) {
+      const at = i * PROFILE_ROWS + row
+      let cloudy = 0
+      let once = 0
+      let twice = 0
+      for (const d of pathDepths(profile, columns, cover, row, thickness, 0))
+        if (d > CLEAR_DEPTH) {
+          cloudy += 1
+          once += Math.exp(-d)
+          twice += Math.exp(-2 * d)
+        }
+      if (cloudy === 0) continue
+      const share = cloudy / columns.length
+      const k = gammaShape(once / cloudy, twice / cloudy)
+      const inCloud = -Math.log(once / cloudy)
+      fraction[at] = share
+      depth[at] = inCloud
+      shape[at] = k
+      const targets = STATISTICS_SLANTS.map((zenith, j) => {
+        let sum = 0
+        for (const d of pathDepths(
+          profile,
+          rays[j]!,
+          cover,
+          row,
+          thickness,
+          zenith,
+        ))
+          sum += Math.exp(-d)
+        return Math.max(sum / rays[j]!.length, 1e-12)
+      })
+      const error = (logSight: number): number => {
+        let e = 0
+        STATISTICS_SLANTS.forEach((zenith, j) => {
+          const model = crossingForm(
+            share,
+            inCloud,
+            k,
+            Math.exp(logSight),
+            thickness,
+            zenith,
+          )
+          e += (Math.log(Math.max(model, 1e-12)) - Math.log(targets[j]!)) ** 2
+        })
+        return e
+      }
+      let low = Math.log(0.1 * profile.cell)
+      let high = Math.log(100 * profile.cell)
+      const golden = (Math.sqrt(5) - 1) / 2
+      for (let g = 0; g < 80; g += 1) {
+        const a = high - golden * (high - low)
+        const b = low + golden * (high - low)
+        if (error(a) < error(b)) high = b
+        else low = a
+      }
+      sight[at] = Math.exp((low + high) / 2)
+    }
+  }
+  // A row whose cloud is too sparse to fit a sight length takes the next
+  // cover's: under 2% of columns cloudy, a slant ray meets so little cloud
+  // that any length fits, and the fit runs to its bound of a hundred cells,
+  // which the reader then blends into the rows beside it.
+  for (let row = 0; row < PROFILE_ROWS; row += 1)
+    for (let i = STATISTICS_COVERS - 2; i >= 0; i -= 1)
+      if (fraction[i * PROFILE_ROWS + row]! < SPARSE)
+        sight[i * PROFILE_ROWS + row] = sight[(i + 1) * PROFILE_ROWS + row]!
+  return { fraction, depth, shape, sight }
+}
+
+/*
+ * Kept by the level's members, as the profile is, and bounded the same way.
+ * A table costs 0.3 to 0.5 s to build on this Mac mini, once a level, more
+ * the first time a process reads the noise's texels: too long for a frame,
+ * so whoever builds the frame builds it off the frame's path.
+ */
+const STATISTICS = new Map<string, LevelStatistics>()
+
+/** A level's statistics, built once for its members. */
+export function levelStatistics(spec: LevelSpec): LevelStatistics {
+  const key = `${spec.base}|${spec.top}|${spec.stratiform}|${spec.cumuliform}`
+  let stats = STATISTICS.get(key)
+  if (stats === undefined) {
+    if (STATISTICS.size >= 256) STATISTICS.clear()
+    stats = buildStatistics(spec, levelProfile(spec))
+    STATISTICS.set(key, stats)
+  }
+  return stats
+}
+
+/** The table at a cover and a convective share: linear in each. */
+export function readLevelStatistics(
+  stats: LevelStatistics,
+  cover: number,
+  convective: number,
+): {
+  readonly fraction: number
+  readonly depth: number
+  readonly shape: number
+  readonly sight: number
+} {
+  const x = clamp01(cover) * (STATISTICS_COVERS - 1)
+  const i = Math.min(STATISTICS_COVERS - 2, Math.floor(x))
+  const f = x - i
+  const y = clamp01(convective) * (PROFILE_ROWS - 1)
+  const j = Math.min(PROFILE_ROWS - 2, Math.floor(y))
+  const g = y - j
+  const read = (table: Float64Array): number => {
+    const at = (k: number, row: number) => table[k * PROFILE_ROWS + row]!
+    const low = at(i, j) + (at(i + 1, j) - at(i, j)) * f
+    const high = at(i, j + 1) + (at(i + 1, j + 1) - at(i, j + 1)) * f
+    return low + (high - low) * g
+  }
+  return {
+    fraction: read(stats.fraction),
+    depth: read(stats.depth),
+    shape: read(stats.shape),
+    sight: read(stats.sight),
   }
 }
 
@@ -401,6 +823,7 @@ export function cloudFieldAt(
   sun: Vec3,
   position: Vec3,
   footprint: number,
+  dither = 0.5,
 ): FieldSample {
   const length = Math.hypot(position.x, position.y, position.z)
   const height = length - weather.datumRadius
@@ -413,6 +836,7 @@ export function cloudFieldAt(
     clock.time,
   )
   return levelSample(
+    spec,
     levelProfile(spec),
     level,
     climate.cover[level]!,
@@ -421,6 +845,7 @@ export function cloudFieldAt(
     clock,
     position,
     footprint,
+    dither,
   )
 }
 
@@ -458,6 +883,7 @@ export function columnDepth(
     const r = weather.datumRadius + spec.base + h01 * thickness
     const position = { x: up.x * r, y: up.y * r, z: up.z * r }
     const at = levelSample(
+      spec,
       profile,
       level,
       climate.cover[level]!,
@@ -465,6 +891,7 @@ export function columnDepth(
       h01,
       clock,
       position,
+      0,
       0,
     )
     depth += at.fraction * at.sigma
