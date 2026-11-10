@@ -881,6 +881,20 @@ describe('the schedule', () => {
     test.volume.dispose()
   })
 
+  it('owes nothing from orbit after a climb, whatever its idle levels still hold', () => {
+    // Filled near the deck, then carried to orbit and along it: the levels
+    // are idle there with their slices at windows the eye has left, and no
+    // frame will redraw them.
+    const test = rig(field)
+    test.settle(eyeAt(EYE_HEIGHT))
+    expect(test.volume.pending).toBe(false)
+    test.step(eyeAt(400_000))
+    test.step(eyeAt(400_000, 5_000))
+    expect(test.volume.drawn).toEqual([0, 0, 0])
+    expect(test.volume.pending).toBe(false)
+    test.volume.dispose()
+  })
+
   it('holds one level of each texture, declares their bytes, and builds no pipeline after its warm-up', async () => {
     const test = rig(field)
     expect(test.volume.bytes).toBe(0)
