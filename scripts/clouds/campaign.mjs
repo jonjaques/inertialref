@@ -911,7 +911,7 @@ export function planText(name, options = {}) {
     if (spec.kind === 'batch') {
       const runs = runsOf(spec, options)
       parts.push(
-        `## ${spec.name}: ${runs.length} rows, about ${minutes(seconds)}${spec.hold ? `; at no hold, ${spec.hold}` : ''}`,
+        `## ${spec.name}: ${runs.length} rows, about ${minutes(seconds)}${spec.hold ? `; without an accepted hold, ${spec.hold === 'record' ? 'recorded only' : 'not taken'}` : ''}`,
         dryRun({ url: URL_, runs }),
       )
     } else {
