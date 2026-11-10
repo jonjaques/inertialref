@@ -668,6 +668,21 @@ function longestRun(drops) {
 }
 
 /**
+ * Why a cast's path did not run to its end, or null. A path that throws in
+ * a frame ends its loop there while the screencast records a still page on,
+ * and the intervals it did log are clean: the log's length, and a
+ * descent's height at its last frame, are what say it stopped.
+ */
+export function shortPath(log, cast) {
+  if (log.length < cast.frames + 1)
+    return `the path stopped at frame ${log.length} of ${cast.frames}`
+  const last = log[cast.frames]?.height
+  if (cast.path?.kind === 'descent' && !(last <= 2 + 1e-6))
+    return `the descent stood at ${String(last)} m at its last frame, not 2 m`
+  return null
+}
+
+/**
  * Read a cast's rate over its whole path, list its drops, and refuse it
  * where `CAST_DROPS` says. The band refuses only where `held` says the rig
  * can hold 60 Hz; until then the rate is what the record says beside it.
@@ -678,6 +693,12 @@ export function checkCast(name, log, instants, cast, held = CAST_RATE.held) {
   if (median === null || !(median > 0))
     throw new Error(`${name}: presented at no measurable rate; refused`)
   const hz = 1000 / median
+  const short = shortPath(log, cast)
+  if (short !== null)
+    throw Object.assign(new Error(`${name}: ${short}; refused`), {
+      dropped: [],
+      hz,
+    })
   const drops = dropsOf(log, pathFrames, median, cast.path)
   const missed = drops.reduce((sum, one) => sum + one.missed, 0)
   const run = longestRun(drops)
@@ -1177,7 +1198,11 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
     } catch (error) {
       if (error.dropped === undefined) throw error
       say(`  ${error.message}`)
-      attempts.push({ hz: error.hz, dropped: error.dropped })
+      attempts.push({
+        hz: error.hz,
+        dropped: error.dropped,
+        why: error.message,
+      })
       continue
     }
     const as = clouds

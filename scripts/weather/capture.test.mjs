@@ -622,6 +622,33 @@ describe('what the capture refuses', () => {
     ).toHaveLength(1)
   })
 
+  it('refuse a cast whose path stopped early, or whose descent never reached the ground', () => {
+    // The page's loop threw at frame 200 of a 1,012-frame descent; the
+    // screencast went on, and the 200 intervals it logged are clean.
+    const stopped = log(60, 200).map((one) => ({ ...one, height: 1e5 }))
+    expect(() =>
+      checkCast('c', stopped, null, { frames: 1012, path: CASTS[0].path }),
+    ).toThrow(/stopped at frame 200 of 1012/)
+    try {
+      checkCast('c', stopped, null, { frames: 1012, path: CASTS[0].path })
+    } catch (error) {
+      // Retaken, as a run of drops is, and recorded with why.
+      expect(error.dropped).toEqual([])
+    }
+    const descent = log(60, 1102).map((one) => ({
+      ...one,
+      height: Math.max(400_000 * 0.988 ** one.k, 2),
+    }))
+    expect(
+      checkCast('c', descent, null, { frames: 1012, path: CASTS[0].path })
+        .dropped,
+    ).toEqual([])
+    descent[1012].height = 3
+    expect(() =>
+      checkCast('c', descent, null, { frames: 1012, path: CASTS[0].path }),
+    ).toThrow(/3 m at its last frame/)
+  })
+
   it('mark a clouds-on drop the clouds’ own where its control dropped nothing within ten path frames', () => {
     const on = [{ frame: 100 }, { frame: 300 }, { frame: 500 }]
     const off = [{ frame: 90 }, { frame: 311 }]
