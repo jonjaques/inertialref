@@ -296,9 +296,27 @@ alone, on the same machine, browser and sizes, with the landed defaults. Its
 tables are [`landed-2026-11-10T09-05-32Z.md`](../../design/plans/weather/phase0/measurements/landed-2026-11-10T09-05-32Z.md),
 and every pass's share of both campaigns' frames is in
 [`passes.md`](../../design/plans/weather/phase0/measurements/passes.md). Each of its rows records the rate it presented
-at: `targets` at 95 to 120 Hz at 1080p and 59 to 120 at Retina, `memory` at 81
-to 89 and 48 to 51, `error` at 96 to 120 and 58 to 83. All 86 of its rows were
-measured quiet, each batch on its first attempt.
+at: `memory` at 81 to 89 Hz at 1080p and 49 to 51 at Retina, `error` at 96 to
+120 and 58 to 83. All 86 of its rows were measured quiet, each batch on its
+first attempt.
+
+**Campaign 2's `cut`, `scrub` and `fly` rows and its `pair-neighbor` rows were
+taken again,** because they ran through the moon's lens: one page served every
+far-shore run of a size, the `pair-moon` stance fits the flight lens to its
+rise and keeps it, and a `visit` stance set none. The clouds-off base gives it
+away: `ground` at 1080p read 5.87 ms steady and 6.92, 7.29 and 7.21 under
+`cut`, `scrub` and `fly`. The runner's stances now start from the preset's
+picture, and the retake at `f9746fd3`, whose frame differs from `bbea04da`'s
+only in what a frame whose cloud work throws draws, ran each of those rows
+again with `pair-moon` first at each size as the control. `pair-neighbor`
+right after it reads a base of 5.88 ms, against `ground`'s steady 5.87, and
+every forced row's base is within 0.62 ms of its scenario's steady one, where
+campaign 2's were up to 4.27 ms off it. Its
+tables are
+[`targets-retake-2026-11-10T12-25-50Z.md`](../../design/plans/weather/phase0/measurements/targets-retake-2026-11-10T12-25-50Z.md):
+40 of 40 runs quiet, at 104 to 120 Hz at 1080p and 64 to 120 at Retina. Every
+`targets` figure here is campaign 2's steady and Earth rows and the retake's
+forced and `pair-neighbor` rows.
 
 #### The placement
 
@@ -431,10 +449,10 @@ pairs:
 | `decks`, steady                                           | 7.55 (0.01)             | 9.79 (0.06)             |
 | `orbit`, steady                                           | 3.03 (0.06)             | 5.54 (0.02)             |
 | Two clouded bodies, from the moon (`pair-moon`)           | 9.38 (0.02)             | 10.21 (0.01)            |
-| Two clouded bodies, on the ground (`pair-neighbor`)       | 6.96 (0.12)             | 8.30 (0.01)             |
-| A reset frame: the larger of `cut` and `scrub`, `horizon` | 20.61 (0.02), the `cut` | 21.78 (0.04), the `cut` |
-| `fly` at 250 m/s, `ground`                                | 6.62 (0.13)             | 7.77 (0.27)             |
-| `fly` at 7.7 km/s, `orbit`                                | 2.45 (0.16)             | 4.40 (0.24)             |
+| Two clouded bodies, on the ground (`pair-neighbor`)       | 7.18 (0.07)             | 8.84 (0.27)             |
+| A reset frame: the larger of `cut` and `scrub`, `horizon` | 20.30 (0.02), the `cut` | 22.14 (0.04), the `cut` |
+| `fly` at 250 m/s, `ground`                                | 6.85 (0.16)             | 8.70 (0.34)             |
+| `fly` at 7.7 km/s, `orbit`                                | 2.18 (0.29)             | 4.08 (0.27)             |
 | Earth on the ground, against its deck hidden              | 6.19 (0.10)             | 7.83 (0.07)             |
 | Earth's deck alone, on the ground                         | 0.06 (0.02)             | 0.02 (0.01)             |
 | Earth from orbit, against its deck hidden                 | 3.00 (0.01)             | 5.57 (0.01)             |
@@ -444,18 +462,20 @@ Campaign 1's `ground` is a clear sky inside a cumulus field, cloud in 2.0% of
 the trace's texels, and no rule read it. The landed `ground` stands one degree
 north, under cumulus.
 
-- **The scrub is the cheaper reset as landed:** 14.88 ms on `horizon` at
-  1080p and 16.15 at Retina, against the cut's 20.61 and 21.78. Over the
-  ground stances a cut is 19.04 to 24.60 ms at 1080p and 20.34 to 26.14 at
-  Retina, and 35.27 and 30.68 with two clouded bodies from the moon.
+- **The scrub is the cheaper reset as landed:** 15.01 ms on `horizon` at
+  1080p and 16.64 at Retina, against the cut's 20.30 and 22.14. Over the
+  ground stances a cut is 19.40 to 24.68 ms at 1080p and 20.79 to 26.17 at
+  Retina, and 35.10 and 30.64 with two clouded bodies from the moon.
 - **With the clouds on, the frame is 11.92 to 12.99 ms at 1080p** on `ground`,
   `horizon` and `inside`, inside a 60 Hz frame, and **21.72 to 23.20 ms at
   Retina,** outside it. Clouds off, the same frames are 5.87 to 7.47 and 13.21
   to 15.50.
-- **The rate moved inside four scenarios.** The summary names them as two
-  operating points each: at 1080p `ground` (rows at 95 to 119 Hz) and `horizon`
-  (95 to 112), at Retina `decks` (89 to 113) and `orbit` (78 to 95). A Δ above
-  is `ir.gpu()`'s, which does not follow the rate.
+- **The four scenarios campaign 2 named as two operating points were the
+  moon's lens, not the rate.** Its summary named `ground` and `horizon` at
+  1080p and `decks` and `orbit` at Retina, each with rows at two rates, and the
+  rows apart were the ones taken after `pair-moon`, which drew another lens's
+  frame. With those rows retaken, no scenario's rows are two operating points.
+  A Δ above is `ir.gpu()`'s, which does not follow the rate.
 - No row forces `reset`, the immediate regime alone: `targets` runs `steady`,
   `cut`, `scrub` and `fly`. The four dispatches' share on a cut, above, is the
   figure for it.

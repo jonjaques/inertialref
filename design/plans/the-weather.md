@@ -950,13 +950,13 @@ texture-bound where spike 2's march was arithmetic.
 | **On the ground, dry**         |                         | **≤ 2.9 ms**       | **7.12 ms**     | **8.91 ms**      | ADR-0063                 |
 | **On the ground, in rain**     |                         | **≤ 3.4 ms**       | —               | —                | A target; phase 4        |
 | **From orbit**                 |                         | **≤ 1.6 ms**       | **3.03 ms**     | **5.54 ms**      | ADR-0063                 |
-| **On a reset frame**           | After a cut or a scrub  | —                  | **20.61 ms**    | **21.78 ms**     | ADR-0064                 |
+| **On a reset frame**           | After a cut or a scrub  | —                  | **20.30 ms**    | **22.14 ms**     | ADR-0064                 |
 
 A cost is `ir.gpu()` taken A/B in one boot — Apple's timestamps are latency, not
 share ([harness](../../docs/guides/harness.md#where-the-gpus-frame-goes)) — and
 a pass's figure is its share from `ir.passes()` on the same frames. A pass's row
 and the ground's total are `ground`, under cumulus; the reset frame is a cut of
-`horizon`. The figures are a generated world's; Earth's are in ADR-0063 with its
+`horizon`, from the retake at `f9746fd3` that ADR-0063 explains. The figures are a generated world's; Earth's are in ADR-0063 with its
 deck priced beside them. Retina holds the 1080p ray budget and upsamples, and
 its trace is no dearer than at 1080p; what grows with the buffer is the second
 scene pass. The weather is not inside §9's totals at either size, and phase 1

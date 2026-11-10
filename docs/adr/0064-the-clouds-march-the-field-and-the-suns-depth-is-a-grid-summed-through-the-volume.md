@@ -504,11 +504,14 @@ in campaign 1. The landed frame's are beside them.
 | `cloud far atlas` | ≤ 0.1                   | 0.86 / 1.28                 | 0.93 / 1.30                  | 0.90 / 0.91                      |
 
 The volume's bound map, 0.04 to 0.05 ms in those rows, is gone with the
-volume's march. As landed, the reset frame on `horizon` is the cut, 20.61 ms
-at 1080p and 21.78 at Retina, of which the grid's rebuild is 11.80 and 11.84.
-Over the ground stances the grid takes 10.48 to 16.52 ms of a cut. The fly
-frames are 6.62 and 7.77 ms on `ground` and 2.45 and 4.40 from orbit, 1080p
-then Retina. The far atlas is 0.80 to 1.59 ms on every landed steady row, the
+volume's march. As landed, the reset frame on `horizon` is the cut, 20.30 ms
+at 1080p and 22.14 at Retina, of which the grid's rebuild is 12.26 and 12.33.
+Over the ground stances the grid takes 9.11 to 16.82 ms of a cut. The fly
+frames are 6.85 and 8.70 ms on `ground` and 2.18 and 4.08 from orbit, 1080p
+then Retina. Each of those is the retake at `f9746fd3`
+([`targets-retake-2026-11-10T12-25-50Z.md`](../../design/plans/weather/phase0/measurements/targets-retake-2026-11-10T12-25-50Z.md)):
+campaign 2's forced rows ran through the moon's lens (ADR-0063, What was
+measured). The far atlas is 0.80 to 1.59 ms on every landed steady row, the
 most under `decks`.
 
 #### The fetch rate
@@ -581,8 +584,8 @@ runs once.
 - One field is read at every distance, and each cache is baked from it: the
   clipmap from the cube, the volume and the atlas from the field. Nothing is
   authored beside it.
-- **A frame that rebuilds the grid costs 10.5 to 16.5 ms for the grid
-  alone,** 11.8 on `horizon`, as landed. A cut, a scrub, and a sun that turns
+- **A frame that rebuilds the grid costs 9.1 to 16.8 ms for the grid
+  alone,** 12.3 on `horizon`, as landed. A cut, a scrub, and a sun that turns
   0.05° each rebuild it whole in one frame. A sun
   that crosses the sky in Earth's day turns 0.05° in 12 s, by arithmetic; no
   steady row is long enough to hold one. Phase 1 takes the rebuild off a cut

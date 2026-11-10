@@ -66,7 +66,7 @@ row with its conditions. In short, against clouds off:
 | --------------------------------- | -------------------- | -------- | -------- |
 | On the ground, under cumulus      | ≤ 2.9 ms             | 7.12 ms  | 8.91 ms  |
 | From orbit                        | ≤ 1.6 ms             | 3.03 ms  | 5.54 ms  |
-| A reset frame, a cut of `horizon` | —                    | 20.61 ms | 21.78 ms |
+| A reset frame, a cut of `horizon` | —                    | 20.30 ms | 22.14 ms |
 | Declared memory                   | about 76 MB          | 91.62 MB | 85.01 MB |
 
 At Retina the largest single cost is the second scene pass, 3.88 to 5.32 ms
@@ -75,7 +75,10 @@ taps, is the larger on `ground`, `horizon`, `decks` and both pairs, up to
 4.75 ms. The first frames with the clouds on are a hitch: the largest of the
 first five is 50.80 to 66.80 ms at 1080p and 75.00 to 92.50 at Retina, the
 caches' first build, not shown to be a compile. Every figure is campaign 2's,
-at `bbea04da`.
+at `bbea04da`, but the reset frame, which is the retake's at `f9746fd3`:
+campaign 2's `cut`, `scrub`, `fly` and `pair-neighbor` rows looked through the
+lens the moon's rise left on the page (ADR-0063). Every figure is the M6 mini's; the plan's budget
+basis is an M5, which is not measured.
 
 ## What phase 1 inherits
 
