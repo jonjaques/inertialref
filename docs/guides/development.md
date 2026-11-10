@@ -370,15 +370,14 @@ publishing nowhere, and a `{@link}` pointing at a renamed symbol fails it
 rather than rendering as words that link to nothing. `scripts/docs/build.mjs`
 carries the rest.
 
-API articles always ship as JSON. Builds from `main` also pre-render their
-HTML; other branches emit one API loading shell and fetch articles when opened.
-Prose remains pre-rendered in both cases. Workers Builds uses
-`WORKERS_CI_BRANCH`; GitHub uses the source branch; a local build uses the
-checked-out branch. To verify the complete production output on a feature
-branch, run `IR_PRERENDER_API=1 pnpm build`. Set it to `0` to force asynchronous
-API pages. Use `pnpm preview` for built API deep links because the Worker asset
-server applies their generated proxy rules; `astro preview` does not. During
-`pnpm dev`, Astro renders API loading shells on demand.
+API articles always ship as JSON. Every build pre-renders prose, the
+`/docs/api` loading shell and each package's own page, and no member page: the
+1,858 member pages take 41 to 50 seconds of a 51 to 61 second bundle stage on
+an Apple M6 when they are rendered, and the shell fetches a member's article
+when it is opened. Every branch builds the same output, `main` included. Use
+`pnpm preview` for built API deep links because the Worker asset server applies
+their generated rewrites; `astro preview` does not. During `pnpm dev`, Astro
+renders API loading shells on demand.
 
 **`design/` is the other half of that division, and it is not published.**
 Plans, working reviews and the complexity report live there; `docs/` is the
