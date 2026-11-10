@@ -309,3 +309,99 @@ export function detailNoise(cells: Vec3): number {
     0.125 * worley(4 * x, 4 * y, 4 * z, 16, d2)
   )
 }
+
+/*
+ * The textures as the GPU reads them. The bake stores each noise at its
+ * texel centers as a byte, and the field reads it trilinearly with repeat
+ * wrapping, so a CPU field that read `baseNoise` itself would differ from
+ * the drawn one by up to the whole interpolation error between texels,
+ * which at 16 texels a cell is far more than a byte. These reads take the
+ * texels the bake writes — the function at the center, rounded to a byte —
+ * and blend them as the sampler does, so what is left to differ is the
+ * sampler's own weight precision.
+ *
+ * A texel is computed the first time a read needs it and kept: the whole
+ * base texture is 2.1 million evaluations, which no test needs, and a read
+ * near the last one costs eight lookups. The tables are presentation and are
+ * regenerated in every process; nothing stores them.
+ */
+
+/** Texels a side of the base texture: eight cells, sixteen texels a cell. */
+export const BASE_NOISE_TEXELS = 128
+/** Texels a side of the detail texture: four cells, eight texels a cell. */
+export const DETAIL_NOISE_TEXELS = 32
+
+interface TexelTable {
+  readonly size: number
+  readonly perCell: number
+  readonly evaluate: (cells: Vec3) => number
+  /** A texel's byte plus one; zero where it is not yet computed. */
+  values: Uint16Array | null
+}
+
+const BASE_TEXELS: TexelTable = {
+  size: BASE_NOISE_TEXELS,
+  perCell: BASE_NOISE_TEXELS / BASE_NOISE_PERIOD,
+  evaluate: baseNoise,
+  values: null,
+}
+const DETAIL_TEXELS: TexelTable = {
+  size: DETAIL_NOISE_TEXELS,
+  perCell: DETAIL_NOISE_TEXELS / DETAIL_NOISE_PERIOD,
+  evaluate: detailNoise,
+  values: null,
+}
+
+/** The byte the bake writes at texel (i, j, k): the function at its center, rounded. */
+function texel(table: TexelTable, i: number, j: number, k: number): number {
+  const { size } = table
+  const values = (table.values ??= new Uint16Array(size * size * size))
+  const index = (k * size + j) * size + i
+  const held = values[index]!
+  if (held !== 0) return held - 1
+  const value = table.evaluate({
+    x: (i + 0.5) / table.perCell,
+    y: (j + 0.5) / table.perCell,
+    z: (k + 0.5) / table.perCell,
+  })
+  const byte = Math.round(255 * clamp(value, 0, 1))
+  values[index] = byte + 1
+  return byte
+}
+
+/**
+ * A repeat-wrapped trilinear read at a point in the noise's cells, in [0, 1]:
+ * texel coordinates are `cells·perCell − ½`, as a sampler forms them.
+ */
+function readTexels(table: TexelTable, cells: Vec3): number {
+  const x = cells.x * table.perCell - 0.5
+  const y = cells.y * table.perCell - 0.5
+  const z = cells.z * table.perCell - 0.5
+  const ix = Math.floor(x)
+  const iy = Math.floor(y)
+  const iz = Math.floor(z)
+  const fx = x - ix
+  const fy = y - iy
+  const fz = z - iz
+  const { size } = table
+  const i0 = wrap(ix, size)
+  const j0 = wrap(iy, size)
+  const k0 = wrap(iz, size)
+  const i1 = i0 + 1 === size ? 0 : i0 + 1
+  const j1 = j0 + 1 === size ? 0 : j0 + 1
+  const k1 = k0 + 1 === size ? 0 : k0 + 1
+  const row = (j: number, k: number): number =>
+    lerp(texel(table, i0, j, k), texel(table, i1, j, k), fx)
+  const sheet = (k: number): number => lerp(row(j0, k), row(j1, k), fy)
+  return lerp(sheet(k0), sheet(k1), fz) / 255
+}
+
+/** The base texture's read at a point in base cells: `baseNoise` as the march sees it. */
+export function baseNoiseTexture(cells: Vec3): number {
+  return readTexels(BASE_TEXELS, cells)
+}
+
+/** The detail texture's read at a point in detail cells: `detailNoise` as the march sees it. */
+export function detailNoiseTexture(cells: Vec3): number {
+  return readTexels(DETAIL_TEXELS, cells)
+}
