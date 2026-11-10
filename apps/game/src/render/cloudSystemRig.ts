@@ -291,7 +291,11 @@ export function rigEngineInputs(
         ? served
         : (SOL.get(address) ?? null),
     scattering: (drawn) =>
-      stance.air === true ? scatteringOf({ pool: () => null }, drawn) : null,
+      // The rig builds a cloud system on every stance, so its air carries
+      // the sky table a page with `?clouds=1` bakes.
+      stance.air === true
+        ? scatteringOf({ pool: () => null }, drawn, { sky: true })
+        : null,
     renderTime: 50_000,
     rate: 1,
     visibility: false,
