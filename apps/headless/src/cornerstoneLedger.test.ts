@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CORNERSTONES,
   openSession,
+  clockStart,
   type Picture,
   solveStationSun,
   stationSubPoint,
@@ -18,6 +19,7 @@ import {
   atmosphereRecipe,
   bakeMultipleScattering,
   bakeTransmittance,
+  CLOUD_ADVECTION_PERIOD,
   cloudExtents,
   DEFAULT_SENSOR_SETTINGS,
   type Lens,
@@ -46,7 +48,7 @@ import {
 import { loadStarCatalog } from './catalog.ts'
 
 /*
- * The cornerstones' ledger: what each of the nine pictures the weather is
+ * The cornerstones' ledger: what each of the ten pictures the weather is
  * judged on asks of the world, held in Node, without a GPU.
  *
  * A cornerstone is a preset taken before the work it judges, so its instant
@@ -131,6 +133,9 @@ const RULES: Readonly<Record<string, SunRule | null>> = {
   },
   'weather-g5-inside': { elevation: 45, trend: 'rising', heading: null },
   'weather-g6-descent': { elevation: 45, trend: 'rising', heading: null },
+  // The guard stands on no surface: its sun is over the station's sub-point,
+  // held by its own test against the instant solved there.
+  'weather-guard-station': null,
 }
 
 /** The pictures that stand on the land stance, L, and so on dry ground. */
@@ -153,6 +158,22 @@ function bodyOf(
   )
   if (parsed.kind !== 'body') throw new Error(`${address} is not a body`)
   return findBody(session.world.loadSystem(parsed.system), parsed.body)!
+}
+
+/** The body a picture's weather stands on: its own, or a station's parent. */
+function bodyUnder(
+  session: ReturnType<typeof openSession>,
+  address: string,
+): Body {
+  const parsed = parseAddress(
+    address.startsWith('g:') ? address : `g:milky-way/${address}`,
+  )
+  return bodyOf(
+    session,
+    parsed.kind === 'satellite'
+      ? stationSubPoint(session.world, address).body
+      : address,
+  )
 }
 
 function bodyDigest(body: Body): string {
@@ -215,7 +236,7 @@ describe('the cornerstones', () => {
         expect(status.target?.address, picture.id).toContain(picture.address)
         // Headlessly no weather is drawn, and the picture says so.
         expect(taken.weather, picture.id).toBe('unavailable')
-        const body = bodyOf(session, picture.address)
+        const body = bodyUnder(session, picture.address)
         const surface = status.surface
         const rule = RULES[picture.id]
         let sun: { elevation: number; azimuth: number } | null = null
@@ -298,7 +319,7 @@ describe('the cornerstones', () => {
                 },
         })
       }
-      // Rule 37: nine pictures, and the world's hash is the one it started with.
+      // Rule 37: ten pictures, and the world's hash is the one it started with.
       expect(session.world.stateHash()).toBe(before)
       const guard = solveGuard(session)
       await expect(
@@ -306,7 +327,6 @@ describe('the cornerstones', () => {
           {
             cornerstones: entries,
             guard: {
-              picture: guard.picture,
               subPoint: {
                 latitude: degrees(guard.solved.place.latitude / DEG),
                 longitude: degrees(guard.solved.place.longitude / DEG),
@@ -650,6 +670,11 @@ describe('the cornerstones', () => {
         (time) => sunOver(guard.sub.sun(time), guard.sub.place(time)),
       )
       expect(guard.behind).toBeGreaterThanOrEqual(GUARD.cover)
+      // The committed guard is the solved one, to the bit: its instant and
+      // its basis are the solver's, not a copy that can drift from it.
+      expect(CORNERSTONES.find((one) => one.id === GUARD.id)).toEqual(
+        guard.picture,
+      )
       // E1's lens, processing and weather; only the place and instant move.
       expect(guard.picture.lens).toEqual(e1.lens)
       expect(guard.picture.processing).toEqual(e1.processing)
@@ -687,6 +712,35 @@ describe('the cornerstones', () => {
             (e1.framing as { surface: { pitch: number } }).surface.pitch / DEG,
         ),
       ).toBeLessThan(0.05)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('run E1’s clock from the start C7 is solved at, across a reduction, until it is paused', () => {
+    const session = openSession({ catalog: loadStarCatalog(), workers: null })
+    try {
+      const e1 = CORNERSTONES.find(
+        (one) => one.id === 'weather-e1-cumulus-orbit',
+      )!
+      session.harness.preset(e1.id)
+      // 300 frames at 100×: five presented seconds at 60 Hz, 500 simulated,
+      // with the drift's reduction at the middle.
+      const { start, reduction } = clockStart(e1.time, 100, 300)
+      expect(reduction % CLOUD_ADVECTION_PERIOD).toBe(0)
+      expect(reduction - start).toBeCloseTo(250, 9)
+      expect(reduction).toBeGreaterThanOrEqual(e1.time)
+      expect(session.harness.runClock(start, 100)).toEqual({ start, warp: 100 })
+      const observatory = session.harness.observatory
+      expect(observatory.time).toBe(start)
+      expect(observatory.timeScale).toBe(100)
+      expect(observatory.timePaused).toBe(false)
+      // A presented second is a hundred simulated ones.
+      observatory.advanceTime(1)
+      expect(observatory.time).toBeCloseTo(start + 100, 6)
+      observatory.setTimePaused(true)
+      observatory.advanceTime(1)
+      expect(observatory.time).toBeCloseTo(start + 100, 6)
     } finally {
       session.dispose()
     }
@@ -824,6 +878,8 @@ const G2_DEPTH = {
  * - **2° off the station's vertical, toward the south,** so the camera looks
  *   down and north at E1's pitch of −88°: the orbit camera's elevation is
  *   clamped off its pole, and a basis turns the pose onto the sub-point.
+ * - **It is in `cornerstones.json` as the solver writes it,** and its test
+ *   holds the committed picture equal to the solved one.
  * - **The instant is the first crossing of E1's sun whose ground behind the
  *   station holds cloud**, at a blob's half height or over: the ground the
  *   camera's line meets past the station, 14 km north of the sub-point. The

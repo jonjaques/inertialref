@@ -79,7 +79,9 @@ that `findPicture` searches and no player-facing list reads.**
   regime) or `none`. Headlessly every weather is unavailable.
 - The engine writes three levers and no others: `on`, the regime as the
   scenario, and `served`, the picture's body by address when the body is
-  outside the default set (`cloudsServed`: wet, and no authored deck). No
+  outside the default set (`cloudsServed`: wet, and no authored deck). A
+  station's picture names the body the station goes round, since the clouds
+  are served on a body and a station's address names none. No
   weather, or weather the page cannot draw, turns the volume off: a picture
   never draws a weather other than the one it names. On a page with the flag
   that means an ordinary preset turns the clouds off.
@@ -92,7 +94,8 @@ that `findPicture` searches and no player-facing list reads.**
 
 ### The cornerstones
 
-- `packages/devtools/src/cornerstones.json` holds nine pictures in the same
+- `packages/devtools/src/cornerstones.json` holds the nine pictures and the
+  overlay guard, E1's picture with the station in it, in the same
   envelope, decoded by the same decoder, as `CORNERSTONES`. `findPicture`
   searches `PICTURES`, then `CORNERSTONES`; the id sets are disjoint. So
   `ir.preset(id)`, `?preset=` and `drive.mjs --preset` take a cornerstone.
@@ -120,11 +123,11 @@ that `findPicture` searches and no player-facing list reads.**
   orbit, since the sun over the sub-point goes round once an orbit
   (`solveStationSun`). The ledger solves the overlay guard that way, E1's
   picture from 2.5 km off the ISS at the first crossing of E1's sun whose
-  ground behind the station holds cloud, and holds its picture whole in its
-  snapshot; the list holds the nine. `cornerstoneLedger.test.ts` holds each cornerstone's sun to
-  its target within half a degree, in Node, against the real catalog: a
-  change to a body's frames that moves a cornerstone's sun fails there,
-  before a plate is taken.
+  ground behind the station holds cloud, and holds the committed picture
+  equal to the one it solves. `cornerstoneLedger.test.ts` holds each
+  cornerstone's sun to its target within half a degree, in Node, against the
+  real catalog: a change to a body's frames that moves a cornerstone's sun
+  fails there, before a plate is taken.
 - `ir.settled()` waits on the clouds: the system's own settle, every cache's
   owed work done and 32 frames since the history last reset, which is when
   the history's 1/8 floor has every pixel holding eight samples.

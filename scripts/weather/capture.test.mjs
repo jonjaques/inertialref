@@ -83,7 +83,7 @@ const jsOf = (args) =>
   args.flatMap((one, i) => (one === '--js' ? [args[i + 1]] : []))
 
 describe('the capture’s plan', () => {
-  it('takes seven stills, E1 to E3 in two arms, and leaves G5 and G6 to their casts', () => {
+  it('takes eight stills, E1 to E3 and the guard in two arms, and leaves G5 and G6 to their casts', () => {
     expect(STILLS.map(tagOf)).toEqual([
       'e1',
       'e2',
@@ -92,10 +92,11 @@ describe('the capture’s plan', () => {
       'g2',
       'g3',
       'g4',
+      'guard',
     ])
     expect(armsOf('weather-e2-limb-dusk')).toEqual(['volume', 'deck'])
     expect(armsOf('weather-g4-over-deck')).toEqual(['volume'])
-    // The overlay guard, once it joins the list: a deck beside a guard pair.
+    // The overlay guard: a deck beside a guard pair.
     expect(armsOf('weather-guard-station')).toEqual(['volume', 'deck'])
     expect(roleOf('weather-guard-station', 'volume')).toBe('guard-pair')
     expect(roleOf('weather-e1-cumulus-orbit', 'deck')).toBe('deck')
@@ -104,7 +105,7 @@ describe('the capture’s plan', () => {
 
   it('takes every cast a check names and the held casts, and leaves K’s two retired ones to --baseline-casts', () => {
     const all = parseCapture(['--phase', '1', '--url', URL_])
-    expect(all.stills).toHaveLength(7)
+    expect(all.stills).toHaveLength(8)
     const names = all.casts.map((one) => `${tagOf(one.id)}/${one.speed}`)
     expect(names).toEqual([
       'g6/slow',
@@ -197,7 +198,15 @@ describe('the capture’s plan', () => {
 
   it('plans each take with its preset, role, arm and frames, and the noise floor as ten boots a still', () => {
     const plan = planOf(parseCapture(['--phase', '1', '--dry-run']))
-    expect(plan.filter((one) => one.kind === 'still')).toHaveLength(10)
+    expect(plan.filter((one) => one.kind === 'still')).toHaveLength(12)
+    expect(
+      plan
+        .filter((one) => one.preset === 'weather-guard-station')
+        .map((one) => [one.arm, one.role]),
+    ).toEqual([
+      ['volume', 'guard-pair'],
+      ['deck', 'deck'],
+    ])
     const injected = plan.find((one) => one.preset.includes('injected'))
     expect(injected).toMatchObject({ role: 'injected-defect', arm: 'on' })
     expect(plan.filter((one) => one.role === 'clouds-off').length).toBe(9)
@@ -220,7 +229,7 @@ describe('the capture’s plan', () => {
         '--no-default-samples',
       ]),
     )
-    expect(pairs).toHaveLength(10)
+    expect(pairs).toHaveLength(12)
     for (const one of pairs)
       expect(one).toMatchObject({
         kind: 'pairs',
@@ -228,7 +237,7 @@ describe('the capture’s plan', () => {
         frames: 10,
       })
     expect(planTable(pairs)).toMatch(
-      /10 takes, 100 frames, about [\d.]+ h \(planned, not measured\)$/,
+      /12 takes, 120 frames, about [\d.]+ h \(planned, not measured\)$/,
     )
   })
 
