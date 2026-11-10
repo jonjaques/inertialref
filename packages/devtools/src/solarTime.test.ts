@@ -81,21 +81,32 @@ describe('the solved instant', () => {
         body,
         place,
         fc.double({ min: 0, max: 1, noNaN: true }),
-        fc.constantFrom('rising' as const, 'falling' as const),
         fc.double({ min: -1e6, max: 1e6, noNaN: true }),
-        ({ spin, year, obliquity, phase }, at, pick, trend, after) => {
+        ({ spin, year, obliquity, phase }, at, pick, after) => {
           const sun = synthetic(spin, year, obliquity, phase)
           const day = solarDay(spin, year)
           const elevation = (time: number) => sunOver(sun(time), at).elevation
-          // A target the sun reaches: its elevation at an instant of the
-          // first two days.
-          const target = elevation(after + pick * 2 * day)
+          // A target the sun reaches, with the trend it reaches it at: its
+          // elevation at an instant of the first two days, rising or falling
+          // as the sun is there. So a crossing exists at or after `after`,
+          // and a solver answering null fails rather than passes.
+          const sampled = after + pick * 2 * day
+          const target = elevation(sampled)
+          const slope = elevation(sampled + 1) - elevation(sampled - 1)
+          // At a peak or a trough the sun is neither rising nor falling, and
+          // a target there is reached only at that instant: no trend names it.
+          fc.pre(Math.abs(slope) > 1e-9)
+          const trend = slope > 0 ? ('rising' as const) : ('falling' as const)
           const time = solveSunTime(
             sun,
             at,
             { elevation: target, trend, after },
             day,
           )
+          expect(
+            time,
+            `${trend} through ${target}° after ${after}`,
+          ).not.toBeNull()
           if (time === null) return
           expect(time).toBeGreaterThanOrEqual(after)
           expect(Math.abs(elevation(time) - target)).toBeLessThan(1e-4)

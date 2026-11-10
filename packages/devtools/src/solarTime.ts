@@ -1,14 +1,26 @@
+import { orbitalPeriod } from '@inertialref/physics'
+import { CLOUD_ADVECTION_PERIOD } from '@inertialref/rendering'
 import type { Radians, Seconds } from '@inertialref/shared'
-import type { Vec3 } from '@inertialref/spatial'
+import {
+  type FrameId,
+  Quaternion as Q,
+  UV,
+  type Vec3,
+} from '@inertialref/spatial'
 import type { World } from '@inertialref/simulation'
 import {
   bodyFixedFrameId,
   compassBasis,
+  directionToGeodetic,
   findBody,
+  formatAddress,
   parseAddress,
+  placementMu,
+  stationFrameId,
 } from '@inertialref/universe'
 import { synodicDay } from './dossier.ts'
 import { sunDirection } from './maneuvers.ts'
+import { stationAt } from './travel.ts'
 
 /*
  * Where the sun stands over a place, and when it stands somewhere asked for.
@@ -20,6 +32,12 @@ import { sunDirection } from './maneuvers.ts'
  * the sun's place over a stance is that spin against the orbit. So the
  * instant is solved: the sun as a function of time, sampled through the
  * solar day for a crossing, and bisected.
+ *
+ * A place can move. The overlay guard stands where a station is, and the
+ * station's sub-point crosses the sunlit side every orbit, so its sun is a
+ * function of time twice over: the place is sampled at each instant beside
+ * the sun, and the search steps through the station's orbit rather than the
+ * body's day, because the sun over the sub-point goes round once an orbit.
  *
  * The world half resolves an address and evaluates the frame graph at each
  * instant it tries. That clears the graph's cache (`spatial/frame.ts`), which
@@ -34,6 +52,12 @@ export interface Geodetic {
   readonly latitude: Radians
   readonly longitude: Radians
 }
+
+/** A place, or a place as a function of time: a station's sub-point. */
+export type PlaceAt = Geodetic | ((time: Seconds) => Geodetic)
+
+const placeAt = (place: PlaceAt, time: Seconds): Geodetic =>
+  typeof place === 'function' ? place(time) : place
 
 export interface SunAt {
   /** Degrees over the sphere's horizon at the place. */
@@ -72,8 +96,10 @@ export function sunOver(sun: Vec3, place: Geodetic): SunAt {
 
 /**
  * The first instant at or after `target.after` the sun stands at the
- * target, as a function of time alone: `sun(t)` is the body-fixed unit sun
- * and `day` the solar day the search steps through.
+ * target, as a function of time alone: `sun(t)` is the body-fixed unit sun,
+ * `place` a place or a place that moves, and `day` the period the sun goes
+ * round that place in, which the search steps through: the solar day for a
+ * place on the ground, the orbit for a station's sub-point.
  *
  * Sampled `SUN_SAMPLES_A_DAY` times a day. Each interior extremum is found
  * by a golden section between the samples either side of it, so the search
@@ -86,14 +112,14 @@ export function sunOver(sun: Vec3, place: Geodetic): SunAt {
  */
 export function solveSunTime(
   sun: (time: Seconds) => Vec3,
-  place: Geodetic,
+  place: PlaceAt,
   target: SunTarget,
   day: Seconds,
 ): Seconds | null {
   if (!(day > 0) || !Number.isFinite(day))
     throw new Error(`A solar day of ${day} s has no sunrise to search`)
   const elevation = (time: Seconds): number =>
-    sunOver(sun(time), place).elevation
+    sunOver(sun(time), placeAt(place, time)).elevation
   const step = day / SUN_SAMPLES_A_DAY
   const count = SUN_SAMPLES_A_DAY * SUN_SEARCH_DAYS
   const start = target.after
@@ -237,4 +263,121 @@ export function solveSun(
   const time = solveSunTime(sun, place, target, day)
   if (time === null) return null
   return { time, ...sunOver(sun(time), place) }
+}
+
+/**
+ * A station's sub-point as a function of time, on the body it goes round,
+ * with that body's address and sun and the station's orbital period.
+ *
+ * The sub-point is the station's position in the body's turning axes, read
+ * as a geodetic direction: the point on the ground straight under it, which
+ * is where the sun a picture of it is solved for stands.
+ */
+export function stationSubPoint(
+  world: World,
+  address: string,
+): {
+  readonly body: string
+  /** The station's frame and the body's turning one. */
+  readonly frame: FrameId
+  readonly bodyFrame: FrameId
+  readonly place: (time: Seconds) => Geodetic
+  readonly sun: (time: Seconds) => Vec3
+  readonly period: Seconds
+} {
+  const parsed = parseAddress(
+    address.startsWith('g:') ? address : `g:milky-way/${address}`,
+  )
+  if (parsed.kind !== 'satellite')
+    throw new Error(`${address} is not a station`)
+  const system = world.loadSystem(parsed.system)
+  const station = stationAt(system, parsed)
+  if (station === undefined) throw new Error(`No station at ${address}`)
+  if (station.parent.kind !== 'body')
+    throw new Error(`${station.name} goes round a star, not a body`)
+  const bodyFrame = bodyFixedFrameId(station.parent)
+  const frame = stationFrameId(station.id)
+  return {
+    body: formatAddress(station.parent),
+    frame,
+    bodyFrame,
+    place: (time) => {
+      const body = world.frames.pose(bodyFrame, time)
+      const at = world.frames.pose(frame, time).position
+      return directionToGeodetic(
+        Q.rotateInverse(body.orientation, UV.difference(at, body.position)),
+      )
+    },
+    sun: (time) => sunDirection(world, parsed.system, bodyFrame, time),
+    period: orbitalPeriod(
+      placementMu(system, station),
+      station.orbit.elements.semiMajorAxis,
+    ),
+  }
+}
+
+/**
+ * The first instant at or after `target.after` the sun at a station's
+ * sub-point stands where the target asks, with the sub-point and its sun;
+ * null where it never does in `SUN_SEARCH_DAYS` orbits.
+ */
+export function solveStationSun(
+  world: World,
+  address: string,
+  target: SunTarget,
+): ({ readonly time: Seconds; readonly place: Geodetic } & SunAt) | null {
+  const { place, sun, period } = stationSubPoint(world, address)
+  const time = solveSunTime(sun, place, target, period)
+  if (time === null) return null
+  const where = place(time)
+  return { time, place: where, ...sunOver(sun(time), where) }
+}
+
+/** The held instant's controls the clock's verb drives: the observatory's. */
+export interface RunnableClock {
+  setTime(time: number | null): void
+  setTimeScale(scale: number): void
+  setTimePaused(paused: boolean): void
+}
+
+/**
+ * Run a picture's held instant from `start` at `warp` simulated seconds a
+ * presented second: the body of the harness's `ir.runClock`.
+ *
+ * Held and released through the observatory's own clock, which the frame
+ * loop advances by presented seconds, so the field moves as it does when a
+ * player runs the clock: a path that set the instant itself each frame would
+ * be a scrub a frame, which resets the history it exists to watch. The
+ * instant each frame is read back into the cast's log instead.
+ */
+export function runClock(
+  clock: RunnableClock,
+  start: Seconds,
+  warp: number,
+): { readonly start: Seconds; readonly warp: number } {
+  clock.setTime(start)
+  clock.setTimeScale(warp)
+  clock.setTimePaused(false)
+  return { start, warp }
+}
+
+/**
+ * The instant a clock cast starts at, so the drift's reduction falls in its
+ * middle at the nominal 60 Hz: the first multiple of `CLOUD_ADVECTION_PERIOD`
+ * at or after `time`, less half the cast's simulated seconds.
+ *
+ * A reduction is where the field's drift starts over (`weatherClock.ts`), so
+ * a cast that never crosses one cannot show the jump C7 looks for. At
+ * another rate the cast spans other seconds; the cast's log holds the
+ * instant each frame, and the capture checks the reduction fell inside it.
+ */
+export function clockStart(
+  time: Seconds,
+  warp: number,
+  frames: number,
+  rate = 60,
+): { readonly start: Seconds; readonly reduction: Seconds } {
+  const reduction =
+    Math.ceil(time / CLOUD_ADVECTION_PERIOD) * CLOUD_ADVECTION_PERIOD
+  return { start: reduction - (frames / 2 / rate) * warp, reduction }
 }

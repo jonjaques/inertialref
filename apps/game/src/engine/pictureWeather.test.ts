@@ -46,11 +46,33 @@ const deckless: Body = {
   appearance: { ...earth.appearance, clouds: null },
 }
 
-function engine(available = true): PictureWeatherEngine & {
+/*
+ * The diagnostics are a parameter, not a spread over a built engine: a
+ * spread copies `clouds` as a plain value and drops the setter that counts
+ * the writes, so a count read from a spread copy is zero whatever happens.
+ */
+function engine(
+  available = true,
+  sensorDiagnostics: PictureWeatherEngine['sensorDiagnostics'] = null,
+): PictureWeatherEngine & {
   writes: number
+  loaded: boolean
+  aim: (address: string | null) => void
 } {
   let levers: CloudLevers = DEFAULT_CLOUD_LEVERS
+  let target: { address: string } | null = null
   return {
+    loaded: true,
+    aim: (address) => {
+      target = address === null ? null : { address }
+    },
+    harness: {
+      observatory: {
+        get target() {
+          return target
+        },
+      },
+    },
     writes: 0,
     get clouds() {
       return levers
@@ -60,9 +82,13 @@ function engine(available = true): PictureWeatherEngine & {
       levers = Object.freeze({ ...next })
     },
     cloudsAvailable: available,
-    sensorDiagnostics: null,
-    bodyFor: (address) =>
-      address === EARTH ? earth : address === decklessAddress ? deckless : null,
+    sensorDiagnostics,
+    // The deckless body's system loads when the test says so; Earth's is
+    // loaded from the start.
+    bodyFor(address) {
+      if (address === EARTH) return earth
+      return address === decklessAddress && this.loaded ? deckless : null
+    },
   }
 }
 
@@ -208,15 +234,62 @@ describe('the hold', () => {
     expect(hold.outcome).toBe('drawn')
     expect(arrived.clouds).toMatchObject({ on: true, served: EARTH })
     // Once: a page that cannot draw it is not asked every frame.
-    const webgl = {
-      ...engine(true),
-      sensorDiagnostics: { clouds: cloudReportIdle('webgl') },
-    }
+    const webgl = engine(true, { clouds: cloudReportIdle('webgl') })
     const once = new PictureWeatherHold()
     once.apply(webgl, { regime: 'overcast' }, EARTH)
     const writes = webgl.writes
+    // The count is live: the apply wrote the levers once.
+    expect(writes).toBeGreaterThan(0)
+    once.frame(webgl, true)
     once.frame(webgl, true)
     expect(webgl.writes).toBe(writes)
+  })
+
+  it('lets the picture go when the observatory is aimed at another subject, and not while it stands on the picture’s', () => {
+    const page = engine()
+    const hold = new PictureWeatherHold()
+    hold.apply(page, { regime: 'fair-cumulus' }, EARTH)
+    // The picture moves the camera after it sets its weather.
+    page.aim(EARTH)
+    hold.frame(page, true)
+    hold.frame(page, true)
+    expect(page.clouds).toMatchObject({ on: true, served: EARTH })
+    // Picked another body in the planetarium: still a target, not the picture.
+    page.aim('g:milky-way/s:SOL/b:3')
+    hold.frame(page, true)
+    expect(page.clouds).toEqual(DEFAULT_CLOUD_LEVERS)
+    expect(hold.outcome).toBe('none')
+    // A station's picture stands on the station and serves Earth's clouds.
+    const station = engine()
+    const guard = new PictureWeatherHold()
+    guard.apply(station, { regime: 'fair-cumulus' }, EARTH)
+    station.aim('g:milky-way/s:SOL/b:2/a:0')
+    guard.frame(station, true)
+    guard.frame(station, true)
+    expect(station.clouds.served).toBe(EARTH)
+  })
+
+  it('ends on the levers a loaded system gives, whether the picture came before its system or after', () => {
+    const loaded = engine()
+    new PictureWeatherHold().apply(
+      loaded,
+      { regime: 'stratocumulus' },
+      decklessAddress,
+    )
+    // Before: nothing knows the body yet, so its address is forced.
+    const early = engine()
+    early.loaded = false
+    const hold = new PictureWeatherHold()
+    hold.apply(early, { regime: 'stratocumulus' }, decklessAddress)
+    expect(early.clouds.served).toBe(decklessAddress)
+    early.aim(decklessAddress)
+    hold.frame(early, true)
+    expect(early.clouds.served).toBe(decklessAddress)
+    // The system loads: the served set decides, as it did for the other.
+    early.loaded = true
+    hold.frame(early, true)
+    expect(early.clouds).toEqual(loaded.clouds)
+    expect(early.clouds.served).toBeNull()
   })
 
   it('reports weather on a page without the clouds, or on WebGL, unavailable', () => {
@@ -224,10 +297,7 @@ describe('the hold', () => {
     expect(hold.apply(engine(false), { regime: 'overcast' }, EARTH)).toBe(
       'unavailable',
     )
-    const webgl = {
-      ...engine(true),
-      sensorDiagnostics: { clouds: cloudReportIdle('webgl') },
-    }
+    const webgl = engine(true, { clouds: cloudReportIdle('webgl') })
     expect(
       new PictureWeatherHold().apply(webgl, { regime: 'overcast' }, EARTH),
     ).toBe('unavailable')

@@ -38,6 +38,12 @@ export interface PictureWeatherEngine {
     readonly clouds: CloudRenderReport | null
   } | null
   bodyFor(address: string): Body | null
+  /** The observatory's subject, which a picture's weather lasts as long as. */
+  readonly harness: {
+    readonly observatory: {
+      readonly target: { readonly address: string } | null
+    }
+  }
 }
 
 /**
@@ -102,6 +108,21 @@ export class PictureWeatherHold {
     readonly weather: PictureWeather
     readonly address: string
   } | null = null
+  /**
+   * The observatory's subject the picture stood on, read on the first frame
+   * after it was taken, since the picture sets its weather before it moves
+   * the camera; undefined until then. The weather lasts while the subject
+   * does: a re-aimed observatory is a picture left, though it still has a
+   * target, and the forced body must not follow the camera elsewhere.
+   */
+  #subject: string | null | undefined = undefined
+  /**
+   * A picture's body by address while its system is not loaded yet.
+   * `bodyFor` answers null for a system nothing has loaded, which forces the
+   * address; once it loads, the served set decides as it would have, so two
+   * takes of one picture end on one set of levers whichever came first.
+   */
+  #pending: string | null = null
 
   /** What became of the last picture's weather, while it is held. */
   get outcome(): PictureWeatherOutcome {
@@ -130,6 +151,8 @@ export class PictureWeatherHold {
     })
     engine.clouds = next.levers
     this.#outcome = next.outcome
+    this.#subject = undefined
+    this.#pending = next.outcome === 'drawn' && body === null ? address : null
     this.#early =
       weather !== null &&
       next.outcome === 'unavailable' &&
@@ -146,16 +169,32 @@ export class PictureWeatherHold {
     this.#found = null
     this.#outcome = 'none'
     this.#early = null
+    this.#subject = undefined
+    this.#pending = null
   }
 
   /**
    * A frame's check. The pictures are left when the observatory holds no
-   * target; and weather asked for before the clouds arrived is applied
-   * again on the first frame they have, once.
+   * target, or holds another than the picture's; weather asked for before
+   * the clouds arrived is applied again on the first frame they have, once;
+   * and a body whose system was not loaded is decided once it is.
    */
   frame(engine: PictureWeatherEngine, observing: boolean): void {
-    if (!observing) this.release(engine)
-    else if (this.#early !== null && engine.cloudsAvailable)
+    if (!observing) return this.release(engine)
+    if (this.#early !== null && engine.cloudsAvailable) {
       this.apply(engine, this.#early.weather, this.#early.address)
+      return
+    }
+    if (this.#found === null) return
+    const subject = engine.harness.observatory.target?.address ?? null
+    if (this.#subject === undefined) this.#subject = subject
+    else if (subject !== this.#subject) return this.release(engine)
+    if (this.#pending === null) return
+    const body = engine.bodyFor(this.#pending)
+    if (body === null) return
+    const served = cloudsServed(body) ? null : this.#pending
+    if (engine.clouds.served !== served)
+      engine.clouds = { ...engine.clouds, served }
+    this.#pending = null
   }
 }

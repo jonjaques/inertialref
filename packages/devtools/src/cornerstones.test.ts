@@ -18,8 +18,19 @@ import { CORNERSTONES, findPicture, PICTURES } from './pictures.ts'
  */
 
 describe('the cornerstones', () => {
-  it('are nine, in their own list, with ids no shipped picture uses', () => {
-    expect(CORNERSTONES).toHaveLength(9)
+  it('are the nine pictures and the overlay guard, in their own list, with ids no shipped picture uses', () => {
+    expect(CORNERSTONES.map((one) => one.id)).toEqual([
+      'weather-e1-cumulus-orbit',
+      'weather-e2-limb-dusk',
+      'weather-e3-whole-face',
+      'weather-g1-fair',
+      'weather-g2-overcast-shore',
+      'weather-g3-underlit-dusk',
+      'weather-g4-over-deck',
+      'weather-g5-inside',
+      'weather-g6-descent',
+      'weather-guard-station',
+    ])
     const shipped = new Set(PICTURES.map((one) => one.id))
     for (const one of CORNERSTONES) {
       expect(shipped.has(one.id), one.id).toBe(false)
@@ -66,7 +77,7 @@ describe('the cornerstones', () => {
     }
   })
 
-  it('hand their weather to the host with the body’s full address, and a picture without weather hands none', () => {
+  it('hand their weather to the host with the body’s full address, a station’s to the body it goes round, and a picture without weather hands none', () => {
     const calls: [unknown, string][] = []
     const session = openSession({
       catalog: TEST_CATALOG,
@@ -81,6 +92,15 @@ describe('the cornerstones', () => {
     try {
       const taken = session.harness.preset('weather-e1-cumulus-orbit')
       expect(taken.weather).toBe('drawn')
+      expect(calls.at(-1)).toEqual([
+        { regime: 'fair-cumulus' },
+        'g:milky-way/s:SOL/b:2',
+      ])
+      // The guard stands at the ISS, and its clouds are Earth's: a station's
+      // own address names no body the clouds could be served on.
+      const guard = session.harness.preset('weather-guard-station')
+      expect(guard.status.target?.kind).toBe('station')
+      expect(guard.weather).toBe('drawn')
       expect(calls.at(-1)).toEqual([
         { regime: 'fair-cumulus' },
         'g:milky-way/s:SOL/b:2',

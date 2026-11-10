@@ -219,7 +219,7 @@
         "terrain": 7,
         "photometry": 1
       },
-      "time": 82800.6354948202,
+      "time": 82596.09687821846,
       "address": "g:milky-way/s:P222_3_2_k/b:3",
       "framing": {
         "kind": "camera",
@@ -233,10 +233,10 @@
           "pitch": 0
         },
         "surface": {
-          "latitude": -0.2928832177490203,
-          "longitude": 0.6526948251778841,
+          "latitude": -0.28844336598413356,
+          "longitude": 0.6635588376687422,
           "height": 2,
-          "heading": 3.246312408709453,
+          "heading": 0.15707963267948966,
           "pitch": 0.08726646259971647
         }
       },
@@ -490,6 +490,63 @@
       },
       "weather": {
         "regime": "stratocumulus"
+      }
+    },
+    {
+      "id": "weather-guard-station",
+      "label": "The overlay guard",
+      "why": "E1’s picture with the station in it: the composite’s hardest frame, a hull’s silhouette over the cloud field.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 11392.718842599568,
+      "address": "s:SOL/b:2/a:0",
+      "framing": {
+        "kind": "camera",
+        "basis": {
+          "x": 0.1963437972399689,
+          "y": 0.12351194266031316,
+          "z": -0.020254798310873495,
+          "w": 0.972514090618255
+        },
+        "state": {
+          "azimuth": 0,
+          "elevation": 0,
+          "distance": 2500
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": null
+      },
+      "lens": {
+        "focalLength": 120.22449583648354,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "fair-cumulus"
       }
     }
   ]
