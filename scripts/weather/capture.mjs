@@ -491,11 +491,37 @@ export function checkStill(id, arm, read) {
     refuse(
       `its weather is ${String(read.weather)}, where the ${arm} arm wants ${ARM_WEATHER[arm]}`,
     )
-  // Drawn and serving nothing is a picture whose weather was forced onto an
-  // address no body has: a station's, until the picture names its body.
-  if (arm === 'volume' && read.clouds?.served == null)
-    refuse('its volume serves no body')
+  if (arm === 'volume') {
+    checkServed(id, read, refuse)
+    if (read.cloud == null) refuse('its trace read back nothing')
+  }
   return read
+}
+
+/**
+ * The body a cornerstone's clouds are served on, by full address: its own,
+ * or for a station's picture the body the station goes round.
+ */
+export function servedAddress(id) {
+  const address = pictureOf(id).address
+  const full = address.startsWith('g:') ? address : `g:milky-way/${address}`
+  return full.replace(/\/a:[^/]+$/, '')
+}
+
+/**
+ * Refuse a take whose frame did not draw its picture's volume. `weather` is
+ * what the levers were told, `drawn` once they were written; whether the
+ * frame then served that body is the clouds' own report. A forced address
+ * no body has serves nothing, the report says `on: false`, the settle has
+ * nothing to wait for, and the plate is the textured deck, kept as the
+ * volume arm.
+ */
+export function checkServed(id, read, refuse) {
+  if (read.clouds?.on !== true) refuse('its clouds report nothing drawn')
+  if (read.clouds.served !== servedAddress(id))
+    refuse(
+      `its clouds serve ${String(read.clouds.served)}, not ${servedAddress(id)}`,
+    )
 }
 
 /** The intervals between a log's first `entries`, milliseconds. */
@@ -1054,10 +1080,18 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
       say(`  ${reads.levers}`)
       return
     }
+    const refuse = (why) => {
+      throw new Error(`${name}: ${why}; refused`)
+    }
     if (reads.state?.weather !== 'drawn')
-      throw new Error(
-        `${name}: the picture's weather is ${String(reads.state?.weather)}, not drawn; refused`,
+      refuse(
+        `the picture's weather is ${String(reads.state?.weather)}, not drawn`,
       )
+    // The control's clouds are off by its own lever, and serve nothing. A
+    // cut's state is read where it boots, before the cut; its settled plate
+    // after the cut is the cornerstone's own, and held as a still is.
+    if (clouds) checkServed(cast.boot ?? cast.id, reads.state, refuse)
+    if (cast.settled) checkStill(cast.id, 'volume', reads.read)
     const castStep = result.results.find((one) => one.step === 'cast')
     let verdict
     try {

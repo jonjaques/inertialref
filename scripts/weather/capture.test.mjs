@@ -26,6 +26,7 @@ import {
   rmseOf,
   roleOf,
   sampleArgs,
+  servedAddress,
   STATE,
   STILLS,
   stillArgs,
@@ -452,13 +453,15 @@ describe('what the capture refuses', () => {
     chrome: false,
     settled: { ok: true },
     weather: 'drawn',
-    clouds: { served: 'g:milky-way/s:SOL/b:2' },
+    clouds: { on: true, served: 'g:milky-way/s:SOL/b:2' },
+    cloud: { texels: 81_000, share: 0.4 },
   }
+  const E1 = 'weather-e1-cumulus-orbit'
 
-  it('a still not settled, not in SDR, with the interface up, not in its arm’s weather, or serving no body', () => {
-    expect(checkStill('e1', 'volume', read)).toBe(read)
+  it('a still not settled, not in SDR, with the interface up, not in its arm’s weather, or not drawing its own body’s volume', () => {
+    expect(checkStill(E1, 'volume', read)).toBe(read)
     expect(
-      checkStill('e1', 'deck', {
+      checkStill(E1, 'deck', {
         ...read,
         weather: 'unavailable',
         clouds: null,
@@ -471,11 +474,23 @@ describe('what the capture refuses', () => {
       { ...read, chrome: true },
       { ...read, weather: 'unavailable' },
       { ...read, weather: 'none' },
-      // A station's picture forces its weather onto an address no body has.
-      { ...read, clouds: { served: null } },
+      // The levers said drawn, and the frame served nothing: a forced
+      // address no body has, and the plate is the deck.
+      { ...read, clouds: { on: false, served: null } },
+      { ...read, clouds: { on: true, served: null } },
+      // Another body served: the volume drawn is not the picture's.
+      { ...read, clouds: { on: true, served: 'g:milky-way/s:SOL/b:21' } },
+      // Drawn, and nothing read back from the trace.
+      { ...read, cloud: null },
     ])
-      expect(() => checkStill('e1', 'volume', bad)).toThrow(/refused/)
-    expect(() => checkStill('e1', 'deck', read)).toThrow(/deck arm/)
+      expect(() => checkStill(E1, 'volume', bad)).toThrow(/refused/)
+    expect(() => checkStill(E1, 'deck', read)).toThrow(/deck arm/)
+    // The guard's clouds are Earth's, the body its station goes round.
+    expect(servedAddress('weather-guard-station')).toBe('g:milky-way/s:SOL/b:2')
+    expect(checkStill('weather-guard-station', 'volume', read)).toBe(read)
+    expect(servedAddress('weather-g1-fair')).toBe(
+      'g:milky-way/s:P222_3_2_k/b:3',
+    )
   })
 
   const log = (hz, n = 120) =>
