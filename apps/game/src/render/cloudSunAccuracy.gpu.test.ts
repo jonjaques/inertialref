@@ -84,7 +84,8 @@ import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
  * is this instrument's own document, written by a run under
  * IR_CLOUD_MEASURE=1 on the Mac mini (Mac18,5, Apple M6) and committed. A
  * case's RMS, its bias, its worst sample and its percentile may each pass
- * the landed value by a tenth and no more. One case runs in every
+ * the landed value by a tenth and no more, or stand under a thousandth of
+ * the sun. One case runs in every
  * `pnpm test:gpu`; every case runs under the flag, which also writes
  * `.data/clouds/sunAccuracy.json`. The bound is this adapter's: it is
  * asserted where the adapter offers timestamps, which is how the suite
@@ -102,6 +103,13 @@ const OUT = '.data/clouds/sunAccuracy.json'
 const WORKSTATION = await adapterOffers('timestamp-query')
 /** A figure may pass its landed value by a tenth (phase 1 design §6.3). */
 const SLACK = 1.1
+/**
+ * A figure under a thousandth of the sun is held to that and not to its
+ * landed value: under the horizon most cases read a transmittance of nothing
+ * as nothing, their figures are 10⁻⁶, and a tenth over one of those is the
+ * last bit of a float. A thousandth is a quarter of a display step.
+ */
+const FLOOR = 1e-3
 
 const CSS = { width: 1024, height: 576 } as const
 /** Degrees over the eye's horizon: phase 0's two, and the dusk cornerstone's. */
@@ -396,7 +404,7 @@ function hold(found: Case): void {
     if (!WORKSTATION) continue
     for (const [name, figure, bound] of figures)
       expect(figure, `${what}, ${taps} taps: ${name}`).toBeLessThanOrEqual(
-        bound * SLACK,
+        Math.max(bound * SLACK, FLOOR),
       )
   }
 }
