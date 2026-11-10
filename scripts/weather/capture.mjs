@@ -68,6 +68,11 @@ import { CORNERSTONES } from '../../packages/devtools/src/index.ts'
 import { rigLeft, takeGpu } from '../driveLock.mjs'
 import {
   armsOfCast,
+  CAST_DROPS,
+  CAST_RATE,
+  CAST_TAIL,
+  checkCast,
+  markCloudsOnly,
   castByKey,
   castName,
   castPath,
@@ -103,53 +108,8 @@ export const RIG = Object.freeze({
  */
 export const SETTLE_BUDGET = 120_000
 export const SETTLE_QUIET = 1_000
-/**
- * The presentation rate a cast is held to, Hz. `held` is whether the rig can
- * hold 60 Hz on demand: the clouds-on descent presents at 42.6 Hz at 2880 ×
- * 1800 on the M6, and until a hold exists a cast outside the band is kept
- * with its rate (rubric §4). The commit that lands the hold sets it, and the
- * band refuses again.
- */
-export const CAST_RATE = Object.freeze({
-  low: 58,
-  high: 62,
-  frames: 30,
-  held: false,
-})
-/**
- * Where a gap in a cast's log is a frame the page did not present: half the
- * shortest normal interval over the longest, the normal ones being the
- * cast's own 10th and 90th percentiles.
- *
- * Two medians, the obvious line, is exactly what one missed frame measures,
- * and the instants are callback times, so one missed frame read as kept
- * about half the time; a single float64 step at 10¹² ms is enough. The line
- * sits midway instead: 1.5 periods at a steady rate, and 45.8 ms in the 25
- * and 33.3 ms cadence a 120 Hz panel gives a 40 Hz page, between its 33.3
- * and the 50 of one missed 25 ms slot. Percentiles, not the extremes, so
- * the 3% of drops a kept cast may hold never move the line.
- */
-export const CAST_GAP = Object.freeze({ normal: 0.9, short: 0.1 })
-/**
- * When dropped frames refuse a cast, and which the clouds alone caused.
- *
- * Provisional, from the baseline at `4a8244e0` on the M6 (README, the
- * cornerstones' record): every G6 arm dropped 5 to 15 frames of its 300 or
- * 1,012, at the same heights with the clouds off, about 50 to 20 km up, so
- * a cast is refused past 3% of its path's frames, which is twice the worst
- * arm's 1.5%, or for three missed in a row, which is a third of a 60 Hz
- * cast's twentieth of a second and long enough to read as a cut. A drop in
- * the clouds-on arm with none in its control within `near` path frames is
- * the clouds' own (`cloudsOnly`), and package I's classifier reports each as
- * a finding. Window 2's casts move these with a figure.
- */
-export const CAST_DROPS = Object.freeze({ share: 0.03, run: 3, near: 10 })
 /** Boots a cast may take before its drops refuse it. */
 export const CAST_ATTEMPTS = 3
-/** Frames a cast records past its path's end, so the end is in the clip. */
-export const CAST_TAIL = 90
-/** Below this share of its path's frames a screencast is subsampling it. */
-export const CAST_COVERAGE = 2 / 3
 /** The presets' per-pixel level against a PNG (`scripts/presets/compare.mjs`). */
 export const SAME_LEVEL = '3%'
 /** Over this RMSE between two boots of one still, the rig is broken (rubric §3.2). */
@@ -582,184 +542,6 @@ export function freshPlate(record, id) {
       one.role?.name !== 'reference-run',
   )
   return kept?.file ?? null
-}
-
-/** The intervals between a log's first `entries`, milliseconds. */
-function intervalsOf(log, entries) {
-  const at = log.slice(0, entries).map((entry) => entry.at)
-  const intervals = []
-  for (let i = 1; i < at.length; i += 1) intervals.push(at[i] - at[i - 1])
-  return intervals
-}
-
-function medianOf(values) {
-  if (values.length === 0) return null
-  const sorted = [...values].sort((a, b) => a - b)
-  const middle = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 1
-    ? sorted[middle]
-    : (sorted[middle - 1] + sorted[middle]) / 2
-}
-
-/** The presentation rate over a log's first `frames`, from the page's log. */
-export function presentationRate(log, frames = CAST_RATE.frames) {
-  const median = medianOf(intervalsOf(log, frames + 1))
-  return median !== null && median > 0 ? 1000 / median : null
-}
-
-/**
- * The frames a cast's page did not present: one entry a gap, at the path
- * frame after it, with how many frames it missed, the height, and for a
- * flight the distance along the path.
- *
- * A gap is one past `gapLine`; it missed its length in medians, rounded,
- * less one, and never fewer than one, so one gap of four medians is three
- * missed in a row.
- */
-export function dropsOf(log, frames, median, path = null) {
-  const intervals = intervalsOf(log, frames)
-  const line = gapLine(intervals)
-  return intervals.flatMap((interval, i) => {
-    if (interval <= line) return []
-    const entry = log[i + 1]
-    const frame = entry.k ?? i + 1
-    return [
-      {
-        frame,
-        ms: interval,
-        missed: Math.max(1, Math.round(interval / median) - 1),
-        height: entry.height ?? null,
-        distance:
-          path?.kind === 'fly'
-            ? path.metersAFrame * Math.min(frame, path.stopAt ?? Infinity)
-            : null,
-        resets: entry.resets ?? null,
-      },
-    ]
-  })
-}
-
-/** The value at a share of a list's sorted order, by the nearest rank. */
-function quantileOf(values, share) {
-  const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))]
-}
-
-/** The interval past which a gap is a missed frame (`CAST_GAP`). */
-export function gapLine(intervals) {
-  return (
-    quantileOf(intervals, CAST_GAP.normal) +
-    quantileOf(intervals, CAST_GAP.short) / 2
-  )
-}
-
-/** The longest run of frames missed in a row: adjacent gaps add. */
-function longestRun(drops) {
-  let longest = 0
-  let run = 0
-  let last = null
-  for (const drop of drops) {
-    run =
-      last !== null && drop.frame === last + 1 ? run + drop.missed : drop.missed
-    longest = Math.max(longest, run)
-    last = drop.frame
-  }
-  return longest
-}
-
-/**
- * Why a cast's path did not run to its end, or null. A path that throws in
- * a frame ends its loop there while the screencast records a still page on,
- * and the intervals it did log are clean: the log's length, and a
- * descent's height at its last frame, are what say it stopped.
- */
-export function shortPath(log, cast) {
-  if (log.length < cast.frames + 1)
-    return `the path stopped at frame ${log.length} of ${cast.frames}`
-  const last = log[cast.frames]?.height
-  if (cast.path?.kind === 'descent' && !(last <= 2 + 1e-6))
-    return `the descent stood at ${String(last)} m at its last frame, not 2 m`
-  return null
-}
-
-/**
- * Read a cast's rate over its whole path, list its drops, and refuse it
- * where `CAST_DROPS` says. The band refuses only where `held` says the rig
- * can hold 60 Hz; until then the rate is what the record says beside it.
- */
-export function checkCast(name, log, instants, cast, held = CAST_RATE.held) {
-  const pathFrames = Math.min(log.length, cast.frames + CAST_TAIL)
-  const median = medianOf(intervalsOf(log, pathFrames))
-  if (median === null || !(median > 0))
-    throw new Error(`${name}: presented at no measurable rate; refused`)
-  const hz = 1000 / median
-  const short = shortPath(log, cast)
-  if (short !== null)
-    throw Object.assign(new Error(`${name}: ${short}; refused`), {
-      dropped: [],
-      hz,
-    })
-  const drops = dropsOf(log, pathFrames, median, cast.path)
-  const missed = drops.reduce((sum, one) => sum + one.missed, 0)
-  const run = longestRun(drops)
-  if (missed > CAST_DROPS.share * pathFrames || run >= CAST_DROPS.run)
-    throw Object.assign(
-      new Error(
-        `${name}: ${missed} frame${missed === 1 ? '' : 's'} missed of ${pathFrames} (${((missed / pathFrames) * 100).toFixed(1)}%), ${run} in a row, at frame${drops.length === 1 ? '' : 's'} ${drops.map((one) => one.frame).join(', ')}: past ${CAST_DROPS.share * 100}% or ${CAST_DROPS.run} in a row`,
-      ),
-      { dropped: drops, hz },
-    )
-  const atSixty = hz >= CAST_RATE.low && hz <= CAST_RATE.high
-  if (held && !atSixty)
-    throw new Error(
-      `${name}: presented at ${hz.toFixed(1)} Hz, outside ${CAST_RATE.low}–${CAST_RATE.high}; the path is scheduled by frame and must be taken at 60 Hz`,
-    )
-  const coverage = coverageOf(instants, log, cast.frames)
-  return {
-    hz,
-    atSixty,
-    first: presentationRate(log),
-    longest: Math.max(...intervalsOf(log, pathFrames)),
-    dropped: drops,
-    coverage,
-    retake: coverage !== null && coverage < CAST_COVERAGE,
-  }
-}
-
-/**
- * The share of a path's frames the screencast holds: its frames whose
- * instant, epoch seconds as `timestamps.json` keeps them, falls between the
- * path's first frame and its last in the page's log, over the path's
- * frames. Null without the instants.
- *
- * Not the frames captured over the frames asked for: the screencast stops
- * once it holds the count asked for, so that share is one unless its
- * deadline lapses, and a stream encoded at a third of the page's rate
- * read as the whole path while its clip held every third frame of it.
- */
-export function coverageOf(instants, log, frames) {
-  if (instants === null || log.length < 2) return null
-  const last = Math.min(frames, log.length - 1)
-  const [from, to] = [log[0].at, log[last].at]
-  const inside = instants.filter((s) => s * 1000 >= from && s * 1000 < to)
-  return inside.length / last
-}
-
-/**
- * Mark each drop of a clouds-on arm the clouds alone caused: no drop in its
- * control within `CAST_DROPS.near` path frames. Null where the control has
- * no drops on record to compare with.
- */
-export function markCloudsOnly(drops, control) {
-  return drops.map((drop) => ({
-    ...drop,
-    cloudsOnly:
-      control === null
-        ? null
-        : !control.some(
-            (one) => Math.abs(one.frame - drop.frame) <= CAST_DROPS.near,
-          ),
-  }))
 }
 
 export async function sha256(file) {
