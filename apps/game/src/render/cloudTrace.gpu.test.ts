@@ -2199,6 +2199,9 @@ describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
             const report = chain.system!.report
             const median = [...runs].sort((a, b) => a - b)[2]!
             expect(Number.isFinite(median)).toBe(true)
+            // Each level's reference extinction, 1/m: what the taps are
+            // spaced by at the least, so 0.5·(2ⁿ − 1) over it is their reach.
+            const { sigma } = chain.system!.field.uniforms.served.layers
             rows.push({
               render: [width, height],
               trace: report.extents.trace,
@@ -2207,6 +2210,7 @@ describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
               ms: median,
               runs,
               steps: report.steps,
+              levelSigma: [sigma.value.x, sigma.value.y, sigma.value.z],
             })
           }
         } finally {
