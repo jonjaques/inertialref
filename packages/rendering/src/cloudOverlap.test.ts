@@ -1,12 +1,14 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import {
+  gammaDepth,
   crossingDepth,
   crossingExponent,
   crossingTransmittance,
-  SIGHT_CELLS,
+  spreadDepth,
   stepLight,
   stepShare,
+  UNSPREAD_FROM,
 } from './cloudOverlap.ts'
 
 /*
@@ -35,6 +37,11 @@ const depth = decades(1e-3, 1e3)
 const cover = between(0, 1)
 /** A crossing's columns: one, vertical, to three hundred, grazing. */
 const exponent = decades(1, 300)
+/**
+ * A gamma's shape: from a half, a spread wider than its mean, through the
+ * decks' few units to past `UNSPREAD_FROM`, where there is no spread.
+ */
+const shape = decades(0.5, 1e5)
 /** Shares of a chord, each at least a thousandth of an even share. */
 const cuts = fc
   .array(between(1e-3, 1), { minLength: 2, maxLength: 24 })
@@ -62,11 +69,6 @@ describe('the columns a crossing counts', () => {
     // length: half of one already counts 12% more than one column.
     expect(crossingExponent(1400, 2800)).toBeCloseTo(1.118, 3)
   })
-
-  it('take the sight length as 2.8 of the noise’s cells, between the counts’ 2.7 and 3.0', () => {
-    expect(SIGHT_CELLS).toBeGreaterThanOrEqual(2.7)
-    expect(SIGHT_CELLS).toBeLessThanOrEqual(3)
-  })
 })
 
 describe('a crossing of a partly cloudy level', () => {
@@ -78,38 +80,52 @@ describe('a crossing of a partly cloudy level', () => {
      * two dozen steps.
      */
     fc.assert(
-      fc.property(cover, depth, exponent, cuts, (c, tau, n, shares) => {
-        const whole = crossingDepth(c, tau, n)
-        const split = shares.reduce(
-          (sum, share) => sum + crossingDepth(c, tau * share, n * share),
-          0,
-        )
-        expect(relativeTo(split, whole)).toBeLessThan(1e-11)
-      }),
+      fc.property(
+        cover,
+        depth,
+        exponent,
+        shape,
+        cuts,
+        (c, tau, n, k, shares) => {
+          const whole = crossingDepth(c, tau, n, k)
+          const split = shares.reduce(
+            (sum, share) => sum + crossingDepth(c, tau * share, n * share, k),
+            0,
+          )
+          expect(relativeTo(split, whole)).toBeLessThan(1e-11)
+        },
+      ),
       { numRuns: 2000 },
     )
   })
 
   it('(b) passes between e^−τ and all of it, and less the more columns it counts', () => {
     fc.assert(
-      fc.property(cover, depth, exponent, exponent, (c, tau, a, b) => {
-        const [few, many] = a < b ? [a, b] : [b, a]
-        const through = crossingTransmittance(c, tau, few)
-        expect(through).toBeLessThanOrEqual(1)
-        expect(through).toBeGreaterThanOrEqual(Math.exp(-tau) * (1 - 1e-12))
-        expect(crossingTransmittance(c, tau, many)).toBeLessThanOrEqual(
-          through * (1 + 1e-12),
-        )
-        // Many thin columns at random are the mean medium, and never less.
-        expect(crossingDepth(c, tau, many)).toBeLessThanOrEqual(
-          c * tau * (1 + 1e-12),
-        )
-      }),
+      fc.property(
+        cover,
+        depth,
+        exponent,
+        exponent,
+        shape,
+        (c, tau, a, b, k) => {
+          const [few, many] = a < b ? [a, b] : [b, a]
+          const through = crossingTransmittance(c, tau, few, k)
+          expect(through).toBeLessThanOrEqual(1)
+          expect(through).toBeGreaterThanOrEqual(Math.exp(-tau) * (1 - 1e-12))
+          expect(crossingTransmittance(c, tau, many, k)).toBeLessThanOrEqual(
+            through * (1 + 1e-9),
+          )
+          // Many thin columns at random are the mean medium, and never less.
+          expect(crossingDepth(c, tau, many, k)).toBeLessThanOrEqual(
+            c * tau * (1 + 1e-12),
+          )
+        },
+      ),
       { numRuns: 2000 },
     )
   })
 
-  it('(c) is Beer’s law at a cover of one, whatever it counts', () => {
+  it('(c) is Beer’s law at a cover of one where depths do not spread, whatever it counts', () => {
     fc.assert(
       fc.property(depth, exponent, (tau, n) => {
         expect(crossingDepth(1, tau, n)).toBe(tau)
@@ -165,6 +181,105 @@ describe('a crossing of a partly cloudy level', () => {
     expect(relativeTo(crossingDepth(0.35, 3, 300), 0.35 * 3)).toBeLessThan(4e-3)
     // And one column of the same depth passes 1.9 times the light.
     expect(crossingDepth(0.35, 3, 1)).toBeCloseTo(0.4043, 3)
+  })
+})
+
+describe('a level whose depths are spread', () => {
+  /** The form as its measurement writes it (`crossingForm`): a level `thickness` thick crossed at `zenith`. */
+  function written(
+    fraction: number,
+    tau: number,
+    k: number,
+    sight: number,
+    thickness: number,
+    zenith: number,
+  ): number {
+    const n = Math.sqrt(1 + ((thickness * Math.tan(zenith)) / sight) ** 2)
+    const mean = k * Math.expm1(tau / k)
+    const cell = (1 + mean / (Math.cos(zenith) * n * k)) ** -k
+    return (1 - fraction + fraction * cell) ** n
+  }
+
+  it('is the measured form from a level’s four numbers, and 1 − F + F·e^(−τ′) straight down at any shape', () => {
+    fc.assert(
+      fc.property(
+        cover,
+        decades(1e-2, 60),
+        decades(0.5, 9999),
+        decades(200, 30_000),
+        decades(100, 14_000),
+        between(0, (85 * Math.PI) / 180),
+        (fraction, tau, k, sight, thickness, zenith) => {
+          const n = crossingExponent(thickness * Math.tan(zenith), sight)
+          const slant = spreadDepth(tau, k) / Math.cos(zenith)
+          const depth = crossingDepth(fraction, slant, n, k)
+          const expected = -Math.log(
+            written(fraction, tau, k, sight, thickness, zenith),
+          )
+          // The form as written adds a column's opacity to one before it
+          // takes the logarithm, so it holds eight digits of an opacity of
+          // 10⁻⁸ a column and none under 10⁻¹⁶, and it underflows a float64
+          // past a depth of 700: compared where it holds six.
+          if (expected > 1e-8 * n && expected < 600)
+            expect(relativeTo(depth, expected)).toBeLessThan(1e-6)
+          const down = crossingTransmittance(
+            fraction,
+            spreadDepth(tau, k),
+            1,
+            k,
+          )
+          expect(down).toBeCloseTo(1 - fraction + fraction * Math.exp(-tau), 12)
+        },
+      ),
+      { numRuns: 2000 },
+    )
+  })
+
+  it('passes more on a slant than one depth does: (mean e^−τ)^m is under mean e^(−m·τ)', () => {
+    fc.assert(
+      fc.property(
+        decades(1e-2, 30),
+        decades(0.5, 9999),
+        between(1, 12),
+        (tau, k, m) => {
+          const spread = gammaDepth(spreadDepth(tau, k) * m, k)
+          expect(spread).toBeLessThanOrEqual(m * tau * (1 + 1e-12))
+          // And at the path the depth was measured on, the two agree.
+          expect(
+            relativeTo(gammaDepth(spreadDepth(tau, k), k), tau),
+          ).toBeLessThan(1e-12)
+        },
+      ),
+      { numRuns: 2000 },
+    )
+    // A deck of depth 3 whose columns spread as an exponential, at 75°: one
+    // depth passes e⁻¹², six parts in a million; the spread passes 1.3%.
+    const slant = spreadDepth(3, 1) * 4
+    expect(Math.exp(-gammaDepth(slant, 1))).toBeCloseTo(0.0129, 4)
+    expect(Math.exp(-12)).toBeLessThan(1e-5)
+  })
+
+  it('joins depths that do not spread at a shape of 10⁴, within x²/(2k) of the exponent', () => {
+    /*
+     * `(1 + x/k)^(−k)` is `e^(−x)·e^(x²/(2k) − …)`, so where the shape
+     * reaches `UNSPREAD_FROM` and the column passes `e^(−x)` itself, the
+     * exponent steps by under x²/(2k): 1.25 × 10⁻³ at a depth of five, past
+     * which a column passes under 1%.
+     */
+    const under = UNSPREAD_FROM * (1 - 1e-12)
+    fc.assert(
+      fc.property(decades(1e-3, 10), (x) => {
+        expect(gammaDepth(x, UNSPREAD_FROM)).toBe(x)
+        const step = x - gammaDepth(x, under)
+        expect(step).toBeGreaterThan(0)
+        expect(step).toBeLessThanOrEqual((x * x) / (2 * UNSPREAD_FROM))
+        expect(spreadDepth(x, UNSPREAD_FROM)).toBe(x)
+        expect(spreadDepth(x, under) - x).toBeLessThanOrEqual(
+          ((x * x) / (2 * UNSPREAD_FROM)) * (1 + x / UNSPREAD_FROM),
+        )
+      }),
+    )
+    expect(5 - gammaDepth(5, under)).toBeCloseTo(1.25e-3, 5)
   })
 })
 

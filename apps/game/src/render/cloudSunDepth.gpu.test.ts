@@ -27,7 +27,6 @@ import {
   reducePoint,
   shellBoundaries,
   shellHeights,
-  SIGHT_CELLS,
   type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
@@ -1016,11 +1015,9 @@ describe('the layers’ statistics', () => {
       )
     })
     // The columns the sun's ray counts across a level beyond the sample's:
-    // its run over the level's thickness, by the level's sight length.
+    // its run over the level's thickness, by the level's cell.
     const { cell } = uniforms.served.layers
-    const sights = [cell.value.x, cell.value.y, cell.value.z].map(
-      (meters) => SIGHT_CELLS * meters,
-    )
+    const sights = [cell.value.x, cell.value.y, cell.value.z]
     const thickness = [LOW, MID, HIGH].map(([base, top]) => top - base)
     cases.forEach((one, k) => {
       const above = Math.fround(one.sunMu) >= 0

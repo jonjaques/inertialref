@@ -33,6 +33,7 @@ import {
 import { airEye, airSegment } from './cloudCompositeAir.ts'
 import { cloudSample, shellCrossing } from './cloudGeometry.ts'
 import { type CloudKnotWriter, KNOT_TRANSMITTANCE } from './cloudKnots.ts'
+import { UNSPREAD_FROM } from '@inertialref/rendering'
 import type { CLOUD_PHASE_MODES } from './cloudLevers.ts'
 import {
   crossingDepth,
@@ -238,11 +239,12 @@ const of = (v: Node<'vec3'>, k: number): Node<'float'> =>
 /* Rays and samples                                                           */
 /* ------------------------------------------------------------------------- */
 
-/** One crossing of a level: where the ray is inside it, and its exponent a meter of chord. */
+/** One crossing of a level: where the ray is inside it, its chord and its horizontal run, meters. */
 interface Crossing {
   readonly start: Node<'float'>
   readonly end: Node<'float'>
-  readonly rate: Node<'float'>
+  readonly chord: Node<'float'>
+  readonly run: Node<'float'>
 }
 
 /**
@@ -252,12 +254,11 @@ interface Crossing {
  *
  * A level is crossed at most twice: on the way down to its base, or through
  * it whole where the ray never reaches that base, and on the way up from the
- * base to the top. Each crossing's exponent is `crossingExponent` of its
- * horizontal run, which is its chord less the height it climbs, squared and
- * subtracted: the heights are the boundaries' own and the eye's over them,
- * never two radii (rule 52). A crossing starts at the eye for an eye inside
- * its level, so the exponent a step takes does not depend on where the scene
- * or the handover stops the ray.
+ * base to the top. A crossing's horizontal run is its chord less the height
+ * it climbs, squared and subtracted: the heights are the boundaries' own and
+ * the eye's over them, never two radii (rule 52). A crossing starts at the
+ * eye for an eye inside its level, so the share of its exponent a step takes
+ * does not depend on where the scene or the handover stops the ray.
  */
 function levelCrossings(
   body: CloudBodyUniforms,
@@ -277,7 +278,7 @@ function levelCrossings(
   ] as const
   const spheres: Node<'float'>[] = []
   const crossings: Crossing[] = []
-  levels.forEach(({ over, bound }, k) => {
+  levels.forEach(({ over, bound }) => {
     const [overBase, overTop] = over
     const [low, high] = bound
     const base = shellCrossing(body, mu, overBase, low)
@@ -293,7 +294,6 @@ function levelCrossings(
     // root alone: from an eye on the base the near one is zero, a float's
     // step to either side.
     const ahead = base.hit.and(base.far.greaterThan(0))
-    const cell = of(body.layers.cell, k)
     const crossing = (
       valid: Node<'bool'>,
       start: Node<'float'>,
@@ -301,11 +301,11 @@ function levelCrossings(
       rise: Node<'float'>,
     ): void => {
       const chord = select(valid, max(end.sub(start), 0), float(0)).toVar()
-      const run = sqrt(max(chord.mul(chord).sub(rise.mul(rise)), 0))
       crossings.push({
         start: start.toVar(),
         end: start.add(chord).toVar(),
-        rate: crossingExponent(run, cell).div(max(chord, TINY)).toVar(),
+        chord,
+        run: sqrt(max(chord.mul(chord).sub(rise.mul(rise)), 0)).toVar(),
       })
     }
     // From outside the level's top the ray falls its whole thickness to the
@@ -679,23 +679,47 @@ export function cloudMarch(
     r.airLength.assign(0)
   }
 
-  /** The crossing a distance along the ray stands in: its index, its level and its exponent a meter. */
+  /** The crossing a distance along the ray stands in: its index, its level, its chord and its run. */
   function crossingAt(t: Node<'float'>) {
     let index: Node<'int'> = int(-1)
     let level: Node<'int'> = int(0)
-    let rate: Node<'float'> = float(0)
+    let chord: Node<'float'> = float(0)
+    let run: Node<'float'> = float(0)
     crossings.forEach((crossing, j) => {
       const inside = t
         .greaterThanEqual(crossing.start)
         .and(t.lessThan(crossing.end))
       index = select(inside, int(j), index)
       level = select(inside, int(j >> 1), level)
-      rate = select(inside, crossing.rate, rate)
+      chord = select(inside, crossing.chord, chord)
+      run = select(inside, crossing.run, run)
     })
     return {
       index: index.toVar(),
       level: level.toVar(),
-      rate: rate.toVar(),
+      chord: chord.toVar(),
+      run: run.toVar(),
+    }
+  }
+
+  /**
+   * A level's statistics at a step's column, beside the in-cloud depth the
+   * step crosses: the cloudy share, the gamma's shape its columns' depths
+   * are spread by, and its sight length. Stand-ins: the medium's own
+   * fraction, depths that do not spread, and the level's noise cell, at
+   * which a resolved cloud is Beer's law. Where the field's read of a
+   * level's four numbers joins the march.
+   */
+  function columnStatistics(level: Node<'int'>) {
+    const { cell } = body.layers
+    return {
+      fraction: m.fraction,
+      shape: float(UNSPREAD_FROM),
+      sight: select(
+        level.equal(int(0)),
+        cell.x,
+        select(level.equal(int(1)), cell.y, cell.z),
+      ),
     }
   }
 
@@ -721,16 +745,21 @@ export function cloudMarch(
     here: ReturnType<typeof crossingAt>,
     length: Node<'float'>,
   ): void {
-    // A cloud outside every level's crossing is one column a step.
+    const column = columnStatistics(here.level)
+    // The step's share of its crossing's columns, by its share of the
+    // chord; a cloud outside every level's crossing is one column a step.
     const exponent = select(
       here.index.greaterThanEqual(int(0)),
-      here.rate.mul(length),
+      crossingExponent(here.run, column.sight)
+        .mul(length)
+        .div(max(here.chord, TINY)),
       float(1),
     )
     const depth = crossingDepth(
-      m.fraction,
+      column.fraction,
       m.sigma.mul(length),
       exponent,
+      column.shape,
     ).toVar()
     // 1 − e^−τ by its series under τ = 0.01, where the subtraction cancels
     // in float32.
@@ -820,7 +849,14 @@ export function cloudMarch(
         .or(r.through.lessThan(EXIT_TRANSMITTANCE))
         .or(r.counted.greaterThanEqual(trace.maxSteps))
         .toVar()
-      If(done.and(pending.on.equal(0)), () => {
+      // One iteration past the last step where a step waits for its far
+      // end's sun or a knot is open: a crossing whose last steps are clear
+      // has no step waiting, and its knot is still to be recorded.
+      const owed =
+        knots === null
+          ? pending.on.greaterThan(0)
+          : pending.on.greaterThan(0).or(knot.open.greaterThan(0))
+      If(done.and(owed.not()), () => {
         Break()
       })
       const bound = min(nextCrossing(spheres, r.t), stop).toVar()

@@ -5,25 +5,45 @@
  *
  * A ray is in the cloudy share of a column or out of it for the column's
  * whole crossing, and between columns the overlap is random, so a crossing
- * that counts `n` columns of in-cloud depth `τ` passes
- * `((1 − c) + c·e^(−τ/n))ⁿ`. A march does not know where a column ends, so
- * a step takes its share of the crossing's exponent by its share of the
- * chord, `n_i = n·s_i/s`, and passes the same expression with its own depth:
- * under one cover and one extinction `τ_i/n_i` is the same for every step,
- * and the product over any cut of the chord is the crossing's own.
+ * that counts `n` columns, each cloudy with probability `F`, passes
+ *
+ *     T = ((1 − F) + F·t(τ/n))ⁿ,   t(x) = (1 + x/k)^(−k)
+ *
+ * with `τ` the crossing's mean in-cloud depth along the ray and `t` the mean
+ * transmittance of a column whose depth is spread as a gamma of shape `k`
+ * about a mean `x`. **One depth cannot stand for a spread of depths on a
+ * slant:** `(mean e^(−τ))^m` is under `mean e^(−m·τ)` for every path factor
+ * over one, and with the cloudy columns all at one depth the form misses a
+ * deck's resolved field by up to 32% (`weatherField.ts`, where each level's
+ * four numbers are measured). As the shape grows the spread closes and
+ * `t(x)` is `e^(−x)`.
+ *
+ * A march does not know where a column ends, so a step takes its share of
+ * the crossing's exponent by its share of the chord, `n_i = n·s_i/s`, and
+ * passes the same expression with its own numbers: under one cover, one
+ * extinction and one shape `τ_i/n_i` is the same for every step, and the
+ * product over any cut of the chord is the crossing's own.
  *
  * Mixing every step as its own column instead counts a half-clear layer's
  * clear share once a step: at a depth of 20, crossed in two steps, it passes
  * a quarter of the light where it passes half.
+ *
+ * **From a level's statistics** (`fraction` F, `depth` τ′, `shape` k and
+ * `sight` c, the vertical depth being the one whose transmittance is the
+ * cloudy columns' mean) a crossing of a level `thickness` thick at a zenith
+ * angle θ is
+ * `crossingTransmittance(F, spreadDepth(τ′, k)/cos θ, crossingExponent(thickness·tan θ, c), k)`:
+ * straight down, `1 − F + F·e^(−τ′)` at any shape.
  */
 
 /**
- * A level's sight length in its noise's cells. The clear lines of sight
- * counted through the field by zenith angle fit `c` at 2.7 to 3.0 km on the
- * cumuliform regimes' 1 km cells and 24 km on the anvil's 8 km
- * (`weatherField.test.ts`, "the sight count"): two to three cells, not one.
+ * The least gamma shape taken as depths that do not spread, where a column
+ * passes `e^(−x)`. `(1 + x/k)^(−k)` is `e^(−x)·e^(x²/(2k))` to first order,
+ * so at this shape the two are a part in 2 × 10⁴ apart at a depth of one,
+ * and the level statistics write this shape for a level whose depths are
+ * one depth.
  */
-export const SIGHT_CELLS = 2.8
+export const UNSPREAD_FROM = 1e4
 
 /**
  * The columns a crossing counts: `√(1 + (ℓ/c)²)` for a horizontal run `ℓ`
@@ -35,6 +55,26 @@ export const SIGHT_CELLS = 2.8
 export function crossingExponent(run: number, sight: number): number {
   const ratio = run / sight
   return Math.sqrt(1 + ratio * ratio)
+}
+
+/**
+ * The mean of the gamma-spread depth whose mean transmittance is that of
+ * one depth `depth`: `k·(e^(τ′/k) − 1)`, and `depth` itself where the
+ * depths do not spread. A level's statistics hold the vertical depth whose
+ * transmittance is the cloudy columns' mean; a slant path scales the mean
+ * depth, not that one.
+ */
+export function spreadDepth(depth: number, shape: number): number {
+  return shape >= UNSPREAD_FROM ? depth : shape * Math.expm1(depth / shape)
+}
+
+/**
+ * −ln of a cloudy column's mean transmittance, its depth spread as a gamma
+ * of `shape` about a mean `depth`: `k·ln(1 + x/k)`, and `depth` itself where
+ * the depths do not spread.
+ */
+export function gammaDepth(depth: number, shape: number): number {
+  return shape >= UNSPREAD_FROM ? depth : shape * Math.log1p(depth / shape)
 }
 
 /** Where air.ts's series takes over from the quotient. */
@@ -59,23 +99,33 @@ export function stepShare(y: number): number {
 
 /**
  * The optical depth a step's mix is worth, −ln of what it passes: `cover`
- * the cloudy share it reads, `depth` the in-cloud optical depth it crosses,
- * `exponent` its share of the crossing's exponent.
+ * the cloudy share it reads, `depth` the mean in-cloud optical depth it
+ * crosses, `exponent` its share of the crossing's exponent, and `shape` the
+ * gamma its columns' depths are spread by.
  *
- * At a cover of one it is `depth` whatever the exponent, so a resolved cloud
- * is Beer's law at any step. As the exponent grows it tends to `cover·depth`,
- * the mean medium: many thin columns overlapped at random.
+ * At a cover of one with depths that do not spread it is `depth` whatever
+ * the exponent, so a resolved cloud is Beer's law at any step. As the
+ * exponent grows it tends to `cover·depth`, the mean medium: many thin
+ * columns overlapped at random.
  */
 export function crossingDepth(
   cover: number,
   depth: number,
   exponent: number,
+  shape: number = UNSPREAD_FROM,
 ): number {
-  if (cover >= 1 || depth <= 0) return Math.max(depth, 0)
-  if (cover <= 0) return 0
-  const column = depth / exponent
-  // 1 − c·(1 − e^−τ), with the opacity taken without cancellation.
-  return -exponent * Math.log1p(cover * Math.expm1(-column))
+  if (depth <= 0 || cover <= 0) return 0
+  if (cover >= 1 && shape >= UNSPREAD_FROM) return depth
+  const column = gammaDepth(depth / exponent, shape)
+  if (cover >= 1) return exponent * column
+  // (1 − c) + c·t. A thin column's opacity is taken without the sum that
+  // loses it against one; a deep column's `t` is added to the clear share
+  // as it is, where forming `1 − c·(1 − t)` would lose it against `1 − c`.
+  const mixed =
+    column < 1
+      ? Math.log1p(cover * Math.expm1(-column))
+      : Math.log(1 - cover + cover * Math.exp(-column))
+  return -exponent * mixed
 }
 
 /** What a step passes of the light behind it: `e^(−crossingDepth)`. */
@@ -83,8 +133,9 @@ export function crossingTransmittance(
   cover: number,
   depth: number,
   exponent: number,
+  shape: number = UNSPREAD_FROM,
 ): number {
-  return Math.exp(-crossingDepth(cover, depth, exponent))
+  return Math.exp(-crossingDepth(cover, depth, exponent, shape))
 }
 
 /**

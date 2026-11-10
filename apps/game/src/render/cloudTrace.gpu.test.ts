@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   type ComputeNode,
@@ -37,9 +38,10 @@ import {
   vec4,
 } from 'three/tsl'
 import {
+  gammaDepth as gammaDepthOf,
   crossingDepth as crossingDepthOf,
   crossingExponent as crossingExponentOf,
-  SIGHT_CELLS,
+  spreadDepth as spreadDepthOf,
   stepLight as stepLightOf,
   stepShare as stepShareOf,
 } from '@inertialref/rendering'
@@ -74,8 +76,10 @@ import {
   type Triple as Vec3,
 } from './cloudMarchRig.ts'
 import {
+  gammaDepth,
   crossingDepth,
   crossingExponent,
+  spreadDepth,
   stepLight,
   stepShare,
 } from './cloudMix.ts'
@@ -97,9 +101,10 @@ import {
   CloudTrace,
   type CloudTraceDeps,
 } from './cloudTrace.ts'
-import { cloudRig } from './cloudSystemRig.ts'
+import { cloudRig, LOOKING_UP } from './cloudSystemRig.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
-import { type GpuSession, openGpu } from './gpuHarness.ts'
+import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
+import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 
 /*
  * The trace on the GPU (§9): its kernels against the stand-ins, the march
@@ -512,7 +517,7 @@ describe('a partly cloudy level (the crossing’s law, §5.9)', () => {
     const s = chord(0, mu, SLAB.base, SLAB.top)
     const rise = SLAB.top - SLAB.base
     const run = Math.sqrt(Math.max(s * s - rise * rise, 0))
-    const n = crossingExponentOf(run, SIGHT_CELLS * CELL)
+    const n = crossingExponentOf(run, CELL)
     return Math.exp(-crossingDepthOf(cover, sigma * s, n))
   }
 
@@ -606,15 +611,18 @@ describe('a partly cloudy level (the crossing’s law, §5.9)', () => {
 })
 
 describe('the kernel’s arithmetic against the CPU’s (`cloudOverlap.ts`)', () => {
-  it('counts a crossing’s columns, mixes a step and integrates its source as the reference does', async () => {
+  it('counts a crossing’s columns, spreads a column’s depth, mixes a step and integrates its source as the reference does', async () => {
     /*
-     * The four functions of `cloudMix.ts` run as a kernel over a table of
+     * The functions of `cloudMix.ts` run as a kernel over a table of
      * arguments, each drawn uniform in its logarithm over the range a march
      * meets, with the ends of each range among them: a wisp's depth of 10⁻⁴
      * and a cumulonimbus's of 500, a cover from a thousandth to one, a
+     * gamma's shape from a half to past where depths do not spread, a
      * source that falls or grows by e^±40 along its step.
      */
     const count = 512
+    const IN = 10
+    const OUT = 6
     const draw = (() => {
       let state = 0x9e3779b9
       return (): number => {
@@ -625,44 +633,54 @@ describe('the kernel’s arithmetic against the CPU’s (`cloudOverlap.ts`)', ()
     const logUniform = (low: number, high: number): number =>
       Math.exp(Math.log(low) + (Math.log(high) - Math.log(low)) * draw())
     const rows = Array.from({ length: count }, (_, k) => {
-      const edge = k < 8
+      const edge = k < 12
       return {
         run: edge ? [0, 1e2, 1e6][k % 3]! : logUniform(1, 1e6),
-        cell: logUniform(200, 8000),
+        sight: logUniform(200, 30_000),
         cover: edge ? [1, 1e-3, 0.5, 0.999999][k % 4]! : draw(),
         depth: edge ? [1e-4, 500][k % 2]! : logUniform(1e-4, 500),
         exponent: edge ? [1, 300][k % 2]! : logUniform(1, 300),
+        // A half, the decks' few units, the join's two sides, and none.
+        shape: edge
+          ? [0.5, 3, 9999, 1e4, 1e5, 30][k % 6]!
+          : logUniform(0.5, 2e4),
         start: logUniform(1e-6, 10),
         folds: edge ? [40, -40, 0][k % 3]! : -20 + 40 * draw(),
         y: -30 + 60 * draw(),
+        // A level's vertical depth: its spread mean overflows past e⁸⁰.
+        vertical: logUniform(1e-3, 30),
       }
     })
-    const input = new StorageBufferAttribute(new Float32Array(count * 8), 1)
-    const output = new StorageBufferAttribute(new Float32Array(count * 4), 1)
+    const input = new StorageBufferAttribute(new Float32Array(count * IN), 1)
+    const output = new StorageBufferAttribute(new Float32Array(count * OUT), 1)
     ;(input.array as Float32Array).set(
       rows.flatMap((row) => [
         row.run,
-        row.cell,
+        row.sight,
         row.cover,
         row.depth,
         row.exponent,
         row.start,
         row.start * Math.exp(-row.folds),
         row.y,
+        row.shape,
+        row.vertical,
       ]),
     )
-    const from = storage(input, 'float', count * 8)
-    const into = storage(output, 'float', count * 4)
+    const from = storage(input, 'float', count * IN)
+    const into = storage(output, 'float', count * OUT)
     const kernel = Fn(() => {
       If(instanceIndex.lessThan(uint(count)), () => {
-        const read = (k: number) => from.element(instanceIndex.mul(8).add(k))
+        const read = (k: number) => from.element(instanceIndex.mul(IN).add(k))
         const write = (k: number, value: Node<'float'>) =>
-          into.element(instanceIndex.mul(4).add(k)).assign(value)
+          into.element(instanceIndex.mul(OUT).add(k)).assign(value)
         write(0, crossingExponent(read(0), read(1)))
-        const depth = crossingDepth(read(2), read(3), read(4)).toVar()
+        const depth = crossingDepth(read(2), read(3), read(4), read(8)).toVar()
         write(1, depth)
         write(2, stepLight(vec3(read(5)), vec3(read(6)), depth).y)
         write(3, stepShare(read(7)))
+        write(4, gammaDepth(read(3), read(8)))
+        write(5, spreadDepth(read(9), read(8)))
       })
     })().compute(count)
     await gpu.compute(kernel)
@@ -671,23 +689,30 @@ describe('the kernel’s arithmetic against the CPU’s (`cloudOverlap.ts`)', ()
     const f32 = Math.fround
     rows.forEach((row, k) => {
       const what = JSON.stringify(row)
-      const n = crossingExponentOf(f32(row.run), SIGHT_CELLS * f32(row.cell))
-      expect(relative(got[4 * k]!, n), what).toBeLessThan(1e-5)
+      const at = (slot: number): number => got[OUT * k + slot]!
+      const n = crossingExponentOf(f32(row.run), f32(row.sight))
+      expect(relative(at(0), n), what).toBeLessThan(1e-5)
       const depth = crossingDepthOf(
         f32(row.cover),
         f32(row.depth),
         f32(row.exponent),
+        f32(row.shape),
       )
       // A cover a float's step under one loses its last bits to 1 − c.
       const loose = row.cover > 0.9999 && row.cover < 1 ? 0.2 : 2e-4
-      expect(relative(got[4 * k + 1]!, depth), what).toBeLessThan(loose)
+      expect(relative(at(1), depth), what).toBeLessThan(loose)
       const end = f32(f32(row.start) * Math.exp(-row.folds))
-      const light = stepLightOf(f32(row.start), end, got[4 * k + 1]!)
-      expect(relative(got[4 * k + 2]!, light), what).toBeLessThan(2e-4)
-      expect(
-        relative(got[4 * k + 3]!, stepShareOf(f32(row.y))),
-        what,
-      ).toBeLessThan(2e-5)
+      const light = stepLightOf(f32(row.start), end, at(1))
+      expect(relative(at(2), light), what).toBeLessThan(2e-4)
+      expect(relative(at(3), stepShareOf(f32(row.y))), what).toBeLessThan(2e-5)
+      const column = gammaDepthOf(f32(row.depth), f32(row.shape))
+      expect(relative(at(4), column), what).toBeLessThan(1e-5)
+      // The spread mean is k·(e^(τ/k) − 1): held where a float32 holds it.
+      if (row.vertical / row.shape < 60)
+        expect(
+          relative(at(5), spreadDepthOf(f32(row.vertical), f32(row.shape))),
+          what,
+        ).toBeLessThan(2e-5)
     })
   })
 })
@@ -1293,6 +1318,37 @@ describe('the knots', () => {
         expect(knot).toBeLessThan(0.87)
         // Behind it stands the wisp alone: within 0.01 of the ray's own.
         expect(Math.abs(knot - through)).toBeLessThan(0.01)
+      }
+    traced.dispose()
+  })
+
+  it('are recorded for a cloud that ends under its level’s top, where the march’s last steps are clear', async () => {
+    // The level runs a kilometer over the cloud in it, and is the union's
+    // top: the ray ends in clear air with no step waiting to be closed.
+    const low = { base: 1000, top: 1400, sigma: 1.2 / 400 }
+    const traced = await rig(
+      slabMedium([low]),
+      2,
+      2,
+      { eye: 0, layers: [[1000, 2400]] },
+      { spread: 1e-3 },
+    )
+    traced.trace.render(renderer, frameOf({ width: 2, height: 2 }), BUDGET)
+    const read = await outputsOf(traced.trace, 2, 2)
+    for (let j = 0; j < 2; j += 1)
+      for (let i = 0; i < 2; i += 1) {
+        expect(read.aux(2 * i + 1, j)[3]).toBe(1)
+        const [entry, exit] = read.knotDepth(2 * i, j)
+        expect(Math.abs(entry - 1)).toBeLessThan(2 * HALF)
+        // The cloud's own edge is no boundary a step ends on: the knot's
+        // exit is the end of the step that held the edge, a depth of 0.3,
+        // 100 m, past it at most.
+        expect(exit).toBeGreaterThanOrEqual(1.4 * (1 - HALF))
+        expect(exit).toBeLessThan(1.5)
+        const knot = read.knotLight(2 * i, 2 * j)[3]
+        expect(knot).toBeLessThanOrEqual(Math.exp(-1.2) * (1 + HALF))
+        expect(knot).toBeGreaterThan(Math.exp(-1.5))
+        expect(knot).toBe(read.light(i, j)[3])
       }
     traced.dispose()
   })
@@ -1913,4 +1969,97 @@ describe('the sun a sample sees (§5.4, §5.5)', () => {
         0.02,
       )
   })
+})
+
+/* ------------------------------------------------------------------------- */
+/* The trace's cost                                                           */
+/* ------------------------------------------------------------------------- */
+
+const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
+const TIMESTAMPS = await adapterOffers('timestamp-query')
+const COST_OUT = '.data/clouds/traceCost.json'
+
+describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
+  /*
+   * GPU milliseconds a frame of the `cloud trace` pass on the timeline, in
+   * the system's own chain, at two target sizes under three regimes and at
+   * each tap count the lever admits from four up: the eye 100 m up, looking
+   * straight up through a 60° lens, the air on, the converging regime, the
+   * median of five runs of eight frames after 140 frames of settling. A
+   * test's figure, of this stance on this adapter, beside the steps a ray
+   * the same frames count; a campaign's stances and its protocol are not
+   * these. Written to `.data/clouds/traceCost.json` and held to nothing but
+   * being a number.
+   */
+  it('is timed at 1920 × 1080 and 2880 × 1800, under three regimes, at four, six and eight taps, and written', async () => {
+    const rows: unknown[] = []
+    for (const [width, height] of [
+      [1920, 1080],
+      [2880, 1800],
+    ] as const)
+      for (const weather of [
+        'overcast',
+        'fair-cumulus',
+        'cirrus-over-cumulus',
+      ] as const) {
+        const own = await openGpu(width, height)
+        const chain = cloudRig(own, width, height, {
+          eye: 100,
+          looking: LOOKING_UP,
+          air: true,
+          levers: { weather, on: true },
+        })
+        await chain.system!.warm()
+        const stop = installPassTimeline(own.renderer)
+        try {
+          const timeline = passTimelineOf(own.renderer)!
+          for (const lightTaps of [4, 6, 8] as const) {
+            chain.levers = { ...chain.levers, lightTaps, stats: false }
+            for (let k = 0; k < 140; k += 1) chain.frame()
+            await own.read(chain.target)
+            const runs: number[] = []
+            for (let n = 0; n < 5; n += 1) {
+              const read = await timeline.measure(() => chain.frame(), 8)
+              const pass = read.passes.find((p) => p.label === 'cloud trace')
+              runs.push(pass?.ms ?? Number.NaN)
+            }
+            chain.levers = { ...chain.levers, stats: true }
+            for (let k = 0; k < 12; k += 1) {
+              chain.frame()
+              await new Promise((resolve) => setTimeout(resolve, 5))
+            }
+            const report = chain.system!.report
+            const median = [...runs].sort((a, b) => a - b)[2]!
+            expect(Number.isFinite(median)).toBe(true)
+            rows.push({
+              render: [width, height],
+              trace: report.extents.trace,
+              weather,
+              lightTaps,
+              ms: median,
+              runs,
+              steps: report.steps,
+            })
+          }
+        } finally {
+          stop()
+          chain.dispose()
+          own.dispose()
+        }
+      }
+    mkdirSync('.data/clouds', { recursive: true })
+    writeFileSync(
+      COST_OUT,
+      `${JSON.stringify(
+        {
+          note: 'cloudTrace.gpu.test.ts: GPU ms a frame of the `cloud trace` pass on the timeline in the system’s chain; a test’s figure at one stance, not a campaign’s',
+          stance:
+            'eye 100 m, looking up, 60° lens, air on, converging, median of 5 runs of 8 frames after 140',
+          rows,
+        },
+        null,
+        2,
+      )}\n`,
+    )
+  }, 900_000)
 })
