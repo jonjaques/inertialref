@@ -111,7 +111,7 @@ const backendOf = (renderer: Renderer): Backend =>
  * attachments are three's cached objects: three writes their ops again at the
  * next `beginRender`, and resumes a pass from them after a framebuffer copy.
  */
-export function leanDescriptor(
+function leanDescriptor(
   descriptor: GPURenderPassDescriptor,
   depthReadOnly: boolean,
 ): GPURenderPassDescriptor {

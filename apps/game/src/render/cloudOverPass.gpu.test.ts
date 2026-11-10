@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { logHub, RingBufferSink } from '@inertialref/shared'
 import {
@@ -1265,5 +1266,112 @@ describe('the composite’s form, chosen a frame at a time', () => {
       }
     },
     120_000,
+  )
+})
+
+/* ------------------------------------------------------------------------- */
+/* The forms' GPU time                                                        */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * Under IR_CLOUD_MEASURE=1, each form's frame on the pass timeline at two
+ * target sizes, written to `.data/clouds/overForms.json`. **Not a campaign
+ * figure.** The scene is the rig's: a ceiling over half the frame and the
+ * deck over the rest, so the scene pass draws one plane and what is timed is
+ * the break and the composite, on Node's WebGPU with no compositor, no
+ * presentation and no page beside it. It says which way each form moves the
+ * frame and by roughly how much at a size; the `over` batch says what a
+ * stance costs.
+ *
+ * `wall` is the frame across a drained queue and `busy` the time any timed
+ * pass was running (`passTimeline.ts`). The overlay is one blended ball over
+ * the clouds that writes no depth, a plume's shape of draw: `chain` goes
+ * back to the two passes for it, and `lean` reads depth without storing it.
+ */
+const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
+
+describe.skipIf(!MEASURE || !TIMESTAMPS)('the forms’ GPU time', () => {
+  const SIZES = [
+    ['1080p', 1920, 1080],
+    ['retina', 2880, 1800],
+  ] as const
+  const FRAMES = 40
+  const measured: Record<string, unknown> = {}
+
+  afterAll(() => {
+    mkdirSync('.data/clouds', { recursive: true })
+    writeFileSync(
+      '.data/clouds/overForms.json',
+      `${JSON.stringify(measured, null, 2)}\n`,
+    )
+  })
+
+  it.each(SIZES)(
+    'at %s',
+    async (name, width, height) => {
+      const session = await openGpu(width, height)
+      const stop = installPassTimeline(session.renderer)
+      const rig = cloudRig(session, width, height, {
+        ceiling: 50,
+        levers: { weather: 'overcast' },
+      })
+      const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
+      material.colorNode = vec3(0.8, 0.2, 0.1)
+      material.transparent = true
+      material.depthWrite = false
+      const overlay = new Mesh(new SphereGeometry(5, 12, 8), material)
+      overlay.position.set(-12, 40, 0)
+      markOverClouds(overlay)
+      rig.scene.add(overlay)
+      rig.scene.updateMatrixWorld(true)
+      try {
+        await rig.sensor.warm()
+        await rig.system!.warm()
+        await warmCompile(warmRenderer(session.renderer, layout), {
+          object: overlay,
+          camera: rig.camera,
+          scene: rig.scene,
+        })
+        const timeline = passTimelineOf(session.renderer)!
+        const row = async (levers: Partial<CloudLevers>, shown: boolean) => {
+          overlay.visible = shown
+          rig.levers = {
+            ...DEFAULT_CLOUD_LEVERS,
+            weather: 'overcast',
+            on: true,
+            ...levers,
+          }
+          for (let k = 0; k < 64; k += 1) rig.frame()
+          await session.read(rig.target)
+          const read = await timeline.measure(() => rig.frame(), FRAMES)
+          const pass = (label: string): number | null =>
+            read.passes.find((one) => one.label === label)?.ms ?? null
+          return {
+            wall: read.wallMs,
+            busy: read.busyMs,
+            scene: pass('scene'),
+            sceneOverClouds: pass(OVER_PASS_LABEL),
+            cloudComposite: pass(CHAIN_PASS_LABEL),
+            dropped: read.dropped,
+          }
+        }
+        const rowsOf: Record<string, unknown> = {
+          off: await row({ on: false }, false),
+        }
+        for (const over of ['passes', 'lean', 'chain'] as const) {
+          rowsOf[over] = await row({ over }, false)
+          rowsOf[`${over}, overlay`] = await row({ over }, true)
+        }
+        measured[name] = { width, height, frames: FRAMES, rows: rowsOf }
+        expect(Object.keys(rowsOf)).toHaveLength(7)
+      } finally {
+        rig.dispose()
+        material.dispose()
+        overlay.geometry.dispose()
+        stop()
+        session.dispose()
+      }
+    },
+    600_000,
   )
 })
