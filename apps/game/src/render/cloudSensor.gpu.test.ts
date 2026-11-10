@@ -28,7 +28,9 @@ import { warmCompile, warmRenderer } from './warmup.ts'
  * the post program carries one more `+ 0` term and not one more binding.
  * With the levers on, the scene is drawn in two passes, under the clouds and
  * over them, and an overlay marked over the clouds and warmed at boot draws
- * in the second with no pipeline built.
+ * in the second with no pipeline built, whichever form the composite takes.
+ * And off again is off: after the clouds drew, in any form, the next frame
+ * without them is the frame of the chain that never had them.
  */
 
 const WIDTH = 64
@@ -212,6 +214,19 @@ describe('with the levers on', () => {
       await gpu.read(flagged.target)
       expect(gpu.pipelinesBuilt()).toBe(render)
       expect(gpu.computePipelinesBuilt()).toBe(compute)
+      // Nor in either other form of the composite, nor on the frames the
+      // chain form gives way to the two passes and takes over from them:
+      // the overlay shown, then hidden.
+      for (const over of ['lean', 'chain'] as const) {
+        flagged.levers = { ...flagged.levers, over }
+        for (const shown of [true, false, true]) {
+          mesh.visible = shown
+          flagged.frame()
+        }
+        await gpu.read(flagged.target)
+        expect(gpu.pipelinesBuilt(), over).toBe(render)
+        expect(gpu.computePipelinesBuilt(), over).toBe(compute)
+      }
     } finally {
       flagged.scene.remove(mesh)
       mesh.geometry.dispose()
@@ -219,6 +234,46 @@ describe('with the levers on', () => {
       flagged.levers = { ...flagged.levers, on: false }
     }
   })
+
+  it.each(['passes', 'lean', 'chain'] as const)(
+    'after the clouds drew under %s and went off, draws the frame of the chain that never had them, bit for bit',
+    async (over) => {
+      const frame = async (rig: CloudRig) => {
+        const { info } = gpu.renderer
+        const renders = info.calls
+        const draws = info.render.drawCalls
+        rig.frame()
+        return {
+          renders: info.calls - renders,
+          draws: info.render.drawCalls - draws,
+          pixels: (await gpu.read(rig.target)).data,
+        }
+      }
+      flagged.levers = {
+        ...DEFAULT_CLOUD_LEVERS,
+        weather: 'overcast',
+        on: true,
+        over,
+      }
+      const clouded = await frame(flagged)
+      for (let k = 0; k < 3; k += 1) flagged.frame()
+      const never = await frame(bare)
+      // The control: the clouds were in the frame, and cost it a render.
+      expect(bits(clouded.pixels)).not.toEqual(bits(never.pixels))
+      expect(clouded.renders).toBeGreaterThan(never.renders)
+      flagged.levers = { ...flagged.levers, on: false }
+      const off = await frame(flagged)
+      expect(off.renders).toBe(never.renders)
+      expect(off.draws).toBe(never.draws)
+      expect(bits(off.pixels)).toEqual(bits(never.pixels))
+      // The scene's passes are one again, and the camera tests what it did.
+      expect(flagged.camera.layers.isEnabled(OVER_CLOUDS_LAYER)).toBe(true)
+      expect(
+        flagged.scene.children.find((child) => child.name === 'cloud composite')
+          ?.visible,
+      ).toBe(false)
+    },
+  )
 
   it.skipIf(!TIMESTAMPS)(
     'draws pass B once, after the scene, with the cloud work',

@@ -1,7 +1,9 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { logHub, RingBufferSink } from '@inertialref/shared'
 import {
   AdditiveBlending,
+  type ComputeNode,
   DirectionalLight,
   FloatType,
   type Layers,
@@ -19,6 +21,7 @@ import {
   QuadMesh,
   RenderTarget,
   Scene,
+  SphereGeometry,
   StorageBufferAttribute,
   type Texture,
   type WebGPURenderer,
@@ -28,25 +31,41 @@ import {
   Fn,
   If,
   instanceIndex,
+  int,
   ivec2,
   nodeObject,
   pass,
+  positionGeometry,
+  screenUV,
   storage,
   textureLoad,
   textureStore,
   uint,
   uniform,
   uvec2,
+  vec3,
   vec4,
+  viewportSharedTexture,
 } from 'three/tsl'
 import { CloudFrameNode } from './cloudFrameNode.ts'
+import type { CloudHistory } from './cloudHistory.ts'
 import {
   markOverClouds,
   OVER_CLOUDS_LAYER,
+  overClouds,
   UNDER_CLOUDS_LAYERS,
 } from './cloudLayers.ts'
+import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { cloudStorageTexture } from './cloudNodes.ts'
-import { CloudOverPassNode, OVER_PASS_LABEL } from './cloudOverPass.ts'
+import {
+  CHAIN_PASS_LABEL,
+  type CloudOverForm,
+  CloudOverPassNode,
+  type CloudOverSource,
+  OVER_PASS_LABEL,
+} from './cloudOverPass.ts'
+import { type CloudRig, cloudRig } from './cloudSystemRig.ts'
+import type { CloudTrace } from './cloudTrace.ts'
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 import {
   installPassTimeline,
@@ -55,6 +74,7 @@ import {
 } from './passTimeline.ts'
 import { DEFAULT_PICTURE } from './picture.ts'
 import { runQuadPasses } from './quadPass.ts'
+import { sensorRadiance } from './radiance.ts'
 import {
   attachmentFormat,
   attachmentType,
@@ -78,6 +98,10 @@ import { warmCompile, warmRenderer } from './warmup.ts'
  * the additive square: pass B landed on pass A's color. Upper right is the
  * ground alone: the opaque square was depth-tested against pass A's depth.
  * The lower half is each square alone.
+ *
+ * Then the forms: pass B through the lean edit, held to the same frame and
+ * read off the descriptor the device is handed; and, through the system's own
+ * chain and composite, the frame's choice among the three.
  */
 
 const SIZE = 32
@@ -176,6 +200,92 @@ function expectNear(
   })
 }
 
+/** Every texel of a 2D texture as RGBA floats, row-major from the top, read by `textureLoad`. */
+const readers = new Map<
+  Texture,
+  { kernel: ComputeNode; out: StorageBufferAttribute; texels: number }
+>()
+async function whole(map: Texture): Promise<Float32Array> {
+  const { width, height } = map.image as { width: number; height: number }
+  let read = readers.get(map)
+  if (read === undefined || read.texels !== width * height) {
+    const texels = width * height
+    const out = new StorageBufferAttribute(new Float32Array(texels * 4), 4)
+    const into = storage(out, 'vec4', texels)
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(texels)), () => {
+        const at = ivec2(
+          int(instanceIndex.mod(uint(width))),
+          int(instanceIndex.div(uint(width))),
+        )
+        into.element(instanceIndex).assign(textureLoad(map, at))
+      })
+    })().compute(texels)
+    read = { kernel, out, texels }
+    readers.set(map, read)
+  }
+  await gpu.compute(read.kernel)
+  return new Float32Array(await gpu.readBuffer(read.out))
+}
+
+/** Every row of a scene target, by name. */
+async function rows(target: RenderTarget): Promise<Map<string, Float32Array>> {
+  const read = new Map<string, Float32Array>()
+  for (const texture of target.textures)
+    read.set(texture.name, await whole(texture))
+  return read
+}
+
+const bits = (values: Float32Array): Uint32Array =>
+  new Uint32Array(values.buffer.slice(0))
+
+/**
+ * Every render pass begun while `work` runs, as the device is handed it:
+ * copied at the call, because three writes its cached descriptor again at
+ * the next pass.
+ */
+function passesBegun(work: () => void): GPURenderPassDescriptor[] {
+  const begun: GPURenderPassDescriptor[] = []
+  const create = device.createCommandEncoder
+  device.createCommandEncoder = (descriptor) => {
+    const encoder = create.call(device, descriptor)
+    const begin = encoder.beginRenderPass
+    encoder.beginRenderPass = (pass) => {
+      begun.push({
+        ...pass,
+        colorAttachments: [...pass.colorAttachments].map((attachment) =>
+          attachment === null ? null : { ...attachment },
+        ),
+        ...(pass.depthStencilAttachment === undefined
+          ? {}
+          : { depthStencilAttachment: { ...pass.depthStencilAttachment } }),
+      })
+      return begin.call(encoder, pass)
+    }
+    return encoder
+  }
+  try {
+    work()
+  } finally {
+    delete (device as { createCommandEncoder?: unknown }).createCommandEncoder
+  }
+  return begun
+}
+
+/** Pass B among the passes of a frame: the one that loads a multisampled color. */
+const passB = (
+  begun: readonly GPURenderPassDescriptor[],
+): GPURenderPassDescriptor | undefined =>
+  begun.find((pass) => {
+    const [first] = pass.colorAttachments
+    return (
+      first !== null &&
+      first !== undefined &&
+      first.loadOp === 'load' &&
+      first.resolveTarget !== undefined
+    )
+  })
+
 /** A plane facing the camera, `depth` meters down its axis, over the image rectangle [x0, x1] × [y0, y1], y up. */
 function facing(
   depth: number,
@@ -235,7 +345,7 @@ interface Chain {
 const PASS_A = 'pass A'
 
 /** The sensor's scene pass and the over pass, in a post quad's dependency sum. */
-function chain(scene: Scene): Chain {
+function chain(scene: Scene, composite: CloudOverSource | null = null): Chain {
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 1e10)
   camera.layers.enable(OVER_CLOUDS_LAYER)
   camera.updateMatrixWorld()
@@ -253,7 +363,13 @@ function chain(scene: Scene): Chain {
     texture.type = attachmentType(row)
   }
   scenePass.updateBeforeType = NodeUpdateType.RENDER
-  const over = new CloudOverPassNode(scene, camera, scenePass.renderTarget, mrt)
+  const over = new CloudOverPassNode(
+    scene,
+    camera,
+    scenePass.renderTarget,
+    mrt,
+    composite,
+  )
   const post = new NodeMaterial()
   post.fragmentNode = vec4(scenePass.getTextureNode().rgb.min(65_504).mul(0), 0)
     .add(nodeObject(over).min(65_504).mul(0))
@@ -270,7 +386,7 @@ function chain(scene: Scene): Chain {
       // `@types/three` declares no null; r185 takes it as the camera's own
       // mask (`PassNode.js:518`), the one-pass frame.
       scenePass.setLayers((on ? UNDER_CLOUDS_LAYERS : null) as Layers)
-      over.active = on
+      over.form = on ? 'passes' : null
     },
     frame() {
       runQuadPasses(renderer, quad, { linear: true }, (draw) => {
@@ -337,6 +453,198 @@ describe('the over pass', () => {
       LAYERED,
     )
     frame.dispose()
+  })
+
+  it('under lean discards each multisampled color beneath its resolve and stores its depth, and draws the same frame', async () => {
+    const { scene } = layered()
+    const frame = chain(scene)
+    frame.passes(true)
+    await checked(() => frame.frame())
+    const stored = await rows(frame.scenePass.renderTarget)
+    const before = passB(passesBegun(() => frame.frame()))!
+    expect(before.colorAttachments.map((one) => one?.storeOp)).toEqual(
+      layout.attachments.map(() => 'store'),
+    )
+    // The opaque square behind the ground writes depth, so the count says
+    // pass B's depth stays writable.
+    expect(overClouds(scene)).toBe('depth')
+    frame.over.form = 'lean'
+    frame.over.depthReadOnly = false
+    let begun: GPURenderPassDescriptor[] = []
+    await checked(() => {
+      begun = passesBegun(() => frame.frame())
+    })
+    const lean = passB(begun)!
+    expect(lean.colorAttachments.map((one) => one?.storeOp)).toEqual(
+      layout.attachments.map(() => 'discard'),
+    )
+    // Every one of them resolves, which is what keeps the frame.
+    expect(
+      lean.colorAttachments.every((one) => one?.resolveTarget !== undefined),
+    ).toBe(true)
+    expect(lean.depthStencilAttachment).toMatchObject({
+      depthLoadOp: 'load',
+      depthStoreOp: 'store',
+    })
+    // The pass under the clouds is three's own: only pass B is edited.
+    expect(
+      begun.filter((pass) =>
+        [...pass.colorAttachments].some((one) => one?.storeOp === 'discard'),
+      ),
+    ).toHaveLength(1)
+    const discarded = await rows(frame.scenePass.renderTarget)
+    for (const [name, values] of stored)
+      expect(bits(discarded.get(name)!), name).toEqual(bits(values))
+    // And the frame after it, which loads nothing pass B dropped: the pass
+    // under the clouds clears.
+    await checked(() => frame.frame())
+    const again = await rows(frame.scenePass.renderTarget)
+    for (const [name, values] of stored)
+      expect(bits(again.get(name)!), name).toEqual(bits(values))
+    frame.dispose()
+  })
+
+  it('under lean reads depth without storing it where nothing over the clouds writes it', async () => {
+    const { scene, behind } = layered()
+    // Only the additive square is left over the clouds.
+    scene.remove(behind)
+    expect(overClouds(scene)).toBe('drawn')
+    const frame = chain(scene)
+    frame.passes(true)
+    await checked(() => frame.frame())
+    const stored = await rows(frame.scenePass.renderTarget)
+    frame.over.form = 'lean'
+    frame.over.depthReadOnly = true
+    let begun: GPURenderPassDescriptor[] = []
+    // Checked: a pipeline that wrote depth here would be refused, and the
+    // pass with it.
+    await checked(() => {
+      begun = passesBegun(() => frame.frame())
+    })
+    const depth = passB(begun)!.depthStencilAttachment!
+    expect(depth.depthReadOnly).toBe(true)
+    expect(depth.depthLoadOp).toBeUndefined()
+    expect(depth.depthStoreOp).toBeUndefined()
+    const read = await rows(frame.scenePass.renderTarget)
+    for (const [name, values] of stored)
+      expect(bits(read.get(name)!), name).toEqual(bits(values))
+    // The additive square is still tested against the ground's depth and
+    // lands on its color.
+    expectNear(await texels(frame.scenePass.renderTarget.texture, QUADRANTS), [
+      [GROUND, 0, IN_FRONT],
+      [GROUND, 0, 0],
+      [0, 0, IN_FRONT],
+      [0, 0, 0],
+    ])
+    frame.dispose()
+  })
+
+  it('leaves the device and the backend as it found them after a lean pass', async () => {
+    const { scene } = layered()
+    const frame = chain(scene)
+    const backend = renderer.backend as unknown as { beginRender: unknown }
+    const beginRender = backend.beginRender
+    const own = Object.hasOwn(backend, 'beginRender')
+    frame.passes(true)
+    frame.over.form = 'lean'
+    await checked(() => frame.frame())
+    expect(backend.beginRender).toBe(beginRender)
+    expect(Object.hasOwn(backend, 'beginRender')).toBe(own)
+    expect(Object.hasOwn(device, 'createCommandEncoder')).toBe(false)
+    frame.dispose()
+  })
+
+  it('turns lean off, once and aloud, when something over the clouds reads the framebuffer', async () => {
+    const sink = new RingBufferSink()
+    const detach = logHub.addSink(sink)
+    const { scene } = layered()
+    // A square over the clouds whose color is the frame behind it: three
+    // ends pass B to copy the frame and resumes it from its own descriptor,
+    // which loads the samples the lean pass was begun to drop.
+    const material = new MeshBasicNodeMaterial()
+    material.colorNode = viewportSharedTexture(screenUV)
+    material.transparent = true
+    material.depthWrite = false
+    const reads = facing(3, [-0.5, 0.5, -0.5, 0.5], material)
+    markOverClouds(reads)
+    scene.add(reads)
+    scene.updateMatrixWorld(true)
+    const frame = chain(scene)
+    try {
+      frame.passes(true)
+      frame.over.form = 'lean'
+      await checked(() => frame.frame())
+      const warned = () =>
+        sink
+          .records()
+          .filter((record) => record.scope === 'game.clouds')
+          .map((record) => record.fields['cause'])
+      expect(warned()).toEqual([
+        'something over the clouds read the framebuffer',
+      ])
+      // From here the node draws pass B as three builds it, whatever the
+      // form asked of it.
+      let begun: GPURenderPassDescriptor[] = []
+      await checked(() => {
+        begun = passesBegun(() => frame.frame())
+      })
+      expect(
+        begun.flatMap((pass) =>
+          [...pass.colorAttachments].map((one) => one?.storeOp),
+        ),
+      ).not.toContain('discard')
+      expect(warned()).toHaveLength(1)
+    } finally {
+      detach()
+      frame.dispose()
+      material.dispose()
+    }
+  })
+
+  it('in the chain form lands on the rows the scene pass resolves into, and follows them to another size', async () => {
+    // A stand-in for the composite, alone in a scene of its own: a plane
+    // over the frame that adds a quarter of blue to what it lands on.
+    const material = added(vec4(0, 0, 0.25, 1))
+    material.depthTest = false
+    material.vertexNode = vec4(positionGeometry.xy, 0, 1)
+    const plane = new Mesh(new PlaneGeometry(2, 2), material)
+    plane.layers.enableAll()
+    plane.frustumCulled = false
+    const alone = new Scene()
+    alone.add(plane)
+    const { scene, ground, behind, inFront } = layered()
+    const frame = chain(scene, { over: alone })
+    const draws = counted(ground, behind, inFront)
+    const lit = LAYERED.map(([r, g, b]) => [r, g, b + 0.25])
+    try {
+      // One scene pass on every layer, then the plane over its resolve.
+      frame.passes(false)
+      frame.over.form = 'chain'
+      await checked(() => frame.frame())
+      expect(draws.draws).toEqual([1, 1, 1])
+      expectNear(
+        await texels(frame.scenePass.renderTarget.texture, QUADRANTS),
+        lit,
+      )
+      // The scene target is made again at the new size, and its GPU
+      // textures with it: a chain form still pointed at the ones it first
+      // found would draw into textures the pass has left.
+      renderer.setSize(2 * SIZE, 2 * SIZE, false)
+      await checked(() => frame.frame())
+      await checked(() => frame.frame())
+      expect(frame.scenePass.renderTarget.width).toBe(2 * SIZE)
+      expectNear(
+        await texels(
+          frame.scenePass.renderTarget.texture,
+          QUADRANTS.map(([x, y]) => [2 * x, 2 * y] as const),
+        ),
+        lit,
+      )
+    } finally {
+      renderer.setSize(SIZE, SIZE, false)
+      frame.dispose()
+      material.dispose()
+    }
   })
 
   it('puts the camera, the target, the MRT and the clear back after pass B', async () => {
@@ -642,6 +950,17 @@ describe.skipIf(!TIMESTAMPS)('the over pass on the pass timeline', () => {
         [PASS_A, 1],
         [OVER_PASS_LABEL, 1],
       ])
+      // The lean edit begins the pass three named: the timeline's writes are
+      // on the descriptor it copies.
+      frame.over.form = 'lean'
+      await checked(draw)
+      const lean = await timeline!.measure(draw, 4)
+      expect(lean.dropped).toBe(0)
+      expect(lean.passes.map((pass) => [pass.label, pass.count])).toEqual([
+        ['post', 1],
+        [PASS_A, 1],
+        [OVER_PASS_LABEL, 1],
+      ])
       frame.passes(false)
       const one = await timeline!.measure(draw, 2)
       expect(one.passes.map((pass) => pass.label)).toEqual(['post', PASS_A])
@@ -650,4 +969,463 @@ describe.skipIf(!TIMESTAMPS)('the over pass on the pass timeline', () => {
       frame.dispose()
     }
   })
+})
+
+/* ------------------------------------------------------------------------- */
+/* The forms, through the system                                              */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * The sensor's own chain with the cloud system in it: the eye 100 m up under
+ * overcast's 300 m base, looking straight up, nothing between it and the
+ * deck. The frame's form is the system's choice from the `over` lever and
+ * the marks in the scene, and everything below is read off what that choice
+ * draws.
+ */
+describe('the composite’s form, chosen a frame at a time', () => {
+  const FORMS = ['passes', 'lean', 'chain'] as const
+  let rig: CloudRig
+
+  beforeAll(async () => {
+    rig = cloudRig(gpu, SIZE, SIZE, { levers: { weather: 'overcast' } })
+    await rig.sensor.warm()
+    await rig.system!.warm()
+  }, 180_000)
+
+  afterAll(() => {
+    rig?.dispose()
+  })
+
+  const set = (levers: Partial<CloudLevers>): void => {
+    rig.levers = {
+      ...DEFAULT_CLOUD_LEVERS,
+      weather: 'overcast',
+      on: true,
+      // Held, so two frames four apart trace the same rays.
+      jitterFrame: 0,
+      ...levers,
+    }
+  }
+  const frames = (n: number): void => {
+    for (let k = 0; k < n; k += 1) rig.frame()
+  }
+  const output = (): Promise<Float32Array> =>
+    whole(rig.sensor.sceneTarget.texture)
+  const pixel = (values: Float32Array, [x, y]: readonly [number, number]) =>
+    [...values.subarray((y * SIZE + x) * 4, (y * SIZE + x) * 4 + 3)] as const
+
+  /** The largest difference in any channel of any texel, over the larger image's peak. */
+  const apart = (a: Float32Array, b: Float32Array): number => {
+    let peak = 0
+    let worst = 0
+    for (let i = 0; i < a.length; i += 1) {
+      peak = Math.max(peak, Math.abs(a[i]!), Math.abs(b[i]!))
+      worst = Math.max(worst, Math.abs(a[i]! - b[i]!))
+    }
+    return worst / peak
+  }
+
+  /** The form the last frame took, by the passes the device was handed. */
+  function formOf(begun: readonly GPURenderPassDescriptor[]): CloudOverForm {
+    const over = passB(begun)
+    if (over === undefined) return 'chain'
+    return over.colorAttachments[0]?.storeOp === 'discard' ? 'lean' : 'passes'
+  }
+  const drawn = (): CloudOverForm => formOf(passesBegun(() => rig.frame()))
+
+  /** A ball `distance` meters up the camera's axis, `across` of it to the side, lit by nothing. */
+  function ball(distance: number, across: number, marked: boolean): Mesh {
+    const material = sensorRadiance(new MeshBasicNodeMaterial(), marked)
+    material.colorNode = vec3(0.8, 0.2, 0.1)
+    const mesh = new Mesh(new SphereGeometry(distance / 8, 12, 8), material)
+    mesh.position.set(distance * across, distance, 0)
+    if (marked) markOverClouds(mesh)
+    rig.scene.add(mesh)
+    rig.scene.updateMatrixWorld(true)
+    return mesh
+  }
+  const drop = (...meshes: Mesh[]): void => {
+    for (const mesh of meshes) {
+      rig.scene.remove(mesh)
+      mesh.geometry.dispose()
+      ;(mesh.material as MeshBasicNodeMaterial).dispose()
+    }
+  }
+  /** The pixel a ball `across` of its distance to the side stands at. */
+  const standsAt = (across: number): [number, number] => [
+    Math.floor(SIZE / 2 + (across / HALF_TAN) * (SIZE / 2)),
+    SIZE / 2,
+  ]
+
+  it('draws a marked mesh in front of the deck and one behind it over the clouds, and an unmarked one behind it under them', async () => {
+    // 40 m up is under the deck's 300 m base; 8 km up is over its top.
+    const near = ball(40, -0.3, true)
+    const far = ball(8_000, 0.3, true)
+    try {
+      set({ on: false })
+      frames(2)
+      const plain = await output()
+      set({})
+      frames(24)
+      const clouded = await output()
+      // The control: the deck is over the frame.
+      expect(apart(clouded, plain)).toBeGreaterThan(0.05)
+      // Both marked balls are their own color, whatever the deck holds in
+      // front of them: drawn after the composite, unattenuated.
+      for (const across of [-0.3, 0.3]) {
+        const at = standsAt(across)
+        const own = pixel(plain, at)
+        pixel(clouded, at).forEach((channel, c) => {
+          expect(
+            Math.abs(channel - own[c]!),
+            `marked at ${across}, channel ${c}`,
+          ).toBeLessThanOrEqual(2 * HALF * Math.abs(own[c]!) + 1e-7)
+        })
+      }
+      // The same ball behind the deck without its mark is the scene's, and
+      // the deck stands in front of it.
+      drop(far)
+      const under = ball(8_000, 0.3, false)
+      try {
+        frames(24)
+        const veiled = pixel(await output(), standsAt(0.3))
+        const own = pixel(plain, standsAt(0.3))
+        // Its red is four times its green; the deck's light is gray.
+        expect(own[0]! / own[1]!).toBeGreaterThan(3)
+        expect(veiled[0]! / veiled[1]!).toBeLessThan(1.5)
+      } finally {
+        drop(under)
+      }
+    } finally {
+      drop(near)
+      set({ on: false })
+      rig.frame()
+    }
+  }, 120_000)
+
+  /*
+   * The overlay guard's frame: a station in front of the deck, opaque,
+   * written into the depth the trace stops at, and carrying no mark. Nothing
+   * there is drawn over the clouds, and two scene passes still walk the
+   * scene twice to find that out.
+   */
+  it('under chain, walks the scene once on a frame with an opaque object in front of the deck and nothing marked over the clouds', async () => {
+    const station = ball(40, -0.3, false)
+    let walks = 0
+    const held = rig.scene.onBeforeRender
+    rig.scene.onBeforeRender = () => {
+      walks += 1
+    }
+    try {
+      set({ on: false })
+      frames(2)
+      const plain = await output()
+      const walked: Record<string, [CloudOverForm, number]> = {}
+      const images: Record<string, Float32Array> = {}
+      for (const over of FORMS) {
+        set({ over })
+        frames(24)
+        walks = 0
+        const form = drawn()
+        walked[over] = [form, walks]
+        images[over] = await output()
+      }
+      expect(walked).toEqual({
+        passes: ['passes', 2],
+        lean: ['lean', 2],
+        chain: ['chain', 1],
+      })
+      // With nothing over the clouds but the composite, lean's pass B reads
+      // depth and stores none.
+      set({ over: 'lean' })
+      expect(
+        passB(passesBegun(() => rig.frame()))!.depthStencilAttachment!
+          .depthReadOnly,
+      ).toBe(true)
+      const at = standsAt(-0.3)
+      for (const over of FORMS) {
+        // The deck is in the frame, and the station in front of it is the
+        // scene's own pixel: the composite leaves what stands before the
+        // cloud alone.
+        expect(apart(images[over]!, plain), over).toBeGreaterThan(0.05)
+        const own = pixel(plain, at)
+        pixel(images[over]!, at).forEach((channel, c) => {
+          expect(
+            Math.abs(channel - own[c]!),
+            `${over}, channel ${c}`,
+          ).toBeLessThanOrEqual(2 * HALF * Math.abs(own[c]!) + 1e-7)
+        })
+      }
+    } finally {
+      rig.scene.onBeforeRender = held
+      drop(station)
+      set({ on: false })
+      rig.frame()
+    }
+  }, 120_000)
+
+  it('takes the form its lever names, and under chain goes back to two passes on the frame a mark draws', async () => {
+    const mark = ball(40, -0.3, true)
+    try {
+      mark.visible = false
+      set({ over: 'passes' })
+      frames(2)
+      expect(drawn()).toBe('passes')
+      set({ over: 'lean' })
+      expect(drawn()).toBe('lean')
+      set({ over: 'chain' })
+      expect(drawn()).toBe('chain')
+      mark.visible = true
+      expect(drawn()).toBe('passes')
+      mark.visible = false
+      expect(drawn()).toBe('chain')
+      // Lean's depth is read-only with nothing over the clouds but the
+      // composite, and stored when a mark that writes depth draws.
+      set({ over: 'lean' })
+      const depthOf = () =>
+        passB(passesBegun(() => rig.frame()))!.depthStencilAttachment!
+      expect(depthOf().depthReadOnly).toBe(true)
+      mark.visible = true
+      expect(depthOf().depthStoreOp).toBe('store')
+    } finally {
+      drop(mark)
+      set({ on: false })
+      rig.frame()
+    }
+  }, 120_000)
+
+  it('draws one frame in all three: lean bit for bit, chain to a half float’s step of the frame’s peak', async () => {
+    /*
+     * A held still with the jitter held repeats every four frames once the
+     * history has converged, so frames four apart under two forms differ by
+     * the forms alone. `cloudComposite.gpu.test.ts` holds pass B and the
+     * chain form to a half float's step on a history it writes; here the
+     * history is the system's own.
+     */
+    try {
+      set({ over: 'passes' })
+      frames(64)
+      const passes = await output()
+      // The control: the frame repeats, so a difference below is a form's.
+      frames(4)
+      expect(bits(await output())).toEqual(bits(passes))
+      set({ over: 'lean' })
+      frames(4)
+      expect(bits(await output())).toEqual(bits(passes))
+      set({ over: 'chain' })
+      frames(4)
+      expect(apart(await output(), passes)).toBeLessThanOrEqual(HALF)
+      // And the deck is in it.
+      set({ on: false })
+      rig.frame()
+      expect(apart(passes, await output())).toBeGreaterThan(0.05)
+    } finally {
+      set({ on: false })
+      rig.frame()
+    }
+  }, 120_000)
+
+  it.each(FORMS)(
+    'under %s, a frame whose cloud work throws composites none of the history it abandoned',
+    async (over) => {
+      const resource = <T>(name: string): T =>
+        rig.system!.resources.find((held) => held.name === name) as T
+      const trace = resource<CloudTrace>('trace')
+      const history = resource<CloudHistory>('history')
+      const { render, dispatchPhase } = trace
+      try {
+        set({ on: false })
+        rig.frame()
+        const plain = await output()
+        set({ over })
+        frames(24)
+        // The control: the history holds the deck, and the frame shows it.
+        expect(apart(await output(), plain)).toBeGreaterThan(0.05)
+        const fail = (): never => {
+          throw new Error('the trace failed')
+        }
+        trace.render = fail
+        trace.dispatchPhase = fail
+        const resets = history.report.resets
+        await checked(() => rig.frame())
+        trace.render = render
+        trace.dispatchPhase = dispatchPhase
+        // The scene alone, bit for bit: the composite drew nothing, and
+        // nothing drawn over it is handed the trace it abandoned.
+        expect(bits(await output())).toEqual(bits(plain))
+        expect(rig.system!.front.textures()).toBeNull()
+        expect(treeOf(renderer)).toEqual({
+          context: null,
+          depth: -1,
+          lights: 0,
+        })
+        // The next frame keeps none of the history, and the cloud comes back.
+        rig.frame()
+        expect(history.report.resets).toBe(resets + 1)
+        frames(24)
+        expect(apart(await output(), plain)).toBeGreaterThan(0.05)
+      } finally {
+        trace.render = render
+        trace.dispatchPhase = dispatchPhase
+        set({ on: false })
+        rig.frame()
+      }
+    },
+    120_000,
+  )
+
+  it.skipIf(!TIMESTAMPS)(
+    'under chain with nothing over the clouds, times no second scene pass: the composite alone, after the scene, with the cloud work',
+    async () => {
+      const labels = async (): Promise<string[]> => {
+        const stop = installPassTimeline(renderer)
+        try {
+          const read = await passTimelineOf(renderer)!.measure(
+            () => rig.frame(),
+            3,
+          )
+          expect(read.dropped).toBe(0)
+          return read.passes.map((pass) => pass.label)
+        } finally {
+          stop()
+        }
+      }
+      try {
+        set({ over: 'chain' })
+        frames(4)
+        const chained = await labels()
+        expect(chained).not.toContain(OVER_PASS_LABEL)
+        expect(chained.filter((label) => label === CHAIN_PASS_LABEL)).toEqual([
+          CHAIN_PASS_LABEL,
+        ])
+        expect(chained.indexOf(CHAIN_PASS_LABEL)).toBeGreaterThan(
+          chained.indexOf('scene'),
+        )
+        expect(chained).toContain('cloud trace')
+        expect(chained).toContain('cloud history')
+        set({ over: 'passes' })
+        frames(4)
+        const passes = await labels()
+        expect(passes).toContain(OVER_PASS_LABEL)
+        expect(passes).not.toContain(CHAIN_PASS_LABEL)
+        // The two forms run the same cloud work.
+        const work = (all: string[]) =>
+          all.filter(
+            (label) => label.startsWith('cloud ') && label !== CHAIN_PASS_LABEL,
+          )
+        expect(work(chained)).toEqual(work(passes))
+      } finally {
+        set({ on: false })
+        rig.frame()
+      }
+    },
+    120_000,
+  )
+})
+
+/* ------------------------------------------------------------------------- */
+/* The forms' GPU time                                                        */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * Under IR_CLOUD_MEASURE=1, each form's frame on the pass timeline at two
+ * target sizes, written to `.data/clouds/overForms.json`. **Not a campaign
+ * figure.** The scene is the rig's: a ceiling over half the frame and the
+ * deck over the rest, so the scene pass draws one plane and what is timed is
+ * the break and the composite, on Node's WebGPU with no compositor, no
+ * presentation and no page beside it. It says which way each form moves the
+ * frame and by roughly how much at a size; the `over` batch says what a
+ * stance costs.
+ *
+ * `wall` is the frame across a drained queue and `busy` the time any timed
+ * pass was running (`passTimeline.ts`). The overlay is one blended ball over
+ * the clouds that writes no depth, a plume's shape of draw: `chain` goes
+ * back to the two passes for it, and `lean` reads depth without storing it.
+ */
+const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
+
+describe.skipIf(!MEASURE || !TIMESTAMPS)('the forms’ GPU time', () => {
+  const SIZES = [
+    ['1080p', 1920, 1080],
+    ['retina', 2880, 1800],
+  ] as const
+  const FRAMES = 40
+  const measured: Record<string, unknown> = {}
+
+  afterAll(() => {
+    mkdirSync('.data/clouds', { recursive: true })
+    writeFileSync(
+      '.data/clouds/overForms.json',
+      `${JSON.stringify(measured, null, 2)}\n`,
+    )
+  })
+
+  it.each(SIZES)(
+    'at %s',
+    async (name, width, height) => {
+      const session = await openGpu(width, height)
+      const stop = installPassTimeline(session.renderer)
+      const rig = cloudRig(session, width, height, {
+        ceiling: 50,
+        levers: { weather: 'overcast' },
+      })
+      const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
+      material.colorNode = vec3(0.8, 0.2, 0.1)
+      material.transparent = true
+      material.depthWrite = false
+      const overlay = new Mesh(new SphereGeometry(5, 12, 8), material)
+      overlay.position.set(-12, 40, 0)
+      markOverClouds(overlay)
+      rig.scene.add(overlay)
+      rig.scene.updateMatrixWorld(true)
+      try {
+        await rig.sensor.warm()
+        await rig.system!.warm()
+        await warmCompile(warmRenderer(session.renderer, layout), {
+          object: overlay,
+          camera: rig.camera,
+          scene: rig.scene,
+        })
+        const timeline = passTimelineOf(session.renderer)!
+        const row = async (levers: Partial<CloudLevers>, shown: boolean) => {
+          overlay.visible = shown
+          rig.levers = {
+            ...DEFAULT_CLOUD_LEVERS,
+            weather: 'overcast',
+            on: true,
+            ...levers,
+          }
+          for (let k = 0; k < 64; k += 1) rig.frame()
+          await session.read(rig.target)
+          const read = await timeline.measure(() => rig.frame(), FRAMES)
+          const pass = (label: string): number | null =>
+            read.passes.find((one) => one.label === label)?.ms ?? null
+          return {
+            wall: read.wallMs,
+            busy: read.busyMs,
+            scene: pass('scene'),
+            sceneOverClouds: pass(OVER_PASS_LABEL),
+            cloudComposite: pass(CHAIN_PASS_LABEL),
+            dropped: read.dropped,
+          }
+        }
+        const rowsOf: Record<string, unknown> = {
+          off: await row({ on: false }, false),
+        }
+        for (const over of ['passes', 'lean', 'chain'] as const) {
+          rowsOf[over] = await row({ over }, false)
+          rowsOf[`${over}, overlay`] = await row({ over }, true)
+        }
+        measured[name] = { width, height, frames: FRAMES, rows: rowsOf }
+        expect(Object.keys(rowsOf)).toHaveLength(7)
+      } finally {
+        rig.dispose()
+        material.dispose()
+        overlay.geometry.dispose()
+        stop()
+        session.dispose()
+      }
+    },
+    600_000,
+  )
 })
