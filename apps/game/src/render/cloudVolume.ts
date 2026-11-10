@@ -806,7 +806,10 @@ export class CloudVolume implements CloudResource {
         rect[1] = Math.max(rect[1]!, origin[1])
         rect[2] = Math.min(rect[2]!, origin[0] + CLOUD_VOLUME_SIZE)
         rect[3] = Math.min(rect[3]!, origin[1] + CLOUD_VOLUME_SIZE)
-        if (now !== undefined && !sameOrigin(origin, now)) pending = true
+        // An idle level keeps the slices it had and the schedule draws none
+        // of them, so a window it has left is nothing owed.
+        if (!state.idle && now !== undefined && !sameOrigin(origin, now))
+          pending = true
       }
       if (!state.idle && !whole) pending = true
       const [x0, y0, x1, y1] = whole ? rect : NOWHERE
