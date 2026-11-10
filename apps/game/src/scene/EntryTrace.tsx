@@ -13,6 +13,7 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createEntryTraceMaterials } from '../render/entryTrace.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 const SAMPLES = 48
@@ -51,9 +52,11 @@ export function EntryTrace({ engine }: { engine: GameEngine }) {
     Object.values(all).forEach((part, index) => {
       part.frustumCulled = false
       part.renderOrder = index + 1
+      // An instrument over the clouds under `?clouds=1`: pass B's, under A.
+      if (engine.cloudsAvailable) markOverClouds(part)
     })
     return all
-  }, [materials])
+  }, [materials, engine])
 
   useEffect(() => {
     const parent = group.current

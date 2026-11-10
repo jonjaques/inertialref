@@ -109,6 +109,12 @@ import {
   type PassTimelineResult,
 } from '../render/passTimeline.ts'
 import { holdFrames } from './frameHold.ts'
+import {
+  type CloudLevers,
+  DEFAULT_CLOUD_LEVERS,
+  isCloudLevers,
+} from '../render/cloudLevers.ts'
+import type { CloudSystemFactory } from '../render/cloudSystem.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
@@ -150,7 +156,7 @@ import {
 } from './terrainStreamer.ts'
 import { OrbitTraceCache } from './orbitTraces.ts'
 import { StarSurvey, type StarSurveyStatus } from './starSurvey.ts'
-import type { TerrainReport } from '@inertialref/devtools'
+import type { CloudRadiance, TerrainReport } from '@inertialref/devtools'
 
 /*
  * The engine.
@@ -489,6 +495,35 @@ export class GameEngine {
   surfaceQuality: SurfaceQuality = DEFAULT_SURFACE_QUALITY
 
   /**
+   * The clouds' levers, which the sensor's chain reads every frame and a
+   * script writes whole: `engine.clouds = { ...engine.clouds, on: true }`.
+   * A malformed set throws rather than landing, because a mistyped field
+   * would otherwise measure the default without a word. Held as a frozen
+   * copy, because a field written in place skips that check, and the frame
+   * compares its levers against the last frame's, which would be the same
+   * object: a scenario changed that way keeps the old one's history. Inert
+   * without `?clouds=1`, which builds no system to read them.
+   */
+  #clouds: CloudLevers = DEFAULT_CLOUD_LEVERS
+
+  get clouds(): CloudLevers {
+    return this.#clouds
+  }
+
+  set clouds(levers: CloudLevers) {
+    if (!isCloudLevers(levers)) throw new Error('Invalid cloud levers.')
+    this.#clouds = Object.freeze({ ...levers })
+  }
+
+  /** `?clouds=1`'s chunk, resolved in the canvas's renderer factory; null without the flag. */
+  cloudSystemFactory: CloudSystemFactory | null = null
+
+  /** Whether this page loaded the clouds at all. */
+  get cloudsAvailable(): boolean {
+    return this.cloudSystemFactory !== null
+  }
+
+  /**
    * The player's own lens — what the flight camera is looking through.
    *
    * Bound to the persisted preference by `state/engineKnobs.ts`, exactly as
@@ -702,6 +737,11 @@ export class GameEngine {
   rotationStop: (RotationStopCue & { readonly entity: EntityId }) | null = null
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
+  /**
+   * The cloud system's radiance capture on the chain on screen, set with it
+   * by `scene/Sensor.tsx`; null without one (`ir.cloudRadiance()`).
+   */
+  cloudRadiance: (() => Promise<CloudRadiance | null>) | null = null
   /** Temporal image history is presentation state, outside the world hash. */
   pictureEpoch = 0
   pictureDebug: PictureDebug = 'none'
@@ -1043,6 +1083,8 @@ export class GameEngine {
         terrainCache: () => this.terrainCache(),
         clearTerrainCache: () => this.clearTerrainCache(),
         galaxyRender: () => this.galaxyRenderer?.() ?? null,
+        clouds: () => this.sensorDiagnostics?.clouds ?? null,
+        cloudRadiance: () => this.cloudRadiance?.() ?? Promise.resolve(null),
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
         cameraProcessing: () => {

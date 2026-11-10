@@ -10,8 +10,11 @@ code and nobody reproduced says so.
 
 [ADR-0056](../../docs/adr/0056-the-air-is-measured-and-its-gain-is-pi.md) holds
 the physics and [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md) the
-camera and Enhanced's ring. The look council's own findings — the rims, the
-twilight domes, Titan's collars — are [its defects log](look-council-defects.md),
+camera and Enhanced's ring.
+[ADR-0065](../../docs/adr/0065-a-scene-unit-is-the-sun-above-the-air-and-the-sensors-white-is-half-a-stop-under-it.md)
+names the scene unit they are both measured in. The look council's own
+findings — the rims, the twilight domes, Titan's collars — are
+[its defects log](look-council-defects.md),
 and its protocol is [its plan](look-council.md). What the air costs is in
 [perf](perf.md#the-air).
 
@@ -65,6 +68,41 @@ decided before either consumer runs.
 and Enhanced opens with a 3.5 s time constant on the ground while the capture
 waits one second after settling. A dusk ground plate depends on how long boot
 and arrival took. Reported by #171's review; no plate has shown it yet.
+
+### The galaxy, the stars and the sun's disk take the sensor's white for the scene unit
+
+A scene unit is the sun above the air, `SCENE_UNIT_LUMINANCE`: E⊥/π, 42,590
+cd/m², the unit the air's gain of π is anchored to. `SURFACE_LUMINANCE`,
+30,000 cd/m², is the sensor's calibration white, 1.420 times (0.506 stop)
+under it, and four conversions divide by the white as though it were the unit:
+
+- the galaxy's backdrop (`render/galaxyVolume.ts`) and the star sprites
+  (`render/materials.ts`), which sit in a sky converted through the unit, so
+  against the sunlit world both draw 1.42 times bright;
+- the stars' visibility floor, `SKY_VISIBILITY.night` (`starVisibility.ts`),
+  whose magnitude loss under a sky in scene units is off by up to 0.22;
+- the sun's disk (`render/bodyUniforms.ts`, `diskCompression` and
+  `starAsBody`), drawn at 1.6 × 10⁹/30,000 = 53,333 units where a disk that
+  lights an albedo-one surface to one unit is π/Ω = 46,240, 1.153 times, and
+  compressed by Enhanced with an exponent of 0.191 where the unit gives 0.197.
+  `SOLAR_LUMINANCE` is the disk at sea level, 108.7 klx at 1 AU, 0.81 of E⊥.
+
+Moving the white to the unit fixes all four and moves every plate: a manual
+exposure opens 0.51 EV at a fixed lens, the calibration EV readouts move, and
+the galaxy and the stars dim to 0.70 of the world. No emitter is calibrated
+against either constant yet, so the move improves no picture there is to
+judge. The weather's phase 5 calibrates the moon, airglow and the stars
+together and re-scores `night-side`, and fixes these conversions with them.
+[ADR-0065](../../docs/adr/0065-a-scene-unit-is-the-sun-above-the-air-and-the-sensors-white-is-half-a-stop-under-it.md)
+names the unit and holds the naming with three tests; it changes no
+constant's value, and every figure here is computed from the constants.
+
+An absolute emitter added before then divides its physical radiance by
+`SCENE_UNIT_LUMINANCE`, and under Enhanced staging by its body's `sunlight`
+as well. Staging draws every body's sunlight at 1 (`bodyUniforms.ts`), so an
+emitter that skips the second division changes its ratio to the sun with the
+camera mode: 2.32 times on Mars, whose sunlight is 0.431. That figure is
+inferred from the staging code, not measured.
 
 ## The sun's disk and the flare
 

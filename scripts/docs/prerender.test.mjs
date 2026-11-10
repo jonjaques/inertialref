@@ -86,6 +86,39 @@ describe('API HTML build policy', () => {
     )
   })
 
+  it('collapses the largest package into one rewrite once exact proxies pass the limit', () => {
+    const wide = {
+      '/docs/api': { kind: 'api-index' },
+      '/docs/api/universe': { kind: 'api-package' },
+      '/docs/api/spatial': { kind: 'api-package' },
+      '/docs/api/spatial/Vec3-abc': { kind: 'api-member' },
+      ...Object.fromEntries(
+        Array.from({ length: 2001 }, (_, i) => [
+          `/docs/api/universe/Symbol${i}`,
+          { kind: 'api-member' },
+        ]),
+      ),
+    }
+    const rules = docRedirects({ pages: wide, aliases, prerenderApi: false })
+      .split('\n')
+      .filter((line) => line !== '' && !line.startsWith('#'))
+    const splat = rules.indexOf('/docs/api/universe/* /docs/api 200')
+    expect(splat).toBeGreaterThan(
+      rules.indexOf('/docs/api/*.html /docs/api/:splat 301'),
+    )
+    expect(rules).toContain('/docs/api/universe /docs/api 200')
+    expect(rules).toContain('/docs/api/spatial/Vec3-abc /docs/api 200')
+    expect(rules).toContain(
+      '/docs/api/spatial/Vec3 /docs/api/spatial/Vec3-abc 301',
+    )
+    expect(
+      rules.some((line) => line.startsWith('/docs/api/universe/Symbol')),
+    ).toBe(false)
+    expect(
+      rules.filter((line) => !line.includes('*')).length,
+    ).toBeLessThanOrEqual(2000)
+  })
+
   it('fails before Cloudflare silently drops routes above its static rule limit', () => {
     const many = Object.fromEntries(
       Array.from({ length: 2001 }, (_, i) => [
@@ -95,6 +128,21 @@ describe('API HTML build policy', () => {
     )
     expect(() => docRedirects({ pages: many, prerenderApi: false })).toThrow(
       '2,000',
+    )
+  })
+
+  it('fails before the collapsed packages pass the dynamic rule limit', () => {
+    // 3,600 exact rules of two members a package: fitting 2,000 collapses
+    // 800 packages, each one splat rule, against a limit of 100.
+    const narrow = Object.fromEntries(
+      Array.from({ length: 1200 }, (_, i) => [
+        [`/docs/api/package${i}`, { kind: 'api-package' }],
+        [`/docs/api/package${i}/A`, { kind: 'api-member' }],
+        [`/docs/api/package${i}/B`, { kind: 'api-member' }],
+      ]).flat(),
+    )
+    expect(() => docRedirects({ pages: narrow, prerenderApi: false })).toThrow(
+      '100 dynamic',
     )
   })
 })

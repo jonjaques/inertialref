@@ -196,8 +196,10 @@ const TAU_MIE = 0.12
 /**
  * The three bands' wavelengths, nm: where Bodhaine's column above is read,
  * and where an aerosol's Ångström slope is evaluated against its 550 nm depth.
+ * The droplets' Mie table (`apps/ingest/src/mieTable.ts`) is generated at
+ * these, so a channel is one wavelength in cloud and sky alike.
  */
-const BANDS = [680, 550, 440] as const
+export const AIR_BANDS = [680, 550, 440] as const
 
 /** The aerosol's single-scattering albedo where none is authored: 0.94,
  * MACv2's global mean. Extinction over scattering is its inverse. */
@@ -437,6 +439,22 @@ const MS_DIRECTIONS = 64
 const MS_STEPS = 16
 
 /**
+ * The aerosol's vertical depth at 550 nm that the recipe draws: the authored
+ * `aerosolDepth`, or Earth's column scaled by `thickness` where none is.
+ *
+ * One definition, because two readers decide by it: the recipe below, and
+ * whether a world is drawn with weather (`wetWorld`), which asks whether its
+ * aerosol is a haze or already a deck the tables draw. An unauthored aerosol
+ * is not zero — a thickness of 10 carries τ 1.2 — so a reader that took the
+ * absent field for none would call a world wet whose sky is already a cloud.
+ */
+export function aerosolDepthOf(
+  haze: Pick<HazeAuthoring, 'aerosolDepth' | 'thickness'>,
+): number {
+  return haze.aerosolDepth ?? TAU_MIE * haze.thickness
+}
+
+/**
  * Derive the physical recipe from an authored haze layer, its shell, and its
  * two measured scale heights (`airHeights`), all in radii of the drawn sphere.
  */
@@ -463,8 +481,8 @@ export function atmosphereRecipe(
 
   // The aerosol's depth per band: 550 nm is the measured one, and the
   // others follow its Ångström slope.
-  const depth = haze.aerosolDepth ?? TAU_MIE * thickness
-  const tauMie = BANDS.map(
+  const depth = aerosolDepthOf(haze)
+  const tauMie = AIR_BANDS.map(
     (wavelength) => depth * (wavelength / 550) ** -haze.aerosolAngstrom,
   )
   let mieScatter: [number, number, number]

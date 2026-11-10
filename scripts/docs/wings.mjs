@@ -233,6 +233,22 @@ export const WINGS = [
             'docs/adr/0062-one-gpu-lock-for-every-job-and-a-rig-held-to-its-point-and-tree.md',
             'The GPU lock and the guard',
           ],
+          [
+            'docs/adr/0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md',
+            "The weather's frame",
+          ],
+          [
+            'docs/adr/0064-the-clouds-march-the-field-and-the-suns-depth-is-a-grid-summed-through-the-volume.md',
+            "The clouds' caches",
+          ],
+          [
+            'docs/adr/0065-a-scene-unit-is-the-sun-above-the-air-and-the-sensors-white-is-half-a-stop-under-it.md',
+            'The scene unit',
+          ],
+          [
+            'docs/adr/0066-the-droplets-phase-is-lorenz-mie-at-one-narrow-width-generated-offline.md',
+            "The droplets' phase",
+          ],
         ],
       },
     ],

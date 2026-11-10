@@ -7,6 +7,7 @@ import type { GameEngine } from '../engine/GameEngine.ts'
 import { sceneBackend, sceneLayout } from '../render/sceneLayout.ts'
 import { createSensor, type Sensor as SensorChain } from '../render/sensor.ts'
 import { observerAir } from '../render/radiance.ts'
+import { scatteringOf } from '../render/atmosphereLuts.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 import { warmAtMount } from '../render/warmup.ts'
 import { createHandover } from './chainHandover.ts'
@@ -43,6 +44,9 @@ export function Sensor({
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   const camera = useThree((state) => state.camera)
+  // `?clouds=1`'s chunk, resolved before R3F mounts anything (`App.tsx`). A
+  // dependency of the chain, so a factory that arrived late would rebuild it.
+  const clouds = engine.cloudSystemFactory
   // One per mount. Its hooks close over the first render's engine, which is
   // the session's only one.
   const [handover] = useState(() =>
@@ -62,6 +66,11 @@ export function Sensor({
               }
         engine.exposure = chain?.exposure ?? null
         engine.sensorDiagnostics = chain?.diagnostics ?? null
+        // The capture reads the chain on screen's own target, so it moves
+        // with the frame.
+        const system = chain?.clouds ?? null
+        engine.cloudRadiance =
+          system === null ? null : () => system.captureRadiance()
       },
     }),
   )
@@ -89,33 +98,68 @@ export function Sensor({
       scene,
       camera,
       layout,
-      () => ({
-        lens: engine.lens,
-        pictureEpoch: engine.pictureEpoch,
-        pictureDebug: engine.pictureDebug,
-        settings: engine.sensorSettings,
-        time: engine.snapshot?.renderTime ?? 0,
-        adaptationTime: engine.presentationTime,
-        renderOrigin: engine.origin,
-        historyKey: [
+      () => {
+        const historyKey = [
           String(engine.world.galaxySeed),
           engine.harness.observatory.target?.address ?? 'flight',
           engine.galaxyView ?? '',
           engine.harness.observatory.timePaused
             ? engine.harness.observatory.heldTime
             : '',
-        ].join(':'),
-        pinned: engine.pinnedExposure,
-        depth: observerAir.depth,
-        stagingLook: (engine.cinematic?.effects.calibratedLight ?? 0) > 0,
-        headroom: engine.gl?.description.headroom ?? 1,
-        gamma: engine.gamma,
-        motionBlur: engine.presentation.resolved().motionBlur,
-        noiseTick: Math.floor(
-          engine.cinematic?.frame ?? (engine.snapshot?.renderTime ?? 0) * 60,
-        ),
-      }),
+        ].join(':')
+        const view = engine.scene()
+        return {
+          lens: engine.lens,
+          pictureEpoch: engine.pictureEpoch,
+          pictureDebug: engine.pictureDebug,
+          settings: engine.sensorSettings,
+          time: engine.snapshot?.renderTime ?? 0,
+          adaptationTime: engine.presentationTime,
+          renderOrigin: engine.origin,
+          historyKey,
+          pinned: engine.pinnedExposure,
+          depth: observerAir.depth,
+          stagingLook: (engine.cinematic?.effects.calibratedLight ?? 0) > 0,
+          headroom: engine.gl?.description.headroom ?? 1,
+          gamma: engine.gamma,
+          motionBlur: engine.presentation.resolved().motionBlur,
+          noiseTick: Math.floor(
+            engine.cinematic?.frame ?? (engine.snapshot?.renderTime ?? 0) * 60,
+          ),
+          // The pose the frame is drawn from, unjittered, copied: the camera's
+          // own vectors move under the reader on the next frame.
+          clouds:
+            clouds === null || view === null
+              ? null
+              : {
+                  levers: engine.clouds,
+                  scene: view,
+                  record: (address: string) => engine.bodyFor(address),
+                  scattering: (body: Parameters<typeof scatteringOf>[1]) =>
+                    scatteringOf(engine, body),
+                  renderTime: engine.snapshot?.renderTime ?? 0,
+                  visibility: engine.visibilityProcessing,
+                  pictureEpoch: engine.pictureEpoch,
+                  historyKey,
+                  camera: {
+                    position: {
+                      x: camera.position.x,
+                      y: camera.position.y,
+                      z: camera.position.z,
+                    },
+                    quaternion: {
+                      x: camera.quaternion.x,
+                      y: camera.quaternion.y,
+                      z: camera.quaternion.z,
+                      w: camera.quaternion.w,
+                    },
+                  },
+                  lens: engine.lens,
+                },
+        }
+      },
       diagnostic,
+      clouds === null ? {} : { clouds },
     )
     const release = handover.offer(built)
     // The producer is registered once per label, so under StrictMode's
@@ -139,10 +183,18 @@ export function Sensor({
         done()
       },
     })
+    if (built.clouds !== null)
+      warmAtMount({
+        label: 'warming the clouds',
+        units: 4,
+        run: async (done) => {
+          await handover.latest?.clouds?.warm(done)
+        },
+      })
     return release
     // `picture` is drawn through the engine's layout and only checked here;
     // it is a dependency because a new picture is a new chain.
-  }, [gl, scene, camera, engine, picture, diagnostic, handover])
+  }, [gl, scene, camera, engine, picture, diagnostic, handover, clouds])
 
   useTimedFrame(
     'sensor',

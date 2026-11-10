@@ -8,6 +8,7 @@ import type { PassReport } from './passReport.ts'
 import type { PictureReport } from './pictureReport.ts'
 import type { TerrainReport } from './descent.ts'
 import type { GalaxyRenderReport } from './galaxy.ts'
+import { cloudReportIdle } from './clouds.ts'
 import type { TimingPort } from './profile.ts'
 import { DEFAULT_PICTURE_PROCESSING } from './pictureProcessing.ts'
 import { PICTURES } from './pictures.ts'
@@ -90,6 +91,8 @@ describe('renderHost, the render side of a host that has none', () => {
     expect(host.frameStats()).toBeNull()
     expect(host.boot()).toBe('booted')
     expect(host.galaxyRender()).toBeNull()
+    expect(host.clouds()).toBeNull()
+    await expect(host.cloudRadiance()).resolves.toBeNull()
     expect(host.terrain()).toBeNull()
     expect(host.lensView()).toBeNull()
     expect(host.framingLens()).toBe(LENS_PRESETS.flight)
@@ -432,6 +435,33 @@ describe('the galaxy inspector', () => {
         .harness.galaxy()
         .render(),
     ).toBe(report)
+  })
+})
+
+describe('the clouds’ report', () => {
+  it('reads the system’s report through the host, and null with none', () => {
+    const report = cloudReportIdle()
+    expect(session().harness.clouds()).toBeNull()
+    expect(session({ clouds: () => report }).harness.clouds()).toBe(report)
+  })
+
+  it('captures the radiance through the host, null with none, and differences two captures', async () => {
+    const capture = {
+      width: 2,
+      height: 1,
+      luminance: Float32Array.from([1, 3]),
+      cloud: Uint8Array.from([1, 0]),
+    }
+    await expect(session().harness.cloudRadiance()).resolves.toBeNull()
+    const ir = session({ cloudRadiance: async () => capture }).harness
+    await expect(ir.cloudRadiance()).resolves.toBe(capture)
+    const lit = { ...capture, luminance: Float32Array.from([2, 3]) }
+    expect(ir.cloudRadianceDifference(capture, lit)).toEqual({
+      texels: 1,
+      rmse: 1,
+      mean: 1.5,
+      relative: 1 / 1.5,
+    })
   })
 })
 
