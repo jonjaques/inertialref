@@ -487,6 +487,28 @@ describe('the sheets', () => {
     expect(rows[2]).toContain('[sheet](sheets/weather-e1-cumulus-orbit.png)')
     expect(rows[2]).toContain('[deck](weather-e1-cumulus-orbit-deck.png)')
     expect(rows[3]).toContain('[slow on](weather-g6-descent-slow-on/cast.mp4)')
+    // A cast refused at every boot is named, with its drops and its rate.
+    const refusedRows = mediaRows(
+      {
+        ...record,
+        refused: [
+          {
+            id: 'weather-g5-inside',
+            speed: 'fly',
+            clouds: true,
+            attempts: [
+              { hz: 42.4, dropped: [{}, {}] },
+              { hz: 42.6, dropped: [{}] },
+            ],
+          },
+        ],
+      },
+      [],
+      [],
+    ).split('\n')
+    expect(refusedRows.at(-1)).toContain(
+      'fly on refused: drops 2, 1 at 42.6 Hz',
+    )
     // A cast's rate travels with it until 60 Hz can be held.
     expect(rows[3]).toContain(
       '[slow off, 42.6 Hz, not held at 60](weather-g6-descent-slow-off/cast.mp4)',

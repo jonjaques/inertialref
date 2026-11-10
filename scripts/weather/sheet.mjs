@@ -127,6 +127,17 @@ export function castLabel(one) {
   return `${one.speed} ${one.clouds ? 'on' : 'off'}${rate}`
 }
 
+/** A cast refused at every boot: its arm, and the rate and drops it was refused at. */
+export function refusedLabel(one) {
+  const rates = one.attempts
+    .map((attempt) => attempt.hz)
+    .filter((hz) => typeof hz === 'number')
+  const hz = rates.length === 0 ? null : Math.max(...rates)
+  const drops = one.attempts.map((attempt) => attempt.dropped.length)
+  // Short enough for a tile's label at the sheet's width.
+  return `${one.speed} ${one.clouds ? 'on' : 'off'} refused: drops ${drops.join(', ')}${hz === null ? '' : ` at ${hz.toFixed(1)} Hz`}`
+}
+
 /** The rows of `media.md`, one a cornerstone, with the files it names. */
 export function mediaRows(record, sheets, pairs) {
   const rows = [
@@ -137,6 +148,7 @@ export function mediaRows(record, sheets, pairs) {
     ...new Set([
       ...record.stills.map((one) => one.id),
       ...record.casts.map((one) => one.id),
+      ...(record.refused ?? []).map((one) => one.id),
     ]),
   ]
   for (const id of ids) {
@@ -147,6 +159,8 @@ export function mediaRows(record, sheets, pairs) {
     const casts = record.casts
       .filter((one) => one.id === id && one.clip !== null)
       .map((one) => `[${castLabel(one)}](${one.clip.file})`)
+    for (const one of (record.refused ?? []).filter((one) => one.id === id))
+      casts.push(refusedLabel(one))
     for (const pair of pairs.filter((one) => one.id === id))
       casts.push(`[${pair.speed}, beside the base](${pair.file})`)
     const sheet = sheets
@@ -226,16 +240,24 @@ export async function buildSheets({ dir, base: given = null }) {
    * own, numbered from 0 as `drive.mjs` writes them.
    */
   for (const cast of CASTS) {
-    const taken = [false, true].map((clouds) =>
-      record.casts.find(
-        (one) =>
-          one.id === cast.id &&
-          one.speed === cast.speed &&
-          one.clouds === clouds,
-      ),
-    )
-    if (taken.some((one) => one === undefined)) continue
-    const tiles = taken.flatMap((one) => {
+    const taken = [false, true].map((clouds) => {
+      const match = (one) =>
+        one.id === cast.id && one.speed === cast.speed && one.clouds === clouds
+      return {
+        kept: record.casts.find(match),
+        refused: (record.refused ?? []).find(match),
+      }
+    })
+    // A sheet needs one kept arm; a refused arm is a labeled blank beside it.
+    if (taken.every((one) => one.kept === undefined)) continue
+    const tiles = taken.flatMap(({ kept: one, refused }) => {
+      if (one === undefined)
+        return tileArgs(
+          null,
+          refused === undefined
+            ? `${now}: not taken`
+            : `${now}, ${refusedLabel(refused)}`,
+        )
       const frame = path.join(
         dir,
         one.name,
