@@ -171,21 +171,44 @@ Phase 0's column is the baseline, phase 0's landed light on the placeholder
 density, taken by `scripts/weather/capture.mjs` before any phase 1 package
 changes it; every later sheet's left column starts there.
 
-| Picture | Phase 0, the baseline | Phase 1 |
-| ------- | --------------------- | ------- |
-| E1      | Not yet taken         | —       |
-| E2      | Not yet taken         | —       |
-| E3      | Not yet taken         | —       |
-| G1      | Not yet taken         | —       |
-| G2      | Not yet taken         | —       |
-| G3      | Not yet taken         | —       |
-| G4      | Not yet taken         | —       |
-| G5      | Not yet taken (casts) | —       |
-| G6      | Not yet taken (casts) | —       |
+Taken by the capture script at `ab301957` from a production build of
+`23f173bc`; the one commit between them raises the script's settle budget
+and changes nothing in the bundle. Chrome 157.0.8103.40 on the Mac
+mini, 1440 × 900 at DPR 2. The noise floor is the pixels over the presets'
+3% level between two fresh boots of the same still, of 5,184,000.
 
-Earth's rows are the forced arm beside the deck. Until phase 2 that arm draws
-no shadow on the ground, and until phase 3 a held regime stands in for the
-climatology. E3's weather changes from `cirrus-over-cumulus` to the climate
+| Picture | Phase 0, the baseline                                                                                                                                                                                                                                                                                                                                                                                    | Phase 1 |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| E1      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/fzrhjxb9ji/weather-e1-cumulus-orbit.png). Volume: a dim blue-gray sea under scattered flat blotches of the placeholder's coverage, thinning to clear toward the frame's left; no cloud reads as cumulus. Deck: an unbroken white of the textured deck. Floor 6,236 px volume, 0 deck; a cut from G1 differs from its fresh boot at 6,491 px | —       |
+| E2      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/5r2dsf2tdz/weather-e2-limb-dusk.png). The night limb under an orange and violet band of air; the volume's horizon is a fine broken edge where the deck's is smooth. Both arms draw the sun's flare through the dark disk below the limb. Floor 14,667 px volume, 0 deck                                                                     | —       |
+| E3      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/3yxryacys8/weather-e3-whole-face.png). Volume: Earth whole under diagonal bands of the placeholder, Africa showing through, the glory's ring at the antisolar point. Deck: the photographed clouds. Floor 6,041 px volume, 0 deck                                                                                                           | —       |
+| G1      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/ceqrj2892y/weather-g1-fair.png). A flat bright plain under a low line of small dark cloud on the horizon; sky and ground orange-brown. Floor 62 px                                                                                                                                                                                          | —       |
+| G2      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/zx7jetqcu6/weather-g2-overcast-shore.png). Two lit wisps on a clear brown sky over a flat orange plane; **no overcast**. Floor 341 px                                                                                                                                                                                                       | —       |
+| G3      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/nhjnmsrugr/weather-g3-underlit-dusk.png). An orange afterglow over a pale plain brighter than the sky; **no cloud at all**. Floor 0 px                                                                                                                                                                                                      | —       |
+| G4      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/miynu3gs87/weather-g4-over-deck.png). Looking down on a broken deck with the glory's rings around the antisolar point and a bright small glory at its center. Floor 170 px                                                                                                                                                                  | —       |
+| G5      | Not taken: the casts need 60 Hz, see below                                                                                                                                                                                                                                                                                                                                                               | —       |
+| G6      | Not taken: the casts need 60 Hz, see below                                                                                                                                                                                                                                                                                                                                                               | —       |
+
+- **The casts cannot be taken at the rubric's rig yet.** G6's descent with the
+  clouds on costs 20.26 ms of GPU a frame and presents at 42.6 Hz (the tool
+  read 41.9 Hz and refused the cast); with the clouds off it costs 13.56 ms
+  and presents at 63.3 Hz, also outside the tool's 58–62 Hz window. The path
+  is scheduled by frame, so a cast at another rate keeps another share of it.
+- **G2 and G3 do not show their weather.** `overcast` draws two wisps and
+  `dusk-altocumulus` nothing visible, at the placeholder density. Both are
+  taken as they are: they are the baseline a calibrated density is judged
+  against, not a fixture to tune.
+- **Every generated-world still reads orange to brown,** sky and ground,
+  where the world was chosen for a noon zenith of R 0.092, G 0.123, B 0.169.
+  The stills look toward the horizon, not the zenith, and nothing here says
+  whether the hue is the air, the star or the sensor's white; it is a
+  question for the rubric's sky rule before a panel scores these.
+
+Earth's rows are the forced arm beside the deck. At this phase the forced
+arm lacks three things the deck's picture has: it draws no shadow on the
+ground (phase 2), a held regime stands in for the climatology (phase 3), and
+its light is phase 0's placeholder, first order with a placeholder sky term.
+So E1 to E3 say where the volume stands, not how Earth's clouds look. E3's weather changes from `cirrus-over-cumulus` to the climate
 when phase 1's integration lands it, so the sheet across that change compares
 two weathers.
 
@@ -279,17 +302,18 @@ ignores that drift and may have its east–west sign reversed.
 
 ## What is in this directory
 
-| File                                                         | What it is                                                                                                                                                                                                                   |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`mvp.md`](mvp.md)                                           | The rubric the MVP is judged against: the nine pictures, the budget, the numbers. A draft no council has settled                                                                                                             |
-| [`references.md`](references.md)                             | The reference photographs gathered for each picture, with source, credit and license                                                                                                                                         |
-| [`phase1/design.md`](phase1/design.md)                       | Phase 1's engineering design, draft 3: the cornerstones, the volume's light, the packages and their order                                                                                                                    |
-| [`phase0/design.md`](phase0/design.md)                       | Phase 0's engineering design: interfaces, frame schedule, physics, measurement protocol, decision rules, packages, and its critique log. The code has moved past it where a loser was deleted; the ADRs describe what stands |
-| [`phase0/package-reports.md`](phase0/package-reports.md)     | What each of the ten work packages committed, where it departed from the design, and what it tried and dropped                                                                                                               |
-| [`phase0/measurement-draft.md`](phase0/measurement-draft.md) | Notes on the jitter lever from the first, stopped measurement                                                                                                                                                                |
-| [`phase0/measurements/`](phase0/measurements/README.md)      | Both campaigns' summaries and instrument documents, every pass's share, and the placement's repeats. The raw row documents stay on the Mac mini                                                                              |
-| [`maps/`](maps/)                                             | A read-only survey of the eight subsystems the weather touches, taken on `c2a50f1` before any of this was written                                                                                                            |
-| [`isccp-h-research.md`](isccp-h-research.md)                 | Phase 3's data: ISCCP-H HGM is netCDF-4 read with `h5wasm`, and its own cover (64.8% global, 68.4% ocean) is not MODIS's                                                                                                     |
+| File                                                                                       | What it is                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`mvp.md`](mvp.md)                                                                         | The rubric the MVP is judged against: the nine pictures, the budget, the numbers. A draft no council has settled                                                                                                             |
+| [`references.md`](references.md)                                                           | The reference photographs gathered for each picture, with source, credit and license                                                                                                                                         |
+| [`phase1/design.md`](phase1/design.md)                                                     | Phase 1's engineering design, draft 3: the cornerstones, the volume's light, the packages and their order                                                                                                                    |
+| [`phase1/measurements/velocity-2026-11-10.md`](phase1/measurements/velocity-2026-11-10.md) | ADR-0044's held presets on the layout without the velocity row and on the one with it: 32 cells, the protocol and the rows                                                                                                   |
+| [`phase0/design.md`](phase0/design.md)                                                     | Phase 0's engineering design: interfaces, frame schedule, physics, measurement protocol, decision rules, packages, and its critique log. The code has moved past it where a loser was deleted; the ADRs describe what stands |
+| [`phase0/package-reports.md`](phase0/package-reports.md)                                   | What each of the ten work packages committed, where it departed from the design, and what it tried and dropped                                                                                                               |
+| [`phase0/measurement-draft.md`](phase0/measurement-draft.md)                               | Notes on the jitter lever from the first, stopped measurement                                                                                                                                                                |
+| [`phase0/measurements/`](phase0/measurements/README.md)                                    | Both campaigns' summaries and instrument documents, every pass's share, and the placement's repeats. The raw row documents stay on the Mac mini                                                                              |
+| [`maps/`](maps/)                                                                           | A read-only survey of the eight subsystems the weather touches, taken on `c2a50f1` before any of this was written                                                                                                            |
+| [`isccp-h-research.md`](isccp-h-research.md)                                               | Phase 3's data: ISCCP-H HGM is netCDF-4 read with `h5wasm`, and its own cover (64.8% global, 68.4% ocean) is not MODIS's                                                                                                     |
 
 The maps, the design and the reports cite line numbers on the trees they were
 written against; read the code before trusting one.
