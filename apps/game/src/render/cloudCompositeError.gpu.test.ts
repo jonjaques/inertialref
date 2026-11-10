@@ -38,12 +38,29 @@ import {
   SURFACE_SEGMENT_SAMPLES,
 } from './cloudCompositeAir.ts'
 import { CLOUD_DEPTH_CLAMP_KM } from './cloudDepth.ts'
-import { type GpuSession, openGpu } from './gpuHarness.ts'
+import landed from './cloudCompositeError.landed.json' with { type: 'json' }
+import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The composite's error on analytic slabs (§8.6): an instrument, opt-in by
- * IR_CLOUD_MEASURE=1, that writes `.data/clouds/compositeError.json` and
- * asserts only that every figure is finite and sane.
+ * The composite's error on analytic slabs (§8.6): the identity and the thin
+ * form against a joint march of air and cloud.
+ *
+ * **The identity's residual is held to the landed one.**
+ * `cloudCompositeError.landed.json` is the instrument's document on the
+ * landed code: `choices-2026-11-10T11-49-33Z-compositeError.json` of phase
+ * 0's measurements, taken at `51c96da4` on the Mac mini (Mac18,5, Apple
+ * M6). A case's identity residual, and the 95th percentile of it over the
+ * cases, may each pass the landed value by a tenth and no more. One slab
+ * runs in every `pnpm test:gpu`, the 500 m one seen from above at five
+ * angles; all sixty cases run under IR_CLOUD_MEASURE=1, which also writes
+ * `.data/clouds/compositeError.json`. The bound is this adapter's: it is
+ * asserted where the adapter offers timestamps, which is how the suite
+ * tells a workstation from CI's hosted device, and there the figures are
+ * still taken and held finite.
+ *
+ * The bounds tighten and are never loosened. A change that moves a figure
+ * replaces the landed document in the commit that moves it, so the diff
+ * shows the old figure and the new.
  *
  * One body, Earth's recipe. A slab of 5 km⁻¹ from 2 km up, 100 m, 500 m and
  * 2 km thick, seen at five angles: from 10 km down through it to the ground
@@ -73,6 +90,16 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
 const OUT = '.data/clouds/compositeError.json'
+/** The adapter the landed figures were taken on is a workstation's: it offers timestamps. */
+const WORKSTATION = await adapterOffers('timestamp-query')
+/** A figure may pass its landed value by a tenth (phase 1 design §6.3). */
+const SLACK = 1.1
+/**
+ * The slab every run of the suite takes: seen from above, the beam
+ * uncleared. With the span's air left out of the light to the cloud's end,
+ * its residual straight down is 0.0042 against a bound of 0.0014.
+ */
+const ALWAYS = { class: 'surface', cleared: 0, thickness: 500 } as const
 
 const earth = SOLAR_PLANETS.find((body) => body.name === 'Earth')!
 const haze = earth.haze!
@@ -199,7 +226,6 @@ let gpu: GpuSession
 let air: AirUniforms
 
 beforeAll(async () => {
-  if (!MEASURE) return
   gpu = await openGpu(1, 1)
   air = createAirUniforms()
   const tables = scatteringFor(haze, TOP, HEIGHTS)
@@ -207,7 +233,7 @@ beforeAll(async () => {
 })
 
 afterAll(() => {
-  if (MEASURE) gpu.dispose()
+  gpu?.dispose()
 })
 
 const at = {
@@ -403,13 +429,55 @@ interface Measured {
   readonly quadrature: number
 }
 
-describe.skipIf(!MEASURE)('the composite’s error on analytic slabs', () => {
-  it('measures the identity and the thin form against a joint march, and the identity’s quadrature', async () => {
-    const programs = { surface: errors(false), sky: errors(true) }
+/** The value at or under which 95 in 100 of `values` fall: nearest rank. */
+function percentile95(values: readonly number[]): number {
+  const sorted = [...values].sort((x, y) => x - y)
+  return sorted[Math.ceil(0.95 * sorted.length) - 1] ?? 0
+}
+
+const sameCase = (a: Measured, b: Measured): boolean =>
+  a.class === b.class &&
+  a.cleared === b.cleared &&
+  a.thickness === b.thickness &&
+  a.angle === b.angle
+
+/** Hold a case's identity residual to its landed one, and its four figures finite. */
+function hold(found: Measured): void {
+  const what = `${found.class}, cleared ${found.cleared}, ${found.thickness} m at ${found.angle}°`
+  for (const figure of [
+    found.identity,
+    found.thin,
+    found.exact,
+    found.quadrature,
+  ]) {
+    expect(Number.isFinite(figure), what).toBe(true)
+    // Relative errors over a lit scene: past 10 is a broken instrument.
+    expect(figure, what).toBeLessThan(10)
+  }
+  const pinned = (landed.cases as readonly Measured[]).find((row) =>
+    sameCase(row, found),
+  )
+  // A case with no landed figure is a case that cannot fail.
+  if (pinned === undefined) throw new Error(`no landed figures for ${what}`)
+  if (!WORKSTATION) return
+  expect(found.identity, `${what}: identity`).toBeLessThanOrEqual(
+    pinned.identity * SLACK,
+  )
+}
+
+describe('the composite’s error on analytic slabs', () => {
+  const programs = { surface: errors(false), sky: errors(true) }
+
+  /** The identity and the thin form against a joint march, and the identity's quadrature, a case at a time. */
+  async function measure(
+    kinds: readonly Measured['class'][],
+    clearings: readonly number[],
+    thicknesses: readonly number[],
+  ): Promise<Measured[]> {
     const measured: Measured[] = []
-    for (const kind of ['surface', 'sky'] as const)
-      for (const cleared of [0, 1])
-        for (const thickness of THICKNESSES)
+    for (const kind of kinds)
+      for (const cleared of clearings)
+        for (const thickness of thicknesses)
           for (const angle of ANGLES) {
             const c = caseOf(kind === 'sky', thickness, angle)
             at.eye.value.copy(c.eye)
@@ -437,30 +505,50 @@ describe.skipIf(!MEASURE)('the composite’s error on analytic slabs', () => {
               quadrature,
             })
           }
-    for (const row of measured)
-      for (const figure of [
-        row.identity,
-        row.thin,
-        row.exact,
-        row.quadrature,
-      ]) {
-        expect(Number.isFinite(figure), JSON.stringify(row)).toBe(true)
-        // Relative errors over a lit scene: past 10 is a broken instrument.
-        expect(figure, JSON.stringify(row)).toBeLessThan(10)
-      }
-    mkdirSync('.data/clouds', { recursive: true })
-    writeFileSync(
-      OUT,
-      `${JSON.stringify(
-        {
-          note: 'cloudCompositeError.gpu.test.ts: relative luminance errors against a 512-sample joint march',
-          body: 'Earth',
-          slab: { baseMeters: BASE, sigmaPerMeter: SIGMA, source: SOURCE },
-          cases: measured,
-        },
-        null,
-        2,
-      )}\n`,
+    return measured
+  }
+
+  it('holds the 500 m slab seen from above to its landed residual, in every run of the suite', async () => {
+    const found = await measure(
+      [ALWAYS.class],
+      [ALWAYS.cleared],
+      [ALWAYS.thickness],
     )
+    expect(found).toHaveLength(ANGLES.length)
+    for (const row of found) {
+      expect(row).toMatchObject(ALWAYS)
+      hold(row)
+    }
   }, 120_000)
+
+  it.skipIf(!MEASURE)(
+    'holds all sixty cases and their 95th percentile to the landed residual, and writes them',
+    async () => {
+      const measured = await measure(['surface', 'sky'], [0, 1], THICKNESSES)
+      expect(measured).toHaveLength(landed.cases.length)
+      for (const row of measured) hold(row)
+      if (WORKSTATION)
+        expect(
+          percentile95(measured.map((row) => row.identity)),
+          'the identity’s residual at the 95th percentile',
+        ).toBeLessThanOrEqual(
+          percentile95(landed.cases.map((row) => row.identity)) * SLACK,
+        )
+      mkdirSync('.data/clouds', { recursive: true })
+      writeFileSync(
+        OUT,
+        `${JSON.stringify(
+          {
+            note: 'cloudCompositeError.gpu.test.ts: relative luminance errors against a 512-sample joint march',
+            body: 'Earth',
+            slab: { baseMeters: BASE, sigmaPerMeter: SIGMA, source: SOURCE },
+            cases: measured,
+          },
+          null,
+          2,
+        )}\n`,
+      )
+    },
+    120_000,
+  )
 })

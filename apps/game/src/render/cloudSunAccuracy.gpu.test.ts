@@ -42,14 +42,28 @@ import {
   type RigStance,
   rigFrameInputs,
 } from './cloudSystemRig.ts'
-import { type GpuSession, openGpu } from './gpuHarness.ts'
+import landed from './cloudSunAccuracy.landed.json' with { type: 'json' }
+import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
  * The sun grid's optical depth against a march through the field (§8.6):
- * an instrument, opt-in by IR_CLOUD_MEASURE=1, that writes
- * `.data/clouds/sunAccuracy.json` and asserts only that every figure is
- * finite and sane. Its headline is T_cloud's RMS error in all five
- * scenarios at both suns, at lightTaps 2 and 4 (§8.7's 3%).
+ * T_cloud's error in five scenarios at two suns, at lightTaps 2 and 4.
+ *
+ * **Every figure is held to the landed one.** `cloudSunAccuracy.landed.json`
+ * is the instrument's document on the landed code:
+ * `choices-2026-11-10T11-49-33Z-sunAccuracy.json` of phase 0's
+ * measurements, taken at `51c96da4` on the Mac mini (Mac18,5, Apple M6). A
+ * case's RMS, its bias and its worst sample may each pass the landed value
+ * by a tenth and no more. One scenario runs in every `pnpm test:gpu`,
+ * fair-cumulus under both suns; all ten cases run under IR_CLOUD_MEASURE=1,
+ * which also writes `.data/clouds/sunAccuracy.json`. The bound is this
+ * adapter's: it is asserted where the adapter offers timestamps, which is
+ * how the suite tells a workstation from CI's hosted device, and there the
+ * figures are still taken and held finite.
+ *
+ * The bounds tighten and are never loosened. A change that moves a figure
+ * replaces the landed document in the commit that moves it, so the diff
+ * shows the old figure and the new.
  *
  * The field is the system's own (`createCloudField`), its bakes driven by
  * frames built as the sensor builds them, over Earth turned so the eye, 2 m
@@ -65,6 +79,20 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
 const OUT = '.data/clouds/sunAccuracy.json'
+/** The adapter the landed figures were taken on is a workstation's: it offers timestamps. */
+const WORKSTATION = await adapterOffers('timestamp-query')
+/** A figure may pass its landed value by a tenth (phase 1 design §6.3). */
+const SLACK = 1.1
+/**
+ * The scenario every run of the suite takes, at both suns. Under the high
+ * sun a kilometer of taps reaches most of the way out of a cumulus, so the
+ * case holds the taps and reads little of the grid: with a fifth of the
+ * grid's depth lost, each of its six figures is still inside its bound, and
+ * with the taps' depth halved its RMS at two taps is 0.162 against a bound
+ * of 0.146. Under the low sun the path past the taps is long, and the loss
+ * in the grid moves the bias at four taps from 0.0004 to 0.0006.
+ */
+const ALWAYS: ScenarioId = 'fair-cumulus'
 
 const CSS = { width: 1024, height: 576 } as const
 const SCENARIOS: readonly ScenarioId[] = [
@@ -173,16 +201,14 @@ let gpu: GpuSession
 let field: CloudField
 
 beforeAll(async () => {
-  if (!MEASURE) return
   gpu = await openGpu(CSS.width, CSS.height)
   field = createCloudField()
   for (const bake of field.bakes) await bake.warm(gpu.renderer)
 }, 120_000)
 
 afterAll(() => {
-  if (!MEASURE) return
-  field.dispose()
-  gpu.dispose()
+  field?.dispose()
+  gpu?.dispose()
 })
 
 interface Scored {
@@ -192,8 +218,61 @@ interface Scored {
   readonly bias: number
 }
 
-describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
-  it('scores the grid at both tap counts on the real field, and writes the figures', async () => {
+interface Case {
+  readonly scenario: string
+  readonly sunDegrees: number
+  readonly place: { readonly latitude: number; readonly longitude: number }
+  readonly samples: number
+  readonly inCloud: number
+  readonly meanReference: number
+  readonly grid: Readonly<Record<string, Scored>>
+}
+
+/** The landed figures of a case, or a failure: a case with no bound is a case that cannot fail. */
+function landedCase(found: Case): Case {
+  const pinned = (landed.cases as readonly Case[]).find(
+    (one) =>
+      one.scenario === found.scenario && one.sunDegrees === found.sunDegrees,
+  )
+  if (pinned === undefined)
+    throw new Error(
+      `no landed figures for ${found.scenario} at ${found.sunDegrees}°`,
+    )
+  return pinned
+}
+
+/** Hold a case's every figure to its landed one, at both tap counts. */
+function hold(found: Case): void {
+  const what = `${found.scenario} at ${found.sunDegrees}°`
+  // Cloud to score, and a transmittance error is at most 1.
+  expect(found.inCloud, what).toBeGreaterThan(0)
+  const pinned = landedCase(found)
+  for (const taps of TAPS) {
+    const now = found.grid[taps]!
+    const then = pinned.grid[taps]!
+    for (const figure of [now.rms, now.worst, now.bias])
+      expect(Number.isFinite(figure), `${what}, ${taps} taps`).toBe(true)
+    expect(now.worst, what).toBeLessThanOrEqual(1)
+    if (!WORKSTATION) continue
+    expect(now.rms, `${what}, ${taps} taps: rms`).toBeLessThanOrEqual(
+      then.rms * SLACK,
+    )
+    expect(now.worst, `${what}, ${taps} taps: worst`).toBeLessThanOrEqual(
+      then.worst * SLACK,
+    )
+    expect(
+      Math.abs(now.bias),
+      `${what}, ${taps} taps: bias`,
+    ).toBeLessThanOrEqual(Math.abs(then.bias) * SLACK)
+  }
+}
+
+describe('the sun’s optical depth against the field', () => {
+  /** Score the grid at both tap counts on the real field, a scenario at a time, at each of its suns. */
+  async function measure(
+    scenarios: readonly ScenarioId[],
+    suns: readonly number[],
+  ): Promise<Case[]> {
     const renderer = gpu.renderer
     const offsets = new StorageBufferAttribute(new Float32Array(POINTS * 4), 4)
     const out = new StorageBufferAttribute(new Float32Array(POINTS * 2), 1)
@@ -275,15 +354,15 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
       return new Float32Array(await gpu.readBuffer(out))
     }
 
-    const results: unknown[] = []
-    for (const scenario of SCENARIOS) {
+    const results: Case[] = []
+    for (const scenario of scenarios) {
       const place = thickest(scenario)
       const turn = turnOnto(place)
       const points = lattice(scenario, turn)
       ;(offsets.array as Float32Array).set(points)
       offsets.needsUpdate = true
       count.value = points.length / 4
-      for (const elevation of SUNS) {
+      for (const elevation of suns) {
         const stance: RigStance = {
           eye: EYE,
           looking: LOOKING_UP,
@@ -337,53 +416,49 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
       }
     }
 
-    const figures = (value: unknown, path: string): [string, number][] =>
-      typeof value === 'number'
-        ? [[path, value]]
-        : typeof value === 'object' && value !== null
-          ? Object.entries(value).flatMap(([key, inner]) =>
-              figures(inner, `${path}.${key}`),
-            )
-          : []
-    for (const [path, value] of figures(results, 'results')) {
-      expect(Number.isFinite(value), path).toBe(true)
-      expect(Math.abs(value), path).toBeLessThan(1e7)
-    }
-    for (const row of results as {
-      scenario: string
-      sunDegrees: number
-      inCloud: number
-      grid: Record<string, Scored>
-    }[]) {
-      // Every case holds cloud to score, and a transmittance error is at most 1.
-      expect(
-        row.inCloud,
-        `${row.scenario} at ${row.sunDegrees}°`,
-      ).toBeGreaterThan(0)
-      for (const s of Object.values(row.grid))
-        expect(s.worst, row.scenario).toBeLessThanOrEqual(1)
-    }
+    for (const kernel of [reference, grid]) kernel.dispose()
+    offsets.dispose()
+    out.dispose()
+    return results
+  }
 
-    mkdirSync('.data/clouds', { recursive: true })
-    writeFileSync(
-      OUT,
-      `${JSON.stringify(
-        {
-          note: 'cloudSunAccuracy.gpu.test.ts: T_cloud through the sun grid against a 256-step march of the field to the union top, at in-cloud samples (§8.6)',
-          body: 'Earth',
-          eyeMeters: EYE,
-          lattice: {
-            columns: ACROSS * ACROSS,
-            reachMeters: REACH,
-            heightsALayer: HEIGHTS_A_LAYER,
-          },
-          referenceSteps: REFERENCE_STEPS,
-          units: 'transmittance, absolute',
-          cases: results,
-        },
-        null,
-        2,
-      )}\n`,
+  it('holds fair-cumulus under both suns to its landed figures, in every run of the suite', async () => {
+    const found = await measure([ALWAYS], SUNS)
+    expect(found.map((one) => [one.scenario, one.sunDegrees])).toEqual(
+      SUNS.map((sun) => [ALWAYS, sun]),
     )
-  }, 600_000)
+    for (const one of found) hold(one)
+  }, 120_000)
+
+  it.skipIf(!MEASURE)(
+    'holds all ten cases to their landed figures, and writes them',
+    async () => {
+      const results = await measure(SCENARIOS, SUNS)
+      expect(results).toHaveLength(landed.cases.length)
+      for (const found of results) hold(found)
+
+      mkdirSync('.data/clouds', { recursive: true })
+      writeFileSync(
+        OUT,
+        `${JSON.stringify(
+          {
+            note: 'cloudSunAccuracy.gpu.test.ts: T_cloud through the sun grid against a 256-step march of the field to the union top, at in-cloud samples (§8.6)',
+            body: 'Earth',
+            eyeMeters: EYE,
+            lattice: {
+              columns: ACROSS * ACROSS,
+              reachMeters: REACH,
+              heightsALayer: HEIGHTS_A_LAYER,
+            },
+            referenceSteps: REFERENCE_STEPS,
+            units: 'transmittance, absolute',
+            cases: results,
+          },
+          null,
+          2,
+        )}\n`,
+      )
+    },
+    600_000,
+  )
 })

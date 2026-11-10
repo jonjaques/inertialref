@@ -47,14 +47,30 @@ import {
   type RigStance,
   rigFrameInputs,
 } from './cloudSystemRig.ts'
-import { type GpuSession, openGpu } from './gpuHarness.ts'
+import landed from './cloudFarCompare.landed.json' with { type: 'json' }
+import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The far atlas against the fine march on the real field (§8.6): an
- * instrument, opt-in by IR_CLOUD_MEASURE=1, that writes
- * `.data/clouds/farCompare.json` and asserts only that every figure is
- * finite and sane. Its headline is the worst footprint-averaged radiance
- * error over the four cases at farFootprint 400 m (§8.7).
+ * The far atlas against the fine march on the real field (§8.6): four cases
+ * at three footprints. Its headline is the footprint-averaged error in
+ * transmittance and in radiance.
+ *
+ * **Every headline figure is held to the landed one.**
+ * `cloudFarCompare.landed.json` is the instrument's document on the landed
+ * code: `choices-2026-11-10T11-49-33Z-farCompare.json` of phase 0's
+ * measurements, taken at `51c96da4` on the Mac mini (Mac18,5, Apple M6). A
+ * case's footprint transmittance and footprint radiance, for the atlas
+ * alone and for the handover, may each pass the landed value by a tenth and
+ * no more. One case runs in every `pnpm test:gpu`, broken cumulus at 800 m;
+ * all twelve run under IR_CLOUD_MEASURE=1, which also writes
+ * `.data/clouds/farCompare.json`. The bound is this adapter's: it is
+ * asserted where the adapter offers timestamps, which is how the suite
+ * tells a workstation from CI's hosted device, and there the figures are
+ * still taken and held finite.
+ *
+ * The bounds tighten and are never loosened. A change that moves a figure
+ * replaces the landed document in the commit that moves it, so the diff
+ * shows the old figure and the new.
  *
  * The field is the system's own (`createCloudField`): the maps, the
  * clipmap, the media, the far atlas and the sun grid the fine march takes
@@ -91,6 +107,18 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
 const OUT = '.data/clouds/farCompare.json'
+/** The adapter the landed figures were taken on is a workstation's: it offers timestamps. */
+const WORKSTATION = await adapterOffers('timestamp-query')
+/** A figure may pass its landed value by a tenth (phase 1 design §6.3). */
+const SLACK = 1.1
+/**
+ * The case and footprint every run of the suite takes. With the far march
+ * mixing a partly clear column as all cloud, its footprint transmittance
+ * error is 0.097 against a bound of 0.092. The bound is on an error, so it
+ * has one side: with every far column a fifth thinner the error is no
+ * larger, and the case passes.
+ */
+const ALWAYS = { case: 'broken cumulus', footprintMeters: 800 } as const
 
 const CSS = { width: 1024, height: 576 } as const
 const WIDTH = CSS.width / 4
@@ -544,17 +572,90 @@ let gpu: GpuSession
 let field: CloudField
 
 beforeAll(async () => {
-  if (!MEASURE) return
   gpu = await openGpu(CSS.width, CSS.height)
   field = createCloudField()
   for (const bake of field.bakes) await bake.warm(gpu.renderer)
 }, 120_000)
 
 afterAll(() => {
-  if (!MEASURE) return
-  field.dispose()
-  gpu.dispose()
+  field?.dispose()
+  gpu?.dispose()
 })
+
+/** One case at one footprint, as the document holds it. */
+interface Row {
+  readonly case: string
+  readonly scenario: string
+  readonly footprintMeters: number
+  readonly tFarKm: number
+  readonly eyeMeters: number
+  readonly pitchDegrees: number
+  readonly sun: Case['sun']
+  readonly rays: number
+  readonly bins: number
+  readonly cloudyBins: number
+  readonly reference: {
+    readonly meanLight: number
+    readonly meanTransmittance: number
+    readonly mostSteps: number
+    readonly exhaustedRays: number
+  }
+  readonly atlas: Scored
+  readonly handover: {
+    readonly budget: number
+    readonly exhaustedShare: number
+    readonly atlas: Scored
+  }
+  readonly farTexel1800km: {
+    readonly fraction: number
+    readonly logTau: number
+  }
+}
+
+const figures = (value: unknown, path: string): [string, number][] =>
+  typeof value === 'number'
+    ? [[path, value]]
+    : typeof value === 'object' && value !== null
+      ? Object.entries(value).flatMap(([key, inner]) =>
+          figures(inner, `${path}.${key}`),
+        )
+      : []
+
+/** Hold a row's headline figures to its landed ones, and every figure of it finite. */
+function hold(found: Row): void {
+  const what = `${found.case} at ${found.footprintMeters} m`
+  for (const [path, value] of figures(found, what)) {
+    expect(Number.isFinite(value), path).toBe(true)
+    // Past this the instrument, not the field, is what broke.
+    expect(Math.abs(value), path).toBeLessThan(1e7)
+  }
+  // The reference reaches every ray's end, and the case holds cloud.
+  expect(found.reference.exhaustedRays, what).toBe(0)
+  expect(found.cloudyBins, what).toBeGreaterThan(0)
+  // Broken cumulus is uniform cover: a far texel 1,800 km out holds cloud.
+  if (found.case === 'broken cumulus')
+    expect(found.farTexel1800km.fraction, what).toBeGreaterThan(0)
+  const pinned = (landed.cases as readonly Row[]).find(
+    (row) =>
+      row.case === found.case && row.footprintMeters === found.footprintMeters,
+  )
+  // A row with no landed figures is a row that cannot fail.
+  if (pinned === undefined) throw new Error(`no landed figures for ${what}`)
+  if (!WORKSTATION) return
+  for (const [march, now, then] of [
+    ['the atlas', found.atlas, pinned.atlas],
+    ['the handover', found.handover.atlas, pinned.handover.atlas],
+  ] as const) {
+    expect(
+      now.footprint.transmittance,
+      `${what}, ${march}: footprint transmittance`,
+    ).toBeLessThanOrEqual(then.footprint.transmittance * SLACK)
+    expect(
+      now.footprint.radiance,
+      `${what}, ${march}: footprint radiance`,
+    ).toBeLessThanOrEqual(then.footprint.radiance * SLACK)
+  }
+}
 
 /** The atlas texel at a body-fixed direction, layer 0, by `textureLoad`. */
 async function atlasTexel(
@@ -584,8 +685,12 @@ async function atlasTexel(
   return [values[0]!, values[1]!, values[2]!, values[3]!]
 }
 
-describe.skipIf(!MEASURE)('the far field against the fine march', () => {
-  it('scores the atlas over each far texel’s footprint on the real field, and writes the figures', async () => {
+describe('the far field against the fine march', () => {
+  /** Score the atlas over each far texel's footprint on the real field, a case at a footprint at a time. */
+  async function measure(
+    cases: readonly Case[],
+    footprints: readonly (typeof FOOTPRINTS)[number][],
+  ): Promise<Row[]> {
     const renderer = gpu.renderer
     const buffer = new StorageBufferAttribute(new Float32Array(RAYS * SLOTS), 1)
     const handover = uniform(0)
@@ -634,9 +739,9 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
       return data
     }
 
-    const results: unknown[] = []
-    for (const c of CASES)
-      for (const footprint of FOOTPRINTS) {
+    const results: Row[] = []
+    for (const c of cases)
+      for (const footprint of footprints) {
         const { stance, eye, pitch } = stanceOf(c, footprint)
         const tFar = footprint / PIXEL_ANGLE
         handover.value = tFar
@@ -685,7 +790,7 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
           mean(valid.map((r) => slot(atlasHandover, r, SLOT.exhausted))) || 0
         results.push({
           case: c.id,
-          weather: c.scenario,
+          scenario: c.scenario,
           footprintMeters: footprint,
           tFarKm: tFar / 1000,
           eyeMeters: eye,
@@ -718,55 +823,48 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
         })
       }
 
-    // Instruments, not gates: every figure finite and inside a bound past
-    // which the instrument, not the field, is what broke.
-    const figures = (value: unknown, path: string): [string, number][] =>
-      typeof value === 'number'
-        ? [[path, value]]
-        : typeof value === 'object' && value !== null
-          ? Object.entries(value).flatMap(([key, inner]) =>
-              figures(inner, `${path}.${key}`),
-            )
-          : []
-    for (const [path, value] of figures(results, 'results')) {
-      expect(Number.isFinite(value), path).toBe(true)
-      expect(Math.abs(value), path).toBeLessThan(1e7)
-    }
-    for (const row of results as {
-      case: string
-      reference: { exhaustedRays: number }
-      cloudyBins: number
-      farTexel1800km: { fraction: number }
-    }[]) {
-      // The reference reaches every ray's end, and every case holds cloud.
-      expect(row.reference.exhaustedRays, row.case).toBe(0)
-      expect(row.cloudyBins, row.case).toBeGreaterThan(0)
-    }
-    // Broken cumulus is uniform cover: a far texel 1,800 km out holds cloud.
-    const broken = results.find(
-      (row) => (row as { case: string }).case === 'broken cumulus',
-    ) as { farTexel1800km: { fraction: number } }
-    expect(broken.farTexel1800km.fraction).toBeGreaterThan(0)
+    for (const kernel of Object.values(kernels)) kernel.dispose()
+    buffer.dispose()
+    return results
+  }
 
-    mkdirSync('.data/clouds', { recursive: true })
-    writeFileSync(
-      OUT,
-      `${JSON.stringify(
-        {
-          note: 'cloudFarCompare.gpu.test.ts: the far atlas against the fine march over the whole ray, on the real field (§8.6)',
-          body: 'Earth',
-          trace: { width: WIDTH, height: HEIGHT, pixelAngle: PIXEL_ANGLE },
-          units: {
-            radiance:
-              'relative to the reference mean light over the cloudy bins',
-            transmittance: 'absolute',
-            moments: 'km, RMS over rays both marches find over 10% opaque',
-          },
-          cases: results,
-        },
-        null,
-        2,
-      )}\n`,
+  it('holds broken cumulus at 800 m to its landed figures, in every run of the suite', async () => {
+    const [found] = await measure(
+      CASES.filter((c) => c.id === ALWAYS.case),
+      [ALWAYS.footprintMeters],
     )
-  }, 600_000)
+    expect(found).toMatchObject(ALWAYS)
+    hold(found!)
+  }, 120_000)
+
+  it.skipIf(!MEASURE)(
+    'holds all four cases at three footprints to their landed figures, and writes them',
+    async () => {
+      const results = await measure(CASES, FOOTPRINTS)
+      expect(results).toHaveLength(landed.cases.length)
+      for (const found of results) hold(found)
+
+      mkdirSync('.data/clouds', { recursive: true })
+      writeFileSync(
+        OUT,
+        `${JSON.stringify(
+          {
+            note: 'cloudFarCompare.gpu.test.ts: the far atlas against the fine march over the whole ray, on the real field (§8.6)',
+            body: 'Earth',
+            trace: { width: WIDTH, height: HEIGHT, pixelAngle: PIXEL_ANGLE },
+            units: {
+              radiance:
+                'relative to the reference mean light over the cloudy bins',
+              transmittance: 'absolute',
+              moments: 'km, RMS over rays both marches find over 10% opaque',
+            },
+            cases: results,
+          },
+          null,
+          2,
+        )}\n`,
+      )
+    },
+    600_000,
+  )
 })

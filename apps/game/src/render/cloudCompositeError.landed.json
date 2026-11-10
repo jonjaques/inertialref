@@ -1,0 +1,611 @@
+{
+  "note": "cloudCompositeError.gpu.test.ts: relative luminance errors against a 512-sample joint march",
+  "body": "Earth",
+  "slab": {
+    "baseMeters": 2000,
+    "sigmaPerMeter": 0.005,
+    "source": 0.2
+  },
+  "cases": [
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 90,
+      "identity": 0.0043976763263344765,
+      "thin": 0.004398244898766279,
+      "exact": 0.000012739846170006786,
+      "quadrature": 0.004410416353493929
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 60,
+      "identity": 0.004761768504977226,
+      "thin": 0.004762509372085333,
+      "exact": 0.000014819726857240312,
+      "quadrature": 0.004776587709784508
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 30,
+      "identity": 0.005860967095941305,
+      "thin": 0.005862762685865164,
+      "exact": 0.000008279670510091819,
+      "quadrature": 0.005869247019290924
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 15,
+      "identity": 0.005932421423494816,
+      "thin": 0.005937124136835337,
+      "exact": 0.000004063467713422142,
+      "quadrature": 0.0059364852495491505
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 5,
+      "identity": 0.008831785060465336,
+      "thin": 0.008839944377541542,
+      "exact": 0.000005628949566016672,
+      "quadrature": 0.008837413974106312
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 90,
+      "identity": 0.001305771409533918,
+      "thin": 0.0013259481638669968,
+      "exact": 0.000004305852598918136,
+      "quadrature": 0.0013100772630423307
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 60,
+      "identity": 0.001273064175620675,
+      "thin": 0.001295914757065475,
+      "exact": 0.000004064245331392158,
+      "quadrature": 0.0012771283509209752
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 30,
+      "identity": 0.0015282919630408287,
+      "thin": 0.0015595799777656794,
+      "exact": 0.000006401247901521856,
+      "quadrature": 0.0015346931759268045
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 15,
+      "identity": 0.002748870989307761,
+      "thin": 0.0027893944643437862,
+      "exact": 0.00000994697620626539,
+      "quadrature": 0.0027588182128965855
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 5,
+      "identity": 0.007024632766842842,
+      "thin": 0.007094929926097393,
+      "exact": 0.000025484319849056192,
+      "quadrature": 0.007050117012113333
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 90,
+      "identity": 0.00018971477402374148,
+      "thin": 0.00027288004639558494,
+      "exact": 0.000008531922503607348,
+      "quadrature": 0.0001982466783374548
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 60,
+      "identity": 0.00020585306629072875,
+      "thin": 0.0002974144590552896,
+      "exact": 0.000011163763701915741,
+      "quadrature": 0.0002170168299926445
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 30,
+      "identity": 0.0003881240845657885,
+      "thin": 0.0005136801046319306,
+      "exact": 0.000017094573195208795,
+      "quadrature": 0.00040521868504583836
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 15,
+      "identity": 0.0008088834001682699,
+      "thin": 0.001015920890495181,
+      "exact": 0.000029467180866049603,
+      "quadrature": 0.0008383505628444254
+    },
+    {
+      "class": "surface",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 5,
+      "identity": 0.002613650867715478,
+      "thin": 0.00291618169285357,
+      "exact": 0.00008332925790455192,
+      "quadrature": 0.002696980256587267
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 90,
+      "identity": 0.00015625683590769768,
+      "thin": 0.00015576956502627581,
+      "exact": 0.00038484748802147806,
+      "quadrature": 0.0005411042948253453
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 60,
+      "identity": 0.0001063370073097758,
+      "thin": 0.00010566400305833668,
+      "exact": 0.00049425387987867,
+      "quadrature": 0.0006005909526720643
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 30,
+      "identity": 0.00044853516737930477,
+      "thin": 0.0004499710048548877,
+      "exact": 0.0012193652801215649,
+      "quadrature": 0.0007708300836384296
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 15,
+      "identity": 0.0018900003051385283,
+      "thin": 0.0018934785621240735,
+      "exact": 0.0028452458791434765,
+      "quadrature": 0.00095524569042027
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 5,
+      "identity": 0.0035358003806322813,
+      "thin": 0.00354002695530653,
+      "exact": 0.004659133963286877,
+      "quadrature": 0.001123333116993308
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 90,
+      "identity": 0.0028755555395036936,
+      "thin": 0.0028960786294192076,
+      "exact": 0.0032015920151025057,
+      "quadrature": 0.00032603630097582936
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 60,
+      "identity": 0.003156387945637107,
+      "thin": 0.0031794910319149494,
+      "exact": 0.0035289807710796595,
+      "quadrature": 0.00037259262171573937
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 30,
+      "identity": 0.0037379509303718805,
+      "thin": 0.003767850110307336,
+      "exact": 0.004264574497938156,
+      "quadrature": 0.0005266238003969193
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 15,
+      "identity": 0.0033736079931259155,
+      "thin": 0.003408564254641533,
+      "exact": 0.004186494275927544,
+      "quadrature": 0.0008128862245939672
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 5,
+      "identity": 0.0024756239727139473,
+      "thin": 0.002517265034839511,
+      "exact": 0.0035922471433877945,
+      "quadrature": 0.0011166231706738472
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 90,
+      "identity": 0.0021999115124344826,
+      "thin": 0.0022874351125210524,
+      "exact": 0.002433957066386938,
+      "quadrature": 0.00023404526291415095
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 60,
+      "identity": 0.0021088027860969305,
+      "thin": 0.002205080119892955,
+      "exact": 0.0023907332215458155,
+      "quadrature": 0.0002819304645527154
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 30,
+      "identity": 0.0018356784712523222,
+      "thin": 0.0019635555800050497,
+      "exact": 0.002267820993438363,
+      "quadrature": 0.00043214246397837996
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 15,
+      "identity": 0.0014194308314472437,
+      "thin": 0.00161560473497957,
+      "exact": 0.002120082965120673,
+      "quadrature": 0.0007006521918810904
+    },
+    {
+      "class": "surface",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 5,
+      "identity": 0.0005126479081809521,
+      "thin": 0.0007420109468512237,
+      "exact": 0.001704670605249703,
+      "quadrature": 0.0011920228134840727
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 90,
+      "identity": 0.0006694550975225866,
+      "thin": 0.0006705918931402266,
+      "exact": 0.0009527868242003024,
+      "quadrature": 0.001622241921722889
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 60,
+      "identity": 0.0002474276116117835,
+      "thin": 0.00024671756546013057,
+      "exact": 0.0009320077951997519,
+      "quadrature": 0.0006845801253803074
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 30,
+      "identity": 0.0007828897796571255,
+      "thin": 0.000781920098233968,
+      "exact": 0.0006455719703808427,
+      "quadrature": 0.00013731782382819802
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 15,
+      "identity": 0.0012454369571059942,
+      "thin": 0.0012438127305358648,
+      "exact": 0.0002458968083374202,
+      "quadrature": 0.000999540090560913
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 100,
+      "angle": 5,
+      "identity": 0.0027894650120288134,
+      "thin": 0.0027900345157831907,
+      "exact": 0.000002031820031334064,
+      "quadrature": 0.0027914969250559807
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 90,
+      "identity": 0.00013402897457126528,
+      "thin": 0.00009861461148830131,
+      "exact": 0.000060075770306866616,
+      "quadrature": 0.00007395321154035628
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 60,
+      "identity": 0.00029207003535702825,
+      "thin": 0.00027069455245509744,
+      "exact": 0.00004240576163283549,
+      "quadrature": 0.00024966427008621395
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 30,
+      "identity": 0.0005702864727936685,
+      "thin": 0.0005591478548012674,
+      "exact": 0.000002340013224966242,
+      "quadrature": 0.0005679464666172862
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 15,
+      "identity": 0.0010767222847789526,
+      "thin": 0.0010845159413293004,
+      "exact": 0.000011593364433792885,
+      "quadrature": 0.0010883157374337316
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 500,
+      "angle": 5,
+      "identity": 0.002740203170105815,
+      "thin": 0.002787454053759575,
+      "exact": 0.000028151274818810634,
+      "quadrature": 0.002768354257568717
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 90,
+      "identity": 0.00011775382154155523,
+      "thin": 0.00009206809045281261,
+      "exact": 0.000022488864487968385,
+      "quadrature": 0.0001402426860295236
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 60,
+      "identity": 0.0002447628357913345,
+      "thin": 0.0002458640665281564,
+      "exact": 0.000017162537915282883,
+      "quadrature": 0.0002619253646116704
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 30,
+      "identity": 0.0004983360413461924,
+      "thin": 0.0005511844647116959,
+      "exact": 0.000025291863494203426,
+      "quadrature": 0.000523627910297364
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 15,
+      "identity": 0.0009624040685594082,
+      "thin": 0.0010843215277418494,
+      "exact": 0.00004569757584249601,
+      "quadrature": 0.0010081017389893532
+    },
+    {
+      "class": "sky",
+      "cleared": 0,
+      "thickness": 2000,
+      "angle": 5,
+      "identity": 0.0025079292245209217,
+      "thin": 0.002784531796351075,
+      "exact": 0.00011204696056665853,
+      "quadrature": 0.0026199764106422663
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 90,
+      "identity": 0.0006694550975225866,
+      "thin": 0.0006705918931402266,
+      "exact": 0.0009527868242003024,
+      "quadrature": 0.001622241921722889
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 60,
+      "identity": 0.0002474276116117835,
+      "thin": 0.00024671756546013057,
+      "exact": 0.0009320077951997519,
+      "quadrature": 0.0006845801253803074
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 30,
+      "identity": 0.0007828897796571255,
+      "thin": 0.000781920098233968,
+      "exact": 0.0006455719703808427,
+      "quadrature": 0.00013731782382819802
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 15,
+      "identity": 0.0012454369571059942,
+      "thin": 0.0012438127305358648,
+      "exact": 0.0002458968083374202,
+      "quadrature": 0.000999540090560913
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 100,
+      "angle": 5,
+      "identity": 0.0027894650120288134,
+      "thin": 0.0027900345157831907,
+      "exact": 0.000002031820031334064,
+      "quadrature": 0.0027914969250559807
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 90,
+      "identity": 0.00013402897457126528,
+      "thin": 0.00009861461148830131,
+      "exact": 0.000060075770306866616,
+      "quadrature": 0.00007395321154035628
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 60,
+      "identity": 0.00029207003535702825,
+      "thin": 0.00027069455245509744,
+      "exact": 0.00004240576163283549,
+      "quadrature": 0.00024966427008621395
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 30,
+      "identity": 0.0005702864727936685,
+      "thin": 0.0005591478548012674,
+      "exact": 0.000002340013224966242,
+      "quadrature": 0.0005679464666172862
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 15,
+      "identity": 0.0010767222847789526,
+      "thin": 0.0010845159413293004,
+      "exact": 0.000011593364433792885,
+      "quadrature": 0.0010883157374337316
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 500,
+      "angle": 5,
+      "identity": 0.002740203170105815,
+      "thin": 0.002787454053759575,
+      "exact": 0.000028151274818810634,
+      "quadrature": 0.002768354257568717
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 90,
+      "identity": 0.00011775382154155523,
+      "thin": 0.00009206809045281261,
+      "exact": 0.000022488864487968385,
+      "quadrature": 0.0001402426860295236
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 60,
+      "identity": 0.0002447628357913345,
+      "thin": 0.0002458640665281564,
+      "exact": 0.000017162537915282883,
+      "quadrature": 0.0002619253646116704
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 30,
+      "identity": 0.0004983360413461924,
+      "thin": 0.0005511844647116959,
+      "exact": 0.000025291863494203426,
+      "quadrature": 0.000523627910297364
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 15,
+      "identity": 0.0009624040685594082,
+      "thin": 0.0010843215277418494,
+      "exact": 0.00004569757584249601,
+      "quadrature": 0.0010081017389893532
+    },
+    {
+      "class": "sky",
+      "cleared": 1,
+      "thickness": 2000,
+      "angle": 5,
+      "identity": 0.0025079292245209217,
+      "thin": 0.002784531796351075,
+      "exact": 0.00011204696056665853,
+      "quadrature": 0.0026199764106422663
+    }
+  ]
+}
