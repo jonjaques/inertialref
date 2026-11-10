@@ -126,7 +126,7 @@ const ALWAYS = { case: 'broken cumulus', footprintMeters: 800 } as const
  * The landed figures are of phase 0's march on phase 0's field. The
  * reference march integrates a step's source and mixes a level by its
  * crossing, the field is the weather's own at the scaled extinction, and
- * the far atlas is still phase 0's: 22 of the 48 headline figures are past
+ * the far atlas is still phase 0's: 20 of the 48 headline figures are past
  * their bars. Each entry is the figure of one run on the Mac mini (Mac18,5,
  * Apple M6), and the bar it misses, the landed figure and a tenth, is beside
  * it. Two runs there give every headline figure the same to its last digit.
@@ -144,32 +144,30 @@ const ALWAYS = { case: 'broken cumulus', footprintMeters: 800 } as const
  * 8,192 steps is 56 m, over the schedule's first step of 50 m.
  */
 const DECLARED: Readonly<Record<string, number>> = {
-  'cirrus over cumulus at 400 m, the atlas: footprint radiance': 1.8567, // 1.812
-  'cirrus over cumulus at 400 m, the handover: footprint radiance': 1.8566, // 1.811
+  'cirrus over cumulus at 400 m, the atlas: footprint radiance': 1.9224, // 1.812
+  'cirrus over cumulus at 400 m, the handover: footprint radiance': 1.9224, // 1.811
   'cirrus over cumulus at 800 m: floored rays': 56,
-  'cirrus over cumulus at 800 m, the atlas: footprint transmittance': 0.3307, // 0.226
-  'cirrus over cumulus at 800 m, the atlas: footprint radiance': 1.1978, // 0.994
-  'cirrus over cumulus at 800 m, the handover: footprint transmittance': 0.3326, // 0.225
-  'cirrus over cumulus at 800 m, the handover: footprint radiance': 1.192, // 0.993
+  'cirrus over cumulus at 800 m, the atlas: footprint transmittance': 0.3281, // 0.226
+  'cirrus over cumulus at 800 m, the atlas: footprint radiance': 1.2071, // 0.994
+  'cirrus over cumulus at 800 m, the handover: footprint transmittance': 0.3281, // 0.225
+  'cirrus over cumulus at 800 m, the handover: footprint radiance': 1.207, // 0.993
   'cirrus over cumulus at 1600 m: floored rays': 140,
-  'broken cumulus at 400 m, the atlas: footprint transmittance': 0.5125, // 0.396
-  'broken cumulus at 400 m, the atlas: footprint radiance': 1.1515, // 0.570
-  'broken cumulus at 400 m, the handover: footprint transmittance': 0.512, // 0.397
-  'broken cumulus at 400 m, the handover: footprint radiance': 1.1513, // 0.571
-  'broken cumulus at 800 m, the atlas: footprint transmittance': 0.361, // 0.092
-  'broken cumulus at 800 m, the atlas: footprint radiance': 0.9645, // 0.308
+  'broken cumulus at 400 m, the atlas: footprint transmittance': 0.5142, // 0.396
+  'broken cumulus at 400 m, the atlas: footprint radiance': 1.1366, // 0.570
+  'broken cumulus at 400 m, the handover: footprint transmittance': 0.5136, // 0.397
+  'broken cumulus at 400 m, the handover: footprint radiance': 1.1365, // 0.571
+  'broken cumulus at 800 m, the atlas: footprint transmittance': 0.3608, // 0.092
+  'broken cumulus at 800 m, the atlas: footprint radiance': 0.9598, // 0.308
   'broken cumulus at 800 m, the handover: footprint transmittance': 0.3607, // 0.084
-  'broken cumulus at 800 m, the handover: footprint radiance': 0.962, // 0.280
+  'broken cumulus at 800 m, the handover: footprint radiance': 0.9569, // 0.280
   'broken cumulus at 1600 m, the atlas: footprint radiance': 0.8468, // 0.846
   'broken cumulus at 1600 m, the handover: footprint radiance': 0.8269, // 0.765
   'anvil at 800 m: floored rays': 314,
   'anvil at 1600 m: floored rays': 304,
-  'anvil at 1600 m, the atlas: footprint radiance': 1.3628, // 1.335
-  'anvil at 1600 m, the handover: footprint radiance': 1.3656, // 1.335
-  'grazing at sunset at 400 m, the atlas: footprint transmittance': 0.2448, // 0.213
-  'grazing at sunset at 800 m, the atlas: footprint transmittance': 0.3139, // 0.064
-  'grazing at sunset at 1600 m, the atlas: footprint transmittance': 0.3391, // 0.295
-  'grazing at sunset at 1600 m, the handover: footprint radiance': 0.3592, // 0.344
+  'grazing at sunset at 400 m, the atlas: footprint transmittance': 0.2455, // 0.213
+  'grazing at sunset at 800 m, the atlas: footprint transmittance': 0.3156, // 0.064
+  'grazing at sunset at 1600 m, the atlas: footprint transmittance': 0.3469, // 0.295
+  'grazing at sunset at 1600 m, the handover: footprint radiance': 0.359, // 0.344
 }
 
 const CSS = { width: 1024, height: 576 } as const
@@ -906,7 +904,7 @@ describe('the far field against the fine march', () => {
   }, 120_000)
 
   it.skipIf(!MEASURE)(
-    'holds all four cases at three footprints to their landed figures or no worse than measured, and writes them: 22 of 48 figures are past their bars, cirrus over cumulus at 400 m first at 1.857 against 1.812, and package X retakes them',
+    'holds all four cases at three footprints to their landed figures or no worse than measured, and writes them: 20 of 48 figures are past their bars, cirrus over cumulus at 400 m first at 1.922 against 1.812, and package X retakes them',
     async () => {
       const results = await measure(CASES, FOOTPRINTS)
       expect(results).toHaveLength(landed.cases.length)

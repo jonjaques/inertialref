@@ -368,8 +368,14 @@ function held(sample: CloudSample, dither?: Node<'float'>): CloudSample {
   }
 }
 
-/** The share of a cell past which a footprint reads statistics where no ray says: a dither of a half. */
-const SWITCH_SHARE = 0.25
+/**
+ * The share of a cell past which a footprint reads statistics where a ray
+ * carries no dither: the medium's own default, a dither of a half
+ * (`CloudSample.dither`), `4^(1/2 − 1)`. The two are one number in two
+ * files, and a march that takes another applies a level's spread to a read
+ * the medium answered as resolved.
+ */
+const SWITCH_SHARE = 4 ** (0.5 - 1)
 
 /** A medium's registers, written a step and read by the steps after it. */
 function mediumRegisters() {

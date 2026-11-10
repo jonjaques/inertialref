@@ -142,6 +142,13 @@ const LIGHT_PER_OPACITY = 1.5 * ISOTROPIC
 const MARCH = 1e-4
 /** RGBA16F's step, relative: the floor on anything read out of the trace's textures. */
 const HALF = 2 ** -10
+/**
+ * How near its handover a ray stops, relative. The handover is
+ * `farDistance·band^ξ`, and at a band of one or ξ of zero the power is one
+ * only as exactly as the adapter's `pow`: WGSL allows `exp2` three float32
+ * steps at zero, 1.8 × 10⁻⁷, and this is five times that.
+ */
+const STOP = 1e-6
 
 /** The march's own probe on this file's device. */
 const probe = (
@@ -621,7 +628,7 @@ describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
    * share, an extinction that sums up a vertical column to the level's
    * depth, and the four numbers as the level's table answers them. The rays
    * are made to read it by a footprint of the distance itself, past any
-   * cell's quarter.
+   * switch.
    */
   const REGIMES: readonly ScenarioId[] = [
     'fair-cumulus',
@@ -637,6 +644,10 @@ describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
   ]
   const ZENITHS = [0, 45, 80]
   const BASE = 1000
+  const CELL = 1000
+  /** Radians a texel that put every footprint on the three rays past any switch, and under any. */
+  const PAST = 1
+  const UNDER = 0
 
   /** Every level of the regimes, with the four numbers its table answers at the regime's cover. */
   function levels() {
@@ -662,7 +673,7 @@ describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
     )
   }
 
-  /** The march through a level of `thickness` holding the four numbers, on the three rays; `statistical` says which read the rays take. */
+  /** The march through a level of `thickness` holding the four numbers, on the three rays; `pixelAngle` sets their footprints, and so which read they take. */
   function marcher() {
     const numbers = {
       thickness: uniform(1),
@@ -693,13 +704,14 @@ describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
     const march = probe(uniforms, medium)
     return async (
       level: ReturnType<typeof levels>[number],
-      statistical: boolean,
+      pixelAngle: number,
     ) => {
       placeBody(uniforms, {
         eye: 0,
         layers: [[BASE, BASE + level.thickness]],
+        cell: CELL,
       })
-      uniforms.camera.pixelAngle.value = statistical ? 1 : 0
+      uniforms.camera.pixelAngle.value = pixelAngle
       numbers.thickness.value = level.thickness
       numbers.fraction.value = level.fraction
       numbers.depth.value = level.depth
@@ -738,7 +750,7 @@ describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
     expect(all.length).toBeGreaterThanOrEqual(12)
     let held = 0
     for (const level of all)
-      for (const { degrees, got, form } of await through(level, true)) {
+      for (const { degrees, got, form } of await through(level, PAST)) {
         const what = `${level.what} at ${degrees}°: ${got} against ${form}`
         // Under the 1% exit the march has stopped, at whatever its last
         // step left: the form is held where the ray crosses the level.
@@ -763,7 +775,7 @@ describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
     const through = marcher()
     let widest = 0
     for (const level of levels()) {
-      const resolved = await through(level, false)
+      const resolved = await through(level, UNDER)
       const [down] = resolved
       if (down!.form >= 0.011)
         expect(relative(down!.got, down!.form), level.what).toBeLessThan(5e-4)
@@ -774,6 +786,47 @@ describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
         if (form >= 0.05) widest = Math.max(widest, 1 - got / form)
       }
     }
+    expect(widest).toBeGreaterThan(0.1)
+  }, 120_000)
+
+  it('takes the switch at half a cell where a ray carries no dither, as the medium does: resolved a tenth under it, statistical a tenth over', async () => {
+    /*
+     * A march with no dither takes the medium's own default, a dither of a
+     * half, whose switch is `cell·4^(−1/2)`. A sample in the level is no
+     * nearer than its base and no farther than its top over the steepest
+     * ray's cosine, so one pixel angle holds every footprint at 0.45 of a
+     * cell or under and another at 0.55 or over: a tenth of the switch
+     * either side, where the share is a constant and no adapter's `exp2`
+     * places it. With the switch at a quarter of a cell the first read is
+     * the statistical one from 0.25 up, and a deck on a slant passes over a
+     * tenth more.
+     */
+    const through = marcher()
+    const steepest = Math.cos((Math.max(...ZENITHS) * Math.PI) / 180)
+    let widest = 0
+    for (const level of levels()) {
+      const under = (0.45 * CELL * steepest) / (BASE + level.thickness)
+      const over = (0.55 * CELL) / BASE
+      const resolved = await through(level, UNDER)
+      const statistical = await through(level, PAST)
+      const below = await through(level, under)
+      const above = await through(level, over)
+      resolved.forEach(({ got, form, degrees }, i) => {
+        const what = `${level.what} at ${degrees}°`
+        // Under the 1% exit a march has stopped where its last step left it.
+        if (got < 0.011 || statistical[i]!.got < 0.011) return
+        expect(relative(below[i]!.got, got), `${what}, under`).toBeLessThan(
+          5e-4,
+        )
+        expect(
+          relative(above[i]!.got, statistical[i]!.got),
+          `${what}, over`,
+        ).toBeLessThan(5e-4)
+        if (form >= 0.05)
+          widest = Math.max(widest, Math.abs(1 - got / statistical[i]!.got))
+      })
+    }
+    // The control: the two reads differ, so a switch misplaced is seen.
     expect(widest).toBeGreaterThan(0.1)
   }, 120_000)
 })
@@ -999,7 +1052,7 @@ describe('past the fine march', () => {
     const result = await handed((uniforms) => {
       uniforms.trace.farDistance.value = 1300
     })
-    expect(result.stopped).toBe(1300)
+    expect(relative(result.stopped, 1300)).toBeLessThanOrEqual(STOP)
     expect(result.exhausted).toBe(0)
     expect(relative(result.transmittance, through)).toBeLessThanOrEqual(MARCH)
     expectLight(result, 1 - through)
@@ -1021,7 +1074,7 @@ describe('past the fine march', () => {
       [EMPTY_BELOW, [SLAB.base, SLAB.top]],
     )
     expect(result.exhausted).toBe(1)
-    expect(result.stopped).toBe(1300)
+    expect(relative(result.stopped, 1300)).toBeLessThanOrEqual(STOP)
     expect(relative(result.transmittance, through)).toBeLessThanOrEqual(MARCH)
     expectLight(result, 1 - through)
   })
@@ -1062,7 +1115,7 @@ describe('past the fine march', () => {
     const slab = slabMedium([{ ...SLAB, sigma }])
     const march = probe(uniforms, slab, { far: clear, air: dark })
     const [result] = await march([{ direction: [0, 1, 0], jitter: 0.3 }])
-    expect(result!.stopped).toBe(2000)
+    expect(relative(result!.stopped, 2000)).toBeLessThanOrEqual(STOP)
     expect(relative(result!.transmittance, through)).toBeLessThanOrEqual(MARCH)
     result!.air.forEach((band, c) => {
       expect(relative(band, (through - 1) * airLight[c]!)).toBeLessThanOrEqual(
@@ -1511,10 +1564,12 @@ describe('the knots', () => {
         // The cloud's own edge is no boundary a step ends on: the knot's
         // exit is the end of the step that held the edge, a depth of 0.3,
         // 100 m, past it at most.
-        expect(exit).toBeGreaterThanOrEqual(1.4 * (1 - HALF))
+        // Two half-float steps: one is 1.4 of this value's own, the room a
+        // store that truncates leaves, and no adapter's store was measured.
+        expect(exit).toBeGreaterThanOrEqual(1.4 * (1 - 2 * HALF))
         expect(exit).toBeLessThan(1.5)
         const knot = read.knotLight(2 * i, 2 * j)[3]
-        expect(knot).toBeLessThanOrEqual(Math.exp(-1.2) * (1 + HALF))
+        expect(knot).toBeLessThanOrEqual(Math.exp(-1.2) * (1 + 2 * HALF))
         expect(knot).toBeGreaterThan(Math.exp(-1.5))
         expect(knot).toBe(read.light(i, j)[3])
       }
