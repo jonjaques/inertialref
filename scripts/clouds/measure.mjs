@@ -10,11 +10,10 @@
  *
  * `stances` shows every scenario's sun, its passes and a still before a batch
  * stands on it; `images` measures the radiance differences §8.7's quality
- * ladders read; `targets`, `memory` and `error`
- * measure the landed code. A run's steps
- * are `page.mjs`'s; its figures land in `.data/clouds/<batch>-<time>.json`
- * and in the Markdown tables printed at the end, from which the choices are
- * decided by the rules fixed before measuring.
+ * ladders read; `targets`, `memory` and `error` measure the landed code. A
+ * run's steps are `page.mjs`'s; its figures land in
+ * `.data/clouds/<batch>-<time>.json` and in the Markdown tables printed at
+ * the end, which the rules fixed before measuring are read against.
  *
  * Production only. Dev React costs about five times the shipped CPU, and
  * the second scene pass's traversal is a CPU cost, so every invocation passes

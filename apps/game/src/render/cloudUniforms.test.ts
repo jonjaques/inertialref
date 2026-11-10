@@ -311,7 +311,7 @@ describe('the cloud uniforms', () => {
     expect(t.size.value.toArray()).toEqual([480, 270])
     expect(t.history.value.toArray()).toEqual([960, 540])
     expect(t.render.value.toArray()).toEqual([1920, 1080])
-    expect(t.farDistance.value).toBeCloseTo(400 / 0.002, 9)
+    expect(t.farDistance.value).toBeCloseTo(800 / 0.002, 9)
     expect(t.thin.value).toBe(1)
     expect(t.wind.value.toArray()).toEqual([10, 0, -2])
     expect(uniforms.period.value.toArray()).toEqual([7, 0])

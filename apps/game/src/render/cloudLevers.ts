@@ -1,8 +1,8 @@
 import { SCENARIO_IDS, type ScenarioId } from '@inertialref/rendering'
 
 /*
- * The cloud system's levers: what a script sets on `engine.clouds` to choose
- * a candidate, force a path, or drive a measurement. Read by the chain every
+ * The cloud system's levers: what a script sets on `engine.clouds` to draw
+ * the clouds, force a path, or drive a measurement. Read by the chain every
  * render call, so a change lands on the next frame with no rebuild; the ones
  * that change what the history means are named by `cloudResetKey`.
  *
@@ -63,18 +63,18 @@ export interface CloudLevers {
 }
 
 /*
- * `farFootprint` 400 puts the handover where a trace texel spans under half
- * the smallest cell any scenario draws (1,000 m), so detail the fine march
- * resolves is never handed to a representation that cannot hold it.
- * `maxSteps` 192 is a guess the sweep replaces: the plan's schedule covers
- * about 13 km in 128 out-of-cloud steps. `flySpeed` 250 is a fast aircraft;
- * the orbit stances set 7,700.
+ * `maxSteps` 192 and `farFootprint` 800 are each the smallest value of its
+ * ladder whose image differs from the next larger one's by under 1%
+ * radiance RMSE in `horizon` and `inside` at 1080p and Retina, the jitter
+ * held (§8.7). `lightTaps` 4 is the largest the ladder holds: 2 differs
+ * from it by just over 1%, and nothing larger has been measured against it.
+ * `flySpeed` 250 is a fast aircraft; the orbit stances set 7,700.
  */
 export const DEFAULT_CLOUD_LEVERS: CloudLevers = Object.freeze({
   on: false,
   scenario: 'fair-cumulus',
-  farFootprint: 400,
-  lightTaps: 2,
+  farFootprint: 800,
+  lightTaps: 4,
   composite: 'identity',
   force: 'none',
   warp: 1000,

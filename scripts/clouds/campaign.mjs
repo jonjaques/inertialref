@@ -9,9 +9,10 @@
  *     node scripts/clouds/campaign.mjs stop               # rigs closed, lock and preview released
  *     node scripts/clouds/campaign.mjs start choices --resume   # where a stopped one left off
  *
- * `choices` measures the candidates (§8.8): `images`,
- * then the three GPU instruments. `landed` measures the code once the losers
- * are deleted: `targets`, `memory`, `error`, always on a fresh build.
+ * `choices` measures the quality ladders (`images`), then the three GPU
+ * instruments: the far atlas, the sun grid and the composite's forms each
+ * against its reference (§8.8). `landed` measures the code as it ships:
+ * `targets`, `memory`, `error`, always on a fresh build.
  *
  * A campaign takes hours, and whatever starts it does not last that long: a
  * background command in an agent's harness is stopped at two hours, and a

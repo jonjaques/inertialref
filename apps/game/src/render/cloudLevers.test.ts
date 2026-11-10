@@ -107,8 +107,8 @@ describe('the reset key', () => {
     const changed: Partial<CloudLevers> = {
       on: true,
       scenario: 'anvil',
-      farFootprint: 800,
-      lightTaps: 4,
+      farFootprint: 1600,
+      lightTaps: 2,
       composite: 'thin',
       force: 'cut',
       warp: 10,
