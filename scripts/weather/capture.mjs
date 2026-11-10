@@ -82,13 +82,7 @@ import {
   startPath,
   stopPath,
 } from './descent.mjs'
-import {
-  checkRecord,
-  PLATE,
-  provenance,
-  role,
-  sunInFrame,
-} from './sheet.mjs'
+import { checkRecord, PLATE, provenance, role, sunInFrame } from './sheet.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const DRIVE = path.join(ROOT, 'scripts/drive.mjs')
@@ -114,16 +108,28 @@ export const SETTLE_QUIET = 1_000
  * hold 60 Hz on demand: the clouds-on descent presents at 42.6 Hz at 2880 ×
  * 1800 on the M6, and until a hold exists a cast outside the band is kept
  * with its rate (rubric §4). The commit that lands the hold sets it, and the
- * band refuses again. `dropped` is the interval, in medians, past which a
- * frame was not presented.
+ * band refuses again.
  */
 export const CAST_RATE = Object.freeze({
   low: 58,
   high: 62,
   frames: 30,
   held: false,
-  dropped: 2,
 })
+/**
+ * Where a gap in a cast's log is a frame the page did not present: half the
+ * shortest normal interval over the longest, the normal ones being the
+ * cast's own 10th and 90th percentiles.
+ *
+ * Two medians, the obvious line, is exactly what one missed frame measures,
+ * and the instants are callback times, so one missed frame read as kept
+ * about half the time; a single float64 step at 10¹² ms is enough. The line
+ * sits midway instead: 1.5 periods at a steady rate, and 45.8 ms in the 25
+ * and 33.3 ms cadence a 120 Hz panel gives a 40 Hz page, between its 33.3
+ * and the 50 of one missed 25 ms slot. Percentiles, not the extremes, so
+ * the 3% of drops a kept cast may hold never move the line.
+ */
+export const CAST_GAP = Object.freeze({ normal: 0.9, short: 0.1 })
 /**
  * When dropped frames refuse a cast, and which the clouds alone caused.
  *
@@ -520,15 +526,15 @@ export function presentationRate(log, frames = CAST_RATE.frames) {
  * frame after it, with how many frames it missed, the height, and for a
  * flight the distance along the path.
  *
- * Twice the median, not a share over it: at 42.6 Hz on a 120 Hz panel the
- * page presents on a mix of 25 and 33.3 ms intervals, and a line at 1.5
- * medians would read that cadence as drops. A gap of n medians missed
- * n − 1 frames, so one gap of four is three missed in a row.
+ * A gap is one past `gapLine`; it missed its length in medians, rounded,
+ * less one, and never fewer than one, so one gap of four medians is three
+ * missed in a row.
  */
 export function dropsOf(log, frames, median, path = null) {
   const intervals = intervalsOf(log, frames)
+  const line = gapLine(intervals)
   return intervals.flatMap((interval, i) => {
-    if (interval < CAST_RATE.dropped * median) return []
+    if (interval <= line) return []
     const entry = log[i + 1]
     const frame = entry.k ?? i + 1
     return [
@@ -545,6 +551,20 @@ export function dropsOf(log, frames, median, path = null) {
       },
     ]
   })
+}
+
+/** The value at a share of a list's sorted order, by the nearest rank. */
+function quantileOf(values, share) {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))]
+}
+
+/** The interval past which a gap is a missed frame (`CAST_GAP`). */
+export function gapLine(intervals) {
+  return (
+    quantileOf(intervals, CAST_GAP.normal) +
+    quantileOf(intervals, CAST_GAP.short) / 2
+  )
 }
 
 /** The longest run of frames missed in a row: adjacent gaps add. */

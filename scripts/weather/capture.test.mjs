@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import ledger from '../../apps/headless/src/cornerstoneLedger.json' with { type: 'json' }
 import { wrap } from '../driveScript.mjs'
@@ -370,6 +371,76 @@ describe('the capture’s plan', () => {
     }).trim()
     expect(dataRoot()).toBe(
       path.join(path.dirname(path.resolve(common)), '.data/weather'),
+    )
+  })
+})
+
+/*
+ * A page log at a rate, each instant read late or early by up to `jitter`
+ * ms, as a callback reads `performance.now()`, with a frame missed before
+ * each path frame in `missed`. Instants are epoch milliseconds, where a
+ * float64 steps by 1.2 × 10⁻⁴ ms, as the page's are.
+ */
+function jitteredLog({ intervals, jitter, missed, slot }) {
+  const at = [1.7628e12]
+  for (let k = 1; k < intervals.length; k += 1)
+    at.push(at[k - 1] + intervals[k] + (missed.includes(k) ? slot(k) : 0))
+  return at.map((t, k) => ({ k, at: t + jitter[k] }))
+}
+
+describe('the drop rule, over rates and jitter', () => {
+  const missedAt = fc
+    .uniqueArray(fc.integer({ min: 20, max: 360 }), { maxLength: 6 })
+    .map((ks) => ks.sort((a, b) => a - b))
+    // Apart: two adjacent misses are a run, which a second property holds.
+    .filter((ks) => ks.every((k, i) => i === 0 || k - ks[i - 1] > 3))
+  const jitter = fc.array(fc.double({ min: -1, max: 1, noNaN: true }), {
+    minLength: 390,
+    maxLength: 390,
+  })
+
+  it('finds each single missed frame at a steady rate from 40 to 70 Hz, with a millisecond of jitter, and no other', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 40, max: 70, noNaN: true }),
+        jitter,
+        missedAt,
+        (hz, wobble, missed) => {
+          const period = 1000 / hz
+          const log = jitteredLog({
+            intervals: Array.from({ length: 390 }, () => period),
+            jitter: wobble,
+            missed,
+            slot: () => period,
+          })
+          const kept = checkCast('c', log, 380, { frames: 300 })
+          expect(kept.dropped.map((one) => one.frame)).toEqual(missed)
+          for (const one of kept.dropped) expect(one.missed).toBe(1)
+        },
+      ),
+      { numRuns: 300 },
+    )
+  })
+
+  it('finds each missed slot in the 25 and 33.3 ms cadence a 120 Hz panel gives a 40 Hz page, and reads the cadence itself as none', () => {
+    const vsync = 1000 / 120
+    fc.assert(
+      fc.property(
+        fc.array(fc.constantFrom(3, 4), { minLength: 390, maxLength: 390 }),
+        jitter,
+        missedAt,
+        (slots, wobble, missed) => {
+          const log = jitteredLog({
+            intervals: slots.map((n) => n * vsync),
+            jitter: wobble,
+            missed,
+            slot: () => 3 * vsync,
+          })
+          const kept = checkCast('c', log, 380, { frames: 300 })
+          expect(kept.dropped.map((one) => one.frame)).toEqual(missed)
+        },
+      ),
+      { numRuns: 300 },
     )
   })
 })
