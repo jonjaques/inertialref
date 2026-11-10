@@ -1,17 +1,29 @@
-import { SLAB_REFERENCE, SLAB_SOURCE } from '@inertialref/rendering'
+import {
+  SLAB_REFERENCE,
+  SLAB_SOURCE,
+  SLAB_VIEW_SOURCE,
+  halfFloatsFromBase64,
+} from '@inertialref/rendering'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { sourceTerms } from './slabSource.ts'
+import { tabulate } from './slabForms.ts'
+import { MIDPOINT_BEARINGS } from './slabSource.ts'
+import {
+  THREE_GRID,
+  VIEW_BEARINGS,
+  VIEW_GRID,
+  sourceMedium,
+  threeForms,
+  viewForm,
+} from './slabSourceTable.ts'
 import {
   SLAB_STREAMS,
-  SOURCE_AXES,
   SOURCE_RADIUS,
   blackSurfaceFlux,
-  halfDecimal,
   referenceStage,
   slabPopulation,
-  sourceMedium,
   type SlabPopulation,
 } from './slabTables.ts'
+import { halfDecimal } from './slabText.ts'
 
 /*
  * The committed tables recomputed from the Mie series. Each case is the
@@ -135,27 +147,58 @@ describe('the reference’s rows, recomputed', () => {
   }, 120_000)
 })
 
-describe('the source table’s cells, recomputed', () => {
-  it('are the committed half floats, under every sun, where the two depths are one node', () => {
-    // One node as both layers is one chain of doublings a mode, and eight
-    // cells: a row of the table across its suns.
+describe('the source tables’ cells, recomputed', () => {
+  // One node as both layers is one chain of doublings a mode: a row of a
+  // table across its suns, and across its slabs.
+
+  it('are the three-term table’s half floats, under every sun, where the two depths are one node', () => {
     const node = Math.floor(SLAB_SOURCE.nodes / 2)
-    const medium = sourceMedium(population)
-    const terms = sourceTerms(
-      medium,
-      { ...SOURCE_AXES, nodes: SLAB_SOURCE.nodes },
-      medium.asymmetry ** 2,
-      SLAB_STREAMS.scaled,
-      { rows: [node], columns: [node] },
-    )
+    const medium = sourceMedium(population, 'formula')
+    const form = threeForms(medium.asymmetry ** 2).find(
+      (item) => item.name === 'three-relative',
+    )!
+    const made = tabulate(medium, THREE_GRID, SLAB_STREAMS.scaled, [form], {
+      rows: [node],
+      columns: [node],
+      bearings: MIDPOINT_BEARINGS,
+    })
+    const terms = made.tables.get(form.name)!
     for (let sun = 0; sun < SLAB_SOURCE.suns; sun += 1) {
-      const cell =
-        ((sun * SLAB_SOURCE.nodes + node) * SLAB_SOURCE.nodes + node) * 3
+      const cell = (sun * SLAB_SOURCE.nodes + node) * SLAB_SOURCE.nodes + node
       for (let term = 0; term < 3; term += 1)
-        expect(halfDecimal(terms[SLAB_SOURCE.fit][cell + term]!)).toBe(
-          SLAB_SOURCE.terms[cell + term],
+        expect(halfDecimal(terms[cell * 4 + term]!)).toBe(
+          SLAB_SOURCE.terms[cell * 3 + term],
         )
     }
+  }, 120_000)
+
+  it('are the view table’s texels, under every sun at every cosine of both hemispheres', () => {
+    const { nodes, suns, cosines } = SLAB_VIEW_SOURCE
+    const slabs = 2 * cosines.length
+    const committed = halfFloatsFromBase64(
+      SLAB_VIEW_SOURCE.texels,
+      nodes * nodes * suns * slabs * 4,
+      'the view table',
+    )
+    const node = Math.floor(nodes / 2)
+    const form = viewForm({ name: 'views', blend: 'angle' })
+    const made = tabulate(
+      sourceMedium(population, 'moment'),
+      VIEW_GRID,
+      SLAB_STREAMS.scaled,
+      [form],
+      { rows: [node], columns: [node], bearings: VIEW_BEARINGS },
+    )
+    const texels = made.tables.get(form.name)!
+    expect(texels).toHaveLength(committed.length)
+    for (let slab = 0; slab < slabs; slab += 1)
+      for (let sun = 0; sun < suns; sun += 1) {
+        const cell = (((slab * suns + sun) * nodes + node) * nodes + node) * 4
+        for (let channel = 0; channel < 4; channel += 1)
+          expect(Math.f16round(texels[cell + channel]!)).toBe(
+            committed[cell + channel],
+          )
+      }
   }, 120_000)
 })
 
