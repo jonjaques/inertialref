@@ -26,7 +26,10 @@ import {
   SLAB_REFERENCE,
   SLAB_SOURCE,
 } from '@inertialref/rendering'
+import { MemorySaveStore } from '@inertialref/persistence'
 import type { Body } from '@inertialref/universe'
+import { createInlineWorker, createTaskRegistry } from '@inertialref/workers'
+import { GameEngine } from '../engine/GameEngine.ts'
 import { createCloudJitter, traceJitter } from './cloudJitter.ts'
 import {
   crossingExponent,
@@ -41,7 +44,13 @@ import {
 } from './cloudNodes.ts'
 import { createCloudSky } from './cloudSky.ts'
 import { createCloudSource } from './cloudSource.ts'
-import { createCloudFrontHandle, createCloudSystem } from './cloudSystem.ts'
+import {
+  type CloudSystem,
+  type CloudSystemDeps,
+  type CloudSystemFactory,
+  createCloudFrontHandle,
+  createCloudSystem,
+} from './cloudSystem.ts'
 import { createCloudUniforms } from './cloudUniforms.ts'
 
 /*
@@ -276,5 +285,44 @@ describe('the front handle', () => {
     const other = createCloudSystem.createFront()
     expect(one).not.toBe(other)
     expect(one.screen.traceSize).not.toBe(other.screen.traceSize)
+  })
+
+  it('is the engine’s once the cloud chunk arrives, and every system the engine’s factory builds is handed it', () => {
+    const engine = new GameEngine({
+      seed: 'inertialref',
+      workers: () => createInlineWorker(createTaskRegistry()),
+      store: new MemorySaveStore(),
+      now: () => 0,
+    })
+    try {
+      // Without the flag the chunk never loads: no factory, and no handle.
+      expect(engine.cloudFront).toBeNull()
+      expect(engine.cloudsAvailable).toBe(false)
+      const built: (CloudSystemDeps['front'] | undefined)[] = []
+      const chunk: CloudSystemFactory = Object.assign(
+        (deps: CloudSystemDeps) => {
+          built.push(deps.front)
+          return {} as CloudSystem
+        },
+        { createFront: createCloudFrontHandle },
+      )
+      engine.cloudSystemFactory = chunk
+      const handle = engine.cloudFront
+      expect(handle).not.toBeNull()
+      expect(engine.cloudsAvailable).toBe(true)
+      // One function for the page's life: the sensor's effect depends on it.
+      const factory = engine.cloudSystemFactory!
+      expect(engine.cloudSystemFactory).toBe(factory)
+      // Two chains, as a picture change builds a second: one handle for both.
+      factory({} as CloudSystemDeps)
+      factory({} as CloudSystemDeps)
+      expect(built).toEqual([handle, handle])
+      expect(engine.cloudFront).toBe(handle)
+      engine.cloudSystemFactory = null
+      expect(engine.cloudFront).toBeNull()
+      expect(engine.cloudsAvailable).toBe(false)
+    } finally {
+      engine.dispose()
+    }
   })
 })

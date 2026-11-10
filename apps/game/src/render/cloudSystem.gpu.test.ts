@@ -17,7 +17,7 @@ import {
 import { logHub, RingBufferSink } from '@inertialref/shared'
 import { cloudRadianceDifference } from '@inertialref/devtools'
 import type { CloudHistory } from './cloudHistory.ts'
-import type { CloudLevers } from './cloudLevers.ts'
+import { type CloudLevers, cloudLeversHash } from './cloudLevers.ts'
 import type { CloudResource } from './cloudNodes.ts'
 import type { CloudTrace } from './cloudTrace.ts'
 import { type CloudRig, cloudRig } from './cloudSystemRig.ts'
@@ -585,6 +585,49 @@ describe('the whole chain over a depth step', () => {
   }, 60_000)
 })
 
+describe('the report’s levers', () => {
+  it('carries the hash of the levers the frame drew with, which a steering lever does not move', () => {
+    set({ force: 'none', stats: false, lightTaps: 4 })
+    rig.frame()
+    const steady = rig.system!.report
+    expect(steady.leversHash).toBe(cloudLeversHash(rig.levers))
+    expect(steady.leversHash).toMatch(/^[0-9a-f]{8}$/)
+    expect(steady.levers).toMatchObject({ weather: 'overcast', lightTaps: 4 })
+    // A forced row and its steady row are one picture's levers.
+    set({ force: 'cut', stats: true })
+    rig.frame()
+    expect(rig.system!.report.leversHash).toBe(steady.leversHash)
+    // A shipped lever is another set.
+    set({ force: 'none', stats: false, lightTaps: 2 })
+    rig.frame()
+    expect(rig.system!.report.leversHash).not.toBe(steady.leversHash)
+    set({ lightTaps: 4 })
+  })
+})
+
+describe('the front handle', () => {
+  it('holds this frame’s trace and the numbers beside it while the clouds draw, and no trace on a frame they do not', () => {
+    const front = rig.system!.front
+    const trace = resource<CloudTrace>('trace')
+    set({ force: 'none' })
+    frames(2)
+    expect(front.textures()).toBe(trace.outputs)
+    const [width, height] = rig.system!.report.extents.trace
+    expect(front.screen.traceSize.value.toArray()).toEqual([width, height])
+    const day = rig.system!.field.uniforms.served.dayColor.value
+    expect(front.screen.dayColor.value.equals(day)).toBe(true)
+    // Its own uniforms, copied into: a material that built over them keeps
+    // reading this frame's numbers when the chain behind them is another.
+    expect(front.screen.dayColor.value).not.toBe(day)
+    set({ on: false })
+    rig.frame()
+    expect(front.textures()).toBeNull()
+    set({ on: true })
+    rig.frame()
+    expect(front.textures()).toBe(trace.outputs)
+  })
+})
+
 describe('the radiance capture', () => {
   it('reads one frame for two asks, at the trace’s extent, cloud where the ceiling does not stop the trace', async () => {
     set({ force: 'none', lightTaps: 2 })
@@ -745,8 +788,10 @@ describe('a frame whose cloud work throws', () => {
       rig.frame()
       trace.render = render
       trace.dispatchPhase = dispatchPhase
-      // The frame is the clouds-off frame: the composite drew nothing.
+      // The frame is the clouds-off frame: the composite drew nothing, and
+      // nothing drawn over it is handed the trace it abandoned.
       expect(apart(await image(), plain)).toBeLessThan(1e-3)
+      expect(rig.system!.front.textures()).toBeNull()
       await expect(asked).resolves.toBeNull()
       expect(
         sink
