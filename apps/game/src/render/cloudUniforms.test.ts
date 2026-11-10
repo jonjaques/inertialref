@@ -444,10 +444,12 @@ describe('the cloud uniforms', () => {
     const served = uniforms.served.climate
     expect(served.kind.value).toBe(CLOUD_CLIMATE_KINDS.regime)
     const [kind, scale, cells] = served.pattern.value.toArray()
-    expect(kind).toBe(CLOUD_PATTERN_KINDS.blobs)
-    expect(scale).toBe(cumulus.patternScale)
-    // Fair-cumulus's 0.02 rad blobs: 64 cells a face edge.
-    expect(cells).toBe(64)
+    // Fair-cumulus names blobs, which a regime draws as a uniform cover at
+    // the layer's coverage (`regimeWeather`): a 96 km blob cell is a whole
+    // sky of cloud or none from a stance.
+    expect(kind).toBe(CLOUD_PATTERN_KINDS.uniform)
+    expect(scale).toBe(0)
+    expect(cells).toBe(1)
     const cover = cumulus.layers[0]!.coverage
     expect(served.cover.value.toArray()).toEqual([cover, 0, 0])
     expect(served.blobThreshold.value.toArray()).toEqual([

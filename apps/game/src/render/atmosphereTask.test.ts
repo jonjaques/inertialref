@@ -211,12 +211,18 @@ describe('render.bakeAtmosphere', () => {
     const shared = createTaskRegistry().names()
     const game = createGameTaskRegistry().names()
     expect(game).toEqual(
-      [...shared, 'render.bakeAtmosphere', 'render.convolvePhase'].sort(),
+      [
+        ...shared,
+        'render.bakeAtmosphere',
+        'render.cloudStatistics',
+        'render.convolvePhase',
+      ].sort(),
     )
     // The shared registry does not know them: the layer graph forbids the
     // import and the headless runner would never ask.
     expect(shared).not.toContain('render.bakeAtmosphere')
     expect(shared).not.toContain('render.convolvePhase')
+    expect(shared).not.toContain('render.cloudStatistics')
   })
 })
 
