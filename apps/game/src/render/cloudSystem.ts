@@ -38,7 +38,6 @@ import type { CloudBudget, CloudResource } from './cloudNodes.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
 import { CLOUD_PROFILE_HEIGHTS, CLOUD_PROFILE_ROWS } from './cloudProfile.ts'
 import { CloudRadianceMeter } from './cloudRadiance.ts'
-import { SUN_GRID_SIZE } from './cloudSunGrid.ts'
 import { CloudTrace, type CloudTraceTextures } from './cloudTrace.ts'
 import type { SceneLayout } from './sceneLayout.ts'
 
@@ -167,8 +166,6 @@ export interface CloudSystemFactory {
   readonly createFront: () => CloudFrontHandle
 }
 
-/** Slices the volume bakes a frame past level 0's own rebuild (§3.11). */
-const VOLUME_SLICES = 8
 /** The profile table, RGBA8: not a resource of its own, 2 KB the report counts. */
 const PROFILE_BYTES = CLOUD_PROFILE_HEIGHTS * CLOUD_PROFILE_ROWS * 4
 
@@ -295,12 +292,13 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
   const css = new Vector2()
   const buffer = new Vector2()
 
-  // The grid's whole stack: a rebuild bakes every slice in its frame.
+  // The `sunSlices` lever is each cache's cap: what a rebuild may bake of
+  // the volume a frame, and then of the grid.
   const budgetOf = (built: CloudFrame): CloudBudget => ({
-    slices: VOLUME_SLICES,
+    slices: built.levers.sunSlices,
     tiles: 1,
     jump: built.jump,
-    sunSlices: SUN_GRID_SIZE[2],
+    sunSlices: built.levers.sunSlices,
   })
 
   /** §3.16's order: every bake and cache, the depth copy, then the trace and the history. */

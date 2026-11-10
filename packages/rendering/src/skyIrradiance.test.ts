@@ -1,0 +1,282 @@
+import fc from 'fast-check'
+import { describe, expect, it } from 'vitest'
+import {
+  ATMOSPHERE_GAIN,
+  atmosphereRecipe,
+  bakeMultipleScattering,
+  bakeTransmittance,
+  MULTI_SCATTER_FLOOR,
+  transmittanceFrom,
+  zenithSkyRadiance,
+} from './atmosphere.ts'
+import {
+  bakeSkyMoments,
+  darkSkyTable,
+  marchSkyFaces,
+  marchSkyMoments,
+  SKY_BLOCK_COLUMNS,
+  SKY_TABLE_HEIGHT,
+  SKY_TABLE_WIDTH,
+  type SkyAir,
+  skyDirections,
+  skyMomentsAt,
+  skyMomentsOf,
+  skyRadiance,
+} from './skyIrradiance.ts'
+
+/*
+ * The sky table is the air's own sky, summed. Each texel is a quadrature of
+ * the march `zenithSkyRadiance` takes, so the tests hold three things: that
+ * the march is that one, that the quadrature has converged where a cloud
+ * reads it, and that the table hands back what the quadrature summed.
+ */
+
+// Earth's authored haze, and the shell ratio and heights `buildScene` gives it.
+const haze = {
+  color: { r: 0.3, g: 0.55, b: 1 },
+  limb: { r: 1, g: 0.6, b: 0.3 },
+  thickness: 1,
+  aerosolAngstrom: 1.3,
+  ozone: 300,
+}
+const recipe = atmosphereRecipe(haze, 1.0157, {
+  rayleigh: 8.5 / 6371,
+  aerosol: 1.2 / 6371,
+})
+const transmittance = bakeTransmittance(recipe)
+const multiScatter = bakeMultipleScattering(recipe, transmittance)
+const air: SkyAir = { recipe, transmittance, multiScatter }
+const table = bakeSkyMoments(recipe, transmittance, multiScatter)
+const ceiling = recipe.topRatio - 1
+
+/** A row's radius and a column's sun cosine, as the bake lays them out. */
+const rowRadius = (y: number) => 1 + (y / (SKY_TABLE_HEIGHT - 1)) * ceiling
+const columnSun = (k: number) => (k / (SKY_BLOCK_COLUMNS - 1)) * 2 - 1
+
+/**
+ * Three suns, as the columns hold them: 60.6° up, 5.6° up and 5.6° under
+ * the horizon. Three heights where clouds stand: the datum, 6.7 km and
+ * 20 km on Earth.
+ */
+const SUNS = [29, 17, 14] as const
+const ROWS = [0, 1, 3] as const
+
+/**
+ * The reference: 2,016 directions, 32 heights over the horizon and 16 under
+ * it by 42 azimuths, at the bake's own 16 samples a direction. The same
+ * march at a finer sphere, so what it measures is the bake's quadrature.
+ * The march's own step count is a separate error, shared with Ψ's bake:
+ * against 64 samples a direction it is 0.6% at noon on the datum and 2%
+ * at nautical twilight, measured once and not held here.
+ */
+const REFERENCE = { above: 32, below: 16, azimuths: 42, steps: 16 }
+
+/**
+ * 1% of L̄, and 1% of π·L̄ on each difference: a difference's error in
+ * irradiance as a share of the sky's mean irradiance. At these nine texels
+ * the bake measured 0.92%, 0.005 and 0.008.
+ */
+const MEAN_TOLERANCE = 0.01
+const DIFFERENCE_TOLERANCE = 0.01
+
+/** The texel's moments as the bake stored them: L̄ decoded, Δ and Δ_s as they are. */
+function texel(y: number, k: number, c: number) {
+  const at = (block: number) =>
+    table.data[(y * SKY_TABLE_WIDTH + block * 34 + 1 + k) * 4 + c] as number
+  return { mean: Math.exp(at(0)), up: at(1), sunward: at(2) }
+}
+
+describe('the sky’s march', () => {
+  it('is the air’s own: straight up it is zenithSkyRadiance, to rounding', () => {
+    for (const r of [1, 1.002, 1.008])
+      for (const mu of [0.9, 0.3, 0.02, -0.08]) {
+        const marched = skyRadiance(air, r, mu, [0, 0, 1], {
+          steps: 32,
+          sunlight: (radius, m) => transmittanceFrom(radius, m, recipe),
+        })
+        const zenith = zenithSkyRadiance(recipe, multiScatter, r, mu)
+        for (let c = 0; c < 3; c += 1)
+          expect(marched[c]! * ATMOSPHERE_GAIN).toBeCloseTo(zenith[c]!, 12)
+      }
+  })
+})
+
+describe('the sky’s quadrature', () => {
+  it('weighs the whole sphere, 4π, at any height and count', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1, max: 1.1, noNaN: true }),
+        fc.integer({ min: 1, max: 24 }),
+        fc.integer({ min: 0, max: 12 }),
+        fc.integer({ min: 1, max: 16 }),
+        (r, above, below, azimuths) => {
+          const directions = skyDirections(r, { above, below, azimuths })
+          let total = 0
+          for (let i = 3; i < directions.length; i += 4)
+            total += directions[i] as number
+          // Under no heights at all the sphere's lower half goes unweighed.
+          const expected =
+            below === 0 ? 2 * Math.PI * (1 - horizon(r)) : 4 * Math.PI
+          expect(total).toBeCloseTo(expected, 9)
+        },
+      ),
+    )
+  })
+
+  it('gives Δ = 2 for a sky uniform above the datum and dark below, and no Δ_s', () => {
+    const directions = skyDirections(1, { above: 6, below: 3, azimuths: 4 })
+    const moments = skyMomentsOf(directions, (_x, _y, z, out) => {
+      out.fill(z > 0 ? 0.8 : 0)
+    })
+    for (let c = 0; c < 3; c += 1) {
+      expect(moments.up[c]).toBeCloseTo(2, 12)
+      expect(moments.sunward[c]).toBeCloseTo(0, 12)
+      expect(moments.mean[c]).toBeCloseTo(0.4, 12)
+    }
+  })
+
+  it('gives no difference for a uniform sky, and none for a sky with no light', () => {
+    const directions = skyDirections(1.004, { above: 5, below: 4, azimuths: 3 })
+    const uniform = skyMomentsOf(directions, (_x, _y, _z, out) => {
+      out.fill(0.3)
+    })
+    const none = skyMomentsOf(directions, (_x, _y, _z, out) => {
+      out.fill(0)
+    })
+    for (let c = 0; c < 3; c += 1) {
+      expect(uniform.mean[c]).toBeCloseTo(0.3, 12)
+      expect(uniform.up[c]).toBeCloseTo(0, 12)
+      expect(uniform.sunward[c]).toBeCloseTo(0, 12)
+      expect(none.mean[c]).toBe(MULTI_SCATTER_FLOOR)
+      expect([none.up[c], none.sunward[c]]).toEqual([0, 0])
+    }
+  })
+
+  it('equals 2,016 directions within 1% at three suns and three cloud heights', () => {
+    for (const y of ROWS)
+      for (const k of SUNS) {
+        const reference = marchSkyMoments(
+          air,
+          rowRadius(y),
+          columnSun(k),
+          REFERENCE,
+        )
+        for (let c = 0; c < 3; c += 1) {
+          const baked = texel(y, k, c)
+          const where = `row ${y}, column ${k}, band ${c}`
+          // Half-float is not in the way: the bake is the Float32 table.
+          expect(
+            Math.abs(baked.mean / reference.mean[c]! - 1),
+            where,
+          ).toBeLessThan(MEAN_TOLERANCE)
+          expect(Math.abs(baked.up - reference.up[c]!), where).toBeLessThan(
+            DIFFERENCE_TOLERANCE,
+          )
+          expect(
+            Math.abs(baked.sunward - reference.sunward[c]!),
+            where,
+          ).toBeLessThan(DIFFERENCE_TOLERANCE)
+        }
+      }
+  }, 120_000)
+
+  it('holds each face’s difference exactly: π·L̄·Δ is the irradiance above less below', () => {
+    const quadrature = { above: 8, below: 4, azimuths: 6, steps: 12 }
+    for (const [r, mu] of [
+      [1, 0.5],
+      [1.001, 0.1],
+      [1.003, -0.08],
+    ] as const) {
+      const moments = marchSkyMoments(air, r, mu, quadrature)
+      const faces = marchSkyFaces(air, r, mu, quadrature)
+      for (let c = 0; c < 3; c += 1) {
+        const scale = Math.PI * moments.mean[c]!
+        expect(faces.above[c]! - faces.below[c]!).toBeCloseTo(
+          scale * moments.up[c]!,
+          12,
+        )
+        expect(faces.sunward[c]! - faces.away[c]!).toBeCloseTo(
+          scale * moments.sunward[c]!,
+          12,
+        )
+      }
+    }
+  })
+})
+
+describe('the sky table', () => {
+  it('reads back what the bake summed, the mean through its logarithm', () => {
+    for (const y of [0, 5, 15])
+      for (const k of [0, 14, 31]) {
+        const read = skyMomentsAt(
+          table,
+          y / (SKY_TABLE_HEIGHT - 1),
+          columnSun(k),
+        )
+        const summed = marchSkyMoments(air, rowRadius(y), columnSun(k))
+        for (let c = 0; c < 3; c += 1) {
+          // The table is Float32, and ln L̄ reaches −69 at the floor, where
+          // a float's last place is 4·10⁻⁶ of the mean.
+          expect(read.mean[c]! / summed.mean[c]!).toBeCloseTo(1, 4)
+          expect(read.up[c]).toBeCloseTo(summed.up[c]!, 5)
+          expect(read.sunward[c]).toBeCloseTo(summed.sunward[c]!, 5)
+        }
+      }
+  })
+
+  it('repeats each block’s edge columns in its guards, so no read blends two blocks', () => {
+    for (let y = 0; y < SKY_TABLE_HEIGHT; y += 1)
+      for (let block = 0; block < 3; block += 1)
+        for (let c = 0; c < 4; c += 1) {
+          const at = (x: number) =>
+            table.data[(y * SKY_TABLE_WIDTH + block * 34 + x) * 4 + c]
+          expect(at(0)).toBe(at(1))
+          expect(at(33)).toBe(at(32))
+        }
+  })
+
+  it('reads the mean geometrically between columns, as Ψ is read', () => {
+    const y = 2
+    const [low, high] = [16, 17]
+    const half = (columnSun(low) + columnSun(high)) / 2
+    const read = skyMomentsAt(table, y / (SKY_TABLE_HEIGHT - 1), half)
+    for (let c = 0; c < 3; c += 1)
+      expect(read.mean[c]).toBeCloseTo(
+        Math.sqrt(texel(y, low, c).mean * texel(y, high, c).mean),
+        12,
+      )
+  })
+
+  it('is dark for an air with no shell, and so is its stand-in', () => {
+    const dark = bakeSkyMoments(
+      { topRatio: 1 } as never,
+      transmittance,
+      multiScatter,
+    )
+    expect(dark).toEqual(darkSkyTable())
+    for (const source of [dark, darkSkyTable(1)])
+      for (const h of [0, 0.5, 1])
+        for (const mu of [-1, 0, 1]) {
+          const read = skyMomentsAt(source, h, mu)
+          for (let c = 0; c < 3; c += 1) {
+            expect(read.mean[c]! / MULTI_SCATTER_FLOOR).toBeCloseTo(1, 4)
+            expect([read.up[c], read.sunward[c]]).toEqual([0, 0])
+          }
+        }
+  })
+
+  it('lies inside the bounds a difference can take, ±4, and its mean is positive', () => {
+    for (let y = 0; y < SKY_TABLE_HEIGHT; y += 1)
+      for (let k = 0; k < SKY_BLOCK_COLUMNS; k += 1)
+        for (let c = 0; c < 3; c += 1) {
+          const { mean, up, sunward } = texel(y, k, c)
+          expect(mean).toBeGreaterThan(0)
+          expect(Math.abs(up)).toBeLessThanOrEqual(4)
+          expect(Math.abs(sunward)).toBeLessThanOrEqual(4)
+        }
+  })
+})
+
+function horizon(r: number): number {
+  return -Math.sqrt(Math.max(0, 1 - 1 / (r * r)))
+}

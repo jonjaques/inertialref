@@ -49,8 +49,11 @@ export interface WeatherSource {
  * The severely roughened aggregate of solid columns: one habit of the set,
  * `P11` at 498 scattering angles for each of 445 wavelengths from 0.2 to
  * 100 µm and 23 effective diameters, in a pair of files, one with the phase
- * matrix and one with the bulk properties alone. The README says so; the
- * archive is read by the ice table's generator and by nothing else.
+ * matrix and one with the bulk properties alone. The ice table's generator
+ * reads those counts from the files and refuses a file that differs from
+ * the README; it is the archive's only reader. The README points to the 2011
+ * paper for the method, which the set's own paper extends, so both are
+ * cited.
  */
 export const BAUM_ICE = {
   key: 'baum-ice',
@@ -59,13 +62,13 @@ export const BAUM_ICE = {
   url: 'https://www.ssec.wisc.edu/ice_models/polarization.html',
   citations: [
     'Baum, B. A., P. Yang, A. J. Heymsfield, A. Bansemer, B. H. Cole, A. Merrelli, C. Schmitt, and C. Wang (2014). Ice cloud single-scattering property models with the full phase matrix at wavelengths from 0.2 to 100 µm. Journal of Quantitative Spectroscopy and Radiative Transfer, 146, 123–139. doi:10.1016/j.jqsrt.2014.02.029',
+    'Baum, B. A., P. Yang, A. J. Heymsfield, C. Schmitt, Y. Xie, A. Bansemer, Y.-X. Hu, and Z. Zhang (2011). Improvements in shortwave bulk scattering and absorption models for the remote sensing of ice clouds. Journal of Applied Meteorology and Climatology, 50, 1037–1056. doi:10.1175/2010JAMC2608.1',
   ],
   license: 'no license or terms of use are stated',
-  sourceDate: 'README last updated 25 July 2013',
+  // The README's own words, which the generator holds the README to.
+  sourceDate: 'Last Updated: 25 July 2013',
   cache: '.data/weather/baum',
-  unread: [
-    'the README’s counts of wavelengths, diameters and angles, which are quoted from it and not read from the files',
-  ],
+  unread: [],
 } as const satisfies WeatherSource
 
 /** The effective diameters the set is given at, µm: 10 to 120 in steps of 5, 23 of them. */

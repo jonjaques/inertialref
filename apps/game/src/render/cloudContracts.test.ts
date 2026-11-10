@@ -247,7 +247,12 @@ describe('the light’s stub modules', () => {
       'sigma',
     ])
     const depths = CLOUD_STAND_INS.sunDepth().depths(sample.offset)
-    expect(Object.keys(depths).sort()).toEqual(['toSun', 'weight', 'whole'])
+    expect(Object.keys(depths).sort()).toEqual([
+      'behind',
+      'toSun',
+      'weight',
+      'whole',
+    ])
     const phase = CLOUD_STAND_INS.phase(undefined, 1.9)
     expect(isNode(phase.phase(float(0), body.layers, 0, float(10)))).toBe(true)
     expect(isNode(phase.droplets(float(0), float(10)))).toBe(true)
