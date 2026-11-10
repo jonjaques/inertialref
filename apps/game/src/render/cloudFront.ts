@@ -158,12 +158,18 @@ export function cloudFront(
     const span = max(exits[k]!.sub(entry), NO_LENGTH)
     const share = saturate(at.sub(entry).div(span))
     const recorded = knot.w.lessThan(RECORDED)
-    transmittance = select(
-      recorded,
-      mix(transmittance, knot.w, share),
-      transmittance,
-    )
-    light = select(recorded, mix(light, knot.xyz, share), light)
+    /*
+     * The previous knot's (T, L) is read once a step: a padding knot mixes
+     * by 0, which returns it exactly, since the trace writes every knot
+     * finite. A select between the mix and the previous value would read it
+     * twice, and TSL inlines an expression wherever it is read, so four
+     * knots would unroll sixteen-fold into every program that reads them,
+     * 16 to 37 KB of fragment WGSL a material. A `toVar` a step keeps the
+     * size and draws nothing on the Metal adapter the suite runs on.
+     */
+    const factor = select(recorded, share, float(0))
+    transmittance = mix(transmittance, knot.w, factor)
+    light = mix(light, knot.xyz, factor)
   }
   return {
     transmittance: transmittance.add(nodeObject(follower)),

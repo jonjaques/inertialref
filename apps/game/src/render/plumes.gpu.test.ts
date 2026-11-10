@@ -216,6 +216,13 @@ describe('a plume seen through the clouds in front of it', () => {
   const THROUGH = 0.3
   /** The knots are half floats: 0.3 is 2⁻¹³ off in one. */
   const WITHIN = 1e-3
+  /*
+   * Clear air is T = 1 exactly, but the program reading the handle is not
+   * the bare one, and the shader compiler contracts its multiply-adds as it
+   * likes: one float32 step apart at 0.80, measured on a
+   * Mac mini (Mac18,5, Apple M6). Four steps is the bound.
+   */
+  const SAME = 4 * 2 ** -23
 
   it('is dimmed by a slab in front of it, and untouched by one behind it', async () => {
     const camera = new PerspectiveCamera(65, 1, 0.01, 100)
@@ -256,8 +263,12 @@ describe('a plume seen through the clouds in front of it', () => {
           for (let c = 0; c < 3; c += 1) {
             const own = bare.at(x, y)[c]!
             if (own > 0.01) lit += 1
-            expect(clear.at(x, y)[c]).toBe(own)
-            expect(behind.at(x, y)[c]).toBe(own)
+            expect(Math.abs(clear.at(x, y)[c]! - own)).toBeLessThanOrEqual(
+              SAME * own,
+            )
+            expect(Math.abs(behind.at(x, y)[c]! - own)).toBeLessThanOrEqual(
+              SAME * own,
+            )
             expect(
               Math.abs(inFront.at(x, y)[c]! - own * THROUGH),
               `(${x}, ${y}) channel ${c}`,

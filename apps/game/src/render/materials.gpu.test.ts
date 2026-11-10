@@ -997,9 +997,12 @@ describe('the materials drawn over the clouds, read through a front handle', () 
    * Under `?clouds=1` the ring, the plumes and the entry trace's inks read
    * the clouds in front of them (design §4.9), and without a handle each
    * builds the program it always has. The handle's cost is the two knot
-   * textures, read with `textureLoad` and no sampler, and nothing else
-   * bound: what is counted here, program by program, against the same
-   * material built with no handle. Each is built before the handle follows a
+   * textures and the two samplers three declares beside them, though the
+   * reads are `textureLoad` and use neither sampler: `cloudFront`'s nodes
+   * are over the trace's own storage textures, which are not nearest
+   * filtered, and the composite binds the same pair. That is what is
+   * counted here, program by program, against the same material built with
+   * no handle. Each is built before the handle follows a
    * trace, so it compiles against the handle's stand-ins, as the page does.
    */
   const knotBindings = async (
@@ -1014,7 +1017,9 @@ describe('the materials drawn over the clouds, read through a front handle', () 
     const samplers = (wgsl: string) =>
       (wgsl.match(/:\s*sampler\s*;/g) ?? []).length
     expect(count(read.fragmentShader) - count(bare.fragmentShader)).toBe(2)
-    expect(samplers(read.fragmentShader)).toBe(samplers(bare.fragmentShader))
+    expect(samplers(read.fragmentShader) - samplers(bare.fragmentShader)).toBe(
+      2,
+    )
     expect(read.fragmentShader).toContain('textureLoad')
     // The vertex stage reads no cloud.
     expect(count(read.vertexShader)).toBe(count(bare.vertexShader))
