@@ -74,8 +74,15 @@ export const RIG = Object.freeze({
   colorProfile: 'srgb',
   queries: ['chrome=0', 'layers=0', 'output=standard'],
 })
-/** How long a picture may take to settle, and the quiet after it does. */
-export const SETTLE_BUDGET = 30_000
+/**
+ * How long a picture may take to settle, and the quiet after it does.
+ *
+ * Earth's ground from low orbit settles last: its deposit slope table is
+ * measured on one worker once the tiles are in, and lands 50–53 s after the
+ * boot on an M6 Mac mini with the clouds on or off, with every tile long
+ * since drawn. Half a minute refused E1 for that alone.
+ */
+export const SETTLE_BUDGET = 120_000
 export const SETTLE_QUIET = 1_000
 /** The presentation rate a cast must hold, Hz, read over its first frames. */
 export const CAST_RATE = Object.freeze({ low: 58, high: 62, frames: 30 })
