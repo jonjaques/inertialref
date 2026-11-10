@@ -108,7 +108,13 @@ import {
   type TravelTargetOptions,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
-import { solveSun, type SunAt, sunAt, type SunTarget } from './solarTime.ts'
+import {
+  runClock,
+  solveSun,
+  type SunAt,
+  sunAt,
+  type SunTarget,
+} from './solarTime.ts'
 import {
   captureCameraProcessing,
   DEFAULT_PICTURE_PROCESSING,
@@ -735,6 +741,11 @@ export class GameHarness {
     target: SunTarget,
   ): ReturnType<typeof solveSun> {
     return solveSun(this.world, address, radiansOf(place), target)
+  }
+
+  /** Run the held instant from `start` at `warp`, a clock cast's verb (`solarTime.ts`). */
+  runClock(start: number, warp: number): ReturnType<typeof runClock> {
+    return runClock(this.observatory, start, warp)
   }
 
   /**
