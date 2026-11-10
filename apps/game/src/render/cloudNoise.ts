@@ -13,8 +13,16 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
+  abs,
+  cos,
+  dot,
   float,
+  floor,
+  If,
+  max,
+  property,
   screenCoordinate,
+  sin,
   texture3D,
   uniform,
   vec3,
@@ -586,6 +594,144 @@ export function mesoscaleRateNode(
     b: phases[1],
     cell,
   }) as unknown as Node<'vec3'>
+}
+
+/* ------------------------------------------------------------------------- */
+/* The displacement along a ray                                               */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * The largest phase step, radians, the recurrence takes by its series; a
+ * call further from the last starts over from sines. The march's longest
+ * step is 1 km and its farthest tap 800 m along the sun, so two calls of a
+ * ray are at most 1.8 km apart, which at the shortest wave of a 1,000 m cell
+ * (17 cells) is 0.67 rad, and 1.33 rad at fog's 500 m cell.
+ */
+export const MESOSCALE_STEP_MAX = 1.5
+
+/*
+ * sin x and cos x by their Taylor series to x⁹ and x¹⁰: at |x| = 1.5 the
+ * first terms left out are 2.2 × 10⁻⁶ and 2.7 × 10⁻⁷, and at the march's
+ * 0.67 rad 3.0 × 10⁻¹⁰ and 1.2 × 10⁻¹¹.
+ */
+const sinSeries = (x: Node<'vec3'>): Node<'vec3'> => {
+  const x2 = x.mul(x)
+  return x.mul(
+    x2
+      .mul(1 / 362_880)
+      .add(-1 / 5040)
+      .mul(x2)
+      .add(1 / 120)
+      .mul(x2)
+      .add(-1 / 6)
+      .mul(x2)
+      .add(1),
+  ) as Node<'vec3'>
+}
+const cosSeries = (x: Node<'vec3'>): Node<'vec3'> => {
+  const x2 = x.mul(x)
+  return x2
+    .mul(-1 / 3_628_800)
+    .add(1 / 40_320)
+    .mul(x2)
+    .add(-1 / 720)
+    .mul(x2)
+    .add(1 / 24)
+    .mul(x2)
+    .add(-1 / 2)
+    .mul(x2)
+    .add(1) as Node<'vec3'>
+}
+
+/** Each wave's `k·cell`, `2π·along/wavelength`, and its `push·amplitude`, in cells: three waves a vec3. */
+const WAVE_K = MESOSCALE_WAVES.map(({ along, wavelength }) =>
+  vec3(
+    (2 * Math.PI * along.x) / wavelength,
+    (2 * Math.PI * along.y) / wavelength,
+    (2 * Math.PI * along.z) / wavelength,
+  ),
+)
+const WAVE_PUSH = MESOSCALE_WAVES.map(({ push, amplitude }) =>
+  vec3(push.x * amplitude, push.y * amplitude, push.z * amplitude),
+)
+
+/** The six waves' phase steps for a turned offset, in two halves: `k·v`. */
+const phasesOf = (
+  v: Node<'vec3'>,
+  cell: Node<'float'>,
+): readonly [Node<'vec3'>, Node<'vec3'>] => [
+  vec3(dot(WAVE_K[0]!, v), dot(WAVE_K[1]!, v), dot(WAVE_K[2]!, v)).div(cell),
+  vec3(dot(WAVE_K[3]!, v), dot(WAVE_K[4]!, v), dot(WAVE_K[5]!, v)).div(cell),
+]
+
+const TURN = 2 * Math.PI
+const reduced = (phase: Node<'vec3'>): Node<'vec3'> =>
+  phase.sub(floor(phase.div(TURN)).mul(TURN)) as Node<'vec3'>
+
+/**
+ * The mesoscale displacement along a ray, for a medium a march reads every
+ * step: no sine a step. Each wave's phase is linear in the offset,
+ * `θ = θ_eye + k·(M·offset)`, so from one call to the next it moves by
+ * `k·(M·Δoffset)`, and each wave's sine and cosine are carried from call to
+ * call and turned through that step by its series: six times two short
+ * polynomials, a rotation and three multiply-adds onto the displacement.
+ * The first call of an invocation, a call in another level than the last,
+ * and a call further than `MESOSCALE_STEP_MAX` from the last start over from
+ * sines of the phases themselves: twelve a level a ray.
+ *
+ * The carried values are invocation-wide variables (`property`), so every
+ * call in one kernel — a march's steps and its light taps, which leave the
+ * ray toward the sun and come back — continues one chain. That holds while
+ * the calls are inlined into one function, as every kernel that reads the
+ * field is; a call from a separate WGSL function would not see them.
+ */
+export function createMesoscaleRay(): (
+  turned: Node<'vec3'>,
+  phases: readonly [Node<'vec3'>, Node<'vec3'>],
+  cell: Node<'float'>,
+  level: Node<'float'>,
+) => Node<'vec3'> {
+  const held = property('float')
+  const at = property('vec3')
+  const sines = [property('vec3'), property('vec3')] as const
+  const cosines = [property('vec3'), property('vec3')] as const
+  return (turned, phases, cell, level) => {
+    const key = level.add(1)
+    const step = phasesOf(turned.sub(at), cell)
+    const largest = max(
+      max(abs(step[0]).x, max(abs(step[0]).y, abs(step[0]).z)),
+      max(abs(step[1]).x, max(abs(step[1]).y, abs(step[1]).z)),
+    )
+    If(held.notEqual(key).or(largest.greaterThan(MESOSCALE_STEP_MAX)), () => {
+      const now = phasesOf(turned, cell)
+      for (const half of [0, 1] as const) {
+        const phase = reduced(phases[half].add(now[half]) as Node<'vec3'>)
+        sines[half].assign(sin(phase))
+        cosines[half].assign(cos(phase))
+      }
+    }).Else(() => {
+      for (const half of [0, 1] as const) {
+        const s = sinSeries(step[half])
+        const c = cosSeries(step[half])
+        const sine = sines[half].mul(c).add(cosines[half].mul(s)).toVar()
+        const cosine = cosines[half].mul(c).sub(sines[half].mul(s)).toVar()
+        sines[half].assign(sine)
+        cosines[half].assign(cosine)
+      }
+    })
+    at.assign(turned)
+    held.assign(key)
+    const [a, b] = sines
+    return WAVE_PUSH[0]!
+      .mul(a.x)
+      .add(WAVE_PUSH[1]!.mul(a.y))
+      .add(WAVE_PUSH[2]!.mul(a.z))
+      .add(WAVE_PUSH[3]!.mul(b.x))
+      .add(WAVE_PUSH[4]!.mul(b.y))
+      .add(WAVE_PUSH[5]!.mul(b.z))
+      .mul(cell)
+      .toVar() as Node<'vec3'>
+  }
 }
 
 /*

@@ -2,6 +2,7 @@ import type { Node } from 'three/webgpu'
 import {
   dot,
   float,
+  If,
   int,
   max,
   mix,
@@ -20,7 +21,11 @@ import {
   climateNode,
 } from './cloudMaps.ts'
 import type { CloudMedium, CloudMediumFn, CloudSample } from './cloudNodes.ts'
-import { type CloudNoiseNodes, mesoscaleNode } from './cloudNoise.ts'
+import {
+  type CloudNoiseNodes,
+  createMesoscaleRay,
+  mesoscaleNode,
+} from './cloudNoise.ts'
 import { type CloudProfile, profileSlot } from './cloudProfile.ts'
 import type {
   CloudBodyUniforms,
@@ -47,12 +52,12 @@ import type {
  * as the point the float32 offset is measured from (rule 58).
  *
  * Each level's noise is read displaced over tens of kilometers
- * (`weatherField.ts`'s mesoscale waves). The fine medium takes the
- * displacement from the clipmap, carried at the level's middle height with
- * its rate with height, so a march step pays no sine for it; the far media,
- * which only bakes read, evaluate it where they read it.
+ * (`weatherField.ts`'s mesoscale waves). The fine medium carries the
+ * waves' sines along the ray from call to call (`createMesoscaleRay`), so a
+ * march step pays no sine for it; the far media and the bakes, which call
+ * the field once a texel, evaluate it where they read it.
  *
- * A fine step reads the clipmap's two targets (each twice in a level's fade
+ * A fine step reads the clipmap's one texture (twice in a level's fade
  * band), the profile, the base noise and the detail noise. The curl that
  * tears the edges is in the base noise already (`weatherNoise.ts`), so it
  * costs a step nothing. Every read names level 0, so the media compile in a
@@ -360,24 +365,32 @@ const cubeTexel = (body: CloudBodyUniforms): Node<'float'> =>
   body.datumRadius.mul(Math.PI / (2 * CLOUD_CUBE_TILE))
 
 /**
- * The fine march's medium: the clipmap's climate and displacement (§4.3).
- * The displacement is the column's at the level's middle height plus its
- * rate times the sample's height from there, so a step pays no sine.
+ * The fine march's medium: the clipmap's climate (§4.3), and the mesoscale
+ * displacement carried along the ray from call to call
+ * (`createMesoscaleRay`), so a step pays no sine for it.
  */
 export function fieldMedium(deps: FieldMediumDeps): CloudMediumFn {
+  const ray = createMesoscaleRay()
   return (sample, body) =>
-    recipe(deps, sample, body, (layer) => {
+    recipe(deps, sample, body, (layer, frame) => {
       const column = deps.clipmap.column(sample, body, layer.index)
-      const middle = dot(
-        layer.weights,
-        body.layers.base.add(body.layers.top).mul(0.5),
-      )
+      const displacement = vec3(0).toVar()
+      // Only a sample in a level carries the chain on: one between the
+      // levels leaves it where the last level's left it.
+      If(layer.inside.greaterThan(0.5), () => {
+        displacement.assign(
+          ray(
+            frame.turned,
+            levelPhases(body.layers, layer.weights),
+            layer.cell,
+            layer.level,
+          ),
+        )
+      })
       return {
         cover: column.cover,
         convective: column.convective,
-        displacement: column.displacement.add(
-          column.rise.mul(sample.altitude.sub(middle)),
-        ),
+        displacement,
         column: deps.clipmap.columnMeters(sample, body),
       }
     })

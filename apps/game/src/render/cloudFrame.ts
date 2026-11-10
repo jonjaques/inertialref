@@ -390,7 +390,29 @@ const emptyLevel = (height: number): LevelNumbers => ({
   meanDepth: [0, 0],
 })
 
-/** A regime's layer `k` as a level's numbers: the layer's own, one radius through it. */
+/**
+ * A regime's layer `k` as a level's spec, as `regimeWeather` lays it out:
+ * one genus at both ends, and an absent layer with no thickness at the
+ * union's top.
+ */
+function regimeSpec(scenario: WeatherScenario, k: number): LevelSpec {
+  const layer = scenario.layers[k]
+  const { top } = shellUnion(scenario)
+  return layer === undefined
+    ? { base: top, top, stratiform: 'stratus', cumuliform: 'stratus' }
+    : {
+        base: layer.base,
+        top: layer.top,
+        stratiform: layer.genus,
+        cumuliform: layer.genus,
+      }
+}
+
+/**
+ * A regime's layer `k` as a level's numbers: the layer's own, one radius
+ * through it. What a frame written by hand draws (`scenarioLevels`); a body's
+ * frame lays every level out by the field's own profile (`weatherLevels`).
+ */
 function regimeLevel(scenario: WeatherScenario, k: number): LevelNumbers {
   const layer = scenario.layers[k]
   if (layer === undefined) return emptyLevel(shellUnion(scenario).top)
@@ -411,8 +433,9 @@ function regimeLevel(scenario: WeatherScenario, k: number): LevelNumbers {
 }
 
 /**
- * A fitted climate's level as numbers: the CPU field's own (`levelProfile`),
- * so the frame and the oracle the drawn field is held to agree on σ, the
+ * A level as numbers, a fitted climate's or a named regime's: the CPU
+ * field's own (`levelProfile`), so the frame and the oracle the drawn field
+ * is held to agree on σ, the
  * radius, the cell and the erosion. The table encodes σ and the radius as
  * shares of its own greatest, so the reference is that greatest, and each
  * end's mean depth is the table's mean channel as the GPU reads its byte.
@@ -470,9 +493,9 @@ export function scenarioLevels(
 }
 
 /**
- * The weather a body draws under the lever, and the regime whose layers give
- * its levels their numbers: null under a fitted climate, whose levels are
- * the genus table's. No record leaves the body a regime with no weather to
+ * The weather a body draws under the lever, and the regime it names: null
+ * under a fitted climate. Either way a level's numbers are its profile's
+ * (`genusLevel`). No record leaves the body a regime with no weather to
  * turn it, and its levels stand still.
  */
 export type DrawnWeather =
@@ -515,8 +538,7 @@ export function drawnWeather(
  * as the point a float32 offset is measured from, and `origin_k + M_k·(p −
  * eye)` is `M_k·p + ŷ·drift` reduced, for any eye. A drift built in the
  * eye's tangent basis (`horizonBasis`) turns the whole lattice as the eye
- * moves at a held instant; that is the bridge the fine march reads
- * (`CloudBodyFrame.drift`), and no level reads it.
+ * moves at a held instant; no level reads it.
  */
 export function weatherLevels(
   drawn: DrawnWeather,
@@ -529,10 +551,9 @@ export function weatherLevels(
       ? { turn: [0, 0, 0], drift: 0, time }
       : fieldClock(weather, time)
   const level = (k: number): CloudLevelFrame => {
-    const numbers =
-      drawn.regime !== null
-        ? regimeLevel(drawn.regime, k)
-        : genusLevel(drawn.weather.levels[k]!)
+    const numbers = genusLevel(
+      weather?.levels[k] ?? regimeSpec(drawn.regime!, k),
+    )
     const angle = clock.turn[k]!
     return {
       ...numbers,

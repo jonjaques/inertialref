@@ -33,6 +33,8 @@ import {
   horizonBasis,
   levelFrames,
   levelProfile,
+  MESOSCALE_WAVES,
+  mesoscaleDisplacement,
   regimeWeather,
   shellHeights,
   WEATHER_SCENARIOS,
@@ -55,13 +57,19 @@ import {
   CLOUD_CLIPMAP_SIZE,
   CLOUD_CLIPMAP_TEXELS,
   type CloudFrame,
+  type DrawnWeather,
+  drawnWeather,
   weatherClimate,
   weatherLevels,
 } from './cloudFrame.ts'
-import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
+import { type CloudWeather, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { CloudMaps } from './cloudMaps.ts'
 import type { CloudBudget, CloudMediumFn, CloudSample } from './cloudNodes.ts'
-import { CloudNoise } from './cloudNoise.ts'
+import {
+  CloudNoise,
+  createMesoscaleRay,
+  MESOSCALE_STEP_MAX,
+} from './cloudNoise.ts'
 import {
   bodyLevelSpecs,
   type CloudProfile,
@@ -172,7 +180,13 @@ function frameAt(
   time = TIME,
   previous: CloudFrame | null = null,
 ): CloudFrame {
-  const drawn = { weather, regime: null } as const
+  // The frame's own path: a named regime is `drawnWeather`'s, and the
+  // climate the body's fitted one.
+  const drawn: DrawnWeather =
+    key === 'climate'
+      ? { weather, regime: null }
+      : drawnWeather(key as CloudWeather, SERVED_EARTH)
+  expect(drawn.weather?.levels).toEqual(weather.levels)
   const levels = weatherLevels(drawn, time, eye)
   const frame = {
     levers: { ...DEFAULT_CLOUD_LEVERS, on: true },
@@ -293,14 +307,22 @@ interface Point {
   readonly footprint: number
 }
 
-/** `medium` at each point seen from `eye`, one thread each: (fraction, σ′, level, column), and (radius, depth). */
+/**
+ * `medium` at each point seen from `eye`: (fraction, σ′, level, column), and
+ * (radius, depth). A thread takes `chain` consecutive points in order, as a
+ * march takes its steps and taps, so the fine medium's displacement is
+ * carried from one to the next; with a chain of one every point starts it
+ * over.
+ */
 async function evaluate(
   points: readonly Point[],
   eye: Vec3,
   medium: CloudMediumFn,
   uniforms: CloudUniforms,
+  chain = 1,
 ): Promise<Float32Array> {
   const count = points.length
+  const threads = Math.ceil(count / chain)
   const input = new StorageBufferAttribute(
     new Float32Array(
       points.flatMap(({ position, footprint }) => {
@@ -324,25 +346,28 @@ async function evaluate(
   const from = storage(input, 'vec4', count * 2)
   const into = storage(output, 'vec4', count * 2)
   const kernel = Fn(() => {
-    If(instanceIndex.lessThan(uint(count)), () => {
-      const a = from.element(instanceIndex.mul(2))
-      const b = from.element(instanceIndex.mul(2).add(1))
-      const sample: CloudSample = {
-        offset: a.xyz,
-        distance: b.y,
-        altitude: a.w,
-        sunMu: float(0.5),
-        footprint: b.x,
-      }
-      const m = medium(sample, uniforms.served)
-      into
-        .element(instanceIndex.mul(2))
-        .assign(vec4(m.fraction, m.sigma, float(m.layer), m.column))
-      into
-        .element(instanceIndex.mul(2).add(1))
-        .assign(vec4(m.radius, m.depth, 0))
+    If(instanceIndex.lessThan(uint(threads)), () => {
+      Loop(chain, ({ i }) => {
+        const at = instanceIndex.mul(chain).add(uint(i)).toVar()
+        If(at.lessThan(uint(count)), () => {
+          const a = from.element(at.mul(2))
+          const b = from.element(at.mul(2).add(1))
+          const sample: CloudSample = {
+            offset: a.xyz,
+            distance: b.y,
+            altitude: a.w,
+            sunMu: float(0.5),
+            footprint: b.x,
+          }
+          const m = medium(sample, uniforms.served)
+          into
+            .element(at.mul(2))
+            .assign(vec4(m.fraction, m.sigma, float(m.layer), m.column))
+          into.element(at.mul(2).add(1)).assign(vec4(m.radius, m.depth, 0))
+        })
+      })
     })
-  })().compute(count)
+  })().compute(threads)
   await gpu.compute(kernel)
   return new Float32Array(await gpu.readBuffer(output))
 }
@@ -459,16 +484,17 @@ const STANCES = [
 /**
  * The drawn field's error against `cloudFieldAt`, in the level's σ′, at the
  * points either side holds cloud. Measured on this Mac mini (Apple M6), the
- * median is 1.7 × 10⁻⁴ to 2.6 × 10⁻³ and the 99th percentile 5.0 × 10⁻⁴ to
- * 1.08 × 10⁻² over the three stances, three regimes and the far media, and
- * the worst point 1.51 × 10⁻² (from 400 km). Its sources: the cover's
- * bytes, amplified by the remap's division by the cover; the sampler's
- * fixed-point weights on the noise; and the displacement carried by the
- * clipmap as a value and a rate in half floats, whose linearization is
- * worth up to 27 m at a level's edge. The bounds are twice the measured.
+ * median is 1.5 × 10⁻⁴ to 2.8 × 10⁻³ and the 99th percentile 5.0 × 10⁻⁴ to
+ * 6.2 × 10⁻³ over the three stances, three regimes through the frame's own
+ * layout and the far media, and the worst point 6.3 × 10⁻³; the light taps,
+ * read on a ray's own chain, 3.4 × 10⁻³ at the 99th. Its sources: the
+ * cover's bytes, amplified by the remap's division by the cover, and the
+ * sampler's fixed-point weights on the noise. The displacement, carried
+ * along the ray by its series, adds under 2.1 × 10⁻⁵ of a cell. The bounds
+ * are twice the measured, the median's rounded to 0.005.
  */
 const ORACLE_MEDIAN = 0.005
-const ORACLE_P99 = 0.02
+const ORACLE_P99 = 0.0125
 
 describe('each medium is cloudFieldAt', () => {
   it.each(STANCES)(
@@ -775,19 +801,21 @@ describe('every read names level 0', () => {
     wgsl.split(`${call}(`).length - 1
 
   /*
-   * The fine march's step: the clipmap's two targets in a level and in the
-   * next one's fade band, the profile, the base noise and the detail, and
-   * no sine (the displacement is the clipmap's). The cube's medium reads
-   * its two targets once; the climate's, the base noise once more for its
-   * synoptic field. The two far media evaluate the displacement, which is
-   * a bake's cost and never a march step's.
+   * The fine march's step: the clipmap's one texture in a level and in the
+   * next one's fade band, the profile, the base noise and the detail. Its
+   * only sines and cosines are the displacement's start over, two of each
+   * over three waves a vector, in the one branch a ray takes on entering a
+   * level (`createMesoscaleRay`); a step turns them by their series. The cube's medium reads its two targets
+   * once; the climate's, the base noise once more for its synoptic field.
+   * The two far media evaluate the displacement where they read it, which
+   * is a bake's cost and never a march step's.
    */
   it.each([
-    ['fieldMedium', 7, 0],
+    ['fieldMedium', 5, 4],
     ['synopticMedium', 5, 12],
     ['analyticMedium', 4, 12],
   ] as const)(
-    '%s: no bare textureSample, a textureSampleLevel for each of its %i reads, and %i sines',
+    '%s: no bare textureSample, a textureSampleLevel for each of its %i reads, and at most %i calls of sin and cos in its text',
     async (name, count, sines) => {
       const weather = regimeWeather(SERVED_EARTH, 'two-decks')
       const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
@@ -804,7 +832,9 @@ describe('every read names level 0', () => {
       const wgsl = await marched(medium, field.uniforms, field.profile, false)
       expect(reads(wgsl, 'textureSample')).toBe(0)
       expect(reads(wgsl, 'textureSampleLevel')).toBe(count)
-      expect(reads(wgsl, 'sin') + reads(wgsl, 'cos')).toBeLessThanOrEqual(sines)
+      const calls = reads(wgsl, 'sin') + reads(wgsl, 'cos')
+      if (name === 'fieldMedium') expect(calls).toBe(sines)
+      else expect(calls).toBeLessThanOrEqual(sines)
       const control = await marched(medium, field.uniforms, field.profile, true)
       expect(reads(control, 'textureSample')).toBe(1)
       field.dispose()
@@ -975,7 +1005,15 @@ describe('no tile from orbit, as drawn', () => {
             footprint: 0,
           })
       }
-    const read = await evaluate(points, eye, field.media.field, field.uniforms)
+    // A thread a column, its five heights in order, as a march would take
+    // them: the displacement is carried up the column.
+    const read = await evaluate(
+      points,
+      eye,
+      field.media.field,
+      field.uniforms,
+      heights.length,
+    )
     const clock = fieldClock(weather, time)
     const drawn = new Uint8Array(n * n)
     const cpu = new Uint8Array(n * n)
@@ -1008,16 +1046,24 @@ describe('no tile from orbit, as drawn', () => {
 describe('the frame’s clouds are the CPU field’s', () => {
   /*
    * Each stance's frame drawn through the fine medium and through
-   * `cloudFieldAt`, ray for ray: 64 × 64 rays of the stance's lens, each marched in
-   * 96 midpoint steps through the levels' union, its transmittance the
-   * product of `e^(−fraction·σ′·Δs)` and its footprint the lens's pixel at
-   * the step's distance. The march is this test's, the same on both sides,
-   * so what differs is the medium alone. The CPU field has no cube: a line
+   * `cloudFieldAt`, ray for ray: 64 × 64 rays of the stance's lens, each
+   * marched in 96 midpoint steps through the levels' union, its
+   * transmittance the product of `e^(−fraction·σ′·Δs)` and its footprint the
+   * lens's pixel at the step's distance. After each step the medium is read
+   * at the four light taps toward the sun, as the march reads them, and one
+   * thread takes a ray's steps and taps in order: the fine medium carries
+   * its displacement through all 480 calls, which is the recurrence the
+   * march runs. The march is this test's, the same on both sides, so what
+   * differs is the medium alone. The CPU field has no cube: a line
    * at the cube cell's frequency, or at a clipmap level's edge, is a
    * difference between the two frames, and the per-pixel bound bounds it.
    */
   const SIDE = 64
   const STEPS = 96
+  /** The four taps' midpoints toward the sun, meters (`LIGHT_TAPS[4]`). */
+  const TAPS = [50, 200, 450, 800] as const
+  /** A step and its taps: the medium's calls a step. */
+  const CALLS = 1 + TAPS.length
 
   /** A ray's span through the shell from radius `low` to `high`, from an eye at `eye` along unit `d`: [t₀, t₁], or null. */
   function span(
@@ -1128,10 +1174,13 @@ describe('the frame’s clouds are the CPU field’s', () => {
           lengths.push(length)
           for (let s = 0; s < STEPS; s += 1) {
             const t = t0 + (s + 0.5) * length
-            points.push({
-              position: added(eye, scaled(d, t)),
-              footprint: t * pixelAngle,
-            })
+            const at = added(eye, scaled(d, t))
+            points.push({ position: at, footprint: t * pixelAngle })
+            for (const midpoint of TAPS)
+              points.push({
+                position: added(at, scaled(SUN, midpoint)),
+                footprint: t * pixelAngle,
+              })
           }
         }
       const read = await evaluate(
@@ -1139,29 +1188,40 @@ describe('the frame’s clouds are the CPU field’s', () => {
         eye,
         field.media.field,
         field.uniforms,
+        STEPS * CALLS,
       )
       const clock = fieldClock(weather, TIME)
       let drawnCloudy = 0
       let cpuCloudy = 0
       let rays = 0
       const differences: number[] = []
+      const taps: number[] = []
       for (let r = 0; r < SIDE * SIDE; r += 1) {
         if (!crossed[r]) continue
         rays += 1
         let drawn = 0
         let cpu = 0
-        for (let s = 0; s < STEPS; s += 1) {
-          const n = r * STEPS + s
-          drawn += read[n * 8]! * read[n * 8 + 1]! * lengths[r]!
-          const want = cloudFieldAt(
-            weather,
-            clock,
-            SUN,
-            points[n]!.position,
-            points[n]!.footprint,
-          )
-          cpu += want.fraction * want.sigma * lengths[r]!
-        }
+        for (let s = 0; s < STEPS; s += 1)
+          for (let q = 0; q < CALLS; q += 1) {
+            const n = (r * STEPS + s) * CALLS + q
+            const want = cloudFieldAt(
+              weather,
+              clock,
+              SUN,
+              points[n]!.position,
+              points[n]!.footprint,
+            )
+            const extinction = read[n * 8]! * read[n * 8 + 1]!
+            const expected = want.fraction * want.sigma
+            if (q === 0) {
+              drawn += extinction * lengths[r]!
+              cpu += expected * lengths[r]!
+            } else if (want.level >= 0 && (extinction > 0 || expected > 0))
+              taps.push(
+                Math.abs(extinction - expected) /
+                  referenceSigma(weather, want.level),
+              )
+          }
         const opacity = 1 - Math.exp(-drawn)
         const expected = 1 - Math.exp(-cpu)
         if (opacity > 0.5) drawnCloudy += 1
@@ -1169,17 +1229,114 @@ describe('the frame’s clouds are the CPU field’s', () => {
         differences.push(Math.abs(opacity - expected))
       }
       console.info(
-        `frame, ${height} m: cloud fraction drawn ${(drawnCloudy / rays).toFixed(4)}, cloudFieldAt ${(cpuCloudy / rays).toFixed(4)}; opacity difference p99 ${quantile(differences, 0.99).toExponential(2)}, worst ${Math.max(...differences).toExponential(2)}; rays ${rays}`,
+        `frame, ${height} m: cloud fraction drawn ${(drawnCloudy / rays).toFixed(4)}, cloudFieldAt ${(cpuCloudy / rays).toFixed(4)}; opacity difference p99 ${quantile(differences, 0.99).toExponential(2)}, worst ${Math.max(...differences).toExponential(2)}; rays ${rays}; taps' extinction median ${quantile(taps, 0.5).toExponential(2)}, p99 ${quantile(taps, 0.99).toExponential(2)} of σ′ over ${taps.length}`,
       )
+      // The light taps, read between the steps on the ray's own chain: the
+      // oracle's bounds.
+      expect(quantile(taps, 0.5)).toBeLessThanOrEqual(ORACLE_MEDIAN)
+      expect(quantile(taps, 0.99)).toBeLessThanOrEqual(ORACLE_P99)
       expect(rays).toBeGreaterThan(SIDE * SIDE * 0.4)
       expect(Math.abs(drawnCloudy - cpuCloudy) / rays).toBeLessThanOrEqual(0.01)
-      // Opacity, measured: p99 at most 2.2 × 10⁻², worst 3.5 × 10⁻²; held at
+      // Opacity, measured: p99 at most 1.9 × 10⁻², worst 3.3 × 10⁻²; held at
       // twice the p99.
-      expect(quantile(differences, 0.99)).toBeLessThanOrEqual(0.045)
+      expect(quantile(differences, 0.99)).toBeLessThanOrEqual(0.04)
       expect(drawnCloudy).toBeGreaterThan(0)
       expect(drawnCloudy).toBeLessThan(rays)
       field.dispose()
     },
     180_000,
+  )
+})
+
+/* ------------------------------------------------------------------------- */
+/* The recurrence                                                             */
+/* ------------------------------------------------------------------------- */
+
+describe('the displacement carried along a ray', () => {
+  /*
+   * The fine medium's displacement turns each wave's sine and cosine from
+   * call to call by its series (`createMesoscaleRay`). Here one invocation
+   * runs the march's longest chain: 192 steps of 1 km, the march's longest,
+   * each followed by its four taps toward the sun, 960 calls, against each
+   * wave's sine of its phase taken directly in float64. The cell is the
+   * smallest a level has, 1,000 m, and fog's 500 m, where a step from the
+   * last tap back to the ray is 1.33 rad.
+   */
+  it.each([1000, 500])(
+    'holds the displacement over 960 calls at a %i m cell, with no renormalization',
+    async (cell) => {
+      const steps = 192
+      const taps = [50, 200, 450, 800]
+      const direction = unit({ x: 0.6, y: -0.3, z: 0.74 })
+      const sun = unit({ x: -0.2, y: 0.9, z: 0.4 })
+      const offsets: Vec3[] = []
+      for (let s = 0; s < steps; s += 1) {
+        const at = scaled(direction, 500 + 1000 * s)
+        offsets.push(at)
+        for (const m of taps) offsets.push(added(at, scaled(sun, m)))
+      }
+      const next = draws(41)
+      const eye = Array.from({ length: 6 }, () => next() * 2 * Math.PI)
+      const count = offsets.length
+      const input = new StorageBufferAttribute(
+        new Float32Array(offsets.flatMap(({ x, y, z }) => [x, y, z, 0])),
+        4,
+      )
+      const output = new StorageBufferAttribute(new Float32Array(count * 4), 4)
+      const from = storage(input, 'vec4', count)
+      const into = storage(output, 'vec4', count)
+      const ray = createMesoscaleRay()
+      const kernel = Fn(() => {
+        If(instanceIndex.lessThan(uint(1)), () => {
+          Loop(count, ({ i }) => {
+            const w = ray(
+              from.element(i).xyz,
+              [
+                vec3(eye[0]!, eye[1]!, eye[2]!),
+                vec3(eye[3]!, eye[4]!, eye[5]!),
+              ],
+              float(cell),
+              float(0),
+            )
+            into.element(i).assign(vec4(w, 0))
+          })
+        })
+      })().compute(1)
+      await gpu.compute(kernel)
+      const read = new Float32Array(await gpu.readBuffer(output))
+      let worst = 0
+      let first = 0
+      let largestStep = 0
+      let previous: number[] | null = null
+      offsets.forEach((offset, n) => {
+        const phases = MESOSCALE_WAVES.map(
+          ({ along, wavelength }, j) =>
+            eye[j]! +
+            ((2 * Math.PI) / (wavelength * cell)) *
+              (along.x * offset.x + along.y * offset.y + along.z * offset.z),
+        )
+        if (previous !== null)
+          phases.forEach((phase, j) => {
+            largestStep = Math.max(largestStep, Math.abs(phase - previous![j]!))
+          })
+        previous = phases
+        const want = mesoscaleDisplacement(phases, cell)
+        const error =
+          Math.max(
+            Math.abs(read[n * 4]! - want.x),
+            Math.abs(read[n * 4 + 1]! - want.y),
+            Math.abs(read[n * 4 + 2]! - want.z),
+          ) / cell
+        if (n < 5) first = Math.max(first, error)
+        worst = Math.max(worst, error)
+      })
+      console.info(
+        `recurrence at a ${cell} m cell: largest step ${largestStep.toFixed(3)} rad, error ${first.toExponential(2)} of a cell over the first step, ${worst.toExponential(2)} over 960 calls`,
+      )
+      expect(largestStep).toBeLessThan(MESOSCALE_STEP_MAX)
+      // A thousandth of a cell, 1 m at 1,000 m: a 64th of a base texel.
+      expect(worst).toBeLessThanOrEqual(1e-3)
+    },
+    60_000,
   )
 })

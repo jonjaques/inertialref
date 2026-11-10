@@ -6,7 +6,7 @@ import {
   QuadMesh,
   RenderTarget,
   RepeatWrapping,
-  HalfFloatType,
+  RGFormat,
   type Texture,
   type TextureNode,
   UnsignedByteType,
@@ -14,13 +14,11 @@ import {
 } from 'three/webgpu'
 import {
   abs,
-  clamp,
   float,
   floor,
   int,
   max,
   mix,
-  mrt,
   normalize,
   screenCoordinate,
   select,
@@ -33,14 +31,11 @@ import {
   cubeFaceOf,
   type CubeFace,
   type LevelFrame,
-  MESOSCALE_GRADIENT,
-  WEATHER_AXIAL_DRIFT,
 } from '@inertialref/rendering'
 import { CLOUD_CLIPMAP_SIZE, type CloudFrame } from './cloudFrame.ts'
-import { levelOffset, levelPlane, levelTexel } from './cloudGeometry.ts'
+import { levelPlane, levelTexel } from './cloudGeometry.ts'
 import type { CloudMapNodes } from './cloudMaps.ts'
 import type { CloudBudget, CloudResource, CloudSample } from './cloudNodes.ts'
-import { mesoscaleNode, mesoscaleRateNode } from './cloudNoise.ts'
 import {
   CLOUD_CLIPMAP_LEVELS,
   type CloudBodyUniforms,
@@ -53,32 +48,24 @@ import { warmSensorPass } from './warmup.ts'
 /*
  * What the fine march reads a step: six eye-anchored levels of 256² texels,
  * 250 m × 2^k, each a layer a cloud level, in a toroidally addressed 2D array
- * of two targets baked from the cube in the strips the window's move
- * exposes. A texel of cloud level j holds what a step in that level reads
- * of its column, in one fetch of each target:
+ * of one RG8 target, baked from the cube in the strips the window's move
+ * exposes. A texel of cloud level j holds that level's cover and its
+ * convective share: what a step in the level reads of its column, in one
+ * fetch. The cube is 19.6 km a texel at Earth's equator and the climate has
+ * no structure under it, so the clipmap adds nothing finer in phase 1: it is
+ * the cube's field resampled onto the planes the march reads, and the place
+ * phase 3's climatology and orography go in.
  *
- *   texel  RGBA16F: the mesoscale displacement at the level's middle height,
- *          meters in its turned frame, and the level's cover
- *   rise   RGBA8: the convective share, and the displacement's rate with
- *          height, ±0.7 about ½
+ * A layer a cloud level, and not the cube's packing of three levels a
+ * texel, so a step's cover and share are one texel of one texture: the
+ * trace binds one clipmap texture and reads it once a step (twice in a
+ * level's fade band), where the cube's packing would take two of each.
  *
- * **The displacement is carried, not evaluated a step.** `weatherField.ts`
- * reads each level's noise at `p′ + Σ a·cell·push·sin(k·p′)`: six sines, which
- * the march's inner loop does not pay. The waves are 17 cells and longer and
- * steepen the displacement by 0.66 at most, so across a texel it is all but
- * linear, and over a level's height it is its value at the middle plus a
- * rate: the second-order term is under `½·0.11·Σk·(h/2)²`, 27 m over a
- * 1.9 km level at a 1,200 m cell, against the 75 m of a base texel. A column
- * the march already fetches carries both, so a step adds no read, no binding
- * and no transcendental.
- *
- * **Its pace is its source's.** The climate is the cube's, resampled, so a
- * level is redrawn when a face it reads is. The displacement turns with its
- * level, so a level is redrawn too when its levels have turned far enough
- * to move it by a 32nd of a cell (`displacementDrift`). Either way an eighth
- * a frame. A level is fresh when it was baked from faces of the field's
- * present generation: one rebuilt from a face not yet rebaked after a jump
- * stays pending and is rebuilt when the face is.
+ * **Its pace and its freshness are the cube's.** A level holds nothing the
+ * cube does not, so it is redrawn when a face it reads is, an eighth of a
+ * level a frame, and never otherwise. A level is fresh when it was baked
+ * from faces of the field's present generation: one rebuilt from a face not
+ * yet rebaked after a jump stays pending and is rebuilt when the face is.
  *
  * **A level is read eye-relatively** (rule 58): a sample's plane coordinate
  * is the eye's, formed on the CPU in float64, plus a difference formed from
@@ -98,14 +85,11 @@ const log = getLogger('game.clouds')
 /** The bake's pass on the timeline: a whole level, a strip or a refresh slice, each one quad. */
 export const CLOUD_CLIPMAP_LABEL = 'cloud clipmap'
 
-const CHANNELS = ['cloudClipmapTexel', 'cloudClipmapRise'] as const
-/** An RGBA16F and an RGBA8 target: 12 bytes a texel. */
-const TEXEL_BYTES = 12
+/** One RG8 target: 2 bytes a texel. */
+const TEXEL_BYTES = 2
 /** Cloud levels: the array holds a layer of each a clipmap level. */
 const CLOUD_LEVELS = 3
 const LAYERS = CLOUD_CLIPMAP_LEVELS * CLOUD_LEVELS
-/** The rise's encoding, ± this about ½: over the six waves' 0.66 at most. */
-const RISE_SPAN = 0.7
 /** Rows a time refresh redraws: an eighth of a level. */
 const REFRESH_ROWS = CLOUD_CLIPMAP_SIZE / 8
 /** Directions a side of a level's window its faces are found from (`levelFaces`). */
@@ -128,10 +112,6 @@ const LEVEL0 = /*@__PURE__*/ float(0)
 export interface CloudClipmapColumn {
   readonly cover: Node<'float'>
   readonly convective: Node<'float'>
-  /** The mesoscale displacement at the level's middle height, meters, in its turned frame. */
-  readonly displacement: Node<'vec3'>
-  /** Its rate with height, meters a meter. */
-  readonly rise: Node<'vec3'>
 }
 
 export interface CloudClipmapNodes {
@@ -226,8 +206,8 @@ export class CloudClipmap implements CloudResource {
   /** 1 × 1 × 18 until a frame draws: the format is the pipeline's, not the size. */
   readonly #target = new RenderTarget(1, 1, {
     depth: LAYERS,
-    count: CHANNELS.length,
-    type: HalfFloatType,
+    format: RGFormat,
+    type: UnsignedByteType,
     depthBuffer: false,
     wrapS: RepeatWrapping,
     wrapT: RepeatWrapping,
@@ -276,11 +256,6 @@ export class CloudClipmap implements CloudResource {
     eighth: number
     readonly versions: number[]
   } | null = null
-  /** The field's instant each level's last whole bake or refresh began at: what its displacement turned from. */
-  readonly #bakedAt: number[] = Array.from(
-    { length: CLOUD_CLIPMAP_LEVELS },
-    () => 0,
-  )
   /** Where the analytic source's refresh goes next: level ⌊slot/8⌋, eighth slot mod 8. */
   #slot = 0
   #warm: Promise<void> | null = null
@@ -295,15 +270,8 @@ export class CloudClipmap implements CloudResource {
    * fine and far marches then draw two different fields.
    */
   constructor(uniforms: CloudUniforms, source: CloudMapNodes) {
-    this.#target.textures.forEach((map, k) => {
-      map.name = CHANNELS[k]!
-    })
-    // The rise and the share are bytes: an attachment's format is its own.
-    this.#target.textures[1]!.type = UnsignedByteType
-    const [texel, rise] = this.#target.textures.map((map) => texture(map)) as [
-      TextureNode,
-      TextureNode,
-    ]
+    this.#target.texture.name = 'cloud clipmap'
+    const column = texture(this.#target.texture)
     // One pick a sample node: the column and the meters share it.
     const picks = new WeakMap<CloudSample, Map<CloudBodyUniforms, Pick>>()
     const pickOf = (sample: CloudSample, body: CloudBodyUniforms): Pick => {
@@ -349,14 +317,8 @@ export class CloudClipmap implements CloudResource {
     }
     this.nodes = {
       column: (sample, body, level) => {
-        const held = read(texel, sample, body, level)
-        const slope = read(rise, sample, body, level)
-        return {
-          cover: held.w,
-          convective: slope.x,
-          displacement: held.xyz,
-          rise: slope.yzw.sub(0.5).mul(2 * RISE_SPAN),
-        }
+        const held = read(column, sample, body, level)
+        return { cover: held.x, convective: held.y }
       },
       columnMeters: (sample, body) => pickOf(sample, body).blend.y,
     }
@@ -521,7 +483,6 @@ export class CloudClipmap implements CloudResource {
       stale[k] = null
       this.#readGeneration[k] = this.#facesGeneration(read)
       this.#readVersions[k] = this.#versions(read)
-      this.#bakedAt[k] = frame.time
       if (this.#refresh?.level === k) this.#refresh = null
     }
     for (let k = 0; k < CLOUD_CLIPMAP_LEVELS; k += 1) {
@@ -535,7 +496,7 @@ export class CloudClipmap implements CloudResource {
       })
     }
     if (whole.length === 0) {
-      const eighth = this.#refreshEighth(faces, frame)
+      const eighth = this.#refreshEighth(faces)
       if (eighth !== null)
         rects.push([
           eighth[0],
@@ -551,13 +512,11 @@ export class CloudClipmap implements CloudResource {
   /**
    * The eighth of a level this frame redraws for time, if one is owed:
    * the refresh under way, or a new one on the first whole level whose
-   * faces the cube has redrawn since it read them or whose displacement has
-   * turned a 32nd of a cell since it was drawn. Over an analytic source,
+   * faces the cube has redrawn since it read them. Over an analytic source,
    * which moves every frame, every level in turn, 48 frames a cycle.
    */
   #refreshEighth(
     faces: readonly (readonly CubeFace[])[],
-    frame: CloudFrame,
   ): readonly [number, number] | null {
     const stale = this.#staleSince
     if (this.#source.freshness === undefined) {
@@ -574,11 +533,8 @@ export class CloudClipmap implements CloudResource {
         const redrawn = versions.some(
           (version, face) => version >= 0 && version !== read[face],
         )
-        const turned =
-          displacementDrift(frame, frame.time - this.#bakedAt[k]!) >= 1 / 32
-        if (!redrawn && !turned) continue
+        if (!redrawn) continue
         this.#refresh = { level: k, eighth: 0, versions }
-        this.#bakedAt[k] = frame.time
         break
       }
     }
@@ -658,30 +614,6 @@ export function levelFaces(level: LevelFrame, radius: number): CubeFace[] {
 }
 
 /**
- * How far the displacement a level holds has moved in `seconds` of the
- * field's time, in the cells of the cloud level it moves most: each cloud
- * level's turn at the equator and the drift along the axis, times the
- * displacement's steepest gradient, over its cell.
- */
-export function displacementDrift(frame: CloudFrame, seconds: number): number {
-  const radius = frame.served.datumRadius
-  let most = 0
-  for (const level of frame.served.levels) {
-    if (!(level.top > level.base)) continue
-    const speed = Math.abs(level.turnRate) * radius + WEATHER_AXIAL_DRIFT
-    most = Math.max(
-      most,
-      (MESOSCALE_STEEPEST * speed * Math.abs(seconds)) /
-        Math.max(level.cell, 1),
-    )
-  }
-  return most
-}
-
-/** The six waves' gradients together: the displacement's steepest. */
-const MESOSCALE_STEEPEST = 6 * MESOSCALE_GRADIENT
-
-/**
  * A layer's bake, clipmap level `level`'s cloud level `j`: the fragment's
  * storage texel (x, y) is lattice texel origin + ((x − origin) mod 256),
  * whose center's plane coordinate is (i + ½)·texel, whose direction is the
@@ -689,15 +621,10 @@ const MESOSCALE_STEEPEST = 6 * MESOSCALE_GRADIENT
  * Integers below 2²⁴ and products by powers of two are exact in float32,
  * so the lattice texel is exact; the direction carries half a meter on
  * Earth, against the cube's 19.6 km texels.
- *
- * The displacement is taken at the cloud level's middle height, at the
- * point's offset from the eye (`levelOffset`, formed without subtracting two
- * radii), turned into the level's frame: `M_j·offset`, which the eye's
- * phases are advanced by.
  */
 function bakeNode(
   level: CloudLevelUniforms,
-  j: 0 | 1 | 2 | number,
+  j: number,
   body: CloudBodyUniforms,
   source: CloudMapNodes,
 ): Node {
@@ -713,28 +640,14 @@ function bakeNode(
       .add(level.east.mul(plane.x))
       .add(level.north.mul(plane.y)),
   )
-  const { layers } = body
   const pickLevel = (v: Node<'vec3'>): Node<'float'> =>
     (j === 0 ? v.x : j === 1 ? v.y : v.z) as Node<'float'>
-  const middle = pickLevel(layers.base).add(pickLevel(layers.top)).mul(0.5)
-  const cell = max(pickLevel(layers.cell), 1)
-  const turn = layers.turn[j as 0 | 1 | 2]
-  const phases = layers.mesoscale[j as 0 | 1 | 2]
-  const turned = turn.mul(
-    levelOffset(level, plane, middle, body),
-  ) as Node<'vec3'>
-  const up = turn.mul(direction) as Node<'vec3'>
-  const displacement = mesoscaleNode(turned, phases, cell)
-  const rise = mesoscaleRateNode(turned, up, phases, cell)
-  const cover = pickLevel(source.cover(direction).xyz)
-  const convective = pickLevel(source.kind(direction).xyz)
-  return mrt({
-    [CHANNELS[0]]: vec4(displacement, cover),
-    [CHANNELS[1]]: vec4(
-      convective,
-      clamp(rise.div(2 * RISE_SPAN).add(0.5), 0, 1),
-    ),
-  })
+  return vec4(
+    pickLevel(source.cover(direction).xyz),
+    pickLevel(source.kind(direction).xyz),
+    0,
+    1,
+  )
 }
 
 /**

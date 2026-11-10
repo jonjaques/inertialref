@@ -23,13 +23,10 @@ import {
   CUBE_FACES,
   cloudExtents,
   directionOf,
-  fieldClock,
   horizonBasis,
   type LevelFrame,
   type LevelUpdate,
   levelFrames,
-  mesoscaleDisplacement,
-  mesoscalePhases,
   planeOf,
   regimeWeather,
   shellHeights,
@@ -71,9 +68,8 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
 /*
  * The clipmap (§3.9, phase 1 design §4.3, §4.7): a strip update after a
  * move is a full rebuild, texel for texel; every layer is the cube
- * resampled at its texels' directions, and carries its cloud level's
- * mesoscale displacement and its rate with height as `weatherField.ts`
- * computes them; a lookup is the float64 projection of the sample, formed
+ * resampled at its texels' directions, its cloud level's cover and
+ * convective share; a lookup is the float64 projection of the sample, formed
  * eye-relatively, to float32's limit; a column reads the finest level
  * holding the sample and, in that level's outer fifth, the next one too; a
  * frame bakes what the schedule says it does; and a level is fresh only
@@ -409,19 +405,6 @@ function bilinear(
 
 const wrapped = (i: number): number => ((i % SIZE) + SIZE) % SIZE
 
-/**
- * What float32's phase, advanced across a level's window from the eye, is
- * worth in meters of displacement: a phase of hundreds of radians carries
- * 10⁻⁵ of one, times the high level's 6 km of amplitude, 0.06 m; held at a
- * quarter meter. Measured worst between a strip and a rebuild from eyes 3.5
- * km apart: under 10⁻³ m.
- */
-const PHASE_METERS = 0.25
-
-/** A half float's step at a value: 2⁻¹⁰ of its binade. */
-const halfUlp = (value: number): number =>
-  2 ** (Math.floor(Math.log2(Math.max(Math.abs(value), 2 ** -14))) - 10)
-
 /** A cube baked for `weather` on a body of `radius`, and a clipmap baked from it at `eye`, every level whole. */
 async function bakedPair(
   weather: BodyWeather,
@@ -474,7 +457,7 @@ describe('the toroidal window', () => {
       clipmap.render(renderer, at(after, moved), budget),
     )
     const strips = after.dirty.reduce((sum, rects) => sum + rects.length, 0)
-    // The strips, a pass for each of a level's three layers; the field has
+    // The strips, a pass for each of a level's three layers; the cube has
     // not moved, so no refresh.
     expect(passes).toBe(3 * strips)
     const scrolled = await everyTexel(clipmap)
@@ -485,47 +468,22 @@ describe('the toroidal window', () => {
       fresh.render(renderer, at(stillAt(after), moved), budget)
     expect(fresh.pending).toBe(false)
     const rebuilt = await everyTexel(fresh)
-    // The climate is a function of the texel's lattice coordinate alone, to
-    // the bit. The displacement is the eye's phases advanced by the texel's
-    // offset from the eye, the same sum from two eyes to float32's rounding
-    // of a phase: a half float's step and `PHASE_METERS`, and a byte of its
-    // rate.
+    // Every texel is a function of its lattice coordinate alone, to the bit.
     let differing = 0
-    let worst = 0
     scrolled.forEach((map, t) => {
-      for (let n = 0; n < map.length; n += 1) {
-        const a = map[n]!
-        const b = rebuilt[t]![n]!
-        const channel = n % 4
-        const exact = (t === 0 && channel === 3) || (t === 1 && channel === 0)
-        if (exact) {
-          if (a !== b) differing += 1
-        } else {
-          const step =
-            t === 0
-              ? halfUlp(Math.max(Math.abs(a), Math.abs(b))) + PHASE_METERS
-              : 1 / 255 + 1e-5
-          worst = Math.max(worst, Math.abs(a - b) / step)
-        }
-      }
+      for (let n = 0; n < map.length; n += 1)
+        if (map[n] !== rebuilt[t]![n]) differing += 1
     })
     expect(differing).toBe(0)
-    expect(worst).toBeLessThanOrEqual(1)
-    // And the field is not constant there: a misplaced strip would show, in
-    // the cover and in the displacement.
-    const [texel] = scrolled
+    // And the field is not constant there: a misplaced strip would show.
+    const [held] = scrolled
     let low = 1
     let high = 0
-    let near = Infinity
-    let far = -Infinity
     for (let n = 0; n < SIZE * SIZE; n += 1) {
-      low = Math.min(low, texel![n * 4 + 3]!)
-      high = Math.max(high, texel![n * 4 + 3]!)
-      near = Math.min(near, texel![n * 4]!)
-      far = Math.max(far, texel![n * 4]!)
+      low = Math.min(low, held![n * 4]!)
+      high = Math.max(high, held![n * 4]!)
     }
     expect(high - low).toBeGreaterThan(0.3)
-    expect(far - near).toBeGreaterThan(200)
     clipmap.dispose()
     fresh.dispose()
     maps.dispose()
@@ -563,9 +521,8 @@ describe('the layers are the cube resampled, and the displacement', () => {
     const layers = probes.map(
       (p) => [wrapped(p.i), wrapped(p.jj), 3 * p.k + p.j] as const,
     )
-    const [texel, rise] = clipmap.textures()
+    const [texel] = clipmap.textures()
     const held = await loadTexels(texel!, '2d-array', layers)
-    const shares = await loadTexels(rise!, '2d-array', layers)
     let worst = 0
     let varied = 0
     probes.forEach((probe, n) => {
@@ -578,82 +535,14 @@ describe('the layers are the cube resampled, and the displacement', () => {
       if (wantCover > 0.05 && wantCover < 0.95) varied += 1
       worst = Math.max(
         worst,
-        Math.abs(held[n * 4 + 3]! - wantCover),
-        Math.abs(shares[n * 4]! - wantShare),
+        Math.abs(held[n * 4]! - wantCover),
+        Math.abs(held[n * 4 + 1]! - wantShare),
       )
     })
     expect(worst).toBeLessThanOrEqual(RESAMPLED)
     expect(varied).toBeGreaterThan(50)
     clipmap.dispose()
     maps.dispose()
-  })
-
-  it('each layer carries its cloud level’s displacement at its middle height, and its rate with height, as the CPU field computes them', async () => {
-    // On Earth, far from the epoch: the phases are the frame's, float64 at
-    // the eye, advanced by k·M·offset in float32 across up to 1,000 km.
-    const weather = bodyWeather(SERVED_EARTH)!
-    const eye = scaled(EYE_DIRECTION, EARTH + 1500)
-    const { clipmap, update } = await bakedPair(weather, 'climate', EARTH, eye)
-    const clock = fieldClock(weather, TIME)
-    const drawn = weatherLevels({ weather, regime: null }, TIME, eye)
-    const next = draws(13)
-    const probes = Array.from({ length: 900 }, () => {
-      const k = Math.floor(next() * 6)
-      const j = Math.floor(next() * 3)
-      const frame = update.frames[k]!
-      const i = frame.origin[0] + Math.floor(next() * SIZE)
-      const jj = frame.origin[1] + Math.floor(next() * SIZE)
-      const direction = directionOf(
-        frame,
-        [(i + 0.5) * frame.texelMeters, (jj + 0.5) * frame.texelMeters],
-        EARTH,
-      )
-      return { k, j, i, jj, direction }
-    })
-    const layers = probes.map(
-      (p) => [wrapped(p.i), wrapped(p.jj), 3 * p.k + p.j] as const,
-    )
-    const [texel, rise] = clipmap.textures()
-    const held = await loadTexels(texel!, '2d-array', layers)
-    const rates = await loadTexels(rise!, '2d-array', layers)
-    let worstDisplacement = 0
-    let worstRise = 0
-    let largest = 0
-    probes.forEach(({ j, direction }, n) => {
-      const level = drawn[j]!
-      const cell = level.cell
-      const at = (height: number): Vec3 => {
-        const p = scaled(direction, EARTH + height)
-        return mesoscaleDisplacement(mesoscalePhases(clock, j, p, cell), cell)
-      }
-      const middle = (level.base + level.top) / 2
-      const w = at(middle)
-      const up = at(middle + 1)
-      const down = at(middle - 1)
-      const want = [w.x, w.y, w.z]
-      const slope = [
-        (up.x - down.x) / 2,
-        (up.y - down.y) / 2,
-        (up.z - down.z) / 2,
-      ]
-      for (let c = 0; c < 3; c += 1) {
-        largest = Math.max(largest, Math.abs(want[c]!))
-        worstDisplacement = Math.max(
-          worstDisplacement,
-          Math.abs(held[n * 4 + c]! - want[c]!) / cell,
-        )
-        const read = (rates[n * 4 + 1 + c]! - 0.5) * 1.4
-        worstRise = Math.max(worstRise, Math.abs(read - slope[c]!))
-      }
-    })
-    // Kilometers of displacement, so a channel left out or mistaken shows.
-    expect(largest).toBeGreaterThan(2000)
-    // A half float's step at 8 km is 4 m, and float32's k·M·offset across
-    // 1,000 km is under 0.2 m: a 300th of the smallest cell.
-    expect(worstDisplacement).toBeLessThanOrEqual(1 / 300)
-    // The rate's byte, 1.4/255 = 0.0055, and half of it rounded.
-    expect(worstRise).toBeLessThanOrEqual(0.7 / 255 + 1e-3)
-    clipmap.dispose()
   })
 })
 
@@ -734,7 +623,7 @@ describe('a lookup', () => {
       )
       return vec4(
         column.cover,
-        column.displacement.x,
+        column.convective,
         0,
         clipmap.nodes.columnMeters(sampleAt(offset), uniforms.served),
       )
@@ -768,17 +657,7 @@ describe('a lookup', () => {
       }
     const texels = await loadTexels(clipmap.textures()[0]!, '2d-array', loads)
     let worstCover = 0
-    let worstShift = 0
     let banded = 0
-    const spreadOf = (n: number): number => {
-      let low = Infinity
-      let high = -Infinity
-      for (let q = 0; q < 8; q += 1) {
-        low = Math.min(low, texels[(n * 8 + q) * 4]!)
-        high = Math.max(high, texels[(n * 8 + q) * 4]!)
-      }
-      return high - low
-    }
     plan.forEach(({ k, at }, n) => {
       expect(k, `offset ${n}`).toBeGreaterThanOrEqual(0)
       const value = (slot: number, level: number, c: number) => {
@@ -795,19 +674,14 @@ describe('a lookup', () => {
         k === 5
           ? (1 - fade) * value(0, 5, c)
           : (1 - fade) * value(0, k, c) + fade * value(1, k + 1, c)
-      worstCover = Math.max(worstCover, Math.abs(read[n * 4]! - blended(3)))
-      // The filter's weights are fixed-point, a read off the exact blend by
-      // up to a 256th of the step between the texels it blends, and it
-      // returns a half float: 4 m of a displacement near 8 km.
-      const want = blended(0)
-      worstShift = Math.max(
-        worstShift,
-        Math.abs(read[n * 4 + 1]! - want) / (spreadOf(n) / 256 + halfUlp(want)),
+      worstCover = Math.max(
+        worstCover,
+        Math.abs(read[n * 4]! - blended(0)),
+        Math.abs(read[n * 4 + 1]! - blended(1)),
       )
       expect(read[n * 4 + 3]).toBe(update.frames[k]!.texelMeters)
     })
     expect(worstCover).toBeLessThanOrEqual(RESAMPLED)
-    expect(worstShift).toBeLessThanOrEqual(1)
     expect(banded).toBeGreaterThan(10)
     clipmap.dispose()
     maps.dispose()
@@ -942,7 +816,7 @@ describe('the schedule', () => {
     expect(clipmap.textures()).toEqual([])
     expect(clipmap.pending).toBe(false)
     await clipmap.warm(renderer)
-    expect(clipmap.bytes).toBe(LAYERS * 12)
+    expect(clipmap.bytes).toBe(LAYERS * 2)
     const weather = regimeWeather(SERVED_EARTH, 'fog')
     const eye = scaled(EYE_DIRECTION, EARTH + 100)
     clipmap.render(
@@ -953,10 +827,7 @@ describe('the schedule', () => {
     const backend = renderer.backend as unknown as {
       get(texture: object): { texture?: GPUTexture }
     }
-    const texelBytes: Record<string, number> = {
-      rgba16float: 8,
-      rgba8unorm: 4,
-    }
+    const texelBytes: Record<string, number> = { rg8unorm: 2 }
     let bytes = 0
     const formats: string[] = []
     for (const held of clipmap.textures()) {
@@ -969,10 +840,11 @@ describe('the schedule', () => {
         gpuTexture.depthOrArrayLayers *
         texelBytes[gpuTexture.format]!
     }
-    expect(formats).toEqual(['rgba16float', 'rgba8unorm'])
+    expect(formats).toEqual(['rg8unorm'])
     expect(clipmap.bytes).toBe(bytes)
-    // 14.16 MB, against phase 0's four RGBA8 targets' 6.29 MB.
-    expect(clipmap.bytes).toBe(256 * 256 * LAYERS * 12)
+    // 2.36 MB, against phase 0's four RGBA8 targets' 6.29 MB and the
+    // design's two, 3.15 MB.
+    expect(clipmap.bytes).toBe(256 * 256 * LAYERS * 2)
     clipmap.dispose()
     expect(clipmap.bytes).toBe(0)
   })
@@ -1011,7 +883,7 @@ describe('freshness by generation, and the pace', () => {
     )
     const held = async () => {
       const read = await loadTexels(texel!, '2d-array', probes)
-      return probes.map((_, n) => read[n * 4 + 3]!)
+      return probes.map((_, n) => read[n * 4]!)
     }
     const at = () =>
       frameAt(uniforms, decks, 'two-decks', EARTH, eye, stillAt(update))
@@ -1039,10 +911,9 @@ describe('freshness by generation, and the pace', () => {
     maps.dispose()
   })
 
-  it('bakes nothing while neither its faces nor its displacement have moved, then an eighth a frame', async () => {
-    // Earth's zonal climate: its cube is due 78 s after a bake, and the
-    // displacement a level holds moves a 32nd of a cell in about ten
-    // seconds at the high level's 25 m/s.
+  it('bakes nothing while no face it reads is redrawn, then an eighth a frame', async () => {
+    // Earth's zonal climate: its cube is due 78 s after a bake, a face a
+    // frame, and each level then refreshes an eighth a frame from it.
     const weather = bodyWeather(SERVED_EARTH)!
     const eye = scaled(EYE_DIRECTION, EARTH + 1500)
     const { uniforms, maps, clipmap, update } = await bakedPair(
@@ -1067,10 +938,11 @@ describe('freshness by generation, and the pace', () => {
     }
     const steady = Array.from({ length: 60 }, (_, k) => at((k + 1) / 60))
     expect(steady.every((passes) => passes === 0)).toBe(true)
-    // At 12 s the displacement is due and the cube is not: an eighth of a
-    // level a frame, three layers each, eight frames a level.
-    const turned = Array.from({ length: 10 }, (_, k) => at(12 + k / 60))
-    expect(turned.slice(0, 8)).toEqual([3, 3, 3, 3, 3, 3, 3, 3])
+    // At 80 s the cube redraws its faces, one a frame, and the levels that
+    // read them follow, an eighth of one a frame, three layers each.
+    const late = Array.from({ length: 12 }, (_, k) => at(80 + k / 60))
+    expect(late.every((passes) => passes === 0 || passes === 3)).toBe(true)
+    expect(late.filter((passes) => passes === 3).length).toBeGreaterThan(8)
     expect(clipmap.pending).toBe(false)
     clipmap.dispose()
     maps.dispose()
