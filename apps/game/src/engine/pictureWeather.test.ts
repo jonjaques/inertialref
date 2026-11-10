@@ -181,6 +181,31 @@ describe('the hold', () => {
     })
   })
 
+  it('draws weather asked for before the page’s clouds arrived, on the first frame they have', () => {
+    const page = engine(false)
+    const hold = new PictureWeatherHold()
+    expect(hold.apply(page, { regime: 'fair-cumulus' }, EARTH)).toBe(
+      'unavailable',
+    )
+    hold.frame(page, true)
+    expect(hold.outcome).toBe('unavailable')
+    // The chunk lands: the next frame draws the picture's weather.
+    const arrived = { ...page, cloudsAvailable: true }
+    hold.frame(arrived, true)
+    expect(hold.outcome).toBe('drawn')
+    expect(arrived.clouds).toMatchObject({ on: true, served: EARTH })
+    // Once: a page that cannot draw it is not asked every frame.
+    const webgl = {
+      ...engine(true),
+      sensorDiagnostics: { clouds: cloudReportIdle('webgl') },
+    }
+    const once = new PictureWeatherHold()
+    once.apply(webgl, { regime: 'overcast' }, EARTH)
+    const writes = webgl.writes
+    once.frame(webgl, true)
+    expect(webgl.writes).toBe(writes)
+  })
+
   it('reports weather on a page without the clouds, or on WebGL, unavailable', () => {
     const hold = new PictureWeatherHold()
     expect(hold.apply(engine(false), { regime: 'overcast' }, EARTH)).toBe(

@@ -93,6 +93,17 @@ export function pictureWeatherLevers(
 export class PictureWeatherHold {
   #found: Held | null = null
   #outcome: PictureWeatherOutcome = 'none'
+  /**
+   * Weather asked for before the page's clouds arrived. `?clouds=1`'s chunk
+   * resolves beside the renderer, and a picture in the address bar is taken
+   * when the planetarium mounts, which can be first; without this the
+   * picture would hold its weather unavailable on a page that has it a few
+   * frames later.
+   */
+  #early: {
+    readonly weather: PictureWeather
+    readonly address: string
+  } | null = null
 
   /** What became of the last picture's weather, while it is held. */
   get outcome(): PictureWeatherOutcome {
@@ -121,6 +132,12 @@ export class PictureWeatherHold {
     })
     engine.clouds = next.levers
     this.#outcome = next.outcome
+    this.#early =
+      weather !== null &&
+      next.outcome === 'unavailable' &&
+      !engine.cloudsAvailable
+        ? { weather, address }
+        : null
     return next.outcome
   }
 
@@ -130,10 +147,17 @@ export class PictureWeatherHold {
     engine.clouds = { ...engine.clouds, ...this.#found }
     this.#found = null
     this.#outcome = 'none'
+    this.#early = null
   }
 
-  /** A frame's check: the pictures are left when the observatory holds no target. */
+  /**
+   * A frame's check. The pictures are left when the observatory holds no
+   * target; and weather asked for before the clouds arrived is applied
+   * again on the first frame they have, once.
+   */
   frame(engine: PictureWeatherEngine, observing: boolean): void {
     if (!observing) this.release(engine)
+    else if (this.#early !== null && engine.cloudsAvailable)
+      this.apply(engine, this.#early.weather, this.#early.address)
   }
 }
