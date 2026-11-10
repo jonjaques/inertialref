@@ -32,6 +32,14 @@ import { OUTSIDE_JUDGED } from './slabVerdict.ts'
 /** A printed figure against the same figure recomputed: four figures. */
 const PRINTED = 2e-4
 
+/**
+ * Five times a set's measured time on this Mac mini (Mac18,5): 7.2 to 8.5 s
+ * a set, 2.5 s the deep one, and the three populations 4 s together.
+ */
+const A_SET = 45_000
+const DEEP = 15_000
+const POPULATIONS = 20_000
+
 const { nodes, suns, cosines, transport } = SLAB_VIEW_SOURCE
 const table: SourceTable = {
   nodes,
@@ -62,7 +70,7 @@ const populations = new Map<number, SlabPopulation>()
 beforeAll(() => {
   for (const radius of [6, 10, 16])
     populations.set(radius, slabPopulation(radius))
-}, 60_000)
+}, POPULATIONS)
 
 /** A set's sample, solved at every radius it is judged at. */
 function sampleRows(name: keyof typeof OUTSIDE_SETS) {
@@ -74,38 +82,46 @@ function sampleRows(name: keyof typeof OUTSIDE_SETS) {
 
 describe('the view table off the domain', () => {
   for (const name of OUTSIDE_JUDGED)
-    it(`reads the ${name} set’s sample to the worst and RMS its file records, and no worse`, () => {
-      const judged = outsideFigures(
-        judgeValues(table, form, scales, sampleRows(name)),
-      )
-      const kept = SLAB_VIEW_SOURCE.outside[name].sample
-      expect(judged.count).toBe(kept.count)
-      expect(judged.worst).toBeLessThanOrEqual(kept.worst + PRINTED)
-      expect(judged.rms).toBeLessThanOrEqual(kept.rms + PRINTED)
-      expect(Math.abs(judged.worst - kept.worst)).toBeLessThan(PRINTED)
-      expect(Math.abs(judged.rms - kept.rms)).toBeLessThan(PRINTED)
-    }, 120_000)
-
-  it('holds transmitted light within 5% past the last node by diffusion’s law, where the held read is far over', () => {
-    const rows = sampleRows('deep')
-    const extended = deepFigures(judgeValues(table, form, scales, rows))
-    const held = deepFigures(
-      judgeValues(table, form, scales, rows, { extend: false }),
+    it(
+      `reads the ${name} set’s sample to the worst and RMS its file records, and no worse`,
+      () => {
+        const judged = outsideFigures(
+          judgeValues(table, form, scales, sampleRows(name)),
+        )
+        const kept = SLAB_VIEW_SOURCE.outside[name].sample
+        expect(judged.count).toBe(kept.count)
+        expect(judged.worst).toBeLessThanOrEqual(kept.worst + PRINTED)
+        expect(judged.rms).toBeLessThanOrEqual(kept.rms + PRINTED)
+        expect(Math.abs(judged.worst - kept.worst)).toBeLessThan(PRINTED)
+        expect(Math.abs(judged.rms - kept.rms)).toBeLessThan(PRINTED)
+      },
+      A_SET,
     )
-    const { deep } = SLAB_VIEW_SOURCE
-    deep.depths.forEach((depth, at) => {
-      const of = (figures: typeof extended, side: string) =>
-        figures.find((item) => item.side === side && item.depth === depth)!
-          .worst
-      expect(of(extended, 'transmitted')).toBeLessThan(0.05)
-      expect(
-        Math.abs(of(extended, 'transmitted') - deep.sample.transmitted[at]!),
-      ).toBeLessThan(PRINTED)
-      // The reflected side is the held read's: a ceiling at its figure.
-      expect(of(extended, 'reflected')).toBeLessThanOrEqual(
-        deep.sample.reflected[at]! + PRINTED,
+
+  it(
+    'holds transmitted light within 5% past the last node by diffusion’s law, where the held read is far over',
+    () => {
+      const rows = sampleRows('deep')
+      const extended = deepFigures(judgeValues(table, form, scales, rows))
+      const held = deepFigures(
+        judgeValues(table, form, scales, rows, { extend: false }),
       )
-      expect(of(held, 'transmitted')).toBeGreaterThan(0.5)
-    })
-  }, 120_000)
+      const { deep } = SLAB_VIEW_SOURCE
+      deep.depths.forEach((depth, at) => {
+        const of = (figures: typeof extended, side: string) =>
+          figures.find((item) => item.side === side && item.depth === depth)!
+            .worst
+        expect(of(extended, 'transmitted')).toBeLessThan(0.05)
+        expect(
+          Math.abs(of(extended, 'transmitted') - deep.sample.transmitted[at]!),
+        ).toBeLessThan(PRINTED)
+        // The reflected side is the held read's: a ceiling at its figure.
+        expect(of(extended, 'reflected')).toBeLessThanOrEqual(
+          deep.sample.reflected[at]! + PRINTED,
+        )
+        expect(of(held, 'transmitted')).toBeGreaterThan(0.5)
+      })
+    },
+    DEEP,
+  )
 })
