@@ -529,6 +529,10 @@ export class CloudNoise implements CloudResource {
         material: this.#materials[bake],
       })),
     )
+    // Disposed while the pipelines compiled: a bake now would draw into
+    // targets already disposed, and three makes a disposed target's texture
+    // again at its next draw, with nothing left to dispose it.
+    if (this.#disposed) return
     for (const bake of bakes) this.#allocated.add(bake)
     this.#bake(renderer)
   }
