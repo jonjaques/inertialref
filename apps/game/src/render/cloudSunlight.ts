@@ -32,9 +32,9 @@ import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
  * layers' own statistics where the cache holds nothing, and the air's own
  * beam at the sample's height, cleared from orbit as the ground's is.
  *
- * **The taps are spaced in optical depth.** The first is half a depth of the
- * sample's own medium wide, `0.5/σ`, and each next one twice the last, to a
- * kilometer's reach. All of first order's light is within a depth or two of
+ * **The taps are spaced in optical depth.** The first is half a depth wide,
+ * `0.5/σ` for the denser of the sample's own extinction and its level's
+ * reference, and each next one twice the last, to a kilometer's reach. All of first order's light is within a depth or two of
  * a lit face, and taps at fixed distances count their medium whole by its
  * midpoint: one 250 m wide puts a face up to `σ·125 m` out, a depth of 4.4
  * in fair cumulus, where the transmittance is wrong by its exponential.
@@ -42,6 +42,13 @@ import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
  * a depth of 0.25. Four taps reach `7.5/σ`, 210 m in fair cumulus; six reach
  * `31.5/σ`; eight are cut at the kilometer in any cloud thicker than a
  * cirrus.
+ *
+ * **What the taps do not reach is the cache's, and the cache is 400 m
+ * cells.** On broken cloud the count is therefore the reach: against a march
+ * of the field, fair cumulus under a 37.5° sun is 0.156 RMS of the sun at
+ * four taps, 0.081 at six and 0.045 at eight, where four taps a kilometer
+ * long in meters are 0.056 (`cloudSunAccuracy.gpu.test.ts`, on the Mac
+ * mini's M6).
  *
  * The taps are one column: mixed tap by tap, each tap's (1 − c) would count
  * the column's clear share again, and a half-clear column of depth 20
@@ -113,8 +120,17 @@ export function cloudSunFn(deps: CloudSunDeps): CloudSunFn {
     const fraction = float(0).toVar()
     const depth = float(0).toVar()
     const reach = float(0).toVar()
+    // Spaced by the denser of the sample's own extinction and its level's
+    // reference: at a cloud's ragged edge the sample's own falls to nothing,
+    // and half a depth of that is the whole reach in one tap.
+    const { sigma: reference } = body.layers
+    const levelSigma = select(
+      medium.layer.equal(int(0)),
+      reference.x,
+      select(medium.layer.equal(int(1)), reference.y, reference.z),
+    )
     const width = float(LIGHT_TAP_DEPTH)
-      .div(max(medium.sigma, NO_EXTINCTION))
+      .div(max(max(medium.sigma, levelSigma), NO_EXTINCTION))
       .toVar()
     Loop({ start: int(0), end: int(taps), type: 'int', condition: '<' }, () => {
       // Cut at the reach: a tap past it reads nothing and ends the taps.
