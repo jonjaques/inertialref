@@ -1,4 +1,4 @@
-import type { Vec3 } from '@inertialref/spatial'
+import { Vec, type Vec3 } from '@inertialref/spatial'
 import { cubeDirection, cubeFaceOf } from './cubeSphere.ts'
 import type { ShellHeights } from './weatherShells.ts'
 
@@ -107,20 +107,9 @@ export const SUN_CASCADE_TURN = 0.05
 /* Vectors                                                                    */
 /* ------------------------------------------------------------------------- */
 
-const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z
+const { dot, cross, scale: scaled } = Vec
 
-const cross = (a: Vec3, b: Vec3): Vec3 => ({
-  x: a.y * b.z - a.z * b.y,
-  y: a.z * b.x - a.x * b.z,
-  z: a.x * b.y - a.y * b.x,
-})
-
-const scaled = (a: Vec3, s: number): Vec3 => ({
-  x: a.x * s,
-  y: a.y * s,
-  z: a.z * s,
-})
-
+/** +Y for a zero vector: `Vec.normalize` answers zero, and a basis crossed from zero is zero too. */
 function unit(a: Vec3): Vec3 {
   const length = Math.hypot(a.x, a.y, a.z)
   return length > 0 ? scaled(a, 1 / length) : { x: 0, y: 1, z: 0 }

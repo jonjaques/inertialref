@@ -1,4 +1,4 @@
-import type { Vec3 } from '@inertialref/spatial'
+import { Vec, type Vec3 } from '@inertialref/spatial'
 
 /*
  * The weather cube: six tangent-warped faces over a body, each a tile of
@@ -75,8 +75,6 @@ function faceOf(direction: Vec3): CubeFace {
   return direction.z >= 0 ? 4 : 5
 }
 
-const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z
-
 /**
  * The face of a direction and its tangent-warped coordinates in [−1, 1]
  * (u = tan(a·π/4) on the face plane).
@@ -88,13 +86,13 @@ export function cubeFaceOf(direction: Vec3): {
 } {
   const face = faceOf(direction)
   const { normal, a, b } = CUBE_FACES[face]!
-  const depth = dot(direction, normal)
+  const depth = Vec.dot(direction, normal)
   // A zero vector has no face; the first face's center keeps it finite.
   if (!(depth > 0)) return { face, a: 0, b: 0 }
   return {
     face,
-    a: Math.atan(dot(direction, a) / depth) / WARP,
-    b: Math.atan(dot(direction, b) / depth) / WARP,
+    a: Math.atan(Vec.dot(direction, a) / depth) / WARP,
+    b: Math.atan(Vec.dot(direction, b) / depth) / WARP,
   }
 }
 
