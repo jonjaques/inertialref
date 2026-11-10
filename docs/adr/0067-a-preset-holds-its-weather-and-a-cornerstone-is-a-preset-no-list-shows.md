@@ -92,12 +92,17 @@ that `findPicture` searches and no player-facing list reads.**
   envelope, decoded by the same decoder, as `CORNERSTONES`. `findPicture`
   searches `PICTURES`, then `CORNERSTONES`; the id sets are disjoint. So
   `ir.preset(id)`, `?preset=` and `drive.mjs --preset` take a cornerstone.
-- The generated world is chosen by a rule fixed before anyone looked:
-  far-shore V unless its noon zenith is not blue-dominant by the air's own
-  `zenithSkyRadiance`, then the first body that passes a list (wet, haze
-  under τ 0.15, ground 250–310 K, a day of 10–60 hours, over 3,000 km, a
-  shore). Far-shore V's zenith is tan; P222_1_0_7 III, in far-shore's own
-  cell, is the one body there that passes.
+- The generated world is chosen by a rule, the first body by cell distance
+  from far-shore V that passes it: wet and plain (haze under τ 0.15, ground
+  250–310 K, a day of 10–60 hours, over 3,000 km, a shore); a sky that is
+  blue as the camera draws it, the air's radiance times the star's color at
+  the camera's balance, from 5° to 29° up under both ground suns; a radius
+  that lets G3's deck be lit from below by half a degree; a sea within 250 m
+  of the datum the regimes' heights are over; and open sea from the shore.
+  The air's zenith alone is not the sky a picture shows: it is per unit of a
+  white sun, and the M dwarf an earlier rule chose drew a blue zenith orange.
+  P222_3_2_k IV, under an F0V star two cells from far-shore, is the first
+  that passes.
 - **The instants are solved, not written.** `solarTime.ts` finds the first
   instant at or after a time the sun stands at an elevation over a place,
   rising or falling, or at the day's noon, and `ir.sun` and `ir.solveSun`

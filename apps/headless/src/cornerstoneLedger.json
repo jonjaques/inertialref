@@ -59,7 +59,7 @@
       "time": 0,
       "fovDeg": 65,
       "focalLength": 18.83622693,
-      "weather": "cirrus-over-cumulus",
+      "weather": "fair-cumulus",
       "altitude": 14401521.51,
       "sun": null,
       "light": {
@@ -70,158 +70,158 @@
     },
     {
       "id": "weather-g1-fair",
-      "address": "g:milky-way/s:P222_1_0_7/b:2",
-      "body": "6affccca691105ac",
-      "time": 16435.22654,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 98977.50831,
       "fovDeg": 50,
       "focalLength": 25.73408305,
       "weather": "fair-cumulus",
       "altitude": 40,
       "sun": {
-        "elevation": 58.995,
-        "azimuth": 0.732
+        "elevation": 73.792,
+        "azimuth": 359.983
       },
       "light": {
-        "sun": 58.995,
-        "phase": 132.609
+        "sun": 73.792,
+        "phase": 14.685
       },
       "surface": {
-        "latitude": -0.71769322,
-        "longitude": -0.4918667907,
+        "latitude": -0.2906217788,
+        "longitude": 0.650074412,
         "height": 40,
-        "heading": 2.107174153,
+        "heading": 2.094098135,
         "pitch": 0.06981317008,
-        "groundElevation": -1292
+        "groundElevation": 213
       }
     },
     {
       "id": "weather-g2-overcast-shore",
-      "address": "g:milky-way/s:P222_1_0_7/b:2",
-      "body": "6affccca691105ac",
-      "time": 10953.93701,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 82800.63549,
       "fovDeg": 50,
       "focalLength": 25.73408305,
       "weather": "overcast",
       "altitude": 2,
       "sun": {
         "elevation": 35,
-        "azimuth": 72.047
+        "azimuth": 78.368
       },
       "light": {
         "sun": 35,
-        "phase": 130.48
+        "phase": 14.658
       },
       "surface": {
-        "latitude": -0.7129114459,
-        "longitude": -0.4914229232,
+        "latitude": -0.2928832177,
+        "longitude": 0.6526948252,
         "height": 2,
-        "heading": 5.183627878,
+        "heading": 3.246312409,
         "pitch": 0.0872664626,
-        "groundElevation": -1313
+        "groundElevation": 192
       }
     },
     {
       "id": "weather-g3-underlit-dusk",
-      "address": "g:milky-way/s:P222_1_0_7/b:2",
-      "body": "6affccca691105ac",
-      "time": 27006.22765,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 17857.64343,
       "fovDeg": 55,
       "focalLength": 23.05178552,
       "weather": "dusk-altocumulus",
       "altitude": 2,
       "sun": {
         "elevation": -1.5,
-        "azimuth": 256.504
+        "azimuth": 269.168
       },
       "light": {
         "sun": -1.5,
-        "phase": 136.678
+        "phase": 14.552
       },
       "surface": {
-        "latitude": -0.71769322,
-        "longitude": -0.4918667907,
+        "latitude": -0.2906217788,
+        "longitude": 0.650074412,
         "height": 2,
-        "heading": 4.476834679,
+        "heading": 4.697871614,
         "pitch": 0.2617993878,
-        "groundElevation": -1292
+        "groundElevation": 213
       }
     },
     {
       "id": "weather-g4-over-deck",
-      "address": "g:milky-way/s:P222_1_0_7/b:2",
-      "body": "6affccca691105ac",
-      "time": 21890.19184,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 6219.386039,
       "fovDeg": 70,
       "focalLength": 17.13777608,
       "weather": "stratocumulus",
-      "altitude": 4300,
+      "altitude": 4107.967027,
       "sun": {
         "elevation": 35,
-        "azimuth": 289.632
+        "azimuth": 281.726
       },
       "light": {
         "sun": 35,
-        "phase": 134.715
+        "phase": 14.534
       },
       "surface": {
-        "latitude": -0.7129114459,
-        "longitude": -0.4914229232,
-        "height": 4300,
-        "heading": 1.913441277,
-        "pitch": -0.6108652044,
-        "groundElevation": -1313
+        "latitude": -0.2928832177,
+        "longitude": 0.6526948252,
+        "height": 4107.967027,
+        "heading": 1.775453871,
+        "pitch": -0.6108652144,
+        "groundElevation": 192
       }
     },
     {
       "id": "weather-g5-inside",
-      "address": "g:milky-way/s:P222_1_0_7/b:2",
-      "body": "6affccca691105ac",
-      "time": 12528.30501,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 86090.56816,
       "fovDeg": 60,
       "focalLength": 20.78460969,
       "weather": "fair-cumulus",
-      "altitude": 1700,
+      "altitude": 1487.321782,
       "sun": {
         "elevation": 45,
-        "azimuth": 57.871
+        "azimuth": 73.263
       },
       "light": {
         "sun": 45,
-        "phase": 131.093
+        "phase": 14.664
       },
       "surface": {
-        "latitude": -0.71769322,
-        "longitude": -0.4918667907,
-        "height": 1700,
+        "latitude": -0.2906217788,
+        "longitude": 0.650074412,
+        "height": 1487.321782,
         "heading": 1.570796327,
         "pitch": 0,
-        "groundElevation": -1292
+        "groundElevation": 213
       }
     },
     {
       "id": "weather-g6-descent",
-      "address": "g:milky-way/s:P222_1_0_7/b:2",
-      "body": "6affccca691105ac",
-      "time": 12528.30501,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 86090.56816,
       "fovDeg": 60,
       "focalLength": 20.78460969,
       "weather": "stratocumulus",
       "altitude": 400000,
       "sun": {
         "elevation": 45,
-        "azimuth": 57.871
+        "azimuth": 73.263
       },
       "light": {
         "sun": 45,
-        "phase": 131.093
+        "phase": 14.664
       },
       "surface": {
-        "latitude": -0.71769322,
-        "longitude": -0.4918667907,
+        "latitude": -0.2906217788,
+        "longitude": 0.650074412,
         "height": 400000,
         "heading": 1.570796327,
         "pitch": -1.535796327,
-        "groundElevation": -1292
+        "groundElevation": 213
       }
     }
   ]

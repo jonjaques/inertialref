@@ -10,15 +10,25 @@ import {
 import { formatSeed } from '@inertialref/procedural'
 import { deg } from '@inertialref/shared'
 import {
+  airHeights,
+  airTopRatio,
+  atmosphereRecipe,
+  bakeMultipleScattering,
+  bakeTransmittance,
+  DEFAULT_SENSOR_SETTINGS,
   type Lens,
   LENS_PRESETS,
   scenarioCoverage,
+  starColor,
   WEATHER_SCENARIOS,
+  whiteBalance,
+  zenithSkyRadiance,
 } from '@inertialref/rendering'
 import { type Vec3, vec3 } from '@inertialref/spatial'
 import {
   type Body,
   bodyFixedFrameId,
+  elevationAt,
   findBody,
   geodeticDirection,
   groundElevation,
@@ -40,12 +50,20 @@ import { loadStarCatalog } from './catalog.ts'
  * holds each cornerstone's sun to its target within half a degree, its
  * trend, and a heading toward the sun to the azimuth it was solved at.
  *
- * It also holds what the generated world's pictures need of the ground: G1,
- * G3, G5 and G6's last frame stand on land, not open water, and G1's rise is
- * the land stance's 20 m over the sea; and G3's deck can be lit from below
- * at all: the layer's base is lit by at least half a degree, and every base
- * under the full deck sunward of the stance has a clear sky where its ray
- * to the sun climbs back into the layer.
+ * It also holds what the generated world's pictures need of the world:
+ *
+ * - its sky, as the camera draws it, is blue: the star's color at the
+ *   camera's balance and the air's zenith under it, not the air alone;
+ * - its sea stands within 250 m of the datum the regimes' heights are over;
+ * - G1, G3, G5 and G6's last frame stand on land, not open water, G1's rise
+ *   is the land stance's 20 m over the sea on dry ground, and G2 faces open
+ *   sea;
+ * - G4 and G5 stand at the design's heights over the datum, which is what
+ *   puts G4 3 km over its deck and G5 inside its cumulus;
+ * - G3's deck can be lit from below at all: the layer's base is lit by at
+ *   least half a degree, every base under the full deck sunward of the
+ *   stance has a clear sky where its ray to the sun climbs back into the
+ *   layer, and the deck's edge stands low in the frame over a clear slot.
  *
  * The snapshot is `cornerstoneLedger.json`; `pnpm cornerstones:ledger`
  * rewrites it, as `presets:ledger` rewrites the pictures'.
@@ -287,6 +305,12 @@ describe('the cornerstones', () => {
         geodeticDirection(latitude, longitude),
       )
       expect(ground - sea).toBeGreaterThanOrEqual(20)
+      // Dry: no water stands there. Over the sea is not enough on a body
+      // whose drainage puts lakes over the sea's level.
+      expect(
+        ground -
+          elevationAt(body.surface, geodeticDirection(latitude, longitude)),
+      ).toBeLessThan(0.01)
       // And it stays over the sea for 10 km along G1's heading, so the rise
       // looks across land.
       const heading = picture.framing.surface.heading
@@ -374,8 +398,181 @@ describe('the cornerstones', () => {
         )
         expect(cover(back), `${km} km sunward`).toBe(0)
       }
-      // The full deck reaches sunward past the eye's own field.
-      expect(full).toBeGreaterThanOrEqual(100)
+      expect(full).toBeGreaterThan(0)
+      /*
+       * The deck fills the frame's sky and ends low in it, over a clear
+       * slot: its last full base, seen from the eye, stands between half a
+       * degree and 3.5° over the horizontal. A distance cannot say this on
+       * every world: the same edge 100 km out stands 1.2° up on a world of
+       * Earth's radius and 1.75° up on one of 3,900 km, where the
+       * curvature takes more of it.
+       */
+      let edge = 0
+      for (let m = 0; m <= 400_000; m += 500) {
+        const at = along(
+          stance.latitude,
+          stance.longitude,
+          sun.azimuth * DEG,
+          m,
+          body.radius,
+        )
+        if (
+          cover(geodeticDirection(at.latitude, at.longitude)) <
+          layer.coverage - 1e-9
+        )
+          break
+        edge = m
+      }
+      const eye =
+        body.radius + groundElevation(body.surface, up) + stance.height
+      const angle = edge / body.radius
+      const elevation =
+        Math.atan2(radius * Math.cos(angle) - eye, radius * Math.sin(angle)) /
+        DEG
+      expect(elevation, 'the edge over the horizontal').toBeGreaterThanOrEqual(
+        0.5,
+      )
+      expect(elevation, 'the edge over the horizontal').toBeLessThanOrEqual(3.5)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('stand on a world whose sky, as the camera draws it, is blue', () => {
+    const session = openSession({ catalog: loadStarCatalog(), workers: null })
+    try {
+      const picture = CORNERSTONES.find((one) => one.id === 'weather-g1-fair')!
+      const parsed = parseAddress(picture.address)
+      if (parsed.kind !== 'body') throw new Error('G1 is on a body')
+      const star = session.world.loadSystem(parsed.system).star
+      const body = bodyOf(session, picture.address)
+      /*
+       * The camera draws the star's light at its balance. The air's own
+       * radiance is per unit of a white sun, so the air alone says nothing
+       * about the picture's color: P222_1_0_7's zenith is blue-dominant at
+       * 0.092 : 0.123 : 0.169, and under its 2,346 K star (1 : 0.36 : 0.06
+       * at 5,800 K) every one of its cornerstones came out orange to brown.
+       * The design's rule is the sky from 5° to 29° at both ground suns;
+       * these are the two parts of it the library can say without marching
+       * a ray: the key light is near white, and the zenith it lights is blue.
+       */
+      const balance = whiteBalance(
+        picture.processing?.balance ?? DEFAULT_SENSOR_SETTINGS.balance,
+      )
+      const color = starColor(star.temperature)
+      const key = [
+        color.r * balance[0],
+        color.g * balance[1],
+        color.b * balance[2],
+      ] as const
+      expect(
+        key[2] / key[0],
+        'the key light at the balance',
+      ).toBeGreaterThanOrEqual(0.85)
+      const haze = body.appearance.haze!
+      const recipe = atmosphereRecipe(
+        haze,
+        airTopRatio(body.radius, haze.height),
+        airHeights(
+          body.radius,
+          haze.height,
+          body.atmosphere?.scaleHeight ?? 0,
+          haze.aerosolHeight,
+        ),
+      )
+      const zenith = zenithSkyRadiance(
+        recipe,
+        bakeMultipleScattering(recipe, bakeTransmittance(recipe)),
+        1,
+        Math.sin(60 * DEG),
+      )
+      expect(
+        (zenith[2] * key[2]) / (zenith[0] * key[0]),
+        'the zenith under a 60° sun, as drawn',
+      ).toBeGreaterThanOrEqual(1.5)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('stand the generated world’s sea within 250 m of the datum the regimes’ heights are over', () => {
+    const session = openSession({ catalog: loadStarCatalog(), workers: null })
+    try {
+      const picture = CORNERSTONES.find((one) => one.id === 'weather-g1-fair')!
+      const sea = seaDatumElevation(bodyOf(session, picture.address).surface)
+      expect(sea).not.toBeNull()
+      // A layer's base is over the datum and a photograph's over the sea; a
+      // quarter of the lowest regime's kilometer keeps the two one height.
+      expect(Math.abs(sea!)).toBeLessThanOrEqual(250)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('face G2 on open sea to 30 km', () => {
+    const session = openSession({ catalog: loadStarCatalog(), workers: null })
+    try {
+      const picture = CORNERSTONES.find(
+        (one) => one.id === 'weather-g2-overcast-shore',
+      )!
+      if (picture.framing.kind !== 'camera' || picture.framing.surface === null)
+        throw new Error('G2 is a stance')
+      const { latitude, longitude, heading } = picture.framing.surface
+      const body = bodyOf(session, picture.address)
+      const sea = seaDatumElevation(body.surface)!
+      /*
+       * Standing water at the sea's own level at every sample. The `shore`
+       * site is scored on the unclamped land nearest the sea's datum, and
+       * on a body with a drainage graph the sea stands only where it
+       * reaches, so the site can face a dry flat under the sea's level, a
+       * lagoon or an islet.
+       */
+      for (const km of [0.1, 0.25, 0.5, 1, 2, 3, 5, 8, 12, 16, 20, 30]) {
+        const at = along(latitude, longitude, heading, km * 1000, body.radius)
+        const direction = geodeticDirection(at.latitude, at.longitude)
+        const ground = groundElevation(body.surface, direction)
+        expect(
+          ground - elevationAt(body.surface, direction),
+          `${km} km out: water stands`,
+        ).toBeGreaterThan(0.01)
+        expect(Math.abs(ground - sea), `${km} km out: the sea`).toBeLessThan(
+          0.5,
+        )
+      }
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('stand G4 3 km over its deck and G5 inside its cumulus, over the datum the layers are over', () => {
+    const session = openSession({ catalog: loadStarCatalog(), workers: null })
+    try {
+      const overDatum = (id: string): number => {
+        const picture = CORNERSTONES.find((one) => one.id === id)!
+        if (
+          picture.framing.kind !== 'camera' ||
+          picture.framing.surface === null
+        )
+          throw new Error(`${id} is a stance`)
+        const { latitude, longitude, height } = picture.framing.surface
+        const body = bodyOf(session, picture.address)
+        return (
+          height +
+          groundElevation(body.surface, geodeticDirection(latitude, longitude))
+        )
+      }
+      const deck = WEATHER_SCENARIOS.stratocumulus.layers[0]!
+      const cumulus = WEATHER_SCENARIOS['fair-cumulus'].layers[0]!
+      // Stance heights are over the ground beneath and a layer's over the
+      // datum; the meter is the stance's rounding against the drawn ground.
+      expect(
+        Math.abs(overDatum('weather-g4-over-deck') - (deck.top + 3000)),
+      ).toBeLessThan(1)
+      expect(
+        Math.abs(
+          overDatum('weather-g5-inside') - (cumulus.base + cumulus.top) / 2,
+        ),
+      ).toBeLessThan(1)
     } finally {
       session.dispose()
     }

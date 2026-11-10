@@ -868,25 +868,76 @@ the orbit arm's 1.5 R floor (`observer.ts:129`), pitch stops at ±88°
 (`surfaceStance.ts:61`), and `compose` refuses a station
 (`observatory.ts:1288-1291`).
 
-**The generated world is `g:milky-way/s:P222_1_0_7/b:2`,** P222_1_0_7 III.
-The rule is draft 1's (ruling 2): far-shore V unless its noon zenith is not
-blue-dominant by the air's own `zenithSkyRadiance`
-(`packages/rendering/src/atmosphere.ts:1055`, B > R at a 60° sun); then the
-first body in catalog order from far-shore's cell that passes `wetWorld`, has
-a haze under τ 0.15, a ground between 250 and 310 K, a rotation between 10
-and 60 hours, a radius over 3,000 km and a `shore` site.
+**The generated world is `g:milky-way/s:P222_3_2_k/b:3`,** P222_3_2_k IV,
+under an F0V star of 6,375 K. It is the first body, by cell distance from
+far-shore V's cell (`P222_1_0`; Manhattan distance, then the cell's dx, dy
+and dz ascending, then the system's index, then the body's), that passes
+every clause of this rule:
 
-| Body           | Zenith at a 60° sun, R, G, B | Haze   | Ground  | Day     | Radius   |
-| -------------- | ---------------------------- | ------ | ------- | ------- | -------- |
-| Far-shore V    | 0.246, 0.189, 0.140          | τ 0.4  | 343 K   | 61.7 h  | —        |
-| P222_1_0_7 III | 0.092, 0.123, 0.169          | τ 0.12 | 274.4 K | 10.08 h | 6,102 km |
+1. **Wet and plain:** `wetWorld`, an aerosol depth under τ 0.15, a ground
+   between 250 and 310 K, a day between 10 and 60 hours, a radius over
+   3,000 km, and a `shore` site.
+2. **Its sky, as the camera draws it, is blue where the pictures look.** The
+   air's radiance along the view ray, times the star's color
+   (`starColor(T)`), times the camera's balance (`whiteBalance(5800)`), has
+   B ≥ 1.2 R at every elevation from 5° to 29°, under a 60° sun 120° off in
+   azimuth (G1) and a 35° sun 135° off (G2). Earth gives 1.31 to 2.47 there;
+   1.2 is its weakest less 10% (**D**).
+3. **G3 can be lit from below with margin:** the 4,000 m base's horizon dips
+   at least 2.0°, half a degree past the −1.5° sun. That is a radius of
+   6,570 km or less (**D**).
+4. **Its sea stands within 250 m of the datum.** A regime's layers are over
+   the datum (`CloudLayerSpec.base`) and a stance's height is over the ground
+   beneath, and a photograph's cloud stands over its sea. A quarter of the
+   lowest regime's kilometer keeps the two one height.
+5. **Its shore faces open sea:** some bearing from S holds standing water at
+   the sea's level at every sample from 0.1 to 30 km. The `shore` site is
+   scored on the unclamped land nearest the sea's datum
+   (`surveySites.ts`), and on a body with a drainage graph the sea stands
+   only where it reaches (`groundElevation`), so the site can face a dry flat
+   under the sea's level, a lagoon or an islet.
+6. **A land stance exists** by the clauses below.
 
-- Far-shore V fails on its sky, its haze, its ground and its day. P222_1_0_7
-  III is wet, has no authored deck, and is the only body in far-shore's cell
-  that passes (K's probe, confirmed by the orchestrator).
-- **Its day is 10.08 hours,** so its sun moves 0.05° in 5 s, 2.4 times
-  Earth's rate (**D**). The landed grid's whole rebuild on a turning sun
-  (§4.7) comes that much more often here than on Earth.
+**Why the rule is not the zenith's.** The rule this replaces chose
+`P222_1_0_7/b:2` for a blue-dominant noon zenith by
+`zenithSkyRadiance`, 0.092 : 0.123 : 0.169 at a 60° sun. That radiance is per
+unit of a white sun. The rule never applied the star's light, and
+P222_1_0_7's star is 2,346 K: its key light is 1 : 0.34 : 0.05, and 1 : 0.36
+: 0.06 at the camera's 5,800 K balance, which the renderer multiplies into
+the sky, the sea, the ground and the clouds alike (`scene.ts`,
+`bodyUniforms.ts`). The air itself is blue along every ray the pictures hold,
+with B/R from 1.2 at the horizon to 2.4 at 29° up under G1's sun, and the
+key light takes it to 0.07 to 0.13: every one of the baseline's ground
+stills came out orange to brown. Under the luminance meter that light also
+clips the foreground in red first, because a metered luminance is 0.46 of
+the red channel. Seven in ten of the 614 systems in far-shore's 3 × 3 × 3
+block of cells are M dwarfs, which is why a rule blind to the star landed on
+one. The sea there also stands 1,313 m under the datum, which put the
+overcast's base 1.6 km over the water, G4's eye 1.7 km over its deck and
+G5's under its cumulus.
+
+| Body                     | Star         | Key B/R at the balance | Pictured B/R, 5° to 29°, at 60° / 35° | Radius   | Sea vs datum | Open sea from S       | G3 margin | Verdict    |
+| ------------------------ | ------------ | ---------------------- | ------------------------------------- | -------- | ------------ | --------------------- | --------- | ---------- |
+| `P222_1_0_7/b:2`, cell 0 | 2,346 K      | 0.06                   | 0.08–0.13 / 0.07–0.14                 | 6,102 km | −1,313 m     | yes                   | 0.57°     | fails 2, 4 |
+| `P220_1_0_c/b:4`, cell 1 | 5,525 K, G2V | 0.91                   | 1.40–2.25 / 1.32–2.31                 | 4,225 km | −558 m       | 4 of 8 on its best    | 0.99°     | fails 4, 5 |
+| `P220_1_2_k/b:2`, cell 2 | 5,540 K, G4V | 0.92                   | 1.93–2.47 / 1.94–2.61                 | 7,061 km | −218 m       | yes                   | 0.43°     | fails 3    |
+| `P222_3_2_k/b:3`, cell 2 | 6,375 K, F0V | 1.16                   | 1.63–2.78 / 1.51–2.81                 | 3,922 km | +192 m       | bearings 169° to 203° | 1.09°     | **passes** |
+
+The figures are a CPU march of the shell's own `marchAir` along each ray,
+which agrees with `zenithSkyRadiance` at the zenith to 0.3%. The other
+bodies that pass clause 1 within two cells orbit M or late-K stars, whose
+key light is under 0.7 at the balance and fails clause 2 outright.
+`cornerstoneLedger.test.ts` holds the parts of clause 2 the library can say
+without marching a ray (the key light at least 0.85 in B/R, and the zenith it
+lights at least 1.5 under a 60° sun), and clauses 4 and 5.
+
+- **P222_3_2_k IV:** radius 3,922 km, a day of 30.19 hours, ground 280 K,
+  Earth's haze authoring (τ 0.12, an aerosol height of 1,482 m), the sea
+  192 m over the datum. Under its star at the balance the key is
+  1 : 1.00 : 1.16, and the sky in G1's frame at its own noon is B/R 1.40 at
+  2° and 2.70 at 29°; the zenith under a 60° sun is 2.13 (**D**).
+- **Its day is 30.19 hours,** so its sun moves 0.05° in 15 s, 0.8 times
+  Earth's rate (**D**).
 - **The campaign's stances stay on far-shore V** (§7.2), where every phase 0
   figure was taken: a cost depends on the geometry and the weather, not on
   the sky's color, and the rubric fixes a stance to the world its landed
@@ -897,34 +948,44 @@ and 60 hours, a radius over 3,000 km and a `shore` site.
 the deepest seabed read at the sea's surface
 (`packages/universe/src/surveySites.ts:334-345`), open water. So:
 
-- **The shore stance, S,** is the world's `shore` site (`:327-348`), facing the
-  sea: 40.8468° S, 28.1565° W.
-- **The land stance, L,** is 41.1208° S, 28.1819° W: 29.25 km from S at
-  bearing 184°, 20.3 m over the sea and 12.75 km from water. The rule was the
-  first point inland of S along the bearing away from the sea whose ground is
-  at least 20 m over the sea. **As built it is off that line,** because the
-  coastal plain there stays 0 to 7 m over the sea for 50 km. The orchestrator
-  confirmed the stance. `cornerstoneLedger.test.ts` holds the ground under
-  G1, G3 and G6's last frame above sea level.
+- **The shore stance, S,** is the world's `shore` site, 16.7810° S,
+  37.3967° E, **facing 186°**: the middle of the widest run of bearings from
+  S, 169° to 203°, that hold open sea at every sample to 30 km. The bearing
+  the land falls lowest toward, 89°, crosses an islet 2 km out.
+- **The land stance, L,** is 16.6514° S, 37.2465° E: the first point 5 to
+  50 km from S, within 90° of the bearing away from the sea (269°) and nearest
+  it, whose ground is dry and at least 20 m over the sea and stays dry and
+  over the sea for 10 km along G1's heading. It is 13.25 km from S at bearing
+  312°, 43° off, 20.6 m over the sea (212.7 m over the datum), with the
+  nearest standing water 0.5 km off. G1's view crosses land to 10 km and
+  reaches open sea at 20 km, a strip at its horizon.
+- **G4's and G5's heights are the design's over the datum,** because their
+  layers are: G4's eye 3,000 m over the stratocumulus's 1,300 m top is
+  4,108 m over S, and G5's at the cumulus's middle, 1,700 m, is 1,487 m
+  over L. `cornerstoneLedger.test.ts` holds both, holds G1's rise dry, and
+  holds the ground under G1, G3 and G6's last frame above sea level.
 
-| Id                          | Body, stance                                                                              | Lens            | Sun at the stance (§3.4) | Weather                                                       | Kind  |
-| --------------------------- | ----------------------------------------------------------------------------------------- | --------------- | ------------------------ | ------------------------------------------------------------- | ----- |
-| `weather-e1-cumulus-orbit`  | Earth; latitude −5, longitude −60, height 400,000, heading 0, pitch −87.995               | 120.2 mm, 11.4° | 50° and falling          | `fair-cumulus`                                                | Still |
-| `weather-e2-limb-dusk`      | Earth; latitude 20, longitude −30, height 400,000, heading the sun's azimuth, pitch −19.8 | 120.2 mm, 11.4° | −21° and falling         | `cirrus-over-cumulus`                                         | Still |
-| `weather-e3-whole-face`     | Earth; `compose` framing `blue-marble`, `fovDeg` 65, time 0 (`pictures.json:23-42`)       | —               | As held                  | `cirrus-over-cumulus`, then `climate` when package N lands it | Still |
-| `weather-g1-fair`           | G world; L, height 40, heading the sun's azimuth + 120, pitch 4                           | 25.7 mm, 50°    | Local noon               | `fair-cumulus`                                                | Still |
-| `weather-g2-overcast-shore` | G world; S, height 2, pitch 5                                                             | 25.7 mm, 50°    | 35° and rising           | `overcast`                                                    | Still |
-| `weather-g3-underlit-dusk`  | G world; L, height 2, heading the sun's azimuth, pitch 15                                 | 23.05 mm, 55°   | −1.5° and falling        | `dusk-altocumulus`                                            | Still |
-| `weather-g4-over-deck`      | G world; S's place, height 4,300, heading the sun's azimuth + 180, pitch −35              | 17.14 mm, 70°   | 35° and falling          | `stratocumulus`                                               | Still |
-| `weather-g5-inside`         | G world; L's place, height 1,700, heading 90, pitch 0                                     | 20.78 mm, 60°   | 45° and rising           | `fair-cumulus`                                                | Cast  |
-| `weather-g6-descent`        | G world; L's place, height 400,000, heading 90, pitch −87.995                             | 20.78 mm, 60°   | 45° and rising           | `stratocumulus`                                               | Cast  |
+| Id                          | Body, stance                                                                              | Lens            | Sun at the stance (§3.4) | Weather                                                | Kind  |
+| --------------------------- | ----------------------------------------------------------------------------------------- | --------------- | ------------------------ | ------------------------------------------------------ | ----- |
+| `weather-e1-cumulus-orbit`  | Earth; latitude −5, longitude −60, height 400,000, heading 0, pitch −87.995               | 120.2 mm, 11.4° | 50° and falling          | `fair-cumulus`                                         | Still |
+| `weather-e2-limb-dusk`      | Earth; latitude 20, longitude −30, height 400,000, heading the sun's azimuth, pitch −19.8 | 120.2 mm, 11.4° | −21° and falling         | `cirrus-over-cumulus`                                  | Still |
+| `weather-e3-whole-face`     | Earth; `compose` framing `blue-marble`, `fovDeg` 65, time 0 (`pictures.json:23-42`)       | —               | As held                  | `fair-cumulus`, then `climate` when package N lands it | Still |
+| `weather-g1-fair`           | G world; L, height 40, heading the sun's azimuth + 120, pitch 4                           | 25.7 mm, 50°    | Local noon               | `fair-cumulus`                                         | Still |
+| `weather-g2-overcast-shore` | G world; S, height 2, heading 186, pitch 5                                                | 25.7 mm, 50°    | 35° and rising           | `overcast`                                             | Still |
+| `weather-g3-underlit-dusk`  | G world; L, height 2, heading the sun's azimuth, pitch 15                                 | 23.05 mm, 55°   | −1.5° and falling        | `dusk-altocumulus`                                     | Still |
+| `weather-g4-over-deck`      | G world; S's place, height 4,108, heading the sun's azimuth + 180, pitch −35              | 17.14 mm, 70°   | 35° and falling          | `stratocumulus`                                        | Still |
+| `weather-g5-inside`         | G world; L's place, height 1,487, heading 90, pitch 0                                     | 20.78 mm, 60°   | 45° and rising           | `fair-cumulus`                                         | Cast  |
+| `weather-g6-descent`        | G world; L's place, height 400,000, heading 90, pitch −87.995                             | 20.78 mm, 60°   | 45° and rising           | `stratocumulus`                                        | Cast  |
 
 **As built.** E1's and G6's pitch is −87.995°, because −88° is past the
-stance's limit. The solved suns are E1 50° and falling, E2 −21° and falling,
-G1 noon at 58.99°, G2 35° and rising, G3 −1.5° and falling with the base's
-horizon dipping 2.074°, a margin of 0.574°, G4 35° and falling, G5 and G6 45°
-and rising. On this world's 6,102 km radius G3's ray returns into its layer
-about 320 km sunward where the text below says 334 km for Earth's (**D**).
+stance's limit. The solved suns are E1 50° and falling, E2 −21° and falling;
+on P222_3_2_k IV, G1's noon at 73.79° (at 16.7° S), G2 35° and rising at
+azimuth 78.37°, 108° off its view, G3 −1.5° and falling with the base's
+horizon dipping 2.59°, a margin of 1.09°, G4 35° and falling, G5 and G6 45°
+and rising. On this world's 3,922 km radius G3's ray returns into its layer
+about 206 km sunward where the text below says 334 km for Earth's (**D**).
+E3 holds `fair-cumulus` until the climate lands: `cirrus-over-cumulus`'s
+bands, 0.05 rad, stripe a whole face every 2.9° of latitude.
 
 What each geometry is for, with what the gathered references say of it
 (`design/plans/weather/references.md`; observations from photographs, not
@@ -967,12 +1028,12 @@ rulings):
   tops.
 - **G3.** A mid-level layer is lit from below only while the sun is higher
   than the layer base's own horizon dips, `acos(R/(R + h))`: 2.03° for a
-  4,000 m base on a world of Earth's radius and 2.07° on the cornerstones'
-  world (**D**; 2.074° as built). At −2° an Earth-sized world leaves 0.03° of
-  margin, and a small error in the sun or the base flips the picture between
-  lit and dark. So the sun is 1.5° under, and the ledger test holds the
-  base's dip at least 0.5° past the sun's depression: 0.574° as built. The
-  radius floor in the world's rule keeps that margin.
+  4,000 m base on a world of Earth's radius and 2.59° on the cornerstones'
+  world (**D**). At −2° an Earth-sized world leaves 0.03° of margin, and a
+  small error in the sun or the base flips the picture between lit and dark.
+  So the sun is 1.5° under, and the ledger test holds the base's dip at least
+  0.5° past the sun's depression: 1.09° as built. Clause 3 of the world's
+  rule keeps that margin.
   - **The layer has to end before its own light comes in.** A base's ray to a
     sun `e` under its horizon dips under the layer and comes back up into it
     where the local sun stands `e` over the horizon: 334 to 362 km sunward of
@@ -991,7 +1052,21 @@ rulings):
   - The ledger test holds it: at G3's instant no cloud of the layer stands at
     the re-entry point of a base's ray, for the base over the stance and for
     bases sunward of it. As built the clause walks sunward under the whole
-    deck, where this design asked for one point 150 km out. The scenario
+    deck, where this design asked for one point 150 km out. It also holds
+    the edge low in the frame over a clear slot, by its elevation from the
+    eye, between 0.5° and 3.5°: a distance cannot say that on every world,
+    since the same edge 100 km out stands 1.2° up on a world of Earth's
+    radius and 1.75° up on this one. On P222_3_2_k IV the deck is full to
+    96 km sunward and clear from 110 km, its edge 1.6° to 1.2° up.
+  - **As taken, the GPU draws no deck at G3's instant.** The cloud frame
+    forms its body-fixed sun from the star's render position less the
+    body's (`bodySun`, `render/cloudFrame.ts`), as the terrain and the water
+    do on `main`. Render compression keeps only directions from the eye, and
+    the star stands 28 radii from the body's center in render space at G3, so
+    the sun seen from the center stands 2.04° higher than from the eye:
+    +0.5° where the true sun is −1.5°. The terminator then clears the eye.
+    The CPU twin, the ledger and this design take the true sun. The
+    weather's README records it, with its measure. The scenario
     carries the edge as `terminator: { full: −0.1, clear: 0.1 }`, in degrees
     of the local sun's elevation (`weatherScenario.ts`).
 - **G4.** The eye stands 3 km over the regime's 1,300 m top, looking at the
