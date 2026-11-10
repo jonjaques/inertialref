@@ -160,6 +160,10 @@ function bodyOf(
   return findBody(session.world.loadSystem(parsed.system), parsed.body)!
 }
 
+/** An address as the observatory reports it: with its galaxy. */
+const fullAddress = (address: string): string =>
+  address.startsWith('g:') ? address : `g:milky-way/${address}`
+
 /** The body a picture's weather stands on: its own, or a station's parent. */
 function bodyUnder(
   session: ReturnType<typeof openSession>,
@@ -233,7 +237,11 @@ describe('the cornerstones', () => {
         held = LENS_PRESETS.flight
         const taken = session.harness.preset(picture.id)
         const { status } = taken
-        expect(status.target?.address, picture.id).toContain(picture.address)
+        // Exactly: `s:SOL/b:2` is inside `s:SOL/b:21` and every moon's
+        // address under Earth, so a substring holds a picture of another body.
+        expect(status.target?.address, picture.id).toBe(
+          fullAddress(picture.address),
+        )
         // Headlessly no weather is drawn, and the picture says so.
         expect(taken.weather, picture.id).toBe('unavailable')
         const body = bodyUnder(session, picture.address)
@@ -345,6 +353,22 @@ describe('the cornerstones', () => {
           2,
         )}\n`,
       ).toMatchFileSnapshot('./cornerstoneLedger.json')
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('hold each picture to its own body’s address, not to one that contains it', () => {
+    const session = openSession({ catalog: loadStarCatalog(), workers: null })
+    try {
+      // A target the old check passed: Earth's picture standing on b:21.
+      expect(fullAddress('s:SOL/b:2')).not.toBe('g:milky-way/s:SOL/b:21')
+      expect('g:milky-way/s:SOL/b:21').toContain('s:SOL/b:2')
+      for (const picture of CORNERSTONES)
+        expect(
+          session.harness.preset(picture.id).status.target?.address,
+          picture.id,
+        ).toBe(fullAddress(picture.address))
     } finally {
       session.dispose()
     }
