@@ -100,6 +100,48 @@ describe('the half-float encoder', () => {
     expect(() => halfBits(Infinity)).toThrow('no half float')
     expect(() => halfBits(NaN)).toThrow('no half float')
   })
+
+  it('holds every finite half, and rounds at every boundary between two: the tie to the even one, a float64 either side to the nearer', () => {
+    // A half's value from its bits by arithmetic, so the encoder is not
+    // checked against the platform's own float16.
+    const halfOf = (bits: number): number => {
+      const exponent = bits >> 10
+      const mantissa = bits & 0x3ff
+      return exponent === 0
+        ? mantissa * 2 ** -24
+        : (1 + mantissa / 1024) * 2 ** (exponent - 15)
+    }
+    const float = new Float64Array(1)
+    const word = new BigUint64Array(float.buffer)
+    /** The float64 `by` steps from a positive `x`. */
+    const stepped = (x: number, by: bigint): number => {
+      float[0] = x
+      word[0] = word[0]! + by
+      return float[0]
+    }
+    const wrong: string[] = []
+    const hold = (value: number, bits: number): void => {
+      if (halfBits(value) !== bits) wrong.push(`${value} → ${bits}`)
+      if (halfBits(-value) !== (bits | 0x8000))
+        wrong.push(`${-value} → ${bits | 0x8000}`)
+    }
+    // 0x7bff is 65504, the largest: 31,743 boundaries below it, subnormals
+    // and the step into the normals among them.
+    for (let bits = 0; bits < 0x7bff; bits += 1) {
+      const here = halfOf(bits)
+      // Exact: two neighbors are multiples of one step, and so is their mean.
+      const tie = (here + halfOf(bits + 1)) / 2
+      hold(here, bits)
+      hold(stepped(tie, -1n), bits)
+      hold(tie, bits % 2 === 0 ? bits : bits + 1)
+      hold(stepped(tie, 1n), bits + 1)
+    }
+    hold(65504, 0x7bff)
+    // The last boundary is the tie with 65536, which no half holds.
+    hold(stepped(65520, -1n), 0x7bff)
+    expect(() => halfBits(-65520)).toThrow('65504')
+    expect(wrong).toEqual([])
+  })
 })
 
 describe('the distribution, the bands and the index', () => {

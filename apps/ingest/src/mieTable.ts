@@ -353,38 +353,22 @@ export function gloryRing(row: number, grid: RadiusGrid = RADIUS_GRID): number {
   )
 }
 
+const HALF = new DataView(new ArrayBuffer(2))
+
 /**
- * IEEE binary16 bits of `value`, rounded to nearest, ties to even. Every step
- * is exact in float64 — a division by a power of two, a subtraction within a
- * binade, a multiplication by 1024 — so the rounding sees the true value.
- * Refuses what half precision cannot hold rather than writing an infinity
- * into committed data.
+ * IEEE binary16 bits of `value`, rounded to nearest, ties to even: the
+ * rounding is `Math.f16round`'s, read back as bits. Refuses what half
+ * precision cannot hold rather than writing an infinity into committed data:
+ * from 65520 up, the tie past the largest half, the rounding is one.
  */
 export function halfBits(value: number): number {
   if (!Number.isFinite(value))
     throw new Error(`mieTable: ${value} has no half float`)
-  const sign = value < 0 || Object.is(value, -0) ? 0x8000 : 0
-  const v = Math.abs(value)
-  if (v < 2 ** -14) return sign | roundEven(v / 2 ** -24)
-  let exponent = Math.floor(Math.log2(v))
-  if (2 ** exponent > v) exponent -= 1
-  if (2 ** (exponent + 1) <= v) exponent += 1
-  let mantissa = roundEven((v / 2 ** exponent - 1) * 1024)
-  if (mantissa === 1024) {
-    mantissa = 0
-    exponent += 1
-  }
-  if (exponent > 15)
+  const half = Math.f16round(value)
+  if (!Number.isFinite(half))
     throw new Error(`mieTable: ${value} is past half float's 65504`)
-  return sign | ((exponent + 15) << 10) | mantissa
-}
-
-function roundEven(q: number): number {
-  const floor = Math.floor(q)
-  const rest = q - floor
-  if (rest > 0.5) return floor + 1
-  if (rest < 0.5) return floor
-  return floor % 2 === 0 ? floor : floor + 1
+  HALF.setFloat16(0, half)
+  return HALF.getUint16(0)
 }
 
 /** Values as little-endian float16, base64: the generated file's phase. */
