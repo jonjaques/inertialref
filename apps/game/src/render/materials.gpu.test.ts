@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   BufferAttribute,
+  BufferGeometry,
   type Camera,
   Color,
   DataTexture,
   FloatType,
   HalfFloatType,
   LinearFilter,
+  LineSegments,
   Mesh,
   type Object3D,
   PerspectiveCamera,
@@ -18,7 +20,9 @@ import {
   Sprite,
   CubeRenderTarget,
 } from 'three/webgpu'
-import { float, vec3, vec4 } from 'three/tsl'
+import { float, uniform, vec3, vec4 } from 'three/tsl'
+import { LineSegments2 } from 'three/addons/lines/webgpu/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 import { openSession, type Session } from '@inertialref/devtools'
 import { rng, rootSeed } from '@inertialref/procedural'
 import {
@@ -71,6 +75,8 @@ import {
   wearSea,
 } from './groundWear.ts'
 import { createThrusterPlumes } from './plumes.ts'
+import { createCloudFrontHandle } from './cloudSystem.ts'
+import { createEntryTraceMaterials } from './entryTrace.ts'
 import { thrusterLayoutFor } from './thrusterLayouts.ts'
 import { createWarpEffects } from './warpEffects.ts'
 
@@ -983,5 +989,85 @@ describe('the disk, seen through its own air', () => {
     const datum = await veil(true, 1)
     const sunk = await veil(true, 0.9)
     expect(Math.abs(sunk / datum - 1)).toBeLessThan(0.02)
+  })
+})
+
+describe('the materials drawn over the clouds, read through a front handle', () => {
+  /*
+   * Under `?clouds=1` the ring, the plumes and the entry trace's inks read
+   * the clouds in front of them (design §4.9), and without a handle each
+   * builds the program it always has. The handle's cost is the two knot
+   * textures, read with `textureLoad` and no sampler, and nothing else
+   * bound: what is counted here, program by program, against the same
+   * material built with no handle. Each is built before the handle follows a
+   * trace, so it compiles against the handle's stand-ins, as the page does.
+   */
+  const knotBindings = async (
+    without: Object3D,
+    within: Object3D,
+  ): Promise<void> => {
+    const bare = await gpu.shader(without, camera, staged(without))
+    await gpu.compile(within, camera, staged(within))
+    const read = await gpu.shader(within, camera, staged(within))
+    const count = (wgsl: string) =>
+      (wgsl.match(/texture_2d\s*<\s*f32\s*>/g) ?? []).length
+    const samplers = (wgsl: string) =>
+      (wgsl.match(/:\s*sampler\s*;/g) ?? []).length
+    expect(count(read.fragmentShader) - count(bare.fragmentShader)).toBe(2)
+    expect(samplers(read.fragmentShader)).toBe(samplers(bare.fragmentShader))
+    expect(read.fragmentShader).toContain('textureLoad')
+    // The vertex stage reads no cloud.
+    expect(count(read.vertexShader)).toBe(count(bare.vertexShader))
+  }
+
+  it('the ring', async () => {
+    const ring = () => new RingGeometry(0.5, 1, 32)
+    await knotBindings(
+      new Mesh(ring(), createRingMaterial().material),
+      new Mesh(ring(), createRingMaterial(createCloudFrontHandle()).material),
+    )
+  })
+
+  it('the plumes: the jets, the pods, the drive and its disk', async () => {
+    const lit = (front?: ReturnType<typeof createCloudFrontHandle>) => {
+      const plumes = createThrusterPlumes(thrusterLayoutFor('rocinante'), front)
+      plumes.update(new Float32Array(plumes.nozzleCount).fill(1), 1, 1)
+      return plumes
+    }
+    const bare = lit()
+    const read = lit(createCloudFrontHandle())
+    expect(read.group.children.length).toBe(bare.group.children.length)
+    expect(bare.group.children.length).toBe(4)
+    for (let i = 0; i < bare.group.children.length; i += 1)
+      await knotBindings(bare.group.children[i]!, read.group.children[i]!)
+    bare.dispose()
+    read.dispose()
+  })
+
+  it('the entry trace: its inks and the line through the body', async () => {
+    const bare = createEntryTraceMaterials()
+    const read = createEntryTraceMaterials({
+      handle: createCloudFrontHandle(),
+      compression: uniform(1),
+    })
+    const geometry = new LineSegmentsGeometry().setPositions([
+      -0.5, 0, 0, 0.5, 0, 0,
+    ])
+    const through = new BufferGeometry()
+    through.setAttribute(
+      'position',
+      new BufferAttribute(new Float32Array([-0.5, 0, 0, 0.5, 0, 0]), 3),
+    )
+    for (const key of Object.keys(bare) as (keyof typeof bare)[]) {
+      const part = (material: (typeof bare)[typeof key]) =>
+        key === 'through'
+          ? new LineSegments(through, material)
+          : new LineSegments2(geometry, material as typeof bare.ring)
+      await knotBindings(part(bare[key]), part(read[key]))
+    }
+    geometry.dispose()
+    through.dispose()
+    for (const material of [...Object.values(bare), ...Object.values(read)])
+      material.dispose()
   })
 })

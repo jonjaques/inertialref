@@ -366,7 +366,9 @@ export function Bodies({
       let ringMesh: Mesh | null = null
       let ringMaterial: RingMaterial | null = null
       if (ringed) {
-        ringMaterial = createRingMaterial()
+        // Seen through the clouds in front of it under `?clouds=1`; the
+        // phase-0 graph without, which is every page with no handle.
+        ringMaterial = createRingMaterial(engine.cloudFront ?? undefined)
         ringMesh = new Mesh(rings, ringMaterial.material)
         ringMesh.renderOrder = 2
         // World transparency over the clouds, in pass B.
@@ -593,6 +595,7 @@ export function Bodies({
           setNumber(material.bodyRadius, values.bodyRadius)
           setNumber(material.opticalDepth, values.opticalDepth)
           setColor(material.baseColor, values.baseColor)
+          setNumber(material.compression, body.placement.compression)
         }
       }
 
