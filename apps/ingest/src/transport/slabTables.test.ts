@@ -1,23 +1,17 @@
 import {
   SLAB_REFERENCE,
-  SLAB_SOURCE,
-  SLAB_SOURCE_ALTERNATE,
   diffractionShare,
   mieDroplets,
   samplePhase,
 } from '@inertialref/rendering'
-import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { firstOrder, scatteringCosine } from './addingDoubling.ts'
 import {
   FLUX_AXES,
   MONTE_CARLO,
   SLAB_DOMAIN,
-  SOURCE_AXES,
   SOURCE_RADIUS,
-  halfDecimal,
   inDomain,
-  judge,
   monteCarloHolds,
   scatteringAngle,
   slabPairs,
@@ -25,9 +19,10 @@ import {
 } from './slabTables.ts'
 
 /*
- * The committed tables, held to themselves: every figure a header states is
- * recomputed here from the table it describes. What it costs minutes to
- * recompute from the Mie series is the slow suite's.
+ * The committed reference, held to itself: every figure its header states
+ * is recomputed here from the table it describes. What it costs minutes to
+ * recompute from the Mie series is the slow suite's, and the source tables
+ * are `slabSourceTable.test.ts`'s.
  */
 
 const rows = SLAB_REFERENCE.rows
@@ -200,110 +195,6 @@ describe('the scaling’s bill', () => {
   })
 })
 
-describe('the source table', () => {
-  it('is a 3D texture’s worth of half floats on the axes the march reads', () => {
-    expect([16, 24, 32]).toContain(SLAB_SOURCE.nodes)
-    expect(SLAB_SOURCE.terms).toHaveLength(
-      SLAB_SOURCE.suns * SLAB_SOURCE.nodes * SLAB_SOURCE.nodes * 3,
-    )
-    expect({
-      suns: SLAB_SOURCE.suns,
-      sunMuMin: SLAB_SOURCE.sunMuMin,
-      depthScale: SLAB_SOURCE.depthScale,
-      depthMax: SLAB_SOURCE.depthMax,
-    }).toEqual(SOURCE_AXES)
-    for (const term of SLAB_SOURCE.terms) {
-      expect(Math.f16round(term)).toBe(Math.f16round(halfDecimal(term)))
-      expect(halfDecimal(term)).toBe(term)
-    }
-    const media = SLAB_REFERENCE.media.find(
-      (item) => item.radius === SLAB_SOURCE.radius,
-    )!
-    expect(SLAB_SOURCE.lobe).toBeCloseTo(media.asymmetry ** 2, 6)
-  })
-
-  it('has no source where there is no slab, and a positive mean everywhere else', () => {
-    const { nodes, suns, terms } = SLAB_SOURCE
-    for (let sun = 0; sun < suns; sun += 1)
-      for (let bottom = 0; bottom < nodes; bottom += 1)
-        for (let top = 0; top < nodes; top += 1) {
-          const j0 = terms[((sun * nodes + bottom) * nodes + top) * 3]!
-          if (top === 0 && bottom === 0) expect(j0).toBe(0)
-          else expect(j0).toBeGreaterThan(0)
-        }
-  })
-
-  it('rebuilds the oracle’s slabs through its own read to the figure its header records, at every azimuth', () => {
-    const rebuilt = judge(
-      SLAB_SOURCE,
-      SLAB_SOURCE.lobe,
-      SLAB_REFERENCE.media,
-      rows,
-      SLAB_REFERENCE.reflected,
-    )
-    // At most the figure, and the figure itself: the rows are printed to
-    // five figures, which moves a radiance by up to 5 × 10⁻⁵ of itself.
-    expect(rebuilt.error).toBeLessThanOrEqual(
-      SLAB_SOURCE.reconstructionError + 2e-4,
-    )
-    expect(rebuilt.error).toBeGreaterThan(
-      SLAB_SOURCE.reconstructionError - 2e-4,
-    )
-    const { grid, held, rms, thin, flux } = SLAB_SOURCE.reconstruction
-    expect(Math.abs(rebuilt.grid - grid)).toBeLessThan(2e-4)
-    expect(Math.abs(rebuilt.held - held)).toBeLessThan(2e-4)
-    expect(Math.abs(rebuilt.rms - rms)).toBeLessThan(2e-4)
-    expect(Math.abs(rebuilt.flux - flux)).toBeLessThan(2e-4)
-    rebuilt.thin.forEach((error, at) =>
-      expect(Math.abs(error - thin[at]!)).toBeLessThan(2e-4),
-    )
-    expect(rebuilt.worst).not.toBe('')
-  })
-
-  it('is over the rubric’s 5% and 2%: three terms do not hold a slab under an oblique sun', () => {
-    // The forecast for the rubric's rows 1 and 2, in Node: both are misses
-    // by this table, by either measure of fit, with the lobe or without.
-    // When either turns, the row is met in Node and its line goes.
-    expect(SLAB_SOURCE.reconstructionError).toBeGreaterThan(0.05)
-    expect(SLAB_SOURCE.reconstruction.flux).toBeGreaterThan(0.02)
-    expect(SLAB_SOURCE.reconstruction.withoutLobe).toBeGreaterThan(
-      SLAB_SOURCE.reconstructionError,
-    )
-    // Under a sun straight above, where the lobe and the cosine share an
-    // axis, the least-squares table is within 8% at every view.
-    const absolute =
-      SLAB_SOURCE_ALTERNATE.fit === 'absolute'
-        ? SLAB_SOURCE_ALTERNATE.terms
-        : SLAB_SOURCE.terms
-    const zenith = judge(
-      { ...SLAB_SOURCE, terms: absolute },
-      SLAB_SOURCE.lobe,
-      SLAB_REFERENCE.media,
-      rows.filter((row) => row.sunMu === 1),
-      [],
-    )
-    expect(zenith.error).toBeLessThan(0.1)
-  })
-
-  it('has the other measure’s table beside it, whose worst error is the larger', () => {
-    expect(SLAB_SOURCE_ALTERNATE.fit).not.toBe(SLAB_SOURCE.fit)
-    expect(SLAB_SOURCE_ALTERNATE.terms).toHaveLength(SLAB_SOURCE.terms.length)
-    const rebuilt = judge(
-      { ...SLAB_SOURCE, terms: SLAB_SOURCE_ALTERNATE.terms },
-      SLAB_SOURCE.lobe,
-      SLAB_REFERENCE.media,
-      rows,
-      [],
-    )
-    expect(
-      Math.abs(rebuilt.error - SLAB_SOURCE_ALTERNATE.reconstructionError),
-    ).toBeLessThan(2e-4)
-    expect(SLAB_SOURCE_ALTERNATE.reconstructionError).toBeGreaterThanOrEqual(
-      SLAB_SOURCE.reconstructionError,
-    )
-  })
-})
-
 describe('the black-surface flux', () => {
   it('rises with depth and with a lower sun, between nothing and everything', () => {
     expect(SLAB_REFERENCE.sunMus).toEqual(FLUX_AXES.sunMus)
@@ -367,25 +258,5 @@ describe('the committed Monte Carlo rows', () => {
     // and under 5% at 50, where a row walks a twentieth of the paths.
     for (const row of held)
       expect(row.error / row.mean).toBeLessThan(row.depth === 5 ? 0.01 : 0.05)
-  })
-})
-
-describe('a half float’s decimal', () => {
-  it('is the shortest that rounds to the same half float', () => {
-    fc.assert(
-      fc.property(
-        fc.double({ min: -60000, max: 60000, noNaN: true }),
-        (value) => {
-          const short = halfDecimal(value)
-          // `===`, not `Object.is`: a zero's sign is nothing a table holds.
-          expect(Math.f16round(short) === Math.f16round(value)).toBe(true)
-          expect(String(short).length).toBeLessThanOrEqual(
-            String(Math.f16round(value)).length,
-          )
-        },
-      ),
-    )
-    expect(halfDecimal(0)).toBe(0)
-    expect(halfDecimal(0.1)).toBe(0.1)
   })
 })
