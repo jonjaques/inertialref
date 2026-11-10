@@ -233,8 +233,8 @@ Four limits bear on the figures below.
   optical depth. An in-cloud step holds τ at 0.3 only near the eye, where that
   is 15%: the step's floor, 3 m plus 60 m per 16 km, overtakes `0.3/σ` at
   1.5 km under `fair-cumulus`'s σ of 0.035 /m. Past it τ grows with distance:
-  +52% at 8 km, where a step is 33 m, and +70% or more at the far
-  comparison's 55 km handover, where steps are 50 m or more. The variable is
+  +52% at 8 km, where a step is 33 m, and about +100% at the far
+  comparison's 55 km handover, where a step is 209 m and τ 7.3. The variable is
   the distance. The far comparison's reference is that march. Its radiance
   errors rank two candidates against one reference and are not a cloud's
   radiance. Phase 1 fixes the march.
