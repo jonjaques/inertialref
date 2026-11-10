@@ -126,15 +126,17 @@ describe('the source the oracle is cut into', () => {
   it('integrates along a ray to the oracle’s own radiance, before any fit', () => {
     // An absorbing slab, so a layer sixteen transport depths under the
     // plane is all there is below it: the cells with the last bottom node
-    // are one deep slab at every depth from its lit face. Sixteen streams
-    // against two hundred moments, so the oracle's delta-M is in the check.
+    // are one deep slab at every depth from its lit face. Eight streams
+    // against two hundred moments, so delta-M takes a tenth of every
+    // scattering out and the source has to put it back; the oracle it is
+    // held to is the same eight streams, whose radiance it rebuilds.
     const albedo = 0.9
     const g = 0.75
-    const streams = 16
+    const streams = 8
     const moments = henyeyGreensteinMoments(g, 200)
     const grid: SourceGrid = { ...AXES, nodes: 32 }
     const quadrature = slabNodes(streams)
-    const picks = [1, 4, 6]
+    const picks = [0, 2, 3]
     const bearing = [0, 7, 15]
     const kept = new Map<string, number[]>()
     const terms = sourceTerms(
@@ -149,7 +151,7 @@ describe('the source the oracle is cut into', () => {
             for (const a of bearing) {
               const key = `${cell.sun} ${i} ${a}`
               const along = kept.get(key) ?? []
-              // Upward directions follow the eight downward ones.
+              // Upward directions follow the four downward ones.
               along[cell.top] = source[(streams / 2 + i) * 16 + a]!
               kept.set(key, along)
             }
@@ -170,7 +172,7 @@ describe('the source the oracle is cut into', () => {
       suns,
       views,
       azimuths,
-      streams: 64,
+      streams,
     })
     suns.forEach((sun, s) =>
       views.forEach((mu, v) =>
@@ -197,11 +199,15 @@ describe('the source the oracle is cut into', () => {
               phaseOf(moments, nu) *
               firstOrder(128, sun, mu, 'reflected') +
             sum
-          // The bound is the chord between thirty-two nodes; measured,
-          // 0.3% at worst, at the most grazing view.
+          // The bound is the chord between thirty-two nodes: measured,
+          // 0.17% at worst. With a term left out the worst case is 6.8%
+          // (the delta's share of the light going the eye's way), 1.8%
+          // (first order of the beam the delta feeds) and 0.7% (first
+          // order's correction). The eye here is above the slab, so it is
+          // the upward half of each that is held.
           expect(
             Math.abs(rebuilt / oracle.reflected[(s * 3 + v) * 3 + at]! - 1),
-          ).toBeLessThan(0.005)
+          ).toBeLessThan(0.003)
         }),
       ),
     )

@@ -901,9 +901,13 @@ export function gloryStage(
 
 /* -------------------------------------------------------------- the files */
 
-const DATA = fileURLToPath(
-  new URL('../../../../.data/weather/slab/', import.meta.url),
-)
+/**
+ * Where the stages are kept. `IR_SLAB_DATA` names another directory, so two
+ * whole runs can stand side by side and be compared.
+ */
+const DATA =
+  process.env.IR_SLAB_DATA ??
+  fileURLToPath(new URL('../../../../.data/weather/slab/', import.meta.url))
 const RENDERING = fileURLToPath(
   new URL('../../../../packages/rendering/src/', import.meta.url),
 )
@@ -956,23 +960,225 @@ export function stageTable(
   }
 }
 
+/**
+ * A header: runs of lines are paragraphs, filled to 76 columns, so a figure
+ * of any length leaves no line long; an empty line parts two paragraphs,
+ * and a line that starts with two spaces is kept as it is written.
+ */
 function comment(lines: readonly string[]): string {
+  const out: string[] = []
+  let words: string[] = []
+  const fill = (): void => {
+    let line = ''
+    for (const word of words) {
+      if (line !== '' && line.length + 1 + word.length > 76) {
+        out.push(line)
+        line = word
+      } else line = line === '' ? word : `${line} ${word}`
+    }
+    if (line !== '') out.push(line)
+    words = []
+  }
+  for (const line of lines) {
+    if (line === '' || line.startsWith('  ')) {
+      fill()
+      out.push(line)
+    } else words.push(...line.split(' '))
+  }
+  fill()
   return (
     '/*\n' +
-    lines.map((line) => (line ? ` * ${line}` : ' *')).join('\n') +
+    out.map((line) => (line ? ` * ${line}` : ' *')).join('\n') +
     '\n */\n'
   )
 }
 
-/** A row as one line of the generated file. */
-function rowText(row: ReferenceRow): string {
-  const triple = (values: Triple): string => `[${values.map(five).join(', ')}]`
+/**
+ * Numbers as a generated file holds them: text, parsed where the file is
+ * read. An array literal of thirty thousand numbers is thirty thousand
+ * operands to the complexity score, and a number a line is thirty thousand
+ * lines to it: either way it reads a table as the most complex file in the
+ * tree.
+ */
+function numbersText(values: readonly number[], perLine: number): string {
+  const lines: string[] = []
+  for (let at = 0; at < values.length; at += perLine)
+    lines.push(values.slice(at, at + perLine).join(' '))
+  return '`\n' + lines.join('\n') + '\n`'
+}
+
+/** Records as a generated file holds them, for the same reason: JSON text, a record a line. */
+function recordsText(records: readonly object[]): string {
   return (
-    `{ radius: ${row.radius}, depth: ${row.depth}, sunMu: ${row.sunMu}, viewMu: ${row.viewMu}, ` +
-    `azimuth: ${row.azimuth}, side: '${row.side}', set: '${row.set}', ` +
-    `angle: ${Number(row.angle.toFixed(1))}, domain: ${row.domain}, ` +
-    `scaled: ${triple(row.scaled)}, first: ${triple(row.first)}, truth: ${triple(row.truth)} },`
+    '`[\n' +
+    records.map((record) => JSON.stringify(record)).join(',\n') +
+    '\n]`'
   )
+}
+
+/** The parser a generated file carries for `numbersText`. */
+const NUMBERS_TEXT = [
+  '/** The numbers a block of text holds, a row a line. */',
+  'function numbers(text: string): readonly number[] {',
+  '  return text.trim().split(/\\s+/).map(Number)',
+  '}',
+  '',
+]
+
+/**
+ * The rows as the generated file holds them: the domain's axes once, and
+ * nine radiances a row. Written out a row an object the file is a megabyte
+ * that every importer of the rendering package parses; this is a third of
+ * it, and the file rebuilds the rows where it is read.
+ */
+function rowsText(rows: readonly ReferenceRow[]): string[] {
+  const pairs = slabPairs()
+  const sides = ['reflected', 'transmitted'] as const
+  const { radii, views, azimuths } = SLAB_DOMAIN
+  const angles: number[] = []
+  const radiance: number[] = []
+  let domain = ''
+  let at = 0
+  radii.forEach((radius, r) => {
+    for (const pair of pairs)
+      for (const side of sides)
+        for (const viewMu of views)
+          for (const azimuth of azimuths) {
+            const row = rows[at]
+            // The layout is the stages' own order; a row out of it is a
+            // table whose radiances would be read at the wrong geometry.
+            if (
+              row === undefined ||
+              row.radius !== radius ||
+              row.depth !== pair.depth ||
+              row.sunMu !== pair.sunMu ||
+              row.set !== pair.set ||
+              row.side !== side ||
+              row.viewMu !== viewMu ||
+              row.azimuth !== azimuth
+            )
+              throw new Error(
+                `slabTables: row ${at} is not where the layout puts it`,
+              )
+            if (r === 0) {
+              angles.push(Number(row.angle.toFixed(1)))
+              domain += row.domain ? '1' : '0'
+            }
+            radiance.push(
+              ...row.scaled.map(five),
+              ...row.first.map(five),
+              ...row.truth.map(five),
+            )
+            at += 1
+          }
+  })
+  if (at !== rows.length)
+    throw new Error(
+      `slabTables: ${rows.length} rows where the layout holds ${at}`,
+    )
+  return [
+    `const RADII = ${JSON.stringify(radii)} as const`,
+    `const VIEWS = ${JSON.stringify(views)} as const`,
+    `const AZIMUTHS = ${JSON.stringify(azimuths)} as const`,
+    "const SIDES = ['reflected', 'transmitted'] as const",
+    '/** The domain’s slabs: an unscaled depth, a sun’s cosine, and the set the slab is in. */',
+    `const SLABS = ${JSON.stringify(pairs.map((pair) => [pair.depth, pair.sunMu, pair.set]))} as const`,
+    ...NUMBERS_TEXT,
+    '/** Each geometry’s scattering angle, degrees, laid out [slab][side][view][azimuth]. */',
+    `const ANGLES = /*@__PURE__*/ numbers(${numbersText(angles, 25)})`,
+    '/** On the same layout: 1 where the rubric’s domain holds the geometry. */',
+    `const DOMAIN = '${domain}'`,
+    '/**',
+    ' * `scaled`, `first` and `truth`, three bands each, laid out',
+    ' * [radius][slab][side][view][azimuth]: a line is one face of one slab.',
+    ' */',
+    // A line is one face of one slab at one radius: twenty-five rows.
+    `const RADIANCE = /*@__PURE__*/ numbers(${numbersText(radiance, 225)})`,
+    '',
+    'interface SlabReferenceRow {',
+    '  readonly radius: number',
+    '  readonly depth: number',
+    '  readonly sunMu: number',
+    '  readonly viewMu: number',
+    '  readonly azimuth: number',
+    "  readonly side: 'reflected' | 'transmitted'",
+    "  readonly set: 'grid' | 'held' | 'thin'",
+    '  readonly angle: number',
+    '  readonly domain: boolean',
+    '  readonly scaled: readonly [number, number, number]',
+    '  readonly first: readonly [number, number, number]',
+    '  readonly truth: readonly [number, number, number]',
+    '}',
+    '',
+    '/** A slab’s reflected flux over the flux arriving, a band a channel. */',
+    'interface SlabReferenceFlux {',
+    '  readonly radius: number',
+    '  readonly depth: number',
+    '  readonly sunMu: number',
+    "  readonly set: 'grid' | 'held' | 'thin'",
+    '  /** The renderer’s medium, the part of it that is first order, and the true medium. */',
+    '  readonly scaled: readonly [number, number, number]',
+    '  readonly first: readonly [number, number, number]',
+    '  readonly truth: readonly [number, number, number]',
+    '}',
+    '',
+    '/** One traced direction under one sun: radiance per unit of the sun’s irradiance, in one band. */',
+    'interface SlabMonteCarloRow {',
+    '  readonly radius: number',
+    '  /** The band’s index: 0 is 680 nm. */',
+    '  readonly band: number',
+    '  readonly depth: number',
+    '  readonly sunMu: number',
+    '  readonly viewMu: number',
+    '  readonly azimuth: number',
+    "  readonly side: 'reflected' | 'transmitted'",
+    '  readonly domain: boolean',
+    '  readonly paths: number',
+    '  /** The trace’s mean and its standard error. */',
+    '  readonly mean: number',
+    '  readonly error: number',
+    '  /** Adding-doubling on the true medium, and on the renderer’s. */',
+    '  readonly oracle: number',
+    '  readonly scaled: number',
+    '}',
+    '',
+    '/** The rows, rebuilt from the axes and the radiances. */',
+    'function slabReferenceRows(): SlabReferenceRow[] {',
+    '  const rows: SlabReferenceRow[] = []',
+    '  const triple = (at: number): [number, number, number] => [',
+    '    RADIANCE[at]!,',
+    '    RADIANCE[at + 1]!,',
+    '    RADIANCE[at + 2]!,',
+    '  ]',
+    '  let at = 0',
+    '  for (const radius of RADII) {',
+    '    let geometry = 0',
+    '    for (const [depth, sunMu, set] of SLABS)',
+    '      for (const side of SIDES)',
+    '        for (const viewMu of VIEWS)',
+    '          for (const azimuth of AZIMUTHS) {',
+    '            rows.push({',
+    '              radius,',
+    '              depth,',
+    '              sunMu,',
+    '              viewMu,',
+    '              azimuth,',
+    '              side,',
+    '              set,',
+    '              angle: ANGLES[geometry]!,',
+    "              domain: DOMAIN[geometry] === '1',",
+    '              scaled: triple(at),',
+    '              first: triple(at + 3),',
+    '              truth: triple(at + 6),',
+    '            })',
+    '            at += 9',
+    '            geometry += 1',
+    '          }',
+    '  }',
+    '  return rows',
+    '}',
+    '',
+  ]
 }
 
 /** What `write` gathers before it writes anything. */
@@ -1028,12 +1234,12 @@ export function decide(inputs: SlabInputs): SlabVerdict {
     ),
   )
   // The smaller worst error draws (the design's §7.4); among tables within
-  // a tenth of a point of it, the fewest nodes.
+  // a point of it, the fewest nodes, which is the design's rule for a count.
   const lobed = candidates.filter((item) => !item.fit.endsWith('Plain'))
   const best = Math.min(...lobed.map((item) => item.judged.error))
   const winner = lobed
-    .filter((item) => item.judged.error <= best + 0.001)
-    .sort((a, b) => a.nodes - b.nodes)[0]!
+    .filter((item) => item.judged.error <= best + 0.01)
+    .sort((a, b) => a.nodes - b.nodes || a.judged.error - b.judged.error)[0]!
   const beside = (fit: string): Reconstruction =>
     candidates.find((item) => item.nodes === winner.nodes && item.fit === fit)!
       .judged
@@ -1105,7 +1311,8 @@ export function referenceText(
     `${references.map((stage) => stage.digest).join(', ')}. First order reads the phase`,
     'function through a sun’s disk of 959.63″.',
     '',
-    '`rows` are one geometry each, at an unscaled optical depth `depth`: `truth`',
+    '`rows` are one geometry each, rebuilt from the axes and the radiances below',
+    'where this file is read, at an unscaled optical depth `depth`: `truth`',
     `is the true medium, the whole Mie phase at that depth, at ${references[0]!.streams.truth} streams;`,
     '`scaled` is the renderer’s medium, at the depth (1 − f_δ)·`depth`: the',
     `scaled phase’s orders past the first, at ${references[0]!.streams.scaled} streams, under first order on the`,
@@ -1138,6 +1345,7 @@ export function referenceText(
     `${glory.oracle.toFixed(3)} by the oracle on the true medium and ${glory.scaled.toFixed(3)} on the renderer’s.`,
   ]
   const body = [
+    ...rowsText(rows),
     'export const SLAB_REFERENCE = {',
     "  format: 'inertialref/slab-reference',",
     '  version: 1,',
@@ -1152,49 +1360,29 @@ export function referenceText(
         })),
       ) +
       ',',
-    '  // prettier-ignore',
-    '  rows: [',
-    ...rows.map((row) => '    ' + rowText(row)),
-    '  ] as readonly {',
-    '    readonly radius: number',
-    '    readonly depth: number',
-    '    readonly sunMu: number',
-    '    readonly viewMu: number',
-    '    readonly azimuth: number',
-    "    readonly side: 'reflected' | 'transmitted'",
-    "    readonly set: 'grid' | 'held' | 'thin'",
-    '    readonly angle: number',
-    '    readonly domain: boolean',
-    '    readonly scaled: readonly [number, number, number]',
-    '    readonly first: readonly [number, number, number]',
-    '    readonly truth: readonly [number, number, number]',
-    '  }[],',
-    '  reflected: ' +
-      JSON.stringify(
-        references.flatMap((stage) =>
-          stage.fluxes.map((flux) => ({
-            ...flux,
-            scaled: flux.scaled.map(five),
-            first: flux.first.map(five),
-            truth: flux.truth.map(five),
-          })),
-        ),
-      ) +
-      ',',
+    '  rows: /*@__PURE__*/ slabReferenceRows() as readonly SlabReferenceRow[],',
+    `  reflected: /*@__PURE__*/ JSON.parse(${recordsText(
+      references.flatMap((stage) =>
+        stage.fluxes.map((flux) => ({
+          ...flux,
+          scaled: flux.scaled.map(five),
+          first: flux.first.map(five),
+          truth: flux.truth.map(five),
+        })),
+      ),
+    )}) as readonly SlabReferenceFlux[],`,
     `  sunMus: ${JSON.stringify(FLUX_AXES.sunMus)},`,
     `  depths: ${JSON.stringify(FLUX_AXES.depths)},`,
     `  flux: ${JSON.stringify(inputs.flux.map(five))},`,
-    '  monteCarlo: ' +
-      JSON.stringify(
-        monteCarlo.map((row) => ({
-          ...row,
-          mean: five(row.mean),
-          error: Number(row.error.toPrecision(3)),
-          oracle: five(row.oracle),
-          scaled: five(row.scaled),
-        })),
-      ) +
-      ',',
+    `  monteCarlo: /*@__PURE__*/ JSON.parse(${recordsText(
+      monteCarlo.map((row) => ({
+        ...row,
+        mean: five(row.mean),
+        error: Number(row.error.toPrecision(3)),
+        oracle: five(row.oracle),
+        scaled: five(row.scaled),
+      })),
+    )}) as readonly SlabMonteCarloRow[],`,
     '  glory: ' +
       JSON.stringify({
         ...glory,
@@ -1242,7 +1430,8 @@ export function sourceText(verdict: SlabVerdict): string {
     '1, and `nodes` each of u(t_b) and u(t_d), the transport depth from the far',
     'face and from the lit one, t = (1 − g′)·τ′ with g′ = (g − f_δ)/(1 − f_δ) at',
     'the sample’s own radius, on u(t) = ln(1 + t/depthScale)/ln(1 + depthMax/depthScale).',
-    'A value is a half float’s, printed as the shortest decimal that rounds to it.',
+    'A value is a half float’s, printed as the shortest decimal that rounds to it,',
+    'twelve to a line: four nodes of the top axis, three terms each.',
     '',
     '`reconstructionError` is the worst relative error of a slab’s leaving',
     'radiance rebuilt through this table’s own trilinear read, first order',
@@ -1254,12 +1443,13 @@ export function sourceText(verdict: SlabVerdict): string {
     'reflected flux, the higher orders summed at eight Gauss points in μ and',
     `sixteen azimuths; and ${percent(verdict.withoutLobe.error)} in radiance without the lobe.`,
     '',
-    `\`alternate\` is the same table by the ${verdict.alternate.fit} measure, whose worst error is`,
+    `\`SLAB_SOURCE_ALTERNATE\` is the same table by the ${verdict.alternate.fit} measure, whose worst error is`,
     `${percent(verdict.alternate.judged.error)} (${percent(verdict.alternate.judged.rms)} root mean square, ${percent(verdict.alternate.judged.flux)} in the flux): the measure with`,
     'the smaller worst error is `terms`. The candidates’ worst errors, by node',
     `count and measure: ${others}.`,
   ]
   const body = [
+    ...NUMBERS_TEXT,
     'export const SLAB_SOURCE = {',
     "  format: 'inertialref/slab-source',",
     '  version: 1,',
@@ -1286,12 +1476,17 @@ export function sourceText(verdict: SlabVerdict): string {
         withoutLobe: Number(verdict.withoutLobe.error.toPrecision(4)),
       }) +
       ',',
-    `  terms: ${JSON.stringify(Array.from(table.terms))} as readonly number[],`,
-    '  alternate: {',
-    `    fit: '${verdict.alternate.fit}',`,
-    `    reconstructionError: ${Number(verdict.alternate.judged.error.toPrecision(4))},`,
-    `    terms: ${JSON.stringify(Array.from(stageTable(stage, verdict.alternate.fit).terms))} as readonly number[],`,
-    '  },',
+    `  terms: /*@__PURE__*/ numbers(${numbersText(Array.from(table.terms), 12)}),`,
+    '} as const',
+    '',
+    '/**',
+    ` * The same table by the ${verdict.alternate.fit} measure, on the same layout: a constant of`,
+    ' * its own, so that a build that draws with `SLAB_SOURCE` does not carry it.',
+    ' */',
+    'export const SLAB_SOURCE_ALTERNATE = {',
+    `  fit: '${verdict.alternate.fit}',`,
+    `  reconstructionError: ${Number(verdict.alternate.judged.error.toPrecision(4))},`,
+    `  terms: /*@__PURE__*/ numbers(${numbersText(Array.from(stageTable(stage, verdict.alternate.fit).terms), 12)}),`,
     '} as const',
     '',
   ]
