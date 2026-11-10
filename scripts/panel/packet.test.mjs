@@ -7,13 +7,16 @@ import sharp from 'sharp'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { CORNERSTONES } from '../../packages/devtools/src/index.ts'
 import { RIG, STILLS } from '../weather/capture.mjs'
+import { provenance, role } from '../weather/sheet.mjs'
 import {
   adaptBaseline,
   buildRound,
   canonical,
   checkArm,
+  gather,
   GROUND,
   layouts,
+  OVERLAY_GUARD,
   parseAnchors,
   parseReferences,
   platesOf,
@@ -33,7 +36,11 @@ const references = parseReferences(
 
 describe('crops.json', () => {
   it('gives every still cornerstone a crop inside its frame, and E2 a terminator', () => {
-    expect(Object.keys(crops).sort()).toEqual([...STILLS].sort())
+    // The overlay guard is taken as a still and judged as a pair, on
+    // Integration and Artifacts over the whole plate: it has no crop.
+    expect(Object.keys(crops).sort()).toEqual(
+      STILLS.filter((id) => id !== OVERLAY_GUARD).sort(),
+    )
     for (const [id, named] of Object.entries(crops)) {
       expect(Object.keys(named)[0], id).toBe('crop')
       for (const crop of Object.values(named)) {
@@ -271,7 +278,22 @@ beforeAll(async () => {
     references: referencesSha,
     stills: [],
   }
-  const candidate = { commit: 'c1', clean: true, rig: RIG, stills: [] }
+  // The candidate is a record as the capture writes it: each still carries
+  // its provenance and its role from `sheet.mjs`'s own builders.
+  const run = {
+    commit: 'c1',
+    clean: true,
+    fixtures: { references: referencesSha, cornerstones: 'x' },
+  }
+  const candidate = { ...run, phase: 1, rig: RIG, stills: [], casts: [] }
+  const taken = (id, read, as) => provenance(run, id, read, role(as))
+  const pageOf = (id, levers) => ({
+    stance: { address: `g:${id}`, state: {}, look: {}, surface: null },
+    lens: { focalLength: 20 },
+    time: 0,
+    processing: 'enhanced',
+    clouds: levers && { levers, extents: { render: [2880, 1800] } },
+  })
   for (const [i, tag] of TAGS.entries()) {
     const levers = { on: true, scenario: tag }
     baseline.stills.push({
@@ -292,13 +314,30 @@ beforeAll(async () => {
       id: ID[tag],
       arm: 'volume',
       ...(await plate(`${tag}-cand.png`, [120, 120, 20 * i])),
-      role: 'candidate',
-      stance: { id: ID[tag] },
-      fixtures: { references: referencesSha, cornerstones: 'x' },
-      processing: 'enhanced',
-      levers: `levers-${tag}`,
+      ...taken(ID[tag], pageOf(ID[tag], levers), 'candidate'),
     })
   }
+  // The overlay guard as the capture takes it: a guard pair in the volume
+  // arm and its first accepted plate, the deck, beside it.
+  const guard = { ...candidate, stills: [] }
+  guard.stills.push(
+    {
+      id: OVERLAY_GUARD,
+      arm: 'volume',
+      ...(await plate('guard-volume.png', [200, 90, 90])),
+      ...taken(
+        OVERLAY_GUARD,
+        pageOf(OVERLAY_GUARD, { on: true }),
+        'guard-pair',
+      ),
+    },
+    {
+      id: OVERLAY_GUARD,
+      arm: 'deck',
+      ...(await plate('guard-deck.png', [90, 90, 200])),
+      ...taken(OVERLAY_GUARD, pageOf(OVERLAY_GUARD, null), 'deck'),
+    },
+  )
   await writeFile(path.join(plates, 'baseline.json'), JSON.stringify(baseline))
   await writeFile(
     path.join(plates, 'candidate.json'),
@@ -307,6 +346,8 @@ beforeAll(async () => {
   fx = {
     dir,
     baselineRecord: baseline,
+    candidateRecord: candidate,
+    guardRecord: guard,
     referencesSha,
     pattern,
     options: (out, kind, seed = 'fixture') => ({
@@ -355,14 +396,16 @@ describe('the record reader', () => {
     expect(supplied.map((line) => line.split(':')[0]).sort()).toEqual(
       [...PROVENANCE].sort(),
     )
-    const plates = platesOf(record, path.join(fx.dir, 'plates/baseline.json'))
+    const plates = platesOf(record, path.join(fx.dir, 'plates/baseline.json'), {
+      adapted: true,
+    })
     expect(plates.map((p) => [p.picture, p.role])).toContainEqual([
       ID.e1,
       'deck',
     ])
     expect(plates.find((p) => p.role === 'low-anchor')).toMatchObject({
       processing: 'enhanced',
-      levers: expect.stringMatching(/^[0-9a-f]{64}$/),
+      levers: { hash: expect.stringMatching(/^[0-9a-f]{64}$/), size: null },
       stance: { id: ID.e1 },
     })
     expect(plates.find((p) => p.role === 'deck').levers).toBeNull()
@@ -371,24 +414,59 @@ describe('the record reader', () => {
     ).toThrow(/roles already/)
   })
 
-  it('refuses a plate whose record lacks a field', () => {
-    const record = {
-      rig: RIG,
-      commit: 'c',
-      clean: true,
-      stills: [
-        {
-          id: ID.g1,
-          arm: 'volume',
-          file: 'x.png',
-          role: 'candidate',
-          stance: { id: ID.g1 },
-          fixtures: {},
-          processing: 'enhanced',
-        },
-      ],
+  it('reads a capture record as written: the role by name, the levers as their hash and size', () => {
+    const plates = platesOf(fx.candidateRecord, '/r.json')
+    expect(plates).toHaveLength(TAGS.length)
+    for (const plate of plates) {
+      expect(plate.role).toBe('candidate')
+      expect(plate.levers).toEqual({
+        hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        size: [2880, 1800],
+      })
+      expect(plate.stance.id).toBe(plate.picture)
+      expect(plate.processing).toBe('enhanced')
     }
-    expect(() => platesOf(record, '/r.json')).toThrow(/has no levers/)
+  })
+
+  it('refuses a plate whose record lacks a field, by the capture’s own check', () => {
+    const [first] = fx.candidateRecord.stills
+    const { levers: _, ...take } = first
+    const record = { ...fx.candidateRecord, stills: [take] }
+    expect(() => platesOf(record, '/r.json')).toThrow(
+      /\/r\.json: weather-e1-cumulus-orbit \(volume\): .*carries no levers/,
+    )
+    const named = { ...first, role: 'candidate' }
+    expect(() =>
+      platesOf({ ...fx.candidateRecord, stills: [named] }, '/r.json'),
+    ).toThrow(/its role undefined is not one of the record's/)
+  })
+
+  it('finds the overlay guard by its id, its deck the old plate and its volume the new', () => {
+    const inputs = [{ file: '/g.json', record: fx.guardRecord, as: 'record' }]
+    const [scene] = gather(inputs, {
+      kind: 'judged',
+      only: null,
+      references: fx.referencesSha,
+    })
+    expect(scene).toMatchObject({
+      picture: OVERLAY_GUARD,
+      tag: null,
+      kind: 'guard',
+    })
+    expect(scene.arms.new.role).toBe('guard-pair')
+    expect(scene.arms.old.role).toBe('deck')
+    // A moved guard's last accepted plate, named, stands as the old plate.
+    const base = {
+      ...fx.guardRecord,
+      commit: 'c0',
+      stills: fx.guardRecord.stills.filter((one) => one.arm === 'volume'),
+    }
+    const [moved] = gather(
+      [...inputs, { file: '/base.json', record: base, as: 'guard-base' }],
+      { kind: 'judged', only: null, references: fx.referencesSha },
+    )
+    expect(moved.arms.old.record).toBe('/base.json')
+    expect(moved.arms.new.record).toBe('/g.json')
   })
 
   it('refuses a plate with the wrong role, rig, stance, fixtures or processing for its arm', () => {

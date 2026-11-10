@@ -38,12 +38,13 @@
  * low anchor and a withheld photograph in every scene, because what it
  * fixes the bar from is those and the real-time anchor stills (§3.5).
  *
- * **Plates come from capture records** (design §3.8), read field by field:
- * a plate with no commit, stance, fixtures, processing, levers or role is
- * refused, and so is one whose role, rig, stance, fixtures or processing
- * cannot stand in its arm. Phase 0's baseline record predates the role and
- * the provenance; `adaptBaseline` supplies them and names each field it
- * supplied, and `round.json` carries that list.
+ * **Plates come from capture records** (design §3.8), read as the capture
+ * writes them: each still is refused by the capture's own `checkTake`, so
+ * the record's form is decided in one place, and a plate is refused when
+ * its role, rig, stance, fixtures or processing cannot stand in its arm.
+ * Phase 0's baseline record predates the role and the provenance;
+ * `adaptBaseline` supplies them and names each field it supplied, and
+ * `round.json` carries that list.
  */
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -54,6 +55,7 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { CORNERSTONES } from '../../packages/devtools/src/index.ts'
 import { RIG, STILLS, tagOf } from '../weather/capture.mjs'
+import { checkTake } from '../weather/sheet.mjs'
 import { HARNESS_FILES, PICTURES, rulesOf, skeletonOf } from './validate.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
@@ -239,9 +241,28 @@ export function parseAnchors(text) {
 
 // ------------------------------------------------------------------ records
 
-/** One plate per still of a record, its provenance read field by field. */
-export function platesOf(record, file) {
+/**
+ * A record's levers as `{ hash, size }`: the capture writes that, and the
+ * baseline adapter a bare hash with no size, which is read as one. The
+ * deck's null stays null.
+ */
+const leversOf = (levers) =>
+  typeof levers === 'string' ? { hash: levers, size: null } : levers
+
+/**
+ * One plate per still of a record, its provenance read field by field. A
+ * capture record's stills are held to `checkTake` first; `adapted` names
+ * the baseline adapter's record, whose role and levers are the adapter's
+ * own and which `checkTake` would refuse for that alone.
+ */
+export function platesOf(record, file, { adapted = false } = {}) {
   return record.stills.map((still) => {
+    if (!adapted)
+      try {
+        checkTake(still)
+      } catch (error) {
+        throw new Error(`${file}: ${still.id} (${still.arm}): ${error.message}`)
+      }
     const plate = {
       picture: still.id,
       file: path.resolve(path.dirname(file), still.file),
@@ -258,6 +279,8 @@ export function platesOf(record, file) {
       plate[field] = value
     }
     plate.processing = plate.processing?.mode ?? plate.processing
+    plate.role = plate.role?.name ?? plate.role
+    plate.levers = leversOf(plate.levers)
     return plate
   })
 }
@@ -307,11 +330,23 @@ export function adaptBaseline(record, { cornerstones, cornerstonesHash }) {
   return { record: { ...record, stills }, supplied }
 }
 
-/** The arm a plate stands in, by the flag its record came under. */
+/**
+ * A guard is the overlay guard, by its id, or a preset that is no
+ * cornerstone and moved (rubric §3.8). The overlay guard is in `STILLS`,
+ * since the capture takes it as a still, so absence from that list does not
+ * find it.
+ */
+const isGuard = (picture) =>
+  picture === OVERLAY_GUARD || !STILLS.includes(picture)
+
+/**
+ * The arm a plate stands in, by the flag its record came under. A guard's
+ * deck plate is its first accepted plate (design §3.8), so it stands as the
+ * old plate beside the volume's new one until a `--guard-base` names a later.
+ */
 function armOf(plate, as) {
-  const guard = !STILLS.includes(plate.picture)
   if (as === 'guard-base') return 'old'
-  if (guard) return 'new'
+  if (isGuard(plate.picture)) return plate.role === 'deck' ? 'old' : 'new'
   if (as === 'experiment') return 'experiment'
   return plate.role
 }
@@ -349,13 +384,17 @@ export function checkArm(plate, arm, { references }) {
  */
 export function gather(inputs, { kind, only, references }) {
   const deckNamed = inputs.some((input) => input.as === 'deck')
+  const guardBased = inputs.some((input) => input.as === 'guard-base')
   const scenes = new Map()
-  for (const { file, record, as } of inputs) {
-    for (const plate of platesOf(record, file)) {
+  for (const { file, record, as, supplied } of inputs) {
+    const adapted = supplied !== undefined
+    for (const plate of platesOf(record, file, { adapted })) {
       const arm = armOf(plate, as)
       if (deckNamed && arm === 'deck' && as !== 'deck') continue
       if (as === 'deck' && arm !== 'deck') continue
-      const tag = STILLS.includes(plate.picture) ? tagOf(plate.picture) : null
+      // A guard's last accepted plate, named, stands in place of its first.
+      if (guardBased && arm === 'old' && as !== 'guard-base') continue
+      const tag = isGuard(plate.picture) ? null : tagOf(plate.picture)
       if (tag && only && !only.includes(tag)) continue
       checkArm(plate, arm, { references })
       const scene = scenes.get(plate.picture) ?? {
