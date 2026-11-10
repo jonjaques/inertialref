@@ -360,6 +360,8 @@ describe('the subjects', () => {
     expect(ANALYTIC_SAMPLES).toBe(4096)
   })
 
+  // 4.7 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 18 s. Five times that.
   it('find one cloud of today’s field that stands clear of its grid', () => {
     // The search at a sixth of its resolution, which a test can afford: the
     // reference's own is 2.5 million evaluations of the field.
@@ -393,7 +395,7 @@ describe('the subjects', () => {
         j === ny - 1
       if (shell) expect(value).toBe(0)
     })
-  })
+  }, 100_000)
 })
 
 describe('the renderer’s scaled medium', () => {
