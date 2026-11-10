@@ -48,7 +48,10 @@ storage textures by default, and three asks for no more. And three's
 passes after every compute write.
 
 Phase 0 built A and B whole, priced C with B's split run empty, measured them
-on the Mac mini by a rule fixed before any figure existed, and deleted B.
+on the Mac mini by a rule fixed before any figure existed, and deleted B. The
+rule's GPU clause keeps A. Its CPU clause, as fixed, fires in two cells, and A
+stands as the exception §8.7 allows only with figures, provisional on the CPU
+evidence (The placement, below).
 
 ## Decision
 
@@ -317,27 +320,56 @@ spread is 0.47. The two repeats read the same: at Retina, B then A, 6.87 and
 on `inside`, 5.67 and 5.69 against 5.67 and 5.68 on `orbit`. Across all three
 sets no cell moves by more than 0.14 ms.
 
-**The CPU clause fires in no cell, and one cell is at its edge.** It was read
-on three samples a cell, by a reading fixed before the repeats arrived: the
-`sensor` clause fires if A's mean exceeds B's by more than 0.3 ms and by more
-than twice the larger sample standard deviation; the late-frame clause if A's
-median exceeds B's by more than 2 and A's least exceeds B's greatest.
+**The CPU clause, as fixed, fires in two cells.** Each cell has three samples:
+campaign 1's row and two repeats. Clouds on, A against B:
 
-| Cell              | `sensor` mean, A − B, ms | Twice the larger deviation, ms | Late frames in 3 s, median, A / B |
-| ----------------- | ------------------------ | ------------------------------ | --------------------------------- |
-| `horizon`, 1080p  | +0.16                    | 0.45                           | 0 / 0                             |
-| `inside`, 1080p   | +0.00                    | 2.64                           | 0 / 0                             |
-| `orbit`, 1080p    | +0.03                    | 3.70                           | 0 / 0                             |
-| `horizon`, Retina | −0.13                    | 0.30                           | 0 / 0                             |
-| `inside`, Retina  | **+3.22**                | **3.28**                       | 21 / 25                           |
-| `orbit`, Retina   | −0.17                    | 0.24                           | 0 / 0                             |
+| Cell              | `sensor` mean, A − B, each sample, ms | Their mean, ms | Late frames in 3 s, A / B, each sample | Fires as fixed                          |
+| ----------------- | ------------------------------------- | -------------- | -------------------------------------- | --------------------------------------- |
+| `horizon`, 1080p  | +0.28, +0.10, +0.10                   | +0.16          | **18 / 0**, 0 / 0, 0 / 0               | **Late frames, in campaign 1's sample** |
+| `inside`, 1080p   | −0.18, −0.03, +0.21                   | +0.00          | 1 / 0, 0 / 0, 0 / 0                    | No                                      |
+| `orbit`, 1080p    | +0.09, +0.22, −0.23                   | +0.03          | 0 / 0, 0 / 0, 0 / 0                    | No                                      |
+| `horizon`, Retina | −0.29, −0.27, +0.17                   | −0.13          | 0 / 0, 0 / 0, 0 / 1                    | No                                      |
+| `inside`, Retina  | **+1.51, +3.51, +4.64**               | **+3.22**      | 21 / 28, 20 / 19, 25 / 25              | **`sensor`, in every sample**           |
+| `orbit`, Retina   | −0.31, −0.22, +0.01                   | −0.17          | 0 / 0, 0 / 0, 0 / 0                    | No                                      |
 
 - **At Retina inside a cloud, A's `sensor` mean is above B's in all three
-  samples:** 10.71, 13.63 and 11.57 ms against 9.20, 10.12 and 6.93. The mean
-  difference is 0.06 ms short of twice the spread. The frames delivered in the
-  window are the same, 132, 133 and 132 against 130, 131 and 130, and A's late
-  frames are 21, 20 and 25 against B's 28, 19 and 25. Three samples do not
-  settle whether A's second traversal of the scene costs the main thread there.
+  samples:** 10.71, 13.63 and 11.57 ms against 9.20, 10.12 and 6.93, which is
+  ten times the clause's 0.3 ms on their mean.
+- **On `horizon` at 1080p, campaign 1's sample counts 18 late frames under A
+  against none under B,** which is the late-frame clause's 2 nine times over.
+  Neither repeat counts one under either placement.
+- **This record first read the clause with two conditions §8.7 does not
+  state:** the `sensor` clause only where A's mean also exceeds twice the
+  larger of the two placements' sample standard deviations, and the
+  late-frame clause only where A's median exceeds B's by more than 2 and A's
+  least exceeds B's greatest. That reading was fixed after campaign 1's result
+  was in hand and before the repeats arrived. Under it no cell fires, and
+  Retina inside a cloud clears by 0.06 ms: 3.22 against 3.28, on samples
+  pooled across two presentation rates. On the paired differences' own
+  standard deviation, 1.58 ms, twice is 3.17, and the cell does not clear.
+
+**A stands as an exception, provisional on the CPU evidence.** The figures
+that argue for it:
+
+- **The GPU cost is equal.** B is cheaper in no cell by more than the
+  resolution, above.
+- **The longer span is not shown to cost a frame.** In the cell where the
+  `sensor` clause fires, A delivers 132, 133 and 132 frames in the 3 s window
+  against B's 130, 131 and 130, and its late frames, 21, 20 and 25, are no
+  worse than B's 28, 19 and 25.
+- **The 18 late frames did not recur.** Both repeats of that row count 0
+  under A and 0 under B.
+- **The 1080p cells show no difference in the span:** the three means are
+  +0.16, +0.00 and +0.03 ms.
+- **B's own defects stand.** It draws the instruments' inks under the clouds
+  (Alternatives, below), and it reaches under three's public surface. The
+  rule's GPU clause prices the two at 0.2 ms.
+- **The second traversal is not needed on a frame with nothing drawn over the
+  clouds,** and phase 1 takes it off those frames (Consequences).
+
+Phase 1 takes the Retina `inside` cell again at one presentation rate, and
+both placements exist at `25df44ab` for it.
+
 - **The three samples a cell are two presentation rates.** Campaign 1's
   profiles all ran capped at 60 frames a second: the clouds-off side delivered
   179 to 182 frames in every 3 s window at both sizes. The repeats, started by
@@ -347,11 +379,8 @@ median exceeds B's by more than 2 and A's least exceeds B's greatest.
   to 7.12 ms in the campaign and 3.05 to 3.07 in the repeats. `ir.gpu`'s
   difference does not. **The cause of the cap is not established:** neither a
   dark display nor a campaign's detached launch reproduces it.
-- **The clause reads the same on the two repeats alone:** no cell fires.
-- The campaign's `horizon` row at 1080p under A counted 18 late frames, and
-  neither repeat counted one.
-
-Both placements exist at `25df44ab` for anyone who measures that cell again.
+- **On the two repeats alone the `sensor` clause still fires** at Retina
+  inside a cloud, +3.51 and +4.64 ms, and the late-frame clause fires nowhere.
 
 **C is reconsidered in phase 1.** The rule sends it there if the split run
 empty costs over 0.1 ms at Retina, and it costs 2.42 to 2.49 ms, and 0.98 to
@@ -594,9 +623,10 @@ GPU suite. The branch's history holds them.
   `decks`, 7.12 under cumulus, against the ground's 2.9, and 3.03 from orbit
   against 1.6; at Retina 7.70 to 9.79 and 5.54. Campaign 1, at its levers, read
   4.9 to 5.1 on `horizon` and `inside` and 3.1 from orbit. The second scene
-  pass alone spends the orbit row. Phase 1 measures two leaner forms of it:
-  the composite as a term of the sensor's chain on a frame with nothing drawn
-  over the clouds, and a second pass that drops its samples once resolved.
+  pass alone spends the orbit row. A frame with nothing drawn over the clouds
+  needs no second traversal, and phase 1 takes it off those frames by drawing
+  the composite as a term of the sensor's chain there; it also measures a
+  second pass that drops its samples once resolved.
 - **The first frames with the clouds on are a hitch** of 50.80 to 66.80 ms at
   1080p and 75.00 to 92.50 at Retina, the caches' first build. A reset plan
   that covers a cut has to cover the first frame too.
@@ -604,8 +634,11 @@ GPU suite. The branch's history holds them.
   change forgets to mark draws in the first pass, under the composite, and is
   veiled by cloud it stands in front of. That is rule 69, and it applies only
   under the flag.
-- **The CPU cost of the second traversal is not settled.** One cell of six is
-  at the rule's edge on three samples taken at two presentation rates.
+- **A is provisional on the CPU evidence.** The placement rule's CPU clause,
+  as fixed, fires at Retina inside a cloud in all three samples and on
+  `horizon` at 1080p in campaign 1's, and A stands as an argued exception
+  (The placement). Phase 1 takes the Retina cell again at one presentation
+  rate; both placements exist at `25df44ab`.
 - **A reset frame is dear.** ADR-0064 has its figures: the grid's whole
   rebuild is most of it, and the four trace dispatches are the rest.
 - **Declared, and not corrected in phase 0:**
