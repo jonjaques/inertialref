@@ -335,6 +335,14 @@ export async function cloudStep(step) {
         frames,
       }
     },
+    async rate() {
+      // The rate the page presents at, from rAF's own timestamps: the
+      // display's refresh where a frame fits in it, less where it does not.
+      const at = []
+      for (let i = 0; i <= step.frames; i += 1)
+        at.push(await new Promise((done) => requestAnimationFrame(done)))
+      return { hz: (step.frames * 1000) / (at[step.frames] - at[0]) }
+    },
     async verify() {
       set(step.levers)
       const settled = await settle(step.settleCap)
@@ -366,6 +374,14 @@ const js = (tag, step) => ({
 })
 const flag = (tag, ...args) => ({ tag, args })
 const at = { settleCap: SETTLE_CAP }
+/**
+ * Every run reads the rate its page presents at, with the clouds off, before
+ * it measures. Campaign 1's profiles ran capped at 60 Hz where the same rows
+ * by hand ran at 120, and every frame-paced figure moved with it (a base
+ * `sensor` mean of 6.8 ms against 3.1) while `ir.gpu` did not; nothing in the
+ * row said so. 120 frames is a second at the mini's panel.
+ */
+const RATE = js('rate', { kind: 'rate', frames: 120 })
 
 /** Each kind of run's steps after the stance, tagged so a result is found by name. */
 const STEPS = {
@@ -432,6 +448,7 @@ export function plan(run, shots = {}) {
     return [
       install,
       js('boot', { kind: 'boot', label: 'warming the clouds' }),
+      RATE,
       ...(run.flag
         ? [
             js('on', {
@@ -449,6 +466,7 @@ export function plan(run, shots = {}) {
     js('stance', { kind: 'stance', stance: run.stance, levers: run.off }),
     flag('settle', '--settle', '30000'),
     flag('wait', '--wait', '1000'),
+    RATE,
     ...STEPS[run.type](run, shots),
   ]
 }
@@ -601,7 +619,10 @@ export function figures(run, steps, out) {
     kind: run.kind ?? null,
     stance: value('stance') ?? null,
     scene: by.get('settle') ?? null,
-    operatingPoint: out.operatingPoint ?? null,
+    operatingPoint: {
+      ...out.operatingPoint,
+      presentHz: value('rate')?.hz ?? null,
+    },
     errors: out.errors ?? [],
     ...READ[run.type](run, value),
   }
@@ -755,6 +776,39 @@ const STANCE_COLUMNS = [
 
 /** The latest attempt of every run, which is the one its table shows. */
 const latest = (rows) => [...new Map(rows.map((r) => [r.id, r])).values()]
+
+/** Rows of one scenario and size further apart in rate than this, over their median, are two operating points. */
+const RATE_SPREAD = 0.15
+
+/**
+ * The rates a batch's rows presented at, a size at a time, and every scenario
+ * whose rows at one size disagree: a frame time at 60 Hz and one at 120 are
+ * figures about two machines, and a table pools them without a word. The
+ * comparison stays within a scenario, because the rate also falls with the
+ * scene's own load: Retina's clouds-off frames run 65–78 Hz by stance alone.
+ */
+export function rateNote(rows) {
+  const hz = (r) => r.operatingPoint?.presentHz
+  const timed = rows.filter((r) => Number.isFinite(hz(r)))
+  if (timed.length === 0) return 'No row recorded the rate it presented at.'
+  const range = (rs) => {
+    const xs = rs.map(hz)
+    return `${fixed(Math.min(...xs), 0)}–${fixed(Math.max(...xs), 0)} Hz`
+  }
+  const lines = unique(timed.map((r) => r.size)).map(
+    (size) =>
+      `${size}: presented at ${range(timed.filter((r) => r.size === size))}.`,
+  )
+  for (const key of unique(timed.map((r) => `${r.size} ${r.scenario}`))) {
+    const group = timed.filter((r) => `${r.size} ${r.scenario}` === key)
+    const xs = group.map(hz)
+    if ((Math.max(...xs) - Math.min(...xs)) / median(xs) > RATE_SPREAD)
+      lines.push(
+        `${key}: rows at ${range(group)} are two operating points, not one.`,
+      )
+  }
+  return lines.join('\n')
+}
 
 export function tables(doc) {
   const rows = latest(doc.rows)

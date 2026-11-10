@@ -17,11 +17,14 @@
  * A campaign takes hours, and whatever starts it does not last that long: a
  * background command in an agent's harness is stopped at two hours, and a
  * closed terminal takes its jobs with it. So `start` checks what it can and
- * hands the work to a detached process under `caffeinate -dims`, which holds
- * the machine and the display awake: the rig is a real window whose frames
- * follow the display (drive.mjs's header), so a sleeping display would stall
- * every row. Not a LaunchAgent, which outlives the campaign and is a
- * confirm-first change on this machine.
+ * hands the work to a detached process under `caffeinate -dimsu`, which holds
+ * the machine and the display awake. `-d` keeps a lit display lit and does
+ * not wake one already off; `-u` does. The rig is a real window whose frames
+ * follow the display (drive.mjs's header), and a display that is off is no
+ * player's condition, with no evidence that its pacing is the panel's: every
+ * row records the rate it presented at (`page.mjs`), and a batch's tables say
+ * when its rows disagree. Not a LaunchAgent, which outlives the campaign and
+ * is a confirm-first change on this machine.
  *
  * Each batch writes one document, `--resume`d on every attempt, so a stage
  * that stops (exit 1) is continued after `PAUSE_MS` with what it measured
@@ -48,7 +51,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { SIZES, batchRuns } from './measure.mjs'
-import { tables } from './page.mjs'
+import { rateNote, tables } from './page.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const SELF = fileURLToPath(import.meta.url)
@@ -66,44 +69,51 @@ const GPU_WAIT = '1800'
 /** A batch of the runner; `minutes` is the estimate the ETA starts from. */
 const batch = (name, minutes) => ({ name, kind: 'batch', minutes, attempts: 8 })
 
+/** The three opt-in GPU instruments, each against its reference, written to
+ *  `.data/clouds/<name>.json` in place, which is why a campaign's summary
+ *  names whether this campaign wrote each one. */
+const INSTRUMENTS = {
+  name: 'instruments',
+  kind: 'command',
+  minutes: 1,
+  // An instrument that fails its sanity bound fails again, so it gets
+  // one more try for a crash and no more.
+  attempts: 2,
+  command: [
+    'pnpm',
+    'vitest',
+    'run',
+    '--config',
+    'apps/game/vitest.gpu.config.ts',
+    'cloudFarCompare',
+    'cloudSunAccuracy',
+    'cloudCompositeError',
+  ],
+  env: { IR_CLOUD_MEASURE: '1', IR_GPU_WAIT: GPU_WAIT },
+  outputs: ['farCompare', 'sunAccuracy', 'compositeError'].map((n) =>
+    path.join('.data/clouds', `${n}.json`),
+  ),
+}
+
 /**
  * Each campaign: whether it builds always or only a bundle older than HEAD,
- * and its stages. The minutes are 8 November's rates, 0.67 min a 1080p row
- * and 1.5 a Retina one, where a batch was measured, and §8.8's estimate
- * where it was not.
+ * and its stages. The minutes are the measured pace, a row a minute over
+ * both sizes (78 A/B rows in 78 minutes on the mini), where a batch is rows
+ * of that kind, and §8.8's estimate where it is not.
  */
 export const CAMPAIGNS = Object.freeze({
   choices: {
     build: 'stale',
-    stages: [
-      batch('images', 60),
-      {
-        name: 'instruments',
-        kind: 'command',
-        minutes: 10,
-        // An instrument that fails its sanity bound fails again, so it gets
-        // one more try for a crash and no more.
-        attempts: 2,
-        command: [
-          'pnpm',
-          'vitest',
-          'run',
-          '--config',
-          'apps/game/vitest.gpu.config.ts',
-          'cloudFarCompare',
-          'cloudSunAccuracy',
-          'cloudCompositeError',
-        ],
-        env: { IR_CLOUD_MEASURE: '1', IR_GPU_WAIT: GPU_WAIT },
-        outputs: ['farCompare', 'sunAccuracy', 'compositeError'].map((n) =>
-          path.join('.data/clouds', `${n}.json`),
-        ),
-      },
-    ],
+    stages: [batch('images', 60), INSTRUMENTS],
   },
   landed: {
     build: 'always',
-    stages: [batch('targets', 75), batch('memory', 20), batch('error', 20)],
+    stages: [
+      batch('targets', 60),
+      batch('memory', 20),
+      batch('error', 20),
+      INSTRUMENTS,
+    ],
   },
 })
 
@@ -422,6 +432,7 @@ function summarize(state) {
       parts.push(
         `\`${path.relative(ROOT, stage.file)}\`: ${stage.done} of ${stage.total} runs measured quiet, ${doc.failures?.length ?? 0} failures.`,
         tables(doc),
+        rateNote(doc.rows),
       )
     }
     const spec = CAMPAIGNS[state.name].stages.find((s) => s.name === stage.name)
@@ -507,7 +518,7 @@ async function start(name, resume) {
   const proc = spawn(
     'caffeinate',
     [
-      '-dims',
+      '-dimsu',
       process.execPath,
       SELF,
       'run',

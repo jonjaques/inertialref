@@ -67,7 +67,7 @@ import {
 import { RIG, readSession, rigLeft, sessionPath } from '../driveLock.mjs'
 import { GpuLockError, acquire, parseWait } from '../gpuLock.mjs'
 import { difference } from './diff.mjs'
-import { figures, plan, progress, tables } from './page.mjs'
+import { figures, plan, progress, rateNote, tables } from './page.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const DRIVE = path.join(ROOT, 'scripts/drive.mjs')
@@ -811,7 +811,7 @@ async function runBatch(runs, ctx) {
         ? ''
         : `; not quiet: ${quietLine(row.quiet.after) || 'a dirty tree'}`
       console.log(
-        `[${i + 1}/${runs.length}] ${run.id}: ${progress(row)}${marked}`,
+        `[${i + 1}/${runs.length}] ${run.id}: ${progress(row)}, ${row.operatingPoint.presentHz?.toFixed(0) ?? '—'} Hz${marked}`,
       )
       if (row.quiet.ok || !ctx.clean) break
     }
@@ -998,7 +998,7 @@ async function measure(options) {
     await runBatch(runs, ctx)
     ctx.doc.finishedAt = new Date().toISOString()
     save(ctx)
-    console.log(`\n${tables(ctx.doc)}`)
+    console.log(`\n${tables(ctx.doc)}\n\n${rateNote(ctx.doc.rows)}`)
   } catch (error) {
     throw new Error(
       `${error.message}; what was measured is in ${path.relative(ROOT, ctx.file)}`,

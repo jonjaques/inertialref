@@ -326,10 +326,11 @@ describe('the invocations', () => {
     expect(plan(flagged).map((s) => s.tag)).toEqual([
       'install',
       'boot',
+      'rate',
       'on',
       'first',
     ])
-    expect(plan(plain).map((s) => s.tag)).toEqual(['install', 'boot'])
+    expect(plan(plain).map((s) => s.tag)).toEqual(['install', 'boot', 'rate'])
     expect(
       dryRun({ url: 'http://localhost:8787/', runs: ALL.memory }),
     ).toContain('--port 9342')
@@ -342,6 +343,7 @@ describe('the invocations', () => {
       'stance',
       'settle',
       'wait',
+      'rate',
       ...[0, 1, 2].flatMap((p) => [`base:${p}`, `candidate:${p}`]),
       'timeline',
       'report',

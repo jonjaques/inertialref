@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CAMPAIGNS, eta, outcome } from './campaign.mjs'
 import { FAILS, HELD, batchRuns, parseOptions, resumeFrom } from './measure.mjs'
+import { rateNote } from './page.mjs'
 
 /*
  * What lets a batch outlast its watcher, without a browser: which runs a
@@ -132,10 +133,38 @@ describe('a campaign', () => {
       Object.values(CAMPAIGNS).map((c) => c.stages.map((s) => s.name)),
     ).toEqual([
       ['images', 'instruments'],
-      ['targets', 'memory', 'error'],
+      ['targets', 'memory', 'error', 'instruments'],
     ])
     for (const s of Object.values(CAMPAIGNS).flatMap((c) => c.stages))
       if (s.kind === 'batch')
         expect(batchRuns(s.name, SIZES).length).toBeGreaterThan(0)
+  })
+})
+
+describe('a batch’s presentation rates', () => {
+  const at = (scenario, size, hz) => ({
+    scenario,
+    size,
+    operatingPoint: { presentHz: hz },
+  })
+
+  it('name each size’s range, and every scenario whose rows were taken at two rates', () => {
+    // Retina's stances differ by their own load, which is one operating point.
+    expect(
+      rateNote([
+        at('ground', '1080p', 117),
+        at('ground', '1080p', 119),
+        at('inside', 'retina', 65),
+        at('orbit', 'retina', 78),
+      ]),
+    ).toBe('1080p: presented at 117–119 Hz.\nretina: presented at 65–78 Hz.')
+    expect(
+      rateNote([at('horizon', '1080p', 60), at('horizon', '1080p', 118)]),
+    ).toBe(
+      '1080p: presented at 60–118 Hz.\n1080p horizon: rows at 60–118 Hz are two operating points, not one.',
+    )
+    expect(rateNote([at('ground', '1080p', null)])).toBe(
+      'No row recorded the rate it presented at.',
+    )
   })
 })
