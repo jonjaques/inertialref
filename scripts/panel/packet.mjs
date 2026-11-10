@@ -54,7 +54,7 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { CORNERSTONES } from '../../packages/devtools/src/index.ts'
 import { RIG, STILLS, tagOf } from '../weather/capture.mjs'
-import { HARNESS_FILES, PICTURES, rulesOf } from './validate.mjs'
+import { HARNESS_FILES, PICTURES, rulesOf, skeletonOf } from './validate.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const HERE = path.join(ROOT, 'scripts/panel')
@@ -495,7 +495,9 @@ async function inCell(pipeline, cell) {
     .toBuffer({ resolveWithObject: true })
   // A composite always writes an alpha channel; the second pass takes it
   // out, so every image is the same 8-bit RGB whatever stood in its cell.
-  const placed = await sharp({ create: { ...cell, channels: 3, background: GROUND } })
+  const placed = await sharp({
+    create: { ...cell, channels: 3, background: GROUND },
+  })
     .composite([
       {
         input: data,
@@ -510,10 +512,7 @@ async function inCell(pipeline, cell) {
     ])
     .raw()
     .toBuffer({ resolveWithObject: true })
-  return sharp(placed.data, { raw: placed.info })
-    .removeAlpha()
-    .png()
-    .toBuffer()
+  return sharp(placed.data, { raw: placed.info }).removeAlpha().png().toBuffer()
 }
 
 /** One source as the packet shows it: the full frame, then each crop. */
@@ -574,40 +573,6 @@ function sceneText(entry, blocks) {
   return lines.join('\n')
 }
 
-/** The answer's skeleton for this packet, every score a placeholder. */
-function exampleOf(packet) {
-  const score = '<0–10>'
-  const scenes = {}
-  for (const entry of packet.scenes) {
-    const rules = rulesOf(entry)
-    const letters = entry.images.map((one) => one.letter)
-    const row = Object.fromEntries(
-      [...rules.dimensions, 'overall'].map((d) => [d, score]),
-    )
-    const answer = { scores: Object.fromEntries(letters.map((l) => [l, row])) }
-    if (rules.rank.length > 0)
-      answer.rankings = Object.fromEntries(
-        rules.rank.map((d) => [d, ['<best letter>', '…', '<worst letter>']]),
-      )
-    if (entry.kind === 'guard')
-      answer.worse = { integration: '<letter>', artifacts: '<letter>' }
-    answer.artifacts = [
-      { arm: '<letter>', class: '<class>', region: '<region>', full: true },
-    ]
-    answer.other = [{ arm: '<letter>', text: '<what you saw>' }]
-    scenes[entry.scene] = answer
-  }
-  const observations = Array(3).fill({
-    image: '<scene>/<file>',
-    text: '<what a person can check>',
-  })
-  return JSON.stringify(
-    { scenes, observations, opened: ['brief.md', '…'] },
-    null,
-    2,
-  )
-}
-
 export function briefOf(template, packet, { notes, allowed }) {
   const { head, blocks } = parseTemplate(template)
   const tags = packet.scenes.map((one) => one.scene.toUpperCase())
@@ -625,7 +590,7 @@ export function briefOf(template, packet, { notes, allowed }) {
       '{{notes}}',
       relevant.map((note) => `- ${note}`).join('\n') || 'None.',
     )
-    .replace('{{example}}', exampleOf(packet))}\n`
+    .replace('{{example}}', skeletonOf(packet))}\n`
 }
 
 // ------------------------------------------------------------------- round

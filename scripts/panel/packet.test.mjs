@@ -13,6 +13,7 @@ import {
   canonical,
   checkArm,
   GROUND,
+  layouts,
   parseAnchors,
   parseReferences,
   platesOf,
@@ -346,6 +347,36 @@ describe('the record reader', () => {
     expect(() =>
       checkArm({ ...good, fixtures: { references: 'g' } }, 'candidate', refs),
     ).toThrow(/references hash/)
+  })
+})
+
+describe('the layout', () => {
+  it('draws a seat again until no two seats share one', () => {
+    // One scene of three arms and two photographs has twelve layouts, so ten
+    // seats drawn once each would almost surely repeat one.
+    const scene = {
+      picture: ID.g1,
+      tag: 'g1',
+      kind: 'still',
+      anchors: [],
+      arms: { 'low-anchor': { sha256: 'l', file: '/l.png' } },
+    }
+    const photos = {
+      [ID.g1]: [
+        { sha256: 'p1', path: '/p1' },
+        { sha256: 'p2', path: '/p2' },
+      ],
+    }
+    const seats = Array.from({ length: 10 }, (_, i) => `seat-${i}`)
+    const drawn = layouts(
+      { round: 'r', kind: 'calibration', seed: 's', seats },
+      [scene],
+      photos,
+    )
+    const signatures = drawn.map(({ layout }) =>
+      canonical(layout[0].sources.map((one) => [one.arm, one.sha256])),
+    )
+    expect(new Set(signatures).size).toBe(10)
   })
 })
 

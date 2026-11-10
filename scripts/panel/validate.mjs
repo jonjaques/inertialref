@@ -325,6 +325,43 @@ export function validateReview(review, { packet, key, dir, allowed }) {
   return { ...result, valid }
 }
 
+/**
+ * The answer's form for one packet, every value a placeholder, which the
+ * brief prints so a seat fills in the shape this file reads.
+ */
+export function skeletonOf(packet) {
+  const score = '<0–10>'
+  const scenes = {}
+  for (const entry of packet.scenes) {
+    const rules = rulesOf(entry)
+    const letters = entry.images.map((one) => one.letter)
+    const row = Object.fromEntries(
+      [...rules.dimensions, 'overall'].map((d) => [d, score]),
+    )
+    const answer = { scores: Object.fromEntries(letters.map((l) => [l, row])) }
+    if (rules.rank.length > 0)
+      answer.rankings = Object.fromEntries(
+        rules.rank.map((d) => [d, ['<best letter>', '…', '<worst letter>']]),
+      )
+    if (entry.kind === 'guard')
+      answer.worse = { integration: '<letter>', artifacts: '<letter>' }
+    answer.artifacts = [
+      { arm: '<letter>', class: '<class>', region: '<region>', full: true },
+    ]
+    answer.other = [{ arm: '<letter>', text: '<what you saw>' }]
+    scenes[entry.scene] = answer
+  }
+  const observations = Array(3).fill({
+    image: '<scene>/<file>',
+    text: '<what a person can check>',
+  })
+  return JSON.stringify(
+    { scenes, observations, opened: ['brief.md', '…'] },
+    null,
+    2,
+  )
+}
+
 const readJson = async (file) => JSON.parse(await readFile(file, 'utf8'))
 
 /** Each seat of a round directory: its packet, key and answer, if it wrote one. */

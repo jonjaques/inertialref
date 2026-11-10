@@ -190,6 +190,8 @@ describe('the bars (rubric §3.5)', () => {
     expect(floorOf(8, 8)).toBe(7)
     expect(floorOf(8, 7.5)).toBe(6)
     expect(floorOf(7, 8)).toBe(6)
+    // B is held at 7 or more, so the clamp binds only on a bar given by hand.
+    expect(floorOf(6, 8)).toBe(6)
   })
 
   it('fixes B from the anchor stills of a calibration round with three valid seats', () => {
