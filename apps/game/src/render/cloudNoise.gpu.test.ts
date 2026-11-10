@@ -338,7 +338,9 @@ describe('the sampler’s weights', () => {
         const f = instanceIndex.toFloat().add(0.5).div(count)
         into
           .element(instanceIndex)
-          .assign(vec4(read.sample(vec2(f.add(0.5).div(2), 0.5)).level(float(0))))
+          .assign(
+            vec4(read.sample(vec2(f.add(0.5).div(2), 0.5)).level(float(0))),
+          )
       })
     })().compute(count)
     await gpu.compute(kernel)

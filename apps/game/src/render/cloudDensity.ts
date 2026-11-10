@@ -14,7 +14,11 @@ import {
 } from 'three/tsl'
 import { DETAIL_NOISE_PERIOD } from '@inertialref/rendering'
 import type { CloudClipmapNodes } from './cloudClipmap.ts'
-import { CLOUD_CUBE_TILE, type CloudMapNodes, climateNode } from './cloudMaps.ts'
+import {
+  CLOUD_CUBE_TILE,
+  type CloudMapNodes,
+  climateNode,
+} from './cloudMaps.ts'
 import type { CloudMedium, CloudMediumFn, CloudSample } from './cloudNodes.ts'
 import { type CloudNoiseNodes, mesoscaleNode } from './cloudNoise.ts'
 import { type CloudProfile, profileSlot } from './cloudProfile.ts'
@@ -154,9 +158,7 @@ function noiseFrame(
   readonly noise: Node<'vec3'>
   readonly detail: Node<'vec3'>
 } {
-  const sum = (
-    of: (k: 0 | 1 | 2) => Node<'vec3'>,
-  ): Node<'vec3'> =>
+  const sum = (of: (k: 0 | 1 | 2) => Node<'vec3'>): Node<'vec3'> =>
     of(0)
       .mul(weights.x)
       .add(of(1).mul(weights.y))
@@ -245,10 +247,8 @@ type ClimateOf = (
 }
 
 /** A level's cover and share out of a body's three, by the one-hot weights. */
-const ofLevel = (
-  layer: Layer,
-  values: Node<'vec4'>,
-): Node<'float'> => dot(layer.weights, values.xyz)
+const ofLevel = (layer: Layer, values: Node<'vec4'>): Node<'float'> =>
+  dot(layer.weights, values.xyz)
 
 /** The displacement evaluated where it is read: six sines, for a bake. */
 const exactDisplacement = (
@@ -299,7 +299,12 @@ function recipe(
     const cover = saturate(climate.cover)
     const convective = climate.convective
     const w = climate.displacement
-    const profile = deps.profile.sample(slot, layer.level, layer.h01, convective)
+    const profile = deps.profile.sample(
+      slot,
+      layer.level,
+      layer.h01,
+      convective,
+    )
     const base = deps.noise.base(baseCells(frame, w, layer.cell))
     const cell = layer.cell
     const footprint = sample.footprint

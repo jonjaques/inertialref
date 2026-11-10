@@ -441,7 +441,8 @@ async function bakedPair(
   await clipmap.warm(renderer)
   const first = levels(eye, radius, null)
   const at = (u: LevelUpdate) => frameAt(uniforms, weather, key, radius, eye, u)
-  for (let k = 0; k < 6; k += 1) maps.render(renderer, at(stillAt(first)), budget)
+  for (let k = 0; k < 6; k += 1)
+    maps.render(renderer, at(stillAt(first)), budget)
   clipmap.render(renderer, at(first), budget)
   for (let k = 0; k < 3; k += 1)
     clipmap.render(renderer, at(stillAt(first)), budget)
@@ -623,17 +624,18 @@ describe('the layers are the cube resampled, and the displacement', () => {
       const cell = level.cell
       const at = (height: number): Vec3 => {
         const p = scaled(direction, EARTH + height)
-        return mesoscaleDisplacement(
-          mesoscalePhases(clock, j, p, cell),
-          cell,
-        )
+        return mesoscaleDisplacement(mesoscalePhases(clock, j, p, cell), cell)
       }
       const middle = (level.base + level.top) / 2
       const w = at(middle)
       const up = at(middle + 1)
       const down = at(middle - 1)
       const want = [w.x, w.y, w.z]
-      const slope = [(up.x - down.x) / 2, (up.y - down.y) / 2, (up.z - down.z) / 2]
+      const slope = [
+        (up.x - down.x) / 2,
+        (up.y - down.y) / 2,
+        (up.z - down.z) / 2,
+      ]
       for (let c = 0; c < 3; c += 1) {
         largest = Math.max(largest, Math.abs(want[c]!))
         worstDisplacement = Math.max(

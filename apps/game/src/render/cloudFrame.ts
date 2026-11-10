@@ -638,7 +638,8 @@ export function scenarioClimate(
     const genus = scenario.layers[k]?.genus
     return genus !== undefined && GENUS_TABLE[genus].cumuliform ? 1 : 0
   }
-  const genus = (k: number): CloudGenus => scenario.layers[k]?.genus ?? 'stratus'
+  const genus = (k: number): CloudGenus =>
+    scenario.layers[k]?.genus ?? 'stratus'
   const middle = scenario.layers[1]?.genus
   return {
     kind: 'regime',

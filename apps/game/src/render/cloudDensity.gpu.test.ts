@@ -680,7 +680,9 @@ describe('a footprint’s fade', () => {
           let depth = 0
           let fraction = 0
           for (let s = 0; s < steps; s += 1) {
-            const { fraction: share, sigma } = at((c * feet.length + f) * steps + s)
+            const { fraction: share, sigma } = at(
+              (c * feet.length + f) * steps + s,
+            )
             depth += sigma * step
             fraction = Math.max(fraction, share)
           }
@@ -715,12 +717,15 @@ describe('a footprint’s fade', () => {
    * recipe is `weatherField.ts`'s (`levelSample`), and this flips green
    * when it conserves the crossing.
    */
-  it.fails('keeps the resolved field’s transmittance within 10% (§6.2): it does not yet', () => {
-    const [resolved, ...faded] = footprintFade.drawn
-    expect(faded).toHaveLength(3)
-    for (const t of faded)
-      expect(Math.abs(t - resolved!) / resolved!).toBeLessThanOrEqual(0.1)
-  })
+  it.fails(
+    'keeps the resolved field’s transmittance within 10% (§6.2): it does not yet',
+    () => {
+      const [resolved, ...faded] = footprintFade.drawn
+      expect(faded).toHaveLength(3)
+      for (const t of faded)
+        expect(Math.abs(t - resolved!) / resolved!).toBeLessThanOrEqual(0.1)
+    },
+  )
 })
 
 describe('every read names level 0', () => {
@@ -963,7 +968,10 @@ describe('no tile from orbit, as drawn', () => {
         )
         for (const h of heights)
           points.push({
-            position: scaled(d, EARTH + level.base + h * (level.top - level.base)),
+            position: scaled(
+              d,
+              EARTH + level.base + h * (level.top - level.base),
+            ),
             footprint: 0,
           })
       }
@@ -1069,97 +1077,109 @@ describe('the frame’s clouds are the CPU field’s', () => {
       fov: Math.PI / 180,
       reach: 500_000,
     },
-  ] as const)('$name', async ({ regime, height, pitch, fov, reach }) => {
-    const weather = regimeWeather(SERVED_EARTH, regime)
-    const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
-    const eye = scaled(ground, EARTH + height)
-    const field = bakeField(weather, regime, eye)
-    const pixelAngle = fov / SIDE
-    const { east, north, up } = horizonBasis(ground)
-    const forward = unit(
-      added(scaled(east, Math.cos(pitch)), scaled(up, Math.sin(pitch))),
-    )
-    const right = unit({
-      x: forward.y * up.z - forward.z * up.y,
-      y: forward.z * up.x - forward.x * up.z,
-      z: forward.x * up.y - forward.y * up.x,
-    })
-    const above = pitch < -1.5 ? north : unit({
-      x: right.y * forward.z - right.z * forward.y,
-      y: right.z * forward.x - right.x * forward.z,
-      z: right.x * forward.y - right.y * forward.x,
-    })
-    const across = pitch < -1.5 ? east : right
-    const lows = weather.levels.filter((level) => level.top > level.base)
-    const low = EARTH + Math.min(...lows.map((level) => level.base))
-    const high = EARTH + Math.max(...lows.map((level) => level.top))
-    const tan = Math.tan(fov / 2)
-    const points: Point[] = []
-    const lengths: number[] = []
-    const crossed: boolean[] = []
-    for (let j = 0; j < SIDE; j += 1)
-      for (let i = 0; i < SIDE; i += 1) {
-        const d = unit(
-          added(
-            forward,
+  ] as const)(
+    '$name',
+    async ({ regime, height, pitch, fov, reach }) => {
+      const weather = regimeWeather(SERVED_EARTH, regime)
+      const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
+      const eye = scaled(ground, EARTH + height)
+      const field = bakeField(weather, regime, eye)
+      const pixelAngle = fov / SIDE
+      const { east, north, up } = horizonBasis(ground)
+      const forward = unit(
+        added(scaled(east, Math.cos(pitch)), scaled(up, Math.sin(pitch))),
+      )
+      const right = unit({
+        x: forward.y * up.z - forward.z * up.y,
+        y: forward.z * up.x - forward.x * up.z,
+        z: forward.x * up.y - forward.y * up.x,
+      })
+      const above =
+        pitch < -1.5
+          ? north
+          : unit({
+              x: right.y * forward.z - right.z * forward.y,
+              y: right.z * forward.x - right.x * forward.z,
+              z: right.x * forward.y - right.y * forward.x,
+            })
+      const across = pitch < -1.5 ? east : right
+      const lows = weather.levels.filter((level) => level.top > level.base)
+      const low = EARTH + Math.min(...lows.map((level) => level.base))
+      const high = EARTH + Math.max(...lows.map((level) => level.top))
+      const tan = Math.tan(fov / 2)
+      const points: Point[] = []
+      const lengths: number[] = []
+      const crossed: boolean[] = []
+      for (let j = 0; j < SIDE; j += 1)
+        for (let i = 0; i < SIDE; i += 1) {
+          const d = unit(
             added(
-              scaled(across, ((2 * (i + 0.5)) / SIDE - 1) * tan),
-              scaled(above, (1 - (2 * (j + 0.5)) / SIDE) * tan),
+              forward,
+              added(
+                scaled(across, ((2 * (i + 0.5)) / SIDE - 1) * tan),
+                scaled(above, (1 - (2 * (j + 0.5)) / SIDE) * tan),
+              ),
             ),
-          ),
-        )
-        const through = span(eye, d, low, high, reach)
-        crossed.push(through !== null)
-        const [t0, t1] = through ?? [0, 0]
-        const length = (t1 - t0) / STEPS
-        lengths.push(length)
-        for (let s = 0; s < STEPS; s += 1) {
-          const t = t0 + (s + 0.5) * length
-          points.push({
-            position: added(eye, scaled(d, t)),
-            footprint: t * pixelAngle,
-          })
+          )
+          const through = span(eye, d, low, high, reach)
+          crossed.push(through !== null)
+          const [t0, t1] = through ?? [0, 0]
+          const length = (t1 - t0) / STEPS
+          lengths.push(length)
+          for (let s = 0; s < STEPS; s += 1) {
+            const t = t0 + (s + 0.5) * length
+            points.push({
+              position: added(eye, scaled(d, t)),
+              footprint: t * pixelAngle,
+            })
+          }
         }
+      const read = await evaluate(
+        points,
+        eye,
+        field.media.field,
+        field.uniforms,
+      )
+      const clock = fieldClock(weather, TIME)
+      let drawnCloudy = 0
+      let cpuCloudy = 0
+      let rays = 0
+      const differences: number[] = []
+      for (let r = 0; r < SIDE * SIDE; r += 1) {
+        if (!crossed[r]) continue
+        rays += 1
+        let drawn = 0
+        let cpu = 0
+        for (let s = 0; s < STEPS; s += 1) {
+          const n = r * STEPS + s
+          drawn += read[n * 8]! * read[n * 8 + 1]! * lengths[r]!
+          const want = cloudFieldAt(
+            weather,
+            clock,
+            SUN,
+            points[n]!.position,
+            points[n]!.footprint,
+          )
+          cpu += want.fraction * want.sigma * lengths[r]!
+        }
+        const opacity = 1 - Math.exp(-drawn)
+        const expected = 1 - Math.exp(-cpu)
+        if (opacity > 0.5) drawnCloudy += 1
+        if (expected > 0.5) cpuCloudy += 1
+        differences.push(Math.abs(opacity - expected))
       }
-    const read = await evaluate(points, eye, field.media.field, field.uniforms)
-    const clock = fieldClock(weather, TIME)
-    let drawnCloudy = 0
-    let cpuCloudy = 0
-    let rays = 0
-    const differences: number[] = []
-    for (let r = 0; r < SIDE * SIDE; r += 1) {
-      if (!crossed[r]) continue
-      rays += 1
-      let drawn = 0
-      let cpu = 0
-      for (let s = 0; s < STEPS; s += 1) {
-        const n = r * STEPS + s
-        drawn += read[n * 8]! * read[n * 8 + 1]! * lengths[r]!
-        const want = cloudFieldAt(
-          weather,
-          clock,
-          SUN,
-          points[n]!.position,
-          points[n]!.footprint,
-        )
-        cpu += want.fraction * want.sigma * lengths[r]!
-      }
-      const opacity = 1 - Math.exp(-drawn)
-      const expected = 1 - Math.exp(-cpu)
-      if (opacity > 0.5) drawnCloudy += 1
-      if (expected > 0.5) cpuCloudy += 1
-      differences.push(Math.abs(opacity - expected))
-    }
-    console.info(
-      `frame, ${height} m: cloud fraction drawn ${(drawnCloudy / rays).toFixed(4)}, cloudFieldAt ${(cpuCloudy / rays).toFixed(4)}; opacity difference p99 ${quantile(differences, 0.99).toExponential(2)}, worst ${Math.max(...differences).toExponential(2)}; rays ${rays}`,
-    )
-    expect(rays).toBeGreaterThan(SIDE * SIDE * 0.4)
-    expect(Math.abs(drawnCloudy - cpuCloudy) / rays).toBeLessThanOrEqual(0.01)
-    // Opacity, measured: p99 at most 2.2 × 10⁻², worst 3.5 × 10⁻²; held at
-    // twice the p99.
-    expect(quantile(differences, 0.99)).toBeLessThanOrEqual(0.045)
-    expect(drawnCloudy).toBeGreaterThan(0)
-    expect(drawnCloudy).toBeLessThan(rays)
-    field.dispose()
-  }, 180_000)
+      console.info(
+        `frame, ${height} m: cloud fraction drawn ${(drawnCloudy / rays).toFixed(4)}, cloudFieldAt ${(cpuCloudy / rays).toFixed(4)}; opacity difference p99 ${quantile(differences, 0.99).toExponential(2)}, worst ${Math.max(...differences).toExponential(2)}; rays ${rays}`,
+      )
+      expect(rays).toBeGreaterThan(SIDE * SIDE * 0.4)
+      expect(Math.abs(drawnCloudy - cpuCloudy) / rays).toBeLessThanOrEqual(0.01)
+      // Opacity, measured: p99 at most 2.2 × 10⁻², worst 3.5 × 10⁻²; held at
+      // twice the p99.
+      expect(quantile(differences, 0.99)).toBeLessThanOrEqual(0.045)
+      expect(drawnCloudy).toBeGreaterThan(0)
+      expect(drawnCloudy).toBeLessThan(rays)
+      field.dispose()
+    },
+    180_000,
+  )
 })

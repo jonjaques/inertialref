@@ -251,8 +251,10 @@ export class CloudClipmap implements CloudResource {
   #address: string | null = null
   #period: readonly [number, number] = [0, 0]
   /** Each level's faces, and the window they were found for. */
-  readonly #faces: ({ readonly key: string; readonly faces: CubeFace[] } | null)[] =
-    Array.from({ length: CLOUD_CLIPMAP_LEVELS }, () => null)
+  readonly #faces: ({
+    readonly key: string
+    readonly faces: CubeFace[]
+  } | null)[] = Array.from({ length: CLOUD_CLIPMAP_LEVELS }, () => null)
   /** The generation each level's last whole bake read, its faces' least; −1 before one. */
   readonly #readGeneration: number[] = Array.from(
     { length: CLOUD_CLIPMAP_LEVELS },
@@ -381,8 +383,7 @@ export class CloudClipmap implements CloudResource {
     if (this.#disposed || this.#allocated !== 'full') return false
     const generation = this.#generation
     return this.#staleSince.some(
-      (since, k) =>
-        since !== null || this.#readGeneration[k]! < generation,
+      (since, k) => since !== null || this.#readGeneration[k]! < generation,
     )
   }
 
@@ -641,8 +642,10 @@ export function levelFaces(level: LevelFrame, radius: number): CubeFace[] {
   const { anchor, east, north, origin, texelMeters, size } = level
   for (let i = 0; i < FACE_SAMPLES; i += 1)
     for (let j = 0; j < FACE_SAMPLES; j += 1) {
-      const u = (origin[0] + 0.5 + ((size - 1) * i) / (FACE_SAMPLES - 1)) * texelMeters
-      const v = (origin[1] + 0.5 + ((size - 1) * j) / (FACE_SAMPLES - 1)) * texelMeters
+      const u =
+        (origin[0] + 0.5 + ((size - 1) * i) / (FACE_SAMPLES - 1)) * texelMeters
+      const v =
+        (origin[1] + 0.5 + ((size - 1) * j) / (FACE_SAMPLES - 1)) * texelMeters
       found.add(
         cubeFaceOf({
           x: anchor.x * radius + east.x * u + north.x * v,
@@ -668,7 +671,8 @@ export function displacementDrift(frame: CloudFrame, seconds: number): number {
     const speed = Math.abs(level.turnRate) * radius + WEATHER_AXIAL_DRIFT
     most = Math.max(
       most,
-      (MESOSCALE_STEEPEST * speed * Math.abs(seconds)) / Math.max(level.cell, 1),
+      (MESOSCALE_STEEPEST * speed * Math.abs(seconds)) /
+        Math.max(level.cell, 1),
     )
   }
   return most
@@ -716,7 +720,9 @@ function bakeNode(
   const cell = max(pickLevel(layers.cell), 1)
   const turn = layers.turn[j as 0 | 1 | 2]
   const phases = layers.mesoscale[j as 0 | 1 | 2]
-  const turned = turn.mul(levelOffset(level, plane, middle, body)) as Node<'vec3'>
+  const turned = turn.mul(
+    levelOffset(level, plane, middle, body),
+  ) as Node<'vec3'>
   const up = turn.mul(direction) as Node<'vec3'>
   const displacement = mesoscaleNode(turned, phases, cell)
   const rise = mesoscaleRateNode(turned, up, phases, cell)
