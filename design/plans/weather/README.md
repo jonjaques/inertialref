@@ -217,12 +217,14 @@ Stills are not committed.
 
 ## What was verified
 
-On the Mac mini, at the tip the pull request carries:
+On the Mac mini, at `8cfd71a0`, whose code is the tip's:
 
-- `pnpm check`, full: 20 stages passed in 97.3 s of wall time.
-- `pnpm test:gpu`, full: 73 files and 443 tests passed; 3 files and 3 tests
+- `pnpm check`, full, on a budget of 4 cores: 20 stages passed in 88.2 s of
+  wall time. Its `test` stage is 362 files and 4,141 tests, and `test:slow`
+  5 files and 9 tests.
+- `pnpm test:gpu`, full: 73 files and 444 tests passed; 3 files and 3 tests
   skipped, as many as the opt-in instruments, which skip without
-  `IR_CLOUD_MEASURE`. 456 s.
+  `IR_CLOUD_MEASURE`.
 - `pnpm presets:compare --all`: against `main` (`fb5aa5f5`) all 13 presets
   move 0 px. Against the committed plates `centauri-daybreak` moves 231 px,
   which is `main`'s own distance from that plate; the other 12 are within
@@ -239,7 +241,10 @@ On the Mac mini, at the tip the pull request carries:
   and three instruments, every counted row quiet. Campaign 2 at `bbea04da`:
   `targets` 58 of 58 runs quiet, `memory` 12 of 12, `error` 16 of 16, no
   failures, each batch on its first attempt, then the three instruments on
-  the landed code.
+  the landed code. The landed set's ladder at `51c96da4`: 12 of 12 runs
+  quiet, then the three instruments. The retake of campaign 2's forced and
+  `pair-neighbor` rows at `f9746fd3`: 40 of 40 runs quiet, no failures, one
+  run taken a third time after two attempts beside another job.
 
 ## Defaults taken without asking
 
