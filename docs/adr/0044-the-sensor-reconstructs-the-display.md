@@ -168,32 +168,56 @@ cut counter nor working textures enter the canonical state hash or save.
 
 ### Measured preset frames
 
-The held, shipped **Tau Ceti Dusk** and **The Far Shore** presets were measured
-on an Apple M5 MacBook Air with 10 GPU cores and 32 GB memory, macOS 27.0,
-Chrome 153.0.0.0 and Node 26.5.0, using the development server. The viewport
-was 1600 × 900 CSS pixels at DPR 1 and 2. Each entry below is milliseconds
-per complete presented frame: the median of five 60-frame batches after a
+The held, shipped **Tau Ceti Dusk** and **The Far Shore** presets are
+measured at 1600 × 900 CSS pixels, DPR 1 and 2. Each entry is milliseconds per
+complete presented frame: the median of five 60-frame batches after a
 discarded warm-up batch, with timing instrumentation off. Detailed GPU pass
-timings were sampled separately. All reconstruction settings used standard
-sharpness; spatial rows retained four-sample MSAA. The three temporal columns
-were taken on a layout with one attachment more than the current one, a
-two-channel velocity row of 4 B a render pixel, and they stand until both
-presets are measured at both ratios on the layout above.
+timings are sampled separately. All reconstruction settings use standard
+sharpness; spatial rows retain four-sample MSAA.
 
-| Preset        | DPR | Native MSAA | Spatial Quality | Spatial Performance | Temporal Native | Temporal Quality | Temporal Performance |
-| ------------- | --: | ----------: | --------------: | ------------------: | --------------: | ---------------: | -------------------: |
-| Tau Ceti Dusk |   1 |       3.683 |           3.508 |               3.285 |           4.283 |            4.303 |                3.980 |
-| Tau Ceti Dusk |   2 |      11.252 |          11.022 |              10.640 |          14.180 |           11.630 |               10.578 |
-| The Far Shore |   1 |       6.883 |           4.772 |               4.187 |           5.662 |            4.033 |                3.568 |
-| The Far Shore |   2 |      22.558 |          18.788 |              13.163 |          23.015 |           18.722 |               15.043 |
+The native and spatial pictures were measured on an Apple M5 MacBook Air with
+10 GPU cores and 32 GB memory, macOS 27.0, Chrome 153.0.0.0 and Node 26.5.0,
+using the development server:
 
-Temporal reconstruction is not always faster. Temporal Quality costs more
-than native MSAA on Tau Ceti Dusk at both display ratios, while Far Shore
-benefits from the reduced scene. These are held frames on one machine, not
-a frame-rate guarantee during flight. All 24 measurements preserved the
-renderer object and canonical state hash. At each preset and DPR, patch
-count and display-referred terrain selection also stayed constant across
-picture settings.
+| Preset        | DPR | Native MSAA | Spatial Quality | Spatial Performance |
+| ------------- | --: | ----------: | --------------: | ------------------: |
+| Tau Ceti Dusk |   1 |       3.683 |           3.508 |               3.285 |
+| Tau Ceti Dusk |   2 |      11.252 |          11.022 |              10.640 |
+| The Far Shore |   1 |       6.883 |           4.772 |               4.187 |
+| The Far Shore |   2 |      22.558 |          18.788 |              13.163 |
+
+The temporal pictures are measured on the layout above, `motion` read and
+`reactive` added, on a Mac mini (Mac18,5, Apple M6, 32 GB), macOS 27.2,
+Chrome 157.0.8103.40 and Node 26.13.0, against a production preview with the
+display asleep. Each preset and DPR is one boot with the world paused, the
+picture chosen in the graphics panel inside it, and native MSAA taken in the
+same boot as the control the temporal columns are read against:
+
+| Preset        | DPR | Native MSAA, in boot | Temporal Native | Temporal Quality | Temporal Performance |
+| ------------- | --: | -------------------: | --------------: | ---------------: | -------------------: |
+| Tau Ceti Dusk |   1 |                4.485 |           5.137 |            3.863 |                3.278 |
+| Tau Ceti Dusk |   2 |               14.033 |          15.955 |           11.542 |                9.435 |
+| The Far Shore |   1 |                7.147 |           6.290 |            4.405 |                3.965 |
+| The Far Shore |   2 |               24.373 |          20.493 |           13.250 |               10.420 |
+
+The two machines' native MSAA columns differ by 0.8–2.8 ms, so a temporal
+figure is compared with the native MSAA beside it, never across tables.
+Temporal reconstruction is not always faster. Temporal Native costs more than
+native MSAA on Tau Ceti Dusk at both display ratios and less on Far Shore;
+Temporal Quality and Performance are cheaper than native MSAA on both presets
+at both ratios on the Mac mini. These are held frames on two machines, not a
+frame-rate guarantee during flight. Every measurement preserved the renderer object and canonical state hash. On the M5, patch count and display-referred terrain selection stayed constant across picture settings at each preset and DPR; on the Mac mini, patch count did (906 and 1,227 on Tau Ceti Dusk, 777 and 867 on Far Shore, at DPR 1 and 2).
+
+The same sixteen cells on the layout that also drew a two-channel velocity
+row, at `bbea04da` on the same machine and the same day, are 0.008–0.167 ms
+slower in every temporal cell, while the in-boot control moves by −0.155 to
++0.043 ms between the two builds: the masked `motion` costs nothing and the
+row's removal saves at most a sixth of a millisecond, at native DPR 2. The
+cells, their batches and the protocol are in
+[`velocity-2026-11-10.md`](../../design/plans/weather/phase1/measurements/velocity-2026-11-10.md).
+Temporal Quality reports 79,668,017 raw working-texture bytes at DPR 1 and
+318,712,817 at DPR 2 on both layouts there; on the M5 it reported 78,706,817
+and 314,868,017.
 
 At Tau Ceti Dusk, DPR 2, Temporal Quality's separately sampled reconstruction,
 exposure, shading-change, accumulation and RCAS passes took 0.459, 0.131,
@@ -204,9 +228,7 @@ package's eight readback slots return — they read 0.66–0.69, 0.11–0.15,
 0.48–0.53, 2.88–2.98 and 0.51–0.78 ms. Each is the package's begin-to-end
 pair, which on this GPU is latency rather than cost: the first run put the gap
 between the scene pass and the optics, where the reconstruction's work falls
-on the timeline, at 1.01 ms. Temporal Quality reported 78,706,817 raw
-working-texture bytes at DPR 1 and 314,868,017 at DPR 2. Those counts are not
-total device VRAM. Its measured kernel initialization was 0.1–0.3 ms; that
+on the timeline, at 1.01 ms. The working-texture counts above are not total device VRAM. On the M5, Temporal Quality's measured kernel initialization was 0.1–0.3 ms; that
 timer excludes subsequent working-texture configuration and scene warm-up.
 
 For DPR 1 stills, RGB8 RMSE against native MSAA was 9.592 for Spatial Quality
