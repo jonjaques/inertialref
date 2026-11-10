@@ -390,7 +390,7 @@ export const STORM_OFFSET = 20 * DEGREE
  * by each band's area, the total twice. Each month's sun is the sub-solar
  * latitude on its 15th, and the synoptic factor is integrated over its
  * spread, so the fit is of the cover the field draws, not of the law's
- * mean. `weatherCalibration.test.ts` recomputes the fit's figures and
+ * mean. `weatherCalibration.slow.test.ts` recomputes the fit's figures and
  * holds them.
  *
  * - The global mean is 0.640 against ISCCP-H's 0.6475; the levels are
