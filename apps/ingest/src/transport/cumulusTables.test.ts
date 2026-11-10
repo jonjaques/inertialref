@@ -32,6 +32,7 @@ import {
   REFERENCE_PIXELS,
   REFERENCE_SAMPLES,
   referenceText,
+  scaledOf,
   scaledTable,
   scalingOf,
   selectProbes,
@@ -300,15 +301,17 @@ describe('the generated file', () => {
     expect(referenceText(CUMULUS_REFERENCE)).toBe(text)
     expect(rowsOf(text, 'PROBES')).toEqual(CUMULUS_REFERENCE.probes)
     expect(rowsOf(text, 'VOXELS')).toEqual(CUMULUS_REFERENCE.voxels)
+    expect(rowsOf(text, 'SCALED')).toEqual(CUMULUS_REFERENCE.scaled)
     expect(rowsOf(text, 'ANALYTIC')).toEqual(CUMULUS_REFERENCE.analytic.probes)
     // The rest is one literal, with the three blocks named in it.
     const body = text
       .slice(text.indexOf('CumulusReference = ') + 19)
-      .replace(/: (PROBES|VOXELS|ANALYTIC)\b/g, ': []')
+      .replace(/: (PROBES|VOXELS|SCALED|ANALYTIC)\b/g, ': []')
     expect(JSON.parse(body)).toEqual({
       ...CUMULUS_REFERENCE,
       probes: [],
       voxels: [],
+      scaled: [],
       analytic: { ...CUMULUS_REFERENCE.analytic, probes: [] },
     })
     const header = text.slice(0, text.indexOf('*/'))
@@ -330,7 +333,7 @@ describe('the generated file', () => {
       'utf8',
     )
     const text = referenceText(CUMULUS_REFERENCE)
-    for (const name of ['PROBES', 'VOXELS', 'ANALYTIC'])
+    for (const name of ['PROBES', 'VOXELS', 'SCALED', 'ANALYTIC'])
       expect(rowsOf(disk, name)).toEqual(rowsOf(text, name))
     expect(disk.slice(0, disk.indexOf('*/'))).toBe(
       text.slice(0, text.indexOf('*/')),
@@ -477,6 +480,24 @@ describe('the renderer’s scaled medium', () => {
       ) as unknown as CumulusProbe['radiance'],
       error: [0, 0, 0],
     }))
+    // The reference's rows of it: first order with its gain, and the rest.
+    const held = scaledOf(spec, traced, gain)
+    expect(held).toHaveLength(traced.length)
+    held.forEach((row, index) => {
+      expect(row.pixel).toEqual(traced[index]!.pixel)
+      for (let b = 0; b < 3; b += 1) {
+        expect(row.first[b]).toBeCloseTo(
+          (gain * traced[index]!.first[b]!.sum) / 64,
+          5,
+        )
+        expect(row.rest[b]).toBeCloseTo(traced[index]!.rest[b]!.sum / 64, 5)
+        expect(row.restError[b]).toBeGreaterThanOrEqual(0)
+      }
+    })
+    // A pixel so thin that sixty-four paths all crossed it has no spread;
+    // the mask's deep ones have.
+    expect(held.some((row) => row.restError[1] > 0)).toBe(true)
+    expect(held.some((row) => row.firstError[1] > 0)).toBe(true)
     const rows = scalingOf(spec, own, traced, gain, 64)
     expect(rows.map(({ mask }) => mask)).toEqual([
       'rim',

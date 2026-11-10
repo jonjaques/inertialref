@@ -24,6 +24,7 @@ import {
   type CumulusMedians,
   type CumulusProbe,
   type CumulusReference,
+  type CumulusScaledProbe,
   type CumulusScaling,
   cumulusSky,
   type CumulusSubject,
@@ -799,6 +800,24 @@ export function unscaleOf(fixture: CumulusFixture): number {
   return index < 0 ? 1 : fixture.extinction[index]! / fixture.sigma[index]!
 }
 
+/** A case's pixels on the scaled medium, as the reference holds them: first order with its gain, and the rest. */
+export function scaledOf(
+  spec: CumulusCase,
+  scaled: readonly ScaledSums[],
+  gain: number,
+): readonly CumulusScaledProbe[] {
+  return scaled.map(({ mask, bin, pixel, first, rest }) => ({
+    case: spec.id,
+    mask,
+    bin,
+    pixel,
+    first: bands((b) => figures(gain * estimateOf(first[b]!).mean)),
+    firstError: bands((b) => figures(gain * estimateOf(first[b]!).error)),
+    rest: bands((b) => figures(estimateOf(rest[b]!).mean)),
+    restError: bands((b) => figures(estimateOf(rest[b]!).error)),
+  }))
+}
+
 /**
  * A case's scaling by mask: the mask's pixels' mean radiance on the scaled
  * medium over their mean in the reference, a band at a time, with the
@@ -954,27 +973,29 @@ export function referenceText(reference: CumulusReference): string {
       ? 'No case of the field is traced: `subjects`, `cases`, `probes`,'
       : `${cases} cases of ${reference.subjects.length} subjects, each cut from \`cloudFieldAt\` at a footprint of zero,`,
     cases === 0
-      ? '`curves`, `medians`, `voxels` and `scaling` are empty, under no genus table.'
+      ? '`curves`, `medians`, `voxels`, `scaling` and `scaled` are empty, under no genus table.'
       : `at ${reference.cases[0]!.samples} samples a pixel and band, under the sky of Earth’s air (\`cumulusSky\`).`,
     ...(cases === 0
       ? []
       : [
           `\`voxels\` are ${reference.voxels.length} of the subjects’ own, which the field must still return.`,
-          '`scaling` is the renderer’s scaled medium over the true one, by case and mask,',
-          `at ${reference.scaling[0]?.samples ?? 0} samples a pixel and band.`,
+          '`scaled` is each pixel on the renderer’s scaled medium, first order and the rest apart,',
+          `at ${reference.scaling[0]?.samples ?? 0} samples a pixel and band, and \`scaling\` its mean over the true`,
+          'one’s by case and mask.',
         ]),
     `\`analytic\` is the same tracer on the analytic cumulus, ${reference.analytic.probes.length} pixels of`,
     `${reference.analytic.cases.length} cases at ${reference.analytic.cases[0]?.samples ?? 0} samples a band.`,
     '',
     `Droplet table ${phaseHash()}; genus table ${reference.genusHash || 'none'}.`,
   ]
-  const { probes, voxels, analytic, ...rest } = reference
+  const { probes, voxels, scaled, analytic, ...rest } = reference
   return (
     '/*\n' +
     header.map((line) => (line ? ` * ${line}` : ' *')).join('\n') +
-    "\n */\nimport type { CumulusProbe, CumulusReference } from './cumulusFixture.ts'\n\n" +
+    "\n */\nimport type { CumulusProbe, CumulusReference, CumulusScaledProbe } from './cumulusFixture.ts'\n\n" +
     `const PROBES = /*@__PURE__*/ ${block(probes)} as readonly CumulusProbe[]\n\n` +
     `const VOXELS = /*@__PURE__*/ ${block(voxels)} as CumulusReference['voxels']\n\n` +
+    `const SCALED = /*@__PURE__*/ ${block(scaled)} as readonly CumulusScaledProbe[]\n\n` +
     `const ANALYTIC = /*@__PURE__*/ ${block(analytic.probes)} as readonly CumulusProbe[]\n\n` +
     'export const CUMULUS_REFERENCE: CumulusReference = ' +
     JSON.stringify(
@@ -982,11 +1003,12 @@ export function referenceText(reference: CumulusReference): string {
         ...rest,
         probes: '@PROBES',
         voxels: '@VOXELS',
+        scaled: '@SCALED',
         analytic: { ...analytic, probes: '@ANALYTIC' },
       },
       null,
       2,
-    ).replace(/"@(PROBES|VOXELS|ANALYTIC)"/g, '$1') +
+    ).replace(/"@(PROBES|VOXELS|SCALED|ANALYTIC)"/g, '$1') +
     '\n'
   )
 }
@@ -1071,6 +1093,10 @@ export function assemble(
       return file === undefined
         ? []
         : scalingOf(spec, probes, file.probes, file.gain, file.samples)
+    }),
+    scaled: specs.flatMap((spec) => {
+      const file = scaled.find(({ id }) => id === spec.id)
+      return file === undefined ? [] : scaledOf(spec, file.probes, file.gain)
     }),
     probes,
     voxels: held.flatMap(voxelsOf),

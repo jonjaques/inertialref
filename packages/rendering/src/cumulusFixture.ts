@@ -857,6 +857,31 @@ export interface CumulusScaling {
   readonly error: readonly [number, number, number]
 }
 
+/**
+ * One pixel of a case on the renderer's scaled medium, in two parts a
+ * march keeps apart (§5.1, §5.5), each per band with its standard error and
+ * in the reference's units:
+ *
+ * - `first`: one order of scattering of the sun, the whole phase as the
+ *   source and scaled depths both ways, under no sky.
+ * - `rest`: every order past the first of the scaled phase, and with it the
+ *   sky's light by every order, the sky seen straight through the cloud
+ *   included.
+ *
+ * Their sum is the pixel on the scaled medium, to hold beside the same
+ * pixel of `probes`, which is the true one.
+ */
+export interface CumulusScaledProbe {
+  readonly case: string
+  readonly mask: CumulusProbe['mask']
+  readonly bin: number
+  readonly pixel: readonly [number, number]
+  readonly first: readonly [number, number, number]
+  readonly firstError: readonly [number, number, number]
+  readonly rest: readonly [number, number, number]
+  readonly restError: readonly [number, number, number]
+}
+
 /** The generated reference's form (`cumulusReference.generated.ts`). */
 export interface CumulusReference {
   readonly format: 'inertialref/cumulus-reference'
@@ -872,6 +897,8 @@ export interface CumulusReference {
   readonly voxels: readonly (RecordedVoxel & { readonly subject: string })[]
   /** The scaled medium against the true one, a row a case and mask. */
   readonly scaling: readonly CumulusScaling[]
+  /** The scaled medium itself, a row a pixel of `probes`, in its two parts. */
+  readonly scaled: readonly CumulusScaledProbe[]
   /**
    * The same tracer on the analytic cumulus, which no field moves: what the
    * GPU tracer is held to on every run of its suite.
