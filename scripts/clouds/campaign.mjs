@@ -316,13 +316,35 @@ async function serve(state, ctx) {
   throw new Error(`the preview did not answer ${URL_}; see ${state.previewLog}`)
 }
 
+/**
+ * Stops the preview this campaign served, and waits for the port rather than
+ * the process: `cf` runs in a process group of its own under pnpm's, and
+ * pnpm forwards the signal to it, so the group pnpm leads can be gone while
+ * `cf` and workerd still hold 8787, which the next campaign would refuse.
+ * What still listens after the wait is this campaign's, and its group goes.
+ */
 async function stopPreview(ctx) {
   const proc = ctx.preview
-  if (proc == null || proc.exitCode !== null) return
+  if (proc == null) return
+  ctx.preview = null
   killGroup(proc, 'SIGTERM')
-  for (let i = 0; i < 20 && proc.exitCode === null; i += 1)
+  for (let i = 0; i < 40 && (await answers(URL_)); i += 1)
     await new Promise((resolve) => setTimeout(resolve, 500))
   killGroup(proc, 'SIGKILL')
+  const read = (command, args) => {
+    try {
+      return execFileSync(command, args, { encoding: 'utf8' }).trim()
+    } catch {
+      return ''
+    }
+  }
+  const port = new URL(URL_).port
+  for (const pid of read('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'])
+    .split('\n')
+    .filter(Boolean)) {
+    const group = Number(read('ps', ['-o', 'pgid=', '-p', pid]))
+    if (group > 1) killGroup({ pid: group }, 'SIGKILL')
+  }
 }
 
 /* --------------------------------------------------------------- the run ---- */
