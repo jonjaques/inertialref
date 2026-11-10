@@ -1,4 +1,5 @@
 import {
+  type Node,
   type UniformNode,
   AddEquation,
   BufferAttribute,
@@ -32,6 +33,7 @@ import {
   normalLocal,
   oneMinus,
   positionLocal,
+  positionView,
   pow,
   saturate,
   select,
@@ -48,6 +50,8 @@ import {
   nozzleValveSeed,
   valveOpening,
 } from '@inertialref/rendering'
+import { cloudFrontThrough } from './cloudFront.ts'
+import type { CloudFrontHandle } from './cloudSystem.ts'
 import { asField, asVector, noiseFetch, noiseSampler } from './noiseNodes.ts'
 import { noiseTexture } from './noiseTexture.ts'
 import { sensorRadiance } from './radiance.ts'
@@ -83,6 +87,13 @@ import { sensorRadiance } from './radiance.ts'
  * here reads the clock: the flicker runs on the frame's own delta, which is
  * a presentation filter like the observatory's ease, so a paused tick with
  * a held key still shows a burning drive rather than a frozen one.
+ *
+ * **With a front handle a plume is seen through the clouds in front of it.**
+ * It is additive, so the light of the cloud in front is already in the frame
+ * under it and the plume's own light is only attenuated: `color·T`. A plume
+ * is at the ship, in the near field, so its view distance is true meters.
+ * Without a handle every graph is the one a page without `?clouds=1` has
+ * always compiled.
  */
 
 /** Hull axes, meters. */
@@ -213,6 +224,15 @@ function additive(material: MeshBasicNodeMaterial): void {
 
 type Shading = 'jet' | 'pod' | 'drive'
 
+/** `color` as the clouds in front of the fragment leave it, or as it is with no handle. */
+function throughClouds(
+  color: Node<'vec3'>,
+  front: CloudFrontHandle | undefined,
+): Node<'vec3'> {
+  if (front === undefined) return color
+  return color.mul(cloudFrontThrough(front, length(positionView)).transmittance)
+}
+
 /**
  * One material for a set of shells placed by instanced attributes.
  *
@@ -229,6 +249,7 @@ function shellMaterial(
   size: InstancedBufferAttribute,
   fire: InstancedBufferAttribute,
   clock: UniformNode<'float', number>,
+  front: CloudFrontHandle | undefined,
 ): MeshBasicNodeMaterial {
   const vFacing = varying(float(), 'vPlumeFacing')
   const vFire = varying(float(), 'vPlumeFire')
@@ -275,7 +296,7 @@ function shellMaterial(
   })()
 
   const noise = noiseSampler(noiseTexture())
-  material.colorNode = Fn(() => {
+  const emitted = Fn(() => {
     const along = uv().y
     const around = uv().x.mul(Math.PI * 2)
     // Noise read on a cylinder about the axis, so the seam at u=0 is not a
@@ -366,6 +387,7 @@ function shellMaterial(
       }
     }
   })()
+  material.colorNode = throughClouds(emitted, front)
   material.side = DoubleSide
   additive(material)
   return material
@@ -383,10 +405,11 @@ function shellMaterial(
 function diskMaterial(
   throttle: UniformNode<'float', number>,
   clock: UniformNode<'float', number>,
+  front: CloudFrontHandle | undefined,
 ): MeshBasicNodeMaterial {
   const noise = noiseSampler(noiseTexture())
   const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
-  material.colorNode = Fn(() => {
+  const disk = Fn(() => {
     const centered = uv().sub(0.5).mul(2)
     const r = length(centered)
     const drift = clock.mul(0.8)
@@ -423,6 +446,7 @@ function diskMaterial(
     )
     return color.mul(intensity)
   })()
+  material.colorNode = throughClouds(disk, front)
   additive(material)
   return material
 }
@@ -455,7 +479,10 @@ const POD_SHELL = /*@__PURE__*/ plumeShell(podProfile, 6, 18)
 const DRIVE_SHELL = /*@__PURE__*/ plumeShell(driveProfile, 24, 48)
 const DISK = /*@__PURE__*/ new CircleGeometry(1, 48)
 
-export function createThrusterPlumes(layout: ThrusterLayout): ThrusterPlumes {
+export function createThrusterPlumes(
+  layout: ThrusterLayout,
+  front?: CloudFrontHandle,
+): ThrusterPlumes {
   const group = new Group()
   group.name = 'plumes'
   group.renderOrder = 10
@@ -491,7 +518,15 @@ export function createThrusterPlumes(layout: ThrusterLayout): ThrusterPlumes {
         nozzle.radius * (shading === 'jet' ? JET_LENGTH : POD_LENGTH),
       )
     })
-    const material = shellMaterial(shading, origin, axis, size, fire, clock)
+    const material = shellMaterial(
+      shading,
+      origin,
+      axis,
+      size,
+      fire,
+      clock,
+      front,
+    )
     const geometry = instanced(shading === 'jet' ? JET_SHELL : POD_SHELL, count)
     const mesh = new Mesh(geometry, material)
     mesh.frustumCulled = false
@@ -536,13 +571,14 @@ export function createThrusterPlumes(layout: ThrusterLayout): ThrusterPlumes {
       size,
       fire,
       clock,
+      front,
     )
     const sheathGeometry = instanced(DRIVE_SHELL, 1)
     const sheath = new Mesh(sheathGeometry, sheathMaterial)
     sheath.frustumCulled = false
     sheath.visible = false
     sheath.renderOrder = 10
-    const diskMat = diskMaterial(throttle, clock)
+    const diskMat = diskMaterial(throttle, clock, front)
     const disk = new Mesh(DISK, diskMat)
     disk.position.set(drive.position.x, drive.position.y, drive.position.z)
     disk.scale.setScalar(drive.radius)

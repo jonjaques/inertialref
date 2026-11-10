@@ -23,6 +23,7 @@ import {
   session,
 } from './measure.mjs'
 import { figures, plan, tables, unfit } from './page.mjs'
+import { sameBuild } from '../weather/sheet.mjs'
 
 /*
  * The whole frame, the frame log and the pacing study without a browser or
@@ -92,6 +93,19 @@ describe('every run', () => {
       "the page is build abed0719, and the tree is abed0719-dirty; serve this tree's build",
     )
     expect(buildRefusal(null, 'abed0719')).toMatch(/nobody named/)
+    // A tree measured dirty on purpose (`--allow-dirty`) is served by the
+    // same test: its build's id ends `-dirty` as the tree's does.
+    expect(buildRefusal('abed0719-dirty', 'abed0719-dirty')).toBeNull()
+    // One equality for the runner and the capture.
+    for (const [page, tree] of [
+      ['abed0719', 'abed0719'],
+      ['abed0719-dirty', 'abed0719-dirty'],
+      ['abed0719', 'abed0719-dirty'],
+      [null, 'abed0719'],
+    ])
+      expect(buildRefusal(page, tree) === null, `${page} ${tree}`).toBe(
+        sameBuild(page, tree),
+      )
   })
 })
 

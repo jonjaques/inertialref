@@ -13,7 +13,9 @@
  *     --samples <cast>:<a>..<b>   settled stills at a path's frames a to b
  *     --role <role>       the volume arm's role: candidate, low-anchor, last-accepted
  *     --base <dir|record> the last phase's plates, for the sheets
- *     --no-casts --no-samples --baseline-casts
+ *     --cast <id>-<speed>[-on|-off]  that cast alone, or one arm of it
+ *     --lever <name>=<value>  a cloud lever on every volume arm, repeatable
+ *     --no-casts --no-default-samples --baseline-casts
  *     --dry-run           print every take, its preset, role, arm and frames
  *
  * The rig is the rubric's: one session of `scripts/drive.mjs` at 1440 × 900
@@ -80,6 +82,7 @@ import {
   cutCast,
   HELD,
   INSTALL_PATH,
+  parseLevers,
   SAMPLES,
   seekPath,
   setLevers,
@@ -87,7 +90,15 @@ import {
   startPath,
   stopPath,
 } from './descent.mjs'
-import { checkRecord, PLATE, provenance, role, sunInFrame } from './sheet.mjs'
+import {
+  checkBuild,
+  checkRecord,
+  PLATE,
+  provenance,
+  role,
+  sunInFrame,
+  treeBuild,
+} from './sheet.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const DRIVE = path.join(ROOT, 'scripts/drive.mjs')
@@ -155,6 +166,12 @@ export function dataRoot(cwd = ROOT) {
   return path.join(path.dirname(path.resolve(cwd, common)), '.data/weather')
 }
 
+/** The `--js` and settle that set a run's levers, or nothing without them. */
+const leverSteps = (levers) =>
+  levers === null || Object.keys(levers).length === 0
+    ? []
+    : ['--js', setLevers(levers), ...settle]
+
 /** `<cast>:<a>..<b>` as a sample over a cast's frames a to b. */
 function parseSample(text) {
   const match = /^(.+):(\d+)\.\.(\d+)$/.exec(text)
@@ -190,6 +207,8 @@ export function parseCapture(argv) {
       role: { type: 'string', default: 'candidate' },
       base: { type: 'string' },
       casts: { type: 'boolean', default: true },
+      cast: { type: 'string', multiple: true },
+      lever: { type: 'string', multiple: true },
       'baseline-casts': { type: 'boolean', default: false },
       'default-samples': { type: 'boolean', default: true },
       'dry-run': { type: 'boolean', default: false },
@@ -230,13 +249,28 @@ export function parseCapture(argv) {
   const cuts = (values.cut ?? [])
     .map((tag) => STILLS.find((id) => tagOf(id) === tag))
     .map((id) => cutCast(id, cutFrom(id)))
-  const casts = values.casts
-    ? [...CASTS, ...HELD].filter(
-        (cast) =>
-          wanted(cast.id) &&
-          (cast.checks.length > 0 || values['baseline-casts']),
-      )
-    : []
+  // `--cast <id>-<speed>` takes those casts alone, retired or not: one an
+  // invocation keeps a run's hold on the GPU lock short on a shared machine.
+  // `<id>-<speed>-<on|off>` takes that arm alone: a control and the cast
+  // read against it in one short run and one record.
+  const named = (values.cast ?? []).map((key) => {
+    const arm = /-(on|off)$/.exec(key)?.[1]
+    const cast = castByKey(
+      arm === undefined ? key : key.slice(0, -arm.length - 1),
+    )
+    if (cast === undefined) throw new Error(`--cast ${key} names no cast`)
+    return arm === undefined ? cast : { ...cast, arms: [arm] }
+  })
+  const casts =
+    named.length > 0
+      ? named
+      : values.casts
+        ? [...CASTS, ...HELD].filter(
+            (cast) =>
+              wanted(cast.id) &&
+              (cast.checks.length > 0 || values['baseline-casts']),
+          )
+        : []
   for (const cut of cuts)
     if (!casts.some((one) => castName(one, true) === castName(cut, true)))
       casts.push(cut)
@@ -247,6 +281,7 @@ export function parseCapture(argv) {
   return {
     help: false,
     dryRun,
+    levers: parseLevers(values.lever ?? []),
     phase: Number(values.phase),
     url: values.url === undefined ? null : new URL(values.url).toString(),
     gpuWaitMs: wait * 1000,
@@ -326,11 +361,12 @@ export const READ = `(async () => {
 })()`
 
 /** One still: a fresh boot at the picture, settled, read and shot. */
-export const stillArgs = (id, arm, file) => [
+export const stillArgs = (id, arm, file, levers = null) => [
   '--preset',
   id,
   ...plateQueries(arm === 'volume'),
   ...settle,
+  ...(arm === 'volume' ? leverSteps(levers) : []),
   '--wait',
   String(SETTLE_QUIET),
   '--js',
@@ -361,7 +397,7 @@ const castBefore = (cast) =>
  * plate after. The `--js` steps run in order and each answers in the
  * result's `js` entries in that order; `castReads` finds them by place.
  */
-export const castArgs = (cast, clouds, file = null) => [
+export const castArgs = (cast, clouds, file = null, levers = null) => [
   '--preset',
   cast.boot ?? cast.id,
   ...plateQueries(true),
@@ -369,9 +405,7 @@ export const castArgs = (cast, clouds, file = null) => [
   ...(clouds
     ? []
     : ['--js', 'engine.clouds = { ...engine.clouds, on: false }', ...settle]),
-  ...(cast.levers === undefined
-    ? []
-    : ['--js', setLevers(cast.levers), ...settle]),
+  ...leverSteps(castLevers(cast, clouds, levers)),
   ...castBefore(cast),
   // The path's first frame, settled and quiet, before the screencast: a
   // cast started on a picture still converging reads its first frames as
@@ -396,14 +430,26 @@ export const castArgs = (cast, clouds, file = null) => [
     : []),
 ]
 
+/**
+ * The levers a cast's arm sets: its own, and on the clouds-on arm a run's
+ * `--lever`s over them; the control differs from its picture by the clouds
+ * alone. Null where it sets none.
+ */
+export function castLevers(cast, clouds, levers = null) {
+  const merged = { ...cast.levers, ...(clouds ? levers : null) }
+  return Object.keys(merged).length === 0 ? null : merged
+}
+
 /** A cast's `--js` answers by what each asked: the levers, the state, the stop, the read. */
-export function castReads(cast, clouds, result) {
+export function castReads(cast, clouds, result, levers = null) {
   const js = result.results.filter((one) => one.step === 'js')
   const at = (n) => js.at(n)?.value
   const settled = cast.settled ? 1 : 0
   return {
     levers:
-      cast.levers === undefined ? 'set' : (at(clouds ? 0 : 1) ?? 'unavailable'),
+      castLevers(cast, clouds, levers) === null
+        ? 'set'
+        : (at(clouds ? 0 : 1) ?? 'unavailable'),
     state: at(-3 - settled),
     stop: at(-1 - settled),
     read: settled === 1 ? at(-1) : null,
@@ -416,11 +462,12 @@ export function castReads(cast, clouds, result) {
  * shot. The eye never moves by more than the path's own step between two
  * of them, so a settle after a seek is a history's 32 frames, not a boot.
  */
-export const sampleArgs = (cast, frames, files) => [
+export const sampleArgs = (cast, frames, files, levers = null) => [
   '--preset',
   cast.id,
   ...plateQueries(true),
   ...settle,
+  ...leverSteps(levers),
   '--js',
   INSTALL_PATH,
   ...frames.flatMap((k, i) => [
@@ -456,30 +503,6 @@ export function checkStill(id, arm, read) {
     if (read.cloud == null) refuse('its trace read back nothing')
   }
   return read
-}
-
-/**
- * Refuse a take whose page was built from another commit than the record
- * names, or from an edited tree.
- *
- * The capture photographs a preview it does not start, and `drive.mjs`
- * cannot hold a production build to a tree: it names none. The page's
- * build id is `git describe --always --dirty --abbrev=8` at build time
- * (`apps/game/vite.config.ts`), which holds the commit's first eight
- * characters, or `<branch>@<eight>` on CI. Without this a record said one
- * commit for plates of another: the baseline's E1 and E2 were recorded at
- * `ab301957` from a build of `23f173bc`. Every take is held to the one
- * commit, so a run cannot mix two builds either.
- */
-export function checkBuild(name, read, commit) {
-  const id = read?.build?.id
-  if (typeof id !== 'string')
-    throw new Error(`${name}: the page names no build; refused`)
-  if (id.endsWith('-dirty') || !id.includes(commit.slice(0, 8)))
-    throw new Error(
-      `${name}: the page was built as ${id}, not from ${commit.slice(0, 8)} clean; build the preview from the commit the record names; refused`,
-    )
-  return id
 }
 
 /**
@@ -771,6 +794,8 @@ async function main() {
   const record = {
     phase: options.phase,
     commit: git('rev-parse', 'HEAD'),
+    tree: treeBuild(),
+    levers: options.levers,
     clean: git('status', '--porcelain') === '',
     url: options.url,
     rig: RIG,
@@ -811,10 +836,15 @@ async function main() {
 
     const still = async (id, arm, file, as) => {
       const take = takeOf(file)
-      const result = await drive(stillArgs(id, arm, take))
+      const levers = arm === 'volume' ? options.levers : null
+      const result = await drive(stillArgs(id, arm, take, levers))
       const read = await keepShot(take, file, () => {
+        if (levers !== null && jsValues(result)[0] !== 'set')
+          throw new Error(
+            `${id} (${arm}): ${String(jsValues(result)[0])}; refused`,
+          )
         const checked = checkStill(id, arm, jsValues(result).at(-1))
-        checkBuild(`${id} (${arm})`, checked, record.commit)
+        checkBuild(`${id} (${arm})`, checked, record.tree)
         return checked
       })
       record.build ??= read.build
@@ -870,7 +900,15 @@ async function main() {
         const file = path.join(out, `${id}-${arm}.png`)
         say(`${id} (${arm})`)
         record.stills.push(
-          await still(id, arm, file, role(roleOf(id, arm, options.role))),
+          await still(
+            id,
+            arm,
+            file,
+            role(
+              roleOf(id, arm, options.role),
+              arm === 'volume' ? leverDifferences(options.levers) : [],
+            ),
+          ),
         )
         if (options.twice) {
           const again = path.join(out, `${id}-${arm}.again.png`)
@@ -924,6 +962,10 @@ async function instantsOf(dir) {
   return existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : null
 }
 
+/** A run's `--lever`s as a role's difference, or none. */
+const leverDifferences = (levers) =>
+  levers === null ? [] : [`run levers ${JSON.stringify(levers)}`]
+
 /** What a cast's path does beyond its picture: its levers, its boot, its scrub. */
 const castDifferences = (cast) => [
   ...(cast.levers === undefined
@@ -955,7 +997,7 @@ async function settledPlate(out, record, cast, plate, read) {
 }
 
 /** One cast in one arm: kept, refused at every boot, or its lever unavailable. */
-async function takeCast({ cast, clouds, out, record, drive, say }) {
+async function takeCast({ cast, clouds, out, record, drive, say, levers }) {
   const name = castName(cast, clouds)
   say(`${name}: ${cast.why}`)
   const plate = cast.settled ? path.join(out, `${name}.settled.png`) : null
@@ -966,9 +1008,9 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
   const attempts = []
   for (let boot = 1; boot <= CAST_ATTEMPTS; boot += 1) {
     const result = await drive(
-      castArgs(cast, clouds, plate === null ? null : takeOf(plate)),
+      castArgs(cast, clouds, plate === null ? null : takeOf(plate), levers),
     )
-    const reads = castReads(cast, clouds, result)
+    const reads = castReads(cast, clouds, result, levers)
     if (reads.levers !== 'set') {
       record.unavailable.push({
         name,
@@ -992,7 +1034,7 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
     // cut's state is read where it boots, before the cut; its settled plate
     // after the cut is the cornerstone's own, and held as a still is.
     if (clouds) checkServed(cast.boot ?? cast.id, reads.state, refuse)
-    checkBuild(name, reads.state, record.commit)
+    checkBuild(name, reads.state, record.tree)
     if (cast.settled) checkStill(cast.id, 'volume', reads.read)
     const castStep = result.results.find((one) => one.step === 'cast')
     let verdict
@@ -1014,7 +1056,10 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
       continue
     }
     const as = clouds
-      ? role(cast.role ?? 'candidate', castDifferences(cast))
+      ? role(cast.role ?? 'candidate', [
+          ...castDifferences(cast),
+          ...leverDifferences(levers),
+        ])
       : role('clouds-off', castDifferences(cast))
     if (plate !== null) await rename(takeOf(plate), plate)
     const dir = path.join(out, name)
@@ -1074,7 +1119,15 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
 async function takeCasts({ options, out, record, drive, say }) {
   for (const cast of options.casts)
     for (const arm of armsOfCast(cast))
-      await takeCast({ cast, clouds: arm === 'on', out, record, drive, say })
+      await takeCast({
+        cast,
+        clouds: arm === 'on',
+        out,
+        record,
+        drive,
+        say,
+        levers: options.levers,
+      })
   // The clouds' own drops: each on arm against its control's, once both
   // are on record, whichever cast took the control.
   for (const one of record.casts.filter((cast) => cast.clouds)) {
@@ -1112,13 +1165,18 @@ async function takeSamples({ options, out, record, drive, say, jsValues }) {
         path.join(dir, `${String(k).padStart(4, '0')}.png`),
       )
       say(`${sample.cast}: settled stills at ${frames[0]}..${frames.at(-1)}`)
-      const result = await drive(sampleArgs(cast, frames, files.map(takeOf)))
-      // After the install each frame answers a seek, then a read.
-      const answers = jsValues(result).slice(1)
+      const result = await drive(
+        sampleArgs(cast, frames, files.map(takeOf), options.levers),
+      )
+      // After the levers and the install each frame answers a seek, then a
+      // read.
+      if (options.levers !== null && jsValues(result)[0] !== 'set')
+        throw new Error(`${sample.cast}: ${String(jsValues(result)[0])}`)
+      const answers = jsValues(result).slice(options.levers === null ? 1 : 2)
       for (const [n, k] of frames.entries()) {
         const read = await keepShot(takeOf(files[n]), files[n], () => {
           const checked = checkStill(cast.id, 'volume', answers[2 * n + 1])
-          checkBuild(`${sample.cast} @ ${k}`, checked, record.commit)
+          checkBuild(`${sample.cast} @ ${k}`, checked, record.tree)
           return checked
         })
         index.stills[k] = {
@@ -1137,7 +1195,10 @@ async function takeSamples({ options, out, record, drive, say, jsValues }) {
             record,
             cast.id,
             read,
-            role('settled-sample', [`path frame ${k}`]),
+            role('settled-sample', [
+              `path frame ${k}`,
+              ...leverDifferences(options.levers),
+            ]),
           ),
         })
       }

@@ -89,6 +89,7 @@ import {
 } from '../../packages/devtools/src/pictures.ts'
 import { RIG, readSession, rigLeft, sessionPath } from '../driveLock.mjs'
 import { GpuLockError, acquire, parseWait } from '../gpuLock.mjs'
+import { sameBuild } from '../weather/sheet.mjs'
 import { difference } from './diff.mjs'
 import {
   DISPLAY_HOLD,
@@ -863,12 +864,11 @@ export const treeBuild = () =>
  * page's `ir.build().id` and holds it to the tree's, the campaign's and a
  * run started by hand alike: a check of the bundle on disk says nothing of
  * the preview that served it, and phase 0's repeats started by hand
- * compared nothing. Equality, not a prefix: the capture's `checkBuild` takes
- * a page whose id holds the commit, which a dirty tree's never matches, and
- * `--allow-dirty` measures exactly that tree.
+ * compared nothing. The test is the capture's own, `sameBuild`: equality,
+ * not a prefix, so `--allow-dirty` measures exactly the dirty tree it names.
  */
 export function buildRefusal(page, tree) {
-  if (page === tree) return null
+  if (sameBuild(page, tree)) return null
   return `the page is build ${page ?? 'nobody named'}, and the tree is ${tree}; serve this tree's build`
 }
 
