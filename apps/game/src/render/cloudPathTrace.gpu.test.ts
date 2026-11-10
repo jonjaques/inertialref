@@ -236,8 +236,8 @@ describe('the flights', () => {
         expect(off).toBeLessThan(5)
         if (off > 3) beyond += 1
       }
-    expect(cloudy).toBeGreaterThan(200)
-    // Three errors hold 99.73% of pixels: of some 290, one in a run.
+    expect(cloudy).toBe(268)
+    // Three errors hold 99.73% of pixels: of 268, one in a run.
     expect(beyond).toBeLessThanOrEqual(4)
   })
 })
