@@ -547,6 +547,53 @@ describe('every order', () => {
     expect(error).toBeLessThan(0.15 * mean)
   })
 
+  // What the scaled medium is put together from: `orders: 1` and `first: 2`
+  // split a slab's light with nothing left over or counted twice, each from
+  // its own seeds. Seen from above first order is the walk's own; looking
+  // up through a thin slab two degrees from the sun it is a chain's from
+  // the eye, which is the other place an order is counted, and most of the
+  // light there.
+  const sunAbove = unit(0.3, 0.8, 0.2)
+  it.each([
+    ['from above', unit(-0.4, -0.7, 0.3), 5, 0.05, 0.2],
+    ['two degrees from the sun', unit(0.3, 0.89, 0.2), 0.5, 0.3, 0.95],
+  ] as const)(
+    'is its first order and the orders past it, traced apart, %s',
+    (label, view, depth, least, most) => {
+      const sun: TraceSun = {
+        direction: sunAbove,
+        irradiance: [1, 1, 1],
+        angularRadius: SUN_DISK,
+      }
+      const part = (rest: Partial<TraceScene>, name: string) =>
+        estimateOf(
+          tracePixel(
+            createTracer(
+              scene(slab(depth), { sun, sky: uniformSky(0.02), ...rest }),
+            ),
+            eyeOn(view),
+            view,
+            0,
+            deriveSeed(SEED, `${label}:${name}`),
+            0,
+            20_000,
+          ),
+        )
+      const whole = part({}, 'whole')
+      const first = part({ orders: 1, sky: uniformSky(0) }, 'first')
+      const rest = part({ first: 2 }, 'rest')
+      const error = Math.hypot(whole.error, first.error, rest.error)
+      expect(Math.abs(first.mean + rest.mean - whole.mean)).toBeLessThan(
+        3 * error,
+      )
+      expect(error).toBeLessThan(0.05 * whole.mean)
+      // Neither part is the whole: first order's share, measured at 9% from
+      // above and 56% toward the sun.
+      expect(first.mean).toBeGreaterThan(least * whole.mean)
+      expect(first.mean).toBeLessThan(most * whole.mean)
+    },
+  )
+
   it('lights a bare ground at its Lambert form, under the sun and the sky', () => {
     // No cloud at all: the sun's cosine and the sky's irradiance over π,
     // each times the albedo, with nothing drawn that could vary.
