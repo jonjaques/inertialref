@@ -5,7 +5,7 @@ import {
   turnAngle,
   unturn,
 } from './weatherClimate.ts'
-import { reducePoint } from './weatherClock.ts'
+import { reducePoint, reduceSeconds } from './weatherClock.ts'
 import {
   type LevelProfile,
   levelProfile,
@@ -111,31 +111,57 @@ export function levelTurnMatrix(
 }
 
 /**
- * Level k's reduced origin for an eye: `M_k·eye + ŷ·D` reduced by `period`
- * in float64. The GPU's lattice point is this plus `M_k·(p − eye)`, which is
- * `M_k·p + ŷ·D` for any eye, modulo the period: the eye enters as the point
- * the float32 offset is measured from, and nowhere else.
+ * A body point's place in level k's noise frame, `R_y(−θ_k)·p + ŷ·D`,
+ * reduced into [0, period) on each axis in float64. For an eye it is the
+ * level's origin: the GPU's lattice point is this plus `M_k·(p − eye)`,
+ * which is `M_k·p + ŷ·D` for any eye, modulo the period, so the eye enters
+ * as the point the float32 offset is measured from and nowhere else.
+ *
+ * The drift is reduced by the period before it is added. Unreduced it is a
+ * quarter of a meter a second since J2000, 8 × 10¹¹ m at the far end of
+ * `periodIndex`'s range, where a float64 resolves a tenth of a millimeter.
+ * This is the arithmetic of the frame's `latticeOrigin` (`weatherClock.ts`,
+ * package H) step for step, so the field and the frame place every level's
+ * noise alike.
  */
 export function levelOrigin(
   clock: FieldClock,
   level: number,
-  eye: Vec3,
+  point: Vec3,
   period: number,
 ): Vec3 {
-  return reducePoint(levelLattice(clock, level, eye), period)
+  const turned = unturn(point, clock.turn[level] ?? 0)
+  return reducePoint(
+    {
+      x: turned.x,
+      y: turned.y + reduceSeconds(clock.drift, period),
+      z: turned.z,
+    },
+    period,
+  )
 }
 
-/** The base noise's cells at a lattice point: reduced by its period, eight cells, in float64. */
-export function baseCells(lattice: Vec3, cell: number): Vec3 {
-  const reduced = reducePoint(lattice, BASE_NOISE_PERIOD * cell)
-  return { x: reduced.x / cell, y: reduced.y / cell, z: reduced.z / cell }
+/** The base noise's cells at a body point: its place in the level's frame over eight cells, over the cell. */
+function baseCells(
+  clock: FieldClock,
+  level: number,
+  point: Vec3,
+  cell: number,
+): Vec3 {
+  const at = levelOrigin(clock, level, point, BASE_NOISE_PERIOD * cell)
+  return { x: at.x / cell, y: at.y / cell, z: at.z / cell }
 }
 
-/** The detail's cells at a lattice point: four a base cell, tiling once a base cell. */
-export function detailCells(lattice: Vec3, cell: number): Vec3 {
-  const reduced = reducePoint(lattice, cell)
+/** The detail's cells at a body point: four a base cell, tiling once a base cell. */
+function detailCells(
+  clock: FieldClock,
+  level: number,
+  point: Vec3,
+  cell: number,
+): Vec3 {
+  const at = levelOrigin(clock, level, point, cell)
   const scale = DETAIL_NOISE_PERIOD / cell
-  return { x: reduced.x * scale, y: reduced.y * scale, z: reduced.z * scale }
+  return { x: at.x * scale, y: at.y * scale, z: at.z * scale }
 }
 
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))
@@ -164,17 +190,20 @@ function levelSample(
   cover: number,
   convective: number,
   h01: number,
-  lattice: Vec3,
+  clock: FieldClock,
+  point: Vec3,
   footprint: number,
 ): FieldSample {
   const [shape, mean, , radius] = readLevelProfile(profile, h01, convective)
   const c = clamp01(cover)
   const { cell } = profile
-  const base = baseNoiseTexture(baseCells(lattice, cell))
+  const base = baseNoiseTexture(baseCells(clock, level, point, cell))
   const reach = 1 - smoothstep(cell / 16, cell / 4, footprint)
   const erosion =
     reach > 0
-      ? detailNoiseTexture(detailCells(lattice, cell)) * profile.erosion * reach
+      ? detailNoiseTexture(detailCells(clock, level, point, cell)) *
+        profile.erosion *
+        reach
       : 0
   const shaped = clamp01((base * shape - (1 - c)) / Math.max(c, TINY))
   const eroded = clamp01((shaped - erosion) / Math.max(1 - erosion, TINY))
@@ -238,7 +267,8 @@ export function cloudFieldAt(
     climate.cover[level]!,
     climate.convective[level]!,
     (height - spec.base) / Math.max(spec.top - spec.base, 1),
-    levelLattice(clock, level, position),
+    clock,
+    position,
     footprint,
   )
 }
@@ -282,7 +312,8 @@ export function columnDepth(
       climate.cover[level]!,
       climate.convective[level]!,
       h01,
-      levelLattice(clock, level, position),
+      clock,
+      position,
       0,
     )
     depth += at.fraction * at.sigma

@@ -79,6 +79,9 @@ const weatherAt = (
       ice: 1,
       deep: 0,
     }),
+    coefficients: () => {
+      throw new Error('the field reads a climate’s samples, not its uniforms')
+    },
   },
   turn,
   drift,
@@ -492,6 +495,27 @@ describe('the field’s motion', () => {
         expect(Math.abs(apart)).toBeLessThan(4 * grid * Math.abs(omega) + 1e-12)
       }),
       { numRuns: 500 },
+    )
+  })
+
+  it('reduces a point’s place by the period with the drift reduced first, and is the lattice point modulo the period', () => {
+    const period = BASE_NOISE_PERIOD * 1200
+    fc.assert(
+      fc.property(rate, instant, point, (omega, time, p) => {
+        const clock = fieldClock(weatherOf(omega), time)
+        const origin = levelOrigin(clock, 0, p, period)
+        const lattice = levelLattice(clock, 0, p)
+        for (const axis of ['x', 'y', 'z'] as const) {
+          expect(origin[axis]).toBeGreaterThanOrEqual(0)
+          expect(origin[axis]).toBeLessThan(period)
+          const apart =
+            (((origin[axis] - lattice[axis]) % period) + period) % period
+          // The unreduced form rounds at its own size, 8 × 10⁷ m of drift
+          // at ten years: 1.5 × 10⁻⁸ m a step, a few steps in all.
+          expect(Math.min(apart, period - apart)).toBeLessThan(1e-6)
+        }
+      }),
+      { numRuns: 300 },
     )
   })
 
