@@ -261,11 +261,11 @@
       },
       {
         "time": 11392.71884,
-        "ring": 0.2361111111
+        "ring": 0.25
       },
       {
         "time": 16970.90279,
-        "ring": 0.25
+        "ring": 0.2777777778
       },
       {
         "time": 22549.08621,
@@ -273,7 +273,7 @@
       },
       {
         "time": 28127.26846,
-        "ring": 0.25
+        "ring": 0.2638888889
       },
       {
         "time": 33705.45122,
@@ -281,11 +281,11 @@
       },
       {
         "time": 39283.63322,
-        "ring": 0.25
+        "ring": 0.2638888889
       },
       {
         "time": 44861.815,
-        "ring": 0.2361111111
+        "ring": 0.25
       },
       {
         "time": 50439.99628,
@@ -326,24 +326,24 @@
     "c6": [
       {
         "seconds": 0,
-        "first": 3295,
+        "first": 3235,
         "last": null,
-        "least": 105,
-        "leastFrame": 1315
+        "least": 55,
+        "leastFrame": 1340
       },
       {
         "seconds": 19,
-        "first": 3485,
+        "first": 3435,
         "last": null,
-        "least": 115,
+        "least": 65,
         "leastFrame": 1380
       },
       {
         "seconds": 38.1,
-        "first": 3745,
+        "first": 3695,
         "last": null,
-        "least": 125,
-        "leastFrame": 1475
+        "least": 65,
+        "leastFrame": 1495
       }
     ]
   },
@@ -358,7 +358,7 @@
       "weather-g2-overcast-shore": {
         "columns": 96,
         "cover": 1,
-        "cloudy": 0.9791666667,
+        "cloudy": 0.9895833333,
         "holds": true
       },
       "weather-g4-over-deck": {
@@ -370,7 +370,7 @@
       "weather-g6-descent": {
         "columns": 160,
         "cover": 0.9,
-        "cloudy": 0.6875,
+        "cloudy": 0.7,
         "holds": true
       },
       "weather-e1-cumulus-orbit": {
@@ -383,7 +383,7 @@
     "g3": {
       "edge": 96000,
       "clear": 110000,
-      "deck": 0.625,
+      "deck": 0.6041666667,
       "slot": 0,
       "holds": true
     },
