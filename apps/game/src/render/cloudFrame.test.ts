@@ -6,8 +6,10 @@ import {
   cloudsServed,
   fieldClock,
   lensForFov,
+  levelProfile,
   MAX_CLOUD_LAYERS,
   placeAt,
+  readLevelProfile,
   regimeWeather,
   type RenderBody,
   type RenderPlacement,
@@ -50,6 +52,7 @@ import {
   drawnWeather,
   scenarioClimate,
   servedBody,
+  weatherLevels,
   weatherScenario,
 } from './cloudFrame.ts'
 import {
@@ -396,6 +399,41 @@ describe('a body’s weather in its frame', () => {
     // The key is the lever's, so a change of weather starts the bakes over.
     expect(frame!.served.weatherKey).toBe('climate')
     expect(held!.served.weatherKey).toBe(CLIMATE_REGIME)
+  })
+
+  it('lays a fitted level out by the field’s own profile, so the frame and the CPU field read one set of numbers', () => {
+    // The body's climate, and every regime's levels taken as a fitted
+    // weather's, which is how `genusLevel` meets them.
+    const weathers = [
+      drawnWeather('climate', deckless).weather!,
+      ...SCENARIO_IDS.map((id) => regimeWeather(deckless, id)),
+    ]
+    const eye = { x: 0, y: earth.radius + 1500, z: 0 }
+    let fitted = 0
+    for (const weather of weathers)
+      weatherLevels({ weather, regime: null }, 50_000, eye).forEach(
+        (level, k) => {
+          const spec = weather.levels[k]!
+          if (!(spec.top > spec.base)) return
+          fitted += 1
+          const profile = levelProfile(spec)
+          expect(level.sigma).toBe(profile.scaled)
+          expect(level.radius).toBe(profile.radius)
+          expect(level.radiusRange[1]).toBe(profile.radius)
+          expect(level.radiusRange[0]).toBeLessThanOrEqual(profile.radius)
+          expect(level.cell).toBe(profile.cell)
+          expect(level.erosion).toBe(profile.erosion)
+          // Each end's mean depth is the table's own mean, as the GPU reads it.
+          const thickness = spec.top - spec.base
+          expect(level.meanDepth).toEqual(
+            [0, 1].map(
+              (v) =>
+                profile.scaled * thickness * readLevelProfile(profile, 0, v)[1],
+            ),
+          )
+        },
+      )
+    expect(fitted).toBeGreaterThan(SCENARIO_IDS.length)
   })
 
   it.each(SCENARIO_IDS)(

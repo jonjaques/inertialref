@@ -24,9 +24,14 @@ import {
   fieldClock,
   GENUS_TABLE,
   genusProfileMean,
+  levelProfile,
+  PROFILE_HEIGHTS,
+  PROFILE_ROWS,
+  readLevelProfile,
   horizonBasis,
   latticeOrigin,
   type Lens,
+  type LevelProfile,
   type LevelSpec,
   type LevelUpdate,
   levelFrames,
@@ -386,30 +391,39 @@ function regimeLevel(scenario: WeatherScenario, k: number): LevelNumbers {
 }
 
 /**
- * A fitted climate's level as numbers: the genus table's, the stratiform
- * genus the reference and the radius's range across both ends of the blend.
+ * A fitted climate's level as numbers: the CPU field's own (`levelProfile`),
+ * so the frame and the oracle the drawn field is held to agree on σ, the
+ * radius, the cell and the erosion. The table encodes σ and the radius as
+ * shares of its own greatest, so the reference is that greatest, and each
+ * end's mean depth is the table's mean channel as the GPU reads its byte.
  */
 function genusLevel(spec: LevelSpec): LevelNumbers {
   if (!(spec.top > spec.base)) return emptyLevel(spec.top)
-  const flat = GENUS_TABLE[spec.stratiform]
-  const heaped = GENUS_TABLE[spec.cumuliform]
-  const depth = (genus: LevelSpec['stratiform']): number =>
-    GENUS_TABLE[genus].sigma * (spec.top - spec.base) * genusProfileMean(genus)
+  const profile = levelProfile(spec)
+  const thickness = spec.top - spec.base
+  const depth = (v: number): number =>
+    profile.scaled * thickness * readLevelProfile(profile, 0, v)[1]
   return {
     ...DROPLETS,
     base: spec.base,
     top: spec.top,
-    sigma: flat.sigma,
-    radius: flat.radius,
-    radiusRange: [
-      Math.min(flat.radius, heaped.radius),
-      Math.max(flat.radius, heaped.radius),
-    ],
-    cell: flat.cell,
-    erosion: flat.erosion,
+    sigma: profile.scaled,
+    radius: profile.radius,
+    radiusRange: [leastRadius(profile), profile.radius],
+    cell: profile.cell,
+    erosion: profile.erosion,
     profileRow: CLOUD_GENERA.indexOf(spec.stratiform),
-    meanDepth: [depth(spec.stratiform), depth(spec.cumuliform)],
+    meanDepth: [depth(0), depth(1)],
   }
+}
+
+/** The least radius a profile's table holds where it holds cloud, µm. */
+function leastRadius(profile: LevelProfile): number {
+  const { texels } = profile
+  let least = 255
+  for (let at = 0; at < PROFILE_ROWS * PROFILE_HEIGHTS * 4; at += 4)
+    if (texels[at]! > 0) least = Math.min(least, texels[at + 3]!)
+  return (profile.radius * least) / 255
 }
 
 /**
