@@ -239,13 +239,9 @@ export const BAUM_MANIFEST: readonly IceSourceFile[] = [
  * that names a license or terms of use, so "no license or terms of use are
  * stated" is a fact about these bytes.
  */
-export const README_DATE = 'Last Updated: 25 July 2013'
+export const README_DATE = BAUM_ICE.sourceDate
 export const README_METHOD =
   'please refer to the 2011 paper for details - the methodology has not changed in the meantime.'
-
-/** The paper the README points to for the method, which the set's own paper extends. */
-export const BAUM_METHOD_CITATION =
-  'Baum, B. A., P. Yang, A. J. Heymsfield, C. Schmitt, Y. Xie, A. Bansemer, Y.-X. Hu, and Z. Zhang (2011). Improvements in shortwave bulk scattering and absorption models for the remote sensing of ice clouds. Journal of Applied Meteorology and Climatology, 50, 1037–1056. doi:10.1175/2010JAMC2608.1'
 
 /**
  * Where the archive is extracted: `.data/weather/baum` under the main
@@ -642,7 +638,7 @@ export function generateIce(
     format: 'inertialref/ice',
     version: 1,
     habit: 'aggregate of solid columns, severely roughened',
-    citation: [...BAUM_ICE.citations, BAUM_METHOD_CITATION].join('\n'),
+    citation: BAUM_ICE.citations.join('\n'),
     license: BAUM_ICE.license,
     sourceDate: README_DATE,
     url: BAUM_ICE.url,

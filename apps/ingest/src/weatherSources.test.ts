@@ -40,14 +40,19 @@ describe('the weather’s sources', () => {
     }
   })
 
-  it('say of Baum’s set that it states no license, and quote its README’s date', () => {
+  it('say of Baum’s set that it states no license, quote its README’s date, and cite the paper its README points to', () => {
     expect(BAUM_ICE.license).toBe('no license or terms of use are stated')
-    expect(BAUM_ICE.sourceDate).toContain('25 July 2013')
+    expect(BAUM_ICE.sourceDate).toBe('Last Updated: 25 July 2013')
+    expect(BAUM_ICE.citations.join(' ')).toContain(
+      'doi:10.1016/j.jqsrt.2014.02.029',
+    )
+    expect(BAUM_ICE.citations.join(' ')).toContain('doi:10.1175/2010JAMC2608.1')
     // 10 to 120 µm in steps of 5 is 23 diameters.
     const { least, greatest, step, count } = BAUM_DIAMETERS
     expect((greatest - least) / step + 1).toBe(count)
-    // What is recalled and not read is said, so a header can say it too.
-    expect(BAUM_ICE.unread.length).toBeGreaterThan(0)
+    // The README's counts are read from the files by the generator, which
+    // refuses a file that differs: nothing of the record is taken unread.
+    expect(BAUM_ICE.unread).toEqual([])
   })
 
   it('quote ISCCP-H’s own license attribute, and state no Creative Commons license for it', () => {
