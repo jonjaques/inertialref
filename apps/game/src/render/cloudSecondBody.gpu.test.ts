@@ -145,7 +145,7 @@ async function disk(): Promise<{ inside: number; outside: number }> {
 
 describe('a second clouded body', () => {
   it('is served as the second, and its atlas bakes cover from the analytic medium past every face’s middle', async () => {
-    set({ placement: 'split', second: null })
+    set({ second: null })
     frames(60)
     const report = rig.system!.report
     expect(report.served).toBe('g:milky-way/s:SOL/b:2')
@@ -167,7 +167,7 @@ describe('a second clouded body', () => {
   }, 60_000)
 
   it('draws its cloud over its disk by the thin form, through the served cloud, and nothing past it', async () => {
-    set({ placement: 'split', second: 'g:milky-way/s:SOL/b:nowhere' })
+    set({ second: 'g:milky-way/s:SOL/b:nowhere' })
     frames(60)
     expect(rig.system!.report.second).toBeNull()
     const without = await disk()
@@ -186,7 +186,7 @@ describe('a second clouded body', () => {
   it.skipIf(!TIMESTAMPS)(
     'bakes a block of its atlas a frame, as `cloud far second`',
     async () => {
-      set({ placement: 'split', second: null })
+      set({ second: null })
       frames(10)
       const stop = installPassTimeline(gpu.renderer as WebGPURenderer)
       try {

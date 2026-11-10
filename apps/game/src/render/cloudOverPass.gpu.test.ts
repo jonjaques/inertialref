@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { logHub, RingBufferSink } from '@inertialref/shared'
 import {
   AdditiveBlending,
   DirectionalLight,
@@ -45,8 +46,7 @@ import {
   UNDER_CLOUDS_LAYERS,
 } from './cloudLayers.ts'
 import { cloudStorageTexture } from './cloudNodes.ts'
-import { CloudOverPassNode } from './cloudOverPass.ts'
-import { SPLIT_LABEL } from './cloudSplit.ts'
+import { CloudOverPassNode, OVER_PASS_LABEL } from './cloudOverPass.ts'
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 import {
   installPassTimeline,
@@ -66,7 +66,7 @@ import { sensorMrt } from './sensorMrt.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 
 /*
- * Placement A's two passes, built the way the sensor's chain builds them: a
+ * The clouds' two scene passes, built the way the sensor's chain builds them: a
  * scene pass of the layout's shape on the UNDER layers, the over pass beside
  * it in a post quad's dependency sum after the scene term, and the post
  * drawn from the top. The camera tests layers 0 and 1, as `<Canvas
@@ -374,14 +374,13 @@ describe('the over pass', () => {
     const seen = { target: false, runs: 0 }
     const node = new CloudFrameNode({
       inFrame: true,
-      placement: 'passes',
       run(three) {
         three.compute(kernel)
         seen.runs += 1
         seen.target = three.getRenderTarget() === frame.scenePass.renderTarget
       },
     })
-    // Placement A's composite: opaque on the OVER layer, first in pass B.
+    // The composite: opaque on the OVER layer, first in pass B.
     // It covers the left half at 2 m with the kernel's value; a square after
     // it, over the right half's lower quadrant, reads the value too.
     const composite = facing(
@@ -480,6 +479,141 @@ describe('the over pass', () => {
   })
 })
 
+/** Three's render tree: what a throw inside nested work would leave pointing into it. */
+interface Tree {
+  readonly _currentRenderContext: object | null
+  readonly _callDepth: number
+  readonly lighting: { readonly _cache: readonly unknown[] }
+}
+const treeOf = (three: WebGPURenderer) => {
+  const tree = three as unknown as Tree
+  return {
+    context: tree._currentRenderContext,
+    depth: tree._callDepth,
+    lights: tree.lighting._cache.length,
+  }
+}
+
+/**
+ * A frame node over `run` in a composite that adds nothing, first in pass B,
+ * so a frame with it draws exactly `LAYERED`.
+ */
+function framed(scene: Scene, run: (three: WebGPURenderer) => void) {
+  const driver = { inFrame: true, runs: 0, run }
+  const node = new CloudFrameNode({
+    get inFrame() {
+      return driver.inFrame
+    },
+    run(three) {
+      driver.runs += 1
+      driver.run(three)
+    },
+  })
+  const composite = facing(
+    2,
+    [-1.5, 1.5, -1.5, 1.5],
+    added(vec4(0, 0, 0, 0).add(node)),
+  )
+  composite.renderOrder = -1e6
+  markOverClouds(composite)
+  scene.add(composite)
+  scene.updateMatrixWorld(true)
+  return { driver, composite }
+}
+
+describe('the frame node in pass B', () => {
+  it('reports a throw in the frame’s cloud work once, puts the renderer back, and pass B draws on', async () => {
+    const sink = new RingBufferSink()
+    const detach = logHub.addSink(sink)
+    const elsewhere = new RenderTarget(4, 4, { depthBuffer: false })
+    const thrown = new Scene()
+    const trap = new Mesh(new PlaneGeometry(2, 2), new MeshBasicNodeMaterial())
+    trap.position.z = -1
+    trap.onBeforeRender = () => {
+      throw new Error('inside a nested render')
+    }
+    thrown.add(trap)
+    thrown.updateMatrixWorld(true)
+    // Its own camera: pass B's tests the OVER layer alone while it draws.
+    const looking = new PerspectiveCamera(FOV, 1, 0.05, 10)
+    looking.updateMatrixWorld()
+    const { scene, ground, behind, inFront } = layered()
+    const frame = chain(scene)
+    // A render nested in the cloud work that throws halfway: three leaves its
+    // context, call depth and lights pointing into it.
+    let throwing = false
+    const { driver } = framed(scene, (three) => {
+      if (!throwing) return
+      three.setRenderTarget(elsewhere)
+      three.setMRT(null)
+      three.render(thrown, looking)
+    })
+    const draws = counted(ground, behind, inFront)
+    try {
+      frame.passes(true)
+      // A frame that builds the chain's pipelines, then two that throw.
+      await checked(() => frame.frame())
+      throwing = true
+      draws.reset()
+      await checked(() => frame.frame())
+      await checked(() => frame.frame())
+      const reports = sink
+        .records()
+        .filter((record) => record.scope === 'game.clouds')
+      expect(reports.map((record) => record.level)).toEqual(['warn'])
+      expect(reports[0]!.fields['cause']).toBe('Error: inside a nested render')
+      // Both frames whole: the overlays pass B draws after the composite
+      // landed on pass A's color, and three's tree is the top level's again.
+      expect(driver.runs).toBe(3)
+      expect(draws.draws).toEqual([2, 2, 2])
+      expectNear(
+        await texels(frame.scenePass.renderTarget.texture, QUADRANTS),
+        LAYERED,
+      )
+      expect(treeOf(renderer)).toEqual({ context: null, depth: -1, lights: 0 })
+    } finally {
+      detach()
+      frame.dispose()
+      elsewhere.dispose()
+    }
+  })
+
+  it('runs no cloud work when compileAsync runs its updateBefore outside a frame', async () => {
+    /*
+     * Three runs a render-scoped node's `updateBefore` once per render id,
+     * and a compile from the top level runs at id 0, which is also where a
+     * fresh node's record starts: a compile reaches the frame node only once
+     * the node has run in a render. So each case draws a frame first, and the
+     * control shows the compile then does reach it.
+     */
+    for (const inFrame of [true, false]) {
+      const { scene } = layered()
+      const frame = chain(scene)
+      const { driver, composite } = framed(scene, () => {})
+      frame.passes(true)
+      await checked(() => frame.frame())
+      const drawn = driver.runs
+      driver.inFrame = inFrame
+      const target = renderer.getRenderTarget()
+      const mrt = renderer.getMRT()
+      let compiled: Promise<unknown>
+      try {
+        renderer.setRenderTarget(frame.scenePass.renderTarget)
+        renderer.setMRT(frame.mrt)
+        compiled = renderer.compileAsync(composite, frame.camera, scene)
+      } finally {
+        renderer.setMRT(mrt)
+        renderer.setRenderTarget(target)
+      }
+      await compiled
+      expect(driver.runs - drawn, `in a frame: ${inFrame}`).toBe(
+        inFrame ? 1 : 0,
+      )
+      frame.dispose()
+    }
+  })
+})
+
 describe.skipIf(!TIMESTAMPS)('the over pass on the pass timeline', () => {
   it('is named for what it is, and gives the scene pass its name back', async () => {
     const stop = installPassTimeline(renderer)
@@ -499,7 +633,7 @@ describe.skipIf(!TIMESTAMPS)('the over pass on the pass timeline', () => {
       expect(both.passes.map((pass) => [pass.label, pass.count])).toEqual([
         ['post', 1],
         [PASS_A, 1],
-        [SPLIT_LABEL, 1],
+        [OVER_PASS_LABEL, 1],
       ])
       frame.passes(false)
       const one = await timeline!.measure(draw, 2)

@@ -100,7 +100,7 @@ import {
 } from './cloudGeometry.ts'
 import type { CloudHistoryTextures } from './cloudHistory.ts'
 import { OVER_CLOUDS_LAYER } from './cloudLayers.ts'
-import type { CloudCompositeMode, CloudPlacement } from './cloudLevers.ts'
+import type { CloudCompositeMode } from './cloudLevers.ts'
 import {
   type CloudFarFn,
   type CloudPhaseNodes,
@@ -122,9 +122,9 @@ import { warmCompile, warmCompute, warmRenderer } from './warmup.ts'
  *
  *     out = T_c·scene + (1 − T_c)·L_a(0, t₁) + T'_a(0, t₀)·L_c + T_a(0, t₀)·B,
  *
- * writing the radiance, `reactive`, `motion` and `meterMask`, with a mesh for
- * each placement. Its material holds the frame node, so the frame's cloud
- * work runs at its draw.
+ * writing the radiance, `reactive`, `motion` and `meterMask`. It is the first
+ * opaque of pass B, the scene pass over the clouds, and its material holds
+ * the frame node, so the frame's cloud work runs at its draw.
  *
  * **Nothing here carries the scene's gain.** `sensorRadiance` multiplies the
  * output by `sceneRadianceGain` once, as it does the shell's
@@ -169,10 +169,8 @@ export interface CloudCompositeDeps {
   readonly airMedium?: AirMediumFn
 }
 
-/** Placement A's mesh draws first among the over-cloud opaques. */
-const PASSES_ORDER = -1e6
-/** Placement B's: after the sea sheets (0) and the decks (1), before the rings (2). */
-const SPLIT_ORDER = 1.5
+/** The composite draws first among the over-cloud opaques. */
+const ORDER = -1e6
 
 /*
  * A history texel's ray ended where this pixel's does when the two ends agree
@@ -531,7 +529,7 @@ function compositeGraph(
  * documents. A custom blend also keeps the opaque list's material from having
  * its alpha forced to one (`NodeBuilder.isOpaque` asks for normal blending).
  */
-function compositeMaterial(transparent: boolean): MeshBasicNodeMaterial {
+function compositeMaterial(): MeshBasicNodeMaterial {
   const material = sensorRadiance(
     new MeshBasicNodeMaterial(),
     false,
@@ -553,7 +551,6 @@ function compositeMaterial(transparent: boolean): MeshBasicNodeMaterial {
     return radiance
   })()
   material.name = 'cloud composite'
-  material.transparent = transparent
   material.depthTest = false
   material.depthWrite = false
   material.fog = false
@@ -571,39 +568,31 @@ function compositeMaterial(transparent: boolean): MeshBasicNodeMaterial {
 }
 
 export class CloudComposite {
-  /** Placement A: opaque list, OVER layer, `renderOrder` −1e6. */
-  readonly passes: Mesh
-  /** Placement B: transparent list, layer 0, `renderOrder` 1.5. */
-  readonly split: Mesh
+  /** Opaque list, OVER layer, `renderOrder` −1e6. */
+  readonly mesh: Mesh
   readonly #deps: CloudCompositeDeps
   readonly #geometry = new PlaneGeometry(2, 2)
-  readonly #opaque = compositeMaterial(false)
-  readonly #transparent = compositeMaterial(true)
+  readonly #material = compositeMaterial()
   readonly #thin = uniform(0)
   readonly #drawn = uniform(1)
   #mode: CloudCompositeMode = 'identity'
-  #placement: CloudPlacement | null = null
   #built = false
   #meter: ResidualMeter | null = null
   #disposed = false
 
   /*
-   * Construction reaches nothing in `deps`: the meshes, their lists, layers
-   * and orders are what the system arranges before a frame, and the graph —
+   * Construction reaches nothing in `deps`: the mesh, its list, layer and
+   * order are what the system arranges before a frame, and the graph —
    * which reads every dependency — is built at the first `warm` or `show`.
    */
   constructor(deps: CloudCompositeDeps) {
     this.#deps = deps
-    this.passes = new Mesh(this.#geometry, this.#opaque)
-    this.passes.layers.set(OVER_CLOUDS_LAYER)
-    this.passes.renderOrder = PASSES_ORDER
-    this.split = new Mesh(this.#geometry, this.#transparent)
-    this.split.renderOrder = SPLIT_ORDER
-    for (const mesh of [this.passes, this.split]) {
-      mesh.name = 'cloud composite'
-      mesh.visible = false
-      mesh.frustumCulled = false
-    }
+    this.mesh = new Mesh(this.#geometry, this.#material)
+    this.mesh.layers.set(OVER_CLOUDS_LAYER)
+    this.mesh.renderOrder = ORDER
+    this.mesh.name = 'cloud composite'
+    this.mesh.visible = false
+    this.mesh.frustumCulled = false
   }
 
   /** The residual meter's histograms, under composite 'residual', read back a frame or so late. */
@@ -611,23 +600,17 @@ export class CloudComposite {
     return this.#meter?.report ?? null
   }
 
-  /** A uniform: identity, thin, or inert (residual). */
+  /** A uniform: identity, thin, or inert under 'residual', so the meter reads the scene as built. */
   setMode(mode: CloudCompositeMode): void {
     this.#mode = mode
     this.#thin.value = mode === 'thin' ? 1 : 0
-    this.#settle()
+    this.#drawn.value = mode === 'residual' ? 0 : 1
   }
 
-  /**
-   * At most one mesh visible. The empty split shows the split's mesh, whose
-   * frame node splits the pass with nothing in it, and draws nothing.
-   */
-  show(placement: CloudPlacement | null): void {
-    if (placement !== null) this.#build()
-    this.#placement = placement
-    this.passes.visible = placement === 'passes'
-    this.split.visible = placement === 'split' || placement === 'empty-split'
-    this.#settle()
+  /** The mesh drawn this frame or not; the graph is built at the first show. */
+  show(on: boolean): void {
+    if (on) this.#build()
+    this.mesh.visible = on
   }
 
   /** The residual meter: after the frame, under composite 'residual'. */
@@ -642,7 +625,7 @@ export class CloudComposite {
     return this.#meter?.reading ?? Promise.resolve()
   }
 
-  /** Both meshes against the scene pass's layout, and the residual meter's kernels. */
+  /** The mesh against the scene pass's layout, and the residual meter's kernels. */
   async warm(
     renderer: WebGPURenderer,
     layout: SceneLayout,
@@ -652,11 +635,7 @@ export class CloudComposite {
     if (this.#disposed) return
     this.#build()
     const warm = warmRenderer(renderer, layout)
-    await Promise.all(
-      [this.passes, this.split].map((object) =>
-        warmCompile(warm, { object, camera, scene }),
-      ),
-    )
+    await warmCompile(warm, { object: this.mesh, camera, scene })
     if (this.#meter !== null) await warmCompute(renderer, this.#meter.kernels)
   }
 
@@ -664,15 +643,8 @@ export class CloudComposite {
     if (this.#disposed) return
     this.#disposed = true
     this.#geometry.dispose()
-    this.#opaque.dispose()
-    this.#transparent.dispose()
+    this.#material.dispose()
     this.#meter?.dispose()
-  }
-
-  /** Inert under 'residual', so the meter reads the scene as built, and under the empty split. */
-  #settle(): void {
-    this.#drawn.value =
-      this.#mode === 'residual' || this.#placement === 'empty-split' ? 0 : 1
   }
 
   #build(): void {
@@ -686,12 +658,9 @@ export class CloudComposite {
       { thin: this.#thin, drawn: this.#drawn },
       medium,
     )
-    // One graph, two programs: the lists differ, the arithmetic does not.
-    for (const material of [this.#opaque, this.#transparent]) {
-      material.colorNode = graph.color
-      material.mrtNode = graph.mrt
-      material.needsUpdate = true
-    }
+    this.#material.colorNode = graph.color
+    this.#material.mrtNode = graph.mrt
+    this.#material.needsUpdate = true
     this.#meter = new ResidualMeter(deps, medium)
   }
 }

@@ -40,9 +40,8 @@ import { sceneRadianceGain } from './radiance.ts'
  * which no figure the report carries could give: the residual meter compares
  * composite forms on one frame, not one frame against another.
  *
- * Under placement 'passes' the scene target holds only the layers under the
- * clouds — the over-clouds pass joins the image later, in the post graph — so
- * a capture there reads the cloud without what is drawn in front of it.
+ * It reads the scene target after pass B has drawn into it, so what is drawn
+ * over the clouds — rings, traces, plumes — is in the capture with them.
  *
  * An instrument (rule 65): it writes nothing a frame reads, builds and
  * allocates nothing until the first capture is asked for, keeps one readback

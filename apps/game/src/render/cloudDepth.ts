@@ -35,8 +35,8 @@ import { warmByDrawing } from './warmup.ts'
  * The scene's distance for the clouds: view distance along each pixel's ray
  * in render meters ÷ 1000, R16F at render resolution, clamped at 60,000 km so
  * far depth reads as sky, drawn as `cloud depth` inside the frame node's run.
- * It reads this frame's depth, which both placements have put on the queue by
- * then: the split's first half, or pass A.
+ * It reads this frame's depth, which pass A, the scene pass under the
+ * clouds, has put on the queue by then.
  *
  * **The source is the scene target's own depth, not a copy of it.** It is
  * read with `textureLoad` at sample 0, which a multisampled depth allows and

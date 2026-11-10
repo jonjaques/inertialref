@@ -289,9 +289,10 @@ describe('the composite’s material', () => {
    * real format and kind, its fragment WGSL read with the scene pass's
    * layout bound.
    */
-  async function fragment(
-    which: 'passes' | 'split',
-  ): Promise<{ readonly wgsl: string; dispose(): void }> {
+  async function fragment(): Promise<{
+    readonly wgsl: string
+    dispose(): void
+  }> {
     const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(gpu.renderer))
     const uniforms = createCloudUniforms()
     const history = {
@@ -307,14 +308,10 @@ describe('the composite’s material', () => {
       depth: () => depth.texture,
       far: CLOUD_STAND_INS.far(),
       phase: CLOUD_STAND_INS.phase(),
-      frameNode: new CloudFrameNode({
-        inFrame: false,
-        placement: which,
-        run() {},
-      }),
+      frameNode: new CloudFrameNode({ inFrame: false, run() {} }),
     })
-    composite.show(which)
-    const mesh = which === 'passes' ? composite.passes : composite.split
+    composite.show(true)
+    const mesh = composite.mesh
     const camera = new PerspectiveCamera(60, 1, 0.05, 1e10)
     camera.layers.enableAll()
     camera.updateMatrixWorld()
@@ -338,22 +335,19 @@ describe('the composite’s material', () => {
     }
   }
 
-  it.each(['split', 'passes'] as const)(
-    'reads every texture at a named level or by load, in non-uniform control flow (%s)',
-    async (which) => {
-      const { wgsl, dispose } = await fragment(which)
-      // The air's tables, through the class's branch.
-      expect(wgsl).toMatch(/\btextureSampleLevel\(/)
-      // The history and the depth copy.
-      expect(wgsl).toMatch(/\btextureLoad\(/)
-      expect(wgsl).not.toMatch(/\btextureSample\(/)
-      // History 3, depth copy 1, both bodies' air 4, the far atlas 1: the
-      // tenth, the phase, is the far field's own read once it is real.
-      const bindings = wgsl.match(/:\s*texture_[a-z0-9_]+</g) ?? []
-      expect(bindings.length).toBe(9)
-      dispose()
-    },
-  )
+  it('reads every texture at a named level or by load, in non-uniform control flow', async () => {
+    const { wgsl, dispose } = await fragment()
+    // The air's tables, through the class's branch.
+    expect(wgsl).toMatch(/\btextureSampleLevel\(/)
+    // The history and the depth copy.
+    expect(wgsl).toMatch(/\btextureLoad\(/)
+    expect(wgsl).not.toMatch(/\btextureSample\(/)
+    // History 3, depth copy 1, both bodies' air 4, the far atlas 1: the
+    // tenth, the phase, is the far field's own read once it is real.
+    const bindings = wgsl.match(/:\s*texture_[a-z0-9_]+</g) ?? []
+    expect(bindings.length).toBe(9)
+    dispose()
+  })
 
   it('would show a plain read, so the assertion above can fail', async () => {
     const table = new DataTexture(

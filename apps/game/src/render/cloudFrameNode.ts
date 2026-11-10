@@ -3,20 +3,19 @@ import {
   type Node,
   type NodeFrame,
   NodeUpdateType,
+  type Renderer,
+  type RenderTarget,
   TempNode,
   type WebGPURenderer,
 } from 'three/webgpu'
 import { float } from 'three/tsl'
-import type { CloudPlacement } from './cloudLevers.ts'
-import { keepRenderer, splitScenePass } from './cloudSplit.ts'
 
 /*
  * The node that drives a frame's cloud work. It lives in the composite's
- * material, so its `updateBefore` runs at the composite's draw: inside pass B
- * under placement A, inside the split under B. Either way the cloud passes are
- * issued from inside an open render, each its own encoder submitted as it
- * finishes, and the outer render's context and target are intact after them
- * (the premise spike, `cloudPremises.gpu.test.ts`).
+ * material, so its `updateBefore` runs at the composite's draw, inside pass B.
+ * The cloud passes are issued from inside that open render, each its own
+ * encoder submitted as it finishes, and the outer render's context and target
+ * are intact after them (the premise spike, `cloudPremises.gpu.test.ts`).
  *
  * `compileAsync` runs `updateBefore` while warming (`upscale.ts:205`), so it
  * does nothing outside a frame, and warming the composite runs no cloud work.
@@ -30,12 +29,69 @@ import { keepRenderer, splitScenePass } from './cloudSplit.ts'
 
 const log = getLogger('game.clouds')
 
-const NOTHING = (): void => {}
+/*
+ * The render tree, which three puts back at the end of a render and not in a
+ * `finally`: a nested render that throws leaves its context current, its call
+ * depth and render id raised, its object handlers installed and its lights on
+ * the lighting stack, and the render it was nested in then draws through all
+ * of them into a pass that has ended.
+ */
+interface RenderTree {
+  _currentRenderContext: { readonly renderTarget: RenderTarget | null } | null
+  _currentRenderObjectFunction: unknown
+  _handleObjectFunction: unknown
+  _callDepth: number
+  readonly _nodes: { readonly nodeFrame: { renderId: number } } | null
+  readonly lighting?: { readonly _cache?: unknown[] }
+}
+
+/**
+ * The renderer as nested work finds it, and the function that puts it back:
+ * the render tree, and the target, MRT, clear, tone mapping, color space and
+ * scissor test a pass sets. What a throw inside that work leaves behind is
+ * whatever it had changed by then, three's own bookkeeping included.
+ */
+function keepRenderer(renderer: Renderer): () => void {
+  const tree = renderer as unknown as RenderTree
+  const context = tree._currentRenderContext
+  const objectFunction = tree._currentRenderObjectFunction
+  const handleObject = tree._handleObjectFunction
+  const depth = tree._callDepth
+  const nodeFrame = tree._nodes?.nodeFrame ?? null
+  const renderId = nodeFrame?.renderId ?? 0
+  // Through `?.`: this is taken outside the `try`, inside an open render, so
+  // a three that moves its lighting stack costs the lights their restore and
+  // not the frame its scene pass.
+  const cache = tree.lighting?._cache
+  const lights = cache?.length ?? 0
+  const target = renderer.getRenderTarget()
+  const face = renderer.getActiveCubeFace()
+  const mip = renderer.getActiveMipmapLevel()
+  const mrt = renderer.getMRT()
+  const autoClear = renderer.autoClear
+  const toneMapping = renderer.toneMapping
+  const colorSpace = renderer.outputColorSpace
+  const scissor = renderer.getScissorTest()
+  return () => {
+    tree._currentRenderContext = context
+    tree._currentRenderObjectFunction = objectFunction
+    tree._handleObjectFunction = handleObject
+    tree._callDepth = depth
+    if (nodeFrame !== null) nodeFrame.renderId = renderId
+    // Only pushes go unmatched, so the stack is never shorter than it was.
+    if (cache !== undefined && cache.length > lights) cache.length = lights
+    renderer.setRenderTarget(target, face, mip)
+    renderer.setMRT(mrt)
+    renderer.autoClear = autoClear
+    renderer.toneMapping = toneMapping
+    renderer.outputColorSpace = colorSpace
+    renderer.setScissorTest(scissor)
+  }
+}
 
 export interface CloudFrameDriver {
   /** True only between `beginFrame` and `endFrame`: `compileAsync` runs `updateBefore` while warming. */
   readonly inFrame: boolean
-  readonly placement: CloudPlacement
   /** The frame's cloud passes, in §4.2's order. */
   run(renderer: WebGPURenderer): void
 }
@@ -47,7 +103,6 @@ export class CloudFrameNode extends TempNode<'float'> {
 
   readonly #driver: CloudFrameDriver
   #reported = false
-  #declined = false
 
   constructor(driver: CloudFrameDriver) {
     super('float')
@@ -61,20 +116,13 @@ export class CloudFrameNode extends TempNode<'float'> {
   }
 
   /**
-   * Under 'split', `splitScenePass(renderer, run)`; under 'passes', `run()`;
-   * under 'empty-split', `splitScenePass(renderer, () => {})`. Nothing
-   * outside a frame.
+   * The driver's `run`, in a frame; nothing outside one.
    *
    * A throw in the cloud work is the clouds', not the frame's: the renderer
-   * is put back and the scene pass draws on without them. Left to escape, it
-   * would leave the render it is nested in — the scene pass or pass B, and
-   * the post chain around it — with no `finishRender`, its pass open and
-   * three's render tree pointing into it, and every later frame drawing
-   * through that.
-   *
-   * A split that declines ran nothing: under 'split' the composite reads
-   * targets no pass wrote this frame, and under 'empty-split' a measurement
-   * prices a split that was never made. So that is reported too.
+   * is put back and pass B draws on without them. Left to escape, it would
+   * leave the render it is nested in — pass B, and the post chain around it —
+   * with no `finishRender`, its pass open and three's render tree pointing
+   * into it, and every later frame drawing through that.
    */
   override updateBefore(frame: NodeFrame): undefined {
     const driver = this.#driver
@@ -83,29 +131,12 @@ export class CloudFrameNode extends TempNode<'float'> {
     if (renderer === null) return undefined
     const restore = keepRenderer(renderer)
     try {
-      const placement = driver.placement
-      if (placement === 'passes') driver.run(renderer)
-      else if (
-        !splitScenePass(
-          renderer,
-          placement === 'split' ? () => driver.run(renderer) : NOTHING,
-        )
-      )
-        this.#decline(placement)
+      driver.run(renderer)
     } catch (cause) {
       restore()
       this.#report(cause)
     }
     return undefined
-  }
-
-  /** Once, as a throw is: a split that declines one frame declines the next. */
-  #decline(placement: CloudPlacement): void {
-    if (this.#declined) return
-    this.#declined = true
-    log.warn('the scene pass did not split; nothing ran between its halves', {
-      placement,
-    })
   }
 
   /*
@@ -117,7 +148,6 @@ export class CloudFrameNode extends TempNode<'float'> {
     if (this.#reported) return
     this.#reported = true
     log.warn('a frame’s cloud work failed; the frame draws without it', {
-      placement: this.#driver.placement,
       cause: String(cause),
       stack: cause instanceof Error ? (cause.stack ?? null) : null,
     })

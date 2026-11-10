@@ -1,7 +1,7 @@
 import { Layers, type Object3D } from 'three/webgpu'
 
 /*
- * The camera layer placement A splits the scene on: everything drawn over the
+ * The camera layer the clouds split the scene on: everything drawn over the
  * clouds — rings, traces, plumes, the flare, the warp, the sheath, pad dust —
  * on layer 1, and everything under them on layer 0, so a second scene pass
  * can draw the first half's complement over the composite.
@@ -24,7 +24,7 @@ function only(layer: number): Layers {
   return Object.freeze(layers)
 }
 
-/** Only layer 0: what the scene pass draws under placement A. */
+/** Only layer 0: what the scene pass draws on a frame the clouds draw. */
 export const UNDER_CLOUDS_LAYERS: Layers = /*@__PURE__*/ only(0)
 /** Only layer 1: what the over pass draws. */
 export const OVER_CLOUDS_LAYERS: Layers = /*@__PURE__*/ only(OVER_CLOUDS_LAYER)

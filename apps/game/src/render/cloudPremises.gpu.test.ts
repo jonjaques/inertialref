@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   FloatType,
-  FramebufferTexture,
   HalfFloatType,
   Mesh,
   MeshBasicNodeMaterial,
@@ -56,7 +55,7 @@ import { runQuadPasses } from './quadPass.ts'
 import { warmCompute, warmSensorPass } from './warmup.ts'
 
 /*
- * The premises a cloud format or placement depends on, settled on the real
+ * The premises a cloud format or pass depends on, settled on the real
  * GPU before any package builds on them (the design's §11.1). Each was read
  * from three r185's source, not run; each has a fallback that changes a
  * contract, and a premise that fails here changes the contract here, before
@@ -195,54 +194,6 @@ const TOP_RIGHT = [6, 1] as const
 const BOTTOM_LEFT = [1, 6] as const
 const BOTTOM_RIGHT = [6, 6] as const
 
-/** The renderer's internals the split reaches: the open render's context, and the backend's record of it. */
-interface Internals {
-  readonly _currentRenderContext: object | null
-}
-interface BackendRecords {
-  get(object: object): {
-    encoder?: GPUCommandEncoder | null
-    currentPass?: GPURenderPassEncoder | null
-  }
-}
-
-/**
- * The split as §4.2 builds it: end the scene pass through a one-texel
- * framebuffer copy, and hold the encoder's `beginRenderPass` for that one
- * call — submit what the encoder holds, start a fresh one, write it into the
- * context's record, and begin the resumed pass on it. `finishRender` reads
- * that record fresh before it submits, so the resumed half goes out on the
- * fresh encoder after whatever `during` submitted.
- */
-function splitPrototype(
-  three: WebGPURenderer,
-  probe: FramebufferTexture,
-  during: () => void,
-): boolean {
-  const context = (three as unknown as Internals)._currentRenderContext
-  if (context === null) return false
-  const records = three.backend as unknown as BackendRecords
-  const record = records.get(context)
-  const encoder = record.encoder
-  if (encoder === undefined || encoder === null || !record.currentPass)
-    return false
-  const begin = encoder.beginRenderPass
-  encoder.beginRenderPass = (descriptor) => {
-    encoder.beginRenderPass = begin
-    device.queue.submit([encoder.finish()])
-    const next = device.createCommandEncoder({ label: 'scene over clouds' })
-    record.encoder = next
-    return next.beginRenderPass(descriptor)
-  }
-  try {
-    three.copyFramebufferToTexture(probe, new Vector2(0, 0))
-  } finally {
-    encoder.beginRenderPass = begin
-  }
-  during()
-  return true
-}
-
 describe('a RenderTarget3D slice', () => {
   it.each([
     ['R8', RedFormat, 0],
@@ -345,8 +296,13 @@ describe('a 2D-array MRT target', () => {
   })
 })
 
+/** The renderer's internals the nested work is checked against: the open render's context. */
+interface Internals {
+  readonly _currentRenderContext: object | null
+}
+
 /*
- * What the frame node does in both placements: inside an open render, a
+ * What the frame node does inside pass B: inside an open render, a
  * compute writes a storage texture, a quad render reads it into a target of
  * its own, and the object whose material holds the node then draws that
  * target, with an object after it reading the storage texture too. If any
@@ -365,7 +321,6 @@ const WRITTEN = 0.75
 
 function nested(
   outer: () => RenderTarget,
-  around: (three: WebGPURenderer, run: () => void) => void,
   compute: (storageMap: StorageTexture) => Node,
 ): Nested {
   const storageMap = cloudStorageTexture(4, 4, 'rgba16float', 'premise storage')
@@ -382,11 +337,9 @@ function nested(
   const seen = { context: false, target: false, runs: 0 }
   const frameNode = new Before((three) => {
     const context = (three as unknown as Internals)._currentRenderContext
-    around(three, () => {
-      three.compute(kernel)
-      runQuadPasses(three, nestedQuad, { linear: true }, (draw) => {
-        draw('premise nested', nestedTarget, nestedMaterial)
-      })
+    three.compute(kernel)
+    runQuadPasses(three, nestedQuad, { linear: true }, (draw) => {
+      draw('premise nested', nestedTarget, nestedMaterial)
     })
     seen.runs += 1
     seen.context =
@@ -417,11 +370,7 @@ describe('compute and a render inside an open render', () => {
       samples: 4,
     })
     const post = new RenderTarget(8, 8, { type: FloatType, depthBuffer: false })
-    const work = nested(
-      () => sceneTarget,
-      (_, run) => run(),
-      fill(WRITTEN),
-    )
+    const work = nested(() => sceneTarget, fill(WRITTEN))
     const camera = view()
     camera.layers.enable(1)
     const scene = new Scene()
@@ -485,97 +434,6 @@ describe('compute and a render inside an open render', () => {
     expect(Math.abs(postComposite![0]! - WRITTEN)).toBeLessThanOrEqual(HALF)
     sceneTarget.dispose()
     post.dispose()
-  })
-})
-
-describe('the split', () => {
-  /*
-   * The scene pass draws an opaque square, then the composite (transparent,
-   * order 1.5), whose node splits the pass; inside the split a kernel reads
-   * the opaque square's texel out of the scene target and writes the storage
-   * texture, and a quad render reads that into a target the composite draws.
-   * A square drawn after the composite reads the storage texture.
-   */
-  async function frame(split: boolean): Promise<{
-    readonly before: number
-    readonly seen: Nested['seen']
-    readonly drawn: number[][]
-  }> {
-    const sceneTarget = new RenderTarget(8, 8, {
-      type: HalfFloatType,
-      samples: 4,
-    })
-    const probe = new FramebufferTexture(1, 1)
-    const readOut = new StorageBufferAttribute(new Float32Array(4), 1)
-    const into = storage(readOut, 'float', 4)
-    let splitTook: boolean | null = null
-    const work = nested(
-      () => sceneTarget,
-      (three, run) => {
-        if (split) splitTook = splitPrototype(three, probe, run)
-        else run()
-      },
-      (storageMap) => {
-        const seenThere = textureLoad(sceneTarget.texture, ivec2(...TOP_RIGHT))
-        If(instanceIndex.equal(uint(0)), () => {
-          into.element(0).assign(seenThere.x)
-        })
-        return fill(WRITTEN)(storageMap)
-      },
-    )
-    const camera = view()
-    const scene = new Scene()
-    const composite = quadrant(-1, -1, work.composite)
-    const after = quadrant(1, -1, work.after)
-    composite.renderOrder = 1.5
-    after.renderOrder = 2
-    scene.add(quadrant(1, 1, colored(vec4(0.5, 0, 0, 1))), composite, after)
-    scene.updateMatrixWorld(true)
-    // What the target held before this frame: what a kernel run ahead of the
-    // frame's first half reads.
-    const previous = new Scene()
-    previous.add(quadrant(1, 1, colored(vec4(0.125, 0, 0, 1))))
-    previous.updateMatrixWorld(true)
-    await checked(() => {
-      const target = renderer.getRenderTarget()
-      try {
-        renderer.setRenderTarget(sceneTarget)
-        renderer.render(previous, camera)
-        renderer.render(scene, camera)
-      } finally {
-        renderer.setRenderTarget(target)
-      }
-    })
-    if (split) expect(splitTook).toBe(true)
-    const before = new Float32Array(await gpu.readBuffer(readOut))[0]!
-    const drawn = await texels(sceneTarget.texture, '2d', [
-      TOP_RIGHT,
-      BOTTOM_LEFT,
-      BOTTOM_RIGHT,
-    ])
-    sceneTarget.dispose()
-    return { before, seen: work.seen, drawn }
-  }
-
-  it('runs the draw before, the compute during and the draw after in that order, on the scene target', async () => {
-    const { before, seen, drawn } = await frame(true)
-    // The kernel inside the split saw the first half's square: the half was
-    // on the queue before it.
-    expect(before).toBeCloseTo(0.5, 3)
-    expect(seen).toEqual({ context: true, target: true, runs: 1 })
-    const [square, composite, after] = drawn
-    expect(square![0]).toBeCloseTo(0.5, 3)
-    expect(Math.abs(composite![0]! - WRITTEN)).toBeLessThanOrEqual(HALF)
-    expect(Math.abs(after![0]! - WRITTEN)).toBeLessThanOrEqual(HALF)
-  })
-
-  it('and without it the kernel runs ahead of the whole scene pass', async () => {
-    // The control: the same work issued from the node with no split reads
-    // the target as the previous frame left it, so the order above is the
-    // split's and not the queue's.
-    const { before, drawn } = await frame(false)
-    expect(before).toBeCloseTo(0.125, 3)
-    expect(drawn[0]![0]).toBeCloseTo(0.5, 3)
   })
 })
 

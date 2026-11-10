@@ -165,14 +165,6 @@ export async function cloudStep(step) {
       const settled = await settle(step.settleCap)
       return { ...(await readPasses(step.limit)), settled, clouds: report() }
     },
-    async profile() {
-      set(step.levers)
-      await settle(step.settleCap)
-      const p = await ir.profile(step.ms)
-      const sensor =
-        p.spans.find((s) => s.track === 'Render' && s.name === 'sensor') ?? null
-      return { frames: p.frames, late: p.late.length, sensor }
-    },
     async report() {
       set(step.levers)
       await settle(step.settleCap)
@@ -426,14 +418,6 @@ const STEPS = {
       limit: PASS_LIMIT,
       ...at,
     }),
-    ...(run.profileMs > 0 ? ['candidate', 'base'] : []).map((arm) =>
-      js(`profile:${arm}`, {
-        kind: 'profile',
-        levers: run[arm],
-        ms: run.profileMs,
-        ...at,
-      }),
-    ),
     js('report', { kind: 'report', levers: run.base, ...at }),
   ],
   sweep: (run) =>
@@ -552,10 +536,6 @@ export function hitch(samples) {
 const BAKES =
   /^cloud (noise|maps|clipmap|volume|volume bound|sun cascade|sun grid|far atlas|far spheres|far second)$/
 
-/** `a − b`, or null when either is missing: a run with no profile has no CPU Δ. */
-const minus = (a, b) =>
-  Number.isFinite(a) && Number.isFinite(b) ? a - b : null
-
 /** What each kind of run's results say, flat, so a table only formats. */
 const READ = {
   ab(run, value) {
@@ -573,14 +553,11 @@ const READ = {
     const passes = value('timeline') ?? null
     const labels = Object.entries(passes?.labels ?? {})
     const pass = (name) => labels.find(([n]) => n === name)?.[1].ms ?? null
-    const profile = (arm) => value(`profile:${arm}`) ?? null
-    const [candidate, base] = [profile('candidate'), profile('base')]
     return {
       levers: { base: run.base, candidate: run.candidate },
       pairs,
       summary: summarize(pairs),
       passes,
-      cpu: run.profileMs > 0 ? { candidate, base } : null,
       report: value('report') ?? null,
       sceneOver: pass('scene over clouds'),
       trace: pass('cloud trace'),
@@ -591,8 +568,6 @@ const READ = {
         .reduce((s, [, p]) => s + p.ms, 0),
       perFrame: passes?.perFrame ?? null,
       bytes: passes?.clouds?.bytes?.total ?? null,
-      sensor: minus(candidate?.sensor?.meanMs, base?.sensor?.meanMs),
-      late: minus(candidate?.late, base?.late),
     }
   },
   sweep(run, value) {
@@ -809,8 +784,6 @@ export const AB_COLUMNS = [
   ['bakes', (r) => fixed(r.bakes)],
   ['passes/frame', (r) => r.perFrame ?? '—'],
   ['bytes MB', (r) => mb(r.bytes)],
-  ['sensor ms Δ', (r) => fixed(r.sensor)],
-  ['late Δ', (r) => fixed(r.late, 0)],
   ['quiet', (r) => yes(r.quiet.ok)],
 ]
 

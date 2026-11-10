@@ -10,10 +10,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import {
-  CLOUD_PLACEMENTS,
-  isCloudLevers,
-} from '../../apps/game/src/render/cloudLevers.ts'
+import { isCloudLevers } from '../../apps/game/src/render/cloudLevers.ts'
 import { wrap } from '../driveScript.mjs'
 import { binEdge, difference, histogramStats, parseRmse } from './diff.mjs'
 import {
@@ -92,25 +89,9 @@ describe('the batches', () => {
       expect(new Set(runs.map((r) => r.id)).size).toBe(runs.length)
   })
 
-  it('runs the decisions as the design counts them: 78 A/B runs', () => {
+  it('runs the decisions as the design counts them: 60 A/B runs', () => {
     const runs = ALL.decisions
-    expect(runs).toHaveLength(78)
-    const placement = runs.filter((r) => r.group === 'placement')
-    expect(placement).toHaveLength(18)
-    for (const r of placement) {
-      expect(r.base.on).toBe(false)
-      expect(r.candidate).toMatchObject({
-        on: true,
-        placement: r.label,
-        force: 'none',
-      })
-      expect(r.pairs).toBe(5)
-      // ir.profile(3000) for the two placements whose CPU the rule weighs.
-      expect(r.profileMs).toBe(r.label === 'empty-split' ? 0 : 3000)
-    }
-    expect(new Set(placement.map((r) => r.label))).toEqual(
-      new Set(CLOUD_PLACEMENTS),
-    )
+    expect(runs).toHaveLength(60)
     const cache = runs.filter((r) => r.group === 'cache')
     expect(count(cache, (r) => r.kind === 'steady')).toBe(24)
     expect(count(cache, (r) => r.kind === 'fly')).toBe(16)
@@ -291,14 +272,14 @@ describe('the images', () => {
 
 describe('the command line', () => {
   it('takes a batch, with the preview and both sizes by default', () => {
-    const options = parseOptions(['--batch', 'decisions'])
+    const options = parseOptions(['--batch', 'targets'])
     expect(options).toMatchObject({
-      batch: 'decisions',
+      batch: 'targets',
       url: 'http://localhost:8787/',
       gpuWait: 0,
       dryRun: false,
     })
-    expect(options.runs).toHaveLength(78)
+    expect(options.runs).toHaveLength(58)
     expect(
       parseOptions(['--batch', 'memory', '--gpu-wait', '900']).gpuWait,
     ).toBe(900_000)
@@ -307,16 +288,16 @@ describe('the command line', () => {
   it('narrows to a size and to the runs whose id holds a text', () => {
     const options = parseOptions([
       '--batch',
-      'decisions',
+      'targets',
       '--sizes',
       'retina',
       '--runs',
-      'placement/split',
+      'landed/horizon',
     ])
     expect(options.runs.map((r) => r.id)).toEqual([
-      'decisions/placement/split/horizon/retina/steady',
-      'decisions/placement/split/inside/retina/steady',
-      'decisions/placement/split/orbit/retina/steady',
+      'targets/landed/landed/horizon/retina/steady',
+      'targets/landed/landed/horizon/retina/cut',
+      'targets/landed/landed/horizon/retina/scrub',
     ])
   })
 
@@ -363,11 +344,11 @@ describe('the command line', () => {
 const steps = (run, shots) => plan(run, shots)
 const jsArgs = (planned) =>
   planned.flatMap((s) => (s.args[0] === '--js' ? [s.args[1]] : []))
-const decision = (id) => ALL.decisions.find((r) => r.id === id)
+const target = (id) => ALL.targets.find((r) => r.id === id)
 
 describe('the invocations', () => {
   it('holds every run to its window, the preview and the flag', () => {
-    const run = decision('decisions/placement/split/horizon/retina/steady')
+    const run = target('targets/landed/landed/horizon/retina/steady')
     const argv = session(run, {
       url: 'http://localhost:8787/',
       port: PORTS.rig,
@@ -389,10 +370,11 @@ describe('the invocations', () => {
       'layers=0',
       'output=standard',
     ])
-    const warm = session(
-      decision('decisions/placement/split/horizon/1080p/steady'),
-      { url: 'http://localhost:8787/', port: PORTS.rig, fresh: false },
-    )
+    const warm = session(target('targets/landed/landed/horizon/1080p/steady'), {
+      url: 'http://localhost:8787/',
+      port: PORTS.rig,
+      fresh: false,
+    })
     expect([
       warm[warm.indexOf('--width') + 1],
       warm[warm.indexOf('--dpr') + 1],
@@ -446,17 +428,15 @@ describe('the invocations', () => {
     ).toContain('--port 9342')
   })
 
-  it('interleaves the pairs in one invocation, then the timeline, the profiles and the report', () => {
-    const run = decision('decisions/placement/passes/inside/1080p/steady')
+  it('interleaves the pairs in one invocation, then the timeline and the report', () => {
+    const run = target('targets/landed/landed/inside/1080p/steady')
     expect(plan(run).map((s) => s.tag)).toEqual([
       'install',
       'stance',
       'settle',
       'wait',
-      ...[0, 1, 2, 3, 4].flatMap((p) => [`base:${p}`, `candidate:${p}`]),
+      ...[0, 1, 2].flatMap((p) => [`base:${p}`, `candidate:${p}`]),
       'timeline',
-      'profile:candidate',
-      'profile:base',
       'report',
     ])
   })
@@ -475,7 +455,7 @@ describe('the invocations', () => {
   it('attaches to a booted page and boots a fresh one for a new window', () => {
     const text = dryRun({
       url: 'http://localhost:8787/',
-      runs: ALL.decisions.slice(0, 2),
+      runs: ALL.targets.slice(0, 2),
     })
     const [first, second] = text
       .split('\n')
@@ -501,9 +481,9 @@ describe('the invocations', () => {
     )
     expect(booted).toEqual(['ground', 'earth-ground', 'sunset'])
     // A cold boot closes the measurement rig, so nothing is left to attach to.
-    const [, after] = kept([ALL.memory[0], ALL.decisions[0]])
+    const [, after] = kept([ALL.memory[0], ALL.targets[0]])
     expect(after).toBe(false)
-    expect(boots(new Map(), ALL.decisions[0])).toBe(true)
+    expect(boots(new Map(), ALL.targets[0])).toBe(true)
   })
 })
 
@@ -621,7 +601,7 @@ async function send(page, run, tag) {
 }
 
 describe('the page steps', () => {
-  const run = decision('decisions/cache/field+cascades/horizon/retina/steady')
+  const run = target('targets/landed/landed/horizon/retina/steady')
 
   it('install into a page that holds nothing of this module', () => {
     const page = fakePage()
@@ -637,8 +617,7 @@ describe('the page steps', () => {
     expect(side.settled).toBe(5)
     expect(page.calls.levers.at(-1)).toMatchObject({
       on: true,
-      cache: 'field',
-      sunDepth: 'cascades',
+      scenario: 'broken-horizon',
     })
   })
 
@@ -781,11 +760,6 @@ describe('the page steps', () => {
     }
     Object.assign(ir, {
       clouds: () => report,
-      profile: async () => ({
-        frames: 180,
-        late: [{}, {}],
-        spans: [{ track: 'Render', name: 'sensor', meanMs: 2.4 }],
-      }),
       lens: () => ({ focalLength: 21 }),
       picture: () => ({ path: 'native' }),
       build: () => ({ id: 'b1' }),
@@ -821,13 +795,8 @@ describe('the page steps', () => {
       }
     }
 
-    const profiled = decision('decisions/placement/split/horizon/1080p/steady')
-    expect(await send(page, profiled, 'profile:candidate')).toMatchObject({
-      frames: 180,
-      late: 2,
-      sensor: { meanMs: 2.4 },
-    })
-    expect(await send(page, profiled, 'report')).toMatchObject({
+    const landed = target('targets/landed/landed/horizon/1080p/steady')
+    expect(await send(page, landed, 'report')).toMatchObject({
       build: { id: 'b1' },
       lens: { focalLength: 21 },
     })
@@ -881,7 +850,7 @@ describe('the page steps', () => {
 })
 
 describe('the figures', () => {
-  const run = decision('decisions/placement/split/orbit/retina/steady')
+  const run = target('targets/landed/landed/orbit/retina/steady')
   const planned = plan(run)
   const answer = (tag) => {
     const [arm, p] = tag.split(':')
@@ -898,12 +867,6 @@ describe('the figures', () => {
         },
         clouds: { bytes: { total: 83_500_000 } },
       }
-    if (arm === 'profile')
-      return {
-        frames: 180,
-        late: tag.endsWith('candidate') ? 3 : 1,
-        sensor: { meanMs: tag.endsWith('candidate') ? 2.5 : 2.1 },
-      }
     return {}
   }
   const out = {
@@ -917,8 +880,8 @@ describe('the figures', () => {
     row.pairs.forEach((pair, p) =>
       expect(pair.delta).toBeCloseTo(0.4 + 0.01 * p, 12),
     )
-    expect(row.summary.delta).toBeCloseTo(0.42, 12)
-    expect(row.summary.spread).toBeCloseTo(0.04, 12)
+    expect(row.summary.delta).toBeCloseTo(0.41, 12)
+    expect(row.summary.spread).toBeCloseTo(0.02, 12)
     expect(row).toMatchObject({
       sceneOver: 0.3,
       trace: 1.1,
@@ -926,8 +889,6 @@ describe('the figures', () => {
       bytes: 83_500_000,
     })
     expect(row.bakes).toBeCloseTo(0.05, 12)
-    expect(row.sensor).toBeCloseTo(0.4, 12)
-    expect(row.late).toBe(2)
   })
 
   it('refuse a pair ir.gpu answered nothing for', () => {
@@ -963,11 +924,11 @@ describe('the figures', () => {
     const text = table([row], AB_COLUMNS)
     const [header, rule, line] = text.split('\n')
     expect(header).toBe(
-      '| Scenario | Size | Kind | Lever | Base ms | Candidate ms | Δ ms (spread) | scene over clouds | cloud trace | cloud history | cloud depth | bakes | passes/frame | bytes MB | sensor ms Δ | late Δ | quiet |',
+      '| Scenario | Size | Kind | Lever | Base ms | Candidate ms | Δ ms (spread) | scene over clouds | cloud trace | cloud history | cloud depth | bakes | passes/frame | bytes MB | quiet |',
     )
     expect(rule).toMatch(/^\| --- (\| --- )+\|$/)
     expect(line).toBe(
-      '| orbit | retina | steady | split | 10.02 | 10.44 | 0.42 (0.04) | 0.30 | 1.10 | — | — | 0.05 | 35 | 83.50 | 0.40 | 2 | yes |',
+      '| orbit | retina | steady | landed | 10.01 | 10.42 | 0.41 (0.02) | 0.30 | 1.10 | — | — | 0.05 | 35 | 83.50 | yes |',
     )
   })
 

@@ -488,11 +488,8 @@ describe('the regime', () => {
       const frames = run([inputs(), inputs(change, levers)])
       expect(frames[1]!.reset).toBe('key')
     }
-    // A force or the stats counter changes how a frame is drawn, not what it means.
-    const drawn = run([
-      inputs(),
-      inputs({}, { stats: true, placement: 'passes' }),
-    ])
+    // The stats counter changes how a frame is drawn, not what it means.
+    const drawn = run([inputs(), inputs({}, { stats: true })])
     expect(drawn[1]!.reset).toBe('none')
   })
 

@@ -10,11 +10,10 @@ import {
 } from 'three/webgpu'
 import { vec4 } from 'three/tsl'
 import { OVER_CLOUDS_LAYERS } from './cloudLayers.ts'
-import { SPLIT_LABEL } from './cloudSplit.ts'
 import { namePass, passName } from './passTimeline.ts'
 
 /*
- * Placement A's second scene pass, pass B: the OVER layer drawn into the scene
+ * The second scene pass, pass B: the OVER layer drawn into the scene
  * target with load ops, after the pass under the clouds and before the
  * upscaler, from the sensor's dependency sum. It binds nothing in the post
  * program: its node is `vec4(0)`, there only for its order, since three runs
@@ -36,12 +35,15 @@ import { namePass, passName } from './passTimeline.ts'
  * pass-B frame.
  */
 
+/** Pass B's name on the pass timeline. */
+export const OVER_PASS_LABEL = 'scene over clouds'
+
 export class CloudOverPassNode extends TempNode<'vec4'> {
   static get type(): string {
     return 'CloudOverPassNode'
   }
 
-  /** Set with the scene pass's UNDER layers, and only on a frame drawn under placement A. */
+  /** Set with the scene pass's UNDER layers, and only on a frame the clouds draw. */
   active = false
 
   readonly #scene: Scene
@@ -68,7 +70,7 @@ export class CloudOverPassNode extends TempNode<'vec4'> {
     return vec4(0)
   }
 
-  /** Renders the OVER layer into the scene target with load ops, the target named `SPLIT_LABEL` meanwhile. */
+  /** Renders the OVER layer into the scene target with load ops, the target named `OVER_PASS_LABEL` meanwhile. */
   override updateBefore(frame: NodeFrame): undefined {
     if (!this.active) return undefined
     const renderer = frame.renderer
@@ -83,7 +85,7 @@ export class CloudOverPassNode extends TempNode<'vec4'> {
     // Pass B takes the target's name for its own render and hands back
     // whatever pass A is called: the sensor's 'scene', or a test's own.
     const named = passName(this.#target) ?? null
-    namePass(this.#target, SPLIT_LABEL)
+    namePass(this.#target, OVER_PASS_LABEL)
     try {
       camera.layers.mask = OVER_CLOUDS_LAYERS.mask
       renderer.setRenderTarget(this.#target)

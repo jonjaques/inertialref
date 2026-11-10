@@ -10,10 +10,6 @@ import { SCENARIO_IDS, type ScenarioId } from '@inertialref/rendering'
  * presentation, never a canonical value.
  */
 
-/** B, A, and B with no cloud work: the split's own price. */
-export const CLOUD_PLACEMENTS = ['split', 'passes', 'empty-split'] as const
-export type CloudPlacement = (typeof CLOUD_PLACEMENTS)[number]
-
 export const CLOUD_CACHES = ['field', 'volume'] as const
 export type CloudCache = (typeof CLOUD_CACHES)[number]
 
@@ -59,7 +55,6 @@ const DECKS = ['auto', 'hidden'] as const
 export interface CloudLevers {
   readonly on: boolean
   readonly scenario: ScenarioId
-  readonly placement: CloudPlacement
   readonly cache: CloudCache
   readonly far: CloudFarKind
   /** Meters a trace texel spans where a ray hands over to the far march. */
@@ -110,7 +105,6 @@ export interface CloudLevers {
 export const DEFAULT_CLOUD_LEVERS: CloudLevers = Object.freeze({
   on: false,
   scenario: 'fair-cumulus',
-  placement: 'split',
   cache: 'field',
   far: 'atlas',
   farFootprint: 400,
@@ -148,7 +142,6 @@ const FIELDS: Readonly<Record<keyof CloudLevers, (value: unknown) => boolean>> =
   {
     on: (value) => typeof value === 'boolean',
     scenario: oneOf(SCENARIO_IDS),
-    placement: oneOf(CLOUD_PLACEMENTS),
     cache: oneOf(CLOUD_CACHES),
     far: oneOf(CLOUD_FAR_KINDS),
     farFootprint: (value) => finite(value) && value > 0,
@@ -199,8 +192,8 @@ export function isCloudLevers(value: unknown): value is CloudLevers {
 
 /**
  * The levers whose change resets the history: what a texel of it means. A
- * placement, a force or the stats counter changes how a frame is drawn, not
- * what the history holds, so none of them is here.
+ * force or the stats counter changes how a frame is drawn, not what the
+ * history holds, so neither is here.
  */
 export function cloudResetKey(levers: CloudLevers): string {
   return JSON.stringify([
@@ -232,12 +225,4 @@ export function deckYields(
   address: string,
 ): boolean {
   return levers.deck === 'hidden' || (levers.on && served === address)
-}
-
-/**
- * Whether the frame is one scene list around the composite (placement B and
- * the empty split): the staged sky before it, the orbit traces after it.
- */
-export function splitOrders(levers: CloudLevers): boolean {
-  return levers.on && levers.placement !== 'passes'
 }

@@ -26,7 +26,7 @@ import {
 import { type CloudFrameDriver, CloudFrameNode } from './cloudFrameNode.ts'
 import { CloudHistory } from './cloudHistory.ts'
 import { UNDER_CLOUDS_LAYERS } from './cloudLayers.ts'
-import type { CloudLevers, CloudPlacement } from './cloudLevers.ts'
+import type { CloudLevers } from './cloudLevers.ts'
 import type { CloudBudget, CloudResource } from './cloudNodes.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
 import { CLOUD_PROFILE_HEIGHTS, CLOUD_PROFILE_ROWS } from './cloudProfile.ts'
@@ -72,7 +72,7 @@ export type CloudEngineInputs = Omit<
 >
 
 export interface CloudSystem {
-  /** Placement A's pass in the sensor's dependency sum: vec4(0) in the post program. */
+  /** Pass B, over the clouds, in the sensor's dependency sum: vec4(0) in the post program. */
   readonly overPass: Node<'vec4'>
   beginFrame(inputs: CloudEngineInputs | null, sensor: CloudSensorState): void
   endFrame(): void
@@ -260,9 +260,6 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     get inFrame() {
       return inFrame && frame !== null
     },
-    get placement(): CloudPlacement {
-      return frame?.levers.placement ?? 'split'
-    },
     run,
   }
   const frameNode = new CloudFrameNode(driver)
@@ -280,7 +277,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     scenePass.renderTarget,
     mrt,
   )
-  scene.add(composite.passes, composite.split)
+  scene.add(composite.mesh)
 
   const farPending = (): boolean =>
     (levers?.far === 'spheres' ? field.farSpheres : field.farAtlas).pending ||
@@ -362,17 +359,15 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       uniforms.camera.near.value = view.near ?? uniforms.camera.near.value
       uniforms.camera.far.value = view.far ?? uniforms.camera.far.value
       composite.setMode(frame.levers.composite)
-      composite.show(frame.levers.placement)
-      if (frame.levers.placement === 'passes') {
-        scenePass.setLayers(UNDER_CLOUDS_LAYERS)
-        overPass.active = true
-        layered = true
-      }
+      composite.show(true)
+      scenePass.setLayers(UNDER_CLOUDS_LAYERS)
+      overPass.active = true
+      layered = true
       inFrame = true
     },
     endFrame() {
       inFrame = false
-      composite.show(null)
+      composite.show(false)
       if (layered) {
         // r185 takes null back to the camera's own mask; its types do not.
         scenePass.setLayers(null as unknown as Layers)
@@ -419,7 +414,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     dispose() {
       if (disposed) return
       disposed = true
-      scene.remove(composite.passes, composite.split)
+      scene.remove(composite.mesh)
       composite.dispose()
       radiance.dispose()
       field.dispose()

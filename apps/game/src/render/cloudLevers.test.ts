@@ -6,7 +6,6 @@ import {
   CLOUD_COMPOSITES,
   CLOUD_FAR_KINDS,
   CLOUD_FORCES,
-  CLOUD_PLACEMENTS,
   CLOUD_SUN_DEPTHS,
   CLOUD_SWEEP_EXTRAS,
   type CloudLevers,
@@ -36,7 +35,6 @@ const RESET_LEVERS = [
 const MALFORMED: Record<keyof CloudLevers, readonly unknown[]> = {
   on: [1, 'true', null],
   scenario: ['cumulus', '', null],
-  placement: ['both', 'split ', 0],
   cache: ['grid', null],
   far: ['levels', ''],
   farFootprint: [0, -400, Infinity, Number.NaN, '400'],
@@ -65,7 +63,6 @@ const levers: fc.Arbitrary<CloudLevers> = fc
   .record({
     on: fc.boolean(),
     scenario: fc.constantFrom(...SCENARIO_IDS),
-    placement: fc.constantFrom(...CLOUD_PLACEMENTS),
     cache: fc.constantFrom(...CLOUD_CACHES),
     far: fc.constantFrom(...CLOUD_FAR_KINDS),
     farFootprint: fc.constantFrom(100, 400, 1600),
@@ -153,7 +150,6 @@ describe('the reset key', () => {
     const changed: Partial<CloudLevers> = {
       on: true,
       scenario: 'anvil',
-      placement: 'passes',
       cache: 'volume',
       far: 'spheres',
       farFootprint: 800,

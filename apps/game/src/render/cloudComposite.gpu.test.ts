@@ -49,7 +49,6 @@ import { CloudFrameNode } from './cloudFrameNode.ts'
 import { traceScreen, viewDirection } from './cloudGeometry.ts'
 import type { CloudHistoryTextures } from './cloudHistory.ts'
 import { OVER_CLOUDS_LAYER } from './cloudLayers.ts'
-import type { CloudPlacement } from './cloudLevers.ts'
 import {
   CLOUD_STAND_INS,
   type CloudFarFn,
@@ -77,7 +76,8 @@ import { sensorMrt } from './sensorMrt.ts'
  * The composite in the sensor's own shape: a scene target of the layout —
  * four samples, or the temporal rows — the sensor's MRT, a renderer with the
  * scene's order, and a depth copy tied to the target and drawn by a real
- * frame node inside the split, or inside pass B under placement A. The
+ * frame node inside pass B, the OVER layer drawn over the pass under the
+ * clouds. The
  * history is written by a kernel here, so every case states exactly what the
  * trace and the history would have left.
  *
@@ -406,7 +406,6 @@ function rig({
   // depth copy, drawn where the system draws it.
   const driver = {
     inFrame: false,
-    placement: 'split' as CloudPlacement,
     run: (three: typeof renderer) => {
       if (copyDepth) depth.render(three)
     },
@@ -436,21 +435,20 @@ function rig({
       writer.set(written)
       await session.compute(writer.kernel)
     },
-    /** One frame of `scene`, the composite in `placement`, or none. */
-    async frame(scene: Scene, placement: CloudPlacement | null): Promise<void> {
-      scene.add(composite.split, composite.passes)
-      composite.show(placement)
-      driver.placement = placement ?? 'split'
+    /** One frame of `scene`, with the composite in pass B or without it. */
+    async frame(scene: Scene, on: boolean): Promise<void> {
+      scene.add(composite.mesh)
+      composite.show(on)
       const mask = camera.layers.mask
       await checked(session, () => {
         renderer.setRenderTarget(target)
         renderer.setMRT(mrt)
-        driver.inFrame = placement !== null
+        driver.inFrame = on
         try {
           camera.layers.set(0)
           renderer.render(scene, camera)
           // Pass B: the OVER layer onto what the pass under the clouds left.
-          if (placement === 'passes') {
+          if (on) {
             camera.layers.set(OVER_CLOUDS_LAYER)
             renderer.autoClear = false
             renderer.render(scene, camera)
@@ -508,19 +506,17 @@ describe('off changes nothing', () => {
       serve(f.uniforms.served, 1_000, 0, 3_000)
       await f.write({})
       const scene = usual()
-      await f.frame(scene, null)
+      await f.frame(scene, false)
       const alone = await f.readAll()
-      for (const placement of ['split', 'passes', 'empty-split'] as const)
-        for (const mode of ['identity', 'thin', 'residual'] as const) {
-          f.composite.setMode(mode)
-          await f.frame(scene, placement)
-          const drawn = await f.readAll()
-          for (const [name, values] of alone)
-            expect(
-              bits(drawn.get(name)!),
-              `${placement}, ${mode}: ${name}`,
-            ).toEqual(bits(values))
-        }
+      for (const mode of ['identity', 'thin', 'residual'] as const) {
+        f.composite.setMode(mode)
+        await f.frame(scene, true)
+        const drawn = await f.readAll()
+        for (const [name, values] of alone)
+          expect(bits(drawn.get(name)!), `${mode}: ${name}`).toEqual(
+            bits(values),
+          )
+      }
       f.dispose()
     },
   )
@@ -529,7 +525,7 @@ describe('off changes nothing', () => {
     const f = rig({ picture: TEMPORAL })
     serve(f.uniforms.served, 1_000, 0, 3_000)
     const scene = usual()
-    await f.frame(scene, null)
+    await f.frame(scene, false)
     const alone = await f.readAll()
     // Cloud over the history's left half only, moving with the eye.
     f.uniforms.camera.translation.value.set(5, 0, 0)
@@ -538,7 +534,7 @@ describe('off changes nothing', () => {
       air: [0, 0, 0, 2],
       clearFrom: HISTORY / 2,
     })
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const drawn = await f.readAll()
     for (const [name, values] of alone)
       for (let y = 0; y < SIZE; y += 1)
@@ -561,28 +557,25 @@ describe('off changes nothing', () => {
 })
 
 describe('the cloud’s light', () => {
-  it.each(['split', 'passes'] as const)(
-    'with T_c = 0 is the cloud alone, at the gain applied once (%s)',
-    async (placement) => {
-      const f = rig()
-      serve(f.uniforms.served, 1_000, 0, 3_000)
-      const cloud = [0.1, 0.2, 0.3] as const
-      await f.write({ light: [...cloud, 0] })
-      await f.frame(usual(), placement)
-      const output = await f.read('output')
-      for (let y = 0; y < SIZE; y += 1)
-        for (let x = 0; x < SIZE; x += 1)
-          for (let c = 0; c < 3; c += 1) {
-            // The gain twice would be four times this.
-            const expected = cloud[c]! * LIGHT
-            expect(
-              Math.abs(at(output, x, y, c) - expected),
-              `(${x}, ${y}) channel ${c}: ${at(output, x, y, c)}`,
-            ).toBeLessThanOrEqual(halfSteps(expected))
-          }
-      f.dispose()
-    },
-  )
+  it('with T_c = 0 is the cloud alone, at the gain applied once', async () => {
+    const f = rig()
+    serve(f.uniforms.served, 1_000, 0, 3_000)
+    const cloud = [0.1, 0.2, 0.3] as const
+    await f.write({ light: [...cloud, 0] })
+    await f.frame(usual(), true)
+    const output = await f.read('output')
+    for (let y = 0; y < SIZE; y += 1)
+      for (let x = 0; x < SIZE; x += 1)
+        for (let c = 0; c < 3; c += 1) {
+          // The gain twice would be four times this.
+          const expected = cloud[c]! * LIGHT
+          expect(
+            Math.abs(at(output, x, y, c) - expected),
+            `(${x}, ${y}) channel ${c}: ${at(output, x, y, c)}`,
+          ).toBeLessThanOrEqual(halfSteps(expected))
+        }
+    f.dispose()
+  })
 
   it('reads the history texel screenTexel gives each pixel, row 0 at the top', async () => {
     const f = rig()
@@ -590,10 +583,10 @@ describe('the cloud’s light', () => {
     const scene = sceneOf(
       facing(50_000, [-1.5, 1.5, -1.5, 1.5], colored([0.01, 0.01, 0.01])),
     )
-    await f.frame(scene, null)
+    await f.frame(scene, false)
     const alone = await f.read('output')
     await f.write({ ramp: true })
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const drawn = await f.read('output')
     for (let y = 0; y < SIZE; y += 1)
       for (let x = 0; x < SIZE; x += 1) {
@@ -617,14 +610,14 @@ describe('the cloud’s light', () => {
       facing(50_000, [-1.5, 1.5, -1.5, 1.5], colored([0.3, 0.2, 0.1])),
       facing(200, [-0.5, 0.5, -0.5, 0.5], colored([0.05, 0.6, 0.2])),
     )
-    await f.frame(scene, null)
+    await f.frame(scene, false)
     const alone = await f.read('output')
     await f.write({
       light: [0.2, 0.2, 0.2, 0.3],
       air: [-0.05, -0.05, -0.05, 2],
       moments: [3, 1, 0.1, 0],
     })
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const drawn = await f.read('output')
     for (let y = 10; y < 22; y += 1)
       for (let x = 10; x < 22; x += 1)
@@ -649,7 +642,7 @@ describe('the other rows', () => {
     // What a surface 3 km out writes, everywhere.
     await f.frame(
       sceneOf(facing(3_000, [-1.5, 1.5, -1.5, 1.5], colored([0.2, 0.2, 0.2]))),
-      null,
+      false,
     )
     const surface = await f.read('motion')
     // A wall 4 km out and an instrument 3.5 km out over the lower right,
@@ -658,16 +651,16 @@ describe('the other rows', () => {
       facing(4_000, [-1.5, 1.5, -1.5, 1.5], colored([0.2, 0.2, 0.2])),
       facing(3_500, [0, 1.5, -1.5, 0], colored([0.4, 0.4, 0.4], true)),
     )
-    await f.frame(scene, null)
+    await f.frame(scene, false)
     const alone = await f.readAll()
     await f.write({ light: [0.1, 0.1, 0.1, 0], viewDepth: 3 })
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const opaque = await f.readAll()
     // At three quarters' opacity, with the eye moving 5 m along +x.
     const translation = new Vector3(5, 0, 0)
     f.uniforms.camera.translation.value.copy(translation)
     await f.write({ light: [0.1, 0.1, 0.1, 0.25], viewDepth: 3 })
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const partial = await f.readAll()
     f.uniforms.camera.translation.value.set(0, 0, 0)
     for (let y = 0; y < SIZE; y += 1)
@@ -782,11 +775,11 @@ describe('the class', () => {
     moon.scale.setScalar(400_000)
     moon.position.copy(toMoon.multiplyScalar(2e7))
     const scene = sceneOf(planet, moon)
-    await f.frame(scene, null)
+    await f.frame(scene, false)
     const alone = await f.read('output')
     const cloud = 0.1
     await f.write({ light: [cloud, cloud, cloud, 1] })
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const drawn = await f.read('output')
     const depth = await f.readDepth()
     const full = cloud * LIGHT
@@ -847,13 +840,13 @@ describe('the class', () => {
       const scene = sceneOf(
         facing(9_500, [-1.5, 0, -1.5, 1.5], colored([0.2, 0.2, 0.2])),
       )
-      await f.frame(scene, null)
+      await f.frame(scene, false)
       const alone = await f.read('output')
       await f.write({ light: [0.1, 0.1, 0.1, 1] })
-      await f.frame(scene, 'split')
+      await f.frame(scene, true)
       const lit = await f.read('output')
       await f.write({ light: [0, 0, 0, 1], air: [-0.05, -0.05, -0.05, 0] })
-      await f.frame(scene, 'split')
+      await f.frame(scene, true)
       const blocked = await f.read('output')
       const eye = R + 10_000
       const shell = R + 3_000
@@ -900,13 +893,13 @@ describe('the second body', () => {
     const scene = sceneOf(
       facing(50_000, [-1.5, 1.5, -1.5, 1.5], colored([0.3, 0.3, 0.3])),
     )
-    await f.frame(scene, null)
+    await f.frame(scene, false)
     const alone = await f.read('output')
     await f.write({})
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const second = await f.read('output')
     await f.write({ light: [0.2, 0.2, 0.2, 0.5] })
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const both = await f.read('output')
     for (const [x, y] of [
       [3, 3],
@@ -937,7 +930,7 @@ describe('the residual meter', () => {
     const scene = sceneOf(
       facing(200, [-1.5, 0.1, -1.5, 1.5], colored([0.3, 0.3, 0.3])),
     )
-    await f.frame(scene, null)
+    await f.frame(scene, false)
     const alone = await f.readAll()
     await f.write({
       light: [0.2, 0.2, 0.2, 0.5],
@@ -945,7 +938,7 @@ describe('the residual meter', () => {
     })
     f.composite.setMode('residual')
     // Inert: the scene as built.
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     const inert = await f.readAll()
     for (const [name, values] of alone)
       expect(bits(inert.get(name)!), name).toEqual(bits(values))
@@ -1023,7 +1016,7 @@ describe('the residual meter', () => {
       air: [-0.1, -0.1, -0.1, 1e6],
     })
     f.composite.setMode('residual')
-    await f.frame(scene, 'split')
+    await f.frame(scene, true)
     f.composite.measureResidual(gpu.renderer, f.target)
     await f.composite.residualRead()
     const { limb, thin } = f.composite.residual!
@@ -1035,7 +1028,7 @@ describe('the residual meter', () => {
 })
 
 describe('the warm-up', () => {
-  it('builds every pipeline either placement’s first frame and the meter’s first measurement use', async () => {
+  it('builds every pipeline the first frame and the meter’s first measurement use', async () => {
     const fresh = await openGpu(SIZE, SIZE)
     try {
       setSceneExposure(fresh.renderer, GAIN / SURFACE_LUMINANCE)
@@ -1047,12 +1040,11 @@ describe('the warm-up', () => {
       await f.write({ light: [0.1, 0.1, 0.1, 0.5] })
       const scene = usual()
       // The scene's own pipelines, which are not the composite's to warm.
-      await f.frame(scene, null)
+      await f.frame(scene, false)
       await f.composite.warm(fresh.renderer, f.layout, f.camera, scene)
       const render = fresh.pipelinesBuilt()
       const compute = fresh.computePipelinesBuilt()
-      for (const placement of ['split', 'passes', 'empty-split'] as const)
-        await f.frame(scene, placement)
+      await f.frame(scene, true)
       expect(fresh.pipelinesBuilt()).toBe(render)
       f.composite.setMode('residual')
       f.composite.measureResidual(fresh.renderer, f.target)

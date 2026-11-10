@@ -17,7 +17,7 @@
  * decided by the rules fixed before measuring.
  *
  * Production only. Dev React costs about five times the shipped CPU, and
- * placement A's second traversal is a CPU cost, so every invocation passes
+ * the second scene pass's traversal is a CPU cost, so every invocation passes
  * `--no-serve` against the preview, and the runner refuses a URL that does not
  * answer. The preview names no tree, so the figures are tied to the code by
  * the commit, a clean status, and a build no older than the commit.
@@ -62,7 +62,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import {
-  CLOUD_PLACEMENTS,
   CLOUD_SWEEP_EXTRAS,
   DEFAULT_CLOUD_LEVERS,
   isCloudLevers,
@@ -242,7 +241,6 @@ const ab = (batch, group, label, scenario, size, kind, options) => ({
   kind,
   ...stood(scenario, size),
   pairs: options.pairs,
-  profileMs: options.profileMs ?? 0,
   base: levers(scenario, options.base ?? OFF),
   candidate: levers(scenario, { ...FORCE[kind], ...(options.candidate ?? ON) }),
 })
@@ -255,15 +253,6 @@ export const COMBOS = [
 ]
 
 function decisions(size) {
-  const placement = CLOUD_PLACEMENTS.flatMap((placement) =>
-    ['horizon', 'inside', 'orbit'].map((s) =>
-      ab('decisions', 'placement', placement, s, size, 'steady', {
-        candidate: { on: true, placement },
-        pairs: 5,
-        profileMs: placement === 'empty-split' ? 0 : 3000,
-      }),
-    ),
-  )
   const cache = COMBOS.flatMap((label) => {
     const [cache, sunDepth] = label.split('+')
     const at = (s, kind, pairs) =>
@@ -285,7 +274,7 @@ function decisions(size) {
       pairs: 5,
     }),
   )
-  return [...placement, ...cache, ...far]
+  return [...cache, ...far]
 }
 
 const LANDED = [

@@ -26,9 +26,9 @@ import { warmCompile, warmRenderer } from './warmup.ts'
  * without it —
  * the pixels bit for bit, the draw calls, the passes on the timeline — and
  * the post program carries one more `+ 0` term and not one more binding.
- * With the levers on, both placements draw their passes, and an overlay
- * marked over the clouds and warmed at boot draws in either with no
- * pipeline built.
+ * With the levers on, the scene is drawn in two passes, under the clouds and
+ * over them, and an overlay marked over the clouds and warmed at boot draws
+ * in the second with no pipeline built.
  */
 
 const WIDTH = 64
@@ -75,7 +75,7 @@ describe('without the flag', () => {
 })
 
 describe('with the flag and the levers off', () => {
-  it('reports a system that exists and is off, its meshes hidden', () => {
+  it('reports a system that exists and is off, its mesh hidden', () => {
     const report = flagged.sensor.diagnostics.clouds!
     expect(report.available).toBe(true)
     expect(report.on).toBe(false)
@@ -83,8 +83,8 @@ describe('with the flag and the levers off', () => {
     const meshes = flagged.scene.children.filter(
       (child) => child.name === 'cloud composite',
     )
-    expect(meshes).toHaveLength(2)
-    for (const mesh of meshes) expect(mesh.visible).toBe(false)
+    expect(meshes).toHaveLength(1)
+    expect(meshes[0]!.visible).toBe(false)
   })
 
   it('draws the frame without the flag: the pixels bit for bit, the renders and the draws', async () => {
@@ -195,68 +195,59 @@ describe('with the levers on', () => {
     return mesh
   }
 
-  it.each(['split', 'passes'] as const)(
-    'draws a marked overlay under %s with no pipeline its warm-up did not build',
-    async (placement) => {
-      const mesh = await overlay(flagged)
-      try {
-        flagged.levers = {
-          ...DEFAULT_CLOUD_LEVERS,
-          scenario: 'overcast',
-          on: true,
-          placement,
-        } satisfies CloudLevers
-        // The clouds' own first frames for this placement, then the count.
-        for (let k = 0; k < 3; k += 1) flagged.frame()
-        await gpu.read(flagged.target)
-        const render = gpu.pipelinesBuilt()
-        const compute = gpu.computePipelinesBuilt()
-        for (let k = 0; k < 3; k += 1) flagged.frame()
-        await gpu.read(flagged.target)
-        expect(gpu.pipelinesBuilt()).toBe(render)
-        expect(gpu.computePipelinesBuilt()).toBe(compute)
-      } finally {
-        flagged.scene.remove(mesh)
-        mesh.geometry.dispose()
-        ;(mesh.material as MeshBasicNodeMaterial).dispose()
-        flagged.levers = { ...flagged.levers, on: false }
-      }
-    },
-  )
+  it('draws a marked overlay with no pipeline its warm-up did not build', async () => {
+    const mesh = await overlay(flagged)
+    try {
+      flagged.levers = {
+        ...DEFAULT_CLOUD_LEVERS,
+        scenario: 'overcast',
+        on: true,
+      } satisfies CloudLevers
+      // The clouds' own first frames, then the count.
+      for (let k = 0; k < 3; k += 1) flagged.frame()
+      await gpu.read(flagged.target)
+      const render = gpu.pipelinesBuilt()
+      const compute = gpu.computePipelinesBuilt()
+      for (let k = 0; k < 3; k += 1) flagged.frame()
+      await gpu.read(flagged.target)
+      expect(gpu.pipelinesBuilt()).toBe(render)
+      expect(gpu.computePipelinesBuilt()).toBe(compute)
+    } finally {
+      flagged.scene.remove(mesh)
+      mesh.geometry.dispose()
+      ;(mesh.material as MeshBasicNodeMaterial).dispose()
+      flagged.levers = { ...flagged.levers, on: false }
+    }
+  })
 
   it.skipIf(!TIMESTAMPS)(
-    'draws pass B only under the two passes, after the scene, and the split’s resumed half under the split',
+    'draws pass B once, after the scene, with the cloud work',
     async () => {
-      const labelsUnder = async (placement: 'split' | 'passes') => {
-        flagged.levers = {
-          ...DEFAULT_CLOUD_LEVERS,
-          scenario: 'overcast',
-          on: true,
-          placement,
-        }
-        for (let k = 0; k < 4; k += 1) flagged.frame()
-        const stop = installPassTimeline(gpu.renderer as WebGPURenderer)
-        try {
-          const read = await passTimelineOf(
-            gpu.renderer as WebGPURenderer,
-          )!.measure(() => flagged.frame(), 3)
-          return read.passes.map((pass) => pass.label)
-        } finally {
-          stop()
-        }
+      flagged.levers = {
+        ...DEFAULT_CLOUD_LEVERS,
+        scenario: 'overcast',
+        on: true,
       }
-      for (const placement of ['split', 'passes'] as const) {
-        const labels = await labelsUnder(placement)
-        const scene = labels.indexOf('scene')
-        const over = labels.indexOf('scene over clouds')
-        expect(scene, placement).toBeGreaterThanOrEqual(0)
-        expect(over, placement).toBeGreaterThan(scene)
-        expect(labels.filter((label) => label === 'scene over clouds')).toEqual(
-          ['scene over clouds'],
-        )
-        expect(labels).toContain('cloud trace')
-        expect(labels).toContain('cloud history')
+      for (let k = 0; k < 4; k += 1) flagged.frame()
+      const stop = installPassTimeline(gpu.renderer as WebGPURenderer)
+      let labels: string[]
+      try {
+        const read = await passTimelineOf(
+          gpu.renderer as WebGPURenderer,
+        )!.measure(() => flagged.frame(), 3)
+        labels = read.passes.map((pass) => pass.label)
+      } finally {
+        stop()
       }
+      const scene = labels.indexOf('scene')
+      const over = labels.indexOf('scene over clouds')
+      expect(scene).toBeGreaterThanOrEqual(0)
+      expect(over).toBeGreaterThan(scene)
+      expect(labels.filter((label) => label === 'scene over clouds')).toEqual([
+        'scene over clouds',
+      ])
+      expect(labels).toContain('cloud trace')
+      expect(labels).toContain('cloud history')
       flagged.levers = { ...flagged.levers, on: false }
     },
   )

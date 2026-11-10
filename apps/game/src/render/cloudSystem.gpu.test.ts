@@ -20,7 +20,6 @@ import type { CloudHistory } from './cloudHistory.ts'
 import {
   CLOUD_CACHES,
   CLOUD_FAR_KINDS,
-  CLOUD_PLACEMENTS,
   CLOUD_SUN_DEPTHS,
   type CloudLevers,
 } from './cloudLevers.ts'
@@ -32,7 +31,7 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 /*
  * The cloud system on the GPU (§9): every wave-2 module in one chain, run by
  * the sensor's own frame. The run order on the pass timeline under both
- * placements and both regimes; every texture at one level and every
+ * regimes; every texture at one level and every
  * resource's declared bytes its GPU textures'; the far atlas holding cloud
  * past the clipmap's reach; the trace stopping at the scene in true
  * kilometers at a compression that is not 1; the trace and the history on
@@ -143,15 +142,14 @@ describe('every lever set', () => {
     const detach = logHub.addSink(sink)
     const before = gpu.reported().filter((m) => m.type === 'error').length
     try {
-      for (const placement of CLOUD_PLACEMENTS)
-        for (const cache of CLOUD_CACHES)
-          for (const sunDepth of CLOUD_SUN_DEPTHS)
-            for (const far of CLOUD_FAR_KINDS) {
-              set({ placement, cache, sunDepth, far })
-              frames(2)
-            }
+      for (const cache of CLOUD_CACHES)
+        for (const sunDepth of CLOUD_SUN_DEPTHS)
+          for (const far of CLOUD_FAR_KINDS) {
+            set({ cache, sunDepth, far })
+            frames(2)
+          }
       for (const force of ['reset', 'cut', 'scrub', 'warp', 'fly'] as const) {
-        set({ placement: 'split', force })
+        set({ force })
         frames(2)
       }
       set({ force: 'none', composite: 'thin' })
@@ -198,9 +196,8 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     }
   }
 
-  it('is §4.2’s under the split, the converging frame tracing once and the immediate four times', async () => {
+  it('is §4.2’s inside pass B, the converging frame tracing once and the immediate four times', async () => {
     const steady = await order({
-      placement: 'split',
       cache: 'field',
       sunDepth: 'cascades',
       far: 'atlas',
@@ -224,9 +221,8 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     expect(immediate.find(([label]) => label === 'cloud history')?.[1]).toBe(4)
   }, 120_000)
 
-  it('is the same order inside pass B, and draws the volume before the sun grid that sums through it', async () => {
+  it('draws the volume before the sun grid that sums through it', async () => {
     const passes = await order({
-      placement: 'passes',
       cache: 'volume',
       sunDepth: 'grid',
       far: 'spheres',
@@ -279,7 +275,7 @@ describe('what the resources hold', () => {
   ] as const)(
     'under %s: every texture one level, every resource’s bytes its GPU textures’',
     async (_, levers) => {
-      set({ placement: 'split', force: 'none', ...levers })
+      set({ force: 'none', ...levers })
       frames(4)
       await gpu.read(rig.target)
       for (const held of rig.system!.resources) {
@@ -306,7 +302,7 @@ describe('what the resources hold', () => {
   it('bakes cloud into the far atlas at every face’s center, past the clipmap’s reach', async () => {
     // Overcast covers the whole body: a face's center 90° from the eye is
     // 10,000 km out, where only the cube's synoptic coverage reaches.
-    set({ placement: 'split', far: 'atlas', force: 'none' })
+    set({ far: 'atlas', force: 'none' })
     frames(50)
     const atlas = resource('farAtlas').textures()[0]!
     const centers = Array.from({ length: 6 }, (_, face): [number, number] => [
@@ -320,7 +316,7 @@ describe('what the resources hold', () => {
 
 describe('the whole chain over a depth step', () => {
   it('stops the trace’s rows under the ceiling at it, in true kilometers', async () => {
-    set({ placement: 'split', cache: 'field', force: 'none' })
+    set({ cache: 'field', force: 'none' })
     frames(4)
     const trace = resource('trace')
     const [width, height] = rig.system!.report.extents.trace
@@ -358,7 +354,7 @@ describe('the whole chain over a depth step', () => {
       [1, 0],
       [0, 1],
     ] as const
-    set({ placement: 'split', force: 'none' })
+    set({ force: 'none' })
     for (let turn = 0; turn < 4; turn += 1) {
       rig.frame()
       const history = resource<CloudHistory>('history')
@@ -394,7 +390,7 @@ describe('the whole chain over a depth step', () => {
 
 describe('the radiance capture', () => {
   it('reads one frame for two asks, at the trace’s extent, cloud where the ceiling does not stop the trace', async () => {
-    set({ placement: 'split', cache: 'field', force: 'none', lightTaps: 2 })
+    set({ cache: 'field', force: 'none', lightTaps: 2 })
     frames(20)
     const first = rig.system!.captureRadiance()
     const second = rig.system!.captureRadiance()
@@ -416,7 +412,7 @@ describe('the radiance capture', () => {
 
   it('differs where the light differs: lightTaps 0 against 4', async () => {
     const capture = async (lightTaps: 0 | 4) => {
-      set({ placement: 'split', cache: 'field', force: 'none', lightTaps })
+      set({ cache: 'field', force: 'none', lightTaps })
       frames(20)
       const asked = rig.system!.captureRadiance()
       rig.frame()
@@ -439,7 +435,7 @@ describe('the radiance capture', () => {
    */
   it('reads a held still twice sixteen frames apart as one image with the jitter held, and as two with it moving', async () => {
     const pair = async (jitterFrame: number | null) => {
-      set({ placement: 'split', cache: 'field', lightTaps: 2, jitterFrame })
+      set({ cache: 'field', lightTaps: 2, jitterFrame })
       set({ force: 'reset' })
       rig.frame()
       set({ force: 'none' })
