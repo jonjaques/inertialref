@@ -36,7 +36,6 @@ import { type CloudFrame, cloudFrame } from './cloudFrame.ts'
 import { altitudeAt, shellCrossingFrom, sunMuAt } from './cloudGeometry.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import type { CloudBudget, CloudSample } from './cloudNodes.ts'
-import { SUN_GRID_SIZE } from './cloudSunGrid.ts'
 import {
   LOOKING_UP,
   RIG_EARTH_RADIUS,
@@ -75,6 +74,10 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * **The suns** are phase 0's two, 37.5° and 5°, and the dusk cornerstone's,
  * 1.5° under the horizon. `dusk-altocumulus`, the cornerstone's own regime,
  * holds cloud only where the sun is low and is scored under the third alone.
+ * Under the horizon a case is scored twice: with the grid's bake stopping
+ * where a ray leaves a level downward, as it ships, and with its 32 steps
+ * run to the far crossing of the union's top (`toFirstExit`), which is
+ * recorded beside it and held to nothing.
  *
  * **A case is a regime, a sun and a place,** and its figures are its RMS,
  * its bias, its worst sample and its 99th percentile, with the same four by
@@ -346,6 +349,8 @@ interface Case {
   /** By tap count: every scored sample, then each ring's. */
   readonly grid: Readonly<Record<string, Scored>>
   readonly rings: Readonly<Record<string, readonly Scored[]>>
+  /** Under the horizon: the same samples with the bake's steps run to the far crossing of the union's top. */
+  readonly farCrossing?: Readonly<Record<string, Scored>>
 }
 
 function score(miss: readonly number[]): Scored {
@@ -450,12 +455,12 @@ function drive(): {
     )
     if (frame === null) throw new Error('no frame: nothing served')
     previous = frame
-    // The system's own budget: eight slices of the volume, and the grid whole.
+    // The system's own budget: the `sunSlices` lever caps both caches.
     const budget: CloudBudget = {
-      slices: 8,
+      slices: levers.sunSlices,
       tiles: 1,
       jump: frame.jump || rebuild,
-      sunSlices: SUN_GRID_SIZE[2],
+      sunSlices: levers.sunSlices,
     }
     field.write(frame)
     field.render(gpu.renderer, frame, budget)
@@ -641,6 +646,16 @@ describe('the sun’s optical depth against the field', () => {
               )
             })
           }
+          // Under the horizon, the other bake on the same field and samples.
+          let farCrossing: Record<string, Scored> | undefined
+          if (elevation < 0) {
+            farCrossing = {}
+            field.grid.toFirstExit = false
+            settle(stance, levers(2), false)
+            for (const taps of TAPS)
+              farCrossing[taps] = score(lit.map(await scoreAt(taps)))
+            field.grid.toFirstExit = true
+          }
           results.push({
             scenario,
             sunDegrees: elevation,
@@ -655,6 +670,7 @@ describe('the sun’s optical depth against the field', () => {
               Math.max(lit.length, 1),
             grid: all,
             rings,
+            ...(farCrossing === undefined ? {} : { farCrossing }),
           })
         }
       }
@@ -716,7 +732,14 @@ describe('the sun’s optical depth against the field', () => {
                       pooled(cases.map((one) => of(one)[taps]!)),
                     ]),
                   )
-                return { scenario, sunDegrees, grid: by((one) => one.grid) }
+                return {
+                  scenario,
+                  sunDegrees,
+                  grid: by((one) => one.grid),
+                  ...(sunDegrees < 0
+                    ? { farCrossing: by((one) => one.farCrossing!) }
+                    : {}),
+                }
               }),
             ),
             cases: results,
@@ -740,7 +763,7 @@ describe('the sun’s optical depth against the field', () => {
    * and no scene, so a figure is a pass's and not a frame's.
    */
   it.skipIf(!MEASURE || !WORKSTATION)(
-    'times a rebuild frame by frame and a clock running at 1×, and writes both',
+    'times a rebuild frame by frame and a clock running at 1×, bakes no frame past the cap, and writes both',
     async () => {
       const { frameAt, settle } = drive()
       const [place] = placesOf(REBUILD.scenario)
@@ -838,6 +861,8 @@ describe('the sun’s optical depth against the field', () => {
             {
               note: 'cloudSunAccuracy.gpu.test.ts: the caches’ passes after every cache starts over, the median of the runs a frame, and with the clock running at 1× and 60 Hz; GPU ms by pass on the timeline, with no trace and no scene drawn',
               ...REBUILD,
+              sunSlices: levers.sunSlices,
+              sunRamp: levers.sunRamp,
               framesToWhole: whole < 0 ? null : whole + 1,
               frames,
               steady,
@@ -846,8 +871,14 @@ describe('the sun’s optical depth against the field', () => {
             2,
           )}\n`,
         )
-        // The grid is whole on the frame that starts it over.
-        expect(whole).toBe(0)
+        // The rubric's B7: whole within 48 frames, and no frame past the cap.
+        expect(whole).toBeGreaterThanOrEqual(0)
+        expect(whole + 1).toBeLessThanOrEqual(48)
+        for (const one of frames)
+          for (const label of ['cloud volume', 'cloud sun grid'])
+            expect(one.passes[label]?.count ?? 0).toBeLessThanOrEqual(
+              levers.sunSlices,
+            )
       } finally {
         stop()
       }

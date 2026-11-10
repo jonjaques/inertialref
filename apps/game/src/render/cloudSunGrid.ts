@@ -15,24 +15,35 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
+  abs,
   clamp,
   float,
   floor,
   Fn,
+  If,
   length,
+  log,
   Loop,
   max,
+  saturate,
   screenCoordinate,
   select,
+  sqrt,
   texture3D,
   uniform,
   vec3,
   vec4,
 } from 'three/tsl'
 import {
+  freshSunGrid,
   type LevelFrame,
-  sunSchedule,
+  owedByMotion,
+  owedBySun,
+  type SunGridState,
+  sunGridStep,
+  sunWakeWeight,
   textureBytes,
+  trustedWindow,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
 import type { CloudFrame } from './cloudFrame.ts'
@@ -43,6 +54,7 @@ import {
   shellCrossingFrom,
   sunMuAt,
 } from './cloudGeometry.ts'
+import { crossingExponent, crossingTransmittance } from './cloudMix.ts'
 import type {
   CloudBudget,
   CloudResource,
@@ -51,8 +63,10 @@ import type {
 } from './cloudNodes.ts'
 import type { CloudLevelUniforms, CloudUniforms } from './cloudUniforms.ts'
 import {
+  CLOUD_VOLUME_HELD,
   CLOUD_VOLUME_SIZE,
   CLOUD_VOLUME_TEXELS,
+  cloudFieldTravel,
   type CloudVolume,
   wrapped,
 } from './cloudVolume.ts'
@@ -61,64 +75,83 @@ import { warmByDrawing } from './warmup.ts'
 
 /*
  * The sun's optical depth as a grid around the eye (Nubis³): τ from each
- * cell's center to the union's top along the sun, summed through the local
- * volume in 32 steps whose heights come from `altitudeAt` (rule 52), over
- * the volume's level-1 window and 32 heights from the union's base to its
- * top.
+ * cell's center toward the sun, summed through the local volume in 32 steps
+ * whose heights come from `altitudeAt` (rule 52), over the volume's finer
+ * window and 32 heights from the union's base to its top.
  *
  * **Its depth is the drawn medium's.** A cell sums the extinction the
  * volume's medium answers with, which is the one the march's transmittance
  * is formed from, so the sun dims inside a cloud at the rate the view does.
  *
- * **Its frame is the volume's level 1.** A cell is two of level 1's texels,
- * 400 m, on that level's anchor and plane, so the grid re-anchors exactly
+ * **Its frame is the volume's finer level.** A cell is two of that level's
+ * texels, 400 m, on its anchor and plane, so the grid re-anchors exactly
  * when the level does; its window of 128 cells is centered on the eye in
- * that plane, as the level's 256 texels are, and scrolls toroidally.
+ * that plane, as the level's 256 texels are, and scrolls toroidally. A slice
+ * is drawn whole, at the window the grid has that frame, and the grid trusts
+ * only the intersection of the windows its slices were drawn at, a cell in
+ * from its edges.
  *
- * **A slice is drawn whole, at the window the grid has that frame.** The
- * cells a move exposes come in with the round-robin: four slices a frame,
- * six while any slice holds a window the grid has left, so a move is drawn
- * into every slice within six frames. Until then the grid trusts only the
- * intersection of the windows its slices were drawn at, a cell in from its
- * edges, and reads nothing past it. Drawing the strip into all 32 slices the
- * frame it appears would be 32 quads on one frame, against the pass budget's
- * six for the grid under motion (§4.4). A sun turned 0.05° from the one the
- * grid was drawn under, the field's time jumping, a new anchor or scenario
- * each rebuild it whole that frame: 32 slices of 128² cells × 32 steps,
- * 16.8 M texel-steps (`SUN_DEPTH_FRAME_CAP`), where the frame's budget
- * allows all 32 slices.
+ * **No frame rebuilds it** (`sunGridStep`, which is the schedule; this
+ * module keeps its state and draws what it answers). A new field, a moved
+ * anchor and a wake from idle leave every slice holding nothing; they come
+ * back at the frame's cap, and only from a volume that is whole, so no step
+ * of a rebuild reads the field's five textures where the volume has one.
+ * A whole grid is redrawn at the pace of what it holds: a slice before the
+ * fastest layer has crossed a tenth of a cell, and before the sun has turned
+ * a quarter of a degree from the one it was baked under. The cells are fixed
+ * to the body and the sun is only the ray a bake follows, so two slices
+ * baked a quarter of a degree apart disagree by 44 m of shadow in 10 km of
+ * chord, against a 400 m cell, and a turning sun is not an event.
  *
- * Past the window, and from orbit, where level 1 lies more than its own
- * extent below the eye and the grid is idle as the volume's level is, the
- * sun is unshadowed beyond the taps.
+ * **It answers with a weight, and the layers' statistics draw where the
+ * weight is not one** (`cloudMix.ts`). The weight is the product of three:
+ * the rebuild's, zero until every slice holds the field and rising over the
+ * `sunRamp` lever's frames; the wake's, zero where the grid idles, more
+ * than the finer level's extent over the union's top, and one a quarter of
+ * that lower; and the reach's, one to 20.8 km from the eye along the grid's
+ * axes and zero from 24 km. The last is measured from the eye and not from
+ * the window's edge: the window moves a cell at a time, and a weight tied to
+ * it would step at each snap. So the grid ends in a ramp, never in an edge
+ * lit on one side and shadowed on the other.
+ *
+ * **Under a sun below a cell's horizon the bake follows the ray down and
+ * stops where it leaves a level** (`#bakeNode`). What that ray meets when it
+ * comes back up, hundreds of kilometers sunward, is one crossing a level by
+ * the crossing's law.
  */
 
-/** Over the volume's level-1 window and the union's height. */
+/** Over the volume's finer window and the union's height. */
 export const SUN_GRID_SIZE = [128, 128, 32] as const
-/** Steps a cell's sun ray takes to the union's top. */
+/** Steps a cell's sun ray takes through the union. */
 export const SUN_GRID_STEPS = 32
 /** The pass's name on the timeline. */
 export const CLOUD_SUN_GRID_LABEL = 'cloud sun grid'
-/** One whole rebuild, in texel-steps: 128² × 32 cells × 32 steps. */
-export const SUN_DEPTH_FRAME_CAP = 16_777_216
-/** Degrees: the sun move that rebuilds the grid whole. */
-const SUN_TURN = 0.05
+/** Meters from the eye along the grid's axes: where its weight reaches zero, and the stretch it falls over. */
+export const SUN_GRID_REACH = 24_000
+export const SUN_GRID_FADE = 3_200
 
 const [WIDTH, HEIGHT, SLICES] = SUN_GRID_SIZE
-/** A cell is two of level 1's texels: 128 cells span its 256. */
-const CELL_METERS = (CLOUD_VOLUME_TEXELS[1] * CLOUD_VOLUME_SIZE) / WIDTH
+/** The frame's level the grid's cells are laid on: the volume's finer one. */
+const LEVEL = CLOUD_VOLUME_HELD[0]
+/** A cell is two of that level's texels: 128 cells span its 256. */
+const CELL_METERS = (CLOUD_VOLUME_TEXELS[LEVEL] * CLOUD_VOLUME_SIZE) / WIDTH
 /** R16F. */
 const TEXEL_BYTES = 2
 /** Cells in from a trusted window's edge: a trilinear read reaches half a cell. */
 const MARGIN = 1
 const NOWHERE = [1, 1, 0, 0] as const
-const SLICE_STEPS = WIDTH * HEIGHT * SUN_GRID_STEPS
-const TURN = Math.cos((SUN_TURN * Math.PI) / 180)
+/** Meters: a footprint past every layer's cell, where the field answers with its cover and its mean extinction. */
+const UNRESOLVED = 1e6
+/**
+ * The least a crossing passes, e⁻⁴⁶: the law is a transmittance, a float's
+ * exponential is zero from e⁻⁸⁸, and the logarithm of that is no depth.
+ */
+const OPAQUE = 1e-20
 
 /**
- * Level 1's frame at the grid's cells: its anchor, axes and eye terms, and a
- * window of the grid's size whose middle corner is the eye's nearest, as
- * `levelFrames` places a level's.
+ * The finer level's frame at the grid's cells: its anchor, axes and eye
+ * terms, and a window of the grid's size whose middle corner is the eye's
+ * nearest, as `levelFrames` places a level's.
  */
 function gridFrame(level: LevelFrame): LevelFrame {
   const corner = (plane: number): number =>
@@ -131,20 +164,45 @@ function gridFrame(level: LevelFrame): LevelFrame {
   }
 }
 
-interface SliceRecord {
-  origin: readonly [number, number] | null
-  frame: number
+/** The angle between two unit vectors, radians, from their cross product: an arccosine loses a turn of a millionth of a radian. */
+function turned(a: Vec3, b: Vec3): number {
+  const x = a.y * b.z - a.z * b.y
+  const y = a.z * b.x - a.x * b.z
+  const z = a.x * b.y - a.y * b.x
+  return Math.atan2(Math.hypot(x, y, z), a.x * b.x + a.y * b.y + a.z * b.z)
 }
-
-const dot3 = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z
 
 const modulo = (value: number, size: number): number =>
   ((value % size) + size) % size
 
+/** A stretch of a ray: where it starts, meters along, and how long it is. */
+interface Stretch {
+  readonly from: Node<'float'>
+  readonly length: Node<'float'>
+}
+
+/** What the grid answers with: the contract's three, and how far it holds the ray's far end. */
+export interface CloudSunGridDepths extends CloudSunDepths {
+  /**
+   * The grid's share of the depth behind the point, 0..1: `whole` is `toSun`
+   * plus this share of what lies between the point and the ray's far end.
+   * It falls to zero as that end leaves the grid's reach, 23 km behind a
+   * point 2 km over the base at a 5° sun, and there the part behind is the
+   * statistics' to give.
+   */
+  readonly behind: Node<'float'>
+}
+
+/** What the grid reads of the volume: its medium, and whether a slice may be baked from it. */
+export type CloudSunSource = Pick<
+  CloudVolume,
+  'medium' | 'trusted' | 'generation'
+>
+
 export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   readonly name = 'sunGrid'
   readonly #uniforms: CloudUniforms
-  readonly #volume: CloudVolume
+  readonly #volume: CloudSunSource
   /** Linear by name: a `RenderTarget3D` keeps `Data3DTexture`'s nearest magnification. */
   readonly #target = new RenderTarget3D(1, 1, 1, {
     type: HalfFloatType,
@@ -166,27 +224,19 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   readonly #trusted = uniform(new Vector4(...NOWHERE))
   readonly #originMod = uniform(new Vector2())
   readonly #slice = uniform(0)
+  readonly #toFirstExit = uniform(1)
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh(this.#material)
-  readonly #slices: SliceRecord[] = Array.from({ length: SLICES }, () => ({
-    origin: null,
-    frame: -1,
-  }))
-  /** Level 1's anchor epoch the slices were drawn on. */
-  #epoch: number | null = null
-  /** The sun the slices were drawn under, since the grid was last whole. */
+  #state: SunGridState = freshSunGrid(SLICES)
+  /** The sun the last frame was drawn under: what this frame's turn is measured from. */
   #sun: Vec3 | null = null
-  #idle = true
   #pending = false
-  #spent = 0
-  #weather: string | null = null
-  #address: string | null = null
-  #last: number | null = null
+  #drawn = 0
   #allocated = false
   #warm: Promise<void> | null = null
   #disposed = false
 
-  constructor(uniforms: CloudUniforms, volume: CloudVolume) {
+  constructor(uniforms: CloudUniforms, volume: CloudSunSource) {
     this.#uniforms = uniforms
     this.#volume = volume
     const map = this.#target.texture
@@ -214,16 +264,15 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     }
   }
 
-  /**
-   * The sun's depths at an eye-relative body-fixed point. Inside the trusted
-   * window the grid's own, at the trace's weight; outside it no depth and no
-   * weight, which reads as no cloud toward the sun. The ray's whole is the
-   * depth to the sun: the grid holds nothing of the part behind a point.
-   */
-  depths(offset: Node<'vec3'>): CloudSunDepths {
+  /** The cell's depth at an eye-relative point, and how far the grid holds the point: its reach's ramp, inside the trusted window. */
+  #read(point: Node<'vec3'>): {
+    readonly tau: Node<'float'>
+    readonly held: Node<'float'>
+  } {
     const body = this.#uniforms.served
     const { base, slice } = this.#vertical()
-    const cell = levelPlane(this.#level, offset, body).div(CELL_METERS)
+    const plane = levelPlane(this.#level, point, body)
+    const cell = plane.div(CELL_METERS)
     const rect = this.#trusted
     const inside = cell.x
       .greaterThanEqual(rect.x.add(MARGIN))
@@ -231,22 +280,131 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       .and(cell.x.lessThanEqual(rect.z.sub(MARGIN)))
       .and(cell.y.lessThanEqual(rect.w.sub(MARGIN)))
     const height = clamp(
-      altitudeAt(body, offset).sub(base).div(slice),
+      altitudeAt(body, point).sub(base).div(slice),
       0,
       SLICES - 1,
     )
     const tau = this.#map
       .sample(vec3(cell.div(WIDTH), height.add(0.5).div(SLICES)))
       .level(float(0)).x
-    const toSun = select(inside, tau, float(0))
+    const out = abs(plane.sub(this.#level.eye))
+    const ramp = saturate(
+      float(SUN_GRID_REACH).sub(max(out.x, out.y)).div(SUN_GRID_FADE),
+    )
+    return { tau, held: select(inside, ramp, float(0)) }
+  }
+
+  /**
+   * Where the sun's ray through a point, followed away from the sun, leaves
+   * the union: through the base under a sun over the horizon, and through
+   * the top where the ray never comes down to the base. The cell there
+   * holds the ray's whole depth. A point under the base is that end itself.
+   */
+  #farEnd(point: Node<'vec3'>): Node<'vec3'> {
+    const body = this.#uniforms.served
+    const away = body.sun.negate()
+    const base = shellCrossingFrom(body, point, away, body.boundaries.x)
+    const top = shellCrossingFrom(body, point, away, body.boundariesHigh.y)
+    const reach = select(
+      base.hit.and(base.near.greaterThan(0)),
+      base.near,
+      select(
+        base.hit.and(base.far.greaterThanEqual(0)),
+        float(0),
+        max(top.far, 0),
+      ),
+    )
+    return point.add(away.mul(reach))
+  }
+
+  /**
+   * The sun's depths at an eye-relative body-fixed point, and the grid's
+   * weight there. Where the weight is zero the grid holds nothing of the
+   * point and both depths are zero.
+   *
+   * `whole` costs a second read of the same texture, at the ray's far end,
+   * and is built only into a program that reads it.
+   */
+  depths(offset: Node<'vec3'>): CloudSunGridDepths {
+    const here = this.#read(offset)
+    const end = this.#read(this.#farEnd(offset))
+    const held = here.held.greaterThan(0)
+    const toSun = select(held, here.tau, float(0))
     return {
       toSun,
-      whole: toSun,
-      weight: select(inside, this.#uniforms.trace.sunWeight, float(0)),
+      whole: toSun.add(
+        select(held, end.held.mul(max(end.tau.sub(here.tau), 0)), float(0)),
+      ),
+      weight: this.#uniforms.trace.sunWeight.mul(here.held),
+      behind: select(held, end.held, float(0)),
     }
   }
 
-  /** One slice of cells: τ from each cell's center at the slice's height to the union's top, through the volume. */
+  /**
+   * Where a ray from `origin` along the sun is inside each level, as
+   * stretches of its length: on the way down to a level's base, or through
+   * the level whole where the ray never reaches that base, and on the way
+   * up from the base to the level's top. A ray under a sun below its
+   * horizon goes down first and comes back up far sunward; one over it only
+   * climbs. Absent levels and levels behind the ray have no length.
+   */
+  #stretches(origin: Node<'vec3'>): readonly {
+    readonly down: Stretch
+    readonly up: Stretch
+    readonly thickness: Node<'float'>
+    readonly cell: Node<'float'>
+  }[] {
+    const body = this.#uniforms.served
+    const { layers, sun } = body
+    const of = (v: Node<'vec3'>, k: number): Node<'float'> =>
+      [v.x, v.y, v.z][k]!
+    return [0, 1, 2].map((k) => {
+      const low = of(layers.base, k)
+      const high = of(layers.top, k)
+      const top = shellCrossingFrom(body, origin, sun, high)
+      const base = shellCrossingFrom(body, origin, sun, low)
+      const reached = top.hit.and(high.greaterThan(low))
+      const enter = max(top.near, 0)
+      const leave = max(top.far, 0)
+      // The base is ahead of the ray, or all round it. Decided by the far
+      // root alone: from a cell on the base the near one is zero, a float's
+      // step to either side, and both readings give the same lengths.
+      const ahead = base.hit.and(base.far.greaterThan(0))
+      const back = max(base.far, 0)
+      return {
+        down: {
+          from: enter,
+          length: select(
+            reached,
+            max(select(ahead, max(base.near, 0), leave).sub(enter), 0),
+            float(0),
+          ),
+        },
+        up: {
+          from: back,
+          length: select(reached.and(ahead), max(leave.sub(back), 0), float(0)),
+        },
+        thickness: high.sub(low),
+        cell: of(layers.cell, k),
+      }
+    })
+  }
+
+  /**
+   * One slice of cells: τ from each cell's center at the slice's height
+   * toward the sun, through the volume, in 32 steps.
+   *
+   * **Over the cell's horizon the steps run to the union's top,** the ray's
+   * one way out.
+   *
+   * **Under it they are spent on the ray's way down, inside the levels, and
+   * stop where it leaves one through its base.** From the top of a deck 1.5°
+   * under the horizon the ray leaves through the base after 34 km and comes
+   * back up into the layer more than 300 km sunward; steps over that whole
+   * chord are 11 km each, and three of them fall in the deck near the cell.
+   * What the ray meets on its way back up is one crossing a level, by the
+   * crossing's law (`#crossing`).
+   */
   #bakeNode(): Node<'vec4'> {
     const body = this.#uniforms.served
     const level = this.#level
@@ -257,14 +415,47 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       const plane = cell.add(0.5).mul(CELL_METERS)
       const height = base.add(this.#slice.mul(slice))
       const origin = levelOffset(level, plane, height, body)
-      const exit = max(
+      // Heading down: decided by the sun's own sine at the cell, which is
+      // also what sides the statistics.
+      const down = this.#toFirstExit
+        .greaterThan(0.5)
+        .and(sunMuAt(body, origin).lessThan(0))
+      const union = max(
         shellCrossingFrom(body, origin, body.sun, body.boundariesHigh.y).far,
         0,
       )
-      const step = exit.div(SUN_GRID_STEPS)
+      const levels = this.#stretches(origin)
+      // In the order a descending ray meets them, from the highest level;
+      // a climbing ray has one stretch, the union's.
+      const marched = [2, 1, 0].map((k, n) => ({
+        from: select(down, levels[k]!.down.from, float(0)).toVar(),
+        length: select(
+          down,
+          levels[k]!.down.length,
+          n === 0 ? union : float(0),
+        ).toVar(),
+      }))
+      const starts: Node<'float'>[] = []
+      let total: Node<'float'> = float(0)
+      for (const { length } of marched) {
+        starts.push(total)
+        total = total.add(length).toVar()
+      }
+      const step = total.div(SUN_GRID_STEPS).toVar()
       const tau = float(0).toVar()
       Loop(SUN_GRID_STEPS, ({ i }) => {
-        const point = origin.add(body.sun.mul(float(i).add(0.5).mul(step)))
+        const along = float(i).add(0.5).mul(step)
+        // The first stretch the step's middle has not passed the end of.
+        let t: Node<'float'> = float(0)
+        for (let n = marched.length - 1; n >= 0; n -= 1) {
+          const { from, length } = marched[n]!
+          t = select(
+            along.lessThan(starts[n]!.add(length)),
+            from.add(along.sub(starts[n]!)),
+            t,
+          )
+        }
+        const point = origin.add(body.sun.mul(t))
         const medium = this.#volume.medium(
           {
             offset: point,
@@ -278,8 +469,52 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
         // One optical depth a cell, the fraction folded in.
         tau.addAssign(medium.sigma.mul(medium.fraction).mul(step))
       })
+      for (const { up, thickness, cell: sight } of levels)
+        If(down.and(up.length.greaterThan(0)), () => {
+          tau.addAssign(this.#crossing(origin, up, thickness, sight))
+        })
       return vec4(tau, 0, 0, 1)
     })()
+  }
+
+  /**
+   * A level a ray comes back up through, far sunward, as an optical depth:
+   * one crossing by the crossing's law. The field is read once, at the
+   * middle of the ray's chord through the level, at a footprint no cell
+   * resolves, where it answers with the level's cover and its mean in-cloud
+   * extinction; the law takes those two, the chord and its horizontal run.
+   *
+   * The chord is the shell's own, from its crossings. The level's thickness
+   * over the sun's sine is 8% long for a kilometer of cloud met 1.75° over
+   * the horizon, where the ray is still curving up out of the layer.
+   */
+  #crossing(
+    origin: Node<'vec3'>,
+    chord: Stretch,
+    thickness: Node<'float'>,
+    sight: Node<'float'>,
+  ): Node<'float'> {
+    const body = this.#uniforms.served
+    const at = origin.add(body.sun.mul(chord.from.add(chord.length.mul(0.5))))
+    const medium = this.#volume.medium(
+      {
+        offset: at,
+        distance: length(at),
+        altitude: altitudeAt(body, at),
+        sunMu: sunMuAt(body, at),
+        footprint: float(UNRESOLVED),
+      },
+      body,
+    )
+    const run = sqrt(
+      max(chord.length.mul(chord.length).sub(thickness.mul(thickness)), 0),
+    )
+    const through = crossingTransmittance(
+      medium.fraction,
+      medium.sigma.mul(chord.length),
+      crossingExponent(run, sight),
+    )
+    return log(max(through, OPAQUE)).negate()
   }
 
   render(
@@ -290,76 +525,65 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     if (this.#disposed) return
     this.#allocate(renderer)
     const { served } = frame
-    const levelOne = served.volume.frames[1]
-    const { boundaries, eye } = served.shells
-    const top = boundaries[boundaries.length - 1] ?? 0
-    const idle =
-      levelOne === undefined ||
-      eye - top > CLOUD_VOLUME_SIZE * levelOne.texelMeters
-    const sun = served.sun
-    const everything =
-      this.#last === null ||
-      frame.frameIndex !== this.#last + 1 ||
-      frame.jump ||
-      budget.jump ||
-      served.weatherKey !== this.#weather ||
-      served.address !== this.#address ||
-      served.volume.rebuilt[1] === true ||
-      levelOne?.epoch !== this.#epoch ||
-      (this.#idle && !idle) ||
-      this.#sun === null ||
-      dot3(this.#sun, sun) < TURN
-    this.#weather = served.weatherKey
-    this.#address = served.address
-    this.#epoch = levelOne?.epoch ?? null
-    this.#idle = idle
-    this.#last = frame.frameIndex
-    if (levelOne === undefined) return
-    const grid = gridFrame(levelOne)
-    if (everything) {
-      for (const record of this.#slices) record.origin = null
-      this.#sun = sun
-    }
-    if (idle) {
-      this.#spent = 0
-      this.#publish(grid)
+    const level = served.volume.frames[LEVEL]
+    const before = this.#sun
+    this.#sun = served.sun
+    if (level === undefined) {
+      this.#drawn = 0
+      this.#silence()
       return
     }
-    const work = this.#schedule(grid, budget.sunSlices, frame.frameIndex)
-    this.#spent = work.length * SLICE_STEPS
-    if (work.length > 0) {
-      this.#bakeAt(grid)
+    const { boundaries, eye } = served.shells
+    const over = eye - (boundaries[boundaries.length - 1] ?? 0)
+    // Idle where the level it is laid on lies more than its own extent
+    // below the eye, as that level of the volume is.
+    const idleOver = CLOUD_VOLUME_SIZE * level.texelMeters
+    const grid = gridFrame(level)
+    const step = sunGridStep(this.#state, {
+      frame: frame.frameIndex,
+      origin: grid.origin,
+      epoch: level.epoch,
+      rebuilt: served.volume.rebuilt[LEVEL] === true,
+      idle: over > idleOver,
+      owed: Math.max(
+        owedByMotion(cloudFieldTravel(frame), CELL_METERS),
+        before === null ? 0 : owedBySun(turned(before, served.sun)),
+      ),
+      cap: budget.sunSlices,
+      ramp: frame.levers.sunRamp,
+      source: {
+        trusted: this.#volume.trusted,
+        generation: this.#volume.generation,
+      },
+    })
+    this.#state = step.state
+    this.#pending = step.pending
+    this.#drawn = step.bake.length
+    this.#bakeAt(grid)
+    if (step.bake.length > 0)
       runQuadPasses(
         renderer,
         this.#quad,
         // Each slice replaces every cell it covers: nothing to clear.
         { linear: true, autoClear: false },
         (draw) => {
-          for (const k of work) {
+          for (const k of step.bake) {
             this.#slice.value = k
             draw(CLOUD_SUN_GRID_LABEL, this.#target, this.#material, k)
           }
         },
       )
-    }
-    this.#publish(grid)
+    // The reads trust the intersection of the slices' windows, at the
+    // rebuild's weight times the wake's.
+    const [x0, y0, x1, y1] =
+      (step.state.idle ? null : trustedWindow(step.state.slices, WIDTH)) ??
+      NOWHERE
+    this.#trusted.value.set(x0, y0, x1, y1)
+    this.#uniforms.trace.sunWeight.value =
+      step.state.weight * sunWakeWeight(over, idleOver)
   }
 
-  /** The slices this frame draws, at most `cap` of them, by the grid's schedule (`sunSchedule`). */
-  #schedule(grid: LevelFrame, cap: number, frameIndex: number): number[] {
-    const { bake } = sunSchedule({
-      slices: this.#slices,
-      origin: [grid.origin[0], grid.origin[1]],
-      cap,
-    })
-    for (const k of bake)
-      this.#slices[k] = {
-        origin: [grid.origin[0], grid.origin[1]],
-        frame: frameIndex,
-      }
-    return [...bake]
-  }
-
+  /** The frame's level terms, for the bake and for every read of the frame. */
   #bakeAt(grid: LevelFrame): void {
     const level = this.#level
     level.anchor.value.set(grid.anchor.x, grid.anchor.y, grid.anchor.z)
@@ -374,30 +598,10 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     )
   }
 
-  /** The reads trust the intersection of the slices' windows, and the frame's eye terms. */
-  #publish(grid: LevelFrame): void {
-    this.#bakeAt(grid)
-    const rect = [-Infinity, -Infinity, Infinity, Infinity]
-    let whole = !this.#idle
-    let moved = false
-    for (const { origin } of this.#slices) {
-      if (origin === null) {
-        whole = false
-        break
-      }
-      rect[0] = Math.max(rect[0]!, origin[0])
-      rect[1] = Math.max(rect[1]!, origin[1])
-      rect[2] = Math.min(rect[2]!, origin[0] + WIDTH)
-      rect[3] = Math.min(rect[3]!, origin[1] + HEIGHT)
-      if (origin[0] !== grid.origin[0] || origin[1] !== grid.origin[1])
-        moved = true
-    }
-    const [x0, y0, x1, y1] = whole ? rect : NOWHERE
-    this.#trusted.value.set(x0!, y0!, x1!, y1!)
-    // The grid's weight for whoever reads it beside the depths: all of it
-    // once every slice holds the field and the grid is awake, none before.
-    this.#uniforms.trace.sunWeight.value = whole ? 1 : 0
-    this.#pending = !this.#idle && (!whole || moved)
+  /** Read nowhere, at no weight. */
+  #silence(): void {
+    this.#trusted.value.set(...NOWHERE)
+    this.#uniforms.trace.sunWeight.value = 0
   }
 
   #allocate(renderer: WebGPURenderer): void {
@@ -410,26 +614,40 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     this.#forget()
   }
 
+  /** No slice holds anything: the grid comes back under the cap, from a weight of zero. */
   #forget(): void {
-    for (const record of this.#slices) {
-      record.origin = null
-      record.frame = -1
-    }
-    this.#trusted.value.set(...NOWHERE)
-    this.#epoch = null
-    this.#sun = null
-    this.#last = null
-    this.#spent = 0
+    this.#state = freshSunGrid(SLICES)
+    this.#silence()
+    this.#drawn = 0
   }
 
-  /** A slice missing, or at a window the grid has left. */
+  /**
+   * Whether a cell under a sun below its horizon sums down to where its ray
+   * leaves a level, with one crossing a level the ray comes back up through,
+   * or to the far crossing of the union's top in the same 32 steps. The
+   * first by default; the sun instrument scores both
+   * (`cloudSunAccuracy.gpu.test.ts`), and the grid starts over when it
+   * changes.
+   */
+  get toFirstExit(): boolean {
+    return this.#toFirstExit.value > 0.5
+  }
+
+  set toFirstExit(on: boolean) {
+    if (on === this.toFirstExit) return
+    this.#toFirstExit.value = on ? 1 : 0
+    this.#forget()
+    this.#pending = true
+  }
+
+  /** A slice missing or at a window the grid has left, or a weight still rising: what a settle waits for. */
   get pending(): boolean {
     return this.#pending
   }
 
-  /** Texel-steps the last frame spent: never over its budget's slices' worth. */
-  get spent(): number {
-    return this.#spent
+  /** Slices baked this frame: never more than the frame's cap. */
+  get drawn(): number {
+    return this.#drawn
   }
 
   get bytes(): number {
@@ -455,8 +673,8 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
         { target: this.#target, material: this.#material },
       ])
       // The draw lands on the target's first slice with whatever the bake's
-      // uniforms last held. A warm-up that arrives after a frame has baked —
-      // a chain rebuilt with the levers on — draws over a slice its record
+      // uniforms last held. A warm-up that arrives after a frame has baked,
+      // a chain rebuilt with the levers on, draws over a slice its record
       // still calls current, so a grid at its real size owes every slice
       // again.
       if (this.#target.width !== 1) {
@@ -485,7 +703,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
  */
 export function createCloudSunGrid(deps: {
   readonly uniforms: CloudUniforms
-  readonly volume: CloudVolume
+  readonly volume: CloudSunSource
 }): CloudSunGrid {
   return new CloudSunGrid(deps.uniforms, deps.volume)
 }
