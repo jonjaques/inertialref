@@ -41,6 +41,10 @@
  */
 
 import { clockStart, CORNERSTONES } from '../../packages/devtools/src/index.ts'
+import {
+  DEFAULT_CLOUD_LEVERS,
+  isCloudLevers,
+} from '../../apps/game/src/render/cloudLevers.ts'
 
 /**
  * @param {{verb: 'start' | 'seek', path: object, frame?: number} | {verb: 'stop'}} command
@@ -243,6 +247,38 @@ export const stopPath = () => `globalThis.irWeatherPath({ verb: 'stop' })`
  */
 export const setLevers = (levers) =>
   `(() => { try { engine.clouds = { ...engine.clouds, ...${JSON.stringify(levers)} }; return 'set' } catch (error) { return 'unavailable: ' + error.message } })()`
+
+/**
+ * `--lever <name>=<value>` as levers over the picture's: the value read as
+ * JSON where it is (a number, a boolean, null), else as a string. Each is
+ * held to the engine's own lever table before anything boots, so a name the
+ * levers do not have, or a value outside a lever's set, stops the run here
+ * rather than recording every cast unavailable in the window.
+ */
+export function parseLevers(texts) {
+  if (texts.length === 0) return null
+  const levers = {}
+  for (const text of texts) {
+    const at = text.indexOf('=')
+    if (at <= 0) throw new Error(`--lever ${text}: want <name>=<value>`)
+    const name = text.slice(0, at)
+    const raw = text.slice(at + 1)
+    let value
+    try {
+      value = JSON.parse(raw)
+    } catch {
+      value = raw
+    }
+    if (!Object.hasOwn(DEFAULT_CLOUD_LEVERS, name))
+      throw new Error(`--lever ${text}: the clouds have no lever ${name}`)
+    levers[name] = value
+  }
+  if (!isCloudLevers({ ...DEFAULT_CLOUD_LEVERS, ...levers }))
+    throw new Error(
+      `--lever: the engine refuses ${JSON.stringify(levers)}; a value is outside its lever's set`,
+    )
+  return levers
+}
 
 /** A descent from `h₀` to 2 m at `rate` of the height a frame: frames to the ground. */
 export const descentFrames = (h0, rate) =>
@@ -519,6 +555,14 @@ export function spansReduction(cast, log) {
     // the field's expected displacement: the warp times a rate the rig may
     // not have held.
     seconds: times.length > 1 ? times.at(-1) - times[0] : null,
+    // The first path frame at or past the reduction: the field's noise
+    // starts over there, so a drift is read on one side of it, never across
+    // (the smoke's E1 at 100× registered nothing across it, and 20.1 px
+    // against 19.4 expected on the frames before it).
+    frame: (() => {
+      const at = times.findIndex((time) => time >= reduction)
+      return at < 0 ? null : (log[at].k ?? at)
+    })(),
     inside:
       times.length > 1 && times[0] < reduction && times.at(-1) >= reduction,
   }
@@ -696,7 +740,16 @@ export function checkCast(name, log, instants, cast, held = CAST_RATE.held) {
   const drops = dropsOf(log, pathFrames, median, cast.path)
   const missed = drops.reduce((sum, one) => sum + one.missed, 0)
   const run = longestRun(drops)
-  if (missed > CAST_DROPS.share * pathFrames || run >= CAST_DROPS.run)
+  // A cut or a scrub loads a world on purpose, and its page hitches there;
+  // C9 reads its frames against the settled plate, not as a path's
+  // continuity, so its drops are listed and never refuse it. The smoke's
+  // cut to E1 missed 8% to 11% of its frames at three boots, from the cut's
+  // own frame on, and was refused each time.
+  const event = ['cut', 'scrub'].includes(cast.path?.kind)
+  if (
+    !event &&
+    (missed > CAST_DROPS.share * pathFrames || run >= CAST_DROPS.run)
+  )
     throw Object.assign(
       new Error(
         `${name}: ${missed} frame${missed === 1 ? '' : 's'} missed of ${pathFrames} (${((missed / pathFrames) * 100).toFixed(1)}%), ${run} in a row, at frame${drops.length === 1 ? '' : 's'} ${drops.map((one) => one.frame).join(', ')}: past ${CAST_DROPS.share * 100}% or ${CAST_DROPS.run} in a row`,
@@ -721,22 +774,31 @@ export function checkCast(name, log, instants, cast, held = CAST_RATE.held) {
 }
 
 /**
- * The share of a path's frames the screencast holds: its frames whose
- * instant, epoch seconds as `timestamps.json` keeps them, falls between the
- * path's first frame and its last in the page's log, over the path's
- * frames. Null without the instants.
+ * The share of a path's frames the screencast holds: each frame is the path
+ * frame of the last log entry at or before its instant (epoch seconds, as
+ * `timestamps.json` keeps them), and the share is the distinct path frames
+ * so held over the path's frames. Null without the instants.
  *
- * Not the frames captured over the frames asked for: the screencast stops
- * once it holds the count asked for, so that share is one unless its
- * deadline lapses, and a stream encoded at a third of the page's rate
- * read as the whole path while its clip held every third frame of it.
+ * Distinct path frames, not frames: a stream that shows one path frame
+ * twice and skips the next counts whole by its frames. The smoke's G5
+ * flight read 100% that way where `castSteps`, aligning as this does, read
+ * 92.2% with 125 path frames missing. And not the frames captured over the
+ * frames asked for either: the screencast stops once it holds that count,
+ * so the share was one unless its deadline lapsed.
  */
 export function coverageOf(instants, log, frames) {
   if (instants === null || log.length < 2) return null
   const last = Math.min(frames, log.length - 1)
-  const [from, to] = [log[0].at, log[last].at]
-  const inside = instants.filter((s) => s * 1000 >= from && s * 1000 < to)
-  return inside.length / last
+  const held = new Set()
+  let entry = 0
+  for (const seconds of [...instants].sort((a, b) => a - b)) {
+    const ms = seconds * 1000
+    if (ms < log[0].at) continue
+    while (entry + 1 < log.length && log[entry + 1].at <= ms) entry += 1
+    const k = log[entry].k ?? entry
+    if (k < last) held.add(k)
+  }
+  return held.size / last
 }
 
 /**

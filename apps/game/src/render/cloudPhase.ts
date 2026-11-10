@@ -1,7 +1,6 @@
 import {
   ClampToEdgeWrapping,
   DataTexture,
-  DataUtils,
   HalfFloatType,
   LinearFilter,
   type Node,
@@ -28,7 +27,10 @@ import {
   PHASE_ATLAS,
   phaseAtlas,
   textureBytes,
+  toHalves,
 } from '@inertialref/rendering'
+import type { WorkerPool } from '@inertialref/workers'
+import { convolvePhaseTask } from './atmosphereTask.ts'
 import type { CloudPhaseNodes, CloudResource } from './cloudNodes.ts'
 import type { CloudLayerUniforms, CloudUniforms } from './cloudUniforms.ts'
 
@@ -57,6 +59,17 @@ import type { CloudLayerUniforms, CloudUniforms } from './cloudUniforms.ts'
  * march reads, draws phase 0's picture from its rows bit for bit: a row's
  * texture coordinate is (row + ½)/64 where it was (row + ½)/32, and a power
  * of two scales a float exactly, so the sampler lands where it landed.
+ *
+ * The convolution runs on the pool (`render.convolvePhase`), never in the
+ * frame that asks: it is 11 to 20 ms warm and about 40 ms cold on the main
+ * thread, and the ask comes on an event's frame, which the rubric holds to
+ * one 60 Hz frame. The atlas keeps the table it has, a point sun's or the
+ * last sun's, until the answer lands, in half floats already; this thread
+ * then pays a 512 KB copy and the upload. The halves are `toHalves`', round
+ * to nearest, on both paths, so the pool's atlas is this thread's half for
+ * half; the generated tables are halves already, so the point sun's rows
+ * are the bits three's truncating conversion gave them. An answer for a radius the served sun has
+ * since left is dropped, as T2's sky is (`atmosphereLuts.ts`).
  */
 
 /** RGBA16F: four half floats a texel. */
@@ -69,6 +82,30 @@ const TEXEL_BYTES = 8
  */
 const RECONVOLVE = 0.01
 
+/**
+ * The committed tables' atlas under a point sun, in halves: what every
+ * system's phase starts from. Its ice block is convolved with
+ * `ICE_DISK_FLOOR`'s disk, the one convolution a system's construction runs
+ * on this thread, 20 to 40 ms on this Mac mini under load. It runs once a
+ * page, in the sensor's mount on a page with clouds, and every system
+ * built after it (a picture preference's remount, a rig) copies it.
+ */
+let committedPointSun: Uint16Array | null = null
+
+/** The committed tables' point-sun atlas, built on the first ask. */
+function pointSunOf(droplets: MieTable, ice: IceTable): Uint16Array {
+  committedPointSun ??= toHalves(phaseAtlas(droplets, ice, 0).texels)
+  return committedPointSun
+}
+
+/** Whether a radius is within the 1% of `held` that leaves the atlas as it is. */
+function holds(angularRadius: number, held: number): boolean {
+  return Math.abs(angularRadius - held) <= RECONVOLVE * held
+}
+
+/** What one `serve` did: nothing, an ask of the pool, or the convolution on this thread. */
+export type CloudPhaseServe = 'held' | 'asked' | 'convolved'
+
 /** A level's component of a per-level vector: x, y or z. */
 function component(v: Node<'vec3'>, level: number): Node<'float'> {
   return level === 0 ? v.x : level === 1 ? v.y : v.z
@@ -79,18 +116,36 @@ export class CloudPhase implements CloudResource, CloudPhaseNodes {
   readonly pending = false
   readonly #droplets: MieTable
   readonly #ice: IceTable
+  /** The tables are the committed ones, which the pool's task convolves. */
+  readonly #pooled: boolean
   readonly #data: Uint16Array
   readonly #map: DataTexture
   readonly #node: TextureNode
   /** Radians: the disk the atlas holds now. */
   #angularRadius = 0
+  /** Radians: the radius `serve` was last told, the served sun's. */
+  #served = 0
+  /** The pool's job in flight, and the radius it was asked for. */
+  #asked: {
+    readonly angularRadius: number
+    readonly job: Promise<void>
+  } | null = null
   /** Uploaded: a warm-up has put the atlas on the device. */
   #allocated = false
   #disposed = false
 
-  constructor(droplets: MieTable, ice: IceTable) {
+  /**
+   * `pooled` says the tables are the committed ones, which is what the
+   * pool's task convolves; any other pair is convolved on this thread.
+   */
+  constructor(
+    droplets: MieTable,
+    ice: IceTable,
+    { pooled = false }: { readonly pooled?: boolean } = {},
+  ) {
     this.#droplets = droplets
     this.#ice = ice
+    this.#pooled = pooled
     this.#data = new Uint16Array(droplets.angles * PHASE_ATLAS.rows * 4)
     // [row][angle]: row j of the data is row j of the texture, at v = (j + ½)/64.
     const map = new DataTexture(
@@ -107,31 +162,82 @@ export class CloudPhase implements CloudResource, CloudPhaseNodes {
     map.generateMipmaps = false
     map.name = 'cloud phase'
     this.#map = map
-    this.#fill(0)
+    this.#land(
+      pooled
+        ? pointSunOf(droplets, ice)
+        : toHalves(phaseAtlas(droplets, ice, 0).texels),
+      0,
+    )
     this.#node = texture(map)
   }
 
-  /** The atlas's texels convolved with a disk of `angularRadius`, radians, as halves, marked for upload. */
-  #fill(angularRadius: number): void {
-    const { texels } = phaseAtlas(this.#droplets, this.#ice, angularRadius)
-    for (let k = 0; k < texels.length; k += 1)
-      this.#data[k] = DataUtils.toHalfFloat(texels[k]!)
+  /** An atlas's RGBA16F texels, convolved with a disk of `angularRadius`, radians, marked for upload. */
+  #land(halves: Uint16Array, angularRadius: number): void {
+    this.#data.set(halves)
     this.#angularRadius = angularRadius
     this.#map.needsUpdate = true
   }
 
   /**
-   * The served sun's angular radius, radians: the atlas is convolved again,
-   * and uploaded on its next read, when the radius has moved 1% since it was
-   * last convolved. True when it was. The second body reads the served
-   * body's atlas, declared (§5.4).
+   * The served sun's angular radius, radians, and the pool to convolve on:
+   * when the radius has moved 1% since the atlas was convolved, the atlas is
+   * convolved again and uploaded on its next read (§4.7). The second body
+   * reads the served body's atlas, declared (§5.4).
+   *
+   * With a pool, `serve` asks it and returns at once, and the atlas keeps
+   * what it holds until the answer lands; an ask for a radius within 1% of
+   * the one in flight asks nothing more. With none, as an engine built with
+   * `workers: null` has, the convolution runs here, inside this call: a
+   * test's rig or a headless engine, never the browser's page, which always
+   * has a pool.
    */
-  serve(angularRadius: number): boolean {
-    if (this.#disposed) return false
-    const held = this.#angularRadius
-    if (Math.abs(angularRadius - held) <= RECONVOLVE * held) return false
-    this.#fill(angularRadius)
-    return true
+  serve(angularRadius: number, pool: WorkerPool | null): CloudPhaseServe {
+    if (this.#disposed) return 'held'
+    this.#served = angularRadius
+    if (holds(angularRadius, this.#angularRadius)) return 'held'
+    const asked = this.#asked
+    if (asked !== null && holds(angularRadius, asked.angularRadius))
+      return 'asked'
+    if (pool === null || !this.#pooled) {
+      this.#land(
+        toHalves(phaseAtlas(this.#droplets, this.#ice, angularRadius).texels),
+        angularRadius,
+      )
+      return 'convolved'
+    }
+    /*
+     * The `try` is around `submit` alone, for `atmosphereLuts.ts`'s reason:
+     * a terminated pool throws there, inside a frame. The atlas then keeps
+     * what it holds, and the next frame's `serve` asks again.
+     */
+    let result: Promise<{
+      readonly angularRadius: number
+      readonly halves: Uint16Array
+    }>
+    try {
+      result = pool.submit(convolvePhaseTask, { angularRadius }).result
+    } catch {
+      return 'held'
+    }
+    const job = result
+      .then((answer) => {
+        // Dropped when the served sun has left the radius it was asked for.
+        if (!this.#disposed && holds(this.#served, answer.angularRadius))
+          this.#land(answer.halves, answer.angularRadius)
+      })
+      .catch(() => {
+        // A pool gone away: the next `serve` asks again.
+      })
+      .finally(() => {
+        if (this.#asked?.job === job) this.#asked = null
+      })
+    this.#asked = { angularRadius, job }
+    return 'asked'
+  }
+
+  /** Settles when no answer is in flight: the one this `serve` asked for has landed or been dropped. */
+  served(): Promise<void> {
+    return this.#asked?.job ?? Promise.resolve()
   }
 
   /** Radians: the sun's angular radius the atlas is convolved with, 0 for a point sun. */
@@ -249,7 +355,8 @@ export class CloudPhase implements CloudResource, CloudPhaseNodes {
 
 /**
  * The phase a field's light reads: the committed droplet and ice tables,
- * under a point sun until `serve` names the served sun's disk.
+ * under a point sun until `serve` names the served sun's disk, convolved on
+ * the pool where there is one.
  *
  * A factory names what its module reads of the field, and the field hands
  * every factory more than that, so a module whose constructor needs another
@@ -258,5 +365,5 @@ export class CloudPhase implements CloudResource, CloudPhaseNodes {
 export function createCloudPhase(_deps: {
   readonly uniforms: CloudUniforms
 }): CloudPhase {
-  return new CloudPhase(mieDroplets(), iceAggregate())
+  return new CloudPhase(mieDroplets(), iceAggregate(), { pooled: true })
 }
