@@ -7,7 +7,13 @@ import {
   bakeSkyMoments,
   bakeTransmittance,
   type HazeAuthoring,
+  type IceTable,
+  iceAggregate,
+  type MieTable,
+  mieDroplets,
+  phaseAtlas,
   type ScatteringLut,
+  toHalves,
 } from '@inertialref/rendering'
 
 /*
@@ -142,4 +148,57 @@ export const bakeAtmosphereTask = defineTask<
       response.multiScatter,
       ...Object.values(response.tables).filter((table) => table !== undefined),
     ]),
+})
+
+/* ------------------------------------------------------------------------- */
+/* The phase atlas under a sun's disk                                         */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * The clouds' phase atlas convolved with the served sun's disk, as a pool
+ * task of its own (phase 1 design §4.7). Its one input is the sun's angular
+ * radius, which no haze's key holds, so it is not a job of the bake above.
+ * The convolution is 11 to 20 ms warm and about 40 ms cold on this Mac
+ * mini's main thread (Mac18,5, Apple M6), on a frame that is already an
+ * event's; the rubric holds an event's frame inside one 60 Hz frame.
+ *
+ * The request carries the radius alone: the tables it convolves are the
+ * committed droplet and ice tables, decoded here on the first ask and kept,
+ * so nothing crosses the boundary but a number one way and the atlas's
+ * texels the other, already half floats (`toHalves`), 512 KB moved. Unlike
+ * the bake's tables, whose conversion stays on the main thread, the atlas
+ * converts here: 262,144 values are 1.2 to 2.3 ms of the main thread's on
+ * this machine under load, four times the upload, so `CloudPhase` copies
+ * the halves and uploads them. That is why the response is not a
+ * `ScatteringLut` and its one buffer is moved by hand where
+ * `tableTransfers` would take a table of floats.
+ */
+
+export interface ConvolvePhaseRequest {
+  /** Radians: the served sun's angular radius. */
+  readonly angularRadius: number
+}
+
+export interface ConvolvePhaseResponse {
+  /** The radius asked for, so the consumer can tell an answer it still wants from a stale one. */
+  readonly angularRadius: number
+  /** The atlas's texels as RGBA16F, [row][angle][rgba] (`phaseAtlas`, `toHalves`). */
+  readonly halves: Uint16Array
+}
+
+/** The committed tables, decoded on the first ask a worker serves. */
+let committed: readonly [MieTable, IceTable] | null = null
+
+export const convolvePhaseTask = defineTask<
+  ConvolvePhaseRequest,
+  ConvolvePhaseResponse
+>({
+  name: 'render.convolvePhase',
+  version: 1,
+  run({ angularRadius }) {
+    committed ??= [mieDroplets(), iceAggregate()]
+    const { texels } = phaseAtlas(...committed, angularRadius)
+    return { angularRadius, halves: toHalves(texels) }
+  },
+  transfers: (response) => [response.halves.buffer],
 })
