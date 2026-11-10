@@ -1,13 +1,17 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
+import type { Vec3 } from '@inertialref/spatial'
 import {
+  bodyPointOf,
   CLOUD_ADVECTION_PERIOD,
   commonPeriod,
   driftOffset,
+  latticeOrigin,
   periodIndex,
   reducePoint,
   reduceSeconds,
   reduceTurns,
+  turnBack,
 } from './weatherClock.ts'
 
 /*
@@ -282,6 +286,123 @@ describe('the weather clock', () => {
         },
       ),
     )
+  })
+})
+
+/*
+ * A level's noise frame (phase 1 design §5.3): a body-fixed point turned
+ * back about the pole by the level's turn and slid along it by the drift,
+ * reduced by the noise's period. The lattice coordinate a shader forms is
+ * the reduced origin of the eye plus the turned offset from it, so the
+ * property that matters is that two eyes give one point one coordinate.
+ */
+describe('a level’s noise frame', () => {
+  /** Earth's radius and a little: every eye and point the field is drawn at. */
+  const reach = 6.5e6
+  const coordinate = fc.double({ min: -reach, max: reach, noNaN: true })
+  const point = fc.record({ x: coordinate, y: coordinate, z: coordinate })
+  const angle = fc.double({
+    min: 0,
+    max: 2 * Math.PI,
+    maxExcluded: true,
+    noNaN: true,
+  })
+  /** A quarter of a meter a second, out to the clock's limit. */
+  const drift = fc.double({
+    min: -0.25 * LIMIT,
+    max: 0.25 * LIMIT,
+    noNaN: true,
+  })
+  const period = fc.integer({ min: 1000, max: 240_000 })
+
+  const turned = (m: readonly number[], v: Vec3): Vec3 => ({
+    x: m[0]! * v.x + m[1]! * v.y + m[2]! * v.z,
+    y: m[3]! * v.x + m[4]! * v.y + m[5]! * v.z,
+    z: m[6]! * v.x + m[7]! * v.y + m[8]! * v.z,
+  })
+  /** How far `a` is from `b` once whole periods are taken out, meters. */
+  const offPeriod = (a: number, b: number, p: number): number => {
+    const turns = (a - b) / p
+    return Math.abs(turns - Math.round(turns)) * p
+  }
+
+  it('turns a point back about the pole: the matrix is the rotation the origin takes', () => {
+    fc.assert(
+      fc.property(point, angle, period, (p, a, wrap) => {
+        const m = turnBack(a)
+        const reduced = latticeOrigin(p, a, 0, wrap)
+        const exact = turned(m, p)
+        // A float64 rotation of a point 6,500 km out is good to 2 × 10⁻⁹ m;
+        // the bound is a thousand of those.
+        for (const axis of ['x', 'y', 'z'] as const) {
+          expect(reduced[axis]).toBeGreaterThanOrEqual(0)
+          expect(reduced[axis]).toBeLessThan(wrap)
+          expect(offPeriod(reduced[axis], exact[axis], wrap)).toBeLessThan(2e-6)
+        }
+        // About +Y and nothing else: the pole's height is untouched, and the
+        // turn is the angle's sense, R_y(−a) taking +X toward +Z.
+        expect(m.slice(3, 6)).toEqual([0, 1, 0])
+        expect(turned(m, { x: 1, y: 0, z: 0 }).z).toBeCloseTo(Math.sin(a), 15)
+      }),
+    )
+  })
+
+  it('gives one body point one lattice coordinate from any two eyes', () => {
+    fc.assert(
+      fc.property(point, point, angle, drift, period, (a, b, turn, d, wrap) => {
+        // The point the two eyes look at: within 2,000 km of the first.
+        const target = {
+          x: a.x + (b.x - a.x) * 0.3,
+          y: a.y + (b.y - a.y) * 0.3,
+          z: a.z + (b.z - a.z) * 0.3,
+        }
+        const m = turnBack(turn)
+        const read = (eye: Vec3): Vec3 => {
+          const origin = latticeOrigin(eye, turn, d, wrap)
+          const offset = turned(m, {
+            x: target.x - eye.x,
+            y: target.y - eye.y,
+            z: target.z - eye.z,
+          })
+          return {
+            x: origin.x + offset.x,
+            y: origin.y + offset.y,
+            z: origin.z + offset.z,
+          }
+        }
+        const fromA = read(a)
+        const fromB = read(b)
+        for (const axis of ['x', 'y', 'z'] as const)
+          expect(offPeriod(fromA[axis], fromB[axis], wrap)).toBeLessThan(1e-5)
+      }),
+      { numRuns: 2000 },
+    )
+  })
+
+  it('finds a lattice point on the body where the turn and the drift put it', () => {
+    fc.assert(
+      fc.property(point, angle, drift, (p, a, d) => {
+        const m = turnBack(a)
+        const lattice = turned(m, p)
+        const slid = { ...lattice, y: lattice.y + d }
+        const back = bodyPointOf(slid, a, d)
+        // The drift's own rounding at its size, and the rotation's at the radius.
+        const bound = 4e-9 * reach + 2 ** -52 * Math.abs(d) * 4
+        for (const axis of ['x', 'y', 'z'] as const)
+          expect(Math.abs(back[axis] - p[axis])).toBeLessThan(bound)
+      }),
+    )
+  })
+
+  it('carries a lattice point east under a positive turn: right-handed about the pole', () => {
+    // The spin evaluator's pole is +Y and a body turns right-handed about it,
+    // so east at +X is −Z: a quarter turn carries the point there, as a
+    // westerly wind carries a cloud.
+    const start = bodyPointOf({ x: reach, y: 0, z: 0 }, 0, 0)
+    const later = bodyPointOf({ x: reach, y: 0, z: 0 }, Math.PI / 2, 0)
+    expect(start.x).toBe(reach)
+    expect(later.x).toBeCloseTo(0, 6)
+    expect(later.z).toBeCloseTo(-reach, 6)
   })
 })
 

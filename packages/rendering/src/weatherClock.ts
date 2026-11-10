@@ -22,8 +22,11 @@ import type { Vec3 } from '@inertialref/spatial'
  */
 
 /**
- * The drift's period: the field slides for this long, then starts over (§5.4).
- * A change of `periodIndex(t, CLOUD_ADVECTION_PERIOD)` is a jump.
+ * Phase 0's drift's period: the field slides for this long, then starts
+ * over. It is the bridge the fine march's medium reads until it reads each
+ * level's turn (`latticeOrigin`), and goes with it. The frame calls no hour
+ * a jump: a steady clock at any warp is continuous (phase 1 design §4.7), so
+ * the bridged field steps once an hour unreset until the medium turns.
  */
 export const CLOUD_ADVECTION_PERIOD = 3600
 
@@ -93,7 +96,64 @@ export function reducePoint(point: Vec3, periodMeters: number): Vec3 {
   }
 }
 
-/** velocity × (t mod CLOUD_ADVECTION_PERIOD), reduced into the noise's period, float64. */
+/**
+ * `R_y(−angle)`, row-major: a level's noise frame, turned back by the
+ * angle the level has turned about the spin axis (+Y, the body's pole).
+ * The angle is reduced before it arrives (`fieldClock`), so its sine and
+ * cosine are never asked of a large argument.
+ */
+export function turnBack(angle: number): readonly number[] {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  return [c, 0, -s, 0, 1, 0, s, 0, c]
+}
+
+/**
+ * A body-fixed point's place in a level's noise frame,
+ * `R_y(−angle)·point + ŷ·drift`, reduced into [0, period) on each axis,
+ * float64: the origin a float32 offset from that point is read against.
+ *
+ * The drift is reduced before it is added. Unreduced it is a quarter of a
+ * meter a second since J2000, 8 × 10¹¹ m at the far end of `periodIndex`'s
+ * range, where a float64 resolves a tenth of a millimeter; reduced, the sum
+ * is two numbers under a body's radius and the period, and resolves a
+ * nanometer.
+ */
+export function latticeOrigin(
+  point: Vec3,
+  angle: number,
+  drift: number,
+  periodMeters: number,
+): Vec3 {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  return reducePoint(
+    {
+      x: c * point.x - s * point.z,
+      y: point.y + split(drift, periodMeters).remainder,
+      z: s * point.x + c * point.z,
+    },
+    periodMeters,
+  )
+}
+
+/**
+ * Where a point of a level's noise frame stands on the body,
+ * `R_y(angle)·(lattice − ŷ·drift)`: `latticeOrigin`'s inverse, unreduced. A
+ * feature fixed in the noise is here at the instant whose turn and drift
+ * these are, which is what an oracle for the field's motion reads.
+ */
+export function bodyPointOf(lattice: Vec3, angle: number, drift: number): Vec3 {
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  return {
+    x: c * lattice.x + s * lattice.z,
+    y: lattice.y - drift,
+    z: c * lattice.z - s * lattice.x,
+  }
+}
+
+/** velocity × (t mod CLOUD_ADVECTION_PERIOD), reduced into the noise's period, float64: the bridge's drift. */
 export function driftOffset(
   velocity: Vec3,
   t: number,
