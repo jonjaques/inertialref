@@ -46,6 +46,16 @@ export type CloudWeather = 'climate' | ScenarioId
  */
 export const CLOUD_LIGHT_TAPS = [0, 2, 4, 6, 8] as const
 
+/**
+ * The step budgets the `maxSteps` ladder climbs (phase 1 design §7.3), and
+ * the far footprints, meters, the `farFootprint` ladder climbs. Exported so
+ * the runner reads its rungs here and holds no copy. Unlike the taps these
+ * are the ladders' rungs, not the levers' values: either lever takes any
+ * positive number, so a script may set one between the rungs.
+ */
+export const CLOUD_MAX_STEPS = [96, 128, 192, 256] as const
+export const CLOUD_FAR_FOOTPRINTS = [200, 400, 800, 1600] as const
+
 /** How first-order light takes its phase's radius: the ray's mean, a few bins a level, or each sample's own. */
 export const CLOUD_PHASE_MODES = ['mean', 'bins', 'sample'] as const
 export const CLOUD_PHASE_BINS = [2, 3, 4] as const
