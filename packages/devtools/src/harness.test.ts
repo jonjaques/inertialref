@@ -8,7 +8,12 @@ import type { PassReport } from './passReport.ts'
 import type { PictureReport } from './pictureReport.ts'
 import type { TerrainReport } from './descent.ts'
 import type { GalaxyRenderReport } from './galaxy.ts'
-import { cloudReportIdle } from './clouds.ts'
+import {
+  CLOUD_SETTLE_FRAMES,
+  type CloudRenderReport,
+  cloudReportIdle,
+  cloudsSettled,
+} from './clouds.ts'
 import type { TimingPort } from './profile.ts'
 import { DEFAULT_PICTURE_PROCESSING } from './pictureProcessing.ts'
 import { PICTURES } from './pictures.ts'
@@ -273,6 +278,7 @@ describe('measurement verbs', () => {
       ok: true,
       galaxy: null,
       terrain: null,
+      clouds: null,
     })
     let pending = 3
     let deposits = true
@@ -315,6 +321,31 @@ describe('measurement verbs', () => {
       ok: true,
       galaxy: null,
       terrain: null,
+      clouds: null,
+    })
+  })
+
+  it('settled waits on the clouds’ own settle, and on nothing when they are off', () => {
+    let report: CloudRenderReport | null = null
+    const live = session({ clouds: () => report })
+    // No system: the page settles as it does with no clouds.
+    expect(live.harness.settled().ok).toBe(true)
+    // A system that is off reports no settle.
+    report = cloudReportIdle()
+    expect(live.harness.settled()).toMatchObject({ ok: true, clouds: null })
+    const drawing = (sinceReset: number): CloudRenderReport => {
+      const rest = { ...cloudReportIdle(), on: true, sinceReset }
+      return { ...rest, settle: cloudsSettled(rest) }
+    }
+    report = drawing(CLOUD_SETTLE_FRAMES - 1)
+    expect(live.harness.settled()).toMatchObject({
+      ok: false,
+      clouds: { pending: true, history: '31/32', caches: 'ready' },
+    })
+    report = drawing(CLOUD_SETTLE_FRAMES)
+    expect(live.harness.settled()).toMatchObject({
+      ok: true,
+      clouds: { pending: false, history: '32/32' },
     })
   })
 })

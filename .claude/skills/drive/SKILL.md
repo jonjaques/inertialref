@@ -103,18 +103,18 @@ regardless of where it appears in the command. Appending it to `--js`, `--file`
 or `--shot` closes Chrome without performing those checks. Run the inspection
 batch first, then `node scripts/drive.mjs --port <port> --down` for that rig.
 
-| Step            | For                                                                     |
-| --------------- | ----------------------------------------------------------------------- |
-| `--js <expr>`   | a bare expression is returned, so `--js "ir.terrain()"` prints          |
-| `--file <path>` | a local `.mjs` evaluated in the page, when quoting gets ugly            |
-| `--wait <ms>`   | a fixed pause, for what no readout reports                              |
-| `--settle <ms>` | until `ir.settled()` is quiet twice — the sky's cubes and the ground    |
-| `--shot <path>` | a bare filename lands in `.data/drive/`; `.jpg` is the one to read      |
-| `--sample <n>`  | `n` consecutive rAF frames, with a min..max per field                   |
-| `--cast <n>`    | `n` **rendered** frames, differenced — the only step that sees a strobe |
-| `--trace <ms>`  | a Chrome trace; `pnpm timing` reads it back as a table and a verdict    |
-| `--logs`        | console output and page errors buffered so far                          |
-| `--reload`      | hard reload, then wait for the renderer                                 |
+| Step            | For                                                                                 |
+| --------------- | ----------------------------------------------------------------------------------- |
+| `--js <expr>`   | a bare expression is returned, so `--js "ir.terrain()"` prints                      |
+| `--file <path>` | a local `.mjs` evaluated in the page, when quoting gets ugly                        |
+| `--wait <ms>`   | a fixed pause, for what no readout reports                                          |
+| `--settle <ms>` | until `ir.settled()` is quiet twice — sky, ground, and under `?clouds=1` the clouds |
+| `--shot <path>` | a bare filename lands in `.data/drive/`; `.jpg` is the one to read                  |
+| `--sample <n>`  | `n` consecutive rAF frames, with a min..max per field                               |
+| `--cast <n>`    | `n` **rendered** frames, differenced — the only step that sees a strobe             |
+| `--trace <ms>`  | a Chrome trace; `pnpm timing` reads it back as a table and a verdict                |
+| `--logs`        | console output and page errors buffered so far                                      |
+| `--reload`      | hard reload, then wait for the renderer                                             |
 
 **Session flags are per invocation, and a mismatched one throws away the state you
 set up.** Every call re-asserts `--url`, `--width`, `--height` and `--dpr`; a second
@@ -248,8 +248,12 @@ reads a JSON export containing exactly one shot. Both choose `/planetarium` on
 `--url`'s host and use the application's serializer. Three query fields carry the
 rest of a plate's state: `chrome=0` clears the interface, `layers=0` takes the
 names and traces with it, `output=standard` is SDR for the page's lifetime. Then
-`--settle` waits for the sky and the ground to stop arriving, which is the wait a
-fixed `--wait` can only guess at.
+`--settle` waits for the sky and the ground to stop arriving, and under
+`?clouds=1` for the clouds' caches and their history's 32 frames, which is
+the wait a fixed `--wait` can only guess at. A cornerstone
+(`weather-e1-cumulus-orbit` … `weather-g6-descent`) is a `--preset` like
+any other and carries its weather in the link; `scripts/weather/capture.mjs`
+takes all nine.
 
 ```bash
 node scripts/drive.mjs --preset earthrise --query chrome=0 --query layers=0 \

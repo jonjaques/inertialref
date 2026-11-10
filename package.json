@@ -52,6 +52,7 @@
     "check": "node scripts/check.mjs",
     "check:gate": "node scripts/check.mjs --only gate",
     "presets:ledger": "vitest run apps/headless/src/pictureLedger.test.ts --update",
+    "cornerstones:ledger": "vitest run apps/headless/src/cornerstoneLedger.test.ts --update",
     "presets:compare": "node scripts/presets/compare.mjs"
   },
   "devDependencies": {

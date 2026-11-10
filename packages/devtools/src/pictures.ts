@@ -1,4 +1,5 @@
 import type { Quat } from '@inertialref/spatial'
+import bundledCornerstones from './cornerstones.json' with { type: 'json' }
 import bundledPictures from './pictures.json' with { type: 'json' }
 import { decodePictures } from './pictureFormat.ts'
 import type {
@@ -63,6 +64,25 @@ export type PictureFraming =
       readonly surface: SurfaceStance | null
     }
 
+/**
+ * What a picture adds to its instant: the clouds drawn at it.
+ *
+ * A body's weather is a function of its record, the place and the instant,
+ * so a picture already holds the climate's weather by holding its time.
+ * What it cannot derive is that the volume draws at all while its default
+ * is off, and a regime standing in for the climate.
+ */
+export interface PictureWeather {
+  /**
+   * `'climate'`, the body's own, or the id of a regime held over the whole
+   * body (`SCENARIO_IDS`): the picture stands where the climate would have
+   * that weather. A string rather than the union, because a picture naming a
+   * regime this build does not know still decodes and reports its weather
+   * unavailable.
+   */
+  readonly regime: string
+}
+
 export interface Picture {
   /** Stable across a rename of the label — this is what `ir.preset` takes. */
   readonly generation: Readonly<Record<string, number>>
@@ -90,16 +110,35 @@ export interface Picture {
    * spans twenty-two to one across the pairs this has to work for.
    */
   readonly fovDeg?: number
+  /** Absent before version 3, and on any picture that holds no weather. */
+  readonly weather?: PictureWeather
 }
 
 export const PICTURES: readonly Picture[] = decodePictures(bundledPictures)
 
+/**
+ * The pictures the weather is judged on, in their own list (ADR-0067).
+ *
+ * Presets in every respect a script can reach — `ir.preset`, `?preset=`,
+ * `drive.mjs --preset` — and in none a player can: the planetarium's
+ * lists, "Export all", the tour and `presets:check` read `PICTURES` alone.
+ * Nine pictures of clouds the volume does not yet draw well belong in no
+ * menu, and each is taken before the work that judges it.
+ */
+export const CORNERSTONES: readonly Picture[] =
+  decodePictures(bundledCornerstones)
+
 export const pictureIds = (): readonly string[] => PICTURES.map((one) => one.id)
 
+/** A shipped picture, then a cornerstone; the two id sets are disjoint. */
 export function findPicture(id: string): Picture {
-  const found = PICTURES.find((one) => one.id === id)
+  const found =
+    PICTURES.find((one) => one.id === id) ??
+    CORNERSTONES.find((one) => one.id === id)
   if (found === undefined) {
-    throw new Error(`Unknown picture "${id}". Try: ${pictureIds().join(', ')}`)
+    throw new Error(
+      `Unknown picture "${id}". Try: ${[...pictureIds(), ...CORNERSTONES.map((one) => one.id)].join(', ')}`,
+    )
   }
   return found
 }

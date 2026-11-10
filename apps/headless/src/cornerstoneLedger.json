@@ -1,0 +1,228 @@
+{
+  "cornerstones": [
+    {
+      "id": "weather-e1-cumulus-orbit",
+      "address": "g:milky-way/s:SOL/b:2",
+      "body": "9a835f4d7487caaf",
+      "time": 17424.92517,
+      "fovDeg": 11.4,
+      "focalLength": 120.2244958,
+      "weather": "fair-cumulus",
+      "altitude": 400000,
+      "sun": {
+        "elevation": 50,
+        "azimuth": 292.288
+      },
+      "light": {
+        "sun": 50,
+        "phase": 29.681
+      },
+      "surface": {
+        "latitude": -0.0872664626,
+        "longitude": -1.047197551,
+        "height": 400000,
+        "heading": 0,
+        "pitch": -1.535796327,
+        "groundElevation": 1099
+      }
+    },
+    {
+      "id": "weather-e2-limb-dusk",
+      "address": "g:milky-way/s:SOL/b:2",
+      "body": "9a835f4d7487caaf",
+      "time": 29353.70481,
+      "fovDeg": 11.4,
+      "focalLength": 120.2244958,
+      "weather": "cirrus-over-cumulus",
+      "altitude": 400000,
+      "sun": {
+        "elevation": -21,
+        "azimuth": 289.845
+      },
+      "light": {
+        "sun": -21,
+        "phase": 29.562
+      },
+      "surface": {
+        "latitude": 0.3490658504,
+        "longitude": -0.5235987756,
+        "height": 400000,
+        "heading": 5.058743063,
+        "pitch": -0.3455751919,
+        "groundElevation": 356
+      }
+    },
+    {
+      "id": "weather-e3-whole-face",
+      "address": "g:milky-way/s:SOL/b:2",
+      "body": "9a835f4d7487caaf",
+      "time": 0,
+      "fovDeg": 65,
+      "focalLength": 18.83622693,
+      "weather": "fair-cumulus",
+      "altitude": 14401521.51,
+      "sun": null,
+      "light": {
+        "sun": null,
+        "phase": 12
+      },
+      "surface": null
+    },
+    {
+      "id": "weather-g1-fair",
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 98977.50831,
+      "fovDeg": 50,
+      "focalLength": 25.73408305,
+      "weather": "fair-cumulus",
+      "altitude": 40,
+      "sun": {
+        "elevation": 73.792,
+        "azimuth": 359.983
+      },
+      "light": {
+        "sun": 73.792,
+        "phase": 14.685
+      },
+      "surface": {
+        "latitude": -0.2906217788,
+        "longitude": 0.650074412,
+        "height": 40,
+        "heading": 2.094098135,
+        "pitch": 0.06981317008,
+        "groundElevation": 213
+      }
+    },
+    {
+      "id": "weather-g2-overcast-shore",
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 82800.63549,
+      "fovDeg": 50,
+      "focalLength": 25.73408305,
+      "weather": "overcast",
+      "altitude": 2,
+      "sun": {
+        "elevation": 35,
+        "azimuth": 78.368
+      },
+      "light": {
+        "sun": 35,
+        "phase": 14.658
+      },
+      "surface": {
+        "latitude": -0.2928832177,
+        "longitude": 0.6526948252,
+        "height": 2,
+        "heading": 3.246312409,
+        "pitch": 0.0872664626,
+        "groundElevation": 192
+      }
+    },
+    {
+      "id": "weather-g3-underlit-dusk",
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 17857.64343,
+      "fovDeg": 55,
+      "focalLength": 23.05178552,
+      "weather": "dusk-altocumulus",
+      "altitude": 2,
+      "sun": {
+        "elevation": -1.5,
+        "azimuth": 269.168
+      },
+      "light": {
+        "sun": -1.5,
+        "phase": 14.552
+      },
+      "surface": {
+        "latitude": -0.2906217788,
+        "longitude": 0.650074412,
+        "height": 2,
+        "heading": 4.697871614,
+        "pitch": 0.2617993878,
+        "groundElevation": 213
+      }
+    },
+    {
+      "id": "weather-g4-over-deck",
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 6219.386039,
+      "fovDeg": 70,
+      "focalLength": 17.13777608,
+      "weather": "stratocumulus",
+      "altitude": 4107.967027,
+      "sun": {
+        "elevation": 35,
+        "azimuth": 281.726
+      },
+      "light": {
+        "sun": 35,
+        "phase": 14.534
+      },
+      "surface": {
+        "latitude": -0.2928832177,
+        "longitude": 0.6526948252,
+        "height": 4107.967027,
+        "heading": 1.775453871,
+        "pitch": -0.6108652144,
+        "groundElevation": 192
+      }
+    },
+    {
+      "id": "weather-g5-inside",
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 86090.56816,
+      "fovDeg": 60,
+      "focalLength": 20.78460969,
+      "weather": "fair-cumulus",
+      "altitude": 1487.321782,
+      "sun": {
+        "elevation": 45,
+        "azimuth": 73.263
+      },
+      "light": {
+        "sun": 45,
+        "phase": 14.664
+      },
+      "surface": {
+        "latitude": -0.2906217788,
+        "longitude": 0.650074412,
+        "height": 1487.321782,
+        "heading": 1.570796327,
+        "pitch": 0,
+        "groundElevation": 213
+      }
+    },
+    {
+      "id": "weather-g6-descent",
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "body": "62e170409bfc48fc",
+      "time": 86090.56816,
+      "fovDeg": 60,
+      "focalLength": 20.78460969,
+      "weather": "stratocumulus",
+      "altitude": 400000,
+      "sun": {
+        "elevation": 45,
+        "azimuth": 73.263
+      },
+      "light": {
+        "sun": 45,
+        "phase": 14.664
+      },
+      "surface": {
+        "latitude": -0.2906217788,
+        "longitude": 0.650074412,
+        "height": 400000,
+        "heading": 1.570796327,
+        "pitch": -1.535796327,
+        "groundElevation": 213
+      }
+    }
+  ]
+}

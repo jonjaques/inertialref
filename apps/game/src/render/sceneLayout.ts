@@ -43,8 +43,7 @@ export type AttachmentBlend =
   /** One over one minus source alpha: premultiplied coverage, as a union. */
   | 'union'
 
-export type SceneAttachmentName =
-  'output' | 'motion' | 'meterMask' | 'velocity' | 'reactive'
+export type SceneAttachmentName = 'output' | 'motion' | 'meterMask' | 'reactive'
 
 export interface SceneAttachment {
   readonly name: SceneAttachmentName
@@ -81,13 +80,17 @@ export interface SceneBackend {
  *
  * `motion` and `meterMask` are the optics', and every production layout
  * carries them: the meter's mask and the defocus and motion stages read them
- * whether or not a frame uses the stages. `velocity` and `reactive` are the
- * temporal reconstruction's. `motion` is four channels because its blend reads
- * the source's alpha, which is how an overlay leaves the attachment to what it
- * covers; `reactive` is four for the same reason, and is a byte because it is
- * coverage. `velocity` is two half-floats and has no blend of its own, which is
- * the defect `design/plans/the-upscaler.md` names — whichever fix it takes is
- * this row.
+ * whether or not a frame uses the stages. `motion` is four channels because
+ * its blend reads the source's alpha, which is how an overlay leaves the
+ * attachment to what it covers.
+ *
+ * Temporal reconstruction adds `reactive` alone, four bytes for the same
+ * reason. Its motion is `motion.rg`: FSR reads `.xy` of an RGBA16F NDC delta,
+ * which is the row as it stands, masked. A two-channel row of its own cannot
+ * take the mask — Dawn refuses a source-alpha blend on an output without an
+ * alpha — and without the blend an overlay writes its own vectors over its
+ * whole footprint, which reconstruction then reprojects, dilates and locks
+ * neighbors from (ADR-0044).
  */
 const OUTPUT: SceneAttachment = {
   name: 'output',
@@ -100,7 +103,6 @@ const OPTICS: readonly SceneAttachment[] = [
   { name: 'meterMask', channels: 1, storage: 'byte', blend: 'max' },
 ]
 const TEMPORAL: readonly SceneAttachment[] = [
-  { name: 'velocity', channels: 2, storage: 'half', blend: 'none' },
   { name: 'reactive', channels: 4, storage: 'byte', blend: 'union' },
 ]
 

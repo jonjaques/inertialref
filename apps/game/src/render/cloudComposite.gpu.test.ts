@@ -522,7 +522,7 @@ describe('off changes nothing', () => {
     },
   )
 
-  it('leaves every pixel whose history holds no cloud as the scene drew it, velocity included', async () => {
+  it('leaves every pixel whose history holds no cloud as the scene drew it, motion included', async () => {
     const f = rig({ picture: TEMPORAL })
     serve(f.uniforms.served, 1_000, 0, 3_000)
     const scene = usual()
@@ -550,7 +550,8 @@ describe('off changes nothing', () => {
     expect(at(drawn.get('output')!, 4, 28)).not.toBe(
       at(alone.get('output')!, 4, 28),
     )
-    expect(at(drawn.get('velocity')!, 4, 28)).not.toBe(0)
+    // The scene is still, so the motion there is the cloud's alone.
+    expect(at(drawn.get('motion')!, 4, 28)).not.toBe(0)
     expect(at(drawn.get('output')!, 4, 4)).toBe(at(alone.get('output')!, 4, 4))
     f.uniforms.camera.translation.value.set(0, 0, 0)
     f.dispose()
@@ -637,7 +638,7 @@ describe('the cloud’s light', () => {
 })
 
 describe('the other rows', () => {
-  it('writes reactive and motion by opacity, the cloud’s view depth as a surface’s, its velocity, and keeps the meter mask', async () => {
+  it('writes reactive and motion by opacity, the cloud’s view depth as a surface’s, and keeps the meter mask', async () => {
     const f = rig({ picture: TEMPORAL })
     serve(f.uniforms.served, 1_000, 0, 3_000)
     // What a surface 3 km out writes, everywhere.
@@ -664,6 +665,11 @@ describe('the other rows', () => {
     await f.frame(scene, true)
     const partial = await f.readAll()
     f.uniforms.camera.translation.value.set(0, 0, 0)
+    // Motion is the one vector the composite writes: a second row written at
+    // full weight wherever it draws is an edge at the discard.
+    const outputs = (f.composite.mesh.material as MeshBasicNodeMaterial).mrtNode
+    expect(outputs?.has('motion')).toBe(true)
+    expect(outputs?.has('velocity')).toBe(false)
     for (let y = 0; y < SIZE; y += 1)
       for (let x = 0; x < SIZE; x += 1) {
         // The history texel this pixel reads, and its ray's distance to the
@@ -706,8 +712,10 @@ describe('the other rows', () => {
         expect(at(partial.get('meterMask')!, x, y), `meter (${x}, ${y})`).toBe(
           at(alone.get('meterMask')!, x, y),
         )
-        // The cloud's velocity: the same point projected now and from the eye
-        // before it moved.
+        // The cloud's motion: the same point projected now and from the eye
+        // before it moved. `motion.rg` is what a temporal picture's
+        // reconstruction reads, so it takes the cloud by its opacity over the
+        // scene's none, with nothing written beside it at full weight.
         const now = ray.clone().multiplyScalar(distance)
         const before = now.clone().add(translation)
         const ndc = (p: Vector3) => [
@@ -718,14 +726,10 @@ describe('the other rows', () => {
         const [bx, by] = ndc(before)
         const velocity = [nx! - bx!, ny! - by!]
         for (const c of [0, 1]) {
-          const written = at(partial.get('velocity')!, x, y, c)
+          const written = at(partial.get('motion')!, x, y, c)
           expect(
-            Math.abs(written - velocity[c]!),
-            `velocity (${x}, ${y}) ${c}: ${written}`,
-          ).toBeLessThanOrEqual(halfSteps(velocity[c]!))
-          // `motion` takes it by the cloud's opacity over the scene's none.
-          expect(
-            Math.abs(at(partial.get('motion')!, x, y, c) - 0.75 * velocity[c]!),
+            Math.abs(written - 0.75 * velocity[c]!),
+            `motion (${x}, ${y}) ${c}: ${written}`,
           ).toBeLessThanOrEqual(halfSteps(velocity[c]!))
         }
       }

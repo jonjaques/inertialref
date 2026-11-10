@@ -197,8 +197,10 @@ Steps run in the order they are written, in one browser session:
                      too long or too quote-heavy for a shell argument
   --wait <ms>        a fixed pause. Textures stream in asynchronously after a seek
   --settle <ms>      wait until ir.settled() says the sky and the ground have
-                     stopped arriving, for at most <ms>; reports what was still
-                     pending if it ran out. What a plate waits for
+                     stopped arriving, and under ?clouds=1 the clouds' caches
+                     and their history's 32 frames, for at most <ms>; reports
+                     what was still pending if it ran out. What a plate waits
+                     for. A forced cloud path never settles
   --shot <path>      screenshot. A bare filename lands in .data/drive/;
                      a .jpg extension captures JPEG, which is what to read
   --sample <n>       n consecutive rAF frames of --sample-js, with a per-field
@@ -642,8 +644,9 @@ async function capture(send, target) {
  * The cast, as something to attach to a pull request.
  *
  * A strobe argued in prose is a paragraph; the same strobe as five seconds of
- * video is the argument. Written at the rate the frames were captured at, so
- * the recurrence plays back at the rate it happens. Absent ffmpeg this is
+ * video is the argument. Written at the rate the frames were captured at, to
+ * the millihertz, so the recurrence plays back at the rate it happens: a
+ * whole-number rate plays a 42.6 Hz capture 1% fast. Absent ffmpeg this is
  * skipped rather than fatal — the frames and the analysis are the finding, and
  * the clip is how it travels.
  */
@@ -655,7 +658,7 @@ async function castClip(dir, fps) {
       [
         '-y',
         '-framerate',
-        String(Math.max(1, Math.round(fps || 60))),
+        (fps > 1 ? fps : 60).toFixed(3),
         '-i',
         path.join(dir, '%04d.jpg'),
         // yuv420p and an even-dimension pad, because a capture whose width is
@@ -830,7 +833,7 @@ async function cast(wire, n) {
   if (map !== null) lines.push(`  where: ${path.relative(ROOT, map)}`)
   if (clip !== null) lines.push(`  clip:  ${path.relative(ROOT, clip)}`)
   return {
-    result: { dir: path.relative(ROOT, dir), ...analysis, map, clip },
+    result: { dir: path.relative(ROOT, dir), ...analysis, fps, map, clip },
     lines,
   }
 }

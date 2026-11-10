@@ -58,6 +58,9 @@ export const SCENARIO_IDS = [
   'anvil',
   'overcast',
   'fog',
+  'altocumulus',
+  'dusk-altocumulus',
+  'stratocumulus',
 ] as const
 export type ScenarioId = (typeof SCENARIO_IDS)[number]
 
@@ -73,10 +76,45 @@ export interface WeatherScenario {
   readonly patternScale: number
   /** Seconds a blob's cell holds one draw before it draws again; 0 for never. */
   readonly patternPeriod: number
+  /**
+   * Where the layers end against the sun, or nowhere when absent: full cover
+   * where the local sun stands under `full` degrees over the horizon, none
+   * over `clear`, and a smoothstep between, in the sine of the elevation.
+   *
+   * A deck held over the whole body cannot be lit from below. A base's ray
+   * to a sun under its horizon dips under the layer and climbs back into it
+   * where the local sun stands as far over the horizon as it is under here,
+   * hundreds of kilometers sunward, and a regime that holds cover there
+   * stands the whole deck in its own shadow. Real underlit decks end
+   * sunward, with clear sky under the edge, and this is that edge.
+   */
+  readonly terminator?: { readonly full: number; readonly clear: number }
 }
 
 /** The layers a frame carries: three shells' boundaries, six uniforms a body. */
 export const MAX_CLOUD_LAYERS = 3
+
+/** The two decks the cornerstones stand under or over (phase 1 design §3.3). */
+const ALTOCUMULUS: CloudLayerSpec = {
+  genus: 'altocumulus',
+  base: 4000,
+  top: 4800,
+  coverage: 0.7,
+  sigma: 0.04,
+  cellMeters: 1000,
+  erosion: 0.5,
+  radius: 7,
+}
+const STRATOCUMULUS: CloudLayerSpec = {
+  genus: 'stratocumulus',
+  base: 800,
+  top: 1300,
+  coverage: 0.9,
+  sigma: 0.035,
+  cellMeters: 1800,
+  erosion: 0.4,
+  radius: 10,
+}
 
 const cumulus = (
   base: number,
@@ -229,6 +267,43 @@ export const WEATHER_SCENARIOS: Readonly<Record<ScenarioId, WeatherScenario>> =
       patternScale: 0,
       patternPeriod: 0,
     },
+    /*
+     * The cornerstones' three. A regime's id is part of a committed format
+     * from here on — `cornerstones.json` names them — so an id is never
+     * renamed; a picture naming one a build does not know reports its
+     * weather unavailable.
+     *
+     * `altocumulus` is a mid-level deck with nothing under it to block a sun
+     * under the horizon; `dusk-altocumulus` is the same deck ending where the
+     * local sun clears the horizon, which is what lets G3's bases be lit
+     * from below; `stratocumulus` is the marine deck G4 looks down on and
+     * G6 descends through.
+     */
+    altocumulus: {
+      id: 'altocumulus',
+      layers: [ALTOCUMULUS],
+      wind: { east: 8, north: 4 },
+      pattern: 'uniform',
+      patternScale: 0,
+      patternPeriod: 0,
+    },
+    'dusk-altocumulus': {
+      id: 'dusk-altocumulus',
+      layers: [ALTOCUMULUS],
+      wind: { east: 8, north: 4 },
+      pattern: 'uniform',
+      patternScale: 0,
+      patternPeriod: 0,
+      terminator: { full: -0.1, clear: 0.1 },
+    },
+    stratocumulus: {
+      id: 'stratocumulus',
+      layers: [STRATOCUMULUS],
+      wind: { east: 6, north: 0 },
+      pattern: 'uniform',
+      patternScale: 0,
+      patternPeriod: 0,
+    },
     fog: {
       id: 'fog',
       layers: [
@@ -361,24 +436,59 @@ function bandCoverage(
 }
 
 /**
+ * A terminator's two elevations as the sines the bake compares, `[full,
+ * clear]`; `[2, 3]` with no terminator, which no sine reaches, so the
+ * factor is 1 everywhere and one program serves both kinds of scenario.
+ */
+export function terminatorSines(s: WeatherScenario): readonly [number, number] {
+  if (s.terminator === undefined) return [2, 3]
+  const sine = (degrees: number): number => Math.sin((degrees * Math.PI) / 180)
+  return [sine(s.terminator.full), sine(s.terminator.clear)]
+}
+
+/** The share of the pattern's cover a terminator leaves at a direction. */
+function terminatorShare(
+  s: WeatherScenario,
+  direction: Vec3,
+  sun: Vec3 | null,
+): number {
+  if (s.terminator === undefined) return 1
+  if (sun === null)
+    throw new Error(`${s.id} ends at the terminator, so its cover needs a sun`)
+  const length = Math.hypot(direction.x, direction.y, direction.z)
+  const up =
+    length > 0
+      ? (direction.x * sun.x + direction.y * sun.y + direction.z * sun.z) /
+        length
+      : 0
+  const [full, clear] = terminatorSines(s)
+  return 1 - smoothstep(full, clear, up)
+}
+
+/**
  * The coverage the maps hold for `layer` at a body-fixed unit direction, at
- * presentation time `t`: the CPU reference of the maps' bake. Blob cells hash
- * (cell, periodIndex) with pcg4d against a u32 threshold (rule 58).
+ * presentation time `t`, under a body-fixed unit `sun`: the CPU reference of
+ * the maps' bake. Blob cells hash (cell, periodIndex) with pcg4d against a
+ * u32 threshold (rule 58). The sun is read only by a scenario with a
+ * terminator, and such a scenario refuses a null one rather than answer for
+ * a sun nobody named.
  */
 export function scenarioCoverage(
   s: WeatherScenario,
   layer: number,
   direction: Vec3,
   t: number,
+  sun: Vec3 | null = null,
 ): number {
   const spec = s.layers[layer]
   if (spec === undefined) return 0
   const coverage = Math.min(1, Math.max(0, spec.coverage))
+  const share = terminatorShare(s, direction, sun)
   if (s.pattern === 'blobs')
-    return blobCoverage(s, layer, coverage, direction, t)
+    return share * blobCoverage(s, layer, coverage, direction, t)
   if (s.pattern === 'bands' && s.patternScale > 0)
-    return bandCoverage(s, coverage, direction)
-  return coverage
+    return share * bandCoverage(s, coverage, direction)
+  return share * coverage
 }
 
 /*
@@ -456,4 +566,17 @@ export function wetWorld(body: Body): boolean {
     body.surface.grammar.liquidKind === 'water' &&
     (haze === null || aerosolDepthOf(haze) < 1)
   )
+}
+
+/**
+ * Drawn by the volume unasked: wet, and no authored deck to lose. Derived;
+ * stored nowhere (rule 17).
+ *
+ * Earth is wet and keeps its textured deck until the volume draws Earth with
+ * its shadow and its light, so it is outside this set: a picture or a lever
+ * that wants the volume there names it by address, which wins over the set.
+ * A body leaves its deck behind and joins the set with no change here.
+ */
+export function cloudsServed(body: Body): boolean {
+  return wetWorld(body) && body.appearance.clouds === null
 }

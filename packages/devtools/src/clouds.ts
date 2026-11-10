@@ -42,7 +42,7 @@ export function cloudHistogramEdge(i: number): number {
 
 export interface CloudSettle {
   readonly pending: boolean
-  /** 'n/16': frames since the history last reset, of the settle window. */
+  /** 'n/32': frames since the history last reset, of the settle window. */
   readonly history: string
   readonly caches: string
 }
@@ -100,12 +100,18 @@ export interface CloudRenderReport {
   } | null
 }
 
-/** Frames after a reset the history takes to settle: four whole interleave cycles. */
-export const CLOUD_SETTLE_FRAMES = 16
+/**
+ * Frames after a reset the history takes to settle: 32. The history's
+ * weight floors at 1/8, so a pixel holds the mean of eight samples only
+ * after 32 frames, which is eight whole interleave cycles; 16 is four. A
+ * plate taken at 16 is a plate of a history halfway there, and two boots
+ * would disagree by what the second half adds.
+ */
+export const CLOUD_SETTLE_FRAMES = 32
 
 /**
- * What a measurement waits on: every cache's owed work done and four whole
- * interleave cycles since the history last reset. Null when there is
+ * What a measurement waits on: every cache's owed work done and
+ * `CLOUD_SETTLE_FRAMES` since the history last reset. Null when there is
  * nothing to wait for — no system, or levers off.
  *
  * A forced path (cut, scrub, warp, fly) resets or re-owes work every frame,

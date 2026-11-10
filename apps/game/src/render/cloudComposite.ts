@@ -134,9 +134,13 @@ import { warmCompile, warmCompute, warmRenderer } from './warmup.ts'
  *
  * **Where there is no cloud nothing changes, bit for bit.** T_c = 1 and
  * L_c = B = 0 make the source exactly zero whatever the air's quadrature, and
- * a source under a half float's reach is discarded rather than blended, which
- * leaves `velocity` — a row with no blend, which any write replaces — the
- * surface's.
+ * a source under a half float's reach is discarded rather than blended.
+ *
+ * **`motion` is the cloud's by its opacity, and it is what reconstruction
+ * reads.** FSR takes `motion.rg` (ADR-0044), so the vectors a temporal picture
+ * reprojects through a thin cloud are the cloud's and the surface's in the
+ * share each holds the pixel. Where the discard falls the cloud held under
+ * 2⁻⁹ of it, so the vectors meet there without a step.
  *
  * **The ray is the scene's own pixel's**, rebuilt from the jittered camera's
  * projection and turned into body-fixed axes, so the class and the depth
@@ -206,12 +210,11 @@ const DARK = 2 ** -14
 const NEAREST = 1e-4
 
 /**
- * The composite's own source, motion and velocity, assigned where the rest is
- * formed and read by its output and its MRT.
+ * The composite's own source and motion, assigned where the rest is formed
+ * and read by its output and its MRT.
  */
 const cloudSource = property('vec4', 'CloudSource')
 const cloudMotion = property('vec4', 'CloudMotion')
-const cloudVelocity = property('vec2', 'CloudVelocity')
 
 const largest = (v: Node<'vec3'>): Node<'float'> => max(max(v.x, v.y), v.z)
 const normalShare = (x: Node<'float'>): Node<'float'> =>
@@ -473,7 +476,7 @@ function compositeGraph(
           const through = float(1).sub(opacity)
           light.addAssign(own.mul(through))
           opacity.addAssign(opaque.mul(through))
-          // The second's cloud carries the velocity only where it is all the
+          // The second's cloud carries the motion only where it is all the
           // pixel holds, and moves with the eye alone: its drift and its
           // body's own motion are not modeled, and its distance is taken
           // into the served body's true meters.
@@ -495,7 +498,6 @@ function compositeGraph(
     cloudMotion.assign(
       vec4(velocity, max(viewDepth, NEAREST).reciprocal(), servedOpacity),
     )
-    cloudVelocity.assign(velocity)
     If(
       modes.drawn
         .lessThan(0.5)
@@ -513,10 +515,7 @@ function compositeGraph(
   })()
   return {
     color,
-    mrt: mrt({
-      motion: cloudMotion,
-      velocity: vec4(cloudVelocity, 0, 1),
-    }),
+    mrt: mrt({ motion: cloudMotion }),
   }
 }
 

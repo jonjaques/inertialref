@@ -1,0 +1,496 @@
+{
+  "format": "inertialref/presets",
+  "version": 3,
+  "pictures": [
+    {
+      "id": "weather-e1-cumulus-orbit",
+      "label": "Cumulus from orbit",
+      "why": "Fair-weather cumulus over the Amazon in the early afternoon, from the station’s height, through a long lens.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 17424.925169385428,
+      "address": "s:SOL/b:2",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0,
+          "elevation": 0.25,
+          "distance": 19113000
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.08726646259971647,
+          "longitude": -1.0471975511965976,
+          "height": 400000,
+          "heading": 0,
+          "pitch": -1.5357963267948966
+        }
+      },
+      "lens": {
+        "focalLength": 120.22449583648354,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "fair-cumulus"
+      }
+    },
+    {
+      "id": "weather-e2-limb-dusk",
+      "label": "The limb at dusk",
+      "why": "Cloud tops standing into the sunset band on the Atlantic limb, from the station’s height.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 29353.70480605342,
+      "address": "s:SOL/b:2",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0,
+          "elevation": 0.25,
+          "distance": 19113000
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": 0.3490658503988659,
+          "longitude": -0.5235987755982988,
+          "height": 400000,
+          "heading": 5.058743063050304,
+          "pitch": -0.3455751918948773
+        }
+      },
+      "lens": {
+        "focalLength": 120.22449583648354,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "cirrus-over-cumulus"
+      }
+    },
+    {
+      "id": "weather-e3-whole-face",
+      "label": "The whole face",
+      "why": "Earth’s whole lit face, framed as the Apollo photograph was, with weather on it.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 0,
+      "address": "s:SOL/b:2",
+      "framing": {
+        "kind": "compose",
+        "composition": "blue-marble"
+      },
+      "fovDeg": 65,
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "fair-cumulus"
+      }
+    },
+    {
+      "id": "weather-g1-fair",
+      "label": "Fair weather",
+      "why": "Fair-weather cumulus at noon over open country, from a rise forty meters up.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 98977.5083075788,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0,
+          "elevation": 0.25,
+          "distance": 11766440.867041122
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.29062177877890516,
+          "longitude": 0.6500744120490799,
+          "height": 40,
+          "heading": 2.094098135016834,
+          "pitch": 0.06981317007977318
+        }
+      },
+      "lens": {
+        "focalLength": 25.734083046114705,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "fair-cumulus"
+      }
+    },
+    {
+      "id": "weather-g2-overcast-shore",
+      "label": "Overcast over water",
+      "why": "A low gray deck over the sea, from the shore, in the morning.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 82800.6354948202,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0,
+          "elevation": 0.25,
+          "distance": 11766440.867041122
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.2928832177490203,
+          "longitude": 0.6526948251778841,
+          "height": 2,
+          "heading": 3.246312408709453,
+          "pitch": 0.08726646259971647
+        }
+      },
+      "lens": {
+        "focalLength": 25.734083046114705,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "overcast"
+      }
+    },
+    {
+      "id": "weather-g3-underlit-dusk",
+      "label": "Underlit at dusk",
+      "why": "A mid-level deck lit from below after sunset, its edge clear toward the sun.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 17857.64342676884,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0,
+          "elevation": 0.25,
+          "distance": 11766440.867041122
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.29062177877890516,
+          "longitude": 0.6500744120490799,
+          "height": 2,
+          "heading": 4.6978716142562265,
+          "pitch": 0.2617993877991494
+        }
+      },
+      "lens": {
+        "focalLength": 23.051785523653994,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "dusk-altocumulus"
+      }
+    },
+    {
+      "id": "weather-g4-over-deck",
+      "label": "Over the deck",
+      "why": "Three kilometers over marine stratocumulus in the afternoon, the sun behind the eye.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 6219.386038889019,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0,
+          "elevation": 0.25,
+          "distance": 11766440.867041122
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.2928832177490203,
+          "longitude": 0.6526948251778841,
+          "height": 4107.967027110147,
+          "heading": 1.7754538713619026,
+          "pitch": -0.6108652143769023
+        }
+      },
+      "lens": {
+        "focalLength": 17.137776080905375,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "stratocumulus"
+      }
+    },
+    {
+      "id": "weather-g5-inside",
+      "label": "Inside",
+      "why": "Level at the height of a cumulus field’s middle, in the morning: the start of a flight through one.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 86090.56815677337,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0,
+          "elevation": 0.25,
+          "distance": 11766440.867041122
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.29062177877890516,
+          "longitude": 0.6500744120490799,
+          "height": 1487.3217824441178,
+          "heading": 1.5707963267948966,
+          "pitch": 0
+        }
+      },
+      "lens": {
+        "focalLength": 20.784609690826528,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "fair-cumulus"
+      }
+    },
+    {
+      "id": "weather-g6-descent",
+      "label": "The descent",
+      "why": "Four hundred kilometers over a stratocumulus deck in the morning: the start of a descent to the ground.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 86090.56815677337,
+      "address": "g:milky-way/s:P222_3_2_k/b:3",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0,
+          "elevation": 0.25,
+          "distance": 11766440.867041122
+        },
+        "look": {
+          "yaw": 0,
+          "pitch": 0
+        },
+        "surface": {
+          "latitude": -0.29062177877890516,
+          "longitude": 0.6500744120490799,
+          "height": 400000,
+          "heading": 1.5707963267948966,
+          "pitch": -1.5357963267948966
+        }
+      },
+      "lens": {
+        "focalLength": 20.784609690826528,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.004,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": {
+          "bright": 24,
+          "dark": 16
+        },
+        "balance": 5800
+      },
+      "weather": {
+        "regime": "stratocumulus"
+      }
+    }
+  ]
+}

@@ -115,6 +115,7 @@ import {
   isCloudLevers,
 } from '../render/cloudLevers.ts'
 import type { CloudSystemFactory } from '../render/cloudSystem.ts'
+import { PictureWeatherHold } from './pictureWeather.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
@@ -522,6 +523,9 @@ export class GameEngine {
   get cloudsAvailable(): boolean {
     return this.cloudSystemFactory !== null
   }
+
+  /** The levers a picture's weather set, and their release (`pictureWeather.ts`). */
+  readonly pictureWeather = new PictureWeatherHold()
 
   /**
    * The player's own lens — what the flight camera is looking through.
@@ -1091,6 +1095,8 @@ export class GameEngine {
           const { peak: _peak, ...processing } = this.sensorSettings
           return { ...processing, range: { ...processing.range } }
         },
+        setWeather: (weather, address) =>
+          this.pictureWeather.apply(this, weather, address),
         setCameraProcessing: (processing) =>
           this.requestSensorSettings({
             ...processing,
@@ -1622,6 +1628,7 @@ export class GameEngine {
       this.harness.observatory.target !== null
     )
       this.harness.observatory.advanceTime(delta)
+    this.pictureWeather.frame(this, this.harness.observatory.target !== null)
     // A surface stage holds its ephemeris epoch while the director samples
     // live render time. Feeding the held snapshot time back freezes the playhead.
     // Sampling before the player lookup also lets a scene end during a hand-off.
