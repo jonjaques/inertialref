@@ -65,4 +65,30 @@ describe('the cornerstones', () => {
       session.dispose()
     }
   })
+
+  it('hand their weather to the host with the body’s full address, and a picture without weather hands none', () => {
+    const calls: [unknown, string][] = []
+    const session = openSession({
+      catalog: TEST_CATALOG,
+      workers: null,
+      render: {
+        setWeather: (weather, address) => {
+          calls.push([weather, address])
+          return weather === null ? 'none' : 'drawn'
+        },
+      },
+    })
+    try {
+      const taken = session.harness.preset('weather-e1-cumulus-orbit')
+      expect(taken.weather).toBe('drawn')
+      expect(calls.at(-1)).toEqual([
+        { regime: 'fair-cumulus' },
+        'g:milky-way/s:SOL/b:2',
+      ])
+      expect(session.harness.preset('earthrise').weather).toBe('none')
+      expect(calls.at(-1)?.[0]).toBeNull()
+    } finally {
+      session.dispose()
+    }
+  })
 })
