@@ -641,7 +641,7 @@ describe('the cornerstones', () => {
       /*
        * The sea sheet is drawn at the datum over the seabed the mesh is
        * built from, `drawnGroundElevation`, and the drawn ground sits up to
-       * `drawnDivergence` (§1.13 m here, the tail `micro.ts` bounds) from
+       * `drawnDivergence` (1.13 m here, the tail `micro.ts` bounds) from
        * the canonical one. Water shallower than that tail draws as sand
        * flats: G2 at S stood over 0.1 to 0.9 m of sea for 2 km. The seabed
        * is the drawn one on purpose (rule 53): it is what the picture shows.
