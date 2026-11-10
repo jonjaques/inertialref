@@ -1,19 +1,30 @@
 #!/usr/bin/env node
 /*
- * The weather's measurement runner: phase 0's batches on the rig, base and
- * candidate interleaved in one boot, under one hold on the machine's GPU lock.
+ * The weather's measurement runner: the batches of phase 1's campaigns on
+ * the rig, base and candidate interleaved in one boot, under one hold on the
+ * machine's GPU lock (phase 1 design §7).
  *
  *     pnpm preview                                  # builds, then serves 8787
  *     node scripts/clouds/measure.mjs --batch stances
  *     node scripts/clouds/measure.mjs --batch targets --gpu-wait 900
- *     node scripts/clouds/measure.mjs --batch images --dry-run     # the plan; nothing launches
+ *     node scripts/clouds/measure.mjs --batch ladders --dry-run    # the plan; nothing launches
  *
  * `stances` shows every scenario's sun, its passes and a still before a batch
- * stands on it; `images` measures the radiance differences §8.7's quality
- * ladders read; `targets`, `memory` and `error` measure the landed code. A
- * run's steps are `page.mjs`'s; its figures land in
+ * stands on it. The rest are §7.2's: `choices`'s `phase`, `jitter`,
+ * `handover`, `clip`, `transport`, `over` and `reset`, and `landed`'s
+ * `ladders`, `targets`, `frame`, `sequences`, `warp`, `pace`, `memory` and
+ * `error`, with `pacing`, `hold` and `study` for the presentation rate
+ * (§7.5). A run's steps are `page.mjs`'s, or its kind's own module's
+ * (`noise.mjs`, `sequence.mjs`, `frame.mjs`); its figures land in
  * `.data/clouds/<batch>-<time>.json` and in the Markdown tables printed at
- * the end, which the rules fixed before measuring are read against.
+ * the end, and `rules.mjs` computes each rule's outcome from them.
+ *
+ * Every row carries what it was taken at: its presentation rate and median
+ * frame interval, how Chrome was started, the lens its stance names and the
+ * one the page wore, and the hash of its levers resolved at its size. A row
+ * through another lens than its stance's, or drawn with other levers than
+ * its run's, does not stand. Every run reads the page's build id and refuses
+ * one that is not the tree's.
  *
  * Production only. Dev React costs about five times the shipped CPU, and
  * the second scene pass's traversal is a CPU cost, so every invocation passes
@@ -64,15 +75,34 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import {
+  CLOUD_LIGHT_TAPS,
   DEFAULT_CLOUD_LEVERS,
+  cloudLeversHash,
   isCloudLevers,
+  resolveCloudLevers,
 } from '../../apps/game/src/render/cloudLevers.ts'
+import {
+  CORNERSTONES,
+  findPicture,
+} from '../../packages/devtools/src/pictures.ts'
 import { RIG, readSession, rigLeft, sessionPath } from '../driveLock.mjs'
 import { GpuLockError, acquire, parseWait } from '../gpuLock.mjs'
 import { difference } from './diff.mjs'
 import {
+  DISPLAY_HOLD,
+  armPlan,
+  armRefusal,
+  frameBatches,
+  studyArm,
+} from './frame.mjs'
+import { noiseBatches } from './noise.mjs'
+import { sequenceBatches } from './sequence.mjs'
+import {
+  describe,
+  estimate,
   figures,
   measured,
+  minutes,
   plan,
   progress,
   rateNote,
@@ -141,6 +171,31 @@ const earth = (height, pitch) =>
 const cumulus = (height, pitch) =>
   visit(FAR, { latitude: 18.5, longitude: 172.63, height, heading: 90, pitch })
 
+/** A cornerstone by its tag: `g4` for `weather-g4-over-deck`. */
+const CORNERSTONE = Object.freeze(
+  Object.fromEntries(CORNERSTONES.map((one) => [one.id.split('-')[1], one.id])),
+)
+/**
+ * A cornerstone as a stance: the picture is the pose, the lens and the
+ * instant, and its weather is the levers, served on its own body by full
+ * address (a station's picture serves the body it goes round), as the
+ * capture serves it. Earth is served only when asked.
+ */
+function picture(tag) {
+  const one = findPicture(CORNERSTONE[tag])
+  const full = one.address.startsWith('g:')
+    ? one.address
+    : `g:milky-way/${one.address}`
+  return {
+    preset: one.id,
+    stance: { kind: 'preset' },
+    levers: {
+      weather: one.weather.regime,
+      served: full.replace(/\/a:[^/]+$/, ''),
+    },
+  }
+}
+
 /**
  * The scenarios: stances, and the levers each sets over the defaults. Heights
  * and pitches are design values, changed only through the orchestrator, once
@@ -198,9 +253,42 @@ export const SCENARIOS = Object.freeze({
     stance: basin(2, 45),
     levers: { weather: 'overcast' },
   },
+  // Phase 1's: the phase's radius from above, the band in frame from orbit
+  // and on the way down, the full sea, and the frame with something drawn
+  // over the clouds. 150 km at −40° puts the frame's center 237 km off.
+  'over-deck': picture('g4'),
+  'earth-orbit-long': picture('e1'),
+  'earth-limb': picture('e2'),
+  'descent-150': {
+    stance: basin(150_000, -40),
+    levers: { weather: 'broken-horizon' },
+  },
+  shore: picture('g2'),
+  overlay: {
+    stance: basin(2, 2),
+    lit: true,
+    levers: { weather: 'broken-horizon' },
+  },
+  // The ten presets, each on its own world by its own picture: B6 and B8
+  // read every cornerstone's whole frame.
+  ...Object.fromEntries(Object.keys(CORNERSTONE).map((t) => [t, picture(t)])),
 })
 
 const presetOf = (scenario) => SCENARIOS[scenario].preset ?? 'far-shore'
+
+/**
+ * The lens a stance names: its preset's focal length, which the stance step
+ * applies before it moves. A composition (blue-marble) names its lens by
+ * solving it, and a rise solves its own, so neither is a number here.
+ */
+export function lensOf(scenario) {
+  if (SCENARIOS[scenario].stance.kind === 'rise') return 'rise'
+  return findPicture(presetOf(scenario)).lens?.focalLength ?? 'composition'
+}
+
+/** The hash a frame of this size reports for a lever set (`ir.clouds().leversHash`). */
+export const hashOf = (set, size) =>
+  cloudLeversHash(resolveCloudLevers(set, SIZES[size]))
 
 /* ------------------------------------------------------------------ the runs ---- */
 
@@ -224,6 +312,8 @@ const FORCE = {
   fly: { force: 'fly' },
   warp: { force: 'warp', warp: 1000 },
 }
+/** A steady Δ is the median of five A/B pairs (rubric §5). */
+export const PAIRS = 5
 
 /** A whole lever set, checked against the contract before anything launches:
  *  a typo here would otherwise be a lever the page ignores for two hours. */
@@ -240,13 +330,17 @@ export function levers(scenario, over = {}) {
 
 /**
  * What every run carries for `page.mjs`: the preset its page boots to and
- * its stance starts from, where it stands, and its levers off.
+ * its stance starts from, where it stands, the lens it names, whatever it
+ * adds to the page's query, and its levers off.
  */
 const stood = (scenario, size) => ({
   scenario,
   size,
   preset: presetOf(scenario),
   stance: SCENARIOS[scenario].stance,
+  lit: SCENARIOS[scenario].lit ?? false,
+  lens: lensOf(scenario),
+  query: SCENARIOS[scenario].query ?? [],
   off: levers(scenario, OFF),
 })
 
@@ -258,11 +352,14 @@ const ab = (batch, group, label, scenario, size, kind, options) => ({
   label,
   kind,
   ...stood(scenario, size),
-  pairs: options.pairs,
+  ...(options.query ? { query: options.query } : {}),
+  clock: options.clock ?? null,
+  pairs: options.pairs ?? PAIRS,
   base: levers(scenario, options.base ?? OFF),
   candidate: levers(scenario, { ...FORCE[kind], ...(options.candidate ?? ON) }),
 })
 
+/** Phase 0's nine stances: `ground` to `pair-neighbor`, and Earth's two. */
 const LANDED = [
   'ground',
   'horizon',
@@ -272,57 +369,87 @@ const LANDED = [
   'pair-moon',
   'pair-neighbor',
 ]
+/** Where the rubric's budget rows stand: phase 0's nine and phase 1's three. */
+export const TARGETS = [
+  ...LANDED,
+  'earth-ground',
+  'earth-orbit',
+  'earth-orbit-long',
+  'shore',
+  'overlay',
+]
+/** The ten presets as stances, by their tags. */
+export const PRESETS = Object.freeze(Object.keys(CORNERSTONE))
+/** Earth's clouds are priced against its deck hidden; anywhere else, off. */
+const baseOf = (scenario) =>
+  SCENARIOS[scenario].levers.served === EARTH ? HIDDEN : OFF
 
 const targets = (size) => [
-  ...['steady', 'cut', 'scrub'].flatMap((kind) =>
-    LANDED.map((s) =>
-      ab('targets', 'landed', 'landed', s, size, kind, { pairs: 3 }),
+  ...TARGETS.map((s) =>
+    ab(
+      'targets',
+      'landed',
+      baseOf(s) === HIDDEN ? 'clouds' : 'landed',
+      s,
+      size,
+      'steady',
+      {
+        base: baseOf(s),
+      },
     ),
   ),
   ...['ground', 'orbit'].map((s) =>
-    ab('targets', 'landed', 'landed', s, size, 'fly', { pairs: 3 }),
+    ab('targets', 'landed', 'landed', s, size, 'fly', {}),
   ),
-  // Earth in pairs: the clouds against the deck hidden, their own cost, and
-  // the deck alone; against today's frame they would be the clouds minus it.
-  ...['earth-ground', 'earth-orbit'].flatMap((s) => [
-    ab('targets', 'landed', 'clouds', s, size, 'steady', {
-      base: HIDDEN,
-      pairs: 3,
-    }),
-    ab('targets', 'landed', 'clouds', s, size, 'fly', {
-      base: HIDDEN,
-      pairs: 3,
-    }),
+  // The deck alone, against the frame with it hidden.
+  ...['earth-ground', 'earth-orbit'].map((s) =>
     ab('targets', 'deck', 'deck', s, size, 'steady', {
       base: HIDDEN,
       candidate: OFF,
-      pairs: 3,
     }),
-  ]),
+  ),
 ]
 
-// Three boots with the flag and three without, each on a deleted profile.
+/**
+ * Three boots with the flag and one body, three with two, and three without,
+ * each on a deleted profile: B12's declared bytes, the second body's, and
+ * the boot's `warming the clouds` span.
+ */
 const memory = (size) =>
-  [true, false].flatMap((flag) =>
+  [
+    ['plain', false, null],
+    ['clouds', true, null],
+    ['two', true, NEIGHBOR],
+  ].flatMap(([name, flag, second]) =>
     [1, 2, 3].map((boot) => ({
-      id: `memory/cold/${flag ? 'clouds' : 'plain'}/ground/${size}/${boot}`,
+      id: `memory/cold/${name}/ground/${size}/${boot}`,
       type: 'cold',
       batch: 'memory',
       ...stood('ground', size),
       flag,
       boot,
-      levers: levers('ground', ON),
+      bodies: second === null ? 1 : 2,
+      levers: levers('ground', { ...ON, second }),
     })),
   )
 
+/** Row 20: the thin form against the identity, the two `pair` stances among them. */
 const error = (size, held = HELD) =>
-  ['sunset', 'fog', 'orbit', 'horizon-2.4km'].flatMap((scenario) =>
+  [
+    'sunset',
+    'fog',
+    'orbit',
+    'horizon-2.4km',
+    'pair-moon',
+    'pair-neighbor',
+  ].flatMap((scenario) =>
     ['automatic', 'enhanced'].map((mode) => ({
       id: `error/residual/${mode}/${scenario}/${size}`,
       type: 'residual',
       batch: 'error',
       ...stood(scenario, size),
       mode,
+      exposure: 'held',
       levers: levers(scenario, { on: true, composite: 'residual' }),
       // The screenshot pair is two frames: with the jitter held they differ
       // by the composite's form and the interleave's phase, not the sample.
@@ -331,11 +458,45 @@ const error = (size, held = HELD) =>
     })),
   )
 
+/**
+ * The game's own clock at 100× and 1,000×, both sides: under the lever alone
+ * the clouds' instant runs and the sun and the world do not, so the grid's
+ * turning sun, which is what warp costs, would never be in the row.
+ */
+const warp = (size) =>
+  size !== '1080p'
+    ? []
+    : [100, 1000].flatMap((clock) =>
+        ['horizon', 'orbit'].map((s) =>
+          ab('warp', 'clock', `${clock}x`, s, size, 'steady', { clock }),
+        ),
+      )
+
+/** The phase's radius: `bins` at 2, 3 and 4 each against `mean`. */
+const phase = (size) =>
+  ['over-deck', 'inside'].flatMap((s) =>
+    [2, 3, 4].map((bins) =>
+      ab('phase', 'radius', `bins ${bins}`, s, size, 'steady', {
+        base: { ...ON, phaseMode: 'mean' },
+        candidate: { ...ON, phaseMode: 'bins', phaseBins: bins },
+      }),
+    ),
+  )
+
+/** O against S, taken only where O's fit passed in Node and O was built. */
+const transport = (size) =>
+  ['ground', 'inside', 'orbit'].map((s) =>
+    ab('transport', 'higher orders', 'octaves', s, size, 'steady', {
+      base: { ...ON, transport: 'slab' },
+      candidate: { ...ON, transport: 'octaves' },
+    }),
+  )
+
 /** A run of radiance comparisons at one stance: each pair of lever sets captured and differenced (§8.7). */
 const radiance = (group, label, scenario, size, threshold, comparisons) => ({
-  id: ['images', group, label, scenario, size].join('/'),
+  id: ['ladders', group, label, scenario, size].join('/'),
   type: 'radiance',
-  batch: 'images',
+  batch: 'ladders',
   group,
   label,
   ...stood(scenario, size),
@@ -348,22 +509,30 @@ const radiance = (group, label, scenario, size, threshold, comparisons) => ({
 })
 
 /**
- * Each quality lever's ladder: §8.7 sets it to the smallest value whose
- * image differs from the next larger one by under 1% radiance RMSE in
- * `horizon` and `inside`. Two taps or four, or none; the default maxSteps,
- * 192, and the default footprint, 800 m, sit inside their ladders.
+ * Each quality lever's ladder (§7.3): the smallest value whose image
+ * differs from the next larger one's by under 1% radiance RMSE, the jitter
+ * held. `lightTaps` climbs the lever's own list, so a rung the contract adds
+ * is a rung the ladder takes. `maxSteps` and `farFootprint` are free numbers
+ * in the contract, with no list to read, so their rungs are §7.3's.
  */
 export const LADDERS = Object.freeze({
-  maxSteps: [64, 96, 128, 192, 256, 384],
-  lightTaps: [0, 2, 4],
+  maxSteps: [96, 128, 192, 256],
+  lightTaps: CLOUD_LIGHT_TAPS,
   farFootprint: [200, 400, 800, 1600],
 })
+/** Where the ladders stand unless asked: `earth-limb` holds the band at every footprint. */
+export const LADDER_STANCES = Object.freeze(['horizon', 'inside', 'earth-limb'])
 
-/** §8.7's image inputs: each ladder's value against the next, with the jitter held. */
-const images = (size, held = HELD) =>
+/**
+ * The ladders, a value against the next with the jitter held, at the given
+ * stances. Each value's cost rides with them: the trace's milliseconds and
+ * the report's step counts, which say when a ladder converges because a term
+ * left the frame.
+ */
+const ladders = (size, held = HELD, { stances = LADDER_STANCES } = {}) =>
   Object.entries(LADDERS).flatMap(([lever, values]) =>
-    ['horizon', 'inside'].map((s) =>
-      radiance(
+    stances.map((s) => ({
+      ...radiance(
         'ladder',
         lever,
         s,
@@ -377,7 +546,11 @@ const images = (size, held = HELD) =>
             { [lever]: values[i + 1], ...held },
           ]),
       ),
-    ),
+      costs: values.map((value) => ({
+        value,
+        levers: levers(s, { ...ON, [lever]: value }),
+      })),
+    })),
   )
 
 const stances = (size) =>
@@ -389,29 +562,79 @@ const stances = (size) =>
     levers: levers(scenario, ON),
   }))
 
+/** What the other modules' batches are built from. */
+const KIT = Object.freeze({
+  ab,
+  stood,
+  levers,
+  ON,
+  OFF,
+  HELD,
+  PAIRS,
+  TARGETS,
+  PRESETS,
+})
+
 /** Each batch's runs at one size. A stance is not a size, so `stances` takes
  *  the first size alone. */
 export const BATCHES = Object.freeze({
   stances,
-  images,
+  ladders,
   targets,
   memory,
   error,
+  warp,
+  phase,
+  transport,
+  ...noiseBatches(KIT),
+  ...sequenceBatches(KIT),
+  ...frameBatches(KIT),
 })
 
-export const batchRuns = (batch, sizes, held = HELD) =>
-  batch === 'stances'
-    ? stances(sizes[0])
-    : sizes.flatMap((size) => BATCHES[batch](size, held))
+/**
+ * A batch's runs, each with the hash of the levers it measures, resolved at
+ * its size: the candidate, the one set it draws, its clouds-on side or arm,
+ * or the stance's levers off.
+ * `options.stances` moves the ladders; `options.hold` paces the rows that
+ * read a rate, by the display or by the page's `pace=60`.
+ */
+export const batchRuns = (batch, sizes, held = HELD, options = {}) =>
+  (!Object.hasOwn(BATCHES, batch)
+    ? (() => {
+        throw new Error(
+          `no batch ${batch}; batches: ${Object.keys(BATCHES).join(', ')}`,
+        )
+      })()
+    : batch === 'stances'
+      ? stances(sizes[0])
+      : sizes.flatMap((size) => BATCHES[batch](size, held, options))
+  ).map((run) => ({
+    ...run,
+    hold: run.paced ? (options.hold ?? 'none') : null,
+    // The display's hold is an arm of the study's: awake, the rig's window
+    // where it stands, the page told it is occluded.
+    ...(run.paced && options.hold === 'display' ? { arm: DISPLAY_HOLD } : {}),
+    leversHash: hashOf(
+      run.candidate ??
+        run.levers ??
+        run.on ??
+        run.arms?.find((a) => a.levers.on)?.levers ??
+        run.off,
+      run.size,
+    ),
+  }))
 
 /** The session flags of one invocation: the URL, the window, and whether it
  *  may attach to a page already booted, which `fresh` refuses. */
 export function session(run, { url, port, fresh }) {
   const { width, height, dpr } = SIZES[run.size]
   const cold = run.type === 'cold'
-  const query = cold
-    ? ['timing=full', ...QUERY.filter((q) => run.flag || q !== 'clouds=1')]
-    : QUERY
+  const query = [
+    ...(cold
+      ? ['timing=full', ...QUERY.filter((q) => run.flag || q !== 'clouds=1')]
+      : QUERY),
+    ...pageQuery(run),
+  ]
   return [
     ...['--port', String(port), '--url', url, '--no-serve'],
     ...['--preset', run.preset],
@@ -421,6 +644,16 @@ export function session(run, { url, port, fresh }) {
     ...(fresh ? [] : ['--keep-storage']),
   ]
 }
+
+/**
+ * What a run adds to the page's query: its stance's (the temporal picture),
+ * and under the page's hold `pace=60`, which the game's frame loop reads to
+ * draw on a 60 Hz grid (§7.5). The display's hold adds nothing to the page.
+ */
+export const pageQuery = (run) => [
+  ...(run.query ?? []),
+  ...(run.hold === 'page' ? ['pace=60'] : []),
+]
 
 /**
  * Whether a run boots its page rather than attach to it, recorded in `held`
@@ -435,7 +668,7 @@ export function boots(held, run) {
     return true
   }
   const port = portOf(run)
-  const page = `${run.size}|${run.preset}`
+  const page = [run.size, run.preset, ...pageQuery(run)].join('|')
   const fresh = held.get(port) !== page
   held.set(port, page)
   return fresh
@@ -618,6 +851,24 @@ export const carries = (text, id) =>
     text,
   )
 
+/** The build id the tree as it stands would be given: `vite.config.ts`'s `git describe`. */
+export const treeBuild = () =>
+  git('describe', '--always', '--dirty', '--abbrev=8')
+
+/**
+ * Why a page cannot be measured as this tree's, or null. Every run reads the
+ * page's `ir.build().id` and holds it to the tree's, the campaign's and a
+ * run started by hand alike: a check of the bundle on disk says nothing of
+ * the preview that served it, and phase 0's repeats started by hand
+ * compared nothing. Equality, not a prefix: the capture's `checkBuild` takes
+ * a page whose id holds the commit, which a dirty tree's never matches, and
+ * `--allow-dirty` measures exactly that tree.
+ */
+export function buildRefusal(page, tree) {
+  if (page === tree) return null
+  return `the page is build ${page ?? 'nobody named'}, and the tree is ${tree}; serve this tree's build`
+}
+
 /**
  * Whether apps/game/dist is the build of the tree as it stands: one of its
  * scripts carries the id `vite.config.ts`'s `buildId` gives this tree, from
@@ -628,7 +879,7 @@ export const carries = (text, id) =>
 export function bundled() {
   const assets = path.join(ROOT, 'apps/game/dist/assets')
   if (!existsSync(assets)) return false
-  const id = git('describe', '--always', '--dirty', '--abbrev=8')
+  const id = treeBuild()
   return readdirSync(assets)
     .filter((name) => name.endsWith('.js'))
     .some((name) => carries(readFileSync(path.join(assets, name), 'utf8'), id))
@@ -643,6 +894,7 @@ function identity() {
   const built = [path.join(dist, 'index.html'), dist].find(existsSync)
   return {
     head: git('rev-parse', 'HEAD'),
+    build: treeBuild(),
     clean: git('status', '--porcelain') === '',
     committedAt: Number(git('log', '-1', '--format=%ct', 'HEAD')) * 1000,
     builtAt: built === undefined ? null : statSync(built).mtimeMs,
@@ -821,16 +1073,31 @@ async function attempt(run, ctx) {
     await freshProfile(PORTS.cold, { token })
   }
   const shots = shotsFor(run, ctx.shots)
-  const steps = plan(run, shots)
-  const fresh = boots(ctx.booted, run)
-  const args = session(run, { url: ctx.url, port: portOf(run), fresh })
-  const out = await drive(
-    [...args, ...steps.flatMap((s) => s.args)],
-    ctx.env,
-    budgetMs(steps),
-  )
+  // One drive.mjs invocation of `steps` on this run's page; the study's
+  // arms take two, with the window moved between them.
+  const invoke = (steps) => {
+    const fresh = boots(ctx.booted, run)
+    const args = session(run, { url: ctx.url, port: portOf(run), fresh })
+    return drive(
+      [...args, ...steps.flatMap((s) => s.args)],
+      ctx.env,
+      budgetMs(steps),
+    )
+  }
+  const planned = run.arm == null ? plan(run, shots) : null
+  const { steps, out } =
+    planned === null
+      ? await studyArm(run, { ...ctx, port: portOf(run) }, invoke)
+      : { steps: planned, out: await invoke(planned) }
   const after = judge(sample(ctx.exempt), ctx.maxLoad)
   const row = figures(run, steps, out)
+  row.operatingPoint.startedBy = ctx.startedBy
+  // A row of another build is no row of this one, and the next is as likely
+  // to be served the same page: a refusal, not a retry. An arm the study
+  // did not take drew nothing to hold.
+  const wrongBuild =
+    out.notTaken == null ? buildRefusal(row.build, ctx.build) : null
+  if (wrongBuild !== null) throw new Refusal(`${run.id}: ${wrongBuild}`)
   if (run.type === 'residual')
     row.display = await difference(shots.identity, shots.thin).catch(
       (cause) => ({ error: cause.message }),
@@ -920,6 +1187,9 @@ const OPTIONS = {
   runs: { type: 'string', multiple: true, default: [] },
   'max-load': { type: 'string' },
   'jitter-frame': { type: 'string' },
+  stances: { type: 'string' },
+  hold: { type: 'string', default: 'none' },
+  refresh: { type: 'string' },
   resume: { type: 'string' },
   'allow-dirty': { type: 'boolean', default: false },
   'dry-run': { type: 'boolean', default: false },
@@ -934,6 +1204,9 @@ export const USAGE = `node scripts/clouds/measure.mjs --batch <${Object.keys(BAT
   --runs <text>      only the runs whose id holds it; repeat for more
   --max-load <n>     the one-minute load a quiet machine stays under; half the cores by default
   --jitter-frame <n> the index a held comparison holds the trace's jitter at, ${HELD.jitterFrame} by default
+  --stances <list>   the ladders' stances, ${LADDER_STANCES.join(',')} by default
+  --hold <how>       pace the rows that read a rate: none (default), display, or page (pace=60)
+  --refresh <label>  the display's refresh mode, as set by hand, for the pacing study's record
   --resume <file>    write the document here, continuing the one already there
   --allow-dirty      measure an uncommitted tree, marking every row
   --dry-run          print each run's drive.mjs invocation and launch nothing
@@ -958,7 +1231,16 @@ export function parseOptions(argv) {
   if (!/^\d+$/.test(index) || !Number.isSafeInteger(Number(index)))
     throw new Error('--jitter-frame takes a frame index, a whole number')
   const held = Object.freeze({ jitterFrame: Number(index) })
-  const runs = batchRuns(values.batch, sizes, held).filter(
+  if (!HOLDS.includes(values.hold))
+    throw new Error(`--hold is one of ${HOLDS.join(', ')}`)
+  const stances = values.stances?.split(',')
+  for (const s of stances ?? [])
+    if (!Object.hasOwn(SCENARIOS, s)) throw new Error(`no stance ${s}`)
+  const runs = batchRuns(values.batch, sizes, held, {
+    stances,
+    hold: values.hold,
+    refresh: values.refresh ?? null,
+  }).filter(
     (run) =>
       values.runs.length === 0 || values.runs.some((t) => run.id.includes(t)),
   )
@@ -974,29 +1256,50 @@ export function parseOptions(argv) {
     maxLoad,
     allowDirty: values['allow-dirty'],
     held,
+    hold: values.hold,
     dryRun: values['dry-run'],
   }
 }
+
+/** How a row that reads a rate is paced (§7.5): not at all, by the display, or by the page. */
+export const HOLDS = Object.freeze(['none', 'display', 'page'])
 
 /** Each run's drive.mjs invocation, as `--dry-run` prints it. */
 export function dryRun(options) {
   const booted = new Map()
   const shown = (arg) =>
     arg.length > 120 ? `${arg.slice(0, 48)}… (${arg.length} characters)` : arg
+  let total = 0
   const lines = options.runs.map((run) => {
+    const fresh = boots(booted, run)
+    const steps =
+      run.arm == null
+        ? plan(run, shotsFor(run, path.join(OUT, 'shots', 'dry-run')))
+        : armPlan(run)
+    const seconds = estimate(steps, fresh || run.type === 'cold')
+    total += seconds
     const args = [
-      ...session(run, {
-        url: options.url,
-        port: portOf(run),
-        fresh: boots(booted, run),
-      }),
-      ...plan(run, shotsFor(run, path.join(OUT, 'shots', 'dry-run'))).flatMap(
-        (s) => s.args,
-      ),
+      ...session(run, { url: options.url, port: portOf(run), fresh }),
+      ...steps.flatMap((s) => s.args),
     ]
-    return `${run.id}\n  node scripts/drive.mjs ${args.map(shown).join(' ')}`
+    // An arm the machine cannot give now is planned and would be recorded
+    // as not taken: the reason is read off the machine as it stands.
+    const refused = run.arm == null ? null : armRefusal(run.arm)
+    return [
+      `${run.id}  ~${seconds} s`,
+      `  ${describe(run)}`,
+      ...(run.arm == null
+        ? []
+        : [
+            `  arm: display ${run.arm.display}, window ${run.arm.window}, presentation ${run.arm.presentation}${refused ? `; not taken now: ${refused}` : ''}`,
+          ]),
+      `  node scripts/drive.mjs ${args.map(shown).join(' ')}`,
+    ].join('\n')
   })
-  return [...lines, `${options.runs.length} runs`].join('\n')
+  return [
+    ...lines,
+    `${options.runs.length} runs, about ${minutes(total)} (${total} s)`,
+  ].join('\n')
 }
 
 /**
@@ -1060,8 +1363,14 @@ async function measure(options) {
   }
   // A signal ends the run, so the rigs it started close with it and the lock
   // goes; the lock's own handler stands aside for one the process installs.
+  // `on` and not `once`: a second signal landing while the first closes the
+  // rigs would otherwise take the default action, kill the runner mid-close
+  // and leave Chrome up with the lock.
+  let closing = false
   for (const signal of ['SIGINT', 'SIGTERM'])
-    process.once(signal, () => {
+    process.on(signal, () => {
+      if (closing) return
+      closing = true
       close()
       process.exit(128 + os.constants.signals[signal])
     })
@@ -1074,6 +1383,10 @@ async function measure(options) {
     began,
     booted: new Map(),
     exempt: [process.pid, listeners(options.url)[0]?.pid ?? null],
+    build: id.build,
+    // How Chrome was started, which every row records beside its rate: the
+    // campaign's detached driver sets this, and a shell does not.
+    startedBy: process.env.IR_CAMPAIGN === '1' ? 'campaign' : 'shell',
     shots: path.join(OUT, 'shots', path.basename(file, '.json')),
     file,
     doc,
@@ -1093,7 +1406,9 @@ async function measure(options) {
     save(ctx)
     console.log(`\n${tables(ctx.doc)}\n\n${rateNote(ctx.doc.rows)}`)
   } catch (error) {
-    throw new Error(
+    // A refusal stays one, so the campaign stops rather than retries it.
+    const Kind = error instanceof Refusal ? Refusal : Error
+    throw new Kind(
       `${error.message}; what was measured is in ${path.relative(ROOT, ctx.file)}`,
       { cause: error },
     )

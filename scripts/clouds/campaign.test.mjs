@@ -4,12 +4,18 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   CAMPAIGNS,
+  captureTakesLever,
   child,
   eta,
+  minutesOf,
+  notTaken,
   outcome,
   ours,
   owner,
+  planText,
   resumeRefusal,
+  resumed,
+  stopper,
   strays,
   summarize,
 } from './campaign.mjs'
@@ -32,11 +38,11 @@ import { rateNote } from './page.mjs'
 
 const SIZES = ['1080p', 'retina']
 const HEAD = 'a'.repeat(40)
-const runs = batchRuns('images', SIZES)
-const want = { batch: 'images', head: HEAD, sizes: SIZES, held: HELD, runs }
+const runs = batchRuns('ladders', SIZES)
+const want = { batch: 'ladders', head: HEAD, sizes: SIZES, held: HELD, runs }
 const row = (id, ok) => ({ id, scene: { settled: true }, quiet: { ok } })
 const doc = (over = {}) => ({
-  batch: 'images',
+  batch: 'ladders',
   identity: { head: HEAD },
   sizes: SIZES,
   held: HELD,
@@ -87,7 +93,7 @@ describe('a continued document', () => {
 
   it('refuses one of another batch, commit, list of sizes or held jitter', () => {
     for (const [over, says] of [
-      [{ batch: 'targets' }, /of targets, not images/],
+      [{ batch: 'targets' }, /of targets, not ladders/],
       [{ identity: { head: 'b'.repeat(40) } }, /measured at bbbbbbbbbbbb/],
       [{ identity: undefined }, /measured at no commit/],
       [{ sizes: ['retina'] }, /sizes retina, not 1080p,retina/],
@@ -140,7 +146,7 @@ describe('a continued document', () => {
   it('is named on the command line, which keeps the sizes it was asked for', () => {
     const options = parseOptions([
       '--batch',
-      'images',
+      'ladders',
       '--sizes',
       'retina',
       '--resume',
@@ -148,7 +154,7 @@ describe('a continued document', () => {
     ])
     expect(options.resume).toMatch(/^\/.*\/\.data\/clouds\/images\.json$/)
     expect(options.sizes).toEqual(['retina'])
-    expect(parseOptions(['--batch', 'images']).resume).toBeNull()
+    expect(parseOptions(['--batch', 'ladders']).resume).toBeNull()
   })
 })
 
@@ -264,16 +270,155 @@ describe('a campaign', () => {
     )
   })
 
-  it('names only batches the runner has, in the order §8.8 runs them', () => {
+  it('names only batches the runner has, in the order §7.2 runs them', () => {
     expect(
-      Object.values(CAMPAIGNS).map((c) => c.stages.map((s) => s.name)),
-    ).toEqual([
-      ['images', 'instruments'],
-      ['targets', 'memory', 'error', 'instruments'],
-    ])
+      Object.fromEntries(
+        Object.entries(CAMPAIGNS).map(([name, c]) => [
+          name,
+          c.stages.map((s) => s.name),
+        ]),
+      ),
+    ).toEqual({
+      choices: [
+        'pacing',
+        'phase',
+        'jitter',
+        'handover',
+        'clip',
+        'transport',
+        'casts',
+        'instruments',
+        'over',
+        'reset',
+        'sun',
+        'sun-casts',
+      ],
+      landed: [
+        'pacing',
+        'ladders',
+        'targets',
+        'frame',
+        'sequences',
+        'warp',
+        'hold',
+        'pace',
+        'memory',
+        'error',
+      ],
+      'pace-study': ['study'],
+    })
     for (const s of Object.values(CAMPAIGNS).flatMap((c) => c.stages))
       if (s.kind === 'batch')
         expect(batchRuns(s.name, SIZES).length).toBeGreaterThan(0)
+  })
+
+  it('checks its own pacing before its first batch measures anything', () => {
+    for (const c of Object.values(CAMPAIGNS).filter((c) => c.stages.length > 1))
+      expect(c.stages[0].name).toBe('pacing')
+    // The hold's acceptance comes before the batch that needs it.
+    const landed = CAMPAIGNS.landed.stages.map((s) => s.name)
+    expect(landed.indexOf('hold')).toBeLessThan(landed.indexOf('pace'))
+  })
+
+  it('takes a stage only where it can be taken, and says why not', () => {
+    const state = (over = {}) => ({
+      name: 'choices',
+      options: {},
+      hold: null,
+      ...over,
+    })
+    const tools = { lever: () => false, exists: () => true }
+    const spec = (name, campaign = 'choices') =>
+      CAMPAIGNS[campaign].stages.find((s) => s.name === name)
+    expect(notTaken(spec('transport'), state(), tools)).toBe(
+      'taken only when the campaign is started with --transport',
+    )
+    expect(
+      notTaken(
+        spec('transport'),
+        state({ options: { transport: true } }),
+        tools,
+      ),
+    ).toBeNull()
+    // The casts need the capture to take a lever's value, which it does not yet.
+    expect(notTaken(spec('casts'), state(), tools)).toMatch(/takes no --lever/)
+    expect(
+      notTaken(spec('casts'), state(), { ...tools, lever: () => true }),
+    ).toBeNull()
+    expect(
+      captureTakesLever(() => {
+        throw new Error("Unknown option '--lever'")
+      }),
+    ).toBe(false)
+    expect(captureTakesLever(() => ({}))).toBe(true)
+    // The instruments take the ones on disk, and are not taken with none.
+    expect(
+      notTaken(spec('instruments'), state(), { ...tools, exists: () => false }),
+    ).toMatch(/none of cloudCumulus/)
+    expect(notTaken(spec('instruments'), state(), tools)).toBeNull()
+    // A batch that records at no hold is taken; one that requires it is not.
+    expect(notTaken(spec('pace', 'landed'), state(), tools)).toBeNull()
+    const requires = { name: 'casts', kind: 'command', hold: 'require' }
+    const failed = {
+      accepted: false,
+      figures: ['118.2, 119.0, 118.7 Hz, held by none'],
+    }
+    expect(notTaken(requires, state({ hold: failed }), tools)).toBe(
+      'the 60 Hz hold was not accepted: 118.2, 119.0, 118.7 Hz, held by none',
+    )
+    expect(
+      notTaken(requires, state({ hold: { accepted: true } }), tools),
+    ).toBeNull()
+  })
+
+  it('keeps every stage’s attempts across a resume', () => {
+    const state = {
+      stages: [
+        { name: 'pacing', status: 'done', attempts: 1 },
+        { name: 'ladders', status: 'failed', attempts: 8 },
+        { name: 'targets', status: 'pending', attempts: 0 },
+      ],
+    }
+    expect(resumed(state).stages).toEqual([
+      { name: 'pacing', status: 'done', attempts: 1 },
+      { name: 'ladders', status: 'pending', attempts: 8 },
+      { name: 'targets', status: 'pending', attempts: 0 },
+    ])
+  })
+
+  it('passes one stop to its stage, and lets a second wait for the first', () => {
+    const killed = []
+    const ctx = { current: { pid: 4242 }, stop: new AbortController() }
+    const stop = stopper(ctx, (proc, signal) => killed.push([proc.pid, signal]))
+    stop('SIGTERM')
+    // The runner is closing its rigs and releasing the lock: a second
+    // SIGTERM there would kill it mid-close and orphan Chrome with the lock.
+    stop('SIGTERM')
+    stop('SIGINT')
+    expect(killed).toEqual([[4242, 'SIGTERM']])
+    expect(ctx.stop.signal.aborted).toBe(true)
+  })
+
+  it('plans every batch of both campaigns and the study, a row with its seconds', () => {
+    for (const name of ['choices', 'landed', 'pace-study']) {
+      const text = planText(name)
+      expect(text).toMatch(
+        new RegExp(`campaign ${name}: about [\\d.]+ (min|h) before any resume`),
+      )
+      for (const stage of CAMPAIGNS[name].stages)
+        expect(text, `${name} ${stage.name}`).toMatch(
+          new RegExp(`## ${stage.name}: `),
+        )
+      // Every row prints its stance, lens and levers and what it costs.
+      const rows = text.split('\n').filter((l) => /~\d+ s$/.test(l))
+      expect(rows.length).toBeGreaterThan(0)
+      const details = text.split('\n').filter((l) => l.startsWith('  stance '))
+      expect(details).toHaveLength(rows.length)
+      for (const line of details)
+        expect(line).toMatch(/; lens .+; levers [0-9a-f]{8} /)
+    }
+    // A stage's minutes are its rows' seconds, not a guess.
+    expect(minutesOf({ name: 'targets', kind: 'batch' })).toBeGreaterThan(30)
   })
 })
 
