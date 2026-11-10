@@ -2936,9 +2936,13 @@ formed from heights, not from `normalize(eye + offset)`.
 ### 5.4 Time and lattices (rule 58, plan §3)
 
 - **No absolute position enters a lattice.**
-  - Noise reads `(noiseOrigin + offset + drift) / (cell·CLOUD_BASE_CELLS)` in
+  - Noise reads `(noiseOrigin − drift + offset) / (cell·CLOUD_BASE_CELLS)` in
     base-cell units. `noiseOrigin = reducePoint(eye, P)` is formed in float64,
     with `P = cell·CLOUD_BASE_CELLS`.
+  - The drift is taken off the point, so a feature of the lattice stands at
+    `+wind·t`: the motion the history reprojects by (§5.14) and the composite
+    writes into `velocity`. Added, the field moves against the wind and both
+    follow it the wrong way by `2·wind·Δt`.
   - The detail noise reads the same way with its own period.
   - A clipmap or volume texel comes from the eye's plane coordinates (float64)
     plus Δu, formed from the offset and the level's float64 `along` terms
