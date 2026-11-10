@@ -132,6 +132,11 @@ export const CLIMATE_REGIME: ScenarioId = 'fair-cumulus'
 /** The texture's drift along the spin axis, m/s: what changes the slice of noise a level cuts. */
 export const WEATHER_AXIAL_DRIFT = 0.25
 
+/**
+ * One number a level, low to high. Module-private: an exported signature
+ * spells the tuple out, because TypeDoc refuses a public type that refers
+ * to a name the documentation does not include.
+ */
 type Triple = readonly [number, number, number]
 
 /** A regime's law: none. */
@@ -342,12 +347,12 @@ export const CLIMATE_WINDS: readonly [number, number, number] = [8, 15, 25]
  * radians.
  */
 export interface ZonalLaw {
-  readonly base: Triple
-  readonly itcz: Triple
-  readonly dry: Triple
-  readonly storm: Triple
+  readonly base: readonly [number, number, number]
+  readonly itcz: readonly [number, number, number]
+  readonly dry: readonly [number, number, number]
+  readonly storm: readonly [number, number, number]
   /** κ: each level's convective share at the convergence zone's center. */
-  readonly convective: Triple
+  readonly convective: readonly [number, number, number]
   /** ι: the convergence zone's latitude over the sun's. */
   readonly follow: number
   /** φ_H, the Hadley cell's edge. */
@@ -446,7 +451,10 @@ export function zonalClimate(
   law: ZonalLaw,
   latitude: number,
   subsolar: number,
-): { readonly cover: Triple; readonly convective: Triple } {
+): {
+  readonly cover: readonly [number, number, number]
+  readonly convective: readonly [number, number, number]
+} {
   const convergence = law.follow * subsolar
   const g = (center: number): number => gaussian(latitude - center, law.width)
   const zone = g(convergence)
