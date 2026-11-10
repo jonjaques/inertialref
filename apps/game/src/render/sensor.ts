@@ -185,7 +185,7 @@ export function createSensor(
     layout === sceneLayout(picture, sceneBackend(renderer)),
     'the scene layout was made for another backend',
   )
-  const temporal = attachment(layout, 'velocity') !== null
+  const temporal = picture.aa === 'temporal'
   const scenePass = pass(scene, camera, { samples: layout.samples })
   namePass(scenePass.renderTarget, 'scene')
   scenePass.renderTarget.depthTexture!.type =
@@ -229,6 +229,12 @@ export function createSensor(
     options.clouds !== undefined && clouds === null
       ? cloudReportIdle('webgl')
       : null
+  const motionTexture = scenePass.getTextureNode('motion')
+  /*
+   * Reconstruction's motion is the optics' own `motion`, read at `.xy`: the
+   * row an overlay leaves to what it covers. FSR keeps its own dilated copy,
+   * so the optics' undilated contract does not move.
+   */
   const upscale =
     automaticAvailable && pictureUpscales(picture)
       ? createUpscale(
@@ -236,7 +242,7 @@ export function createSensor(
           {
             color: scenePass.getTextureNode('output'),
             depth: scenePass.getTextureNode('depth'),
-            velocity: temporal ? scenePass.getTextureNode('velocity') : null,
+            motion: temporal ? motionTexture : null,
             reactive: temporal ? scenePass.getTextureNode('reactive') : null,
           },
           camera,
@@ -247,7 +253,6 @@ export function createSensor(
           },
         )
       : null
-  const motionTexture = scenePass.getTextureNode('motion')
   const mask = attachment(layout, 'meterMask')
   const maskBytes = mask === null ? 0 : attachmentBytes(mask)
   const meter =
