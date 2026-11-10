@@ -202,6 +202,26 @@ export const dropFindings = (drops) =>
       reason: `the clouds-on arm dropped path frame ${drop.frame} and the clouds-off arm dropped none within ${CLASSIFY.within}; the rubric's §4 holds no verdict for a drop, so it is listed for the ruling and never folded into a step`,
     }))
 
+/**
+ * C6's range: 2 km or more ahead at the path's first frame and its last, and
+ * under 2 km somewhere between (§8.5). A null range is the center ray never
+ * reaching ln 50, which is clear. The least range is recorded and gates
+ * nothing. Null where the log carries no live readout.
+ */
+export function rangeCheck(log, pathFrames) {
+  const path = log.filter((entry) => entry.k < pathFrames)
+  if (path.length < 2 || path.some((entry) => inside(entry) === null))
+    return null
+  const ranges = path.map((entry) => entry.range)
+  const known = ranges.filter((range) => typeof range === 'number')
+  return {
+    first: ranges[0],
+    last: ranges.at(-1),
+    least: known.length > 0 ? Math.min(...known) : null,
+    passes: !inside(path[0]) && !inside(path.at(-1)) && path.some(inside),
+  }
+}
+
 /** A cast's verdict from its findings: an error fails, and so does an unresolved one. */
 export function verdictOf(findings) {
   const count = (kind) => findings.filter((one) => one.kind === kind).length
@@ -363,10 +383,16 @@ async function main(argv) {
     await writeFile(values.record, `${JSON.stringify(record, null, 1)}\n`)
   }
   const verdict = verdictOf(findings)
+  // C6's range over the path, where the log carries the readout live.
+  const range =
+    (report.pathFrames ?? null) === null
+      ? null
+      : rangeCheck(log, report.pathFrames)
+  if (range !== null) console.log(`range: ${JSON.stringify(range)}`)
   if (values.out !== undefined)
     await writeFile(
       values.out,
-      `${JSON.stringify({ findings, verdict }, null, 1)}\n`,
+      `${JSON.stringify({ findings, verdict, range }, null, 1)}\n`,
     )
   console.log(JSON.stringify(verdict))
   for (const one of findings)

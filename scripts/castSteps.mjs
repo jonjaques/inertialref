@@ -4,7 +4,7 @@
  *
  *   node scripts/castSteps.mjs <cast dir> [--against <control dir>]
  *     [--held <held cast dir>] [--path-frames <n>] [--out <dir>] [--json]
- *     [--no-changed]
+ *     [--no-changed] [--trail <texel px>]
  *
  * `frameDiff.mjs` finds a strobe: a frame that departs from both neighbors
  * while they match. A pop does not revert, so the frame after it matches it
@@ -622,6 +622,46 @@ export async function measureCast(cast, { pathFrames, changed = true } = {}) {
   }
 }
 
+/** A frame's luma plane, as the trail and the drift read it. */
+export function lumaPlane(pixels, width, height, channels = 3) {
+  const plane = new Float64Array(width * height)
+  for (let i = 0; i < plane.length; i += 1) {
+    const at = i * channels
+    plane[i] =
+      0.2126 * pixels[at] + 0.7152 * pixels[at + 1] + 0.0722 * pixels[at + 2]
+  }
+  return plane
+}
+
+/**
+ * The trail after a cast's stop (C8): the measure between the frames at
+ * path frames `k + 3` and `k + 32`, `k` the log's `stopAt`, or from the
+ * cast's frames 3 and 32 for a held cast, which has no stop. Null where the
+ * cast has no stop to read, and a reason where either frame was not
+ * captured.
+ */
+export async function trailAfterStop(cast, ks, texel) {
+  const k = cast.stopAt ?? 0
+  const a = ks.indexOf(k + 3)
+  const b = ks.indexOf(k + 32)
+  if (a < 0 || b < 0)
+    return {
+      stopAt: cast.stopAt,
+      measure: null,
+      reason: `path frame ${k + 3} or ${k + 32} was not captured`,
+    }
+  const planeOf = async (file) => {
+    const { pixels, width, height, channels } = await decode(file)
+    return { plane: lumaPlane(pixels, width, height, channels), width, height }
+  }
+  const x = await planeOf(cast.frames[a])
+  const y = await planeOf(cast.frames[b])
+  return {
+    stopAt: cast.stopAt,
+    measure: trailMeasure(x.plane, y.plane, x.width, x.height, texel),
+  }
+}
+
 function describe(step, cast, measured) {
   const entry = cast.log.find((one) => one.k === step.to)
   return {
@@ -643,13 +683,14 @@ async function main(argv) {
       out: { type: 'string' },
       json: { type: 'boolean', default: false },
       changed: { type: 'boolean', default: true },
+      trail: { type: 'string' },
     },
     allowNegative: true,
   })
   const [dir] = positionals
   if (dir === undefined) {
     console.error(
-      'usage: node scripts/castSteps.mjs <cast dir> [--against <control>] [--held <held cast>] [--path-frames n] [--out dir] [--json] [--no-changed]',
+      'usage: node scripts/castSteps.mjs <cast dir> [--against <control>] [--held <held cast>] [--path-frames n] [--trail <texel px>] [--out dir] [--json] [--no-changed]',
     )
     return 1
   }
@@ -661,9 +702,26 @@ async function main(argv) {
     changed: values.changed,
   })
   let noise = null
+  let trail = null
+  const texel = values.trail === undefined ? null : Number(values.trail)
+  if (texel !== null && cast.stopAt !== null)
+    trail = await trailAfterStop(cast, measured.ks, texel)
   if (values.held !== undefined) {
     const held = await readCast(values.held)
-    noise = heldNoise((await measureCast(held, { changed: false })).series)
+    const still = await measureCast(held, { changed: false })
+    noise = heldNoise(still.series)
+    if (trail?.measure !== undefined && trail.measure !== null) {
+      const own = await trailAfterStop(
+        { ...held, stopAt: null },
+        still.ks,
+        texel,
+      )
+      trail.floor = trailFloor(own.measure)
+    }
+  }
+  if (trail?.measure !== undefined && trail.measure !== null) {
+    trail.floor ??= trailFloor()
+    trail.passes = trail.measure < trail.floor
   }
   const steps = readSteps({ ...measured, noise })
   let lacked = steps
@@ -689,6 +747,7 @@ async function main(argv) {
     cast: dir,
     against: values.against ?? null,
     frames: cast.frames.length,
+    pathFrames: pathFrames ?? null,
     alignment: measured.by,
     gaps: measured.gaps,
     floor:
@@ -698,6 +757,7 @@ async function main(argv) {
     strobes: measured.changed?.isolated ?? null,
     steps: lacked.map((step) => describe(step, cast, measured)),
     shared: shared.map((step) => describe(step, cast, measured)),
+    trail,
     control:
       control === null
         ? null
@@ -746,6 +806,12 @@ export function summarize(report) {
     )
   if (report.steps.length > 20)
     lines.push(`  …and ${report.steps.length - 20} more`)
+  if (report.trail !== null)
+    lines.push(
+      report.trail.measure === null
+        ? `trail: not read, ${report.trail.reason}`
+        : `trail after the stop at ${report.trail.stopAt}: ${(report.trail.measure * 100).toFixed(2)}% of full scale against a floor of ${(report.trail.floor * 100).toFixed(2)}%${report.trail.passes ? '' : ' — over it'}`,
+    )
   if (report.against !== null)
     lines.push(`shared with the control, the scene’s: ${report.shared.length}`)
   return lines.join('\n')

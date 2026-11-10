@@ -23,7 +23,7 @@
 
 import path from 'node:path'
 import { parseArgs } from 'node:util'
-import { decode, readCast } from '../castSteps.mjs'
+import { decode, lumaPlane, readCast } from '../castSteps.mjs'
 
 /**
  * The measure's numbers. `radius` and the reduction are the design's;
@@ -38,17 +38,6 @@ export const DRIFT = Object.freeze({
   cloud: 0.03 * 255,
   overlap: 0.25,
 })
-
-/** Luma planes, from interleaved 8-bit pixels. */
-export function lumaPlane(pixels, width, height, channels = 3) {
-  const plane = new Float64Array(width * height)
-  for (let i = 0; i < plane.length; i += 1) {
-    const at = i * channels
-    plane[i] =
-      0.2126 * pixels[at] + 0.7152 * pixels[at + 1] + 0.0722 * pixels[at + 2]
-  }
-  return plane
-}
 
 /** Reduce a plane, or a mask, by `factor` on each side, by the box mean. */
 export function shrink(plane, width, height, factor) {

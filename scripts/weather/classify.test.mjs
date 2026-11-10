@@ -5,6 +5,7 @@ import {
   classifyStep,
   dropFindings,
   markCloudsOnly,
+  rangeCheck,
   verdictOf,
 } from './classify.mjs'
 
@@ -237,5 +238,39 @@ describe('a cast’s verdict', () => {
     expect(kinds(['entry', 'exit']).passes).toBe(true)
     expect(kinds(['entry', 'error']).passes).toBe(false)
     expect(kinds(['unresolved']).passes).toBe(false)
+  })
+})
+
+describe('C6’s range', () => {
+  const log = (ranges) => ranges.map((range, k) => ({ k, range, opacity: 0.1 }))
+
+  it('passes a path clear at both ends with a cloud between', () => {
+    expect(rangeCheck(log([null, 2400, 600, 150, 900, 2600]), 6)).toEqual({
+      first: null,
+      last: 2600,
+      least: 150,
+      passes: true,
+    })
+  })
+
+  it('fails a path that starts inside 2 km, or never falls under it', () => {
+    expect(rangeCheck(log([1500, 600, 2600]), 3).passes).toBe(false)
+    expect(rangeCheck(log([3000, 2500, 2600]), 3).passes).toBe(false)
+  })
+
+  it('reads only the path, not the tail recorded past it', () => {
+    expect(rangeCheck(log([2400, 600, 2600, 900]), 3).passes).toBe(true)
+  })
+
+  it('says nothing without a live readout', () => {
+    expect(
+      rangeCheck(
+        [
+          { k: 0, range: null, opacity: null },
+          { k: 1, range: null, opacity: null },
+        ],
+        2,
+      ),
+    ).toBe(null)
   })
 })
