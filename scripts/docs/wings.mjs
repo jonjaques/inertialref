@@ -249,6 +249,10 @@ export const WINGS = [
             'docs/adr/0066-the-droplets-phase-is-lorenz-mie-at-one-narrow-width-generated-offline.md',
             "The droplets' phase",
           ],
+          [
+            'docs/adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md',
+            'The cornerstones',
+          ],
         ],
       },
     ],

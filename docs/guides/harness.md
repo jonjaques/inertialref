@@ -481,6 +481,54 @@ a warning. This differs from canonical-save drift reporting.
 [ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md) records the format
 and current limitation.
 
+**A picture can hold its weather.** Version 3 adds `weather: { regime }`, a
+scenario's id or `'climate'`, and `takePicture` returns what became of it:
+`weather: 'drawn'` under `?clouds=1` on WebGPU, `'unavailable'` without the
+flag or for a regime the build does not know, `'none'` for a picture with no
+weather. Taking it sets three of the clouds' levers — `on`, `scenario`, and
+`served` when the body is outside the volume's default set, which is how
+Earth is drawn at all — and puts them back when the observatory lets go.
+**On a flagged page, taking a picture with no weather turns the clouds off**
+until then, so set `engine.clouds` after `ir.preset`, not before.
+[ADR-0067](../adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md)
+records it.
+
+**The cornerstones** are the nine pictures the weather is judged on, ids
+`weather-e1-cumulus-orbit` to `weather-g6-descent`. `ir.preset` takes them
+like any picture, and no list a player sees shows them. Each was solved for a
+sun, and `apps/headless/src/cornerstoneLedger.test.ts` holds it there in Node;
+`pnpm cornerstones:ledger` rewrites its snapshot.
+
+```js
+ir.sun('s:SOL/b:2', { latitude: -5, longitude: -60 }) // { elevation, azimuth } at the held instant, degrees
+ir.solveSun(
+  's:SOL/b:2',
+  { latitude: -5, longitude: -60 },
+  {
+    elevation: 50, // or 'noon'
+    trend: 'falling',
+    after: 0,
+  },
+) // the first instant at or after `after`, with the sun there; null if never
+```
+
+`scripts/weather/capture.mjs` takes every cornerstone in its arms — the volume
+under the flag, and for E1 to E3 the deck without it — and the six scripted
+casts with the clouds on and off, into the main checkout's
+`.data/weather/phase-<n>/`, against a production preview it does not start:
+
+```sh
+pnpm build && pnpm preview &
+node scripts/weather/capture.mjs --phase 1 --url http://localhost:8787/ --gpu-wait 1800 --twice --cut e1
+node scripts/weather/sheet.mjs --dir <that directory> --base <the last phase's>
+```
+
+It refuses a still that did not settle or whose weather is not its arm's, and
+a cast presented outside 58 to 62 Hz: a cast's path
+(`scripts/weather/descent.mjs`) is scheduled by frame index, a descent's
+height `max(h₀·(1 − rate)ᵏ, 2)`, so at another rate the same path runs in
+other seconds.
+
 `ir.rise()` is the framing behind Earthrise on its own: it stands on the body
 being looked at with its parent a stated clearance over the horizon, and returns
 the field of view it solved — Earth is 1.90° across from Luna and Mars is 42.39°
@@ -509,7 +557,7 @@ ir.visit(address?, { latitude, longitude, heading, pitch })
 ir.drop(lat, lon, { address, seconds })  // fly down there, facing the star
 ir.observatory.setStanceScrub(0.5)       // the height slider, logarithmic
 ir.ascend()                              // and this abandons a drop in flight
-ir.settled()                             // whether the sky and the ground have stopped arriving
+ir.settled()                             // whether the sky, the ground and the clouds have stopped arriving
 ```
 
 **Stand where the sun is.** A picture taken in the dark compares nothing: a
@@ -848,7 +896,7 @@ mark, and `ir.clouds()` is `null`.
 ```js
 engine.clouds = { ...engine.clouds, on: true, scenario: 'broken-horizon' }
 ir.clouds() // the report: levers, frame, caches, bytes, steps
-ir.clouds().settle // { pending, history: 'n/16', caches } — null while off
+ir.clouds().settle // { pending, history: 'n/32', caches } — null while off
 await ir.cloudRadiance() // the next frame at the trace's texels: luminance and cloud mask
 ir.cloudRadianceDifference(a, b) // two captures' radiance RMSE over their cloud texels
 ```
@@ -858,19 +906,19 @@ every render call, so a change lands on the next frame, and the setter throws on
 a set with an unknown key or a value out of range. Always spread the current
 value: the guard takes a whole set.
 
-| Lever                                   | What it does                                                                                                                                          |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `on`                                    | Draws the clouds. Off by default                                                                                                                      |
-| `scenario`                              | The placeholder weather: `fair-cumulus`, `broken-horizon`, `inside`, `two-decks`, `near-gap-far`, `cirrus-over-cumulus`, `anvil`, `overcast` or `fog` |
-| `maxSteps`, `lightTaps`, `farFootprint` | The quality ladders: 192 steps, 4 taps, a handover where a trace texel spans 800 m                                                                    |
-| `traceScale`                            | 0.5, 1 or 2 times the trace's extent                                                                                                                  |
-| `composite`                             | `identity`, `thin`, or `residual`, which draws nothing and fills `ir.clouds().residual` after the frame                                               |
-| `force`                                 | A path a held loop never takes: `reset`, `cut`, `scrub`, `warp`, `fly`                                                                                |
-| `warp`, `scrubSeconds`, `flySpeed`      | The forced paths' time scale, seconds a frame and m/s                                                                                                 |
-| `jitterFrame`                           | Holds the trace's jitter at one frame index, so a held still repeats every four frames                                                                |
-| `served`, `second`                      | Force the served body, and a second clouded one, by address                                                                                           |
-| `deck`                                  | `hidden` hides every cloud deck whatever `on` is, which prices Earth's deck against the volume                                                        |
-| `stats`                                 | Counts each ray's steps into `ir.clouds().steps`                                                                                                      |
+| Lever                                   | What it does                                                                                                                                                                                                                                                                              |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `on`                                    | Draws the clouds. Off by default                                                                                                                                                                                                                                                          |
+| `scenario`                              | The placeholder weather: `fair-cumulus`, `broken-horizon`, `inside`, `two-decks`, `near-gap-far`, `cirrus-over-cumulus`, `anvil`, `overcast`, `fog`, and the cornerstones' `altocumulus`, `dusk-altocumulus` (the deck ending where the local sun clears the horizon) and `stratocumulus` |
+| `maxSteps`, `lightTaps`, `farFootprint` | The quality ladders: 192 steps, 4 taps, a handover where a trace texel spans 800 m                                                                                                                                                                                                        |
+| `traceScale`                            | 0.5, 1 or 2 times the trace's extent                                                                                                                                                                                                                                                      |
+| `composite`                             | `identity`, `thin`, or `residual`, which draws nothing and fills `ir.clouds().residual` after the frame                                                                                                                                                                                   |
+| `force`                                 | A path a held loop never takes: `reset`, `cut`, `scrub`, `warp`, `fly`                                                                                                                                                                                                                    |
+| `warp`, `scrubSeconds`, `flySpeed`      | The forced paths' time scale, seconds a frame and m/s                                                                                                                                                                                                                                     |
+| `jitterFrame`                           | Holds the trace's jitter at one frame index, so a held still repeats every four frames                                                                                                                                                                                                    |
+| `served`, `second`                      | Force the served body, and a second clouded one, by address                                                                                                                                                                                                                               |
+| `deck`                                  | `hidden` hides every cloud deck whatever `on` is, which prices Earth's deck against the volume                                                                                                                                                                                            |
+| `stats`                                 | Counts each ray's steps into `ir.clouds().steps`                                                                                                                                                                                                                                          |
 
 **`ir.gpu()` and `ir.passes()` hold the loop, and a held loop never cuts,
 scrubs or flies.** The frame's cloud state is built inside the chain, so a held
@@ -881,10 +929,12 @@ jumps the field `scrubSeconds` and turns the sun with the body, and under `fly`
 the rays and the caches follow a synthetic eye at `flySpeed`. The cost is the
 real one and the picture is not.
 
-**Wait on the report's own `settle`, not on `ir.settled()`.** The clouds are
-not part of `ir.settled()` yet. `settle.pending` is true while any cache is
-pending or the history is under 16 frames old. A forced path never settles, so
-cap the wait: 240 frames is longer than the far atlas's 45-frame cycle.
+**`ir.settled()` waits on the clouds.** Its `clouds` is the report's own
+`settle`, null while the system is off or absent. `settle.pending` is true
+while any cache is pending or the history is under 32 frames old, the frames
+its 1/8 weight floor takes to hold eight samples a pixel. A forced path never
+settles, so cap the wait: 240 frames is longer than the far atlas's 45-frame
+cycle.
 
 **Compare two images with the jitter held.** Two frames four apart differ by
 about 2% of radiance under the moving jitter, which is more than a 1% rule can
