@@ -5,13 +5,13 @@
  *
  *     pnpm preview                                  # builds, then serves 8787
  *     node scripts/clouds/measure.mjs --batch stances
- *     node scripts/clouds/measure.mjs --batch decisions --gpu-wait 900
+ *     node scripts/clouds/measure.mjs --batch targets --gpu-wait 900
  *     node scripts/clouds/measure.mjs --batch sweep --dry-run      # the plan; nothing launches
  *
  * `stances` shows every scenario's sun, its passes and a still before a batch
- * stands on it; `decisions` and `sweep` measure the four choices and the fetch
- * rate, and `images` the radiance differences §8.7's cache gate and quality
- * ladders read; `targets`, `memory` and `error` measure the landed code. A run's steps
+ * stands on it; `sweep` measures the fetch rate, and `images` the radiance
+ * differences §8.7's quality ladders read; `targets`, `memory` and `error`
+ * measure the landed code. A run's steps
  * are `page.mjs`'s; its figures land in `.data/clouds/<batch>-<time>.json`
  * and in the Markdown tables printed at the end, from which the choices are
  * decided by the rules fixed before measuring.
@@ -182,7 +182,7 @@ export const SCENARIOS = Object.freeze({
   },
   overcast: {
     stance: basin(2, 45),
-    levers: { scenario: 'overcast', cache: 'field' },
+    levers: { scenario: 'overcast' },
   },
 })
 
@@ -244,30 +244,6 @@ const ab = (batch, group, label, scenario, size, kind, options) => ({
   base: levers(scenario, options.base ?? OFF),
   candidate: levers(scenario, { ...FORCE[kind], ...(options.candidate ?? ON) }),
 })
-
-export const COMBOS = [
-  'field+cascades',
-  'field+grid',
-  'volume+cascades',
-  'volume+grid',
-]
-
-function decisions(size) {
-  const cache = COMBOS.flatMap((label) => {
-    const [cache, sunDepth] = label.split('+')
-    const at = (s, kind, pairs) =>
-      ab('decisions', 'cache', label, s, size, kind, {
-        candidate: { on: true, cache, sunDepth },
-        pairs,
-      })
-    return [
-      ...['ground', 'horizon', 'inside'].map((s) => at(s, 'steady', 5)),
-      ...['ground', 'orbit'].map((s) => at(s, 'fly', 3)),
-      ...['cut', 'scrub'].map((kind) => at('horizon', kind, 3)),
-    ]
-  })
-  return cache
-}
 
 const LANDED = [
   'ground',
@@ -408,31 +384,9 @@ export const LADDERS = Object.freeze({
   farFootprint: [200, 400, 800, 1600],
 })
 
-/**
- * §8.7's image inputs. The cache gate: each volume combination against the
- * field one with the same sun depth, under 3% over cloud texels, in `ground`,
- * `horizon` and `inside`, under the moving jitter the player sees, and again
- * with it held, which reads the media's own difference without the means'
- * floor. The ladders: each value against the next, with the jitter held.
- */
-const images = (size, held = HELD) => [
-  ...['ground', 'horizon', 'inside'].map((s) =>
-    radiance(
-      'cache',
-      'volume',
-      s,
-      size,
-      0.03,
-      [{}, held].flatMap((jitter) =>
-        ['cascades', 'grid'].map((sunDepth) => [
-          `volume against field, ${sunDepth}${jitter === held ? ', jitter held' : ''}`,
-          { cache: 'field', sunDepth, ...jitter },
-          { cache: 'volume', sunDepth, ...jitter },
-        ]),
-      ),
-    ),
-  ),
-  ...Object.entries(LADDERS).flatMap(([lever, values]) =>
+/** §8.7's image inputs: each ladder's value against the next, with the jitter held. */
+const images = (size, held = HELD) =>
+  Object.entries(LADDERS).flatMap(([lever, values]) =>
     ['horizon', 'inside'].map((s) =>
       radiance(
         'ladder',
@@ -449,8 +403,7 @@ const images = (size, held = HELD) => [
           ]),
       ),
     ),
-  ),
-]
+  )
 
 const stances = (size) =>
   Object.keys(SCENARIOS).map((scenario) => ({
@@ -465,7 +418,6 @@ const stances = (size) =>
  *  the first size alone. */
 export const BATCHES = Object.freeze({
   stances,
-  decisions,
   images,
   sweep,
   targets,

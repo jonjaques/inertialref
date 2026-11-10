@@ -1,10 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
-  CLOUD_CACHES,
-  CLOUD_SUN_DEPTHS,
-  type CloudLevers,
-  DEFAULT_CLOUD_LEVERS,
-} from './cloudLevers.ts'
+import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { type CloudRig, cloudRig } from './cloudSystemRig.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
@@ -78,9 +73,7 @@ function built(run: () => void): string[] {
 /** Every lever set the decisions, sweep, targets and error batches draw. */
 function leverSets(): [string, Partial<CloudLevers>][] {
   const sets: [string, Partial<CloudLevers>][] = []
-  for (const cache of CLOUD_CACHES)
-    for (const sunDepth of CLOUD_SUN_DEPTHS)
-      sets.push([`${cache} ${sunDepth}`, { cache, sunDepth }])
+  sets.push(['the defaults', {}])
   for (const force of ['reset', 'cut', 'scrub', 'warp', 'fly'] as const)
     sets.push([`force ${force}`, { force }])
   sets.push(['thin', { composite: 'thin' }])

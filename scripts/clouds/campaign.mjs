@@ -9,7 +9,7 @@
  *     node scripts/clouds/campaign.mjs stop               # rigs closed, lock and preview released
  *     node scripts/clouds/campaign.mjs start choices --resume   # where a stopped one left off
  *
- * `choices` measures the candidates (§8.8): `decisions`, `sweep`, `images`,
+ * `choices` measures the candidates (§8.8): `sweep`, `images`,
  * then the three GPU instruments. `landed` measures the code once the losers
  * are deleted: `targets`, `memory`, `error`, always on a fresh build.
  *
@@ -75,7 +75,6 @@ export const CAMPAIGNS = Object.freeze({
   choices: {
     build: 'stale',
     stages: [
-      batch('decisions', 85),
       batch('sweep', 20),
       batch('images', 60),
       {

@@ -1,7 +1,6 @@
 import type { Node } from 'three/webgpu'
 import {
   Break,
-  bool,
   clamp,
   exp,
   float,
@@ -36,7 +35,6 @@ import type {
   CloudMediumFn,
   CloudRay,
   CloudSample,
-  CloudSunFn,
 } from './cloudNodes.ts'
 import type { CloudTraceDeps } from './cloudTrace.ts'
 import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
@@ -70,8 +68,7 @@ import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
  * gives, so the grid every later step falls on moves by up to that step from
  * frame to frame while the span is still covered from t₀ on. Starting the
  * first sample at t₀ + ξ·Δ instead drops the first ξ·Δ of every ray — up to
- * 50 m of a cloud's lit face, an optical depth of 3.4 in cumulus. Through
- * the volume, the first step after each empty brick takes it again.
+ * 50 m of a cloud's lit face, an optical depth of 3.4 in cumulus.
  */
 
 export interface CloudMarchResult {
@@ -100,10 +97,7 @@ export interface CloudMarchResult {
  */
 export type CloudAirFn = typeof airMediumAt
 
-export type CloudMarchDeps = Omit<CloudTraceDeps, 'far' | 'depth' | 'sun'> & {
-  readonly medium: CloudMediumFn
-  readonly sun: CloudSunFn
-}
+export type CloudMarchDeps = Omit<CloudTraceDeps, 'far' | 'depth' | 'sweep'>
 
 /** Out of cloud: from 50 m, growing 1% a step, to 1 km (plan §5.2). */
 const STEP_FIRST = 50
@@ -257,7 +251,7 @@ function rayRegisters(ray: CloudRay, uniforms: CloudUniforms) {
     steps: float(0).toVar(),
     /** The schedule's last step, unscaled and unclipped: what the next grows from. */
     growth: float(STEP_FIRST).toVar(),
-    /** 1 until a medium step has taken the jitter: at the start, and after a skip. */
+    /** 1 until the first step has taken the jitter. */
     fresh: float(1).toVar(),
     closed: float(1).toVar(),
     first: vec3(0).toVar(),
@@ -296,13 +290,6 @@ export function cloudMarch(
   const stop = clamp(uniforms.trace.farDistance, ray.start, ray.end).toVar()
   const r = rayRegisters(ray, uniforms)
   const seg = openSegment()
-  // An empty brick of the volume skips to where the ray leaves it (§5.6).
-  const skip =
-    deps.medium === deps.media.volume &&
-    deps.media.bound !== null &&
-    deps.media.brickExit !== null
-      ? { bound: deps.media.bound, exit: deps.media.brickExit }
-      : null
 
   /** T_cl times the open segment's current mix. */
   const running = (): Node<'float'> =>
@@ -514,25 +501,7 @@ export function cloudMarch(
         cloudSample(ray, r.t.add(inset), body, uniforms.camera.pixelAngle),
       )
       const next = float(0).toVar()
-      if (skip === null) stepMedium(s, bound, next)
-      else
-        If(skip.bound(s, body).lessThanEqual(0), () => {
-          // Not a segment step and no light: the segment ends with the
-          // brick's cloud, and the schedule carries on where it was. The
-          // first step after it takes the jitter again, or every ray would
-          // resume on the brick's face and the grid would stop moving.
-          transition(seg.open.greaterThan(0), bool(false), s)
-          r.fresh.assign(1)
-          next.assign(
-            clamp(
-              skip.exit(s, ray, body),
-              r.t.add(AHEAD).add(r.t.mul(AHEAD_RELATIVE)),
-              stop,
-            ),
-          )
-        }).Else(() => {
-          stepMedium(s, bound, next)
-        })
+      stepMedium(s, bound, next)
       r.airLength.addAssign(next.sub(r.t))
       r.t.assign(next)
       r.steps.addAssign(1)

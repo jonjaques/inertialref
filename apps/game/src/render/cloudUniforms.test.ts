@@ -94,7 +94,6 @@ function body(overrides: Partial<CloudBodyFrame> = {}): CloudBodyFrame {
     wind: { x: 10, y: 0, z: -2 },
     clipmap: levels(6),
     volume: levels(3),
-    cascades: { cascades: [], dirty: [], stale: [] },
     ...overrides,
   }
 }

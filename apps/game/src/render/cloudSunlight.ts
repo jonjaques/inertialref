@@ -12,24 +12,23 @@ import type { CloudUniforms } from './cloudUniforms.ts'
 
 /*
  * The sun a cloud sample sees (§5.9): a few taps of the medium over the
- * first kilometer toward the sun, mixed as one segment, then the sun-depth
- * candidate's optical depth beyond them, and the air's own beam at the
+ * first kilometer toward the sun, mixed as one segment, then the sun
+ * grid's optical depth beyond them, and the air's own beam at the
  * sample's height, cleared from orbit as the ground's is.
  *
  * The taps are one segment because they are one column: mixed tap by tap,
  * each tap's (1 − c) would count the column's clear share again, and a
  * half-clear column at τ 20 crossed by two taps would pass a quarter of the
- * sun where it passes half (plan §3's example). Past them the candidate
- * answers in optical depth alone — a cascade texel or a grid cell is coarser
- * than any column — so the two multiply:
+ * sun where it passes half (plan §3's example). Past them the grid answers
+ * in optical depth alone — a grid cell is coarser than any column — so the
+ * two multiply:
  * T = ((1 − c) + c·e^(−τ_taps))·e^(−τ_beyond).
  *
  * The tap set is the `lightTaps` lever, a uniform, so changing it rebuilds
- * nothing: two, four, or none, when the candidate's depth is read at the
- * sample itself and covers the whole path. A tap is a sample of the same
- * medium at the view sample's footprint, its height from `altitudeAt`
- * (rule 52), so the volume's skipping and the field's reads are the march's
- * own and bind nothing new. Statements: built inside the march's `Fn`.
+ * nothing: two, four, or none, when the grid's depth is read at the sample
+ * itself and covers the whole path. A tap is a sample of the same medium at
+ * the view sample's footprint, its height from `altitudeAt` (rule 52), so
+ * the field's reads are the march's own and bind nothing new. Statements: built inside the march's `Fn`.
  */
 
 /** Tap midpoints and widths, meters, over the first kilometer toward the sun (§5.9). */

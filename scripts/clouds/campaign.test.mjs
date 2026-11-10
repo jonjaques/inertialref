@@ -131,7 +131,7 @@ describe('a campaign', () => {
     expect(
       Object.values(CAMPAIGNS).map((c) => c.stages.map((s) => s.name)),
     ).toEqual([
-      ['decisions', 'sweep', 'images', 'instruments'],
+      ['sweep', 'images', 'instruments'],
       ['targets', 'memory', 'error'],
     ])
     for (const s of Object.values(CAMPAIGNS).flatMap((c) => c.stages))

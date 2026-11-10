@@ -39,13 +39,7 @@ import {
   viewDirection,
 } from './cloudGeometry.ts'
 import { cloudKnotWriter } from './cloudKnots.ts'
-import {
-  CLOUD_CACHES,
-  CLOUD_SUN_DEPTHS,
-  type CloudCache,
-  type CloudLevers,
-  type CloudSunDepth,
-} from './cloudLevers.ts'
+import type { CloudLevers } from './cloudLevers.ts'
 import {
   type CloudAirFn,
   cloudMarch,
@@ -60,28 +54,24 @@ import {
   type CloudPhaseNodes,
   type CloudRay,
   type CloudResource,
-  type CloudSample,
   cloudStorageTexture,
   type CloudSunFn,
   traceJitter,
 } from './cloudNodes.ts'
-import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
+import type { CloudUniforms } from './cloudUniforms.ts'
 import { warmCompute } from './warmup.ts'
 
 /*
- * The trace: one compute kernel a (cache, sun depth) pair, and the
- * sweep's, each named `cloud trace`, at a quarter of the display's axes. A
+ * The trace: one compute kernel that marches the field, and the sweep's,
+ * each named `cloud trace`, at a quarter of the display's axes. A
  * converging frame dispatches once at this frame's interleave phase; the
  * immediate regime dispatches four times at the same extent, a quarter of
  * the step budget each, so every store stays inside its texture (§5.14).
  *
- * A sun depth is its own variant because the cascades (a 2D array) and the
- * grid (a 3D texture) are two binding types, and binding both would put the
- * volume's kernels at 16 of the stage's 16 sampled textures. A kernel binds
- * the field (7), one sun depth, the served air (2), the phase, the far atlas
- * and the depth copy: 13, and 15 with the volume. It writes the four outputs,
- * which is the stage's limit of storage textures, so the trace has no room
- * for a fifth.
+ * The kernel binds the field (7), the sun grid, the served air (2), the
+ * phase, the far atlas and the depth copy: 13 of the stage's 16 sampled
+ * textures. It writes the four outputs, which is the stage's limit of
+ * storage textures, so the trace has no room for a fifth.
  *
  * Texel (i, j) traces history pixel (2i + φx, 2j + φy) at a point jittered
  * inside it, and every depth it writes is in true kilometers, the depth
@@ -103,17 +93,12 @@ export interface CloudTraceTextures {
 
 export interface CloudTraceDeps {
   readonly uniforms: CloudUniforms
-  readonly media: {
-    readonly field: CloudMediumFn
-    readonly volume: CloudMediumFn | null
-    readonly bound:
-      ((s: CloudSample, b: CloudBodyUniforms) => Node<'float'>) | null
-    readonly brickExit:
-      | ((s: CloudSample, r: CloudRay, b: CloudBodyUniforms) => Node<'float'>)
-      | null
-    readonly sweep: CloudMediumFn
-  }
-  readonly sun: Readonly<Record<CloudSunDepth, CloudSunFn>>
+  /** What the fine march reads: the field (§5.6). */
+  readonly medium: CloudMediumFn
+  /** The sweep's constant-work medium (§8.4). */
+  readonly sweep: CloudMediumFn
+  /** The light a cloud sample sees: the taps, then the sun grid. */
+  readonly sun: CloudSunFn
   readonly phase: CloudPhaseNodes
   /** The served body's far atlas. */
   readonly far: CloudFarFn
@@ -144,15 +129,9 @@ const TEXEL_BYTES = 72
 /** Sum of steps, the largest, rays, rays whose budget ran out. */
 const STAT_SLOTS = 4
 
-interface KernelChoice {
-  readonly cache: CloudCache
-  readonly sunDepth: CloudSunDepth
-}
-
-const keyOf = (choice: KernelChoice): string =>
-  `${choice.cache} ${choice.sunDepth}`
-
+const FINE = 'fine'
 const SWEEP = 'sweep'
+type KernelKind = typeof FINE | typeof SWEEP
 
 /** Meters → the textures' kilometers, held under the clamp a half float carries. */
 const kilometers = (meters: Node<'float'>): Node<'float'> =>
@@ -250,7 +229,7 @@ function traceKernel(
   outputs: CloudTraceTextures,
   depth: TextureNode,
   stats: Stats,
-  choice: KernelChoice | typeof SWEEP,
+  kind: KernelKind,
 ): ComputeNode {
   const { uniforms } = deps
   const body = uniforms.served
@@ -264,21 +243,13 @@ function traceKernel(
       const knots = cloudKnotWriter(outputs)
       const jitter = traceJitter(texel, uniforms.trace.frame).x
       let result: CloudMarchResult
-      if (choice === SWEEP)
+      if (kind === SWEEP)
         result = cloudSweepMarch(ray, jitter, {
           uniforms,
-          medium: deps.media.sweep,
+          medium: deps.sweep,
         })
       else {
-        const medium =
-          choice.cache === 'volume' ? deps.media.volume! : deps.media.field
-        const fine = cloudMarch(
-          ray,
-          jitter,
-          sky,
-          { ...deps, medium, sun: deps.sun[choice.sunDepth] },
-          knots,
-        )
+        const fine = cloudMarch(ray, jitter, sky, deps, knots)
         result = marchFar(
           fine,
           ray,
@@ -295,24 +266,13 @@ function traceKernel(
     .setName(CLOUD_TRACE_LABEL)
 }
 
-/** Every (cache, sun depth) pair the media allow. */
-function choices(deps: CloudTraceDeps): KernelChoice[] {
-  const volume =
-    deps.media.volume !== null &&
-    deps.media.bound !== null &&
-    deps.media.brickExit !== null
-  return CLOUD_CACHES.filter((cache) => cache === 'field' || volume).flatMap(
-    (cache) => CLOUD_SUN_DEPTHS.map((sunDepth) => ({ cache, sunDepth })),
-  )
-}
-
 export class CloudTrace implements CloudResource {
   readonly name = 'trace'
   readonly pending = false
   readonly #deps: CloudTraceDeps
   readonly #stats: Stats
   #outputs: CloudTraceTextures
-  #kernels: Map<string, ComputeNode> | null = null
+  #kernels: Map<KernelKind, ComputeNode> | null = null
   #clear: ComputeNode | null = null
   #depth: TextureNode | null = null
   #steps: CloudTrace['steps'] = null
@@ -375,16 +335,12 @@ export class CloudTrace implements CloudResource {
   kernels(): readonly ComputeNode[] {
     if (this.#kernels === null) {
       const depth = texture(this.#deps.depth())
-      const kernels = new Map<string, ComputeNode>()
-      for (const choice of choices(this.#deps))
+      const kernels = new Map<KernelKind, ComputeNode>()
+      for (const kind of [FINE, SWEEP] as const)
         kernels.set(
-          keyOf(choice),
-          traceKernel(this.#deps, this.#outputs, depth, this.#stats, choice),
+          kind,
+          traceKernel(this.#deps, this.#outputs, depth, this.#stats, kind),
         )
-      kernels.set(
-        SWEEP,
-        traceKernel(this.#deps, this.#outputs, depth, this.#stats, SWEEP),
-      )
       const { counts } = this.#stats
       this.#clear = Fn(() => {
         If(instanceIndex.lessThan(uint(STAT_SLOTS)), () => {
@@ -470,13 +426,7 @@ export class CloudTrace implements CloudResource {
 
   #kernel(levers: CloudLevers): ComputeNode {
     this.kernels()
-    const key = levers.fixedSteps > 0 ? SWEEP : keyOf(levers)
-    const kernel = this.#kernels!.get(key)
-    invariant(
-      kernel !== undefined,
-      `the trace has no ${key} kernel: the volume cache needs its medium, bound and brick exit`,
-    )
-    return kernel
+    return this.#kernels!.get(levers.fixedSteps > 0 ? SWEEP : FINE)!
   }
 
   /** The outputs at the frame's extent, reallocated only when it changes. */

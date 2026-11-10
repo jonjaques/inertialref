@@ -31,7 +31,7 @@ import type { CloudBudget, CloudResource } from './cloudNodes.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
 import { CLOUD_PROFILE_HEIGHTS, CLOUD_PROFILE_ROWS } from './cloudProfile.ts'
 import { CloudRadianceMeter } from './cloudRadiance.ts'
-import { SUN_DEPTH_FRAME_CAP } from './cloudSunCascades.ts'
+import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
 import { CloudTrace } from './cloudTrace.ts'
 import type { SceneLayout } from './sceneLayout.ts'
 
@@ -203,14 +203,8 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
   depth.tie(scenePass.renderTarget)
   const trace = new CloudTrace({
     uniforms,
-    media: {
-      field: field.medium,
-      volume: field.volume.medium,
-      bound: (sample, body) => field.volume.bound(sample, body),
-      brickExit: (sample, ray, body) =>
-        field.volume.brickExit(sample, ray, body),
-      sweep: field.sweep,
-    },
+    medium: field.medium,
+    sweep: field.sweep,
     sun: field.sun,
     phase: field.phase,
     far: field.farAtlas.far,
@@ -311,8 +305,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
         maps: field.maps.pending,
         clipmap: field.clipmap.pending,
         volume: field.volume.pending,
-        sunDepth: (levers?.sunDepth === 'grid' ? field.grid : field.cascades)
-          .pending,
+        sunDepth: field.grid.pending,
         far: field.farAtlas.pending || field.farSecond.pending,
         history: history.pending,
       },

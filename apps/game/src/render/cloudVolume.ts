@@ -1,5 +1,4 @@
 import {
-  type ComputeNode,
   LinearFilter,
   type Node,
   NodeMaterial,
@@ -7,7 +6,6 @@ import {
   RenderTarget3D,
   RepeatWrapping,
   RGFormat,
-  type Storage3DTexture,
   type Texture,
   type TextureNode,
   UnsignedByteType,
@@ -17,31 +15,20 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
-  abs,
   clamp,
-  dot,
   float,
   floor,
   Fn,
   If,
-  instanceIndex,
   int,
-  ivec3,
   length,
-  Loop,
   max,
-  min,
   saturate,
   screenCoordinate,
   select,
   sqrt,
-  storageTexture3D,
   texture3D,
-  textureStore,
-  uint,
   uniform,
-  uniformArray,
-  uvec3,
   vec2,
   vec3,
   vec4,
@@ -58,16 +45,13 @@ import {
   layerRadius,
 } from './cloudDensity.ts'
 import type { CloudFrame } from './cloudFrame.ts'
-import type { CloudLevers } from './cloudLevers.ts'
 import { levelOffset, levelPlane, sunMuAt } from './cloudGeometry.ts'
 import {
   type CloudBudget,
   type CloudMedium,
   type CloudMediumFn,
-  type CloudRay,
   type CloudResource,
   type CloudSample,
-  cloudStorage3DTexture,
 } from './cloudNodes.ts'
 import type { CloudNoiseNodes } from './cloudNoise.ts'
 import type {
@@ -76,14 +60,14 @@ import type {
   CloudUniforms,
 } from './cloudUniforms.ts'
 import { runQuadPasses } from './quadPass.ts'
-import { warmByDrawing, warmCompute } from './warmup.ts'
+import { warmByDrawing } from './warmup.ts'
 
 /*
  * The local volume: the field cached in three eye-anchored levels of
  * 256² × 32 RG8 texels — R = √(σ/σ_scale), G = the fraction — stacked with a
- * guard slice under and over each level in one `RenderTarget3D`, baked a few
- * slices a frame, and a max-mip bound of 4³ bricks dilated by a texel so a
- * step through empty space can jump to its brick's exit (§3.11).
+ * guard slice under and over each level in one `RenderTarget3D` and baked a
+ * few slices a frame (§3.11). It is what the sun grid sums its optical depth
+ * through (`cloudSunGrid.ts`); the trace marches the field itself.
  *
  * **A level is read only where every one of its slices holds this anchor's
  * texels.** A slice is baked whole, at the window the level has that frame,
@@ -119,40 +103,19 @@ export const CLOUD_VOLUME_SIZE = 256
 export const CLOUD_VOLUME_SLICES = 32
 export const CLOUD_VOLUME_TEXELS = [50, 200, 800] as const
 
-/** The passes' names on the timeline. */
+/** The pass's name on the timeline. */
 export const CLOUD_VOLUME_LABEL = 'cloud volume'
-export const CLOUD_VOLUME_BOUND_LABEL = 'cloud volume bound'
 
 const LEVELS = CLOUD_VOLUME_TEXELS.length
 /** A level's slices with its two guards. */
 const STACK = CLOUD_VOLUME_SLICES + 2
 const DEPTH = LEVELS * STACK
-const BRICK = 4
-const BRICKS = CLOUD_VOLUME_SIZE / BRICK
-const BRICK_LAYERS = CLOUD_VOLUME_SLICES / BRICK
-/**
- * A brick layer of each level is a z-slot of the bound: 24 in all. Its
- * dilation reaches one slice past each end of a level's 32, which is what
- * the guard slices hold, so no slot needs a guard of its own.
- */
-const SLOTS = LEVELS * BRICK_LAYERS
-const BRICKS_A_LAYER = BRICKS * BRICKS
-/** RG8, and the bound's RGBA8. */
+/** RG8. */
 const TEXEL_BYTES = 2
-const BOUND_TEXEL_BYTES = 4
 /** Texels in from a trusted window's edges: a trilinear read reaches half a texel. */
 const MARGIN = 1
-/** Floor under a texel's share of a chord, so a level ray's rate is never 0/0. */
-const NO_RATE = 1e-12
-/** Meters past a brick's face a skip lands, so a ray never stalls on one. */
-const PAST_FACE = 0.5
 /** A rectangle nothing is inside: lattice x0, y0, x1, y1. */
 const NOWHERE = [1, 1, 0, 0] as const
-
-/** The volume is drawn when either the cache or the grid summed through it is selected. */
-export function volumeSelected(levers: CloudLevers): boolean {
-  return levers.cache === 'volume' || levers.sunDepth === 'grid'
-}
 
 export interface CloudVolumeDeps {
   readonly uniforms: CloudUniforms
@@ -175,18 +138,6 @@ export function wrapped(
   const value = x as Node<'vec2'>
   return value.sub(floor(value.div(n)).mul(n))
 }
-
-/** TSL's `Loop` over three ranges, which `@types/three` declares up to two of. */
-const loopOver3 = Loop as unknown as (
-  i: number,
-  j: number,
-  k: number,
-  body: (inputs: {
-    readonly i: Node<'int'>
-    readonly j: Node<'int'>
-    readonly k: Node<'int'>
-  }) => void,
-) => void
 
 /** Where in the volume a point is read: its level, or 3 where none is trusted. */
 interface Held {
@@ -251,10 +202,10 @@ function bakeLevelUniforms(): CloudLevelUniforms {
 export class CloudVolume implements CloudResource {
   readonly name = 'volume'
   /**
-   * One read a step: R = √(σ/σ_scale), G = fraction, at the finest level
-   * holding the sample, plus detail-noise erosion where the footprint is finer
-   * than the level's texel; the field where no level holds it. Level 0.
-   * Statements: built inside a `Fn`.
+   * One read a step of the grid's sun ray: R = √(σ/σ_scale), G = fraction,
+   * at the finest level holding the sample, plus detail-noise erosion where
+   * the footprint is finer than the level's texel; the field where no level
+   * holds it. Level 0. Statements: built inside a `Fn`.
    */
   readonly medium: CloudMediumFn
 
@@ -263,8 +214,7 @@ export class CloudVolume implements CloudResource {
    * Linear by name: a `RenderTarget3D` takes its minification filter from
    * the options and keeps `Data3DTexture`'s nearest magnification, and a read
    * at level 0 magnifies. Nearest, a cloudy texel reads as a 50 m box a ray
-   * can clip in under a step, and the bound's dilation covers a filter that
-   * is not there.
+   * can clip in under a step.
    */
   readonly #target = new RenderTarget3D(1, 1, 1, {
     type: UnsignedByteType,
@@ -273,15 +223,7 @@ export class CloudVolume implements CloudResource {
     minFilter: LinearFilter,
     depthBuffer: false,
   })
-  readonly #boundMap: Storage3DTexture = cloudStorage3DTexture(
-    1,
-    1,
-    1,
-    'rgba8unorm',
-    'cloud volume bound',
-  )
   readonly #volume: TextureNode
-  readonly #boundRead: TextureNode
   /** Per level, the lattice rectangle the reads trust: x0, y0, x1, y1. */
   readonly #trusted = Array.from({ length: LEVELS }, () =>
     uniform(new Vector4(...NOWHERE)),
@@ -291,9 +233,6 @@ export class CloudVolume implements CloudResource {
   readonly #bakeSlice = uniform(0)
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh(this.#material)
-  readonly #slots = uniformArray(new Array<number>(SLOTS).fill(0), 'float')
-  readonly #slotCount = uniform(0, 'uint')
-  readonly #boundKernel: ComputeNode
   readonly #levels: LevelState[] = Array.from({ length: LEVELS }, freshLevel)
   #scenario: WeatherScenario | null = null
   #address: string | null = null
@@ -312,10 +251,8 @@ export class CloudVolume implements CloudResource {
     map.wrapS = RepeatWrapping
     map.wrapT = RepeatWrapping
     this.#volume = texture3D(map)
-    this.#boundRead = texture3D(this.#boundMap)
     this.#material.name = 'cloud volume'
     this.#material.fragmentNode = this.#bakeNode()
-    this.#boundKernel = this.#boundNode()
     this.medium = (sample, body) => this.#mediumAt(sample, body)
   }
 
@@ -417,89 +354,8 @@ export class CloudVolume implements CloudResource {
     return { sigma, fraction, layer, column, radius }
   }
 
-  /**
-   * The largest R over the sample's 4³ brick and one texel around it: zero
-   * means no trilinear read anywhere in the brick can see cloud. 1 where no
-   * level holds the sample, so nothing is skipped through the field.
-   */
-  bound(sample: CloudSample, body: CloudBodyUniforms): Node<'float'> {
-    const held = this.#held(sample.offset, sample.altitude, body)
-    const brick = wrapped(floor(held.lattice.div(BRICK)), BRICKS)
-    const layer = clamp(floor(held.slice.div(BRICK)), 0, BRICK_LAYERS - 1)
-    const slot = min(held.level, LEVELS - 1)
-      .mul(BRICK_LAYERS)
-      .add(layer)
-    const largest = this.#boundRead.load(ivec3(vec3(brick, slot))).x
-    return select(held.level.lessThan(2.5), largest, float(1))
-  }
-
-  /**
-   * The distance along the ray at which it leaves the brick holding the
-   * sample: the least over the brick's three axes of the distance to its far
-   * face over that coordinate's rate along the ray at the sample, formed
-   * analytically — d(u)/dt = R·(e·A)·(d·E − (e·E)(d·A)/(e·A))/(e·A + o·A)²
-   * from `levelPlane`, dh/dt = (r_e·μ + t)/(R + h) from §5.3 — plus half a
-   * meter so a ray never stalls on a face. Over a 200 m brick the curvature
-   * this takes as straight is under 3 mm, and over any brick it is under a
-   * texel, which the bound's dilation already covers.
-   */
-  brickExit(
-    sample: CloudSample,
-    ray: CloudRay,
-    body: CloudBodyUniforms,
-  ): Node<'float'> {
-    const held = this.#held(sample.offset, sample.altitude, body)
-    const { slice } = this.#vertical(body)
-    const R = body.datumRadius
-    // The held level's frame, chosen as `held` chose it.
-    const pick = <T extends Node<'vec3'> | Node<'float'>>(
-      of: (frame: CloudLevelUniforms) => T,
-    ): T => {
-      let value = of(body.volume[LEVELS - 1]!)
-      for (let L = LEVELS - 2; L >= 0; L -= 1)
-        value = select(held.level.equal(L), of(body.volume[L]!), value) as T
-      return value
-    }
-    const anchor = pick((frame) => frame.anchor)
-    const east = pick((frame) => frame.east)
-    const north = pick((frame) => frame.north)
-    const along = pick((frame) => frame.along)
-    const eA = along.x
-    const a = dot(ray.direction, anchor)
-    const denominator = eA.add(dot(sample.offset, anchor))
-    const scale = R.mul(eA).div(denominator.mul(denominator)).div(held.texel)
-    const rateU = scale.mul(
-      dot(ray.direction, east).sub(along.y.mul(a).div(eA)),
-    )
-    const rateV = scale.mul(
-      dot(ray.direction, north).sub(along.z.mul(a).div(eA)),
-    )
-    const rateH = body.datumRadius
-      .add(body.eye)
-      .mul(ray.mu)
-      .add(sample.distance)
-      .div(R.add(sample.altitude))
-      .div(slice)
-    const toFace = (x: Node<'float'>, rate: Node<'float'>): Node<'float'> => {
-      const cell = floor(x.div(BRICK))
-      const ahead = select(
-        rate.greaterThanEqual(0),
-        cell.add(1).mul(BRICK).sub(x),
-        x.sub(cell.mul(BRICK)),
-      )
-      return ahead.div(max(abs(rate), NO_RATE))
-    }
-    const step = min(
-      min(toFace(held.lattice.x, rateU), toFace(held.lattice.y, rateV)),
-      toFace(held.slice, rateH),
-    )
-    return sample.distance.add(
-      select(held.level.lessThan(2.5), step, float(0)).add(PAST_FACE),
-    )
-  }
-
   /* ----------------------------------------------------------------------- */
-  /* The bake and the bound                                                   */
+  /* The bake                                                                 */
   /* ----------------------------------------------------------------------- */
 
   /** One slice of one level: the field at each texel's center, at the level's texel. */
@@ -534,65 +390,6 @@ export class CloudVolume implements CloudResource {
     })()
   }
 
-  /** Each listed brick's largest R over its 6³ footprint, toroidal across, guarded up. */
-  #boundNode(): ComputeNode {
-    const store = storageTexture3D(this.#boundMap)
-    const read = texture3D(this.#target.texture)
-    const kernel = Fn(() => {
-      If(instanceIndex.lessThan(this.#slotCount.mul(BRICKS_A_LAYER)), () => {
-        const listed = instanceIndex.div(BRICKS_A_LAYER)
-        const within = instanceIndex.mod(BRICKS_A_LAYER)
-        const bx = int(within.mod(BRICKS))
-        const by = int(within.div(BRICKS))
-        // `@types/three` types an array element by no node type at all.
-        const slot = int(
-          this.#slots.element(listed) as unknown as Node<'float'>,
-        )
-        const level = slot.div(BRICK_LAYERS)
-        const layer = slot.mod(BRICK_LAYERS)
-        // The brick's first slice less one: level L's slices start at 34L + 1.
-        const z0 = level.mul(STACK).add(layer.mul(BRICK))
-        const largest = float(0).toVar()
-        /*
-         * One `Loop` of three ranges, never three `Loop`s nested: TSL names a
-         * loop's index by its place among that loop's own ranges, so every
-         * nested loop declares an `i`, the inner one shadows the outer, and
-         * the footprint collapses onto its diagonal: a bound built that way
-         * misses cloud in one brick in seven, one in three at level 1.
-         */
-        loopOver3(
-          BRICK + 2,
-          BRICK + 2,
-          BRICK + 2,
-          ({ i: dz, j: dy, k: dx }) => {
-            const x = bx
-              .mul(BRICK)
-              .add(int(dx))
-              .sub(1)
-              .add(CLOUD_VOLUME_SIZE)
-              .mod(CLOUD_VOLUME_SIZE)
-            const y = by
-              .mul(BRICK)
-              .add(int(dy))
-              .sub(1)
-              .add(CLOUD_VOLUME_SIZE)
-              .mod(CLOUD_VOLUME_SIZE)
-            largest.assign(
-              max(largest, read.load(ivec3(x, y, z0.add(int(dz)))).x),
-            )
-          },
-        )
-        textureStore(
-          store,
-          uvec3(uint(bx), uint(by), uint(slot)),
-          vec4(largest, 0, 0, 1),
-        )
-      })
-    })().compute(SLOTS * BRICKS_A_LAYER)
-    kernel.setName(CLOUD_VOLUME_BOUND_LABEL)
-    return kernel
-  }
-
   /* ----------------------------------------------------------------------- */
   /* The schedule                                                             */
   /* ----------------------------------------------------------------------- */
@@ -603,15 +400,10 @@ export class CloudVolume implements CloudResource {
     budget: CloudBudget,
   ): void {
     if (this.#disposed) return
-    if (!volumeSelected(frame.levers)) {
-      this.#release(renderer)
-      return
-    }
     this.#allocate(renderer)
     this.#invalidate(frame, budget)
     const work = this.#schedule(frame, budget.slices)
     this.#bake(renderer, frame, work)
-    this.#refreshBound(renderer, work)
     this.#publish(frame)
     this.#last = frame.frameIndex
   }
@@ -745,23 +537,6 @@ export class CloudVolume implements CloudResource {
     )
   }
 
-  /** The bound over every brick layer whose 6³ footprint a baked slice reached. */
-  #refreshBound(renderer: WebGPURenderer, work: readonly Bake[]): void {
-    const slots = new Set<number>()
-    for (const { level, slice } of work) {
-      // Brick layer b reads the level's slices 4b … 4b + 5, guards counted.
-      const first = Math.max(0, Math.ceil((slice - (BRICK + 1)) / BRICK))
-      const last = Math.min(BRICK_LAYERS - 1, Math.floor(slice / BRICK))
-      for (let b = first; b <= last; b += 1) slots.add(level * BRICK_LAYERS + b)
-    }
-    if (slots.size === 0) return
-    ;[...slots].forEach((slot, k) => {
-      this.#slots.array[k] = slot
-    })
-    this.#slotCount.value = slots.size
-    renderer.compute(this.#boundKernel, slots.size * BRICKS_A_LAYER)
-  }
-
   /** Each level's trusted rectangle: the intersection of its slices' windows. */
   #publish(frame: CloudFrame): void {
     let pending = false
@@ -794,37 +569,17 @@ export class CloudVolume implements CloudResource {
   /* The resource                                                             */
   /* ----------------------------------------------------------------------- */
 
-  /** Real size, the frame the levers first select it. */
+  /**
+   * Real size, the first frame it draws. A resize frees the texture and
+   * three makes the new one at its next binding: allocated here at once, so
+   * what `textures()` lists is on the device at the size `bytes` declares.
+   */
   #allocate(renderer: WebGPURenderer): void {
     this.#allocated = true
     if (this.#target.width === CLOUD_VOLUME_SIZE) return
-    this.#resize(renderer, CLOUD_VOLUME_SIZE, DEPTH, BRICKS, SLOTS)
-    this.#forget()
-  }
-
-  /** Back to the 1 × 1 targets warming built against, holding nothing. */
-  #release(renderer: WebGPURenderer): void {
-    if (this.#target.width !== 1) this.#resize(renderer, 1, 1, 1, 1)
-    this.#forget()
-    this.#pending = false
-  }
-
-  /*
-   * A resize frees the textures and three makes the new ones at their next
-   * binding, which a released cache never has: allocated here, so what
-   * `textures()` lists is always on the device at the size `bytes` declares.
-   */
-  #resize(
-    renderer: WebGPURenderer,
-    size: number,
-    depth: number,
-    bricks: number,
-    slots: number,
-  ): void {
-    this.#target.setSize(size, size, depth)
-    this.#boundMap.setSize(bricks, bricks, slots)
+    this.#target.setSize(CLOUD_VOLUME_SIZE, CLOUD_VOLUME_SIZE, DEPTH)
     renderer.initRenderTarget(this.#target)
-    renderer.initTexture(this.#boundMap)
+    this.#forget()
   }
 
   #forget(): void {
@@ -848,27 +603,16 @@ export class CloudVolume implements CloudResource {
   get bytes(): number {
     if (this.#disposed || !this.#allocated) return 0
     const target = this.#target
-    const bound = this.#boundMap.image as {
-      readonly width: number
-      readonly height: number
-      readonly depth: number
-    }
-    return (
-      textureBytes(target.width, target.height, target.depth, TEXEL_BYTES) +
-      textureBytes(bound.width, bound.height, bound.depth, BOUND_TEXEL_BYTES)
-    )
+    return textureBytes(target.width, target.height, target.depth, TEXEL_BYTES)
   }
 
   textures(): readonly Texture[] {
-    return this.#disposed || !this.#allocated
-      ? []
-      : [this.#target.texture, this.#boundMap]
+    return this.#disposed || !this.#allocated ? [] : [this.#target.texture]
   }
 
   /**
    * The bake against a slice, drawn (an RG8 target, which `warmByDrawing`
-   * says why), and the bound's kernel; a renderer with no backend builds
-   * nothing.
+   * says why); a renderer with no backend builds nothing.
    */
   warm(renderer: WebGPURenderer): Promise<void> {
     if (this.#disposed || renderer?.backend === undefined)
@@ -887,7 +631,7 @@ export class CloudVolume implements CloudResource {
         this.#forget()
         this.#pending = true
       }
-      this.#warm = warmCompute(renderer, [this.#boundKernel])
+      this.#warm = Promise.resolve()
     }
     return this.#warm
   }
@@ -896,8 +640,6 @@ export class CloudVolume implements CloudResource {
     if (this.#disposed) return
     this.#disposed = true
     this.#target.dispose()
-    this.#boundMap.dispose()
     this.#material.dispose()
-    this.#boundKernel.dispose()
   }
 }

@@ -31,7 +31,6 @@ import {
 } from 'three/tsl'
 import {
   type LevelFrame,
-  SUN_CASCADE_TURN,
   textureBytes,
   type WeatherScenario,
 } from '@inertialref/rendering'
@@ -81,7 +80,7 @@ import { warmByDrawing } from './warmup.ts'
  * six for the grid under motion (§4.4). A sun turned 0.05° from the one the
  * grid was drawn under, the field's time jumping, a new anchor or scenario
  * each rebuild it whole that frame: 32 slices of 128² cells × 32 steps,
- * 16.8 M texel-steps, which is the cap the two candidates share.
+ * 16.8 M texel-steps, which is the frame's cap (`SUN_DEPTH_FRAME_CAP`).
  *
  * Past the window, and from orbit, where level 1 lies more than its own
  * extent below the eye and the grid is idle as the volume's level is, the
@@ -94,6 +93,10 @@ export const SUN_GRID_SIZE = [128, 128, 32] as const
 export const SUN_GRID_STEPS = 32
 /** The pass's name on the timeline. */
 export const CLOUD_SUN_GRID_LABEL = 'cloud sun grid'
+/** The per-frame cap, in texel-steps: one rebuild, 128² × 32 cells × 32 steps. */
+export const SUN_DEPTH_FRAME_CAP = 16_777_216
+/** Degrees: the sun move that rebuilds the grid whole. */
+const SUN_TURN = 0.05
 
 const [WIDTH, HEIGHT, SLICES] = SUN_GRID_SIZE
 /** A cell is two of level 1's texels: 128 cells span its 256. */
@@ -106,7 +109,7 @@ const TEXEL_BYTES = 2
 const MARGIN = 1
 const NOWHERE = [1, 1, 0, 0] as const
 const SLICE_STEPS = WIDTH * HEIGHT * SUN_GRID_STEPS
-const TURN = Math.cos((SUN_CASCADE_TURN * Math.PI) / 180)
+const TURN = Math.cos((SUN_TURN * Math.PI) / 180)
 
 /**
  * Level 1's frame at the grid's cells: its anchor, axes and eye terms, and a
@@ -258,7 +261,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
           },
           body,
         )
-        // As the cascades: one optical depth a cell, the fraction folded in.
+        // One optical depth a cell, the fraction folded in.
         tau.addAssign(medium.sigma.mul(medium.fraction).mul(step))
       })
       return vec4(tau, 0, 0, 1)
@@ -271,10 +274,6 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     budget: CloudBudget,
   ): void {
     if (this.#disposed) return
-    if (frame.levers.sunDepth !== 'grid') {
-      this.#release(renderer)
-      return
-    }
     this.#allocate(renderer)
     const { served } = frame
     const levelOne = served.volume.frames[1]
@@ -400,20 +399,10 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     this.#allocated = true
     if (this.#target.width === WIDTH) return
     this.#target.setSize(WIDTH, HEIGHT, SLICES)
-    // At once: a resized target is made at its next binding, and a released
-    // candidate has none, so what `textures()` lists is always on the device.
+    // At once: a resized target is made at its next binding, so what
+    // `textures()` lists is on the device at the size `bytes` declares.
     renderer.initRenderTarget(this.#target)
     this.#forget()
-  }
-
-  /** Back to the 1 × 1 target warming built against, holding nothing. */
-  #release(renderer: WebGPURenderer): void {
-    if (this.#target.width !== 1) {
-      this.#target.setSize(1, 1, 1)
-      renderer.initRenderTarget(this.#target)
-    }
-    this.#forget()
-    this.#pending = false
   }
 
   #forget(): void {

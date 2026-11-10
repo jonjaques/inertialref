@@ -10,12 +10,6 @@ import { SCENARIO_IDS, type ScenarioId } from '@inertialref/rendering'
  * presentation, never a canonical value.
  */
 
-export const CLOUD_CACHES = ['field', 'volume'] as const
-export type CloudCache = (typeof CLOUD_CACHES)[number]
-
-export const CLOUD_SUN_DEPTHS = ['cascades', 'grid'] as const
-export type CloudSunDepth = (typeof CLOUD_SUN_DEPTHS)[number]
-
 export const CLOUD_COMPOSITES = ['identity', 'thin', 'residual'] as const
 export type CloudCompositeMode = (typeof CLOUD_COMPOSITES)[number]
 
@@ -51,10 +45,8 @@ const DECKS = ['auto', 'hidden'] as const
 export interface CloudLevers {
   readonly on: boolean
   readonly scenario: ScenarioId
-  readonly cache: CloudCache
   /** Meters a trace texel spans where a ray hands over to the far march. */
   readonly farFootprint: number
-  readonly sunDepth: CloudSunDepth
   readonly lightTaps: (typeof LIGHT_TAP_COUNTS)[number]
   readonly composite: CloudCompositeMode
   readonly force: CloudForce
@@ -100,9 +92,7 @@ export interface CloudLevers {
 export const DEFAULT_CLOUD_LEVERS: CloudLevers = Object.freeze({
   on: false,
   scenario: 'fair-cumulus',
-  cache: 'field',
   farFootprint: 400,
-  sunDepth: 'cascades',
   lightTaps: 2,
   composite: 'identity',
   force: 'none',
@@ -136,9 +126,7 @@ const FIELDS: Readonly<Record<keyof CloudLevers, (value: unknown) => boolean>> =
   {
     on: (value) => typeof value === 'boolean',
     scenario: oneOf(SCENARIO_IDS),
-    cache: oneOf(CLOUD_CACHES),
     farFootprint: (value) => finite(value) && value > 0,
-    sunDepth: oneOf(CLOUD_SUN_DEPTHS),
     lightTaps: oneOf(LIGHT_TAP_COUNTS),
     composite: oneOf(CLOUD_COMPOSITES),
     force: oneOf(CLOUD_FORCES),
@@ -191,9 +179,7 @@ export function isCloudLevers(value: unknown): value is CloudLevers {
 export function cloudResetKey(levers: CloudLevers): string {
   return JSON.stringify([
     levers.scenario,
-    levers.cache,
     levers.farFootprint,
-    levers.sunDepth,
     levers.composite,
     levers.traceScale,
     levers.noiseFormat,

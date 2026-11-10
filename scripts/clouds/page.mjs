@@ -534,7 +534,7 @@ export function hitch(samples) {
 
 /** The passes that bake a cache, a map or the far field rather than draw the frame. */
 const BAKES =
-  /^cloud (noise|maps|clipmap|volume|volume bound|sun cascade|sun grid|far atlas|far second)$/
+  /^cloud (noise|maps|clipmap|volume|sun grid|far atlas|far second)$/
 
 /** What each kind of run's results say, flat, so a table only formats. */
 const READ = {
@@ -916,8 +916,8 @@ export function memoryTable(rows) {
 }
 
 /**
- * §8.7's image inputs, one row a comparison: the cache gate's volume against
- * field under 3%, a ladder's value against the next under 1%.
+ * §8.7's image inputs, one row a comparison: a ladder's value against the
+ * next under 1%.
  */
 const RADIANCE_COLUMNS = [
   ...NAMED,

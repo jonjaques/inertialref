@@ -1,10 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import {
-  type Node,
-  StorageBufferAttribute,
-  type Texture,
-  Vector3,
-} from 'three/webgpu'
+import { type Node, StorageBufferAttribute, type Texture } from 'three/webgpu'
 import {
   abs,
   cos,
@@ -20,11 +15,9 @@ import {
   max,
   select,
   sin,
-  sqrt,
   storage,
   texture3D,
   uint,
-  uniform,
   vec3,
 } from 'three/tsl'
 import {
@@ -35,7 +28,6 @@ import {
   shellBoundaries,
   reducePoint,
   shellHeights,
-  sunCascades,
   type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
@@ -47,18 +39,9 @@ import {
 } from './cloudFrame.ts'
 import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
-import type {
-  CloudBudget,
-  CloudMediumFn,
-  CloudRay,
-  CloudSample,
-} from './cloudNodes.ts'
+import type { CloudBudget, CloudMediumFn, CloudSample } from './cloudNodes.ts'
 import type { CloudNoiseNodes } from './cloudNoise.ts'
-import {
-  SUN_CASCADE_EXTENTS,
-  SUN_CASCADE_SIZE,
-  SUN_DEPTH_FRAME_CAP,
-} from './cloudSunCascades.ts'
+import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import {
   CLOUD_VOLUME_SIZE,
@@ -70,10 +53,9 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
  * The local volume on the GPU (§3.11): it bakes the field it is handed at
- * its texels' centers, its guard slices stop each level's filter, its bound
- * covers every trilinear read in a brick, a skip lands past the brick's
- * face and never past cloud, and a window that scrolls ends where a fresh
- * one starts. The field here is analytic, built from the sample alone.
+ * its texels' centers, its guard slices stop each level's filter, its
+ * schedule bakes what goes missing first, and a window that scrolls ends
+ * where a fresh one starts. The field here is analytic, built from the sample alone.
  */
 
 let gpu: GpuSession
@@ -117,7 +99,7 @@ const SCENARIO: WeatherScenario = {
 }
 const SLICE = (TOP - BASE) / CLOUD_VOLUME_SLICES
 const STACK = CLOUD_VOLUME_SLICES + 2
-const LEVERS = { ...DEFAULT_CLOUD_LEVERS, on: true, cache: 'volume' as const }
+const LEVERS = { ...DEFAULT_CLOUD_LEVERS, on: true }
 const BUDGET: CloudBudget = {
   slices: 8,
   tiles: 1,
@@ -210,15 +192,6 @@ function frameAt(
       CLOUD_VOLUME_TEXELS,
       CLOUD_VOLUME_SIZE,
       caches?.volume.frames ?? null,
-    ),
-    cascades: sunCascades(
-      eye,
-      SUN,
-      shells,
-      SUN_CASCADE_EXTENTS,
-      SUN_CASCADE_SIZE,
-      caches?.cascades.cascades ?? null,
-      options.jump ?? false,
     ),
   }
   const camera = {
@@ -418,22 +391,6 @@ function latticeOffset(
   return sub(scale(direction, R + height), eye)
 }
 
-/** TSL's `Loop` over three ranges, which `@types/three` declares up to two of. */
-const loopOver3 = Loop as unknown as (
-  i: number,
-  j: number,
-  k: number,
-  body: (inputs: {
-    readonly i: Node<'int'>
-    readonly j: Node<'int'>
-    readonly k: Node<'int'>
-  }) => void,
-) => void
-
-/** A lattice texel's storage column, floored mod the window. */
-const wrap = (x: Node<'float'>): Node<'float'> =>
-  x.sub(x.div(CLOUD_VOLUME_SIZE).floor().mul(CLOUD_VOLUME_SIZE))
-
 /** RG8's step: what a stored texel is held to. */
 const BYTE = 1 / 255
 const EYE_HEIGHT = 1500
@@ -530,301 +487,6 @@ describe('the bake', () => {
 })
 
 /* ------------------------------------------------------------------------- */
-/* The bound and the skip                                                     */
-/* ------------------------------------------------------------------------- */
-
-describe('the bound', () => {
-  const east = levelFrames(scale(UP, R + EYE_HEIGHT), R, [50], 256, null)
-    .frames[0]!.east
-  const north = levelFrames(scale(UP, R + EYE_HEIGHT), R, [50], 256, null)
-    .frames[0]!.north
-  const E = vec3(east.x, east.y, east.z)
-  const N = vec3(north.x, north.y, north.z)
-  // Patches a few hundred meters across with clear air between: most bricks
-  // at level 0 hold cloud or none, and many have an edge.
-  const patchy = analytic((o) =>
-    select(
-      sin(dot(o, E).div(170))
-        .mul(cos(dot(o, N).div(230)))
-        .greaterThan(0.5),
-      float(SIGMA),
-      float(0),
-    ),
-  )
-
-  it('is at least every trilinear read inside its brick, at every level', async () => {
-    const test = rig(patchy)
-    const eye = eyeAt(EYE_HEIGHT)
-    test.settle(eye)
-    const frame = test.frame!
-    const next = draws(7)
-    const count = 8192
-    const inputs = new Float32Array(count * 3)
-    for (let n = 0; n < count; n += 1) {
-      const L = n % 3
-      const level = frame.served.volume.frames[L]!
-      // Inside the trusted window, two texels in, anywhere in the union.
-      const i = level.origin[0] + 2 + next() * (CLOUD_VOLUME_SIZE - 4)
-      const j = level.origin[1] + 2 + next() * (CLOUD_VOLUME_SIZE - 4)
-      const height = BASE + next() * (TOP - BASE)
-      const o = latticeOffset(level, eye, i, j, height)
-      inputs.set([o.x, o.y, o.z], n * 3)
-    }
-    const out = await run(count, inputs, 3, 2, (read, write) => {
-      const sample = sampleAt(test.uniforms, vec3(read(0), read(1), read(2)))
-      const medium = test.volume.medium(sample, test.uniforms.served)
-      write(0, test.volume.bound(sample, test.uniforms.served))
-      write(1, sqrt(medium.sigma.div(SIGMA)))
-    })
-    let empty = 0
-    let cloudy = 0
-    for (let n = 0; n < count; n += 1) {
-      const bound = out[n * 2]!
-      const read = out[n * 2 + 1]!
-      expect(read).toBeLessThanOrEqual(bound + 1e-6)
-      if (bound === 0) empty += 1
-      if (read > 0) cloudy += 1
-    }
-    // The bound is a bound, not a constant: some bricks are empty, some not.
-    expect(empty).toBeGreaterThan(count / 20)
-    expect(cloudy).toBeGreaterThan(count / 20)
-    test.volume.dispose()
-  })
-
-  /*
-   * One cloudy texel at a brick's corner, and 1,000 rays from the eye aimed
-   * through its filter's reach where it lies in the neighboring bricks, each
-   * marched as the trace marches: a step whose bound is zero jumps to the
-   * brick's exit, any other steps a meter and reads. Every ray sees the
-   * cloud. With the bound taken over the brick alone, undilated, some do
-   * not: they cross a neighbor whose own texels are clear while its reads
-   * near the shared corner blend the cloudy one.
-   */
-  async function seen(dilated: boolean): Promise<number> {
-    const eye = eyeAt(EYE_HEIGHT)
-    const level = levelFrames(eye, R, CLOUD_VOLUME_TEXELS, 256, null).frames[0]!
-    // A brick's far corner texel, 1.4 km east and 0.9 km north of the eye.
-    const brick = [
-      Math.floor((level.eye[0] + 1400) / 200),
-      Math.floor((level.eye[1] + 900) / 200),
-    ]
-    const i = brick[0]! * 4 + 3
-    const j = brick[1]! * 4 + 3
-    const slice = 4 * 3 + 3
-    const height = BASE + (slice + 0.5) * SLICE
-    const center = latticeOffset(level, eye, i + 0.5, j + 0.5, height)
-    const target = uniform(new Vector3(center.x, center.y, center.z))
-    const corner = analytic((o) =>
-      select(length(o.sub(target)).lessThan(10), float(SIGMA), float(0)),
-    )
-    const test = rig(corner)
-    test.settle(eye)
-    const body = test.uniforms.served
-    const map = test.volume.textures()[0]!
-    const raw = texture3D(map)
-    const next = draws(8)
-    const count = 1000
-    const inputs = new Float32Array(count * 3)
-    for (let n = 0; n < count; n += 1) {
-      // Within 0.8 of a texel of the cloudy one's center on every axis, so
-      // its weight in a read there is at least 0.2³, and past its brick's
-      // face on at least one: in a neighbor.
-      let d: number[]
-      do d = [0, 0, 0].map(() => 1.6 * next() - 0.8)
-      while (Math.max(...d) < 0.55)
-      const p = latticeOffset(
-        level,
-        eye,
-        i + 0.5 + d[0]!,
-        j + 0.5 + d[1]!,
-        height + d[2]! * SLICE,
-      )
-      inputs.set([p.x, p.y, p.z], n * 3)
-    }
-    const out = await run(count, inputs, 3, 1, (read, write) => {
-      const aim = vec3(read(0), read(1), read(2))
-      const reach = length(aim)
-      const direction = aim.div(reach)
-      const ray: CloudRay = {
-        direction,
-        mu: dot(direction, body.up),
-        nu: dot(direction, body.sun),
-        start: reach.sub(400),
-        end: reach.add(400),
-      }
-      const t = ray.start.toVar()
-      const hit = float(0).toVar()
-      Loop(4000, () => {
-        If(t.greaterThan(ray.end).or(hit.greaterThan(0)), () => {
-          // Break by running out the range.
-          t.assign(ray.end.add(1))
-        }).Else(() => {
-          const sample = sampleAt(test.uniforms, direction.mul(t))
-          const own = dilated
-            ? test.volume.bound(sample, body)
-            : undilated(raw, sample, test)
-          If(own.equal(0), () => {
-            t.assign(test.volume.brickExit(sample, ray, body))
-          }).Else(() => {
-            If(test.volume.medium(sample, body).sigma.greaterThan(0), () => {
-              hit.assign(1)
-            })
-            t.addAssign(1)
-          })
-        })
-      })
-      write(0, hit)
-    })
-    test.volume.dispose()
-    return out.reduce((sum, hit) => sum + hit, 0)
-  }
-
-  /** The largest R over the sample's level-0 brick alone, read in the test: the bound without its border. */
-  function undilated(
-    raw: ReturnType<typeof texture3D>,
-    sample: CloudSample,
-    test: Rig,
-  ): Node<'float'> {
-    const level = test.uniforms.served.volume[0]!
-    const oA = dot(sample.offset, level.anchor)
-    const eA = level.along.x
-    const scaleOf = test.uniforms.served.datumRadius.div(eA.add(oA))
-    const u = level.eye.x.add(
-      dot(sample.offset, level.east)
-        .sub(level.along.y.mul(oA).div(eA))
-        .mul(scaleOf),
-    )
-    const v = level.eye.y.add(
-      dot(sample.offset, level.north)
-        .sub(level.along.z.mul(oA).div(eA))
-        .mul(scaleOf),
-    )
-    const bx = u.div(level.texel).div(4).floor()
-    const by = v.div(level.texel).div(4).floor()
-    const bz = sample.altitude.sub(BASE).div(SLICE).div(4).floor()
-    const largest = float(0).toVar()
-    // One loop of three ranges: nested `Loop`s each name their index `i`.
-    loopOver3(4, 4, 4, ({ i: dz, j: dy, k: dx }) => {
-      const x = wrap(bx.mul(4).add(float(dx)))
-      const y = wrap(by.mul(4).add(float(dy)))
-      const z = bz.mul(4).add(float(dz)).add(1)
-      largest.assign(max(largest, raw.load(ivec3(int(x), int(y), int(z))).x))
-    })
-    return largest
-  }
-
-  it('lets no ray skip one cloudy texel at a brick’s corner, through 1,000 directions', async () => {
-    expect(await seen(true)).toBe(1000)
-  })
-
-  it('where a bound over the brick alone lets some through', async () => {
-    expect(await seen(false)).toBeLessThan(1000)
-  })
-})
-
-/** What float32 moves a brick exit by along the rays here: twice the 5.3 cm measured. */
-const EXIT_SLACK = 0.1
-
-describe('the brick exit', () => {
-  /*
-   * From the eye along random rays, at samples in level 0's window, the
-   * exit less its half meter against the float64 distance at which the ray
-   * leaves the sample's brick: on the face, to float32's centimeter at a few
-   * kilometers and the curvature the rates take as straight, under 3 mm
-   * over a 200 m brick.
-   */
-  it('lands on the brick’s far face, within half a meter past it', async () => {
-    const test = rig(analytic(() => float(0)))
-    const eye = eyeAt(EYE_HEIGHT)
-    test.settle(eye)
-    const level = test.frame!.served.volume.frames[0]!
-    const body = test.uniforms.served
-    const next = draws(9)
-    const count = 2048
-    const cases: { d: Vec3; t: number }[] = []
-    for (let n = 0; n < count; n += 1) {
-      const p = latticeOffset(
-        level,
-        eye,
-        level.eye[0] / 50 + (next() - 0.5) * 200,
-        level.eye[1] / 50 + (next() - 0.5) * 200,
-        BASE + 50 + next() * (TOP - BASE - 100),
-      )
-      const t = Math.hypot(p.x, p.y, p.z)
-      // The ray from the eye through the point: the points spread over
-      // level 0's window and the union, so faces of all three axes are met.
-      const d = { x: p.x / t, y: p.y / t, z: p.z / t }
-      cases.push({ d, t })
-    }
-    const inputs = new Float32Array(
-      cases.flatMap(({ d, t }) => [d.x, d.y, d.z, t]),
-    )
-    const out = await run(count, inputs, 4, 1, (read, write) => {
-      const direction = vec3(read(0), read(1), read(2))
-      const t = read(3)
-      const ray: CloudRay = {
-        direction,
-        mu: dot(direction, body.up),
-        nu: dot(direction, body.sun),
-        start: float(0),
-        end: float(1e9),
-      }
-      write(
-        0,
-        test.volume.brickExit(
-          sampleAt(test.uniforms, direction.mul(t)),
-          ray,
-          body,
-        ),
-      )
-    })
-    // The brick of a point, by level 0's lattice: (u, v) in 4-texel bricks, h in 4-slice ones.
-    const brickOf = (p: Vec3): [number, number, number] => {
-      const position = add(eye, p)
-      const depth = dot3(position, level.anchor)
-      const u = (R * dot3(position, level.east)) / depth
-      const v = (R * dot3(position, level.north)) / depth
-      const h = Math.hypot(position.x, position.y, position.z) - R
-      return [
-        Math.floor(u / 200),
-        Math.floor(v / 200),
-        Math.floor((h - BASE) / SLICE / 4),
-      ]
-    }
-    let nearest = Infinity
-    let farthest = -Infinity
-    cases.forEach(({ d, t }, n) => {
-      const from = brickOf(scale(d, t))
-      const same = (s: number) => {
-        const at = brickOf(scale(d, s))
-        return at[0] === from[0] && at[1] === from[1] && at[2] === from[2]
-      }
-      // March out of the brick, then bisect onto the face.
-      let low = t
-      let high = t + 1
-      while (same(high)) {
-        low = high
-        high += 1
-      }
-      for (let k = 0; k < 60; k += 1) {
-        const mid = (low + high) / 2
-        if (same(mid)) low = mid
-        else high = mid
-      }
-      const past = out[n]! - high
-      nearest = Math.min(nearest, past)
-      farthest = Math.max(farthest, past)
-    })
-    // Past the face, so the next sample is the next brick's, and half a
-    // meter past it to float32's millimeters in the plane coordinate over
-    // the rate of an axis the ray runs nearly along: 5.3 cm, measured.
-    expect(nearest).toBeGreaterThan(0.5 - EXIT_SLACK)
-    expect(farthest).toBeLessThanOrEqual(0.5 + EXIT_SLACK)
-    test.volume.dispose()
-  })
-})
-
-/* ------------------------------------------------------------------------- */
 /* The schedule                                                               */
 /* ------------------------------------------------------------------------- */
 
@@ -890,15 +552,13 @@ describe('the schedule', () => {
       1,
       new Float32Array([below.x, below.y, below.z]),
       3,
-      2,
+      1,
       (read, write) => {
         const sample = sampleAt(test.uniforms, vec3(read(0), read(1), read(2)))
         write(0, test.volume.medium(sample, test.uniforms.served).sigma)
-        write(1, test.volume.bound(sample, test.uniforms.served))
       },
     )
     expect(out[0]).toBeCloseTo(SIGMA / 2, 7)
-    expect(out[1]).toBe(1)
     test.volume.dispose()
   })
 
@@ -916,27 +576,26 @@ describe('the schedule', () => {
     test.volume.dispose()
   })
 
-  it('holds one level of each texture, declares their bytes, and builds no pipeline after its warm-up', async () => {
+  it('holds one level of its texture, declares its bytes, and builds no pipeline after its warm-up', async () => {
     const test = rig(field)
     expect(test.volume.bytes).toBe(0)
     await test.volume.warm(gpu.renderer)
     const render = gpu.pipelinesBuilt()
     const compute = gpu.computePipelinesBuilt()
     test.settle(eyeAt(EYE_HEIGHT))
-    // The slices and the bound drawn at their real size on pipelines the
-    // 1 × 1 targets warmed: a pipeline is the format's, not the size's.
+    // The slices drawn at their real size on the pipeline the 1 × 1 target
+    // warmed: a pipeline is the format's, not the size's.
     expect(gpu.pipelinesBuilt()).toBe(render)
     expect(gpu.computePipelinesBuilt()).toBe(compute)
     expect(test.volume.bytes).toBe(
-      CLOUD_VOLUME_SIZE * CLOUD_VOLUME_SIZE * 3 * STACK * 2 + 64 * 64 * 24 * 4,
+      CLOUD_VOLUME_SIZE * CLOUD_VOLUME_SIZE * 3 * STACK * 2,
     )
     const backend = gpu.renderer.backend as unknown as {
       get(texture: object): { texture: GPUTexture }
     }
     const textures = test.volume.textures()
-    expect(textures).toHaveLength(2)
-    for (const map of textures)
-      expect(backend.get(map).texture.mipLevelCount).toBe(1)
+    expect(textures).toHaveLength(1)
+    expect(backend.get(textures[0]!).texture.mipLevelCount).toBe(1)
     test.volume.dispose()
     expect(test.volume.bytes).toBe(0)
   })

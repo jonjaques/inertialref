@@ -2,10 +2,8 @@ import { describe, expect, it } from 'vitest'
 import fc from 'fast-check'
 import { SCENARIO_IDS } from '@inertialref/rendering'
 import {
-  CLOUD_CACHES,
   CLOUD_COMPOSITES,
   CLOUD_FORCES,
-  CLOUD_SUN_DEPTHS,
   CLOUD_SWEEP_EXTRAS,
   type CloudLevers,
   cloudResetKey,
@@ -16,9 +14,7 @@ import {
 /** The levers a history texel's meaning depends on (§3.4). */
 const RESET_LEVERS = [
   'scenario',
-  'cache',
   'farFootprint',
-  'sunDepth',
   'composite',
   'traceScale',
   'noiseFormat',
@@ -33,9 +29,7 @@ const RESET_LEVERS = [
 const MALFORMED: Record<keyof CloudLevers, readonly unknown[]> = {
   on: [1, 'true', null],
   scenario: ['cumulus', '', null],
-  cache: ['grid', null],
   farFootprint: [0, -400, Infinity, Number.NaN, '400'],
-  sunDepth: ['volume', null],
   lightTaps: [1, 3, 8, '2'],
   composite: ['over', null],
   force: ['teleport', 1],
@@ -60,9 +54,7 @@ const levers: fc.Arbitrary<CloudLevers> = fc
   .record({
     on: fc.boolean(),
     scenario: fc.constantFrom(...SCENARIO_IDS),
-    cache: fc.constantFrom(...CLOUD_CACHES),
     farFootprint: fc.constantFrom(100, 400, 1600),
-    sunDepth: fc.constantFrom(...CLOUD_SUN_DEPTHS),
     lightTaps: fc.constantFrom(0 as const, 2 as const, 4 as const),
     composite: fc.constantFrom(...CLOUD_COMPOSITES),
     force: fc.constantFrom(...CLOUD_FORCES),
@@ -146,9 +138,7 @@ describe('the reset key', () => {
     const changed: Partial<CloudLevers> = {
       on: true,
       scenario: 'anvil',
-      cache: 'volume',
       farFootprint: 800,
-      sunDepth: 'grid',
       lightTaps: 4,
       composite: 'thin',
       force: 'cut',

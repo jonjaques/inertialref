@@ -198,7 +198,6 @@ function frameAt(
         previous?.served.clipmap.frames ?? null,
       ),
       volume: { frames: [], dirty: [], rebuilt: [] },
-      cascades: { cascades: [], dirty: [], stale: [] },
     },
     second: null,
     time: TIME,

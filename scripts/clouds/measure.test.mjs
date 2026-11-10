@@ -59,9 +59,10 @@ import {
 
 const SIZES = ['1080p', 'retina']
 const ALL = Object.fromEntries(
-  ['stances', 'decisions', 'images', 'sweep', 'targets', 'memory', 'error'].map(
-    (b) => [b, batchRuns(b, SIZES)],
-  ),
+  ['stances', 'images', 'sweep', 'targets', 'memory', 'error'].map((b) => [
+    b,
+    batchRuns(b, SIZES),
+  ]),
 )
 const count = (runs, test) => runs.filter(test).length
 
@@ -87,27 +88,6 @@ describe('the batches', () => {
   it('gives every run an id of its own', () => {
     for (const runs of Object.values(ALL))
       expect(new Set(runs.map((r) => r.id)).size).toBe(runs.length)
-  })
-
-  it('runs the decisions as the design counts them: 56 A/B runs', () => {
-    const runs = ALL.decisions
-    expect(runs).toHaveLength(56)
-    const cache = runs.filter((r) => r.group === 'cache')
-    expect(count(cache, (r) => r.kind === 'steady')).toBe(24)
-    expect(count(cache, (r) => r.kind === 'fly')).toBe(16)
-    expect(count(cache, (r) => r.kind === 'cut' || r.kind === 'scrub')).toBe(16)
-    for (const r of cache) {
-      const [cacheKind, sunDepth] = r.label.split('+')
-      expect(r.candidate).toMatchObject({
-        on: true,
-        cache: cacheKind,
-        sunDepth,
-      })
-      expect(r.pairs).toBe(r.kind === 'steady' ? 5 : 3)
-      if (r.kind !== 'steady') expect(r.candidate.force).toBe(r.kind)
-      if (r.kind === 'cut' || r.kind === 'scrub')
-        expect(r.scenario).toBe('horizon')
-    }
   })
 
   it('prices Earth against its deck hidden, and the deck alone', () => {
@@ -146,11 +126,7 @@ describe('the batches', () => {
         'level',
       ])
       for (const c of cells)
-        expect(c).toMatchObject({
-          on: true,
-          scenario: 'overcast',
-          cache: 'field',
-        })
+        expect(c).toMatchObject({ on: true, scenario: 'overcast' })
     }
   })
 
@@ -203,33 +179,6 @@ describe('the batches', () => {
 })
 
 describe('the images', () => {
-  it('compare each volume combination with the field one of its sun depth, under 3%, where the cache gate reads it', () => {
-    const gate = ALL.images.filter((r) => r.group === 'cache')
-    expect(gate).toHaveLength(6)
-    expect(new Set(gate.map((r) => r.scenario))).toEqual(
-      new Set(['ground', 'horizon', 'inside']),
-    )
-    for (const r of gate) {
-      expect(r.type).toBe('radiance')
-      // Each sun depth under the moving jitter, then again with it held.
-      expect(r.comparisons.map((c) => [c.a.sunDepth, c.a.jitterFrame])).toEqual(
-        [
-          ['cascades', null],
-          ['grid', null],
-          ['cascades', HELD.jitterFrame],
-          ['grid', HELD.jitterFrame],
-        ],
-      )
-      for (const c of r.comparisons) {
-        expect(c.threshold).toBe(0.03)
-        expect(c.a).toMatchObject({ on: true, cache: 'field' })
-        expect(c.b).toMatchObject({ on: true, cache: 'volume' })
-        expect(c.b.sunDepth).toBe(c.a.sunDepth)
-        expect(c.b.jitterFrame).toBe(c.a.jitterFrame)
-      }
-    }
-  })
-
   it('climb each quality lever’s ladder a value against the next, under 1%, in horizon and inside', () => {
     const ladders = ALL.images.filter((r) => r.group === 'ladder')
     expect(ladders).toHaveLength(Object.keys(LADDERS).length * 2 * 2)
@@ -252,7 +201,7 @@ describe('the images', () => {
       expect(r.levers.jitterFrame).toBeNull()
       expect([r.identity.jitterFrame, r.thin.jitterFrame]).toEqual([0, 0])
     }
-    for (const batch of ['decisions', 'sweep', 'targets', 'memory', 'stances'])
+    for (const batch of ['sweep', 'targets', 'memory', 'stances'])
       for (const r of ALL[batch])
         for (const set of [r.base, r.candidate, r.levers, ...(r.cells ?? [])])
           if (set !== undefined) expect(set.jitterFrame, r.id).toBeNull()
@@ -297,11 +246,10 @@ describe('the command line', () => {
         .flatMap((c) => (c.a === undefined ? [c] : [c.a, c.b]))
         .map((set) => set.jitterFrame)
         .filter((index) => index !== null)
-    // The cache gate's two held comparisons and the ten ladder steps, at
-    // each of three and two stances, on both sizes.
-    expect(held(['--batch', 'images'])).toEqual(Array(2 * 2 * 26).fill(0))
+    // The ten ladder steps, both sides, at two stances, on both sizes.
+    expect(held(['--batch', 'images'])).toEqual(Array(2 * 2 * 20).fill(0))
     expect(held(['--batch', 'images', '--jitter-frame', '17'])).toEqual(
-      Array(2 * 2 * 26).fill(17),
+      Array(2 * 2 * 20).fill(17),
     )
     expect(held(['--batch', 'error', '--jitter-frame', '5'])).toEqual(
       Array(2 * 16).fill(5),
@@ -922,24 +870,24 @@ describe('the figures', () => {
   })
 
   it('read a radiance run a comparison a row, and say which pass their threshold', () => {
-    const gate = ALL.images.find(
-      (r) => r.id === 'images/cache/volume/inside/retina',
+    const ladder = ALL.images.find(
+      (r) => r.id === 'images/ladder/maxSteps/inside/retina',
     )
-    const p = plan(gate)
+    const p = plan(ladder)
     const values = [
       {
-        difference: { relative: 0.021, texels: 900 },
-        floor: { relative: 0.004 },
+        difference: { relative: 0.0021, texels: 900 },
+        floor: { relative: 0.0004 },
         settled: [17, 17],
       },
       {
         difference: { relative: 0.042, texels: 880 },
-        floor: { relative: 0.005 },
+        floor: { relative: 0.0005 },
         settled: [17, 20],
       },
     ]
     const row = {
-      ...figures(gate, p, {
+      ...figures(ladder, p, {
         results: p.map((s) => ({
           value: s.tag.startsWith('radiance:')
             ? values[Number(s.tag.split(':')[1])]
@@ -949,23 +897,24 @@ describe('the figures', () => {
       quiet: { ok: true },
     }
     expect(row.differences.map((d) => [d.relative, d.threshold])).toEqual([
-      [0.021, 0.03],
-      [0.042, 0.03],
-      [null, 0.03],
-      [null, 0.03],
+      [0.0021, 0.01],
+      [0.042, 0.01],
+      [null, 0.01],
+      [null, 0.01],
+      [null, 0.01],
     ])
     const lines = tables({ rows: [row] }).split('\n')
     expect(lines[0]).toBe(
       '| Scenario | Size | Group | Lever | Comparison | jitter | radiance RMSE | noise floor | under | passes | cloud texels | quiet |',
     )
     expect(lines[2]).toBe(
-      '| inside | retina | cache | volume | volume against field, cascades | moving | 2.10% | 0.40% | 3.0% | yes | 900 | yes |',
+      '| inside | retina | ladder | maxSteps | 64 against 96 | held at 0 | 0.21% | 0.04% | 1.0% | yes | 900 | yes |',
     )
     expect(lines[3]).toMatch(
-      /field, grid \| moving \| 4\.20% \| 0\.50% \| 3\.0% \| no \| 880 \| yes \|$/,
+      /96 against 128 \| held at 0 \| 4\.20% \| 0\.05% \| 1\.0% \| no \| 880 \| yes \|$/,
     )
-    // The held comparisons answered nothing here, so each reads as a dash.
-    expect(lines[4]).toMatch(/cascades, jitter held \| held at 0 \| — \| — \|/)
+    // The rest answered nothing here, so each reads as a dash.
+    expect(lines[4]).toMatch(/128 against 192 \| held at 0 \| — \| — \|/)
   })
 
   it('print the latest attempt of a run, which is the one a re-run left', () => {

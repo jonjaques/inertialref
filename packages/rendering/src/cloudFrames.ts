@@ -1,21 +1,18 @@
 import { Vec, type Vec3 } from '@inertialref/spatial'
 import { cubeDirection, cubeFaceOf } from './cubeSphere.ts'
-import type { ShellHeights } from './weatherShells.ts'
 
 /*
  * The frames the eye-anchored caches are laid out in: the clipmap's and the
  * volume's levels, each a tangent plane at a snapped anchor addressed
- * toroidally, and the sun's cascades, orthographic boxes along the sun
- * snapped in sun space. Formed in float64 here; a shader reads only the
- * eye-relative terms (`LevelFrame.along`) and never an absolute position
- * (rule 58).
+ * toroidally. Formed in float64 here; a shader reads only the eye-relative
+ * terms (`LevelFrame.along`) and never an absolute position (rule 58).
  *
  * A window follows the eye by whole texels and is stored toroidally, texel
  * (i, j) at (i mod size, j mod size), so a move redraws only the strips it
  * exposes. What a texel holds is fixed by the frame it was drawn in, so
- * everything a stored texel was measured against — a level's anchor, a
- * cascade's orientation and its near plane — holds still while the window
- * scrolls, and moves only by rebuilding the whole level or cascade.
+ * everything a stored texel was measured against — a level's anchor — holds
+ * still while the window scrolls, and moves only by rebuilding the whole
+ * level.
  */
 
 /** One clipmap or volume level: a tangent plane at a snapped anchor, addressed toroidally. */
@@ -62,58 +59,6 @@ export interface LevelUpdate {
   /** Per level, whether the window is exposed whole: a moved anchor, a first frame or a cut. */
   readonly rebuilt: readonly boolean[]
 }
-
-/**
- * A sun-space cascade: an orthographic box along the sun, its texel grid
- * snapped in sun space and addressed toroidally (plan §6.1: "scrolled as it
- * moves").
- */
-export interface SunCascade {
-  /** Unit, toward the sun, body-fixed: the orientation, held until it moves 0.05°. */
-  readonly toward: Vec3
-  readonly right: Vec3
-  readonly up: Vec3
-  /** Eye-relative, body-fixed meters: a texel corner, snapped. */
-  readonly center: Vec3
-  /** Meters across. */
-  readonly extent: number
-  readonly texelMeters: number
-  /** Distance from `center` toward the sun to the near plane. */
-  readonly near: number
-  /** Near to far, meters: the union's chord along the sun, with a margin. */
-  readonly depth: number
-  /** The integer texel at the window's low corner; texel (i, j) is stored at (i mod size, j mod size). */
-  readonly origin: readonly [number, number]
-  /**
-   * The cascade's rebuilds since it was built from no previous frame: a new
-   * orientation, a jump, a union that left its box. A first frame and a cut
-   * pass no previous cascade and start it over at 0, so a cut can leave the
-   * epoch where it stood: `CascadeUpdate.stale` reports one.
-   */
-  readonly epoch: number
-  /**
-   * The near plane's distance from the body's center along `toward`, float64:
-   * what holds the plane still in body-fixed space while the cascade scrolls.
-   * A texel stores its front depth from that plane, so a plane that followed
-   * the eye would move every texel drawn on an earlier frame by the eye's
-   * travel along the sun. `near` is this less the eye's own distance, which
-   * no eye-relative field can carry from one frame to the next. Optional
-   * only so a cascade built by hand still types; one without it is rebuilt.
-   * A shader reads `near`, never this.
-   */
-  readonly plane?: number
-}
-
-export interface CascadeUpdate {
-  readonly cascades: readonly SunCascade[]
-  /** Per cascade, the toroidal strips the scroll exposed: drawn the frame they appear. */
-  readonly dirty: readonly (readonly DirtyRect[])[]
-  /** Per cascade, whether its contents are stale whole: a new orientation, a jump or a cut. */
-  readonly stale: readonly boolean[]
-}
-
-/** Degrees: the sun move that re-orients a cascade. */
-export const SUN_CASCADE_TURN = 0.05
 
 /* ------------------------------------------------------------------------- */
 /* Vectors                                                                    */
@@ -384,200 +329,4 @@ export function levelFrames(
     )
   })
   return { frames, dirty, rebuilt }
-}
-
-/* ------------------------------------------------------------------------- */
-/* Sun cascades                                                               */
-/* ------------------------------------------------------------------------- */
-
-/**
- * Right and up across the sun, deterministic in `toward` so a rebuild at one
- * orientation lays one grid: right × up = toward, seeded off the pole unless
- * the sun is near it.
- */
-function sunBasis(toward: Vec3): { readonly right: Vec3; readonly up: Vec3 } {
-  const seed =
-    Math.abs(toward.y) < 0.9 ? { x: 0, y: 1, z: 0 } : { x: 1, y: 0, z: 0 }
-  const right = unit(cross(seed, toward))
-  return { right, up: cross(toward, right) }
-}
-
-/** The angle between two unit vectors, without acos's loss near zero. */
-const angleBetween = (a: Vec3, b: Vec3): number =>
-  2 *
-  Math.atan2(
-    Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z),
-    Math.hypot(a.x + b.x, a.y + b.y, a.z + b.z),
-  )
-
-/** z on a sphere of `radius` over the sun axis at a distance `rho` from it, sun side. */
-const sunSide = (radius: number, rho: number): number =>
-  Math.sqrt(Math.max(0, (radius - rho) * (radius + rho)))
-
-/**
- * How far along the sun, from the body's center, the union reaches over the
- * columns of a window centered at (x, y) in sun space, `half` meters either
- * way: [lowest, highest], or null where no column meets it.
- *
- * A column at a distance ρ from the sun axis meets the top sphere at
- * z = √((R + top)² − ρ²) and the base sphere at √((R + base)² − ρ²) on the
- * sun side; a column that passes outside the base sphere grazes the union
- * the whole way through the top one, lit on both sides of the terminator.
- * Both are monotone in ρ, so the window's nearest and farthest columns bound
- * them. The night side's union is in the body's shadow and no cascade holds it.
- */
-function unionReach(
-  x: number,
-  y: number,
-  half: number,
-  shells: ShellHeights,
-): readonly [number, number] | null {
-  const { datumRadius, boundaries } = shells
-  const inner = datumRadius + (boundaries[0] ?? 0)
-  const outer = datumRadius + (boundaries[boundaries.length - 1] ?? 0)
-  const nearest = Math.hypot(
-    Math.max(0, Math.abs(x) - half),
-    Math.max(0, Math.abs(y) - half),
-  )
-  const farthest = Math.hypot(Math.abs(x) + half, Math.abs(y) + half)
-  if (nearest >= outer) return null
-  const lowest =
-    farthest < inner
-      ? sunSide(inner, farthest)
-      : -sunSide(outer, Math.max(nearest, inner))
-  return [lowest, sunSide(outer, nearest)]
-}
-
-/*
- * A rebuild sizes its box for the window grown by half its own width on
- * every side, so the cascade scrolls that far in any direction before the
- * union can leave it, and pads both planes by a texel. Depth costs a bake
- * nothing — each texel marches between its own crossings of the union — and
- * costs a stored front depth little: the half-float pair keeps 6 cm to
- * 1,000 km.
- */
-const CASCADE_SLACK = 1 / 2
-
-/** A cascade carried over from `before`: its orientation, its grid and its box. */
-type HeldCascade = SunCascade & { readonly plane: number }
-
-/** Whether `before` can be scrolled into this frame: same layout, no jump, a sun within the turn. */
-function orientedLike(
-  before: SunCascade | undefined,
-  extent: number,
-  texel: number,
-  toSun: Vec3,
-  jump: boolean,
-): before is HeldCascade {
-  return (
-    before !== undefined &&
-    before.plane !== undefined &&
-    !jump &&
-    before.extent === extent &&
-    before.texelMeters === texel &&
-    angleBetween(before.toward, toSun) <= (SUN_CASCADE_TURN * Math.PI) / 180
-  )
-}
-
-/** One cascade this frame, and what of it is stale. */
-function cascadeAt(
-  eye: Vec3,
-  toSun: Vec3,
-  shells: ShellHeights,
-  extent: number,
-  size: number,
-  before: SunCascade | undefined,
-  jump: boolean,
-): {
-  readonly cascade: SunCascade
-  readonly dirty: DirtyRect[]
-  readonly stale: boolean
-} {
-  const texel = extent / size
-  const oriented = orientedLike(before, extent, texel, toSun, jump)
-  const toward = oriented ? before.toward : toSun
-  const { right, up } = oriented ? before : sunBasis(toSun)
-  // The grid is laid on the sun axis through the body's center, so a
-  // texel's column is fixed in body-fixed space whatever the eye does.
-  const ex = dot(eye, right)
-  const ey = dot(eye, up)
-  const ez = dot(eye, toward)
-  const origin = [
-    windowOrigin(ex / texel, size),
-    windowOrigin(ey / texel, size),
-  ] as const
-  const cx = (origin[0] + Math.floor(size / 2)) * texel
-  const cy = (origin[1] + Math.floor(size / 2)) * texel
-  const reach = unionReach(cx, cy, extent / 2, shells)
-  const held =
-    oriented &&
-    (reach === null ||
-      (reach[1] <= before.plane && reach[0] >= before.plane - before.depth))
-  let plane: number
-  let depth: number
-  if (held) {
-    plane = before.plane
-    depth = before.depth
-  } else {
-    const grown = unionReach(
-      cx,
-      cy,
-      extent / 2 + CASCADE_SLACK * extent,
-      shells,
-    ) ?? [ez, ez]
-    plane = grown[1] + texel
-    depth = plane - (grown[0] - texel)
-  }
-  const cascade: SunCascade = {
-    toward,
-    right,
-    up,
-    center: {
-      x: right.x * (cx - ex) + up.x * (cy - ey),
-      y: right.y * (cx - ex) + up.y * (cy - ey),
-      z: right.z * (cx - ex) + up.z * (cy - ey),
-    },
-    extent,
-    texelMeters: texel,
-    near: plane - ez,
-    depth,
-    origin,
-    epoch: held ? before.epoch : before === undefined ? 0 : before.epoch + 1,
-    plane,
-  }
-  return {
-    cascade,
-    dirty: held ? exposed(before.origin, origin, size) : [whole(size)],
-    stale: !held,
-  }
-}
-
-/**
- * `jump` marks every cascade stale; a sun that moved more than 0.05° from a
- * cascade's orientation re-orients it; `previous` null is a cut.
- *
- * A cascade also rebuilds when the window has scrolled far enough that the
- * union over it leaves the box it was built with. That rebuild keeps the
- * orientation, which is within 0.05° of the sun or it would not be held, and
- * moves the near plane: everything the cascade holds is redrawn against it.
- * `center` lies in the eye's own plane across the sun.
- */
-export function sunCascades(
-  eye: Vec3,
-  sun: Vec3,
-  shells: ShellHeights,
-  extents: readonly number[],
-  size: number,
-  previous: readonly SunCascade[] | null,
-  jump: boolean,
-): CascadeUpdate {
-  const toSun = unit(sun)
-  const built = extents.map((extent, k) =>
-    cascadeAt(eye, toSun, shells, extent, size, previous?.[k], jump),
-  )
-  return {
-    cascades: built.map((one) => one.cascade),
-    dirty: built.map((one) => one.dirty),
-    stale: built.map((one) => one.stale),
-  }
 }

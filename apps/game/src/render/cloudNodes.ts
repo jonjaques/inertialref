@@ -10,7 +10,6 @@ import {
   RepeatWrapping,
   RGBAFormat,
   RGFormat,
-  Storage3DTexture,
   StorageTexture,
   type Texture,
   type TextureNode,
@@ -23,7 +22,6 @@ import {
   floatBitsToUint,
   fract,
   int,
-  ivec3,
   select,
   texture,
   texture3D,
@@ -248,11 +246,10 @@ export function finiteOr(
  * after each compute write regenerates that chain with raw render passes the
  * pass timeline cannot name while `ir.gpu` counts them: about forty a frame
  * across the trace and the history, biasing the very figures the clouds are
- * measured by, and the declared bytes a third short. A `Storage3DTexture`
- * allocates its chain and nothing fills it. `generateMipmaps` off is all
- * either needs: three allocates a chain, and regenerates one after a store,
- * only where `Textures.needsMipmaps` holds, so a `StorageTexture`'s own
- * `mipmapsAutoUpdate` is left as it comes. Every storage texture the cloud
+ * measured by, and the declared bytes a third short. `generateMipmaps` off
+ * is all it needs: three allocates a chain, and regenerates one after a
+ * store, only where `Textures.needsMipmaps` holds, so a `StorageTexture`'s
+ * own `mipmapsAutoUpdate` is left as it comes. Every storage texture the cloud
  * system holds is made here.
  */
 
@@ -266,24 +263,6 @@ export function cloudStorageTexture(
   const storage = new StorageTexture(width, height)
   storage.format = RGBAFormat
   storage.type = format === 'rgba16float' ? HalfFloatType : UnsignedByteType
-  storage.generateMipmaps = false
-  storage.name = name
-  return storage
-}
-
-const STORAGE_3D_TYPES = { rgba8unorm: UnsignedByteType } as const
-
-/** The same for a 3D storage texture: RGBA8, the one 3D storage format core WebGPU writes. */
-export function cloudStorage3DTexture(
-  width: number,
-  height: number,
-  depth: number,
-  format: 'rgba8unorm',
-  name: string,
-): Storage3DTexture {
-  const storage = new Storage3DTexture(width, height, depth)
-  storage.format = RGBAFormat
-  storage.type = STORAGE_3D_TYPES[format]
   storage.generateMipmaps = false
   storage.name = name
   return storage
@@ -452,8 +431,8 @@ function withReads(medium: CloudMedium, reads: Node<'float'>): CloudMedium {
  *
  * - `field`: the clipmap's textures 0–2 (2D arrays), the base and detail
  *   noises (3D), the curl and the profile (2D): 7;
- * - `volume`: the volume and its bound (3D): 2;
- * - `sunDepth`: the cascades (a 2D array) or the grid (3D): 1;
+ * - `volume`: the volume (3D): 1;
+ * - `sunDepth`: the sun grid (3D): 1;
  * - `phase`: the Mie table (2D): 1;
  * - `far`: its atlas (2D): 1.
  *
@@ -481,35 +460,15 @@ export const CLOUD_STAND_INS = {
       )
   },
 
-  volume(medium: CloudMediumFn = CLOUD_VACUUM): {
-    readonly medium: CloudMediumFn
-    readonly bound: (s: CloudSample, b: CloudBodyUniforms) => Node<'float'>
-    readonly brickExit: (
-      s: CloudSample,
-      r: CloudRay,
-      b: CloudBodyUniforms,
-    ) => Node<'float'>
-  } {
+  volume(medium: CloudMediumFn = CLOUD_VACUUM): CloudMediumFn {
     const cache = texture3D(cloudStandInTexture('3d', 'rg8'))
-    const bound = texture3D(cloudStandInTexture('3d', 'rgba8'))
-    return {
-      medium: (sample, body) =>
-        withReads(medium(sample, body), cloudStandInBinding(cache, '3d')),
-      // Never zero: no brick is skipped, so the medium is read every step. A
-      // brick's bound is a texel load, as its brick index is an integer.
-      bound: () => float(1).add(bound.load(ivec3(0, 0, 0)).x.mul(0)),
-      // A step past the sample, the least a skip advances.
-      brickExit: (sample) => sample.distance.add(0.5),
-    }
+    return (sample, body) =>
+      withReads(medium(sample, body), cloudStandInBinding(cache, '3d'))
   },
 
-  sunDepth(kind: 'cascades' | 'grid'): CloudSunDepthNodes {
-    const map =
-      kind === 'cascades'
-        ? texture(cloudStandInTexture('2d-array', 'rgba16f', { layers: 3 }))
-        : texture3D(cloudStandInTexture('3d', 'r16f'))
-    const shape = kind === 'cascades' ? '2d-array' : '3d'
-    return { opticalDepth: () => cloudStandInBinding(map, shape) }
+  sunDepth(): CloudSunDepthNodes {
+    const map = texture3D(cloudStandInTexture('3d', 'r16f'))
+    return { opticalDepth: () => cloudStandInBinding(map, '3d') }
   },
 
   /** An isotropic phase, `value` sr⁻¹ in every band; 1/(4π) is normalized. */

@@ -17,11 +17,7 @@ import {
 import { logHub, RingBufferSink } from '@inertialref/shared'
 import { cloudRadianceDifference } from '@inertialref/devtools'
 import type { CloudHistory } from './cloudHistory.ts'
-import {
-  CLOUD_CACHES,
-  CLOUD_SUN_DEPTHS,
-  type CloudLevers,
-} from './cloudLevers.ts'
+import type { CloudLevers } from './cloudLevers.ts'
 import type { CloudResource } from './cloudNodes.ts'
 import { type CloudRig, cloudRig } from './cloudSystemRig.ts'
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
@@ -141,11 +137,8 @@ describe('every lever set', () => {
     const detach = logHub.addSink(sink)
     const before = gpu.reported().filter((m) => m.type === 'error').length
     try {
-      for (const cache of CLOUD_CACHES)
-        for (const sunDepth of CLOUD_SUN_DEPTHS) {
-          set({ cache, sunDepth })
-          frames(2)
-        }
+      set({})
+      frames(2)
       for (const force of ['reset', 'cut', 'scrub', 'warp', 'fly'] as const) {
         set({ force })
         frames(2)
@@ -195,16 +188,15 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
   }
 
   it('is §4.2’s inside pass B, the converging frame tracing once and the immediate four times', async () => {
-    const steady = await order({
-      cache: 'field',
-      sunDepth: 'cascades',
-      force: 'none',
-    })
+    const steady = await order({ force: 'none' })
+    // The volume before the sun grid that sums through it, each refreshing
+    // a share of its slices a frame: the volume's budget of 8, the grid's 4.
     expect(steady).toEqual([
       ['scene over clouds', 1],
       ['cloud maps', 1],
       ['cloud clipmap', 1],
-      ['cloud sun cascade', 1],
+      ['cloud volume', 8],
+      ['cloud sun grid', 4],
       ['cloud far atlas', 1],
       ['cloud depth', 1],
       ['cloud trace', 1],
@@ -216,26 +208,6 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     )
     expect(immediate.find(([label]) => label === 'cloud trace')?.[1]).toBe(4)
     expect(immediate.find(([label]) => label === 'cloud history')?.[1]).toBe(4)
-  }, 120_000)
-
-  it('draws the volume before the sun grid that sums through it', async () => {
-    const passes = await order({
-      cache: 'volume',
-      sunDepth: 'grid',
-      force: 'none',
-    })
-    expect(passes.map(([label]) => label)).toEqual([
-      'scene over clouds',
-      'cloud maps',
-      'cloud clipmap',
-      'cloud volume',
-      'cloud volume bound',
-      'cloud sun grid',
-      'cloud far atlas',
-      'cloud depth',
-      'cloud trace',
-      'cloud history',
-    ])
   }, 120_000)
 })
 
@@ -255,11 +227,8 @@ describe('what the resources hold', () => {
     }
 
   it.each([
-    ['field and cascades', { cache: 'field', sunDepth: 'cascades' }],
-    [
-      'the volume and the grid',
-      { cache: 'volume', sunDepth: 'grid', noiseFormat: 'rgba8' },
-    ],
+    ['the defaults', {}],
+    ['the sweep’s RGBA8 noise', { noiseFormat: 'rgba8' }],
   ] as const)(
     'under %s: every texture one level, every resource’s bytes its GPU textures’',
     async (_, levers) => {
@@ -304,7 +273,7 @@ describe('what the resources hold', () => {
 
 describe('the whole chain over a depth step', () => {
   it('stops the trace’s rows under the ceiling at it, in true kilometers', async () => {
-    set({ cache: 'field', force: 'none' })
+    set({ force: 'none' })
     frames(4)
     const trace = resource('trace')
     const [width, height] = rig.system!.report.extents.trace
@@ -378,7 +347,7 @@ describe('the whole chain over a depth step', () => {
 
 describe('the radiance capture', () => {
   it('reads one frame for two asks, at the trace’s extent, cloud where the ceiling does not stop the trace', async () => {
-    set({ cache: 'field', force: 'none', lightTaps: 2 })
+    set({ force: 'none', lightTaps: 2 })
     frames(20)
     const first = rig.system!.captureRadiance()
     const second = rig.system!.captureRadiance()
@@ -400,7 +369,7 @@ describe('the radiance capture', () => {
 
   it('differs where the light differs: lightTaps 0 against 4', async () => {
     const capture = async (lightTaps: 0 | 4) => {
-      set({ cache: 'field', force: 'none', lightTaps })
+      set({ force: 'none', lightTaps })
       frames(20)
       const asked = rig.system!.captureRadiance()
       rig.frame()
@@ -423,7 +392,7 @@ describe('the radiance capture', () => {
    */
   it('reads a held still twice sixteen frames apart as one image with the jitter held, and as two with it moving', async () => {
     const pair = async (jitterFrame: number | null) => {
-      set({ cache: 'field', lightTaps: 2, jitterFrame })
+      set({ lightTaps: 2, jitterFrame })
       set({ force: 'reset' })
       rig.frame()
       set({ force: 'none' })
@@ -462,12 +431,7 @@ describe('a warm-up that arrives after the caches are whole', () => {
    */
   it('leaves the volume and the sun grid owing what it drew over, and the next frames bake it', async () => {
     const late = cloudRig(gpu, WIDTH, HEIGHT, {
-      levers: {
-        scenario: 'overcast',
-        on: true,
-        cache: 'volume',
-        sunDepth: 'grid',
-      },
+      levers: { scenario: 'overcast', on: true },
     })
     const owed = () => {
       const { volume, sunDepth } = late.system!.report.pending

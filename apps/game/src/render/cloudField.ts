@@ -9,7 +9,6 @@ import {
 } from './cloudDensity.ts'
 import { CloudFarAtlas } from './cloudFarAtlas.ts'
 import type { CloudFrame } from './cloudFrame.ts'
-import type { CloudSunDepth } from './cloudLevers.ts'
 import { CloudMaps, writeScenarioPattern } from './cloudMaps.ts'
 import type {
   CloudBudget,
@@ -20,7 +19,6 @@ import type {
 import { CloudNoise } from './cloudNoise.ts'
 import { CloudPhase } from './cloudPhase.ts'
 import { CloudProfile } from './cloudProfile.ts'
-import { CloudSunCascades } from './cloudSunCascades.ts'
 import { CloudSunGrid } from './cloudSunGrid.ts'
 import { cloudSunFn } from './cloudSunlight.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
@@ -28,15 +26,15 @@ import { CloudVolume } from './cloudVolume.ts'
 
 /*
  * The field and everything that reads it: the uniform bundle, the noise,
- * the profile, the maps and the clipmap, the four media, the volume, both
- * sun depths with the light through each, the droplets' phase and the two
- * far atlases, each built once and handed to every module that reads it. The
- * trace's 13 sampled bindings (15 with the volume) of WebGPU's 16 are counted
+ * the profile, the maps and the clipmap, the four media, the volume and the
+ * sun grid summed through it with the light through that, the droplets'
+ * phase and the two far atlases, each built once and handed to every module
+ * that reads it. The trace's 13 sampled bindings of WebGPU's 16 are counted
  * on shared nodes: a second medium built over the same textures is a second
- * set of bindings, and the volume's kernels would not compile.
+ * set of bindings.
  *
  * The cloud system builds its frame on one of these, and so does every
- * instrument that scores a choice on the field the frame draws
+ * instrument that scores a part of it on the field the frame draws
  * (`cloudFarCompare.gpu.test.ts`, `cloudSunAccuracy.gpu.test.ts`): one
  * construction, so the two cannot drift into two fields.
  */
@@ -49,12 +47,12 @@ export interface CloudField {
   readonly clipmap: CloudClipmap
   /** The fine march's medium: the clipmap's coverage (§5.6). */
   readonly medium: CloudMediumFn
+  /** The field cached around the eye: what the sun grid sums through. */
   readonly volume: CloudVolume
-  readonly cascades: CloudSunCascades
   readonly grid: CloudSunGrid
   readonly phase: CloudPhase
-  /** The light a cloud sample sees through each sun depth; the taps read the field's own textures. */
-  readonly sun: Readonly<Record<CloudSunDepth, CloudSunFn>>
+  /** The light a cloud sample sees through the sun grid; the taps read the field's own textures. */
+  readonly sun: CloudSunFn
   /** The sweep's constant-work medium (§8.4). */
   readonly sweep: CloudMediumFn
   /** The served body's far atlas, baked from the cube's coverage. */
@@ -83,7 +81,6 @@ export function createCloudField(): CloudField {
     bake: medium,
     detail: noise.nodes,
   })
-  const cascades = new CloudSunCascades(uniforms, medium)
   const grid = new CloudSunGrid(uniforms, volume)
   const phase = new CloudPhase(mieDroplets())
   const farAtlas = new CloudFarAtlas({
@@ -98,7 +95,7 @@ export function createCloudField(): CloudField {
     phase,
     body: 'second',
   })
-  const caches = [noise, maps, clipmap, volume, cascades, grid] as const
+  const caches = [noise, maps, clipmap, volume, grid] as const
   const fars = [farAtlas, farSecond] as const
   const bakes = [...caches, phase, ...fars] as const
   return {
@@ -109,13 +106,9 @@ export function createCloudField(): CloudField {
     clipmap,
     medium,
     volume,
-    cascades,
     grid,
     phase,
-    sun: {
-      cascades: cloudSunFn({ uniforms, medium, depth: cascades }),
-      grid: cloudSunFn({ uniforms, medium, depth: grid }),
-    },
+    sun: cloudSunFn({ uniforms, medium, depth: grid }),
     sweep: sweepMedium({ ...recipe, clipmap: clipmap.nodes }),
     farAtlas,
     farSecond,

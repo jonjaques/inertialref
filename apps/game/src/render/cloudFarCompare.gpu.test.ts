@@ -39,7 +39,7 @@ import {
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { cloudMarch, type CloudMarchDeps, marchFar } from './cloudMarch.ts'
 import { type CloudBudget, type CloudRay, traceJitter } from './cloudNodes.ts'
-import { SUN_DEPTH_FRAME_CAP } from './cloudSunCascades.ts'
+import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
 import {
   RIG_EARTH_RADIUS,
   RIG_FOV,
@@ -56,7 +56,7 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * error over the four cases at farFootprint 400 m (§8.7).
  *
  * The field is the system's own (`createCloudField`): the maps, the
- * clipmap, the media, the far atlas and the cascades the fine march takes
+ * clipmap, the media, the far atlas and the sun grid the fine march takes
  * its sun from, baked by frames built as the sensor builds them, over Earth
  * with its own air. 256 × 144 rays, the trace's extent for a 1024 × 576
  * picture through the rig's 60° lens, each case placed so the middle ray
@@ -81,10 +81,10 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * The radiance is the cloud's own light, L_c's luminance per unit sun
  * irradiance; the transmittance is T_c. Errors are relative to the
  * reference's mean light over the bins that hold cloud, and absolute in T.
- * The reference takes its sun from the cascades, as the fine march does,
- * and past the outer one's reach (102 km either side of the eye's sun axis)
- * from the taps alone, so at 1,600 m, 220 km out, its light is an upper
- * bound; at 400 m every case's content is inside it.
+ * The reference takes its sun from the sun grid, as the fine march does,
+ * and past the grid's window (25.6 km either side of the eye) from the taps
+ * alone, so at both footprints, 55 and 220 km out, its light is an upper
+ * bound: every case's content lies past the window.
  */
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
@@ -252,16 +252,9 @@ type Variant = (
 function marchDeps(field: CloudField): CloudMarchDeps {
   return {
     uniforms: field.uniforms,
-    media: {
-      field: field.medium,
-      volume: null,
-      bound: null,
-      brickExit: null,
-      sweep: field.sweep,
-    },
     phase: field.phase,
     medium: field.medium,
-    sun: field.sun.cascades,
+    sun: field.sun,
   }
 }
 

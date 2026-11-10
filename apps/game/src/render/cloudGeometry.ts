@@ -142,8 +142,8 @@ export function shellCrossing(
 /**
  * The same quadratic for a ray from an eye-relative origin `o₀` along `d̂`:
  * s² + 2s·[r_e(up·d̂) + o₀·d̂] + [c₀ + 2r_e(up·o₀) + o₀·o₀] = 0, with
- * c₀ = (h_e − h_b)(2R + h_e + h_b). The cascade and grid bakes' sun rays,
- * which do not pass through the eye. h_e − h_b is two heights, not two radii.
+ * c₀ = (h_e − h_b)(2R + h_e + h_b). The sun grid's bake and the far atlas's
+ * sun rays, which do not pass through the eye. h_e − h_b is two heights, not two radii.
  */
 export function shellCrossingFrom(
   body: CloudBodyUniforms,
@@ -247,8 +247,8 @@ export function altitudeAlong(
 
 /**
  * Height over the datum of an eye-relative point: §5.3 with μ·t → up·o and
- * t² → o·o. The light taps, the cascade and grid bakes and the volume bake
- * all take their heights here (rule 52); none forms length(eye + o) − R.
+ * t² → o·o. The light taps, the sun grid's bake and the volume bake all
+ * take their heights here (rule 52); none forms length(eye + o) − R.
  */
 export function altitudeAt(
   body: CloudBodyUniforms,

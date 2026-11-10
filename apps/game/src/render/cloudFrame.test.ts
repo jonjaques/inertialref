@@ -36,7 +36,6 @@ import {
 } from './cloudFrame.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { CLOUD_BASE_CELLS } from './cloudNoise.ts'
-import { SUN_CASCADE_EXTENTS, SUN_CASCADE_SIZE } from './cloudSunCascades.ts'
 import { CLOUD_CLIPMAP_LEVELS, createCloudUniforms } from './cloudUniforms.ts'
 import { CLOUD_VOLUME_SIZE, CLOUD_VOLUME_TEXELS } from './cloudVolume.ts'
 
@@ -331,7 +330,7 @@ describe('a body’s frame', () => {
 
   it('lays out its caches as their modules do', () => {
     const [frame] = run([inputs()])
-    const { clipmap, volume, cascades } = frame!.served
+    const { clipmap, volume } = frame!.served
     expect(clipmap.frames.length).toBe(CLOUD_CLIPMAP_LEVELS)
     expect(clipmap.frames.map((level) => level.texelMeters)).toEqual([
       ...CLOUD_CLIPMAP_TEXELS,
@@ -345,11 +344,6 @@ describe('a body’s frame', () => {
     expect(
       volume.frames.every((level) => level.size === CLOUD_VOLUME_SIZE),
     ).toBe(true)
-    expect(cascades.cascades.map((cascade) => cascade.extent)).toEqual([
-      ...SUN_CASCADE_EXTENTS,
-    ])
-    for (const cascade of cascades.cascades)
-      expect(cascade.extent / cascade.texelMeters).toBe(SUN_CASCADE_SIZE)
     expect(cloudNoisePeriods(WEATHER_SCENARIOS['fair-cumulus']).base).toBe(
       1200 * CLOUD_BASE_CELLS,
     )
@@ -559,12 +553,10 @@ describe('the forced paths', () => {
       expect(frame.regime).toBe('immediate')
       expect(frame.served.clipmap.rebuilt.every(Boolean)).toBe(true)
       expect(frame.served.volume.rebuilt.every(Boolean)).toBe(true)
-      expect(frame.served.cascades.stale.every(Boolean)).toBe(true)
     }
     // Without the force the same still eye scrolls nothing and rebuilds nothing.
     const still = run([inputs(), inputs()])
     expect(still[1]!.served.clipmap.rebuilt.some(Boolean)).toBe(false)
-    expect(still[1]!.served.cascades.stale.some(Boolean)).toBe(false)
   })
 
   it('immediates under reset, and nothing else', () => {

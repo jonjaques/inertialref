@@ -8,7 +8,6 @@ import type { Body } from '@inertialref/universe'
 import {
   aspectRatio,
   CLOUD_ADVECTION_PERIOD,
-  type CascadeUpdate,
   type CloudExtents,
   cloudExtents,
   commonPeriod,
@@ -26,7 +25,6 @@ import {
   type ShellHeights,
   shellBoundaries,
   shellHeights,
-  sunCascades,
   verticalFov,
   WEATHER_SCENARIOS,
   type WeatherScenario,
@@ -114,7 +112,6 @@ export interface CloudBodyFrame {
   readonly clipmap: LevelUpdate
   /** Levels 50/200/800 m. */
   readonly volume: LevelUpdate
-  readonly cascades: CascadeUpdate
 }
 
 export type CloudRegime = 'converging' | 'immediate'
@@ -181,15 +178,12 @@ export const CLOUD_CLIPMAP_TEXELS = [250, 500, 1000, 2000, 4000, 8000] as const
 export const CLOUD_CLIPMAP_SIZE = 256
 
 /*
- * The volume's and the cascades' layouts and the base noise's cells a
- * period, restated from `cloudVolume.ts`, `cloudSunCascades.ts` and
- * `cloudNoise.ts`: those modules reach Three at runtime and this one does
- * not. `cloudFrame.test.ts` holds each copy to its source.
+ * The volume's layout and the base noise's cells a period, restated from
+ * `cloudVolume.ts` and `cloudNoise.ts`: those modules reach Three at runtime
+ * and this one does not. `cloudFrame.test.ts` holds each copy to its source.
  */
 const VOLUME_TEXELS = [50, 200, 800] as const
 const VOLUME_SIZE = 256
-const CASCADE_EXTENTS = [12_800, 51_200, 204_800] as const
-const CASCADE_SIZE = 512
 const BASE_CELLS = 8
 
 /**
@@ -230,7 +224,6 @@ const FLY_RATE = 60
 const POLE: Vec3 = { x: 0, y: 1, z: 0 }
 const WHITE: Rgb = { r: 1, g: 1, b: 1 }
 const NO_LEVELS: LevelUpdate = { frames: [], dirty: [], rebuilt: [] }
-const NO_CASCADES: CascadeUpdate = { cascades: [], dirty: [], stale: [] }
 
 /* ------------------------------------------------------------------------- */
 /* The bodies                                                                 */
@@ -399,17 +392,6 @@ function bodyFrame(
           caches?.volume.frames ?? null,
         )
       : NO_LEVELS,
-    cascades: served
-      ? sunCascades(
-          eye,
-          sun,
-          shells,
-          CASCADE_EXTENTS,
-          CASCADE_SIZE,
-          caches?.cascades.cascades ?? null,
-          context.jump,
-        )
-      : NO_CASCADES,
   }
 }
 

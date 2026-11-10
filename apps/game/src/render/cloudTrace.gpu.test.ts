@@ -26,10 +26,8 @@ import {
   instanceIndex,
   ivec2,
   max,
-  min,
   normalize,
   oneMinus,
-  select,
   sqrt,
   storage,
   texture,
@@ -56,7 +54,6 @@ import {
   type CloudFarFn,
   type CloudMediumFn,
   type CloudPhaseNodes,
-  type CloudSample,
   cloudStandInTexture,
   type CloudSunDepthNodes,
   type CloudSunFn,
@@ -205,9 +202,9 @@ interface Media {
 }
 
 /**
- * The trace's deps over the stand-ins, every candidate's: the field and the
- * volume carrying `medium`, both sun depths, the far field, the stand-in
- * phase, and the depth copy `depth` stands in for.
+ * The trace's deps over the stand-ins: the field carrying `medium`, the sun
+ * grid, the far field, the stand-in phase, and the depth copy `depth` stands
+ * in for.
  */
 function standIns(
   uniforms: CloudUniforms,
@@ -216,22 +213,13 @@ function standIns(
   options: { readonly phase?: CloudPhaseNodes } = {},
 ): Media {
   const field = CLOUD_STAND_INS.field(medium)
-  const volume = CLOUD_STAND_INS.volume(medium)
   return {
     medium: field,
     deps: {
       uniforms,
-      media: {
-        field,
-        volume: volume.medium,
-        bound: volume.bound,
-        brickExit: volume.brickExit,
-        sweep: field,
-      },
-      sun: {
-        cascades: testSun(field, CLOUD_STAND_INS.sunDepth('cascades')),
-        grid: testSun(field, CLOUD_STAND_INS.sunDepth('grid')),
-      },
+      medium: field,
+      sweep: field,
+      sun: testSun(field, CLOUD_STAND_INS.sunDepth()),
       phase: options.phase ?? CLOUD_STAND_INS.phase(),
       far: CLOUD_STAND_INS.far(),
       depth,
@@ -370,18 +358,18 @@ function bindings(wgsl: string): { sampled: number; storage: number } {
 }
 
 describe('the kernels', () => {
-  it('all five compile against the stand-ins, and bind within the stage’s limits', async () => {
+  it('all three compile against the stand-ins, and bind within the stage’s limits', async () => {
     const uniforms = createCloudUniforms()
     const sky = depthTexture(4, 4, () => SKY_KM)
     const { deps } = standIns(uniforms, slabMedium([]), () => sky)
     const trace = new CloudTrace(deps)
     const kernels = trace.kernels()
-    // Four (cache, sun depth) pairs, the sweep's, and the counters' clear.
-    expect(kernels).toHaveLength(6)
+    // The fine march's, the sweep's, and the counters' clear.
+    expect(kernels).toHaveLength(3)
     const from = gpu.reported().length
     const before = gpu.computePipelinesBuilt()
     await trace.warm(renderer)
-    expect(gpu.computePipelinesBuilt() - before).toBe(6)
+    expect(gpu.computePipelinesBuilt() - before).toBe(3)
     expect(
       gpu
         .reported()
@@ -397,14 +385,14 @@ describe('the kernels', () => {
       expect(sampled).toBeLessThanOrEqual(16)
       expect(storage).toBeLessThanOrEqual(4)
     }
-    const traces = counted.slice(0, 5)
-    // The design's census (§3.7): the field's 7, one sun depth, the air's 2,
-    // the phase, the far atlas and the depth copy; the volume's 2 beside
-    // them; the sweep's field and depth alone. A floor as well as a ceiling:
+    const traces = counted.slice(0, 2)
+    // The design's census (§3.7): the field's 7, the sun grid, the air's 2,
+    // the phase, the far atlas and the depth copy; the sweep's field and
+    // depth alone. A floor as well as a ceiling:
     // the counts are a regex over three's WGSL, and a spelling that stopped
     // matching would pass the ceiling at zero.
-    expect(traces.map(({ sampled }) => sampled)).toEqual([13, 13, 15, 15, 8])
-    expect(traces.map(({ storage }) => storage)).toEqual(Array(5).fill(4))
+    expect(traces.map(({ sampled }) => sampled)).toEqual([13, 8])
+    expect(traces.map(({ storage }) => storage)).toEqual(Array(2).fill(4))
     expect(new Set(counted.map(({ name }) => name))).toEqual(
       new Set(['cloud trace', 'cloud stats']),
     )
@@ -420,16 +408,9 @@ describe('the march’s reads', () => {
     const field = CLOUD_STAND_INS.field(medium)
     const deps: CloudMarchDeps = {
       uniforms,
-      media: {
-        field,
-        volume: null,
-        bound: null,
-        brickExit: null,
-        sweep: field,
-      },
       phase: CLOUD_STAND_INS.phase(),
       medium: field,
-      sun: testSun(field, CLOUD_STAND_INS.sunDepth('cascades')),
+      sun: testSun(field, CLOUD_STAND_INS.sunDepth()),
     }
     const material = new MeshBasicNodeMaterial()
     material.colorNode = Fn(() => {
@@ -508,11 +489,6 @@ interface ProbeOptions {
   readonly phase?: CloudPhaseNodes
   /** A far march past the handover, composed as the trace composes it. */
   readonly far?: CloudFarFn
-  /** March the medium as the volume, skipping where `bound` is zero to `exit`. */
-  readonly skip?: {
-    readonly bound: (s: CloudSample) => Node<'float'>
-    readonly exit: (s: CloudSample) => Node<'float'>
-  }
 }
 
 /**
@@ -535,18 +511,9 @@ function probe(
   const into = storage(output, 'float', capacity * PROBED)
   const count = uniform(0, 'uint')
   const field = CLOUD_STAND_INS.field(medium)
-  const sun =
-    options.sun ?? ((f) => testSun(f, CLOUD_STAND_INS.sunDepth('grid')))
-  const { skip } = options
+  const sun = options.sun ?? ((f) => testSun(f, CLOUD_STAND_INS.sunDepth()))
   const deps: CloudMarchDeps = {
     uniforms,
-    media: {
-      field,
-      volume: skip === undefined ? null : field,
-      bound: skip === undefined ? null : (s) => skip.bound(s),
-      brickExit: skip === undefined ? null : (s) => skip.exit(s),
-      sweep: field,
-    },
     phase: options.phase ?? CLOUD_STAND_INS.phase(),
     medium: field,
     sun: sun(field),
@@ -839,8 +806,7 @@ describe('the march’s edge cases', () => {
     const uniforms = createCloudUniforms()
     placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
     const unlit = probe(uniforms, slabMedium([{ ...SLAB, sigma: 0.002 }]), {
-      sun: (field) =>
-        testSun(field, CLOUD_STAND_INS.sunDepth('grid'), float(0)),
+      sun: (field) => testSun(field, CLOUD_STAND_INS.sunDepth(), float(0)),
       phase: reading,
     })
     const [shaded] = await unlit([{ direction: [0, 1, 0] }])
@@ -994,36 +960,6 @@ describe('past the fine march', () => {
         MARCH,
       )
     })
-  })
-
-  it('skips an empty brick of the volume to its exit, and loses no cloud', async () => {
-    // Bricks 250 m long and empty below 800 m, each ending where the empty
-    // region does, as a brick's far face does.
-    const skip = {
-      bound: (s: CloudSample) =>
-        select(s.altitude.greaterThanEqual(800), float(1), float(0)),
-      exit: (s: CloudSample) => min(s.distance.add(250), 800),
-    }
-    const uniforms = createCloudUniforms()
-    placeBody(uniforms, {
-      eye: 0,
-      layers: [EMPTY_BELOW, [SLAB.base, SLAB.top]],
-    })
-    const slab = slabMedium([{ ...SLAB, sigma }])
-    // At two jitters: the first step after the last brick takes it again.
-    const skipping = await probe(uniforms, slab, { skip })(
-      [0, 0.6].map((jitter) => ({ direction: [0, 1, 0] as Vec3, jitter })),
-    )
-    const [walked] = await probe(uniforms, slab)([{ direction: [0, 1, 0] }])
-    for (const skipped of skipping) {
-      expect(relative(skipped.transmittance, through)).toBeLessThanOrEqual(
-        MARCH,
-      )
-      expectLight(skipped, 1 - through)
-      // Three bricks cover the 700 m the schedule's growing steps take about
-      // fourteen to cross.
-      expect(skipped.steps).toBeLessThan(walked!.steps - 5)
-    }
   })
 })
 
@@ -1413,27 +1349,7 @@ describe('the knots', () => {
   })
 })
 
-describe('the kernels’ choice', () => {
-  it('marches one medium alike in every (cache, sun depth) pair', async () => {
-    const slab = slabMedium([{ ...SLAB, sigma: 0.002 }])
-    const traced = await rig(slab, 4, 4, {
-      eye: 0,
-      layers: [[SLAB.base, SLAB.top]],
-    })
-    const outputs: number[][] = []
-    for (const cache of ['field', 'volume'] as const)
-      for (const sunDepth of ['cascades', 'grid'] as const) {
-        const frame = frameOf({ width: 4, height: 4 }, { cache, sunDepth })
-        traced.trace.render(renderer, frame, BUDGET)
-        const { light, aux } = await outputsOf(traced.trace, 4, 4)
-        outputs.push([...light(1, 2), ...aux(3, 2), ...aux(4, 1)])
-      }
-    // A slab the stand-ins add nothing to: the same numbers from each.
-    expect(outputs[0]![3]).toBeLessThan(1)
-    for (const output of outputs) expect(output).toEqual(outputs[0])
-    traced.dispose()
-  })
-
+describe('the jitter', () => {
   it('draws one frame index alike every time, and moves the samples with the index', async () => {
     // Frames 5 and 9 share an interleave phase, so only the jitter differs.
     const slab = slabMedium([{ ...SLAB, sigma: 0.002 }])

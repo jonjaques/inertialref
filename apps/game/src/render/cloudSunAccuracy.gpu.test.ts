@@ -33,13 +33,9 @@ import {
 import { type CloudField, createCloudField } from './cloudField.ts'
 import { type CloudFrame, cloudFrame } from './cloudFrame.ts'
 import { altitudeAt, shellCrossingFrom, sunMuAt } from './cloudGeometry.ts'
-import {
-  type CloudLevers,
-  type CloudSunDepth,
-  DEFAULT_CLOUD_LEVERS,
-} from './cloudLevers.ts'
+import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import type { CloudBudget, CloudSample } from './cloudNodes.ts'
-import { SUN_DEPTH_FRAME_CAP } from './cloudSunCascades.ts'
+import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
 import {
   LOOKING_UP,
   RIG_EARTH_RADIUS,
@@ -49,12 +45,11 @@ import {
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The sun's optical depth against a march through the field (§8.6): an
- * instrument, opt-in by IR_CLOUD_MEASURE=1, that writes
+ * The sun grid's optical depth against a march through the field (§8.6):
+ * an instrument, opt-in by IR_CLOUD_MEASURE=1, that writes
  * `.data/clouds/sunAccuracy.json` and asserts only that every figure is
- * finite and sane. Cache × sun-depth gate (b) reads it: a candidate's
- * T_cloud RMS error ≤ 3% in all five scenarios at both suns at lightTaps 2
- * (§8.7).
+ * finite and sane. Its headline is T_cloud's RMS error in all five
+ * scenarios at both suns, at lightTaps 2 and 4 (§8.7's 3%).
  *
  * The field is the system's own (`createCloudField`), its bakes driven by
  * frames built as the sensor builds them, over Earth turned so the eye, 2 m
@@ -62,10 +57,10 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * a fixed place may hold no cloud for kilometers. The samples are a lattice
  * of 24 × 24 columns 4 km either side of the eye, eight heights through
  * each layer, and every one the field holds cloud at is scored: the
- * candidate's T_cloud — its taps, then its own optical depth beyond them —
+ * light's T_cloud — its taps, then the grid's optical depth beyond them —
  * against exp(−∫σ·f ds) by 256 steps of the same field medium to the
- * union's top along the sun, f the medium's fraction, as the candidates
- * store σ·f. Every sample is resolved, its footprint 0.
+ * union's top along the sun, f the medium's fraction, as the grid stores
+ * σ·f. Every sample is resolved, its footprint 0.
  */
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
@@ -81,11 +76,10 @@ const SCENARIOS: readonly ScenarioId[] = [
 ]
 /** Degrees over the eye's horizon. */
 const SUNS = [37.5, 5] as const
-const DEPTHS: readonly CloudSunDepth[] = ['cascades', 'grid']
 const TAPS = [2, 4] as const
 const REFERENCE_STEPS = 256
 const ACROSS = 24
-/** Meters either side of the eye: inside the inner cascade (6.4 km) and the grid (25.6 km). */
+/** Meters either side of the eye: inside the grid's window (25.6 km). */
 const REACH = 4000
 const HEIGHTS_A_LAYER = 8
 const EYE = 2
@@ -194,12 +188,12 @@ afterAll(() => {
 interface Scored {
   readonly rms: number
   readonly worst: number
-  /** Mean signed error: positive where the candidate passes more sun. */
+  /** Mean signed error: positive where the grid passes more sun. */
   readonly bias: number
 }
 
 describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
-  it('scores both sun depths at both tap counts on the real field, and writes the figures', async () => {
+  it('scores the grid at both tap counts on the real field, and writes the figures', async () => {
     const renderer = gpu.renderer
     const offsets = new StorageBufferAttribute(new Float32Array(POINTS * 4), 4)
     const out = new StorageBufferAttribute(new Float32Array(POINTS * 2), 1)
@@ -249,15 +243,9 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
       })
       return exp(tau.negate())
     })
-    const candidates = Object.fromEntries(
-      DEPTHS.map((kind) => [
-        kind,
-        pointKernel(
-          (sample) =>
-            field.sun[kind](sample, field.medium(sample, body), body).cloud,
-        ),
-      ]),
-    ) as Record<CloudSunDepth, ComputeNode>
+    const grid = pointKernel(
+      (sample) => field.sun(sample, field.medium(sample, body), body).cloud,
+    )
 
     let previous: CloudFrame | null = null
     const frameAt = (stance: RigStance, levers: CloudLevers): CloudFrame => {
@@ -307,37 +295,29 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
             z: -Math.cos(radians(elevation)),
           },
         }
-        const levers = (
-          sunDepth: CloudSunDepth,
-          lightTaps: (typeof TAPS)[number],
-        ): CloudLevers => ({
+        const levers = (lightTaps: (typeof TAPS)[number]): CloudLevers => ({
           ...DEFAULT_CLOUD_LEVERS,
           on: true,
           scenario,
-          sunDepth,
           lightTaps,
         })
-        settle(stance, levers('cascades', 2))
+        settle(stance, levers(2))
         const truth = await read(reference)
         const inCloud: number[] = []
         for (let k = 0; k < count.value; k += 1)
           if (truth[2 * k]! > 0) inCloud.push(k)
-        const scored: Record<string, Record<string, Scored>> = {}
-        for (const kind of DEPTHS) {
-          settle(stance, levers(kind, 2))
-          scored[kind] = {}
-          for (const taps of TAPS) {
-            // The taps are a uniform: one frame writes it, and builds nothing.
-            frameAt(stance, levers(kind, taps))
-            const got = await read(candidates[kind])
-            const miss = inCloud.map((k) => got[2 * k + 1]! - truth[2 * k + 1]!)
-            scored[kind][taps] = {
-              rms: Math.sqrt(
-                miss.reduce((s, v) => s + v * v, 0) / Math.max(miss.length, 1),
-              ),
-              worst: Math.max(0, ...miss.map(Math.abs)),
-              bias: miss.reduce((s, v) => s + v, 0) / Math.max(miss.length, 1),
-            }
+        const scored: Record<string, Scored> = {}
+        for (const taps of TAPS) {
+          // The taps are a uniform: one frame writes it, and builds nothing.
+          frameAt(stance, levers(taps))
+          const got = await read(grid)
+          const miss = inCloud.map((k) => got[2 * k + 1]! - truth[2 * k + 1]!)
+          scored[taps] = {
+            rms: Math.sqrt(
+              miss.reduce((s, v) => s + v * v, 0) / Math.max(miss.length, 1),
+            ),
+            worst: Math.max(0, ...miss.map(Math.abs)),
+            bias: miss.reduce((s, v) => s + v, 0) / Math.max(miss.length, 1),
           }
         }
         results.push({
@@ -352,7 +332,7 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
           meanReference:
             inCloud.reduce((s, k) => s + truth[2 * k + 1]!, 0) /
             Math.max(inCloud.length, 1),
-          candidates: scored,
+          grid: scored,
         })
       }
     }
@@ -373,16 +353,15 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
       scenario: string
       sunDegrees: number
       inCloud: number
-      candidates: Record<string, Record<string, Scored>>
+      grid: Record<string, Scored>
     }[]) {
       // Every case holds cloud to score, and a transmittance error is at most 1.
       expect(
         row.inCloud,
         `${row.scenario} at ${row.sunDegrees}°`,
       ).toBeGreaterThan(0)
-      for (const kind of Object.values(row.candidates))
-        for (const s of Object.values(kind))
-          expect(s.worst, row.scenario).toBeLessThanOrEqual(1)
+      for (const s of Object.values(row.grid))
+        expect(s.worst, row.scenario).toBeLessThanOrEqual(1)
     }
 
     mkdirSync('.data/clouds', { recursive: true })
@@ -390,7 +369,7 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
       OUT,
       `${JSON.stringify(
         {
-          note: 'cloudSunAccuracy.gpu.test.ts: T_cloud of each sun depth against a 256-step march of the field to the union top, at in-cloud samples (§8.6)',
+          note: 'cloudSunAccuracy.gpu.test.ts: T_cloud through the sun grid against a 256-step march of the field to the union top, at in-cloud samples (§8.6)',
           body: 'Earth',
           eyeMeters: EYE,
           lattice: {
