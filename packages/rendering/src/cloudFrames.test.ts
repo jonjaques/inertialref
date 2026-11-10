@@ -274,6 +274,27 @@ describe('a level’s frame', () => {
     )
   })
 
+  it('starts its epochs over on a cut, which rebuilt reports and the epoch cannot', () => {
+    const first = levelFrames(eye, EARTH, CLIPMAP, SIZE, null)
+    const frame = first.frames[0]!
+    const reach = (SIZE / 4) * frame.texelMeters
+    const plane = planeOf(frame, eye, EARTH)
+    const outside = movedInPlane(frame, eye, reach - plane[0] + 10, 0)
+    const moved = levelFrames(outside, EARTH, CLIPMAP, SIZE, first.frames)
+    expect(moved.frames[0]!.epoch).toBe(1)
+    // A cut passes no previous frame: there is no epoch to count from.
+    const cut = levelFrames(outside, EARTH, CLIPMAP, SIZE, null)
+    expect(cut.rebuilt).toEqual(CLIPMAP.map(() => true))
+    for (const level of cut.frames) expect(level.epoch).toBe(0)
+    // Where no anchor has moved, a cut's frames are a held frame's in every
+    // field, the epoch among them, and `rebuilt` is all that tells them apart.
+    const held = levelFrames(eye, EARTH, CLIPMAP, SIZE, first.frames)
+    const still = levelFrames(eye, EARTH, CLIPMAP, SIZE, null)
+    expect(still.frames).toEqual(held.frames)
+    expect(held.rebuilt).toEqual(CLIPMAP.map(() => false))
+    expect(still.rebuilt).toEqual(CLIPMAP.map(() => true))
+  })
+
   it('projects and unprojects a direction through the anchor’s tangent plane', () => {
     const { frames } = levelFrames(eye, EARTH, CLIPMAP, SIZE, null)
     fc.assert(
@@ -526,6 +547,38 @@ describe('the sun’s cascades', () => {
     )
     expect(jumped.stale).toEqual([true, true, true])
     jumped.cascades.forEach((cascade) => expect(cascade.epoch).toBe(1))
+  })
+
+  it('start their epochs over on a cut, which stale reports and the epoch cannot', () => {
+    const first = sunCascades(eye, sun, shells(), EXTENTS, CASCADE, null, false)
+    const jumped = sunCascades(
+      eye,
+      sun,
+      shells(),
+      EXTENTS,
+      CASCADE,
+      first.cascades,
+      true,
+    )
+    jumped.cascades.forEach((cascade) => expect(cascade.epoch).toBe(1))
+    // A cut passes no previous cascade: there is no epoch to count from.
+    const cut = sunCascades(eye, sun, shells(), EXTENTS, CASCADE, null, false)
+    expect(cut.stale).toEqual([true, true, true])
+    cut.cascades.forEach((cascade) => expect(cascade.epoch).toBe(0))
+    // Before anything has rebuilt, a cut's cascades are a held frame's in
+    // every field, the epoch among them, and `stale` is all that tells them
+    // apart.
+    const held = sunCascades(
+      eye,
+      sun,
+      shells(),
+      EXTENTS,
+      CASCADE,
+      first.cascades,
+      false,
+    )
+    expect(cut.cascades).toEqual(held.cascades)
+    expect(held.stale).toEqual([false, false, false])
   })
 
   it('rebuild a cascade the eye has carried past its box, and only that one', () => {

@@ -37,7 +37,13 @@ export interface LevelFrame {
   readonly along: readonly [number, number, number]
   /** The integer texel at the window's low corner; texel (i, j) is stored at (i mod size, j mod size). */
   readonly origin: readonly [number, number]
-  /** Bumps when the anchor moves: the level is rebuilt whole. */
+  /**
+   * The anchor's moves since the level was built from no previous frame,
+   * where it starts over at 0. A first frame and a cut both pass none, so
+   * neither has an epoch to count from, and a cut taken before any anchor
+   * moved leaves every epoch at the 0 it had: `LevelUpdate.rebuilt` reports
+   * a cut, and an unchanged epoch does not rule one out.
+   */
   readonly epoch: number
 }
 
@@ -53,6 +59,7 @@ export interface LevelUpdate {
   readonly frames: readonly LevelFrame[]
   /** Per level, the toroidal rectangles the window's move exposed. */
   readonly dirty: readonly (readonly DirtyRect[])[]
+  /** Per level, whether the window is exposed whole: a moved anchor, a first frame or a cut. */
   readonly rebuilt: readonly boolean[]
 }
 
@@ -77,7 +84,12 @@ export interface SunCascade {
   readonly depth: number
   /** The integer texel at the window's low corner; texel (i, j) is stored at (i mod size, j mod size). */
   readonly origin: readonly [number, number]
-  /** Bumps when the orientation moves or the cascade is rebuilt (a jump, a cut). */
+  /**
+   * The cascade's rebuilds since it was built from no previous frame: a new
+   * orientation, a jump, a union that left its box. A first frame and a cut
+   * pass no previous cascade and start it over at 0, so a cut can leave the
+   * epoch where it stood: `CascadeUpdate.stale` reports one.
+   */
   readonly epoch: number
   /**
    * The near plane's distance from the body's center along `toward`, float64:

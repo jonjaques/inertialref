@@ -170,10 +170,13 @@ function frameAt(
   previous: CloudFrame | null,
   options: {
     readonly jump?: boolean
+    /** Build the caches' frames from none, as `cloudFrame` does under a cut, the frame count carried. */
+    readonly cut?: boolean
     readonly scenario?: WeatherScenario
   } = {},
 ): CloudFrame {
   const scenario = options.scenario ?? SCENARIO
+  const caches = options.cut === true ? null : (previous?.served ?? null)
   const shells = shellHeights(eye, R, shellBoundaries(scenario))
   const served: CloudBodyFrame = {
     address: 'test',
@@ -199,14 +202,14 @@ function frameAt(
       R,
       CLOUD_CLIPMAP_TEXELS,
       CLOUD_CLIPMAP_SIZE,
-      previous?.served.clipmap.frames ?? null,
+      caches?.clipmap.frames ?? null,
     ),
     volume: levelFrames(
       eye,
       R,
       CLOUD_VOLUME_TEXELS,
       CLOUD_VOLUME_SIZE,
-      previous?.served.volume.frames ?? null,
+      caches?.volume.frames ?? null,
     ),
     cascades: sunCascades(
       eye,
@@ -214,7 +217,7 @@ function frameAt(
       shells,
       SUN_CASCADE_EXTENTS,
       SUN_CASCADE_SIZE,
-      previous?.served.cascades.cascades ?? null,
+      caches?.cascades.cascades ?? null,
       options.jump ?? false,
     ),
   }
@@ -260,7 +263,10 @@ interface Rig {
   readonly volume: CloudVolume
   frame: CloudFrame | null
   /** Render a frame at `eye`; returns it. */
-  step(eye: Vec3, options?: { readonly jump?: boolean }): CloudFrame
+  step(
+    eye: Vec3,
+    options?: { readonly jump?: boolean; readonly cut?: boolean },
+  ): CloudFrame
   /** Render at `eye` until nothing is pending; returns the frames it took. */
   settle(eye: Vec3): number
 }
@@ -847,6 +853,21 @@ describe('the schedule', () => {
     // A jump: level 0 whole again.
     test.step(eye, { jump: true })
     expect(test.volume.drawn[0]).toBe(STACK)
+    test.volume.dispose()
+  })
+
+  it('bakes level 0 whole on a cut, where every level’s epoch stands at the 0 it had', () => {
+    const test = rig(field)
+    const eye = eyeAt(EYE_HEIGHT)
+    test.settle(eye)
+    const before = test.frame!.served.volume.frames
+    const cut = test.step(eye, { cut: true })
+    // No anchor has moved, so the cut's frames are the settled ones, epoch
+    // and all, and the levels' `rebuilt` is the only word of it.
+    expect(cut.served.volume.frames).toEqual(before)
+    expect(cut.served.volume.rebuilt).toEqual([true, true, true])
+    expect(test.volume.drawn[0]).toBe(STACK)
+    expect(test.volume.pending).toBe(true)
     test.volume.dispose()
   })
 
