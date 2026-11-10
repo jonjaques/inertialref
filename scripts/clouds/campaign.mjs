@@ -17,12 +17,14 @@
  * A campaign takes hours, and whatever starts it does not last that long: a
  * background command in an agent's harness is stopped at two hours, and a
  * closed terminal takes its jobs with it. So `start` checks what it can and
- * hands the work to a detached process under `caffeinate -dimsu`, which holds
- * the machine and the display awake. `-d` keeps a lit display lit and does
- * not wake one already off; `-u` does. The rig is a real window whose frames
- * follow the display (drive.mjs's header), and a display that is off is no
- * player's condition, with no evidence that its pacing is the panel's: every
- * row records the rate it presented at (`page.mjs`), and a batch's tables say
+ * hands the work to a detached process under `caffeinate -dims`, which holds
+ * the machine awake and a lit display lit. It does not wake a dark one, and
+ * `-u`, which would, is left out: an unattended Mac's session is locked, and
+ * a lit lock screen over the rig's window paces it at 51–68 Hz, unevenly,
+ * where the same stance presents at 115–119 with the display dark, the
+ * nearest this machine comes unattended to the panel's 120. The rig is a real
+ * window whose frames follow the display (drive.mjs's header), so every row
+ * records the rate it presented at (`page.mjs`), and a batch's tables say
  * when its rows disagree. Not a LaunchAgent, which outlives the campaign and
  * is a confirm-first change on this machine.
  *
@@ -518,7 +520,7 @@ async function start(name, resume) {
   const proc = spawn(
     'caffeinate',
     [
-      '-dimsu',
+      '-dims',
       process.execPath,
       SELF,
       'run',
