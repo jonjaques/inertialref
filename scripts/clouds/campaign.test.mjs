@@ -6,6 +6,7 @@ import {
   outcome,
   ours,
   owner,
+  resumeRefusal,
   strays,
 } from './campaign.mjs'
 import {
@@ -149,6 +150,17 @@ describe('a campaign', () => {
     expect(outcome(stage({ done: 78, total: 78 }), 0)).toBe('done')
     // A command's exit is all there is to read of it.
     expect(outcome(stage({ kind: 'command', total: null }), 0)).toBe('done')
+  })
+
+  it('is resumed only at the commit it was of', () => {
+    const was = { name: 'choices', head: HEAD }
+    expect(resumeRefusal('choices', was, HEAD)).toBeNull()
+    expect(resumeRefusal('choices', was, 'b'.repeat(40))).toBe(
+      'campaign choices was of aaaaaaaaaaaa, and HEAD is bbbbbbbbbbbb; check out its commit to resume it',
+    )
+    expect(resumeRefusal('choices', null, HEAD)).toBe(
+      'no campaign choices to resume',
+    )
   })
 
   it('launches nothing once it has been told to stop', async () => {

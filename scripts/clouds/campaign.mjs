@@ -253,6 +253,19 @@ const sleep = (ms, signal) =>
     signal.addEventListener('abort', done, { once: true })
   })
 
+/**
+ * Why a campaign cannot be resumed, or null: there is none, or it was of
+ * another commit. Its document is tied to its commit, and `measure.mjs`
+ * would refuse it, but only after the run had reset the state's stages and
+ * rewritten its summary as failed.
+ */
+export function resumeRefusal(name, was, head) {
+  if (was === null) return `no campaign ${name} to resume`
+  if (was.head !== head)
+    return `campaign ${name} was of ${was.head.slice(0, 12)}, and HEAD is ${head.slice(0, 12)}; check out its commit to resume it`
+  return null
+}
+
 /** Why the campaign cannot start, or null: the checks `start` and `run` share. */
 async function refusal() {
   if (git('status', '--porcelain') !== '')
@@ -557,6 +570,15 @@ async function run(name, { stamp, resume }) {
   }
   const head = git('rev-parse', 'HEAD')
   const was = resume ? readState(name) : null
+  // Every refusal before the state is touched: past this line the `finally`
+  // saves it and rewrites its summary, which for a resume refused is the
+  // record of the campaign it was asked to continue.
+  const why =
+    (resume ? resumeRefusal(name, was, head) : null) ?? (await refusal())
+  if (why !== null) {
+    console.log(`${new Date().toISOString()} refused: ${why}`)
+    return 2
+  }
   const state = was ?? initial(name, stamp, head)
   Object.assign(state, { pid: process.pid, status: 'running', reason: null })
   for (const stage of state.stages)
@@ -569,10 +591,6 @@ async function run(name, { stamp, resume }) {
       if (ctx.current) killGroup(ctx.current, 'SIGTERM')
     })
   try {
-    if (state.head !== head)
-      throw new Error(`the campaign was of ${state.head}, and HEAD is ${head}`)
-    const why = await refusal()
-    if (why !== null) throw new Error(why)
     save(state)
     if (CAMPAIGNS[name].build === 'always' || !bundled()) {
       console.log(`${new Date().toISOString()} building`)
@@ -608,7 +626,10 @@ async function start(name, resume) {
   const why = await refusal()
   if (why !== null) throw new Error(why)
   const was = readState(name)
-  if (resume && was === null) throw new Error(`no campaign ${name} to resume`)
+  if (resume) {
+    const refused = resumeRefusal(name, was, git('rev-parse', 'HEAD'))
+    if (refused !== null) throw new Error(refused)
+  }
   const stamp = resume
     ? path.basename(was.log, '.log').slice(name.length + 1)
     : new Date()
