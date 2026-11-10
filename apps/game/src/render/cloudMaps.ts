@@ -429,8 +429,9 @@ export class CloudMaps implements CloudResource {
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh()
   #allocated: 'none' | 'stand-in' | 'full' = 'none'
-  /** Stale faces in the order they bake: nearest the eye first. */
-  #queue: CubeFace[] = []
+  /** The render each face went stale on, or null while it holds this field. */
+  readonly #staleSince: (number | null)[] = [null, null, null, null, null, null]
+  #renders = 0
   /** The steady cycle's next face. */
   #next: CubeFace = 0
   #scenario: string | null = null
@@ -500,7 +501,7 @@ export class CloudMaps implements CloudResource {
   }
 
   get pending(): boolean {
-    return !this.#disposed && this.#queue.length > 0
+    return !this.#disposed && this.#staleSince.some((since) => since !== null)
   }
 
   get bytes(): number {
@@ -540,6 +541,13 @@ export class CloudMaps implements CloudResource {
    * level reaches at most 1,540 km from the eye, which the eye's own face
    * and the neighbors nearest it hold, and the opposite face, 90° away at
    * least, comes last.
+   *
+   * The face that has been stale longest bakes first, and nearness orders
+   * the faces that went stale together. A scrub jumps every frame: an order
+   * begun again at each jump bakes the eye's own face forever and never the
+   * other five. So through a run of jumps the eye's own face waits its turn
+   * with the rest, up to five frames, and the nearest-first order above is
+   * a single jump's.
    */
   render(
     renderer: WebGPURenderer,
@@ -547,6 +555,8 @@ export class CloudMaps implements CloudResource {
     budget: CloudBudget,
   ): void {
     if (this.#disposed) return
+    const now = this.#renders
+    this.#renders += 1
     writeScenarioPattern(this.#uniforms, frame.scenario)
     const fresh = this.#allocated !== 'full'
     if (fresh) {
@@ -563,9 +573,24 @@ export class CloudMaps implements CloudResource {
       high !== this.#period[1]
     this.#scenario = frame.scenario.id
     this.#period = [low, high]
-    if (moved) this.#queue = facesNearest(frame.served.eye)
-    const face = this.#queue.shift() ?? this.#cycle()
-    this.#draw(renderer, face)
+    const stale = this.#staleSince
+    if (moved) for (let f = 0; f < stale.length; f += 1) stale[f] ??= now
+    const owed = this.#owed(frame.served.eye)
+    if (owed !== null) stale[owed] = null
+    this.#draw(renderer, owed ?? this.#cycle())
+  }
+
+  /** The stale face to bake: the longest stale, the nearest the eye among those. */
+  #owed(eye: Vec3): CubeFace | null {
+    const stale = this.#staleSince
+    if (stale.every((since) => since === null)) return null
+    let chosen: CubeFace | null = null
+    for (const face of facesNearest(eye)) {
+      const since = stale[face]
+      if (since === null || since === undefined) continue
+      if (chosen === null || since < stale[chosen]!) chosen = face
+    }
+    return chosen
   }
 
   #cycle(): CubeFace {

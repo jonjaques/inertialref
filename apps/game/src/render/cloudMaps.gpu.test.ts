@@ -388,6 +388,27 @@ describe('the bake', () => {
     maps.dispose()
   })
 
+  it('reaches all six faces through a scrub, which jumps every frame', async () => {
+    const uniforms = createCloudUniforms()
+    const maps = new CloudMaps(uniforms)
+    bakeAll(maps, uniforms, WEATHER_SCENARIOS['two-decks'])
+    const overcast = WEATHER_SCENARIOS.overcast
+    for (let k = 0; k < 6; k += 1)
+      maps.render(renderer, frameFor(uniforms, overcast, EYE, true), budget)
+    // Each face holds the new field, where the eye's own alone would if every
+    // jump began the order again; and every one is owed again by the last.
+    const read = await loadTexels(
+      maps.textures()[0]!,
+      ([0, 1, 2, 3, 4, 5] as const).map(
+        (face) => atlasTexel(face, 257, 257).at,
+      ),
+    )
+    for (let face = 0; face < 6; face += 1)
+      expect(read[face * 4], `face ${face}`).toBeCloseTo(1, 5)
+    expect(maps.pending).toBe(true)
+    maps.dispose()
+  })
+
   it('holds one level a texture, its declared bytes its own, and nothing before it warms', async () => {
     const uniforms = createCloudUniforms()
     const maps = new CloudMaps(uniforms)
