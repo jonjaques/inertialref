@@ -66,12 +66,9 @@ import {
 } from './cloudFrame.ts'
 import { traceScreen, viewDirection } from './cloudGeometry.ts'
 import { CloudHistory } from './cloudHistory.ts'
+import { traceJitter } from './cloudJitter.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
-import {
-  type CloudBudget,
-  cloudStorageTexture,
-  traceJitter,
-} from './cloudNodes.ts'
+import { type CloudBudget, cloudStorageTexture } from './cloudNodes.ts'
 import type { CloudTraceTextures } from './cloudTrace.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
@@ -136,7 +133,17 @@ const SOL: ReadonlyMap<string, Body> = (() => {
     [...walkBodies(system)].map((body) => [formatAddress(body.address), body]),
   )
 })()
-const EARTH = SOL.get('g:milky-way/s:SOL/b:2')!
+const EARTH_ADDRESS = 'g:milky-way/s:SOL/b:2'
+const EARTH = SOL.get(EARTH_ADDRESS)!
+/**
+ * Earth's record less its authored deck: a wet world the volume serves
+ * unasked (`cloudsServed`), where Earth as recorded is drawn only when a
+ * lever forces it.
+ */
+const SERVED_EARTH: Body = {
+  ...EARTH,
+  appearance: { ...EARTH.appearance, clouds: null },
+}
 
 /** The eye's vertical in render axes; the eye is the render origin. */
 const UP = Vec.normalize({ x: 0.3, y: 0.8, z: -0.52 })
@@ -247,13 +254,15 @@ function inputs(step: Step = {}): CloudFrameInputs {
     levers: {
       ...DEFAULT_CLOUD_LEVERS,
       on: true,
-      scenario: 'anvil',
+      weather: 'anvil',
       ...step.levers,
     },
     scene: scene(earth(step.orientation ?? TURNED)),
-    record: (address) => SOL.get(address) ?? null,
+    record: (address) =>
+      address === EARTH_ADDRESS ? SERVED_EARTH : (SOL.get(address) ?? null),
     scattering: () => null,
     renderTime: step.renderTime ?? START,
+    rate: 1,
     visibility: false,
     enhanced: false,
     pictureEpoch: step.epoch ?? 0,
@@ -636,7 +645,7 @@ const BUDGET: CloudBudget = {
   slices: 0,
   tiles: 0,
   jump: false,
-  sunTexelSteps: 0,
+  sunSlices: 0,
 }
 
 /**

@@ -216,7 +216,7 @@ export class CloudClipmap implements CloudResource {
   #renders = 0
   /** The time refresh's next slot: level ⌊slot/8⌋, eighth slot mod 8. */
   #refresh = 0
-  #scenario: string | null = null
+  #weather: string | null = null
   #period: readonly [number, number] = [0, 0]
   #warm: Promise<void> | null = null
   #disposed = false
@@ -364,10 +364,10 @@ export class CloudClipmap implements CloudResource {
       fresh ||
       frame.jump ||
       budget.jump ||
-      frame.scenario.id !== this.#scenario ||
+      frame.served.weatherKey !== this.#weather ||
       low !== this.#period[0] ||
       high !== this.#period[1]
-    this.#scenario = frame.scenario.id
+    this.#weather = frame.served.weatherKey
     this.#period = [low, high]
     const stale = this.#staleSince
     for (let k = 0; k < CLOUD_CLIPMAP_LEVELS; k += 1)
@@ -472,4 +472,18 @@ function bakeNode(
         : source.channel(direction, k as 1 | 2 | 3)
   })
   return mrt(outputs)
+}
+
+/**
+ * The clipmap a field's fine medium reads, baked from the weather cube.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudClipmap(deps: {
+  readonly uniforms: CloudUniforms
+  readonly maps: { readonly nodes: CloudMapNodes }
+}): CloudClipmap {
+  return new CloudClipmap(deps.uniforms, deps.maps.nodes)
 }

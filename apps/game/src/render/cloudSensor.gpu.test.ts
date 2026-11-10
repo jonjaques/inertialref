@@ -34,7 +34,7 @@ import { warmCompile, warmRenderer } from './warmup.ts'
 const WIDTH = 64
 const HEIGHT = 48
 const TIMESTAMPS = await adapterOffers('timestamp-query')
-const OPTIONS = { ceiling: 50, levers: { scenario: 'overcast' } } as const
+const OPTIONS = { ceiling: 50, levers: { weather: 'overcast' } } as const
 
 let gpu: GpuSession
 let bare: CloudRig
@@ -200,7 +200,7 @@ describe('with the levers on', () => {
     try {
       flagged.levers = {
         ...DEFAULT_CLOUD_LEVERS,
-        scenario: 'overcast',
+        weather: 'overcast',
         on: true,
       } satisfies CloudLevers
       // The clouds' own first frames, then the count.
@@ -225,7 +225,7 @@ describe('with the levers on', () => {
     async () => {
       flagged.levers = {
         ...DEFAULT_CLOUD_LEVERS,
-        scenario: 'overcast',
+        weather: 'overcast',
         on: true,
       }
       for (let k = 0; k < 4; k += 1) flagged.frame()

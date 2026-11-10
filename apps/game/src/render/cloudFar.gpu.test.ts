@@ -28,6 +28,7 @@ import {
   storage,
   textureLoad,
   uint,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl'
@@ -117,7 +118,7 @@ const BUDGET: CloudBudget = {
   slices: 8,
   tiles: 1,
   jump: false,
-  sunTexelSteps: 0,
+  sunSlices: 0,
 }
 
 /**
@@ -198,12 +199,8 @@ function shellsOf(place: Placement): ShellHeights {
   }
 }
 
-/** Write a body's uniforms as `CloudUniforms.write` would for this eye, and the layers' with them. */
-function placeBody(
-  uniforms: CloudUniforms,
-  body: CloudBodyUniforms,
-  place: Placement,
-): void {
+/** Write a body's uniforms as `CloudUniforms.write` would for this eye, and its layers' with them. */
+function placeBody(body: CloudBodyUniforms, place: Placement): void {
   const shells = shellsOf(place)
   const [b0, t0, b1, t1, b2, t2] = shells.boundaries as [
     number,
@@ -235,9 +232,9 @@ function placeBody(
   body.sunUp.value = dot3(UP, sun)
   body.cleared.value = place.cleared ?? 0
   body.active.value = 1
-  uniforms.layers.base.value.set(b0, b1, b2)
-  uniforms.layers.top.value.set(t0, t1, t2)
-  uniforms.layers.radius.value.set(10, 10, 10)
+  body.layers.base.value.set(b0, b1, b2)
+  body.layers.top.value.set(t0, t1, t2)
+  body.layers.radius.value.set(10, 10, 10)
 }
 
 /** A frame as the far field reads one: its levers, its scenario, its bodies, its jump. */
@@ -251,8 +248,14 @@ function frameFor(
   return {
     levers: { ...DEFAULT_CLOUD_LEVERS, on: true },
     scenario: WEATHER_SCENARIOS.overcast,
-    served: options.served === false ? null : { address: 'served' },
-    second: options.second === true ? { address: 'second' } : null,
+    served:
+      options.served === false
+        ? null
+        : { address: 'served', weatherKey: 'overcast' },
+    second:
+      options.second === true
+        ? { address: 'second', weatherKey: 'overcast' }
+        : null,
     jump: options.jump ?? false,
   } as unknown as CloudFrame
 }
@@ -275,7 +278,7 @@ function build(
   const uniforms = createCloudUniforms()
   const side = options.second === true ? 'second' : 'served'
   const body = uniforms[side]
-  placeBody(uniforms, body, place)
+  placeBody(body, place)
   const deps = {
     uniforms,
     field: CLOUD_STAND_INS.field(medium),
@@ -1019,6 +1022,7 @@ describe('the atlas’s bake', () => {
       layer: select(cloudy, int(0), int(-1)),
       column: float(1e9),
       radius: float(10),
+      depth: vec2(0),
     }
   }
 

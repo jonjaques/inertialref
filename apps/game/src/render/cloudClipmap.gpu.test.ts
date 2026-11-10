@@ -38,6 +38,7 @@ import {
   CLOUD_CLIPMAP_TEXELS,
   type CloudFrame,
   cloudNoisePeriods,
+  scenarioWeather,
 } from './cloudFrame.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
@@ -105,7 +106,7 @@ const budget: CloudBudget = {
   slices: 0,
   tiles: 0,
   jump: false,
-  sunTexelSteps: 0,
+  sunSlices: 0,
 }
 
 const unit = (v: Vec3): Vec3 => {
@@ -134,8 +135,12 @@ function frameAt(
 ): CloudFrame {
   const periods = cloudNoisePeriods(scenario)
   const { east, north } = horizonBasis(eye)
+  const ORIGINS = {
+    noise: reducePoint(eye, periods.base),
+    detail: reducePoint(eye, periods.detail),
+  }
   const frame = {
-    levers: { ...DEFAULT_CLOUD_LEVERS, on: true, scenario: scenario.id },
+    levers: { ...DEFAULT_CLOUD_LEVERS, on: true, weather: scenario.id },
     scenario,
     served: {
       address: 'test',
@@ -149,8 +154,8 @@ function frameAt(
       limb: 0,
       limbFalloff: 1,
       dayColor: { r: 1, g: 1, b: 1 },
-      noiseOrigin: reducePoint(eye, periods.base),
-      detailOrigin: reducePoint(eye, periods.detail),
+      noiseOrigin: ORIGINS.noise,
+      detailOrigin: ORIGINS.detail,
       drift: { x: 0, y: 0, z: 0 },
       wind: added(
         scaled(east, scenario.wind.east),
@@ -158,6 +163,7 @@ function frameAt(
       ),
       clipmap,
       volume: { frames: [], dirty: [], rebuilt: [] },
+      ...scenarioWeather(scenario, ORIGINS, TIME),
     },
     second: null,
     time: TIME,

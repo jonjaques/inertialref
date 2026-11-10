@@ -35,7 +35,7 @@ import { type CloudFrame, cloudFrame } from './cloudFrame.ts'
 import { altitudeAt, shellCrossingFrom, sunMuAt } from './cloudGeometry.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import type { CloudBudget, CloudSample } from './cloudNodes.ts'
-import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
+import { SUN_GRID_SIZE } from './cloudSunGrid.ts'
 import {
   LOOKING_UP,
   RIG_EARTH_RADIUS,
@@ -256,7 +256,7 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
         slices: 8,
         tiles: 1,
         jump: frame.jump,
-        sunTexelSteps: SUN_DEPTH_FRAME_CAP,
+        sunSlices: SUN_GRID_SIZE[2],
       }
       field.write(frame)
       field.render(renderer, frame, budget)
@@ -298,7 +298,7 @@ describe.skipIf(!MEASURE)('the sun’s optical depth against the field', () => {
         const levers = (lightTaps: (typeof TAPS)[number]): CloudLevers => ({
           ...DEFAULT_CLOUD_LEVERS,
           on: true,
-          scenario,
+          weather: scenario,
           lightTaps,
         })
         settle(stance, levers(2))

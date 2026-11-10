@@ -48,13 +48,15 @@ import {
 import {
   type CloudBudget,
   type CloudFarFn,
+  type CloudJitterNodes,
   type CloudMediumFn,
   type CloudPhaseNodes,
   type CloudRay,
   type CloudResource,
+  type CloudSkyNodes,
+  type CloudSourceNodes,
   cloudStorageTexture,
   type CloudSunFn,
-  traceJitter,
 } from './cloudNodes.ts'
 import type { CloudUniforms } from './cloudUniforms.ts'
 import { warmCompute } from './warmup.ts'
@@ -102,6 +104,12 @@ export interface CloudTraceDeps {
   readonly depth: () => Texture
   /** The air's per-sample terms; `airMediumAt` when absent. */
   readonly air?: CloudAirFn
+  /** The sky's light at a sample, from the served body's own table. */
+  readonly sky: CloudSkyNodes
+  /** The higher orders' source at a sample's two depths. */
+  readonly source: CloudSourceNodes
+  /** The two numbers a ray is jittered by. */
+  readonly jitter: CloudJitterNodes
 }
 
 /** Every kernel's name on the timeline: one label, one row. */
@@ -147,6 +155,7 @@ const countsOf = (buffer: StorageBufferAttribute) =>
  */
 function traceView(
   uniforms: CloudUniforms,
+  jitter: CloudJitterNodes,
   depth: TextureNode,
   texel: Node<'uvec2'>,
 ) {
@@ -156,7 +165,7 @@ function traceView(
   // An offset from the history pixel's center, drawn at the history pixel
   // rather than at the texel, so the point inside the pixel and the share of
   // the first step (the texel's draw) are not one number.
-  const within = traceJitter(pixel, trace.frame).sub(0.5)
+  const within = jitter.at(pixel, trace.frame).sub(0.5)
   const screen = traceScreen(pixel, within, trace.history)
   const direction = viewDirection(uniforms.camera, screen).toVar()
   const distanceKm = depth.load(screenTexel(screen, trace.render)).x.toVar()
@@ -230,9 +239,9 @@ function traceKernel(
     // Every dispatch is at the trace's extent, so this guard is what keeps a
     // workgroup's spare invocations from storing outside the textures.
     If(texel.x.lessThan(size.x).and(texel.y.lessThan(size.y)), () => {
-      const { ray, sky } = traceView(uniforms, depth, texel)
+      const { ray, sky } = traceView(uniforms, deps.jitter, depth, texel)
       const knots = cloudKnotWriter(outputs)
-      const jitter = traceJitter(texel, uniforms.trace.frame).x
+      const jitter = deps.jitter.at(texel, uniforms.trace.frame).x
       const fine = cloudMarch(ray, jitter, sky, deps, knots)
       const result = marchFar(
         fine,

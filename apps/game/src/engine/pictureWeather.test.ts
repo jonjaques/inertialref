@@ -79,7 +79,7 @@ describe('a picture’s weather as levers', () => {
     expect(levers).toEqual({
       ...DEFAULT_CLOUD_LEVERS,
       on: true,
-      scenario: 'cirrus-over-cumulus',
+      weather: 'cirrus-over-cumulus',
       served: EARTH,
     })
     // Inside the set, nothing is forced.
@@ -100,9 +100,8 @@ describe('a picture’s weather as levers', () => {
     })
     for (const [weather, available] of [
       [{ regime: 'fair-cumulus' }, false],
+      [{ regime: 'climate' }, false],
       [{ regime: 'squall-line' }, true],
-      // A climate needs the contracts' lever; until then it is not drawn.
-      [{ regime: 'climate' }, true],
     ] as const)
       expect(
         pictureWeatherLevers(lit, weather, { ...page, available }),
@@ -110,6 +109,20 @@ describe('a picture’s weather as levers', () => {
         levers: { ...lit, on: false, served: null },
         outcome: 'unavailable',
       })
+  })
+
+  it('draws a climate as the lever’s own value: the body’s weather, by no regime’s id', () => {
+    const { levers, outcome } = pictureWeatherLevers(
+      { ...DEFAULT_CLOUD_LEVERS, weather: 'anvil' },
+      { regime: 'climate' },
+      page,
+    )
+    expect(outcome).toBe('drawn')
+    expect(levers).toMatchObject({
+      on: true,
+      weather: 'climate',
+      served: EARTH,
+    })
   })
 
   it('writes the three levers a picture owns and leaves every other one as it was', () => {
@@ -122,12 +135,12 @@ describe('a picture’s weather as levers', () => {
     expect({
       ...levers,
       on: false,
-      scenario: 'fair-cumulus',
+      weather: 'fair-cumulus',
       served: null,
     }).toEqual({
       ...tuned,
       on: false,
-      scenario: 'fair-cumulus',
+      weather: 'fair-cumulus',
       served: null,
     })
   })
@@ -141,7 +154,7 @@ describe('the hold', () => {
     expect(hold.apply(page, { regime: 'fair-cumulus' }, EARTH)).toBe('drawn')
     expect(page.clouds).toMatchObject({
       on: true,
-      scenario: 'fair-cumulus',
+      weather: 'fair-cumulus',
       served: EARTH,
       stats: true,
     })
@@ -161,12 +174,12 @@ describe('the hold', () => {
 
   it('serves a body inside the set without forcing it, and starts each picture from the levers the first one found', () => {
     const page = engine()
-    page.clouds = { ...page.clouds, on: true, scenario: 'anvil' }
+    page.clouds = { ...page.clouds, on: true, weather: 'anvil' }
     const hold = new PictureWeatherHold()
     hold.apply(page, { regime: 'stratocumulus' }, decklessAddress)
     expect(page.clouds).toMatchObject({
       on: true,
-      scenario: 'stratocumulus',
+      weather: 'stratocumulus',
       served: null,
     })
     hold.apply(page, null, EARTH)
@@ -177,7 +190,7 @@ describe('the hold', () => {
     expect(page.clouds).toEqual({
       ...DEFAULT_CLOUD_LEVERS,
       on: true,
-      scenario: 'anvil',
+      weather: 'anvil',
     })
   })
 

@@ -1,5 +1,5 @@
 import type { Node } from 'three/webgpu'
-import { exp, float, If, length, max, select } from 'three/tsl'
+import { exp, float, If, length, max, select, vec2 } from 'three/tsl'
 import { sunThroughAt } from './air.ts'
 import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
 import type {
@@ -70,23 +70,29 @@ export function cloudSunFn(deps: CloudSunDeps): CloudSunFn {
       fraction.assign(max(fraction, medium.fraction))
       depth.addAssign(medium.sigma.mul(width))
     }
+    // Four taps for every count from four up: the lever's six and eight
+    // have no tap set of their own, and draw as four.
     If(taps.equal(2), () => {
       for (const [midpoint, width] of LIGHT_TAPS[2]) tap(midpoint, width)
-    }).ElseIf(taps.equal(4), () => {
+    }).ElseIf(taps.greaterThanEqual(4), () => {
       for (const [midpoint, width] of LIGHT_TAPS[4]) tap(midpoint, width)
     })
     const throughTaps = float(1)
       .sub(fraction)
       .add(fraction.mul(exp(depth.negate())))
     const reach = select(taps.greaterThan(0), float(LIGHT_TAP_REACH), float(0))
-    const beyond = deps.depth.opticalDepth(
+    const beyond = deps.depth.depths(
       sample.offset.add(body.sun.mul(reach)),
-    )
+    ).toSun
     // The air's height, true meters: its top is in sea-level units.
     const airHeight = body.datumRadius.mul(max(body.air.top.sub(1), 1e-6))
     const cloud: Node<'float'> = throughTaps.mul(exp(beyond.negate()))
     return {
       cloud,
+      // The two depths toward the sun are read by nothing: zero, and an
+      // octave is the transmittance itself.
+      depth: vec2(0),
+      octave: () => cloud,
       air: sunThroughAt(
         body.air,
         sample.altitude.div(airHeight),

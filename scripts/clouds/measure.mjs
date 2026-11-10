@@ -149,10 +149,10 @@ const cumulus = (height, pitch) =>
  * 400 km and −35°. A scenario boots at far-shore unless it names a preset.
  */
 export const SCENARIOS = Object.freeze({
-  ground: { stance: cumulus(2, 10), levers: { scenario: 'fair-cumulus' } },
-  horizon: { stance: basin(2, 2), levers: { scenario: 'broken-horizon' } },
-  inside: { stance: basin(1200, 0), levers: { scenario: 'inside' } },
-  decks: { stance: basin(2, 30), levers: { scenario: 'two-decks' } },
+  ground: { stance: cumulus(2, 10), levers: { weather: 'fair-cumulus' } },
+  horizon: { stance: basin(2, 2), levers: { weather: 'broken-horizon' } },
+  inside: { stance: basin(1200, 0), levers: { weather: 'inside' } },
+  decks: { stance: basin(2, 30), levers: { weather: 'two-decks' } },
   orbit: {
     stance: visit(FAR, {
       latitude: 15,
@@ -161,40 +161,42 @@ export const SCENARIOS = Object.freeze({
       heading: 0,
       pitch: -40,
     }),
-    levers: { scenario: 'broken-horizon', flySpeed: 7700 },
+    levers: { weather: 'broken-horizon', flySpeed: 7700 },
   },
   'pair-moon': {
     stance: { kind: 'rise', address: MOON },
-    levers: { scenario: 'fair-cumulus', served: MOON, second: FAR },
+    levers: { weather: 'fair-cumulus', served: MOON, second: FAR },
   },
   'pair-neighbor': {
     stance: cumulus(2, 10),
-    levers: { scenario: 'fair-cumulus', second: NEIGHBOR },
+    levers: { weather: 'fair-cumulus', second: NEIGHBOR },
   },
+  // Earth's deck is authored, so Earth is outside the set the volume serves
+  // unasked and a stance on it names it.
   'earth-ground': {
     preset: 'blue-marble',
     stance: earth(2, 10),
-    levers: { scenario: 'fair-cumulus' },
+    levers: { weather: 'fair-cumulus', served: EARTH },
   },
   'earth-orbit': {
     preset: 'blue-marble',
     stance: earth(400_000, -35),
-    levers: { scenario: 'broken-horizon', flySpeed: 7700 },
+    levers: { weather: 'broken-horizon', flySpeed: 7700, served: EARTH },
   },
   // The preset's own stance, 80 m over the shore facing the low sun, raised
   // into a gap of the layer.
   sunset: {
     stance: { kind: 'raise', address: FAR, height: 1500 },
-    levers: { scenario: 'near-gap-far' },
+    levers: { weather: 'near-gap-far' },
   },
-  fog: { stance: basin(2, 10), levers: { scenario: 'fog' } },
+  fog: { stance: basin(2, 10), levers: { weather: 'fog' } },
   'horizon-2.4km': {
     stance: basin(2400, 2),
-    levers: { scenario: 'broken-horizon' },
+    levers: { weather: 'broken-horizon' },
   },
   overcast: {
     stance: basin(2, 45),
-    levers: { scenario: 'overcast' },
+    levers: { weather: 'overcast' },
   },
 })
 

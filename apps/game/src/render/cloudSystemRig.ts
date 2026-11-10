@@ -54,7 +54,7 @@ import { createSensor, type Sensor, type SensorFrame } from './sensor.ts'
  * The cloud system's GPU tests' rig: the sensor's own chain built with the
  * system, over a scene that holds what the trace stops at, and a frame
  * closure that hands the system what `scene/Sensor.tsx` hands it — Earth's
- * record and a render body placed about the eye, the camera's pose, the
+ * record less its deck and a render body placed about the eye, the camera's pose, the
  * lens the camera draws through. Earth sits with its north up the render
  * +Y, the eye `eye` meters over its datum at the render origin, and the
  * camera looks straight up, the image's top toward +Z.
@@ -74,6 +74,17 @@ function solRecords(): Map<string, Body> {
 const SOL = /*@__PURE__*/ solRecords()
 export const RIG_EARTH = 'g:milky-way/s:SOL/b:2'
 const earth = SOL.get(RIG_EARTH)!
+/**
+ * The record the rig's bodies are found under: Earth's without its authored
+ * deck. The volume serves a wet world that has no deck to lose
+ * (`cloudsServed`), and Earth as recorded is outside that set, so a rig that
+ * handed the frame Earth's own record would draw nothing unless every test
+ * forced it by address.
+ */
+const served: Body = {
+  ...earth,
+  appearance: { ...earth.appearance, clouds: null },
+}
 /** Meters: Earth's datum, the record's own, for geometry a test forms on the CPU. */
 export const RIG_EARTH_RADIUS = earth.radius
 
@@ -151,8 +162,8 @@ function earthAt(
 }
 
 /**
- * The second wet body: Earth's own record under another address, so the
- * frame finds it wet, its center `distance` meters from the eye `toward` a
+ * The second wet body: the same record under another address, so the frame
+ * finds it in the served set, its center `distance` meters from the eye `toward` a
  * render direction, uncompressed and unturned.
  */
 export const RIG_TWIN = 'g:milky-way/s:SOL/b:2-twin'
@@ -276,10 +287,13 @@ export function rigEngineInputs(
       stance.sun === undefined ? star(STAR) : starToward(body, stance.sun),
     ),
     record: (address) =>
-      SOL.get(address) ?? (address === RIG_TWIN ? earth : null),
+      address === RIG_EARTH || address === RIG_TWIN
+        ? served
+        : (SOL.get(address) ?? null),
     scattering: (drawn) =>
       stance.air === true ? scatteringOf({ pool: () => null }, drawn) : null,
     renderTime: 50_000,
+    rate: 1,
     visibility: false,
     pictureEpoch: 0,
     historyKey: 'rig',

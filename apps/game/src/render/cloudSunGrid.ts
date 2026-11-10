@@ -31,8 +31,8 @@ import {
 } from 'three/tsl'
 import {
   type LevelFrame,
+  sunSchedule,
   textureBytes,
-  type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
 import type { CloudFrame } from './cloudFrame.ts'
@@ -47,6 +47,7 @@ import type {
   CloudBudget,
   CloudResource,
   CloudSunDepthNodes,
+  CloudSunDepths,
 } from './cloudNodes.ts'
 import type { CloudLevelUniforms, CloudUniforms } from './cloudUniforms.ts'
 import {
@@ -80,7 +81,8 @@ import { warmByDrawing } from './warmup.ts'
  * six for the grid under motion (§4.4). A sun turned 0.05° from the one the
  * grid was drawn under, the field's time jumping, a new anchor or scenario
  * each rebuild it whole that frame: 32 slices of 128² cells × 32 steps,
- * 16.8 M texel-steps, which is the frame's cap (`SUN_DEPTH_FRAME_CAP`).
+ * 16.8 M texel-steps (`SUN_DEPTH_FRAME_CAP`), where the frame's budget
+ * allows all 32 slices.
  *
  * Past the window, and from orbit, where level 1 lies more than its own
  * extent below the eye and the grid is idle as the volume's level is, the
@@ -93,7 +95,7 @@ export const SUN_GRID_SIZE = [128, 128, 32] as const
 export const SUN_GRID_STEPS = 32
 /** The pass's name on the timeline. */
 export const CLOUD_SUN_GRID_LABEL = 'cloud sun grid'
-/** The per-frame cap, in texel-steps: one rebuild, 128² × 32 cells × 32 steps. */
+/** One whole rebuild, in texel-steps: 128² × 32 cells × 32 steps. */
 export const SUN_DEPTH_FRAME_CAP = 16_777_216
 /** Degrees: the sun move that rebuilds the grid whole. */
 const SUN_TURN = 0.05
@@ -101,8 +103,6 @@ const SUN_TURN = 0.05
 const [WIDTH, HEIGHT, SLICES] = SUN_GRID_SIZE
 /** A cell is two of level 1's texels: 128 cells span its 256. */
 const CELL_METERS = (CLOUD_VOLUME_TEXELS[1] * CLOUD_VOLUME_SIZE) / WIDTH
-const STEADY = 4
-const MOVING = 6
 /** R16F. */
 const TEXEL_BYTES = 2
 /** Cells in from a trusted window's edge: a trilinear read reaches half a cell. */
@@ -175,7 +175,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   #idle = true
   #pending = false
   #spent = 0
-  #scenario: WeatherScenario | null = null
+  #weather: string | null = null
   #address: string | null = null
   #last: number | null = null
   #allocated = false
@@ -210,8 +210,13 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     }
   }
 
-  /** Optical depth from an eye-relative body-fixed point to the sun. */
-  opticalDepth(offset: Node<'vec3'>): Node<'float'> {
+  /**
+   * The sun's depths at an eye-relative body-fixed point. Inside the trusted
+   * window the grid's own, at the trace's weight; outside it no depth and no
+   * weight, which reads as no cloud toward the sun. The ray's whole is the
+   * depth to the sun: the grid holds nothing of the part behind a point.
+   */
+  depths(offset: Node<'vec3'>): CloudSunDepths {
     const body = this.#uniforms.served
     const { base, slice } = this.#vertical()
     const cell = levelPlane(this.#level, offset, body).div(CELL_METERS)
@@ -229,7 +234,12 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     const tau = this.#map
       .sample(vec3(cell.div(WIDTH), height.add(0.5).div(SLICES)))
       .level(float(0)).x
-    return select(inside, tau, float(0))
+    const toSun = select(inside, tau, float(0))
+    return {
+      toSun,
+      whole: toSun,
+      weight: select(inside, this.#uniforms.trace.sunWeight, float(0)),
+    }
   }
 
   /** One slice of cells: τ from each cell's center at the slice's height to the union's top, through the volume. */
@@ -288,14 +298,14 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       frame.frameIndex !== this.#last + 1 ||
       frame.jump ||
       budget.jump ||
-      frame.scenario !== this.#scenario ||
+      served.weatherKey !== this.#weather ||
       served.address !== this.#address ||
       served.volume.rebuilt[1] === true ||
       levelOne?.epoch !== this.#epoch ||
       (this.#idle && !idle) ||
       this.#sun === null ||
       dot3(this.#sun, sun) < TURN
-    this.#scenario = frame.scenario
+    this.#weather = served.weatherKey
     this.#address = served.address
     this.#epoch = levelOne?.epoch ?? null
     this.#idle = idle
@@ -311,7 +321,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       this.#publish(grid)
       return
     }
-    const work = this.#schedule(grid, budget.sunTexelSteps, frame.frameIndex)
+    const work = this.#schedule(grid, budget.sunSlices, frame.frameIndex)
     this.#spent = work.length * SLICE_STEPS
     if (work.length > 0) {
       this.#bakeAt(grid)
@@ -331,31 +341,19 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     this.#publish(grid)
   }
 
-  /** The slices this frame draws, under the cap: missing ones first, then the oldest. */
+  /** The slices this frame draws, at most `cap` of them, by the grid's schedule (`sunSchedule`). */
   #schedule(grid: LevelFrame, cap: number, frameIndex: number): number[] {
-    const fits = Math.floor(cap / SLICE_STEPS)
-    const missing = this.#slices.flatMap((record, k) =>
-      record.origin === null ? [k] : [],
-    )
-    const moved = this.#slices.some(
-      ({ origin }) =>
-        origin !== null &&
-        (origin[0] !== grid.origin[0] || origin[1] !== grid.origin[1]),
-    )
-    const work =
-      missing.length > 0
-        ? missing.slice(0, fits)
-        : this.#slices
-            .map((record, k) => ({ k, at: record.frame }))
-            .sort((a, b) => a.at - b.at || a.k - b.k)
-            .slice(0, Math.min(fits, moved ? MOVING : STEADY))
-            .map(({ k }) => k)
-    for (const k of work)
+    const { bake } = sunSchedule({
+      slices: this.#slices,
+      origin: [grid.origin[0], grid.origin[1]],
+      cap,
+    })
+    for (const k of bake)
       this.#slices[k] = {
         origin: [grid.origin[0], grid.origin[1]],
         frame: frameIndex,
       }
-    return work
+    return [...bake]
   }
 
   #bakeAt(grid: LevelFrame): void {
@@ -392,6 +390,9 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     }
     const [x0, y0, x1, y1] = whole ? rect : NOWHERE
     this.#trusted.value.set(x0!, y0!, x1!, y1!)
+    // The grid's weight for whoever reads it beside the depths: all of it
+    // once every slice holds the field and the grid is awake, none before.
+    this.#uniforms.trace.sunWeight.value = whole ? 1 : 0
     this.#pending = !this.#idle && (!whole || moved)
   }
 
@@ -422,7 +423,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     return this.#pending
   }
 
-  /** Texel-steps the last frame spent: never over the cap it was given. */
+  /** Texel-steps the last frame spent: never over its budget's slices' worth. */
   get spent(): number {
     return this.#spent
   }
@@ -469,4 +470,18 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     this.#target.dispose()
     this.#material.dispose()
   }
+}
+
+/**
+ * The sun's depth as a grid, summed through the volume.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudSunGrid(deps: {
+  readonly uniforms: CloudUniforms
+  readonly volume: CloudVolume
+}): CloudSunGrid {
+  return new CloudSunGrid(deps.uniforms, deps.volume)
 }

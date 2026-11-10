@@ -72,7 +72,7 @@ const budget: CloudBudget = {
   slices: 0,
   tiles: 0,
   jump: false,
-  sunTexelSteps: 0,
+  sunSlices: 0,
 }
 
 /**
@@ -86,14 +86,14 @@ function frameFor(
   jump = false,
 ): CloudFrame {
   const at = (k: number) => scenario.layers[k]?.coverage ?? 0
-  uniforms.layers.coverage.value.set(at(0), at(1), at(2))
+  uniforms.served.layers.coverage.value.set(at(0), at(1), at(2))
   const period = periodIndex(TIME, scenario.patternPeriod)
   uniforms.period.value.set(period[0], period[1])
   return {
     scenario,
     period,
     jump,
-    served: { eye },
+    served: { eye, weatherKey: scenario.id },
   } as unknown as CloudFrame
 }
 

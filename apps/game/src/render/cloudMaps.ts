@@ -361,7 +361,7 @@ export function scenarioCoverageNode(
     kind: pattern.kind,
     scale: pattern.scale,
     cells: pattern.cells,
-    coverages: uniforms.layers.coverage,
+    coverages: body.layers.coverage,
     thresholds: pattern.thresholds,
     floors: pattern.floors,
     period: uniforms.period,
@@ -450,7 +450,7 @@ export class CloudMaps implements CloudResource {
   #renders = 0
   /** The steady cycle's next face. */
   #next: CubeFace = 0
-  #scenario: string | null = null
+  #weather: string | null = null
   #period: readonly [number, number] = [0, 0]
   #warm: Promise<void> | null = null
   #disposed = false
@@ -548,6 +548,16 @@ export class CloudMaps implements CloudResource {
   }
 
   /**
+   * The frame's pattern on the uniforms every coverage node of this bundle
+   * reads, before any pass of the frame: the cube's bake reads it, and so
+   * does a pass that bakes from the analytic coverage with no cube, whatever
+   * the cube drew this frame.
+   */
+  write(frame: CloudFrame): void {
+    writeScenarioPattern(this.#uniforms, frame.scenario)
+  }
+
+  /**
    * One face tile a frame, every frame: the steady cycle takes six. When the
    * field moves discontinuously — a jump, a scenario or a pattern period
    * that is not the last frame's, or the first frame at full size — every
@@ -573,7 +583,7 @@ export class CloudMaps implements CloudResource {
     if (this.#disposed) return
     const now = this.#renders
     this.#renders += 1
-    writeScenarioPattern(this.#uniforms, frame.scenario)
+    this.write(frame)
     const fresh = this.#allocated !== 'full'
     if (fresh) {
       this.#target.setSize(CLOUD_CUBE_WIDTH, CLOUD_CUBE_HEIGHT)
@@ -584,10 +594,10 @@ export class CloudMaps implements CloudResource {
       fresh ||
       frame.jump ||
       budget.jump ||
-      frame.scenario.id !== this.#scenario ||
+      frame.served.weatherKey !== this.#weather ||
       low !== this.#period[0] ||
       high !== this.#period[1]
-    this.#scenario = frame.scenario.id
+    this.#weather = frame.served.weatherKey
     this.#period = [low, high]
     const stale = this.#staleSince
     if (moved) for (let f = 0; f < stale.length; f += 1) stale[f] ??= now
@@ -645,4 +655,17 @@ export class CloudMaps implements CloudResource {
     this.#target.dispose()
     this.#material.dispose()
   }
+}
+
+/**
+ * The weather cube a field's far media and its clipmap read.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudMaps(deps: {
+  readonly uniforms: CloudUniforms
+}): CloudMaps {
+  return new CloudMaps(deps.uniforms)
 }

@@ -62,7 +62,7 @@ beforeAll(async () => {
     air: true,
     sun: { x: 0.3, y: -0.5, z: 0.8 },
     twin: { distance: TWIN_DISTANCE, toward: { x: 0, y: 1, z: 0 } },
-    levers: { scenario: 'fog' },
+    levers: { weather: 'fog' },
   })
   await rig.system!.warm()
 }, 120_000)

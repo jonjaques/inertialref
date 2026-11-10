@@ -10,6 +10,7 @@ import {
   select,
   smoothstep,
   step,
+  vec2,
   vec3,
 } from 'three/tsl'
 import { DETAIL_NOISE_PERIOD } from '@inertialref/rendering'
@@ -194,7 +195,7 @@ function recipe(
   body: CloudBodyUniforms,
   coverageOf: CoverageOf,
 ): CloudMedium {
-  const layer = layerAt(deps.uniforms.layers, sample.altitude)
+  const layer = layerAt(body.layers, sample.altitude)
   const inLayer = (): Node<'vec3'> => {
     const { cover, column } = coverageOf(layer)
     const shape = deps.profile.sample(layer.genus, layer.h01)
@@ -234,6 +235,7 @@ function recipe(
     layer: layer.index,
     column: values.z,
     radius: layerRadius(layer),
+    depth: vec2(0),
   }
 }
 
@@ -293,4 +295,36 @@ export function analyticMedium(deps: {
       ),
       column: cubeTexel(body),
     }))
+}
+
+/**
+ * The three media of a field, over one recipe: the fine march's from the
+ * clipmap, the served body's far bakes' from the cube, and a second body's
+ * from the analytic coverage.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudMedia(deps: {
+  readonly uniforms: CloudUniforms
+  readonly noise: { readonly nodes: CloudNoiseNodes }
+  readonly profile: CloudProfile
+  readonly maps: { readonly nodes: CloudMapNodes }
+  readonly clipmap: { readonly nodes: CloudClipmapNodes }
+}): {
+  readonly field: CloudMediumFn
+  readonly synoptic: CloudMediumFn
+  readonly analytic: CloudMediumFn
+} {
+  const recipe = {
+    uniforms: deps.uniforms,
+    noise: deps.noise.nodes,
+    profile: deps.profile,
+  }
+  return {
+    field: fieldMedium({ ...recipe, clipmap: deps.clipmap.nodes }),
+    synoptic: synopticMedium({ ...recipe, maps: deps.maps.nodes }),
+    analytic: analyticMedium(recipe),
+  }
 }

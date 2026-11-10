@@ -38,8 +38,9 @@ import {
 } from './cloudGeometry.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { cloudMarch, type CloudMarchDeps, marchFar } from './cloudMarch.ts'
-import { type CloudBudget, type CloudRay, traceJitter } from './cloudNodes.ts'
-import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
+import { traceJitter } from './cloudJitter.ts'
+import type { CloudBudget, CloudRay } from './cloudNodes.ts'
+import { SUN_GRID_SIZE } from './cloudSunGrid.ts'
 import {
   RIG_EARTH_RADIUS,
   RIG_FOV,
@@ -256,6 +257,9 @@ function marchDeps(field: CloudField): CloudMarchDeps {
     phase: field.phase,
     medium: field.medium,
     sun: field.sun,
+    sky: field.sky,
+    source: field.source,
+    jitter: field.jitter,
   }
 }
 
@@ -602,7 +606,7 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
           slices: 8,
           tiles: 1,
           jump: frame.jump,
-          sunTexelSteps: SUN_DEPTH_FRAME_CAP,
+          sunSlices: SUN_GRID_SIZE[2],
         }
         field.write(frame)
         field.render(renderer, frame, budget)
@@ -639,7 +643,7 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
         const levers: CloudLevers = {
           ...DEFAULT_CLOUD_LEVERS,
           on: true,
-          scenario: c.scenario,
+          weather: c.scenario,
           farFootprint: footprint,
         }
         const frame = settle(stance, levers)
@@ -681,7 +685,7 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
           mean(valid.map((r) => slot(atlasHandover, r, SLOT.exhausted))) || 0
         results.push({
           case: c.id,
-          scenario: c.scenario,
+          weather: c.scenario,
           footprintMeters: footprint,
           tFarKm: tFar / 1000,
           eyeMeters: eye,

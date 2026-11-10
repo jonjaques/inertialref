@@ -38,7 +38,8 @@ import {
   traceScreen,
   viewDirection,
 } from './cloudGeometry.ts'
-import { finiteOr, slabMedium, traceJitter } from './cloudNodes.ts'
+import { traceJitter } from './cloudJitter.ts'
+import { finiteOr, slabMedium } from './cloudNodes.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import {
   type CloudBodyUniforms,

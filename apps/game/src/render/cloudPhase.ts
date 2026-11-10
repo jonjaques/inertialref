@@ -10,9 +10,14 @@ import {
   type TextureNode,
   type WebGPURenderer,
 } from 'three/webgpu'
-import { atan, clamp, float, log2, sqrt, texture, vec2 } from 'three/tsl'
-import { type MieTable, textureBytes } from '@inertialref/rendering'
+import { atan, clamp, float, log2, sqrt, texture, vec2, vec4 } from 'three/tsl'
+import {
+  type MieTable,
+  mieDroplets,
+  textureBytes,
+} from '@inertialref/rendering'
 import type { CloudPhaseNodes, CloudResource } from './cloudNodes.ts'
+import type { CloudLayerUniforms, CloudUniforms } from './cloudUniforms.ts'
 
 /*
  * The droplets' Lorenz–Mie table on the GPU: one texel an angle across, one
@@ -93,6 +98,20 @@ export class CloudPhase implements CloudResource, CloudPhaseNodes {
     return this.#node.sample(uv).level(float(0)).rgb
   }
 
+  /**
+   * First-order phase per band in rgb and the row's gain in a, for a level's
+   * class. Every level is droplets at the radius asked for, at a gain of
+   * one: a medium with no diffraction taken out of it.
+   */
+  phase(
+    nu: Node<'float'>,
+    _layers: CloudLayerUniforms,
+    _level: number,
+    radius: Node<'float'>,
+  ): Node<'vec4'> {
+    return vec4(this.droplets(nu, radius), 1)
+  }
+
   /** The table's texture: what a census lists once it is on the device. */
   get texture(): Texture {
     return this.#map
@@ -128,4 +147,17 @@ export class CloudPhase implements CloudResource, CloudPhaseNodes {
     this.#disposed = true
     this.#map.dispose()
   }
+}
+
+/**
+ * The phase a field's light reads: the committed droplet table.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudPhase(_deps: {
+  readonly uniforms: CloudUniforms
+}): CloudPhase {
+  return new CloudPhase(mieDroplets())
 }

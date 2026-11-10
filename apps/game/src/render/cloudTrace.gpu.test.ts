@@ -42,6 +42,7 @@ import {
 import { sunThroughAt } from './air.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import { cloudRay } from './cloudGeometry.ts'
+import { traceJitter } from './cloudJitter.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
   type CloudAirFn,
@@ -64,6 +65,8 @@ import {
   CloudTrace,
   type CloudTraceDeps,
 } from './cloudTrace.ts'
+import { createCloudSky } from './cloudSky.ts'
+import { createCloudSource } from './cloudSource.ts'
 import { cloudRig } from './cloudSystemRig.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
@@ -136,7 +139,7 @@ function placeBody(uniforms: CloudUniforms, { eye, layers }: Layers): void {
   body.sunUp.value = 1
   body.compression.value = 1
   body.cleared.value = 0
-  uniforms.layers.radius.value.set(10, 10, 10)
+  body.layers.radius.value.set(10, 10, 10)
   const trace = uniforms.trace
   trace.farDistance.value = 1e9
   trace.maxSteps.value = 1024
@@ -182,10 +185,13 @@ function testSun(
   return (sample, _medium, body) => {
     const taps = field(sample, body).sigma.mul(0)
     const airHeight = float(R).mul(body.air.top.sub(1).max(1e-6))
+    const through = exp(depth.depths(sample.offset).toSun.negate())
+      .mul(cloud)
+      .add(taps)
     return {
-      cloud: exp(depth.opticalDepth(sample.offset).negate())
-        .mul(cloud)
-        .add(taps),
+      cloud: through,
+      depth: vec2(0),
+      octave: () => through,
       air: sunThroughAt(
         body.air,
         sample.altitude.div(airHeight),
@@ -200,6 +206,17 @@ function testSun(
 interface Media {
   readonly medium: CloudMediumFn
   readonly deps: CloudTraceDeps
+}
+
+/**
+ * What a march's deps hold beyond its medium, its sun and its phase: no sky
+ * and no source, which the march reads nowhere, and the trace's own jitter,
+ * so a kernel here draws the rays the system's draws.
+ */
+const LIGHT = {
+  sky: createCloudSky(),
+  source: createCloudSource(),
+  jitter: { at: traceJitter },
 }
 
 /**
@@ -223,6 +240,7 @@ function standIns(
       phase: options.phase ?? CLOUD_STAND_INS.phase(),
       far: CLOUD_STAND_INS.far(),
       depth,
+      ...LIGHT,
     },
   }
 }
@@ -320,7 +338,7 @@ function frameOf(
   } as unknown as CloudFrame
 }
 
-const BUDGET = { slices: 0, tiles: 0, jump: false, sunTexelSteps: 0 }
+const BUDGET = { slices: 0, tiles: 0, jump: false, sunSlices: 0 }
 
 /** A camera looking up the local vertical with `spread` of half-tangent each way. */
 function lookUp(uniforms: CloudUniforms, spread: number): void {
@@ -385,11 +403,12 @@ describe('the kernels', () => {
       expect(sampled).toBeLessThanOrEqual(16)
       expect(storage).toBeLessThanOrEqual(4)
     }
-    // The design's census (§3.7): the field's 6, the sun grid, the air's 2,
-    // the phase, the far atlas and the depth copy. A floor as well as a
-    // ceiling: the counts are a regex over three's WGSL, and a spelling that
-    // stopped matching would pass the ceiling at zero.
-    expect(counted[0]).toMatchObject({ sampled: 12, storage: 4 })
+    // The stand-ins' census: the field's 5, the sun grid, the air's 2, the
+    // phase, the far atlas and the depth copy. A floor as well as a ceiling:
+    // the counts are a regex over three's WGSL, and a spelling that stopped
+    // matching would pass the ceiling at zero. The sky, the source and the
+    // mask bind only in a kernel that reads them, and this march reads none.
+    expect(counted[0]).toMatchObject({ sampled: 11, storage: 4 })
     expect(new Set(counted.map(({ name }) => name))).toEqual(
       new Set(['cloud trace', 'cloud stats']),
     )
@@ -453,6 +472,7 @@ describe('the march’s reads', () => {
       phase: CLOUD_STAND_INS.phase(),
       medium: field,
       sun: testSun(field, CLOUD_STAND_INS.sunDepth()),
+      ...LIGHT,
     }
     const material = new MeshBasicNodeMaterial()
     material.colorNode = Fn(() => {
@@ -559,6 +579,7 @@ function probe(
     phase: options.phase ?? CLOUD_STAND_INS.phase(),
     medium: field,
     sun: sun(field),
+    ...LIGHT,
     ...(options.air === undefined ? {} : { air: options.air }),
   }
   const kernel = Fn(() => {
@@ -842,8 +863,11 @@ describe('the march’s edge cases', () => {
      * this one does, as a table's coordinate would: a NaN radius is a NaN
      * phase, whose product with no light is NaN, not 0.
      */
+    const droplets = (_nu: Node<'float'>, radius: Node<'float'>) =>
+      vec3(radius.mul(0).add(ISOTROPIC))
     const reading: CloudPhaseNodes = {
-      droplets: (_nu, radius) => vec3(radius.mul(0).add(ISOTROPIC)),
+      droplets,
+      phase: (nu, _layers, _level, radius) => vec4(droplets(nu, radius), 1),
     }
     const uniforms = createCloudUniforms()
     placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })

@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { rootSeed } from '@inertialref/procedural'
 import {
+  CLIMATE_REGIME,
+  cloudsServed,
   lensForFov,
+  MAX_CLOUD_LAYERS,
   type RenderBody,
   type RenderScene,
   type RenderStar,
+  SCENARIO_IDS,
   shellBoundaries,
+  shellUnion,
   WEATHER_SCENARIOS,
+  wetWorld,
 } from '@inertialref/rendering'
 import {
   type Quat,
@@ -32,9 +38,16 @@ import {
   type CloudFrameInputs,
   cloudFrame,
   cloudNoisePeriods,
+  type CloudResetReason,
+  scenarioClimate,
   servedBody,
+  weatherScenario,
 } from './cloudFrame.ts'
-import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
+import {
+  type CloudLevers,
+  deckYields,
+  DEFAULT_CLOUD_LEVERS,
+} from './cloudLevers.ts'
 import { CLOUD_BASE_CELLS } from './cloudNoise.ts'
 import { CLOUD_CLIPMAP_LEVELS, createCloudUniforms } from './cloudUniforms.ts'
 import { CLOUD_VOLUME_SIZE, CLOUD_VOLUME_TEXELS } from './cloudVolume.ts'
@@ -63,6 +76,16 @@ const EARTH = 'g:milky-way/s:SOL/b:2'
 const MARS = 'g:milky-way/s:SOL/b:3'
 const earth = SOL.get(EARTH)!
 const mars = SOL.get(MARS)!
+/**
+ * Earth as it stands once its deck's record goes: wet, with no authored
+ * deck, which is a body the volume serves unasked. The frame's rules are
+ * held on this record; the served set is held on the records as they are.
+ */
+const deckless: Body = {
+  ...earth,
+  appearance: { ...earth.appearance, clouds: null },
+}
+const SERVED = new Map(SOL).set(EARTH, deckless)
 
 /** A turned body, so body-fixed and render axes differ in every component. */
 const TURNED: Quat = Q.fromAxisAngle({ x: 0.3, y: -0.5, z: 0.8 }, 0.7)
@@ -173,9 +196,10 @@ function inputs(
   return {
     levers: { ...DEFAULT_CLOUD_LEVERS, on: true, ...levers },
     scene: scene(bodies ?? [earthAt(1500)]),
-    record: (address) => SOL.get(address) ?? null,
+    record: (address) => SERVED.get(address) ?? null,
     scattering: () => null,
     renderTime: 50_000,
+    rate: 1,
     visibility: false,
     enhanced: false,
     pictureEpoch: 0,
@@ -259,6 +283,162 @@ describe('the body a frame serves', () => {
   })
 })
 
+describe('the served set', () => {
+  /** Earth alone in the sky, the eye in its air, under the records as they are. */
+  const overEarth = (levers: Partial<CloudLevers> = {}, record = SOL) =>
+    cloudFrame(
+      inputs({ record: (address) => record.get(address) ?? null }, levers),
+      null,
+    )
+
+  it('leaves Earth, whose deck is authored, out: no frame over it unasked', () => {
+    expect(wetWorld(earth)).toBe(true)
+    expect(earth.appearance.clouds).not.toBeNull()
+    expect(cloudsServed(earth)).toBe(false)
+    expect(overEarth()).toBeNull()
+  })
+
+  it('serves Earth where a lever forces it by address', () => {
+    const frame = overEarth({ served: EARTH })
+    expect(frame?.served.address).toBe(EARTH)
+  })
+
+  it('serves Earth unasked once its deck’s record goes, with no change to the rule', () => {
+    expect(cloudsServed(deckless)).toBe(true)
+    expect(overEarth({}, SERVED)?.served.address).toBe(EARTH)
+  })
+
+  it('takes a second body from the set, and never a decked one unasked', () => {
+    const twin = { ...earthAt(1500), address: 'b:twin' }
+    const far = {
+      ...place(earth, { center: { x: 4e8, y: 0, z: 0 }, angularRadius: 0.2 }),
+      address: 'b:far',
+    }
+    const second = (record: Body, levers: Partial<CloudLevers> = {}) =>
+      cloudFrame(
+        inputs(
+          {
+            bodies: [twin, far],
+            record: (address) =>
+              address === 'b:twin'
+                ? deckless
+                : address === 'b:far'
+                  ? record
+                  : null,
+          },
+          levers,
+        ),
+        null,
+      )?.second?.address ?? null
+    expect(second(deckless)).toBe('b:far')
+    expect(second(earth)).toBeNull()
+    expect(second(earth, { second: 'b:far' })).toBe('b:far')
+  })
+
+  /*
+   * C11: on a frame Earth is drawn, its deck is hidden exactly when the
+   * volume serves it. A frame of Earth with neither is a bare planet, and
+   * one with both draws two cloud decks.
+   */
+  it('hides Earth’s deck on exactly the frames the volume serves Earth', () => {
+    const cases: readonly [Partial<CloudLevers>, Map<string, Body>][] = [
+      [{}, SOL],
+      [{ served: EARTH }, SOL],
+      [{ on: false }, SOL],
+      [{ on: false, served: EARTH }, SOL],
+      [{ served: MARS }, SOL],
+      [{}, SERVED],
+    ]
+    for (const [set, record] of cases) {
+      const levers = { ...DEFAULT_CLOUD_LEVERS, on: true, ...set }
+      const frame = overEarth(set, record)
+      const volume = frame?.served.address === EARTH
+      // `Bodies` reads the served address off the last frame's report.
+      const hidden = deckYields(levers, frame?.served.address ?? null, EARTH)
+      expect(hidden, JSON.stringify(set)).toBe(volume)
+    }
+    // The measurement that prices the deck hides it with no volume: the one
+    // frame of Earth with neither, and it is asked for by name.
+    expect(
+      deckYields({ ...DEFAULT_CLOUD_LEVERS, deck: 'hidden' }, null, EARTH),
+    ).toBe(true)
+  })
+})
+
+describe('a body’s weather in its frame', () => {
+  it('draws the climate as the regime the body’s own weather is', () => {
+    expect(DEFAULT_CLOUD_LEVERS.weather).toBe('climate')
+    expect(weatherScenario('climate')).toBe(WEATHER_SCENARIOS[CLIMATE_REGIME])
+    for (const id of SCENARIO_IDS)
+      expect(weatherScenario(id)).toBe(WEATHER_SCENARIOS[id])
+    const [own] = run([inputs()])
+    const [held] = run([inputs({}, { weather: CLIMATE_REGIME })])
+    expect(own!.scenario).toBe(held!.scenario)
+    expect(own!.served.levels).toEqual(held!.served.levels)
+    // One field under two names: the key is the lever's, and a change of
+    // name alone starts the bakes over.
+    expect(own!.served.weatherKey).toBe('climate')
+    expect(held!.served.weatherKey).toBe(CLIMATE_REGIME)
+  })
+
+  it.each(SCENARIO_IDS)(
+    '%s: lays the scenario’s layers out as three levels, the absent ones at the union’s top with nothing in them',
+    (id) => {
+      const scenario = WEATHER_SCENARIOS[id]
+      const [frame] = run([inputs({}, { weather: id })])
+      const { levels, noiseOrigin, detailOrigin } = frame!.served
+      const { top } = shellUnion(scenario)
+      expect(levels).toHaveLength(MAX_CLOUD_LAYERS)
+      levels.forEach((level, k) => {
+        const layer = scenario.layers[k]
+        expect([level.base, level.top]).toEqual(
+          layer === undefined ? [top, top] : [layer.base, layer.top],
+        )
+        expect(level.sigma).toBe(layer?.sigma ?? 0)
+        expect(level.radius).toBe(layer?.radius ?? 10)
+        expect(level.radiusRange).toEqual([level.radius, level.radius])
+        expect(level.cell).toBe(layer?.cellMeters ?? 1)
+        expect(level.erosion).toBe(layer?.erosion ?? 0)
+        // The medium is the unscaled one, and nothing turns.
+        expect([level.gain, level.transport, level.turnRate]).toEqual([1, 1, 0])
+        expect(level.turn).toEqual([1, 0, 0, 0, 1, 0, 0, 0, 1])
+        expect(level.noiseOrigin).toEqual(noiseOrigin)
+        expect(level.detailOrigin).toEqual(detailOrigin)
+        expect(level.phaseRows).toBeGreaterThan(0)
+        expect(level.meanDepth[0]).toBe(level.meanDepth[1])
+        expect(level.meanDepth[0] > 0).toBe(layer !== undefined)
+      })
+      // The boundaries a march crosses are the levels' own, in order.
+      expect(shellBoundaries(scenario)).toEqual(
+        levels.flatMap((level) => [level.base, level.top]),
+      )
+      expect(frame!.served.climate).toEqual(scenarioClimate(scenario, 50_000))
+    },
+  )
+
+  it('gives a second body the frame’s weather too, under the same key', () => {
+    const far = {
+      ...place(earth, { center: { x: 4e8, y: 0, z: 0 }, angularRadius: 0.2 }),
+      address: 'b:far',
+    }
+    const [frame] = run([
+      inputs(
+        {
+          bodies: [earthAt(1500), far],
+          record: (address) =>
+            address === 'b:far' ? deckless : (SERVED.get(address) ?? null),
+        },
+        { weather: 'two-decks' },
+      ),
+    ])
+    expect(frame!.second?.address).toBe('b:far')
+    expect(frame!.second!.weatherKey).toBe('two-decks')
+    expect(frame!.second!.levels.map(({ base, top }) => [base, top])).toEqual(
+      frame!.served.levels.map(({ base, top }) => [base, top]),
+    )
+  })
+})
+
 describe('a body’s frame', () => {
   it('forms the eye’s heights in float64, with no radius taken from another', () => {
     const [frame] = run([inputs({ bodies: [earthAt(1250.5)] })])
@@ -298,7 +478,7 @@ describe('a body’s frame', () => {
   })
 
   it('blows the scenario’s wind east and north at the eye, in the body’s axes', () => {
-    const [frame] = run([inputs({}, { scenario: 'two-decks' })])
+    const [frame] = run([inputs({}, { weather: 'two-decks' })])
     const { wind, eye } = frame!.served
     expect(Vec.dot(wind, Vec.normalize(eye))).toBeCloseTo(0, 12)
     expect(Vec.length(wind)).toBeCloseTo(Math.hypot(8, 4), 12)
@@ -318,7 +498,7 @@ describe('a body’s frame', () => {
       expect(periods.base % (layer.cellMeters * CLOUD_BASE_CELLS)).toBe(0)
       expect(periods.detail % layer.cellMeters).toBe(0)
     }
-    const [frame] = run([inputs({}, { scenario: 'cirrus-over-cumulus' })])
+    const [frame] = run([inputs({}, { weather: 'cirrus-over-cumulus' })])
     const { noiseOrigin, eye } = frame!.served
     for (const axis of ['x', 'y', 'z'] as const) {
       expect(noiseOrigin[axis]).toBeGreaterThanOrEqual(0)
@@ -464,7 +644,7 @@ describe('the regime', () => {
       Parameters<typeof inputs>[0],
       Partial<CloudLevers>,
     ][] = [
-      [{}, { scenario: 'overcast' }],
+      [{}, { weather: 'overcast' }],
       [{}, { traceScale: 2 }],
       [{ pictureEpoch: 1 }, {}],
       [{ historyKey: 'seed:b:4' }, {}],
@@ -485,6 +665,42 @@ describe('the regime', () => {
     // The stats counter changes how a frame is drawn, not what it means.
     const drawn = run([inputs(), inputs({}, { stats: true })])
     expect(drawn[1]!.reset).toBe('none')
+  })
+
+  it('names a reason from one list, the key’s two halves among them', () => {
+    // The union is what a report's reader switches on; a frame draws every
+    // reason here but the two halves, which stand for 'key' once it splits.
+    const reasons: Record<CloudResetReason, true> = {
+      none: true,
+      first: true,
+      key: true,
+      field: true,
+      picture: true,
+      jump: true,
+      resize: true,
+      motion: true,
+      cut: true,
+      force: true,
+    }
+    const drawn = new Set(
+      run([
+        inputs(),
+        inputs({}, { weather: 'overcast' }),
+        inputs({}, { weather: 'overcast' }),
+        inputs({ pictureEpoch: 1 }, { weather: 'overcast' }),
+      ]).map((frame) => frame.reset),
+    )
+    for (const reason of drawn) expect(reasons[reason]).toBe(true)
+    expect([...drawn]).toEqual(['first', 'key', 'none'])
+  })
+
+  it('reads the clock’s rate and leaves the jump to the step it took: a steady 1× raises none', () => {
+    const frames = run([
+      inputs({ rate: 1 }),
+      inputs({ rate: 1, renderTime: 50_000 + 1 / 60 }),
+      inputs({ rate: 100, renderTime: 50_000 + 2 / 60 }),
+    ])
+    expect(frames.map((frame) => frame.jump)).toEqual([false, false, false])
   })
 
   it('resets on a resize', () => {

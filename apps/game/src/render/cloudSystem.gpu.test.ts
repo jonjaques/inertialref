@@ -64,7 +64,7 @@ beforeAll(async () => {
     ceiling: CEILING,
     ceilingEdge: CEILING_EDGE,
     compression: COMPRESSION,
-    levers: { scenario: 'overcast' },
+    levers: { weather: 'overcast' },
   })
   await rig.system!.warm()
 }, 120_000)
@@ -422,7 +422,7 @@ describe('a warm-up that arrives after the caches are whole', () => {
    */
   it('leaves the volume and the sun grid owing what it drew over, and the next frames bake it', async () => {
     const late = cloudRig(gpu, WIDTH, HEIGHT, {
-      levers: { scenario: 'overcast', on: true },
+      levers: { weather: 'overcast', on: true },
     })
     const owed = () => {
       const { volume, sunDepth } = late.system!.report.pending

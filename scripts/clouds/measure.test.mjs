@@ -553,7 +553,7 @@ describe('the page steps', () => {
     expect(side.settled).toBe(5)
     expect(page.calls.levers.at(-1)).toMatchObject({
       on: true,
-      scenario: 'broken-horizon',
+      weather: 'broken-horizon',
     })
   })
 

@@ -7,16 +7,25 @@ import {
 import type { Body } from '@inertialref/universe'
 import {
   aspectRatio,
+  blobCells,
+  blobThreshold,
+  BLOB_MEAN,
+  CLIMATE_REGIME,
   CLOUD_ADVECTION_PERIOD,
+  CLOUD_GENERA,
   type CloudExtents,
   cloudExtents,
+  cloudsServed,
   commonPeriod,
   driftOffset,
   type Extent,
+  GENUS_TABLE,
+  genusProfileMean,
   horizonBasis,
   type Lens,
   type LevelUpdate,
   levelFrames,
+  MIE_DROPLETS,
   periodIndex,
   reducePoint,
   reduceTurns,
@@ -25,14 +34,19 @@ import {
   type ShellHeights,
   shellBoundaries,
   shellHeights,
+  shellUnion,
+  terminatorSines,
   verticalFov,
   WEATHER_SCENARIOS,
   type WeatherScenario,
-  wetWorld,
 } from '@inertialref/rendering'
 // Types only: this module reaches no Three at runtime, as `bodyUniforms.ts`.
 import type { AtmosphereScattering } from './atmosphereLuts.ts'
-import { type CloudLevers, cloudResetKey } from './cloudLevers.ts'
+import {
+  type CloudLevers,
+  cloudResetKey,
+  type CloudWeather,
+} from './cloudLevers.ts'
 
 /*
  * A frame's cloud state, built on the CPU from what the engine holds inside
@@ -74,6 +88,68 @@ export interface CloudFrameInputs {
   readonly render: Extent
   /** This render call's seconds. */
   readonly delta: number
+  /**
+   * The world clock's own rate, seconds of world time a second of the wall's
+   * (`WorldSnapshot.timeScale`): what a call's step of the field's time is
+   * expected to be, times `delta`. 1 where a caller has no clock.
+   */
+  readonly rate: number
+}
+
+/** One level of a body's weather, as the uniforms copy it: every number float64-formed. */
+export interface CloudLevelFrame {
+  /** Meters over the datum. An absent level has no thickness, at the union's top. */
+  readonly base: number
+  readonly top: number
+  /** Reference in-cloud extinction, 1/m. */
+  readonly sigma: number
+  /** Reference effective radius, µm, and the level's least and greatest. */
+  readonly radius: number
+  readonly radiusRange: readonly [least: number, greatest: number]
+  /** 1/(1 − f_δ) and 1 − g′ at the reference radius. */
+  readonly gain: number
+  readonly transport: number
+  /** One cell of the base noise, meters, and how far the detail eats the edge. */
+  readonly cell: number
+  readonly erosion: number
+  /** The level's first row in the profile table. */
+  readonly profileRow: number
+  /** The class's first row in the phase atlas, its row count, and its first row's radius, µm. */
+  readonly phaseRow: number
+  readonly phaseRows: number
+  readonly phaseRadius: number
+  /** The level's turn about the spin axis, R_y(−ω·t), row-major, and ω itself, rad/s. */
+  readonly turn: readonly number[]
+  readonly turnRate: number
+  /** The noises' origins for the level, reduced in float64, meters. */
+  readonly noiseOrigin: Vec3
+  readonly detailOrigin: Vec3
+  /** The level's mean in-cloud optical depth where it is stratiform, and where it is cumuliform. */
+  readonly meanDepth: readonly [stratiform: number, cumuliform: number]
+}
+
+/** A body's climate as its uniforms take it: the zonal law, or a regime's pattern. */
+export interface CloudClimateFrame {
+  readonly kind: 'regime' | 'zonal' | 'measured'
+  /** The zonal law's sixteen coefficients, row-major; zeros under a regime. */
+  readonly law: readonly number[]
+  /** A regime's pattern: how its cover varies, a band's or a blob's angular size, and the blob cells a face edge. */
+  readonly pattern: 'uniform' | 'bands' | 'blobs'
+  readonly patternScale: number
+  readonly patternCells: number
+  /** `periodIndex(time, the pattern's period)`: the two u32 halves a blob cell is hashed with. */
+  readonly period: readonly [number, number]
+  /** The terminator's sines, full and clear (`terminatorSines`). */
+  readonly terminator: readonly [number, number]
+  /** Each level's u32 blob threshold, and its cover between blobs. */
+  readonly blobThreshold: readonly [number, number, number]
+  readonly blobFloor: readonly [number, number, number]
+  /** Each level's mean cover and cumuliform share under a regime, 0..1. */
+  readonly cover: readonly [number, number, number]
+  readonly convective: readonly [number, number, number]
+  /** The middle level's ice share, and the deep-convection rate, 0..1. */
+  readonly ice: number
+  readonly deep: number
 }
 
 export interface CloudBodyFrame {
@@ -112,11 +188,32 @@ export interface CloudBodyFrame {
   readonly clipmap: LevelUpdate
   /** Levels 50/200/800 m. */
   readonly volume: LevelUpdate
+  /**
+   * The weather's identity: a regime's id, or 'climate'. Every bake that
+   * holds this body's field starts over when it changes.
+   */
+  readonly weatherKey: string
+  readonly levels: readonly [CloudLevelFrame, CloudLevelFrame, CloudLevelFrame]
+  readonly climate: CloudClimateFrame
 }
 
 export type CloudRegime = 'converging' | 'immediate'
+/**
+ * Why the history restarts. `'key'` is anything that names what the history
+ * holds; its two halves are `'picture'`, a cut that leaves the field as it
+ * was, and `'field'`, a change of the weather, a body or a cache's layout.
+ */
 export type CloudResetReason =
-  'none' | 'first' | 'key' | 'jump' | 'resize' | 'motion' | 'cut' | 'force'
+  | 'none'
+  | 'first'
+  | 'key'
+  | 'field'
+  | 'picture'
+  | 'jump'
+  | 'resize'
+  | 'motion'
+  | 'cut'
+  | 'force'
 
 export interface CloudCameraFrame {
   readonly right: Vec3
@@ -201,6 +298,124 @@ export function cloudNoisePeriods(scenario: WeatherScenario): {
   return {
     base: commonPeriod(cells.map((cell) => cell * BASE_CELLS)),
     detail: commonPeriod(cells),
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* A regime as a body's weather                                               */
+/* ------------------------------------------------------------------------- */
+
+/** The regime a lever's weather draws: the one it names, or the climate's own. */
+export function weatherScenario(weather: CloudWeather): WeatherScenario {
+  return WEATHER_SCENARIOS[weather === 'climate' ? CLIMATE_REGIME : weather]
+}
+
+const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1] as const
+
+/**
+ * A scenario's layers as a body's three levels. Each number is the layer's
+ * own: one radius through the level, a gain and a transport of one, no turn,
+ * the droplets' rows of the phase atlas for every genus, and the profile's
+ * row the genus's index. An absent layer sits at the union's top with no
+ * thickness and nothing in it, as `ShellHeights` lays out its boundaries.
+ */
+export function scenarioLevels(
+  scenario: WeatherScenario,
+  origins: { readonly noise: Vec3; readonly detail: Vec3 },
+): CloudBodyFrame['levels'] {
+  const { top: ceiling } = shellUnion(scenario)
+  const level = (k: number): CloudLevelFrame => {
+    const layer = scenario.layers[k]
+    const shared = {
+      gain: 1,
+      transport: 1,
+      phaseRow: 0,
+      phaseRows: MIE_DROPLETS.radii,
+      phaseRadius: MIE_DROPLETS.radiusMin,
+      turn: IDENTITY,
+      turnRate: 0,
+      noiseOrigin: origins.noise,
+      detailOrigin: origins.detail,
+    }
+    if (layer === undefined)
+      return {
+        ...shared,
+        base: ceiling,
+        top: ceiling,
+        sigma: 0,
+        radius: 10,
+        radiusRange: [10, 10],
+        cell: 1,
+        erosion: 0,
+        profileRow: 0,
+        meanDepth: [0, 0],
+      }
+    const depth =
+      layer.sigma * (layer.top - layer.base) * genusProfileMean(layer.genus)
+    return {
+      ...shared,
+      base: layer.base,
+      top: layer.top,
+      sigma: layer.sigma,
+      radius: layer.radius,
+      radiusRange: [layer.radius, layer.radius],
+      cell: layer.cellMeters,
+      erosion: layer.erosion,
+      profileRow: CLOUD_GENERA.indexOf(layer.genus),
+      meanDepth: [depth, depth],
+    }
+  }
+  return [level(0), level(1), level(2)]
+}
+
+/**
+ * A scenario as the three members of a body's frame that are its weather:
+ * its id as the key, its layers as the levels, its pattern as the climate.
+ */
+export function scenarioWeather(
+  scenario: WeatherScenario,
+  origins: { readonly noise: Vec3; readonly detail: Vec3 },
+  time: number,
+): Pick<CloudBodyFrame, 'weatherKey' | 'levels' | 'climate'> {
+  return {
+    weatherKey: scenario.id,
+    levels: scenarioLevels(scenario, origins),
+    climate: scenarioClimate(scenario, time),
+  }
+}
+
+/** A scenario's pattern as a body's climate, at an instant. */
+export function scenarioClimate(
+  scenario: WeatherScenario,
+  time: number,
+): CloudClimateFrame {
+  const cover = (k: number): number =>
+    Math.min(1, Math.max(0, scenario.layers[k]?.coverage ?? 0))
+  const floor = (k: number): number =>
+    Math.max(0, (cover(k) - BLOB_MEAN) / (1 - BLOB_MEAN))
+  const convective = (k: number): number => {
+    const genus = scenario.layers[k]?.genus
+    return genus !== undefined && GENUS_TABLE[genus].cumuliform ? 1 : 0
+  }
+  const middle = scenario.layers[1]?.genus
+  return {
+    kind: 'regime',
+    law: new Array<number>(16).fill(0),
+    pattern: scenario.pattern,
+    patternScale: scenario.patternScale,
+    patternCells: blobCells(scenario.patternScale),
+    period: periodIndex(time, scenario.patternPeriod),
+    terminator: terminatorSines(scenario),
+    blobThreshold: [
+      blobThreshold(cover(0)),
+      blobThreshold(cover(1)),
+      blobThreshold(cover(2)),
+    ],
+    blobFloor: [floor(0), floor(1), floor(2)],
+    cover: [cover(0), cover(1), cover(2)],
+    convective: [convective(0), convective(1), convective(2)],
+    ice: middle !== undefined && GENUS_TABLE[middle].class === 'ice' ? 1 : 0,
+    deep: 0,
   }
 }
 
@@ -328,6 +543,7 @@ function bodySun(
 interface Context {
   readonly inputs: CloudFrameInputs
   readonly scenario: WeatherScenario
+  readonly weatherKey: string
   readonly boundaries: readonly number[]
   readonly periods: { readonly base: number; readonly detail: number }
   readonly time: number
@@ -358,6 +574,8 @@ function bodyFrame(
   const color = key?.color ?? WHITE
   const gain = inputs.visibility ? 1 : body.sunlight
   const served = caches !== 'none'
+  const noiseOrigin = reducePoint(eye, context.periods.base)
+  const detailOrigin = reducePoint(eye, context.periods.detail)
   return {
     address: body.address,
     datumRadius,
@@ -370,8 +588,8 @@ function bodyFrame(
     limb: body.limb,
     limbFalloff: body.limbFalloff,
     dayColor: { r: color.r * gain, g: color.g * gain, b: color.b * gain },
-    noiseOrigin: reducePoint(eye, context.periods.base),
-    detailOrigin: reducePoint(eye, context.periods.detail),
+    noiseOrigin,
+    detailOrigin,
     drift: driftOffset(wind, time, context.periods.base),
     wind,
     clipmap: served
@@ -392,6 +610,13 @@ function bodyFrame(
           caches?.volume.frames ?? null,
         )
       : NO_LEVELS,
+    // Both bodies draw the lever's one weather, under the lever's name.
+    ...scenarioWeather(
+      scenario,
+      { noise: noiseOrigin, detail: detailOrigin },
+      time,
+    ),
+    weatherKey: context.weatherKey,
   }
 }
 
@@ -589,9 +814,11 @@ export function cloudFrame(
 ): CloudFrame | null {
   const { levers } = inputs
   if (!levers.on) return null
+  // The served set: wet, and no authored deck to lose. A body outside it is
+  // drawn only where a lever forces it by address.
   const wet = (body: RenderBody): boolean => {
     const record = inputs.record(body.address)
-    return record !== null && wetWorld(record)
+    return record !== null && cloudsServed(record)
   }
   const eyeRender = inputs.camera.position
   const servedAt = servedBody(
@@ -602,7 +829,7 @@ export function cloudFrame(
   )
   if (servedAt === null) return null
   const secondAt = secondBody(inputs.scene.bodies, servedAt, wet, levers.second)
-  const scenario = WEATHER_SCENARIOS[levers.scenario]
+  const scenario = weatherScenario(levers.weather)
   const time = frameTime(inputs, previous)
   const jump = jumped(inputs, previous, time)
   const extents = cloudExtents(inputs.render, inputs.css, levers.traceScale)
@@ -617,6 +844,7 @@ export function cloudFrame(
   const context: Context = {
     inputs,
     scenario,
+    weatherKey: levers.weather,
     boundaries: shellBoundaries(scenario),
     periods: cloudNoisePeriods(scenario),
     time,

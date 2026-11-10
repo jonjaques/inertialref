@@ -12,6 +12,7 @@ import {
   storage,
   texture3D,
   uint,
+  vec2,
   vec3,
 } from 'three/tsl'
 import {
@@ -28,6 +29,7 @@ import {
   CLOUD_CLIPMAP_TEXELS,
   type CloudBodyFrame,
   type CloudFrame,
+  scenarioWeather,
 } from './cloudFrame.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import type {
@@ -143,6 +145,23 @@ function slabScenario(
   }
 }
 
+/**
+ * A scenario's key as a frame carries it. One a scenario object, since the
+ * scenarios here are built by hand and share an id: every bake starts over
+ * on a new key, as it does on a new weather.
+ */
+const WEATHER_KEYS = new WeakMap<WeatherScenario, string>()
+function weatherKeyOf(scenario: WeatherScenario): string {
+  let key = WEATHER_KEYS.get(scenario)
+  if (key === undefined) {
+    key = `${scenario.id} ${WEATHER_KEY_COUNT.next}`
+    WEATHER_KEY_COUNT.next += 1
+    WEATHER_KEYS.set(scenario, key)
+  }
+  return key
+}
+const WEATHER_KEY_COUNT = { next: 0 }
+
 function frameAt(
   eye: Vec3,
   sun: Vec3,
@@ -182,6 +201,12 @@ function frameAt(
       CLOUD_VOLUME_SIZE,
       previous?.served.volume.frames ?? null,
     ),
+    ...scenarioWeather(
+      scenario,
+      { noise: reducePoint(eye, FIELD_PERIOD), detail: ZERO },
+      0,
+    ),
+    weatherKey: weatherKeyOf(scenario),
   }
   const camera = {
     right: { x: 1, y: 0, z: 0 },
@@ -221,7 +246,7 @@ const BUDGET: CloudBudget = {
   slices: 8,
   tiles: 1,
   jump: false,
-  sunTexelSteps: SUN_DEPTH_FRAME_CAP,
+  sunSlices: SUN_GRID_SIZE[2],
 }
 
 interface Rig {
@@ -290,6 +315,7 @@ function slab(base: number, top: number, sigma: number): CloudMediumFn {
       layer: select(inside, int(0), int(-1)),
       column: float(1e9),
       radius: float(8),
+      depth: vec2(0),
     }
   }
 }
@@ -338,7 +364,7 @@ async function depths(
 ): Promise<Float32Array> {
   const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
   return run(offsets.length, inputs, 3, 1, (read, write) => {
-    write(0, test.depth.opticalDepth(vec3(read(0), read(1), read(2))))
+    write(0, test.depth.depths(vec3(read(0), read(1), read(2))).toSun)
   })
 }
 
@@ -484,6 +510,7 @@ describe('a grid that moves', () => {
       layer: select(inside, int(0), int(-1)),
       column: float(1e9),
       radius: float(8),
+      depth: vec2(0),
     }
   }
   const EYE = 500

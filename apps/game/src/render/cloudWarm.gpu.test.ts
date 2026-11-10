@@ -25,7 +25,7 @@ beforeAll(async () => {
   gpu = await openGpu(WIDTH, HEIGHT)
   rig = cloudRig(gpu, WIDTH, HEIGHT, {
     ceiling: 50,
-    levers: { scenario: 'overcast' },
+    levers: { weather: 'overcast' },
   })
   await rig.sensor.warm()
   await rig.system!.warm()
@@ -87,7 +87,7 @@ describe('the first frame of every lever set after the warm-up', () => {
   it.each(leverSets())('%s builds no pipeline', async (_, levers) => {
     rig.levers = {
       ...DEFAULT_CLOUD_LEVERS,
-      scenario: 'overcast',
+      weather: 'overcast',
       on: true,
       ...levers,
     }

@@ -12,6 +12,7 @@ import {
   genusProfile,
   genusProfileMean,
 } from '@inertialref/rendering'
+import type { CloudUniforms } from './cloudUniforms.ts'
 
 /*
  * Each genus's density over its layer's height: `genusProfile` baked on the
@@ -94,4 +95,17 @@ export class CloudProfile {
   dispose(): void {
     this.texture.dispose()
   }
+}
+
+/**
+ * The profile table a field's media read.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudProfile(_deps: {
+  readonly uniforms: CloudUniforms
+}): CloudProfile {
+  return new CloudProfile()
 }

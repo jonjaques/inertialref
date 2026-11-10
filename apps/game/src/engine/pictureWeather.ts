@@ -3,13 +3,13 @@ import type {
   PictureWeather,
   PictureWeatherOutcome,
 } from '@inertialref/devtools'
-import {
-  cloudsServed,
-  SCENARIO_IDS,
-  type ScenarioId,
-} from '@inertialref/rendering'
+import { cloudsServed } from '@inertialref/rendering'
 import type { Body } from '@inertialref/universe'
-import type { CloudLevers } from '../render/cloudLevers.ts'
+import {
+  CLOUD_WEATHERS,
+  type CloudLevers,
+  type CloudWeather,
+} from '../render/cloudLevers.ts'
 
 /*
  * A picture's weather as the clouds' levers, and its release.
@@ -28,7 +28,7 @@ import type { CloudLevers } from '../render/cloudLevers.ts'
  */
 
 /** The three levers a picture writes, as it found them. */
-type Held = Pick<CloudLevers, 'on' | 'scenario' | 'served'>
+type Held = Pick<CloudLevers, 'on' | 'weather' | 'served'>
 
 /** What the engine lends this: its levers, whether it has clouds, and its records. */
 export interface PictureWeatherEngine {
@@ -41,21 +41,19 @@ export interface PictureWeatherEngine {
 }
 
 /**
- * The regime as a lever's scenario, or null for one this build does not
- * draw. `'climate'` is null until the levers carry a climate: the contracts
- * package widens `scenario` to `'climate' | ScenarioId` as `weather`, and
- * this is the one line that follows it.
+ * The regime as the `weather` lever's value, or null for one this build does
+ * not draw: `'climate'`, the body's own, or the id of a regime it knows.
  */
-const scenarioOf = (regime: string): ScenarioId | null =>
-  (SCENARIO_IDS as readonly string[]).includes(regime)
-    ? (regime as ScenarioId)
+const weatherOf = (regime: string): CloudWeather | null =>
+  (CLOUD_WEATHERS as readonly string[]).includes(regime)
+    ? (regime as CloudWeather)
     : null
 
 /**
  * The levers a picture's weather asks for over `found`, and what became of
  * it. Pure, so the mapping is held in Node without an engine.
  *
- * - Weather the page can draw: the volume on, the regime as its scenario,
+ * - Weather the page can draw: the volume on, the regime as its weather,
  *   and the picture's body forced when it is outside the served set
  *   (`cloudsServed`), which is how Earth, with its authored deck, is drawn
  *   at all. Inside the set no force is needed, and none is written.
@@ -75,14 +73,14 @@ export function pictureWeatherLevers(
 ): { readonly levers: CloudLevers; readonly outcome: PictureWeatherOutcome } {
   const off: CloudLevers = { ...found, on: false, served: null }
   if (weather === null) return { levers: off, outcome: 'none' }
-  const scenario = scenarioOf(weather.regime)
-  if (!page.available || scenario === null)
+  const drawn = weatherOf(weather.regime)
+  if (!page.available || drawn === null)
     return { levers: off, outcome: 'unavailable' }
   return {
     levers: {
       ...found,
       on: true,
-      scenario,
+      weather: drawn,
       served: page.served ? null : page.address,
     },
     outcome: 'drawn',
@@ -119,7 +117,7 @@ export class PictureWeatherHold {
     const levers = engine.clouds
     this.#found = {
       on: levers.on,
-      scenario: levers.scenario,
+      weather: levers.weather,
       served: levers.served,
     }
     const body = engine.bodyFor(address)

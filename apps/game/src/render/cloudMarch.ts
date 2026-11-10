@@ -193,6 +193,7 @@ function heldMedium(medium: CloudMedium): CloudMedium {
     layer: medium.layer.toVar(),
     column: medium.column.toVar(),
     radius: medium.radius.toVar(),
+    depth: medium.depth.toVar(),
   }
 }
 
@@ -258,7 +259,7 @@ function rayRegisters(ray: CloudRay, uniforms: CloudUniforms) {
     moment: float(0).toVar(),
     moment2: float(0).toVar(),
     front: float(-1).toVar(),
-    radius: uniforms.layers.radius.x.toVar(),
+    radius: uniforms.served.layers.radius.x.toVar(),
     air: vec3(1).toVar(),
     blocked: vec3(0).toVar(),
     airLength: float(0).toVar(),

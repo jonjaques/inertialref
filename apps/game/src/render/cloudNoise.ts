@@ -31,6 +31,7 @@ import {
 } from '@inertialref/rendering'
 import type { CloudFrame } from './cloudFrame.ts'
 import type { CloudBudget, CloudResource } from './cloudNodes.ts'
+import type { CloudUniforms } from './cloudUniforms.ts'
 import { runQuadPasses } from './quadPass.ts'
 import { warmSensorPass } from './warmup.ts'
 
@@ -502,4 +503,17 @@ export class CloudNoise implements CloudResource {
       this.#materials[bake].dispose()
     }
   }
+}
+
+/**
+ * The noises a field is built on.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudNoise(_deps: {
+  readonly uniforms: CloudUniforms
+}): CloudNoise {
+  return new CloudNoise()
 }

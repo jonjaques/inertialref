@@ -45,6 +45,7 @@ import {
   CLOUD_CLIPMAP_SIZE,
   CLOUD_CLIPMAP_TEXELS,
   type CloudFrame,
+  scenarioWeather,
 } from './cloudFrame.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { CloudMaps } from './cloudMaps.ts'
@@ -110,7 +111,7 @@ const budget: CloudBudget = {
   slices: 0,
   tiles: 0,
   jump: false,
-  sunTexelSteps: 0,
+  sunSlices: 0,
 }
 
 const unit = (v: Vec3): Vec3 => {
@@ -160,8 +161,12 @@ function frameAt(
 ): CloudFrame {
   const lead = detailLead(scenario)
   const { east, north } = horizonBasis(EYE)
+  const ORIGINS = {
+    noise: NOISE_ORIGIN,
+    detail: added(NOISE_ORIGIN, { x: lead, y: lead, z: lead }),
+  }
   const frame = {
-    levers: { ...DEFAULT_CLOUD_LEVERS, on: true, scenario: scenario.id },
+    levers: { ...DEFAULT_CLOUD_LEVERS, on: true, weather: scenario.id },
     scenario,
     served: {
       address: 'test',
@@ -175,8 +180,8 @@ function frameAt(
       limb: 0,
       limbFalloff: 1,
       dayColor: { r: 1, g: 1, b: 1 },
-      noiseOrigin: NOISE_ORIGIN,
-      detailOrigin: added(NOISE_ORIGIN, { x: lead, y: lead, z: lead }),
+      noiseOrigin: ORIGINS.noise,
+      detailOrigin: ORIGINS.detail,
       drift: DRIFT,
       wind: added(
         scaled(east, scenario.wind.east),
@@ -190,6 +195,7 @@ function frameAt(
         previous?.served.clipmap.frames ?? null,
       ),
       volume: { frames: [], dirty: [], rebuilt: [] },
+      ...scenarioWeather(scenario, ORIGINS, TIME),
     },
     second: null,
     time: TIME,

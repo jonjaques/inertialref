@@ -18,6 +18,7 @@ import {
   storage,
   texture3D,
   uint,
+  vec2,
   vec3,
 } from 'three/tsl'
 import {
@@ -36,12 +37,13 @@ import {
   CLOUD_CLIPMAP_TEXELS,
   type CloudBodyFrame,
   type CloudFrame,
+  scenarioWeather,
 } from './cloudFrame.ts'
 import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import type { CloudBudget, CloudMediumFn, CloudSample } from './cloudNodes.ts'
 import type { CloudNoiseNodes } from './cloudNoise.ts'
-import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
+import { SUN_GRID_SIZE } from './cloudSunGrid.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import {
   CLOUD_VOLUME_SIZE,
@@ -104,7 +106,7 @@ const BUDGET: CloudBudget = {
   slices: 8,
   tiles: 1,
   jump: false,
-  sunTexelSteps: SUN_DEPTH_FRAME_CAP,
+  sunSlices: SUN_GRID_SIZE[2],
 }
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 }
 /** Meters: what a field fixed to the body repeats over on each axis. */
@@ -141,6 +143,23 @@ function eyeAt(height: number, east = 0, north = 0): Vec3 {
   const frames = levelFrames(center, R, [50], 256, null).frames[0]!
   return add(add(center, scale(frames.east, east)), scale(frames.north, north))
 }
+
+/**
+ * A scenario's key as a frame carries it. One a scenario object, since the
+ * scenarios here are built by hand and share an id: every bake starts over
+ * on a new key, as it does on a new weather.
+ */
+const WEATHER_KEYS = new WeakMap<WeatherScenario, string>()
+function weatherKeyOf(scenario: WeatherScenario): string {
+  let key = WEATHER_KEYS.get(scenario)
+  if (key === undefined) {
+    key = `${scenario.id} ${WEATHER_KEY_COUNT.next}`
+    WEATHER_KEY_COUNT.next += 1
+    WEATHER_KEYS.set(scenario, key)
+  }
+  return key
+}
+const WEATHER_KEY_COUNT = { next: 0 }
 
 /**
  * A frame as `cloudFrame` builds it for the served body, from the clipmap's
@@ -193,6 +212,12 @@ function frameAt(
       CLOUD_VOLUME_SIZE,
       caches?.volume.frames ?? null,
     ),
+    ...scenarioWeather(
+      scenario,
+      { noise: reducePoint(eye, FIELD_PERIOD), detail: ZERO },
+      0,
+    ),
+    weatherKey: weatherKeyOf(scenario),
   }
   const camera = {
     right: { x: 1, y: 0, z: 0 },
@@ -283,6 +308,7 @@ function analytic(
       layer: select(inside, int(0), int(-1)),
       column: float(1e9),
       radius: float(8),
+      depth: vec2(0),
     }
   }
 }

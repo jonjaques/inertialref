@@ -33,11 +33,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import {
-  type LevelFrame,
-  textureBytes,
-  type WeatherScenario,
-} from '@inertialref/rendering'
+import { type LevelFrame, textureBytes } from '@inertialref/rendering'
 import {
   detailCells,
   detailReach,
@@ -234,7 +230,7 @@ export class CloudVolume implements CloudResource {
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh(this.#material)
   readonly #levels: LevelState[] = Array.from({ length: LEVELS }, freshLevel)
-  #scenario: WeatherScenario | null = null
+  #weather: string | null = null
   #address: string | null = null
   #last: number | null = null
   #pending = false
@@ -304,7 +300,7 @@ export class CloudVolume implements CloudResource {
   }
 
   #mediumAt(sample: CloudSample, body: CloudBodyUniforms): CloudMedium {
-    const layers = this.#deps.uniforms.layers
+    const layers = body.layers
     const held = this.#held(sample.offset, sample.altitude, body)
     const sigma = float(0).toVar()
     const fraction = float(0).toVar()
@@ -351,7 +347,7 @@ export class CloudVolume implements CloudResource {
       column.assign(field.column)
       radius.assign(field.radius)
     })
-    return { sigma, fraction, layer, column, radius }
+    return { sigma, fraction, layer, column, radius, depth: vec2(0) }
   }
 
   /* ----------------------------------------------------------------------- */
@@ -383,9 +379,7 @@ export class CloudVolume implements CloudResource {
         },
         body,
       )
-      const encoded = sqrt(
-        saturate(medium.sigma.div(uniforms.layers.sigmaScale)),
-      )
+      const encoded = sqrt(saturate(medium.sigma.div(body.layers.sigmaScale)))
       return vec4(encoded, saturate(medium.fraction), 0, 1)
     })()
   }
@@ -410,19 +404,19 @@ export class CloudVolume implements CloudResource {
 
   /** What makes a level's slices hold nothing this frame's. */
   #invalidate(frame: CloudFrame, budget: CloudBudget): void {
-    const { served, scenario } = frame
+    const { served } = frame
     const { boundaries, eye } = served.shells
     const top = boundaries[boundaries.length - 1] ?? 0
-    // A scenario is a constant record, so a new one is a new object: its
-    // union, its slices' heights and its σ scale are all the texels hold.
+    // A weather's union, its slices' heights and its σ scale are all the
+    // texels hold, so another weather is another volume.
     const everything =
       this.#last === null ||
       frame.frameIndex !== this.#last + 1 ||
       frame.jump ||
       budget.jump ||
-      scenario !== this.#scenario ||
+      served.weatherKey !== this.#weather ||
       served.address !== this.#address
-    this.#scenario = scenario
+    this.#weather = served.weatherKey
     this.#address = served.address
     this.#levels.forEach((state, L) => {
       const level = served.volume.frames[L]
@@ -642,4 +636,24 @@ export class CloudVolume implements CloudResource {
     this.#target.dispose()
     this.#material.dispose()
   }
+}
+
+/**
+ * The field cached around the eye, for the sun grid to sum through.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudVolume(deps: {
+  readonly uniforms: CloudUniforms
+  /** The fine march's medium: what the volume caches. */
+  readonly medium: CloudMediumFn
+  readonly noise: { readonly nodes: CloudNoiseNodes }
+}): CloudVolume {
+  return new CloudVolume({
+    uniforms: deps.uniforms,
+    bake: deps.medium,
+    detail: deps.noise.nodes,
+  })
 }

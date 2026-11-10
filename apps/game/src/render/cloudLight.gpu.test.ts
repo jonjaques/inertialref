@@ -38,7 +38,11 @@ import {
   sunThroughAt,
 } from './air.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
-import { type CloudSample, slabMedium } from './cloudNodes.ts'
+import {
+  type CloudSample,
+  type CloudSunDepthNodes,
+  slabMedium,
+} from './cloudNodes.ts'
 import { CloudPhase } from './cloudPhase.ts'
 import { cloudSunFn } from './cloudSunlight.ts'
 import { type CloudBodyUniforms, createCloudUniforms } from './cloudUniforms.ts'
@@ -642,9 +646,13 @@ describe('the sun a cloud sample sees', () => {
     body.sunUp.value = 1
     uniforms.trace.lightTaps.value = taps
     const medium = slabMedium([{ base: BASE, top: TOP, sigma, fraction }])
-    const depth = {
-      opticalDepth: (offset: Node<'vec3'>): Node<'float'> =>
-        max(float(TOP).sub(altitudeAt(body, offset)), 0).mul(sigma),
+    const depth: CloudSunDepthNodes = {
+      depths: (offset) => {
+        const toSun = max(float(TOP).sub(altitudeAt(body, offset)), 0).mul(
+          sigma,
+        )
+        return { toSun, whole: toSun, weight: float(1) }
+      },
     }
     const sun = cloudSunFn({ uniforms, medium, depth })
     const out = await run(1, new Float32Array(1), 1, 1, (_, write) => {
