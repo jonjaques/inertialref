@@ -156,6 +156,7 @@ export function viewForm(
     ),
     measure: 'relative',
     blend: options.blend,
+    ...(stretch === 1 ? {} : { stretch }),
   })
 }
 
