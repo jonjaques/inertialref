@@ -33,7 +33,8 @@
  * kept, up to its `attempts`. A refusal (exit 2) stops the campaign: the
  * runner refuses a row that has failed three times, and the same command would
  * meet the same refusal. The preview is checked before each attempt and served
- * again if it died; it is stopped on every exit, clean or not, and the
+ * again if it died, and a server on its port that is not this campaign's
+ * stops the campaign; it is stopped on every exit, clean or not, and the
  * runner's own exit closes its rigs and releases the GPU lock.
  *
  * Everything lands in `.data/clouds/campaign/`: `<name>.json`, the state,
@@ -52,7 +53,7 @@ import {
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { SIZES, batchRuns, bundled } from './measure.mjs'
+import { SIZES, batchRuns, bundled, parseProcesses } from './measure.mjs'
 import { rateNote, tables } from './page.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
@@ -294,6 +295,83 @@ const killGroup = (proc, signal) => {
   }
 }
 
+const read = (command, args) => {
+  try {
+    return execFileSync(command, args, { encoding: 'utf8' }).trim()
+  } catch {
+    return ''
+  }
+}
+
+/** What listens on the preview's port, each with its process group. */
+function listening() {
+  const port = new URL(URL_).port
+  return read('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'])
+    .split('\n')
+    .filter(Boolean)
+    .map((pid) => ({
+      pid: Number(pid),
+      group: Number(read('ps', ['-o', 'pgid=', '-p', pid])),
+    }))
+}
+
+/**
+ * The listeners that descend from `root`, the pnpm this campaign spawned: an
+ * answer on 8787 is anyone's, and another worktree's `pnpm dev` answers
+ * there as readily as the preview, so the batch would measure its tree under
+ * this commit. `table` is `ps`'s, parsed.
+ */
+export function ours(table, listeners, root) {
+  const parent = new Map(table.map((p) => [p.pid, p.ppid]))
+  const descends = (pid) => {
+    for (let at = pid; at > 1; at = parent.get(at) ?? 0)
+      if (at === root) return true
+    return false
+  }
+  return listeners.filter((l) => descends(l.pid))
+}
+
+/**
+ * The groups of the listeners now on the port that serving saw as this
+ * campaign's, by pid or group. The stop cannot ask for descent again: pnpm's
+ * group goes first, and `cf` and workerd, in a group of their own, are left
+ * with no parent to trace.
+ */
+export const strays = (now, served) => [
+  ...new Set(
+    now
+      .filter((l) => served.some((s) => s.pid === l.pid || s.group === l.group))
+      .map((l) => l.group),
+  ),
+]
+
+/**
+ * Whether what listens on the port is this campaign's preview: every
+ * listener descends from `root` or was seen as its own when it was served.
+ * One stranger is enough to refuse, since `localhost` may reach either of two
+ * listeners on one port, one on IPv4 and one on IPv6.
+ */
+export function owner(table, now, root, served = []) {
+  if (now.length === 0) return { up: false }
+  const mine = new Set(root == null ? [] : ours(table, now, root))
+  const known = new Set(strays(now, served))
+  const strangers = now.filter((l) => !mine.has(l) && !known.has(l.group))
+  if (strangers.length === 0) return { up: true, ours: true, listeners: now }
+  return {
+    up: true,
+    ours: false,
+    why: `pid ${strangers.map((l) => l.pid).join(', ')} listens on ${URL_}, and it is not the preview this campaign served`,
+  }
+}
+
+const preview = (ctx) =>
+  owner(
+    parseProcesses(read('ps', ['-A', '-o', 'pid=,ppid=,command='])),
+    listening(),
+    ctx.preview?.pid,
+    ctx.served ?? [],
+  )
+
 /** Serves the built bundle on 8787 as `pnpm preview` does, without the build. */
 async function serve(state, ctx) {
   const out = openSync(state.previewLog, 'a')
@@ -313,7 +391,16 @@ async function serve(state, ctx) {
   ctx.preview = proc
   state.preview.pid = proc.pid
   for (const deadline = Date.now() + 180_000; Date.now() < deadline;) {
-    if (await answers(URL_)) return
+    if (await answers(URL_)) {
+      const seen = preview(ctx)
+      if (!seen.up)
+        throw new Error(
+          `${URL_} answers and lsof names no listener, so it cannot be shown to be this campaign's preview`,
+        )
+      if (!seen.ours) throw new Error(seen.why)
+      ctx.served = seen.listeners
+      return
+    }
     if (proc.exitCode !== null) break
     await sleep(2000, ctx.stop.signal)
   }
@@ -325,30 +412,24 @@ async function serve(state, ctx) {
  * the process: `cf` runs in a process group of its own under pnpm's, and
  * pnpm forwards the signal to it, so the group pnpm leads can be gone while
  * `cf` and workerd still hold 8787, which the next campaign would refuse.
- * What still listens after the wait is this campaign's, and its group goes.
+ * What still listens after the wait goes only where serving saw it as this
+ * campaign's (`strays`); another tree's server on the port is left alone.
  */
 async function stopPreview(ctx) {
   const proc = ctx.preview
   if (proc == null) return
   ctx.preview = null
+  // What descends from pnpm now, while there is a pnpm to descend from: a
+  // stop that lands before `serve` saw an answer has recorded nothing.
+  const table = parseProcesses(read('ps', ['-A', '-o', 'pid=,ppid=,command=']))
+  const served = [...(ctx.served ?? []), ...ours(table, listening(), proc.pid)]
+  ctx.served = null
   killGroup(proc, 'SIGTERM')
-  for (let i = 0; i < 40 && (await answers(URL_)); i += 1)
+  for (let i = 0; i < 40 && strays(listening(), served).length > 0; i += 1)
     await new Promise((resolve) => setTimeout(resolve, 500))
   killGroup(proc, 'SIGKILL')
-  const read = (command, args) => {
-    try {
-      return execFileSync(command, args, { encoding: 'utf8' }).trim()
-    } catch {
-      return ''
-    }
-  }
-  const port = new URL(URL_).port
-  for (const pid of read('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'])
-    .split('\n')
-    .filter(Boolean)) {
-    const group = Number(read('ps', ['-o', 'pgid=', '-p', pid]))
+  for (const group of strays(listening(), served))
     if (group > 1) killGroup({ pid: group }, 'SIGKILL')
-  }
 }
 
 /* --------------------------------------------------------------- the run ---- */
@@ -376,7 +457,9 @@ async function runStage(stage, state, ctx) {
   stage.startedAt = new Date().toISOString()
   stage.from = stage.done
   while (!ctx.stop.signal.aborted) {
-    if (!(await answers(URL_))) {
+    const seen = preview(ctx)
+    if (seen.up && !seen.ours) throw new Error(seen.why)
+    if (!seen.up || !(await answers(URL_))) {
       console.log(
         `${new Date().toISOString()} the preview is down; serving it again`,
       )
@@ -446,7 +529,12 @@ function summarize(state) {
 }
 
 async function run(name, { stamp, resume }) {
-  const ctx = { current: null, preview: null, stop: new AbortController() }
+  const ctx = {
+    current: null,
+    preview: null,
+    served: null,
+    stop: new AbortController(),
+  }
   const head = git('rev-parse', 'HEAD')
   const was = resume ? readState(name) : null
   const state = was ?? initial(name, stamp, head)

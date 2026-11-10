@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CAMPAIGNS, eta, outcome } from './campaign.mjs'
+import { CAMPAIGNS, eta, outcome, ours, owner, strays } from './campaign.mjs'
 import {
   FAILS,
   HELD,
@@ -165,6 +165,55 @@ describe('a campaign', () => {
     for (const s of Object.values(CAMPAIGNS).flatMap((c) => c.stages))
       if (s.kind === 'batch')
         expect(batchRuns(s.name, SIZES).length).toBeGreaterThan(0)
+  })
+})
+
+describe('the preview a campaign serves', () => {
+  // pnpm (100) runs cf (110, its own group) and workerd (111) under it;
+  // another worktree's dev server (200) answers the same port.
+  const table = [
+    {
+      pid: 100,
+      ppid: 50,
+      command: 'pnpm --filter @inertialref/server exec cf dev',
+    },
+    { pid: 110, ppid: 100, command: 'cf dev' },
+    { pid: 111, ppid: 110, command: 'workerd serve' },
+    { pid: 200, ppid: 60, command: 'node vite' },
+  ]
+  const cf = { pid: 110, group: 110 }
+  const workerd = { pid: 111, group: 110 }
+  const theirs = { pid: 200, group: 200 }
+
+  it('is the listener that descends from the process it spawned, and no other', () => {
+    expect(ours(table, [cf, workerd], 100)).toEqual([cf, workerd])
+    expect(ours(table, [theirs], 100)).toEqual([])
+    expect(ours(table, [theirs, cf], 100)).toEqual([cf])
+    // A listener whose parent is gone is nobody's descendant.
+    expect(ours([], [cf], 100)).toEqual([])
+  })
+
+  it('is measured only while every listener on the port is its own', () => {
+    expect(owner(table, [], 100)).toEqual({ up: false })
+    expect(owner(table, [cf, workerd], 100)).toMatchObject({ ours: true })
+    // Another tree's server answered first, during the build or after ours died.
+    expect(owner(table, [theirs], 100)).toMatchObject({
+      up: true,
+      ours: false,
+      why: expect.stringMatching(/pid 200 .* not the preview/),
+    })
+    // One on IPv4 and one on IPv6: localhost may reach either.
+    expect(owner(table, [cf, theirs], 100)).toMatchObject({ ours: false })
+    // Orphaned by a stopped pnpm, ours by what serving saw.
+    expect(owner([], [cf, workerd], 999, [cf])).toMatchObject({ ours: true })
+  })
+
+  it('is stopped by the groups it was seen to hold, and nothing else on the port is', () => {
+    // pnpm gone, cf and workerd orphaned: still ours by what serving recorded.
+    expect(strays([cf, workerd], [cf, workerd])).toEqual([110])
+    // Ours gone, another tree's server on the port: not this campaign's.
+    expect(strays([theirs], [cf, workerd])).toEqual([])
+    expect(strays([theirs, workerd], [cf])).toEqual([110])
   })
 })
 
