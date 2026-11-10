@@ -11,6 +11,7 @@ import {
   armsOf,
   castArgs,
   castReads,
+  checkBuild,
   CAST_DROPS,
   CAST_RATE,
   checkCast,
@@ -491,6 +492,23 @@ describe('what the capture refuses', () => {
     expect(servedAddress('weather-g1-fair')).toBe(
       'g:milky-way/s:P222_3_2_k/b:3',
     )
+  })
+
+  it('a take whose page was built from another commit, or from an edited tree', () => {
+    const commit = 'abcdef1234567890abcdef1234567890abcdef12'
+    const at = (id) => ({ build: { id, tree: null } })
+    expect(checkBuild('e1', at('abcdef12'), commit)).toBe('abcdef12')
+    // A tag's describe, and CI's branch form, both name the commit.
+    expect(checkBuild('e1', at('v1.0-3-gabcdef12'), commit)).toBeTruthy()
+    expect(checkBuild('e1', at('weather-p1-u@abcdef12'), commit)).toBeTruthy()
+    for (const bad of [
+      at('abcdef12-dirty'),
+      // The baseline's own case: plates of 23f173bc, recorded at ab301957.
+      at('23f173bc'),
+      {},
+      undefined,
+    ])
+      expect(() => checkBuild('e1', bad, commit)).toThrow(/refused/)
   })
 
   const log = (hz, n = 120) =>

@@ -499,6 +499,30 @@ export function checkStill(id, arm, read) {
 }
 
 /**
+ * Refuse a take whose page was built from another commit than the record
+ * names, or from an edited tree.
+ *
+ * The capture photographs a preview it does not start, and `drive.mjs`
+ * cannot hold a production build to a tree: it names none. The page's
+ * build id is `git describe --always --dirty --abbrev=8` at build time
+ * (`apps/game/vite.config.ts`), which holds the commit's first eight
+ * characters, or `<branch>@<eight>` on CI. Without this a record said one
+ * commit for plates of another: the baseline's E1 and E2 were recorded at
+ * `ab301957` from a build of `23f173bc`. Every take is held to the one
+ * commit, so a run cannot mix two builds either.
+ */
+export function checkBuild(name, read, commit) {
+  const id = read?.build?.id
+  if (typeof id !== 'string')
+    throw new Error(`${name}: the page names no build; refused`)
+  if (id.endsWith('-dirty') || !id.includes(commit.slice(0, 8)))
+    throw new Error(
+      `${name}: the page was built as ${id}, not from ${commit.slice(0, 8)} clean; build the preview from the commit the record names; refused`,
+    )
+  return id
+}
+
+/**
  * The body a cornerstone's clouds are served on, by full address: its own,
  * or for a station's picture the body the station goes round.
  */
@@ -928,6 +952,7 @@ async function main() {
     const still = async (id, arm, file, as) => {
       const result = await drive(stillArgs(id, arm, file))
       const read = checkStill(id, arm, jsValues(result).at(-1))
+      checkBuild(`${id} (${arm})`, read, record.commit)
       record.build ??= read.build
       return {
         id,
@@ -1091,6 +1116,7 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
     // cut's state is read where it boots, before the cut; its settled plate
     // after the cut is the cornerstone's own, and held as a still is.
     if (clouds) checkServed(cast.boot ?? cast.id, reads.state, refuse)
+    checkBuild(name, reads.state, record.commit)
     if (cast.settled) checkStill(cast.id, 'volume', reads.read)
     const castStep = result.results.find((one) => one.step === 'cast')
     let verdict
@@ -1207,6 +1233,7 @@ async function takeSamples({ options, out, record, drive, say, jsValues }) {
       const answers = jsValues(result).slice(1)
       for (const [n, k] of frames.entries()) {
         const read = checkStill(cast.id, 'volume', answers[2 * n + 1])
+        checkBuild(`${sample.cast} @ ${k}`, read, record.commit)
         index.stills[k] = {
           file: path.basename(files[n]),
           opacity: read.clouds?.opacity ?? null,
