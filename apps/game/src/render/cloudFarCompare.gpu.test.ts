@@ -828,18 +828,57 @@ describe('the far field against the fine march', () => {
     return results
   }
 
-  it.fails(
-    'holds broken cumulus at 800 m to its landed figures, in every run of the suite: fails at 0.358 against 0.0924 until the far march’s light (package X)',
-    async () => {
-      const [found] = await measure(
-        CASES.filter((c) => c.id === ALWAYS.case),
-        [ALWAYS.footprintMeters],
-      )
-      expect(found).toMatchObject(ALWAYS)
-      hold(found!)
-    },
-    120_000,
-  )
+  /*
+   * A declared miss, held as a ceiling on every adapter: the far atlas's
+   * footprint transmittance is 0.358 against its landed bar of 0.0924, and
+   * its radiance and the handover's miss theirs alike: the atlas mixes a
+   * crossing by phase 0's law, and the fine march reads package F's port of
+   * D's field. The case is held to a tenth over the figures measured on this
+   * Mac mini (Apple M6) at 766ecc45, this file's slack, so it cannot get
+   * worse while it waits. `hold` and the landed bars are what package X's
+   * atlas is held to.
+   */
+  it('holds broken cumulus at 800 m within a tenth of its 0.358 footprint transmittance, in every run of the suite: it misses 0.0924 until the far march’s light (package X)', async () => {
+    const MEASURED = {
+      atlas: {
+        transmittance: 0.35778829617012803,
+        radiance: 0.7301545950187575,
+      },
+      handover: {
+        transmittance: 0.3558154588343415,
+        radiance: 0.7230683715790722,
+      },
+    }
+    const [found] = await measure(
+      CASES.filter((c) => c.id === ALWAYS.case),
+      [ALWAYS.footprintMeters],
+    )
+    expect(found).toMatchObject(ALWAYS)
+    const what = `${found!.case} at ${found!.footprintMeters} m`
+    for (const [path, value] of figures(found!, what)) {
+      expect(Number.isFinite(value), path).toBe(true)
+      expect(Math.abs(value), path).toBeLessThan(1e7)
+    }
+    expect(found!.reference.exhaustedRays, what).toBe(0)
+    expect(found!.cloudyBins, what).toBeGreaterThan(0)
+    expect(found!.farTexel1800km.fraction, what).toBeGreaterThan(0)
+    console.info(
+      `${what}: the atlas ${found!.atlas.footprint.transmittance} in T, ${found!.atlas.footprint.radiance} in L; the handover ${found!.handover.atlas.footprint.transmittance} in T, ${found!.handover.atlas.footprint.radiance} in L`,
+    )
+    for (const [march, now, ceiling] of [
+      ['the atlas', found!.atlas, MEASURED.atlas],
+      ['the handover', found!.handover.atlas, MEASURED.handover],
+    ] as const) {
+      expect(
+        now.footprint.transmittance,
+        `${what}, ${march}: footprint transmittance`,
+      ).toBeLessThanOrEqual(ceiling.transmittance * SLACK)
+      expect(
+        now.footprint.radiance,
+        `${what}, ${march}: footprint radiance`,
+      ).toBeLessThanOrEqual(ceiling.radiance * SLACK)
+    }
+  }, 120_000)
 
   it.skipIf(!MEASURE)(
     'holds all four cases at three footprints to their landed figures, and writes them',

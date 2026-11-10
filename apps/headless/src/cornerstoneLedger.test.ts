@@ -229,153 +229,167 @@ function along(
   }
 }
 
-describe('the cornerstones', () => {
-  it('compose the frame and the sun they were solved for, and take nothing from the world', async () => {
-    let held: Lens = LENS_PRESETS.flight
-    const session = openSession({
-      catalog: loadStarCatalog(),
-      workers: null,
-      render: {
-        framingLens: () => held,
-        setFlightLens: (next) => {
-          held = next
-        },
-      },
-    })
-    try {
-      const before = session.world.stateHash()
-      const entries: unknown[] = []
-      expect(CORNERSTONES.map((one) => one.id).sort()).toEqual(
-        Object.keys(RULES).sort(),
-      )
-      for (const picture of CORNERSTONES) {
-        held = LENS_PRESETS.flight
-        const taken = session.harness.preset(picture.id)
-        const { status } = taken
-        // Exactly: `s:SOL/b:2` is inside `s:SOL/b:21` and every moon's
-        // address under Earth, so a substring holds a picture of another body.
-        expect(status.target?.address, picture.id).toBe(
-          fullAddress(picture.address),
-        )
-        // Headlessly no weather is drawn, and the picture says so.
-        expect(taken.weather, picture.id).toBe('unavailable')
-        const body = bodyUnder(session, picture.address)
-        const surface = status.surface
-        const rule = RULES[picture.id]
-        let sun: { elevation: number; azimuth: number } | null = null
-        if (surface !== null) {
-          const { stance } = surface
-          sun = sunAt(session.world, picture.address, stance, status.time)
-          // The harness's verb reads the same sun, in degrees.
-          const read = session.harness.sun(
-            picture.address,
-            {
-              latitude: deg(stance.latitude / DEG),
-              longitude: deg(stance.longitude / DEG),
-            },
-            status.time,
-          )
-          expect(read.elevation).toBeCloseTo(sun.elevation, 9)
-        }
-        if (rule !== null && rule !== undefined) {
-          expect(sun, picture.id).not.toBeNull()
-          holdSun(picture, rule, sun!, (time) =>
-            sunAt(session.world, picture.address, surface!.stance, time),
-          )
-          if (rule.heading !== null)
-            expect(
-              angleBetween(
-                surface!.stance.heading / DEG,
-                sun!.azimuth + rule.heading,
-              ),
-              `${picture.id}: heading`,
-            ).toBeLessThan(0.5)
-          if (rule.antisolar)
-            expect(
-              Math.abs(surface!.stance.pitch / DEG + sun!.elevation),
-              `${picture.id}: pitch`,
-            ).toBeLessThan(0.5)
-        }
-        if (ON_LAND.includes(picture.id)) {
-          const sea = seaDatumElevation(body.surface)!
-          expect(sea, picture.id).not.toBeNull()
-          // The drawn ground under the eye, which is what the stance stands
-          // on, over the sea's surface.
-          expect(surface!.groundElevation, picture.id).toBeGreaterThan(sea)
-        }
+/**
+ * The ledger's whole snapshot takes 5.5 s alone on this Mac mini (Apple M6),
+ * most of it the guard's solve (2.3 s) and the field's figures (1.3 s), and
+ * every part of it is a figure the snapshot holds. In CI's root suite, on
+ * four slow cores beside the other files, it passed vitest's 20 s on some
+ * runs and not on others; the check prints no time for a test that passes,
+ * so 20 s is the slowest hosted time there is to read. Five times it.
+ */
+const LEDGER_TIMEOUT = 100_000
 
-        entries.push({
-          id: picture.id,
-          address: status.target!.address,
-          body: bodyDigest(body),
-          time: figure(status.time),
-          fovDeg: figure(taken.fovDeg),
-          focalLength: figure(held.focalLength),
-          weather: picture.weather?.regime ?? null,
-          altitude: figure(status.altitude),
-          sun:
-            sun === null
-              ? null
-              : {
-                  elevation: degrees(sun.elevation),
-                  azimuth: degrees(sun.azimuth),
-                },
-          light: (() => {
-            const light = session.harness.light()
-            return {
-              sun: light.sun === null ? null : degrees(light.sun),
-              phase: light.phase === null ? null : degrees(light.phase),
-            }
-          })(),
-          surface:
-            surface === null
-              ? null
-              : {
-                  latitude: figure(surface.stance.latitude),
-                  longitude: figure(surface.stance.longitude),
-                  height: figure(surface.stance.height),
-                  heading: figure(surface.stance.heading),
-                  pitch: figure(surface.stance.pitch),
-                  // To the meter, as the pictures' ledger does: the field's
-                  // noise rounds differently on another V8.
-                  groundElevation: Math.round(surface.groundElevation),
-                },
-        })
-      }
-      // Rule 37: ten pictures, and the world's hash is the one it started with.
-      expect(session.world.stateHash()).toBe(before)
-      const guard = solveGuard(session)
-      await expect(
-        `${JSON.stringify(
-          {
-            cornerstones: entries,
-            guard: {
-              subPoint: {
-                latitude: degrees(guard.solved.place.latitude / DEG),
-                longitude: degrees(guard.solved.place.longitude / DEG),
-              },
-              sun: {
-                elevation: degrees(guard.solved.elevation),
-                azimuth: degrees(guard.solved.azimuth),
-              },
-              crossings: guard.crossings,
-            },
-            zoom: zoomFootprints(session),
-            g5: {
-              frames: C6.frames,
-              metersAFrame: C6.metersAFrame,
-              c6: c6Figures(session).figures,
-            },
-            field: fieldFigures(session, guard),
+describe('the cornerstones', () => {
+  it(
+    'compose the frame and the sun they were solved for, and take nothing from the world',
+    async () => {
+      let held: Lens = LENS_PRESETS.flight
+      const session = openSession({
+        catalog: loadStarCatalog(),
+        workers: null,
+        render: {
+          framingLens: () => held,
+          setFlightLens: (next) => {
+            held = next
           },
-          null,
-          2,
-        )}\n`,
-      ).toMatchFileSnapshot('./cornerstoneLedger.json')
-    } finally {
-      session.dispose()
-    }
-  })
+        },
+      })
+      try {
+        const before = session.world.stateHash()
+        const entries: unknown[] = []
+        expect(CORNERSTONES.map((one) => one.id).sort()).toEqual(
+          Object.keys(RULES).sort(),
+        )
+        for (const picture of CORNERSTONES) {
+          held = LENS_PRESETS.flight
+          const taken = session.harness.preset(picture.id)
+          const { status } = taken
+          // Exactly: `s:SOL/b:2` is inside `s:SOL/b:21` and every moon's
+          // address under Earth, so a substring holds a picture of another body.
+          expect(status.target?.address, picture.id).toBe(
+            fullAddress(picture.address),
+          )
+          // Headlessly no weather is drawn, and the picture says so.
+          expect(taken.weather, picture.id).toBe('unavailable')
+          const body = bodyUnder(session, picture.address)
+          const surface = status.surface
+          const rule = RULES[picture.id]
+          let sun: { elevation: number; azimuth: number } | null = null
+          if (surface !== null) {
+            const { stance } = surface
+            sun = sunAt(session.world, picture.address, stance, status.time)
+            // The harness's verb reads the same sun, in degrees.
+            const read = session.harness.sun(
+              picture.address,
+              {
+                latitude: deg(stance.latitude / DEG),
+                longitude: deg(stance.longitude / DEG),
+              },
+              status.time,
+            )
+            expect(read.elevation).toBeCloseTo(sun.elevation, 9)
+          }
+          if (rule !== null && rule !== undefined) {
+            expect(sun, picture.id).not.toBeNull()
+            holdSun(picture, rule, sun!, (time) =>
+              sunAt(session.world, picture.address, surface!.stance, time),
+            )
+            if (rule.heading !== null)
+              expect(
+                angleBetween(
+                  surface!.stance.heading / DEG,
+                  sun!.azimuth + rule.heading,
+                ),
+                `${picture.id}: heading`,
+              ).toBeLessThan(0.5)
+            if (rule.antisolar)
+              expect(
+                Math.abs(surface!.stance.pitch / DEG + sun!.elevation),
+                `${picture.id}: pitch`,
+              ).toBeLessThan(0.5)
+          }
+          if (ON_LAND.includes(picture.id)) {
+            const sea = seaDatumElevation(body.surface)!
+            expect(sea, picture.id).not.toBeNull()
+            // The drawn ground under the eye, which is what the stance stands
+            // on, over the sea's surface.
+            expect(surface!.groundElevation, picture.id).toBeGreaterThan(sea)
+          }
+
+          entries.push({
+            id: picture.id,
+            address: status.target!.address,
+            body: bodyDigest(body),
+            time: figure(status.time),
+            fovDeg: figure(taken.fovDeg),
+            focalLength: figure(held.focalLength),
+            weather: picture.weather?.regime ?? null,
+            altitude: figure(status.altitude),
+            sun:
+              sun === null
+                ? null
+                : {
+                    elevation: degrees(sun.elevation),
+                    azimuth: degrees(sun.azimuth),
+                  },
+            light: (() => {
+              const light = session.harness.light()
+              return {
+                sun: light.sun === null ? null : degrees(light.sun),
+                phase: light.phase === null ? null : degrees(light.phase),
+              }
+            })(),
+            surface:
+              surface === null
+                ? null
+                : {
+                    latitude: figure(surface.stance.latitude),
+                    longitude: figure(surface.stance.longitude),
+                    height: figure(surface.stance.height),
+                    heading: figure(surface.stance.heading),
+                    pitch: figure(surface.stance.pitch),
+                    // To the meter, as the pictures' ledger does: the field's
+                    // noise rounds differently on another V8.
+                    groundElevation: Math.round(surface.groundElevation),
+                  },
+          })
+        }
+        // Rule 37: ten pictures, and the world's hash is the one it started with.
+        expect(session.world.stateHash()).toBe(before)
+        const guard = solveGuard(session)
+        await expect(
+          `${JSON.stringify(
+            {
+              cornerstones: entries,
+              guard: {
+                subPoint: {
+                  latitude: degrees(guard.solved.place.latitude / DEG),
+                  longitude: degrees(guard.solved.place.longitude / DEG),
+                },
+                sun: {
+                  elevation: degrees(guard.solved.elevation),
+                  azimuth: degrees(guard.solved.azimuth),
+                },
+                crossings: guard.crossings,
+              },
+              zoom: zoomFootprints(session),
+              g5: {
+                frames: C6.frames,
+                metersAFrame: C6.metersAFrame,
+                c6: c6Figures(session).figures,
+              },
+              field: fieldFigures(session, guard),
+            },
+            null,
+            2,
+          )}\n`,
+        ).toMatchFileSnapshot('./cornerstoneLedger.json')
+      } finally {
+        session.dispose()
+      }
+    },
+    LEDGER_TIMEOUT,
+  )
 
   it('hold each picture to its own body’s address, not to one that contains it', () => {
     const session = openSession({ catalog: loadStarCatalog(), workers: null })

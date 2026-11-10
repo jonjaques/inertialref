@@ -35,10 +35,11 @@ import {
   type TraceMedium,
   type TracePhase,
 } from '@inertialref/rendering'
+import { type AirUniforms, skyTableAt } from './air.ts'
 
 /*
  * The WebGPU path tracer: the float64 tracer's walk
- * (`apps/ingest/src/transport/pathTrace.ts`) as a compute kernel, a pixel a
+ * (`apps/ingest/src/transport/pathTrace.ts`) as a compute kernel, a path a
  * thread. It is imported by its test alone. What it shares with the CPU
  * tier is in `@inertialref/rendering`'s `cumulusFixture.ts`: the medium's
  * cell coordinates, the bricks, the phase's sampled form and the cone about
@@ -71,10 +72,24 @@ import {
  * one. A scattering angle is carried as `1 − cos` and `1 + cos`, never as
  * the cosine.
  *
- * **The stream is `xoshiro128**`'s,** one a pixel, seeded on the CPU by the
- * pixel's index and continued across its samples. The two tiers draw in
+ * **The stream is `xoshiro128**`'s,** one a thread, seeded on the CPU by the
+ * thread's index and continued across its samples. The two tiers draw in
  * different orders, so they agree as two estimates of one radiance and not
  * sample for sample.
+ *
+ * **A thread holds one pixel, and a pixel may hold many threads.** An image
+ * traced a pixel a thread is as slow as its deepest pixel, while every
+ * thread of clear sky idles: on the reference's congestus, a line of sight
+ * of 358, that is the difference between minutes and an hour. `threads`
+ * names the pixel each thread traces, so the pixels a comparison wants can
+ * each be given as many streams as the device has room for.
+ *
+ * **The sky is three numbers, or a body's table.** A case of the field
+ * stands under the sky of Earth's air, and the kernel then reads the
+ * texture the page uploads through the march's own node (`skyTableAt`),
+ * once a dispatch, where the CPU tier reads the table's floats
+ * (`skyMomentsAt`). `createPathTraceSkyProbe` is that read and the linear
+ * sky made of it, with no path around it, for the test that holds the two.
  */
 
 type F = Node<'float'>
@@ -103,19 +118,125 @@ export interface PathTraceScene {
     readonly irradiance: Triple
     readonly angularRadius: number
   } | null
-  /** The sky's mean radiance and its two irradiance differences, per band. */
-  readonly sky: {
-    readonly mean: Triple
-    readonly up: Triple
-    readonly sunward: Triple
-  }
+  /** The sky: its three moments as numbers, or a body's air and where to read its table. */
+  readonly sky: PathTraceSky
   /** A Lambertian ground: its height, meters from the grid's low corner, and its albedo. */
   readonly ground: { readonly height: number; readonly albedo: number } | null
   /** Scatterings a path may make; `Infinity` for every order. */
   readonly orders: number
-  /** Samples a pixel takes in each band before its thread idles. */
+  /** Samples a thread takes in each band before it idles. */
   readonly samples: number
   readonly seed: Seed
+  /**
+   * The pixel each thread traces, by its index in the image, row 0 at the
+   * top: every pixel once where left out. A pixel listed many times is
+   * traced by as many threads, each a stream of its own, and their sums
+   * add. A thread holds one path, so an image a pixel a thread is as slow
+   * as its deepest pixel; a list that repeats the pixels wanted shares the
+   * device among them.
+   */
+  readonly threads?: readonly number[]
+}
+
+/**
+ * The sky's mean radiance and its two irradiance differences, per band: as
+ * three numbers each, or as the table of a body's air read where the
+ * march's node reads it (`skyTableAt`), at a sun's cosine and a height as
+ * a share of the air's.
+ */
+export type PathTraceSky =
+  | { readonly mean: Triple; readonly up: Triple; readonly sunward: Triple }
+  | {
+      readonly air: AirUniforms
+      readonly sunMu: number
+      readonly height01: number
+    }
+
+/** The sky's three moments as nodes, a band a channel. */
+function skyMoments(sky: PathTraceSky): {
+  readonly mean: V3
+  readonly up: V3
+  readonly sunward: V3
+} {
+  if ('air' in sky) {
+    const at = skyTableAt(sky.air, float(sky.sunMu), float(sky.height01))
+    return { mean: asV3(at.mean), up: asV3(at.up), sunward: asV3(at.sunward) }
+  }
+  return {
+    mean: vec3(...sky.mean),
+    up: vec3(...sky.up),
+    sunward: vec3(...sky.sunward),
+  }
+}
+
+/** A sun's horizontal direction, or none for a sun at the zenith or no sun. */
+function sunwardOf(scene: PathTraceScene): V3 {
+  const direction = scene.sun?.direction ?? ([0, 1, 0] as const)
+  const flat = Math.hypot(direction[0], direction[2])
+  return vec3(
+    flat > 0 ? direction[0] / flat : 0,
+    0,
+    flat > 0 ? direction[2] / flat : 0,
+  )
+}
+
+/**
+ * The sky a direction sees, a band a channel: the sky linear in direction
+ * with the three moments, `mean·max(0, 1 + ¾·(up·ω_y + sunward·ω·ŝ_h))`, as
+ * the CPU tier has it.
+ */
+function skyRadiance(
+  moments: ReturnType<typeof skyMoments>,
+  sunward: V3,
+  direction: V3,
+): V3 {
+  return asV3(
+    moments.mean.mul(
+      max(
+        vec3(1).add(
+          moments.up
+            .mul(direction.y)
+            .add(moments.sunward.mul(direction.dot(sunward)))
+            .mul(0.75),
+        ),
+        vec3(0),
+      ),
+    ),
+  )
+}
+
+/**
+ * The kernel's sky alone, a direction a thread: what holds the table's read
+ * on the device to the CPU's, apart from any path. `directions` is three
+ * floats a thread; the buffer returned takes four, a band a channel.
+ */
+export function createPathTraceSkyProbe(
+  scene: PathTraceScene,
+  directions: Float32Array,
+): { readonly kernel: ComputeNode; readonly output: StorageBufferAttribute } {
+  const count = directions.length / 3
+  const padded = new Float32Array(count * 4)
+  for (let i = 0; i < count; i += 1)
+    padded.set(directions.subarray(i * 3, i * 3 + 3), i * 4)
+  const from = storage(
+    new StorageBufferAttribute(padded, 4),
+    'vec4',
+    count,
+  ).toReadOnly()
+  const output = new StorageBufferAttribute(new Float32Array(count * 4), 4)
+  const into = storage(output, 'vec4', count)
+  const kernel = Fn(() => {
+    const direction = asV3(asV4(from.element(instanceIndex)).xyz)
+    into
+      .element(instanceIndex)
+      .assign(
+        vec4(
+          skyRadiance(skyMoments(scene.sky), sunwardOf(scene), direction),
+          1,
+        ),
+      )
+  })().compute(count)
+  return { kernel, output }
 }
 
 /** Vec4 slots a thread's path holds, and a pixel's sums. */
@@ -253,27 +374,30 @@ export interface PathTraceEstimate {
   readonly truncated: number
 }
 
-/** A pixel's estimate from a readback of `sums`. */
+/**
+ * An estimate from a readback of `sums`: one thread's, or several threads'
+ * of one pixel as one, their sums added.
+ */
 export function pathTraceEstimate(
   sums: Float32Array,
-  pixel: number,
+  thread: number | readonly number[],
 ): PathTraceEstimate {
-  const at = pixel * SUMS * 4
+  const threads = typeof thread === 'number' ? [thread] : thread
+  const add = (offset: number): number =>
+    threads.reduce((sum, t) => sum + sums[t * SUMS * 4 + offset]!, 0)
   const band = (b: number): readonly [number, number] => {
-    const n = sums[at + 8 + b]!
-    const mean = n > 0 ? sums[at + b]! / n : 0
+    const n = add(8 + b)
+    const mean = n > 0 ? add(b) / n : 0
     const variance =
-      n > 1
-        ? Math.max(0, sums[at + 4 + b]! / n - mean * mean) * (n / (n - 1))
-        : 0
+      n > 1 ? Math.max(0, add(4 + b) / n - mean * mean) * (n / (n - 1)) : 0
     return [mean, Math.sqrt(variance / Math.max(n, 1))]
   }
   const bands = [band(0), band(1), band(2)]
   return {
     mean: [bands[0]![0], bands[1]![0], bands[2]![0]],
     error: [bands[0]![1], bands[1]![1], bands[2]![1]],
-    samples: sums[at + 10]!,
-    truncated: sums[at + 3]!,
+    samples: add(10),
+    truncated: add(3),
   }
 }
 
@@ -294,7 +418,7 @@ export function createCloudPathTracer(
   events: number,
 ): CloudPathTracer {
   const { medium, phase } = scene
-  const threads = scene.pixels * scene.pixels
+  const threads = scene.threads?.length ?? scene.pixels * scene.pixels
   const [nx, ny, nz] = medium.size
   const [bx, by, bz] = medium.bricks
   const voxelCount = nx * ny * nz
@@ -318,9 +442,9 @@ export function createCloudPathTracer(
     nodeCount,
   ).toReadOnly()
   const seeds = new Uint32Array(threads * 4)
-  for (let pixel = 0; pixel < threads; pixel += 1) {
-    const { a, b, c, d } = deriveSeed(scene.seed, `gpu:${pixel}`)
-    seeds.set([a, b, c, d], pixel * 4)
+  for (let thread = 0; thread < threads; thread += 1) {
+    const { a, b, c, d } = deriveSeed(scene.seed, `gpu:${thread}`)
+    seeds.set([a, b, c, d], thread * 4)
   }
   const streams = storage(
     new StorageBufferAttribute(seeds, 4),
@@ -348,12 +472,7 @@ export function createCloudPathTracer(
   const sunOn = scene.sun !== null && scene.sun.irradiance.some((e) => e > 0)
   const sunDirection = scene.sun?.direction ?? ([0, 1, 0] as const)
   const sunAxis = uniform(new Vector3(...sunDirection))
-  const flat = Math.hypot(sunDirection[0], sunDirection[2])
-  const sunward = vec3(
-    flat > 0 ? sunDirection[0] / flat : 0,
-    0,
-    flat > 0 ? sunDirection[2] / flat : 0,
-  )
+  const sunward = sunwardOf(scene)
   const irradiance = vec3(...(scene.sun?.irradiance ?? [0, 0, 0]))
   const diskReach = float(
     scene.sun === null ? 0 : 2 * Math.sin(scene.sun.angularRadius / 2) ** 2,
@@ -364,6 +483,15 @@ export function createCloudPathTracer(
   const groundOn = scene.ground !== null
   const albedo = float(scene.ground?.albedo ?? 0)
   const groundHeight = float(scene.ground?.height ?? 0)
+  // The pixel a thread traces: its own index, or the list's.
+  const pixelOf =
+    scene.threads === undefined
+      ? null
+      : storage(
+          new StorageBufferAttribute(Uint32Array.from(scene.threads), 1),
+          'uint',
+          threads,
+        ).toReadOnly()
 
   const kernel = Fn(() => {
     const thread = instanceIndex
@@ -570,22 +698,16 @@ export function createCloudPathTracer(
     const bandIndex = int(0).toVar()
     const bandMask = vec3(1, 0, 0).toVar()
     const pick = (values: V3): F => asF(values.dot(bandMask))
+    // The sky's moments, read once a dispatch: a table's read is the same
+    // at every event.
+    const read = skyMoments(scene.sky)
+    const moments = {
+      mean: read.mean.toVar(),
+      up: read.up.toVar(),
+      sunward: read.sunward.toVar(),
+    }
     const sky = (direction: V3): F =>
-      asF(
-        pick(vec3(...scene.sky.mean)).mul(
-          max(
-            float(1).add(
-              pick(vec3(...scene.sky.up))
-                .mul(direction.y)
-                .add(
-                  pick(vec3(...scene.sky.sunward)).mul(direction.dot(sunward)),
-                )
-                .mul(0.75),
-            ),
-            0,
-          ),
-        ),
-      )
+      pick(skyRadiance(moments, sunward, direction))
 
     Loop(
       {
@@ -605,8 +727,12 @@ export function createCloudPathTracer(
           }).Else(() => {
             // `viewRay`: a square image over the grid's east and up, row 0 at
             // the top, every ray north from south of the grid.
-            const px = float(thread.mod(uint(scene.pixels)))
-            const py = float(thread.div(uint(scene.pixels)))
+            const pixel =
+              pixelOf === null
+                ? thread
+                : (pixelOf.element(thread) as unknown as Node<'uint'>)
+            const px = float(pixel.mod(uint(scene.pixels)))
+            const py = float(pixel.div(uint(scene.pixels)))
             q.assign(
               vec3(
                 px
