@@ -63,7 +63,7 @@ import {
   listeners,
   processes,
 } from './measure.mjs'
-import { rateNote, tables } from './page.mjs'
+import { measured, rateNote, tables } from './page.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const SELF = fileURLToPath(import.meta.url)
@@ -185,19 +185,29 @@ const alive = (pid) => {
   }
 }
 
-/** A batch's progress from its document: runs measured quiet, of all. */
-function progress(stage) {
-  if (stage.kind !== 'batch' || !existsSync(stage.file)) return
-  let doc
+/**
+ * A batch's document, or null where none is or the read landed mid-write:
+ * the runner rewrites it whole and not atomically.
+ */
+function documentAt(file) {
+  if (file === null || !existsSync(file)) return null
   try {
-    doc = JSON.parse(readFileSync(stage.file, 'utf8'))
+    return JSON.parse(readFileSync(file, 'utf8'))
   } catch {
-    // The runner rewrites the document whole and not atomically, so a read
-    // can land mid-write; the count from the last read stands.
-    return
+    return null
   }
-  const quiet = new Set(doc.rows.filter((r) => r.quiet?.ok).map((r) => r.id))
-  stage.done = quiet.size
+}
+
+/**
+ * A batch's progress from its document: runs measured quiet with every
+ * figure they owe (`measured`), of all. A torn read leaves the count from
+ * the last read standing.
+ */
+function progress(stage) {
+  if (stage.kind !== 'batch') return
+  const doc = documentAt(stage.file)
+  if (doc === null) return
+  stage.done = new Set(doc.rows.filter(measured).map((r) => r.id)).size
   stage.failures = doc.failures?.length ?? 0
 }
 
@@ -508,15 +518,21 @@ async function runStage(stage, state, ctx) {
 
 /** Every batch's tables and the instruments' paths, in the file the
  *  orchestrator reads, written whatever the campaign's end. */
-function summarize(state) {
+export function summarize(state) {
   const parts = [
     `# Campaign ${state.name} at ${state.head.slice(0, 12)}`,
     `${state.status} at ${state.finishedAt}${state.reason ? `: ${state.reason}` : ''}. Started ${state.startedAt}.`,
   ]
   for (const stage of state.stages) {
     parts.push(`## ${stage.name}: ${stage.status}, ${stage.attempts} attempts`)
-    if (stage.kind === 'batch' && existsSync(stage.file)) {
-      const doc = JSON.parse(readFileSync(stage.file, 'utf8'))
+    // The same guarded read as `progress`: this runs in `run`'s `finally`,
+    // and a throw here would lose the summary of a campaign that measured.
+    const doc = stage.kind === 'batch' ? documentAt(stage.file) : null
+    if (stage.kind === 'batch' && doc === null && existsSync(stage.file))
+      parts.push(
+        `\`${path.relative(ROOT, stage.file)}\` did not parse when this summary was written, so its tables are not here.`,
+      )
+    if (doc !== null) {
       parts.push(
         `\`${path.relative(ROOT, stage.file)}\`: ${stage.done} of ${stage.total} runs measured quiet, ${doc.failures?.length ?? 0} failures.`,
         tables(doc),

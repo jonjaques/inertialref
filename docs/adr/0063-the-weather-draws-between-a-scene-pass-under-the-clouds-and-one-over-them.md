@@ -48,7 +48,10 @@ storage textures by default, and three asks for no more. And three's
 passes after every compute write.
 
 Phase 0 built A and B whole, priced C with B's split run empty, measured them
-on the Mac mini by a rule fixed before any figure existed, and deleted B.
+on the Mac mini by a rule fixed before any figure existed, and deleted B. The
+rule's GPU clause keeps A. Its CPU clause, as fixed, fires in two cells, and A
+stands as the exception §8.7 allows only with figures, provisional on the CPU
+evidence (The placement, below).
 
 ## Decision
 
@@ -267,6 +270,9 @@ behind, then the reverse, and holds both to the analytic value within 2%.
 ### What was measured
 
 The machine is the Mac mini (Mac18,5, Apple M6, 32 GB, 12 cores), fan-cooled.
+**Every figure here is that machine's.** The plan's budget basis is perf's
+Apple M5, on which nothing in phase 0 was measured, and no factor between the
+two is known.
 The browser is Chrome 157.0.8103.40 on WebGPU over Metal, and the build is
 production, served by the preview from a clean tree. The sizes are 1920×1080
 at a device pixel ratio of 1 and 1440×900 at 2, a 2880×1800 buffer. The
@@ -290,9 +296,27 @@ alone, on the same machine, browser and sizes, with the landed defaults. Its
 tables are [`landed-2026-11-10T09-05-32Z.md`](../../design/plans/weather/phase0/measurements/landed-2026-11-10T09-05-32Z.md),
 and every pass's share of both campaigns' frames is in
 [`passes.md`](../../design/plans/weather/phase0/measurements/passes.md). Each of its rows records the rate it presented
-at: `targets` at 95 to 120 Hz at 1080p and 59 to 120 at Retina, `memory` at 81
-to 89 and 48 to 51, `error` at 96 to 120 and 58 to 83. All 86 of its rows were
-measured quiet, each batch on its first attempt.
+at: `memory` at 81 to 89 Hz at 1080p and 49 to 51 at Retina, `error` at 96 to
+120 and 58 to 83. All 86 of its rows were measured quiet, each batch on its
+first attempt.
+
+**Campaign 2's `cut`, `scrub` and `fly` rows and its `pair-neighbor` rows were
+taken again,** because they ran through the moon's lens: one page served every
+far-shore run of a size, the `pair-moon` stance fits the flight lens to its
+rise and keeps it, and a `visit` stance set none. The clouds-off base gives it
+away: `ground` at 1080p read 5.87 ms steady and 6.92, 7.29 and 7.21 under
+`cut`, `scrub` and `fly`. The runner's stances now start from the preset's
+picture, and the retake at `f9746fd3`, whose frame differs from `bbea04da`'s
+only in what a frame whose cloud work throws draws, ran each of those rows
+again with `pair-moon` first at each size as the control. `pair-neighbor`
+right after it reads a base of 5.88 ms, against `ground`'s steady 5.87, and
+every forced row's base is within 0.62 ms of its scenario's steady one, where
+campaign 2's were up to 4.27 ms off it. Its
+tables are
+[`targets-retake-2026-11-10T12-25-50Z.md`](../../design/plans/weather/phase0/measurements/targets-retake-2026-11-10T12-25-50Z.md):
+40 of 40 runs quiet, at 104 to 120 Hz at 1080p and 64 to 120 at Retina. Every
+`targets` figure here is campaign 2's steady and Earth rows and the retake's
+forced and `pair-neighbor` rows.
 
 #### The placement
 
@@ -317,27 +341,24 @@ spread is 0.47. The two repeats read the same: at Retina, B then A, 6.87 and
 on `inside`, 5.67 and 5.69 against 5.67 and 5.68 on `orbit`. Across all three
 sets no cell moves by more than 0.14 ms.
 
-**The CPU clause fires in no cell, and one cell is at its edge.** It was read
-on three samples a cell, by a reading fixed before the repeats arrived: the
-`sensor` clause fires if A's mean exceeds B's by more than 0.3 ms and by more
-than twice the larger sample standard deviation; the late-frame clause if A's
-median exceeds B's by more than 2 and A's least exceeds B's greatest.
+**The CPU clause, as fixed, fires in two cells.** Each cell has three samples:
+campaign 1's row and two repeats. Clouds on, A against B:
 
-| Cell              | `sensor` mean, A − B, ms | Twice the larger deviation, ms | Late frames in 3 s, median, A / B |
-| ----------------- | ------------------------ | ------------------------------ | --------------------------------- |
-| `horizon`, 1080p  | +0.16                    | 0.45                           | 0 / 0                             |
-| `inside`, 1080p   | +0.00                    | 2.64                           | 0 / 0                             |
-| `orbit`, 1080p    | +0.03                    | 3.70                           | 0 / 0                             |
-| `horizon`, Retina | −0.13                    | 0.30                           | 0 / 0                             |
-| `inside`, Retina  | **+3.22**                | **3.28**                       | 21 / 25                           |
-| `orbit`, Retina   | −0.17                    | 0.24                           | 0 / 0                             |
+| Cell              | `sensor` mean, A − B, each sample, ms | Their mean, ms | Late frames in 3 s, A / B, each sample | Fires as fixed                          |
+| ----------------- | ------------------------------------- | -------------- | -------------------------------------- | --------------------------------------- |
+| `horizon`, 1080p  | +0.28, +0.10, +0.10                   | +0.16          | **18 / 0**, 0 / 0, 0 / 0               | **Late frames, in campaign 1's sample** |
+| `inside`, 1080p   | −0.18, −0.03, +0.21                   | +0.00          | 1 / 0, 0 / 0, 0 / 0                    | No                                      |
+| `orbit`, 1080p    | +0.09, +0.22, −0.23                   | +0.03          | 0 / 0, 0 / 0, 0 / 0                    | No                                      |
+| `horizon`, Retina | −0.29, −0.27, +0.17                   | −0.13          | 0 / 0, 0 / 0, 0 / 1                    | No                                      |
+| `inside`, Retina  | **+1.51, +3.51, +4.64**               | **+3.22**      | 21 / 28, 20 / 19, 25 / 25              | **`sensor`, in every sample**           |
+| `orbit`, Retina   | −0.31, −0.22, +0.01                   | −0.17          | 0 / 0, 0 / 0, 0 / 0                    | No                                      |
 
 - **At Retina inside a cloud, A's `sensor` mean is above B's in all three
-  samples:** 10.71, 13.63 and 11.57 ms against 9.20, 10.12 and 6.93. The mean
-  difference is 0.06 ms short of twice the spread. The frames delivered in the
-  window are the same, 132, 133 and 132 against 130, 131 and 130, and A's late
-  frames are 21, 20 and 25 against B's 28, 19 and 25. Three samples do not
-  settle whether A's second traversal of the scene costs the main thread there.
+  samples:** 10.71, 13.63 and 11.57 ms against 9.20, 10.12 and 6.93, which is
+  ten times the clause's 0.3 ms on their mean.
+- **On `horizon` at 1080p, campaign 1's sample counts 18 late frames under A
+  against none under B,** which is the late-frame clause's 2 nine times over.
+  Neither repeat counts one under either placement.
 - **The three samples a cell are two presentation rates.** Campaign 1's
   profiles all ran capped at 60 frames a second: the clouds-off side delivered
   179 to 182 frames in every 3 s window at both sizes. The repeats, started by
@@ -347,11 +368,39 @@ median exceeds B's by more than 2 and A's least exceeds B's greatest.
   to 7.12 ms in the campaign and 3.05 to 3.07 in the repeats. `ir.gpu`'s
   difference does not. **The cause of the cap is not established:** neither a
   dark display nor a campaign's detached launch reproduces it.
-- **The clause reads the same on the two repeats alone:** no cell fires.
-- The campaign's `horizon` row at 1080p under A counted 18 late frames, and
-  neither repeat counted one.
+- **On the two repeats alone the `sensor` clause still fires** at Retina
+  inside a cloud, +3.51 and +4.64 ms, and the late-frame clause fires nowhere.
+- **The reading under which no cell fires adds two conditions §8.7 does not
+  state:** the `sensor` clause only where A's mean also exceeds twice the
+  larger of the two placements' sample standard deviations, and the
+  late-frame clause only where A's median exceeds B's by more than 2 and A's
+  least exceeds B's greatest. It was fixed after campaign 1's result was in
+  hand and before the repeats arrived. Under it no cell fires, and
+  Retina inside a cloud clears by 0.06 ms: 3.22 against 3.28, on samples
+  pooled across two presentation rates. On the paired differences' own
+  standard deviation, 1.58 ms, twice is 3.17, and the cell does not clear.
 
-Both placements exist at `25df44ab` for anyone who measures that cell again.
+**A stands as an exception, provisional on the CPU evidence.** The figures
+that argue for it:
+
+- **The GPU cost is equal.** B is cheaper in no cell by more than the
+  resolution, above.
+- **The longer span is not shown to cost a frame.** In the cell where the
+  `sensor` clause fires, A delivers 132, 133 and 132 frames in the 3 s window
+  against B's 130, 131 and 130, and its late frames, 21, 20 and 25, are no
+  worse than B's 28, 19 and 25.
+- **The 18 late frames did not recur.** Both repeats of that row count 0
+  under A and 0 under B.
+- **The 1080p cells show no difference in the span:** the three means are
+  +0.16, +0.00 and +0.03 ms.
+- **B's own defects stand.** It draws the instruments' inks under the clouds
+  (Alternatives, below), and it reaches under three's public surface. The
+  rule's GPU clause prices the two at 0.2 ms.
+- **The second traversal is not needed on a frame with nothing drawn over the
+  clouds,** and phase 1 takes it off those frames (Consequences).
+
+Phase 1 takes the Retina `inside` cell again at one presentation rate, and
+both placements exist at `25df44ab` for it.
 
 **C is reconsidered in phase 1.** The rule sends it there if the split run
 empty costs over 0.1 ms at Retina, and it costs 2.42 to 2.49 ms, and 0.98 to
@@ -399,10 +448,10 @@ pairs:
 | `decks`, steady                                           | 7.55 (0.01)             | 9.79 (0.06)             |
 | `orbit`, steady                                           | 3.03 (0.06)             | 5.54 (0.02)             |
 | Two clouded bodies, from the moon (`pair-moon`)           | 9.38 (0.02)             | 10.21 (0.01)            |
-| Two clouded bodies, on the ground (`pair-neighbor`)       | 6.96 (0.12)             | 8.30 (0.01)             |
-| A reset frame: the larger of `cut` and `scrub`, `horizon` | 20.61 (0.02), the `cut` | 21.78 (0.04), the `cut` |
-| `fly` at 250 m/s, `ground`                                | 6.62 (0.13)             | 7.77 (0.27)             |
-| `fly` at 7.7 km/s, `orbit`                                | 2.45 (0.16)             | 4.40 (0.24)             |
+| Two clouded bodies, on the ground (`pair-neighbor`)       | 7.18 (0.07)             | 8.84 (0.27)             |
+| A reset frame: the larger of `cut` and `scrub`, `horizon` | 20.30 (0.02), the `cut` | 22.14 (0.04), the `cut` |
+| `fly` at 250 m/s, `ground`                                | 6.85 (0.16)             | 8.70 (0.34)             |
+| `fly` at 7.7 km/s, `orbit`                                | 2.18 (0.29)             | 4.08 (0.27)             |
 | Earth on the ground, against its deck hidden              | 6.19 (0.10)             | 7.83 (0.07)             |
 | Earth's deck alone, on the ground                         | 0.06 (0.02)             | 0.02 (0.01)             |
 | Earth from orbit, against its deck hidden                 | 3.00 (0.01)             | 5.57 (0.01)             |
@@ -412,18 +461,20 @@ Campaign 1's `ground` is a clear sky inside a cumulus field, cloud in 2.0% of
 the trace's texels, and no rule read it. The landed `ground` stands one degree
 north, under cumulus.
 
-- **The scrub is the cheaper reset as landed:** 14.88 ms on `horizon` at
-  1080p and 16.15 at Retina, against the cut's 20.61 and 21.78. Over the
-  ground stances a cut is 19.04 to 24.60 ms at 1080p and 20.34 to 26.14 at
-  Retina, and 35.27 and 30.68 with two clouded bodies from the moon.
+- **The scrub is the cheaper reset as landed:** 15.01 ms on `horizon` at
+  1080p and 16.64 at Retina, against the cut's 20.30 and 22.14. Over the
+  ground stances a cut is 19.40 to 24.68 ms at 1080p and 20.79 to 26.17 at
+  Retina, and 35.10 and 30.64 with two clouded bodies from the moon.
 - **With the clouds on, the frame is 11.92 to 12.99 ms at 1080p** on `ground`,
   `horizon` and `inside`, inside a 60 Hz frame, and **21.72 to 23.20 ms at
   Retina,** outside it. Clouds off, the same frames are 5.87 to 7.47 and 13.21
   to 15.50.
-- **The rate moved inside four scenarios.** The summary names them as two
-  operating points each: at 1080p `ground` (rows at 95 to 119 Hz) and `horizon`
-  (95 to 112), at Retina `decks` (89 to 113) and `orbit` (78 to 95). A Δ above
-  is `ir.gpu()`'s, which does not follow the rate.
+- **The four scenarios campaign 2 named as two operating points were the
+  moon's lens, not the rate.** Its summary named `ground` and `horizon` at
+  1080p and `decks` and `orbit` at Retina, each with rows at two rates, and the
+  rows apart were the ones taken after `pair-moon`, which drew another lens's
+  frame. With those rows retaken, no scenario's rows are two operating points.
+  A Δ above is `ir.gpu()`'s, which does not follow the rate.
 - No row forces `reset`, the immediate regime alone: `targets` runs `steady`,
   `cut`, `scrub` and `fly`. The four dispatches' share on a cut, above, is the
   figure for it.
@@ -522,16 +573,29 @@ its corners. Each cell is Enhanced off / on.
   sunset, in fog and on the horizon from 2.4 km its 95th percentile is 3.2 to
   31.6% and its worst 10.0 to 100.0%, in every row. The identity's own light
   residual is 1.2% at the 95th percentile at worst, in fog.
+- **"From orbit" is one stance:** `orbit`, 400 km over far-shore V with the sun
+  4.4° up, at two sizes and two cameras. No other altitude, sun or body was
+  measured, so the regime the rule names is that stance's.
+- **A second clouded body always composites through the thin form**
+  (`cloudComposite.ts`, the second body's branch), wherever the eye is: the
+  neighbor's disk seen from the ground in `pair-neighbor` among them. That is
+  a distant disk through near air, a geometry in none of the four scenarios
+  above, so the `error` batch says nothing about it.
 - **The ring Enhanced draws at sky pixels within 2° of the limb is dimmed by
   `T_c` even in front of a cloud:** from orbit under Enhanced its 95th
   percentile and its worst are both 100%, over 183 limb samples at 1080p and
   111 at Retina. Enhanced off draws no ring, and the limb reads 0.0%.
-- **One difference is unexplained.** The batch also compares the identity's
-  and the thin form's screenshots, display-referred. From orbit with Enhanced
-  off they differ by 0.0680 RMSE at 1080p and 0.1114 at Retina, where the
-  residual meter puts the thin form within 0.1% at the 95th percentile; with
-  Enhanced on they differ by 0.0006 and 0.0007. The automatic meter settling
-  between the two shots would explain it, and that is not verified.
+- **The display-referred pair is uncontrolled, and no figure here reads it.**
+  The batch also compares a screenshot under the identity with one under the
+  thin form, and the pair contradicts the meter in every scenario with
+  Enhanced off. In fog at 1080p 42.0% of pixels differ by over 3%, where the
+  meter puts 2.7% of cloud texels over 5%; on the horizon from 2.4 km at
+  Retina it is 100.0% against 2.9%; from orbit the shots differ by 0.0680 RMSE
+  at 1080p and 0.1114 at Retina, where the meter puts the thin form within
+  0.1% at the 95th percentile. With Enhanced on from orbit they differ by
+  0.0006 and 0.0007. The two shots are two frames, and nothing holds the
+  automatic meter, the interleave's phase or the exposure between them, so
+  the pair does not isolate the composite's form.
 
 ## Alternatives considered
 
@@ -594,9 +658,10 @@ GPU suite. The branch's history holds them.
   `decks`, 7.12 under cumulus, against the ground's 2.9, and 3.03 from orbit
   against 1.6; at Retina 7.70 to 9.79 and 5.54. Campaign 1, at its levers, read
   4.9 to 5.1 on `horizon` and `inside` and 3.1 from orbit. The second scene
-  pass alone spends the orbit row. Phase 1 measures two leaner forms of it:
-  the composite as a term of the sensor's chain on a frame with nothing drawn
-  over the clouds, and a second pass that drops its samples once resolved.
+  pass alone spends the orbit row. A frame with nothing drawn over the clouds
+  needs no second traversal, and phase 1 takes it off those frames by drawing
+  the composite as a term of the sensor's chain there; it also measures a
+  second pass that drops its samples once resolved.
 - **The first frames with the clouds on are a hitch** of 50.80 to 66.80 ms at
   1080p and 75.00 to 92.50 at Retina, the caches' first build. A reset plan
   that covers a cut has to cover the first frame too.
@@ -604,8 +669,11 @@ GPU suite. The branch's history holds them.
   change forgets to mark draws in the first pass, under the composite, and is
   veiled by cloud it stands in front of. That is rule 69, and it applies only
   under the flag.
-- **The CPU cost of the second traversal is not settled.** One cell of six is
-  at the rule's edge on three samples taken at two presentation rates.
+- **A is provisional on the CPU evidence.** The placement rule's CPU clause,
+  as fixed, fires at Retina inside a cloud in all three samples and on
+  `horizon` at 1080p in campaign 1's, and A stands as an argued exception
+  (The placement). Phase 1 takes the Retina cell again at one presentation
+  rate; both placements exist at `25df44ab`.
 - **A reset frame is dear.** ADR-0064 has its figures: the grid's whole
   rebuild is most of it, and the four trace dispatches are the rest.
 - **Declared, and not corrected in phase 0:**

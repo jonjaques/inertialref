@@ -94,6 +94,12 @@ export interface CloudFrameDriver {
   readonly inFrame: boolean
   /** The frame's cloud passes, in §4.2's order. */
   run(renderer: WebGPURenderer): void
+  /**
+   * `run` threw this frame: whatever it wrote is partial, and the composite
+   * drawing next in this same render would read it. Called before pass B
+   * draws on, so what it changes holds for this frame's composite.
+   */
+  failed(): void
 }
 
 export class CloudFrameNode extends TempNode<'float'> {
@@ -119,7 +125,10 @@ export class CloudFrameNode extends TempNode<'float'> {
    * The driver's `run`, in a frame; nothing outside one.
    *
    * A throw in the cloud work is the clouds', not the frame's: the renderer
-   * is put back and pass B draws on without them. Left to escape, it would
+   * is put back, the driver is told, and pass B draws on without them. The
+   * renderer alone is not enough: the composite this node sits in draws
+   * next, from a history that holds the last good frame's cloud or part of
+   * this one's, so the driver makes it inert. Left to escape, the throw would
    * leave the render it is nested in — pass B, and the post chain around it —
    * with no `finishRender`, its pass open and three's render tree pointing
    * into it, and every later frame drawing through that.
@@ -134,6 +143,7 @@ export class CloudFrameNode extends TempNode<'float'> {
       driver.run(renderer)
     } catch (cause) {
       restore()
+      driver.failed()
       this.#report(cause)
     }
     return undefined

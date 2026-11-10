@@ -409,6 +409,7 @@ function rig({
     run: (three: typeof renderer) => {
       if (copyDepth) depth.render(three)
     },
+    failed: () => {},
   }
   const composite = new CloudComposite({
     uniforms,

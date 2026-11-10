@@ -606,6 +606,17 @@ export class CloudComposite {
     this.#drawn.value = mode === 'residual' ? 0 : 1
   }
 
+  /**
+   * Draws nothing until the next `setMode`, which every frame the clouds
+   * draw begins with: the frame's cloud work threw, and the history holds a
+   * stale or partial frame. A uniform rather than `show(false)`, because the
+   * throw is caught inside this mesh's own draw, after three has chosen to
+   * draw it and before it binds the uniforms.
+   */
+  inert(): void {
+    this.#drawn.value = 0
+  }
+
   /** The mesh drawn this frame or not; the graph is built at the first show. */
   show(on: boolean): void {
     if (on) this.#build()

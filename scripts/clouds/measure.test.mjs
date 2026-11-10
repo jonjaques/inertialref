@@ -40,12 +40,14 @@ import {
   RADIANCE_FRAMES,
   figures,
   hitch,
+  measured,
   median,
   memoryTable,
   plan,
   summarize,
   table,
   tables,
+  unfit,
 } from './page.mjs'
 
 /*
@@ -407,7 +409,14 @@ function fakePage({
   pending = false,
   gpu = [6, 5, 7],
 } = {}) {
-  const calls = { passes: [], gpu: [], levers: [], captured: [] }
+  // `lens` is whose lens the camera wears: a preset's, or a rise's.
+  const calls = {
+    passes: [],
+    gpu: [],
+    levers: [],
+    captured: [],
+    lens: 'booted',
+  }
   let reads = 0
   // The frames the page has drawn: one a tick, as the report counts them.
   let drawn = 0
@@ -474,6 +483,23 @@ function fakePage({
       relative: Math.abs(a.luminance[0] - b.luminance[0]) / a.luminance[0],
     }),
     light: () => ({ sun: 37.5, phase: null, lit: true }),
+    // A picture wears its lens, a rise the one it solves; a visit sets none.
+    preset: (id) => {
+      calls.lens = id
+      return {
+        picture: {
+          id,
+          time: 100_331.95,
+          address: 'x',
+          framing: { kind: 'camera' },
+          lens: { focalLength: 20.8 },
+        },
+      }
+    },
+    takePicture: (picture) => {
+      calls.picture = picture
+      if (picture.framing.kind === 'rise') calls.lens = 'the rise'
+    },
     visit: (address, options) => {
       calls.visit = { address, options }
     },
@@ -605,6 +631,31 @@ describe('the page steps', () => {
       (-0.13 * 180) / Math.PI,
       12,
     )
+  })
+
+  it('stand every run at its own preset’s lens, whatever lens the run before it left', async () => {
+    const page = fakePage()
+    const moon = target('targets/landed/landed/pair-moon/1080p/steady')
+    await send(page, moon, 'stance')
+    expect(page.calls.lens).toBe('the rise')
+    // The runs campaign 2 took after the moon's on the same page: each stood
+    // at the ground's stance, or the horizon's, through the rise's lens.
+    for (const id of [
+      'targets/landed/landed/pair-neighbor/1080p/steady',
+      'targets/landed/landed/ground/1080p/cut',
+      'targets/landed/landed/horizon/retina/scrub',
+      'targets/landed/landed/orbit/1080p/fly',
+    ]) {
+      await send(page, moon, 'stance')
+      await send(page, target(id), 'stance')
+      expect(page.calls.lens, id).toBe('far-shore')
+    }
+    await send(
+      page,
+      target('targets/landed/clouds/earth-ground/1080p/fly'),
+      'stance',
+    )
+    expect(page.calls.lens).toBe('blue-marble')
   })
 
   it('refuse a page with no cloud system before standing anywhere', async () => {
@@ -769,8 +820,12 @@ describe('the figures', () => {
       }
     return {}
   }
+  // drive.mjs's settle answers with its own fields, not a `value`.
+  const settled = { step: 'settle', settled: true, ok: true }
   const out = {
-    results: planned.map((s) => ({ step: 'js', value: answer(s.tag) })),
+    results: planned.map((s) =>
+      s.tag === 'settle' ? settled : { step: 'js', value: answer(s.tag) },
+    ),
     operatingPoint: { kind: 'webgpu' },
   }
 
@@ -807,16 +862,116 @@ describe('the figures', () => {
     const residual = ALL.error.find((r) => r.mode === 'automatic')
     const p = plan(residual, { identity: 'i.png', thin: 't.png' })
     const row = figures(residual, p, {
-      results: p.map((s) => ({
-        value:
-          s.tag === 'residual'
-            ? { processing: 'enhanced', residual: null }
-            : null,
-      })),
+      results: p.map((s) =>
+        s.tag === 'settle'
+          ? settled
+          : {
+              value:
+                s.tag === 'residual'
+                  ? { processing: 'enhanced', residual: null }
+                  : null,
+            },
+      ),
     })
     expect(row.refused).toBe(
       'drawn under enhanced processing, not photographic',
     )
+    // Measured quiet, and still no row of the run it was asked for.
+    const quiet = { ...row, quiet: { ok: true } }
+    expect(unfit(quiet)).toBe(row.refused)
+    expect(measured(quiet)).toBe(false)
+    expect(tables({ rows: [quiet] })).toMatch(
+      /\| drawn under enhanced processing, not photographic \|$/m,
+    )
+  })
+
+  it('stand a quiet row only where it holds every figure its run owes', () => {
+    const scene = { settled: true }
+    const total = { samples: 4 }
+    const quiet = { ok: true }
+    const rows = [
+      // A row that stands, of each kind.
+      [{ type: 'ab', scene }, null],
+      [{ type: 'residual', scene, refused: null, residual: { total } }, null],
+      [
+        {
+          type: 'radiance',
+          scene,
+          differences: [{ name: 'a', relative: 0.01, floor: 0.002 }],
+        },
+        null,
+      ],
+      [
+        {
+          type: 'cold',
+          flag: true,
+          spans: { warmUp: 4000, clouds: null },
+          hitch: { first: 60, steady: 8 },
+          bytes: 1e8,
+        },
+        null,
+      ],
+      [
+        { type: 'cold', flag: false, spans: { warmUp: 4000 }, hitch: null },
+        null,
+      ],
+      [{ type: 'verify', scene, verify: {} }, null],
+      // drive.mjs's settle gave up at 30 s, the deposits still building.
+      [
+        { type: 'ab', scene: { settled: false, ok: false } },
+        'the scene had not settled when the levers moved',
+      ],
+      [
+        { type: 'ab', scene: null },
+        'the scene had not settled when the levers moved',
+      ],
+      [
+        { type: 'residual', scene, refused: null, residual: null },
+        'no residual was read back',
+      ],
+      [
+        {
+          type: 'residual',
+          scene,
+          refused: null,
+          residual: { total: { samples: 0 } },
+        },
+        'no residual was read back',
+      ],
+      // `ir.cloudRadiance()` answered null for one side.
+      [
+        {
+          type: 'radiance',
+          scene,
+          differences: [
+            { name: 'a', relative: 0.01, floor: 0.002 },
+            { name: '2 against 4', relative: null, floor: null },
+          ],
+        },
+        'no radiance capture for 2 against 4',
+      ],
+      [
+        { type: 'cold', flag: true, spans: null, hitch: null, bytes: null },
+        'the boot recorded no warm-up span',
+      ],
+      [
+        {
+          type: 'cold',
+          flag: true,
+          spans: { warmUp: 4000 },
+          hitch: null,
+          bytes: 1e8,
+        },
+        'the first frames with the clouds on were not read',
+      ],
+      [{ type: 'verify', scene, verify: null }, 'the stance was not read back'],
+    ]
+    for (const [row, why] of rows) {
+      expect(unfit(row), JSON.stringify(row)).toBe(why)
+      expect(measured({ ...row, quiet })).toBe(why === null)
+      // A row marked under load stands for nothing, whatever it holds.
+      expect(measured({ ...row, quiet: { ok: false } })).toBe(false)
+    }
   })
 
   it('print in the design’s columns, a missing figure as a dash', () => {
@@ -851,11 +1006,15 @@ describe('the figures', () => {
     ]
     const row = {
       ...figures(ladder, p, {
-        results: p.map((s) => ({
-          value: s.tag.startsWith('radiance:')
-            ? values[Number(s.tag.split(':')[1])]
-            : null,
-        })),
+        results: p.map((s) =>
+          s.tag === 'settle'
+            ? settled
+            : {
+                value: s.tag.startsWith('radiance:')
+                  ? values[Number(s.tag.split(':')[1])]
+                  : null,
+              },
+        ),
       }),
       quiet: { ok: true },
     }
@@ -870,14 +1029,17 @@ describe('the figures', () => {
     expect(lines[0]).toBe(
       '| Scenario | Size | Group | Lever | Comparison | jitter | radiance RMSE | noise floor | under | passes | cloud texels | quiet |',
     )
+    // The rest answered nothing here, so each reads as a dash, and the run,
+    // quiet as it was, does not stand: its `quiet` column says why.
+    const missing = 'no radiance capture for 128 against 192'
     expect(lines[2]).toBe(
-      '| inside | retina | ladder | maxSteps | 64 against 96 | held at 0 | 0.21% | 0.04% | 1.0% | yes | 900 | yes |',
+      `| inside | retina | ladder | maxSteps | 64 against 96 | held at 0 | 0.21% | 0.04% | 1.0% | yes | 900 | ${missing} |`,
     )
     expect(lines[3]).toMatch(
-      /96 against 128 \| held at 0 \| 4\.20% \| 0\.05% \| 1\.0% \| no \| 880 \| yes \|$/,
+      /96 against 128 \| held at 0 \| 4\.20% \| 0\.05% \| 1\.0% \| no \| 880 \| no radiance capture/,
     )
-    // The rest answered nothing here, so each reads as a dash.
     expect(lines[4]).toMatch(/128 against 192 \| held at 0 \| — \| — \|/)
+    expect(measured(row)).toBe(false)
   })
 
   it('print the latest attempt of a run, which is the one a re-run left', () => {

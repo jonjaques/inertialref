@@ -119,12 +119,21 @@ export async function cloudStep(step) {
         )
       set(step.levers)
       const at = step.stance
+      /*
+       * Every stance from its preset's picture: its lens, its time and its
+       * processing, as the page booted to them. One page serves every run of
+       * its size and preset in turn, and `ir.visit` sets no lens, so a stance
+       * that only visited would stand at whatever lens the run before it
+       * left: the moon's rise fits its own, and every run after it on that
+       * page measured through it.
+       */
+      const { picture: preset } = ir.preset(step.preset)
       if (at.kind === 'visit') ir.visit(at.address, at.options)
       else if (at.kind === 'rise') {
         // `ir.rise()` solves the lens and leaves it unapplied; a picture with
-        // a rise framing wears it, so the moon's rise is far-shore's picture
+        // a rise framing wears it, so the moon's rise is the preset's picture
         // with its address and framing swapped and no lens of its own.
-        const picture = { ...ir.preset(at.preset).picture }
+        const picture = { ...preset }
         delete picture.lens
         ir.takePicture({
           ...picture,
@@ -137,9 +146,8 @@ export async function cloudStep(step) {
       } else if (at.kind === 'raise') {
         // The preset's own stance, raised: `ir.visit` sets every field it is
         // not given to its default, so each is read back and passed again.
-        ir.preset(at.preset)
         const was = ir.observatory.status().surface?.stance
-        if (was == null) throw new Error(`${at.preset} leaves no stance`)
+        if (was == null) throw new Error(`${step.preset} leaves no stance`)
         ir.visit(at.address, {
           latitude: degrees(was.latitude),
           longitude: degrees(was.longitude),
@@ -463,7 +471,12 @@ export function plan(run, shots = {}) {
     ]
   return [
     install,
-    js('stance', { kind: 'stance', stance: run.stance, levers: run.off }),
+    js('stance', {
+      kind: 'stance',
+      stance: run.stance,
+      preset: run.preset,
+      levers: run.off,
+    }),
     flag('settle', '--settle', '30000'),
     flag('wait', '--wait', '1000'),
     RATE,
@@ -628,6 +641,44 @@ export function figures(run, steps, out) {
   }
 }
 
+/* ------------------------------------------------------------ what stands ---- */
+
+/**
+ * Why a row's figures cannot stand, or null. A quiet machine says nothing
+ * about the page: a residual drawn under the other processing comes back as
+ * a `refused` string, a radiance comparison whose capture answered null comes
+ * back as null figures, and a stance whose scene was still building when
+ * drive.mjs's 30 s settle gave up measures that building. None of them
+ * throws, so each would otherwise be kept as the run's row, and a continued
+ * document and the campaign would count the run done.
+ */
+export function unfit(row) {
+  if (row.type !== 'cold' && row.scene?.settled !== true)
+    return 'the scene had not settled when the levers moved'
+  if (row.type === 'residual') {
+    if (row.refused != null) return row.refused
+    if (!(row.residual?.total?.samples > 0)) return 'no residual was read back'
+  }
+  if (row.type === 'radiance') {
+    const missing = row.differences.find(
+      (d) => !Number.isFinite(d.relative) || !Number.isFinite(d.floor),
+    )
+    if (missing !== undefined) return `no radiance capture for ${missing.name}`
+  }
+  if (row.type === 'cold') {
+    if (!Number.isFinite(row.spans?.warmUp))
+      return 'the boot recorded no warm-up span'
+    if (row.flag && (row.hitch === null || !Number.isFinite(row.bytes)))
+      return 'the first frames with the clouds on were not read'
+  }
+  if (row.type === 'verify' && row.verify === null)
+    return 'the stance was not read back'
+  return null
+}
+
+/** Whether a row finishes its run: measured quiet, and every figure it owes there. */
+export const measured = (row) => row.quiet?.ok === true && unfit(row) === null
+
 /* --------------------------------------------------------------- the tables ---- */
 
 const fixed = (x, digits = 2) => (Number.isFinite(x) ? x.toFixed(digits) : '—')
@@ -635,6 +686,8 @@ const pct = (x, digits = 1) =>
   Number.isFinite(x) ? `${(x * 100).toFixed(digits)}%` : '—'
 const mb = (bytes) => fixed(bytes == null ? NaN : bytes / 1e6)
 const yes = (x) => (x ? 'yes' : 'no')
+/** The `quiet` column: why a row does not stand, or whether it was measured quiet. */
+const standing = (r) => unfit(r) ?? yes(r.quiet.ok)
 const unique = (xs) => [...new Set(xs)]
 
 /** A Markdown table of `rows`, one column per `[header, cell]`. */
@@ -669,7 +722,7 @@ export const AB_COLUMNS = [
   ['bakes', (r) => fixed(r.bakes)],
   ['passes/frame', (r) => r.perFrame ?? '—'],
   ['bytes MB', (r) => mb(r.bytes)],
-  ['quiet', (r) => yes(r.quiet.ok)],
+  ['quiet', standing],
 ]
 
 const share = (stats, threshold) =>
@@ -690,7 +743,7 @@ export const ERROR_COLUMNS = [
   ['RMSE (display)', (r) => fixed(r.display?.rmse, 4)],
   ['>3%', (r) => pct(r.display?.over?.['3%'])],
   ['>8%', (r) => pct(r.display?.over?.['8%'])],
-  ['quiet', (r) => r.refused ?? yes(r.quiet.ok)],
+  ['quiet', standing],
 ]
 
 const MEMORY_COLUMNS = [
@@ -747,7 +800,7 @@ const RADIANCE_COLUMNS = [
     (d) => (Number.isFinite(d.relative) ? yes(d.relative < d.threshold) : '—'),
   ],
   ['cloud texels', (d) => d.texels ?? '—'],
-  ['quiet', (d) => yes(d.quiet.ok)],
+  ['quiet', standing],
 ]
 
 const labelsOf = (r) => r.verify?.labels ?? []

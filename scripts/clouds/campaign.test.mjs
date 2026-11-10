@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   CAMPAIGNS,
@@ -8,6 +11,7 @@ import {
   owner,
   resumeRefusal,
   strays,
+  summarize,
 } from './campaign.mjs'
 import {
   FAILS,
@@ -30,7 +34,7 @@ const SIZES = ['1080p', 'retina']
 const HEAD = 'a'.repeat(40)
 const runs = batchRuns('images', SIZES)
 const want = { batch: 'images', head: HEAD, sizes: SIZES, held: HELD, runs }
-const row = (id, ok) => ({ id, quiet: { ok } })
+const row = (id, ok) => ({ id, scene: { settled: true }, quiet: { ok } })
 const doc = (over = {}) => ({
   batch: 'images',
   identity: { head: HEAD },
@@ -53,6 +57,32 @@ describe('a continued document', () => {
       runs.map((r) => r.id).filter((id) => id !== first && id !== third),
     )
     expect(resumeFrom(doc(), want).runs).toEqual(runs)
+  })
+
+  it('owes a run whose quiet row is refused, empty or taken on a scene still building', () => {
+    const [first, second, third, fourth] = runs.map((r) => r.id)
+    const captured = { name: '64 against 96', relative: 0.004, floor: 0.001 }
+    const radiance = (id, over, differences = [captured]) => ({
+      ...row(id, true),
+      type: 'radiance',
+      differences,
+      ...over,
+    })
+    const rows = [
+      radiance(first, {}),
+      // `ir.cloudRadiance()` answered null for a side.
+      radiance(second, {}, [{ ...captured, relative: null, floor: null }]),
+      // drive.mjs's settle gave up at 30 s.
+      radiance(third, { scene: { settled: false, ok: false } }),
+      // Taken again, and it stands.
+      radiance(fourth, { scene: { settled: false, ok: false } }),
+      radiance(fourth, {}),
+    ]
+    const { runs: todo, refusal } = resumeFrom(doc({ rows }), want)
+    expect(refusal).toBeNull()
+    expect(todo.map((r) => r.id)).toEqual(
+      runs.map((r) => r.id).filter((id) => id !== first && id !== fourth),
+    )
   })
 
   it('refuses one of another batch, commit, list of sizes or held jitter', () => {
@@ -150,6 +180,42 @@ describe('a campaign', () => {
     expect(outcome(stage({ done: 78, total: 78 }), 0)).toBe('done')
     // A command's exit is all there is to read of it.
     expect(outcome(stage({ kind: 'command', total: null }), 0)).toBe('done')
+  })
+
+  it('writes its summary when a batch’s document does not parse', () => {
+    // The runner rewrites a document whole and not atomically, and the
+    // summary is written in `run`'s `finally`, after the measuring is over.
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'clouds-campaign-'))
+    try {
+      const torn = path.join(dir, 'targets.json')
+      writeFileSync(torn, '{"batch": "targets", "rows": [{"id": "targ')
+      const state = {
+        name: 'landed',
+        head: HEAD,
+        status: 'done',
+        reason: null,
+        startedAt: '2026-11-10T09:05:32Z',
+        finishedAt: '2026-11-10T10:21:00Z',
+        summary: path.join(dir, 'landed.md'),
+        stages: [
+          {
+            name: 'targets',
+            kind: 'batch',
+            status: 'done',
+            attempts: 1,
+            file: torn,
+            done: 58,
+            total: 58,
+          },
+        ],
+      }
+      summarize(state)
+      expect(readFileSync(state.summary, 'utf8')).toMatch(
+        /targets\.json` did not parse when this summary was written/,
+      )
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('is resumed only at the commit it was of', () => {

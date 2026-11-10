@@ -308,7 +308,11 @@ describe('the composite’s material', () => {
       depth: () => depth.texture,
       far: CLOUD_STAND_INS.far(),
       phase: CLOUD_STAND_INS.phase(),
-      frameNode: new CloudFrameNode({ inFrame: false, run() {} }),
+      frameNode: new CloudFrameNode({
+        inFrame: false,
+        run() {},
+        failed() {},
+      }),
     })
     composite.show(true)
     const mesh = composite.mesh

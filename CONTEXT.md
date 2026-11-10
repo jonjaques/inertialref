@@ -264,6 +264,26 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **A measurement stance inherited the lens the run before it left.** One
+  page served every far-shore run of a size, `ir.visit` sets no lens, and the
+  moon's rise fits the flight lens and keeps it, so every `cut`, `scrub`,
+  `fly` and `pair-neighbor` row of the weather's campaign 2 measured another
+  lens's frame. The clouds-off base gave it away, `ground` at 1080p at 5.87 ms
+  steady and 6.92 to 7.29 after the rise. Every stance now starts from its
+  preset's picture; `measure.test.mjs` runs a stance after the moon's and
+  holds its lens to far-shore's (10 Nov 2026, below).
+- **A quiet row with no figures finished its run.** A residual drawn under the
+  other processing, a radiance capture that answered null and a stance whose
+  scene never settled each came back without a throw, and a continued batch
+  and the campaign counted the run done. `unfit` names what a row lacks, and
+  only a quiet, fit row finishes (`campaign.test.mjs`).
+- **A cloud frame that threw still composited the cloud.** The frame node put
+  the renderer back and logged that the frame draws without the clouds, while
+  the composite, already shown, drew the last good frame's history under the
+  new camera. The driver's `failed()` makes it inert and resets the history;
+  `cloudSystem.gpu.test.ts` throws in the trace after twenty clouded frames
+  and reads back the clouds-off frame.
+
 - **A refused `response.create` wedged the guide for the session.** The
   in-flight flag set at the create was cleared only by `response.created`, so
   a rate limit, a redelivery race or a configuration refusal left every later
@@ -13519,15 +13539,82 @@ the smaller ones, from
   once the sweep had been read. The curl itself is folded into the base noise
   at the bake.
 
-**Not measured.** `lightTaps` 4 has no larger rung beside it. `farFootprint`
-800 was read on the ground and inside a cloud and on no orbit stance, and the
-far comparison scored 400 and 1,600 m, not 800. `force: 'reset'`, the
-immediate regime alone, has no row. The cell at Retina inside a cloud where
-the second traversal may cost the main thread is three samples at two rates;
-both placements exist at `25df44ab`. The fine march takes a step's source at
+**Not measured.** `lightTaps` 4 has no larger rung beside it, so its rule
+leaves it unset and 4 ships. `farFootprint` 800 was read on the ground and
+inside a cloud and on no orbit stance, and no comparison of the two far
+candidates exists at 800 m: campaign 1 scored 400 and 1,600, and the atlas
+alone was scored at 800 after the spheres went. `force: 'reset'`, the
+immediate regime alone, has no row, and no warp row was recorded. Every figure
+is the M6 mini's; the plan's M5 basis is unmeasured.
+
+**The placement is an exception to its rule, not a pass.** §8.7's CPU clause,
+as fixed, fires at Retina inside a cloud, where A's `sensor` mean is 1.51,
+3.51 and 4.64 ms over B's in the three samples, and on `horizon` at 1080p in
+campaign 1's sample, 18 late frames against none. The reading that cleared
+both added a condition §8.7 does not state, twice the larger sample standard
+deviation, and was fixed after campaign 1's result was in hand; it cleared the
+Retina cell by 0.06 ms on samples pooled across two presentation rates, and
+on the paired differences' own deviation it does not clear. ADR-0063 keeps A
+as the exception §8.7 allows with figures, provisional on the CPU evidence,
+and both placements exist at `25df44ab` for phase 1's retake of that cell at
+one rate. A rule's reading is fixed before the result it reads. The fine march takes a step's source at
 the step's start, so every radiance in the far comparison is against a
 reference biased high. And the placeholder's density and light mean nothing:
 no image from phase 0 says how a cloud looks.
+
+## The weather's forced rows looked through the moon's lens, and the placement is an exception (10 Nov 2026)
+
+Three council seats reviewed phase 0 of the weather at `51c96da4` and scored
+it 7 of 10 each. What they found that the records did not say, and what came
+of it.
+
+**Campaign 2's forced rows measured another lens's frame.** The runner serves
+every far-shore run of a size from one page, and `pair-moon`, sixth of the
+steady rows, stands by a picture with a rise framing, which fits the flight
+lens and keeps it. `ir.visit` sets none, so every `cut`, `scrub` and `fly` row
+and both `pair-neighbor` rows after it stood where specified and looked
+through the moon's lens. The base said so and nobody read it: `ground` at
+1080p 5.87 ms steady, 6.92, 7.29 and 7.21 forced; `decks` at Retina 6.97
+against 11.24. The four scenarios campaign 2's summary named as two operating
+points were these rows, not a moving rate. Every stance now starts from its
+preset's picture, and the 40 rows were taken again at `f9746fd3` with the
+display dark, `pair-moon` first at each size as the control: `pair-neighbor`
+right after it reads a base of 5.88 ms. The costs barely moved. The reset
+frame on `horizon` is 20.30 ms at 1080p and 22.14 at Retina, where campaign 2
+read 20.61 and 21.78; `pair-neighbor` steady 7.18 and 8.84 against 6.96 and
+8.30; the grid's share of a cut 9.11 to 16.82 ms against 10.48 to 16.52. A
+base that differs from the same stance's steady base is a stance that is not
+the one specified; compare them before reading a forced row.
+
+**The placement's CPU clause fires as fixed.** The reading that cleared it
+added a condition §8.7 does not state and was chosen after the result it
+read; the build log's entry above says so, and ADR-0063 now keeps A as an
+argued exception, provisional on the CPU evidence.
+
+**The landed set has a ladder.** The `choices` campaign at `51c96da4` took
+the three ladders on the grid with 4 taps at 800 m. `maxSteps` 192 holds
+(0.02% and 0.01% against 256); `farFootprint` 800 is set by Retina, 7.23%
+from 400, with 200 passing at 1080p; `lightTaps` 2 against 4 is 1.03% and
+1.13%, and 4 has no rung above it, so the rule leaves it unset and 4 ships.
+The far comparison now scores the atlas at 800 m, alone: the spheres were
+gone before it could.
+
+**Two runner defects, one composite defect.** A row refused, empty or taken
+on an unsettled scene finished its run; it no longer does, and over every
+document on the mini the new check rejects no quoted figure and four rows on
+a scene still building, one of them campaign 1's B row on `orbit` at 1080p,
+in no cell the placement's rule fired in. And a cloud frame that threw
+composited stale cloud; the composite is now inert on such a frame.
+
+**Declared, not fixed: what phase 1 inherits.** Under the game's own warp at
+60 Hz every frame from 100× up is a jump and rebuilds the grid whole; the
+knots mean the first four clipmap columns on the real field; the drift is
+built in the eye's tangent basis, so the field depends on the eye; the far
+atlas filters log τ against clear texels' zero; the motion reset has no floor
+near a layer's boundary; the grid's window ends in a hard edge; the step-start
+bias reaches +52% at 8 km and more at the far handover; and the three accuracy
+instruments assert only finiteness. Every figure is the M6 mini's, and the
+plan's M5 basis is unmeasured. The weather README lists each.
 
 ## Known gaps
 

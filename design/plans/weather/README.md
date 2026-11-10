@@ -28,19 +28,31 @@ ships.
 ## What phase 0 decided
 
 Each choice was built in every candidate, measured on the Mac mini (Mac18,5,
-Apple M6, 32 GB) at 1920×1080 and 2880×1800, and decided by a rule fixed in
-[the design](phase0/design.md) §8.7 before any figure existed.
+Apple M6, 32 GB) at 1920×1080 and 2880×1800, and read against a rule fixed in
+[the design](phase0/design.md) §8.7 before any figure existed. Not every
+choice follows its rule as written, and the ADRs say where:
 
-| Choice                       | Decided                                                                                   | Against                                                                                      | Record                                                                                                                    |
-| ---------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Where the composite stands   | Two scene passes, one under the clouds and one over them                                  | A hand-rolled split of the scene pass, no cheaper in any cell                                | [ADR-0063](../../../docs/adr/0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md)           |
-| What the march reads         | The field itself                                                                          | A baked local volume, 6.3–6.9% from the field's picture on a broken-cloud horizon against 3% | [ADR-0064](../../../docs/adr/0064-the-clouds-march-the-field-and-the-suns-depth-is-a-grid-summed-through-the-volume.md)   |
-| The sun's optical depth      | A grid round the eye, summed through the volume                                           | Sun-space cascades, 0.49 RMS under cirrus over cumulus at a 5° sun                           | ADR-0064                                                                                                                  |
-| The far field                | A three-layer cube-sphere atlas                                                           | Spheres at the layers' heights; the volume's coarse levels, excluded by their memory         | ADR-0064                                                                                                                  |
-| The quality ladders          | `maxSteps` 192, `lightTaps` 4, `farFootprint` 800 m                                       | —                                                                                            | ADR-0064                                                                                                                  |
-| Where the thin form may draw | From orbit, and nowhere else                                                              | The identity, which stays the default everywhere, orbit included                             | ADR-0063                                                                                                                  |
-| The scene unit               | `SCENE_UNIT_LUMINANCE`, the sun above the air; the sensor's white is half a stop under it | Moving the white, which moves every plate                                                    | [ADR-0065](../../../docs/adr/0065-a-scene-unit-is-the-sun-above-the-air-and-the-sensors-white-is-half-a-stop-under-it.md) |
-| The droplets' phase function | Lorenz–Mie at one narrow width, generated offline                                         | A fitted phase function, which draws no glory                                                | [ADR-0066](../../../docs/adr/0066-the-droplets-phase-is-lorenz-mie-at-one-narrow-width-generated-offline.md)              |
+- **The placement is an argued exception.** Its CPU clause, as fixed, fires
+  at Retina inside a cloud in all three samples and on `horizon` at 1080p in
+  campaign 1's, and A stands on the figures ADR-0063 gives, provisional on
+  the CPU evidence.
+- **The sun's depth fell to the rule's fallback,** which keeps "the more
+  accurate" without naming the aggregate. By the worst case's RMS at two taps
+  it is the grid; case by case the cascades are ahead in five cells.
+- **The far field is decided at 400 m and provisional at the default.** No
+  comparison of the two candidates exists at 800 m.
+- **`lightTaps` is unset by its rule,** and 4 ships.
+
+| Choice                       | Decided                                                                                               | Against                                                                                      | Record                                                                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Where the composite stands   | Two scene passes, one under the clouds and one over them; an exception to the CPU clause, provisional | A hand-rolled split of the scene pass, no cheaper in any cell                                | [ADR-0063](../../../docs/adr/0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md)           |
+| What the march reads         | The field itself                                                                                      | A baked local volume, 6.3–6.9% from the field's picture on a broken-cloud horizon against 3% | [ADR-0064](../../../docs/adr/0064-the-clouds-march-the-field-and-the-suns-depth-is-a-grid-summed-through-the-volume.md)   |
+| The sun's optical depth      | A grid round the eye, summed through the volume                                                       | Sun-space cascades, 0.49 RMS under cirrus over cumulus at a 5° sun                           | ADR-0064                                                                                                                  |
+| The far field                | A three-layer cube-sphere atlas                                                                       | Spheres at the layers' heights; the volume's coarse levels, excluded by their memory         | ADR-0064                                                                                                                  |
+| The quality ladders          | `maxSteps` 192 and `farFootprint` 800 m by the rule; `lightTaps` 4 ships, unset by it                 | —                                                                                            | ADR-0064                                                                                                                  |
+| Where the thin form may draw | From orbit, and nowhere else                                                                          | The identity, which stays the default everywhere, orbit included                             | ADR-0063                                                                                                                  |
+| The scene unit               | `SCENE_UNIT_LUMINANCE`, the sun above the air; the sensor's white is half a stop under it             | Moving the white, which moves every plate                                                    | [ADR-0065](../../../docs/adr/0065-a-scene-unit-is-the-sun-above-the-air-and-the-sensors-white-is-half-a-stop-under-it.md) |
+| The droplets' phase function | Lorenz–Mie at one narrow width, generated offline                                                     | A fitted phase function, which draws no glory                                                | [ADR-0066](../../../docs/adr/0066-the-droplets-phase-is-lorenz-mie-at-one-narrow-width-generated-offline.md)              |
 
 An object drawn over the clouds has to be marked for the second pass. That is
 rule 69 in [`AGENTS.md`](../../../AGENTS.md).
@@ -54,7 +66,7 @@ row with its conditions. In short, against clouds off:
 | --------------------------------- | -------------------- | -------- | -------- |
 | On the ground, under cumulus      | ≤ 2.9 ms             | 7.12 ms  | 8.91 ms  |
 | From orbit                        | ≤ 1.6 ms             | 3.03 ms  | 5.54 ms  |
-| A reset frame, a cut of `horizon` | —                    | 20.61 ms | 21.78 ms |
+| A reset frame, a cut of `horizon` | —                    | 20.30 ms | 22.14 ms |
 | Declared memory                   | about 76 MB          | 91.62 MB | 85.01 MB |
 
 At Retina the largest single cost is the second scene pass, 3.88 to 5.32 ms
@@ -63,7 +75,10 @@ taps, is the larger on `ground`, `horizon`, `decks` and both pairs, up to
 4.75 ms. The first frames with the clouds on are a hitch: the largest of the
 first five is 50.80 to 66.80 ms at 1080p and 75.00 to 92.50 at Retina, the
 caches' first build, not shown to be a compile. Every figure is campaign 2's,
-at `bbea04da`.
+at `bbea04da`, but the reset frame, which is the retake's at `f9746fd3`:
+campaign 2's `cut`, `scrub`, `fly` and `pair-neighbor` rows looked through the
+lens the moon's rise left on the page (ADR-0063). Every figure is the M6 mini's; the plan's budget
+basis is an M5, which is not measured.
 
 ## What phase 1 inherits
 
@@ -73,17 +88,23 @@ none is fixed.
 **In the march and its light**
 
 - **A step's light source is taken at the step's start,** which biases
-  first-order light high, 15% on a uniform slab at equal sun and view angles
-  and more at a grazing sun. Every radiance figure of phase 0 is against a
-  march with that bias.
+  first-order light high by `2/(1+e^−τ) − 1` a step on a uniform slab at equal
+  sun and view angles. That is 15% only near the eye, where a step holds τ at
+  0.3; past the step's floor τ grows with distance, to +52% at 8 km and +70%
+  or more at the far comparison's 55 km handover. Every radiance figure of
+  phase 0 is against a march with that bias.
 - **The sun's depth misses its 3% in most cases,** two decks under a high sun
-  by 0.097 at four taps. Outside the grid's 25.6 km window, which from orbit
+  by 0.097 at four taps, and single samples reach a full-scale error of 1.00
+  there. The gate scored one place a scenario, four of five at latitude 86 to
+  89°, within 4 km of the eye. Outside the grid's 25.6 km window, which from orbit
   is everywhere, a sample is lit as though nothing stood past its first
   kilometer.
-- **The ladders are not closed.** `lightTaps` 4 has no larger rung measured
-  beside it. `farFootprint` 800 was read on the ground and inside a cloud and
-  on no orbit stance, and the landed orbit still shows almost none of the
-  cloud texture the campaign's showed.
+- **The ladders are not closed.** The landed set's own ladder, at
+  `51c96da4`, holds `maxSteps` 192 and `farFootprint` 800 (set by Retina), and
+  leaves `lightTaps` unset: two against four is 1.03% and 1.13% on `horizon`,
+  and `cloudLevers.ts` has no rung above four. No ladder has an orbit stance,
+  and the landed orbit still shows almost none of the cloud texture the
+  campaign's showed.
 - **The light is first order through the droplets' table and a placeholder
   sky term, on an uncalibrated density.** No image from phase 0 says how a
   cloud looks. The table is unconvolved, and ice and rain read the droplets'.
@@ -93,10 +114,12 @@ none is fixed.
 - **The second scene pass** costs 1.52 to 2.19 ms at 1080p and 3.88 to 5.32
   at Retina, and a break with nothing drawn in it 1.0 and 2.4. Riding the sea's
   own split is reconsidered in phase 1 by the rule that priced it.
-- **The second traversal's CPU cost is not settled.** At Retina inside a cloud
-  it is at the rule's edge on three samples taken at two presentation rates.
-  Both placements exist at commit `25df44ab`.
-- **A reset frame rebuilds the sun's grid whole,** 10.5 to 16.5 ms of a cut
+- **The placement is provisional on its CPU evidence.** At Retina inside a
+  cloud A's `sensor` span is 1.51 to 4.64 ms over B's in all three samples,
+  taken at two presentation rates, and the rule as fixed fires there. Phase 1
+  takes that cell again at one rate; both placements exist at commit
+  `25df44ab`.
+- **A reset frame rebuilds the sun's grid whole,** 9.1 to 16.8 ms of a cut
   for the grid alone, and so does a sun that turns 0.05°. The first frames
   with the clouds on pay a whole build too, and the reset plan has to cover
   them.
@@ -106,9 +129,56 @@ none is fixed.
 
 - **It lets through more light than the fine march:** half again over broken
   cumulus and nearly ten times on a grazing ray at sunset. It is not shown
-  better than the spheres at 800 m, which the comparison did not measure.
+  better than the spheres at 800 m: the atlas alone is scored there, and the
+  spheres led at 1,600 m in all four cases. Its radiance errors are each
+  relative to their own case's light, and its reference marches up to 1,051
+  steps where production takes 192.
 - **The handover is a switch.** The cross-fade by footprint, with hysteresis,
   is not built.
+
+**Limits of the landed code, declared and not fixed here**
+
+- **Under the game's own time warp every frame is a reset.** A frame whose
+  world step exceeds its own by over a second is a jump, so at 60 Hz every
+  frame from 100× up (from 1,000× at 120 Hz) takes the immediate regime and a
+  whole grid rebuild, 9.1 to 16.8 ms of grid alone; and a sun that turns
+  more than 0.05° a frame rebuilds the grid whole every frame, which on
+  Earth's day is from about 720×. The `warp` lever measures another path, and
+  no warp row was recorded.
+- **The knots mean the first four clipmap columns on the real field.** A
+  segment closes at every 250 m texel of horizontal run, and the fourth knot
+  takes the rest, so through layered cloud `cloudFront` puts an object in a
+  clear gap behind a depth-proportional share of the cloud past it, and for
+  cloud thin in each column it records no knot and answers T = 1. The
+  done-when for the transparent object is held on analytic slabs alone.
+- **The field depends on the eye.** The wind is built in the observer's
+  tangent basis (`cloudFrame.ts`) and the drift from it, up to 3,600 s of it,
+  so moving the eye turns the whole lattice, and the history's
+  `wind × frameSeconds` does not follow that.
+- **The far atlas filters log τ against clear texels' zero.** A bilinear read
+  beside a clear texel gives `(1+τ)^w − 1`: τ 8 at half weight reads 2, an
+  opacity of 0.43 against 0.50. It is one cause of the far field's excess
+  light, and fixing it changes the atlas's format.
+- **The motion reset has no floor near a layer's boundary.** The reset
+  compares the eye's travel with its clearance to the nearest shell, so
+  within ten frames' travel of a base or a top, 42 m at 250 m/s and 60 Hz, every frame
+  is immediate and the history never accumulates.
+- **The grid's window ends in a hard edge about 25 km out.** Outside its
+  trusted rectangle `opticalDepth` answers zero, a lighting seam where the
+  grid gives way to the taps alone.
+- **After a jump the clipmap and the atlas rebuild from cube faces not yet
+  rebaked,** and mark themselves fresh, inside the runner's settle window.
+- **What no always-on test gates:** compression other than 1 in the
+  composite (`cloudComposite.gpu.test.ts` sets 1 in every case), the air's
+  in-scatter term in the composite, the drift's sign (the history's oracle is
+  built from the wind), the grid on a real field (its gate is a uniform
+  slab), and a texture left off a resource's declared-bytes list (the census
+  sums each resource's own list). The three accuracy instruments,
+  `cloudFarCompare`, `cloudSunAccuracy` and `cloudCompositeError`, run only
+  under `IR_CLOUD_MEASURE` and assert only that their figures are finite.
+- **The thin form's regime is one stance.** "From orbit" is `orbit` at a 4.4°
+  sun, and a second clouded body always composites through the thin form,
+  from the ground too, in a geometry the `error` batch never measured.
 
 **Not built, and owed before a cloud ships**
 
@@ -227,12 +297,14 @@ Stills are not committed.
 
 ## What was verified
 
-On the Mac mini, at the tip the pull request carries:
+On the Mac mini, at `8cfd71a0`, whose code is the tip's:
 
-- `pnpm check`, full: 20 stages passed in 97.3 s of wall time.
-- `pnpm test:gpu`, full: 73 files and 443 tests passed; 3 files and 3 tests
+- `pnpm check`, full, on a budget of 4 cores: 20 stages passed in 88.2 s of
+  wall time. Its `test` stage is 362 files and 4,141 tests, and `test:slow`
+  5 files and 9 tests.
+- `pnpm test:gpu`, full: 73 files and 444 tests passed; 3 files and 3 tests
   skipped, as many as the opt-in instruments, which skip without
-  `IR_CLOUD_MEASURE`. 456 s.
+  `IR_CLOUD_MEASURE`.
 - `pnpm presets:compare --all`: against `main` (`fb5aa5f5`) all 13 presets
   move 0 px. Against the committed plates `centauri-daybreak` moves 231 px,
   which is `main`'s own distance from that plate; the other 12 are within
@@ -249,7 +321,10 @@ On the Mac mini, at the tip the pull request carries:
   and three instruments, every counted row quiet. Campaign 2 at `bbea04da`:
   `targets` 58 of 58 runs quiet, `memory` 12 of 12, `error` 16 of 16, no
   failures, each batch on its first attempt, then the three instruments on
-  the landed code.
+  the landed code. The landed set's ladder at `51c96da4`: 12 of 12 runs
+  quiet, then the three instruments. The retake of campaign 2's forced and
+  `pair-neighbor` rows at `f9746fd3`: 40 of 40 runs quiet, no failures, one
+  run taken a third time after two attempts beside another job.
 
 ## Defaults taken without asking
 

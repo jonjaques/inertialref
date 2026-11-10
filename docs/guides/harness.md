@@ -1000,9 +1000,20 @@ keeps its state, its log and its summary in `.data/clouds/campaign/`.
   port and Chrome's GPU caches live in it; `--fresh` only reboots the page. The
   OS's Metal shader cache lives outside the profile and is not cleared, so a
   cold figure is "a fresh Chrome profile, the OS cache possibly warm".
-- **A batch can be continued.** `--resume <file>` keeps the runs measured quiet
-  and runs the rest. Exit 1 is a batch that stopped and is worth continuing;
-  exit 2 is a refusal the same command would meet again.
+- **Every stance starts from its preset's picture.** One page serves every run
+  of a size and preset in turn, and `ir.visit` sets no lens, so a stance
+  applies its preset first: its lens, time and processing, then the visit, the
+  rise or the raise over them. Without it, a run after the moon's rise looks
+  through the rise's lens. A forced row's clouds-off base and its
+  stance's steady one should agree; where they do not, the stance is not the
+  one specified.
+- **A row finishes its run only when it is quiet and whole.** A residual drawn
+  under the other processing, a radiance capture that answered null, or a
+  stance whose scene drive.mjs's settle gave up on is kept in the document,
+  named in the table's `quiet` column, and written as a failure of its run.
+- **A batch can be continued.** `--resume <file>` keeps the runs whose rows
+  finished them and runs the rest. Exit 1 is a batch that stopped and is worth
+  continuing; exit 2 is a refusal the same command would meet again.
 
 ### The instruments
 
@@ -1016,7 +1027,7 @@ IR_CLOUD_MEASURE=1 IR_GPU_WAIT=900 pnpm vitest run --config apps/game/vitest.gpu
 
 | Test                  | Scores                                                                                              |
 | --------------------- | --------------------------------------------------------------------------------------------------- |
-| `cloudFarCompare`     | The far atlas against the fine march over the whole ray, on four handover cases at two footprints   |
+| `cloudFarCompare`     | The far atlas against the fine march over the whole ray, on four handover cases at three footprints |
 | `cloudSunAccuracy`    | The sun grid's `T_cloud` against a 256-step march of the field, at five scenarios and two suns      |
 | `cloudCompositeError` | The identity and the thin form against a 512-sample joint march of air and cloud, on analytic slabs |
 

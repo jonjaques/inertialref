@@ -11,6 +11,11 @@ off, in the summaries.
 
 ## Campaign 2, `targets`, at `bbea04da`
 
+**Its `cut`, `scrub`, `fly` and `pair-neighbor` rows are superseded** by the
+retake below: they ran through the lens the `pair-moon` stance left on the
+page, and the shares here are of another lens's frame. Its steady rows of the
+other scenarios and its Earth rows stand.
+
 | Scenario      | Size   | Kind   | Lever  | `scene over clouds` | `cloud maps` | `cloud clipmap` | `cloud volume` | `cloud sun grid` | `cloud far atlas` | `cloud depth` | `cloud trace` | `cloud history` | `cloud far second` | passes/frame |
 | ------------- | ------ | ------ | ------ | ------------------- | ------------ | --------------- | -------------- | ---------------- | ----------------- | ------------- | ------------- | --------------- | ------------------ | ------------ |
 | ground        | 1080p  | steady | landed | 1.70                | 0.05         | 0.01            | 0.23           | 0.43             | 0.90              | 0.11          | 3.72          | 0.27            | —                  | 38           |
@@ -71,6 +76,56 @@ off, in the summaries.
 | earth-orbit   | retina | steady | clouds | 4.39                | 0.03         | 0.01            | —              | —                | 0.79              | 0.25          | 0.07          | 0.17            | —                  | 21           |
 | earth-orbit   | retina | fly    | clouds | 2.67                | 0.03         | 0.01            | —              | —                | 0.80              | 0.25          | 0.05          | 0.17            | —                  | 25           |
 | earth-orbit   | retina | steady | deck   | —                   | —            | —               | —              | —                | —                 | —             | —             | —               | —                  | 16           |
+
+## The retake, `targets`, at `f9746fd3`
+
+The rows that supersede campaign 2's above, each stance starting from its
+preset's picture, with `pair-moon`'s steady rows first at each size as the
+control. The costs are in
+[`targets-retake-2026-11-10T12-25-50Z.md`](targets-retake-2026-11-10T12-25-50Z.md).
+
+| Scenario      | Size   | Kind   | Lever  | `scene over clouds` | `cloud maps` | `cloud clipmap` | `cloud volume` | `cloud sun grid` | `cloud far atlas` | `cloud depth` | `cloud trace` | `cloud history` | `cloud far second` | passes/frame |
+| ------------- | ------ | ------ | ------ | ------------------- | ------------ | --------------- | -------------- | ---------------- | ----------------- | ------------- | ------------- | --------------- | ------------------ | ------------ |
+| pair-moon     | 1080p  | steady | landed | 1.95                | 0.14         | 0.00            | 0.20           | 0.46             | 0.79              | 0.06          | 4.73          | 0.26            | 0.72               | 36           |
+| pair-neighbor | 1080p  | steady | landed | 1.70                | 0.04         | 0.06            | 0.23           | 0.43             | 0.91              | 0.12          | 3.67          | 0.27            | 0.18               | 41           |
+| ground        | 1080p  | cut    | landed | 1.71                | 0.05         | 0.02            | 0.36           | 13.93            | 0.53              | 0.09          | 6.69          | 0.24            | —                  | 102          |
+| horizon       | 1080p  | cut    | landed | 1.53                | 0.04         | 0.02            | 0.36           | 12.26            | 1.30              | 0.09          | 5.59          | 0.24            | —                  | 102          |
+| inside        | 1080p  | cut    | landed | 2.08                | 0.10         | 0.03            | 0.35           | 16.49            | 1.21              | 0.11          | 4.69          | 0.23            | —                  | 100          |
+| decks         | 1080p  | cut    | landed | 2.20                | 0.05         | 0.04            | 0.29           | 9.11             | 0.06              | 0.03          | 6.09          | 0.23            | —                  | 96           |
+| orbit         | 1080p  | cut    | landed | 1.72                | 0.03         | 0.02            | —              | —                | 0.75              | 0.12          | 0.35          | 0.20            | —                  | 32           |
+| pair-moon     | 1080p  | cut    | landed | 1.97                | 0.04         | 0.05            | 0.34           | 12.14            | 0.89              | 0.05          | 18.98         | 0.22            | 0.50               | 98           |
+| pair-neighbor | 1080p  | cut    | landed | 1.72                | 0.06         | 0.02            | 0.37           | 13.74            | 0.26              | 0.09          | 6.56          | 0.23            | 0.36               | 103          |
+| ground        | 1080p  | scrub  | landed | 1.69                | 0.08         | 0.01            | 0.37           | 8.81             | 0.58              | 0.09          | 5.84          | 0.25            | —                  | 102          |
+| horizon       | 1080p  | scrub  | landed | 1.53                | 0.04         | 0.04            | 0.36           | 6.85             | 1.05              | 0.11          | 5.12          | 0.22            | —                  | 102          |
+| inside        | 1080p  | scrub  | landed | 2.05                | 0.06         | 0.02            | 0.35           | 9.28             | 0.18              | 0.13          | 4.32          | 0.27            | —                  | 100          |
+| decks         | 1080p  | scrub  | landed | 2.18                | 0.04         | 0.03            | 0.28           | 6.45             | 0.31              | 0.03          | 5.85          | 0.23            | —                  | 98           |
+| orbit         | 1080p  | scrub  | landed | 1.75                | 0.03         | 0.02            | —              | —                | 0.81              | 0.11          | 0.36          | 0.21            | —                  | 32           |
+| pair-moon     | 1080p  | scrub  | landed | 1.98                | 0.04         | 0.03            | 0.33           | 7.68             | 0.06              | 0.08          | 17.68         | 0.23            | 0.75               | 98           |
+| pair-neighbor | 1080p  | scrub  | landed | 1.72                | 0.06         | 0.03            | 0.58           | 7.72             | 0.14              | 0.12          | 6.02          | 0.25            | 0.07               | 101          |
+| ground        | 1080p  | fly    | landed | 1.68                | 0.05         | 0.00            | 0.22           | 0.46             | 0.90              | 0.12          | 3.55          | 0.25            | —                  | 40           |
+| orbit         | 1080p  | fly    | landed | 1.03                | 0.03         | 0.01            | —              | —                | 0.76              | 0.11          | 0.05          | 0.26            | —                  | 26           |
+| earth-ground  | 1080p  | fly    | clouds | 1.55                | 0.03         | 0.01            | 0.14           | 0.51             | 0.11              | 0.14          | 3.12          | 0.59            | —                  | 41           |
+| earth-orbit   | 1080p  | fly    | clouds | 1.08                | 0.03         | 0.02            | —              | —                | 0.80              | 0.11          | 0.06          | 0.25            | —                  | 23           |
+| pair-moon     | retina | steady | landed | 4.71                | 0.04         | 0.01            | 0.20           | 0.44             | 0.81              | 0.13          | 3.03          | 0.17            | 0.71               | 34           |
+| pair-neighbor | retina | steady | landed | 4.20                | 0.05         | 0.01            | 0.24           | 0.44             | 0.89              | 0.28          | 3.07          | 0.18            | 0.16               | 41           |
+| ground        | retina | cut    | landed | 4.24                | 0.04         | 0.03            | 0.40           | 13.89            | 0.79              | 0.24          | 5.08          | 0.16            | —                  | 102          |
+| horizon       | retina | cut    | landed | 3.93                | 0.04         | 0.03            | 0.37           | 12.33            | 1.21              | 0.21          | 5.18          | 0.17            | —                  | 102          |
+| inside        | retina | cut    | landed | 5.05                | 0.07         | 0.05            | 0.34           | 16.82            | 0.85              | 0.29          | 3.24          | 0.21            | —                  | 98           |
+| decks         | retina | cut    | landed | 5.37                | 0.02         | 0.03            | 0.29           | 9.14             | 0.08              | 0.08          | 4.41          | 0.17            | —                  | 98           |
+| orbit         | retina | cut    | landed | 4.36                | 0.02         | 0.03            | —              | —                | 0.78              | 0.27          | 0.27          | 0.15            | —                  | 32           |
+| pair-moon     | retina | cut    | landed | 4.72                | 0.04         | 0.03            | 0.34           | 12.12            | 0.89              | 0.13          | 11.88         | 0.18            | 0.53               | 98           |
+| pair-neighbor | retina | cut    | landed | 4.26                | 0.05         | 0.03            | 0.38           | 13.63            | 0.21              | 0.33          | 5.10          | 0.18            | 0.35               | 103          |
+| ground        | retina | scrub  | landed | 4.19                | 0.07         | 0.03            | 0.38           | 7.97             | 0.09              | 0.23          | 4.66          | 0.17            | —                  | 100          |
+| horizon       | retina | scrub  | landed | 3.90                | 0.05         | 0.04            | 0.37           | 7.32             | 0.23              | 0.26          | 4.60          | 0.17            | —                  | 100          |
+| inside        | retina | scrub  | landed | 4.99                | 0.05         | 0.04            | 0.35           | 10.50            | 0.53              | 0.26          | 2.94          | 0.21            | —                  | 98           |
+| decks         | retina | scrub  | landed | 5.31                | 0.03         | 0.04            | 0.29           | 6.55             | 0.45              | 0.09          | 4.19          | 0.16            | —                  | 96           |
+| orbit         | retina | scrub  | landed | 4.31                | 0.03         | 0.03            | —              | —                | 0.78              | 0.26          | 0.27          | 0.15            | —                  | 32           |
+| pair-moon     | retina | scrub  | landed | 4.74                | 0.13         | 0.04            | 0.33           | 7.83             | 1.19              | 0.09          | 10.14         | 0.17            | 1.50               | 98           |
+| pair-neighbor | retina | scrub  | landed | 4.21                | 0.07         | 0.02            | 0.38           | 8.18             | 0.64              | 0.31          | 4.40          | 0.16            | 0.02               | 103          |
+| ground        | retina | fly    | landed | 4.13                | 0.05         | 0.01            | 0.23           | 0.46             | 0.87              | 0.30          | 3.00          | 0.16            | —                  | 40           |
+| orbit         | retina | fly    | landed | 2.53                | 0.03         | 0.01            | —              | —                | 0.78              | 0.27          | 0.05          | 0.17            | —                  | 24           |
+| earth-ground  | retina | fly    | clouds | 3.85                | 0.16         | 0.01            | 0.14           | 0.50             | 0.12              | 0.31          | 2.25          | 0.53            | —                  | 41           |
+| earth-orbit   | retina | fly    | clouds | 2.68                | 0.03         | 0.01            | —              | —                | 0.79              | 0.25          | 0.05          | 0.16            | —                  | 25           |
 
 ## Campaign 1, `decisions`, at `8a01d311`
 
