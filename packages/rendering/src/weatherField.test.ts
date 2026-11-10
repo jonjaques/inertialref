@@ -25,6 +25,10 @@ import {
   levelLattice,
   levelOrigin,
   levelTurnMatrix,
+  MESOSCALE_GRADIENT,
+  MESOSCALE_WAVES,
+  mesoscaleDisplacement,
+  mesoscalePhases,
   sightForm,
 } from './weatherField.ts'
 import { levelProfile, readLevelProfile } from './weatherGenus.ts'
@@ -241,10 +245,28 @@ const smooth = (a: number, b: number, x: number) => {
 }
 
 /**
+ * The mesoscale displacement at a body point at t = 0, from the waves'
+ * definition and no reduction: `Σ a·cell·push·sin(k·p)`.
+ */
+function displaced(p: Vec3, cell: number): Vec3 {
+  let at = p
+  for (const { along, push, wavelength, amplitude } of MESOSCALE_WAVES) {
+    const k = (2 * Math.PI) / (wavelength * cell)
+    const a =
+      amplitude *
+      cell *
+      Math.sin(k * (along.x * p.x + along.y * p.y + along.z * p.z))
+    at = plus(at, scale(push, a))
+  }
+  return at
+}
+
+/**
  * Phase 0's recipe (`render/cloudDensity.ts`) at t = 0, where its drift is
- * zero and its lattice is the point over the cell: what the field must still
- * be before anything turns. Its numbers are the level's profile table's, so
- * this holds the recipe and the lattice, not the table.
+ * zero and its lattice is the point over the cell, read at the point the
+ * mesoscale displacement carries it to: what the field must still be before
+ * anything turns. Its numbers are the level's profile table's, so this holds
+ * the recipe and the lattice, not the table.
  */
 function asBuilt(weather: BodyWeather, sun: Vec3, p: Vec3, footprint: number) {
   const height = length(p) - weather.datumRadius
@@ -269,11 +291,12 @@ function asBuilt(weather: BodyWeather, sun: Vec3, p: Vec3, footprint: number) {
     climate.convective[k]!,
   )
   const cell = profile.cell
-  const base = baseNoiseTexture(scale(p, 1 / cell))
+  const q = displaced(p, cell)
+  const base = baseNoiseTexture(scale(q, 1 / cell))
   const reach = 1 - smooth(cell / 16, cell / 4, footprint)
   const erosion =
     reach > 0
-      ? detailNoiseTexture(scale(p, 4 / cell)) * profile.erosion * reach
+      ? detailNoiseTexture(scale(q, 4 / cell)) * profile.erosion * reach
       : 0
   const shaped = clamp01((base * shape - (1 - c)) / Math.max(c, 1e-6))
   const eroded = clamp01((shaped - erosion) / Math.max(1 - erosion, 1e-6))
@@ -292,40 +315,45 @@ function asBuilt(weather: BodyWeather, sun: Vec3, p: Vec3, footprint: number) {
 describe('the field', () => {
   const sun = { x: 0, y: 1, z: 0 }
 
-  it.each(SCENARIO_IDS)('%s: is phase 0’s recipe at t = 0', (id) => {
-    const weather = regimeWeather(world, id)
-    const clock = fieldClock(weather, 0)
-    fc.assert(
-      fc.property(
-        unit,
-        fc.integer({ min: 0, max: 2 }),
-        between(0, 1),
-        between(0, 5),
-        (direction, k, h, cells) => {
-          const level = weather.levels[k]!
-          const r =
-            weather.datumRadius + level.base + h * (level.top - level.base)
-          const p = scale(direction, r)
-          const footprint = cells * levelProfile(level).cell
-          const got = cloudFieldAt(weather, clock, sun, p, footprint)
-          const want = asBuilt(weather, sun, p, footprint)
-          expect(got.level).toBe(want.level)
-          // The field reduces the lattice by its period before it divides
-          // by the cell, and phase 0's read does not: two float64 roundings
-          // of a coordinate 5 × 10⁴ texels out, through a remap that
-          // divides by the cover, measured at 5 × 10⁻¹⁰.
-          const ROUNDING = 1e-8
-          expect(Math.abs(got.fraction - want.fraction)).toBeLessThan(ROUNDING)
-          expect(Math.abs(got.sigma - want.sigma)).toBeLessThan(
-            ROUNDING * Math.max(1, want.sigma),
-          )
-          if (want.level >= 0)
-            expect(Math.abs(got.radius - want.radius!)).toBeLessThan(ROUNDING)
-        },
-      ),
-      { numRuns: 150 },
-    )
-  })
+  it.each(SCENARIO_IDS)(
+    '%s: is phase 0’s recipe at t = 0, read through the mesoscale displacement',
+    (id) => {
+      const weather = regimeWeather(world, id)
+      const clock = fieldClock(weather, 0)
+      fc.assert(
+        fc.property(
+          unit,
+          fc.integer({ min: 0, max: 2 }),
+          between(0, 1),
+          between(0, 5),
+          (direction, k, h, cells) => {
+            const level = weather.levels[k]!
+            const r =
+              weather.datumRadius + level.base + h * (level.top - level.base)
+            const p = scale(direction, r)
+            const footprint = cells * levelProfile(level).cell
+            const got = cloudFieldAt(weather, clock, sun, p, footprint)
+            const want = asBuilt(weather, sun, p, footprint)
+            expect(got.level).toBe(want.level)
+            // The field reduces the lattice by its period before it divides
+            // by the cell, and phase 0's read does not: two float64 roundings
+            // of a coordinate 5 × 10⁴ texels out, through a remap that
+            // divides by the cover, measured at 5 × 10⁻¹⁰.
+            const ROUNDING = 1e-8
+            expect(Math.abs(got.fraction - want.fraction)).toBeLessThan(
+              ROUNDING,
+            )
+            expect(Math.abs(got.sigma - want.sigma)).toBeLessThan(
+              ROUNDING * Math.max(1, want.sigma),
+            )
+            if (want.level >= 0)
+              expect(Math.abs(got.radius - want.radius!)).toBeLessThan(ROUNDING)
+          },
+        ),
+        { numRuns: 150 },
+      )
+    },
+  )
 
   it('holds, unresolved, the level’s cover and the profile’s mean, whatever the noise', () => {
     const weather = regimeWeather(world, 'fair-cumulus')
@@ -632,6 +660,349 @@ describe('the sight count', () => {
             sightForm(counts[0]!.clear, thickness, zenith, sight) - clear,
           ),
         ).toBeLessThanOrEqual(0.1 * clear)
+    },
+  )
+})
+
+/* ------------------------------------------------------------------------- */
+/* The mesoscale displacement                                                 */
+/* ------------------------------------------------------------------------- */
+
+describe('the mesoscale displacement', () => {
+  it('displaces each wave across its own direction, so the field is divergence-free and never folds', () => {
+    let steepest = 0
+    for (const { along, push, wavelength, amplitude } of MESOSCALE_WAVES) {
+      expect(length(along)).toBeCloseTo(1, 14)
+      expect(length(push)).toBeCloseTo(1, 14)
+      expect(
+        Math.abs(along.x * push.x + along.y * push.y + along.z * push.z),
+      ).toBeLessThan(1e-14)
+      const gradient = (2 * Math.PI * amplitude) / wavelength
+      expect(gradient).toBeCloseTo(MESOSCALE_GRADIENT, 14)
+      steepest += gradient
+    }
+    // The noise folds over itself where the displacement's gradient reaches
+    // one; six waves aligned at their steepest reach 0.66.
+    expect(steepest).toBeLessThan(1)
+  })
+
+  const weatherOf = (omega: number): BodyWeather => ({
+    ...regimeWeather(world, 'fair-cumulus'),
+    turn: [omega, omega, omega],
+  })
+  const point = fc
+    .tuple(unit, between(0, 15_000))
+    .map(([d, h]) => scale(d, world.radius + h))
+  const instant = between(0, 3.2e8)
+  const offset = fc.tuple(unit, between(0, 2e6)).map(([d, r]) => scale(d, r))
+  const cell = 1200
+  /** Two angles' distance on the circle. */
+  const apart = (a: number, b: number): number =>
+    Math.abs(Math.sin((a - b) / 2)) * 2
+
+  it('is the same from any eye: the eye’s phases and the turned offset give the point’s own', () => {
+    fc.assert(
+      fc.property(rate, instant, point, offset, (omega, time, p, a) => {
+        const clock = fieldClock(weatherOf(omega), time)
+        const eye = plus(p, a)
+        const m = levelTurnMatrix(clock, 0)
+        const d = minus(p, eye)
+        const turned = {
+          x: m[0]! * d.x + m[1]! * d.y + m[2]! * d.z,
+          y: m[3]! * d.x + m[4]! * d.y + m[5]! * d.z,
+          z: m[6]! * d.x + m[7]! * d.y + m[8]! * d.z,
+        }
+        const atEye = mesoscalePhases(clock, 0, eye, cell)
+        const atPoint = mesoscalePhases(clock, 0, p, cell)
+        MESOSCALE_WAVES.forEach(({ along, wavelength }, j) => {
+          const k = (2 * Math.PI) / (wavelength * cell)
+          const seen =
+            atEye[j]! +
+            k * (along.x * turned.x + along.y * turned.y + along.z * turned.z)
+          // Rounding: 2,000 km of offset is 600 rad of phase, and the
+          // eye's and the point's phases each round at 10⁻¹² of a turn.
+          expect(apart(seen, atPoint[j]!)).toBeLessThan(1e-9)
+        })
+      }),
+      { numRuns: 300 },
+    )
+  })
+
+  it('travels with the level’s lattice: a frame later, the point the lattice carried has the same displacement', () => {
+    fc.assert(
+      fc.property(rate, instant, point, (omega, time, p) => {
+        const weather = weatherOf(omega)
+        const step = time + 1 / 60 - time
+        const moved = (() => {
+          const q = { x: p.x, y: p.y - weather.drift * step, z: p.z }
+          const a = omega * step
+          return {
+            x: Math.cos(a) * q.x + Math.sin(a) * q.z,
+            y: q.y,
+            z: -Math.sin(a) * q.x + Math.cos(a) * q.z,
+          }
+        })()
+        const before = mesoscaleDisplacement(
+          mesoscalePhases(fieldClock(weather, time), 0, p, cell),
+          cell,
+        )
+        const after = mesoscaleDisplacement(
+          mesoscalePhases(fieldClock(weather, time + 1 / 60), 0, moved, cell),
+          cell,
+        )
+        // As the lattice test's bound: the instant's float64 step times ω
+        // at this radius, times the displacement's gradient, under 0.66.
+        const grid = 2 ** (Math.floor(Math.log2(Math.max(time, 1))) - 52)
+        expect(length(minus(after, before))).toBeLessThan(
+          4 * grid * Math.abs(omega) * length(p) + 1e-7,
+        )
+      }),
+      { numRuns: 300 },
+    )
+  })
+})
+
+/* ------------------------------------------------------------------------- */
+/* No tile from orbit                                                         */
+/* ------------------------------------------------------------------------- */
+
+/** In-place radix-2 FFT of one row or column. */
+function fft(re: Float64Array, im: Float64Array, inverse: boolean): void {
+  const n = re.length
+  for (let i = 1, j = 0; i < n; i += 1) {
+    let bit = n >> 1
+    for (; j & bit; bit >>= 1) j ^= bit
+    j ^= bit
+    if (i < j) {
+      ;[re[i], re[j]] = [re[j]!, re[i]!]
+      ;[im[i], im[j]] = [im[j]!, im[i]!]
+    }
+  }
+  for (let size = 2; size <= n; size <<= 1) {
+    const turn = ((inverse ? 2 : -2) * Math.PI) / size
+    const wr = Math.cos(turn)
+    const wi = Math.sin(turn)
+    for (let start = 0; start < n; start += size) {
+      let cr = 1
+      let ci = 0
+      for (let j = 0; j < size / 2; j += 1) {
+        const a = start + j
+        const b = a + size / 2
+        const vr = re[b]! * cr - im[b]! * ci
+        const vi = re[b]! * ci + im[b]! * cr
+        re[b] = re[a]! - vr
+        im[b] = im[a]! - vi
+        re[a] = re[a]! + vr
+        im[a] = im[a]! + vi
+        const next = cr * wr - ci * wi
+        ci = cr * wi + ci * wr
+        cr = next
+      }
+    }
+  }
+  if (inverse)
+    for (let i = 0; i < n; i += 1) {
+      re[i] = re[i]! / n
+      im[i] = im[i]! / n
+    }
+}
+
+/** A map's correlation with itself at every lag, as sums, on a grid padded to twice its size. */
+function selfCorrelation(
+  map: Float64Array,
+  n: number,
+  size: number,
+): Float64Array {
+  const re = new Float64Array(size * size)
+  const im = new Float64Array(size * size)
+  for (let y = 0; y < n; y += 1)
+    for (let x = 0; x < n; x += 1) re[y * size + x] = map[y * n + x]!
+  const pass = (inverse: boolean) => {
+    const r = new Float64Array(size)
+    const i = new Float64Array(size)
+    for (const rows of [true, false])
+      for (let a = 0; a < size; a += 1) {
+        for (let b = 0; b < size; b += 1) {
+          const at = rows ? a * size + b : b * size + a
+          r[b] = re[at]!
+          i[b] = im[at]!
+        }
+        fft(r, i, inverse)
+        for (let b = 0; b < size; b += 1) {
+          const at = rows ? a * size + b : b * size + a
+          re[at] = r[b]!
+          im[at] = i[b]!
+        }
+      }
+  }
+  pass(false)
+  for (let k = 0; k < size * size; k += 1) {
+    re[k] = re[k]! * re[k]! + im[k]! * im[k]!
+    im[k] = 0
+  }
+  pass(true)
+  return re
+}
+
+/**
+ * A footprint's cloud-or-clear map, a column a texel: cloud where any of
+ * five heights through the low level holds σ′·fraction over 10⁻⁵ 1/m at a
+ * footprint of zero.
+ */
+function cloudMap(
+  weather: BodyWeather,
+  time: number,
+  latitude: number,
+  longitude: number,
+  half: number,
+  grid: number,
+): { readonly map: Uint8Array; readonly n: number } {
+  const { up, east, north } = compass(latitude, longitude)
+  const clock = fieldClock(weather, time)
+  const radius = weather.datumRadius
+  const level = weather.levels[0]!
+  const n = Math.round((2 * half) / grid) + 1
+  const map = new Uint8Array(n * n)
+  for (let j = 0; j < n; j += 1)
+    for (let i = 0; i < n; i += 1) {
+      const d = plus(
+        up,
+        plus(
+          scale(east, (-half + i * grid) / radius),
+          scale(north, (-half + j * grid) / radius),
+        ),
+      )
+      const direction = scale(d, 1 / length(d))
+      for (const h of [0.15, 0.3, 0.45, 0.6, 0.75]) {
+        const r = radius + level.base + h * (level.top - level.base)
+        const at = cloudFieldAt(weather, clock, up, scale(direction, r), 0)
+        if (at.fraction * at.sigma > 1e-5) {
+          map[j * n + i] = 1
+          break
+        }
+      }
+    }
+  return { map, n }
+}
+
+/**
+ * The largest normalized autocorrelation of a map at any lag from 2 km to
+ * half its width, each lag over the pairs that overlap at it, and the map's
+ * cloudy share.
+ */
+function largestRepeat(
+  map: Uint8Array,
+  n: number,
+  grid: number,
+): { readonly peak: number; readonly cloudy: number } {
+  let cloudy = 0
+  for (const value of map) cloudy += value
+  cloudy /= map.length
+  let size = 1
+  while (size < 2 * n) size <<= 1
+  const centered = new Float64Array(n * n)
+  const ones = new Float64Array(n * n).fill(1)
+  map.forEach((value, k) => (centered[k] = value - cloudy))
+  const sums = selfCorrelation(centered, n, size)
+  const counts = selfCorrelation(ones, n, size)
+  const variance = cloudy * (1 - cloudy)
+  const reach = Math.floor((n - 1) / 2)
+  let peak = -1
+  for (let dy = -reach; dy <= reach; dy += 1)
+    for (let dx = 0; dx <= reach; dx += 1) {
+      const lag = Math.hypot(dx, dy) * grid
+      if (lag < 2000 || lag > reach * grid) continue
+      const k = ((dy + size) % size) * size + dx
+      peak = Math.max(peak, sums[k]! / Math.round(counts[k]!) / variance)
+    }
+  return { peak, cloudy }
+}
+
+const earth: Body = (() => {
+  const stub = resolveSystem(
+    galaxySeedOf(ROOT, MILKY_WAY),
+    SOL_ONLY_CATALOG,
+    systemId('SOL'),
+  )!
+  return [...walkBodies(generateSystem(ROOT, MILKY_WAY, stub))].find(
+    (one) => formatAddress(one.address) === 'g:milky-way/s:SOL/b:2',
+  )!
+})()
+
+describe('the field from orbit', () => {
+  /*
+   * A cloud-or-clear map at 200 m, over 80 km about a cornerstone's stance
+   * at its instant (`packages/devtools/src/cornerstones.json`), correlates
+   * with itself at no lag from 2 km to 40 km by more than this.
+   *
+   * Without the mesoscale displacement the base noise's 9.6 km tile shows
+   * through: E1 correlates at 0.876 at 23.5 km, G4 at 0.828 at 32 km, G6
+   * at 0.303 over 80 km and 0.116 over 40 km (the tile lies across that
+   * stance's plane). G6's two are its descent's footprint: the middle
+   * 80 km of the frame from 400 km, and the whole 46 km frame from 40 km,
+   * whose lags reach 20 km. With it: 0.249, 0.154, 0.213 and 0.140, and over 24
+   * places drawn at random on Earth and on the cornerstones' world under
+   * cumulus and stratocumulus, 0.296 at most. A cumulus field's own
+   * autocorrelation falls to near nothing within a few cells, and an
+   * organized one rises again at its streets' or cells' spacing; 0.3 is
+   * a repeat no eye takes for a tile, set at the measured worst and not
+   * from a measured photograph. Under 2 km is a cloud's own extent.
+   */
+  const ORGANIZED = 0.3
+
+  it.each([
+    [
+      'E1',
+      earth,
+      'fair-cumulus',
+      -0.08726646259971647,
+      -1.0471975511965976,
+      17424.925169385428,
+      40e3,
+    ],
+    [
+      'G4',
+      world,
+      'stratocumulus',
+      -0.2928832177490203,
+      0.6526948251778841,
+      6219.386038889019,
+      40e3,
+    ],
+    [
+      'G6 at 400 km',
+      world,
+      'stratocumulus',
+      -0.29062177877890516,
+      0.6500744120490799,
+      86090.56815677337,
+      40e3,
+    ],
+    [
+      'G6 at 40 km',
+      world,
+      'stratocumulus',
+      -0.29062177877890516,
+      0.6500744120490799,
+      86090.56815677337,
+      20e3,
+    ],
+  ] as const)(
+    '%s: no lag repeats the field',
+    (_, body, regime, latitude, longitude, time, half) => {
+      const weather = regimeWeather(body, regime)
+      const { map, n } = cloudMap(weather, time, latitude, longitude, half, 200)
+      const { peak, cloudy } = largestRepeat(map, n, 200)
+      expect(peak).toBeLessThan(ORGANIZED)
+      // The stance's share of cloudy columns is the regime's, as without
+      // the displacement: 0.216 at E1 and 0.77 under stratocumulus.
+      if (regime === 'fair-cumulus') {
+        expect(cloudy).toBeGreaterThan(0.19)
+        expect(cloudy).toBeLessThan(0.24)
+      } else {
+        expect(cloudy).toBeGreaterThan(0.74)
+        expect(cloudy).toBeLessThan(0.8)
+      }
     },
   )
 })
