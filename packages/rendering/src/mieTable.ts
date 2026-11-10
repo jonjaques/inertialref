@@ -103,6 +103,50 @@ function halfToFloat(half: number): number {
   return sign * (1 + mantissa / 1024) * 2 ** (exponent - 15)
 }
 
+const FLOAT = new Float32Array(1)
+const FLOAT_BITS = new Uint32Array(FLOAT.buffer)
+
+/**
+ * IEEE binary16 bits of `value` as a float32 holds it, rounded to nearest,
+ * ties to even: `Math.f16round`'s rounding of a float32, as bits. Written
+ * out because a worker holds no `three` to convert with, and `Math.f16round`
+ * is younger than some browsers WebGPU runs in; and not three's
+ * `DataUtils.toHalfFloat`, which truncates. Past 65504 it is an infinity,
+ * as the standard's rounding is.
+ */
+export function halfBitsOf(value: number): number {
+  FLOAT[0] = value
+  const bits = FLOAT_BITS[0]!
+  const sign = (bits >>> 16) & 0x8000
+  const exponent = (bits >>> 23) & 0xff
+  const mantissa = bits & 0x7fffff
+  if (exponent === 0xff) return sign | 0x7c00 | (mantissa === 0 ? 0 : 0x200)
+  const biased = exponent - 112
+  if (biased >= 0x1f) return sign | 0x7c00
+  const round = (kept: number, rest: number, half: number): number =>
+    rest > half || (rest === half && (kept & 1) === 1) ? kept + 1 : kept
+  if (biased <= 0) {
+    // A subnormal half, or nothing: the implicit bit joins the mantissa.
+    if (biased < -10) return sign
+    const shift = 14 - biased
+    const full = mantissa | 0x800000
+    return (
+      sign | round(full >>> shift, full & ((1 << shift) - 1), 1 << (shift - 1))
+    )
+  }
+  // A carry out of the mantissa steps the exponent, up to the infinity.
+  return (
+    sign | round((biased << 10) | (mantissa >>> 13), mantissa & 0x1fff, 0x1000)
+  )
+}
+
+/** Each value's `halfBitsOf`, in order: an atlas as its RGBA16F texels. */
+export function toHalves(values: Float32Array): Uint16Array {
+  const halves = new Uint16Array(values.length)
+  for (let k = 0; k < values.length; k += 1) halves[k] = halfBitsOf(values[k]!)
+  return halves
+}
+
 /**
  * `count` little-endian half floats from base64, as a phase table holds its
  * texels. Throws where the text holds another number of them: `what` names

@@ -5,6 +5,7 @@ import {
   convolveDisk,
   decodeMieTable,
   diffractionShare,
+  halfBitsOf,
   type MieTable,
   type MieTableSource,
   mieDroplets,
@@ -16,6 +17,7 @@ import {
   radiusOf,
   sampleAtlas,
   samplePhase,
+  toHalves,
 } from './mieTable.ts'
 import { MIE_DROPLETS } from './mieDroplets.generated.ts'
 import { iceAggregate, type IceTable } from './iceTable.ts'
@@ -616,5 +618,81 @@ describe('the phase atlas', () => {
         0,
       ),
     ).toThrow('no light past the diffraction')
+  })
+})
+
+/*
+ * Node's float16, which the core project's lib (ES2024) does not type: the
+ * reference the converter is held to, present at runtime in Node 26.
+ */
+const f16 = {
+  round: (Math as unknown as { f16round(x: number): number }).f16round,
+  view: () =>
+    new DataView(new ArrayBuffer(2)) as unknown as {
+      setFloat16(at: number, value: number): void
+      getFloat16(at: number): number
+      setUint16(at: number, value: number): void
+      getUint16(at: number): number
+    },
+}
+
+describe('the atlas’s half floats', () => {
+  /** `Math.f16round`'s rounding of a value, as bits. */
+  const reference = (value: number): number => {
+    const view = f16.view()
+    view.setFloat16(0, f16.round(value))
+    return view.getUint16(0)
+  }
+
+  it('round a float32 to nearest, ties to even, as `Math.f16round` does, across every exponent', () => {
+    const float = new Float32Array(1)
+    const bits = new Uint32Array(float.buffer)
+    // A stride prime to 2³², so every exponent and both signs are crossed,
+    // a quarter of a million patterns; NaN's payload is not compared.
+    for (let pattern = 0; pattern < 2 ** 32; pattern += 16_411) {
+      bits[0] = pattern
+      if (Number.isNaN(float[0]!)) continue
+      expect(halfBitsOf(float[0]!)).toBe(reference(float[0]!))
+    }
+    // The edges: ties at both ends of a binade and of the subnormals, the
+    // largest half and the tie past it, and the least subnormal's half.
+    for (const value of [
+      0,
+      -0,
+      1,
+      1 + 2 ** -11,
+      1 + 3 * 2 ** -11,
+      2 ** -24,
+      2 ** -25,
+      3 * 2 ** -26,
+      2 ** -14 - 2 ** -25,
+      65504,
+      65519,
+      65520,
+      -65520,
+      Infinity,
+      -Infinity,
+    ])
+      expect(halfBitsOf(value), String(value)).toBe(
+        reference(Math.fround(value)),
+      )
+    expect(halfBitsOf(Number.NaN) & 0x7c00).toBe(0x7c00)
+    expect(halfBitsOf(Number.NaN) & 0x3ff).not.toBe(0)
+  })
+
+  it('leave a table already in half floats as it is, bit for bit', () => {
+    // A half's value is exact in a float32, so a table decoded from halves
+    // must convert back to the bits it was decoded from: the point sun's
+    // atlas is the generated file's halves, whatever the rounding.
+    const view = f16.view()
+    const valueOf = (bits: number): number => {
+      view.setUint16(0, bits)
+      return view.getFloat16(0)
+    }
+    const halves = toHalves(table.phase)
+    expect(halves).toHaveLength(table.phase.length)
+    for (let k = 0; k < halves.length; k += 1)
+      if (valueOf(halves[k]!) !== table.phase[k])
+        expect(valueOf(halves[k]!)).toBe(table.phase[k])
   })
 })

@@ -1,5 +1,8 @@
 import { createTaskRegistry, type TaskRegistry } from '@inertialref/workers'
-import { bakeAtmosphereTask } from '../render/atmosphereTask.ts'
+import {
+  bakeAtmosphereTask,
+  convolvePhaseTask,
+} from '../render/atmosphereTask.ts'
 
 /**
  * What this client's workers serve: the shared registry, plus the tasks only
@@ -16,5 +19,6 @@ import { bakeAtmosphereTask } from '../render/atmosphereTask.ts'
 export function createGameTaskRegistry(): TaskRegistry {
   const registry = createTaskRegistry()
   registry.register(bakeAtmosphereTask)
+  registry.register(convolvePhaseTask)
   return registry
 }

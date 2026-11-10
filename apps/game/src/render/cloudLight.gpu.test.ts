@@ -1,5 +1,18 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { DataUtils, type Node, StorageBufferAttribute } from 'three/webgpu'
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest'
+import {
+  DataUtils,
+  type Node,
+  StorageBufferAttribute,
+  type Texture,
+} from 'three/webgpu'
 import {
   dot,
   exp,
@@ -7,10 +20,13 @@ import {
   Fn,
   If,
   instanceIndex,
+  int,
+  ivec2,
   length,
   max,
   saturate,
   storage,
+  textureLoad,
   uint,
   uniform,
   vec3,
@@ -29,8 +45,10 @@ import {
   radiusIndex,
   radiusOf,
   sampleAtlas,
+  toHalves,
 } from '@inertialref/rendering'
 import { SOLAR_PLANETS } from '@inertialref/universe'
+import { createInlineWorker, WorkerPool } from '@inertialref/workers'
 import {
   type AirUniforms,
   airMediumAt,
@@ -51,12 +69,36 @@ import {
   type CloudSunDepthNodes,
   slabMedium,
 } from './cloudNodes.ts'
-import { CloudPhase } from './cloudPhase.ts'
+import { CloudPhase, createCloudPhase } from './cloudPhase.ts'
 import { cloudSunFn } from './cloudSunlight.ts'
 import { type CloudBodyUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { altitudeAt } from './cloudGeometry.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { setSceneExposure } from './radiance.ts'
+import { createGameTaskRegistry } from '../workers/registry.ts'
+
+/*
+ * The atlas's convolutions are counted, not timed: `phaseAtlas` is wrapped
+ * in a counter, so "nothing convolved on this thread inside the call" is a
+ * count that has not moved when `serve` returns. The inline pool's worker
+ * shares this thread but runs only after the call has returned, so its
+ * convolution is counted after the answer lands, and only then.
+ */
+const convolutions = vi.hoisted(() => ({ count: 0 }))
+vi.mock('@inertialref/rendering', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@inertialref/rendering')>()
+  return {
+    ...real,
+    phaseAtlas: (...args: Parameters<typeof real.phaseAtlas>) => {
+      convolutions.count += 1
+      return real.phaseAtlas(...args)
+    },
+  }
+})
+
+beforeEach(() => {
+  convolutions.count = 0
+})
 
 /*
  * The light a cloud sample is lit by (§5.9, §5.10) and the air's pieces the
@@ -545,12 +587,12 @@ function structuredIce(diameters: number, poison?: number): IceTable {
 /** The sun's angular radius from Earth, radians (phase 1 design §5.4). */
 const EARTH_SUN = 0.265 * (Math.PI / 180)
 
-/** An atlas's texels as the GPU holds them: each a half float. */
+/** An atlas's texels as the GPU holds them: each a half float, as `CloudPhase` rounds it. */
 function asHalves(atlas: PhaseAtlas): PhaseAtlas {
   return {
     ...atlas,
-    texels: atlas.texels.map((v) =>
-      DataUtils.fromHalfFloat(DataUtils.toHalfFloat(v)),
+    texels: Float32Array.from(toHalves(atlas.texels), (h) =>
+      DataUtils.fromHalfFloat(h),
     ),
   }
 }
@@ -708,7 +750,7 @@ describe('the phase atlas', () => {
     const droplets = structuredTable(1024, 32)
     const ice = structuredIce(PHASE_ATLAS.iceRows)
     const phase = new CloudPhase(droplets, ice)
-    expect(phase.serve(EARTH_SUN)).toBe(true)
+    expect(phase.serve(EARTH_SUN, null)).toBe('convolved')
     const atlas = asHalves(phaseAtlas(droplets, ice, EARTH_SUN))
     const { rows, phased } = await lookups(phase, droplets, ice)
     expect(worstShare(atlas, rows, phased, 4)).toBeLessThanOrEqual(1)
@@ -723,7 +765,7 @@ describe('the phase atlas', () => {
     const droplets = mieDroplets()
     const ice = iceAggregate()
     const phase = new CloudPhase(droplets, ice)
-    phase.serve(EARTH_SUN)
+    phase.serve(EARTH_SUN, null)
     const atlas = asHalves(phaseAtlas(droplets, ice, EARTH_SUN))
     const { rows, phased } = await lookups(phase, droplets, ice)
     expect(worstShare(atlas, rows, phased, 4)).toBeLessThanOrEqual(1)
@@ -791,7 +833,7 @@ describe('the phase atlas', () => {
     const lastDroplet = PHASE_ATLAS.dropletRow + droplets.radii - 1
     const poisonedIce = structuredIce(PHASE_ATLAS.iceRows, POISON)
     const intoIce = new CloudPhase(droplets, poisonedIce)
-    intoIce.serve(EARTH_SUN)
+    intoIce.serve(EARTH_SUN, null)
     for (const radius of [droplets.radiusMax, droplets.radiusMax * 2])
       expect(
         share(
@@ -816,7 +858,7 @@ describe('the phase atlas', () => {
       phase: new Float32Array(droplets.phase.length).fill(POISON),
     }
     const intoDroplets = new CloudPhase(poisonedDroplets, ice)
-    intoDroplets.serve(EARTH_SUN)
+    intoDroplets.serve(EARTH_SUN, null)
     for (const radius of [ice.diameterMin / 2, 1])
       expect(
         share(
@@ -830,15 +872,15 @@ describe('the phase atlas', () => {
 
   it('convolves again when the served sun has moved 1%, and not before', () => {
     const phase = new CloudPhase(mieDroplets(), iceAggregate())
-    expect(phase.serve(0)).toBe(false)
-    expect(phase.serve(EARTH_SUN)).toBe(true)
-    expect(phase.serve(EARTH_SUN * 1.009)).toBe(false)
+    expect(phase.serve(0, null)).toBe('held')
+    expect(phase.serve(EARTH_SUN, null)).toBe('convolved')
+    expect(phase.serve(EARTH_SUN * 1.009, null)).toBe('held')
     expect(phase.angularRadius).toBe(EARTH_SUN)
-    expect(phase.serve(EARTH_SUN * 0.985)).toBe(true)
+    expect(phase.serve(EARTH_SUN * 0.985, null)).toBe('convolved')
     expect(phase.angularRadius).toBe(EARTH_SUN * 0.985)
-    expect(phase.serve(0)).toBe(true)
+    expect(phase.serve(0, null)).toBe('convolved')
     phase.dispose()
-    expect(phase.serve(EARTH_SUN)).toBe(false)
+    expect(phase.serve(EARTH_SUN, null)).toBe('held')
   })
 
   it('holds the atlas at one level, 1024 × 64 RGBA16F of it, once warmed', async () => {
@@ -857,6 +899,153 @@ describe('the phase atlas', () => {
     expect([texture.width, texture.height]).toEqual([1024, 64])
     phase.dispose()
     expect(phase.bytes).toBe(0)
+  })
+})
+
+describe('the atlas convolved on the pool', () => {
+  function inlinePool(): WorkerPool {
+    return new WorkerPool({
+      factory: () => createInlineWorker(createGameTaskRegistry()),
+      size: 1,
+    })
+  }
+
+  /** Every texel of a 1024 × 64 RGBA16F texture by `textureLoad`, as the device holds it. */
+  async function deviceTexels(map: Texture): Promise<Float32Array> {
+    const width = 1024
+    const count = width * PHASE_ATLAS.rows
+    const out = new StorageBufferAttribute(new Float32Array(count * 4), 1)
+    const into = storage(out, 'float', count * 4)
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(count)), () => {
+        const x = int(instanceIndex.mod(uint(width)))
+        const y = int(instanceIndex.div(uint(width)))
+        const texel = textureLoad(map, ivec2(x, y))
+        const to = instanceIndex.mul(4)
+        into.element(to).assign(texel.x)
+        into.element(to.add(1)).assign(texel.y)
+        into.element(to.add(2)).assign(texel.z)
+        into.element(to.add(3)).assign(texel.w)
+      })
+    })().compute(count)
+    await gpu.compute(kernel)
+    const values = new Float32Array(await gpu.readBuffer(out))
+    kernel.dispose()
+    return values
+  }
+
+  /** The main thread's convolution at a radius, half for half. */
+  const halves = (angularRadius: number): Float32Array =>
+    asHalves(phaseAtlas(mieDroplets(), iceAggregate(), angularRadius)).texels
+
+  /** A system's phase: the committed tables, which the pool's task convolves. */
+  const systemPhase = (): CloudPhase =>
+    createCloudPhase({ uniforms: createCloudUniforms() })
+
+  it('asks the pool and returns at once: nothing convolves on this thread inside the call', async () => {
+    const pool = inlinePool()
+    const phase = systemPhase()
+    try {
+      await phase.warm(gpu.renderer)
+      const before = convolutions.count
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(convolutions.count).toBe(before)
+      // The atlas keeps the point sun's table until the answer lands.
+      expect(phase.angularRadius).toBe(0)
+      await phase.served()
+      expect(convolutions.count).toBe(before + 1)
+      expect(phase.angularRadius).toBe(EARTH_SUN)
+    } finally {
+      phase.dispose()
+      pool.terminate()
+    }
+  })
+
+  it('lands on the device half for half what the main thread convolves', async () => {
+    const pool = inlinePool()
+    const phase = systemPhase()
+    try {
+      await phase.warm(gpu.renderer)
+      phase.serve(EARTH_SUN, pool)
+      await phase.served()
+      const expected = halves(EARTH_SUN)
+      const held = await deviceTexels(phase.texture)
+      expect(held).toEqual(expected)
+      // The control: the point sun's atlas is not it, so the read sees the
+      // upload rather than the table the atlas was built with.
+      expect(halves(0)).not.toEqual(expected)
+    } finally {
+      phase.dispose()
+      pool.terminate()
+    }
+  })
+
+  it('makes one job of two asks for one radius, and of an ask within 1% of the one in flight', async () => {
+    const pool = inlinePool()
+    const phase = systemPhase()
+    try {
+      const before = convolutions.count
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(phase.serve(EARTH_SUN * 1.005, pool)).toBe('asked')
+      await phase.served()
+      expect(convolutions.count).toBe(before + 1)
+      expect(phase.angularRadius).toBe(EARTH_SUN)
+      // Landed, a radius within 1% of it asks nothing at all.
+      expect(phase.serve(EARTH_SUN * 1.005, pool)).toBe('held')
+      await phase.served()
+      expect(convolutions.count).toBe(before + 1)
+    } finally {
+      phase.dispose()
+      pool.terminate()
+    }
+  })
+
+  it('drops an answer for a radius the served sun has left', async () => {
+    const pool = inlinePool()
+    const phase = systemPhase()
+    try {
+      await phase.warm(gpu.renderer)
+      // The sun goes back to the radius the atlas holds while the answer is
+      // in flight: the answer lands and is not bound.
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(phase.serve(0, pool)).toBe('held')
+      await phase.served()
+      expect(phase.angularRadius).toBe(0)
+      expect(await deviceTexels(phase.texture)).toEqual(halves(0))
+      // A second sun asked for while the first is in flight: the first's
+      // answer lands first and is dropped, the second's is bound.
+      const before = convolutions.count
+      expect(phase.serve(EARTH_SUN, pool)).toBe('asked')
+      expect(phase.serve(2 * EARTH_SUN, pool)).toBe('asked')
+      await phase.served()
+      expect(convolutions.count).toBe(before + 2)
+      expect(phase.angularRadius).toBe(2 * EARTH_SUN)
+      expect(await deviceTexels(phase.texture)).toEqual(halves(2 * EARTH_SUN))
+    } finally {
+      phase.dispose()
+      pool.terminate()
+    }
+  })
+
+  it('convolves inside the call where there is no pool, and for tables the pool does not hold', () => {
+    const before = convolutions.count
+    const phase = systemPhase()
+    // Construction lays out the point sun's atlas, which convolves nothing
+    // (`convolveDisk` at a radius of zero is a copy), and is counted.
+    expect(convolutions.count).toBe(before + 1)
+    expect(phase.serve(EARTH_SUN, null)).toBe('convolved')
+    expect(convolutions.count).toBe(before + 2)
+    expect(phase.angularRadius).toBe(EARTH_SUN)
+    phase.dispose()
+    const pool = inlinePool()
+    const own = new CloudPhase(structuredTable(1024, 32), iceAggregate())
+    try {
+      expect(own.serve(EARTH_SUN, pool)).toBe('convolved')
+    } finally {
+      own.dispose()
+      pool.terminate()
+    }
   })
 })
 
