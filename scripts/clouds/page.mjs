@@ -173,13 +173,14 @@ export async function cloudStep(step) {
       // Nothing lights an engine at a stance from a script yet. A row that
       // asks for one is then recorded as not taken, with the reason, rather
       // than failed: failing, it would refuse its batch after three tries.
+      // Set on every stance, lit or not: the light is the harness's and
+      // outlives the run, so the run after an overlay's would stand lit.
       let unlit = null
-      if (step.lit === true) {
-        if (typeof ir.lightEngine === 'function') ir.lightEngine(true)
-        else
-          unlit =
-            'this page offers no ir.lightEngine(), so nothing is drawn over the clouds at this stance'
-      }
+      if (typeof ir.lightEngine === 'function')
+        ir.lightEngine(step.lit === true)
+      else if (step.lit === true)
+        unlit =
+          'this page offers no ir.lightEngine(), so nothing is drawn over the clouds at this stance'
       const lens = ir.lens()
       return {
         light: ir.light(),
@@ -515,6 +516,18 @@ const STEPS = {
       limit: PASS_LIMIT,
       ...at,
     }),
+    // The base's passes too where two forms are compared: `scene over
+    // clouds` is the base's, and `cloud composite` the candidate's.
+    ...(run.timelineBase
+      ? [
+          js('timeline:base', {
+            kind: 'timeline',
+            levers: run.base,
+            limit: PASS_LIMIT,
+            ...at,
+          }),
+        ]
+      : []),
     js('report', { kind: 'report', levers: run.base, ...at }),
   ],
   residual: (run, shots) => [
@@ -711,6 +724,8 @@ const READ = {
     const passes = value('timeline') ?? null
     const labels = Object.entries(passes?.labels ?? {})
     const pass = (name) => labels.find(([n]) => n === name)?.[1].ms ?? null
+    const base = value('timeline:base') ?? null
+    const basePass = (name) => base?.labels?.[name]?.ms ?? null
     return {
       levers: { base: run.base, candidate: run.candidate },
       pairs,
@@ -728,6 +743,18 @@ const READ = {
       bytes: passes?.clouds?.bytes?.total ?? null,
       // The candidate's hash as the page resolved it, read under its levers.
       pageHash: passes?.clouds?.leversHash ?? null,
+      composite: pass('cloud composite'),
+      ...(run.timelineBase
+        ? {
+            baseSceneOver: basePass('scene over clouds'),
+            baseComposite: basePass('cloud composite'),
+          }
+        : {}),
+      // The form each side's frame drew, where the report says (§4.12).
+      form: {
+        base: formOf(value('report')?.clouds),
+        candidate: formOf(passes?.clouds),
+      },
     }
   },
   residual(run, value) {
@@ -794,6 +821,19 @@ const READ = {
     }
   },
 }
+
+/**
+ * The composite's form a frame drew, from the report's `overPass`, `{ form,
+ * depth }`: `form` one of `passes`, `lean` and `chain` (a `chain` lever that
+ * gave the frame back to pass B reads `passes`), and `depth` pass B's,
+ * `read-only` or `stored`, null where there is no pass B. The report does not
+ * carry it until integration writes it, and a row is not failed for that: it
+ * reads `unknown`.
+ */
+export const formOf = (report) => ({
+  form: report?.overPass?.form ?? 'unknown',
+  depth: report?.overPass?.depth ?? (report?.overPass ? null : 'unknown'),
+})
 
 /** The figures of one invocation: `out` is drive.mjs's `--json`, whose
  *  results are in the order of `steps`. */
@@ -1011,6 +1051,14 @@ export const AB_COLUMNS = [
     (r) => `${fixed(r.summary?.delta)} (${fixed(r.summary?.spread)})`,
   ],
   ['allowance ms', (r) => fixed(r.summary?.allowance)],
+  ['cloud composite', (r) => fixed(r.composite)],
+  [
+    'form drawn (pass B depth)',
+    (r) =>
+      r.batch === 'over' && r.form
+        ? `${r.form.candidate.form} (${r.form.candidate.depth ?? 'none'})`
+        : '—',
+  ],
   ...OPERATING,
   ['scene over clouds', (r) => fixed(r.sceneOver)],
   ['cloud trace', (r) => fixed(r.trace)],
