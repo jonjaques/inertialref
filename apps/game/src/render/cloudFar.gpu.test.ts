@@ -41,10 +41,10 @@ import {
   type ShellHeights,
   WEATHER_SCENARIOS,
 } from '@inertialref/rendering'
-import { type CloudFarField, createFarField } from './cloudFar.ts'
 import {
   type AirMediumFn,
   CloudFarAtlas,
+  type CloudFarField,
   FAR_BLOCK,
   FAR_CYCLE,
   FAR_HEIGHT,
@@ -52,10 +52,9 @@ import {
   FAR_WIDTH,
   farBlock,
 } from './cloudFarAtlas.ts'
-import { CloudFarSpheres } from './cloudFarSpheres.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import { cloudRay } from './cloudGeometry.ts'
-import { type CloudFarKind, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
+import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
   type CloudBudget,
   type CloudMediumFn,
@@ -73,19 +72,18 @@ import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 
 /*
- * The far field on the GPU, both candidates, against analytic media bound
+ * The far atlas on the GPU, against analytic media bound
  * through the stand-ins (§3.5): a slab's transmittance, light and depth
  * moments against the fine march's limit computed here in float64, the
  * atlas's bake against the same statistics computed on the CPU, the bake's
  * cadence and allocation, and the blocked air's beam by class (§9).
  *
  * The media are the contracts' slabs, so a column is the same everywhere and
- * what a candidate's representation loses is only what its march loses. The
- * atlas stores in-cloud τ as an 8-bit log code and base and top as 8-bit
- * fractions of the layer's range, so its slabs sit on code values: a slab
- * from 1,000 m to 2,500 m is codes 51 and 204 exactly, and τ = 513^(m/255) − 1
- * is code m. The spheres store half floats, which every slab here is within
- * 2.5 × 10⁻⁴ of.
+ * what the atlas's representation loses is only what its march loses. It
+ * stores in-cloud τ as an 8-bit log code and base and top as 8-bit fractions
+ * of the layer's range, so its slabs sit on code values: a slab from 1,000 m
+ * to 2,500 m is codes 51 and 204 exactly, and τ = 513^(m/255) − 1 is code
+ * m.
  */
 
 const TIMESTAMPS = await adapterOffers('timestamp-query')
@@ -244,13 +242,16 @@ function placeBody(
 
 /** A frame as the far field reads one: its levers, its scenario, its bodies, its jump. */
 function frameFor(
-  kind: CloudFarKind,
-  options: { readonly jump?: boolean; readonly second?: boolean } = {},
+  options: {
+    readonly jump?: boolean
+    readonly served?: boolean
+    readonly second?: boolean
+  } = {},
 ): CloudFrame {
   return {
-    levers: { ...DEFAULT_CLOUD_LEVERS, on: true, far: kind },
+    levers: { ...DEFAULT_CLOUD_LEVERS, on: true },
     scenario: WEATHER_SCENARIOS.overcast,
-    served: { address: 'served' },
+    served: options.served === false ? null : { address: 'served' },
     second: options.second === true ? { address: 'second' } : null,
     jump: options.jump ?? false,
   } as unknown as CloudFrame
@@ -267,7 +268,6 @@ interface Built {
 }
 
 function build(
-  kind: CloudFarKind,
   medium: CloudMediumFn,
   place: Placement,
   options: { readonly air?: AirMediumFn; readonly second?: boolean } = {},
@@ -282,22 +282,19 @@ function build(
     phase: CLOUD_STAND_INS.phase(),
     body: side,
   } as const
-  const field =
-    options.air === undefined
-      ? createFarField(kind, deps)
-      : kind === 'atlas'
-        ? new CloudFarAtlas(deps, { air: options.air })
-        : new CloudFarSpheres(deps, { air: options.air })
+  const field = new CloudFarAtlas(
+    deps,
+    options.air === undefined ? {} : { air: options.air },
+  )
   return { field, uniforms, body }
 }
 
 /** Every block once, after the warm-up. */
 async function bake(built: Built, second = false): Promise<void> {
-  const kind = built.field instanceof CloudFarAtlas ? 'atlas' : 'spheres'
   await checked(() => built.field.warm(renderer))
   await checked(() => {
     for (let k = 0; k < FAR_CYCLE; k += 1)
-      built.field.render(renderer, frameFor(kind, { second }), BUDGET)
+      built.field.render(renderer, frameFor({ second }), BUDGET)
   })
 }
 
@@ -455,55 +452,50 @@ const textureOf = (field: CloudFarField): Texture => field.textures()[0]!
 /* The program                                                                */
 /* ------------------------------------------------------------------------- */
 
-const KINDS = ['atlas', 'spheres'] as const
-
 /** One slab, filling `LAYER`. */
 const slab = (sigma: number, extra: Partial<CloudSlab> = {}): CloudMediumFn =>
   slabMedium([{ base: LAYER.base, top: LAYER.top, sigma, ...extra }])
 
 describe('the far march in a fragment', () => {
-  it.each(KINDS)(
-    '%s compiles in control flow that differs per pixel, every read at level 0, its atlas its one binding',
-    async (kind) => {
-      const built = build(kind, slab(1e-3), {
-        eye: 400_000,
-        sun: UP,
-        layers: [[LAYER.base, LAYER.top]],
-      })
-      const material = new MeshBasicNodeMaterial()
-      material.colorNode = Fn(() => {
-        // A direction and a class per pixel: the composite's case.
-        const direction = normalize(
-          vec3(screenUV.x.sub(0.5), float(-1), screenUV.y.sub(0.5)),
-        )
-        const ray = cloudRay(direction, built.body, float(1e9))
-        const result = built.field.far(
-          ray,
-          ray.start,
-          built.body,
-          screenUV.x.greaterThan(0.5),
-        )
-        return vec4(
-          result.light.add(result.air),
-          result.transmittance.add(result.depthMean.mul(0)),
-        )
-      })()
-      const mesh = new Mesh(new PlaneGeometry(2, 2), material)
-      const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 10)
-      camera.position.z = 1
-      camera.updateMatrixWorld()
-      const scene = new Scene()
-      scene.add(mesh)
-      await gpu.compile(mesh, camera, scene)
-      const { fragmentShader } = await gpu.shader(mesh, camera, scene)
-      expect(fragmentShader).not.toMatch(/textureSample\(/)
-      expect(fragmentShader).toMatch(/textureSampleLevel\(/)
-      // The atlas, the air's two tables and the phase table: a far field binds
-      // one texture of its own (§3.7).
-      expect(fragmentShader.match(/:\s*texture_2d</g) ?? []).toHaveLength(4)
-      built.field.dispose()
-    },
-  )
+  it('atlas compiles in control flow that differs per pixel, every read at level 0, its atlas its one binding', async () => {
+    const built = build(slab(1e-3), {
+      eye: 400_000,
+      sun: UP,
+      layers: [[LAYER.base, LAYER.top]],
+    })
+    const material = new MeshBasicNodeMaterial()
+    material.colorNode = Fn(() => {
+      // A direction and a class per pixel: the composite's case.
+      const direction = normalize(
+        vec3(screenUV.x.sub(0.5), float(-1), screenUV.y.sub(0.5)),
+      )
+      const ray = cloudRay(direction, built.body, float(1e9))
+      const result = built.field.far(
+        ray,
+        ray.start,
+        built.body,
+        screenUV.x.greaterThan(0.5),
+      )
+      return vec4(
+        result.light.add(result.air),
+        result.transmittance.add(result.depthMean.mul(0)),
+      )
+    })()
+    const mesh = new Mesh(new PlaneGeometry(2, 2), material)
+    const camera = new OrthographicCamera(-1, 1, 1, -1, 0.1, 10)
+    camera.position.z = 1
+    camera.updateMatrixWorld()
+    const scene = new Scene()
+    scene.add(mesh)
+    await gpu.compile(mesh, camera, scene)
+    const { fragmentShader } = await gpu.shader(mesh, camera, scene)
+    expect(fragmentShader).not.toMatch(/textureSample\(/)
+    expect(fragmentShader).toMatch(/textureSampleLevel\(/)
+    // The atlas, the air's two tables and the phase table: a far field binds
+    // one texture of its own (§3.7).
+    expect(fragmentShader.match(/:\s*texture_2d</g) ?? []).toHaveLength(4)
+    built.field.dispose()
+  })
 })
 
 /* ------------------------------------------------------------------------- */
@@ -626,18 +618,14 @@ function slabLight(
 /* ------------------------------------------------------------------------- */
 
 /**
- * A thick slab (τ 1.47 a column, the atlas's code 37; 1.5 for the spheres)
- * through steep rays from below, inside, above and orbit; a thin one along
- * grazing chords, which only the atlas follows. The thin one is τ 0.103, the
- * atlas's code 4 and the least past the bake's cloudy threshold: a column
- * under τ 0.1 is clear by the design's rule, and a thinner slab bakes to
- * nothing. The spheres take each crossing at the plane-parallel slant
- * through the sphere, which is the chord to second order in the curvature
- * (2 × 10⁻⁶ at μ = 0.2), and fail a grazing chord by construction: there is
- * no column mixing along it.
+ * A thick slab (τ 1.47 a column, the atlas's code 37) through steep rays from
+ * below, inside, above and orbit; a thin one along grazing chords. The thin
+ * one is τ 0.103, the atlas's code 4 and the least past the bake's cloudy
+ * threshold: a column under τ 0.1 is clear by the design's rule, and a
+ * thinner slab bakes to nothing.
  */
-const THICK = { atlas: tauAtCode(37), spheres: 1.5 } as const
-const THIN = { atlas: tauAtCode(4), spheres: 0.103 } as const
+const THICK = tauAtCode(37)
+const THIN = tauAtCode(4)
 const THICKNESS = LAYER.top - LAYER.base
 
 const steep = (
@@ -675,40 +663,37 @@ const GRAZING = [
 const TRANSMITTANCE_BOUND = 1e-3
 
 describe('a uniform slab', () => {
-  it.each(KINDS)(
-    'marched by the %s has the fine march’s transmittance on every steep ray',
-    async (kind) => {
-      const sigma = THICK[kind] / THICKNESS
-      for (const place of STEEP) {
-        const built = build(kind, slab(sigma), place)
-        await bake(built)
-        const result = await march(
-          built,
-          place.probes.map((direction) => ({ direction })),
+  it('marched by the atlas has the fine march’s transmittance on every steep ray', async () => {
+    const sigma = THICK / THICKNESS
+    for (const place of STEEP) {
+      const built = build(slab(sigma), place)
+      await bake(built)
+      const result = await march(
+        built,
+        place.probes.map((direction) => ({ direction })),
+      )
+      result.forEach((got, k) => {
+        const direction = place.probes[k]!
+        const [start, end] = spanOf(place, direction)
+        expect(got.start).toBeCloseTo(start, -1)
+        expect(got.end).toBeCloseTo(end, -1)
+        const truth = slabTruth(
+          slabPieces(place, direction, [LAYER.base, LAYER.top], start),
+          sigma,
         )
-        result.forEach((got, k) => {
-          const direction = place.probes[k]!
-          const [start, end] = spanOf(place, direction)
-          expect(got.start).toBeCloseTo(start, -1)
-          expect(got.end).toBeCloseTo(end, -1)
-          const truth = slabTruth(
-            slabPieces(place, direction, [LAYER.base, LAYER.top], start),
-            sigma,
-          )
-          expect(
-            Math.abs(got.transmittance - truth.transmittance),
-            `${kind} from ${place.eye} m at μ ${direction.y}`,
-          ).toBeLessThanOrEqual(TRANSMITTANCE_BOUND)
-        })
-        built.field.dispose()
-      }
-    },
-  )
+        expect(
+          Math.abs(got.transmittance - truth.transmittance),
+          `from ${place.eye} m at μ ${direction.y}`,
+        ).toBeLessThanOrEqual(TRANSMITTANCE_BOUND)
+      })
+      built.field.dispose()
+    }
+  })
 
   it('marched by the atlas has the fine march’s transmittance along grazing chords, the column read a texel a step', async () => {
-    const sigma = THIN.atlas / THICKNESS
+    const sigma = THIN / THICKNESS
     for (const place of GRAZING) {
-      const built = build('atlas', slab(sigma), place)
+      const built = build(slab(sigma), place)
       await bake(built)
       const result = await march(
         built,
@@ -737,225 +722,200 @@ describe('a uniform slab', () => {
    * The far march lights each run of a column through the rest of the column
    * above each of its points (`runSunShare`), which for a uniform slab is the
    * fine march's limit, each point lit along its own path to the sun. With
-   * the sun at the zenith, measured: 1.4 × 10⁻⁴ (atlas) and 3.3 × 10⁻⁴
-   * (spheres, whose half float holds τ 1.5 to its own step) at worst. Lit
-   * through half its depth, e^(−τ/2μ_s), the slab misses it by 9.3% (atlas)
-   * and 9.6% (spheres) from 200 m looking straight up.
+   * the sun at the zenith, measured: 1.4 × 10⁻⁴ at worst. Lit through half
+   * its depth, e^(−τ/2μ_s), the slab misses it by 9.3% from 200 m looking
+   * straight up.
    */
-  it.each(KINDS)(
-    'marched by the %s has the fine march’s light in a thick slab, each run lit through the rest of its column',
-    async (kind) => {
-      const tau = THICK[kind]
-      const sigma = tau / THICKNESS
-      for (const place of STEEP.filter((p) => p.eye !== 1800)) {
-        const built = build(kind, slab(sigma), place)
-        await bake(built)
-        const result = await march(
-          built,
-          place.probes.map((direction) => ({ direction })),
-        )
-        result.forEach((got, k) => {
-          const truth = slabLight(
-            place,
-            place.probes[k]!,
-            [LAYER.base, LAYER.top],
-            sigma,
-            got.from,
-          )
-          expect(
-            Math.abs(got.light[1] / ISOTROPIC / truth - 1),
-            `${kind} from ${place.eye} m at μ ${place.probes[k]!.y}`,
-          ).toBeLessThanOrEqual(1e-3)
-        })
-        built.field.dispose()
-      }
-    },
-  )
-
-  /*
-   * The same against the thinnest slab the bake holds, τ 0.103, under three
-   * suns, from below and above: measured 1.1 × 10⁻⁵ (atlas) and 3.2 × 10⁻⁴
-   * (spheres) at worst. Lit through half its depth the slab is right to
-   * second order in τ and no better: the spheres miss by 3.3 × 10⁻³ from
-   * 5 km looking straight down, and the atlas by 1.03 × 10⁻³ from 200 m at
-   * μ 0.6 under a sun at μ 0.6.
-   */
-  it.each(KINDS)(
-    'marched by the %s has the fine march’s light in a thin slab, under any sun',
-    async (kind) => {
-      const sigma = THIN[kind] / THICKNESS
-      const cases: { place: Placement; probes: Vec[] }[] = [
-        {
-          place: { eye: 200, sun: UP, layers: [[LAYER.base, LAYER.top]] },
-          probes: [toward(1), toward(0.8, 1), toward(0.6, 2)],
-        },
-        {
-          place: {
-            eye: 200,
-            sun: toward(0.866, 0.4),
-            layers: [[LAYER.base, LAYER.top]],
-          },
-          probes: [toward(1), toward(0.8, 0.4), toward(0.6, 2.5)],
-        },
-        {
-          place: {
-            eye: 5000,
-            sun: toward(0.6, 1.2),
-            layers: [[LAYER.base, LAYER.top]],
-          },
-          probes: [toward(-1), toward(-0.7, 1.2), toward(-0.6, 4)],
-        },
-      ]
-      for (const { place, probes } of cases) {
-        const built = build(kind, slab(sigma), place)
-        await bake(built)
-        const result = await march(
-          built,
-          probes.map((direction) => ({ direction })),
-        )
-        result.forEach((got, k) => {
-          const truth = slabLight(
-            place,
-            probes[k]!,
-            [LAYER.base, LAYER.top],
-            sigma,
-            got.from,
-          )
-          const [r, g, b] = got.light
-          expect(r).toBe(g)
-          expect(b).toBe(g)
-          expect(
-            Math.abs(g / ISOTROPIC / truth - 1),
-            `${kind} from ${place.eye} m at μ ${probes[k]!.y}`,
-          ).toBeLessThanOrEqual(1e-3)
-        })
-        built.field.dispose()
-      }
-    },
-  )
-
-  /*
-   * Each step carries the truncated exponential its cloud's opacity follows,
-   * combined by the parallel-axis rule, so the moments of a uniform slab are
-   * exact however the march divides it. The spheres center a crossing's run on
-   * the mid-height sphere, which the true run sits κH²/(4μ³) from: 1.6 m at
-   * μ = 0.3 against a 5 km run, under the bound.
-   */
-  it.each(KINDS)(
-    'marched by the %s has the depth moments of one slab',
-    async (kind) => {
-      const places = kind === 'atlas' ? [...STEEP, ...GRAZING] : STEEP
-      for (const place of places) {
-        const sigma = (GRAZING.includes(place) ? THIN : THICK)[kind] / THICKNESS
-        const built = build(kind, slab(sigma), place)
-        await bake(built)
-        const result = await march(
-          built,
-          place.probes.map((direction) => ({ direction })),
-        )
-        result.forEach((got, k) => {
-          const truth = slabTruth(
-            slabPieces(
-              place,
-              place.probes[k]!,
-              [LAYER.base, LAYER.top],
-              got.from,
-            ),
-            sigma,
-          )
-          const bound = 1e-3 * truth.length
-          expect(
-            Math.abs(got.mean - truth.mean),
-            `${kind} mean from ${place.eye} m at μ ${place.probes[k]!.y}`,
-          ).toBeLessThanOrEqual(bound)
-          expect(
-            Math.abs(got.deviation - truth.deviation),
-            `${kind} deviation from ${place.eye} m at μ ${place.probes[k]!.y}`,
-          ).toBeLessThanOrEqual(bound)
-        })
-        built.field.dispose()
-      }
-    },
-  )
-
-  it.each(KINDS)(
-    'marched by the %s through a vacuum is clear, unlit, and its depth where it began',
-    async (kind) => {
-      const place = steep(5000, [-1, -0.5])
-      const built = build(kind, CLOUD_VACUUM, place)
+  it('marched by the atlas has the fine march’s light in a thick slab, each run lit through the rest of its column', async () => {
+    const tau = THICK
+    const sigma = tau / THICKNESS
+    for (const place of STEEP.filter((p) => p.eye !== 1800)) {
+      const built = build(slab(sigma), place)
       await bake(built)
       const result = await march(
         built,
         place.probes.map((direction) => ({ direction })),
       )
-      for (const got of result) {
-        expect(got.transmittance).toBe(1)
-        expect(got.light).toEqual([0, 0, 0])
-        expect(got.air).toEqual([0, 0, 0])
-        expect(got.mean).toBe(got.from)
-        expect(got.deviation).toBe(0)
-      }
+      result.forEach((got, k) => {
+        const truth = slabLight(
+          place,
+          place.probes[k]!,
+          [LAYER.base, LAYER.top],
+          sigma,
+          got.from,
+        )
+        expect(
+          Math.abs(got.light[1] / ISOTROPIC / truth - 1),
+          `from ${place.eye} m at μ ${place.probes[k]!.y}`,
+        ).toBeLessThanOrEqual(1e-3)
+      })
       built.field.dispose()
-    },
-  )
+    }
+  })
 
-  it.each(KINDS)(
-    'marched by the %s from past the span’s end is the empty result, so it needs no branch around it',
-    async (kind) => {
-      const place = steep(5000, [-1, -0.5])
-      const built = build(kind, slab(THICK[kind] / THICKNESS), place)
+  /*
+   * The same against the thinnest slab the bake holds, τ 0.103, under three
+   * suns, from below and above: measured 1.1 × 10⁻⁵ at worst. Lit through
+   * half its depth the slab is right to second order in τ and no better: it
+   * misses by 1.03 × 10⁻³ from 200 m at μ 0.6 under a sun at μ 0.6.
+   */
+  it('marched by the atlas has the fine march’s light in a thin slab, under any sun', async () => {
+    const sigma = THIN / THICKNESS
+    const cases: { place: Placement; probes: Vec[] }[] = [
+      {
+        place: { eye: 200, sun: UP, layers: [[LAYER.base, LAYER.top]] },
+        probes: [toward(1), toward(0.8, 1), toward(0.6, 2)],
+      },
+      {
+        place: {
+          eye: 200,
+          sun: toward(0.866, 0.4),
+          layers: [[LAYER.base, LAYER.top]],
+        },
+        probes: [toward(1), toward(0.8, 0.4), toward(0.6, 2.5)],
+      },
+      {
+        place: {
+          eye: 5000,
+          sun: toward(0.6, 1.2),
+          layers: [[LAYER.base, LAYER.top]],
+        },
+        probes: [toward(-1), toward(-0.7, 1.2), toward(-0.6, 4)],
+      },
+    ]
+    for (const { place, probes } of cases) {
+      const built = build(slab(sigma), place)
       await bake(built)
       const result = await march(
         built,
-        place.probes.map((direction) => ({ direction, from: 1e7 })),
+        probes.map((direction) => ({ direction })),
       )
-      for (const got of result) {
-        expect(got.from).toBeGreaterThan(got.end)
-        expect(got.transmittance).toBe(1)
-        expect(got.light).toEqual([0, 0, 0])
-        expect(got.air).toEqual([0, 0, 0])
-        expect(got.mean).toBe(got.from)
-        expect(got.deviation).toBe(0)
-      }
+      result.forEach((got, k) => {
+        const truth = slabLight(
+          place,
+          probes[k]!,
+          [LAYER.base, LAYER.top],
+          sigma,
+          got.from,
+        )
+        const [r, g, b] = got.light
+        expect(r).toBe(g)
+        expect(b).toBe(g)
+        expect(
+          Math.abs(g / ISOTROPIC / truth - 1),
+          `from ${place.eye} m at μ ${probes[k]!.y}`,
+        ).toBeLessThanOrEqual(1e-3)
+      })
       built.field.dispose()
-    },
-  )
+    }
+  })
 
   /*
-   * The fine march may stop anywhere inside a layer, so the far march takes
-   * only what is left of it: the atlas by clipping its shells to the span,
-   * the spheres by clipping each crossing's run.
+   * Each step carries the truncated exponential its cloud's opacity follows,
+   * combined by the parallel-axis rule, so the moments of a uniform slab are
+   * exact however the march divides it.
    */
-  it.each(KINDS)(
-    'marched by the %s from inside the slab takes only the rest of it',
-    async (kind) => {
-      const sigma = THICK[kind] / THICKNESS
-      const place = steep(5000, [-1, -0.6])
-      const built = build(kind, slab(sigma), place)
+  it('marched by the atlas has the depth moments of one slab', async () => {
+    for (const place of [...STEEP, ...GRAZING]) {
+      const sigma = (GRAZING.includes(place) ? THIN : THICK) / THICKNESS
+      const built = build(slab(sigma), place)
       await bake(built)
-      const probes = place.probes.map((direction) => {
-        const [start] = spanOf(place, direction)
-        // A third of the way down through the slab.
-        return { direction, from: start + THICKNESS / 3 / -direction.y }
-      })
-      const result = await march(built, probes)
+      const result = await march(
+        built,
+        place.probes.map((direction) => ({ direction })),
+      )
       result.forEach((got, k) => {
         const truth = slabTruth(
           slabPieces(
             place,
-            probes[k]!.direction,
+            place.probes[k]!,
             [LAYER.base, LAYER.top],
             got.from,
           ),
           sigma,
         )
+        const bound = 1e-3 * truth.length
         expect(
-          Math.abs(got.transmittance - truth.transmittance),
-        ).toBeLessThanOrEqual(TRANSMITTANCE_BOUND)
+          Math.abs(got.mean - truth.mean),
+          `mean from ${place.eye} m at μ ${place.probes[k]!.y}`,
+        ).toBeLessThanOrEqual(bound)
+        expect(
+          Math.abs(got.deviation - truth.deviation),
+          `deviation from ${place.eye} m at μ ${place.probes[k]!.y}`,
+        ).toBeLessThanOrEqual(bound)
       })
       built.field.dispose()
-    },
-  )
+    }
+  })
+
+  it('marched by the atlas through a vacuum is clear, unlit, and its depth where it began', async () => {
+    const place = steep(5000, [-1, -0.5])
+    const built = build(CLOUD_VACUUM, place)
+    await bake(built)
+    const result = await march(
+      built,
+      place.probes.map((direction) => ({ direction })),
+    )
+    for (const got of result) {
+      expect(got.transmittance).toBe(1)
+      expect(got.light).toEqual([0, 0, 0])
+      expect(got.air).toEqual([0, 0, 0])
+      expect(got.mean).toBe(got.from)
+      expect(got.deviation).toBe(0)
+    }
+    built.field.dispose()
+  })
+
+  it('marched by the atlas from past the span’s end is the empty result, so it needs no branch around it', async () => {
+    const place = steep(5000, [-1, -0.5])
+    const built = build(slab(THICK / THICKNESS), place)
+    await bake(built)
+    const result = await march(
+      built,
+      place.probes.map((direction) => ({ direction, from: 1e7 })),
+    )
+    for (const got of result) {
+      expect(got.from).toBeGreaterThan(got.end)
+      expect(got.transmittance).toBe(1)
+      expect(got.light).toEqual([0, 0, 0])
+      expect(got.air).toEqual([0, 0, 0])
+      expect(got.mean).toBe(got.from)
+      expect(got.deviation).toBe(0)
+    }
+    built.field.dispose()
+  })
+
+  /*
+   * The fine march may stop anywhere inside a layer, so the far march takes
+   * only what is left of it, the atlas's shells clipped to the span.
+   */
+  it('marched by the atlas from inside the slab takes only the rest of it', async () => {
+    const sigma = THICK / THICKNESS
+    const place = steep(5000, [-1, -0.6])
+    const built = build(slab(sigma), place)
+    await bake(built)
+    const probes = place.probes.map((direction) => {
+      const [start] = spanOf(place, direction)
+      // A third of the way down through the slab.
+      return { direction, from: start + THICKNESS / 3 / -direction.y }
+    })
+    const result = await march(built, probes)
+    result.forEach((got, k) => {
+      const truth = slabTruth(
+        slabPieces(
+          place,
+          probes[k]!.direction,
+          [LAYER.base, LAYER.top],
+          got.from,
+        ),
+        sigma,
+      )
+      expect(
+        Math.abs(got.transmittance - truth.transmittance),
+      ).toBeLessThanOrEqual(TRANSMITTANCE_BOUND)
+    })
+    built.field.dispose()
+  })
 })
 
 /* ------------------------------------------------------------------------- */
@@ -975,29 +935,19 @@ describe('a slab under a partly cloudy one', () => {
     [LAYER.base, LAYER.top],
     [HIGH_LAYER.base, HIGH_LAYER.top],
   ]
-  const lowSigma = (kind: CloudFarKind): number => THIN[kind] / THICKNESS
-  const highTau = (kind: CloudFarKind): number => THICK[kind]
-  const media = (
-    kind: CloudFarKind,
-    low: boolean,
-    high: boolean,
-  ): CloudMediumFn =>
+  const media = (low: boolean, high: boolean): CloudMediumFn =>
     slabMedium([
-      { ...LAYER, sigma: low ? lowSigma(kind) : 0 },
+      { ...LAYER, sigma: low ? THIN / THICKNESS : 0 },
       {
         ...HIGH_LAYER,
-        sigma: high ? highTau(kind) / THICKNESS : 0,
+        sigma: high ? THICK / THICKNESS : 0,
         fraction: COVER,
       },
     ])
 
-  it.each([
-    ['atlas', UP],
-    ['spheres', UP],
-    ['atlas', toward(0.8, 0.7)],
-  ] as const)(
-    'the %s dims the lower slab by the upper one along a sun at %o',
-    async (kind, sun) => {
+  it.each([UP, toward(0.8, 0.7)])(
+    'the atlas dims the lower slab by the upper one along a sun at %o',
+    async (sun) => {
       const place: Placement = { eye: 200, sun, layers: twoLayers }
       const probes = [{ direction: toward(1) }, { direction: toward(0.9, 2) }]
       const runs: Marched[][] = []
@@ -1006,7 +956,7 @@ describe('a slab under a partly cloudy one', () => {
         [false, true],
         [true, false],
       ] as const) {
-        const built = build(kind, media(kind, low, high), place)
+        const built = build(media(low, high), place)
         await bake(built)
         runs.push(await march(built, probes))
         built.field.dispose()
@@ -1014,17 +964,17 @@ describe('a slab under a partly cloudy one', () => {
       const [both, upper, lower] = runs as [Marched[], Marched[], Marched[]]
       probes.forEach((probe, k) => {
         const muSun = dot3(UP, unit(sun))
-        const expected = 1 - COVER + COVER * Math.exp(-highTau(kind) / muSun)
+        const expected = 1 - COVER + COVER * Math.exp(-THICK / muSun)
         const above =
           (both[k]!.light[1] - lower[k]!.transmittance * upper[k]!.light[1]) /
           lower[k]!.light[1]
         expect(
           Math.abs(above - expected),
-          `${kind} at μ ${probe.direction.y}`,
+          `at μ ${probe.direction.y}`,
         ).toBeLessThanOrEqual(1e-3)
         // Seen from below, the upper slab is one column too, mixed at its share.
         const mu = probe.direction.y
-        const viewHigh = 1 - COVER + COVER * Math.exp(-highTau(kind) / mu)
+        const viewHigh = 1 - COVER + COVER * Math.exp(-THICK / mu)
         expect(
           Math.abs(both[k]!.transmittance - lower[k]!.transmittance * viewHigh),
         ).toBeLessThanOrEqual(TRANSMITTANCE_BOUND)
@@ -1126,7 +1076,7 @@ describe('the atlas’s bake', () => {
   }
 
   it('holds each texel’s fraction, in-cloud τ, base and top as the CPU integrates them', async () => {
-    const built = build('atlas', structured, {
+    const built = build(structured, {
       eye: 2000,
       sun: SUN,
       layers: [[LAYER.base, LAYER.top]],
@@ -1198,96 +1148,90 @@ describe('the blocked air', () => {
     multiple: vec3(0),
   })
 
-  it.each(KINDS)(
-    'the %s blocks the sky’s beam on a sky texel and the cleared one on a surface texel',
-    async (kind) => {
-      const place: Placement = {
-        eye: 5000,
-        sun: UP,
-        layers: [[LAYER.base, LAYER.top]],
-        cleared: 1,
-      }
-      const built = build(kind, slab(THICK[kind] / THICKNESS), place, {
-        air: beamAir,
-      })
-      built.body.air.transmittance.value = table
-      await bake(built)
-      const direction = toward(-0.8, 1)
-      const [sky, surface] = await march(built, [
-        { direction, sky: true },
-        { direction, sky: false },
-      ])
-      // Air behind cloud the march crossed is hidden: B is negative.
-      expect(sky!.air[1]).toBeLessThan(0)
+  it('the atlas blocks the sky’s beam on a sky texel and the cleared one on a surface texel', async () => {
+    const place: Placement = {
+      eye: 5000,
+      sun: UP,
+      layers: [[LAYER.base, LAYER.top]],
+      cleared: 1,
+    }
+    const built = build(slab(THICK / THICKNESS), place, {
+      air: beamAir,
+    })
+    built.body.air.transmittance.value = table
+    await bake(built)
+    const direction = toward(-0.8, 1)
+    const [sky, surface] = await march(built, [
+      { direction, sky: true },
+      { direction, sky: false },
+    ])
+    // Air behind cloud the march crossed is hidden: B is negative.
+    expect(sky!.air[1]).toBeLessThan(0)
+    for (let c = 0; c < 3; c += 1) {
+      const blocked = sky!.air[c]! / beam[c]!
+      expect(
+        Math.abs(surface!.air[c]! / surfaceBeam[c]! / blocked - 1),
+      ).toBeLessThanOrEqual(1e-4)
+      expect(
+        Math.abs(blocked / (sky!.air[1]! / beam[1]!) - 1),
+      ).toBeLessThanOrEqual(1e-4)
+    }
+    // The class decides B and nothing else.
+    expect(surface!.light).toEqual(sky!.light)
+    expect(surface!.transmittance).toBe(sky!.transmittance)
+
+    // Its own light takes the beam cleared whole: white, against the table's
+    // own color with nothing cleared.
+    built.body.cleared.value = 0
+    const [dim] = await march(built, [{ direction, sky: true }])
+    for (let c = 0; c < 3; c += 1)
+      expect(
+        Math.abs(dim!.light[c]! / sky!.light[c]! / beam[c]! - 1),
+      ).toBeLessThanOrEqual(1e-4)
+    built.field.dispose()
+  })
+
+  it('the atlas hands back the air light it walked, by the class’s beam, whatever cloud is in front of it', async () => {
+    /*
+     * With no extinction the air's light over a stretch is its beam times
+     * the stretch, so the march's sum over its steps and gaps is exact
+     * however they fall, and it holds only where the stretches tile
+     * [from, end] once each. The caller hides this behind the cloud the
+     * fine march crossed; B, against the far march's own cloud, is a share
+     * of it.
+     */
+    const place: Placement = {
+      eye: 5000,
+      sun: UP,
+      layers: [[LAYER.base, LAYER.top]],
+      cleared: 1,
+    }
+    const built = build(slab(THICK / THICKNESS), place, {
+      air: beamAir,
+    })
+    built.body.air.transmittance.value = table
+    await bake(built)
+    const direction = toward(-0.8, 1)
+    const [sky, surface] = await march(built, [
+      { direction, sky: true },
+      { direction, sky: false },
+    ])
+    const radius = built.body.datumRadius.value
+    for (const [got, colors] of [
+      [sky!, beam],
+      [surface!, surfaceBeam],
+    ] as const) {
+      const walked = (got.end - got.from) / radius
       for (let c = 0; c < 3; c += 1) {
-        const blocked = sky!.air[c]! / beam[c]!
         expect(
-          Math.abs(surface!.air[c]! / surfaceBeam[c]! / blocked - 1),
+          Math.abs(got.airLight[c]! / (colors[c]! * walked) - 1),
         ).toBeLessThanOrEqual(1e-4)
-        expect(
-          Math.abs(blocked / (sky!.air[1]! / beam[1]!) - 1),
-        ).toBeLessThanOrEqual(1e-4)
+        expect(got.air[c]!).toBeLessThan(0)
+        expect(-got.air[c]!).toBeLessThan(got.airLight[c]!)
       }
-      // The class decides B and nothing else.
-      expect(surface!.light).toEqual(sky!.light)
-      expect(surface!.transmittance).toBe(sky!.transmittance)
-
-      // Its own light takes the beam cleared whole: white, against the table's
-      // own color with nothing cleared.
-      built.body.cleared.value = 0
-      const [dim] = await march(built, [{ direction, sky: true }])
-      for (let c = 0; c < 3; c += 1)
-        expect(
-          Math.abs(dim!.light[c]! / sky!.light[c]! / beam[c]! - 1),
-        ).toBeLessThanOrEqual(1e-4)
-      built.field.dispose()
-    },
-  )
-
-  it.each(KINDS)(
-    'the %s hands back the air light it walked, by the class’s beam, whatever cloud is in front of it',
-    async (kind) => {
-      /*
-       * With no extinction the air's light over a stretch is its beam times
-       * the stretch, so the march's sum over its steps and gaps is exact
-       * however they fall, and it holds only where the stretches tile
-       * [from, end] once each. The caller hides this behind the cloud the
-       * fine march crossed; B, against the far march's own cloud, is a share
-       * of it.
-       */
-      const place: Placement = {
-        eye: 5000,
-        sun: UP,
-        layers: [[LAYER.base, LAYER.top]],
-        cleared: 1,
-      }
-      const built = build(kind, slab(THICK[kind] / THICKNESS), place, {
-        air: beamAir,
-      })
-      built.body.air.transmittance.value = table
-      await bake(built)
-      const direction = toward(-0.8, 1)
-      const [sky, surface] = await march(built, [
-        { direction, sky: true },
-        { direction, sky: false },
-      ])
-      const radius = built.body.datumRadius.value
-      for (const [got, colors] of [
-        [sky!, beam],
-        [surface!, surfaceBeam],
-      ] as const) {
-        const walked = (got.end - got.from) / radius
-        for (let c = 0; c < 3; c += 1) {
-          expect(
-            Math.abs(got.airLight[c]! / (colors[c]! * walked) - 1),
-          ).toBeLessThanOrEqual(1e-4)
-          expect(got.air[c]!).toBeLessThan(0)
-          expect(-got.air[c]!).toBeLessThan(got.airLight[c]!)
-        }
-      }
-      built.field.dispose()
-    },
-  )
+    }
+    built.field.dispose()
+  })
 })
 
 /* ------------------------------------------------------------------------- */
@@ -1311,84 +1255,80 @@ describe('the bake', () => {
     expect(covered.every((n) => n === 1)).toBe(true)
   })
 
-  it.each([
-    ['atlas', 'farAtlas', 4],
-    ['spheres', 'farSpheres', 8],
-  ] as const)(
-    '%s draws one block a frame as one pass, and is pending until the cycle is through',
-    async (kind, name, texelBytes) => {
-      const built = build(kind, slab(1e-3), {
-        eye: 2000,
-        sun: UP,
-        layers: [[LAYER.base, LAYER.top]],
-      })
-      const { field } = built
-      expect(field.name).toBe(name)
-      expect([field.bytes, field.textures(), field.pending]).toEqual([
-        0,
-        [],
-        false,
-      ])
-      await checked(() => field.warm(renderer))
-      // A 1 × 1 target of the real format, which the warm-up compiled against.
-      expect(field.bytes).toBe(texelBytes)
-      let draws = 0
-      const render = renderer.render.bind(renderer)
-      renderer.render = (...args: Parameters<typeof renderer.render>) => {
-        draws += 1
-        return render(...args)
-      }
-      try {
-        await checked(() => field.render(renderer, frameFor(kind), BUDGET))
-        expect(draws).toBe(1)
-      } finally {
-        renderer.render = render
-      }
-      expect(field.bytes).toBe(FAR_WIDTH * FAR_HEIGHT * texelBytes)
-      expect(field.pending).toBe(true)
-      // Block 0 holds the bake; block 1 and the row of blocks under it do not
-      // yet. An absent layer's texels hold its range's middle in base and top,
-      // so every baked texel is nonzero somewhere.
-      const baked = (texel: number[]): boolean => texel.some((v) => v !== 0)
-      const [inside, right, below] = await texels(textureOf(field), [
-        [FAR_BLOCK - 1, FAR_BLOCK - 1],
-        [FAR_BLOCK, 0],
-        [0, FAR_BLOCK],
-      ])
-      expect([baked(inside!), baked(right!), baked(below!)]).toEqual([
-        true,
-        false,
-        false,
-      ])
-      await checked(() => {
-        for (let k = 1; k < FAR_CYCLE - 1; k += 1)
-          field.render(renderer, frameFor(kind), BUDGET)
-      })
-      expect(field.pending).toBe(true)
-      await checked(() => field.render(renderer, frameFor(kind), BUDGET))
-      expect(field.pending).toBe(false)
-      const corners = await texels(textureOf(field), [
-        [FAR_WIDTH - 1, FAR_HEIGHT - 1],
-        [FAR_WIDTH - 1, 0],
-        [0, FAR_HEIGHT - 1],
-      ])
-      expect(corners.every(baked)).toBe(true)
-      // A jump starts the cycle over.
-      await checked(() =>
-        field.render(renderer, frameFor(kind, { jump: true }), BUDGET),
-      )
-      expect(field.pending).toBe(true)
-      field.dispose()
-      expect([field.bytes, field.textures(), field.pending]).toEqual([
-        0,
-        [],
-        false,
-      ])
-    },
-  )
+  it('draws one block a frame as one pass, and is pending until the cycle is through', async () => {
+    // RGBA8.
+    const texelBytes = 4
+    const built = build(slab(1e-3), {
+      eye: 2000,
+      sun: UP,
+      layers: [[LAYER.base, LAYER.top]],
+    })
+    const { field } = built
+    expect(field.name).toBe('farAtlas')
+    expect([field.bytes, field.textures(), field.pending]).toEqual([
+      0,
+      [],
+      false,
+    ])
+    await checked(() => field.warm(renderer))
+    // A 1 × 1 target of the real format, which the warm-up compiled against.
+    expect(field.bytes).toBe(texelBytes)
+    let draws = 0
+    const render = renderer.render.bind(renderer)
+    renderer.render = (...args: Parameters<typeof renderer.render>) => {
+      draws += 1
+      return render(...args)
+    }
+    try {
+      await checked(() => field.render(renderer, frameFor(), BUDGET))
+      expect(draws).toBe(1)
+    } finally {
+      renderer.render = render
+    }
+    expect(field.bytes).toBe(FAR_WIDTH * FAR_HEIGHT * texelBytes)
+    expect(field.pending).toBe(true)
+    // Block 0 holds the bake; block 1 and the row of blocks under it do not
+    // yet. An absent layer's texels hold its range's middle in base and top,
+    // so every baked texel is nonzero somewhere.
+    const baked = (texel: number[]): boolean => texel.some((v) => v !== 0)
+    const [inside, right, below] = await texels(textureOf(field), [
+      [FAR_BLOCK - 1, FAR_BLOCK - 1],
+      [FAR_BLOCK, 0],
+      [0, FAR_BLOCK],
+    ])
+    expect([baked(inside!), baked(right!), baked(below!)]).toEqual([
+      true,
+      false,
+      false,
+    ])
+    await checked(() => {
+      for (let k = 1; k < FAR_CYCLE - 1; k += 1)
+        field.render(renderer, frameFor(), BUDGET)
+    })
+    expect(field.pending).toBe(true)
+    await checked(() => field.render(renderer, frameFor(), BUDGET))
+    expect(field.pending).toBe(false)
+    const corners = await texels(textureOf(field), [
+      [FAR_WIDTH - 1, FAR_HEIGHT - 1],
+      [FAR_WIDTH - 1, 0],
+      [0, FAR_HEIGHT - 1],
+    ])
+    expect(corners.every(baked)).toBe(true)
+    // A jump starts the cycle over.
+    await checked(() =>
+      field.render(renderer, frameFor({ jump: true }), BUDGET),
+    )
+    expect(field.pending).toBe(true)
+    field.dispose()
+    expect([field.bytes, field.textures(), field.pending]).toEqual([
+      0,
+      [],
+      false,
+    ])
+  })
 
   it('keeps its blocks in order through a scrub, which jumps every frame, and is owed the cycle until the jumps stop', async () => {
-    const built = build('atlas', slab(1e-3), {
+    const built = build(slab(1e-3), {
       eye: 2000,
       sun: UP,
       layers: [[LAYER.base, LAYER.top]],
@@ -1397,7 +1337,7 @@ describe('the bake', () => {
     await checked(() => field.warm(renderer))
     await checked(() => {
       for (let k = 0; k < FAR_CYCLE; k += 1)
-        field.render(renderer, frameFor('atlas', { jump: true }), BUDGET)
+        field.render(renderer, frameFor({ jump: true }), BUDGET)
     })
     expect(field.pending).toBe(true)
     const corners = await texels(textureOf(field), [
@@ -1408,24 +1348,24 @@ describe('the bake', () => {
     expect(corners.every((texel) => texel.some((v) => v !== 0))).toBe(true)
     await checked(() => {
       for (let k = 0; k < FAR_CYCLE; k += 1)
-        field.render(renderer, frameFor('atlas'), BUDGET)
+        field.render(renderer, frameFor(), BUDGET)
     })
     expect(field.pending).toBe(false)
     field.dispose()
   })
 
-  it('releases its atlas on a frame that selects the other candidate, and the second body’s when there is none', async () => {
+  it('releases the served body’s atlas on a frame with no served body, and the second body’s when there is none', async () => {
     const place: Placement = {
       eye: 2000,
       sun: UP,
       layers: [[LAYER.base, LAYER.top]],
     }
-    const atlas = build('atlas', slab(1e-3), place)
+    const atlas = build(slab(1e-3), place)
     await checked(() => atlas.field.warm(renderer))
-    await checked(() => atlas.field.render(renderer, frameFor('atlas'), BUDGET))
+    await checked(() => atlas.field.render(renderer, frameFor(), BUDGET))
     expect(atlas.field.bytes).toBe(FAR_WIDTH * FAR_HEIGHT * 4)
     await checked(() =>
-      atlas.field.render(renderer, frameFor('spheres'), BUDGET),
+      atlas.field.render(renderer, frameFor({ served: false }), BUDGET),
     )
     expect([atlas.field.bytes, atlas.field.pending]).toEqual([4, false])
     expect(atlas.field.textures()).toHaveLength(1)
@@ -1438,34 +1378,26 @@ describe('the bake', () => {
     expect([gpuTexture?.width, gpuTexture?.height]).toEqual([1, 1])
     atlas.field.dispose()
 
-    const second = build('atlas', slab(1e-3), place, { second: true })
+    const second = build(slab(1e-3), place, { second: true })
     expect(second.field.name).toBe('farSecond')
     await checked(() => second.field.warm(renderer))
     await checked(() =>
-      second.field.render(
-        renderer,
-        frameFor('spheres', { second: true }),
-        BUDGET,
-      ),
+      second.field.render(renderer, frameFor({ second: true }), BUDGET),
     )
     expect(second.field.bytes).toBe(FAR_WIDTH * FAR_HEIGHT * 4)
-    await checked(() =>
-      second.field.render(renderer, frameFor('atlas'), BUDGET),
-    )
+    await checked(() => second.field.render(renderer, frameFor(), BUDGET))
     expect(second.field.bytes).toBe(4)
     second.field.dispose()
   })
 
   describe.skipIf(!TIMESTAMPS)('on the pass timeline', () => {
     it.each([
-      ['atlas', false, 'cloud far atlas'],
-      ['spheres', false, 'cloud far spheres'],
-      ['atlas', true, 'cloud far second'],
+      [false, 'cloud far atlas'],
+      [true, 'cloud far second'],
     ] as const)(
-      '%s (second body: %s) is one pass a frame, named %s',
-      async (kind, second, label) => {
+      'the atlas (second body: %s) is one pass a frame, named %s',
+      async (second, label) => {
         const built = build(
-          kind,
           slab(1e-3),
           { eye: 2000, sun: UP, layers: [[LAYER.base, LAYER.top]] },
           { second },
@@ -1476,7 +1408,7 @@ describe('the bake', () => {
           const timeline = passTimelineOf(renderer)
           expect(timeline).not.toBeNull()
           const draw = () =>
-            built.field.render(renderer, frameFor(kind, { second }), BUDGET)
+            built.field.render(renderer, frameFor({ second }), BUDGET)
           await checked(draw)
           const result = await timeline!.measure(draw, 4)
           expect(result.dropped).toBe(0)

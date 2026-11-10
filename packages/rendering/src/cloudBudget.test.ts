@@ -115,7 +115,6 @@ describe('the declared bytes', () => {
       ['sun cascades, RGBA16F 512² × 3', textureBytes(512, 512, 3, 8), 6.29],
       ['sun grid, R16F 128² × 32', textureBytes(128, 128, 32, 2), 1.05],
       ['far atlas, RGBA8 1548 × 774', textureBytes(1548, 774, 1, 4), 4.79],
-      ['far spheres, RGBA16F 1548 × 774', textureBytes(1548, 774, 1, 8), 9.59],
       ['depth copy at 1080p, R16F', textureBytes(1920, 1080, 1, 2), 4.15],
       ['depth copy at Retina, R16F', textureBytes(2880, 1800, 1, 2), 10.37],
     ]

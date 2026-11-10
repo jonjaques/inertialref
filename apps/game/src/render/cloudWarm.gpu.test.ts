@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   CLOUD_CACHES,
-  CLOUD_FAR_KINDS,
   CLOUD_SUN_DEPTHS,
   type CloudLevers,
   DEFAULT_CLOUD_LEVERS,
@@ -81,8 +80,7 @@ function leverSets(): [string, Partial<CloudLevers>][] {
   const sets: [string, Partial<CloudLevers>][] = []
   for (const cache of CLOUD_CACHES)
     for (const sunDepth of CLOUD_SUN_DEPTHS)
-      for (const far of CLOUD_FAR_KINDS)
-        sets.push([`${cache} ${sunDepth} ${far}`, { cache, sunDepth, far }])
+      sets.push([`${cache} ${sunDepth}`, { cache, sunDepth }])
   for (const force of ['reset', 'cut', 'scrub', 'warp', 'fly'] as const)
     sets.push([`force ${force}`, { force }])
   sets.push(['thin', { composite: 'thin' }])

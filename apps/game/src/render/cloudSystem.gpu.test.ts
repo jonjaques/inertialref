@@ -19,7 +19,6 @@ import { cloudRadianceDifference } from '@inertialref/devtools'
 import type { CloudHistory } from './cloudHistory.ts'
 import {
   CLOUD_CACHES,
-  CLOUD_FAR_KINDS,
   CLOUD_SUN_DEPTHS,
   type CloudLevers,
 } from './cloudLevers.ts'
@@ -143,11 +142,10 @@ describe('every lever set', () => {
     const before = gpu.reported().filter((m) => m.type === 'error').length
     try {
       for (const cache of CLOUD_CACHES)
-        for (const sunDepth of CLOUD_SUN_DEPTHS)
-          for (const far of CLOUD_FAR_KINDS) {
-            set({ cache, sunDepth, far })
-            frames(2)
-          }
+        for (const sunDepth of CLOUD_SUN_DEPTHS) {
+          set({ cache, sunDepth })
+          frames(2)
+        }
       for (const force of ['reset', 'cut', 'scrub', 'warp', 'fly'] as const) {
         set({ force })
         frames(2)
@@ -200,7 +198,6 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     const steady = await order({
       cache: 'field',
       sunDepth: 'cascades',
-      far: 'atlas',
       force: 'none',
     })
     expect(steady).toEqual([
@@ -225,7 +222,6 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     const passes = await order({
       cache: 'volume',
       sunDepth: 'grid',
-      far: 'spheres',
       force: 'none',
     })
     expect(passes.map(([label]) => label)).toEqual([
@@ -235,7 +231,7 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
       'cloud volume',
       'cloud volume bound',
       'cloud sun grid',
-      'cloud far spheres',
+      'cloud far atlas',
       'cloud depth',
       'cloud trace',
       'cloud history',
@@ -259,18 +255,10 @@ describe('what the resources hold', () => {
     }
 
   it.each([
+    ['field and cascades', { cache: 'field', sunDepth: 'cascades' }],
     [
-      'field, cascades and the atlas',
-      { cache: 'field', sunDepth: 'cascades', far: 'atlas' },
-    ],
-    [
-      'the volume, the grid and the spheres',
-      {
-        cache: 'volume',
-        sunDepth: 'grid',
-        far: 'spheres',
-        noiseFormat: 'rgba8',
-      },
+      'the volume and the grid',
+      { cache: 'volume', sunDepth: 'grid', noiseFormat: 'rgba8' },
     ],
   ] as const)(
     'under %s: every texture one level, every resource’s bytes its GPU textures’',
@@ -302,7 +290,7 @@ describe('what the resources hold', () => {
   it('bakes cloud into the far atlas at every face’s center, past the clipmap’s reach', async () => {
     // Overcast covers the whole body: a face's center 90° from the eye is
     // 10,000 km out, where only the cube's synoptic coverage reaches.
-    set({ far: 'atlas', force: 'none' })
+    set({ force: 'none' })
     frames(50)
     const atlas = resource('farAtlas').textures()[0]!
     const centers = Array.from({ length: 6 }, (_, face): [number, number] => [

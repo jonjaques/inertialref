@@ -213,7 +213,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     },
     sun: field.sun,
     phase: field.phase,
-    far: { atlas: field.farAtlas.far, spheres: field.farSpheres.far },
+    far: field.farAtlas.far,
     depth: () => depth.texture,
   })
   const history = new CloudHistory(uniforms, () => trace.outputs)
@@ -279,10 +279,6 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
   )
   scene.add(composite.mesh)
 
-  const farPending = (): boolean =>
-    (levers?.far === 'spheres' ? field.farSpheres : field.farAtlas).pending ||
-    field.farSecond.pending
-
   const reportOf = (): CloudRenderReport => {
     if (disposed) return cloudReportIdle()
     const shown = frame
@@ -317,7 +313,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
         volume: field.volume.pending,
         sunDepth: (levers?.sunDepth === 'grid' ? field.grid : field.cascades)
           .pending,
-        far: farPending(),
+        far: field.farAtlas.pending || field.farSecond.pending,
         history: history.pending,
       },
       bytes: { ...bytes, total },

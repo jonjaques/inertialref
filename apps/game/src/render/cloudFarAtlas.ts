@@ -1,5 +1,4 @@
 import {
-  HalfFloatType,
   type Node,
   NodeMaterial,
   QuadMesh,
@@ -49,7 +48,6 @@ import {
   sunTableAt,
   sunThroughAt,
 } from './air.ts'
-import type { CloudFarDeps, CloudFarField } from './cloudFar.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import {
   cloudSample,
@@ -58,7 +56,6 @@ import {
   shellCrossingFrom,
   sunMuAt,
 } from './cloudGeometry.ts'
-import type { CloudFarKind } from './cloudLevers.ts'
 import type {
   CloudFarFn,
   CloudFarResult,
@@ -73,16 +70,14 @@ import { runQuadPasses } from './quadPass.ts'
 import { warmSensorPass } from './warmup.ts'
 
 /*
- * The layer atlas: 6 faces × 3 layers × 258² texels of (fraction, log
- * in-cloud τ, base, top), RGBA8, a 1548 × 774 2D atlas, baked from the field
- * over 4 × 4 sub-columns and marched as slabs, one texel a step, with
- * per-column mixing and depth moments (§3.13, §5.13).
- *
- * The arithmetic both far candidates share is here too, and the sphere caches
- * import it: the layout and its block schedule, a texel's column statistics,
- * the march's accumulation (light, blocked air, depth moments) and the
- * resource that bakes one block a frame. `cloudFar.ts` constructs both
- * candidates, so it cannot also be what they read from.
+ * The far field: the march past the handover, where a trace texel spans more
+ * than `farFootprint` and the fine march's steps would be finer than the
+ * picture. It is the layer atlas: 6 faces × 3 layers × 258² texels of
+ * (fraction, log in-cloud τ, base, top), RGBA8, a 1548 × 774 2D atlas, baked
+ * from the field over 4 × 4 sub-columns and marched as slabs, one texel a
+ * step, with per-column mixing and depth moments (§3.13, §5.13). The served
+ * body bakes one from the cube's coverage and the second clouded body one
+ * from the analytic medium.
  *
  * Every texture is read at level 0. The served body's march runs inside the
  * trace's kernel, but the second body's runs in the composite's fragment, in
@@ -90,6 +85,30 @@ import { warmSensorPass } from './warmup.ts'
  * derivative. The march and the bake build loops and variables, so each is
  * called from inside a kernel's or a material's `Fn`.
  */
+
+export interface CloudFarField extends CloudResource {
+  /**
+   * The march past the handover, for the body these uniforms describe.
+   * Level-0 reads. It declares variables and loops where it is called, so it
+   * is called inside a kernel's or a material's `Fn`, and its result is read
+   * in the block it was called in: called inside an `If` and read after it,
+   * the result names variables out of scope, which the stand-in's far
+   * function, declaring none, never shows. With `from` at or past the span's
+   * end it returns the empty result itself, so it needs no branch around it.
+   */
+  readonly far: CloudFarFn
+}
+
+interface CloudFarDeps {
+  readonly uniforms: CloudUniforms
+  /**
+   * What it bakes from: `synopticMedium` for the served body (the cube's
+   * coverage, the whole body), `analyticMedium` for the second (§3.10).
+   */
+  readonly field: CloudMediumFn
+  readonly phase: CloudPhaseNodes
+  readonly body: 'served' | 'second'
+}
 
 type F = Node<'float'>
 type I = Node<'int'>
@@ -162,8 +181,6 @@ export const FAR_MARGIN = 500
 const LOG_TAU = Math.log2(513)
 /** A sub-column's spacing in warped units: a quarter of a texel, 2/(256·4). */
 const SUBCOLUMN_WARPED = 2 / (FAR_TILE * SUBCOLUMNS)
-/** The same spacing as an angle at a face's center, where the warp is π/4 a unit. */
-const SUBCOLUMN_ANGLE = (Math.PI / 4) * SUBCOLUMN_WARPED
 
 /** Level 0, named on every read: see the file comment. */
 const LEVEL = { level: true } as const
@@ -207,7 +224,7 @@ function onFace(face: F, values: readonly V3[]): V3 {
 }
 
 /** The unit direction at warped coordinates on a face, `cubeDirection`'s tangent warp. */
-export function faceDirection(face: F, a: F, b: F): V3 {
+function faceDirection(face: F, a: F, b: F): V3 {
   const warp = Math.PI / 4
   return normalize(
     onFace(face, FACE_NORMALS)
@@ -217,7 +234,7 @@ export function faceDirection(face: F, a: F, b: F): V3 {
 }
 
 /** The atlas texel a bake fragment draws: its face's column, its layer's row and its warped center. */
-export interface FarTexel {
+interface FarTexel {
   readonly face: F
   readonly layer: F
   readonly a: F
@@ -234,7 +251,7 @@ export interface FarTexel {
  * inside several loops, and a shared node first built inside one loop is
  * declared in that loop's scope, where the next cannot see it.
  */
-export function farTexel(): FarTexel {
+function farTexel(): FarTexel {
   const x = floor(screenCoordinate.x)
   const y = floor(screenCoordinate.y)
   const face = floor(x.div(FAR_SPAN)).toVar()
@@ -250,7 +267,7 @@ export function farTexel(): FarTexel {
 }
 
 /** A layer's heights over the datum and the eye's over them, by its index. */
-export interface FarLayer {
+interface FarLayer {
   readonly base: F
   readonly top: F
   /** The eye's height over the base and the top, float64-formed on the CPU. */
@@ -259,7 +276,7 @@ export interface FarLayer {
 }
 
 /** Layer `k` of the body's shells, which `ShellHeights` lays out as [b₀, t₀, b₁, t₁, b₂, t₂]. */
-export function farLayer(body: CloudBodyUniforms, k: number): FarLayer {
+function farLayer(body: CloudBodyUniforms, k: number): FarLayer {
   if (k === 0)
     return {
       base: body.boundaries.x,
@@ -283,7 +300,7 @@ export function farLayer(body: CloudBodyUniforms, k: number): FarLayer {
 }
 
 /** The same layer's base and top chosen by an integer-valued float, as a bake fragment knows its row. */
-export function farLayerAt(
+function farLayerAt(
   body: CloudBodyUniforms,
   layer: F,
 ): { readonly base: F; readonly top: F } {
@@ -308,12 +325,12 @@ function farRadius(uniforms: CloudUniforms, k: number): F {
  * shell's upper half is √(radius·thickness) each side of the tangent point:
  * τ over that floor is the chord's.
  */
-export function slantCosine(mu: F, thickness: F, radius: F): F {
+function slantCosine(mu: F, thickness: F, radius: F): F {
   return max(abs(mu), sqrt(max(thickness, 0).div(max(radius, 1))))
 }
 
 /** The eye's position from the body's center, body-fixed meters: float32, for coarse lookups only. */
-export const centerOf = (body: CloudBodyUniforms): V3 =>
+const centerOf = (body: CloudBodyUniforms): V3 =>
   body.up.mul(body.datumRadius.add(body.eye))
 
 /**
@@ -340,7 +357,7 @@ function bakeSample(
 }
 
 /** What a texel's column holds: the bake's four numbers before their encoding. */
-export interface FarColumn {
+interface FarColumn {
   /** The cloudy share of the column. */
   readonly fraction: F
   /** The in-cloud column optical depth, the mean over the cloudy share. */
@@ -363,7 +380,7 @@ export interface FarColumn {
  * to 3; `name` keeps three nested loops' variables apart. What the loops share
  * is declared before them (see `farTexel`).
  */
-export function columnStatistics(
+function columnStatistics(
   field: CloudMediumFn,
   body: CloudBodyUniforms,
   base: F,
@@ -419,7 +436,7 @@ export function columnStatistics(
 }
 
 /** Sub-column (p, q) of the texel at warped (a, b) on `face`. */
-export function subColumnOf(face: F, a: F, b: F): (p: F, q: F) => V3 {
+function subColumnOf(face: F, a: F, b: F): (p: F, q: F) => V3 {
   return (p, q) =>
     faceDirection(
       face,
@@ -428,26 +445,8 @@ export function subColumnOf(face: F, a: F, b: F): (p: F, q: F) => V3 {
     )
 }
 
-/**
- * Sub-column (p, q) of a texel-sized column centered on `direction`, which
- * need not be a texel's center: the sub-columns' spacing at a face's center,
- * along any two axes square to the direction.
- */
-export function subColumnAround(direction: V3): (p: F, q: F) => V3 {
-  const center = direction.toVar()
-  const helper = select(
-    abs(center.y).lessThan(0.9),
-    vec3(0, 1, 0),
-    vec3(1, 0, 0),
-  )
-  const u = normalize(helper.cross(center)).mul(SUBCOLUMN_ANGLE).toVar()
-  const v = center.cross(u).toVar()
-  return (p, q) =>
-    normalize(center.add(u.mul(p.sub(1.5))).add(v.mul(q.sub(1.5))))
-}
-
-/** The far atlases' read of layer `k` at a body-fixed direction: one level-0 read in the face tile. */
-export function farRead(atlas: TextureNode, direction: V3, k: number): V4 {
+/** The atlas's read of layer `k` at a body-fixed direction: one level-0 read in the face tile. */
+function farRead(atlas: TextureNode, direction: V3, k: number): V4 {
   const uv = cubeAtlasUv(
     direction,
     FAR_TILE,
@@ -464,7 +463,7 @@ export function farRead(atlas: TextureNode, direction: V3, k: number): V4 {
  * trace texel spans that much, so it holds the field as the fine march sees it
  * there, and the sub-columns do the averaging a coarser footprint would.
  */
-export const bakeFootprint = (uniforms: CloudUniforms): F =>
+const bakeFootprint = (uniforms: CloudUniforms): F =>
   uniforms.trace.farDistance.mul(uniforms.camera.pixelAngle)
 
 /* ------------------------------------------------------------------------- */
@@ -475,13 +474,13 @@ export const bakeFootprint = (uniforms: CloudUniforms): F =>
 export type AirMediumFn = typeof airMediumAt
 
 /** What a far field may be built with besides its deps: the air a test injects. */
-export interface FarOptions {
+interface FarOptions {
   /** The air's per-sample terms; `airMediumAt` unless a test needs an air the stub does not draw. */
   readonly air?: AirMediumFn
 }
 
 /** One column's crossing as the march takes it: a step [from, to] with its cloud inside it. */
-export interface FarStep {
+interface FarStep {
   readonly from: F
   readonly to: F
   /** Where the cloud starts along the ray, and how far it runs, meters. */
@@ -542,7 +541,7 @@ function meanThrough(tau: F): F {
  * stay at or under zero, `entry` and `exit` being depths, so nothing
  * overflows whichever way a ray runs through the column.
  */
-export function runSunShare(tau: F, entry: F, exit: F): F {
+function runSunShare(tau: F, entry: F, exit: F): F {
   const spread = tau.add(exit).sub(entry).toVar()
   const lit = exp(entry.negate())
   const integral = select(
@@ -564,7 +563,7 @@ export function runSunShare(tau: F, entry: F, exit: F): F {
  * the sun through the rest of the column: σ·(top − h)/μ_s at either end's
  * height, σ the column's extinction a meter of height.
  */
-export function runDepths(
+function runDepths(
   body: CloudBodyUniforms,
   ray: CloudRay,
   run: { readonly start: F; readonly length: F },
@@ -581,8 +580,8 @@ export function runDepths(
 }
 
 /**
- * The state one far march carries from `from` to the span's end, shared by
- * both candidates: the cloud's transmittance, the air's, each layer's light
+ * The state one far march carries from `from` to the span's end: the
+ * cloud's transmittance, the air's, each layer's light
  * before its phase, the blocked air, and the depth moments.
  *
  * The air is sampled once a step, at the step's middle, and once a gap
@@ -599,7 +598,7 @@ export function runDepths(
  * one texel-long step reports a deviation of 0 m, and the composite's share
  * in front of the terrain becomes a hard edge at the slab's middle.
  */
-export class FarMarch {
+class FarMarch {
   readonly #ray: CloudRay
   readonly #body: CloudBodyUniforms
   readonly #sky: B
@@ -771,200 +770,10 @@ export class FarMarch {
 }
 
 /** The beam a cloud at an altitude takes: `sunThroughAt` at the whole `cleared`, as the ground's (§5.9). */
-export function cloudBeam(body: CloudBodyUniforms, altitude: F, sunMu: F): V3 {
+function cloudBeam(body: CloudBodyUniforms, altitude: F, sunMu: F): V3 {
   const air = body.air
   const height01 = altitude.div(body.datumRadius).div(max(air.top.sub(1), 1e-6))
   return sunThroughAt(air, height01, sunMu, body.cleared, LEVEL)
-}
-
-/* ------------------------------------------------------------------------- */
-/* The resource                                                               */
-/* ------------------------------------------------------------------------- */
-
-const LABELS = {
-  atlas: 'cloud far atlas',
-  spheres: 'cloud far spheres',
-  second: 'cloud far second',
-} as const
-
-const NAMES = {
-  atlas: 'farAtlas',
-  spheres: 'farSpheres',
-  second: 'farSecond',
-} as const
-
-const FORMATS = {
-  rgba8: { type: UnsignedByteType, bytes: 4 },
-  rgba16f: { type: HalfFloatType, bytes: 8 },
-} as const
-
-/**
- * The bake both candidates share: an atlas target, one scissored 192 × 192
- * block drawn a frame as one quad, so the bake is one pass on the timeline
- * and 45 blocks cover the atlas.
- *
- * It allocates at its real size only on a frame that selects it — the served
- * body's on `levers.far`, the second body's whenever there is one — and
- * shrinks back to 1 × 1 on a frame that does not, so a lever's A/B in one boot
- * declares one candidate's bytes and not both. A resize is followed at once by
- * `initRenderTarget`, which allocates without drawing, so what `textures()`
- * lists always exists on the GPU at the size `bytes` declares.
- *
- * The atlas is body-fixed, not eye-anchored, so a cut leaves it valid. A jump
- * of the field's time, or a change of the scenario, the body or the handover
- * footprint it was baked at, owes the whole cycle again, and until 45 blocks
- * have been drawn since, it is `pending`. The blocks keep their order through
- * that: restarted at the first block, a scrub, which jumps every frame, would
- * redraw that one block forever and never the other 44. Between, it keeps
- * baking a block a frame, which refreshes the whole atlas every 45 frames for
- * the field's time.
- */
-export class FarBake implements CloudResource {
-  readonly name: string
-  readonly #label: string
-  readonly #side: 'served' | 'second'
-  readonly #kind: CloudFarKind
-  readonly #texelBytes: number
-  readonly #target: RenderTarget
-  readonly #material = new NodeMaterial()
-  readonly #quad = new QuadMesh(this.#material)
-  #allocated = false
-  #disposed = false
-  #warm: Promise<void> | null = null
-  #next = 0
-  #due = 0
-  #key: string | null = null
-
-  constructor(
-    deps: CloudFarDeps,
-    kind: CloudFarKind,
-    format: keyof typeof FORMATS,
-    fragment: V4,
-  ) {
-    this.#side = deps.body
-    this.#kind = kind
-    const role = deps.body === 'second' ? 'second' : kind
-    this.name = NAMES[role]
-    this.#label = LABELS[role]
-    this.#texelBytes = FORMATS[format].bytes
-    this.#target = new RenderTarget(1, 1, {
-      type: FORMATS[format].type,
-      depthBuffer: false,
-    })
-    this.#target.texture.name = this.#label
-    this.#material.fragmentNode = fragment
-    this.#material.name = this.#label
-  }
-
-  /** What the march reads: the same texture object at every size, so no program rebinds. */
-  get texture(): Texture {
-    return this.#target.texture
-  }
-
-  get bytes(): number {
-    if (this.#disposed || !this.#allocated) return 0
-    return this.#target.width * this.#target.height * this.#texelBytes
-  }
-
-  get pending(): boolean {
-    return !this.#disposed && this.#due > 0
-  }
-
-  textures(): readonly Texture[] {
-    return this.#disposed || !this.#allocated ? [] : [this.#target.texture]
-  }
-
-  /**
-   * Compiles the bake against its 1 × 1 target of the real format: a pipeline
-   * is keyed on the format, not the size. Off WebGPU there is nothing to
-   * compile — the clouds are WebGPU's alone (§4.6) — and a renderer with no
-   * WebGPU backend, which the contracts' stub test hands it, warms nothing.
-   */
-  warm(renderer: WebGPURenderer): Promise<void> {
-    const backend = (renderer as { backend?: { isWebGPUBackend?: boolean } })
-      ?.backend
-    if (this.#disposed || backend?.isWebGPUBackend !== true)
-      return Promise.resolve()
-    this.#warm ??= this.#compile(renderer)
-    return this.#warm
-  }
-
-  #compile(renderer: WebGPURenderer): Promise<void> {
-    renderer.initRenderTarget(this.#target)
-    this.#allocated = true
-    return warmSensorPass(renderer, this.#quad, [
-      { target: this.#target, material: this.#material },
-    ])
-  }
-
-  /**
-   * One block, every frame that selects it, whatever the budget: the far
-   * bake's cadence is fixed (§4.4), so its pass count on the timeline does not
-   * move with the frame's other work.
-   */
-  render(renderer: WebGPURenderer, frame: CloudFrame): void {
-    if (this.#disposed) return
-    const body = this.#side === 'served' ? frame.served : frame.second
-    if (
-      body === null ||
-      (this.#side === 'served' && frame.levers.far !== this.#kind)
-    ) {
-      this.#release(renderer)
-      return
-    }
-    if (this.#target.width !== FAR_WIDTH || this.#target.height !== FAR_HEIGHT)
-      this.#resize(renderer, FAR_WIDTH, FAR_HEIGHT)
-    const key = `${frame.scenario.id} ${body.address} ${frame.levers.farFootprint}`
-    if (key !== this.#key || frame.jump) {
-      this.#key = key
-      this.#due = FAR_CYCLE
-    }
-    this.#draw(renderer)
-  }
-
-  #draw(renderer: WebGPURenderer): void {
-    const block = farBlock(this.#next)
-    const target = this.#target
-    target.scissor.set(block.x, block.y, block.width, block.height)
-    target.scissorTest = true
-    try {
-      runQuadPasses(
-        renderer,
-        this.#quad,
-        // Each block replaces the texels it covers and no others: a clear
-        // would erase every block before it, since a load clear ignores the
-        // scissor, and three reads the scissor's enable from the renderer and
-        // its rectangle from the target.
-        { linear: true, autoClear: false, scissor: true },
-        (draw) => draw(this.#label, target, this.#material),
-      )
-    } finally {
-      target.scissorTest = false
-    }
-    this.#next = (this.#next + 1) % FAR_CYCLE
-    if (this.#due > 0) this.#due -= 1
-  }
-
-  #resize(renderer: WebGPURenderer, width: number, height: number): void {
-    this.#target.setSize(width, height)
-    renderer.initRenderTarget(this.#target)
-    this.#allocated = true
-  }
-
-  #release(renderer: WebGPURenderer): void {
-    this.#due = 0
-    this.#key = null
-    if (this.#target.width === 1 && this.#target.height === 1) return
-    this.#resize(renderer, 1, 1)
-  }
-
-  dispose(): void {
-    if (this.#disposed) return
-    this.#disposed = true
-    this.#due = 0
-    this.#target.dispose()
-    this.#material.dispose()
-  }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1199,15 +1008,174 @@ function atlasMarch(
   }
 }
 
-export class CloudFarAtlas extends FarBake implements CloudFarField {
+/* ------------------------------------------------------------------------- */
+/* The resource                                                               */
+/* ------------------------------------------------------------------------- */
+
+const LABELS = {
+  served: 'cloud far atlas',
+  second: 'cloud far second',
+} as const
+const NAMES = { served: 'farAtlas', second: 'farSecond' } as const
+/** RGBA8. */
+const TEXEL_BYTES = 4
+
+/**
+ * One body's atlas: a target baked one scissored 192 × 192 block a frame as
+ * one quad, so the bake is one pass on the timeline and 45 blocks cover the
+ * atlas, and the march that reads it.
+ *
+ * It allocates at its real size only on a frame that has its body — the
+ * served body's always, the second body's whenever there is one — and
+ * shrinks back to 1 × 1 on a frame that does not. A resize is followed at
+ * once by `initRenderTarget`, which allocates without drawing, so what
+ * `textures()` lists always exists on the GPU at the size `bytes` declares.
+ *
+ * The atlas is body-fixed, not eye-anchored, so a cut leaves it valid. A jump
+ * of the field's time, or a change of the scenario, the body or the handover
+ * footprint it was baked at, owes the whole cycle again, and until 45 blocks
+ * have been drawn since, it is `pending`. The blocks keep their order through
+ * that: restarted at the first block, a scrub, which jumps every frame, would
+ * redraw that one block forever and never the other 44. Between, it keeps
+ * baking a block a frame, which refreshes the whole atlas every 45 frames for
+ * the field's time.
+ */
+export class CloudFarAtlas implements CloudFarField {
+  readonly name: string
   readonly far: CloudFarFn
+  readonly #label: string
+  readonly #side: 'served' | 'second'
+  readonly #target = new RenderTarget(1, 1, {
+    type: UnsignedByteType,
+    depthBuffer: false,
+  })
+  readonly #material = new NodeMaterial()
+  readonly #quad = new QuadMesh(this.#material)
+  #allocated = false
+  #disposed = false
+  #warm: Promise<void> | null = null
+  #next = 0
+  #due = 0
+  #key: string | null = null
 
   constructor(deps: CloudFarDeps, options: FarOptions = {}) {
-    super(deps, 'atlas', 'rgba8', atlasBake(deps))
+    this.#side = deps.body
+    this.name = NAMES[deps.body]
+    this.#label = LABELS[deps.body]
+    this.#target.texture.name = this.#label
+    this.#material.fragmentNode = atlasBake(deps)
+    this.#material.name = this.#label
     this.far = atlasMarch(
       deps,
       texture(this.texture),
       options.air ?? airMediumAt,
     )
+  }
+
+  /** What the march reads: the same texture object at every size, so no program rebinds. */
+  get texture(): Texture {
+    return this.#target.texture
+  }
+
+  get bytes(): number {
+    if (this.#disposed || !this.#allocated) return 0
+    return this.#target.width * this.#target.height * TEXEL_BYTES
+  }
+
+  get pending(): boolean {
+    return !this.#disposed && this.#due > 0
+  }
+
+  textures(): readonly Texture[] {
+    return this.#disposed || !this.#allocated ? [] : [this.#target.texture]
+  }
+
+  /**
+   * Compiles the bake against its 1 × 1 target of the real format: a pipeline
+   * is keyed on the format, not the size. Off WebGPU there is nothing to
+   * compile — the clouds are WebGPU's alone (§4.6) — and a renderer with no
+   * WebGPU backend, which the contracts' stub test hands it, warms nothing.
+   */
+  warm(renderer: WebGPURenderer): Promise<void> {
+    const backend = (renderer as { backend?: { isWebGPUBackend?: boolean } })
+      ?.backend
+    if (this.#disposed || backend?.isWebGPUBackend !== true)
+      return Promise.resolve()
+    this.#warm ??= this.#compile(renderer)
+    return this.#warm
+  }
+
+  #compile(renderer: WebGPURenderer): Promise<void> {
+    renderer.initRenderTarget(this.#target)
+    this.#allocated = true
+    return warmSensorPass(renderer, this.#quad, [
+      { target: this.#target, material: this.#material },
+    ])
+  }
+
+  /**
+   * One block, every frame that has its body, whatever the budget: the far
+   * bake's cadence is fixed (§4.4), so its pass count on the timeline does not
+   * move with the frame's other work.
+   */
+  render(renderer: WebGPURenderer, frame: CloudFrame): void {
+    if (this.#disposed) return
+    const body = this.#side === 'served' ? frame.served : frame.second
+    if (body === null) {
+      this.#release(renderer)
+      return
+    }
+    if (this.#target.width !== FAR_WIDTH || this.#target.height !== FAR_HEIGHT)
+      this.#resize(renderer, FAR_WIDTH, FAR_HEIGHT)
+    const key = `${frame.scenario.id} ${body.address} ${frame.levers.farFootprint}`
+    if (key !== this.#key || frame.jump) {
+      this.#key = key
+      this.#due = FAR_CYCLE
+    }
+    this.#draw(renderer)
+  }
+
+  #draw(renderer: WebGPURenderer): void {
+    const block = farBlock(this.#next)
+    const target = this.#target
+    target.scissor.set(block.x, block.y, block.width, block.height)
+    target.scissorTest = true
+    try {
+      runQuadPasses(
+        renderer,
+        this.#quad,
+        // Each block replaces the texels it covers and no others: a clear
+        // would erase every block before it, since a load clear ignores the
+        // scissor, and three reads the scissor's enable from the renderer and
+        // its rectangle from the target.
+        { linear: true, autoClear: false, scissor: true },
+        (draw) => draw(this.#label, target, this.#material),
+      )
+    } finally {
+      target.scissorTest = false
+    }
+    this.#next = (this.#next + 1) % FAR_CYCLE
+    if (this.#due > 0) this.#due -= 1
+  }
+
+  #resize(renderer: WebGPURenderer, width: number, height: number): void {
+    this.#target.setSize(width, height)
+    renderer.initRenderTarget(this.#target)
+    this.#allocated = true
+  }
+
+  #release(renderer: WebGPURenderer): void {
+    this.#due = 0
+    this.#key = null
+    if (this.#target.width === 1 && this.#target.height === 1) return
+    this.#resize(renderer, 1, 1)
+  }
+
+  dispose(): void {
+    if (this.#disposed) return
+    this.#disposed = true
+    this.#due = 0
+    this.#target.dispose()
+    this.#material.dispose()
   }
 }

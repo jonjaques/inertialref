@@ -13,10 +13,6 @@ import { SCENARIO_IDS, type ScenarioId } from '@inertialref/rendering'
 export const CLOUD_CACHES = ['field', 'volume'] as const
 export type CloudCache = (typeof CLOUD_CACHES)[number]
 
-/** `levels` is decided on paper: its memory loses under the far-field rule (§1.3). */
-export const CLOUD_FAR_KINDS = ['atlas', 'spheres'] as const
-export type CloudFarKind = (typeof CLOUD_FAR_KINDS)[number]
-
 export const CLOUD_SUN_DEPTHS = ['cascades', 'grid'] as const
 export type CloudSunDepth = (typeof CLOUD_SUN_DEPTHS)[number]
 
@@ -56,7 +52,6 @@ export interface CloudLevers {
   readonly on: boolean
   readonly scenario: ScenarioId
   readonly cache: CloudCache
-  readonly far: CloudFarKind
   /** Meters a trace texel spans where a ray hands over to the far march. */
   readonly farFootprint: number
   readonly sunDepth: CloudSunDepth
@@ -106,7 +101,6 @@ export const DEFAULT_CLOUD_LEVERS: CloudLevers = Object.freeze({
   on: false,
   scenario: 'fair-cumulus',
   cache: 'field',
-  far: 'atlas',
   farFootprint: 400,
   sunDepth: 'cascades',
   lightTaps: 2,
@@ -143,7 +137,6 @@ const FIELDS: Readonly<Record<keyof CloudLevers, (value: unknown) => boolean>> =
     on: (value) => typeof value === 'boolean',
     scenario: oneOf(SCENARIO_IDS),
     cache: oneOf(CLOUD_CACHES),
-    far: oneOf(CLOUD_FAR_KINDS),
     farFootprint: (value) => finite(value) && value > 0,
     sunDepth: oneOf(CLOUD_SUN_DEPTHS),
     lightTaps: oneOf(LIGHT_TAP_COUNTS),
@@ -199,7 +192,6 @@ export function cloudResetKey(levers: CloudLevers): string {
   return JSON.stringify([
     levers.scenario,
     levers.cache,
-    levers.far,
     levers.farFootprint,
     levers.sunDepth,
     levers.composite,

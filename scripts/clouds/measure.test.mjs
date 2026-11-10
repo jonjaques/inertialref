@@ -89,9 +89,9 @@ describe('the batches', () => {
       expect(new Set(runs.map((r) => r.id)).size).toBe(runs.length)
   })
 
-  it('runs the decisions as the design counts them: 60 A/B runs', () => {
+  it('runs the decisions as the design counts them: 56 A/B runs', () => {
     const runs = ALL.decisions
-    expect(runs).toHaveLength(60)
+    expect(runs).toHaveLength(56)
     const cache = runs.filter((r) => r.group === 'cache')
     expect(count(cache, (r) => r.kind === 'steady')).toBe(24)
     expect(count(cache, (r) => r.kind === 'fly')).toBe(16)
@@ -107,17 +107,6 @@ describe('the batches', () => {
       if (r.kind !== 'steady') expect(r.candidate.force).toBe(r.kind)
       if (r.kind === 'cut' || r.kind === 'scrub')
         expect(r.scenario).toBe('horizon')
-    }
-    const far = runs.filter((r) => r.group === 'far')
-    expect(far).toHaveLength(4)
-    for (const r of far) {
-      expect(r.base).toMatchObject({
-        on: true,
-        far: 'atlas',
-        cache: 'field',
-        sunDepth: 'cascades',
-      })
-      expect(r.candidate).toMatchObject({ on: true, far: 'spheres' })
     }
   })
 

@@ -36,11 +36,7 @@ import {
   traceScreen,
   viewDirection,
 } from './cloudGeometry.ts'
-import {
-  type CloudFarKind,
-  type CloudLevers,
-  DEFAULT_CLOUD_LEVERS,
-} from './cloudLevers.ts'
+import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { cloudMarch, type CloudMarchDeps, marchFar } from './cloudMarch.ts'
 import { type CloudBudget, type CloudRay, traceJitter } from './cloudNodes.ts'
 import { SUN_DEPTH_FRAME_CAP } from './cloudSunCascades.ts'
@@ -53,14 +49,14 @@ import {
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The far field against the fine march on the real field (§8.6): an
+ * The far atlas against the fine march on the real field (§8.6): an
  * instrument, opt-in by IR_CLOUD_MEASURE=1, that writes
  * `.data/clouds/farCompare.json` and asserts only that every figure is
- * finite and sane. Far-field rule input: the worst footprint-averaged
- * radiance error over the four cases at farFootprint 400 m (§8.7).
+ * finite and sane. Its headline is the worst footprint-averaged radiance
+ * error over the four cases at farFootprint 400 m (§8.7).
  *
  * The field is the system's own (`createCloudField`): the maps, the
- * clipmap, the media, both far fields and the cascades the fine march takes
+ * clipmap, the media, the far atlas and the cascades the fine march takes
  * its sun from, baked by frames built as the sensor builds them, over Earth
  * with its own air. 256 × 144 rays, the trace's extent for a 1024 × 576
  * picture through the rig's 60° lens, each case placed so the middle ray
@@ -71,16 +67,15 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  *
  * - the fine march over the whole ray, the reference: the handover pushed
  *   past the span (farFootprint → ∞) and a budget no ray exhausts;
- * - each far candidate from t₀, alone;
+ * - the far atlas from t₀, alone;
  * - the handover by an exhausted budget: the fine march at a budget most
- *   rays run out of, then the candidate from where it stopped, as the trace
+ *   rays run out of, then the atlas from where it stopped, as the trace
  *   composes them (`marchFar`).
  *
- * The decision's figure averages over each far texel's footprint: rays are
- * binned by the far texel their handover point falls in, and the bins'
- * means compared, because the two candidates share one texel layout and
- * per-pixel error at a fixed handover would decide on resolution rather
- * than representation. The per-pixel error is recorded beside it, for phase
+ * The headline averages over each far texel's footprint: rays are binned by
+ * the far texel their handover point falls in, and the bins' means
+ * compared, because per-pixel error at a fixed handover measures the
+ * atlas's resolution rather than its representation. The per-pixel error is recorded beside it, for phase
  * 1's cross-fade, with the depth moments' and the blocked air's.
  *
  * The radiance is the cloud's own light, L_c's luminance per unit sun
@@ -174,7 +169,7 @@ const CASES: readonly Case[] = [
   },
   {
     // From just over broken cumulus toward a sun 2° up, the rays crossing
-    // the layer at under 2°: the chord the spheres take as one column.
+    // the layer at under 2°: chords across many far texels.
     id: 'grazing at sunset',
     scenario: 'broken-horizon',
     content: 1550,
@@ -368,14 +363,9 @@ const fineVariant =
   }
 
 const farVariant =
-  (field: CloudField, kind: CloudFarKind): Variant =>
+  (field: CloudField): Variant =>
   (ray, _jitter, sky) => {
-    const far = (kind === 'atlas' ? field.farAtlas : field.farSpheres).far(
-      ray,
-      ray.start,
-      field.uniforms.served,
-      sky,
-    )
+    const far = field.farAtlas.far(ray, ray.start, field.uniforms.served, sky)
     return {
       light: far.light,
       air: far.air,
@@ -388,9 +378,9 @@ const farVariant =
   }
 
 const handoverVariant =
-  (field: CloudField, kind: CloudFarKind): Variant =>
+  (field: CloudField): Variant =>
   (ray, jitter, sky) => {
-    const far = (kind === 'atlas' ? field.farAtlas : field.farSpheres).far
+    const far = field.farAtlas.far
     const fine = cloudMarch(ray, jitter, sky, marchDeps(field), null)
     const both = marchFar(
       fine,
@@ -445,7 +435,7 @@ const mean = (values: readonly number[]): number =>
   values.length === 0 ? 0 : values.reduce((s, v) => s + v, 0) / values.length
 
 interface Scored {
-  /** The candidate's own means over every ray, beside the reference's. */
+  /** The march's own means over every ray, beside the reference's. */
   readonly meanLight: number
   readonly meanTransmittance: number
   readonly footprint: {
@@ -463,7 +453,7 @@ interface Scored {
   }
 }
 
-/** One candidate's record against the reference's, over the reference's bins. */
+/** One march's record against the reference's, over the reference's bins. */
 function score(
   reference: Float32Array,
   other: Float32Array,
@@ -597,26 +587,14 @@ async function atlasTexel(
 }
 
 describe.skipIf(!MEASURE)('the far field against the fine march', () => {
-  it('scores both candidates over each far texel’s footprint on the real field, and writes the figures', async () => {
+  it('scores the atlas over each far texel’s footprint on the real field, and writes the figures', async () => {
     const renderer = gpu.renderer
     const buffer = new StorageBufferAttribute(new Float32Array(RAYS * SLOTS), 1)
     const handover = uniform(0)
     const kernels = {
       fine: rayKernel(field, buffer, handover, fineVariant(field)),
-      atlas: rayKernel(field, buffer, handover, farVariant(field, 'atlas')),
-      spheres: rayKernel(field, buffer, handover, farVariant(field, 'spheres')),
-      atlasHandover: rayKernel(
-        field,
-        buffer,
-        handover,
-        handoverVariant(field, 'atlas'),
-      ),
-      spheresHandover: rayKernel(
-        field,
-        buffer,
-        handover,
-        handoverVariant(field, 'spheres'),
-      ),
+      atlas: rayKernel(field, buffer, handover, farVariant(field)),
+      atlasHandover: rayKernel(field, buffer, handover, handoverVariant(field)),
     }
     let previous: CloudFrame | null = null
     /** Frames at a stance until every bake owes nothing, past two far cycles. */
@@ -664,14 +642,13 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
         const { stance, eye, pitch } = stanceOf(c, footprint)
         const tFar = footprint / PIXEL_ANGLE
         handover.value = tFar
-        const levers = (far: CloudFarKind): CloudLevers => ({
+        const levers: CloudLevers = {
           ...DEFAULT_CLOUD_LEVERS,
           on: true,
           scenario: c.scenario,
-          far,
           farFootprint: footprint,
-        })
-        const frame = settle(stance, levers('atlas'))
+        }
+        const frame = settle(stance, levers)
         expect(frame.extents.trace).toEqual({ width: WIDTH, height: HEIGHT })
         expect(frame.camera.pixelAngle).toBeCloseTo(PIXEL_ANGLE, 9)
         const reference = await dispatch(kernels.fine, {
@@ -688,11 +665,6 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
           x: 0,
           y: Math.cos(arc),
           z: -Math.sin(arc),
-        })
-        settle(stance, levers('spheres'))
-        const spheres = await dispatch(kernels.spheres, {})
-        const spheresHandover = await dispatch(kernels.spheresHandover, {
-          maxSteps: EXHAUSTED_STEPS,
         })
 
         const bins = new Map<string, number[]>()
@@ -738,15 +710,11 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
             mostSteps: referenceSteps,
             exhaustedRays: referenceExhausted,
           },
-          candidates: {
-            atlas: score(reference, atlas, bins),
-            spheres: score(reference, spheres, bins),
-          },
+          atlas: score(reference, atlas, bins),
           handover: {
             budget: EXHAUSTED_STEPS,
             exhaustedShare,
             atlas: score(reference, atlasHandover, bins),
-            spheres: score(reference, spheresHandover, bins),
           },
           farTexel1800km: { fraction: probe[0], logTau: probe[1] },
         })
@@ -787,7 +755,7 @@ describe.skipIf(!MEASURE)('the far field against the fine march', () => {
       OUT,
       `${JSON.stringify(
         {
-          note: 'cloudFarCompare.gpu.test.ts: each far candidate against the fine march over the whole ray, on the real field (§8.6)',
+          note: 'cloudFarCompare.gpu.test.ts: the far atlas against the fine march over the whole ray, on the real field (§8.6)',
           body: 'Earth',
           trace: { width: WIDTH, height: HEIGHT, pixelAngle: PIXEL_ANGLE },
           units: {

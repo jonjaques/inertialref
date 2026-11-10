@@ -41,10 +41,8 @@ import {
 import { cloudKnotWriter } from './cloudKnots.ts'
 import {
   CLOUD_CACHES,
-  CLOUD_FAR_KINDS,
   CLOUD_SUN_DEPTHS,
   type CloudCache,
-  type CloudFarKind,
   type CloudLevers,
   type CloudSunDepth,
 } from './cloudLevers.ts'
@@ -71,7 +69,7 @@ import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
 import { warmCompute } from './warmup.ts'
 
 /*
- * The trace: one compute kernel a (cache, sun depth, far) triple, and the
+ * The trace: one compute kernel a (cache, sun depth) pair, and the
  * sweep's, each named `cloud trace`, at a quarter of the display's axes. A
  * converging frame dispatches once at this frame's interleave phase; the
  * immediate regime dispatches four times at the same extent, a quarter of
@@ -80,7 +78,7 @@ import { warmCompute } from './warmup.ts'
  * A sun depth is its own variant because the cascades (a 2D array) and the
  * grid (a 3D texture) are two binding types, and binding both would put the
  * volume's kernels at 16 of the stage's 16 sampled textures. A kernel binds
- * the field (7), one sun depth, the served air (2), the phase, one far field
+ * the field (7), one sun depth, the served air (2), the phase, the far atlas
  * and the depth copy: 13, and 15 with the volume. It writes the four outputs,
  * which is the stage's limit of storage textures, so the trace has no room
  * for a fifth.
@@ -117,7 +115,8 @@ export interface CloudTraceDeps {
   }
   readonly sun: Readonly<Record<CloudSunDepth, CloudSunFn>>
   readonly phase: CloudPhaseNodes
-  readonly far: Readonly<Record<CloudFarKind, CloudFarFn>>
+  /** The served body's far atlas. */
+  readonly far: CloudFarFn
   /** The render-resolution scene distance, km (R16F), from the depth copy. */
   readonly depth: () => Texture
   /** The air's per-sample terms; `airMediumAt` when absent. */
@@ -148,11 +147,10 @@ const STAT_SLOTS = 4
 interface KernelChoice {
   readonly cache: CloudCache
   readonly sunDepth: CloudSunDepth
-  readonly far: CloudFarKind
 }
 
 const keyOf = (choice: KernelChoice): string =>
-  `${choice.cache} ${choice.sunDepth} ${choice.far}`
+  `${choice.cache} ${choice.sunDepth}`
 
 const SWEEP = 'sweep'
 
@@ -281,8 +279,12 @@ function traceKernel(
           { ...deps, medium, sun: deps.sun[choice.sunDepth] },
           knots,
         )
-        const far = deps.far[choice.far]
-        result = marchFar(fine, ray, (from) => far(ray, from, body, sky), knots)
+        result = marchFar(
+          fine,
+          ray,
+          (from) => deps.far(ray, from, body, sky),
+          knots,
+        )
       }
       store(outputs, texel, result, knots.count)
       knots.flush(texel)
@@ -293,17 +295,14 @@ function traceKernel(
     .setName(CLOUD_TRACE_LABEL)
 }
 
-/** Every (cache, sun depth, far) triple the media allow. */
+/** Every (cache, sun depth) pair the media allow. */
 function choices(deps: CloudTraceDeps): KernelChoice[] {
   const volume =
     deps.media.volume !== null &&
     deps.media.bound !== null &&
     deps.media.brickExit !== null
   return CLOUD_CACHES.filter((cache) => cache === 'field' || volume).flatMap(
-    (cache) =>
-      CLOUD_SUN_DEPTHS.flatMap((sunDepth) =>
-        CLOUD_FAR_KINDS.map((far) => ({ cache, sunDepth, far })),
-      ),
+    (cache) => CLOUD_SUN_DEPTHS.map((sunDepth) => ({ cache, sunDepth })),
   )
 }
 

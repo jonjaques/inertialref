@@ -534,7 +534,7 @@ export function hitch(samples) {
 
 /** The passes that bake a cache, a map or the far field rather than draw the frame. */
 const BAKES =
-  /^cloud (noise|maps|clipmap|volume|volume bound|sun cascade|sun grid|far atlas|far spheres|far second)$/
+  /^cloud (noise|maps|clipmap|volume|volume bound|sun cascade|sun grid|far atlas|far second)$/
 
 /** What each kind of run's results say, flat, so a table only formats. */
 const READ = {

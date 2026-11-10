@@ -202,7 +202,7 @@ const HIDDEN = { on: false, deck: 'hidden' }
  * figure resolves.
  */
 export const HELD = Object.freeze({ jitterFrame: 0 })
-/** The force each kind sets; `steady` and `choice` set none. */
+/** The force each kind sets; `steady` sets none. */
 const FORCE = {
   reset: { force: 'reset' },
   cut: { force: 'cut' },
@@ -266,15 +266,7 @@ function decisions(size) {
       ...['cut', 'scrub'].map((kind) => at('horizon', kind, 3)),
     ]
   })
-  // Measured on (field, cascades), the defaults, and decided on its own.
-  const far = ['orbit', 'horizon'].map((s) =>
-    ab('decisions', 'far', 'spheres', s, size, 'choice', {
-      base: { on: true, far: 'atlas' },
-      candidate: { on: true, far: 'spheres' },
-      pairs: 5,
-    }),
-  )
-  return [...cache, ...far]
+  return cache
 }
 
 const LANDED = [

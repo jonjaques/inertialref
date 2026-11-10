@@ -206,7 +206,7 @@ interface Media {
 
 /**
  * The trace's deps over the stand-ins, every candidate's: the field and the
- * volume carrying `medium`, both sun depths, both far fields, the stand-in
+ * volume carrying `medium`, both sun depths, the far field, the stand-in
  * phase, and the depth copy `depth` stands in for.
  */
 function standIns(
@@ -233,7 +233,7 @@ function standIns(
         grid: testSun(field, CLOUD_STAND_INS.sunDepth('grid')),
       },
       phase: options.phase ?? CLOUD_STAND_INS.phase(),
-      far: { atlas: CLOUD_STAND_INS.far(), spheres: CLOUD_STAND_INS.far() },
+      far: CLOUD_STAND_INS.far(),
       depth,
     },
   }
@@ -370,18 +370,18 @@ function bindings(wgsl: string): { sampled: number; storage: number } {
 }
 
 describe('the kernels', () => {
-  it('all nine compile against the stand-ins, and bind within the stage’s limits', async () => {
+  it('all five compile against the stand-ins, and bind within the stage’s limits', async () => {
     const uniforms = createCloudUniforms()
     const sky = depthTexture(4, 4, () => SKY_KM)
     const { deps } = standIns(uniforms, slabMedium([]), () => sky)
     const trace = new CloudTrace(deps)
     const kernels = trace.kernels()
-    // Eight (cache, sun depth, far) triples, the sweep's, and the counters' clear.
-    expect(kernels).toHaveLength(10)
+    // Four (cache, sun depth) pairs, the sweep's, and the counters' clear.
+    expect(kernels).toHaveLength(6)
     const from = gpu.reported().length
     const before = gpu.computePipelinesBuilt()
     await trace.warm(renderer)
-    expect(gpu.computePipelinesBuilt() - before).toBe(10)
+    expect(gpu.computePipelinesBuilt() - before).toBe(6)
     expect(
       gpu
         .reported()
@@ -397,16 +397,14 @@ describe('the kernels', () => {
       expect(sampled).toBeLessThanOrEqual(16)
       expect(storage).toBeLessThanOrEqual(4)
     }
-    const traces = counted.slice(0, 9)
+    const traces = counted.slice(0, 5)
     // The design's census (§3.7): the field's 7, one sun depth, the air's 2,
-    // the phase, one far field and the depth copy; the volume's 2 beside
+    // the phase, the far atlas and the depth copy; the volume's 2 beside
     // them; the sweep's field and depth alone. A floor as well as a ceiling:
     // the counts are a regex over three's WGSL, and a spelling that stopped
     // matching would pass the ceiling at zero.
-    expect(traces.map(({ sampled }) => sampled)).toEqual([
-      13, 13, 13, 13, 15, 15, 15, 15, 8,
-    ])
-    expect(traces.map(({ storage }) => storage)).toEqual(Array(9).fill(4))
+    expect(traces.map(({ sampled }) => sampled)).toEqual([13, 13, 15, 15, 8])
+    expect(traces.map(({ storage }) => storage)).toEqual(Array(5).fill(4))
     expect(new Set(counted.map(({ name }) => name))).toEqual(
       new Set(['cloud trace', 'cloud stats']),
     )
@@ -1416,7 +1414,7 @@ describe('the knots', () => {
 })
 
 describe('the kernels’ choice', () => {
-  it('marches one medium alike in every (cache, sun depth, far) triple', async () => {
+  it('marches one medium alike in every (cache, sun depth) pair', async () => {
     const slab = slabMedium([{ ...SLAB, sigma: 0.002 }])
     const traced = await rig(slab, 4, 4, {
       eye: 0,
@@ -1424,16 +1422,12 @@ describe('the kernels’ choice', () => {
     })
     const outputs: number[][] = []
     for (const cache of ['field', 'volume'] as const)
-      for (const sunDepth of ['cascades', 'grid'] as const)
-        for (const far of ['atlas', 'spheres'] as const) {
-          const frame = frameOf(
-            { width: 4, height: 4 },
-            { cache, sunDepth, far },
-          )
-          traced.trace.render(renderer, frame, BUDGET)
-          const { light, aux } = await outputsOf(traced.trace, 4, 4)
-          outputs.push([...light(1, 2), ...aux(3, 2), ...aux(4, 1)])
-        }
+      for (const sunDepth of ['cascades', 'grid'] as const) {
+        const frame = frameOf({ width: 4, height: 4 }, { cache, sunDepth })
+        traced.trace.render(renderer, frame, BUDGET)
+        const { light, aux } = await outputsOf(traced.trace, 4, 4)
+        outputs.push([...light(1, 2), ...aux(3, 2), ...aux(4, 1)])
+      }
     // A slab the stand-ins add nothing to: the same numbers from each.
     expect(outputs[0]![3]).toBeLessThan(1)
     for (const output of outputs) expect(output).toEqual(outputs[0])

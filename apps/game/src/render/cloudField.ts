@@ -7,7 +7,7 @@ import {
   sweepMedium,
   synopticMedium,
 } from './cloudDensity.ts'
-import { type CloudFarField, createFarField } from './cloudFar.ts'
+import { CloudFarAtlas } from './cloudFarAtlas.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import type { CloudSunDepth } from './cloudLevers.ts'
 import { CloudMaps, writeScenarioPattern } from './cloudMaps.ts'
@@ -29,8 +29,8 @@ import { CloudVolume } from './cloudVolume.ts'
 /*
  * The field and everything that reads it: the uniform bundle, the noise,
  * the profile, the maps and the clipmap, the four media, the volume, both
- * sun depths with the light through each, the droplets' phase and the far
- * fields, each built once and handed to every module that reads it. The
+ * sun depths with the light through each, the droplets' phase and the two
+ * far atlases, each built once and handed to every module that reads it. The
  * trace's 13 sampled bindings (15 with the volume) of WebGPU's 16 are counted
  * on shared nodes: a second medium built over the same textures is a second
  * set of bindings, and the volume's kernels would not compile.
@@ -57,10 +57,10 @@ export interface CloudField {
   readonly sun: Readonly<Record<CloudSunDepth, CloudSunFn>>
   /** The sweep's constant-work medium (§8.4). */
   readonly sweep: CloudMediumFn
-  readonly farAtlas: CloudFarField
-  readonly farSpheres: CloudFarField
+  /** The served body's far atlas, baked from the cube's coverage. */
+  readonly farAtlas: CloudFarAtlas
   /** The second clouded body's atlas, baked from the analytic medium. */
-  readonly farSecond: CloudFarField
+  readonly farSecond: CloudFarAtlas
   /** Every bake and cache, in the frame's order: §3.16's run up to the depth copy. */
   readonly bakes: readonly CloudResource[]
   /** The frame's numbers on everything the field's passes read, before any of them draws. */
@@ -86,27 +86,20 @@ export function createCloudField(): CloudField {
   const cascades = new CloudSunCascades(uniforms, medium)
   const grid = new CloudSunGrid(uniforms, volume)
   const phase = new CloudPhase(mieDroplets())
-  const synoptic = synopticMedium({ ...recipe, maps: maps.nodes })
-  const farAtlas = createFarField('atlas', {
+  const farAtlas = new CloudFarAtlas({
     uniforms,
-    field: synoptic,
+    field: synopticMedium({ ...recipe, maps: maps.nodes }),
     phase,
     body: 'served',
   })
-  const farSpheres = createFarField('spheres', {
-    uniforms,
-    field: synoptic,
-    phase,
-    body: 'served',
-  })
-  const farSecond = createFarField('atlas', {
+  const farSecond = new CloudFarAtlas({
     uniforms,
     field: analyticMedium(recipe),
     phase,
     body: 'second',
   })
   const caches = [noise, maps, clipmap, volume, cascades, grid] as const
-  const fars = [farAtlas, farSpheres, farSecond] as const
+  const fars = [farAtlas, farSecond] as const
   const bakes = [...caches, phase, ...fars] as const
   return {
     uniforms,
@@ -125,7 +118,6 @@ export function createCloudField(): CloudField {
     },
     sweep: sweepMedium({ ...recipe, clipmap: clipmap.nodes }),
     farAtlas,
-    farSpheres,
     farSecond,
     bakes,
     write(frame) {
@@ -137,7 +129,7 @@ export function createCloudField(): CloudField {
     },
     render(renderer, frame, budget) {
       for (const resource of caches) resource.render(renderer, frame, budget)
-      for (const far of fars) far.render(renderer, frame, budget)
+      for (const far of fars) far.render(renderer, frame)
     },
     dispose() {
       for (const bake of bakes) bake.dispose()
