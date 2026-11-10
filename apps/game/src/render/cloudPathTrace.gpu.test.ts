@@ -372,8 +372,9 @@ describe('every order', () => {
       expect(probes.length).toBeGreaterThan(30)
       off.push(...offsets(sums, spec.pixels, probes))
     }
-    // Of some 400 values, three errors hold all but one or two by chance
-    // (99.73% each), and five hold every one of them.
+    // Of 432 values, three errors hold all but one or two by chance (99.73%
+    // each), and five hold every one of them. Measured: two beyond three,
+    // the farthest at 3.93, and a mean of 0.81 where a normal's is 0.80.
     expect(Math.max(...off)).toBeLessThan(5)
     expect(off.filter((value) => value > 3).length).toBeLessThanOrEqual(4)
     // Not a comparison of two zeros: the values' spread is a normal's.
@@ -435,8 +436,12 @@ const TODAY: CumulusSubject = {
 
 describe.skipIf(!MEASURE)('the instrument (IR_CLOUD_MEASURE)', () => {
   it('prices a sample at the reference’s resolution, on today’s cumulus', async () => {
+    // A view traced for a fixed time with no last sample, so every thread
+    // is at work for all of it, and then read: a pixel's samples in that
+    // time are its rate. A run to a fixed count would be priced by its one
+    // deepest pixel and say nothing of the rest.
     const medium = subjectMedium(TODAY)
-    const samples = 16
+    const budget = 20
     const rows = []
     for (const view of CUMULUS_VIEWS) {
       const spec: CumulusCase = {
@@ -444,46 +449,67 @@ describe.skipIf(!MEASURE)('the instrument (IR_CLOUD_MEASURE)', () => {
         subject: TODAY.id,
         view: view.id,
         pixels: 256,
-        samples,
+        samples: 2 ** 30,
         sunRadius: (0.265 * Math.PI) / 180,
         sky: analytic.cases[0]!.sky,
         ground: null,
       }
-      const start = performance.now()
-      const { sums, dispatches, events } = await trace(
-        sceneOfCase(medium, spec, samples),
-        40_000,
+      const events = eventsFor(spec.pixels)
+      const tracer = createCloudPathTracer(
+        sceneOfCase(medium, spec, spec.samples),
+        events,
       )
-      const seconds = (performance.now() - start) / 1000
-      // The mean relative error of the cloud's pixels, green, at this count.
-      let relative = 0
-      let cloudy = 0
-      for (let pixel = 0; pixel < 256 * 256; pixel += 1) {
-        const { mean, error } = pathTraceEstimate(sums, pixel)
-        if (error[1] > 0 && mean[1] > 0) {
-          relative += error[1] / mean[1]
-          cloudy += 1
-        }
+      const start = performance.now()
+      let dispatches = 0
+      while (performance.now() - start < budget * 1000) {
+        for (let i = 0; i < BURST; i += 1) await gpu.compute(tracer.kernel)
+        dispatches += BURST
       }
+      const sums = new Float32Array(await gpu.readBuffer(tracer.sums))
+      const seconds = (performance.now() - start) / 1000
+      const threads = spec.pixels * spec.pixels
+      // Thread-seconds one sample of the image costs: each pixel's seconds a
+      // sample, summed. A pixel that finished none is counted at one.
+      let cost = 0
+      let fewest = Infinity
+      let started = 0
+      const spread: number[] = []
+      for (let pixel = 0; pixel < threads; pixel += 1) {
+        const { mean, error, samples } = pathTraceEstimate(sums, pixel)
+        cost += seconds / Math.max(samples, 1)
+        fewest = Math.min(fewest, samples)
+        if (samples === 0) started += 1
+        // One sample's relative deviation, green, where a path's light is
+        // drawn: over a tenth. Clear sky is one value summed 10⁵ times in
+        // float32, and the last bits of that sum and of its squares read
+        // as a deviation of a hundredth.
+        const one = mean[1] > 0 ? (error[1] / mean[1]) * Math.sqrt(samples) : 0
+        if (samples > 8 && one > 0.1) spread.push(one)
+      }
+      spread.sort((x, y) => x - y)
       mkdirSync(OUT, { recursive: true })
-      writeImage(`pathTrace-today-${view.id}`, sums, 256)
+      writeImage(`pathTrace-today-${view.id}`, sums, spec.pixels)
       rows.push({
         case: spec.id,
-        samples,
         seconds,
         dispatches,
         events,
-        secondsASample: seconds / samples,
-        cloudyPixels: cloudy,
-        meanRelativeError: relative / Math.max(cloudy, 1),
+        eventsASecond: (threads * events * dispatches) / seconds,
+        threadSecondsASample: cost,
+        secondsASampleShared: cost / threads,
+        fewestSamples: fewest,
+        pixelsWithNone: started,
+        pixelsWithSpread: spread.length,
+        medianDeviationOfOne: spread[spread.length >> 1] ?? 0,
+        ninetiethDeviationOfOne: spread[Math.floor(0.9 * spread.length)] ?? 0,
       })
     }
     writeFileSync(
       `${OUT}/pathTraceCost.json`,
-      JSON.stringify({ rows }, null, 2),
+      JSON.stringify({ budget, rows }, null, 2),
     )
-    for (const row of rows) expect(row.cloudyPixels).toBeGreaterThan(1000)
-  }, 1_800_000)
+    for (const row of rows) expect(row.pixelsWithSpread).toBeGreaterThan(1000)
+  }, 600_000)
 
   it.skipIf(CUMULUS_REFERENCE.cases.length === 0)(
     'holds the reference’s cases to its 288 pixels each, by the count',
