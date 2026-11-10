@@ -5,7 +5,6 @@ import {
   QuadMesh,
   RenderTarget,
   RepeatWrapping,
-  RGFormat,
   type Texture,
   type TextureNode,
   UnsignedByteType,
@@ -13,12 +12,14 @@ import {
 } from 'three/webgpu'
 import {
   abs,
+  clamp,
   float,
   floor,
   int,
   max,
   mix,
   normalize,
+  round,
   screenCoordinate,
   select,
   smoothstep,
@@ -35,6 +36,7 @@ import { CLOUD_CLIPMAP_SIZE, type CloudFrame } from './cloudFrame.ts'
 import { levelPlane, levelTexel } from './cloudGeometry.ts'
 import type { CloudMapNodes } from './cloudMaps.ts'
 import type { CloudBudget, CloudResource, CloudSample } from './cloudNodes.ts'
+import type { CloudProfile } from './cloudProfile.ts'
 import {
   CLOUD_CLIPMAP_LEVELS,
   type CloudBodyUniforms,
@@ -47,10 +49,13 @@ import { warmByDrawing } from './warmup.ts'
 /*
  * What the fine march reads a step: six eye-anchored levels of 256² texels,
  * 250 m × 2^k, each a layer a cloud level, in a toroidally addressed 2D array
- * of one RG8 target, baked from the cube in the strips the window's move
- * exposes. A texel of cloud level j holds that level's cover and its
- * convective share: what a step in the level reads of its column, in one
- * fetch. The cube is 19.6 km a texel at Earth's equator and the climate has
+ * of one RGBA8 target, baked from the cube in the strips the window's move
+ * exposes. A texel of cloud level j holds what a step in that level reads of
+ * its column, in one fetch: its cover, its convective share, and its gain
+ * (`levelStatistics`), the last as sixteen bits over two channels. The gain
+ * runs from 1 to 30 (Earth's blended low level at a small cover), past what
+ * a byte holds to the oracle's bound; split linearly, `(B·256 + A)·255/65535`,
+ * so the sampler's filtering of the two bytes is the filtering of the gain. The cube is 19.6 km a texel at Earth's equator and the climate has
  * no structure under it, so the clipmap adds nothing finer in phase 1: it is
  * the cube's field resampled onto the planes the march reads, and the place
  * phase 3's climatology and orography go in.
@@ -82,8 +87,10 @@ import { warmByDrawing } from './warmup.ts'
 /** The bake's pass on the timeline: a whole level, a strip or a refresh slice, each one quad. */
 export const CLOUD_CLIPMAP_LABEL = 'cloud clipmap'
 
-/** One RG8 target: 2 bytes a texel. */
-const TEXEL_BYTES = 2
+/** One RGBA8 target: 4 bytes a texel. */
+const TEXEL_BYTES = 4
+/** The gain the two channels hold at their greatest: over the 29.5 measured. */
+export const CLIPMAP_GAIN_SPAN = 32
 /** Cloud levels: the array holds a layer of each a clipmap level. */
 const CLOUD_LEVELS = 3
 const LAYERS = CLOUD_CLIPMAP_LEVELS * CLOUD_LEVELS
@@ -109,6 +116,8 @@ const LEVEL0 = /*@__PURE__*/ float(0)
 export interface CloudClipmapColumn {
   readonly cover: Node<'float'>
   readonly convective: Node<'float'>
+  /** What the resolved extinction is multiplied by (`levelStatistics`). */
+  readonly gain: Node<'float'>
 }
 
 export interface CloudClipmapNodes {
@@ -203,7 +212,6 @@ export class CloudClipmap implements CloudResource {
   /** 1 × 1 × 18 until a frame draws: the format is the pipeline's, not the size. */
   readonly #target = new RenderTarget(1, 1, {
     depth: LAYERS,
-    format: RGFormat,
     type: UnsignedByteType,
     depthBuffer: false,
     wrapS: RepeatWrapping,
@@ -222,6 +230,9 @@ export class CloudClipmap implements CloudResource {
   )
   #renders = 0
   readonly #source: CloudMapNodes
+  readonly #profile: CloudProfile
+  /** The profile's generation the levels were baked under, over an analytic source. */
+  #tables = -1
   /** The field's generation where the source has no cube: bumped by this clipmap's own events. */
   #ownGeneration = 0
   #weather: string | null = null
@@ -266,7 +277,11 @@ export class CloudClipmap implements CloudResource {
    * placeholder's own pattern and never the cube the far bakes read, and the
    * fine and far marches then draw two different fields.
    */
-  constructor(uniforms: CloudUniforms, source: CloudMapNodes) {
+  constructor(
+    uniforms: CloudUniforms,
+    source: CloudMapNodes,
+    profile: CloudProfile,
+  ) {
     this.#target.texture.name = 'cloud clipmap'
     const column = texture(this.#target.texture)
     // One pick a sample node: the column and the meters share it.
@@ -315,11 +330,19 @@ export class CloudClipmap implements CloudResource {
     this.nodes = {
       column: (sample, body, level) => {
         const held = read(column, sample, body, level)
-        return { cover: held.x, convective: held.y }
+        return {
+          cover: held.x,
+          convective: held.y,
+          gain: held.z
+            .mul(256)
+            .add(held.w)
+            .mul((255 / 65535) * CLIPMAP_GAIN_SPAN),
+        }
       },
       columnMeters: (sample, body) => pickOf(sample, body).blend.y,
     }
     this.#source = source
+    this.#profile = profile
     const body = uniforms.served
     this.#materials = body.clipmap
       .slice(0, CLOUD_CLIPMAP_LEVELS)
@@ -327,7 +350,7 @@ export class CloudClipmap implements CloudResource {
         [0, 1, 2].map((j) => {
           const material = new NodeMaterial()
           material.name = `cloud clipmap ${k}.${j}`
-          material.fragmentNode = bakeNode(level, j, body, source)
+          material.fragmentNode = bakeNode(level, j, body, source, profile)
           return material
         }),
       )
@@ -443,7 +466,11 @@ export class CloudClipmap implements CloudResource {
     }
     const { served } = frame
     const [low, high] = served.climate.period
+    // Over an analytic source this clipmap keeps its own generation, and a
+    // level's statistics landing moves it as it moves the cube's.
+    const tables = this.#profile.generation
     if (
+      tables !== this.#tables ||
       fresh ||
       frame.jump ||
       budget.jump ||
@@ -453,6 +480,7 @@ export class CloudClipmap implements CloudResource {
       high !== this.#period[1]
     )
       this.#ownGeneration += 1
+    this.#tables = tables
     this.#weather = served.weatherKey
     this.#address = served.address
     this.#period = [low, high]
@@ -631,6 +659,7 @@ function bakeNode(
   j: number,
   body: CloudBodyUniforms,
   source: CloudMapNodes,
+  profile: CloudProfile,
 ): Node {
   const storage = floor(screenCoordinate.xy)
   const fromOrigin = storage.sub(level.origin)
@@ -646,11 +675,21 @@ function bakeNode(
   )
   const pickLevel = (v: Node<'vec3'>): Node<'float'> =>
     (j === 0 ? v.x : j === 1 ? v.y : v.z) as Node<'float'>
+  const cover = pickLevel(source.cover(direction).xyz)
+  const convective = pickLevel(source.kind(direction).xyz)
+  // The gain at the column's cover and share, as sixteen bits: rounded to
+  // its step, then split so each byte is exact in the target.
+  const steps = round(
+    clamp(profile.gain(0, float(j), cover, convective), 0, CLIPMAP_GAIN_SPAN)
+      .div(CLIPMAP_GAIN_SPAN)
+      .mul(65535),
+  )
+  const high = floor(steps.div(256))
   return vec4(
-    pickLevel(source.cover(direction).xyz),
-    pickLevel(source.kind(direction).xyz),
-    0,
-    1,
+    cover,
+    convective,
+    high.div(255),
+    steps.sub(high.mul(256)).div(255),
   )
 }
 
@@ -664,6 +703,7 @@ function bakeNode(
 export function createCloudClipmap(deps: {
   readonly uniforms: CloudUniforms
   readonly maps: { readonly nodes: CloudMapNodes }
+  readonly profile: CloudProfile
 }): CloudClipmap {
-  return new CloudClipmap(deps.uniforms, deps.maps.nodes)
+  return new CloudClipmap(deps.uniforms, deps.maps.nodes, deps.profile)
 }

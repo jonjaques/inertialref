@@ -245,6 +245,14 @@ describe('the light’s stub modules', () => {
       'layer',
       'radius',
       'sigma',
+      'statistics',
+    ])
+    // A slab is one column: its share, its depth, no spread, its extent.
+    expect(Object.keys(medium.statistics!).sort()).toEqual([
+      'depth',
+      'fraction',
+      'shape',
+      'sight',
     ])
     const depths = CLOUD_STAND_INS.sunDepth().depths(sample.offset)
     expect(Object.keys(depths).sort()).toEqual([

@@ -64,8 +64,8 @@ import { warmSensorPass } from './warmup.ts'
  * sub-solar latitude. A field with none of these moving bakes nothing.
  *
  * **A face is fresh by generation.** Every discontinuity of the field — a
- * jump, a new weather, a new body, the pattern's period — starts a new
- * generation, and a face is fresh when it was baked in the present one. The
+ * jump, a new weather, a new body, the pattern's period, a level's
+ * statistics landing (`CloudProfile.generation`) — starts a new generation, and a face is fresh when it was baked in the present one. The
  * clipmap reads each face's generation and is fresh only from fresh faces
  * (`CloudCubeFreshness`).
  */
@@ -417,6 +417,8 @@ export class CloudMaps implements CloudResource, CloudCubeFreshness {
   #weather: string | null = null
   #address: string | null = null
   #period: readonly [number, number] = [0, 0]
+  /** The profile's generation the faces were baked under. */
+  #tables = -1
   #warm: Promise<void> | null = null
   #disposed = false
 
@@ -559,7 +561,11 @@ export class CloudMaps implements CloudResource, CloudCubeFreshness {
     }
     const { served } = frame
     const [low, high] = served.climate.period
+    // A level's statistics landing is a new field: what was baked before it
+    // read a gain the field no longer has.
+    const tables = profileOf(this.#uniforms)?.generation ?? 0
     const moved =
+      tables !== this.#tables ||
       fresh ||
       frame.jump ||
       budget.jump ||
@@ -567,6 +573,7 @@ export class CloudMaps implements CloudResource, CloudCubeFreshness {
       served.address !== this.#address ||
       low !== this.#period[0] ||
       high !== this.#period[1]
+    this.#tables = tables
     this.#weather = served.weatherKey
     this.#address = served.address
     this.#period = [low, high]

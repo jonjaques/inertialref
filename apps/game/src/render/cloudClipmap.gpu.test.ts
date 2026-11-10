@@ -27,7 +27,9 @@ import {
   type LevelFrame,
   type LevelUpdate,
   levelFrames,
+  levelStatistics,
   planeOf,
+  readLevelStatistics,
   regimeWeather,
   shellHeights,
   WEATHER_SCENARIOS,
@@ -44,7 +46,11 @@ import {
   systemId,
   walkBodies,
 } from '@inertialref/universe'
-import { CloudClipmap, clipmapTexel } from './cloudClipmap.ts'
+import {
+  CLIPMAP_GAIN_SPAN,
+  CloudClipmap,
+  clipmapTexel,
+} from './cloudClipmap.ts'
 import {
   CLOUD_CLIPMAP_SIZE,
   CLOUD_CLIPMAP_TEXELS,
@@ -62,7 +68,15 @@ import {
 } from './cloudMaps.ts'
 import type { CloudBudget, CloudSample } from './cloudNodes.ts'
 import { CloudNoise } from './cloudNoise.ts'
+import { createCloudProfile, profileOf } from './cloudProfile.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
+
+/** A uniform bundle with the profile its field builds beside it. */
+function fieldUniforms(): CloudUniforms {
+  const uniforms = createCloudUniforms()
+  createCloudProfile({ uniforms })
+  return uniforms
+}
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
@@ -236,6 +250,8 @@ function frameAt(
     extents: cloudExtents({ width: 64, height: 64 }, { width: 64, height: 64 }),
   } satisfies CloudFrame
   uniforms.write(frame)
+  // The levels' profile and statistics, as `CloudMaps.write` writes them.
+  profileOf(uniforms)?.write(frame)
   return frame
 }
 
@@ -417,9 +433,9 @@ async function bakedPair(
   readonly clipmap: CloudClipmap
   readonly update: LevelUpdate
 }> {
-  const uniforms = createCloudUniforms()
+  const uniforms = fieldUniforms()
   const maps = new CloudMaps(uniforms, noise.nodes)
-  const clipmap = new CloudClipmap(uniforms, maps.nodes)
+  const clipmap = new CloudClipmap(uniforms, maps.nodes, profileOf(uniforms)!)
   await maps.warm(renderer)
   await clipmap.warm(renderer)
   const first = levels(eye, radius, null)
@@ -462,7 +478,7 @@ describe('the toroidal window', () => {
     expect(passes).toBe(3 * strips)
     const scrolled = await everyTexel(clipmap)
 
-    const fresh = new CloudClipmap(uniforms, maps.nodes)
+    const fresh = new CloudClipmap(uniforms, maps.nodes, profileOf(uniforms)!)
     fresh.render(renderer, at(rebuiltAt(after), moved), budget)
     for (let k = 0; k < 3; k += 1)
       fresh.render(renderer, at(stillAt(after), moved), budget)
@@ -544,6 +560,67 @@ describe('the layers are the cube resampled, and the displacement', () => {
     clipmap.dispose()
     maps.dispose()
   })
+
+  it('a layer texel carries its level’s gain at its own cover and share, in sixteen bits', async () => {
+    // Earth's climate, whose low level blends two genera and whose gain runs
+    // past what a byte holds.
+    const weather = bodyWeather(SERVED_EARTH)!
+    const eye = scaled(EYE_DIRECTION, EARTH + 1500)
+    const { clipmap, update, maps } = await bakedPair(
+      weather,
+      'climate',
+      EARTH,
+      eye,
+    )
+    const next = draws(17)
+    const probes = Array.from({ length: 600 }, () => {
+      const k = Math.floor(next() * 6)
+      const j = Math.floor(next() * 3)
+      const frame = update.frames[k]!
+      return [
+        wrapped(frame.origin[0] + Math.floor(next() * SIZE)),
+        wrapped(frame.origin[1] + Math.floor(next() * SIZE)),
+        3 * k + j,
+      ] as const
+    })
+    const held = await loadTexels(clipmap.textures()[0]!, '2d-array', probes)
+    let worst = 0
+    let largest = 0
+    let relative = 0
+    probes.forEach(([, , layer], n) => {
+      const stats = levelStatistics(weather.levels[layer % 3]!)
+      const cover = held[n * 4]!
+      const share = held[n * 4 + 1]!
+      const gainAt = (c: number, v: number) =>
+        readLevelStatistics(stats, c, v).gain
+      const want = gainAt(cover, share)
+      // The bake read the gain at the cover and share before their bytes,
+      // which this reads back: allowed is what one byte of either moves the
+      // gain by, where it is steep, and half a percent beside it.
+      const byte = 1 / 255
+      const reach = Math.max(
+        ...[
+          [byte, 0],
+          [-byte, 0],
+          [0, byte],
+          [0, -byte],
+        ].map(([dc, dv]) => Math.abs(gainAt(cover + dc!, share + dv!) - want)),
+      )
+      const read =
+        ((held[n * 4 + 2]! * 255 * 256 + held[n * 4 + 3]! * 255) / 65535) *
+        CLIPMAP_GAIN_SPAN
+      largest = Math.max(largest, want)
+      relative = Math.max(relative, Math.abs(read - want) / want)
+      worst = Math.max(worst, Math.abs(read - want) / (reach + 0.005 * want))
+    })
+    console.info(
+      `clipmap gain: largest ${largest.toFixed(3)}, ${relative.toExponential(2)} relative at worst, ${worst.toFixed(3)} of one byte's reach and half a percent`,
+    )
+    expect(largest).toBeGreaterThan(1.2)
+    expect(worst).toBeLessThanOrEqual(1)
+    clipmap.dispose()
+    maps.dispose()
+  })
 })
 
 describe('a lookup', () => {
@@ -551,7 +628,7 @@ describe('a lookup', () => {
     // Earth, where an absolute float32 direction would carry 0.4 m. The
     // limit is float32's: a plane coordinate 100 km out carries 2.2 cm at
     // worst over twelve seeds (cloudGeometry.gpu.test.ts), so 3 cm.
-    const uniforms = createCloudUniforms()
+    const uniforms = fieldUniforms()
     const weather = regimeWeather(SERVED_EARTH, 'two-decks')
     const eye = scaled(EYE_DIRECTION, EARTH + 1500)
     const update = levels(eye, EARTH, null)
@@ -691,10 +768,11 @@ describe('a lookup', () => {
     // From the climate itself, so a change of weather lands in the levels a
     // frame rebuilds: one frame after overcast's cover of 1 gives way to
     // two-decks' 0.6, levels 0–2 hold 0.6 and 3–5 still 1.
-    const uniforms = createCloudUniforms()
+    const uniforms = fieldUniforms()
     const clipmap = new CloudClipmap(
       uniforms,
       analyticMapNodes(uniforms.served, noise.nodes),
+      profileOf(uniforms)!,
     )
     const eye = scaled(EYE_DIRECTION, EARTH + 1500)
     const update = levels(eye, EARTH, null)
@@ -761,10 +839,11 @@ describe('a lookup', () => {
 
 describe('the schedule', () => {
   it('a first frame rebuilds levels 0–2, then one more a frame; a still frame over a moving source refreshes an eighth; a cut three', async () => {
-    const uniforms = createCloudUniforms()
+    const uniforms = fieldUniforms()
     const clipmap = new CloudClipmap(
       uniforms,
       analyticMapNodes(uniforms.served, noise.nodes),
+      profileOf(uniforms)!,
     )
     const weather = regimeWeather(SERVED_EARTH, 'two-decks')
     const eye = scaled(EYE_DIRECTION, EARTH + 1500)
@@ -807,16 +886,17 @@ describe('the schedule', () => {
   })
 
   it('holds one level a texture, its declared bytes its own, and nothing before it warms', async () => {
-    const uniforms = createCloudUniforms()
+    const uniforms = fieldUniforms()
     const clipmap = new CloudClipmap(
       uniforms,
       analyticMapNodes(uniforms.served, noise.nodes),
+      profileOf(uniforms)!,
     )
     expect(clipmap.bytes).toBe(0)
     expect(clipmap.textures()).toEqual([])
     expect(clipmap.pending).toBe(false)
     await clipmap.warm(renderer)
-    expect(clipmap.bytes).toBe(LAYERS * 2)
+    expect(clipmap.bytes).toBe(LAYERS * 4)
     const weather = regimeWeather(SERVED_EARTH, 'fog')
     const eye = scaled(EYE_DIRECTION, EARTH + 100)
     clipmap.render(
@@ -827,7 +907,7 @@ describe('the schedule', () => {
     const backend = renderer.backend as unknown as {
       get(texture: object): { texture?: GPUTexture }
     }
-    const texelBytes: Record<string, number> = { rg8unorm: 2 }
+    const texelBytes: Record<string, number> = { rgba8unorm: 4 }
     let bytes = 0
     const formats: string[] = []
     for (const held of clipmap.textures()) {
@@ -840,11 +920,11 @@ describe('the schedule', () => {
         gpuTexture.depthOrArrayLayers *
         texelBytes[gpuTexture.format]!
     }
-    expect(formats).toEqual(['rg8unorm'])
+    expect(formats).toEqual(['rgba8unorm'])
     expect(clipmap.bytes).toBe(bytes)
-    // 2.36 MB, against phase 0's four RGBA8 targets' 6.29 MB and the
-    // design's two, 3.15 MB.
-    expect(clipmap.bytes).toBe(256 * 256 * LAYERS * 2)
+    // 4.72 MB, against phase 0's four RGBA8 targets' 6.29 MB and the
+    // design's two, 3.15 MB: the gain rides in the column.
+    expect(clipmap.bytes).toBe(256 * 256 * LAYERS * 4)
     clipmap.dispose()
     expect(clipmap.bytes).toBe(0)
   })

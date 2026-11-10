@@ -36,7 +36,7 @@ import {
 } from './cloudLevers.ts'
 import type { CloudBudget, CloudResource } from './cloudNodes.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
-import { CLOUD_PROFILE_HEIGHTS, CLOUD_PROFILE_ROWS } from './cloudProfile.ts'
+import { CLOUD_PROFILE_BYTES } from './cloudProfile.ts'
 import { CloudRadianceMeter } from './cloudRadiance.ts'
 import { CloudTrace, type CloudTraceTextures } from './cloudTrace.ts'
 import type { SceneLayout } from './sceneLayout.ts'
@@ -169,8 +169,8 @@ export interface CloudSystemFactory {
   readonly createFront: () => CloudFrontHandle
 }
 
-/** The profile table, RGBA8: not a resource of its own, 2 KB the report counts. */
-const PROFILE_BYTES = CLOUD_PROFILE_HEIGHTS * CLOUD_PROFILE_ROWS * 4
+/** The profile and statistics table, RGBA16F: not a resource of its own, 48 KB the report counts. */
+const PROFILE_BYTES = CLOUD_PROFILE_BYTES
 
 /* ------------------------------------------------------------------------- */
 /* The pipeline census                                                        */

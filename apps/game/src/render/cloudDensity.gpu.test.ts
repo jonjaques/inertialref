@@ -5,6 +5,7 @@ import {
   OrthographicCamera,
   PlaneGeometry,
   Scene,
+  DataUtils,
   StorageBufferAttribute,
   type WebGPURenderer,
 } from 'three/webgpu'
@@ -33,6 +34,7 @@ import {
   horizonBasis,
   levelFrames,
   levelProfile,
+  levelStatistics,
   MESOSCALE_WAVES,
   mesoscaleDisplacement,
   regimeWeather,
@@ -40,6 +42,7 @@ import {
   WEATHER_SCENARIOS,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
+import { createInlineWorker, WorkerPool } from '@inertialref/workers'
 import {
   type Body,
   formatAddress,
@@ -75,6 +78,7 @@ import {
   type CloudProfile,
   createCloudProfile,
 } from './cloudProfile.ts'
+import { createGameTaskRegistry } from '../workers/registry.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
@@ -272,7 +276,7 @@ function bakeField(
   const uniforms = createCloudUniforms()
   const profile = createCloudProfile({ uniforms })
   const maps = new CloudMaps(uniforms, noise.nodes)
-  const clipmap = new CloudClipmap(uniforms, maps.nodes)
+  const clipmap = new CloudClipmap(uniforms, maps.nodes, profile)
   let frame = frameAt(uniforms, weather, key, eye, time)
   for (let k = 0; k < 8; k += 1) {
     maps.render(renderer, frame, budget)
@@ -301,10 +305,11 @@ function bakeField(
   }
 }
 
-/** A sample's inputs: its body point, and the meters it stands for. */
+/** A sample's inputs: its body point, the meters it stands for, and its ray's dither (0.5 where absent). */
 interface Point {
   readonly position: Vec3
   readonly footprint: number
+  readonly dither?: number
 }
 
 /**
@@ -325,7 +330,7 @@ async function evaluate(
   const threads = Math.ceil(count / chain)
   const input = new StorageBufferAttribute(
     new Float32Array(
-      points.flatMap(({ position, footprint }) => {
+      points.flatMap(({ position, footprint, dither = 0.5 }) => {
         const offset = less(position, eye)
         const altitude = Math.hypot(position.x, position.y, position.z) - EARTH
         return [
@@ -335,7 +340,7 @@ async function evaluate(
           altitude,
           footprint,
           Math.hypot(offset.x, offset.y, offset.z),
-          0,
+          dither,
           0,
         ]
       }),
@@ -358,6 +363,7 @@ async function evaluate(
             altitude: a.w,
             sunMu: float(0.5),
             footprint: b.x,
+            dither: b.z,
           }
           const m = medium(sample, uniforms.served)
           into
@@ -393,8 +399,8 @@ function against(
   const errors: number[] = []
   let clouded = 0
   let levels = 0
-  points.forEach(({ position, footprint }, n) => {
-    const want = cloudFieldAt(weather, clock, SUN, position, footprint)
+  points.forEach(({ position, footprint, dither = 0.5 }, n) => {
+    const want = cloudFieldAt(weather, clock, SUN, position, footprint, dither)
     const level = read[n * 8 + 2]!
     if (level === want.level) levels += 1
     if (want.level < 0) return
@@ -450,23 +456,49 @@ function pointsAround(
 /* ------------------------------------------------------------------------- */
 
 describe('the profile table', () => {
-  it('is each body’s levels’ `levelProfile`, byte for byte, in its slot', () => {
+  it('is each body’s levels’ `levelProfile`, byte for byte, in its slot, and their statistics under them', () => {
     const weather = bodyWeather(SERVED_EARTH)!
     const ground = unit({ x: 0.3, y: 0.85, z: -0.43 })
     const field = bakeField(weather, 'climate', scaled(ground, EARTH + 1500))
-    const table = field.profile.texture.image.data as Uint8Array
+    const table = field.profile.texture.image.data as Uint16Array
     const specs = bodyLevelSpecs(field.frame.served)
     expect(specs.map((spec) => [spec.stratiform, spec.cumuliform])).toEqual(
       weather.levels.map((level) => [level.stratiform, level.cumuliform]),
     )
     for (const slot of [0, 1])
       specs.forEach((spec, k) => {
+        // The CPU's bytes over 255, in half floats: within a half float's
+        // step, 2⁻¹¹ of a value under one (the conversion truncates).
         const rows = levelProfile(spec).texels
         const at = (slot * 24 + k * 8) * 64 * 4
-        expect([...table.subarray(at, at + rows.length)]).toEqual([...rows])
+        rows.forEach((byte, n) => {
+          expect(
+            Math.abs(DataUtils.fromHalfFloat(table[at + n]!) - byte / 255),
+          ).toBeLessThanOrEqual(2 ** -11)
+        })
+      })
+    // And each level's statistics, cover by cover, under the profile's rows.
+    for (const slot of [0, 1])
+      specs.forEach((spec, k) => {
+        const stats = levelStatistics(spec)
+        const cell = levelProfile(spec).cell
+        for (let row = 0; row < 8; row += 1)
+          for (let i = 0; i < 17; i += 1) {
+            const at = ((48 + slot * 24 + k * 8 + row) * 64 + i) * 4
+            const from = i * 8 + row
+            const near = (half: number, want: number) =>
+              expect(
+                Math.abs(DataUtils.fromHalfFloat(half) - want),
+              ).toBeLessThanOrEqual(Math.abs(want) * 2 ** -10 + 1e-7)
+            near(table[at]!, stats.fraction[from]!)
+            near(table[at + 1]!, stats.depth[from]!)
+            near(table[at + 2]!, stats.shape[from]!)
+            near(table[at + 3]!, stats.sight[from]! / cell)
+            near(table[at + 17 * 4]!, stats.gain[from]!)
+          }
       })
     field.dispose()
-  })
+  }, 60_000)
 })
 
 /*
@@ -482,19 +514,35 @@ const STANCES = [
 ] as const
 
 /**
- * The drawn field's error against `cloudFieldAt`, in the level's σ′, at the
- * points either side holds cloud. Measured on this Mac mini (Apple M6), the
- * median is 1.5 × 10⁻⁴ to 2.8 × 10⁻³ and the 99th percentile 5.0 × 10⁻⁴ to
- * 6.2 × 10⁻³ over the three stances, three regimes through the frame's own
- * layout and the far media, and the worst point 6.3 × 10⁻³; the light taps,
- * read on a ray's own chain, 3.4 × 10⁻³ at the 99th. Its sources: the
- * cover's bytes, amplified by the remap's division by the cover, and the
- * sampler's fixed-point weights on the noise. The displacement, carried
- * along the ray by its series, adds under 2.1 × 10⁻⁵ of a cell. The bounds
- * are twice the measured, the median's rounded to 0.005.
+ * The drawn field's error against `cloudFieldAt`, in the level's reference
+ * σ′ (`levelProfile`'s `scaled`), at the points either side holds cloud.
+ * The field holds its genus's extinction inside its clouds (the gain), about
+ * twice what the reference's share of it was, so an error of the same share
+ * of a cloud is about twice the reference's share. Measured on this Mac
+ * mini (Apple M6) over the three stances, three regimes through the frame's
+ * own layout, the far media, every footprint to four cells and every
+ * dither, and the light taps on a ray's own chain: the median at most
+ * 5.2 × 10⁻³ (the taps from 400 km), the 99th percentile at most
+ * 8.8 × 10⁻³, the worst point 1.4 × 10⁻². Its sources: the cover's bytes,
+ * amplified by the remap's division by the cover; the gain's two bytes and
+ * the bytes of the cover and share it is read at; the sampler's fixed-point
+ * weights on the noise and the statistics; half floats in the profile. The
+ * displacement, carried along the ray by its series, adds under 2.1 × 10⁻⁵
+ * of a cell. The bounds are twice the measured.
  */
-const ORACLE_MEDIAN = 0.005
-const ORACLE_P99 = 0.0125
+const ORACLE_MEDIAN = 0.0105
+const ORACLE_P99 = 0.0175
+/**
+ * Earth's zonal climate, read through the cube, at its 99th percentile:
+ * measured 1.7 × 10⁻² to 2.6 × 10⁻² over the three stances and the cube's
+ * medium, against 6.7 × 10⁻³ where the climate itself is read (the second
+ * body's medium). The difference is the cube's cover in a byte, read where
+ * the blended levels' gain is steep: it runs to 20 and 30 at small covers,
+ * and one byte of cover moves it by several percent there
+ * (`cloudClipmap.gpu.test.ts`). Twice the measured; a cube and clipmap that
+ * held the cover in sixteen bits would take it to the climate's own.
+ */
+const ZONAL_P99 = 0.052
 
 describe('each medium is cloudFieldAt', () => {
   it.each(STANCES)(
@@ -504,7 +552,7 @@ describe('each medium is cloudFieldAt', () => {
       const ground = unit({ x: 0.3, y: 0.85, z: -0.43 })
       const eye = scaled(ground, EARTH + height)
       const field = bakeField(weather, 'climate', eye)
-      const points = pointsAround(weather, ground, reach, 7)
+      const points = pointsAround(weather, ground, reach, 7, 3000)
       const read = await evaluate(
         points,
         eye,
@@ -525,7 +573,7 @@ describe('each medium is cloudFieldAt', () => {
         `oracle, fieldMedium, ${height} m: median ${median.toExponential(2)}, p99 ${p99.toExponential(2)}, worst ${Math.max(...errors).toExponential(2)}, clouded ${clouded}`,
       )
       expect(median).toBeLessThanOrEqual(ORACLE_MEDIAN)
-      expect(p99).toBeLessThanOrEqual(ORACLE_P99)
+      expect(p99).toBeLessThanOrEqual(ZONAL_P99)
       field.dispose()
     },
     60_000,
@@ -570,7 +618,7 @@ describe('each medium is cloudFieldAt', () => {
       const eye = scaled(ground, EARTH + 1500)
       const field = bakeField(weather, 'climate', eye)
       // Out to 1,500 km: past the clipmap, where the far bakes read.
-      const points = pointsAround(weather, ground, 1_500_000, 17)
+      const points = pointsAround(weather, ground, 1_500_000, 17, 3000)
       const read = await evaluate(
         points,
         eye,
@@ -588,7 +636,7 @@ describe('each medium is cloudFieldAt', () => {
         `oracle, ${name}Medium: median ${quantile(errors, 0.5).toExponential(2)}, p99 ${quantile(errors, 0.99).toExponential(2)}, worst ${Math.max(...errors).toExponential(2)}, clouded ${clouded}`,
       )
       expect(quantile(errors, 0.5)).toBeLessThanOrEqual(ORACLE_MEDIAN)
-      expect(quantile(errors, 0.99)).toBeLessThanOrEqual(ORACLE_P99)
+      expect(quantile(errors, 0.99)).toBeLessThanOrEqual(ZONAL_P99)
       field.dispose()
     },
     60_000,
@@ -601,7 +649,7 @@ describe('nothing in the lookup is the observer’s (§5.3)', () => {
     // Points around the pole, in every level: one eye 10 km from them, the
     // other over the pole itself, 2,000 km up.
     const pole = { x: 0, y: 1, z: 0 }
-    const points = pointsAround(weather, pole, 3000, 29, 600)
+    const points = pointsAround(weather, pole, 3000, 29, 3000)
     const near = added(scaled(unit({ x: 0.0016, y: 1, z: 0 }), EARTH + 1500), {
       x: 0,
       y: 0,
@@ -656,11 +704,17 @@ describe('nothing in the lookup is the observer’s (§5.3)', () => {
   }, 60_000)
 })
 
-/** What the port's footprint test measured, for the pin beside it. */
-const footprintFade: { drawn: number[] } = { drawn: [] }
-
-describe('a footprint’s fade', () => {
-  it('draws the CPU field’s transmittance through a level at a quarter, a half and a whole cell of footprint', async () => {
+describe('a footprint’s read', () => {
+  /*
+   * D's pin, on the GPU: broken-horizon straight down, a vertical crossing
+   * of its level by the march's segment law, `1 − F + F·e^(−Σσ′Δs)` with F
+   * the largest fraction along it, at footprints from none to four cells
+   * and a dither of 0.5, so a quarter and a half cell are resolved and a
+   * whole cell and more read the statistics. Held to the CPU field's own
+   * figure computed here, not to a literal: a regime's thickness may move
+   * under the test with the calibration.
+   */
+  it('passes what the CPU field passes, resolved and past the switch, and keeps the resolved field’s transmittance within 10%', async () => {
     const weather = regimeWeather(SERVED_EARTH, 'broken-horizon')
     const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
     const eye = scaled(ground, EARTH + 1500)
@@ -671,7 +725,7 @@ describe('a footprint’s fade', () => {
     const columns = 400
     const steps = 32
     const next = draws(37)
-    const feet = [0, cell / 4, cell / 2, cell]
+    const feet = [0, cell / 4, cell / 2, cell, 2 * cell, 4 * cell]
     const points: Point[] = []
     for (let c = 0; c < columns; c += 1) {
       const across = added(
@@ -689,14 +743,19 @@ describe('a footprint’s fade', () => {
           })
         }
     }
-    const read = await evaluate(points, eye, field.media.field, field.uniforms)
+    // A thread a column at a footprint, its steps in order, as a march.
+    const read = await evaluate(
+      points,
+      eye,
+      field.media.field,
+      field.uniforms,
+      steps,
+    )
     const clock = fieldClock(weather, TIME)
     const oracle = points.map(({ position, footprint }) =>
       cloudFieldAt(weather, clock, SUN, position, footprint),
     )
     const step = (level.top - level.base) / steps
-    // The march's segment law: a crossing's transmittance is
-    // `1 − F + F·e^(−Σσ′Δs)`, F the largest fraction along it.
     const transmittance = (
       at: (n: number) => { readonly fraction: number; readonly sigma: number },
     ) =>
@@ -722,36 +781,174 @@ describe('a footprint’s fade', () => {
     }))
     const cpu = transmittance((n) => oracle[n]!)
     console.info(
-      `footprints 0, ¼, ½, 1 cell: drawn ${drawn.map((t) => t.toFixed(4)).join(', ')}; cloudFieldAt ${cpu.map((t) => t.toFixed(4)).join(', ')}`,
+      `footprints 0, ¼, ½, 1, 2, 4 cells: drawn ${drawn.map((t) => t.toFixed(4)).join(', ')}; cloudFieldAt ${cpu.map((t) => t.toFixed(4)).join(', ')}`,
     )
-    // The port: the drawn transmittance is the CPU field's at every footprint.
+    // The port: the drawn crossing is the CPU field's at every footprint.
     drawn.forEach((t, f) => {
       expect(Math.abs(t - cpu[f]!)).toBeLessThanOrEqual(0.01)
     })
-    footprintFade.drawn = drawn
+    // The pin (§6.2): no footprint moves the crossing a tenth off the
+    // resolved field's.
+    for (const t of drawn.slice(1))
+      expect(Math.abs(t - drawn[0]!) / drawn[0]!).toBeLessThanOrEqual(0.1)
     field.dispose()
   }, 60_000)
 
-  /*
-   * §6.2's pin: the fade keeps the resolved field's transmittance within
-   * 10%. The recipe the CPU field and this port share does not: between a
-   * sixteenth and a quarter of a cell the detail's erosion fades out with
-   * nothing added back, so the cells thicken and the crossing darkens,
-   * then the unresolved share's mean density lightens it again. Measured
-   * on broken-horizon on this Mac mini: 0.725 resolved, 0.548, 0.132 and
-   * 0.498 at a quarter, a half and a whole cell, both sides alike. The
-   * recipe is `weatherField.ts`'s (`levelSample`), and this flips green
-   * when it conserves the crossing.
-   */
-  it.fails(
-    'keeps the resolved field’s transmittance within 10% (§6.2): it does not yet',
-    () => {
-      const [resolved, ...faded] = footprintFade.drawn
-      expect(faded).toHaveLength(3)
-      for (const t of faded)
-        expect(Math.abs(t - resolved!) / resolved!).toBeLessThanOrEqual(0.1)
+  it.each([
+    ['Earth’s zonal climate', 'climate'],
+    ['broken-horizon', 'broken-horizon'],
+    ['stratocumulus', 'stratocumulus'],
+    ['two-decks', 'two-decks'],
+  ] as const)(
+    '%s: each read is cloudFieldAt at footprints of a quarter, a half, one and four cells and dithers of 0, 0.5 and 1',
+    async (_, key) => {
+      const weather =
+        key === 'climate'
+          ? bodyWeather(SERVED_EARTH)!
+          : regimeWeather(SERVED_EARTH, key)
+      const ground =
+        key === 'climate'
+          ? unit({ x: 0.3, y: 0.85, z: -0.43 })
+          : unit({ x: -0.6, y: 0.1, z: 0.79 })
+      const eye = scaled(ground, EARTH + 1500)
+      const field = bakeField(weather, key, eye)
+      const base = pointsAround(weather, ground, 20_000, 43, 1200)
+      const points: Point[] = []
+      base.forEach((point, n) => {
+        const length = Math.hypot(
+          point.position.x,
+          point.position.y,
+          point.position.z,
+        )
+        const level = weather.levels.findIndex(
+          ({ base: b, top }) => length - EARTH >= b && length - EARTH < top,
+        )
+        const cell = levelProfile(weather.levels[Math.max(level, 0)]!).cell
+        for (const share of [0.25, 0.5, 1, 4])
+          points.push({
+            position: point.position,
+            footprint: share * cell,
+            dither: [0, 0.5, 1][n % 3]!,
+          })
+      })
+      const read = await evaluate(
+        points,
+        eye,
+        field.media.field,
+        field.uniforms,
+      )
+      const { errors, clouded } = against(
+        weather,
+        fieldClock(weather, TIME),
+        points,
+        read,
+      )
+      console.info(
+        `footprints and dithers, ${key}: median ${quantile(errors, 0.5).toExponential(2)}, p99 ${quantile(errors, 0.99).toExponential(2)}, worst ${Math.max(...errors).toExponential(2)}, clouded ${clouded}`,
+      )
+      expect(clouded).toBeGreaterThan(100)
+      expect(quantile(errors, 0.5)).toBeLessThanOrEqual(ORACLE_MEDIAN)
+      expect(quantile(errors, 0.99)).toBeLessThanOrEqual(ORACLE_P99)
+      field.dispose()
     },
+    60_000,
   )
+
+  it('holds a cumulus’s genus extinction inside its clouds: 52 per kilometer within 3%', async () => {
+    const weather = regimeWeather(SERVED_EARTH, 'broken-horizon')
+    const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
+    const eye = scaled(ground, EARTH + 1500)
+    const field = bakeField(weather, 'broken-horizon', eye)
+    const points = pointsAround(weather, ground, 20_000, 47, 40_000)
+    const read = await evaluate(points, eye, field.media.field, field.uniforms)
+    const profile = levelProfile(weather.levels[0]!)
+    const unscale = profile.sigma / profile.scaled
+    let sum = 0
+    let count = 0
+    for (let n = 0; n < points.length; n += 1) {
+      const sigma = read[n * 8 + 1]!
+      if (sigma > 0) {
+        sum += sigma * unscale
+        count += 1
+      }
+    }
+    const mean = sum / count
+    // The same points through the CPU field: what this sample of the level
+    // holds, which need not be D's 51.7 over its own sample.
+    const clock = fieldClock(weather, TIME)
+    let cpuSum = 0
+    let cpuCount = 0
+    for (const { position } of points) {
+      const at = cloudFieldAt(weather, clock, SUN, position, 0)
+      if (at.sigma > 0) {
+        cpuSum += at.sigma * unscale
+        cpuCount += 1
+      }
+    }
+    const cpu = cpuSum / cpuCount
+    console.info(
+      `cumulus inside its clouds: ${(mean * 1000).toFixed(2)} per km drawn over ${count} samples, ${(cpu * 1000).toFixed(2)} on the CPU over ${cpuCount}`,
+    )
+    expect(count).toBeGreaterThan(3000)
+    expect(Math.abs(mean - cpu) / cpu).toBeLessThanOrEqual(0.01)
+    expect(Math.abs(mean - 0.052) / 0.052).toBeLessThanOrEqual(0.03)
+    field.dispose()
+  }, 60_000)
+})
+
+describe('the statistics are the field’s generation', () => {
+  it('a body whose tables are not in draws nothing, and draws once they land', async () => {
+    // A world the session has not built tables for: its own scale height.
+    const world: Body = {
+      ...SERVED_EARTH,
+      atmosphere: { ...SERVED_EARTH.atmosphere!, scaleHeight: 7_777 },
+    }
+    const weather = bodyWeather(world)!
+    const ground = unit({ x: 0.3, y: 0.85, z: -0.43 })
+    const eye = scaled(ground, EARTH + 1500)
+    const uniforms = createCloudUniforms()
+    const profile = createCloudProfile({ uniforms })
+    // A pool that never answers: the tables are owed for as long as it runs.
+    profile.pool = {
+      submit: () => ({ result: new Promise(() => {}) }),
+    } as unknown as WorkerPool
+    const medium = analyticMedium({ uniforms, noise: noise.nodes, profile })
+    const frame = frameAt(uniforms, weather, 'climate', eye)
+    profile.write(frame)
+    expect(profile.ready[0].value).toBe(0)
+    const points = pointsAround(weather, ground, 20_000, 53, 2000)
+    const owed = await evaluate(points, eye, medium, uniforms)
+    let drawn = 0
+    for (let n = 0; n < points.length; n += 1)
+      drawn = Math.max(drawn, owed[n * 8]! * owed[n * 8 + 1]!)
+    expect(drawn).toBe(0)
+    // The pool the browser's worker serves, inline: each table lands, and
+    // the frame after draws the body.
+    const pool = new WorkerPool({
+      factory: () => createInlineWorker(createGameTaskRegistry()),
+      size: 1,
+    })
+    profile.pool = pool
+    const before = profile.generation
+    const start = performance.now()
+    profile.write(frame)
+    while (profile.ready[0].value === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      profile.write(frame)
+    }
+    const body = performance.now() - start
+    console.info(
+      `the tables in the pool: ${profile.builds.map((ms) => ms.toFixed(0)).join(', ')} ms a level, ${body.toFixed(0)} ms for the body`,
+    )
+    expect(profile.generation).toBeGreaterThan(before)
+    const landed = await evaluate(points, eye, medium, uniforms)
+    let clouded = 0
+    for (let n = 0; n < points.length; n += 1)
+      if (landed[n * 8]! * landed[n * 8 + 1]! > 0) clouded += 1
+    expect(clouded).toBeGreaterThan(50)
+    pool.terminate()
+    profile.dispose()
+  }, 120_000)
 })
 
 describe('every read names level 0', () => {
@@ -802,18 +999,22 @@ describe('every read names level 0', () => {
 
   /*
    * The fine march's step: the clipmap's one texture in a level and in the
-   * next one's fade band, the profile, the base noise and the detail. Its
-   * only sines and cosines are the displacement's start over, two of each
-   * over three waves a vector, in the one branch a ray takes on entering a
-   * level (`createMesoscaleRay`); a step turns them by their series. The cube's medium reads its two targets
-   * once; the climate's, the base noise once more for its synoptic field.
+   * next one's fade band, the profile, and either the base noise and the
+   * detail (resolved) or the statistics (past the switch): six reads in its
+   * text, four a resolved step runs and three a statistical one. Its only
+   * sines and cosines are the displacement's start over, two of each over
+   * three waves a vector, in the one branch a ray takes on entering a level
+   * (`createMesoscaleRay`); a step turns them by their series. The cube's
+   * medium reads its two targets once and the gain, a bake's read; the
+   * climate's, the base noise once more for its synoptic field, and the
+   * gain.
    * The two far media evaluate the displacement where they read it, which
    * is a bake's cost and never a march step's.
    */
   it.each([
-    ['fieldMedium', 5, 4],
-    ['synopticMedium', 5, 12],
-    ['analyticMedium', 4, 12],
+    ['fieldMedium', 6, 4],
+    ['synopticMedium', 7, 12],
+    ['analyticMedium', 6, 12],
   ] as const)(
     '%s: no bare textureSample, a textureSampleLevel for each of its %i reads, and at most %i calls of sin and cos in its text',
     async (name, count, sines) => {

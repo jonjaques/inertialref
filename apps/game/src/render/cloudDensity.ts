@@ -1,12 +1,15 @@
 import type { Node } from 'three/webgpu'
 import {
+  clamp,
   dot,
+  exp2,
   float,
   If,
   int,
   max,
   mix,
   normalize,
+  property,
   saturate,
   select,
   smoothstep,
@@ -38,8 +41,9 @@ import type {
  * every medium is held to, read through the GPU's textures. A level's cover
  * and convective share come from the climate's maps, its shape from the
  * profile table's row at that share, its cells from the base noise thresholded
- * against the shape and eroded by the detail, faded by footprint to a
- * fraction and a mean extinction (phase 1 design §4.3, §5.2). The three media
+ * against the shape and eroded by the detail, and past a footprint that no
+ * longer resolves its cells, its level's statistics (phase 1 design §4.3,
+ * §5.2). The three media
  * differ only in where the cover and the share come from — the clipmap near,
  * the weather cube for the served body's far bakes, the climate itself for a
  * second body — so the far field is the same field at every distance.
@@ -58,7 +62,8 @@ import type {
  * the field once a texel, evaluate it where they read it.
  *
  * A fine step reads the clipmap's one texture (twice in a level's fade
- * band), the profile, the base noise and the detail noise. The curl that
+ * band), the profile, and the base and detail noises where it resolves the
+ * field or the level's statistics where it does not. The curl that
  * tears the edges is in the base noise already (`weatherNoise.ts`), so it
  * costs a step nothing. Every read names level 0, so the media compile in a
  * fragment's non-uniform control flow as they do in compute.
@@ -245,8 +250,13 @@ type ClimateOf = (
 ) => {
   readonly cover: Node<'float'>
   readonly convective: Node<'float'>
-  /** The mesoscale displacement at the sample, meters, in the level's turned frame. */
-  readonly displacement: Node<'vec3'>
+  /** The level's gain at the column, where the source carries it; otherwise read from the profile's statistics. */
+  readonly gain?: Node<'float'>
+  /**
+   * The mesoscale displacement at the sample, meters, in the level's turned
+   * frame: built inside the resolved read, the one that reads the noise.
+   */
+  displacement(): Node<'vec3'>
   /** Horizontal meters the cover holds still over. */
   readonly column: Node<'float'>
 }
@@ -267,25 +277,44 @@ const exactDisplacement = (
     layer.cell,
   )
 
+/** The constant dither a sample without one takes: the switch at half a cell. */
+const DITHER = 0.5
+
 /**
- * `levelSample` at a sample, for the level it is in:
+ * `4^(dither − 1)`, the share of a cell past which a footprint reads its
+ * level's statistics (`statisticsFootprint`): a constant for a sample with
+ * no dither, and an `exp2` where the sample carries one.
+ */
+const switchShare = (sample: CloudSample): Node<'float'> =>
+  sample.dither === undefined
+    ? float(4 ** (DITHER - 1))
+    : exp2(clamp(sample.dither, 0, 1).mul(2).sub(2))
+
+/**
+ * `levelSample` at a sample, for the level it is in. Up to a footprint of
+ * `cell·4^(dither − 1)` the read is the resolved field, at every footprint
+ * alike:
  *
- *     d     = saturate(remap(n_b·R, 1 − c, 1, 0, 1)),  d = saturate(remap(d, n_d, 1, 0, 1))
- *     f     = smoothstep(cell/4, cell, footprint)       the unresolved share of a cell
- *     fraction = mix(1, c, f),   fraction·σ′ = σ′_level·mix(d, c·Ḡ, f)
+ *     d = saturate(remap(n_b·R, 1 − c, 1, 0, 1)),  d = saturate(remap(d, n_d·erosion, 1, 0, 1))
+ *     fraction = 1,  σ′ = gain·σ′_level·d
  *
  * with `R` the profile's extinction share at the height and the convective
- * share, `Ḡ` its mean over the level, and
- * `n_d = detail·erosion·(1 − smoothstep(cell/16, cell/4, footprint))`.
+ * share and the gain the level's statistics' at its column, which makes a
+ * cloud's mean extinction inside it the genus's. The detail is never faded
+ * out: a cell with its erosion taken away is a thicker cell, and the
+ * crossing it darkens is the one the footprint was meant to keep.
  *
- * The two pictures of a cell — resolved, all of it at σ′·d, and unresolved,
- * a share c at σ′·Ḡ — are blended by their mean extinction, fraction × σ′,
- * which is what a step's transmittance follows. Blending σ′ and the
- * fraction each on its own puts (1 − f)·f·σ′·Ḡ of cloud in a cell with no
- * cover, where the first picture holds no σ′ and the second no share: at the
- * far bake's 400 m footprint on 1 km cells that phantom made the atlas
- * 96–97% cloudy at every texel the cube held clear, and Earth opaque from
- * orbit. Both ends of the blend are unchanged.
+ * Past it the read is the level's statistics at the column, measured on the
+ * resolved field itself: `fraction` the share of its columns that hold
+ * cloud, and `σ′ = depth·R/(Ḡ·thickness)`, so a vertical column sums to the
+ * depth whose transmittance is the cloudy columns' mean. It reads no noise,
+ * and the displacement does not enter it: the table was measured through
+ * it.
+ *
+ * The two are branches, not a blend of two reads that both run, so a step
+ * reads the column, the profile and either the base and detail noises or
+ * the statistics. A body whose tables are not all in (`CloudProfile.ready`)
+ * draws nothing.
  *
  * The depths are `(B, 1)·σ′·Ḡ·thickness`, two multiplies on the profile's
  * fetch: the level's in-cloud column above the sample, and the whole of it.
@@ -295,61 +324,86 @@ function recipe(
   sample: CloudSample,
   body: CloudBodyUniforms,
   climateOf: ClimateOf,
+  shareOf: (sample: CloudSample) => Node<'float'> = switchShare,
 ): CloudMedium {
   const layer = layerAt(body.layers, sample.altitude)
   const slot = profileSlot(deps.uniforms, body)
-  const inLayer = (): readonly [Node<'vec3'>, Node<'vec3'>] => {
+  const ready = deps.profile.ready[slot]
+  const held = vec3(0, 0, UNBOUNDED_COLUMN).toVar()
+  const shaped = vec3(NO_RADIUS, 0, 0).toVar()
+  // The column's cover and share, held for a crossing's read of the
+  // statistics, which a march takes once a crossing and not a step.
+  const columnCover = float(0).toVar()
+  const columnShare = float(0).toVar()
+  If(layer.inside.greaterThan(0.5), () => {
     const frame = noiseFrame(sample, body.layers, layer.weights)
     const climate = climateOf(layer, frame)
-    const cover = saturate(climate.cover)
-    const convective = climate.convective
-    const w = climate.displacement
-    const profile = deps.profile.sample(
-      slot,
-      layer.level,
-      layer.h01,
-      convective,
-    )
-    const base = deps.noise.base(baseCells(frame, w, layer.cell))
-    const cell = layer.cell
-    const footprint = sample.footprint
-    const reach = detailReach(footprint, cell)
-    const erosion = select(
-      reach.greaterThan(0),
-      deps.noise
-        .detail(detailLattice(frame, w, cell))
-        .mul(layer.erosion)
-        .mul(reach),
-      float(0),
-    )
-    const shaped = saturate(
-      base.mul(profile.x).sub(float(1).sub(cover)).div(max(cover, TINY)),
-    )
-    const eroded = saturate(
-      shaped.sub(erosion).div(max(float(1).sub(erosion), TINY)),
-    )
-    const unresolved = smoothstep(cell.div(4), cell, footprint)
-    const fraction = mix(float(1), cover, unresolved)
-    const extinction = layer.sigma.mul(
-      mix(eroded, cover.mul(profile.y), unresolved),
-    )
+    const cover = saturate(climate.cover).toVar()
+    const convective = climate.convective.toVar()
+    columnCover.assign(cover)
+    columnShare.assign(convective)
+    const profile = deps.profile
+      .sample(slot, layer.level, layer.h01, convective)
+      .toVar()
     const column = layer.sigma.mul(profile.y).mul(layer.thickness)
-    return [
-      vec3(fraction, extinction.div(max(fraction, TINY)), climate.column),
+    shaped.assign(
       vec3(profile.w.mul(layer.radius), profile.z.mul(column), column),
-    ]
-  }
-  const inside = layer.inside.greaterThan(0.5)
-  const [held, shaped] = inLayer()
-  const first = select(inside, held, vec3(0, 0, UNBOUNDED_COLUMN))
-  const second = select(inside, shaped, vec3(NO_RADIUS, 0, 0))
+    )
+    const threshold = layer.cell.mul(shareOf(sample))
+    If(sample.footprint.greaterThan(threshold), () => {
+      const stats = deps.profile.statistics(
+        slot,
+        layer.level,
+        cover,
+        convective,
+      )
+      const sigma = select(
+        stats.fraction.greaterThan(0).and(profile.y.greaterThan(0)),
+        stats.depth
+          .mul(profile.x)
+          .div(max(profile.y.mul(layer.thickness), TINY)),
+        float(0),
+      )
+      held.assign(vec3(stats.fraction, sigma, climate.column))
+    }).Else(() => {
+      const w = climate.displacement()
+      const base = deps.noise.base(baseCells(frame, w, layer.cell))
+      const erosion = deps.noise
+        .detail(detailLattice(frame, w, layer.cell))
+        .mul(layer.erosion)
+      const shapedDensity = saturate(
+        base.mul(profile.x).sub(float(1).sub(cover)).div(max(cover, TINY)),
+      )
+      const eroded = saturate(
+        shapedDensity.sub(erosion).div(max(float(1).sub(erosion), TINY)),
+      )
+      const gain =
+        climate.gain ?? deps.profile.gain(slot, layer.level, cover, convective)
+      held.assign(vec3(1, gain.mul(layer.sigma).mul(eroded), climate.column))
+    })
+    // A body whose tables are not in draws nothing: no frame draws from a
+    // table that is not its level's.
+    held.assign(vec3(held.x.mul(ready), held.y.mul(ready), held.z))
+  })
+  const statistics = deps.profile.statistics(
+    slot,
+    layer.level,
+    columnCover,
+    columnShare,
+  )
   return {
-    fraction: first.x,
-    sigma: first.y,
+    fraction: held.x,
+    sigma: held.y,
     layer: layer.index,
-    column: first.z,
-    radius: second.x,
-    depth: second.yz,
+    column: held.z,
+    radius: shaped.x,
+    depth: shaped.yz,
+    statistics: {
+      fraction: statistics.fraction.mul(layer.inside).mul(ready),
+      depth: statistics.depth,
+      shape: statistics.shape,
+      sight: statistics.sightCells.mul(layer.cell),
+    },
   }
 }
 
@@ -371,29 +425,52 @@ const cubeTexel = (body: CloudBodyUniforms): Node<'float'> =>
  */
 export function fieldMedium(deps: FieldMediumDeps): CloudMediumFn {
   const ray = createMesoscaleRay()
+  const share = ditherShare()
   return (sample, body) =>
-    recipe(deps, sample, body, (layer, frame) => {
-      const column = deps.clipmap.column(sample, body, layer.index)
-      const displacement = vec3(0).toVar()
-      // Only a sample in a level carries the chain on: one between the
-      // levels leaves it where the last level's left it.
-      If(layer.inside.greaterThan(0.5), () => {
-        displacement.assign(
-          ray(
-            frame.turned,
-            levelPhases(body.layers, layer.weights),
-            layer.cell,
-            layer.level,
-          ),
-        )
-      })
-      return {
-        cover: column.cover,
-        convective: column.convective,
-        displacement,
-        column: deps.clipmap.columnMeters(sample, body),
-      }
+    recipe(
+      deps,
+      sample,
+      body,
+      (layer, frame) => {
+        const column = deps.clipmap.column(sample, body, layer.index)
+        return {
+          cover: column.cover,
+          convective: column.convective,
+          gain: column.gain,
+          displacement: () =>
+            ray(
+              frame.turned,
+              levelPhases(body.layers, layer.weights),
+              layer.cell,
+              layer.level,
+            ),
+          column: deps.clipmap.columnMeters(sample, body),
+        }
+      },
+      share,
+    )
+}
+
+/**
+ * `switchShare` for a march: a ray carries one dither, so its `exp2` is
+ * taken when the dither changes, once a ray, and held between the calls in
+ * invocation-wide variables, as the displacement's chain is
+ * (`createMesoscaleRay`).
+ */
+function ditherShare(): (sample: CloudSample) => Node<'float'> {
+  const key = property('float')
+  const held = property('float')
+  return (sample) => {
+    if (sample.dither === undefined) return switchShare(sample)
+    const dither = clamp(sample.dither, 0, 1)
+    // A dither plus one, so the variables' zero start is no dither's key.
+    const next = dither.add(1)
+    If(key.notEqual(next), () => {
+      held.assign(exp2(dither.mul(2).sub(2)))
+      key.assign(next)
     })
+    return held
+  }
 }
 
 /**
@@ -408,7 +485,7 @@ export function synopticMedium(deps: SynopticMediumDeps): CloudMediumFn {
     return recipe(deps, sample, body, (layer, frame) => ({
       cover: ofLevel(layer, deps.maps.cover(direction)),
       convective: ofLevel(layer, deps.maps.kind(direction)),
-      displacement: exactDisplacement(body, layer, frame),
+      displacement: () => exactDisplacement(body, layer, frame),
       column: cubeTexel(body),
     }))
   }
@@ -428,7 +505,7 @@ export function analyticMedium(deps: {
     return recipe(deps, sample, body, (layer, frame) => ({
       cover: ofLevel(layer, climate.cover),
       convective: ofLevel(layer, climate.kind),
-      displacement: exactDisplacement(body, layer, frame),
+      displacement: () => exactDisplacement(body, layer, frame),
       column: cubeTexel(body),
     }))
   }
