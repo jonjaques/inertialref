@@ -1,6 +1,10 @@
 # ADR-0067: A preset holds its weather, and a cornerstone is a preset no list shows
 
-Status: accepted · 10 Nov 2026. Amends
+Status: accepted · 10 Nov 2026 · amended 10 Nov 2026: the capture's record
+carries each take's provenance and role, a cast is kept with its dropped
+frames listed and refused only past a share or a run of them, every cast
+starts from a settled first frame, G2 faces a sea deeper than the drawn
+ground's tail, and the sun is solved over a place that moves. Amends
 [ADR-0033](0033-presets-hold-a-photographic-instant.md): version 3 of the
 presets format, and a second bundled list. The volume the weather draws is
 [ADR-0063](0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md)'s
@@ -98,7 +102,12 @@ that `findPicture` searches and no player-facing list reads.**
   blue as the camera draws it, the air's radiance times the star's color at
   the camera's balance, from 5° to 29° up under both ground suns; a radius
   that lets G3's deck be lit from below by half a degree; a sea within 250 m
-  of the datum the regimes' heights are over; and open sea from the shore.
+  of the datum the regimes' heights are over; and open sea from the shore,
+  deep enough to draw as sea: across the frame's horizontal field, from
+  250 m out to 30 km, the drawn seabed lies under the sea by the drawn
+  ground's tail (`drawnDivergence`, 1.13 m on this world) and a meter more.
+  Water shallower than the tail draws as sand flats, which is what G2's
+  first shore drew.
   The air's zenith alone is not the sky a picture shows: it is per unit of a
   white sun, and the M dwarf an earlier rule chose drew a blue zenith orange.
   P222_3_2_k IV, under an F0V star two cells from far-shore, is the first
@@ -106,13 +115,54 @@ that `findPicture` searches and no player-facing list reads.**
 - **The instants are solved, not written.** `solarTime.ts` finds the first
   instant at or after a time the sun stands at an elevation over a place,
   rising or falling, or at the day's noon, and `ir.sun` and `ir.solveSun`
-  are its verbs. `cornerstoneLedger.test.ts` holds each cornerstone's sun to
+  are its verbs. The place may move: a station's sub-point is sampled at
+  each instant beside the sun, and the search steps through the station's
+  orbit, since the sun over the sub-point goes round once an orbit
+  (`solveStationSun`). The ledger solves the overlay guard that way, E1's
+  picture from 2.5 km off the ISS at the first crossing of E1's sun whose
+  ground behind the station holds cloud, and holds its picture whole in its
+  snapshot; the list holds the nine. `cornerstoneLedger.test.ts` holds each cornerstone's sun to
   its target within half a degree, in Node, against the real catalog: a
   change to a body's frames that moves a cornerstone's sun fails there,
   before a plate is taken.
 - `ir.settled()` waits on the clouds: the system's own settle, every cache's
   owed work done and 32 frames since the history last reset, which is when
   the history's 1/8 floor has every pixel holding eight samples.
+
+### The capture
+
+`scripts/weather/capture.mjs` takes the cornerstones in their arms, the casts
+the rubric's checks name, and settled stills along their paths, on the
+rubric's one rig, into one record.
+
+- **Every take carries its provenance and a role:** the commit and a clean
+  tree, the stance as the page resolved it, the fixtures' hashes (the frozen
+  references and `cornerstones.json`), the processing mode, the hash of the
+  cloud levers as resolved at the capture's size, and a role (`candidate`,
+  `deck`, `last-accepted`, `low-anchor`, `guard-pair`, `clouds-off`,
+  `injected-defect`, `reference-run`, `settled-sample`) with the differences
+  its comparison exists to make. A cast adds its presented rate and whether
+  the 60 Hz hold was on. `sheet.mjs` holds the list and refuses a record a
+  take of which lacks any of it; the panel's packet builder and the step
+  detector read the same record.
+- **A cast is kept at the rate it presents at** until a 60 Hz hold exists,
+  and refused for its rate only while the hold is on.
+- **A cast is kept with its dropped frames listed,** each by path frame,
+  frames missed, height and path distance, and refused when it misses more
+  than 3% of its path's frames or three in a row. A clouds-on drop with no
+  drop in its clouds-off control within ten path frames is marked
+  `cloudsOnly`, a finding of its own the classifier reports and no
+  continuity check fails on. The record says how many boots the cast took.
+  The 3%, the three and the ten are provisional, from the baseline at
+  `4a8244e0` on the M6, where G6's worst arm missed 15 frames of 1,012.
+- **A cast starts from a settled picture at its own first frame:** the path
+  is put at frame 0, settled and held quiet for a second, and only then
+  started.
+- **The noise floor is the rig against itself:** `--pairs n` takes each still
+  from 2n boots, two at a time, and writes each picture's largest changed-pixel
+  count and RMSE to `floor.json`; an RMSE over 0.005 stops the run.
+- A cast's frames keep their screencast instants (`timestamps.json`), so a
+  gap in the stream is visible and each frame finds the path step it showed.
 
 ## Alternatives considered
 
@@ -136,6 +186,19 @@ committed plate for each before the volume could draw one.
 **Write the instants by hand.** A time is a claim about a sun nobody can
 check by reading it, and it goes stale silently when a body's frames change.
 
+**Refuse a cast for any dropped frame.** No descent is then ever kept:
+every G6 arm of the baseline dropped 5 to 15 frames, three boots each, at
+the same heights, about 50 to 20 km up, with the clouds off. The descent
+drops them, not the clouds, so the cast is refused for the path's cost and
+C3, C4, C8 and the injected step can never be read. Listing the drops and
+marking the clouds' own keeps what a drop says about the clouds without
+discarding the cast that shows it.
+
+**Set the instant each frame for the clock's casts.** That is a scrub a
+frame, which resets the history the cast exists to watch. The clock runs
+through the observatory's own clock, as a player's warp does, and the log
+records the instant each frame presented.
+
 ## Consequences
 
 A cornerstone is one command to take, and the same picture every time on one
@@ -151,3 +214,9 @@ the camera. It is the one such field, and it says what to draw, not how.
 
 Each regime's id is now a promise: renaming one breaks every picture that
 names it, silently degraded to unavailable rather than refused.
+
+A record without provenance, the baseline's included, is refused by the
+sheet and the panel's tools as a take to compare; its plates are still read
+by path as a sheet's base. A cast whose drops the clouds alone
+caused is kept and reported, so a hitch at an event is visible as a finding
+rather than hidden as a retake.
