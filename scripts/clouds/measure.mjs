@@ -36,6 +36,17 @@
  * Chrome profile is deleted before each boot: drive.mjs keeps one profile a
  * port, and Chrome's GPU caches live in it. A rig this run did not start is
  * never closed, so one already up on either port refuses the run.
+ *
+ * A batch outlasts what can be watched, so it can be continued. `--resume
+ * <file>` writes the document there, and where one already is, continues it:
+ * the runs measured quiet are kept and the rest run again, under the same
+ * batch, commit, sizes and held jitter or not at all. A run that fails is
+ * written into the document as it ends the batch, and one that has failed
+ * `FAILS` times refuses the continuation, so a batch never loops on one row.
+ * Each drive.mjs child runs under a watchdog, so a Chrome that hangs ends the
+ * batch with its rigs closed and the lock released. The exit says which:
+ * 1 stopped and worth continuing, 2 refused, the same refusal next time.
+ * `scripts/clouds/campaign.mjs` runs the batches end to end on those terms.
  */
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import {
@@ -69,6 +80,22 @@ const OUT = path.join(ROOT, '.data/clouds')
 export const PORTS = Object.freeze({ rig: 9341, cold: 9342 })
 const RETRIES = 2
 const QUIET_WAIT_MS = 600_000
+/** Failures of one run a continued document accepts before it refuses. */
+export const FAILS = 3
+/**
+ * The watchdog over one drive.mjs invocation: a boot, and each step at the
+ * DevTools channel's own 120 s cap (`scripts/cdp.mjs`). A step that hangs in
+ * the page is already caught by that cap, and drive.mjs exits; this catches
+ * what it cannot, a Chrome that never answers its launch or a process that
+ * never exits. It is a bound, not an estimate: a sweep of 74 steps gets
+ * 2.6 hours and takes about ten minutes.
+ */
+const budgetMs = (steps) => 300_000 + steps.length * 120_000
+/** What `budgetMs` leaves a child after SIGTERM before SIGKILL. */
+const KILL_GRACE_MS = 15_000
+
+/** A refusal the same command would meet again: exit 2, not worth a retry. */
+class Refusal extends Error {}
 
 /* ------------------------------------------------------- the operating point ---- */
 
@@ -710,18 +737,53 @@ export function closeOurs(port, token, { rig = RIG, env = process.env } = {}) {
     /* no session */
   }
   if (token == null || state?.gpuToken !== token) return false
+  // Bounded, because a `--down` that hangs would hold the lock it releases.
   spawnSync(process.execPath, [DRIVE, '--port', String(port), '--down'], {
     cwd: ROOT,
     env,
     stdio: ['ignore', 'ignore', 'inherit'],
+    timeout: 60_000,
   })
   return true
 }
 
+/**
+ * What a continued document still owes, or why it cannot be continued. A
+ * document is one batch at one commit, one list of sizes and one held jitter,
+ * so a row of any other would be a figure about something else under its
+ * name. A run measured quiet is done, and a marked one is measured again. A
+ * run that has failed `FAILS` times refuses, with its last error.
+ */
+export function resumeFrom(doc, { batch, head, sizes, held, runs }) {
+  const was = doc.identity?.head ?? 'no commit'
+  const differs = [
+    doc.batch !== batch && `is of ${doc.batch}, not ${batch}`,
+    was !== head &&
+      `was measured at ${was.slice(0, 12)}, and HEAD is ${head.slice(0, 12)}`,
+    String(doc.sizes) !== String(sizes) &&
+      `holds the sizes ${doc.sizes ?? 'nobody recorded'}, not ${sizes}`,
+    doc.held?.jitterFrame !== held.jitterFrame &&
+      `holds the jitter at ${doc.held?.jitterFrame}, not ${held.jitterFrame}`,
+  ].find(Boolean)
+  if (differs) return { runs: [], refusal: `the document ${differs}` }
+  const done = new Set(doc.rows.filter((r) => r.quiet?.ok).map((r) => r.id))
+  const todo = runs.filter((run) => !done.has(run.id))
+  for (const run of todo) {
+    const failed = (doc.failures ?? []).filter((f) => f.id === run.id)
+    if (failed.length >= FAILS)
+      return {
+        runs: [],
+        refusal: `${run.id} has failed ${failed.length} times, last: ${failed.at(-1).error}`,
+      }
+  }
+  return { runs: todo, refusal: null }
+}
+
 /* ------------------------------------------------------------------ the run ---- */
 
-/** One drive.mjs invocation, its step results parsed from `--json`. */
-const drive = (args, env) =>
+/** One drive.mjs invocation, its step results parsed from `--json`, ended
+ *  and refused when it runs past `timeoutMs`. */
+const drive = (args, env, timeoutMs) =>
   new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [DRIVE, ...args], {
       cwd: ROOT,
@@ -729,11 +791,22 @@ const drive = (args, env) =>
       stdio: ['ignore', 'pipe', 'inherit'],
     })
     let text = ''
+    let late = false
+    const watchdog = setTimeout(() => {
+      late = true
+      child.kill('SIGTERM')
+      setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS).unref()
+    }, timeoutMs)
     child.stdout.on('data', (chunk) => (text += chunk))
     child.on('error', reject)
     // `close`, not `exit`: a child can exit with its last output still in the
     // pipe, and the result is read whole or not at all.
     child.on('close', (code, signal) => {
+      clearTimeout(watchdog)
+      if (late)
+        return reject(
+          new Error(`drive.mjs ran past ${timeoutMs / 60_000} minutes`),
+        )
       if (code !== 0)
         return reject(new Error(`drive.mjs exited ${code ?? signal}`))
       try {
@@ -787,7 +860,11 @@ async function attempt(run, ctx) {
   const steps = plan(run, shots)
   const fresh = boots(ctx.booted, run)
   const args = session(run, { url: ctx.url, port: portOf(run), fresh })
-  const out = await drive([...args, ...steps.flatMap((s) => s.args)], ctx.env)
+  const out = await drive(
+    [...args, ...steps.flatMap((s) => s.args)],
+    ctx.env,
+    budgetMs(steps),
+  )
   const after = judge(sample(ctx.exempt), ctx.maxLoad)
   const row = figures(run, steps, out)
   if (run.type === 'residual')
@@ -806,14 +883,32 @@ async function attempt(run, ctx) {
   }
 }
 
+const save = (ctx) =>
+  writeFileSync(ctx.file, `${JSON.stringify(ctx.doc, null, 2)}\n`)
+
+/** One attempt, a failure written into the document before it ends the
+ *  batch, so a continuation can count it. */
+async function recorded(run, ctx) {
+  try {
+    return await attempt(run, ctx)
+  } catch (error) {
+    ctx.doc.failures = [
+      ...(ctx.doc.failures ?? []),
+      { id: run.id, at: new Date().toISOString(), error: error.message },
+    ]
+    save(ctx)
+    throw error
+  }
+}
+
 /** Every run, each again while it ends under load, the document rewritten
  *  after each so a batch that stops keeps what it measured. */
 async function runBatch(runs, ctx) {
   for (const [i, run] of runs.entries())
     for (let tries = 0; tries <= RETRIES; tries += 1) {
-      const row = { ...(await attempt(run, ctx)), attempt: tries + 1 }
+      const row = { ...(await recorded(run, ctx)), attempt: tries + 1 }
       ctx.doc.rows.push(row)
-      writeFileSync(ctx.file, `${JSON.stringify(ctx.doc, null, 2)}\n`)
+      save(ctx)
       const marked = row.quiet.ok
         ? ''
         : `; not quiet: ${quietLine(row.quiet.after) || 'a dirty tree'}`
@@ -834,6 +929,7 @@ const OPTIONS = {
   runs: { type: 'string', multiple: true, default: [] },
   'max-load': { type: 'string' },
   'jitter-frame': { type: 'string' },
+  resume: { type: 'string' },
   'allow-dirty': { type: 'boolean', default: false },
   'dry-run': { type: 'boolean', default: false },
   help: { type: 'boolean', default: false },
@@ -847,10 +943,12 @@ export const USAGE = `node scripts/clouds/measure.mjs --batch <${Object.keys(BAT
   --runs <text>      only the runs whose id holds it; repeat for more
   --max-load <n>     the one-minute load a quiet machine stays under; half the cores by default
   --jitter-frame <n> the index a held comparison holds the trace's jitter at, ${HELD.jitterFrame} by default
+  --resume <file>    write the document here, continuing the one already there
   --allow-dirty      measure an uncommitted tree, marking every row
   --dry-run          print each run's drive.mjs invocation and launch nothing
 
-The measurement rig is port ${PORTS.rig} and the cold boots ${PORTS.cold}.`
+The measurement rig is port ${PORTS.rig} and the cold boots ${PORTS.cold}.
+Exit 1 is a batch that stopped, which --resume continues; 2 is a refusal.`
 
 /** The command line, checked whole before anything is touched; the runs it
  *  selects are part of the check. */
@@ -879,7 +977,9 @@ export function parseOptions(argv) {
     batch: values.batch,
     url: new URL(values.url).toString(),
     gpuWait: parseWait(values['gpu-wait'], '--gpu-wait'),
+    sizes,
     runs,
+    resume: values.resume === undefined ? null : path.resolve(values.resume),
     maxLoad,
     allowDirty: values['allow-dirty'],
     held,
@@ -908,6 +1008,38 @@ export function dryRun(options) {
   return [...lines, `${options.runs.length} runs`].join('\n')
 }
 
+/**
+ * The document a batch writes and the runs it still owes: a new one under the
+ * time it began, or the one `--resume` names, continued where it exists.
+ */
+function documentOf(options, id, began) {
+  const stamp = new Date(began)
+    .toISOString()
+    .replaceAll(':', '-')
+    .replace(/\.\d+Z$/, 'Z')
+  const file =
+    options.resume ?? path.join(OUT, `${options.batch}-${stamp}.json`)
+  if (existsSync(file)) {
+    const doc = JSON.parse(readFileSync(file, 'utf8'))
+    const { runs, refusal } = resumeFrom(doc, { ...options, head: id.head })
+    if (refusal !== null) throw new Refusal(`${file}: ${refusal}`)
+    doc.resumedAt = [...(doc.resumedAt ?? []), new Date(began).toISOString()]
+    return { file, doc, runs }
+  }
+  const doc = {
+    batch: options.batch,
+    startedAt: new Date(began).toISOString(),
+    url: options.url,
+    ports: PORTS,
+    identity: id,
+    sizes: options.sizes,
+    held: options.held,
+    rows: [],
+    failures: [],
+  }
+  return { file, doc, runs: options.runs }
+}
+
 async function measure(options) {
   // Every refusal that costs nothing comes before the lock.
   if (!(await answers(options.url)))
@@ -916,10 +1048,12 @@ async function measure(options) {
     )
   const id = identity()
   const refusal = identityRefusal(id, options)
-  if (refusal !== null) throw new Error(refusal)
+  if (refusal !== null) throw new Refusal(refusal)
+  const began = Date.now()
+  const { file, doc, runs } = documentOf(options, id, began)
   for (const port of [PORTS.rig, PORTS.cold])
     if ((await readSession(port)) !== null || (await chromeOn(port)))
-      throw new Error(
+      throw new Refusal(
         `a rig is up on port ${port} that this run did not start, so it is not this run's to close; node scripts/drive.mjs --port ${port} --down closes it if it is yours`,
       )
   const lock = await acquire('clouds:measure', {
@@ -940,11 +1074,6 @@ async function measure(options) {
       close()
       process.exit(128 + os.constants.signals[signal])
     })
-  const began = Date.now()
-  const stamp = new Date(began)
-    .toISOString()
-    .replaceAll(':', '-')
-    .replace(/\.\d+Z$/, 'Z')
   const ctx = {
     url: options.url,
     maxLoad: options.maxLoad,
@@ -954,17 +1083,9 @@ async function measure(options) {
     began,
     booted: new Map(),
     exempt: [process.pid, listener(options.url)],
-    shots: path.join(OUT, 'shots', `${options.batch}-${stamp}`),
-    file: path.join(OUT, `${options.batch}-${stamp}.json`),
-    doc: {
-      batch: options.batch,
-      startedAt: new Date(began).toISOString(),
-      url: options.url,
-      ports: PORTS,
-      identity: id,
-      held: options.held,
-      rows: [],
-    },
+    shots: path.join(OUT, 'shots', path.basename(file, '.json')),
+    file,
+    doc,
   }
   if (ctx.exempt[1] === null)
     console.error(
@@ -972,13 +1093,13 @@ async function measure(options) {
     )
   try {
     mkdirSync(ctx.shots, { recursive: true })
-    writeFileSync(ctx.file, `${JSON.stringify(ctx.doc, null, 2)}\n`)
+    save(ctx)
     console.log(
-      `${options.runs.length} runs of ${options.batch} at ${id.head.slice(0, 12)}${id.clean ? '' : ' (dirty)'} on ${id.hardware} -> ${path.relative(ROOT, ctx.file)}`,
+      `${runs.length} of ${options.runs.length} runs of ${options.batch} at ${id.head.slice(0, 12)}${id.clean ? '' : ' (dirty)'} on ${id.hardware} -> ${path.relative(ROOT, ctx.file)}`,
     )
-    await runBatch(options.runs, ctx)
+    await runBatch(runs, ctx)
     ctx.doc.finishedAt = new Date().toISOString()
-    writeFileSync(ctx.file, `${JSON.stringify(ctx.doc, null, 2)}\n`)
+    save(ctx)
     console.log(`\n${tables(ctx.doc)}`)
   } catch (error) {
     throw new Error(
@@ -1008,6 +1129,10 @@ async function main(argv) {
     return await measure(options).then(
       () => 0,
       (error) => {
+        if (error instanceof Refusal) {
+          console.error(`refused: ${error.message}`)
+          return 2
+        }
         console.error(
           error instanceof GpuLockError
             ? error.message
