@@ -552,7 +552,12 @@ export async function sha256(file) {
 
 const run = promisify(execFile)
 
-/** Pixels two plates differ at past the presets' level, by ImageMagick. */
+/**
+ * Pixels two plates differ at past the presets' level, by ImageMagick, at
+ * the plate's native size. `frameDiff.mjs`'s `changedPixels` is the same
+ * recipe on frames cut to a 480 px long edge first, which a cast's JPEG
+ * ringing needs and a plate's noise floor, counted of 5,184,000, cannot use.
+ */
 export async function changedPixels(a, b, level = SAME_LEVEL) {
   const { stdout } = await run(
     'magick',
