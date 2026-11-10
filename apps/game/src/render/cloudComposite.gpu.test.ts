@@ -152,6 +152,17 @@ const grayAir =
     multiple: vec3(0),
   })
 
+/**
+ * The same gray air with a constant source function `source`, per unit sun
+ * irradiance: over a path of optical depth τ it adds source·(1 − e^(−τ)).
+ */
+const glowingAir =
+  (sigma: number, source: number): AirMediumFn =>
+  (air, height) => {
+    const extinction = vec3(sigma).mul(step(height, air.top.sub(1)))
+    return { extinction, single: extinction.mul(source), multiple: vec3(0) }
+  }
+
 /** One layer from `base` to `top` over a datum of `radius`, the eye `eye` meters up along `up`. */
 function serve(
   body: CloudBodyUniforms,
@@ -879,6 +890,170 @@ describe('the class', () => {
       f.dispose()
     },
   )
+})
+
+describe('at a render compression', () => {
+  /*
+   * A body past the near field is drawn smaller than life, by a factor the
+   * depth copy's kilometers carry and the history's do not. 0.49 is Earth
+   * from 20,000 km over it (`packages/rendering/src/placement.ts`). The
+   * scene here is the uncompressed one scaled about the eye, so every ray
+   * meets what it met, and the frame is the same frame: the radiance, the
+   * coverage and the motion, with only the view depth in render meters.
+   */
+  const ORBIT = 0.49
+
+  it('draws the frame the uncompressed slab draws, within a half float’s step', async () => {
+    const drawn = async (compression: number) => {
+      const f = rig({ picture: TEMPORAL })
+      serve(f.uniforms.served, 1_000, 0, 3_000)
+      f.uniforms.served.compression.value = compression
+      // A wall behind the whole slab and a square in front of all of it.
+      const scene = sceneOf(
+        facing(
+          50_000 * compression,
+          [-1.5, 1.5, -1.5, 1.5],
+          colored([0.3, 0.2, 0.1]),
+        ),
+        facing(
+          200 * compression,
+          [-0.5, 0.5, -0.5, 0.5],
+          colored([0.05, 0.6, 0.2]),
+        ),
+      )
+      f.uniforms.camera.translation.value.set(5, 0, 0)
+      await f.write({
+        light: [0.2, 0.2, 0.2, 0.3],
+        air: [-0.05, -0.05, -0.05, 2],
+        moments: [3, 1, 0.1, 0],
+      })
+      await f.frame(scene, true)
+      const rows = await f.readAll()
+      f.dispose()
+      return rows
+    }
+    const life = await drawn(1)
+    const orbit = await drawn(ORBIT)
+    // The control: the cloud is over the wall, and not over the square.
+    const cloud = 0.3 * 0.3 * GAIN + (0.2 - 0.05) * LIGHT
+    expect(Math.abs(at(life.get('output')!, 2, 2) - cloud)).toBeLessThanOrEqual(
+      halfSteps(cloud),
+    )
+    expect(at(life.get('reactive')!, 16, 16)).toBe(0)
+    for (const name of ['output', 'motion', 'reactive'] as const) {
+      const a = life.get(name)!
+      const b = orbit.get(name)!
+      for (let i = 0; i < a.length; i += 1) {
+        // `motion.z` is one over the view depth in render meters.
+        const scale = name === 'motion' && i % 4 === 2 ? ORBIT : 1
+        const one = a[i]!
+        const other = b[i]! * scale
+        const step =
+          name === 'reactive'
+            ? 1 / 255
+            : HALF * Math.max(Math.abs(one), Math.abs(other))
+        expect(
+          Math.abs(one - other),
+          `${name} ${i}: ${one} against ${other}`,
+        ).toBeLessThanOrEqual(step + 1e-7)
+      }
+    }
+  })
+})
+
+describe('an air that scatters', () => {
+  /*
+   * The identity's second term, (1 − T_c)·L_a(0, t₁): the air's own light
+   * along the ray, which the cloud takes from the scene with everything
+   * else and the composite puts back. In an air with no in-scatter it is
+   * zero, and every other case here has such an air.
+   *
+   * Straight down from 10 km through a slab from 3 km to 1 km onto a
+   * surface 9.5 km below the eye, in a gray air of constant extinction and
+   * constant source. The joint medium of air and cloud is uniform in the
+   * slab, so its march has a closed form, the limit of the 512-sample joint
+   * march `cloudCompositeError.gpu.test.ts` takes; and the composite's own
+   * segments integrate a uniform medium's step exactly, so what is left is
+   * the half float's rounding. The history holds what a trace of the slab
+   * leaves along the vertical ray: the cloud's light and transmittance, and
+   * the air it blocks, which is the span's air under the joint extinction
+   * less the span's air alone.
+   */
+  const SIGMA = 630
+  const SOURCE = 0.3
+  const CLOUD_DEPTH = 1.2
+  const CLOUD_SOURCE = 0.5
+  const SURFACE = 0.2
+
+  it('puts back the air’s light the cloud stands in front of: one slab within 1% of the joint march', async () => {
+    const f = rig({ medium: glowingAir(SIGMA, SOURCE) })
+    const up = new Vector3(0, 0, 1)
+    serve(f.uniforms.served, 10_000, 1_000, 3_000, up)
+    // Optical depths of the air along the vertical ray, by segment.
+    const tau = (meters: number) => (SIGMA * meters) / R
+    const front = tau(7_000)
+    const span = tau(2_000)
+    const behind = tau(500)
+    const airLight = (depth: number) => SOURCE * (1 - Math.exp(-depth))
+    const joint = span + CLOUD_DEPTH
+    const lit = (1 - Math.exp(-joint)) / joint
+    const cloudLight = CLOUD_SOURCE * CLOUD_DEPTH * lit
+    const cloudThrough = Math.exp(-CLOUD_DEPTH)
+    const blocked = SOURCE * span * lit - airLight(span)
+    // The scene as its own air draws it: the surface through all of it.
+    const whole = front + span + behind
+    const sceneLight = airLight(whole) + Math.exp(-whole) * SURFACE
+    const scene = sceneOf(
+      facing(
+        9_500,
+        [-1.5, 1.5, -1.5, 1.5],
+        colored(
+          [sceneLight, sceneLight, sceneLight].map(
+            (value) => value * ATMOSPHERE_GAIN,
+          ) as [number, number, number],
+        ),
+      ),
+    )
+    await f.frame(scene, false)
+    const alone = await f.read('output')
+    await f.write({
+      light: [cloudLight, cloudLight, cloudLight, cloudThrough],
+      air: [blocked, blocked, blocked, 8],
+      moments: [9, 7, 0.5, 0],
+    })
+    await f.frame(scene, true)
+    const drawn = await f.read('output')
+    // The joint march: the air to the slab, the slab's two sources under
+    // the joint extinction, and what is behind it through both.
+    const past = airLight(behind) + Math.exp(-behind) * SURFACE
+    const expected =
+      (airLight(front) +
+        Math.exp(-front) *
+          (cloudLight +
+            SOURCE * span * lit +
+            Math.exp(-span) * cloudThrough * past)) *
+      LIGHT
+    // The term under test is a third of that frame: with it out of the
+    // fragment this pixel reads 2.879 against 4.435, 35% low.
+    const term = (1 - cloudThrough) * airLight(front + span) * LIGHT
+    expect(term / expected).toBeGreaterThan(0.3)
+    for (const [x, y] of [
+      [15, 15],
+      [16, 15],
+      [15, 16],
+      [16, 16],
+    ] as const) {
+      // The scene alone is the surface's color, to a half float.
+      expect(
+        Math.abs(at(alone, x, y) - sceneLight * LIGHT),
+      ).toBeLessThanOrEqual(halfSteps(sceneLight * LIGHT))
+      expect(
+        Math.abs(at(drawn, x, y) - expected) / expected,
+        `(${x}, ${y}): ${at(drawn, x, y)} against ${expected}`,
+      ).toBeLessThan(0.01)
+    }
+    f.dispose()
+  })
 })
 
 describe('the second body', () => {
