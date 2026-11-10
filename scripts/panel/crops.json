@@ -1,0 +1,77 @@
+{
+  "format": "inertialref/panel-crops",
+  "version": 1,
+  "frame": "Each crop is a rectangle in fractions of the frame, x and y from its top-left corner, cut at native pixels: the same fractions on every arm and on a photograph (weather rubric §3.2). Each is placed by the preset's geometry, not by what one plate draws, so it holds while the picture changes.",
+  "crops": {
+    "weather-e1-cumulus-orbit": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The nadir: at pitch −88° the frame's center is straight down, where the cells and their shadows are at their least foreshortened."
+      }
+    },
+    "weather-e2-limb-dusk": {
+      "crop": {
+        "x": 0.125,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The limb away from the sun. Pitch −19.8° is the horizon's dip from 400 km, so the limb crosses the frame at mid-height; this cell holds the cloud tops standing into the band."
+      },
+      "terminator": {
+        "x": 0.375,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The limb over the sun's azimuth, where the terminator meets it and the tops lay their shadows on the air. E2's Shadow is scored here and nowhere else (rubric §2)."
+      }
+    },
+    "weather-e3-whole-face": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The disk's center, the sub-observer point: the least foreshortened cloud on the face."
+      }
+    },
+    "weather-g1-fair": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.35,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The bases over the horizon. At pitch 4° through a 50° lens the horizon sits 0.575 down the frame; the crop holds it and the row of bases above it."
+      }
+    },
+    "weather-g2-overcast-shore": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.4,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The sea's horizon. At pitch 5° through a 50° lens it sits 0.594 down the frame; the crop holds the deck over it and the water under it."
+      }
+    },
+    "weather-g3-underlit-dusk": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.45,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The layer's underside over the sun. At pitch 15° through a 55° lens the horizon sits 0.757 down the frame, and the camera faces the sun's azimuth, so the crop is the lit base above the glow."
+      }
+    },
+    "weather-g4-over-deck": {
+      "crop": {
+        "x": 0.375,
+        "y": 0.375,
+        "w": 0.25,
+        "h": 0.25,
+        "why": "The antisolar point, at the frame's center: the glory's rings and the deck's cells around it."
+      }
+    }
+  }
+}
