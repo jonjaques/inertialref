@@ -115,7 +115,6 @@ none is fixed.
 - **Velocity under temporal FSR.** The composite cannot blend into a row that
   has no blend. The upscaler's decided fix, reading the masked `motion`, lands
   before clouds draw under a temporal picture.
-- **The clouds are not in `ir.settled()`,** so no plate can hold one.
 - **Nothing in the scene calls `cloudFront`.** Rings, plumes and traces draw
   over the clouds undimmed.
 - **The galaxy, the stars and the sun's disk take the sensor's white for the
@@ -131,6 +130,64 @@ none is fixed.
 - **Earth keeps its deck until phase 3,** and every phase records Earth with
   the volume forced onto it, here and in its pull request.
 - **Every pull request carries comparison media.**
+
+## The cornerstones
+
+Nine presets the weather is judged on, committed before the work that judges
+them ([ADR-0067](../../../docs/adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md),
+[phase 1's design](phase1/design.md) §3). Each is one command to take and
+the same picture every time; the rubric ([`mvp.md`](mvp.md) §2) says what
+each has to show, and [`references.md`](references.md) holds the
+photographs it is judged against.
+
+The generated world is P222_1_0_7 III (`g:milky-way/s:P222_1_0_7/b:2`), by
+the rule the design fixed: far-shore V's noon zenith is tan (R 0.246 against
+B 0.140 at a 60° sun), and P222_1_0_7 III is the one body in far-shore's cell
+that passes the list. Its shore site is S; its land stance L is 29.25 km from
+S at a bearing of 184°, 20.3 m over the sea, because straight inland the
+coastal plain stays under 7 m for all 50 km. The campaign's stances stay on
+far-shore V.
+
+| Picture                     | Body, stance, lens                           | Sun                     | Weather               |
+| --------------------------- | -------------------------------------------- | ----------------------- | --------------------- |
+| `weather-e1-cumulus-orbit`  | Earth, 5°S 60°W, 400 km, nadir; 11.4°        | 50.0° and falling       | `fair-cumulus`        |
+| `weather-e2-limb-dusk`      | Earth, 20°N 30°W, 400 km, at the limb; 11.4° | −21.0° and falling      | `cirrus-over-cumulus` |
+| `weather-e3-whole-face`     | Earth, `blue-marble`; 65°                    | `blue-marble`'s instant | `cirrus-over-cumulus` |
+| `weather-g1-fair`           | L, 40 m; 50°                                 | Noon, 59.0°             | `fair-cumulus`        |
+| `weather-g2-overcast-shore` | S, 2 m, facing the sea; 50°                  | 35.0° and rising        | `overcast`            |
+| `weather-g3-underlit-dusk`  | L, 2 m, facing the sun; 55°                  | −1.5° and falling       | `dusk-altocumulus`    |
+| `weather-g4-over-deck`      | S, 4,300 m, at the antisolar point; 70°      | 35.0° and falling       | `stratocumulus`       |
+| `weather-g5-inside`         | L, 1,700 m, east; 60°. A cast's start        | 45.0° and rising        | `fair-cumulus`        |
+| `weather-g6-descent`        | L, 400 km, nadir; 60°. A cast's start        | 45.0° and rising        | `stratocumulus`       |
+
+The suns are solved, not written, and `cornerstoneLedger.test.ts` holds each
+within half a degree in Node.
+
+### The record
+
+A row a cornerstone and a column a phase: the sheet, the commit, the rubric's
+§3.6 numbers that exist yet, and the panel's scores where a panel has sat.
+Phase 0's column is the baseline, phase 0's landed light on the placeholder
+density, taken by `scripts/weather/capture.mjs` before any phase 1 package
+changes it; every later sheet's left column starts there.
+
+| Picture | Phase 0, the baseline | Phase 1 |
+| ------- | --------------------- | ------- |
+| E1      | Not yet taken         | —       |
+| E2      | Not yet taken         | —       |
+| E3      | Not yet taken         | —       |
+| G1      | Not yet taken         | —       |
+| G2      | Not yet taken         | —       |
+| G3      | Not yet taken         | —       |
+| G4      | Not yet taken         | —       |
+| G5      | Not yet taken (casts) | —       |
+| G6      | Not yet taken (casts) | —       |
+
+Earth's rows are the forced arm beside the deck. Until phase 2 that arm draws
+no shadow on the ground, and until phase 3 a held regime stands in for the
+climatology. E3's weather changes from `cirrus-over-cumulus` to the climate
+when phase 1's integration lands it, so the sheet across that change compares
+two weathers.
 
 ## Earth, phase by phase
 
@@ -224,6 +281,9 @@ ignores that drift and may have its east–west sign reversed.
 
 | File                                                         | What it is                                                                                                                                                                                                                   |
 | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`mvp.md`](mvp.md)                                           | The rubric the MVP is judged against: the nine pictures, the budget, the numbers. A draft no council has settled                                                                                                             |
+| [`references.md`](references.md)                             | The reference photographs gathered for each picture, with source, credit and license                                                                                                                                         |
+| [`phase1/design.md`](phase1/design.md)                       | Phase 1's engineering design, draft 3: the cornerstones, the volume's light, the packages and their order                                                                                                                    |
 | [`phase0/design.md`](phase0/design.md)                       | Phase 0's engineering design: interfaces, frame schedule, physics, measurement protocol, decision rules, packages, and its critique log. The code has moved past it where a loser was deleted; the ADRs describe what stands |
 | [`phase0/package-reports.md`](phase0/package-reports.md)     | What each of the ten work packages committed, where it departed from the design, and what it tried and dropped                                                                                                               |
 | [`phase0/measurement-draft.md`](phase0/measurement-draft.md) | Notes on the jitter lever from the first, stopped measurement                                                                                                                                                                |

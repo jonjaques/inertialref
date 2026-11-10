@@ -33,6 +33,7 @@ import {
   type CubeFace,
   genusProfileMean,
   MAX_CLOUD_LAYERS,
+  terminatorSines,
   type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
@@ -125,6 +126,8 @@ interface ScenarioPattern {
   readonly ice: UniformNode<'float', number>
   /** Texture 3's encoding of the wind, east and north. */
   readonly wind: UniformNode<'vec2', Vector2>
+  /** The terminator's sines, full and clear (`terminatorSines`). */
+  readonly terminator: UniformNode<'vec2', Vector2>
 }
 
 const PATTERNS = new WeakMap<CloudUniforms, ScenarioPattern>()
@@ -142,6 +145,7 @@ function patternOf(uniforms: CloudUniforms): ScenarioPattern {
       convective: uniform(new Vector3()),
       ice: uniform(0),
       wind: uniform(new Vector2(0.5, 0.5)),
+      terminator: uniform(new Vector2(2, 3)),
     }
     PATTERNS.set(uniforms, pattern)
   }
@@ -232,6 +236,7 @@ export function writeScenarioPattern(
   setVector(pattern.convective.value, channels.convective)
   setNumber(pattern.ice, channels.ice)
   setVector(pattern.wind.value, channels.wind)
+  setVector(pattern.terminator.value, terminatorSines(scenario))
 }
 
 /* ------------------------------------------------------------------------- */
@@ -309,19 +314,25 @@ const coverageCode = /*@__PURE__*/ wgslFn(
     thresholds: vec4<u32>,
     floors: vec3<f32>,
     period: vec2<u32>,
+    sun: vec3<f32>,
+    terminator: vec2<f32>,
   ) -> f32 {
-    // weatherScenario.ts \`scenarioCoverage\`.
+    // weatherScenario.ts \`scenarioCoverage\`. With no terminator its sines
+    // are (2, 3), which no sine reaches, and the share is 1.
     if (layer < 0 || layer > 2) {
       return 0.0;
     }
     let coverage = clamp(coverages[layer], 0.0, 1.0);
+    let size = length(d);
+    let up = select(0.0, dot(d, sun) / size, size > 0.0);
+    let share = 1.0 - smoothstep(terminator.x, terminator.y, up);
     if (kind > 1.5) {
-      return cloudBlobCoverage(d, cells, u32(layer), period, thresholds[layer], floors[layer]);
+      return share * cloudBlobCoverage(d, cells, u32(layer), period, thresholds[layer], floors[layer]);
     }
     if (kind > 0.5 && scale > 0.0) {
-      return cloudBandCoverage(d, coverage, scale);
+      return share * cloudBandCoverage(d, coverage, scale);
     }
-    return coverage;
+    return share * coverage;
   }
 `,
   uses(blobCode, bandCode),
@@ -331,12 +342,15 @@ const coverageCode = /*@__PURE__*/ wgslFn(
  * The placeholder's coverage of `layer` at a body-fixed direction, for
  * `body`'s frame and the shared scenario uniforms: the cube bake's source,
  * and the second body's far bake's (§3.13). A port of `scenarioCoverage`;
- * the pattern is a function of the direction alone, so `body` names whose
- * frame the direction is in and adds nothing to the value.
+ * the pattern is a function of the direction alone, and `body` supplies the
+ * sun in the same body-fixed axes for a scenario that ends at the
+ * terminator. The cube's steady cycle bakes a face a frame, so under a
+ * running clock its edge trails the sun by up to six frames; the picture
+ * that names such a scenario holds its instant, and there it does not move.
  */
 export function scenarioCoverageNode(
   uniforms: CloudUniforms,
-  _body: CloudBodyUniforms,
+  body: CloudBodyUniforms,
   layer: Node<'int'>,
   direction: Node<'vec3'>,
 ): Node<'float'> {
@@ -351,6 +365,8 @@ export function scenarioCoverageNode(
     thresholds: pattern.thresholds,
     floors: pattern.floors,
     period: uniforms.period,
+    sun: body.sun,
+    terminator: pattern.terminator,
   }) as unknown as Node<'float'>
 }
 
