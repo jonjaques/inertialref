@@ -555,6 +555,14 @@ export function spansReduction(cast, log) {
     // the field's expected displacement: the warp times a rate the rig may
     // not have held.
     seconds: times.length > 1 ? times.at(-1) - times[0] : null,
+    // The first path frame at or past the reduction: the field's noise
+    // starts over there, so a drift is read on one side of it, never across
+    // (the smoke's E1 at 100× registered nothing across it, and 20.1 px
+    // against 19.4 expected on the frames before it).
+    frame: (() => {
+      const at = times.findIndex((time) => time >= reduction)
+      return at < 0 ? null : (log[at].k ?? at)
+    })(),
     inside:
       times.length > 1 && times[0] < reduction && times.at(-1) >= reduction,
   }

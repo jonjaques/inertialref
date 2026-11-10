@@ -412,6 +412,10 @@ describe('the capture’s plan', () => {
       inside: true,
     })
     expect(spansReduction(clock, log).seconds).toBeCloseTo((299 / 45) * 100, 6)
+    // Where the noise starts over: the first path frame at or past it.
+    const at = spansReduction(clock, log).frame
+    expect(log[at].time).toBeGreaterThanOrEqual(reduction)
+    expect(log[at - 1].time).toBeLessThan(reduction)
     expect(spansReduction(clock, log.slice(0, 2)).inside).toBe(false)
     expect(spansReduction(CASTS[0], log)).toBeNull()
     const scrub = castByKey('weather-e1-cumulus-orbit-scrub')
