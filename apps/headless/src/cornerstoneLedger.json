@@ -176,11 +176,11 @@
       "id": "weather-g5-inside",
       "address": "g:milky-way/s:P222_3_2_k/b:3",
       "body": "62e170409bfc48fc",
-      "time": 86088.95679,
+      "time": 86087.80493,
       "fovDeg": 60,
       "focalLength": 20.78460969,
       "weather": "fair-cumulus",
-      "altitude": 1489.818644,
+      "altitude": 1497.366301,
       "sun": {
         "elevation": 45,
         "azimuth": 73.254
@@ -190,12 +190,12 @@
         "phase": 14.664
       },
       "surface": {
-        "latitude": -0.2907492575,
-        "longitude": 0.650207473,
-        "height": 1489.818644,
-        "heading": 2.129301687,
+        "latitude": -0.2907492569,
+        "longitude": 0.6502740061,
+        "height": 1497.366301,
+        "heading": 2.234021443,
         "pitch": 0,
-        "groundElevation": 210
+        "groundElevation": 203
       }
     },
     {
@@ -228,7 +228,7 @@
       "id": "weather-guard-station",
       "address": "g:milky-way/s:SOL/b:2/a:0",
       "body": "9a835f4d7487caaf",
-      "time": 95065.43216,
+      "time": 61596.3577,
       "fovDeg": 11.4,
       "focalLength": 120.2244958,
       "weather": "fair-cumulus",
@@ -243,12 +243,12 @@
   ],
   "guard": {
     "subPoint": {
-      "latitude": -4.063,
-      "longitude": -23.06
+      "latitude": -3.712,
+      "longitude": 116.497
     },
     "sun": {
       "elevation": 50,
-      "azimuth": 290.525
+      "azimuth": 290.3
     },
     "crossings": [
       {
@@ -257,11 +257,11 @@
       },
       {
         "time": 5814.535037,
-        "ring": 0.25
+        "ring": 0.1666666667
       },
       {
         "time": 11392.71884,
-        "ring": 0.1944444444
+        "ring": 0.2361111111
       },
       {
         "time": 16970.90279,
@@ -269,59 +269,35 @@
       },
       {
         "time": 22549.08621,
-        "ring": 0.2083333333
+        "ring": 0.2222222222
       },
       {
         "time": 28127.26846,
-        "ring": 0.2222222222
+        "ring": 0.25
       },
       {
         "time": 33705.45122,
-        "ring": 0.2638888889
+        "ring": 0.2361111111
       },
       {
         "time": 39283.63322,
-        "ring": 0.2777777778
+        "ring": 0.25
       },
       {
         "time": 44861.815,
-        "ring": 0.25
+        "ring": 0.2361111111
       },
       {
         "time": 50439.99628,
-        "ring": 0.25
-      },
-      {
-        "time": 56018.1774,
-        "ring": 0.1944444444
-      },
-      {
-        "time": 61596.3577,
-        "ring": 0.2083333333
-      },
-      {
-        "time": 67174.53785,
-        "ring": 0.1666666667
-      },
-      {
-        "time": 72752.71714,
-        "ring": 0.2222222222
-      },
-      {
-        "time": 78330.89674,
-        "ring": 0.2222222222
-      },
-      {
-        "time": 83909.07549,
         "ring": 0.2916666667
       },
       {
-        "time": 89487.25406,
-        "ring": 0.1805555556
+        "time": 56018.1774,
+        "ring": 0.1666666667
       },
       {
-        "time": 95065.43216,
-        "ring": 0.3472222222
+        "time": 61596.3577,
+        "ring": 0.3055555556
       }
     ]
   },
@@ -350,24 +326,24 @@
     "c6": [
       {
         "seconds": 0,
-        "first": 2965,
-        "last": 5215,
-        "least": 115,
-        "leastFrame": 1215
+        "first": 3295,
+        "last": null,
+        "least": 105,
+        "leastFrame": 1315
       },
       {
         "seconds": 19,
-        "first": 3155,
-        "last": 5295,
-        "least": 105,
-        "leastFrame": 1310
+        "first": 3485,
+        "last": null,
+        "least": 115,
+        "leastFrame": 1380
       },
       {
         "seconds": 38.1,
-        "first": 3355,
-        "last": 5385,
-        "least": 105,
-        "leastFrame": 1365
+        "first": 3745,
+        "last": null,
+        "least": 125,
+        "leastFrame": 1475
       }
     ]
   },
@@ -376,38 +352,38 @@
       "weather-g1-fair": {
         "columns": 96,
         "cover": 0.35,
-        "cloudy": 0.2291666667,
+        "cloudy": 0.2083333333,
         "holds": true
       },
       "weather-g2-overcast-shore": {
         "columns": 96,
         "cover": 1,
-        "cloudy": 0.96875,
+        "cloudy": 0.9791666667,
         "holds": true
       },
       "weather-g4-over-deck": {
         "columns": 154,
         "cover": 0.9,
-        "cloudy": 0.8636363636,
+        "cloudy": 0.8116883117,
         "holds": true
       },
       "weather-g6-descent": {
         "columns": 160,
         "cover": 0.9,
-        "cloudy": 0.73125,
+        "cloudy": 0.6875,
         "holds": true
       },
       "weather-e1-cumulus-orbit": {
         "columns": 160,
         "cover": 0.35,
-        "cloudy": 0.2375,
+        "cloudy": 0.21875,
         "holds": true
       }
     },
     "g3": {
       "edge": 96000,
       "clear": 110000,
-      "deck": 0.5625,
+      "deck": 0.7708333333,
       "slot": 0,
       "holds": true
     },
@@ -436,7 +412,7 @@
       "holds": true
     },
     "guard": {
-      "ring": 0.3472222222,
+      "ring": 0.3055555556,
       "behind": {
         "depth": 0,
         "cloudy": false
