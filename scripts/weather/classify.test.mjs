@@ -259,6 +259,21 @@ describe('the record a classification is written into', () => {
     expect(drops).toEqual([{ frame: 430, cloudsOnly: true }])
   })
 
+  it('marks a drop against the control the record names, not one of its own speed', () => {
+    const climate = {
+      ...cast('weather-g6-descent-climate-on', true, [
+        { frame: 183 },
+        { frame: 430 },
+      ]),
+      speed: 'climate',
+    }
+    const { drops } = dropsOf(
+      { casts: [climate, ...record.casts] },
+      'weather-g6-descent-climate-on',
+    )
+    expect(drops.map((one) => one.cloudsOnly)).toEqual([false, true])
+  })
+
   it('refuses a cast the record itself would refuse', () => {
     const { rate: _, ...rateless } = record.casts[0]
     expect(() =>

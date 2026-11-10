@@ -335,9 +335,13 @@ export function dropsOf(record, name) {
   if (entry === undefined) throw new Error(`no cast named ${name}`)
   checkTake(entry, true)
   if (!entry.clouds) return { entry, drops: [] }
-  const control = record.casts.find(
-    (one) =>
-      one.id === entry.id && one.speed === entry.speed && one.clouds === false,
+  // The capture names each cast's control: the climate and injected casts
+  // are read against the slow descent's, which shares neither their speed
+  // nor a clouds-off arm of their own.
+  const control = record.casts.find((one) =>
+    entry.control === undefined
+      ? one.id === entry.id && one.speed === entry.speed && !one.clouds
+      : one.name === entry.control,
   )
   return {
     entry,
