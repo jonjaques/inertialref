@@ -41,7 +41,8 @@
  * the runs measured quiet are kept and the rest run again, under the same
  * batch, commit, sizes and held jitter or not at all. A run that fails is
  * written into the document as it ends the batch, and one that has failed
- * `FAILS` times refuses the continuation, so a batch never loops on one row.
+ * `FAILS` times refuses the continuation, so a batch never loops on one row;
+ * a run that no quiet start let begin ends the batch and is written nowhere.
  * Each drive.mjs child runs under a watchdog, so a Chrome that hangs ends the
  * batch with its rigs closed and the lock released. The exit says which:
  * 1 stopped and worth continuing, 2 refused, the same refusal next time.
@@ -93,6 +94,9 @@ const KILL_GRACE_MS = 15_000
 
 /** A refusal the same command would meet again: exit 2, not worth a retry. */
 class Refusal extends Error {}
+
+/** A run the machine never let begin: no quiet start, or none that could be checked. */
+export class NoQuietStart extends Error {}
 
 /* ------------------------------------------------------- the operating point ---- */
 
@@ -743,7 +747,7 @@ const portOf = (run) => (run.type === 'cold' ? PORTS.cold : PORTS.rig)
 async function attempt(run, ctx) {
   const before = await quietStart(ctx)
   if (!before.ok)
-    throw new Error(
+    throw new NoQuietStart(
       before.unread
         ? `a quiet machine cannot be checked: ${quietLine(before)}`
         : `no quiet start in ten minutes: ${quietLine(before)}`,
@@ -784,16 +788,31 @@ async function attempt(run, ctx) {
 const save = (ctx) =>
   writeFileSync(ctx.file, `${JSON.stringify(ctx.doc, null, 2)}\n`)
 
-/** One attempt, a failure written into the document before it ends the
- *  batch, so a continuation can count it. */
+/**
+ * The document with a run's failure written in, which a continuation counts,
+ * or the document as it was when the run never began. A busy machine is no
+ * failure of the run: counted as one, a dev server left up for half an hour
+ * refuses the document after `FAILS` waits, and every continuation after,
+ * for a row that never ran. The batch still stops, exit 1, and is continued.
+ */
+export function withFailure(doc, run, error, at) {
+  if (error instanceof NoQuietStart) return doc
+  return {
+    ...doc,
+    failures: [
+      ...(doc.failures ?? []),
+      { id: run.id, at, error: error.message },
+    ],
+  }
+}
+
+/** One attempt, a failure of the run written into the document before it
+ *  ends the batch, so a continuation can count it. */
 async function recorded(run, ctx) {
   try {
     return await attempt(run, ctx)
   } catch (error) {
-    ctx.doc.failures = [
-      ...(ctx.doc.failures ?? []),
-      { id: run.id, at: new Date().toISOString(), error: error.message },
-    ]
+    ctx.doc = withFailure(ctx.doc, run, error, new Date().toISOString())
     save(ctx)
     throw error
   }

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { CAMPAIGNS, eta, outcome } from './campaign.mjs'
-import { FAILS, HELD, batchRuns, parseOptions, resumeFrom } from './measure.mjs'
+import {
+  FAILS,
+  HELD,
+  NoQuietStart,
+  batchRuns,
+  parseOptions,
+  resumeFrom,
+  withFailure,
+} from './measure.mjs'
 import { rateNote } from './page.mjs'
 
 /*
@@ -69,6 +77,25 @@ describe('a continued document', () => {
     expect(
       resumeFrom(doc({ failures, rows: [row(id, true)] }), want).refusal,
     ).toBeNull()
+  })
+
+  it('counts no failure against a run a busy machine never let begin', () => {
+    const run = runs[1]
+    // Three ten-minute waits through somebody's dev server, then a fourth.
+    let held = doc()
+    for (let i = 0; i < FAILS + 1; i += 1)
+      held = withFailure(
+        held,
+        run,
+        new NoQuietStart('no quiet start in ten minutes: vite (pid 1)'),
+        `t${i}`,
+      )
+    expect(held.failures).toEqual([])
+    expect(resumeFrom(held, want)).toEqual({ runs, refusal: null })
+    // A run that began and failed still counts.
+    expect(
+      withFailure(held, run, new Error('drive.mjs exited 1'), 't').failures,
+    ).toEqual([{ id: run.id, at: 't', error: 'drive.mjs exited 1' }])
   })
 
   it('is named on the command line, which keeps the sizes it was asked for', () => {
