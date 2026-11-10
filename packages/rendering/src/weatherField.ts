@@ -209,9 +209,11 @@ const unit = (p: Vec3, length: number): Vec3 => ({
  * `sigma` is scaled, `σ′`; the extinction a transmittance through the
  * sample is formed from is `fraction·sigma`.
  *
- * About 1 µs a call once the noise's texels near it are known, and a few
- * microseconds more for each texel a call is the first to need
- * (`weatherField.test.ts` measures neither: the report does).
+ * Measured on a Mac mini (Mac18,5, Apple M6, Node 26), over 40,000 places
+ * in a 20 km square of a low level: 0.5–0.6 µs a call where the noise's
+ * texels near it are known, 7–11 µs where the call is the first to need
+ * them (3.4 µs a texel), and 0.3–0.4 µs unresolved, where the detail is
+ * not read. A column (`columnDepth`) is 145–165 µs.
  */
 export function cloudFieldAt(
   weather: BodyWeather,
