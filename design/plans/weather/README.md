@@ -72,8 +72,7 @@ The order of work is the design's §11.3, from step 7:
    high effort, rounds until all three are satisfied, with the score table in
    the PR body.
 
-What the partial run already shows, from the instruments in
-[`phase0/partial-measurements/`](phase0/partial-measurements/) (Earth, after
+What the partial run already shows, from the instruments (Earth, after
 the two far-path fixes; not yet the decision):
 
 - **Far field.** Footprint radiance error at 400 m, atlas against spheres:
@@ -129,14 +128,14 @@ ignores that drift and may have its east–west sign reversed.
 
 ## What is in this directory
 
-| File                                                           | What it is                                                                                                                              |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| [`phase0/design.md`](phase0/design.md)                         | Phase 0's engineering design: interfaces, frame schedule, physics, measurement protocol, decision rules, packages, and its critique log |
-| [`phase0/package-reports.md`](phase0/package-reports.md)       | What each of the ten work packages committed, where it departed from the design, and what it asked of the others                        |
-| [`phase0/measurement-draft.md`](phase0/measurement-draft.md)   | The measurement agent's notes on the jitter lever, written before it was stopped                                                        |
-| [`phase0/partial-measurements/`](phase0/partial-measurements/) | The JSON the instruments and the stopped batches wrote                                                                                  |
-| [`maps/`](maps/)                                               | A read-only survey of the eight subsystems the weather touches, taken on `c2a50f1` before any of this was written                       |
-| [`isccp-h-research.md`](isccp-h-research.md)                   | Phase 3's data: ISCCP-H HGM is netCDF-4 read with `h5wasm`, and its own cover (64.8% global, 68.4% ocean) is not MODIS's                |
+| File                                                         | What it is                                                                                                                              |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| [`phase0/design.md`](phase0/design.md)                       | Phase 0's engineering design: interfaces, frame schedule, physics, measurement protocol, decision rules, packages, and its critique log |
+| [`phase0/package-reports.md`](phase0/package-reports.md)     | What each of the ten work packages committed, where it departed from the design, and what it asked of the others                        |
+| [`phase0/measurement-draft.md`](phase0/measurement-draft.md) | The measurement agent's notes on the jitter lever, written before it was stopped                                                        |
+| [`phase0/measurements/`](phase0/measurements/)               | Both campaigns' summaries and instrument documents, and the placement's repeats                                                         |
+| [`maps/`](maps/)                                             | A read-only survey of the eight subsystems the weather touches, taken on `c2a50f1` before any of this was written                       |
+| [`isccp-h-research.md`](isccp-h-research.md)                 | Phase 3's data: ISCCP-H HGM is netCDF-4 read with `h5wasm`, and its own cover (64.8% global, 68.4% ocean) is not MODIS's                |
 
 The maps and the reports cite line numbers on the trees they were written
 against; read the code before trusting one.
