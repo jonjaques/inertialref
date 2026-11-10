@@ -513,45 +513,100 @@ export function ladderRule(docs, lever) {
 const cheaper = (rows) =>
   rows.length > 0 && rows.every((r) => r.summary.delta < -r.summary.allowance)
 
+/** A form's frame as its row read it: the form and pass B's depth, or `unknown`. */
+const formText = (r) => {
+  const read = r.form?.candidate
+  return read === undefined
+    ? 'form unknown, depth unknown'
+    : `form ${read.form}, depth ${read.depth ?? 'none'}`
+}
+
+/** B10's bound: the composite's steady Δ may grow by no more than this from 1080p to Retina. */
+export const B10_GROWTH_MS = 0.5
+
 /**
- * The composite in the chain: `chain` is the form on a frame with nothing
- * over the clouds if its frame equals pass B's within a half-float step
- * (`inputs.chainEqual`, the GPU test) and its steady Δ is under `passes`'s
- * by more than the resolution on `orbit` and `horizon` at both sizes.
+ * The composite in the chain (§7.4, §4.12): `chain` is the form on a frame
+ * with nothing over the clouds if its frame equals pass B's within a
+ * half-float step (`inputs.chainEqual`, the GPU test), its steady Δ is
+ * under `passes`'s by more than the resolution on `orbit` and `horizon` at
+ * both sizes, and, B10's bound, its own steady Δ over the clouds off grows
+ * by no more than 0.5 ms from 1080p to Retina, less the larger allowance of
+ * the two rows. A clause the rows fail is a miss whatever another clause
+ * lacks; a clause with nothing to read leaves the rule undecided only where
+ * none failed.
  */
 export function chainRule(docs, inputs = {}) {
   const rows = standing(docs, 'over').filter(
-    (r) =>
-      r.type === 'ab' &&
-      r.group === 'form' &&
-      r.label === 'chain' &&
-      ['orbit', 'horizon'].includes(r.scenario),
+    (r) => r.type === 'ab' && ['orbit', 'horizon'].includes(r.scenario),
   )
-  if (rows.length < 4)
-    return undecided('chain', 'The composite in the chain', 'four `over` rows')
-  if (typeof inputs.chainEqual !== 'boolean')
-    return undecided(
-      'chain',
-      'The composite in the chain',
-      'cloudOverPass’s equality',
+  const chain = rows.filter((r) => r.group === 'chain')
+  const clouds = rows.filter((r) => r.group === 'clouds')
+  const growth = ['orbit', 'horizon'].map((s) => {
+    const [a, b] = ['1080p', 'retina'].map((size) =>
+      find(clouds, { scenario: s, size }),
     )
+    if (!a || !b) return { s, read: false }
+    const grows = b.summary.delta - a.summary.delta
+    const allowance = Math.max(a.summary.allowance, b.summary.allowance)
+    return {
+      s,
+      read: true,
+      grows,
+      allowance,
+      holds: grows <= B10_GROWTH_MS + allowance,
+    }
+  })
+  const clauses = [
+    {
+      name: 'cheaper than passes on orbit and horizon at both sizes',
+      read: chain.length === 4,
+      holds: cheaper(chain),
+    },
+    {
+      name: 'equal to pass B’s frame within a half-float step',
+      read: typeof inputs.chainEqual === 'boolean',
+      holds: inputs.chainEqual === true,
+    },
+    {
+      name: `B10: its steady Δ grows by at most ${B10_GROWTH_MS} ms from 1080p to Retina`,
+      read: growth.every((g) => g.read),
+      holds: growth.every((g) => g.holds),
+    },
+  ]
+  const failed = clauses.filter((c) => c.read && !c.holds)
+  const unread = clauses.filter((c) => !c.read)
   return {
     id: 'chain',
     title: 'The composite in the chain',
-    outcome: inputs.chainEqual && cheaper(rows) ? 'pass' : 'miss',
-    figures: rows.map(
-      (r) =>
-        `${r.scenario} ${r.size}: Δ ${ms(r.summary.delta)} ± ${ms(r.summary.allowance)}`,
-    ),
+    outcome:
+      failed.length > 0 ? 'miss' : unread.length > 0 ? 'undecided' : 'pass',
+    figures: [
+      ...chain.map(
+        (r) =>
+          `${r.scenario} ${r.size}: Δ ${ms(r.summary.delta)} ± ${ms(r.summary.allowance)} against passes; cloud composite ${ms(r.composite)}, passes's scene over clouds ${ms(r.baseSceneOver)}; ${formText(r)}`,
+      ),
+      ...growth
+        .filter((g) => g.read)
+        .map(
+          (g) =>
+            `${g.s}: chain's steady Δ grows ${ms(g.grows)} from 1080p to Retina, against ${B10_GROWTH_MS} ms ± ${ms(g.allowance)}`,
+        ),
+      ...failed.map((c) => `fails: ${c.name}`),
+      ...unread.map((c) => `missing: ${c.name}`),
+    ],
   }
 }
 
-/** Pass B's store: `lean` stays if its frame is equal on and off and it is cheaper on `overlay` at Retina. */
+/**
+ * Pass B's store: `lean` stays if its frame is equal on and off
+ * (`inputs.leanEqual`) and its steady Δ on `overlay` is under `passes`'s by
+ * more than the resolution at Retina. Which `lean` the stance drew, its
+ * depth read-only or stored, is recorded beside it.
+ */
 export function leanRule(docs, inputs = {}) {
   const row = find(standing(docs, 'over'), {
     type: 'ab',
-    group: 'form',
-    label: 'lean',
+    group: 'lean',
     scenario: 'overlay',
     size: 'retina',
   })
@@ -568,9 +623,53 @@ export function leanRule(docs, inputs = {}) {
     title: 'Pass B’s store',
     outcome: inputs.leanEqual && cheaper([row]) ? 'pass' : 'miss',
     figures: [
-      `overlay Retina: Δ ${ms(row.summary.delta)} ± ${ms(row.summary.allowance)}`,
+      `overlay Retina: Δ ${ms(row.summary.delta)} ± ${ms(row.summary.allowance)}; ${formText(row)}`,
     ],
   }
+}
+
+/**
+ * Recorded beside the rules, deciding nothing: `chain` on `overlay`, which
+ * is `passes` by construction, so a Δ over its resolution is a defect of the
+ * hand-back, not a figure; and the guard's frame, where `chain` walks the
+ * scene once.
+ */
+export function overRecords(docs) {
+  const rows = standing(docs, 'over').filter((r) => r.type === 'ab')
+  const overlay = rows.filter((r) => r.group === 'overlay')
+  const guard = rows.filter((r) => r.group === 'guard')
+  const line = (r) =>
+    `${r.scenario} ${r.size} ${r.label}: Δ ${ms(r.summary.delta)} ± ${ms(r.summary.allowance)} against passes; cloud composite ${ms(r.composite)}, passes's scene over clouds ${ms(r.baseSceneOver)}; ${formText(r)}`
+  return [
+    overlay.length === 0
+      ? undecided(
+          'chain on overlay',
+          'Chain hands the overlay back',
+          'the overlay rows',
+        )
+      : {
+          id: 'chain on overlay',
+          title: 'Chain hands the overlay back',
+          outcome: 'recorded',
+          figures: [
+            ...overlay.map(line),
+            ...overlay
+              .filter((r) => Math.abs(r.summary.delta) > r.summary.allowance)
+              .map(
+                (r) =>
+                  `${r.size}: differs from passes by more than the resolution`,
+              ),
+          ],
+        },
+    guard.length === 0
+      ? undecided('guard', 'The overlay guard’s frame', 'the guard rows')
+      : {
+          id: 'guard',
+          title: 'The overlay guard’s frame',
+          outcome: 'recorded',
+          figures: guard.map(line),
+        },
+  ]
 }
 
 /**
@@ -757,6 +856,7 @@ export function evaluate(docs, inputs = {}) {
     ),
     chainRule(docs, inputs),
     leanRule(docs, inputs),
+    ...overRecords(docs),
     placementRule(docs),
     cpuRule(docs),
     capsRule(docs),
@@ -805,6 +905,8 @@ const READS = {
   clip: ['clip'],
   chain: ['over'],
   lean: ['over'],
+  'chain on overlay': ['over'],
+  guard: ['over'],
   placement: ['over'],
   cpu: ['over'],
   caps: ['reset'],
