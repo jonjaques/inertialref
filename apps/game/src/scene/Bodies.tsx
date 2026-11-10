@@ -533,7 +533,16 @@ export function Bodies({
         }
         setNumber(planet.specularStrength, values.specularStrength)
         setNumber(planet.nightStrength, values.nightStrength)
-        setNumber(planet.cloudShadow, values.cloudShadow)
+        // A deck the volume hides still darkens the sphere through its map,
+        // and under the volume's clouds that is a second set of shadows of
+        // clouds nobody can see. Its shadow yields with it: a uniform's
+        // value, so no graph moves.
+        setNumber(
+          planet.cloudShadow,
+          clouds !== null && deckYields(clouds, served, body.address)
+            ? 0
+            : values.cloudShadow,
+        )
         setNumber(planet.cloudHeight, values.cloudHeight)
         setNumber(planet.ringInner, values.ringInner)
         setNumber(planet.ringOuter, values.ringOuter)

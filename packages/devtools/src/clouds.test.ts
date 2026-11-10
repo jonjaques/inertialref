@@ -64,22 +64,22 @@ describe('cloudsSettled', () => {
     for (let frames = 0; frames < CLOUD_SETTLE_FRAMES; frames += 1)
       expect(cloudsSettled(drawing(frames))).toEqual({
         pending: true,
-        history: `${frames}/16`,
+        history: `${frames}/32`,
         caches: 'ready',
       })
     expect(cloudsSettled(drawing(CLOUD_SETTLE_FRAMES))).toEqual({
       pending: false,
-      history: '16/16',
+      history: '32/32',
       caches: 'ready',
     })
-    expect(cloudsSettled(drawing(400))?.history).toBe('16/16')
+    expect(cloudsSettled(drawing(400))?.history).toBe('32/32')
   })
 
   it('waits on every cache that owes work, and names each', () => {
     const settle = cloudsSettled(drawing(40, { far: true, maps: true }))
     expect(settle).toEqual({
       pending: true,
-      history: '16/16',
+      history: '32/32',
       caches: 'maps, far',
     })
     for (const cache of Object.keys(cloudReportIdle().pending))
