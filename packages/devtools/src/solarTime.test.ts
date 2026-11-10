@@ -92,11 +92,16 @@ describe('the solved instant', () => {
           // and a solver answering null fails rather than passes.
           const sampled = after + pick * 2 * day
           const target = elevation(sampled)
-          const slope = elevation(sampled + 1) - elevation(sampled - 1)
+          const left = target - elevation(sampled - 1)
+          const right = elevation(sampled + 1) - target
           // At a peak or a trough the sun is neither rising nor falling, and
           // a target there is reached only at that instant: no trend names it.
-          fc.pre(Math.abs(slope) > 1e-9)
-          const trend = slope > 0 ? ('rising' as const) : ('falling' as const)
+          // A centered slope cannot see one between its ends: near the zenith
+          // a peak 5e-8 s after the sample leaves e(+1) − e(−1) at 1.04e-9°
+          // while each side falls 0.0104°. So the sun must move one way on
+          // both sides of the sample.
+          fc.pre(left * right > 0 && Math.abs(left + right) > 1e-9)
+          const trend = left > 0 ? ('rising' as const) : ('falling' as const)
           const time = solveSunTime(
             sun,
             at,
