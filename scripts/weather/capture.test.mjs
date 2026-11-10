@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -38,6 +38,13 @@ import { baseSource, buildSheets, mediaRows } from './sheet.mjs'
  */
 
 const URL_ = 'http://localhost:8787/'
+
+// `buildSheets` refuses without ImageMagick or ffmpeg rather than write half
+// a sheet, and CI's Linux runner has neither, so the one test that draws a
+// sheet runs where the capture itself can.
+const hasSheetTools = ['magick', 'ffmpeg'].every(
+  (tool) => spawnSync(tool, ['-version']).status === 0,
+)
 
 describe('the capture’s plan', () => {
   it('takes seven stills, E1 to E3 in two arms, and leaves G5 and G6 to their casts', () => {
@@ -402,31 +409,34 @@ describe('the sheets', () => {
     expect(baseSource({ kind: 'dir', dir: '/nowhere' }, 'a.png')).toBeNull()
   })
 
-  it('lay the deck beside the volume at one scale, with a blank where no base exists', async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), 'weather-sheet-'))
-    for (const [file, color] of [
-      ['weather-e1-cumulus-orbit-volume.png', 'navy'],
-      ['weather-e1-cumulus-orbit-deck.png', 'white'],
-    ])
-      execFileSync('magick', [
-        '-size',
-        '2880x1800',
-        `xc:${color}`,
-        path.join(dir, file),
+  it.skipIf(!hasSheetTools)(
+    'lay the deck beside the volume at one scale, with a blank where no base exists',
+    async () => {
+      const dir = await mkdtemp(path.join(tmpdir(), 'weather-sheet-'))
+      for (const [file, color] of [
+        ['weather-e1-cumulus-orbit-volume.png', 'navy'],
+        ['weather-e1-cumulus-orbit-deck.png', 'white'],
       ])
-    await writeFile(
-      path.join(dir, 'record.json'),
-      JSON.stringify({ ...record, casts: [] }),
-    )
-    const { sheets, media } = await buildSheets({ dir })
-    expect(sheets).toHaveLength(1)
-    const size = execFileSync(
-      'magick',
-      ['identify', '-format', '%w %h', path.join(dir, sheets[0].file)],
-      { encoding: 'utf8' },
-    )
-    // Three tiles of 720 across, each with its 36-pixel label.
-    expect(size).toBe(`${3 * 720} ${450 + 36}`)
-    expect(await readFile(path.join(dir, 'media.md'), 'utf8')).toBe(media)
-  })
+        execFileSync('magick', [
+          '-size',
+          '2880x1800',
+          `xc:${color}`,
+          path.join(dir, file),
+        ])
+      await writeFile(
+        path.join(dir, 'record.json'),
+        JSON.stringify({ ...record, casts: [] }),
+      )
+      const { sheets, media } = await buildSheets({ dir })
+      expect(sheets).toHaveLength(1)
+      const size = execFileSync(
+        'magick',
+        ['identify', '-format', '%w %h', path.join(dir, sheets[0].file)],
+        { encoding: 'utf8' },
+      )
+      // Three tiles of 720 across, each with its 36-pixel label.
+      expect(size).toBe(`${3 * 720} ${450 + 36}`)
+      expect(await readFile(path.join(dir, 'media.md'), 'utf8')).toBe(media)
+    },
+  )
 })
