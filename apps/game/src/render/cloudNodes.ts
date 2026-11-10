@@ -249,7 +249,10 @@ export function finiteOr(
  * pass timeline cannot name while `ir.gpu` counts them: about forty a frame
  * across the trace and the history, biasing the very figures the clouds are
  * measured by, and the declared bytes a third short. A `Storage3DTexture`
- * allocates its chain and nothing fills it. Every storage texture the cloud
+ * allocates its chain and nothing fills it. `generateMipmaps` off is all
+ * either needs: three allocates a chain, and regenerates one after a store,
+ * only where `Textures.needsMipmaps` holds, so a `StorageTexture`'s own
+ * `mipmapsAutoUpdate` is left as it comes. Every storage texture the cloud
  * system holds is made here.
  */
 
@@ -264,10 +267,6 @@ export function cloudStorageTexture(
   storage.format = RGBAFormat
   storage.type = format === 'rgba16float' ? HalfFloatType : UnsignedByteType
   storage.generateMipmaps = false
-  // r185's own flag, which `@types/three` does not declare.
-  ;(
-    storage as StorageTexture & { mipmapsAutoUpdate: boolean }
-  ).mipmapsAutoUpdate = false
   storage.name = name
   return storage
 }

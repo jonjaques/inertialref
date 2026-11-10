@@ -645,9 +645,15 @@ describe('a cloud storage texture', () => {
   }
 
   it('written by compute and then sampled, has one level and draws no mip pass', async () => {
-    const { levels, passes } = await writeThenSample(
-      cloudStorageTexture(16, 16, 'rgba16float', 'premise one level'),
-    )
+    const map = cloudStorageTexture(16, 16, 'rgba16float', 'premise one level')
+    // `generateMipmaps` off is the whole of it. three asks for a chain, and
+    // regenerates one after a store, only where `Textures.needsMipmaps`
+    // holds, so its own `mipmapsAutoUpdate` stands at the default and has
+    // nothing to update: a three that regenerates on that flag alone fails
+    // here.
+    expect(map.generateMipmaps).toBe(false)
+    expect(map).toHaveProperty('mipmapsAutoUpdate', true)
+    const { levels, passes } = await writeThenSample(map)
     expect(levels).toBe(1)
     // The sampled draw's own pass, and nothing else.
     expect(passes).toBe(1)
