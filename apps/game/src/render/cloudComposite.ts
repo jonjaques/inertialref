@@ -7,11 +7,12 @@ import {
   MeshBasicNodeMaterial,
   type MRTNode,
   type Node,
+  type NodeMaterial,
   OneFactor,
   OneMinusSrcAlphaFactor,
   PlaneGeometry,
   type RenderTarget,
-  type Scene,
+  Scene,
   StorageBufferAttribute,
   type Texture,
   type TextureNode,
@@ -122,9 +123,12 @@ import { warmCompile, warmCompute, warmRenderer } from './warmup.ts'
  *
  *     out = T_c·scene + (1 − T_c)·L_a(0, t₁) + T'_a(0, t₀)·L_c + T_a(0, t₀)·B,
  *
- * writing the radiance, `reactive`, `motion` and `meterMask`. It is the first
- * opaque of pass B, the scene pass over the clouds, and its material holds
- * the frame node, so the frame's cloud work runs at its draw.
+ * writing the radiance, `reactive` and `motion`. It has two forms, chosen a
+ * frame at a time (`cloudOverPass.ts`): the first opaque of pass B, the scene
+ * pass over the clouds, or, on a frame with nothing drawn over the clouds,
+ * alone over the scene target's resolved rows. Both draw one plane with one
+ * material, so they are one fragment and one blend, and the material holds
+ * the frame node, so the frame's cloud work runs at whichever draw it is.
  *
  * **Nothing here carries the scene's gain.** `sensorRadiance` multiplies the
  * output by `sceneRadianceGain` once, as it does the shell's
@@ -519,15 +523,35 @@ function compositeGraph(
   }
 }
 
-/*
- * Premultiplied compositing over the scene: the source is radiance, not
- * radiance over alpha, so the blend adds it whole and lets alpha extinguish
- * what is behind — (One, OneMinusSrcAlpha), the shell's. The alpha writes are
- * (Zero, One), the shell's and the starfield's: an additive pass stamping
- * alpha into the extended-range canvas is the compositor artifact `flare.ts`
- * documents. A custom blend also keeps the opaque list's material from having
- * its alpha forced to one (`NodeBuilder.isOpaque` asks for normal blending).
+/**
+ * The composite over what it lands on, `dst·T + L`, as the blend of
+ * `material`: the one law of both forms. In pass B it lands on the scene
+ * target's samples and in the chain form on its resolved rows; the fragment
+ * is one a pixel and the blend is linear in the destination, so resolving
+ * before it or after it is one frame, to a half float's rounding.
+ *
+ * Premultiplied: the source is radiance, not radiance over alpha, so the
+ * blend adds it whole and lets alpha extinguish what is behind — (One,
+ * OneMinusSrcAlpha), the shell's. The alpha writes are (Zero, One), the
+ * shell's and the starfield's: an additive pass stamping alpha into the
+ * extended-range canvas is the compositor artifact `flare.ts` documents. A
+ * custom blend also keeps the opaque list's material from having its alpha
+ * forced to one (`NodeBuilder.isOpaque` asks for normal blending).
+ *
+ * A blend reads the destination and cannot bound it: a term that needs
+ * `max(dst − x, 0)` is written as `dst·a + x·b` here, in both forms, equal
+ * wherever a pixel holds at least its own `x`.
  */
+export function compositeOver(material: NodeMaterial): void {
+  material.blending = CustomBlending
+  material.blendEquation = AddEquation
+  material.blendSrc = OneFactor
+  material.blendDst = OneMinusSrcAlphaFactor
+  material.blendEquationAlpha = AddEquation
+  material.blendSrcAlpha = ZeroFactor
+  material.blendDstAlpha = OneFactor
+}
+
 function compositeMaterial(): MeshBasicNodeMaterial {
   const material = sensorRadiance(
     new MeshBasicNodeMaterial(),
@@ -553,13 +577,7 @@ function compositeMaterial(): MeshBasicNodeMaterial {
   material.depthTest = false
   material.depthWrite = false
   material.fog = false
-  material.blending = CustomBlending
-  material.blendEquation = AddEquation
-  material.blendSrc = OneFactor
-  material.blendDst = OneMinusSrcAlphaFactor
-  material.blendEquationAlpha = AddEquation
-  material.blendSrcAlpha = ZeroFactor
-  material.blendDstAlpha = OneFactor
+  compositeOver(material)
   // The plane in clip space, at the far depth the backdrop takes: a full-screen
   // object needs no camera, and with no depth test the depth is never read.
   material.vertexNode = vec4(positionGeometry.xy, sceneFarDepth, 1)
@@ -567,8 +585,9 @@ function compositeMaterial(): MeshBasicNodeMaterial {
 }
 
 export class CloudComposite {
-  /** Opaque list, OVER layer, `renderOrder` −1e6. */
+  /** Pass B's form. Opaque list, OVER layer, `renderOrder` −1e6. */
   readonly mesh: Mesh
+  readonly #over = new Scene()
   readonly #deps: CloudCompositeDeps
   readonly #geometry = new PlaneGeometry(2, 2)
   readonly #material = compositeMaterial()
@@ -592,6 +611,23 @@ export class CloudComposite {
     this.mesh.name = 'cloud composite'
     this.mesh.visible = false
     this.mesh.frustumCulled = false
+    // The chain form's: the same plane and material, on every layer, so the
+    // camera draws it whatever mask the frame has left it.
+    const alone = new Mesh(this.#geometry, this.#material)
+    alone.layers.enableAll()
+    alone.name = 'cloud composite'
+    alone.frustumCulled = false
+    this.#over.add(alone)
+  }
+
+  /**
+   * The chain form's: the composite alone in a scene of its own, drawn over
+   * the scene target's resolved rows (`cloudOverPass.ts`). The graph is built
+   * at the first read.
+   */
+  get over(): Scene {
+    this.#build()
+    return this.#over
   }
 
   /** The residual meter's histograms, under composite 'residual', read back a frame or so late. */
@@ -617,7 +653,7 @@ export class CloudComposite {
     this.#drawn.value = 0
   }
 
-  /** The mesh drawn this frame or not; the graph is built at the first show. */
+  /** Pass B's mesh drawn this frame or not; the graph is built at the first show. */
   show(on: boolean): void {
     if (on) this.#build()
     this.mesh.visible = on

@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { Mesh, MeshBasicNodeMaterial, SphereGeometry } from 'three/webgpu'
+import { vec3 } from 'three/tsl'
+import { markOverClouds } from './cloudLayers.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
   type CloudRig,
@@ -8,6 +11,10 @@ import {
   RIG_TWIN,
 } from './cloudSystemRig.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sensorRadiance } from './radiance.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+import { warmCompile, warmRenderer } from './warmup.ts'
 
 /*
  * Rule 61 for the clouds (§4.5): after the system's warm-up and the
@@ -19,6 +26,12 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * A miss is named by the label three gives the pipeline it built —
  * `renderPipeline_<material>_<id>`, `computePipeline_compute_<kernel>` —
  * recorded at the device for the frame it happened in.
+ *
+ * The composite has three forms, and each has a first frame: pass B, pass B
+ * through the lean edit, and the composite alone over the scene target's
+ * resolved rows, whose pipeline is keyed on that target's shape and so is a
+ * second one for the same material. The frame one form gives way to another
+ * is a first frame too.
  *
  * Two chains: one over a body alone, and one with a second clouded body in
  * its sky, where the levers that name a body have something to name. A
@@ -111,6 +124,11 @@ function leverSets(): [string, Partial<CloudLevers>][] {
   sets.push(['residual', { composite: 'residual' }])
   sets.push(['stats', { stats: true }])
   sets.push(['deck hidden', { on: false, deck: 'hidden' }])
+  // The composite's other two forms: pass B through the lean edit, and the
+  // composite alone over the resolved rows, which nothing over the clouds
+  // in this scene keeps from drawing.
+  sets.push(['lean', { over: 'lean' }])
+  sets.push(['chain', { over: 'chain' }])
   return sets
 }
 
@@ -149,6 +167,45 @@ describe('the first frame of every lever set after the warm-up', () => {
     const labels = built(() => rig.frame())
     await gpu.read(rig.target)
     expect(labels).toEqual([])
+  })
+
+  it('builds no pipeline on the frame the chain form gives way to pass B, or on the one it comes back', async () => {
+    // An overlay over the clouds, warmed where the scene's own are: against
+    // the scene's layout, by the camera that tests its layer.
+    const material = sensorRadiance(new MeshBasicNodeMaterial(), true)
+    material.colorNode = vec3(0.8, 0.2, 0.1)
+    material.transparent = true
+    const mesh = new Mesh(new SphereGeometry(5, 8, 6), material)
+    mesh.position.set(0, 40, 0)
+    markOverClouds(mesh)
+    rig.scene.add(mesh)
+    rig.scene.updateMatrixWorld(true)
+    const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(gpu.renderer))
+    await warmCompile(warmRenderer(gpu.renderer, layout), {
+      object: mesh,
+      camera: rig.camera,
+      scene: rig.scene,
+    })
+    try {
+      mesh.visible = false
+      rig.levers = {
+        ...DEFAULT_CLOUD_LEVERS,
+        weather: 'overcast',
+        on: true,
+        over: 'chain',
+      }
+      const labels: string[][] = []
+      for (const shown of [false, true, false, true]) {
+        mesh.visible = shown
+        labels.push(built(() => rig.frame()))
+      }
+      await gpu.read(rig.target)
+      expect(labels).toEqual([[], [], [], []])
+    } finally {
+      rig.scene.remove(mesh)
+      mesh.geometry.dispose()
+      material.dispose()
+    }
   })
 
   it.each(bodySets())(
