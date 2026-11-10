@@ -240,6 +240,21 @@ Four limits bear on the figures below.
 - **The placeholder's density is uncalibrated and its light is first order
   plus a placeholder sky term.**
 
+What each gate's figure covers:
+
+- **The ladders** vary one lever each, the others at `8a01d311`'s defaults:
+  the sun's depth from cascades, `lightTaps` 2 and `farFootprint` 400. The
+  landed set, the grid with 4 taps at 800 m, has no ladder; `landed` measures
+  cost, memory and the composite's error, and no images.
+- **The far comparison** scores 400 and 1,600 m in both campaigns' documents.
+  `cloudFarCompare` also scores 800 m, the default, and no committed document
+  holds that figure.
+- **The sun-accuracy lattice** is ±4 km about a 2 m eye, inside the grid's
+  window, so its figures describe the sun's depth within 4 km of the eye.
+- **The grid's window** is ±25.6 km. Past it a fine-march sample is lit by
+  the taps alone, and no gate scores that band; the far comparison's cases
+  lie past it, which is why its reference's light is an upper bound.
+
 #### The cache: the field
 
 The gate: a volume combination's image is within 3% radiance RMSE of the

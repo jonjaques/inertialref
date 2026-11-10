@@ -61,7 +61,8 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * with its own air. 256 × 144 rays, the trace's extent for a 1024 × 576
  * picture through the rig's 60° lens, each case placed so the middle ray
  * meets the case's cloud at the handover distance of the footprint:
- * t_far = farFootprint / pixelAngle, 55 km at 400 m and 220 km at 1,600 m.
+ * t_far = farFootprint / pixelAngle: 55 km at 400 m, 110 km at 800 m, the
+ * default, and 220 km at 1,600 m.
  *
  * Per case and footprint, every ray is marched three ways:
  *
@@ -83,7 +84,7 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * reference's mean light over the bins that hold cloud, and absolute in T.
  * The reference takes its sun from the sun grid, as the fine march does,
  * and past the grid's window (25.6 km either side of the eye) from the taps
- * alone, so at both footprints, 55 and 220 km out, its light is an upper
+ * alone, so at every footprint, 55 to 220 km out, its light is an upper
  * bound: every case's content lies past the window.
  */
 
@@ -96,7 +97,7 @@ const HEIGHT = CSS.height / 4
 const RAYS = WIDTH * HEIGHT
 /** Radians a trace row subtends: cloudFrame's pixelAngle for this extent and lens. */
 const PIXEL_ANGLE = (RIG_FOV * Math.PI) / 180 / HEIGHT
-const FOOTPRINTS = [400, 1600] as const
+const FOOTPRINTS = [400, 800, 1600] as const
 /** Steps no ray of these cases reaches in the reference: the most any took is 1,051 (the anvil). */
 const REFERENCE_STEPS = 8192
 /** A budget most rays through cloud run out of, so the far march takes the rest. */
@@ -173,7 +174,7 @@ const CASES: readonly Case[] = [
     id: 'grazing at sunset',
     scenario: 'broken-horizon',
     content: 1550,
-    eye: { 400: 2400, 1600: 4000 },
+    eye: { 400: 2400, 800: 3000, 1600: 4000 },
     sun: { elevation: 2, azimuth: 0 },
   },
 ]

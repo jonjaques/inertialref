@@ -63,11 +63,21 @@ export interface CloudLevers {
 }
 
 /*
+ * The quality defaults are read off ladders that each vary one lever, the
+ * others at the defaults of `8a01d311`: the sun's depth from cascades,
+ * `lightTaps` 2 and `farFootprint` 400 (§8.7, ADR-0064). On those terms
  * `maxSteps` 192 and `farFootprint` 800 are each the smallest value of its
  * ladder whose image differs from the next larger one's by under 1%
  * radiance RMSE in `horizon` and `inside` at 1080p and Retina, the jitter
- * held (§8.7). `lightTaps` 4 is the largest the ladder holds: 2 differs
- * from it by just over 1%, and nothing larger has been measured against it.
+ * held; the footprint passes from 200 m at 1080p, and Retina alone puts it
+ * at 800. `lightTaps` 4 is the largest the ladder holds: 2 differs from it
+ * by just over 1%, and nothing larger has been measured against it.
+ *
+ * The set as it stands, the grid with 4 taps at 800 m, has no ladder of its
+ * own, and its levers meet in the grid: past the grid's ±25.6 km window a
+ * fine-march sample is lit by the taps alone, and the footprint sets how far
+ * the fine march reaches before the far field takes the ray.
+ *
  * `flySpeed` 250 is a fast aircraft; the orbit stances set 7,700.
  */
 export const DEFAULT_CLOUD_LEVERS: CloudLevers = Object.freeze({
