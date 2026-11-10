@@ -48,6 +48,7 @@
     "audio:fetch": "node apps/ingest/src/main.ts audio:fetch",
     "audio:build": "node apps/ingest/src/main.ts audio:build",
     "audio:report": "node apps/ingest/src/main.ts audio:report",
+    "isccp:build": "node apps/ingest/src/main.ts isccp && prettier -w packages/rendering/src/isccpZonal.generated.ts",
     "deploy:worker": "pnpm build && pnpm --filter @inertialref/server run deploy",
     "check": "node scripts/check.mjs",
     "check:gate": "node scripts/check.mjs --only gate",
