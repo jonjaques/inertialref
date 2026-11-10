@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
@@ -16,6 +16,7 @@ import {
   dataRoot,
   parseCapture,
   presentationRate,
+  READ,
   STILLS,
   stillArgs,
   tagOf,
@@ -190,15 +191,92 @@ describe('what the capture refuses', () => {
   const log = (hz, n = 120) =>
     Array.from({ length: n }, (_, k) => ({ k, at: 1e12 + (k * 1000) / hz }))
 
-  it('a cast presented outside 58 to 62 Hz, and one the screencast subsampled is taken again', () => {
+  it('keep a cast at the rate it was presented at until 60 Hz can be held, and take one the screencast subsampled again', () => {
+    expect(CAST_RATE.held).toBe(false)
     expect(presentationRate(log(60))).toBeCloseTo(60, 3)
     const cast = { frames: 100 }
-    expect(checkCast('c', log(60), 190, cast)).toMatchObject({ retake: false })
+    expect(checkCast('c', log(60), 190, cast)).toMatchObject({
+      retake: false,
+      atSixty: true,
+    })
     expect(checkCast('c', log(60), 70, cast).retake).toBe(true)
     expect(checkCast('c', log(59), 190, cast).hz).toBeCloseTo(59, 3)
-    for (const hz of [120, 72, 50, CAST_RATE.high + 0.5])
-      expect(() => checkCast('c', log(hz), 190, cast)).toThrow(/60 Hz/)
+    // The rig's own: the clouds-on descent at 2880 × 1800 on the M6.
+    for (const hz of [42.6, 120, 72, 50, CAST_RATE.high + 0.5]) {
+      const kept = checkCast('c', log(hz), 190, cast)
+      // To 0.01 Hz: the log's instants are epoch milliseconds, where a
+      // float64 holds a part in 10¹⁶ of 10¹², a tenth of a microsecond.
+      expect(kept.hz).toBeCloseTo(hz, 2)
+      expect(kept.atSixty).toBe(false)
+    }
     expect(() => checkCast('c', [], 0, cast)).toThrow(/no measurable rate/)
+  })
+
+  it('refuse a cast outside 58 to 62 Hz once the rig can hold 60', () => {
+    const cast = { frames: 100 }
+    for (const hz of [42.6, 120, 72, 50, CAST_RATE.high + 0.5])
+      expect(() => checkCast('c', log(hz), 190, cast, true)).toThrow(/60 Hz/)
+    expect(checkCast('c', log(60), 190, cast, true).atSixty).toBe(true)
+  })
+
+  it('refuse a cast that dropped a frame anywhere on its path, at any rate', () => {
+    const cast = { frames: 100 }
+    for (const hz of [60, 42.6]) {
+      // One frame not presented at frame 80, past the first thirty the
+      // start's rate is read over: every later instant moves by a frame.
+      const gap = log(hz)
+      for (let k = 80; k < gap.length; k += 1) gap[k].at += 1000 / hz
+      expect(() => checkCast('c', gap, 190, cast)).toThrow(/dropped/)
+      expect(() => checkCast('c', gap, 190, cast, true)).toThrow(
+        hz === 60 ? /dropped/ : /dropped|60 Hz/,
+      )
+    }
+    // The cadence a 120 Hz panel gives a 40 Hz page, 25 and 33.3 ms
+    // intervals mixed, drops nothing.
+    const mixed = Array.from({ length: 120 }, (_, k) => ({
+      k,
+      at: 1e12 + Math.floor(k / 2) * (25 + 1000 / 30) + (k % 2) * 25,
+    }))
+    expect(checkCast('c', mixed, 190, cast).hz).toBeGreaterThan(30)
+    // A drop past the path's end and its tail is not the path's.
+    const late = log(60, 400)
+    for (let k = 300; k < late.length; k += 1) late[k].at += 1000 / 60
+    expect(() => checkCast('c', late, 190, cast)).not.toThrow()
+  })
+
+  it('read each still’s cloud texel share from the page’s capture', async () => {
+    const page = (capture) =>
+      vm.runInNewContext(READ, {
+        ir: {
+          cloudRadiance: async () => capture,
+          observatory: { time: 1 },
+          light: () => null,
+          settled: () => ({ ok: true }),
+          clouds: () => null,
+          build: () => null,
+        },
+        engine: {
+          gl: { description: { mode: 'standard' } },
+          chrome: false,
+          lens: null,
+          pictureWeather: { outcome: 'drawn' },
+        },
+      })
+    const read = await page({
+      width: 2,
+      height: 2,
+      luminance: Float32Array.from([1, 3, 0.5, 0.5]),
+      cloud: Uint8Array.from([1, 1, 0, 0]),
+    })
+    expect(read.cloud).toEqual({
+      texels: 4,
+      share: 0.5,
+      meanCloud: 2,
+      meanClear: 0.5,
+    })
+    expect(read.weather).toBe('drawn')
+    // No capture where nothing draws: the deck arm, or a failed readback.
+    expect((await page(null)).cloud).toBeNull()
   })
 
   it('reads the rate past a hitch: the median, not the mean', () => {
@@ -377,6 +455,14 @@ describe('the sheets', () => {
         clouds: true,
         clip: { file: 'weather-g6-descent-slow-on/cast.mp4' },
       },
+      {
+        id: 'weather-g6-descent',
+        speed: 'slow',
+        clouds: false,
+        hz: 42.57,
+        atSixty: false,
+        clip: { file: 'weather-g6-descent-slow-off/cast.mp4' },
+      },
     ],
   }
 
@@ -395,6 +481,10 @@ describe('the sheets', () => {
     expect(rows[2]).toContain('[sheet](sheets/weather-e1-cumulus-orbit.png)')
     expect(rows[2]).toContain('[deck](weather-e1-cumulus-orbit-deck.png)')
     expect(rows[3]).toContain('[slow on](weather-g6-descent-slow-on/cast.mp4)')
+    // A cast's rate travels with it until 60 Hz can be held.
+    expect(rows[3]).toContain(
+      '[slow off, 42.6 Hz, not held at 60](weather-g6-descent-slow-off/cast.mp4)',
+    )
   })
 
   it('find the base’s plate in its directory, or among its record’s URLs', () => {
@@ -423,12 +513,46 @@ describe('the sheets', () => {
           `xc:${color}`,
           path.join(dir, file),
         ])
+      // A cast's two arms, three frames each, as the capture copies them.
+      const casts = ['on', 'off'].map((arm) => ({
+        name: `weather-g6-descent-slow-${arm}`,
+        id: 'weather-g6-descent',
+        speed: 'slow',
+        clouds: arm === 'on',
+        frames: 3,
+        hz: arm === 'on' ? 42.57 : 63.3,
+        atSixty: false,
+        clip: null,
+      }))
+      for (const one of casts) {
+        await mkdir(path.join(dir, one.name))
+        for (let i = 0; i < one.frames; i += 1)
+          execFileSync('magick', [
+            '-size',
+            '1440x900',
+            'xc:gray',
+            path.join(dir, one.name, `${String(i).padStart(4, '0')}.jpg`),
+          ])
+      }
       await writeFile(
         path.join(dir, 'record.json'),
-        JSON.stringify({ ...record, casts: [] }),
+        JSON.stringify({ ...record, casts }),
       )
       const { sheets, media } = await buildSheets({ dir })
-      expect(sheets).toHaveLength(1)
+      // The still's sheet, and the cast's: clouds off beside clouds on.
+      expect(sheets).toHaveLength(2)
+      expect(sheets[1]).toMatchObject({
+        id: 'weather-g6-descent',
+        speed: 'slow',
+      })
+      expect(
+        execFileSync(
+          'magick',
+          ['identify', '-format', '%w', path.join(dir, sheets[1].file)],
+          { encoding: 'utf8' },
+        ),
+      ).toBe(`${2 * 720}`)
+      expect(media).toContain(`[slow sheet](${sheets[1].file})`)
       const size = execFileSync(
         'magick',
         ['identify', '-format', '%w %h', path.join(dir, sheets[0].file)],

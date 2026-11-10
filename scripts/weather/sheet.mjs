@@ -1,9 +1,14 @@
 /*
  * The comparison sheets a weather pull request shows: per cornerstone, the
  * last phase's plate beside this phase's, and for E1 to E3 the deck beside
- * both; per cast, the two phases' clips side by side; and `media.md`, one
- * row a cornerstone, which the orchestrator pastes into the pull request
- * once the files are uploaded.
+ * both; per cast and speed, its middle frame with the clouds off and on,
+ * each labeled with the rate it was presented at; per cast, the two phases'
+ * clips side by side; and `media.md`, one row a cornerstone, which the
+ * orchestrator pastes into the pull request once the files are uploaded.
+ *
+ * A cast's rate is on its sheet and in `media.md` because a cast is kept at
+ * the rate the rig presented it at until a 60 Hz hold exists (rubric §4),
+ * and a path scheduled by frame runs in other seconds at another rate.
  *
  *   node scripts/weather/sheet.mjs --dir .data/weather/phase-1 [--base <dir|record.json|URL>]
  *
@@ -113,6 +118,15 @@ export function tileArgs(source, label) {
   ]
 }
 
+/** A cast's label: its speed, the clouds, and the rate it was presented at. */
+export function castLabel(one) {
+  const rate =
+    typeof one.hz === 'number'
+      ? `, ${one.hz.toFixed(1)} Hz${one.atSixty === false ? ', not held at 60' : ''}`
+      : ''
+  return `${one.speed} ${one.clouds ? 'on' : 'off'}${rate}`
+}
+
 /** The rows of `media.md`, one a cornerstone, with the files it names. */
 export function mediaRows(record, sheets, pairs) {
   const rows = [
@@ -132,15 +146,18 @@ export function mediaRows(record, sheets, pairs) {
       .join(', ')
     const casts = record.casts
       .filter((one) => one.id === id && one.clip !== null)
-      .map(
-        (one) =>
-          `[${one.speed} ${one.clouds ? 'on' : 'off'}](${one.clip.file})`,
-      )
+      .map((one) => `[${castLabel(one)}](${one.clip.file})`)
     for (const pair of pairs.filter((one) => one.id === id))
       casts.push(`[${pair.speed}, beside the base](${pair.file})`)
-    const sheet = sheets.find((one) => one.id === id)
+    const sheet = sheets
+      .filter((one) => one.id === id)
+      .map(
+        (one) =>
+          `[${one.speed === undefined ? 'sheet' : `${one.speed} sheet`}](${one.file})`,
+      )
+      .join(', ')
     rows.push(
-      `| \`${id}\` | ${sheet === undefined ? '—' : `[sheet](${sheet.file})`} | ${plates || '—'} | ${casts.join(', ') || '—'} |`,
+      `| \`${id}\` | ${sheet || '—'} | ${plates || '—'} | ${casts.join(', ') || '—'} |`,
     )
   }
   return rows.join('\n')
@@ -201,6 +218,41 @@ export async function buildSheets({ dir, base: given = null }) {
     const sheet = path.join(out, `${id}.png`)
     await run('magick', [...tiles, '+append', sheet], { maxBuffer: 1 << 24 })
     sheets.push({ id, file: path.relative(dir, sheet) })
+  }
+
+  /*
+   * A cast's sheet: the frame halfway along its path, clouds off beside
+   * clouds on, each labeled with its rate. The frames are the screencast's
+   * own, numbered from 0 as `drive.mjs` writes them.
+   */
+  for (const cast of CASTS) {
+    const taken = [false, true].map((clouds) =>
+      record.casts.find(
+        (one) =>
+          one.id === cast.id &&
+          one.speed === cast.speed &&
+          one.clouds === clouds,
+      ),
+    )
+    if (taken.some((one) => one === undefined)) continue
+    const tiles = taken.flatMap((one) => {
+      const frame = path.join(
+        dir,
+        one.name,
+        `${String(Math.floor((one.frames - 1) / 2)).padStart(4, '0')}.jpg`,
+      )
+      return tileArgs(
+        existsSync(frame) ? frame : null,
+        `${now}, ${castLabel(one)}`,
+      )
+    })
+    const sheet = path.join(out, `${cast.id}-${cast.speed}.png`)
+    await run('magick', [...tiles, '+append', sheet], { maxBuffer: 1 << 24 })
+    sheets.push({
+      id: cast.id,
+      speed: cast.speed,
+      file: path.relative(dir, sheet),
+    })
   }
 
   const pairs = []

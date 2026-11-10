@@ -34,17 +34,24 @@
  *
  * **A cast** is a path of `descent.mjs`'s, recorded over a screencast with
  * the clouds on and again with them off. The page's own log carries a
- * timestamp a frame, and the cast is refused outside 58 to 62 Hz read from
- * its first 30 frames: the path advances a step a frame, so at another rate
- * the same path runs in other seconds and the capture keeps another share
- * of it.
+ * timestamp a frame, and the cast's rate is the median interval over its
+ * whole path. Until the rig can hold 60 Hz on demand, a cast at another
+ * rate is kept and its rate recorded beside it (rubric §4); `CAST_RATE.held`
+ * is the switch that refuses it outside 58 to 62 Hz once it can. The path
+ * advances a step a frame, so at another rate the same path runs in other
+ * seconds, which is what the recorded rate tells a reader. What is refused
+ * at any rate is a run that dropped a frame: an interval twice the median
+ * or longer anywhere on the path is a frame the page did not present, and
+ * a reading of continuity across it reads a gap.
  *
  * Output goes to the main checkout's `.data/weather/phase-<n>/`, found from
  * the clone's common git directory as the GPU lock is, so every worktree of
  * every phase writes one place and a removed worktree takes no plate with
  * it: `<id>-<arm>.png`, `<id>-<speed>-<on|off>/` with the cast's frames, its
  * clip and its log, and `record.json`, which names the commit and every
- * file's SHA-256.
+ * file's SHA-256. A still's record carries its cloud texel share, from
+ * `ir.cloudRadiance()`: the share of the trace's texels whose history holds
+ * cloud, which is what tells a sheet of the sky from a sheet of cloud.
  */
 import { createHash } from 'node:crypto'
 import { execFile, execFileSync, spawn } from 'node:child_process'
@@ -84,8 +91,23 @@ export const RIG = Object.freeze({
  */
 export const SETTLE_BUDGET = 120_000
 export const SETTLE_QUIET = 1_000
-/** The presentation rate a cast must hold, Hz, read over its first frames. */
-export const CAST_RATE = Object.freeze({ low: 58, high: 62, frames: 30 })
+/**
+ * The presentation rate a cast is held to, Hz. `held` is whether the rig can
+ * hold 60 Hz on demand: the clouds-on descent presents at 42.6 Hz at 2880 ×
+ * 1800 on the M6, and until a hold exists a cast outside the band is kept
+ * with its rate (rubric §4). The commit that lands the hold sets it, and the
+ * band refuses again. `dropped` is the interval, in medians, past which a
+ * frame was not presented.
+ */
+export const CAST_RATE = Object.freeze({
+  low: 58,
+  high: 62,
+  frames: 30,
+  held: false,
+  dropped: 2,
+})
+/** Boots a cast may take before a dropped frame refuses it. */
+export const CAST_ATTEMPTS = 3
 /** Frames a cast records past its path's end, so the end is in the clip. */
 export const CAST_TAIL = 90
 /** Below this share of its path's frames a screencast is subsampling it. */
@@ -212,7 +234,28 @@ const plateQueries = (clouds) =>
  * What a still reads back before its shot. The weather is the engine's hold:
  * what became of the picture's weather, after the clouds' chunk arrived.
  */
-export const READ = `({ mode: engine.gl.description.mode, chrome: engine.chrome, lens: engine.lens, time: ir.observatory.time, light: ir.light(), settled: ir.settled(), clouds: ir.clouds(), weather: engine.pictureWeather.outcome, build: ir.build() })`
+export const READ = `(async () => {
+  const capture = await ir.cloudRadiance()
+  let cloud = null
+  if (capture !== null) {
+    let held = 0
+    let lit = 0
+    let clear = 0
+    for (let i = 0; i < capture.cloud.length; i += 1)
+      if (capture.cloud[i]) {
+        held += 1
+        lit += capture.luminance[i]
+      } else clear += capture.luminance[i]
+    const texels = capture.cloud.length
+    cloud = {
+      texels,
+      share: held / texels,
+      meanCloud: held > 0 ? lit / held : null,
+      meanClear: texels > held ? clear / (texels - held) : null,
+    }
+  }
+  return { mode: engine.gl.description.mode, chrome: engine.chrome, lens: engine.lens, time: ir.observatory.time, light: ir.light(), settled: ir.settled(), clouds: ir.clouds(), cloud, weather: engine.pictureWeather.outcome, build: ir.build() }
+})()`
 
 /** One still: a fresh boot at the picture, settled, read and shot. */
 export const stillArgs = (id, arm, file) => [
@@ -302,31 +345,72 @@ export function checkStill(id, arm, read) {
   return read
 }
 
-/** The presentation rate over a cast's first frames, from the page's log. */
-export function presentationRate(log, frames = CAST_RATE.frames) {
-  const at = log.slice(0, frames + 1).map((entry) => entry.at)
+/** The intervals between a log's first `entries`, milliseconds. */
+function intervalsOf(log, entries) {
+  const at = log.slice(0, entries).map((entry) => entry.at)
   const intervals = []
   for (let i = 1; i < at.length; i += 1) intervals.push(at[i] - at[i - 1])
-  if (intervals.length === 0) return null
-  intervals.sort((a, b) => a - b)
-  const middle = Math.floor(intervals.length / 2)
-  const median =
-    intervals.length % 2 === 1
-      ? intervals[middle]
-      : (intervals[middle - 1] + intervals[middle]) / 2
-  return median > 0 ? 1000 / median : null
+  return intervals
 }
 
-/** Refuse a cast taken at another rate, or one the screencast subsampled. */
-export function checkCast(name, log, captured, cast) {
-  const hz = presentationRate(log)
-  if (hz === null || hz < CAST_RATE.low || hz > CAST_RATE.high)
-    throw new Error(
-      `${name}: presented at ${hz === null ? 'no measurable rate' : `${hz.toFixed(1)} Hz`}, outside ${CAST_RATE.low}–${CAST_RATE.high}; the path is scheduled by frame and must be taken at 60 Hz`,
-    )
+function medianOf(values) {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+/** The presentation rate over a log's first `frames`, from the page's log. */
+export function presentationRate(log, frames = CAST_RATE.frames) {
+  const median = medianOf(intervalsOf(log, frames + 1))
+  return median !== null && median > 0 ? 1000 / median : null
+}
+
+/**
+ * Read a cast's rate over its whole path, and refuse a run that dropped a
+ * frame anywhere on it. The band refuses only where `held` says the rig can
+ * hold 60 Hz; until then the rate is what the record says beside the cast.
+ */
+export function checkCast(name, log, captured, cast, held = CAST_RATE.held) {
   const pathFrames = Math.min(log.length, cast.frames + CAST_TAIL)
+  const intervals = intervalsOf(log, pathFrames)
+  const median = medianOf(intervals)
+  if (median === null || !(median > 0))
+    throw new Error(`${name}: presented at no measurable rate; refused`)
+  const hz = 1000 / median
+  const longest = Math.max(...intervals)
+  /*
+   * Twice the median, not a share over it: at 42.6 Hz on a 120 Hz panel
+   * the page presents on a mix of 25 and 33.3 ms intervals, and a line at
+   * 1.5 medians would read that cadence as drops. An interval of two
+   * medians is a frame that did not present.
+   */
+  const dropped = intervals.filter(
+    (interval) => interval >= CAST_RATE.dropped * median,
+  ).length
+  if (dropped > 0)
+    throw Object.assign(
+      new Error(
+        `${name}: ${dropped} interval${dropped === 1 ? '' : 's'} of at least ${CAST_RATE.dropped} × the median ${median.toFixed(1)} ms, the longest ${longest.toFixed(1)} ms: a frame was dropped mid-run; take it again`,
+      ),
+      { dropped },
+    )
+  const atSixty = hz >= CAST_RATE.low && hz <= CAST_RATE.high
+  if (held && !atSixty)
+    throw new Error(
+      `${name}: presented at ${hz.toFixed(1)} Hz, outside ${CAST_RATE.low}–${CAST_RATE.high}; the path is scheduled by frame and must be taken at 60 Hz`,
+    )
   const coverage = pathFrames > 0 ? captured / pathFrames : 0
-  return { hz, coverage, retake: coverage < CAST_COVERAGE }
+  return {
+    hz,
+    atSixty,
+    first: presentationRate(log),
+    longest,
+    coverage,
+    retake: coverage < CAST_COVERAGE,
+  }
 }
 
 export async function sha256(file) {
@@ -517,18 +601,33 @@ async function main() {
       for (const clouds of [true, false]) {
         const name = castName(cast, clouds)
         say(`${name}: ${cast.why}`)
-        const result = await drive(castArgs(cast, clouds))
-        const castStep = result.results.find((one) => one.step === 'cast')
-        const stop = lastJs(result)
-        // The steps' last four evaluations are the install, the weather, the
-        // start and the stop; the control's levers come before them.
-        const evaluations = result.results.filter((one) => one.step === 'js')
-        const outcome = evaluations.at(-3)?.value
-        if (outcome !== 'drawn')
-          throw new Error(
-            `${name}: the picture's weather is ${String(outcome)}, not drawn; refused`,
-          )
-        const verdict = checkCast(name, stop.log, castStep?.frames ?? 0, cast)
+        let result
+        let castStep
+        let stop
+        let verdict
+        // A dropped frame is taken again, from a fresh boot, before the run
+        // gives up on the cast: the rubric retakes a cast with a gap rather
+        // than reading continuity across it.
+        for (let attempt = 1; verdict === undefined; attempt += 1) {
+          result = await drive(castArgs(cast, clouds))
+          castStep = result.results.find((one) => one.step === 'cast')
+          stop = lastJs(result)
+          // The steps' last four evaluations are the install, the weather,
+          // the start and the stop; the control's levers come before them.
+          const evaluations = result.results.filter((one) => one.step === 'js')
+          const outcome = evaluations.at(-3)?.value
+          if (outcome !== 'drawn')
+            throw new Error(
+              `${name}: the picture's weather is ${String(outcome)}, not drawn; refused`,
+            )
+          try {
+            verdict = checkCast(name, stop.log, castStep?.frames ?? 0, cast)
+          } catch (error) {
+            if (error.dropped === undefined || attempt >= CAST_ATTEMPTS)
+              throw error
+            say(`  ${error.message}`)
+          }
+        }
         const dir = path.join(out, name)
         await rm(dir, { recursive: true, force: true })
         await cp(path.join(ROOT, castStep.dir), dir, { recursive: true })
@@ -538,7 +637,7 @@ async function main() {
         )
         const clip = path.join(dir, 'cast.mp4')
         say(
-          `  ${castStep.frames} frames at ${verdict.hz.toFixed(1)} Hz, ${(verdict.coverage * 100).toFixed(0)}% of the path${verdict.retake ? ' — under two thirds: take it again' : ''}`,
+          `  ${castStep.frames} frames at ${verdict.hz.toFixed(1)} Hz${verdict.atSixty ? '' : ' (not held at 60 Hz)'}, ${(verdict.coverage * 100).toFixed(0)}% of the path${verdict.retake ? ' — under two thirds: take it again' : ''}`,
         )
         record.casts.push({
           name,
@@ -549,6 +648,9 @@ async function main() {
           pathFrames: cast.frames,
           stopAt: stop.stopAt,
           ...verdict,
+          // The rate the clip is written at: the screencast's own frames
+          // over their span, so it plays at the speed it was taken.
+          clipFps: castStep.fps ?? null,
           isolated: castStep.isolated?.length ?? null,
           clip: existsSync(clip)
             ? { file: `${name}/cast.mp4`, sha256: await sha256(clip) }

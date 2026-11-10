@@ -13,9 +13,10 @@
  * **The schedule is by frame index, never by time.** A descent's height at
  * frame k is `max(h₀·(1 − rate)ᵏ, 2)`, a flight moves a fixed arc a frame,
  * a zoom a fixed ratio of focal length a frame. So two casts of one path
- * are the same frames whatever the machine's pace, and the cast is refused
- * outside 58 to 62 Hz (`capture.mjs`) because at another rate the screencast
- * keeps another share of the same steps.
+ * are the same frames whatever the machine's pace. What the pace changes is
+ * the seconds they take, and so the speed a viewer sees: `capture.mjs`
+ * records each cast's presented rate beside it, and refuses one outside 58
+ * to 62 Hz once the rig can hold 60 Hz on demand.
  *
  * `weatherPath` travels as text, as `scripts/clouds/page.mjs`'s step does:
  * the capture installs its source in the page once an invocation, so it
@@ -207,7 +208,7 @@ export const CASTS = Object.freeze([
   {
     id: 'weather-g5-inside',
     speed: 'fly',
-    // 150 m/s at 60 Hz along the heading, the whole cast.
+    // 2.5 m a frame along the heading, the whole cast: 150 m/s at 60 Hz.
     path: { kind: 'fly', metersAFrame: 2.5 },
     frames: 600,
     why: 'the range falls and returns, and no frame steps',
