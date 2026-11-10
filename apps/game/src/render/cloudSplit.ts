@@ -88,7 +88,7 @@ interface RenderTree {
   _handleObjectFunction: unknown
   _callDepth: number
   readonly _nodes: { readonly nodeFrame: { renderId: number } } | null
-  readonly lighting: { readonly _cache: unknown[] }
+  readonly lighting?: { readonly _cache?: unknown[] }
 }
 
 /**
@@ -105,7 +105,11 @@ export function keepRenderer(renderer: Renderer): () => void {
   const depth = tree._callDepth
   const nodeFrame = tree._nodes?.nodeFrame ?? null
   const renderId = nodeFrame?.renderId ?? 0
-  const lights = tree.lighting._cache.length
+  // Through `?.`: every caller takes this outside its `try`, inside an open
+  // render, so a three that moves its lighting stack costs the lights their
+  // restore and not the frame its scene pass.
+  const cache = tree.lighting?._cache
+  const lights = cache?.length ?? 0
   const target = renderer.getRenderTarget()
   const face = renderer.getActiveCubeFace()
   const mip = renderer.getActiveMipmapLevel()
@@ -121,8 +125,7 @@ export function keepRenderer(renderer: Renderer): () => void {
     tree._callDepth = depth
     if (nodeFrame !== null) nodeFrame.renderId = renderId
     // Only pushes go unmatched, so the stack is never shorter than it was.
-    const cache = tree.lighting._cache
-    if (cache.length > lights) cache.length = lights
+    if (cache !== undefined && cache.length > lights) cache.length = lights
     renderer.setRenderTarget(target, face, mip)
     renderer.setMRT(mrt)
     renderer.autoClear = autoClear

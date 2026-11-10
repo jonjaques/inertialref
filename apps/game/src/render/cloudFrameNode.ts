@@ -47,6 +47,7 @@ export class CloudFrameNode extends TempNode<'float'> {
 
   readonly #driver: CloudFrameDriver
   #reported = false
+  #declined = false
 
   constructor(driver: CloudFrameDriver) {
     super('float')
@@ -70,6 +71,10 @@ export class CloudFrameNode extends TempNode<'float'> {
    * the post chain around it — with no `finishRender`, its pass open and
    * three's render tree pointing into it, and every later frame drawing
    * through that.
+   *
+   * A split that declines ran nothing: under 'split' the composite reads
+   * targets no pass wrote this frame, and under 'empty-split' a measurement
+   * prices a split that was never made. So that is reported too.
    */
   override updateBefore(frame: NodeFrame): undefined {
     const driver = this.#driver
@@ -80,16 +85,27 @@ export class CloudFrameNode extends TempNode<'float'> {
     try {
       const placement = driver.placement
       if (placement === 'passes') driver.run(renderer)
-      else
-        splitScenePass(
+      else if (
+        !splitScenePass(
           renderer,
           placement === 'split' ? () => driver.run(renderer) : NOTHING,
         )
+      )
+        this.#decline(placement)
     } catch (cause) {
       restore()
       this.#report(cause)
     }
     return undefined
+  }
+
+  /** Once, as a throw is: a split that declines one frame declines the next. */
+  #decline(placement: CloudPlacement): void {
+    if (this.#declined) return
+    this.#declined = true
+    log.warn('the scene pass did not split; nothing ran between its halves', {
+      placement,
+    })
   }
 
   /*
