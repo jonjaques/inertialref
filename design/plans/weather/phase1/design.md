@@ -1058,17 +1058,16 @@ rulings):
     since the same edge 100 km out stands 1.2° up on a world of Earth's
     radius and 1.75° up on this one. On P222_3_2_k IV the deck is full to
     96 km sunward and clear from 110 km, its edge 1.6° to 1.2° up.
-  - **As taken, the GPU draws no deck at G3's instant.** The cloud frame
-    forms its body-fixed sun from the star's render position less the
-    body's (`bodySun`, `render/cloudFrame.ts`), as the terrain and the water
-    do on `main`. Render compression keeps only directions from the eye, and
-    the star stands 28 radii from the body's center in render space at G3, so
-    the sun seen from the center stands 2.04° higher than from the eye:
-    +0.5° where the true sun is −1.5°. The terminator then clears the eye.
-    The CPU twin, the ledger and this design take the true sun. The
-    weather's README records it, with its measure. The scenario
-    carries the edge as `terminator: { full: −0.1, clear: 0.1 }`, in degrees
-    of the local sun's elevation (`weatherScenario.ts`).
+  - **The GPU's sun is not the CPU's.** The cloud frame forms its
+    body-fixed sun from the star's render position less the body's
+    (`bodySun`, `render/cloudFrame.ts`), as the terrain and the water do on
+    `main`. Render compression keeps only directions from the eye, so the sun
+    seen from the center stands higher than from the eye by the star's
+    parallax at its render distance: 0.26° at this world's G3, where the star
+    stands 217 radii out, and the deck draws. On P222_1_0_7 III it stood 28
+    radii out, the sun read +0.5° where it was −1.5°, and the terminator
+    cleared the whole frame. The CPU twin, the ledger and this design take
+    the true sun. The weather's README records it, with its measure.
 - **G4.** The eye stands 3 km over the regime's 1,300 m top, looking at the
   antisolar point: pitch is the sun's elevation negated. At 70° a degree is
   12.9 CSS pixels, so a glory ring near 2.4° is 31 CSS pixels from the point,
