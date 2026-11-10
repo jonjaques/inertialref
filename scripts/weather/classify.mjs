@@ -39,6 +39,7 @@ import path from 'node:path'
 import { parseArgs } from 'node:util'
 import { changedPixels } from '../frameDiff.mjs'
 import { decode, GRID, lumaGrid, readCast } from '../castSteps.mjs'
+import { checkTake } from './sheet.mjs'
 
 /**
  * The classifier's numbers. `boundary` is the design's 2 km. `holds` and
@@ -326,11 +327,13 @@ async function evidenceOf(step, stills, log) {
 /**
  * The record's drops for a kept clouds-on cast, marked against its control:
  * `dropped`, one entry a path frame the page did not present, as the ruling
- * lists them.
+ * lists them. The cast is held to the capture's own `checkTake` first, so a
+ * classification is never written into a take the record would refuse.
  */
-function dropsOf(record, name) {
+export function dropsOf(record, name) {
   const entry = record.casts?.find((one) => one.name === name)
   if (entry === undefined) throw new Error(`no cast named ${name}`)
+  checkTake(entry, true)
   if (!entry.clouds) return { entry, drops: [] }
   const control = record.casts.find(
     (one) =>

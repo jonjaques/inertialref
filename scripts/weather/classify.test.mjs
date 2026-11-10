@@ -4,10 +4,12 @@ import {
   CLASSIFY,
   classifyStep,
   dropFindings,
+  dropsOf,
   markCloudsOnly,
   rangeCheck,
   verdictOf,
 } from './classify.mjs'
+import { provenance, role } from './sheet.mjs'
 
 /*
  * One fixture of each kind, as the evidence `classify.mjs` gathers from a
@@ -223,6 +225,49 @@ describe('a drop the clouds alone make', () => {
     expect(findings).toHaveLength(1)
     expect(findings[0]).toMatchObject({ kind: 'clouds-only-drop', from: 430 })
     expect(verdictOf(findings)).toMatchObject({ drops: 1, errors: 0 })
+  })
+})
+
+describe('the record a classification is written into', () => {
+  // A record as the capture writes it: each cast with its provenance, its
+  // role and its rate from `sheet.mjs`'s own builders.
+  const run = {
+    commit: 'c1',
+    clean: true,
+    fixtures: { references: 'r', cornerstones: 'c' },
+  }
+  const page = { stance: { address: 'g:x' }, processing: 'enhanced' }
+  const rate = { hz: 60, held: true, atSixty: true }
+  const cast = (name, clouds, dropped) => ({
+    name,
+    id: 'weather-g6-descent',
+    speed: 'slow',
+    clouds,
+    control: clouds ? 'weather-g6-descent-slow-off' : null,
+    dropped,
+    ...provenance(run, 'weather-g6-descent', page, role('candidate'), rate),
+  })
+  const record = {
+    casts: [
+      cast('weather-g6-descent-slow-on', true, [{ frame: 430 }]),
+      cast('weather-g6-descent-slow-off', false, [{ frame: 182 }]),
+    ],
+  }
+
+  it('reads the drops of a cast the capture kept', () => {
+    const { drops } = dropsOf(record, 'weather-g6-descent-slow-on')
+    expect(drops).toEqual([{ frame: 430, cloudsOnly: true }])
+  })
+
+  it('refuses a cast the record itself would refuse', () => {
+    const { rate: _, ...rateless } = record.casts[0]
+    expect(() =>
+      dropsOf({ casts: [rateless] }, 'weather-g6-descent-slow-on'),
+    ).toThrow(/carries no rate; the record is refused/)
+    const { levers: __, ...leverless } = record.casts[0]
+    expect(() =>
+      dropsOf({ casts: [leverless] }, 'weather-g6-descent-slow-on'),
+    ).toThrow(/carries no levers/)
   })
 })
 
