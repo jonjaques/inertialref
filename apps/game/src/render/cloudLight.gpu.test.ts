@@ -898,7 +898,7 @@ describe('the sun a cloud sample sees', () => {
         const toSun = max(float(TOP).sub(altitudeAt(body, offset)), 0).mul(
           sigma,
         )
-        return { toSun, whole: toSun, weight: float(1) }
+        return { toSun, whole: toSun, weight: float(1), behind: float(1) }
       },
     }
     const sun = cloudSunFn({ uniforms, medium, depth })
