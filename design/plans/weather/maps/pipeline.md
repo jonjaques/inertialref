@@ -17,6 +17,10 @@ Conventions:
 - **Inference:** marks anything not read directly in code. Everything else
   was read at the cited line.
 - Read-only survey; nothing was run on the GPU.
+- The surveyed tree carried a temporal `velocity` row. It is gone:
+  reconstruction reads the optics' masked `motion.rg`, and temporal pictures
+  add `reactive` alone (`docs/adr/0044-the-sensor-reconstructs-the-display.md`). Where this map weighs `velocity`'s fate, the
+  answer is the arm that drops it.
 
 ---
 
@@ -56,9 +60,9 @@ motion, psf]`. Internal optical quads read _plain_ `texture(x.value)`
 6. **Per-attachment blend comes from the pass's MRT, never from the material**
    (`three/renderers/webgpu/utils/WebGPUPipelineUtils.js:140-160`); the
    material's own blend applies to `output` only. A full-screen composite
-   drawn into the scene target replaces `velocity` everywhere it draws. The
-   upscaler plan has already **decided** to delete `velocity` and read the
-   masked `motion.rg` (`design/plans/the-upscaler.md:40-45`) — not yet landed.
+   drawn into the scene target replaces `velocity` everywhere it draws.
+   Reconstruction reads the masked `motion.rg` instead, and no layout carries
+   `velocity` (`docs/adr/0044-the-sensor-reconstructs-the-display.md` § Decision).
 7. **Under MSAA (the default picture) the scene depth is itself
    4-sample** (no resolve), color attachments are MSAA with single-sample
    resolve targets, and every attachment is stored at pass end
@@ -341,7 +345,7 @@ the blend states. `MRTNode.setup` drops outputs whose name the bound target
 lacks (`three/nodes/core/MRTNode.js:161-185`) and types each output from the
 target's format (`builder.getOutputType(index)`), which is why a blend that
 reads source alpha needs a 4-channel row (`sceneLayout.ts:80-91`; Dawn's
-refusal quoted in `design/plans/the-upscaler.md:22-28`;
+refusal quoted in `docs/adr/0044-the-sensor-reconstructs-the-display.md` § Alternatives considered;
 `sceneLayout.test.ts:41`).
 
 Material blend is applied only when `blending !== NoBlending && (blending
@@ -1011,8 +1015,9 @@ be a warm-up dispatch (inference about the remedy).
 - **A `PassTextureNode` in a quad material re-runs the scene pass** for that
   quad's render (`PassNode.js:60-67`; `updateBeforeType = RENDER`). Plain
   textures only (`sensor.ts:60-61, 280-282`).
-- **`velocity` has no blend**; a full-screen composite overwrites it
-  (`sceneLayout.ts:86-91`, `design/plans/the-upscaler.md:11-45`).
+- **There is no `velocity` row**: reconstruction reads `motion.rg`, which a
+  full-screen composite writes by its opacity (`sceneLayout.ts:78-94`,
+  `docs/adr/0044-the-sensor-reconstructs-the-display.md`).
 - **32 B MRT**: temporal is at 30 B (§2.4); `requiredLimits` must change in
   two places.
 - **Blend states belong to the pass MRT** (`WebGPUPipelineUtils.js:140-160`);
