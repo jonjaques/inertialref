@@ -1064,6 +1064,10 @@ describe('the field from orbit', () => {
         expect(cloudy).toBeLessThan(0.8)
       }
     },
+    // E1, the slowest case: 2.8 s in the root suite on this Mac mini (Apple
+    // M6), four workers; CI's hosted runner is 2.1 to 3.9 times slower, up
+    // to 11 s. Five times that.
+    60_000,
   )
 })
 
