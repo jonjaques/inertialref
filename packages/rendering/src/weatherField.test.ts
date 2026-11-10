@@ -1274,6 +1274,8 @@ describe('a footprint keeps the resolved field’s light (§6.2)', () => {
   ]
   const ZENITHS = [0, Math.PI / 4, (80 * Math.PI) / 180]
 
+  // 3.7 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 14 s. Five times that.
   it('holds a level read at any footprint and dither to the resolved field’s mean, at three angles', () => {
     fc.assert(
       fc.property(
@@ -1321,7 +1323,7 @@ describe('a footprint keeps the resolved field’s light (§6.2)', () => {
       ),
       { numRuns: 24, seed: 0x5eed },
     )
-  })
+  }, 80_000)
 
   it('keeps broken-horizon’s crossing straight down at a quarter, a half and a whole cell, as the port measures it', () => {
     const weather = regimeWeather(world, 'broken-horizon')
