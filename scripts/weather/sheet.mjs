@@ -241,9 +241,26 @@ export function baseSource(base, file) {
   if (base === null) return null
   if (base.kind === 'dir') {
     const local = path.join(base.dir, file)
-    return existsSync(local) ? local : null
+    return base.files.has(file) && existsSync(local) ? local : null
   }
   return base.urls[file] ?? null
+}
+
+/** The files a record kept: its plates and its casts' clips. */
+export function keptFiles(record) {
+  if (record === null) return new Set()
+  return new Set([
+    ...(record.stills ?? []).map((one) => one.file),
+    ...(record.casts ?? []).flatMap((one) =>
+      one.clip?.file === undefined ? [] : [one.clip.file],
+    ),
+  ])
+}
+
+/** A kept cast's clip, by the record; null for a cast refused or not taken. */
+export function keptClip(record, name) {
+  const kept = (record.casts ?? []).find((one) => one.name === name)
+  return kept?.clip?.file ?? null
 }
 
 /** A base given as a directory, a record on disk, or a record's URL. */
@@ -265,11 +282,21 @@ export async function readBase(given) {
       urls: record.urls ?? {},
     }
   }
-  const record = path.join(given, 'record.json')
-  const phase = existsSync(record)
-    ? (JSON.parse(await readFile(record, 'utf8')).phase ?? null)
+  /*
+   * A base directory answers only the files its record kept: a refused
+   * take, or a file a later run left there, is in the directory and is not
+   * the phase's plate. Without a record it answers none.
+   */
+  const file = path.join(given, 'record.json')
+  const record = existsSync(file)
+    ? JSON.parse(await readFile(file, 'utf8'))
     : null
-  return { kind: 'dir', dir: given, phase }
+  return {
+    kind: 'dir',
+    dir: given,
+    phase: record?.phase ?? null,
+    files: keptFiles(record),
+  }
 }
 
 /*
@@ -525,12 +552,15 @@ export async function buildSheets({ dir, base: given = null }) {
   const pairs = []
   for (const cast of CASTS) {
     const name = castName(cast, true)
-    const clip = path.join(dir, name, 'cast.mp4')
+    // The clip this run kept, by its record: a cast refused now keeps
+    // none, whatever an earlier run left under its name.
+    const kept = keptClip(record, name)
+    const clip = kept === null ? null : path.join(dir, kept)
     const earlier = await local(
       baseSource(base, `${name}/cast.mp4`),
       `${name}/cast.mp4`,
     )
-    if (!existsSync(clip) || earlier === null) continue
+    if (clip === null || !existsSync(clip) || earlier === null) continue
     const pair = path.join(out, `${name}.pair.mp4`)
     await run(
       'ffmpeg',

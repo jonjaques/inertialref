@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
@@ -18,6 +19,8 @@ import {
   checkStill,
   cutFrom,
   dataRoot,
+  freshPlate,
+  keepShot,
   markCloudsOnly,
   parseCapture,
   planOf,
@@ -31,6 +34,7 @@ import {
   STATE,
   STILLS,
   stillArgs,
+  takeOf,
   tagOf,
 } from './capture.mjs'
 import {
@@ -55,8 +59,10 @@ import {
   buildSheets,
   checkRecord,
   checkTake,
+  keptClip,
   leverHash,
   mediaRows,
+  readBase,
   provenance,
   shotOf,
   RECORD_FIELDS,
@@ -728,6 +734,52 @@ describe('what the capture refuses', () => {
   )
 })
 
+describe('the files a run keeps', () => {
+  it('keep a shot under its name only once it passes, and leave the last good plate when it does not', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'weather-shot-'))
+    const file = path.join(dir, 'weather-e1-cumulus-orbit-volume.png')
+    const take = takeOf(file)
+    expect(take).toBe(
+      path.join(dir, 'weather-e1-cumulus-orbit-volume.take.png'),
+    )
+    await writeFile(file, 'last good')
+    await writeFile(take, 'refused')
+    await expect(
+      keepShot(take, file, () => {
+        throw new Error('not settled; refused')
+      }),
+    ).rejects.toThrow(/refused/)
+    expect(await readFile(file, 'utf8')).toBe('last good')
+    expect(existsSync(take)).toBe(false)
+    await writeFile(take, 'this run')
+    expect(await keepShot(take, file, () => 'read')).toBe('read')
+    expect(await readFile(file, 'utf8')).toBe('this run')
+    expect(existsSync(take)).toBe(false)
+  })
+
+  it('compare a cut with this run’s fresh plate alone', () => {
+    const record = {
+      stills: [
+        {
+          id: 'weather-e1-cumulus-orbit',
+          arm: 'deck',
+          file: 'e1-deck.png',
+          role: { name: 'deck' },
+        },
+        {
+          id: 'weather-e1-cumulus-orbit',
+          arm: 'volume',
+          file: 'e1-volume.png',
+          role: { name: 'candidate' },
+        },
+      ],
+    }
+    expect(freshPlate(record, 'weather-e1-cumulus-orbit')).toBe('e1-volume.png')
+    // `--only g1 --cut e1` took no E1 plate: nothing to compare with.
+    expect(freshPlate({ stills: [] }, 'weather-e1-cumulus-orbit')).toBeNull()
+  })
+})
+
 describe('the record', () => {
   const run = {
     commit: 'abc',
@@ -1174,7 +1226,42 @@ describe('the sheets', () => {
       ),
     ).toBe('https://x/a.png')
     expect(baseSource({ kind: 'record', urls: {} }, 'a.png')).toBeNull()
-    expect(baseSource({ kind: 'dir', dir: '/nowhere' }, 'a.png')).toBeNull()
+    expect(
+      baseSource(
+        { kind: 'dir', dir: '/nowhere', files: new Set(['a.png']) },
+        'a.png',
+      ),
+    ).toBeNull()
+  })
+
+  it('answer only what a record kept: a base’s listed plates, and this run’s clips', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'weather-base-'))
+    for (const file of ['kept-volume.png', 'refused-volume.png'])
+      await writeFile(path.join(dir, file), 'plate')
+    await writeFile(
+      path.join(dir, 'record.json'),
+      JSON.stringify({
+        phase: 1,
+        stills: [{ id: 'kept', file: 'kept-volume.png' }],
+        casts: [{ name: 'g5-fly-on', clip: { file: 'g5-fly-on/cast.mp4' } }],
+      }),
+    )
+    const base = await readBase(dir)
+    expect(baseSource(base, 'kept-volume.png')).toBe(
+      path.join(dir, 'kept-volume.png'),
+    )
+    // On disk and not kept: a refused take, or another run's file.
+    expect(baseSource(base, 'refused-volume.png')).toBeNull()
+    // A directory with no record answers nothing.
+    await rm(path.join(dir, 'record.json'))
+    expect(baseSource(await readBase(dir), 'kept-volume.png')).toBeNull()
+    // A cast refused in this run pairs no clip, whatever is on disk.
+    const run = {
+      casts: [{ name: 'a-on', clip: { file: 'a-on/cast.mp4' } }],
+      refused: [{ name: 'b-on' }],
+    }
+    expect(keptClip(run, 'a-on')).toBe('a-on/cast.mp4')
+    expect(keptClip(run, 'b-on')).toBeNull()
   })
 
   it.skipIf(!hasSheetTools)(

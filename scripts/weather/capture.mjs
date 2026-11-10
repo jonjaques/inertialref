@@ -59,7 +59,7 @@
  */
 import { createHash } from 'node:crypto'
 import { execFile, execFileSync, spawn } from 'node:child_process'
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { promisify, parseArgs } from 'node:util'
@@ -548,6 +548,42 @@ export function checkServed(id, read, refuse) {
     )
 }
 
+/** Where a shot lands before it is checked: beside its name, never on it. */
+export const takeOf = (file) => file.replace(/\.png$/, '.take.png')
+
+/**
+ * Keep a shot under its name once `check` passes, and remove it when the
+ * check refuses it. A shot taken straight to its name overwrote the last
+ * good plate before anything had read the page, and a refused take then
+ * stood on disk where the next phase's sheet reads its base.
+ */
+export async function keepShot(take, file, check) {
+  let value
+  try {
+    value = await check()
+  } catch (error) {
+    await rm(take, { force: true })
+    throw error
+  }
+  await rename(take, file)
+  return value
+}
+
+/**
+ * The fresh plate this run took of a picture, its volume arm, by its file
+ * in the record; null where this run took none. A cut is compared with
+ * this and only this, never with a plate an earlier run left on disk.
+ */
+export function freshPlate(record, id) {
+  const kept = record.stills.find(
+    (one) =>
+      one.id === id &&
+      one.arm === 'volume' &&
+      one.role?.name !== 'reference-run',
+  )
+  return kept?.file ?? null
+}
+
 /** The intervals between a log's first `entries`, milliseconds. */
 function intervalsOf(log, entries) {
   const at = log.slice(0, entries).map((entry) => entry.at)
@@ -950,9 +986,13 @@ async function main() {
       .catch(() => null)
 
     const still = async (id, arm, file, as) => {
-      const result = await drive(stillArgs(id, arm, file))
-      const read = checkStill(id, arm, jsValues(result).at(-1))
-      checkBuild(`${id} (${arm})`, read, record.commit)
+      const take = takeOf(file)
+      const result = await drive(stillArgs(id, arm, take))
+      const read = await keepShot(take, file, () => {
+        const checked = checkStill(id, arm, jsValues(result).at(-1))
+        checkBuild(`${id} (${arm})`, checked, record.commit)
+        return checked
+      })
       record.build ??= read.build
       return {
         id,
@@ -1071,14 +1111,15 @@ const castDifferences = (cast) => [
  * same picture where this run took one: C9's first reading, by changed
  * pixels and RMSE, which the noise floor judges.
  */
-async function settledPlate(out, cast, plate, read) {
-  const fresh = path.join(out, `${cast.id}-volume.png`)
-  const against = existsSync(fresh)
+async function settledPlate(out, record, cast, plate, read) {
+  const kept = freshPlate(record, cast.id)
+  const fresh = kept === null ? null : path.join(out, kept)
+  const against = fresh !== null && existsSync(fresh)
   return {
     file: path.basename(plate),
     sha256: await sha256(plate),
     read,
-    fresh: against ? path.basename(fresh) : null,
+    fresh: against ? kept : null,
     changed: against ? await changedPixels(fresh, plate) : null,
     rmse: against ? await rmseOf(fresh, plate) : null,
   }
@@ -1089,9 +1130,15 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
   const name = castName(cast, clouds)
   say(`${name}: ${cast.why}`)
   const plate = cast.settled ? path.join(out, `${name}.settled.png`) : null
+  // An earlier run's frames, clip and plate go before the first boot, so a
+  // cast refused now leaves nothing of its own name for the sheet to pair.
+  await rm(path.join(out, name), { recursive: true, force: true })
+  if (plate !== null) await rm(plate, { force: true })
   const attempts = []
   for (let boot = 1; boot <= CAST_ATTEMPTS; boot += 1) {
-    const result = await drive(castArgs(cast, clouds, plate))
+    const result = await drive(
+      castArgs(cast, clouds, plate === null ? null : takeOf(plate)),
+    )
     const reads = castReads(cast, clouds, result)
     if (reads.levers !== 'set') {
       record.unavailable.push({
@@ -1136,8 +1183,8 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
     const as = clouds
       ? role(cast.role ?? 'candidate', castDifferences(cast))
       : role('clouds-off', castDifferences(cast))
+    if (plate !== null) await rename(takeOf(plate), plate)
     const dir = path.join(out, name)
-    await rm(dir, { recursive: true, force: true })
     await cp(path.join(ROOT, castStep.dir), dir, { recursive: true })
     await writeFile(
       path.join(dir, 'log.json'),
@@ -1145,7 +1192,7 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
     )
     const clip = path.join(dir, 'cast.mp4')
     say(
-      `  ${castStep.frames} frames at ${verdict.hz.toFixed(1)} Hz${verdict.atSixty ? '' : ' (not held at 60 Hz)'}, ${verdict.dropped.length} drops, ${(verdict.coverage * 100).toFixed(0)}% of the path, boot ${boot}${verdict.retake ? ' — under two thirds: take it again' : ''}`,
+      `  ${castStep.frames} frames at ${verdict.hz.toFixed(1)} Hz${verdict.atSixty ? '' : ' (not held at 60 Hz)'}, ${verdict.dropped.length} drops, ${verdict.coverage === null ? 'no instants' : `${(verdict.coverage * 100).toFixed(0)}% of the path`}, boot ${boot}${verdict.retake ? ' — under two thirds: take it again' : ''}`,
     )
     record.casts.push({
       name,
@@ -1164,7 +1211,7 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
       settled:
         plate === null
           ? null
-          : await settledPlate(out, cast, plate, reads.read),
+          : await settledPlate(out, record, cast, plate, reads.read),
       // The rate the clip is written at: the screencast's own frames
       // over their span, so it plays at the speed it was taken.
       clipFps: castStep.fps ?? null,
@@ -1219,8 +1266,12 @@ async function takeSamples({ options, out, record, drive, say, jsValues }) {
   for (const sample of options.samples) {
     const cast = castByKey(sample.cast)
     const dir = path.join(out, 'samples', sample.cast)
+    // An earlier run's stills go before this run's first set on the path.
+    if (!indexes.has(dir)) {
+      await rm(dir, { recursive: true, force: true })
+      indexes.set(dir, { cast, stills: {}, log: [] })
+    }
     await mkdir(dir, { recursive: true })
-    if (!indexes.has(dir)) indexes.set(dir, { cast, stills: {}, log: [] })
     const index = indexes.get(dir)
     for (let i = 0; i < sample.frames.length; i += SAMPLE_BATCH) {
       const frames = sample.frames.slice(i, i + SAMPLE_BATCH)
@@ -1228,12 +1279,15 @@ async function takeSamples({ options, out, record, drive, say, jsValues }) {
         path.join(dir, `${String(k).padStart(4, '0')}.png`),
       )
       say(`${sample.cast}: settled stills at ${frames[0]}..${frames.at(-1)}`)
-      const result = await drive(sampleArgs(cast, frames, files))
+      const result = await drive(sampleArgs(cast, frames, files.map(takeOf)))
       // After the install each frame answers a seek, then a read.
       const answers = jsValues(result).slice(1)
       for (const [n, k] of frames.entries()) {
-        const read = checkStill(cast.id, 'volume', answers[2 * n + 1])
-        checkBuild(`${sample.cast} @ ${k}`, read, record.commit)
+        const read = await keepShot(takeOf(files[n]), files[n], () => {
+          const checked = checkStill(cast.id, 'volume', answers[2 * n + 1])
+          checkBuild(`${sample.cast} @ ${k}`, checked, record.commit)
+          return checked
+        })
         index.stills[k] = {
           file: path.basename(files[n]),
           opacity: read.clouds?.opacity ?? null,
