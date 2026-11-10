@@ -142,7 +142,9 @@ const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
  * `ownStandIns` starts the tables on stand-ins of this bundle's own, for a
  * material that binds two bodies' air: two texture nodes over `LUT_WHITE`
  * compile to one binding (rule 57), and the second body's tables would then
- * swap into nothing. Every other material shares the one pair.
+ * swap into nothing. Every other material shares the one pair. A pair of its
+ * own is a pair nothing else can free, so the bundle's owner calls `dispose`
+ * when it goes.
  */
 export function createAirUniforms(
   options: { readonly ownStandIns?: boolean } = {},
@@ -239,6 +241,16 @@ export function createAirUniforms(
       // that binds two bodies' air never holds two nodes over one object.
       transmittance.value = white
       multiScatter.value = black
+    },
+    /**
+     * Frees the stand-ins this bundle made for itself. The shared pair is
+     * every other material's and outlives this one, and a table `set` bound
+     * belongs to the bake that made it.
+     */
+    dispose(): void {
+      if (!own) return
+      white.dispose()
+      black.dispose()
     },
   }
 }

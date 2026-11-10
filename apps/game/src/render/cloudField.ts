@@ -142,6 +142,7 @@ export function createCloudField(): CloudField {
     dispose() {
       for (const bake of bakes) bake.dispose()
       profile.dispose()
+      uniforms.dispose()
     },
   }
 }

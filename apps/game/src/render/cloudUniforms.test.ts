@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DataTexture, Quaternion, Vector3 } from 'three/webgpu'
+import { DataTexture, Quaternion, type Texture, Vector3 } from 'three/webgpu'
 import {
   atmosphereRecipe,
   cloudExtents,
@@ -13,6 +13,7 @@ import type {
   CloudCameraFrame,
   CloudFrame,
 } from './cloudFrame.ts'
+import { createCloudField } from './cloudField.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { createCloudUniforms } from './cloudUniforms.ts'
 
@@ -205,6 +206,45 @@ describe('the cloud uniforms', () => {
     uniforms.write(cloudFrame())
     expect(uniforms.second.active.value).toBe(0)
     expect(uniforms.served.active.value).toBe(1)
+  })
+
+  it('free the second body’s own stand-ins when disposed, and neither the shared pair nor a bound table', () => {
+    const uniforms = createCloudUniforms()
+    const freed: Texture[] = []
+    const watch = (texture: Texture): Texture => {
+      texture.addEventListener('dispose', () => freed.push(texture))
+      return texture
+    }
+    const own = [
+      watch(uniforms.second.air.transmittance.value),
+      watch(uniforms.second.air.multiScatter.value),
+    ]
+    watch(uniforms.served.air.transmittance.value)
+    watch(uniforms.served.air.multiScatter.value)
+    const tables = scattering()
+    watch(tables.transmittance)
+    watch(tables.multiScatter)
+    // Disposed while the second body's nodes hold real tables: the stand-ins
+    // are out of every node's reach and still the bundle's to free.
+    uniforms.write(
+      cloudFrame({ second: body({ address: 'b:4', scattering: tables }) }),
+    )
+    expect(uniforms.second.air.transmittance.value).toBe(tables.transmittance)
+    uniforms.dispose()
+    expect(freed).toEqual(own)
+  })
+
+  it('are freed with the field built over them', () => {
+    const field = createCloudField()
+    const freed: Texture[] = []
+    const own = [
+      field.uniforms.second.air.transmittance.value,
+      field.uniforms.second.air.multiScatter.value,
+    ]
+    for (const texture of own)
+      texture.addEventListener('dispose', () => freed.push(texture))
+    field.dispose()
+    expect(freed).toEqual(own)
   })
 
   it('copy each level frame into its slot', () => {

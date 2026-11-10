@@ -157,6 +157,8 @@ export interface CloudUniforms {
   readonly period: UniformNode<'uvec2', Vector2>
   /** Copy a frame in, each write compared first, as Bodies' setters are. */
   write(frame: CloudFrame): void
+  /** Frees the second body's own table stand-ins: the only textures the bundle makes. */
+  dispose(): void
 }
 
 /* ------------------------------------------------------------------------- */
@@ -519,6 +521,10 @@ export function createCloudUniforms(): CloudUniforms {
       writeCamera(camera, frame)
       writeTrace(trace, frame)
       setVector2(period.value, frame.period[0], frame.period[1])
+    },
+    dispose() {
+      served.uniforms.air.dispose()
+      second.uniforms.air.dispose()
     },
   }
 }
