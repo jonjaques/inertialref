@@ -64,6 +64,7 @@ import {
   CloudTrace,
   type CloudTraceDeps,
 } from './cloudTrace.ts'
+import { cloudRig } from './cloudSystemRig.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
@@ -394,6 +395,51 @@ describe('the kernels', () => {
     )
     trace.dispose()
     sky.dispose()
+  }, 120_000)
+})
+
+describe('the system’s own trace kernel', () => {
+  /*
+   * The census above counts the stand-ins, which bind what a test's field
+   * binds. This one counts the kernel the system builds over the real field,
+   * the real sun grid, the real phase and the real far atlas, which is the
+   * one a device has to accept: WebGPU's default device allows a stage 16
+   * sampled textures and 4 storage textures, and nothing raises the limit.
+   *
+   * Ten today: the clipmap's cover (a 2D array), the base and detail noises
+   * (3D), the profile, the sun grid (3D), the air's transmittance and Ψ, the
+   * phase atlas, the far atlas and the depth copy. Phase 1's design counts
+   * four more at worst (§4.5): the clipmap's `kind`, the sky table, the slab
+   * source and the blue-noise mask, 14 of 16. The count is exact, not a
+   * ceiling, so a binding nobody counted fails here rather than at the
+   * sixteenth, and the package that adds one changes this number where a
+   * reviewer reads it.
+   */
+  const SAMPLED = { '2d': 6, '2d_array': 1, '3d': 3 }
+  const STAGE_SAMPLED = 16
+  const STAGE_STORAGE = 4
+
+  it('binds 10 sampled textures of the stage’s 16, and its 4 storage textures', async () => {
+    const rig = cloudRig(gpu, 16, 16)
+    try {
+      await rig.system!.warm()
+      const trace = rig.system!.resources.find(
+        (held) => held.name === 'trace',
+      ) as CloudTrace
+      const [kernel] = trace.kernels()
+      expect(kernel!.name).toBe('cloud trace')
+      const wgsl = wgslOf(kernel!)
+      const counted = bindings(wgsl)
+      const kinds: Record<string, number> = {}
+      for (const [, kind] of wgsl.matchAll(/var\s+\w+\s*:\s*texture_(\w+)</g))
+        if (!kind!.startsWith('storage')) kinds[kind!] = (kinds[kind!] ?? 0) + 1
+      expect(kinds).toEqual(SAMPLED)
+      expect(counted.sampled).toBe(10)
+      expect(counted.sampled).toBeLessThanOrEqual(STAGE_SAMPLED)
+      expect(counted.storage).toBe(STAGE_STORAGE)
+    } finally {
+      rig.dispose()
+    }
   }, 120_000)
 })
 

@@ -318,13 +318,10 @@ function createBodyBundle(air: AirUniforms): BodyBundle {
         frame.dayColor.b,
       )
       if (frame.scattering !== tables) {
+        // The body's table set as one object: a table more is a member of
+        // it, bound by `air.bind`, and this call does not change.
         if (frame.scattering === null) air.clear()
-        else
-          air.set(
-            frame.scattering.recipe,
-            frame.scattering.transmittance,
-            frame.scattering.multiScatter,
-          )
+        else air.bind(frame.scattering)
         tables = frame.scattering
       }
       if (

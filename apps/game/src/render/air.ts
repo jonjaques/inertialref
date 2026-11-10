@@ -1,5 +1,6 @@
 import {
   DataTexture,
+  HalfFloatType,
   LinearFilter,
   type Node,
   RGBAFormat,
@@ -130,6 +131,40 @@ const LUT_WHITE = /*@__PURE__*/ lutPixel(255, 255, 255)
 const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
 
 /**
+ * The sky table's stand-in: one RGBA16F texel of zeros, linear, as the table
+ * is. An object of its own, never `LUT_BLACK`: the multiple-scattering
+ * table's node already stands over that one, and a second node over it would
+ * compile to its binding (rule 57).
+ */
+function skyPixel(): DataTexture {
+  const map = new DataTexture(
+    new Uint16Array(4),
+    1,
+    1,
+    RGBAFormat,
+    HalfFloatType,
+  )
+  map.magFilter = LinearFilter
+  map.minFilter = LinearFilter
+  map.needsUpdate = true
+  return map
+}
+const LUT_SKY = /*@__PURE__*/ skyPixel()
+
+/**
+ * One body's air as its tables: what `bind` points a bundle at. An
+ * `AtmosphereScattering` is one. `sky` is the sky's irradiance table over the
+ * sun's cosine and height, for the bodies that bake one; without it the
+ * bundle's `sky` stays on its stand-in.
+ */
+export interface AirTables {
+  readonly recipe: AtmosphereRecipe
+  readonly transmittance: Texture
+  readonly multiScatter: Texture
+  readonly sky?: Texture
+}
+
+/**
  * The uniforms one material marches through: the recipe's coefficients in
  * sea-level units, the two tables, `top`, the tables' ceiling over sea
  * level — 1 with no air — and the limb: `limb`, how far the eye stands
@@ -138,6 +173,13 @@ const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
  * march reads. `set` points them at one body's air, idempotently and without a
  * rebuild, `lift` writes the limb beside it, and `clear` is a vacuum, which
  * draws nothing, extinguishes nothing and passes the beam white.
+ *
+ * `sky` is the sky's irradiance on a cloud, a table of its own that only the
+ * cloud passes read. TSL binds a texture in a graph that reads it and in no
+ * other, so the member costs the shell, the sphere, the ground and the sea
+ * no binding and moves none of their WGSL (`cloudPremises.gpu.test.ts`).
+ * `bind` takes a body's tables as one object, so a table more is a member
+ * more and no caller's argument list changes.
  *
  * `ownStandIns` starts the tables on stand-ins of this bundle's own, for a
  * material that binds two bodies' air: two texture nodes over `LUT_WHITE`
@@ -152,6 +194,7 @@ export function createAirUniforms(
   const own = options.ownStandIns === true
   const white = own ? lutPixel(255, 255, 255) : LUT_WHITE
   const black = own ? lutPixel(0, 0, 0) : LUT_BLACK
+  const dark = own ? skyPixel() : LUT_SKY
   const top = uniform(1)
   const limb = uniform(0)
   const limbFalloff = uniform(0)
@@ -171,6 +214,30 @@ export function createAirUniforms(
   const hMie = uniform(1)
   const transmittance = texture(white)
   const multiScatter = texture(black)
+  const sky = texture(dark)
+  const set = (
+    recipe: AtmosphereRecipe,
+    sunTable: Texture,
+    psiTable: Texture,
+  ): void => {
+    top.value = recipe.topRatio
+    betaRayleigh.value.set(...recipe.betaRayleigh)
+    mieScatter.value.set(...recipe.mieScatter)
+    mieExtinction.value.set(...recipe.mieExtinction)
+    mieForward.value.set(...recipe.mieForward)
+    aerosolSky.value = recipe.aerosolSky
+    ozone.value.set(...recipe.ozone)
+    ozonePeak.value = recipe.ozonePeak
+    ozoneHalfWidth.value = recipe.ozoneHalfWidth
+    detachedPeak.value = recipe.detachedPeak
+    detachedHalfWidth.value = recipe.detachedHalfWidth
+    detachedExtinction.value = recipe.detachedExtinction
+    detachedScatter.value.set(...recipe.detachedScatter)
+    hRayleigh.value = recipe.hRayleigh
+    hMie.value = recipe.hMie
+    transmittance.value = sunTable
+    multiScatter.value = psiTable
+  }
   return {
     top,
     betaRayleigh,
@@ -191,24 +258,12 @@ export function createAirUniforms(
     multiScatter,
     limb,
     limbFalloff,
-    set(recipe: AtmosphereRecipe, sunTable: Texture, psiTable: Texture): void {
-      top.value = recipe.topRatio
-      betaRayleigh.value.set(...recipe.betaRayleigh)
-      mieScatter.value.set(...recipe.mieScatter)
-      mieExtinction.value.set(...recipe.mieExtinction)
-      mieForward.value.set(...recipe.mieForward)
-      aerosolSky.value = recipe.aerosolSky
-      ozone.value.set(...recipe.ozone)
-      ozonePeak.value = recipe.ozonePeak
-      ozoneHalfWidth.value = recipe.ozoneHalfWidth
-      detachedPeak.value = recipe.detachedPeak
-      detachedHalfWidth.value = recipe.detachedHalfWidth
-      detachedExtinction.value = recipe.detachedExtinction
-      detachedScatter.value.set(...recipe.detachedScatter)
-      hRayleigh.value = recipe.hRayleigh
-      hMie.value = recipe.hMie
-      transmittance.value = sunTable
-      multiScatter.value = psiTable
+    sky,
+    set,
+    /** `set`, from a body's tables as one object, with its sky table where it has one. */
+    bind(tables: AirTables): void {
+      set(tables.recipe, tables.transmittance, tables.multiScatter)
+      sky.value = tables.sky ?? dark
     },
     lift(strength: number, falloff: number): void {
       limb.value = strength
@@ -241,6 +296,7 @@ export function createAirUniforms(
       // that binds two bodies' air never holds two nodes over one object.
       transmittance.value = white
       multiScatter.value = black
+      sky.value = dark
     },
     /**
      * Frees the stand-ins this bundle made for itself. The shared pair is
@@ -251,6 +307,7 @@ export function createAirUniforms(
       if (!own) return
       white.dispose()
       black.dispose()
+      dark.dispose()
     },
   }
 }
