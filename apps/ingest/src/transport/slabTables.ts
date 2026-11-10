@@ -34,15 +34,18 @@ import {
  * generated files. Up to four stages run at once:
  *
  *   node apps/ingest/src/transport/slabTables.ts reference 6     (and 10, 16)
- *   node apps/ingest/src/transport/slabTables.ts source 16 0 2   (nodes, part, parts)
+ *   node apps/ingest/src/transport/slabTables.ts source 16 0 1   (and 24, 32: nodes, part, parts)
+ *   node apps/ingest/src/transport/slabTables.ts merge 16 1      (a table's parts as one)
  *   node apps/ingest/src/transport/slabTables.ts flux
  *   node apps/ingest/src/transport/slabTables.ts montecarlo 5    (and 10, 20, 50, bill, glory)
  *   node apps/ingest/src/transport/slabTables.ts write
  *   pnpm exec prettier -w packages/rendering/src/slabReference.generated.ts \
  *     packages/rendering/src/slabSource.generated.ts
+ *   node apps/ingest/src/transport/octaveFit.ts                  (it reads the reference)
+ *   pnpm exec prettier -w packages/rendering/src/cloudOctaves.ts
  *
  * Nothing a stage writes, and nothing in a generated file, names the machine
- * or the time: two runs are byte-equal.
+ * or the time: two runs are byte-equal. What a run cost goes in its commit.
  */
 
 /** The rubric's domain of "within 5%" (the MVP's §6.1), and the depths recorded under it. */
@@ -934,7 +937,7 @@ interface SourceStage {
   readonly fits: Record<SourceFit | 'absolutePlain' | 'relativePlain', number[]>
 }
 
-/** Five figures: a radiance's rounding is 10⁻⁵ of it, a hundredth of the oracle's own convergence. */
+/** Five figures: a radiance's rounding is at most 5 × 10⁻⁵ of it, a hundredth of the oracle's own convergence. */
 const five = (value: number): number => Number(value.toPrecision(5))
 const percent = (value: number): string => `${(100 * value).toFixed(2)}%`
 

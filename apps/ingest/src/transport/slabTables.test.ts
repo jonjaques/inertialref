@@ -242,7 +242,7 @@ describe('the source table', () => {
       SLAB_REFERENCE.reflected,
     )
     // At most the figure, and the figure itself: the rows are printed to
-    // five figures, which moves an error by 10⁻⁵ of a radiance.
+    // five figures, which moves a radiance by up to 5 × 10⁻⁵ of itself.
     expect(rebuilt.error).toBeLessThanOrEqual(
       SLAB_SOURCE.reconstructionError + 2e-4,
     )

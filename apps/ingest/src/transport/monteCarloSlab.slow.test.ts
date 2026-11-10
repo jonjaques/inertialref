@@ -10,12 +10,14 @@ import {
 /*
  * One committed row of the Monte Carlo slab, walked again from its seed: a
  * slab of τ 20, a hundred thousand paths. It is here and not in the gate
- * because it is tens of seconds of one core; a row over sixty leaves this
- * suite too.
+ * because it is tens of seconds of one core: 25.5 s on the Mac mini
+ * (Mac18,5, M6), and 35.1 s with two generator stages running beside it.
+ * The time is printed and not asserted, because a hosted runner is not that
+ * machine; a row that costs a minute there leaves this suite too.
  */
 
 describe('a committed row of τ = 20', () => {
-  it('is the row its seed walks, within 3·SE + 0.5% of adding-doubling, in under a minute', () => {
+  it('is the row its seed walks, within 3·SE + 0.5% of adding-doubling', () => {
     const depth = 20
     const view = MONTE_CARLO.views[0]
     const paths = MONTE_CARLO.paths[MONTE_CARLO.depths.indexOf(depth)]!
@@ -33,7 +35,6 @@ describe('a committed row of τ = 20', () => {
     console.log(
       `monteCarloSlab: τ ${depth}, ${paths} paths, ${seconds.toFixed(1)} s`,
     )
-    expect(seconds).toBeLessThan(60)
     MONTE_CARLO.suns.forEach((sunMu, s) => {
       const kept = SLAB_REFERENCE.monteCarlo.find(
         (row) =>
@@ -45,7 +46,7 @@ describe('a committed row of τ = 20', () => {
           row.side === view[2],
       )!
       // The mean is printed to five figures and the error to three.
-      expect(Math.abs(traced.mean[s]! / kept.mean - 1)).toBeLessThan(1e-5)
+      expect(Math.abs(traced.mean[s]! / kept.mean - 1)).toBeLessThan(6e-5)
       expect(Math.abs(traced.error[s]! / kept.error - 1)).toBeLessThan(1e-2)
       expect(kept.paths).toBe(paths)
       expect(
@@ -56,5 +57,5 @@ describe('a committed row of τ = 20', () => {
         }),
       ).toBe(true)
     })
-  }, 120_000)
+  }, 300_000)
 })

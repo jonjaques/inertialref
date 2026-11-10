@@ -20,8 +20,11 @@ import {
  * cores.
  */
 
-/** A value printed to five figures, against the same value recomputed. */
-const FIVE_FIGURES = 1e-5
+/**
+ * A value printed to five figures, against the same value recomputed: half
+ * a unit in the fifth figure is 5 × 10⁻⁵ of a value that begins with a one.
+ */
+const FIVE_FIGURES = 6e-5
 
 let population: SlabPopulation
 

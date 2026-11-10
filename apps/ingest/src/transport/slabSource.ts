@@ -20,7 +20,7 @@ import { gaussLegendre, henyeyGreenstein, phaseOf } from './legendre.ts'
  *
  * and a march that integrates first order plus S_h along its ray, through
  * the scaled depth, returns the oracle's radiance. The table holds S_h's
- * least-squares projection, over every view direction, on
+ * least-squares fit, over every view direction, to
  *
  *   J₀ + J₁·μ_v + J_f·Φ(ν)          Φ(ν) = 4π·HG(ν; λ) − 1
  *
@@ -50,6 +50,20 @@ import { gaussLegendre, henyeyGreenstein, phaseOf } from './legendre.ts'
  * delta feeds. Along a ray in scaled depth those three and first order
  * integrate to the oracle's corrected radiance exactly, so what the
  * reconstruction measures is the three terms and the table's read.
+ *
+ * **Three terms do not hold a slab under an oblique sun,** by either
+ * measure of fit. Across the horizon the source is a step, not a line:
+ * light going up was sent by the slab below, and near the lit face almost
+ * nothing is above to send light down. A tenth of a scaled depth under the
+ * face, under a sun at μ₀ 0.19, the source away from the sun is 0.04 from
+ * the horizon to straight up and 0.008 straight down; toward the sun's far
+ * side it is 0.29 along the horizon, the lobe, and 0.04 and 0.01 straight
+ * up and down. One cosine cannot be a step, and the lobe lies along it.
+ * Least squares on the source follows the lobe and is 109% high straight
+ * up; least squares on the source over itself spreads the error, 70% at
+ * worst, and loses 3% to 4% of the reflected flux. Under a sun straight
+ * above, the lobe points down the normal and the first fit is within 8%.
+ * Both are returned, and the generated table says which it holds.
  */
 
 /** The table's axes. */

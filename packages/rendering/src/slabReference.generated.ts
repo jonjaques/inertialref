@@ -649,7 +649,7 @@ export const SLAB_REFERENCE = {
     depth: 10,
     trough: 0.98,
     ring: 1.9,
-    traced: 1.0609,
+    traced: 1.0608,
     error: 0.00219,
     oracle: 1.0604,
     scaled: 1.1385,
