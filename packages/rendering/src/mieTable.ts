@@ -103,6 +103,50 @@ function halfToFloat(half: number): number {
   return sign * (1 + mantissa / 1024) * 2 ** (exponent - 15)
 }
 
+const FLOAT = new Float32Array(1)
+const FLOAT_BITS = new Uint32Array(FLOAT.buffer)
+
+/**
+ * IEEE binary16 bits of `value` as a float32 holds it, rounded to nearest,
+ * ties to even: `Math.f16round`'s rounding of a float32, as bits. Written
+ * out because a worker holds no `three` to convert with, and `Math.f16round`
+ * is younger than some browsers WebGPU runs in; and not three's
+ * `DataUtils.toHalfFloat`, which truncates. Past 65504 it is an infinity,
+ * as the standard's rounding is.
+ */
+export function halfBitsOf(value: number): number {
+  FLOAT[0] = value
+  const bits = FLOAT_BITS[0]!
+  const sign = (bits >>> 16) & 0x8000
+  const exponent = (bits >>> 23) & 0xff
+  const mantissa = bits & 0x7fffff
+  if (exponent === 0xff) return sign | 0x7c00 | (mantissa === 0 ? 0 : 0x200)
+  const biased = exponent - 112
+  if (biased >= 0x1f) return sign | 0x7c00
+  const round = (kept: number, rest: number, half: number): number =>
+    rest > half || (rest === half && (kept & 1) === 1) ? kept + 1 : kept
+  if (biased <= 0) {
+    // A subnormal half, or nothing: the implicit bit joins the mantissa.
+    if (biased < -10) return sign
+    const shift = 14 - biased
+    const full = mantissa | 0x800000
+    return (
+      sign | round(full >>> shift, full & ((1 << shift) - 1), 1 << (shift - 1))
+    )
+  }
+  // A carry out of the mantissa steps the exponent, up to the infinity.
+  return (
+    sign | round((biased << 10) | (mantissa >>> 13), mantissa & 0x1fff, 0x1000)
+  )
+}
+
+/** Each value's `halfBitsOf`, in order: an atlas as its RGBA16F texels. */
+export function toHalves(values: Float32Array): Uint16Array {
+  const halves = new Uint16Array(values.length)
+  for (let k = 0; k < values.length; k += 1) halves[k] = halfBitsOf(values[k]!)
+  return halves
+}
+
 /**
  * `count` little-endian half floats from base64, as a phase table holds its
  * texels. Throws where the text holds another number of them: `what` names
@@ -294,8 +338,8 @@ function gaussLegendre(n: number): {
   return { nodes, weights }
 }
 
-/** Nodes a piece of the disk's integral: the design's sixteen (§5.4). */
-const DISK_NODES = 16
+/** Nodes a piece of the disk's integral, a piece being `SPAN` texels at most. */
+const DISK_NODES = 8
 const GAUSS = /*@__PURE__*/ gaussLegendre(DISK_NODES)
 
 /**
@@ -320,6 +364,32 @@ function reflected(index: number, angles: number): number {
 }
 
 /**
+ * Texels of the table's axis a piece of the disk's integral spans at most.
+ * Near either pole a texel is a ten-thousandth of a degree and a wide disk
+ * a thousand of them, so one piece of sixteen nodes stepped over the forward
+ * peak: at a 2° disk the droplets' largest row gained 1.8 × 10⁻³ of its
+ * integral and the ice's 1.8 × 10⁻⁴. Cut to four texels a piece, eight nodes
+ * hold the droplets to 1.3 × 10⁻⁵ at every radius from 0.07° to 5°, and more
+ * nodes or shorter pieces move nothing.
+ */
+const SPAN = 4
+
+/** A piece of the integral cut into pieces of at most `SPAN` texels, evenly in the texel index. */
+function spans(
+  table: { readonly angles: number },
+  [from, to, whole]: [number, number, boolean],
+): [number, number, boolean][] {
+  const a = angleIndex(table, from)
+  const b = angleIndex(table, to)
+  const count = Math.max(1, Math.ceil((b - a) / SPAN))
+  return Array.from({ length: count }, (_, k): [number, number, boolean] => [
+    k === 0 ? from : angleOf(table, a + ((b - a) * k) / count),
+    k === count - 1 ? to : angleOf(table, a + ((b - a) * (k + 1)) / count),
+    whole,
+  ])
+}
+
+/**
  * The disk's weights for every texel of a table of `angles` angles, shared
  * by every row and band: one row and band costs a weighted sum.
  *
@@ -330,8 +400,8 @@ function reflected(index: number, angles: number): number {
  * where the acos form's numerator cancels to nothing. The integral runs in
  * pieces: where the whole ring lies in the cap (θ′ < α − Θ, or past
  * 2π − Θ − α) its extent is 2π, and the piece between has a square-root
- * edge at each end, which `θ′ = c + h·sin(πx/2)` takes out before sixteen
- * Gauss–Legendre nodes. The weights are normalized by their own sum, not by
+ * edge at each end, which `θ′ = c + h·sin(πx/2)` takes out before eight
+ * Gauss–Legendre nodes, each piece cut to `SPAN` texels at most. The weights are normalized by their own sum, not by
  * Ω_c, so a constant phase convolves to itself exactly.
  */
 function diskKernel(angles: number, alpha: number): DiskKernel {
@@ -353,7 +423,9 @@ function diskKernel(angles: number, alpha: number): DiskKernel {
       pieces.push([2 * Math.PI - center - alpha, Math.PI, true])
     const first = weights.length
     let total = 0
-    for (const [a, b, whole] of pieces) {
+    for (const [a, b, whole] of pieces.flatMap((piece) =>
+      spans(table, piece),
+    )) {
       const middle = (a + b) / 2
       const half = (b - a) / 2
       for (let k = 0; k < DISK_NODES; k += 1) {
@@ -475,6 +547,26 @@ export const PHASE_ATLAS = {
   iceRows: 23,
 } as const
 
+/**
+ * Radians, 0.07°: the least disk the ice block is convolved with, whatever
+ * the sun's own. The largest crystals' forward peak, 188,416 sr⁻¹ in blue at
+ * 120 µm and twenty row-bands past 65,504 within 0.034° of forward, does not
+ * fit a half float until a disk of 0.0666° has spread it (package T4's
+ * bisection); at 0.07° it peaks at 61,368. A half float past 65,504 is an
+ * infinity, which the sampler's blend turns into NaN, and a clamp there
+ * drops up to 7.0% of the 120 µm row's blue light. The disk keeps each
+ * row's integral, so the floor loses no light: under a smaller sun it draws
+ * the ice's aureole within 0.07° of the sun as that disk's, under two
+ * pixels at 1,600 across 60°. The droplets fit at any radius and keep the
+ * sun's own.
+ *
+ * The march's scaled medium does not take this peak out of what it reads:
+ * first order keeps the exact phase, σ·p = σ′·p/(1 − f_δ), so the atlas
+ * holds the diffraction peak, and only the higher orders read the scaled
+ * phase, through the slab source (phase 1 design §5.1).
+ */
+export const ICE_DISK_FLOOR = 0.07 * (Math.PI / 180)
+
 export interface PhaseAtlas {
   /** Texels across: the droplet table's angles. */
   readonly width: number
@@ -487,8 +579,10 @@ export interface PhaseAtlas {
   /** Rows each class fills, from its first. */
   readonly dropletRows: number
   readonly iceRows: number
-  /** Radians: the disk it was convolved with. */
+  /** Radians: the sun's disk the droplets were convolved with. */
   readonly angularRadius: number
+  /** Radians: the ice's, the sun's or `ICE_DISK_FLOOR`, whichever is larger. */
+  readonly iceAngularRadius: number
 }
 
 /** 1/(1 − f_δ) of a row whose extinction efficiency is `extinction`, f_δ = 1/Q_ext. */
@@ -525,8 +619,10 @@ function onAngles(table: PhaseRows, rows: number, angles: number): PhaseRows {
 }
 
 /**
- * The phase atlas's texels: the droplets' rows and the ice's, each convolved
- * with a sun of angular radius `angularRadius`, radians, with each row's
+ * The phase atlas's texels: the droplets' rows convolved with a sun of
+ * angular radius `angularRadius`, radians, and the ice's with that sun or
+ * `ICE_DISK_FLOOR`'s disk, whichever is wider, so no texel passes a half
+ * float's range, with each row's
  * gain beside its phase, so first order takes `1/(1 − f_δ)` at a sample's
  * own radius from the fetch it already makes (§4.4). Through an adiabatic
  * level the radius doubles and `1 − f_δ` moves 4%, which a level's constant
@@ -546,12 +642,14 @@ export function phaseAtlas(
     throw new Error('phaseAtlas: the ice table’s bands are not the droplets’')
   const width = droplets.angles
   const texels = new Float32Array(width * rows * 4)
+  const iceAngularRadius = Math.max(angularRadius, ICE_DISK_FLOOR)
   const place = (
     first: number,
     table: PhaseRows,
     gains: readonly number[],
+    disk: number,
   ): void => {
-    const phase = convolveDisk(table, angularRadius)
+    const phase = convolveDisk(table, disk)
     gains.forEach((gain, row) => {
       for (let i = 0; i < width; i += 1) {
         const to = ((first + row) * width + i) * 4
@@ -567,11 +665,13 @@ export function phaseAtlas(
     dropletRow,
     droplets,
     droplets.bulk.map((b) => gainOf(b.extinction)),
+    angularRadius,
   )
   place(
     iceRow,
     onAngles(ice, ice.diameters, width),
     ice.bulk.map((b) => gainOf(b.extinction)),
+    iceAngularRadius,
   )
   return {
     width,
@@ -580,6 +680,7 @@ export function phaseAtlas(
     dropletRows: droplets.radii,
     iceRows: ice.diameters,
     angularRadius,
+    iceAngularRadius,
   }
 }
 

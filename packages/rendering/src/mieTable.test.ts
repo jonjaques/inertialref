@@ -5,6 +5,8 @@ import {
   convolveDisk,
   decodeMieTable,
   diffractionShare,
+  halfBitsOf,
+  ICE_DISK_FLOOR,
   type MieTable,
   type MieTableSource,
   mieDroplets,
@@ -16,6 +18,7 @@ import {
   radiusOf,
   sampleAtlas,
   samplePhase,
+  toHalves,
 } from './mieTable.ts'
 import { MIE_DROPLETS } from './mieDroplets.generated.ts'
 import { iceAggregate, type IceTable } from './iceTable.ts'
@@ -358,6 +361,27 @@ const DISK_GLORY: readonly (readonly [ring: number, contrast: number])[] = [
   [0.575, 1.015],
 ]
 
+/** The worst change of any row and band's ∫p dΩ, a table's against its convolution. */
+function worstIntegral(
+  t: { readonly angles: number; readonly phase: Float32Array },
+  convolved: Float32Array,
+): number {
+  const rows = t.phase.length / (t.angles * 3)
+  const as = (phase: Float32Array) =>
+    ({ ...table, angles: t.angles, radii: rows, phase }) as MieTable
+  let worst = 0
+  for (let row = 0; row < rows; row += 1)
+    for (let band = 0; band < 3; band += 1)
+      worst = Math.max(
+        worst,
+        Math.abs(
+          phaseIntegral(as(convolved), row, band) -
+            phaseIntegral(as(t.phase), row, band),
+        ),
+      )
+  return worst
+}
+
 describe('the phase under a sun’s disk', () => {
   const convolved: MieTable = {
     ...table,
@@ -394,21 +418,19 @@ describe('the phase under a sun’s disk', () => {
       expect(convolveDisk(isotropic, alpha)).toEqual(isotropic.phase)
   })
 
-  it('keeps each row’s integral to 10⁻⁴', () => {
-    // 1.4 × 10⁻⁵ at worst, measured, the largest row in blue: the disk
-    // moves light out of the forward peak and makes none.
-    for (let row = 0; row < table.radii; row += 1)
-      for (let band = 0; band < 3; band += 1)
-        expect(
-          Math.abs(
-            phaseIntegral(convolved, row, band) -
-              phaseIntegral(table, row, band),
-          ),
-        ).toBeLessThan(1e-4)
+  it('keeps each row’s integral to 10⁻⁴, under Earth’s sun and a 2° one', () => {
+    // 1.5 × 10⁻⁵ and 1.2 × 10⁻⁵ at worst, measured: the disk moves light
+    // out of the forward peak and makes none. At 2° the integral steps over
+    // a thousand texels at either pole, where one piece of nodes missed the
+    // peak by 1.8 × 10⁻³ before the pieces were cut to `SPAN` texels.
+    expect(worstIntegral(table, convolved.phase)).toBeLessThan(1e-4)
+    expect(worstIntegral(table, convolveDisk(table, 2 * DEGREE))).toBeLessThan(
+      1e-4,
+    )
   })
 
   it('equals the Funk–Hecke form on a Henyey–Greenstein phase to 10⁻⁴', () => {
-    // Under 10⁻⁷ for g of 0.5 and 0.85, 1.8 × 10⁻⁶ and 5.7 × 10⁻⁶ at 0.99,
+    // Under 10⁻⁷ for g of 0.5 and 0.85, 2.4 × 10⁻⁶ and 1.4 × 10⁻⁶ at 0.99,
     // measured, where the unconvolved phase misses the form by 16% and by a
     // factor of 8. The control: at 2° the unconvolved phase misses it by
     // more than the bound for every g, so the bound sees the disk.
@@ -533,7 +555,12 @@ describe('the phase atlas', () => {
     const atlas = phaseAtlas(table, iceAggregate(), EARTH_SUN)
     expect([atlas.width, atlas.height]).toEqual([1024, rows])
     expect(atlas.texels).toHaveLength(1024 * 64 * 4)
-    expect([atlas.dropletRows, atlas.iceRows]).toEqual([32, 2])
+    // The committed ice is Baum's 23 diameters, the whole of the block the
+    // atlas holds for it.
+    expect([atlas.dropletRows, atlas.iceRows]).toEqual([
+      32,
+      PHASE_ATLAS.iceRows,
+    ])
     const droplets = convolveDisk(table, EARTH_SUN)
     for (let row = 0; row < table.radii; row += 1) {
       const gain = 1 / (1 - 1 / table.bulk[row]!.extinction)
@@ -543,21 +570,27 @@ describe('the phase atlas', () => {
           Math.fround(gain),
         ])
     }
-    // The committed ice is a stand-in on three angles: isotropic, resampled
-    // onto the droplets' axis and convolved, it is the same half float
-    // everywhere; Q_ext of 2 is a gain of 2.
-    const isotropic = iceAggregate().phase[0]!
-    for (const row of [iceRow, iceRow + 1])
+    // The ice is generated on the droplets' axis, so it is placed as it is,
+    // convolved with the same sun, each row with its own Q_ext's gain.
+    const ice = iceAggregate()
+    const convolved = convolveDisk(ice, EARTH_SUN)
+    for (let row = 0; row < ice.diameters; row += 1) {
+      const gain = Math.fround(1 / (1 - 1 / ice.bulk[row]!.extinction))
       for (let i = 0; i < 1024; i += 1)
-        expect(texel(atlas, row, i)).toEqual([
-          isotropic,
-          isotropic,
-          isotropic,
-          2,
+        expect(texel(atlas, iceRow + row, i)).toEqual([
+          ...convolved.subarray((row * 1024 + i) * 3, (row * 1024 + i) * 3 + 3),
+          gain,
         ])
-    for (let row = iceRow + 2; row < rows; row += 1)
+    }
+    for (let row = iceRow + ice.diameters; row < rows; row += 1)
       for (const i of [0, 512, 1023])
         expect(texel(atlas, row, i)).toEqual([0, 0, 0, 0])
+    // Under Earth's sun the atlas is inside RGBA16F's range: the largest
+    // crystal's forward peak, 188,416 sr⁻¹ in blue before the disk, is
+    // 6,572 after it.
+    expect(atlas.texels.every((v) => Number.isFinite(v) && v < 65504)).toBe(
+      true,
+    )
   })
 
   it('places a full ice table at rows 32 to 54, each row convolved and gained as its own', () => {
@@ -600,6 +633,48 @@ describe('the phase atlas', () => {
     )
   })
 
+  it('holds no texel past half float’s 65,504 at a point sun, at 0.05°, under Earth’s sun or at 2°', () => {
+    // The ice's forward peak, 188,416 sr⁻¹ at 120 µm in blue, is spread by
+    // `ICE_DISK_FLOOR`'s disk under any sun smaller than it: 61,368 at the
+    // floor, measured. The control: the ice convolved with the sun's own
+    // disk passes the range at a point sun and at 0.05°, so the floor is
+    // what holds it.
+    const ice = iceAggregate()
+    const largest = (values: Float32Array) =>
+      values.reduce((most, v) => Math.max(most, v), 0)
+    for (const sun of [0, 0.05 * DEGREE, EARTH_SUN, 2 * DEGREE]) {
+      const atlas = phaseAtlas(table, ice, sun)
+      expect(atlas.iceAngularRadius).toBe(Math.max(sun, ICE_DISK_FLOOR))
+      expect(atlas.angularRadius).toBe(sun)
+      expect(largest(atlas.texels)).toBeLessThan(65504)
+      expect(atlas.texels.every(Number.isFinite)).toBe(true)
+    }
+    expect(largest(convolveDisk(ice, 0))).toBeGreaterThan(65504)
+    expect(largest(convolveDisk(ice, 0.05 * DEGREE))).toBeGreaterThan(65504)
+    // The droplets keep the sun's own disk: under a point sun they are the
+    // table as generated.
+    const point = phaseAtlas(table, ice, 0)
+    expect(texel(point, 31, 0).slice(0, 3)).toEqual(
+      Array.from(table.phase.subarray(31 * 1024 * 3, 31 * 1024 * 3 + 3)),
+    )
+  })
+
+  it('keeps each ice row’s integral as the droplets’ are kept, at the floor and under Earth’s sun', () => {
+    // 1.2 × 10⁻⁵ at the floor and 6.5 × 10⁻⁶ under Earth's sun, measured.
+    // At 2° it is 1.3 × 10⁻⁴, past the droplets' 10⁻⁴, and no count of
+    // nodes or pieces moves it (1.2 to 1.4 × 10⁻⁴ from eight nodes to
+    // sixty-four, from one piece to pieces of two texels): it is the table's
+    // own, the integral of the curve the convolution reads between texels
+    // against the trapezoid's over the same texels, across a peak only ten
+    // texels wide. It is held at that measured figure, and named.
+    const ice = iceAggregate()
+    for (const sun of [0, 0.05 * DEGREE, EARTH_SUN])
+      expect(
+        worstIntegral(ice, convolveDisk(ice, Math.max(sun, ICE_DISK_FLOOR))),
+      ).toBeLessThan(1e-4)
+    expect(worstIntegral(ice, convolveDisk(ice, 2 * DEGREE))).toBeLessThan(2e-4)
+  })
+
   it('refuses tables it cannot hold', () => {
     const ice = iceAggregate()
     expect(() => phaseAtlas({ ...table, radii: 33 }, ice, 0)).toThrow(
@@ -616,5 +691,81 @@ describe('the phase atlas', () => {
         0,
       ),
     ).toThrow('no light past the diffraction')
+  })
+})
+
+/*
+ * Node's float16, which the core project's lib (ES2024) does not type: the
+ * reference the converter is held to, present at runtime in Node 26.
+ */
+const f16 = {
+  round: (Math as unknown as { f16round(x: number): number }).f16round,
+  view: () =>
+    new DataView(new ArrayBuffer(2)) as unknown as {
+      setFloat16(at: number, value: number): void
+      getFloat16(at: number): number
+      setUint16(at: number, value: number): void
+      getUint16(at: number): number
+    },
+}
+
+describe('the atlas’s half floats', () => {
+  /** `Math.f16round`'s rounding of a value, as bits. */
+  const reference = (value: number): number => {
+    const view = f16.view()
+    view.setFloat16(0, f16.round(value))
+    return view.getUint16(0)
+  }
+
+  it('round a float32 to nearest, ties to even, as `Math.f16round` does, across every exponent', () => {
+    const float = new Float32Array(1)
+    const bits = new Uint32Array(float.buffer)
+    // A stride prime to 2³², so every exponent and both signs are crossed,
+    // a quarter of a million patterns; NaN's payload is not compared.
+    for (let pattern = 0; pattern < 2 ** 32; pattern += 16_411) {
+      bits[0] = pattern
+      if (Number.isNaN(float[0]!)) continue
+      expect(halfBitsOf(float[0]!)).toBe(reference(float[0]!))
+    }
+    // The edges: ties at both ends of a binade and of the subnormals, the
+    // largest half and the tie past it, and the least subnormal's half.
+    for (const value of [
+      0,
+      -0,
+      1,
+      1 + 2 ** -11,
+      1 + 3 * 2 ** -11,
+      2 ** -24,
+      2 ** -25,
+      3 * 2 ** -26,
+      2 ** -14 - 2 ** -25,
+      65504,
+      65519,
+      65520,
+      -65520,
+      Infinity,
+      -Infinity,
+    ])
+      expect(halfBitsOf(value), String(value)).toBe(
+        reference(Math.fround(value)),
+      )
+    expect(halfBitsOf(Number.NaN) & 0x7c00).toBe(0x7c00)
+    expect(halfBitsOf(Number.NaN) & 0x3ff).not.toBe(0)
+  })
+
+  it('leave a table already in half floats as it is, bit for bit', () => {
+    // A half's value is exact in a float32, so a table decoded from halves
+    // must convert back to the bits it was decoded from: the point sun's
+    // atlas is the generated file's halves, whatever the rounding.
+    const view = f16.view()
+    const valueOf = (bits: number): number => {
+      view.setUint16(0, bits)
+      return view.getFloat16(0)
+    }
+    const halves = toHalves(table.phase)
+    expect(halves).toHaveLength(table.phase.length)
+    for (let k = 0; k < halves.length; k += 1)
+      if (valueOf(halves[k]!) !== table.phase[k])
+        expect(valueOf(halves[k]!)).toBe(table.phase[k])
   })
 })

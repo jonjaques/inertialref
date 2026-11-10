@@ -5,7 +5,11 @@ import {
   bakeMultipleScattering,
   bakeSkyMoments,
   bakeTransmittance,
+  iceAggregate,
+  mieDroplets,
+  phaseAtlas,
   type RenderBody,
+  toHalves,
   SKY_TABLE_HEIGHT,
   SKY_TABLE_WIDTH,
 } from '@inertialref/rendering'
@@ -15,7 +19,11 @@ import {
   runInline,
   WorkerPool,
 } from '@inertialref/workers'
-import { bakeAirTables, bakeAtmosphereTask } from './atmosphereTask.ts'
+import {
+  bakeAirTables,
+  bakeAtmosphereTask,
+  convolvePhaseTask,
+} from './atmosphereTask.ts'
 import {
   scatteringCensus,
   scatteringFor,
@@ -41,6 +49,8 @@ import { createGameTaskRegistry } from '../workers/registry.ts'
  */
 
 const skyBakes = vi.hoisted(() => ({ count: 0 }))
+/** The phase atlas's convolutions and the droplet table's decodes, counted as the sky's bakes are. */
+const phaseWork = vi.hoisted(() => ({ atlases: 0, decodes: 0 }))
 vi.mock('@inertialref/rendering', async (importOriginal) => {
   const real = await importOriginal<typeof import('@inertialref/rendering')>()
   return {
@@ -49,11 +59,21 @@ vi.mock('@inertialref/rendering', async (importOriginal) => {
       skyBakes.count += 1
       return real.bakeSkyMoments(...args)
     },
+    phaseAtlas: (...args: Parameters<typeof real.phaseAtlas>) => {
+      phaseWork.atlases += 1
+      return real.phaseAtlas(...args)
+    },
+    mieDroplets: () => {
+      phaseWork.decodes += 1
+      return real.mieDroplets()
+    },
   }
 })
 
 beforeEach(() => {
   skyBakes.count = 0
+  phaseWork.atlases = 0
+  phaseWork.decodes = 0
 })
 
 // Earth's authored haze, and the shell ratio and heights `buildScene` gives it.
@@ -176,13 +196,16 @@ describe('render.bakeAtmosphere', () => {
     }
   })
 
-  it('is the shared registry plus this one task, and nothing shared is lost', () => {
+  it('is the shared registry plus the client’s own tasks, and nothing shared is lost', () => {
     const shared = createTaskRegistry().names()
     const game = createGameTaskRegistry().names()
-    expect(game).toEqual([...shared, 'render.bakeAtmosphere'].sort())
-    // The shared registry does not know it: the layer graph forbids the import
-    // and the headless runner would never ask.
+    expect(game).toEqual(
+      [...shared, 'render.bakeAtmosphere', 'render.convolvePhase'].sort(),
+    )
+    // The shared registry does not know them: the layer graph forbids the
+    // import and the headless runner would never ask.
     expect(shared).not.toContain('render.bakeAtmosphere')
+    expect(shared).not.toContain('render.convolvePhase')
   })
 })
 
@@ -285,5 +308,67 @@ describe('the scattering cache', () => {
       scatteringOf({ pool: noPool }, body(1.08), { sky: true })?.sky,
     ).toBeDefined()
     expect(skyBakes.count).toBe(2)
+  })
+})
+
+/** Earth's sun's angular radius, radians (phase 1 design §5.4). */
+const EARTH_SUN = 0.265 * (Math.PI / 180)
+
+describe('render.convolvePhase', () => {
+  it('convolves what the main thread convolves, and answers for the radius it was asked', async () => {
+    const answer = await runInline(convolvePhaseTask, {
+      angularRadius: EARTH_SUN,
+    })
+    const here = phaseAtlas(mieDroplets(), iceAggregate(), EARTH_SUN)
+    expect(answer.angularRadius).toBe(EARTH_SUN)
+    expect([here.width, here.height]).toEqual([1024, 64])
+    expect(answer.halves).toEqual(toHalves(here.texels))
+  })
+
+  it('crosses the worker boundary intact through the game registry, its 512 KB moved rather than copied', async () => {
+    const pool = inlinePool()
+    try {
+      const request = { angularRadius: 2 * EARTH_SUN }
+      const expected = await runInline(convolvePhaseTask, request)
+      const moved = convolvePhaseTask.transfers!(expected)
+      expect(moved.map((buffer) => buffer.byteLength)).toEqual([
+        1024 * 64 * 4 * 2,
+      ])
+      const crossed = await pool.submit(convolvePhaseTask, request).result
+      expect(crossed.angularRadius).toBe(request.angularRadius)
+      expect([...crossed.halves]).toEqual([
+        ...toHalves(
+          phaseAtlas(mieDroplets(), iceAggregate(), request.angularRadius)
+            .texels,
+        ),
+      ])
+    } finally {
+      pool.terminate()
+    }
+  })
+
+  it('decodes the committed tables once a worker, on its first ask', async () => {
+    await runInline(convolvePhaseTask, { angularRadius: EARTH_SUN })
+    const decoded = phaseWork.decodes
+    // Once, or not at all where an earlier test's ask decoded them already.
+    expect(decoded).toBeLessThanOrEqual(1)
+    await runInline(convolvePhaseTask, { angularRadius: 3 * EARTH_SUN })
+    expect(phaseWork.decodes).toBe(decoded)
+    expect(phaseWork.atlases).toBe(2)
+  })
+
+  it('costs a page without clouds nothing: a registry served and a haze baked convolve and decode no table', async () => {
+    // The page without `?clouds=1` builds no cloud system, so no `CloudPhase`
+    // and no `serve` (`cloudSensor.gpu.test.ts`, "builds nothing of the
+    // clouds"). What it does build is the worker's registry, which holds
+    // this task, and the air's bake on the same pool.
+    const pool = inlinePool()
+    try {
+      createGameTaskRegistry()
+      await warmScattering(pool, hazeAt(1.09), topRatio, heights)
+      expect(phaseWork).toEqual({ atlases: 0, decodes: 0 })
+    } finally {
+      pool.terminate()
+    }
   })
 })
