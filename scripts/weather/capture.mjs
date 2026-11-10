@@ -817,6 +817,21 @@ export async function rmseOf(a, b) {
   return Number(match[1])
 }
 
+/**
+ * The end of a run: write what it took, then let go of the machine whatever
+ * the write did. The rig's Chrome holds the GPU lock, so a full disk or a
+ * removed directory under `record.json` must not leave the lock and the
+ * browser held against every other job on the machine.
+ */
+export async function finish(write, release, down) {
+  try {
+    await write()
+  } finally {
+    release()
+    await down()
+  }
+}
+
 /* ------------------------------------------------------------- the plan --- */
 
 /*
@@ -1081,24 +1096,29 @@ async function main() {
     await takeCasts({ options, out, record, drive, say })
     await takeSamples({ options, out, record, drive, say, jsValues })
   } finally {
-    if (options.pairs > 0)
-      await writeFile(
-        path.join(out, 'floor.json'),
-        `${JSON.stringify(floor, null, 1)}\n`,
-      )
-    await writeFile(
-      path.join(out, 'record.json'),
-      `${JSON.stringify(record, null, 1)}\n`,
+    await finish(
+      async () => {
+        if (options.pairs > 0)
+          await writeFile(
+            path.join(out, 'floor.json'),
+            `${JSON.stringify(floor, null, 1)}\n`,
+          )
+        await writeFile(
+          path.join(out, 'record.json'),
+          `${JSON.stringify(record, null, 1)}\n`,
+        )
+      },
+      () => gpu.release(),
+      async () => {
+        await promisify(execFile)(
+          process.execPath,
+          [DRIVE, '--port', options.port, '--down'],
+          { cwd: ROOT },
+        ).catch(() => {})
+        const left = await rigLeft(options.port)
+        if (left !== null) console.error(left)
+      },
     )
-    gpu.release()
-    // The rig comes down whatever happened: its Chrome holds the GPU lock.
-    await promisify(execFile)(
-      process.execPath,
-      [DRIVE, '--port', options.port, '--down'],
-      { cwd: ROOT },
-    ).catch(() => {})
-    const left = await rigLeft(options.port)
-    if (left !== null) console.error(left)
   }
   checkRecord(record)
   say(

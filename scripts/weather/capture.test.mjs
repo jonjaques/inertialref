@@ -19,6 +19,7 @@ import {
   checkStill,
   cutFrom,
   dataRoot,
+  finish,
   freshPlate,
   keepShot,
   markCloudsOnly,
@@ -804,6 +805,22 @@ describe('the files a run keeps', () => {
     expect(freshPlate(record, 'weather-e1-cumulus-orbit')).toBe('e1-volume.png')
     // `--only g1 --cut e1` took no E1 plate: nothing to compare with.
     expect(freshPlate({ stills: [] }, 'weather-e1-cumulus-orbit')).toBeNull()
+  })
+})
+
+describe('the end of a run', () => {
+  it('lets go of the GPU lock and the rig when the record cannot be written', async () => {
+    const done = []
+    await expect(
+      finish(
+        async () => {
+          throw new Error('ENOSPC: no space left on device')
+        },
+        () => done.push('release'),
+        async () => done.push('down'),
+      ),
+    ).rejects.toThrow(/ENOSPC/)
+    expect(done).toEqual(['release', 'down'])
   })
 })
 
