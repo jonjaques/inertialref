@@ -156,7 +156,7 @@ export const SCENARIOS = Object.freeze({
     levers: { scenario: 'broken-horizon', flySpeed: 7700 },
   },
   'pair-moon': {
-    stance: { kind: 'rise', preset: 'far-shore', address: MOON },
+    stance: { kind: 'rise', address: MOON },
     levers: { scenario: 'fair-cumulus', served: MOON, second: FAR },
   },
   'pair-neighbor': {
@@ -176,7 +176,7 @@ export const SCENARIOS = Object.freeze({
   // The preset's own stance, 80 m over the shore facing the low sun, raised
   // into a gap of the layer.
   sunset: {
-    stance: { kind: 'raise', preset: 'far-shore', address: FAR, height: 1500 },
+    stance: { kind: 'raise', address: FAR, height: 1500 },
     levers: { scenario: 'near-gap-far' },
   },
   fog: { stance: basin(2, 10), levers: { scenario: 'fog' } },
@@ -228,10 +228,14 @@ export function levers(scenario, over = {}) {
   return set
 }
 
-/** What every run carries for `page.mjs`: where it stands, and its levers off. */
+/**
+ * What every run carries for `page.mjs`: the preset its page boots to and
+ * its stance starts from, where it stands, and its levers off.
+ */
 const stood = (scenario, size) => ({
   scenario,
   size,
+  preset: presetOf(scenario),
   stance: SCENARIOS[scenario].stance,
   off: levers(scenario, OFF),
 })
@@ -400,7 +404,7 @@ export function session(run, { url, port, fresh }) {
     : QUERY
   return [
     ...['--port', String(port), '--url', url, '--no-serve'],
-    ...['--preset', presetOf(run.scenario)],
+    ...['--preset', run.preset],
     ...query.flatMap((q) => ['--query', q]),
     ...['--width', String(width), '--height', String(height)],
     ...['--dpr', String(dpr), '--max-px', '0', '--quiet', '--json'],
@@ -421,7 +425,7 @@ export function boots(held, run) {
     return true
   }
   const port = portOf(run)
-  const page = `${run.size}|${presetOf(run.scenario)}`
+  const page = `${run.size}|${run.preset}`
   const fresh = held.get(port) !== page
   held.set(port, page)
   return fresh

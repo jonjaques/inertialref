@@ -407,7 +407,14 @@ function fakePage({
   pending = false,
   gpu = [6, 5, 7],
 } = {}) {
-  const calls = { passes: [], gpu: [], levers: [], captured: [] }
+  // `lens` is whose lens the camera wears: a preset's, or a rise's.
+  const calls = {
+    passes: [],
+    gpu: [],
+    levers: [],
+    captured: [],
+    lens: 'booted',
+  }
   let reads = 0
   // The frames the page has drawn: one a tick, as the report counts them.
   let drawn = 0
@@ -474,6 +481,23 @@ function fakePage({
       relative: Math.abs(a.luminance[0] - b.luminance[0]) / a.luminance[0],
     }),
     light: () => ({ sun: 37.5, phase: null, lit: true }),
+    // A picture wears its lens, a rise the one it solves; a visit sets none.
+    preset: (id) => {
+      calls.lens = id
+      return {
+        picture: {
+          id,
+          time: 100_331.95,
+          address: 'x',
+          framing: { kind: 'camera' },
+          lens: { focalLength: 20.8 },
+        },
+      }
+    },
+    takePicture: (picture) => {
+      calls.picture = picture
+      if (picture.framing.kind === 'rise') calls.lens = 'the rise'
+    },
     visit: (address, options) => {
       calls.visit = { address, options }
     },
@@ -605,6 +629,31 @@ describe('the page steps', () => {
       (-0.13 * 180) / Math.PI,
       12,
     )
+  })
+
+  it('stand every run at its own preset’s lens, whatever lens the run before it left', async () => {
+    const page = fakePage()
+    const moon = target('targets/landed/landed/pair-moon/1080p/steady')
+    await send(page, moon, 'stance')
+    expect(page.calls.lens).toBe('the rise')
+    // The runs campaign 2 took after the moon's on the same page: each stood
+    // at the ground's stance, or the horizon's, through the rise's lens.
+    for (const id of [
+      'targets/landed/landed/pair-neighbor/1080p/steady',
+      'targets/landed/landed/ground/1080p/cut',
+      'targets/landed/landed/horizon/retina/scrub',
+      'targets/landed/landed/orbit/1080p/fly',
+    ]) {
+      await send(page, moon, 'stance')
+      await send(page, target(id), 'stance')
+      expect(page.calls.lens, id).toBe('far-shore')
+    }
+    await send(
+      page,
+      target('targets/landed/clouds/earth-ground/1080p/fly'),
+      'stance',
+    )
+    expect(page.calls.lens).toBe('blue-marble')
   })
 
   it('refuse a page with no cloud system before standing anywhere', async () => {

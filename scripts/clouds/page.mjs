@@ -119,12 +119,21 @@ export async function cloudStep(step) {
         )
       set(step.levers)
       const at = step.stance
+      /*
+       * Every stance from its preset's picture: its lens, its time and its
+       * processing, as the page booted to them. One page serves every run of
+       * its size and preset in turn, and `ir.visit` sets no lens, so a stance
+       * that only visited would stand at whatever lens the run before it
+       * left: the moon's rise fits its own, and every run after it on that
+       * page measured through it.
+       */
+      const { picture: preset } = ir.preset(step.preset)
       if (at.kind === 'visit') ir.visit(at.address, at.options)
       else if (at.kind === 'rise') {
         // `ir.rise()` solves the lens and leaves it unapplied; a picture with
-        // a rise framing wears it, so the moon's rise is far-shore's picture
+        // a rise framing wears it, so the moon's rise is the preset's picture
         // with its address and framing swapped and no lens of its own.
-        const picture = { ...ir.preset(at.preset).picture }
+        const picture = { ...preset }
         delete picture.lens
         ir.takePicture({
           ...picture,
@@ -137,9 +146,8 @@ export async function cloudStep(step) {
       } else if (at.kind === 'raise') {
         // The preset's own stance, raised: `ir.visit` sets every field it is
         // not given to its default, so each is read back and passed again.
-        ir.preset(at.preset)
         const was = ir.observatory.status().surface?.stance
-        if (was == null) throw new Error(`${at.preset} leaves no stance`)
+        if (was == null) throw new Error(`${step.preset} leaves no stance`)
         ir.visit(at.address, {
           latitude: degrees(was.latitude),
           longitude: degrees(was.longitude),
@@ -463,7 +471,12 @@ export function plan(run, shots = {}) {
     ]
   return [
     install,
-    js('stance', { kind: 'stance', stance: run.stance, levers: run.off }),
+    js('stance', {
+      kind: 'stance',
+      stance: run.stance,
+      preset: run.preset,
+      levers: run.off,
+    }),
     flag('settle', '--settle', '30000'),
     flag('wait', '--wait', '1000'),
     RATE,
