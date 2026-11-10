@@ -35,6 +35,7 @@ import {
   ivec2,
   nodeObject,
   pass,
+  positionGeometry,
   screenUV,
   storage,
   textureLoad,
@@ -60,6 +61,7 @@ import {
   CHAIN_PASS_LABEL,
   type CloudOverForm,
   CloudOverPassNode,
+  type CloudOverSource,
   OVER_PASS_LABEL,
 } from './cloudOverPass.ts'
 import { type CloudRig, cloudRig } from './cloudSystemRig.ts'
@@ -343,7 +345,7 @@ interface Chain {
 const PASS_A = 'pass A'
 
 /** The sensor's scene pass and the over pass, in a post quad's dependency sum. */
-function chain(scene: Scene): Chain {
+function chain(scene: Scene, composite: CloudOverSource | null = null): Chain {
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 1e10)
   camera.layers.enable(OVER_CLOUDS_LAYER)
   camera.updateMatrixWorld()
@@ -361,7 +363,13 @@ function chain(scene: Scene): Chain {
     texture.type = attachmentType(row)
   }
   scenePass.updateBeforeType = NodeUpdateType.RENDER
-  const over = new CloudOverPassNode(scene, camera, scenePass.renderTarget, mrt)
+  const over = new CloudOverPassNode(
+    scene,
+    camera,
+    scenePass.renderTarget,
+    mrt,
+    composite,
+  )
   const post = new NodeMaterial()
   post.fragmentNode = vec4(scenePass.getTextureNode().rgb.min(65_504).mul(0), 0)
     .add(nodeObject(over).min(65_504).mul(0))
@@ -588,6 +596,52 @@ describe('the over pass', () => {
       expect(warned()).toHaveLength(1)
     } finally {
       detach()
+      frame.dispose()
+      material.dispose()
+    }
+  })
+
+  it('in the chain form lands on the rows the scene pass resolves into, and follows them to another size', async () => {
+    // A stand-in for the composite, alone in a scene of its own: a plane
+    // over the frame that adds a quarter of blue to what it lands on.
+    const material = added(vec4(0, 0, 0.25, 1))
+    material.depthTest = false
+    material.vertexNode = vec4(positionGeometry.xy, 0, 1)
+    const plane = new Mesh(new PlaneGeometry(2, 2), material)
+    plane.layers.enableAll()
+    plane.frustumCulled = false
+    const alone = new Scene()
+    alone.add(plane)
+    const { scene, ground, behind, inFront } = layered()
+    const frame = chain(scene, { over: alone })
+    const draws = counted(ground, behind, inFront)
+    const lit = LAYERED.map(([r, g, b]) => [r, g, b + 0.25])
+    try {
+      // One scene pass on every layer, then the plane over its resolve.
+      frame.passes(false)
+      frame.over.form = 'chain'
+      await checked(() => frame.frame())
+      expect(draws.draws).toEqual([1, 1, 1])
+      expectNear(
+        await texels(frame.scenePass.renderTarget.texture, QUADRANTS),
+        lit,
+      )
+      // The scene target is made again at the new size, and its GPU
+      // textures with it: a chain form still pointed at the ones it first
+      // found would draw into textures the pass has left.
+      renderer.setSize(2 * SIZE, 2 * SIZE, false)
+      await checked(() => frame.frame())
+      await checked(() => frame.frame())
+      expect(frame.scenePass.renderTarget.width).toBe(2 * SIZE)
+      expectNear(
+        await texels(
+          frame.scenePass.renderTarget.texture,
+          QUADRANTS.map(([x, y]) => [2 * x, 2 * y] as const),
+        ),
+        lit,
+      )
+    } finally {
+      renderer.setSize(SIZE, SIZE, false)
       frame.dispose()
       material.dispose()
     }
