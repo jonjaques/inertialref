@@ -185,7 +185,10 @@ describe('the field’s shape', () => {
     expect(fieldLevel(weather, 4800)).toBe(-1)
     expect(cloudFieldAt(weather, clock, sun, up(1500), 50).level).toBe(0)
     expect(cloudFieldAt(weather, clock, sun, up(3000), 50).level).toBe(-1)
-  })
+    // 2.3 to 4.0 s in the root suite on this Mac mini (Apple M6), four
+    // workers; CI's hosted runner is 2.1 to 3.9 times slower, up to 16 s.
+    // Five times that.
+  }, 80_000)
 
   it('answers every point and column with a sample and a depth that are finite', () => {
     const sample = cloudFieldAt(weather, clock, sun, up(1500), 50)
