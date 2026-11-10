@@ -48,7 +48,7 @@ import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
  * textures of the real format and kind beside that analytic medium, so a
  * kernel compiled in a test binds what the real one binds: WebGPU's default
  * device allows 16 sampled and 4 storage textures a stage, the system's
- * trace binds 10 of the 16 and writes 4 of 4
+ * trace binds 11 of the 16 and writes 4 of 4
  * (`cloudTrace.gpu.test.ts` counts it), and a count that only integration
  * could see would be a format change after every package had built on the
  * old one.
