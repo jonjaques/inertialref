@@ -8,6 +8,7 @@ import {
   LineSegments,
   type InterleavedBufferAttribute,
 } from 'three/webgpu'
+import { uniform } from 'three/tsl'
 import { LineSegments2 } from 'three/addons/lines/webgpu/LineSegments2.js'
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
 import { Vec, type Vec3 } from '@inertialref/spatial'
@@ -27,7 +28,15 @@ export function EntryTrace({ engine }: { engine: GameEngine }) {
   const group = useRef<Group>(null)
   const rope = useMemo(() => new SpringRope(), [])
   const reducedMotion = useReducedMotion()
-  const materials = useMemo(() => createEntryTraceMaterials(), [])
+  // The target body's compression, written each frame: the trace is drawn in
+  // its placement, and the clouds' knots are in true meters.
+  const compression = useMemo(() => uniform(1), [])
+  const materials = useMemo(() => {
+    const handle = engine.cloudFront
+    return createEntryTraceMaterials(
+      handle === null ? undefined : { handle, compression },
+    )
+  }, [engine, compression])
   const parts = useMemo(() => {
     const wide = (count: number, material: typeof materials.ring) =>
       new LineSegments2(
@@ -99,6 +108,7 @@ export function EntryTrace({ engine }: { engine: GameEngine }) {
       orientation.w,
     )
     parent.scale.setScalar(placement.scale)
+    compression.value = placement.compression
 
     const preview = observatory.entryArcPreview(undefined, aim, SAMPLES)
     if (preview === null) {

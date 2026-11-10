@@ -29,8 +29,9 @@ import {
   vec4,
 } from 'three/tsl'
 import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
-import { cloudFront } from './cloudFront.ts'
+import { cloudFront, cloudFrontThrough } from './cloudFront.ts'
 import { cloudStorageTexture } from './cloudNodes.ts'
+import { createCloudFrontHandle } from './cloudSystem.ts'
 import type { CloudTraceTextures } from './cloudTrace.ts'
 import { createCloudUniforms } from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
@@ -325,5 +326,59 @@ describe('the knot lookup', () => {
           `texel (${i}, ${j}): ${red}`,
         ).toBeLessThanOrEqual(code * 2 ** -10 + 1e-6)
       }
+  })
+})
+
+describe('the front handle, as the materials drawn over the clouds read it', () => {
+  /*
+   * A material is built before the first cloud frame, so its texture nodes
+   * compile against the handle's stand-in and are pointed at the trace by
+   * the follower when the system takes the handle. These hold the swap both
+   * ways on one program, through the trace textures the system writes:
+   * clear air before, the knots the bare `cloudFront` reads once it follows,
+   * and clear air again after a frame with no clouds.
+   */
+  const handle = createCloudFrontHandle()
+  const seen = cloudFrontThrough(handle, float(4_000))
+  const direct = cloudFront(trace, uniforms, fragmentScreen(), float(4_000))
+  const packed = (front: typeof seen) =>
+    vec4(front.transmittance, front.light.div(ATMOSPHERE_GAIN).x, 0, 1)
+  const graph = packed(seen)
+
+  it('reads clear air before the handle follows a trace', async () => {
+    await writeKnots(1, 0)
+    handle.follow(null)
+    const pixels = await gpu.drawGraph(graph, { float: true })
+    for (const [x, y] of [
+      [0, 0],
+      [16, 16],
+      [31, 31],
+    ] as const) {
+      expect(pixels.at(x, y)[0]).toBe(1)
+      expect(pixels.at(x, y)[1]).toBe(0)
+    }
+  })
+
+  it('reads what `cloudFront` reads once it follows one, and clear air again after', async () => {
+    await writeKnots(1, 0)
+    handle.screen.traceSize.value.set(TRACE, TRACE)
+    handle.follow(trace)
+    const through = await gpu.drawGraph(graph, { float: true })
+    const bare = await gpu.drawGraph(packed(direct), { float: true })
+    const { through: expected } = front(4, 1, 0)
+    for (let y = 0; y < SIZE; y += 1)
+      for (let x = 0; x < SIZE; x += 1) {
+        expect(through.at(x, y)[0]).toBe(bare.at(x, y)[0])
+        expect(through.at(x, y)[1]).toBe(bare.at(x, y)[1])
+      }
+    // Not a vacuous equality: the point is behind the lit near layer.
+    expect(Math.abs(through.at(16, 16)[0] - expected)).toBeLessThan(
+      WITHIN * expected,
+    )
+    expect(through.at(16, 16)[1]).toBeGreaterThan(0.1)
+    handle.follow(null)
+    const after = await gpu.drawGraph(graph, { float: true })
+    expect(after.at(16, 16)[0]).toBe(1)
+    expect(after.at(16, 16)[1]).toBe(0)
   })
 })
