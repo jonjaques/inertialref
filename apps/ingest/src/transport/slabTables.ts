@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
+import { writeFileSync } from 'node:fs'
 import { rootSeed } from '@inertialref/procedural'
 import {
   firstOrder,
@@ -18,31 +17,33 @@ import {
   scaledMoments,
 } from './moments.ts'
 import { phaseTable, traceRow, type TraceRow } from './monteCarloSlab.ts'
+import { describeRow } from './slabJudge.ts'
+import { RENDERING, loadStage, saveStage } from './slabStages.ts'
 import {
-  higherOrders,
-  sourceTerms,
-  type SourceFit,
-  type SourceGrid,
-  type SourceMedium,
-  type SourceTable,
-} from './slabSource.ts'
+  NUMBERS_TEXT,
+  comment,
+  five,
+  numbersText,
+  percent,
+  recordsText,
+} from './slabText.ts'
 
 /*
  * The slab tables' generator. The oracle's rows are minutes of arithmetic,
  * so it runs in stages, each a process, each writing what it made under
- * `.data/weather/slab/`; `write` then reads them all and writes the two
- * generated files. Up to four stages run at once:
+ * `.data/weather/slab/`; `write` then reads them all and writes the
+ * reference. Up to four stages run at once:
  *
  *   node apps/ingest/src/transport/slabTables.ts reference 6     (and 10, 16)
- *   node apps/ingest/src/transport/slabTables.ts source 16 0 1   (and 24, 32: nodes, part, parts)
- *   node apps/ingest/src/transport/slabTables.ts merge 16 1      (a table's parts as one)
  *   node apps/ingest/src/transport/slabTables.ts flux
  *   node apps/ingest/src/transport/slabTables.ts montecarlo 5    (and 10, 20, 50, bill, glory)
  *   node apps/ingest/src/transport/slabTables.ts write
- *   pnpm exec prettier -w packages/rendering/src/slabReference.generated.ts \
- *     packages/rendering/src/slabSource.generated.ts
+ *   pnpm exec prettier -w packages/rendering/src/slabReference.generated.ts
  *   node apps/ingest/src/transport/octaveFit.ts                  (it reads the reference)
  *   pnpm exec prettier -w packages/rendering/src/cloudOctaves.ts
+ *
+ * The source tables are `slabSourceTable.ts`'s, which reads the `reference`
+ * stages made here.
  *
  * Nothing a stage writes, and nothing in a generated file, names the machine
  * or the time: two runs are byte-equal. What a run cost goes in its commit.
@@ -115,6 +116,12 @@ export interface SlabPopulation {
   readonly share: number
   /** g′ = (g − f_δ)/(1 − f_δ), from the bands' mean g. */
   readonly asymmetry: number
+  /**
+   * χ′₁, the scaled phase's own first moment, the bands' mean. It is over
+   * g′ by f_δ·(1 − g_d)/(1 − f_δ), because the pattern taken out has a first
+   * moment g_d of its own under one: its wings fall as θ⁻³.
+   */
+  readonly moment: number
   readonly bands: readonly SlabBand[]
   /** A digest of the moments, to ten figures: what a generated file names its input by. */
   readonly digest: string
@@ -145,6 +152,9 @@ export function slabPopulation(radius: number): SlabPopulation {
     radius,
     share: droplets.share,
     asymmetry: (g - droplets.share) / (1 - droplets.share),
+    moment:
+      bands.reduce((sum, band) => sum + band.scaled.moments[1]!, 0) /
+      bands.length,
     bands,
     digest: hash.digest('hex').slice(0, 16),
   }
@@ -396,205 +406,8 @@ export function worstDifference<Row extends { readonly domain: boolean }>(
   return { error, row: worst, band }
 }
 
-/* ------------------------------------------------------------ the source */
-
-/** The source table's axes but its node count, which the reconstruction chooses. */
-export const SOURCE_AXES = {
-  suns: 8,
-  sunMuMin: 0.05,
-  depthScale: 0.02,
-  depthMax: 16,
-} as const
-
-/** µm: the radius row the source table is cut at. */
+/** µm: the radius row the source tables and the black-surface flux are cut at. */
 export const SOURCE_RADIUS = 10
-
-/** The medium the source table is cut from: a population's three bands as one, scaled. */
-export function sourceMedium(population: SlabPopulation): SourceMedium {
-  const moments = meanMoments(
-    population.bands.map((band) => band.scaled.moments as Float64Array),
-  )
-  const cap = capMoments(SOLAR_ANGULAR_RADIUS, moments.length)
-  return {
-    moments,
-    convolved: moments.map((value, l) => value * cap[l]!),
-    asymmetry: population.asymmetry,
-  }
-}
-
-/** One table's reconstruction against the oracle's rows. */
-export interface Reconstruction {
-  /** The worst relative error over the domain's grid and held-out slabs. */
-  readonly error: number
-  /** The same over each set alone, and at each thin depth. */
-  readonly grid: number
-  readonly held: number
-  readonly thin: readonly number[]
-  /** Root mean square over the grid and the held-out slabs. */
-  readonly rms: number
-  /**
-   * The worst relative error of those slabs' reflected flux, the higher
-   * orders summed by the rubric's quadrature: eight Gauss points in μ and
-   * sixteen azimuths.
-   */
-  readonly flux: number
-  /** The row that carries `error`, and its band. */
-  readonly worst: string
-}
-
-/** What a population's rows need of it to be reconstructed. */
-export interface SlabScale {
-  readonly radius: number
-  readonly share: number
-  readonly asymmetry: number
-}
-
-/** What a march's source adds to a row's first order, through the table's own read. */
-export function reconstruct(
-  table: SourceTable,
-  lobeAsymmetry: number,
-  scale: SlabScale,
-  row: {
-    readonly depth: number
-    readonly sunMu: number
-    readonly viewMu: number
-    readonly azimuth: number
-    readonly side: SlabSide
-  },
-): number {
-  return higherOrders(
-    table,
-    {
-      depth: row.depth * (1 - scale.share),
-      sunMu: row.sunMu,
-      viewMu: row.viewMu,
-      azimuth: row.azimuth,
-      side: row.side,
-    },
-    scale.asymmetry,
-    lobeAsymmetry,
-  )
-}
-
-type JudgedRow = Pick<
-  ReferenceRow,
-  | 'radius'
-  | 'depth'
-  | 'sunMu'
-  | 'viewMu'
-  | 'azimuth'
-  | 'side'
-  | 'set'
-  | 'angle'
-  | 'domain'
-  | 'scaled'
-  | 'first'
->
-
-type JudgedFlux = Pick<
-  ReferenceFlux,
-  'radius' | 'depth' | 'sunMu' | 'set' | 'scaled' | 'first'
->
-
-/** The rubric's quadrature for a flux: eight Gauss points in μ, sixteen azimuths. */
-const FLUX_RULE = /*@__PURE__*/ halfRangeGauss(8)
-const FLUX_AZIMUTHS = 16
-
-/** The worst relative error of the reflected flux a table rebuilds. */
-function judgeFlux(
-  table: SourceTable,
-  lobeAsymmetry: number,
-  scales: readonly SlabScale[],
-  fluxes: readonly JudgedFlux[],
-): number {
-  let worst = 0
-  for (const flux of fluxes) {
-    if (flux.set === 'thin') continue
-    const scale = scales.find((item) => item.radius === flux.radius)!
-    let higher = 0
-    for (let k = 0; k < FLUX_RULE.nodes.length; k += 1)
-      for (let a = 0; a < FLUX_AZIMUTHS; a += 1) {
-        // Midpoints around the whole circle; the source is even in azimuth.
-        const around = (360 * (a + 0.5)) / FLUX_AZIMUTHS
-        higher +=
-          FLUX_RULE.weights[k]! *
-          FLUX_RULE.nodes[k]! *
-          ((2 * Math.PI) / FLUX_AZIMUTHS) *
-          reconstruct(table, lobeAsymmetry, scale, {
-            depth: flux.depth,
-            sunMu: flux.sunMu,
-            viewMu: FLUX_RULE.nodes[k]!,
-            azimuth: around > 180 ? 360 - around : around,
-            side: 'reflected',
-          })
-      }
-    flux.scaled.forEach((exact, band) => {
-      worst = Math.max(
-        worst,
-        Math.abs((flux.first[band]! + higher / flux.sunMu) / exact - 1),
-      )
-    })
-  }
-  return worst
-}
-
-/** A table's error at every row of the domain, and in every slab's flux. */
-export function judge(
-  table: SourceTable,
-  lobeAsymmetry: number,
-  scales: readonly SlabScale[],
-  rows: readonly JudgedRow[],
-  fluxes: readonly JudgedFlux[],
-): Reconstruction {
-  const worst = { grid: 0, held: 0 }
-  const thin = SLAB_DOMAIN.depths.thin.map(() => 0)
-  let squares = 0
-  let count = 0
-  let error = 0
-  let where = ''
-  for (const row of rows) {
-    if (!row.domain) continue
-    const scale = scales.find((item) => item.radius === row.radius)!
-    const higher = reconstruct(table, lobeAsymmetry, scale, row)
-    row.scaled.forEach((exact, band) => {
-      const off = Math.abs((row.first[band]! + higher) / exact - 1)
-      if (row.set === 'thin') {
-        const at = SLAB_DOMAIN.depths.thin.indexOf(row.depth as 0.5)
-        thin[at] = Math.max(thin[at]!, off)
-        return
-      }
-      worst[row.set] = Math.max(worst[row.set], off)
-      squares += off * off
-      count += 1
-      if (off > error) {
-        error = off
-        where = describeRow(row, band)
-      }
-    })
-  }
-  return {
-    error,
-    grid: worst.grid,
-    held: worst.held,
-    thin,
-    rms: Math.sqrt(squares / Math.max(1, count)),
-    flux: judgeFlux(table, lobeAsymmetry, scales, fluxes),
-    worst: where,
-  }
-}
-
-const BAND_NAMES = ['680 nm', '550 nm', '440 nm']
-
-/** A row in a sentence. */
-export function describeRow(
-  row: Pick<
-    ReferenceRow,
-    'radius' | 'depth' | 'sunMu' | 'viewMu' | 'azimuth' | 'side' | 'angle'
-  >,
-  band: number,
-): string {
-  return `${row.radius} µm, ${BAND_NAMES[band]}, τ ${row.depth}, μ₀ ${row.sunMu}, μ ${row.viewMu} at ${row.azimuth}°, ${row.side}, ${row.angle.toFixed(1)}° from the sun's direction`
-}
 
 /* -------------------------------------------------- the black-surface flux */
 
@@ -905,130 +718,6 @@ export function gloryStage(
 /* -------------------------------------------------------------- the files */
 
 /**
- * Where the stages are kept. `IR_SLAB_DATA` names another directory, so two
- * whole runs can stand side by side and be compared.
- */
-const DATA =
-  process.env.IR_SLAB_DATA ??
-  fileURLToPath(new URL('../../../../.data/weather/slab/', import.meta.url))
-const RENDERING = fileURLToPath(
-  new URL('../../../../packages/rendering/src/', import.meta.url),
-)
-
-function save(name: string, value: unknown): void {
-  mkdirSync(DATA, { recursive: true })
-  writeFileSync(`${DATA}${name}.json`, JSON.stringify(value))
-  console.log(`slabTables: wrote ${DATA}${name}.json`)
-}
-
-function load<Value>(name: string): Value {
-  return JSON.parse(readFileSync(`${DATA}${name}.json`, 'utf8')) as Value
-}
-
-/** A stage's source terms, as the stage file holds them. */
-interface SourceStage {
-  readonly nodes: number
-  readonly streams: number
-  readonly lobe: number
-  readonly asymmetry: number
-  readonly digest: string
-  readonly delta: number
-  readonly modes: number
-  readonly fits: Record<SourceFit | 'absolutePlain' | 'relativePlain', number[]>
-}
-
-/** Five figures: a radiance's rounding is at most 5 × 10⁻⁵ of it, a hundredth of the oracle's own convergence. */
-const five = (value: number): number => Number(value.toPrecision(5))
-const percent = (value: number): string => `${(100 * value).toFixed(2)}%`
-
-/** The shortest decimal that rounds to the same half float as `value`. */
-export function halfDecimal(value: number): number {
-  const half = Math.f16round(value)
-  for (let digits = 1; digits <= 9; digits += 1) {
-    const short = Number(half.toPrecision(digits))
-    if (Math.f16round(short) === half) return short
-  }
-  return half
-}
-
-/** A source stage as a table a march reads, by one of its fits. */
-export function stageTable(
-  stage: SourceStage,
-  fit: keyof SourceStage['fits'],
-): SourceTable {
-  return {
-    ...SOURCE_AXES,
-    nodes: stage.nodes,
-    terms: stage.fits[fit].map(halfDecimal),
-  }
-}
-
-/**
- * A header: runs of lines are paragraphs, filled to 76 columns, so a figure
- * of any length leaves no line long; an empty line parts two paragraphs,
- * and a line that starts with two spaces is kept as it is written.
- */
-function comment(lines: readonly string[]): string {
-  const out: string[] = []
-  let words: string[] = []
-  const fill = (): void => {
-    let line = ''
-    for (const word of words) {
-      if (line !== '' && line.length + 1 + word.length > 76) {
-        out.push(line)
-        line = word
-      } else line = line === '' ? word : `${line} ${word}`
-    }
-    if (line !== '') out.push(line)
-    words = []
-  }
-  for (const line of lines) {
-    if (line === '' || line.startsWith('  ')) {
-      fill()
-      out.push(line)
-    } else words.push(...line.split(' '))
-  }
-  fill()
-  return (
-    '/*\n' +
-    out.map((line) => (line ? ` * ${line}` : ' *')).join('\n') +
-    '\n */\n'
-  )
-}
-
-/**
- * Numbers as a generated file holds them: text, parsed where the file is
- * read. An array literal of thirty thousand numbers is thirty thousand
- * operands to the complexity score, and a number a line is thirty thousand
- * lines to it: either way it reads a table as the most complex file in the
- * tree.
- */
-function numbersText(values: readonly number[], perLine: number): string {
-  const lines: string[] = []
-  for (let at = 0; at < values.length; at += perLine)
-    lines.push(values.slice(at, at + perLine).join(' '))
-  return '`\n' + lines.join('\n') + '\n`'
-}
-
-/** Records as a generated file holds them, for the same reason: JSON text, a record a line. */
-function recordsText(records: readonly object[]): string {
-  return (
-    '`[\n' +
-    records.map((record) => JSON.stringify(record)).join(',\n') +
-    '\n]`'
-  )
-}
-
-/** The parser a generated file carries for `numbersText`. */
-const NUMBERS_TEXT = [
-  '/** The numbers a block of text holds, a row a line. */',
-  'function numbers(text: string): readonly number[] {',
-  '  return text.trim().split(/\\s+/).map(Number)',
-  '}',
-  '',
-]
-
-/**
  * The rows as the generated file holds them: the domain's axes once, and
  * nine radiances a row. Written out a row an object the file is a megabyte
  * that every importer of the rendering package parses; this is a third of
@@ -1184,71 +873,27 @@ function rowsText(rows: readonly ReferenceRow[]): string[] {
   ]
 }
 
-/** What `write` gathers before it writes anything. */
+/** What `write` gathers of the oracle's stages before it writes anything. */
 export interface SlabInputs {
   readonly references: readonly ReferenceStage[]
-  readonly sources: readonly SourceStage[]
   readonly flux: readonly number[]
   readonly monteCarlo: readonly MonteCarloRow[]
   readonly glory: GloryStage
 }
 
-/** The choice of table, and every figure the two headers carry. */
-export interface SlabVerdict {
+/** The scaling's bill: every figure of it the reference's header carries. */
+export interface SlabBill {
   readonly scaling: ReturnType<typeof worstDifference<ReferenceRow>>
   readonly scalingPure: ReturnType<typeof worstDifference<ReferenceRow>>
   readonly scalingGrid: number
   readonly scalingFlux: number
-  readonly candidates: readonly {
-    readonly nodes: number
-    readonly fit: keyof SourceStage['fits']
-    readonly judged: Reconstruction
-  }[]
-  readonly chosen: {
-    readonly stage: SourceStage
-    readonly fit: SourceFit
-    readonly judged: Reconstruction
-  }
-  /** The same table by the other measure, and by the chosen one without the lobe. */
-  readonly alternate: {
-    readonly fit: SourceFit
-    readonly judged: Reconstruction
-  }
-  readonly withoutLobe: Reconstruction
 }
 
-/** Every candidate table judged, and the one that is written. */
-export function decide(inputs: SlabInputs): SlabVerdict {
-  const rows = inputs.references.flatMap((stage) => stage.rows)
-  const fluxes = inputs.references.flatMap((stage) => stage.fluxes)
-  const candidates = inputs.sources.flatMap((stage) =>
-    (['absolute', 'relative', 'absolutePlain', 'relativePlain'] as const).map(
-      (fit) => ({
-        nodes: stage.nodes,
-        fit,
-        judged: judge(
-          stageTable(stage, fit),
-          stage.lobe,
-          inputs.references,
-          rows,
-          fluxes,
-        ),
-      }),
-    ),
-  )
-  // The smaller worst error draws (the design's §7.4); among tables within
-  // a point of it, the fewest nodes, which is the design's rule for a count.
-  const lobed = candidates.filter((item) => !item.fit.endsWith('Plain'))
-  const best = Math.min(...lobed.map((item) => item.judged.error))
-  const winner = lobed
-    .filter((item) => item.judged.error <= best + 0.01)
-    .sort((a, b) => a.nodes - b.nodes || a.judged.error - b.judged.error)[0]!
-  const beside = (fit: string): Reconstruction =>
-    candidates.find((item) => item.nodes === winner.nodes && item.fit === fit)!
-      .judged
-  const other: SourceFit = winner.fit === 'relative' ? 'absolute' : 'relative'
+/** The scaled medium against the true one, over the domain's rows and fluxes. */
+export function billOf(references: readonly ReferenceStage[]): SlabBill {
+  const rows = references.flatMap((stage) => stage.rows)
   let scalingFlux = 0
-  for (const flux of fluxes)
+  for (const flux of references.flatMap((stage) => stage.fluxes))
     if (flux.set !== 'thin')
       flux.scaled.forEach((value, band) => {
         scalingFlux = Math.max(
@@ -1276,22 +921,11 @@ export function decide(inputs: SlabInputs): SlabVerdict {
       (row) => row.set === 'grid',
     ).error,
     scalingFlux,
-    candidates,
-    chosen: {
-      stage: inputs.sources.find((stage) => stage.nodes === winner.nodes)!,
-      fit: winner.fit as SourceFit,
-      judged: winner.judged,
-    },
-    alternate: { fit: other, judged: beside(other) },
-    withoutLobe: beside(`${winner.fit}Plain`),
   }
 }
 
 /** `slabReference.generated.ts`'s text, before prettier. */
-export function referenceText(
-  inputs: SlabInputs,
-  verdict: SlabVerdict,
-): string {
+export function referenceText(inputs: SlabInputs, verdict: SlabBill): string {
   const { references, monteCarlo, glory } = inputs
   const rows = references.flatMap((stage) => stage.rows)
   const held = monteCarlo.filter((row) => row.domain)
@@ -1403,191 +1037,38 @@ export function referenceText(
   return comment(header) + body.join('\n')
 }
 
-/** `slabSource.generated.ts`'s text, before prettier. */
-export function sourceText(verdict: SlabVerdict): string {
-  const { stage, fit, judged } = verdict.chosen
-  const table = stageTable(stage, fit)
-  const others = verdict.candidates
-    .filter((item) => !item.fit.endsWith('Plain'))
-    .map((item) => `${item.nodes} ${item.fit} ${percent(item.judged.error)}`)
-    .join(', ')
-  const header = [
-    'Generated by `node apps/ingest/src/transport/slabTables.ts write` from the',
-    'stages its header lists; rerun them rather than editing, then',
-    '`pnpm exec prettier -w` this file.',
-    '',
-    'The higher orders’ source function in a plane slab of the renderer’s scaled',
-    'medium, per unit of the sun’s irradiance and of scaled optical depth: what',
-    'a march adds a step beyond first order, as three terms,',
-    '',
-    '  J₀ + J₁·μ_v + J_f·Φ(ν)        Φ(ν) = 4π·HG(ν; lobe) − 1',
-    '',
-    'with μ_v the cosine, to the lit face’s outward normal, of light traveling to',
-    'the eye, and ν the cosine between the sun’s light and that light. The terms',
-    `are the ${fit} least-squares fit, over every direction, of the adding-doubling`,
-    `oracle’s interior field at ${stage.streams} streams (\`slabSource.ts\`), for the droplet`,
-    `table’s population at ${SOURCE_RADIUS} µm with the three bands as one (moments’ digest`,
-    `${stage.digest}).`,
-    '',
-    'Laid out [sun][bottom][top][term]: `suns` cosines evenly from `sunMuMin` to',
-    '1, and `nodes` each of u(t_b) and u(t_d), the transport depth from the far',
-    'face and from the lit one, t = (1 − g′)·τ′ with g′ = (g − f_δ)/(1 − f_δ) at',
-    'the sample’s own radius, on u(t) = ln(1 + t/depthScale)/ln(1 + depthMax/depthScale).',
-    'A value is a half float’s, printed as the shortest decimal that rounds to it,',
-    'twelve to a line: four nodes of the top axis, three terms each.',
-    '',
-    '`reconstructionError` is the worst relative error of a slab’s leaving',
-    'radiance rebuilt through this table’s own trilinear read, first order',
-    'beside it, against the oracle’s `scaled` rows of `slabReference.generated.ts`:',
-    'every band, radius, depth, sun, view and azimuth of the domain’s grid and',
-    `held-out slabs. It is ${percent(judged.error)}, at ${judged.worst}.`,
-    `\`reconstruction\` breaks it down: ${percent(judged.grid)} on the grid, ${percent(judged.held)} on the held-out slabs,`,
-    `${percent(judged.rms)} root mean square, ${judged.thin.map(percent).join(', ')} at τ ${SLAB_DOMAIN.depths.thin.join(', ')}; ${percent(judged.flux)} in the`,
-    'reflected flux, the higher orders summed at eight Gauss points in μ and',
-    `sixteen azimuths; and ${percent(verdict.withoutLobe.error)} in radiance without the lobe.`,
-    '',
-    `\`SLAB_SOURCE_ALTERNATE\` is the same table by the ${verdict.alternate.fit} measure, whose worst error is`,
-    `${percent(verdict.alternate.judged.error)} (${percent(verdict.alternate.judged.rms)} root mean square, ${percent(verdict.alternate.judged.flux)} in the flux): the measure with`,
-    'the smaller worst error is `terms`. The candidates’ worst errors, by node',
-    `count and measure: ${others}.`,
-  ]
-  const body = [
-    ...NUMBERS_TEXT,
-    'export const SLAB_SOURCE = {',
-    "  format: 'inertialref/slab-source',",
-    '  version: 1,',
-    `  nodes: ${stage.nodes},`,
-    `  suns: ${SOURCE_AXES.suns},`,
-    `  sunMuMin: ${SOURCE_AXES.sunMuMin},`,
-    `  depthScale: ${SOURCE_AXES.depthScale},`,
-    `  depthMax: ${SOURCE_AXES.depthMax},`,
-    '  /** µm: the radius row the table is generated at. */',
-    `  radius: ${SOURCE_RADIUS},`,
-    '  /** The lobe’s asymmetry: g′² at that radius. */',
-    `  lobe: ${Number(stage.lobe.toPrecision(7))},`,
-    '  /** Which least squares the terms are: on the source, or on the source over itself. */',
-    `  fit: '${fit}',`,
-    '  /** The reconstruction’s worst relative error against the oracle, on the domain and between its nodes. */',
-    `  reconstructionError: ${Number(judged.error.toPrecision(4))},`,
-    '  reconstruction: ' +
-      JSON.stringify({
-        grid: Number(judged.grid.toPrecision(4)),
-        held: Number(judged.held.toPrecision(4)),
-        rms: Number(judged.rms.toPrecision(4)),
-        thin: judged.thin.map((value) => Number(value.toPrecision(4))),
-        flux: Number(judged.flux.toPrecision(4)),
-        withoutLobe: Number(verdict.withoutLobe.error.toPrecision(4)),
-      }) +
-      ',',
-    `  terms: /*@__PURE__*/ numbers(${numbersText(Array.from(table.terms), 12)}),`,
-    '} as const',
-    '',
-    '/**',
-    ` * The same table by the ${verdict.alternate.fit} measure, on the same layout: a constant of`,
-    ' * its own, so that a build that draws with `SLAB_SOURCE` does not carry it.',
-    ' */',
-    'export const SLAB_SOURCE_ALTERNATE = {',
-    `  fit: '${verdict.alternate.fit}',`,
-    `  reconstructionError: ${Number(verdict.alternate.judged.error.toPrecision(4))},`,
-    `  terms: /*@__PURE__*/ numbers(${numbersText(Array.from(stageTable(stage, verdict.alternate.fit).terms), 12)}),`,
-    '} as const',
-    '',
-  ]
-  return comment(header) + body.join('\n')
-}
-
-/** Reads every stage `write` needs. */
+/** Reads every stage of the oracle's that `write` needs. */
 export function gather(): SlabInputs {
-  const references = SLAB_DOMAIN.radii.map((radius) =>
-    load<ReferenceStage>(`reference-${radius}`),
-  )
-  const sources: SourceStage[] = []
-  for (const nodes of [16, 24, 32]) {
-    try {
-      sources.push(load<SourceStage>(`source-${nodes}`))
-    } catch {
-      // A node count that was not run is not a candidate.
-    }
-  }
   return {
-    references,
-    sources,
-    flux: load<number[]>('flux'),
-    monteCarlo: [...MONTE_CARLO.depths, 'bill'].flatMap((name) =>
-      load<MonteCarloRow[]>(`montecarlo-${name}`),
+    references: SLAB_DOMAIN.radii.map((radius) =>
+      loadStage<ReferenceStage>(`reference-${radius}`),
     ),
-    glory: load<GloryStage>('glory'),
+    flux: loadStage<number[]>('flux'),
+    monteCarlo: [...MONTE_CARLO.depths, 'bill'].flatMap((name) =>
+      loadStage<MonteCarloRow[]>(`montecarlo-${name}`),
+    ),
+    glory: loadStage<GloryStage>('glory'),
   }
-}
-
-function runSource(nodes: number, part: number, parts: number): void {
-  const population = slabPopulation(SOURCE_RADIUS)
-  const medium = sourceMedium(population)
-  const grid: SourceGrid = { ...SOURCE_AXES, nodes }
-  const rows = Array.from({ length: nodes }, (_, i) => i).filter(
-    (i) => i % parts === part,
-  )
-  const lobe = medium.asymmetry ** 2
-  const terms = sourceTerms(medium, grid, lobe, SLAB_STREAMS.scaled, { rows })
-  save(`source-${nodes}-${part}of${parts}`, {
-    nodes,
-    streams: SLAB_STREAMS.scaled,
-    lobe,
-    asymmetry: medium.asymmetry,
-    digest: population.digest,
-    delta: terms.delta,
-    modes: terms.modes,
-    fits: {
-      absolute: Array.from(terms.absolute),
-      relative: Array.from(terms.relative),
-      absolutePlain: Array.from(terms.absolutePlain),
-      relativePlain: Array.from(terms.relativePlain),
-    },
-  } satisfies SourceStage)
-}
-
-/** The parts of a source table as one stage: a part holds zeros where another holds a row. */
-function mergeSource(nodes: number, parts: number): void {
-  const stages = Array.from({ length: parts }, (_, part) =>
-    load<SourceStage>(`source-${nodes}-${part}of${parts}`),
-  )
-  const sum = (fit: keyof SourceStage['fits']): number[] =>
-    stages[0]!.fits[fit].map((_, at) =>
-      stages.reduce((total, stage) => total + stage.fits[fit][at]!, 0),
-    )
-  save(`source-${nodes}`, {
-    ...stages[0]!,
-    fits: {
-      absolute: sum('absolute'),
-      relative: sum('relative'),
-      absolutePlain: sum('absolutePlain'),
-      relativePlain: sum('relativePlain'),
-    },
-  } satisfies SourceStage)
 }
 
 function runMonteCarlo(name: string): void {
   if (name === 'glory') {
     const { depth, paths } = MONTE_CARLO.glory
-    save('glory', gloryStage(slabPopulation(MONTE_CARLO.radius), depth, paths))
-    return
-  }
-  if (name === 'bill') {
-    const { radius, band, depth, suns, views } = MONTE_CARLO.bill
-    save(
-      'montecarlo-bill',
-      monteCarloRows(
-        slabPopulation(radius),
-        band,
-        depth,
-        suns,
-        views,
-        MONTE_CARLO.bill.paths,
-      ),
+    saveStage(
+      'glory',
+      gloryStage(slabPopulation(MONTE_CARLO.radius), depth, paths),
     )
     return
   }
-  save(
+  if (name === 'bill') {
+    const { radius, band, depth, suns, views, paths } = MONTE_CARLO.bill
+    saveStage(
+      'montecarlo-bill',
+      monteCarloRows(slabPopulation(radius), band, depth, suns, views, paths),
+    )
+    return
+  }
+  saveStage(
     `montecarlo-${name}`,
     monteCarloRows(
       slabPopulation(MONTE_CARLO.radius),
@@ -1602,48 +1083,29 @@ function runMonteCarlo(name: string): void {
 
 function write(): void {
   const inputs = gather()
-  const verdict = decide(inputs)
   writeFileSync(
     `${RENDERING}slabReference.generated.ts`,
-    referenceText(inputs, verdict),
+    referenceText(inputs, billOf(inputs.references)),
   )
-  writeFileSync(`${RENDERING}slabSource.generated.ts`, sourceText(verdict))
-  save('verdict', {
-    scaling: verdict.scaling,
-    scalingPure: verdict.scalingPure,
-    scalingGrid: verdict.scalingGrid,
-    scalingFlux: verdict.scalingFlux,
-    candidates: verdict.candidates,
-    chosen: {
-      nodes: verdict.chosen.stage.nodes,
-      fit: verdict.chosen.fit,
-      judged: verdict.chosen.judged,
-    },
-    alternate: verdict.alternate,
-    withoutLobe: verdict.withoutLobe,
-  })
   console.log(
-    `slabTables: wrote the two generated files under ${RENDERING}; now run pnpm exec prettier -w on them`,
+    `slabTables: wrote the reference under ${RENDERING}; now run pnpm exec prettier -w on it`,
   )
 }
 
 if (import.meta.main) {
   const [stage, ...rest] = process.argv.slice(2)
   if (stage === 'reference')
-    save(
+    saveStage(
       `reference-${rest[0]}`,
       referenceStage(slabPopulation(Number(rest[0]))),
     )
-  else if (stage === 'source')
-    runSource(Number(rest[0]), Number(rest[1] ?? 0), Number(rest[2] ?? 1))
-  else if (stage === 'merge') mergeSource(Number(rest[0]), Number(rest[1]))
   else if (stage === 'flux')
-    save('flux', blackSurfaceFlux(slabPopulation(SOURCE_RADIUS)))
+    saveStage('flux', blackSurfaceFlux(slabPopulation(SOURCE_RADIUS)))
   else if (stage === 'montecarlo') runMonteCarlo(rest[0] ?? '')
   else if (stage === 'write') write()
   else {
     console.error(
-      'slabTables: a stage is one of reference <radius>, source <nodes> <part> <parts>, merge <nodes> <parts>, flux, montecarlo <depth | bill | glory>, write',
+      'slabTables: a stage is one of reference <radius>, flux, montecarlo <depth | bill | glory>, write',
     )
     process.exit(1)
   }
