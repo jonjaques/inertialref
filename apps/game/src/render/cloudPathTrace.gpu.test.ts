@@ -8,9 +8,13 @@ import {
   CUMULUS_FIELD_SUN,
   CUMULUS_REFERENCE,
   CUMULUS_VIEWS,
+  cumulusAir,
   type CumulusCase,
   cumulusFixture,
   type CumulusProbe,
+  cumulusSky,
+  cumulusSkyHeight,
+  cumulusSkyRadiance,
   type CumulusSubject,
   fixtureMedium,
   isolateCumulus,
@@ -26,8 +30,11 @@ import {
   viewRay,
   viewSun,
 } from '@inertialref/rendering'
+import { type AirUniforms, createAirUniforms } from './air.ts'
+import { scatteringFor } from './atmosphereLuts.ts'
 import {
   createCloudPathTracer,
+  createPathTraceSkyProbe,
   pathTraceDone,
   pathTraceEstimate,
   pathTraceRandom,
@@ -44,12 +51,16 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * two tiers draw different paths, so a pixel is held at three of the two
  * errors together and the image at how many pixels may pass that by chance.
  *
- * Under IR_CLOUD_MEASURE: the reference's own cases at its resolution, held
- * to its pixels by the same count, with the images and
- * `.data/clouds/pathTrace.json`; and what a sample costs on today's field.
+ * Under IR_CLOUD_MEASURE, once the reference has cases: each case's own
+ * pixels traced on the device and held to the float64 tracer's by the same
+ * count (`.data/clouds/pathTrace.json`), and what a sample of each case
+ * costs at 256² (`pathTraceCost.json`). With IR_CLOUD_IMAGES as well, the
+ * images traced whole, which is the campaign's long run.
  */
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
+/** With `IR_CLOUD_MEASURE`: the images traced whole, which is the campaign's long run. */
+const IMAGES = process.env.IR_CLOUD_IMAGES !== undefined
 const OUT = '.data/clouds'
 const PHASE = tracePhase(mieDroplets())
 const SEED = rootSeed('cloudPathTrace.gpu.test')
@@ -57,6 +68,13 @@ const { analytic } = CUMULUS_REFERENCE
 const ANALYTIC = fixtureMedium(analyticCumulus(analytic.fixture))
 const PIXELS = 32
 const DARK_SKY = { mean: [0, 0, 0], up: [0, 0, 0], sunward: [0, 0, 0] } as const
+/**
+ * The most the device's sky may stand from the CPU's, as a share of the
+ * sky's mean. Measured at 0.46% over 96 directions and the three suns: a
+ * half float's step on ln L̄ near −4 is 0.2% of the mean, and the two
+ * differences' steps and the sampler's weights are the rest.
+ */
+const SKY_STEP = 0.01
 const uniformSky = (radiance: number) =>
   ({
     mean: [radiance, radiance, radiance],
@@ -77,20 +95,22 @@ afterAll(() => {
 /**
  * Events a dispatch for a thread, by how many threads there are: about four
  * million events a dispatch. A dispatch costs a submit and a wait whatever
- * it holds, so a small image at a small count spends the run on that; a
- * large one at a large count holds the device for seconds.
+ * it holds, so a few threads at a small count spend the run on that; many
+ * at a large count hold the device for seconds.
  */
-const eventsFor = (pixels: number): number =>
-  Math.max(64, Math.min(4096, Math.round((4 * 2 ** 20) / (pixels * pixels))))
+const eventsFor = (threads: number): number =>
+  Math.max(64, Math.min(4096, Math.round((4 * 2 ** 20) / threads)))
+const threadsOf = (scene: PathTraceScene): number =>
+  scene.threads?.length ?? scene.pixels * scene.pixels
 /** Dispatches between two readbacks of the sums. */
 const BURST = 4
 
-/** A scene traced to its last sample: every pixel's sums, and the dispatches it took. */
+/** A scene traced to its last sample: every thread's sums, and the dispatches it took. */
 async function trace(
   scene: PathTraceScene,
   budget = 4000,
 ): Promise<{ sums: Float32Array; dispatches: number; events: number }> {
-  const events = eventsFor(scene.pixels)
+  const events = eventsFor(threadsOf(scene))
   const tracer = createCloudPathTracer(scene, events)
   for (let dispatches = BURST; dispatches <= budget; dispatches += BURST) {
     for (let i = 0; i < BURST; i += 1) await gpu.compute(tracer.kernel)
@@ -323,17 +343,18 @@ describe('one order of scattering', () => {
   })
 })
 
-/** How far a traced pixel stands from its reference, in their errors together, by band. */
+/**
+ * How far a traced pixel stands from its reference, in their errors
+ * together, by band. `threadsOf` names the threads that traced a pixel: the
+ * pixel's own index in an image traced whole.
+ */
 function offsets(
   sums: Float32Array,
-  pixels: number,
   probes: readonly CumulusProbe[],
-): number[] {
-  return probes.flatMap((probe) => {
-    const estimate = pathTraceEstimate(
-      sums,
-      probe.pixel[1] * pixels + probe.pixel[0],
-    )
+  threadsOf: (pixel: readonly [number, number]) => number | readonly number[],
+): number[][] {
+  return probes.map((probe) => {
+    const estimate = pathTraceEstimate(sums, threadsOf(probe.pixel))
     return probe.radiance.map(
       (value, band) =>
         Math.abs(estimate.mean[band]! - value) /
@@ -342,10 +363,28 @@ function offsets(
   })
 }
 
+/**
+ * Earth's air on the device, as the page binds it: the three tables of
+ * `scatteringFor`, the sky's among them as the half-float texture the
+ * march's node reads.
+ */
+function earthAir(): AirUniforms {
+  const { haze, topRatio, heights } = cumulusAir()
+  const air = createAirUniforms({ ownStandIns: true })
+  air.bind(scatteringFor(haze, topRatio, heights, { sky: true }))
+  return air
+}
+
+/**
+ * A case's scene. A case of the field stands under the table's sky, read on
+ * the device where the CPU read it; a case with no table under it takes its
+ * three numbers.
+ */
 const sceneOfCase = (
   medium: TraceMedium,
   spec: CumulusCase,
   samples: number,
+  air: AirUniforms | null = null,
 ): PathTraceScene => ({
   medium,
   phase: PHASE,
@@ -355,11 +394,79 @@ const sceneOfCase = (
     irradiance: [1, 1, 1],
     angularRadius: spec.sunRadius,
   },
-  sky: spec.sky,
+  sky:
+    spec.skyAt === null || air === null
+      ? spec.sky
+      : {
+          air,
+          sunMu: spec.skyAt.sunMu,
+          height01: cumulusSkyHeight(spec.skyAt.height),
+        },
   ground: spec.ground,
   orders: Infinity,
   samples,
   seed: SEED,
+})
+
+describe('the sky', () => {
+  it('is the table’s on the device as on the CPU, at a half float’s step', async () => {
+    // The CPU tier's sky is `skyMomentsAt` of the table's float32 data; the
+    // kernel's is `skyTableAt` of the texture the page uploads, half floats.
+    // The mean is stored as its logarithm, near −4, so a half float's
+    // eleven bits are 0.2% of the mean itself. Held in every direction of
+    // a sphere, each view's sun, as a share of the mean: where the linear
+    // sky falls to nothing there is no ratio to take.
+    const air = earthAir()
+    const count = 96
+    const directions = new Float32Array(count * 3)
+    const golden = Math.PI * (3 - Math.sqrt(5))
+    for (let i = 0; i < count; i += 1) {
+      const y = 1 - (2 * (i + 0.5)) / count
+      const r = Math.sqrt(1 - y * y)
+      directions.set(
+        [r * Math.cos(golden * i), y, r * Math.sin(golden * i)],
+        i * 3,
+      )
+    }
+    let worst = 0
+    for (const view of CUMULUS_VIEWS) {
+      const { sky, at } = cumulusSky(view, 1700)
+      const spec: CumulusCase = {
+        id: `sky:${view.id}`,
+        subject: 'sky',
+        view: view.id,
+        pixels: 8,
+        samples: 1,
+        sunRadius: 0,
+        sky,
+        skyAt: at,
+        ground: null,
+      }
+      const probe = createPathTraceSkyProbe(
+        sceneOfCase(ANALYTIC, spec, 1, air),
+        directions,
+      )
+      await gpu.compute(probe.kernel)
+      const drawn = new Float32Array(await gpu.readBuffer(probe.output))
+      for (let i = 0; i < count; i += 1) {
+        const direction = [
+          directions[i * 3]!,
+          directions[i * 3 + 1]!,
+          directions[i * 3 + 2]!,
+        ] as const
+        const expected = cumulusSkyRadiance(sky, viewSun(view), direction)
+        for (let band = 0; band < 3; band += 1)
+          worst = Math.max(
+            worst,
+            Math.abs(drawn[i * 4 + band]! - expected[band]!) / sky.mean[band]!,
+          )
+      }
+      // The sky is one: in some direction it is over half its mean.
+      expect(Math.max(...drawn)).toBeGreaterThan(0.5 * sky.mean[1])
+    }
+    expect(worst).toBeLessThan(SKY_STEP)
+    air.dispose()
+  })
 })
 
 describe('every order', () => {
@@ -370,7 +477,7 @@ describe('every order', () => {
       const { sums } = await trace(sceneOfCase(ANALYTIC, spec, 1024))
       const probes = analytic.probes.filter((probe) => probe.case === spec.id)
       expect(probes.length).toBeGreaterThan(30)
-      off.push(...offsets(sums, spec.pixels, probes))
+      off.push(...offsets(sums, probes, ([x, y]) => y * spec.pixels + x).flat())
     }
     // Of 432 values, three errors hold all but one or two by chance (99.73%
     // each), and five hold every one of them. Measured: two beyond three,
@@ -394,7 +501,7 @@ function subjectMedium(subject: CumulusSubject): TraceMedium {
   )
 }
 
-/** An image's green band as a portable float map, bottom row first as the format has it. */
+/** An image as a portable float map, bottom row first as the format has it. */
 function writeImage(name: string, sums: Float32Array, pixels: number): void {
   const data = new Float32Array(pixels * pixels * 3)
   for (let py = 0; py < pixels; py += 1)
@@ -403,6 +510,7 @@ function writeImage(name: string, sums: Float32Array, pixels: number): void {
         pathTraceEstimate(sums, py * pixels + px).mean,
         ((pixels - 1 - py) * pixels + px) * 3,
       )
+  mkdirSync(OUT, { recursive: true })
   writeFileSync(
     `${OUT}/${name}.pfm`,
     Buffer.concat([
@@ -412,144 +520,193 @@ function writeImage(name: string, sums: Float32Array, pixels: number): void {
   )
 }
 
-/**
- * Today's fair-weather cumulus, where the generator's search finds it on
- * the field as it stands (`cumulusTables.ts place cumulus`): what a sample
- * is priced on until the reference has subjects of its own. The place is
- * the field's, so when the field's recipe moves this is another cloud or
- * none, and the instrument says so by its count of cloudy pixels.
- */
-const TODAY: CumulusSubject = {
-  id: 'cumulus',
-  regime: 'fair-cumulus',
-  thickness: null,
-  time: 0,
-  place: {
-    corner: { x: 6_371_000, y: 7840, z: -11_360 },
-    east: { x: 0, y: 0, z: -1 },
-    north: { x: 0, y: 1, z: 0 },
-    size: [160, 96, 160],
-    voxel: 20,
-    base: 880,
-  },
-}
+/** The samples the two tiers are held to each other at, as on the analytic cumulus. */
+const COMPARE_SAMPLES = 1024
+/** Threads a pixel's samples are shared among where only the reference's pixels are traced. */
+const STREAMS = 64
+const { cases, subjects } = CUMULUS_REFERENCE
 
-describe.skipIf(!MEASURE)('the instrument (IR_CLOUD_MEASURE)', () => {
-  it('prices a sample at the reference’s resolution, on today’s cumulus', async () => {
-    // A view traced for a fixed time with no last sample, so every thread
-    // is at work for all of it, and then read: a pixel's samples in that
-    // time are its rate. A run to a fixed count would be priced by its one
-    // deepest pixel and say nothing of the rest.
-    const medium = subjectMedium(TODAY)
-    const budget = 20
-    const rows = []
-    for (const view of CUMULUS_VIEWS) {
-      const spec: CumulusCase = {
-        id: `today:${view.id}`,
-        subject: TODAY.id,
-        view: view.id,
-        pixels: 256,
-        samples: 2 ** 30,
-        sunRadius: (0.265 * Math.PI) / 180,
-        sky: analytic.cases[0]!.sky,
-        ground: null,
+describe.skipIf(!MEASURE || cases.length === 0)(
+  'the instrument (IR_CLOUD_MEASURE)',
+  () => {
+    const media = new Map<string, TraceMedium>()
+    const mediumOf = (id: string): TraceMedium => {
+      let medium = media.get(id)
+      if (medium === undefined) {
+        medium = subjectMedium(subjects.find((subject) => subject.id === id)!)
+        media.set(id, medium)
       }
-      const events = eventsFor(spec.pixels)
-      const tracer = createCloudPathTracer(
-        sceneOfCase(medium, spec, spec.samples),
-        events,
-      )
-      const start = performance.now()
-      let dispatches = 0
-      while (performance.now() - start < budget * 1000) {
-        for (let i = 0; i < BURST; i += 1) await gpu.compute(tracer.kernel)
-        dispatches += BURST
-      }
-      const sums = new Float32Array(await gpu.readBuffer(tracer.sums))
-      const seconds = (performance.now() - start) / 1000
-      const threads = spec.pixels * spec.pixels
-      // Thread-seconds one sample of the image costs: each pixel's seconds a
-      // sample, summed. A pixel that finished none is counted at one.
-      let cost = 0
-      let fewest = Infinity
-      let started = 0
-      const spread: number[] = []
-      for (let pixel = 0; pixel < threads; pixel += 1) {
-        const { mean, error, samples } = pathTraceEstimate(sums, pixel)
-        cost += seconds / Math.max(samples, 1)
-        fewest = Math.min(fewest, samples)
-        if (samples === 0) started += 1
-        // One sample's relative deviation, green, where a path's light is
-        // drawn: over a tenth. Clear sky is one value summed 10⁵ times in
-        // float32, and the last bits of that sum and of its squares read
-        // as a deviation of a hundredth.
-        const one = mean[1] > 0 ? (error[1] / mean[1]) * Math.sqrt(samples) : 0
-        if (samples > 8 && one > 0.1) spread.push(one)
-      }
-      spread.sort((x, y) => x - y)
-      mkdirSync(OUT, { recursive: true })
-      writeImage(`pathTrace-today-${view.id}`, sums, spec.pixels)
-      rows.push({
-        case: spec.id,
-        seconds,
-        dispatches,
-        events,
-        eventsASecond: (threads * events * dispatches) / seconds,
-        threadSecondsASample: cost,
-        secondsASampleShared: cost / threads,
-        fewestSamples: fewest,
-        pixelsWithNone: started,
-        pixelsWithSpread: spread.length,
-        medianDeviationOfOne: spread[spread.length >> 1] ?? 0,
-        ninetiethDeviationOfOne: spread[Math.floor(0.9 * spread.length)] ?? 0,
-      })
+      return medium
     }
-    writeFileSync(
-      `${OUT}/pathTraceCost.json`,
-      JSON.stringify({ budget, rows }, null, 2),
-    )
-    for (const row of rows) expect(row.pixelsWithSpread).toBeGreaterThan(1000)
-  }, 600_000)
 
-  it.skipIf(CUMULUS_REFERENCE.cases.length === 0)(
-    'holds the reference’s cases to its 288 pixels each, by the count',
-    async () => {
+    it('holds the reference’s cases to their own pixels, by the count', async () => {
+      // Only the reference's pixels are traced, sixty-four threads each. An
+      // image traced whole is as slow as its deepest pixel, a line of sight
+      // of some hundreds here, and the pixels the two tiers are compared at
+      // are 288 of its 65,536.
+      const air = earthAir()
       const rows = []
-      for (const spec of CUMULUS_REFERENCE.cases) {
-        const subject = CUMULUS_REFERENCE.subjects.find(
-          ({ id }) => id === spec.subject,
-        )!
-        const start = performance.now()
-        const { sums } = await trace(
-          sceneOfCase(subjectMedium(subject), spec, 1024),
-          400_000,
-        )
-        const seconds = (performance.now() - start) / 1000
+      for (const spec of cases) {
         const probes = CUMULUS_REFERENCE.probes.filter(
           (probe) => probe.case === spec.id,
         )
-        const off = offsets(sums, spec.pixels, probes)
-        mkdirSync(OUT, { recursive: true })
-        writeImage(`pathTrace-${spec.id.replace(':', '-')}`, sums, spec.pixels)
-        const beyondThree = off.filter((value) => value > 3).length
+        const pixels = [
+          ...new Set(
+            probes.map(({ pixel }) => pixel[1] * spec.pixels + pixel[0]),
+          ),
+        ]
+        const start = performance.now()
+        const { sums, dispatches, events } = await trace(
+          {
+            ...sceneOfCase(
+              mediumOf(spec.subject),
+              spec,
+              COMPARE_SAMPLES / STREAMS,
+              air,
+            ),
+            threads: pixels.flatMap((pixel) =>
+              new Array<number>(STREAMS).fill(pixel),
+            ),
+          },
+          4_000_000,
+        )
+        const seconds = (performance.now() - start) / 1000
+        const off = offsets(sums, probes, ([x, y]) => {
+          const at = pixels.indexOf(y * spec.pixels + x) * STREAMS
+          return Array.from({ length: STREAMS }, (_, k) => at + k)
+        })
+        const band = (b: number): number[] => off.map((values) => values[b]!)
+        const beyondThree = [0, 1, 2].map(
+          (b) => band(b).filter((value) => value > 3).length,
+        )
+        const worst = Math.max(...off.flat())
+        const all = off.flat()
+        rows.push({
+          case: spec.id,
+          probes: probes.length,
+          pixels: pixels.length,
+          samples: COMPARE_SAMPLES,
+          seconds,
+          dispatches,
+          events,
+          beyondThree,
+          beyondTwo: all.filter((value) => value > 2).length,
+          worst,
+          meanOffset: all.reduce((sum, value) => sum + value, 0) / all.length,
+        })
+        // §5.11: of a case's 288 pixels at most three beyond three combined
+        // standard errors, and none beyond five, a band at a time. A bound
+        // on every pixel at three would fail one run in two by chance.
+        for (const count of beyondThree) expect(count).toBeLessThanOrEqual(3)
+        expect(worst).toBeLessThan(5)
+      }
+      mkdirSync(OUT, { recursive: true })
+      writeFileSync(
+        `${OUT}/pathTrace.json`,
+        JSON.stringify(
+          { samples: COMPARE_SAMPLES, streams: STREAMS, rows },
+          null,
+          2,
+        ),
+      )
+      air.dispose()
+    }, 3_600_000)
+
+    it('prices a sample of each case at the reference’s resolution', async () => {
+      // A case traced whole for a fixed time with no last sample, so every
+      // thread is at work for all of it, and then read: a pixel's samples
+      // in that time are its rate. A run to a fixed count would be priced
+      // by its one deepest pixel and say nothing of the rest.
+      const air = earthAir()
+      const budget = 10
+      const rows = []
+      for (const spec of cases) {
+        const scene = sceneOfCase(mediumOf(spec.subject), spec, 2 ** 30, air)
+        const threads = spec.pixels * spec.pixels
+        const events = eventsFor(threads)
+        const tracer = createCloudPathTracer(scene, events)
+        const start = performance.now()
+        let dispatches = 0
+        while (performance.now() - start < budget * 1000) {
+          for (let i = 0; i < BURST; i += 1) await gpu.compute(tracer.kernel)
+          dispatches += BURST
+        }
+        const sums = new Float32Array(await gpu.readBuffer(tracer.sums))
+        const seconds = (performance.now() - start) / 1000
+        // Thread-seconds one sample of the image costs: each pixel's seconds
+        // a sample, summed. A pixel that finished none is counted at one.
+        let cost = 0
+        let fewest = Infinity
+        let none = 0
+        const spread: number[] = []
+        for (let pixel = 0; pixel < threads; pixel += 1) {
+          const { mean, error, samples } = pathTraceEstimate(sums, pixel)
+          cost += seconds / Math.max(samples, 1)
+          fewest = Math.min(fewest, samples)
+          if (samples === 0) none += 1
+          // One sample's relative deviation, green, where a path's light is
+          // drawn: over a tenth. Clear sky is one value summed 10⁵ times in
+          // float32, and the last bits of that sum and of its squares read
+          // as a deviation of a hundredth.
+          const one =
+            mean[1] > 0 ? (error[1] / mean[1]) * Math.sqrt(samples) : 0
+          if (samples > 8 && one > 0.1) spread.push(one)
+        }
+        spread.sort((x, y) => x - y)
         rows.push({
           case: spec.id,
           seconds,
-          probes: probes.length,
-          beyondThree,
-          worst: Math.max(...off),
+          dispatches,
+          events,
+          eventsASecond: (threads * events * dispatches) / seconds,
+          threadSecondsASample: cost,
+          secondsASampleShared: cost / threads,
+          fewestSamples: fewest,
+          pixelsWithNone: none,
+          pixelsWithSpread: spread.length,
+          medianDeviationOfOne: spread[spread.length >> 1] ?? 0,
+          ninetiethDeviationOfOne: spread[Math.floor(0.9 * spread.length)] ?? 0,
         })
-        // §5.11: of a case's 288 pixels at most three beyond three combined
-        // standard errors, and none beyond five. A bound on every pixel at
-        // three would fail one run in two by chance.
-        expect(beyondThree).toBeLessThanOrEqual(3)
-        expect(Math.max(...off)).toBeLessThan(5)
       }
+      mkdirSync(OUT, { recursive: true })
       writeFileSync(
-        `${OUT}/pathTrace.json`,
-        JSON.stringify({ samples: 1024, rows }, null, 2),
+        `${OUT}/pathTraceCost.json`,
+        JSON.stringify({ budget, rows }, null, 2),
       )
-    },
-    3_600_000,
-  )
-})
+      for (const row of rows) expect(row.pixelsWithSpread).toBeGreaterThan(1000)
+      air.dispose()
+    }, 600_000)
+
+    it.skipIf(!IMAGES)(
+      'draws each case whole, and holds the image to the reference’s pixels',
+      async () => {
+        // The campaign's long run: every pixel of 256² a thread, to the
+        // count the tiers are compared at. It is as slow as each image's
+        // deepest pixel.
+        const air = earthAir()
+        for (const spec of cases) {
+          const { sums } = await trace(
+            sceneOfCase(mediumOf(spec.subject), spec, COMPARE_SAMPLES, air),
+            40_000_000,
+          )
+          writeImage(
+            `pathTrace-${spec.id.replace(':', '-')}`,
+            sums,
+            spec.pixels,
+          )
+          const probes = CUMULUS_REFERENCE.probes.filter(
+            (probe) => probe.case === spec.id,
+          )
+          const off = offsets(sums, probes, ([x, y]) => y * spec.pixels + x)
+          for (let b = 0; b < 3; b += 1)
+            expect(
+              off.filter((values) => values[b]! > 3).length,
+            ).toBeLessThanOrEqual(3)
+          expect(Math.max(...off.flat())).toBeLessThan(5)
+        }
+        air.dispose()
+      },
+      14_400_000,
+    )
+  },
+)

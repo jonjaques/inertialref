@@ -5,8 +5,13 @@ import {
   CUMULUS_DATUM,
   CUMULUS_FIELD_SUN,
   CUMULUS_VIEWS,
+  cumulusAir,
   type CumulusFixture,
   cumulusFixture,
+  cumulusSky,
+  cumulusSkyHeight,
+  cumulusSkyRadiance,
+  cumulusSkyTable,
   type CumulusSubject,
   fixtureMedium,
   fixtureVoxel,
@@ -38,6 +43,7 @@ import {
   radiusOf,
   samplePhase,
 } from './mieTable.ts'
+import { skyMomentsAt } from './skyIrradiance.ts'
 import { cloudFieldAt } from './weatherField.ts'
 import { levelProfile } from './weatherGenus.ts'
 
@@ -136,7 +142,8 @@ describe('the fixture', () => {
           y: corner.y + (k + 0.5) * voxel + (corner.y / length) * h,
           z: corner.z - (i + 0.5) * voxel + (corner.z / length) * h,
         },
-        voxel,
+        // The resolved field: no footprint, whatever the voxel's size.
+        0,
       )
       expect(fixture.sigma[index]).toBe(Math.fround(at.sigma * at.fraction))
       expect(fixture.radius[index]).toBe(Math.fround(at.radius))
@@ -522,22 +529,114 @@ describe('a reference and the field it was traced through', () => {
     expect(genusHash()).toBe(genusHash())
   })
 
-  it('holds the committed reference to today’s field and today’s genus table', () => {
-    // With no subject the reference claims nothing of the field, and its
-    // hash is empty. With one, every voxel it carries is still the field's.
-    if (CUMULUS_REFERENCE.subjects.length === 0) {
-      expect(CUMULUS_REFERENCE.genusHash).toBe('')
-      expect(CUMULUS_REFERENCE.voxels).toEqual([])
-      expect(CUMULUS_REFERENCE.cases).toEqual([])
-      return
-    }
-    expect(CUMULUS_REFERENCE.genusHash).toBe(genusHash())
-    for (const subject of CUMULUS_REFERENCE.subjects) {
-      const voxels = CUMULUS_REFERENCE.voxels.filter(
-        (voxel) => voxel.subject === subject.id,
+  it(
+    'holds the committed reference to today’s field and today’s genus table',
+    { timeout: 30_000 },
+    () => {
+      // With no subject the reference claims nothing of the field, and its
+      // hash is empty. With one, every voxel it carries is still the field's.
+      if (CUMULUS_REFERENCE.subjects.length === 0) {
+        expect(CUMULUS_REFERENCE.genusHash).toBe('')
+        expect(CUMULUS_REFERENCE.voxels).toEqual([])
+        expect(CUMULUS_REFERENCE.cases).toEqual([])
+        return
+      }
+      expect(CUMULUS_REFERENCE.genusHash).toBe(genusHash())
+      for (const subject of CUMULUS_REFERENCE.subjects) {
+        const voxels = CUMULUS_REFERENCE.voxels.filter(
+          (voxel) => voxel.subject === subject.id,
+        )
+        expect(voxels.length).toBeGreaterThanOrEqual(100)
+        expect(movedVoxels(subject, voxels)).toEqual([])
+      }
+      // And a reference whose subjects are nudged is caught: a voxel to the
+      // east is another place of the cloud.
+      const [first] = CUMULUS_REFERENCE.subjects
+      const { corner, voxel } = first!.place
+      const nudged = {
+        ...first!,
+        place: { ...first!.place, corner: { ...corner, z: corner.z - voxel } },
+      }
+      expect(
+        movedVoxels(
+          nudged,
+          CUMULUS_REFERENCE.voxels.filter(
+            ({ subject }) => subject === first!.id,
+          ),
+        ).length,
+      ).toBeGreaterThan(100)
+    },
+  )
+})
+
+describe('the sky a case of the field stands under', () => {
+  it('is Earth’s air as the scene hands it to the bake', () => {
+    const { haze, topRatio, heights } = cumulusAir()
+    // 100 km of haze over 6,378 km, an 8.5 km gas and a 1.2 km aerosol.
+    expect(topRatio).toBeCloseTo(1 + 100_000 / 6_378_137, 12)
+    expect(heights.rayleigh).toBeCloseTo(8_500 / 6_378_137, 12)
+    expect(heights.aerosol).toBeCloseTo(1_200 / 6_378_137, 12)
+    expect(haze.thickness).toBe(1)
+    expect(cumulusSkyHeight(50_000)).toBeCloseTo(0.5, 12)
+    expect(cumulusSkyHeight(-10)).toBe(0)
+  })
+
+  it('is the table’s own read at a height and a view’s sun', () => {
+    for (const view of CUMULUS_VIEWS) {
+      const { sky, at } = cumulusSky(view, 1700)
+      expect(at).toEqual({ height: 1700, sunMu: viewSun(view)[1] })
+      expect(sky).toEqual(
+        skyMomentsAt(cumulusSkyTable(), cumulusSkyHeight(1700), at.sunMu),
       )
-      expect(voxels.length).toBeGreaterThanOrEqual(100)
-      expect(movedVoxels(subject, voxels)).toEqual([])
+      for (let band = 0; band < 3; band += 1) {
+        expect(sky.mean[band]).toBeGreaterThan(0.005)
+        expect(sky.mean[band]).toBeLessThan(0.1)
+      }
+      // The blue sky is the brightest, and at a low sun the sunward side
+      // is the brighter one.
+      expect(sky.mean[2]).toBeGreaterThan(sky.mean[0])
+      expect(sky.sunward[1]).toBeGreaterThan(0)
     }
+    // One table, baked once.
+    expect(cumulusSkyTable()).toBe(cumulusSkyTable())
+  })
+
+  it('is linear in direction with the three moments, floored at nothing', () => {
+    const sky = {
+      mean: [2, 2, 2],
+      up: [0.8, 0.8, 0.8],
+      sunward: [-0.4, -0.4, -0.4],
+    } as const
+    const sun = [0.6, 0.5, Math.sqrt(1 - 0.61)] as const
+    let mean = 0
+    let up = 0
+    let sunward = 0
+    const directions = 20_000
+    const golden = Math.PI * (3 - Math.sqrt(5))
+    const flat = Math.hypot(sun[0], sun[2])
+    for (let i = 0; i < directions; i += 1) {
+      const y = 1 - (2 * (i + 0.5)) / directions
+      const r = Math.sqrt(1 - y * y)
+      const d = [r * Math.cos(golden * i), y, r * Math.sin(golden * i)] as const
+      const [value] = cumulusSkyRadiance(sky, sun, d)
+      mean += value / directions
+      // The irradiance on a face from its front less that from its back is
+      // the integral of L·(ω·n) over the sphere.
+      up += (value * d[1] * 4 * Math.PI) / directions
+      sunward +=
+        (value * ((d[0] * sun[0] + d[2] * sun[2]) / flat) * 4 * Math.PI) /
+        directions
+    }
+    expect(mean).toBeCloseTo(2, 3)
+    expect(up / (Math.PI * 2)).toBeCloseTo(0.8, 3)
+    expect(sunward / (Math.PI * 2)).toBeCloseTo(-0.4, 3)
+    // Where the form falls under zero there is no light, not a negative one.
+    expect(
+      cumulusSkyRadiance(
+        { mean: [1, 1, 1], up: [0, 0, 0], sunward: [2, 2, 2] },
+        [1, 0, 0],
+        [-1, 0, 0],
+      ),
+    ).toEqual([0, 0, 0])
   })
 })

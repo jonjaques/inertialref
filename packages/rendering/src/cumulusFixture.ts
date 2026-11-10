@@ -6,13 +6,26 @@ import {
   type Seed,
 } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
-import type { Body } from '@inertialref/universe'
+import { type Body, SOLAR_PLANETS } from '@inertialref/universe'
+import {
+  atmosphereRecipe,
+  bakeMultipleScattering,
+  bakeTransmittance,
+  type HazeAuthoring,
+  type ScatteringLut,
+} from './atmosphere.ts'
+import { type AirHeights, airHeights, airTopRatio } from './datum.ts'
 import {
   angleOf,
   diffractionShare,
   mieDroplets,
   type MieTable,
 } from './mieTable.ts'
+import {
+  bakeSkyMoments,
+  type SkyMoments,
+  skyMomentsAt,
+} from './skyIrradiance.ts'
 import { type BodyWeather, regimeWeather } from './weatherClimate.ts'
 import { cloudFieldAt, type FieldClock, fieldClock } from './weatherField.ts'
 import { GENUS_TABLE, levelProfile } from './weatherGenus.ts'
@@ -78,9 +91,12 @@ export interface FixtureVoxel {
 }
 
 /**
- * The field at one voxel's center, at the voxel's own footprint. The
- * unscaled extinction is the level's own ratio of the two, as `columnDepth`
- * forms it: a level scales by one diffraction share, its greatest radius's.
+ * The resolved field at one voxel's center: a footprint of zero. Past a
+ * footprint the field answers with its level's statistics, a cloudy share
+ * and a mean, which is what a far sample marches and not a cloud a path can
+ * be traced through. The unscaled extinction is the level's own ratio of
+ * the two, as `columnDepth` forms it: a level scales by one diffraction
+ * share, its greatest radius's.
  */
 export function fixtureVoxel(
   weather: BodyWeather,
@@ -114,7 +130,7 @@ export function fixtureVoxel(
       y: place.corner.y + place.east.y * e + place.north.y * n + up.y * h,
       z: place.corner.z + place.east.z * e + place.north.z * n + up.z * h,
     },
-    place.voxel,
+    0,
   )
   const sigma = at.sigma * at.fraction
   const level = at.level >= 0 ? weather.levels[at.level] : undefined
@@ -124,7 +140,7 @@ export function fixtureVoxel(
   return { sigma, radius: at.radius, extinction: sigma * unscale }
 }
 
-/** The field on a place's voxels, each read at its center at its own footprint. */
+/** The resolved field on a place's voxels, each read at its center. */
 export function cumulusFixture(
   weather: BodyWeather,
   clock: FieldClock,
@@ -777,6 +793,12 @@ export interface CumulusCase {
     readonly up: readonly [number, number, number]
     readonly sunward: readonly [number, number, number]
   }
+  /**
+   * Where those three were read in the table of Earth's air (`cumulusSky`):
+   * a height over the datum, meters, and the sun's cosine. Null where the
+   * sky is no table's but three numbers a case was given.
+   */
+  readonly skyAt: { readonly height: number; readonly sunMu: number } | null
   /** A Lambertian ground, its height in meters from the grid's low corner, or none. */
   readonly ground: { readonly height: number; readonly albedo: number } | null
 }
@@ -818,6 +840,23 @@ export interface CumulusMedians {
   readonly baseError: readonly [number, number, number]
 }
 
+/**
+ * What the renderer's scaled medium costs in one mask of one case (§5.1):
+ * the mean radiance of the mask's pixels on the scaled medium over their
+ * mean on the true one, per band, with the standard error of that ratio.
+ * The scaled medium is first order on the whole phase through scaled
+ * depths and every order past it of the scaled phase, which is what the
+ * march sets out to draw; the true one is the reference itself.
+ */
+export interface CumulusScaling {
+  readonly case: string
+  readonly mask: CumulusProbe['mask']
+  /** Samples a pixel and band took on the scaled medium. */
+  readonly samples: number
+  readonly ratio: readonly [number, number, number]
+  readonly error: readonly [number, number, number]
+}
+
 /** The generated reference's form (`cumulusReference.generated.ts`). */
 export interface CumulusReference {
   readonly format: 'inertialref/cumulus-reference'
@@ -831,6 +870,8 @@ export interface CumulusReference {
   readonly medians: readonly CumulusMedians[]
   /** Voxels of each subject's fixture, as the field returned them. */
   readonly voxels: readonly (RecordedVoxel & { readonly subject: string })[]
+  /** The scaled medium against the true one, a row a case and mask. */
+  readonly scaling: readonly CumulusScaling[]
   /**
    * The same tracer on the analytic cumulus, which no field moves: what the
    * GPU tracer is held to on every run of its suite.
@@ -840,6 +881,93 @@ export interface CumulusReference {
     readonly cases: readonly CumulusCase[]
     readonly probes: readonly CumulusProbe[]
   }
+}
+
+/** Earth's air as the scene hands it to the bake: its haze, its shell's ratio and its two scale heights. */
+export function cumulusAir(): {
+  readonly haze: HazeAuthoring
+  readonly topRatio: number
+  readonly heights: AirHeights
+} {
+  const earth = SOLAR_PLANETS.find((body) => body.name === 'Earth')
+  if (earth === undefined || earth.haze === null || earth.atmosphere === null)
+    throw new Error('cumulusFixture: Sol has no Earth with air')
+  return {
+    haze: earth.haze,
+    topRatio: airTopRatio(earth.radius, earth.haze.height),
+    heights: airHeights(
+      earth.radius,
+      earth.haze.height,
+      earth.atmosphere.scaleHeight,
+      earth.haze.aerosolHeight,
+    ),
+  }
+}
+
+let skyTable: ScatteringLut | null = null
+/** The sky table of Earth's air (`bakeSkyMoments`), baked once: what the page bakes for Earth and the march reads. */
+export function cumulusSkyTable(): ScatteringLut {
+  if (skyTable === null) {
+    const { haze, topRatio, heights } = cumulusAir()
+    const recipe = atmosphereRecipe(haze, topRatio, heights)
+    const transmittance = bakeTransmittance(recipe)
+    skyTable = bakeSkyMoments(
+      recipe,
+      transmittance,
+      bakeMultipleScattering(recipe, transmittance),
+    )
+  }
+  return skyTable
+}
+
+/** A height over the datum as the sky table's row coordinate: its share of the air's depth. */
+export function cumulusSkyHeight(height: number): number {
+  const earth = SOLAR_PLANETS.find((body) => body.name === 'Earth')
+  return earth?.haze ? Math.max(0, height) / earth.haze.height : 0
+}
+
+/**
+ * The sky a cumulus stands under: the table's three moments at a height
+ * and a view's sun, read as the march's node reads them (`skyMomentsAt`),
+ * and where they were read.
+ */
+export function cumulusSky(
+  view: CumulusView,
+  height: number,
+): {
+  readonly sky: SkyMoments
+  readonly at: NonNullable<CumulusCase['skyAt']>
+} {
+  const sunMu = viewSun(view)[1]
+  return {
+    sky: skyMomentsAt(cumulusSkyTable(), cumulusSkyHeight(height), sunMu),
+    at: { height, sunMu },
+  }
+}
+
+/**
+ * The radiance a unit direction sees of a case's sky, per band, in the
+ * fixture's east, up and north under a sun toward `sun`: the sky linear in
+ * direction that has the case's three moments,
+ * `mean·max(0, 1 + ¾·(up·ω_y + sunward·ω·ŝ_h))`. Both tracers draw this
+ * sky, behind the cloud as well as on it, so a march's light is laid over
+ * this and not over the air's own sky before it is held to a pixel.
+ */
+export function cumulusSkyRadiance(
+  sky: CumulusCase['sky'],
+  sun: readonly [number, number, number],
+  direction: readonly [number, number, number],
+): readonly [number, number, number] {
+  const flat = Math.hypot(sun[0], sun[2])
+  const toward =
+    flat > 0 ? (direction[0] * sun[0] + direction[2] * sun[2]) / flat : 0
+  const band = (b: number): number =>
+    sky.mean[b]! *
+    Math.max(
+      0,
+      1 + 0.75 * (sky.up[b]! * direction[1] + sky.sunward[b]! * toward),
+    )
+  return [band(0), band(1), band(2)]
 }
 
 /** The cloud a reference is traced through: a regime's low level on the datum of an Earth. */

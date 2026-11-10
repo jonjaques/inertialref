@@ -122,6 +122,14 @@ export interface TraceScene {
    * order, at `Infinity`.
    */
   readonly orders: number
+  /**
+   * The first scattering whose sunlight is counted: 1 where it is left out,
+   * which is every order, and 2 for the orders past the first alone. The
+   * walk and the sky's light are the same either way. It is how the
+   * renderer's scaled medium is put together from two media: first order on
+   * the whole phase, and the scaled phase's orders past it (§5.1).
+   */
+  readonly first?: number
   /** How the sun is found: the file's header says what each is. A reference is `'cone'`. */
   readonly estimator: 'cone' | 'disk'
 }
@@ -407,6 +415,7 @@ export function createTracer(scene: TraceScene): Tracer {
     ((x - sunX) ** 2 + (y - sunY) ** 2 + (z - sunZ) ** 2) / 2
   const coneReach = phaseConeReach(phase)
   const cone = scene.estimator === 'cone'
+  const first = scene.first ?? 1
 
   /**
    * The weight of the drawn point of the disk against a direction the vertex
@@ -544,7 +553,7 @@ export function createTracer(scene: TraceScene): Tracer {
       if (order > scene.orders) break
       counts.chained += 1
       ;[row, share] = phaseRow(phase, at[1]!)
-      total += weight * lit(rng, row, share, band)
+      if (order >= first) total += weight * lit(rng, row, share, band)
     }
     qx = px
     qy = py
@@ -587,7 +596,8 @@ export function createTracer(scene: TraceScene): Tracer {
           qx += ex * t
           qy += ey * t
           qz += ez * t
-          if (irradiance > 0) {
+          // A bounce is a scattering to the count of orders, and no more.
+          if (irradiance > 0 && scatterings + 1 >= first) {
             drawSun(rng)
             if (wy > 0) {
               const density = wy / Math.PI
@@ -617,7 +627,13 @@ export function createTracer(scene: TraceScene): Tracer {
           continue
         }
         light += throughput * skyRadiance(band)
-        if (!cone && drew >= 0 && diskDensity > 0 && irradiance > 0) {
+        if (
+          !cone &&
+          drew >= 0 &&
+          diskDensity > 0 &&
+          irradiance > 0 &&
+          scatterings >= first
+        ) {
           if (fromSun(ux, uy, uz) < diskReach)
             light +=
               (throughput * irradiance * diskDensity * drew) /
@@ -635,7 +651,8 @@ export function createTracer(scene: TraceScene): Tracer {
       const [row, share] = phaseRow(phase, at[1]!)
       // Under `'cone'` a vertex reached along the cone is a chain's to light.
       if (irradiance > 0 && !(chains && fromSun(ux, uy, uz) < coneReach)) {
-        light += throughput * irradiance * lit(rng, row, share, band)
+        if (scatterings >= first)
+          light += throughput * irradiance * lit(rng, row, share, band)
         if (chains)
           light +=
             throughput *
