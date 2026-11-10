@@ -93,6 +93,29 @@ export function pictureWeatherLevers(
   }
 }
 
+/**
+ * What a frame served for a picture's levers, once one has drawn them: the
+ * levers ask for a body, and only the clouds' report says which they got. A
+ * forced address no body in the scene has serves nothing, and an unforced
+ * one serves the body whose air the eye is in, which need not be the
+ * picture's. `'drawn'` when the frame served `address`, `'unavailable'`
+ * when it served another or none, and null while no frame on the report was
+ * drawn with these levers.
+ */
+export function servedOutcome(
+  report: CloudRenderReport | null,
+  levers: CloudLevers,
+  address: string,
+): PictureWeatherOutcome | null {
+  if (report?.levers.on !== true) return null
+  if (
+    report.levers.served !== levers.served ||
+    report.levers.weather !== levers.weather
+  )
+    return null
+  return report.served === address ? 'drawn' : 'unavailable'
+}
+
 /** The engine's hold on the levers a picture set. */
 export class PictureWeatherHold {
   #found: Held | null = null
@@ -123,6 +146,8 @@ export class PictureWeatherHold {
    * takes of one picture end on one set of levers whichever came first.
    */
   #pending: string | null = null
+  /** The body the picture's clouds are asked to serve, while they are on. */
+  #address: string | null = null
 
   /** What became of the last picture's weather, while it is held. */
   get outcome(): PictureWeatherOutcome {
@@ -153,6 +178,7 @@ export class PictureWeatherHold {
     this.#outcome = next.outcome
     this.#subject = undefined
     this.#pending = next.outcome === 'drawn' && body === null ? address : null
+    this.#address = next.outcome === 'drawn' ? address : null
     this.#early =
       weather !== null &&
       next.outcome === 'unavailable' &&
@@ -171,13 +197,15 @@ export class PictureWeatherHold {
     this.#early = null
     this.#subject = undefined
     this.#pending = null
+    this.#address = null
   }
 
   /**
    * A frame's check. The pictures are left when the observatory holds no
    * target, or holds another than the picture's; weather asked for before
    * the clouds arrived is applied again on the first frame they have, once;
-   * and a body whose system was not loaded is decided once it is.
+   * the outcome follows what the last frame drawn with the picture's levers
+   * served; and a body whose system was not loaded is decided once it is.
    */
   frame(engine: PictureWeatherEngine, observing: boolean): void {
     if (!observing) return this.release(engine)
@@ -189,6 +217,13 @@ export class PictureWeatherHold {
     const subject = engine.harness.observatory.target?.address ?? null
     if (this.#subject === undefined) this.#subject = subject
     else if (subject !== this.#subject) return this.release(engine)
+    if (this.#address !== null)
+      this.#outcome =
+        servedOutcome(
+          engine.sensorDiagnostics?.clouds ?? null,
+          engine.clouds,
+          this.#address,
+        ) ?? this.#outcome
     if (this.#pending === null) return
     const body = engine.bodyFor(this.#pending)
     if (body === null) return

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cloudReportIdle } from '@inertialref/devtools'
+import { type CloudRenderReport, cloudReportIdle } from '@inertialref/devtools'
 import {
   type Body,
   findBody,
@@ -20,6 +20,7 @@ import {
   type PictureWeatherEngine,
   PictureWeatherHold,
   pictureWeatherLevers,
+  servedOutcome,
 } from './pictureWeather.ts'
 
 /*
@@ -290,6 +291,47 @@ describe('the hold', () => {
     hold.frame(early, true)
     expect(early.clouds).toEqual(loaded.clouds)
     expect(early.clouds.served).toBeNull()
+  })
+
+  it('reads drawn only once a frame drawn with its levers served the picture’s body', () => {
+    // What the system reports after a frame drawn with `levers`, serving
+    // `served`: `on` is whether that frame drew anything.
+    const reportOf = (
+      levers: CloudLevers,
+      served: string | null,
+    ): CloudRenderReport => ({
+      ...cloudReportIdle(),
+      on: served !== null,
+      levers: { ...levers },
+      served,
+    })
+    const diagnostics: { clouds: CloudRenderReport | null } = { clouds: null }
+    const page = engine(true, diagnostics)
+    const hold = new PictureWeatherHold()
+    const station = 'g:milky-way/s:SOL/a:9'
+    expect(hold.apply(page, { regime: 'fair-cumulus' }, station)).toBe('drawn')
+    page.aim(station)
+    // No frame has drawn these levers yet: the request stands.
+    hold.frame(page, true)
+    expect(hold.outcome).toBe('drawn')
+    diagnostics.clouds = reportOf(DEFAULT_CLOUD_LEVERS, EARTH)
+    hold.frame(page, true)
+    expect(hold.outcome).toBe('drawn')
+    // A frame drew them over an address no body has, and served nothing.
+    diagnostics.clouds = reportOf(page.clouds, null)
+    hold.frame(page, true)
+    expect(hold.outcome).toBe('unavailable')
+    expect(page.clouds).toMatchObject({ on: true, served: station })
+    // Unforced, the eye in another body's air: served, and not the picture's.
+    const levers = { ...page.clouds, served: null }
+    expect(servedOutcome(reportOf(levers, EARTH), levers, EARTH)).toBe('drawn')
+    expect(
+      servedOutcome(reportOf(levers, 'g:milky-way/s:SOL/b:3'), levers, EARTH),
+    ).toBe('unavailable')
+    // Released, the report's outcome goes with the picture.
+    hold.release(page)
+    hold.frame(page, true)
+    expect(hold.outcome).toBe('none')
   })
 
   it('reports weather on a page without the clouds, or on WebGL, unavailable', () => {
