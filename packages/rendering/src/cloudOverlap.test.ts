@@ -8,8 +8,8 @@ import {
   spreadDepth,
   stepLight,
   stepShare,
-  UNSPREAD_FROM,
 } from './cloudOverlap.ts'
+import { crossingForm, UNSPREAD_SHAPE } from './weatherField.ts'
 
 /*
  * The crossing's law and the step's integral, the arithmetic the trace's
@@ -39,7 +39,7 @@ const cover = between(0, 1)
 const exponent = decades(1, 300)
 /**
  * A gamma's shape: from a half, a spread wider than its mean, through the
- * decks' few units to past `UNSPREAD_FROM`, where there is no spread.
+ * decks' few units to past `UNSPREAD_SHAPE`, where there is no spread.
  */
 const shape = decades(0.5, 1e5)
 /** Shares of a chord, each at least a thousandth of an even share. */
@@ -185,21 +185,6 @@ describe('a crossing of a partly cloudy level', () => {
 })
 
 describe('a level whose depths are spread', () => {
-  /** The form as its measurement writes it (`crossingForm`): a level `thickness` thick crossed at `zenith`. */
-  function written(
-    fraction: number,
-    tau: number,
-    k: number,
-    sight: number,
-    thickness: number,
-    zenith: number,
-  ): number {
-    const n = Math.sqrt(1 + ((thickness * Math.tan(zenith)) / sight) ** 2)
-    const mean = k * Math.expm1(tau / k)
-    const cell = (1 + mean / (Math.cos(zenith) * n * k)) ** -k
-    return (1 - fraction + fraction * cell) ** n
-  }
-
   it('is the measured form from a level’s four numbers, and 1 − F + F·e^(−τ′) straight down at any shape', () => {
     fc.assert(
       fc.property(
@@ -214,7 +199,7 @@ describe('a level whose depths are spread', () => {
           const slant = spreadDepth(tau, k) / Math.cos(zenith)
           const depth = crossingDepth(fraction, slant, n, k)
           const expected = -Math.log(
-            written(fraction, tau, k, sight, thickness, zenith),
+            crossingForm(fraction, tau, k, sight, thickness, zenith),
           )
           // The form as written adds a column's opacity to one before it
           // takes the logarithm, so it holds eight digits of an opacity of
@@ -262,20 +247,20 @@ describe('a level whose depths are spread', () => {
   it('joins depths that do not spread at a shape of 10⁴, within x²/(2k) of the exponent', () => {
     /*
      * `(1 + x/k)^(−k)` is `e^(−x)·e^(x²/(2k) − …)`, so where the shape
-     * reaches `UNSPREAD_FROM` and the column passes `e^(−x)` itself, the
+     * reaches `UNSPREAD_SHAPE` and the column passes `e^(−x)` itself, the
      * exponent steps by under x²/(2k): 1.25 × 10⁻³ at a depth of five, past
      * which a column passes under 1%.
      */
-    const under = UNSPREAD_FROM * (1 - 1e-12)
+    const under = UNSPREAD_SHAPE * (1 - 1e-12)
     fc.assert(
       fc.property(decades(1e-3, 10), (x) => {
-        expect(gammaDepth(x, UNSPREAD_FROM)).toBe(x)
+        expect(gammaDepth(x, UNSPREAD_SHAPE)).toBe(x)
         const step = x - gammaDepth(x, under)
         expect(step).toBeGreaterThan(0)
-        expect(step).toBeLessThanOrEqual((x * x) / (2 * UNSPREAD_FROM))
-        expect(spreadDepth(x, UNSPREAD_FROM)).toBe(x)
+        expect(step).toBeLessThanOrEqual((x * x) / (2 * UNSPREAD_SHAPE))
+        expect(spreadDepth(x, UNSPREAD_SHAPE)).toBe(x)
         expect(spreadDepth(x, under) - x).toBeLessThanOrEqual(
-          ((x * x) / (2 * UNSPREAD_FROM)) * (1 + x / UNSPREAD_FROM),
+          ((x * x) / (2 * UNSPREAD_SHAPE)) * (1 + x / UNSPREAD_SHAPE),
         )
       }),
     )

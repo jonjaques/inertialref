@@ -80,12 +80,6 @@ const NO_EXTINCTION = 1e-9
 /** The least the sun's cosine turns a column's depth by: the statistics' own floor. */
 const SUN_MU_FLOOR = 0.05
 
-/** Each level's cover and cumuliform share at a sample's own column. */
-export interface CloudSunColumns {
-  readonly cover: Node<'vec3'>
-  readonly convective: Node<'vec3'>
-}
-
 export interface CloudSunDeps {
   readonly uniforms: CloudUniforms
   readonly medium: CloudMediumFn
@@ -100,17 +94,6 @@ export interface CloudSunDeps {
     step: CloudMedium,
     body: CloudBodyUniforms,
   ) => CloudMedium
-  /**
-   * What the statistics read of the sample's column: each level's cover and
-   * cumuliform share there. The climate's own means for the body when
-   * absent, which are the levels' under a regime and the eye's under a
-   * fitted climate.
-   */
-  readonly columns?: (
-    sample: CloudSample,
-    step: CloudMedium,
-    body: CloudBodyUniforms,
-  ) => CloudSunColumns
 }
 
 export function cloudSunFn(deps: CloudSunDeps): CloudSunFn {
@@ -145,6 +128,8 @@ export function cloudSunFn(deps: CloudSunDeps): CloudSunFn {
         altitude: altitudeAt(body, offset),
         sunMu: sunMuAt(body, offset),
         footprint: sample.footprint,
+        // The ray's own, so a tap reads the representation its step reads.
+        ...(sample.dither === undefined ? {} : { dither: sample.dither }),
       }
       const tapped = tapMedium(at, medium, body)
       fraction.assign(max(fraction, tapped.fraction))
@@ -153,18 +138,18 @@ export function cloudSunFn(deps: CloudSunDeps): CloudSunFn {
       width.mulAssign(2)
     })
     const depths = deps.depth.depths(sample.offset.add(body.sun.mul(reach)))
-    const columns = deps.columns?.(sample, medium, body) ?? {
-      cover: body.climate.cover,
-      convective: body.climate.convective,
-    }
+    // The sample's own level by its statistics at its column, where the
+    // medium answers them. The levels beyond it are read nowhere along the
+    // sun's ray, and take the climate's mean cover and cumuliform share.
     const statistics = sunStatistics({
       layers: body.layers,
       level: medium.layer,
-      cover: columns.cover,
-      convective: columns.convective,
+      cover: body.climate.cover,
+      convective: body.climate.convective,
       depth: medium.depth,
       sunMu: sample.sunMu,
       taps: depth,
+      ...(medium.statistics === undefined ? {} : { own: medium.statistics }),
     })
     /** The taps' column at a depth scaled by `a`. */
     const throughTaps = (a: number): Node<'float'> =>

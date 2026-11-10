@@ -34,16 +34,21 @@
  * angle θ is
  * `crossingTransmittance(F, spreadDepth(τ′, k)/cos θ, crossingExponent(thickness·tan θ, c), k)`:
  * straight down, `1 − F + F·e^(−τ′)` at any shape.
+ *
+ * **`crossingForm` in `weatherField.ts` is this file's oracle, and this file
+ * is the kernel's.** `crossingForm` is the form a level's four numbers are
+ * measured against, a whole crossing at one zenith angle, written once
+ * there. The functions here are the same form cut so a march can take it a
+ * step at a time, in arithmetic that holds where the whole form does not: a
+ * thin column's opacity against one, a deep column's transmittance against
+ * the clear share. `cloudOverlap.test.ts` holds their composition to
+ * `crossingForm`, and `cloudTrace.gpu.test.ts` holds the kernel's functions
+ * to these and the march itself to `crossingForm`. A level's shape is taken
+ * as depths that do not spread from `UNSPREAD_SHAPE` up, the table's own
+ * value for a level of one depth, where a column passes `e^(−x)`.
  */
 
-/**
- * The least gamma shape taken as depths that do not spread, where a column
- * passes `e^(−x)`. `(1 + x/k)^(−k)` is `e^(−x)·e^(x²/(2k))` to first order,
- * so at this shape the two are a part in 2 × 10⁴ apart at a depth of one,
- * and the level statistics write this shape for a level whose depths are
- * one depth.
- */
-export const UNSPREAD_FROM = 1e4
+import { UNSPREAD_SHAPE } from './weatherField.ts'
 
 /**
  * The columns a crossing counts: `√(1 + (ℓ/c)²)` for a horizontal run `ℓ`
@@ -65,7 +70,7 @@ export function crossingExponent(run: number, sight: number): number {
  * depth, not that one.
  */
 export function spreadDepth(depth: number, shape: number): number {
-  return shape >= UNSPREAD_FROM ? depth : shape * Math.expm1(depth / shape)
+  return shape >= UNSPREAD_SHAPE ? depth : shape * Math.expm1(depth / shape)
 }
 
 /**
@@ -74,7 +79,7 @@ export function spreadDepth(depth: number, shape: number): number {
  * the depths do not spread.
  */
 export function gammaDepth(depth: number, shape: number): number {
-  return shape >= UNSPREAD_FROM ? depth : shape * Math.log1p(depth / shape)
+  return shape >= UNSPREAD_SHAPE ? depth : shape * Math.log1p(depth / shape)
 }
 
 /** Where air.ts's series takes over from the quotient. */
@@ -112,10 +117,10 @@ export function crossingDepth(
   cover: number,
   depth: number,
   exponent: number,
-  shape: number = UNSPREAD_FROM,
+  shape: number = UNSPREAD_SHAPE,
 ): number {
   if (depth <= 0 || cover <= 0) return 0
-  if (cover >= 1 && shape >= UNSPREAD_FROM) return depth
+  if (cover >= 1 && shape >= UNSPREAD_SHAPE) return depth
   const column = gammaDepth(depth / exponent, shape)
   if (cover >= 1) return exponent * column
   // (1 − c) + c·t. A thin column's opacity is taken without the sum that
@@ -133,7 +138,7 @@ export function crossingTransmittance(
   cover: number,
   depth: number,
   exponent: number,
-  shape: number = UNSPREAD_FROM,
+  shape: number = UNSPREAD_SHAPE,
 ): number {
   return Math.exp(-crossingDepth(cover, depth, exponent, shape))
 }

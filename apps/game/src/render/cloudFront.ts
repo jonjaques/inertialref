@@ -95,13 +95,15 @@ export interface CloudFrontSeen {
 }
 
 /*
- * A knot the trace did not record is padding with T = 1. A recorded one
- * closed a segment whose own transmittance was under 0.98, so its T is under
- * 0.98 of the one before it and under 1 on its own: half a percent of
- * headroom tells the two apart through a half float, whose step under 1 is
- * 2⁻¹¹.
+ * A knot the trace did not record is padding with T = 1. A recorded one is a
+ * crossing whose own transmittance was under `KNOT_TRANSMITTANCE`, 0.999
+ * (`cloudKnots.ts`), so its T is under that and under 1: halfway between the
+ * two tells them apart through a half float, whose step under 1 is 2⁻¹¹.
+ * A literal and not an import: this module is in a page's first chunk, and
+ * the knots' writer is the cloud chunk's. `cloudFront.gpu.test.ts` holds the
+ * two together.
  */
-const RECORDED = 0.995
+const RECORDED = 0.9995
 /** km: a knot of no length is a step at its depth, not a division by zero. */
 const NO_LENGTH = 1e-9
 

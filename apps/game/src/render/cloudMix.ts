@@ -12,8 +12,8 @@ import {
   sqrt,
   vec3,
 } from 'three/tsl'
-import { UNSPREAD_FROM } from '@inertialref/rendering'
-import type { CloudSunDepths } from './cloudNodes.ts'
+import { UNSPREAD_SHAPE } from '@inertialref/rendering'
+import type { CloudLevelStatistics, CloudSunDepths } from './cloudNodes.ts'
 import type { CloudLayerUniforms } from './cloudUniforms.ts'
 
 /*
@@ -88,7 +88,7 @@ export function stepShare(y: Node<'float'>): Node<'float'> {
 
 /** A shape from which a column's depths do not spread, as a node. */
 const unspread = (shape: Node<'float'>): Node<'bool'> =>
-  shape.greaterThanEqual(UNSPREAD_FROM)
+  shape.greaterThanEqual(UNSPREAD_SHAPE)
 
 /**
  * The mean of the gamma-spread depth whose mean transmittance is that of
@@ -149,7 +149,7 @@ export function crossingDepth(
   cover: Node<'float'>,
   depth: Node<'float'>,
   exponent: Node<'float'>,
-  shape: Node<'float'> = float(UNSPREAD_FROM),
+  shape: Node<'float'> = float(UNSPREAD_SHAPE),
 ): Node<'float'> {
   const n = max(exponent, TINY)
   const column = gammaDepth(depth.div(n), shape)
@@ -185,7 +185,7 @@ export function crossingTransmittance(
   cover: Node<'float'>,
   depth: Node<'float'>,
   exponent: Node<'float'>,
-  shape: Node<'float'> = float(UNSPREAD_FROM),
+  shape: Node<'float'> = float(UNSPREAD_SHAPE),
 ): Node<'float'> {
   return exp(crossingDepth(cover, depth, exponent, shape).negate())
 }
@@ -264,6 +264,12 @@ export interface SunStatisticsInput {
   readonly sunMu: Node<'float'>
   /** The optical depth the light taps crossed toward the sun. */
   readonly taps: Node<'float'>
+  /**
+   * The sample's own level's statistics at its column, where the medium
+   * answers them: its cloudy share in place of the climate's mean cover, and
+   * the gamma its columns' depths are spread by.
+   */
+  readonly own?: CloudLevelStatistics
 }
 
 /** The least the sun's cosine is taken as: the slab source's first row. */
@@ -300,11 +306,29 @@ export function sunStatistics(input: SunStatisticsInput): Node<'float'> {
   for (let k = 0; k < 3; k += 1)
     own = select(level.equal(int(k)), cover[k]!, own)
   // One column: the sample's own, whatever the sun's run across the level.
-  let through = crossingTransmittance(
-    own,
-    max(column.div(mu).sub(input.taps), 0),
-    float(1),
-  )
+  // With the level's statistics it is cloudy by their share, and its depth
+  // along the sun is the spread's mean in the share the column holds of the
+  // level's own, as a slant crossing's is.
+  const { own: statistics } = input
+  const slant = column.div(mu)
+  let through =
+    statistics === undefined
+      ? crossingTransmittance(own, max(slant.sub(input.taps), 0), float(1))
+      : crossingTransmittance(
+          statistics.fraction,
+          max(
+            slant
+              .mul(
+                spreadDepth(statistics.depth, statistics.shape).div(
+                  max(statistics.depth, TINY),
+                ),
+              )
+              .sub(input.taps),
+            0,
+          ),
+          float(1),
+          statistics.shape,
+        )
   for (let j = 0; j < 3; j += 1) {
     const beyond = select(
       above,

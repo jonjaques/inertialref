@@ -310,8 +310,16 @@ function traceKernel(
       const draw = deps.jitter.draw(texel, uniforms.trace.frame).toVar()
       const { ray, sky } = traceView(uniforms, draw.yz.sub(0.5), depth, texel)
       const knots = cloudKnotWriter(outputs)
+      // The switch to a level's statistics is dithered by the first
+      // coordinate of the ray's point inside its pixel, not by the
+      // handover's ξ: a ray whose switch and whose handover moved together
+      // would be coarse in both or fine in both, and a pixel's samples would
+      // differ by the two at once. The point's coordinate is uncorrelated
+      // with ξ under either draw, and it spreads the two representations
+      // across the pixel's own width.
       const fine = cloudMarch(ray, draw.x, sky, deps, knots, {
         handover: draw.w,
+        dither: draw.y,
         phaseMode,
       })
       const result = marchFar(

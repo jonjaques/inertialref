@@ -3,6 +3,7 @@ import {
   Break,
   clamp,
   exp,
+  exp2,
   float,
   floor,
   If,
@@ -33,11 +34,12 @@ import {
 import { airEye, airSegment } from './cloudCompositeAir.ts'
 import { cloudSample, shellCrossing } from './cloudGeometry.ts'
 import { type CloudKnotWriter, KNOT_TRANSMITTANCE } from './cloudKnots.ts'
-import { UNSPREAD_FROM } from '@inertialref/rendering'
+import { UNSPREAD_SHAPE } from '@inertialref/rendering'
 import type { CLOUD_PHASE_MODES } from './cloudLevers.ts'
 import {
   crossingDepth,
   crossingExponent,
+  spreadDepth,
   stepLight,
   stepShare,
 } from './cloudMix.ts'
@@ -94,6 +96,16 @@ import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
  * a step takes its share by its length, and the level's transmittance is
  * then the same at any step count (`cloudMix.ts`). No register holds a
  * column open between steps.
+ *
+ * **A step is the resolved field or its level's statistics, and the ray
+ * says which.** Up to a footprint of `cell·4^(dither − 1)` the medium answers
+ * the resolved field, a cover of one, and a step is Beer's law. Past it the
+ * medium answers the level's cloudy share and the depth whose transmittance
+ * is the cloudy columns' mean, and the step is the crossing's law at the
+ * level's own shape and sight length, which the march reads once a
+ * crossing. The dither is the ray's, one value on every read of the medium
+ * the ray makes, its taps' among them, so at one footprint a ray's crossing
+ * is wholly one or the other.
  *
  * **A ray always reaches its handover, and keeps its fine steps near the
  * eye.** A step is never shorter than an even share, in the logarithm of
@@ -166,6 +178,12 @@ export interface CloudMarchOptions {
   readonly handover?: Node<'float'>
   /** How first order takes its phase's radius: the ray's mean a level when absent. */
   readonly phaseMode?: CloudPhaseMode
+  /**
+   * The ray's dither in [0, 1]: where its footprint stops reading the
+   * resolved field and reads its level's statistics, `cell·4^(dither − 1)`.
+   * Passed on every read of the medium the ray makes. A half when absent.
+   */
+  readonly dither?: Node<'float'>
   /**
    * Hold a step's source at its start where the march takes it at both
    * ends. The rule a test builds to watch the step's integral fail: 15%
@@ -339,15 +357,19 @@ function nextCrossing(
  * Registers of a sample, so the branches after it read one value: a node
  * first built inside one branch is declared in that branch's scope.
  */
-function held(sample: CloudSample): CloudSample {
+function held(sample: CloudSample, dither?: Node<'float'>): CloudSample {
   return {
     offset: sample.offset.toVar(),
     distance: sample.distance.toVar(),
     altitude: sample.altitude.toVar(),
     sunMu: sample.sunMu.toVar(),
     footprint: sample.footprint.toVar(),
+    ...(dither === undefined ? {} : { dither }),
   }
 }
+
+/** The share of a cell past which a footprint reads statistics where no ray says: a dither of a half. */
+const SWITCH_SHARE = 0.25
 
 /** A medium's registers, written a step and read by the steps after it. */
 function mediumRegisters() {
@@ -548,6 +570,22 @@ function phaseGather(
 /* The march's registers                                                      */
 /* ------------------------------------------------------------------------- */
 
+/**
+ * A level's statistics at the column a crossing began in, read once a
+ * crossing: the cloudy share, the depth whose transmittance is the cloudy
+ * columns' mean, the gamma's shape, the sight length, and the spread's mean
+ * depth over that depth, which a slant path scales.
+ */
+function crossingStatistics() {
+  return {
+    fraction: float(0).toVar(),
+    depth: float(0).toVar(),
+    shape: float(UNSPREAD_SHAPE).toVar(),
+    sight: float(1).toVar(),
+    spread: float(1).toVar(),
+  }
+}
+
 /** The step waiting for the sun at its far end. */
 function pendingStep() {
   return {
@@ -641,6 +679,18 @@ export function cloudMarch(
   const stepped = mediumRegisters()
   const pending = pendingStep()
   const knot = openKnot()
+  const column = crossingStatistics()
+  const { dither } = options
+  // 4^(dither − 1), once a ray: the share of a cell past which the medium
+  // answers its level's statistics (`statisticsFootprint`), as the medium
+  // takes it from the same dither.
+  const switchShare =
+    dither === undefined
+      ? float(SWITCH_SHARE)
+      : exp2(clamp(dither, 0, 1).mul(2).sub(2)).toVar()
+  /** A level's component of a per-level vector, by the medium's own level. */
+  const ofLevel = (v: Node<'vec3'>, level: Node<'int'>): Node<'float'> =>
+    select(level.equal(int(0)), v.x, select(level.equal(int(1)), v.y, v.z))
   const gather = phaseGather(options.phaseMode ?? 'mean', deps, ray.nu)
 
   /** L_c so far: first order through its phase, and the sky's light. */
@@ -703,24 +753,29 @@ export function cloudMarch(
   }
 
   /**
-   * A level's statistics at a step's column, beside the in-cloud depth the
-   * step crosses: the cloudy share, the gamma's shape its columns' depths
-   * are spread by, and its sight length. Stand-ins: the medium's own
-   * fraction, depths that do not spread, and the level's noise cell, at
-   * which a resolved cloud is Beer's law. Where the field's read of a
-   * level's four numbers joins the march.
+   * The level's statistics at a crossing's first column, held for the
+   * crossing. A medium that answers none is one column a cell across whose
+   * depths do not spread, at which a resolved cloud is Beer's law.
    */
-  function columnStatistics(level: Node<'int'>) {
-    const { cell } = body.layers
-    return {
-      fraction: m.fraction,
-      shape: float(UNSPREAD_FROM),
-      sight: select(
-        level.equal(int(0)),
-        cell.x,
-        select(level.equal(int(1)), cell.y, cell.z),
-      ),
+  function readStatistics(medium: CloudMedium): void {
+    const { statistics } = medium
+    if (statistics === undefined) {
+      column.sight.assign(ofLevel(body.layers.cell, medium.layer))
+      return
     }
+    column.fraction.assign(statistics.fraction)
+    column.depth.assign(statistics.depth)
+    column.shape.assign(statistics.shape)
+    column.sight.assign(statistics.sight)
+    column.spread.assign(
+      select(
+        statistics.depth.greaterThan(TINY),
+        spreadDepth(statistics.depth, statistics.shape).div(
+          max(statistics.depth, TINY),
+        ),
+        float(1),
+      ),
+    )
   }
 
   /** The pending step's light, now that the sun at its far end is known. */
@@ -743,9 +798,9 @@ export function cloudMarch(
   /** A step of `length` through cloud: its mix, its opacity's moments, and its light left pending. */
   function step(
     here: ReturnType<typeof crossingAt>,
+    s: CloudSample,
     length: Node<'float'>,
   ): void {
-    const column = columnStatistics(here.level)
     // The step's share of its crossing's columns, by its share of the
     // chord; a cloud outside every level's crossing is one column a step.
     const exponent = select(
@@ -755,11 +810,22 @@ export function cloudMarch(
         .div(max(here.chord, TINY)),
       float(1),
     )
+    /*
+     * Past the switch the medium's extinction sums, up a vertical column,
+     * to the depth whose transmittance is the cloudy columns' mean: the
+     * step's mean depth is that times the spread's share, and its columns
+     * hold the level's gamma. Up to the switch the medium is the resolved
+     * field at a cover of one, and its depth is the step's own. The switch
+     * is the medium's, formed here from the same cell and the same dither.
+     */
+    const statistical = s.footprint.greaterThan(
+      ofLevel(body.layers.cell, m.layer).mul(switchShare),
+    )
     const depth = crossingDepth(
-      column.fraction,
-      m.sigma.mul(length),
+      m.fraction,
+      m.sigma.mul(length).mul(select(statistical, column.spread, float(1))),
       exponent,
-      column.shape,
+      select(statistical, column.shape, float(UNSPREAD_SHAPE)),
     ).toVar()
     // 1 − e^−τ by its series under τ = 0.01, where the subtraction cancels
     // in float32.
@@ -866,12 +932,18 @@ export function cloudMarch(
       )
       const s = held(
         cloudSample(ray, r.t.add(inset), body, uniforms.camera.pixelAngle),
+        dither,
       )
       const here = crossingAt(s.distance)
       // Past the last step the medium is not read again: the step being
-      // closed keeps the one it was taken with.
+      // closed keeps the one it was taken with. The level's statistics are
+      // read where the ray enters a crossing, and held for it.
       If(done.not(), () => {
-        assignMedium(m, deps.medium(s, body))
+        const medium = deps.medium(s, body)
+        assignMedium(m, medium)
+        If(here.index.notEqual(r.crossing), () => {
+          readStatistics(medium)
+        })
       })
       const cloudy = done
         .not()
@@ -894,7 +966,10 @@ export function cloudMarch(
       // The sun, where a step starts in cloud and where one waits for its
       // far end: there with the medium the waiting step was taken with.
       If(cloudy.or(waiting), () => {
-        const at = held(cloudSample(ray, r.t, body, uniforms.camera.pixelAngle))
+        const at = held(
+          cloudSample(ray, r.t, body, uniforms.camera.pixelAngle),
+          dither,
+        )
         const lit = cloudy
         const sun = deps.sun(
           at,
@@ -908,6 +983,7 @@ export function cloudMarch(
               select(lit, m.depth, stepped.depth),
               select(lit, m.whole, stepped.whole),
             ),
+            statistics: column,
           },
           body,
         )
@@ -942,7 +1018,7 @@ export function cloudMarch(
       )
       r.fresh.assign(0)
       If(cloudy, () => {
-        step(here, next.sub(r.t))
+        step(here, s, next.sub(r.t))
       })
       r.airLength.addAssign(next.sub(r.t))
       r.t.assign(next)

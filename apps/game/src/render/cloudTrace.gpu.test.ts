@@ -38,12 +38,18 @@ import {
   vec4,
 } from 'three/tsl'
 import {
-  gammaDepth as gammaDepthOf,
   crossingDepth as crossingDepthOf,
   crossingExponent as crossingExponentOf,
+  crossingForm,
+  gammaDepth as gammaDepthOf,
+  GENUS_TABLE,
+  levelStatistics,
+  readLevelStatistics,
+  type ScenarioId,
   spreadDepth as spreadDepthOf,
   stepLight as stepLightOf,
   stepShare as stepShareOf,
+  WEATHER_SCENARIOS,
 } from '@inertialref/rendering'
 import { altitudeAt, cloudRay, sunMuAt } from './cloudGeometry.ts'
 import { traceJitter } from './cloudJitter.ts'
@@ -509,8 +515,9 @@ describe('the march through one slab', () => {
 })
 
 describe('a partly cloudy level (the crossing’s law, §5.9)', () => {
-  const halfClear = { ...SLAB, sigma: 20 / 600, fraction: 0.5 }
   const CELL = 1000
+  /** A slab's column is its sight length: what its statistics answer. */
+  const halfClear = { ...SLAB, sigma: 20 / 600, fraction: 0.5, column: CELL }
 
   /** What the law passes of a ray of up-cosine μ from the datum through the slab, float64. */
   function lawThrough(mu: number, cover: number, sigma: number): number {
@@ -523,11 +530,7 @@ describe('a partly cloudy level (the crossing’s law, §5.9)', () => {
 
   it('passes a half-clear layer of depth 20 by its crossing’s columns at every slant, and half of it vertically, on any cut', async () => {
     const uniforms = createCloudUniforms()
-    placeBody(uniforms, {
-      eye: 0,
-      layers: [[SLAB.base, SLAB.top]],
-      cell: CELL,
-    })
+    placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
     const march = probe(uniforms, slabMedium([halfClear]))
     const cosines = [1, 0.8, 0.5, 0.2]
     expect(lawThrough(1, 0.5, halfClear.sigma)).toBeCloseTo(0.5, 8)
@@ -553,16 +556,12 @@ describe('a partly cloudy level (the crossing’s law, §5.9)', () => {
     }
   })
 
-  it('counts every step its own columns where a cell is a millimeter: the variant, which passes nothing', async () => {
+  it('counts every step its own columns where the sight length is a millimeter: the variant, which passes nothing', async () => {
     // A sight length under any step's run makes each step many columns, the
     // layer's clear half counted once a column: the mean medium, e^(−c·τ).
     const uniforms = createCloudUniforms()
-    placeBody(uniforms, {
-      eye: 0,
-      layers: [[SLAB.base, SLAB.top]],
-      cell: 1e-3,
-    })
-    const march = probe(uniforms, slabMedium([halfClear]))
+    placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
+    const march = probe(uniforms, slabMedium([{ ...halfClear, column: 1e-3 }]))
     const [mixed] = await march([{ direction: leaning(0.8) }])
     expect(mixed!.transmittance).toBeLessThan(0.05)
     expect(lawThrough(0.8, 0.5, halfClear.sigma)).toBeGreaterThan(0.4)
@@ -591,10 +590,10 @@ describe('a partly cloudy level (the crossing’s law, §5.9)', () => {
 
   it('is Beer’s law at a cover of one whatever the crossing counts: a grazing ray through a resolved slab', async () => {
     const uniforms = createCloudUniforms()
-    placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]], cell: 50 })
+    placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
     // Thin enough that the longest chord, 16.7 km, stays over the 1% exit.
     const sigma = 1e-4
-    const march = probe(uniforms, slabMedium([{ ...SLAB, sigma }]))
+    const march = probe(uniforms, slabMedium([{ ...SLAB, sigma, column: 50 }]))
     const cosines = [0.3, 0.1, 0.03]
     const probed = await march(
       cosines.map((mu) => ({ direction: leaning(mu) })),
@@ -608,6 +607,175 @@ describe('a partly cloudy level (the crossing’s law, §5.9)', () => {
       )
     })
   })
+})
+
+describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
+  /*
+   * Past the footprint switch the medium answers a level's four numbers at
+   * the column, and a crossing passes the form those numbers were measured
+   * against: `crossingForm` in `weatherField.ts`. The march is held to it
+   * on each regime's own levels, at the regime's cover, on rays 0°, 45° and
+   * 80° from the vertical.
+   *
+   * The medium is the statistical branch's, written out: a level's cloudy
+   * share, an extinction that sums up a vertical column to the level's
+   * depth, and the four numbers as the level's table answers them. The rays
+   * are made to read it by a footprint of the distance itself, past any
+   * cell's quarter.
+   */
+  const REGIMES: readonly ScenarioId[] = [
+    'fair-cumulus',
+    'broken-horizon',
+    'inside',
+    'two-decks',
+    'near-gap-far',
+    'cirrus-over-cumulus',
+    'anvil',
+    'overcast',
+    'fog',
+    'altocumulus',
+  ]
+  const ZENITHS = [0, 45, 80]
+  const BASE = 1000
+
+  /** Every level of the regimes, with the four numbers its table answers at the regime's cover. */
+  function levels() {
+    return REGIMES.flatMap((id) =>
+      WEATHER_SCENARIOS[id].layers.map((layer, k) => {
+        const { genus } = layer
+        const stats = readLevelStatistics(
+          levelStatistics({
+            base: layer.base,
+            top: layer.top,
+            stratiform: genus,
+            cumuliform: genus,
+          }),
+          layer.coverage,
+          GENUS_TABLE[genus].cumuliform ? 1 : 0,
+        )
+        return {
+          what: `${id}, level ${k}`,
+          thickness: layer.top - layer.base,
+          ...stats,
+        }
+      }),
+    )
+  }
+
+  /** The march through a level of `thickness` holding the four numbers, on the three rays; `statistical` says which read the rays take. */
+  function marcher() {
+    const numbers = {
+      thickness: uniform(1),
+      fraction: uniform(0),
+      depth: uniform(0),
+      shape: uniform(1),
+      sight: uniform(1),
+    }
+    const uniforms = createCloudUniforms()
+    const top = float(BASE).add(numbers.thickness)
+    const slab = slabMedium([
+      {
+        base: BASE,
+        top,
+        sigma: numbers.depth.div(numbers.thickness),
+        fraction: numbers.fraction,
+      },
+    ])
+    const medium: CloudMediumFn = (sample, body) => ({
+      ...slab(sample, body),
+      statistics: {
+        fraction: numbers.fraction,
+        depth: numbers.depth,
+        shape: numbers.shape,
+        sight: numbers.sight,
+      },
+    })
+    const march = probe(uniforms, medium)
+    return async (
+      level: ReturnType<typeof levels>[number],
+      statistical: boolean,
+    ) => {
+      placeBody(uniforms, {
+        eye: 0,
+        layers: [[BASE, BASE + level.thickness]],
+      })
+      uniforms.camera.pixelAngle.value = statistical ? 1 : 0
+      numbers.thickness.value = level.thickness
+      numbers.fraction.value = level.fraction
+      numbers.depth.value = level.depth
+      numbers.shape.value = level.shape
+      numbers.sight.value = level.sight
+      const cosines = ZENITHS.map((degrees) =>
+        Math.cos((degrees * Math.PI) / 180),
+      )
+      const probed = await march(
+        cosines.map((mu) => ({ direction: leaning(mu), jitter: 0.5 })),
+      )
+      return probed.map((result, i) => {
+        // The ray's own chord over a round body: the path factor it has,
+        // and the zenith angle that is its secant.
+        const s = chord(0, cosines[i]!, BASE, BASE + level.thickness)
+        const zenith = Math.acos(Math.min(level.thickness / s, 1))
+        return {
+          degrees: ZENITHS[i]!,
+          got: result.transmittance,
+          form: crossingForm(
+            level.fraction,
+            level.depth,
+            level.shape,
+            level.sight,
+            level.thickness,
+            zenith,
+          ),
+        }
+      })
+    }
+  }
+
+  it('passes each regime’s levels as `crossingForm` does, at 0°, 45° and 80°', async () => {
+    const through = marcher()
+    const all = levels()
+    expect(all.length).toBeGreaterThanOrEqual(12)
+    let held = 0
+    for (const level of all)
+      for (const { degrees, got, form } of await through(level, true)) {
+        const what = `${level.what} at ${degrees}°: ${got} against ${form}`
+        // Under the 1% exit the march has stopped, at whatever its last
+        // step left: the form is held where the ray crosses the level.
+        if (form < 0.011) expect(got, what).toBeLessThan(0.011)
+        else {
+          expect(relative(got, form), what).toBeLessThan(5e-4)
+          held += 1
+        }
+      }
+    // The control: most of the crossings are above the exit, and held.
+    expect(held).toBeGreaterThanOrEqual(24)
+  }, 120_000)
+
+  it('is not what one depth passes: read as resolved, a deck on a slant is its mean’s exponential, and darker', async () => {
+    /*
+     * The same numbers with the rays' footprint under the switch: the march
+     * takes the medium as the resolved field, whose depth is the step's own
+     * with no spread. Straight down the two agree by construction. On a
+     * slant the spread passes more, and on a level whose depths spread the
+     * most it is the picture.
+     */
+    const through = marcher()
+    let widest = 0
+    for (const level of levels()) {
+      const resolved = await through(level, false)
+      const [down] = resolved
+      if (down!.form >= 0.011)
+        expect(relative(down!.got, down!.form), level.what).toBeLessThan(5e-4)
+      for (const { got, form } of resolved.slice(1)) {
+        // Under the exit either march has stopped where its step left it.
+        if (form < 0.011) continue
+        expect(got).toBeLessThanOrEqual(form * (1 + 5e-4) + 1e-6)
+        if (form >= 0.05) widest = Math.max(widest, 1 - got / form)
+      }
+    }
+    expect(widest).toBeGreaterThan(0.1)
+  }, 120_000)
 })
 
 describe('the kernel’s arithmetic against the CPU’s (`cloudOverlap.ts`)', () => {

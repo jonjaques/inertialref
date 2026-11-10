@@ -37,6 +37,7 @@ import { Quaternion as Q, type Vec3, Vec } from '@inertialref/spatial'
 import { type CloudField, createCloudField } from './cloudField.ts'
 import { type CloudFrame, cloudFrame } from './cloudFrame.ts'
 import { cloudFront, cloudFrontThrough } from './cloudFront.ts'
+import { KNOT_TRANSMITTANCE } from './cloudKnots.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
   depthTexture,
@@ -450,14 +451,15 @@ async function frontAt(
 }
 
 describe('a point behind a layer thin in every column', () => {
-  it('reads the layer’s transmittance within 0.01 of the march’s, and not one', async () => {
+  /** The trace over a layer of vertical depth `depth`, and `cloudFront` behind and before it. */
+  async function thinLayer(depth: number) {
     const over = createCloudUniforms()
     placeBody(over, { eye: 0, layers: [[1000, 1400]] })
     lookUp(over, 0.5)
     sizeTrace(over, TRACE, TRACE)
-    const depth = depthTexture(4 * TRACE, 4 * TRACE, () => SKY_KM)
+    const copy = depthTexture(4 * TRACE, 4 * TRACE, () => SKY_KM)
     const field = CLOUD_STAND_INS.field(
-      slabMedium([{ base: 1000, top: 1400, sigma: 0.1 / 400 }]),
+      slabMedium([{ base: 1000, top: 1400, sigma: depth / 400 }]),
     )
     const thin = new CloudTrace({
       uniforms: over,
@@ -465,15 +467,25 @@ describe('a point behind a layer thin in every column', () => {
       sun: testSun(field, CLOUD_STAND_INS.sunDepth()),
       phase: CLOUD_STAND_INS.phase(),
       far: CLOUD_STAND_INS.far(),
-      depth: () => depth,
+      depth: () => copy,
       ...marchLight(over),
     })
     await thin.warm(gpu.renderer)
     const frame = traceFrame({ width: TRACE, height: TRACE })
     thin.render(gpu.renderer, frame, NO_BUDGET)
-    const marched = await readTexels(gpu, thin.outputs.light, TRACE, TRACE)
-    const behind = await frontAt(() => thin.outputs, over, 20_000)
-    const before = await frontAt(() => thin.outputs, over, 500)
+    const found = {
+      marched: await readTexels(gpu, thin.outputs.light, TRACE, TRACE),
+      behind: await frontAt(() => thin.outputs, over, 20_000),
+      before: await frontAt(() => thin.outputs, over, 500),
+    }
+    thin.dispose()
+    copy.dispose()
+    over.dispose()
+    return found
+  }
+
+  it('reads the layer’s transmittance within 0.01 of the march’s, and not one', async () => {
+    const { marched, behind, before } = await thinLayer(0.1)
     for (let j = 0; j < TRACE; j += 1)
       for (let i = 0; i < TRACE; i += 1) {
         const through = marched(i, j)[3]
@@ -482,9 +494,23 @@ describe('a point behind a layer thin in every column', () => {
         expect(Math.abs(behind(i, j)[3] - through)).toBeLessThan(0.01)
         expect(before(i, j)[3]).toBe(1)
       }
-    thin.dispose()
-    depth.dispose()
-    over.dispose()
+  }, 60_000)
+
+  it('reads a knot recorded just under the trace’s own threshold, which half a percent of headroom would take for padding', async () => {
+    /*
+     * The trace records a crossing that passes under `KNOT_TRANSMITTANCE`,
+     * and the reader tells a recorded knot from padding by its
+     * transmittance. A layer that passes 99.85% is recorded: read with a
+     * threshold of 0.995, an object behind it stands in clear air.
+     */
+    const { marched, behind } = await thinLayer(0.0015)
+    for (let j = 0; j < TRACE; j += 1)
+      for (let i = 0; i < TRACE; i += 1) {
+        const through = marched(i, j)[3]
+        expect(through).toBeLessThan(KNOT_TRANSMITTANCE)
+        expect(through).toBeGreaterThan(0.995)
+        expect(behind(i, j)[3]).toBe(through)
+      }
   }, 60_000)
 })
 
