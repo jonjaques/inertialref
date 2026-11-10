@@ -28,7 +28,7 @@ import {
 } from './cloudFrame.ts'
 import { type CloudFrameDriver, CloudFrameNode } from './cloudFrameNode.ts'
 import { CloudHistory } from './cloudHistory.ts'
-import { UNDER_CLOUDS_LAYERS } from './cloudLayers.ts'
+import { overClouds, UNDER_CLOUDS_LAYERS } from './cloudLayers.ts'
 import {
   type CloudLevers,
   cloudLeversHash,
@@ -36,7 +36,7 @@ import {
 } from './cloudLevers.ts'
 import type { CloudBudget, CloudResource } from './cloudNodes.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
-import { CLOUD_PROFILE_HEIGHTS, CLOUD_PROFILE_ROWS } from './cloudProfile.ts'
+import { CLOUD_PROFILE_BYTES } from './cloudProfile.ts'
 import { CloudRadianceMeter } from './cloudRadiance.ts'
 import { CloudTrace, type CloudTraceTextures } from './cloudTrace.ts'
 import type { SceneLayout } from './sceneLayout.ts'
@@ -129,7 +129,10 @@ export type CloudEngineInputs = Omit<
 >
 
 export interface CloudSystem {
-  /** Pass B, over the clouds, in the sensor's dependency sum: vec4(0) in the post program. */
+  /**
+   * What stands over the scene, in the sensor's dependency sum: pass B, or
+   * the composite alone over the resolved rows. vec4(0) in the post program.
+   */
   readonly overPass: Node<'vec4'>
   beginFrame(inputs: CloudEngineInputs | null, sensor: CloudSensorState): void
   endFrame(): void
@@ -166,8 +169,8 @@ export interface CloudSystemFactory {
   readonly createFront: () => CloudFrontHandle
 }
 
-/** The profile table, RGBA8: not a resource of its own, 2 KB the report counts. */
-const PROFILE_BYTES = CLOUD_PROFILE_HEIGHTS * CLOUD_PROFILE_ROWS * 4
+/** The profile and statistics table, RGBA16F: not a resource of its own, 48 KB the report counts. */
+const PROFILE_BYTES = CLOUD_PROFILE_BYTES
 
 /* ------------------------------------------------------------------------- */
 /* The pipeline census                                                        */
@@ -353,6 +356,7 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
     camera,
     scenePass.renderTarget,
     mrt,
+    composite,
   )
   scene.add(composite.mesh)
 
@@ -448,19 +452,32 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
       uniforms.camera.near.value = view.near ?? uniforms.camera.near.value
       uniforms.camera.far.value = view.far ?? uniforms.camera.far.value
       composite.setMode(frame.levers.composite)
-      composite.show(true)
-      scenePass.setLayers(UNDER_CLOUDS_LAYERS)
-      overPass.active = true
-      layered = true
+      /*
+       * The composite's form, a frame at a time. The marks are counted only
+       * where a form asks: `chain` draws the scene once, on every layer,
+       * while nothing marked over the clouds would draw, and goes back to
+       * the two passes on the frame something would; `lean` asks whether
+       * what pass B draws writes depth.
+       */
+      const over = frame.levers.over
+      const marked = over === 'passes' ? 'depth' : overClouds(scene)
+      const chained = over === 'chain' && marked === 'nothing'
+      overPass.form = chained ? 'chain' : over === 'lean' ? 'lean' : 'passes'
+      overPass.depthReadOnly = marked !== 'depth'
+      if (!chained) {
+        composite.show(true)
+        scenePass.setLayers(UNDER_CLOUDS_LAYERS)
+        layered = true
+      }
       inFrame = true
     },
     endFrame() {
       inFrame = false
       composite.show(false)
+      overPass.form = null
       if (layered) {
         // r185 takes null back to the camera's own mask; its types do not.
         scenePass.setLayers(null as unknown as Layers)
-        overPass.active = false
         layered = false
       }
     },
@@ -496,6 +513,8 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
       await history.warm(renderer)
       progress()
       await composite.warm(renderer, layout, camera, scene)
+      // Both forms, so the frame one gives way to the other builds nothing.
+      await overPass.warm(renderer)
       progress()
     },
     get served() {
@@ -514,6 +533,7 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
       // rebuilt beside this one may already have taken it.
       if (front.textures() === trace.outputs) front.follow(null)
       scene.remove(composite.mesh)
+      overPass.dispose()
       composite.dispose()
       radiance.dispose()
       field.dispose()

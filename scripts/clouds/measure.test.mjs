@@ -799,6 +799,14 @@ describe('the page steps', () => {
     page.context.ir.lightEngine = (on) => (lit = on)
     expect((await send(page, overlay, 'stance')).unlit).toBeNull()
     expect(lit).toBe(true)
+    // The light is the harness's and outlives the run: the next stance on
+    // the page puts it out.
+    await send(
+      page,
+      target('targets/landed/landed/horizon/1080p/steady'),
+      'stance',
+    )
+    expect(lit).toBe(false)
   })
 
   it('refuse a page with no cloud system before standing anywhere', async () => {
@@ -1155,11 +1163,11 @@ describe('the figures', () => {
     const [header, rule, line] = text.split('\n')
     // Which median is which, and the Δ as the pairs' own.
     expect(header).toBe(
-      '| Scenario | Size | Kind | Lever | base: median of sides ms | candidate: median of sides ms | Δ: median of pairs ms (spread) | allowance ms | Hz | lens mm | levers | scene over clouds | cloud trace | cloud history | cloud depth | bakes | passes/frame | bytes MB | quiet |',
+      '| Scenario | Size | Kind | Lever | base: median of sides ms | candidate: median of sides ms | Δ: median of pairs ms (spread) | allowance ms | cloud composite | form drawn (pass B depth) | Hz | lens mm | levers | scene over clouds | cloud trace | cloud history | cloud depth | bakes | passes/frame | bytes MB | quiet |',
     )
     expect(rule).toMatch(/^\| --- (\| --- )+\|$/)
     expect(line).toBe(
-      `| orbit | retina | steady | landed | 10.02 | 10.44 | 0.42 (0.04) | 0.08 | 118 | 20.8 | ${run.leversHash} | 0.30 | 1.10 | — | — | 0.05 | 35 | 83.50 | yes |`,
+      `| orbit | retina | steady | landed | 10.02 | 10.44 | 0.42 (0.04) | 0.08 | — | — | 118 | 20.8 | ${run.leversHash} | 0.30 | 1.10 | — | — | 0.05 | 35 | 83.50 | yes |`,
     )
   })
 
@@ -1216,6 +1224,46 @@ describe('the figures', () => {
     )
     expect(lines[4]).toMatch(/192 against 256 \| held at 0 \| — \| — \|/)
     expect(measured(row)).toBe(false)
+  })
+
+  it('read the form each side drew from the report’s overPass, and unknown without it', () => {
+    const over = batchRuns('over', ['1080p']).find((r) => r.group === 'chain')
+    const steps = plan(over)
+    const answer = (overPass) => ({
+      results: steps.map((s) =>
+        s.tag === 'settle'
+          ? settled
+          : {
+              value:
+                s.tag === 'stance'
+                  ? STOOD
+                  : s.tag.startsWith('base:') || s.tag.startsWith('candidate:')
+                    ? { ms: 10, settled: 5 }
+                    : s.tag === 'timeline'
+                      ? {
+                          labels: { 'cloud composite': { ms: 0.9 } },
+                          clouds: {
+                            leversHash: over.leversHash,
+                            ...(overPass ? { overPass } : {}),
+                          },
+                        }
+                      : s.tag === 'timeline:base'
+                        ? { labels: { 'scene over clouds': { ms: 1.44 } } }
+                        : null,
+            },
+      ),
+    })
+    // Integration writes `overPass`; until then the row reads `unknown` and
+    // stands all the same.
+    const blind = { ...figures(over, steps, answer(null)), quiet: { ok: true } }
+    expect(blind.form.candidate).toEqual({ form: 'unknown', depth: 'unknown' })
+    expect(unfit(blind)).toBeNull()
+    expect([blind.composite, blind.baseSceneOver]).toEqual([0.9, 1.44])
+    const read = figures(over, steps, answer({ form: 'chain', depth: null }))
+    expect(read.form.candidate).toEqual({ form: 'chain', depth: null })
+    expect(tables({ rows: [{ ...read, quiet: { ok: true } }] })).toMatch(
+      /\| 0\.90 \| chain \(none\) \|/,
+    )
   })
 
   it('print the latest attempt of a run, which is the one a re-run left', () => {

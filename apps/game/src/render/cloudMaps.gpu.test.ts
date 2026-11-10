@@ -6,67 +6,112 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { Fn, If, instanceIndex, storage, textureLoad, uint } from 'three/tsl'
+import { rootSeed } from '@inertialref/procedural'
 import {
+  type BodyWeather,
+  bodyWeather,
   CUBE_FACES,
   type CubeFace,
   cubeDirection,
   cubeTexelCoordinate,
+  levelFrames,
   periodIndex,
+  regimeWeather,
+  type ScenarioId,
   scenarioCoverage,
+  shellHeights,
   WEATHER_SCENARIOS,
-  type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
-import type { CloudFrame } from './cloudFrame.ts'
+import {
+  type Body,
+  formatAddress,
+  galaxySeedOf,
+  generateSystem,
+  MILKY_WAY,
+  resolveSystem,
+  SOL_ONLY_CATALOG,
+  systemId,
+  walkBodies,
+} from '@inertialref/universe'
+import {
+  CLOUD_CLIPMAP_SIZE,
+  CLOUD_CLIPMAP_TEXELS,
+  type CloudClimateFrame,
+  type CloudFrame,
+  weatherClimate,
+  weatherLevels,
+} from './cloudFrame.ts'
+import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
   CLOUD_CUBE_COLUMNS,
   CLOUD_CUBE_GUTTER,
+  CLOUD_CUBE_HEIGHT,
   CLOUD_CUBE_TILE,
+  CLOUD_CUBE_WIDTH,
   CloudMaps,
-  scenarioChannels,
+  cubeTexelMeters,
 } from './cloudMaps.ts'
 import type { CloudBudget } from './cloudNodes.ts'
+import { CloudNoise } from './cloudNoise.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The weather cube against `scenarioCoverage` (§3.9): every atlas texel, the
- * gutters included, is the placeholder's coverage at that texel's direction
- * to 8-bit storage's step, so a read near an edge never mixes two faces; one
- * MRT quad writes a face tile's four textures; and the bake builds no
- * pipeline past its warm-up.
+ * The weather cube against `BodyClimate.sample` (phase 1 design §4.3): every
+ * atlas texel, the gutters included, is the climate at that texel's
+ * direction under the frame's sun at the frame's instant, to 8-bit
+ * storage's step, for the zonal law and for each kind of regime pattern; one
+ * MRT quad writes a face tile's two textures; a face is fresh by generation
+ * and redrawn at the pace its field moves.
  */
 
 let gpu: GpuSession
 let renderer: WebGPURenderer
 let device: GPUDevice
+let noise: CloudNoise
 
-/** An 8-bit texel's step, plus float32 against float64 in the direction's atan: under 10⁻⁵. */
+/**
+ * An 8-bit texel's step, plus float32 against float64 in the direction's
+ * atan and the zonal law's exponentials: measured worst 2.0 × 10⁻³ against
+ * 3.9 × 10⁻³ for the step (this Mac mini, Apple M6).
+ */
 const BYTE_BOUND = 1 / 255 + 1e-5
 const SPAN = CLOUD_CUBE_TILE + 2 * CLOUD_CUBE_GUTTER
-/** An instant whose pattern period is not the first: the blobs' hash sees a nonzero period. */
 const TIME = 7.3e9
+const EYE_HEIGHT = 1500
+
+const ROOT = rootSeed('inertialref')
+const SOL: ReadonlyMap<string, Body> = (() => {
+  const stub = resolveSystem(
+    galaxySeedOf(ROOT, MILKY_WAY),
+    SOL_ONLY_CATALOG,
+    systemId('SOL'),
+  )!
+  const system = generateSystem(ROOT, MILKY_WAY, stub)
+  return new Map(
+    [...walkBodies(system)].map((body) => [formatAddress(body.address), body]),
+  )
+})()
+const EARTH = SOL.get('g:milky-way/s:SOL/b:2')!
+/** Earth less its authored deck: a wet world with its own zonal climate. */
+const SERVED_EARTH: Body = {
+  ...EARTH,
+  appearance: { ...EARTH.appearance, clouds: null },
+}
 
 beforeAll(async () => {
   gpu = await openGpu(8, 8)
   renderer = gpu.renderer
   device = (renderer.backend as unknown as { device: GPUDevice }).device
+  noise = new CloudNoise()
+  await noise.warm(renderer)
 })
 
 afterAll(() => {
+  noise.dispose()
   gpu.dispose()
 })
-
-function draws(seed: number): () => number {
-  let state = seed >>> 0
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0
-    let t = state
-    t = Math.imul(t ^ (t >>> 15), t | 1)
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 const budget: CloudBudget = {
   slices: 0,
@@ -75,26 +120,101 @@ const budget: CloudBudget = {
   sunSlices: 0,
 }
 
-/**
- * What the maps read of a frame, and what the uniform bundle carries for
- * them: the layers' coverage and the pattern period, as `write` copies them.
- */
-function frameFor(
-  uniforms: CloudUniforms,
-  scenario: WeatherScenario,
-  eye: Vec3,
-  jump = false,
-): CloudFrame {
-  const at = (k: number) => scenario.layers[k]?.coverage ?? 0
-  uniforms.served.layers.coverage.value.set(at(0), at(1), at(2))
-  const period = periodIndex(TIME, scenario.patternPeriod)
-  uniforms.period.value.set(period[0], period[1])
-  return {
-    scenario,
-    period,
-    jump,
-    served: { eye, weatherKey: scenario.id },
-  } as unknown as CloudFrame
+const unit = (v: Vec3): Vec3 => {
+  const length = Math.hypot(v.x, v.y, v.z)
+  return { x: v.x / length, y: v.y / length, z: v.z / length }
+}
+const scaled = (v: Vec3, s: number): Vec3 => ({
+  x: v.x * s,
+  y: v.y * s,
+  z: v.z * s,
+})
+
+const UP = unit({ x: 0.3, y: 0.9, z: -0.31 })
+/** A sun 23° over the equator's plane, so the zonal law's season is not an equinox's. */
+const SUN = unit({ x: 0.9, y: 0.42, z: 0.1 })
+
+interface FrameOptions {
+  readonly weather: BodyWeather
+  readonly key: string
+  readonly time?: number
+  readonly sun?: Vec3
+  readonly jump?: boolean
+  /** Replaces the weather's own climate: a pattern no weather draws, held to its CPU function. */
+  readonly climate?: CloudClimateFrame
+}
+
+/** A frame with every field the bundle writes, written into `uniforms`: the weather's own levels and climate. */
+function frameOf(uniforms: CloudUniforms, options: FrameOptions): CloudFrame {
+  const time = options.time ?? TIME
+  const sun = options.sun ?? SUN
+  const radius = SERVED_EARTH.radius
+  const eye = scaled(UP, radius + EYE_HEIGHT)
+  const drawn = { weather: options.weather, regime: null } as const
+  const levels = weatherLevels(drawn, time, eye)
+  const frame = {
+    levers: { ...DEFAULT_CLOUD_LEVERS, on: true },
+    scenario: WEATHER_SCENARIOS['fair-cumulus'],
+    served: {
+      address: 'test',
+      datumRadius: radius,
+      compression: 1,
+      toBodyFixed: { x: 0, y: 0, z: 0, w: 1 },
+      eye,
+      sun,
+      shells: shellHeights(
+        eye,
+        radius,
+        levels.flatMap((level) => [level.base, level.top]),
+      ),
+      scattering: null,
+      limb: 0,
+      limbFalloff: 1,
+      dayColor: { r: 1, g: 1, b: 1 },
+      noiseOrigin: { x: 0, y: 0, z: 0 },
+      detailOrigin: { x: 0, y: 0, z: 0 },
+      drift: { x: 0, y: 0, z: 0 },
+      wind: { x: 0, y: 0, z: 0 },
+      clipmap: levelFrames(
+        eye,
+        radius,
+        CLOUD_CLIPMAP_TEXELS,
+        CLOUD_CLIPMAP_SIZE,
+        null,
+      ),
+      volume: { frames: [], dirty: [], rebuilt: [] },
+      weatherKey: options.key,
+      levels,
+      climate: options.climate ?? weatherClimate(drawn, time, sun),
+    },
+    second: null,
+    time,
+    frameSeconds: 0,
+    period: [0, 0],
+    camera: {
+      right: { x: 1, y: 0, z: 0 },
+      up: { x: 0, y: 1, z: 0 },
+      forward: { x: 0, y: 0, z: -1 },
+      halfTan: 0.5,
+      aspect: 1,
+      pixelAngle: 0.002,
+    },
+    previousCamera: null,
+    translation: { x: 0, y: 0, z: 0 },
+    enhanced: false,
+    regime: 'converging',
+    reset: 'none',
+    jump: options.jump ?? false,
+    frameIndex: 0,
+    extents: cubeExtentsFor(),
+  } satisfies CloudFrame
+  uniforms.write(frame)
+  return frame
+}
+
+function cubeExtentsFor(): CloudFrame['extents'] {
+  const extent = { width: 64, height: 64 }
+  return { render: extent, css: extent, trace: extent, history: extent }
 }
 
 /** Texels at integer coordinates, `textureLoad`ed by one thread each: RGBA a texel. */
@@ -164,114 +284,190 @@ function passesDuring(work: () => void): number {
   return passes
 }
 
-/** A face tile's texel, its atlas coordinate and its direction, float64. */
-function atlasTexel(
-  face: CubeFace,
-  i: number,
-  j: number,
-): { readonly at: readonly [number, number]; readonly direction: Vec3 } {
-  const x = (face % CLOUD_CUBE_COLUMNS) * SPAN + i
-  const y = Math.floor(face / CLOUD_CUBE_COLUMNS) * SPAN + j
-  const direction = cubeDirection(
-    face,
-    cubeTexelCoordinate(CLOUD_CUBE_TILE, CLOUD_CUBE_GUTTER, i),
-    cubeTexelCoordinate(CLOUD_CUBE_TILE, CLOUD_CUBE_GUTTER, j),
-  )
-  return { at: [x, y], direction }
+/** Every atlas texel of every face tile, gutters included: its coordinate and its direction, float64. */
+function everyTexel(): {
+  readonly at: (readonly [number, number])[]
+  readonly directions: Vec3[]
+} {
+  const at: (readonly [number, number])[] = []
+  const directions: Vec3[] = []
+  for (const face of [0, 1, 2, 3, 4, 5] as CubeFace[]) {
+    const x0 = (face % CLOUD_CUBE_COLUMNS) * SPAN
+    const y0 = Math.floor(face / CLOUD_CUBE_COLUMNS) * SPAN
+    for (let j = 0; j < SPAN; j += 1)
+      for (let i = 0; i < SPAN; i += 1) {
+        at.push([x0 + i, y0 + j])
+        directions.push(
+          cubeDirection(
+            face,
+            cubeTexelCoordinate(CLOUD_CUBE_TILE, CLOUD_CUBE_GUTTER, i),
+            cubeTexelCoordinate(CLOUD_CUBE_TILE, CLOUD_CUBE_GUTTER, j),
+          ),
+        )
+      }
+  }
+  return { at, directions }
 }
 
-const EYE: Vec3 = { x: 0.3, y: 0.9, z: -0.31 }
-
-/** Bake every face, a frame a face, and report what was pending along the way. */
-function bakeAll(
-  maps: CloudMaps,
-  uniforms: CloudUniforms,
-  scenario: WeatherScenario,
-): boolean[] {
+function bakeAll(maps: CloudMaps, frame: CloudFrame): boolean[] {
   const pending: boolean[] = []
   for (let k = 0; k < 6; k += 1) {
-    maps.render(renderer, frameFor(uniforms, scenario, EYE), budget)
+    maps.render(renderer, frame, budget)
     pending.push(maps.pending)
   }
   return pending
 }
 
-describe('the cube is the placeholder’s coverage at every texel’s direction', () => {
+/** The worst difference of the two textures from a CPU climate at every texel, and the texels where the reference was strictly between its ends. */
+async function heldToClimate(
+  maps: CloudMaps,
+  expected: (direction: Vec3) => {
+    readonly cover: readonly number[]
+    readonly kind: readonly number[]
+  },
+): Promise<{ readonly worst: number; readonly between: number }> {
+  const { at, directions } = everyTexel()
+  const [cover, kind] = maps.textures()
+  const covers = await loadTexels(cover!, at)
+  const kinds = await loadTexels(kind!, at)
+  let worst = 0
+  let between = 0
+  directions.forEach((direction, n) => {
+    const want = expected(direction)
+    for (let c = 0; c < 4; c += 1) {
+      worst = Math.max(
+        worst,
+        Math.abs(covers[n * 4 + c]! - want.cover[c]!),
+        Math.abs(kinds[n * 4 + c]! - want.kind[c]!),
+      )
+    }
+    if (want.cover[0]! > 0.02 && want.cover[0]! < 0.98) between += 1
+  })
+  return { worst, between }
+}
+
+/* ------------------------------------------------------------------------- */
+
+describe('the cube is BodyClimate.sample at every texel’s direction', () => {
+  const sampleOf =
+    (weather: BodyWeather, sun: Vec3, time: number) => (direction: Vec3) => {
+      const s = weather.climate.sample(direction, sun, time)
+      return {
+        cover: [...s.cover, s.ice],
+        kind: [...s.convective, s.deep],
+      }
+    }
+
+  it('under the zonal law: its latitudes, its season and its synoptic field turning with the low level', async () => {
+    const weather = bodyWeather(SERVED_EARTH)!
+    expect(weather.climate.kind).toBe('zonal')
+    const uniforms = createCloudUniforms()
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    await maps.warm(renderer)
+    const pipelines = gpu.pipelinesBuilt()
+    const pending = bakeAll(
+      maps,
+      frameOf(uniforms, { weather, key: 'climate' }),
+    )
+    expect(gpu.pipelinesBuilt()).toBe(pipelines)
+    expect(pending).toEqual([true, true, true, true, true, false])
+    const { worst, between } = await heldToClimate(
+      maps,
+      sampleOf(weather, SUN, TIME),
+    )
+    expect(between).toBeGreaterThan(100_000)
+    expect(worst).toBeLessThanOrEqual(BYTE_BOUND)
+    maps.dispose()
+  }, 120_000)
+
   it.each([
-    'fair-cumulus',
-    'anvil',
+    'broken-horizon',
     'cirrus-over-cumulus',
     'two-decks',
-  ] as const)(
-    '%s: every channel of every face, gutters included',
+    'fair-cumulus',
+    'dusk-altocumulus',
+  ] as ScenarioId[])(
+    '%s: a regime’s pattern, terminator included',
     async (id) => {
-      const scenario = WEATHER_SCENARIOS[id]
+      const weather = regimeWeather(SERVED_EARTH, id)
       const uniforms = createCloudUniforms()
-      const maps = new CloudMaps(uniforms)
-      await maps.warm(renderer)
-      const pipelines = gpu.pipelinesBuilt()
-      const pending = bakeAll(maps, uniforms, scenario)
-      // Warmed at 1 × 1: the full-size draws build nothing.
-      expect(gpu.pipelinesBuilt()).toBe(pipelines)
-      expect(pending).toEqual([true, true, true, true, true, false])
-
-      const next = draws(id.length * 977)
-      const texels = Array.from({ length: 1000 }, () =>
-        atlasTexel(
-          Math.floor(next() * 6) as CubeFace,
-          Math.floor(next() * SPAN),
-          Math.floor(next() * SPAN),
-        ),
-      )
-      // Every gutter corner, where three faces' directions meet.
-      for (const face of [0, 1, 2, 3, 4, 5] as const)
-        for (const [i, j] of [
-          [0, 0],
-          [SPAN - 1, 0],
-          [0, SPAN - 1],
-          [SPAN - 1, SPAN - 1],
-        ] as const)
-          texels.push(atlasTexel(face, i, j))
-      const at = texels.map((texel) => texel.at)
-      const maps0 = await loadTexels(maps.textures()[0]!, at)
-      const channels = scenarioChannels(scenario)
-      let worst = 0
-      texels.forEach(({ direction }, n) => {
-        for (let k = 0; k < 3; k += 1) {
-          const expected = scenarioCoverage(scenario, k, direction, TIME)
-          worst = Math.max(worst, Math.abs(maps0[n * 4 + k]! - expected))
-        }
-        worst = Math.max(worst, Math.abs(maps0[n * 4 + 3]! - channels.ice))
-      })
+      const maps = new CloudMaps(uniforms, noise.nodes)
+      bakeAll(maps, frameOf(uniforms, { weather, key: id }))
+      const { worst } = await heldToClimate(maps, sampleOf(weather, SUN, TIME))
       expect(worst).toBeLessThanOrEqual(BYTE_BOUND)
-
-      const expected = [
-        [...channels.logDepth, 0],
-        [...channels.convective, 0],
-        [...channels.wind, 0, 0],
-      ]
-      for (const k of [1, 2, 3] as const) {
-        const read = await loadTexels(maps.textures()[k]!, at.slice(0, 64))
-        for (let n = 0; n < 64; n += 1)
-          for (let c = 0; c < 4; c += 1)
-            expect(
-              Math.abs(read[n * 4 + c]! - expected[k - 1]![c]!),
-            ).toBeLessThanOrEqual(BYTE_BOUND)
-      }
       maps.dispose()
     },
+    60_000,
   )
+
+  it('the terminator’s dusk edge: every texel inside the edge held to the CPU’s smoothstep', async () => {
+    // A code review of the first pull request found the dusk edge's WGSL
+    // held to nothing. Here the texels whose local sun stands inside the
+    // edge, where the cover is strictly between the layer's and none, are
+    // counted, so a terminator that ported as a step fails as well as one
+    // that ported the wrong way round.
+    const scenario = WEATHER_SCENARIOS['dusk-altocumulus']
+    const weather = regimeWeather(SERVED_EARTH, 'dusk-altocumulus')
+    const uniforms = createCloudUniforms()
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    bakeAll(maps, frameOf(uniforms, { weather, key: scenario.id }))
+    const { at, directions } = everyTexel()
+    const covers = await loadTexels(maps.textures()[0]!, at)
+    let inside = 0
+    let worst = 0
+    directions.forEach((direction, n) => {
+      const want = scenarioCoverage(scenario, 0, direction, TIME, SUN)
+      if (want > 0.01 && want < 0.69) {
+        inside += 1
+        worst = Math.max(worst, Math.abs(covers[n * 4]! - want))
+      }
+    })
+    expect(inside).toBeGreaterThan(500)
+    expect(worst).toBeLessThanOrEqual(BYTE_BOUND)
+    maps.dispose()
+  }, 60_000)
+
+  it('a pattern of blobs, which no weather draws, still ports `scenarioCoverage` cell for cell', async () => {
+    // Blobs are drawn as a uniform cover by every regime that names them
+    // (`regimeWeather`); the pattern stays in the climate's uniforms, so the
+    // WGSL that hashes a cell is held here with the raw pattern written in.
+    const scenario = WEATHER_SCENARIOS.anvil
+    const weather = regimeWeather(SERVED_EARTH, 'anvil')
+    const uniforms = createCloudUniforms()
+    const drawn = { weather, regime: null } as const
+    const climate = weatherClimate(drawn, TIME, SUN)
+    const raw: CloudClimateFrame = {
+      ...climate,
+      pattern: 'blobs',
+      patternScale: scenario.patternScale,
+      patternCells: 32,
+      period: periodIndex(TIME, scenario.patternPeriod),
+    }
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    bakeAll(maps, frameOf(uniforms, { weather, key: 'anvil', climate: raw }))
+    const { at, directions } = everyTexel()
+    const covers = await loadTexels(maps.textures()[0]!, at)
+    let worst = 0
+    let clouded = 0
+    directions.forEach((direction, n) => {
+      const want = scenarioCoverage(scenario, 0, direction, TIME, SUN)
+      if (want > 0.5) clouded += 1
+      worst = Math.max(worst, Math.abs(covers[n * 4]! - want))
+    })
+    expect(clouded).toBeGreaterThan(10_000)
+    expect(worst).toBeLessThanOrEqual(BYTE_BOUND)
+    maps.dispose()
+  }, 60_000)
 })
 
 describe('the gutters', () => {
   it('a read either side of each of the twelve edges agrees: no face reads its neighbor’s texels', async () => {
-    // Bands are smooth across every edge, so the two sides differ only by
-    // the 8-bit step and the field's own slope over the two-ε gap: at most
-    // 31 a radian for a 0.05 rad band at coverage ½.
-    const scenario = WEATHER_SCENARIOS['cirrus-over-cumulus']
+    // The zonal law is smooth across every edge, so the two sides differ
+    // only by the 8-bit step and the field's own slope over the two-ε gap.
+    const weather = bodyWeather(SERVED_EARTH)!
     const uniforms = createCloudUniforms()
-    const maps = new CloudMaps(uniforms)
-    bakeAll(maps, uniforms, scenario)
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    bakeAll(maps, frameOf(uniforms, { weather, key: 'climate' }))
     const epsilon = 1e-5
     const sides: Vec3[] = []
     const pairs: [number, number][] = []
@@ -287,144 +483,53 @@ describe('the gutters', () => {
           y: n1.z * n2.x - n1.x * n2.z,
           z: n1.x * n2.y - n1.y * n2.x,
         }
-        for (let s = -0.9; s <= 0.9; s += 0.1) {
-          for (const sign of [1, -1]) {
-            const d = {
-              x: n1.x + n2.x + s * t.x + sign * epsilon * (n1.x - n2.x),
-              y: n1.y + n2.y + s * t.y + sign * epsilon * (n1.y - n2.y),
-              z: n1.z + n2.z + s * t.z + sign * epsilon * (n1.z - n2.z),
-            }
-            const length = Math.hypot(d.x, d.y, d.z)
-            sides.push({ x: d.x / length, y: d.y / length, z: d.z / length })
-          }
-        }
+        for (let s = -0.9; s <= 0.9; s += 0.1)
+          for (const sign of [1, -1])
+            sides.push(
+              unit({
+                x: n1.x + n2.x + s * t.x + sign * epsilon * (n1.x - n2.x),
+                y: n1.y + n2.y + s * t.y + sign * epsilon * (n1.y - n2.y),
+                z: n1.z + n2.z + s * t.z + sign * epsilon * (n1.z - n2.z),
+              }),
+            )
       }),
     )
     expect(pairs).toHaveLength(12)
-    const read = await readAt(sides, (direction) =>
-      maps.nodes.synoptic(direction),
-    )
+    const read = await readAt(sides, (d) => maps.nodes.cover(d))
     let worst = 0
     for (let n = 0; n < sides.length; n += 2)
-      for (let k = 0; k < 2; k += 1)
+      for (let c = 0; c < 3; c += 1)
         worst = Math.max(
           worst,
-          Math.abs(read[n * 4 + k]! - read[n * 4 + 4 + k]!),
+          Math.abs(read[n * 4 + c]! - read[(n + 1) * 4 + c]!),
         )
-    expect(worst).toBeLessThanOrEqual(2 / 255 + 31 * 2 * epsilon)
+    expect(worst).toBeLessThanOrEqual(2 / 255)
     maps.dispose()
-  })
+  }, 60_000)
 })
 
 describe('the bake', () => {
-  it('one MRT quad a frame writes a face tile’s four textures, and nothing outside the tile', async () => {
-    const scenario = WEATHER_SCENARIOS['two-decks']
+  it('one MRT quad writes a face tile’s two textures, each one level, their declared bytes the GPU’s', async () => {
     const uniforms = createCloudUniforms()
-    const maps = new CloudMaps(uniforms)
-    await maps.warm(renderer)
-    const passes = passesDuring(() =>
-      maps.render(renderer, frameFor(uniforms, scenario, EYE), budget),
-    )
-    expect(passes).toBe(1)
-    // The eye's face first: (0.3, 0.9, −0.31) is +Y's, tile 2 at column 2.
-    const inside = atlasTexel(2, 200, 300)
-    const outside = atlasTexel(0, 200, 300)
-    const textures = maps.textures()
-    const expected = [
-      [0.6, 0.6, 0, 0],
-      [...scenarioChannels(scenario).logDepth, 0],
-      [...scenarioChannels(scenario).convective, 0],
-      [...scenarioChannels(scenario).wind, 0, 0],
-    ]
-    for (let k = 0; k < 4; k += 1) {
-      const read = await loadTexels(textures[k]!, [inside.at, outside.at])
-      for (let c = 0; c < 4; c += 1) {
-        expect(Math.abs(read[c]! - expected[k]![c]!)).toBeLessThanOrEqual(
-          BYTE_BOUND,
-        )
-        // A tile no quad has drawn keeps WebGPU's zero.
-        expect(read[4 + c]).toBe(0)
-      }
-    }
-    maps.dispose()
-  })
-
-  it('a jump or a new pattern stales every face, baked nearest the eye first', async () => {
-    const uniforms = createCloudUniforms()
-    const maps = new CloudMaps(uniforms)
-    bakeAll(maps, uniforms, WEATHER_SCENARIOS['two-decks'])
-    expect(maps.pending).toBe(false)
-    // The steady cycle owes nothing.
-    maps.render(
-      renderer,
-      frameFor(uniforms, WEATHER_SCENARIOS['two-decks'], EYE),
-      budget,
-    )
-    expect(maps.pending).toBe(false)
-
-    const overcast = WEATHER_SCENARIOS.overcast
-    maps.render(renderer, frameFor(uniforms, overcast, EYE), budget)
-    expect(maps.pending).toBe(true)
-    const eyeFace = atlasTexel(2, 257, 257)
-    const opposite = atlasTexel(3, 257, 257)
-    const read = await loadTexels(maps.textures()[0]!, [
-      eyeFace.at,
-      opposite.at,
-    ])
-    expect(read[0]).toBeCloseTo(1, 5)
-    expect(Math.abs(read[4]! - 0.6)).toBeLessThanOrEqual(BYTE_BOUND)
-    const pending: boolean[] = []
-    for (let k = 0; k < 5; k += 1) {
-      maps.render(renderer, frameFor(uniforms, overcast, EYE, k === 2), budget)
-      pending.push(maps.pending)
-    }
-    // A jump on the third frame stales all six again.
-    expect(pending).toEqual([true, true, true, true, true])
-    for (let k = 0; k < 5; k += 1)
-      maps.render(renderer, frameFor(uniforms, overcast, EYE), budget)
-    expect(maps.pending).toBe(false)
-    const after = await loadTexels(maps.textures()[0]!, [opposite.at])
-    expect(after[0]).toBeCloseTo(1, 5)
-    maps.dispose()
-  })
-
-  it('reaches all six faces through a scrub, which jumps every frame', async () => {
-    const uniforms = createCloudUniforms()
-    const maps = new CloudMaps(uniforms)
-    bakeAll(maps, uniforms, WEATHER_SCENARIOS['two-decks'])
-    const overcast = WEATHER_SCENARIOS.overcast
-    for (let k = 0; k < 6; k += 1)
-      maps.render(renderer, frameFor(uniforms, overcast, EYE, true), budget)
-    // Each face holds the new field, where the eye's own alone would if every
-    // jump began the order again; and every one is owed again by the last.
-    const read = await loadTexels(
-      maps.textures()[0]!,
-      ([0, 1, 2, 3, 4, 5] as const).map(
-        (face) => atlasTexel(face, 257, 257).at,
-      ),
-    )
-    for (let face = 0; face < 6; face += 1)
-      expect(read[face * 4], `face ${face}`).toBeCloseTo(1, 5)
-    expect(maps.pending).toBe(true)
-    maps.dispose()
-  })
-
-  it('holds one level a texture, its declared bytes its own, and nothing before it warms', async () => {
-    const uniforms = createCloudUniforms()
-    const maps = new CloudMaps(uniforms)
+    const maps = new CloudMaps(uniforms, noise.nodes)
     expect(maps.bytes).toBe(0)
     expect(maps.textures()).toEqual([])
     await maps.warm(renderer)
-    expect(maps.bytes).toBe(16)
-    maps.render(
-      renderer,
-      frameFor(uniforms, WEATHER_SCENARIOS.fog, EYE),
-      budget,
-    )
+    expect(maps.bytes).toBe(8)
+    const weather = bodyWeather(SERVED_EARTH)!
+    const passes = passesDuring(() => {
+      maps.render(
+        renderer,
+        frameOf(uniforms, { weather, key: 'climate' }),
+        budget,
+      )
+    })
+    expect(passes).toBe(1)
     const backend = renderer.backend as unknown as {
       get(texture: object): { texture?: GPUTexture }
     }
     let bytes = 0
+    expect(maps.textures()).toHaveLength(2)
     for (const held of maps.textures()) {
       const gpuTexture = backend.get(held).texture!
       expect(gpuTexture.mipLevelCount).toBe(1)
@@ -432,9 +537,150 @@ describe('the bake', () => {
       bytes += gpuTexture.width * gpuTexture.height * 4
     }
     expect(maps.bytes).toBe(bytes)
-    // 25.36 MB, §3.19's figure.
-    expect(maps.bytes).toBe(1542 * 1028 * 16)
+    // 12.68 MB, against phase 0's four targets' 25.36 MB.
+    expect(maps.bytes).toBe(CLOUD_CUBE_WIDTH * CLOUD_CUBE_HEIGHT * 8)
     maps.dispose()
     expect(maps.bytes).toBe(0)
+  })
+})
+
+describe('freshness by generation, and the pace', () => {
+  it('a jump starts a generation: every face is stale until it is baked in it, nearest the eye first', async () => {
+    const weather = bodyWeather(SERVED_EARTH)!
+    const uniforms = createCloudUniforms()
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    bakeAll(maps, frameOf(uniforms, { weather, key: 'climate' }))
+    const first = maps.generation
+    const faces = [0, 1, 2, 3, 4, 5] as CubeFace[]
+    expect(faces.map((f) => maps.faceGeneration(f))).toEqual(
+      faces.map(() => first),
+    )
+    const later = TIME + 3 * 3600
+    maps.render(
+      renderer,
+      frameOf(uniforms, { weather, key: 'climate', time: later, jump: true }),
+      budget,
+    )
+    expect(maps.generation).toBe(first + 1)
+    // The eye's own face is baked in the jump's frame, and only it.
+    const fresh = faces.filter((f) => maps.faceGeneration(f) === first + 1)
+    const { x, y, z } = UP
+    const own = [x >= 0 ? 0 : 1, y >= 0 ? 2 : 3, z >= 0 ? 4 : 5][
+      [Math.abs(x), Math.abs(y), Math.abs(z)].indexOf(
+        Math.max(Math.abs(x), Math.abs(y), Math.abs(z)),
+      )
+    ]
+    expect(fresh).toEqual([own])
+    expect(maps.pending).toBe(true)
+    for (let k = 0; k < 5; k += 1)
+      maps.render(
+        renderer,
+        frameOf(uniforms, { weather, key: 'climate', time: later }),
+        budget,
+      )
+    expect(maps.pending).toBe(false)
+    expect(faces.every((f) => maps.faceGeneration(f) === first + 1)).toBe(true)
+    // What it holds is the new instant's climate.
+    const { worst } = await heldToClimate(maps, (direction) => {
+      const s = weather.climate.sample(direction, SUN, later)
+      return { cover: [...s.cover, s.ice], kind: [...s.convective, s.deep] }
+    })
+    expect(worst).toBeLessThanOrEqual(BYTE_BOUND)
+    maps.dispose()
+  }, 60_000)
+
+  it('reaches all six faces through a scrub, which jumps every frame', () => {
+    const weather = bodyWeather(SERVED_EARTH)!
+    const uniforms = createCloudUniforms()
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    bakeAll(maps, frameOf(uniforms, { weather, key: 'climate' }))
+    const baked = new Set<number>()
+    for (let k = 0; k < 6; k += 1) {
+      const before = [0, 1, 2, 3, 4, 5].map((f) =>
+        maps.faceVersion(f as CubeFace),
+      )
+      maps.render(
+        renderer,
+        frameOf(uniforms, {
+          weather,
+          key: 'climate',
+          time: TIME + 600 * (k + 1),
+          jump: true,
+        }),
+        budget,
+      )
+      before.forEach((version, f) => {
+        if (maps.faceVersion(f as CubeFace) > version) baked.add(f)
+      })
+    }
+    expect([...baked].sort()).toEqual([0, 1, 2, 3, 4, 5])
+    maps.dispose()
+  })
+
+  it('bakes nothing while its field moves under a tenth of a texel, then a face a frame, never more', () => {
+    // Earth's zonal climate: the high level turns at 25 m/s at the equator,
+    // and a face's texel is 19.6 km, so a face is due 78 s after its bake.
+    const weather = bodyWeather(SERVED_EARTH)!
+    const uniforms = createCloudUniforms()
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    bakeAll(maps, frameOf(uniforms, { weather, key: 'climate' }))
+    const due =
+      cubeTexelMeters(SERVED_EARTH.radius) /
+      10 /
+      Math.max(...weather.turn.map((rate) => rate * SERVED_EARTH.radius))
+    expect(due).toBeGreaterThan(70)
+    expect(due).toBeLessThan(90)
+    const at = (seconds: number) =>
+      passesDuring(() =>
+        maps.render(
+          renderer,
+          frameOf(uniforms, { weather, key: 'climate', time: TIME + seconds }),
+          budget,
+        ),
+      )
+    const steady = Array.from({ length: 60 }, (_, k) => at((k + 1) / 60))
+    expect(steady.every((passes) => passes === 0)).toBe(true)
+    // Past the pace every face is due, and they go one a frame.
+    const late = Array.from({ length: 8 }, (_, k) => at(due + 1 + k / 60))
+    expect(late).toEqual([1, 1, 1, 1, 1, 1, 0, 0])
+    // Under a warp of 1,000×, 16.7 s of field a frame: a face every frame.
+    const warped = Array.from({ length: 12 }, (_, k) =>
+      at(2 * due + (k + 1) * 16.7),
+    )
+    expect(warped.every((passes) => passes === 1)).toBe(true)
+    maps.dispose()
+  })
+
+  it('a terminator moves its faces with the sun, at the sun’s pace and not the wind’s', () => {
+    // dusk-altocumulus turns at 8 m/s, which alone is due after 245 s; the
+    // sun's sweep over a tenth of a texel is 1960 m of Earth's surface.
+    const weather = regimeWeather(SERVED_EARTH, 'dusk-altocumulus')
+    const uniforms = createCloudUniforms()
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    const key = 'dusk-altocumulus'
+    bakeAll(maps, frameOf(uniforms, { weather, key }))
+    const turned = (angle: number): Vec3 => ({
+      x: Math.cos(angle) * SUN.x + Math.sin(angle) * SUN.z,
+      y: SUN.y,
+      z: -Math.sin(angle) * SUN.x + Math.cos(angle) * SUN.z,
+    })
+    const tenth =
+      cubeTexelMeters(SERVED_EARTH.radius) / 10 / SERVED_EARTH.radius
+    const at = (angle: number) =>
+      passesDuring(() =>
+        maps.render(
+          renderer,
+          frameOf(uniforms, {
+            weather,
+            key,
+            time: TIME + 1,
+            sun: turned(angle),
+          }),
+          budget,
+        ),
+      )
+    expect(at(0.5 * tenth)).toBe(0)
+    expect(at(1.5 * tenth)).toBe(1)
+    maps.dispose()
   })
 })

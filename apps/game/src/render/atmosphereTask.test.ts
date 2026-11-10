@@ -70,6 +70,17 @@ vi.mock('@inertialref/rendering', async (importOriginal) => {
   }
 })
 
+/*
+ * The phase tables' module, counted by its loads: a mock's factory runs when
+ * the module is first imported, and only then, so "not loaded" is a count
+ * of zero.
+ */
+const phaseModule = vi.hoisted(() => ({ loads: 0 }))
+vi.mock('./phaseTables.ts', async (importOriginal) => {
+  phaseModule.loads += 1
+  return importOriginal()
+})
+
 beforeEach(() => {
   skyBakes.count = 0
   phaseWork.atlases = 0
@@ -200,12 +211,18 @@ describe('render.bakeAtmosphere', () => {
     const shared = createTaskRegistry().names()
     const game = createGameTaskRegistry().names()
     expect(game).toEqual(
-      [...shared, 'render.bakeAtmosphere', 'render.convolvePhase'].sort(),
+      [
+        ...shared,
+        'render.bakeAtmosphere',
+        'render.cloudStatistics',
+        'render.convolvePhase',
+      ].sort(),
     )
     // The shared registry does not know them: the layer graph forbids the
     // import and the headless runner would never ask.
     expect(shared).not.toContain('render.bakeAtmosphere')
     expect(shared).not.toContain('render.convolvePhase')
+    expect(shared).not.toContain('render.cloudStatistics')
   })
 })
 
@@ -315,6 +332,24 @@ describe('the scattering cache', () => {
 const EARTH_SUN = 0.265 * (Math.PI / 180)
 
 describe('render.convolvePhase', () => {
+  // First in this file to ask the task: the module, once loaded, stays.
+  it('loads the tables’ module on its first ask and not before, and once', async () => {
+    createGameTaskRegistry()
+    const pool = inlinePool()
+    try {
+      expect(phaseModule.loads).toBe(0)
+      const first = pool.submit(convolvePhaseTask, { angularRadius: EARTH_SUN })
+      const second = pool.submit(convolvePhaseTask, {
+        angularRadius: 2 * EARTH_SUN,
+      })
+      await Promise.all([first.result, second.result])
+      expect(phaseModule.loads).toBe(1)
+      expect(phaseWork.decodes).toBe(1)
+    } finally {
+      pool.terminate()
+    }
+  })
+
   it('convolves what the main thread convolves, and answers for the radius it was asked', async () => {
     const answer = await runInline(convolvePhaseTask, {
       angularRadius: EARTH_SUN,

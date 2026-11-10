@@ -590,45 +590,68 @@ export function frameBatches(kit) {
               pace('pace', 'rate', s, size, [['on', ON]], 1),
             ),
           ],
-    // `chain` and `lean` each against `passes`; one row each under the
-    // temporal picture on `horizon`; and at Retina the placement's cell,
-    // nine samples a side at the hold, against `chain`'s frame without the
-    // overlay.
-    over: (size) => [
-      ...['orbit', 'horizon', 'inside', 'shore', 'overlay'].flatMap((s) =>
-        FORMS.map((form) =>
-          ab('over', 'form', form, s, size, 'steady', {
-            base: { ...ON, over: 'passes' },
-            candidate: { ...ON, over: form },
-          }),
-        ),
-      ),
-      ...(size === '1080p'
-        ? FORMS.map((form) => ({
-            ...ab('over', 'temporal', form, 'horizon', size, 'steady', {
+    // The over pass's rows (package Y's six, §7.2, §4.12), each a group the
+    // rules read by name. Every form row reads both sides' passes: `scene
+    // over clouds` is `passes`'s, `cloud composite` the chain form's.
+    over: (size) => {
+      const forms = (group, scenario, which, extra = {}) =>
+        which
+          .map((form) =>
+            ab('over', group, form, scenario, size, 'steady', {
               base: { ...ON, over: 'passes' },
               candidate: { ...ON, over: form },
-              query: ['picture=temporal:quality'],
+              ...extra,
             }),
-          }))
-        : []),
-      ...(size === 'retina'
-        ? ['inside', 'overlay'].map((s) =>
-            pace(
-              'over',
-              'placement',
-              s,
-              size,
-              [
-                ['passes', { ...ON, over: 'passes' }],
-                ['lean', { ...ON, over: 'lean' }],
-                ['chain, nothing over', { ...ON, over: 'chain' }, false],
-              ],
-              9,
-            ),
           )
-        : []),
-    ],
+          .map((run) => ({ ...run, timelineBase: true }))
+      return [
+        // 1. `chain` against `passes` where nothing is drawn over the
+        // clouds, the chain rule's rows; and `chain` against the clouds off,
+        // B10's: a pass's time is no bar, so the composite's growth from
+        // 1080p to Retina is read as the clouds' steady Δ under `chain`.
+        ...['orbit', 'horizon'].flatMap((s) => [
+          ...forms('chain', s, ['chain']),
+          ab('over', 'clouds', 'chain', s, size, 'steady', {
+            candidate: { ...ON, over: 'chain' },
+          }),
+        ]),
+        // 2. `lean` against `passes` on `overlay` at Retina, the lean rule's,
+        // with the depth pass B kept: read-only under a plume alone.
+        ...(size === 'retina' ? forms('lean', 'overlay', ['lean']) : []),
+        // 3. `chain` on `overlay`: pass B as `passes` draws it, by
+        // construction, so the row is the check that it is.
+        ...forms('overlay', 'overlay', ['chain']),
+        // 4. The placement's cell and the forms' CPU cost at Retina: nine
+        // samples a side at the hold, against `chain` without the overlay.
+        ...(size === 'retina'
+          ? ['inside', 'overlay'].map((s) =>
+              pace(
+                'over',
+                'placement',
+                s,
+                size,
+                [
+                  ['passes', { ...ON, over: 'passes' }],
+                  ['lean', { ...ON, over: 'lean' }],
+                  ['chain, nothing over', { ...ON, over: 'chain' }, false],
+                ],
+                9,
+              ),
+            )
+          : []),
+        // 5. The overlay guard: an opaque object in front of the deck and
+        // nothing marked over the clouds, where `chain` walks the scene once
+        // and `scene over clouds` was 5.5 ms on the real page.
+        ...forms('guard', 'guard', FORMS),
+        // 6. The temporal picture, where nothing is multisampled: `lean` is
+        // its read-only depth alone and `chain` saves the second walk.
+        ...(size === '1080p'
+          ? forms('temporal', 'horizon', FORMS, {
+              query: ['picture=temporal:quality'],
+            })
+          : []),
+      ]
+    },
     // The study: clouds-off `horizon` at 1080p, three windows an arm.
     study: (size, held, options = {}) =>
       size !== '1080p'

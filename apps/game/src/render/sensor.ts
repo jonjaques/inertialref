@@ -321,9 +321,12 @@ export function createSensor(
     builtToneMapping = renderer.toneMapping
     builtColorSpace = renderer.outputColorSpace
     const encoded = renderOutput(sceneColor, builtToneMapping, builtColorSpace)
-    // Pass B runs after the scene pass and before the upscaler: three runs
-    // the graph's `updateBefore`s children first, left to right, so the over
-    // pass goes right after the scene's term. Its node is vec4(0).
+    // The composite's term runs after the scene pass and before the upscaler:
+    // three runs the graph's `updateBefore`s children first, left to right,
+    // so it goes right after the scene's term. It is pass B, or on a frame
+    // with nothing over the clouds the composite alone, drawn over the scene
+    // target's resolved rows in place, so every reader after it reads the
+    // textures it reads without the clouds. Its node is vec4(0).
     const scene0 = (): Node<'vec4'> =>
       vec4(scenePass.getTextureNode().rgb.min(65_504).mul(0), 0)
     if (signature === null || psf === null)

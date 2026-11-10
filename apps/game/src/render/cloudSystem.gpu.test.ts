@@ -199,11 +199,12 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
   it('is §4.2’s inside pass B, the converging frame tracing once and the immediate four times', async () => {
     const steady = await order({ force: 'none' })
     // Under the rig's held clock nothing a steady frame draws has moved, so
-    // the volume and the sun grid bake no slice (cloudSunSchedule.ts).
+    // the volume and the sun grid bake no slice (cloudSunSchedule.ts), and
+    // the cube and the clipmap, which bake at the pace their field moves, a
+    // face or an eighth of a level every few seconds at 1×, draw nothing
+    // either (phase 1 design §4.7).
     expect(steady).toEqual([
       ['scene over clouds', 1],
-      ['cloud maps', 1],
-      ['cloud clipmap', 1],
       ['cloud far atlas', 1],
       ['cloud depth', 1],
       ['cloud trace', 1],
