@@ -331,18 +331,20 @@ luminance on and off them in scene units.
   build id must contain the commit's first eight characters and not end
   `-dirty`. The baseline's E1 and E2, recorded at `ab301957` from a build of
   `23f173bc`, are such a pair.
-- **C6's clause waits for the fine field's CPU twin.** The ledger records
-  G5's 1,600-frame path against C6 and does not assert it: the CPU holds only
-  the coverage, whose blob cells are 96 km here, and L stands in a core at
-  cover 1.0 for all 4 km, so no path from there runs clear, through a cloud
-  and clear again. Package D's CPU field is what can place one.
+- **C6's clause is not held yet.** The ledger records G5's 1,600-frame path
+  against C6 and does not assert it: it reads only the coverage, whose blob
+  cells are 96 km here, and L stands in a core at cover 1.0 for all 4 km, so
+  no path from there runs clear, through a cloud and clear again. The fine
+  field's CPU twin, package D's `cloudFieldAt`, is merged; reading it is the
+  ledger's next pass.
 - **C4's cast is G6's slow descent under the world's own climate,** the
-  `weather` lever at `'climate'`. Until package D lands the climate,
-  `bodyWeather` answers `CLIMATE_REGIME`, `fair-cumulus`, on every wet body,
-  so the cast draws that regime, not G6's `stratocumulus`.
-- **G3's deck draws on this world and did not on the last.** The cloud frame
-  takes the sun from the body's center in render space, 2.04° high there and
-  0.26° here (below, under the defects on `main`).
+  `weather` lever at `'climate'`: the zonal law's three fitted levels, laid
+  out by the field's own profile. Until package F's port reads the law, the
+  frame draws the climate's cover as sampled at the eye, uniform over the
+  field.
+- **G3's deck draws on this world and did not on the last.** The baseline's
+  cloud frame, phase 0's, took the sun from the body's center in render
+  space, 2.04° high there and 0.26° here (below, under the defects).
 - **G1 and G2 show the regime and the ground, not the picture the rubric
   names,** for reasons in the cornerstones themselves, each in its row. They
   are taken as they stand, not tuned.
@@ -460,8 +462,9 @@ recorded in [`maps/deck.md`](maps/deck.md): the deck's drift is uploaded
 unreduced (2.4 km float32 steps in 2026), and the sphere's cloud shadow
 ignores that drift and may have its east–west sign reversed.
 
-Three more on `main` and one here, found by the cornerstones, are left as
-they are for the light and the flare's own work to take up:
+Three more on `main` and one here, found by the cornerstones. Those on
+`main` are left as they are for the light and the flare's own work to take
+up; the one here is fixed on this branch:
 
 - **The sun's flare draws through the planet.** `sunVisibility`
   (`apps/game/src/render/flareMath.ts`) fades the flare over the sight line's
@@ -478,16 +481,17 @@ they are for the light and the flare's own work to take up:
   center in render space, 0.51° at E2 and 0.26° at P222_3_2_k IV's G3 (217
   radii). A dusk sun 1.5° under the horizon lights the ground as one 0.5°
   over it on the first: the baseline's G3 ground was brighter than its sky.
-- **The cloud frame forms its sun the same way** (`bodySun`,
-  `apps/game/src/render/cloudFrame.ts`, phase 0's), so the maps' terminator
-  and the trace's light read that same parallax. At P222_1_0_7 III's G3 it
+- **Phase 0's cloud frame formed its sun the same way** (`bodySun`,
+  `apps/game/src/render/cloudFrame.ts`), so the maps' terminator and the
+  trace's light read that same parallax. At P222_1_0_7 III's G3 it
   cleared `dusk-altocumulus` from the whole frame: `ir.cloudRadiance()` held
   cloud at 0 of 81,000 texels, where the CPU twin puts cover 0.7 over the
   eye, and the GPU's edge crossed overhead only once the eye's sun stood
   2° to 2.5° under the horizon. With the same layer and no terminator it
-  drew. At P222_3_2_k IV's 0.26° the deck draws. The fix is the direction
-  from the eye, which compression preserves; phase 1's light is where it
-  lands.
+  drew. At P222_3_2_k IV's 0.26° the deck draws. Package H's frame takes
+  the key star's true direction from the body's center, which compression
+  does not bend, so the clouds' sun carries no parallax on this branch; the
+  terrain's and the water's still do.
 
 ## What is in this directory
 

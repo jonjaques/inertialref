@@ -321,8 +321,8 @@ export const CASTS = Object.freeze([
     speed: 'climate',
     path: SLOW,
     frames: descentFrames(400_000, 0.012),
-    // The body's own climate. Until package D lands it, `bodyWeather`
-    // answers `CLIMATE_REGIME`, `fair-cumulus`, so this draws that regime.
+    // The body's own climate: the zonal law's levels. Until package F's port
+    // reads the law, the frame draws its cover as sampled at the eye.
     levers: { weather: 'climate' },
     arms: ['on'],
     control: `${G6}-slow-off`,
