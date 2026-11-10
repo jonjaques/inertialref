@@ -146,7 +146,7 @@ export interface CloudBudget {
   readonly slices: number
   readonly tiles: number
   readonly jump: boolean
-  /** Texel-steps a sun-depth candidate may spend this frame: one cap for both (§3.12). */
+  /** Texel-steps the sun grid may spend this frame: `SUN_DEPTH_FRAME_CAP`, one whole rebuild (§3.12). */
   readonly sunTexelSteps: number
 }
 
