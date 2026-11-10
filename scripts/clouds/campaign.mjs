@@ -42,7 +42,7 @@
  * rewritten at every transition; the log and the preview's log; and at the
  * end the summary, every batch's tables and the instruments' paths.
  */
-import { execFileSync, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import {
   existsSync,
   mkdirSync,
@@ -54,7 +54,15 @@ import {
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { SIZES, batchRuns, bundled, parseProcesses } from './measure.mjs'
+import {
+  SIZES,
+  answers,
+  batchRuns,
+  bundled,
+  git,
+  listeners,
+  processes,
+} from './measure.mjs'
 import { rateNote, tables } from './page.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
@@ -233,15 +241,6 @@ function initial(name, stamp, head) {
 
 /* ------------------------------------------------------------- the machine ---- */
 
-const git = (...args) =>
-  execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8' }).trim()
-
-const answers = (url) =>
-  fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(3000) }).then(
-    () => true,
-    () => false,
-  )
-
 const sleep = (ms, signal) =>
   new Promise((resolve) => {
     const done = () => {
@@ -320,25 +319,8 @@ const killGroup = (proc, signal) => {
   }
 }
 
-const read = (command, args) => {
-  try {
-    return execFileSync(command, args, { encoding: 'utf8' }).trim()
-  } catch {
-    return ''
-  }
-}
-
 /** What listens on the preview's port, each with its process group. */
-function listening() {
-  const port = new URL(URL_).port
-  return read('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'])
-    .split('\n')
-    .filter(Boolean)
-    .map((pid) => ({
-      pid: Number(pid),
-      group: Number(read('ps', ['-o', 'pgid=', '-p', pid])),
-    }))
-}
+const listening = () => listeners(URL_)
 
 /**
  * The listeners that descend from `root`, the pnpm this campaign spawned: an
@@ -346,14 +328,14 @@ function listening() {
  * there as readily as the preview, so the batch would measure its tree under
  * this commit. `table` is `ps`'s, parsed.
  */
-export function ours(table, listeners, root) {
+export function ours(table, found, root) {
   const parent = new Map(table.map((p) => [p.pid, p.ppid]))
   const descends = (pid) => {
     for (let at = pid; at > 1; at = parent.get(at) ?? 0)
       if (at === root) return true
     return false
   }
-  return listeners.filter((l) => descends(l.pid))
+  return found.filter((l) => descends(l.pid))
 }
 
 /**
@@ -390,12 +372,7 @@ export function owner(table, now, root, served = []) {
 }
 
 const preview = (ctx) =>
-  owner(
-    parseProcesses(read('ps', ['-A', '-o', 'pid=,ppid=,command='])),
-    listening(),
-    ctx.preview?.pid,
-    ctx.served ?? [],
-  )
+  owner(processes(), listening(), ctx.preview?.pid, ctx.served ?? [])
 
 /** Serves the built bundle on 8787 as `pnpm preview` does, without the build. */
 async function serve(state, ctx) {
@@ -450,7 +427,7 @@ async function stopPreview(ctx) {
   ctx.preview = null
   // What descends from pnpm now, while there is a pnpm to descend from: a
   // stop that lands before `serve` saw an answer has recorded nothing.
-  const table = parseProcesses(read('ps', ['-A', '-o', 'pid=,ppid=,command=']))
+  const table = processes()
   const served = [...(ctx.served ?? []), ...ours(table, listening(), proc.pid)]
   ctx.served = null
   killGroup(proc, 'SIGTERM')

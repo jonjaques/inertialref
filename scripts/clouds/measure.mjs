@@ -533,7 +533,8 @@ export const quietLine = (q) =>
     ...q.busy.map((p) => `${p.program} (pid ${p.pid})`),
   ].join(', ')
 
-const read = (command, args) => {
+/** A command's output, or null when it fails: `ps` refused, no listener. */
+export const read = (command, args) => {
   try {
     return execFileSync(command, args, {
       encoding: 'utf8',
@@ -546,14 +547,16 @@ const read = (command, args) => {
   }
 }
 
+/** The process table, read now; empty when `ps` fails. */
+export const processes = () =>
+  parseProcesses(read('ps', ['-A', '-o', 'pid=,ppid=,command=']) ?? '')
+
 /** The load, the process table and the thermal pressure, read now. */
 const sample = (exempt) => ({
   at: new Date().toISOString(),
   load: os.loadavg(),
   cores: os.availableParallelism(),
-  processes: parseProcesses(
-    read('ps', ['-A', '-o', 'pid=,ppid=,command=']) ?? '',
-  ),
+  processes: processes(),
   exempt,
   // macOS's thermal pressure, 0 nominal, which the fan-cooled mini held through
   // 10.4 minutes under load (the drive skill's trap 12); NaN off a Mac.
@@ -564,14 +567,25 @@ const sample = (exempt) => ({
   ),
 })
 
-/** The process listening for a local URL: the preview, exempt from the scan. */
-function listener(url) {
-  const { port } = new URL(url)
-  const pid = read('lsof', ['-nP', `-iTCP:${port || 80}`, '-sTCP:LISTEN', '-t'])
-  return Number(pid?.split('\n')[0]) || null
-}
+/** The processes listening for a local URL, each with its process group. */
+export const listeners = (url) =>
+  (
+    read('lsof', [
+      '-nP',
+      `-iTCP:${new URL(url).port || 80}`,
+      '-sTCP:LISTEN',
+      '-t',
+    ]) ?? ''
+  )
+    .split('\n')
+    .filter(Boolean)
+    .map((pid) => ({
+      pid: Number(pid),
+      group: Number(read('ps', ['-o', 'pgid=', '-p', pid])),
+    }))
 
-const answers = (url) =>
+/** Whether anything answers a URL inside three seconds. */
+export const answers = (url) =>
   fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(3000) }).then(
     () => true,
     () => false,
@@ -1032,7 +1046,7 @@ async function measure(options) {
     env,
     began,
     booted: new Map(),
-    exempt: [process.pid, listener(options.url)],
+    exempt: [process.pid, listeners(options.url)[0]?.pid ?? null],
     shots: path.join(OUT, 'shots', path.basename(file, '.json')),
     file,
     doc,
