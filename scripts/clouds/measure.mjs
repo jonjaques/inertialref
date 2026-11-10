@@ -70,7 +70,15 @@ import {
 import { RIG, readSession, rigLeft, sessionPath } from '../driveLock.mjs'
 import { GpuLockError, acquire, parseWait } from '../gpuLock.mjs'
 import { difference } from './diff.mjs'
-import { figures, plan, progress, rateNote, tables } from './page.mjs'
+import {
+  figures,
+  measured,
+  plan,
+  progress,
+  rateNote,
+  tables,
+  unfit,
+} from './page.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const DRIVE = path.join(ROOT, 'scripts/drive.mjs')
@@ -704,8 +712,9 @@ export function closeOurs(port, token, { rig = RIG, env = process.env } = {}) {
  * What a continued document still owes, or why it cannot be continued. A
  * document is one batch at one commit, one list of sizes and one held jitter,
  * so a row of any other would be a figure about something else under its
- * name. A run measured quiet is done, and a marked one is measured again. A
- * run that has failed `FAILS` times refuses, with its last error.
+ * name. A run is done by a row measured quiet that holds every figure it
+ * owes (`measured`); a marked row, or one refused or empty, is measured
+ * again. A run that has failed `FAILS` times refuses, with its last error.
  */
 export function resumeFrom(doc, { batch, head, sizes, held, runs }) {
   const was = doc.identity?.head ?? 'no commit'
@@ -719,7 +728,7 @@ export function resumeFrom(doc, { batch, head, sizes, held, runs }) {
       `holds the jitter at ${doc.held?.jitterFrame}, not ${held.jitterFrame}`,
   ].find(Boolean)
   if (differs) return { runs: [], refusal: `the document ${differs}` }
-  const done = new Set(doc.rows.filter((r) => r.quiet?.ok).map((r) => r.id))
+  const done = new Set(doc.rows.filter(measured).map((r) => r.id))
   const todo = runs.filter((run) => !done.has(run.id))
   for (const run of todo) {
     const failed = (doc.failures ?? []).filter((f) => f.id === run.id)
@@ -869,20 +878,32 @@ async function recorded(run, ctx) {
   }
 }
 
-/** Every run, each again while it ends under load, the document rewritten
- *  after each so a batch that stops keeps what it measured. */
+/**
+ * Every run, each again while it ends under load, the document rewritten
+ * after each so a batch that stops keeps what it measured. A row refused or
+ * empty is kept, for what it shows, and is a failure of its run: it ends the
+ * batch and counts toward `FAILS`, as a hung Chrome does, since the same
+ * page is as likely to refuse again in place.
+ */
 async function runBatch(runs, ctx) {
   for (const [i, run] of runs.entries())
     for (let tries = 0; tries <= RETRIES; tries += 1) {
       const row = { ...(await recorded(run, ctx)), attempt: tries + 1 }
       ctx.doc.rows.push(row)
       save(ctx)
+      const why = unfit(row)
       const marked = row.quiet.ok
         ? ''
         : `; not quiet: ${quietLine(row.quiet.after) || 'a dirty tree'}`
       console.log(
-        `[${i + 1}/${runs.length}] ${run.id}: ${progress(row)}, ${row.operatingPoint.presentHz?.toFixed(0) ?? '—'} Hz${marked}`,
+        `[${i + 1}/${runs.length}] ${run.id}: ${why ?? progress(row)}, ${row.operatingPoint.presentHz?.toFixed(0) ?? '—'} Hz${marked}`,
       )
+      if (why !== null) {
+        const error = new Error(`${run.id}: ${why}`)
+        ctx.doc = withFailure(ctx.doc, run, error, new Date().toISOString())
+        save(ctx)
+        throw error
+      }
       if (row.quiet.ok || !ctx.clean) break
     }
 }
