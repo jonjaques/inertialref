@@ -255,6 +255,11 @@ describe('the weather clock', () => {
     expect(commonPeriod([14_400, 8000])).toBe(72_000)
     expect(commonPeriod([9600])).toBe(9600)
     expect(commonPeriod([])).toBe(0)
+    // A period that is no number is left out, in either place: Euclid's
+    // remainder of one is NaN, and the loop that waits for zero never ends.
+    expect(commonPeriod([Number.NaN, 9600, 40_000])).toBe(240_000)
+    expect(commonPeriod([9600, Infinity, 40_000])).toBe(240_000)
+    expect(commonPeriod([Number.NaN])).toBe(0)
     fc.assert(
       fc.property(
         fc.array(fc.integer({ min: 1, max: 5000 }), {

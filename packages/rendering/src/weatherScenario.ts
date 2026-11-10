@@ -1,4 +1,4 @@
-import { pcg4d } from '@inertialref/procedural'
+import { pcg4d, smoothstep } from '@inertialref/procedural'
 import type { Vec3 } from '@inertialref/spatial'
 import type { Body } from '@inertialref/universe'
 import { aerosolDepthOf } from './atmosphere.ts'
@@ -279,11 +279,6 @@ export const BLOB_MEAN = (23 * Math.PI) / 160
 /** The finest blob grid: one cell a texel of a 512-texel face. */
 const BLOB_CELLS_MAX = 512
 const U32_MAX = 0xffff_ffff
-
-const smoothstep = (edge0: number, edge1: number, x: number): number => {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)))
-  return t * t * (3 - 2 * t)
-}
 
 /**
  * Cells a face edge for blobs of angular size `patternScale`: the power of

@@ -129,10 +129,13 @@ const greatestDivisor = (a: number, b: number): number => {
  * scenarios' cells are whole meters, and their multiples stay small —
  * `cirrus-over-cumulus`'s 1,200 m and 5,000 m cells come to 240 km of base
  * period, where a float32 position still resolves 1.6 cm. Zero for no periods.
+ * A period that is not finite has no lattice to hold and is left out: the
+ * divisor's remainder of one is NaN, which never reaches the zero it ends on.
  */
 export function commonPeriod(periods: readonly number[]): number {
   let common = 0
   for (const period of periods) {
+    if (!Number.isFinite(period)) continue
     const whole = Math.max(1, Math.round(period))
     common =
       common === 0 ? whole : (common / greatestDivisor(common, whole)) * whole
