@@ -1080,8 +1080,8 @@ describe('the sun a cloud sample sees', () => {
   /*
    * A slab under an overhead sun, with a sun depth that answers exactly for
    * it: whatever the tap set, the transmittance to the sun from inside a
-   * uniform slab is e^(−σ·(top − h)), because the taps' widths tile the first
-   * kilometer and the depth past them is the rest. And a half-clear column
+   * uniform slab is e^(−σ·(top − h)), because the taps' widths tile the path
+   * as far as they reach and the depth past them is the rest. And a half-clear column
    * crossed by the taps is half clear, not a quarter: the taps are one
    * segment.
    */
@@ -1090,7 +1090,7 @@ describe('the sun a cloud sample sees', () => {
   const TOP = 3000
 
   async function transmittance(
-    taps: 0 | 2 | 4,
+    taps: 0 | 2 | 4 | 8,
     sigma: number,
     fraction: number,
     height: number,
@@ -1142,9 +1142,10 @@ describe('the sun a cloud sample sees', () => {
 
   it('mixes the taps as one segment: a half-clear column at τ 20 passes half the sun, not a quarter', async () => {
     // σ·1000 m = 20 inside the first kilometer, past which the depth is
-    // nothing: the slab's top is the taps' reach.
+    // nothing: the slab's top is the taps' reach, which eight taps spaced in
+    // depth are cut at, where two end 75 m up.
     const height = TOP - 1000
-    const through = await transmittance(2, 0.02, 0.5, height)
+    const through = await transmittance(8, 0.02, 0.5, height)
     expect(through).toBeCloseTo(0.5 * (1 + Math.exp(-20)) * Math.exp(0), 5)
   })
 })

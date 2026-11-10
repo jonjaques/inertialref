@@ -6,7 +6,11 @@ import {
   documentTitle,
   metadataForPath,
 } from '../apps/game/src/site.ts'
-import { docHtmlRoutes, docRedirects, isApiRoute } from './docs/prerender.mjs'
+import {
+  docHtmlRoutes,
+  docRedirects,
+  loadsThroughShell,
+} from './docs/prerender.mjs'
 
 const root = new URL('../apps/game/dist/', import.meta.url)
 /*
@@ -50,9 +54,14 @@ for (const file of await readdir(root, { recursive: true })) {
   if (!file.endsWith('.html')) continue
   const route = file === 'index.html' ? '/' : `/${file.slice(0, -5)}`
   const entry = manifest.pages[route]
+  // A member page rendered as HTML is a bundle stage that grows with the
+  // export count, which is the cost the shell exists to avoid.
+  assert(
+    route === '/docs/api' || !loadsThroughShell(route),
+    `${route}: an API member page was rendered as HTML`,
+  )
   const page =
-    entry === undefined ||
-    (manifest.prerenderApi === false && isApiRoute(route))
+    entry === undefined || loadsThroughShell(route)
       ? undefined
       : JSON.parse(
           await readFile(

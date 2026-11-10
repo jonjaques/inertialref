@@ -8,7 +8,7 @@ import { metadataForPath } from '../../src/site.ts'
 import type { InitialDocs } from '../../src/docs/initialDocs.ts'
 import {
   docHtmlRoutes,
-  isApiRoute,
+  loadsThroughShell,
 } from '../../../../scripts/docs/prerender.mjs'
 
 export const getStaticPaths = (async () => {
@@ -26,10 +26,11 @@ const { route } = Astro.props
 let initialDocs: InitialDocs | undefined
 let asyncDocs = false
 if (route === '/docs' || route.startsWith('/docs/')) {
-  const manifest = await stagedManifest()
-  asyncDocs = manifest.prerenderApi === false && isApiRoute(route)
-  if (!asyncDocs)
+  asyncDocs = loadsThroughShell(route)
+  if (!asyncDocs) {
+    const manifest = await stagedManifest()
     initialDocs = { manifest, page: await stagedPage(manifest, route) }
+  }
 }
 const meta = metadataForPath(route, initialDocs?.page)
 ---

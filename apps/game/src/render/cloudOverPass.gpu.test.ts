@@ -1204,7 +1204,10 @@ describe('the composite’s form, chosen a frame at a time', () => {
      */
     try {
       set({ over: 'passes' })
-      frames(64)
+      // 128 frames, because the control needs the history converged to the
+      // bit: at 64 the frame four later is still one half-float step off in
+      // 23 channel values, at 96 it still differs, and from 128 it repeats.
+      frames(128)
       const passes = await output()
       // The control: the frame repeats, so a difference below is a form's.
       frames(4)
