@@ -68,18 +68,25 @@ import { runQuadPasses } from './quadPass.ts'
 import { warmByDrawing } from './warmup.ts'
 
 /*
- * The local volume: the field cached in two eye-anchored levels of
+ * The local volume: the field cached in three eye-anchored levels of
  * 256² × 32 RG8 texels, R = √(σ/σ_scale) and G the fraction, stacked with a
  * guard slice under and over each level in one `RenderTarget3D`. It is what
  * the sun grid sums its optical depth through (`cloudSunGrid.ts`), and
  * nothing else reads it: the trace marches the field itself.
  *
- * **Its levels are the frame's 200 m and 800 m.** The grid's cell is 400 m
- * and a step of its bake is 300 m or more through a 10 km union, so a finer
- * level would be point-sampled once a cell and once a step: detail the grid
- * cannot store, where the 200 m level holds the field already averaged. The
- * frame lays out a 50 m level too (`CLOUD_VOLUME_TEXELS`), and the volume
- * holds none of it.
+ * **It holds every level the frame lays out, the 50 m one among them**
+ * (`CLOUD_VOLUME_HELD`). The grid's cell is 400 m and a step of its bake is
+ * 300 m or more through a 10 km union, so the 50 m level is point-sampled
+ * once a cell and once a step, and it reads as detail the grid cannot store.
+ * The sun gate says otherwise. Without it, a cell within 6.4 km of the eye
+ * sums the 200 m level's field, already averaged to a mean extinction and a
+ * fraction, where the 50 m level gives the ray cloud or clear air as the
+ * march finds them: at four taps the gate's RMS within 4 km of the eye goes
+ * from 0.035 to 0.062 under fair cumulus at a 5° sun, from 0.114 to 0.150
+ * under two decks at 37.5° and from 0.043 to 0.087 under altocumulus at 5°
+ * (`cloudSunAccuracy.gpu.test.ts`, by ring). Over the whole 22.5 km the same
+ * three move by 0.002 to 0.004, because nine samples in ten stand where the
+ * 50 m level never reached.
  *
  * **A level is read only where every one of its slices holds this anchor's
  * texels.** A slice is baked whole, at the window the level has that frame,
@@ -88,14 +95,14 @@ import { warmByDrawing } from './warmup.ts'
  * level is trusted only on the intersection of the windows its slices were
  * baked at, a texel in from each edge so a trilinear read never reaches a
  * texel outside it. Where no level is trusted the medium is the field itself
- * (`bake`), which is how a sun ray is followed past the coarse level's
+ * (`bake`), which is how a sun ray is followed past the coarsest level's
  * 102 km.
  *
  * **No frame bakes more than the cap** (`CloudBudget.slices`), whatever
  * happened: `sunSourceStep` is the schedule, and this module keeps its state
  * and draws what it answers. The anchor moving, the field's time jumping,
  * the weather changing and a level waking from idle each leave slices
- * holding nothing, and they come back at the cap, the finer level first.
+ * holding nothing, and they come back at the cap, the finest level first.
  * Until they have, the grid bakes nothing and its weight is zero
  * (`trusted`). A whole level is redrawn at the pace its field moves, a slice
  * before the fastest layer has crossed a tenth of a texel, so a field that
@@ -116,8 +123,8 @@ export const CLOUD_VOLUME_SIZE = 256
 export const CLOUD_VOLUME_SLICES = 32
 /** The levels a frame lays out about the eye, meters a texel (`cloudFrame.ts`). */
 export const CLOUD_VOLUME_TEXELS = [50, 200, 800] as const
-/** The frame's levels the volume holds, finer first. */
-export const CLOUD_VOLUME_HELD = [1, 2] as const
+/** The frame's levels the volume holds, finer first: all three. */
+export const CLOUD_VOLUME_HELD = [0, 1, 2] as const
 
 /** The pass's name on the timeline. */
 export const CLOUD_VOLUME_LABEL = 'cloud volume'
@@ -157,9 +164,9 @@ export function wrapped(
   return value.sub(floor(value.div(n)).mul(n))
 }
 
-/** Where in the volume a point is read: its level, or 2 where none is trusted. */
+/** Where in the volume a point is read: its level, or 3 where none is trusted. */
 interface Held {
-  /** 0 or 1, the finer trusted level holding the point, as the volume stacks them; 2 where neither does. */
+  /** 0, 1 or 2, the finest trusted level holding the point, as the volume stacks them; 3 where none does. */
   readonly level: Node<'float'>
   /** Lattice texels of that level's plane, continuous: texel (i, j) covers [i, i + 1). */
   readonly lattice: Node<'vec2'>
@@ -213,9 +220,9 @@ export class CloudVolume implements CloudResource {
   readonly name = 'volume'
   /**
    * One read a step of the grid's sun ray: R = √(σ/σ_scale), G = fraction,
-   * at the finer level holding the sample, plus detail-noise erosion where
-   * the footprint is finer than the level's texel; the field where neither
-   * level holds it. Read at level 0. Statements: built inside a `Fn`.
+   * at the finest level holding the sample, plus detail-noise erosion where
+   * the footprint is finer than the level's texel; the field where no level
+   * holds it. Read at level 0. Statements: built inside a `Fn`.
    */
   readonly medium: CloudMediumFn
 
@@ -223,8 +230,8 @@ export class CloudVolume implements CloudResource {
   /*
    * Linear by name: a `RenderTarget3D` takes its minification filter from
    * the options and keeps `Data3DTexture`'s nearest magnification, and a read
-   * at level 0 magnifies. Nearest, a cloudy texel reads as a 200 m box under
-   * a grid whose cells are laid half a texel off its centers.
+   * at level 0 magnifies. Nearest, a cloudy texel reads as a 50 m box a ray
+   * can clip in under a step.
    */
   readonly #target = new RenderTarget3D(1, 1, 1, {
     type: UnsignedByteType,
@@ -599,7 +606,7 @@ export class CloudVolume implements CloudResource {
       ])
       // The draw lands on the target's first slice with whatever the bake's
       // uniforms last held. A warm-up that arrives after a frame has baked,
-      // a chain rebuilt with the levers on, draws over the finer level's
+      // a chain rebuilt with the levers on, draws over the finest level's
       // lower guard while its record still says whole, so a cache at its
       // real size owes every slice again.
       if (this.#target.width !== 1) {

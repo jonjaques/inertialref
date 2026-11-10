@@ -21,12 +21,14 @@ import {
 } from './cloudSunSchedule.ts'
 
 /*
- * The sun's depth as the renderer schedules it: a volume of two levels of 34
- * slices and a grid of 32 over the finer one, stepped a frame at a time
+ * The sun's depth as the renderer schedules it: a volume of three levels of
+ * 34 slices and a grid of 32 over the middle one, stepped a frame at a time
  * through whatever a session does to them.
  */
 
-const LEVELS = 2
+const LEVELS = 3
+/** The level the grid's cells are laid on. */
+const GRID_LEVEL = 1
 const STACK = 34
 const SLICES = 32
 const CAPS = [4, 8, 16] as const
@@ -38,31 +40,31 @@ interface Frame {
   readonly reset: boolean
   /** The maps the volume bakes from owe nothing. */
   readonly ready: boolean
-  /** Texels each level's window moved, and cells the grid's did. */
-  readonly scroll: readonly [number, number]
+  /** Texels each level's window moved. */
+  readonly scroll: readonly [number, number, number]
   /** Whether each level's anchor moved. */
-  readonly anchor: readonly [boolean, boolean]
+  readonly anchor: readonly [boolean, boolean, boolean]
   /** Whether each level is out of reach. */
-  readonly idle: readonly [boolean, boolean]
+  readonly idle: readonly [boolean, boolean, boolean]
   /** The share of a whole redraw the frame owes: the volume's levels, then the grid. */
-  readonly owed: readonly [number, number, number]
+  readonly owed: readonly [number, number, number, number]
 }
 
 const QUIET: Frame = {
   reset: false,
   ready: true,
-  scroll: [0, 0],
-  anchor: [false, false],
-  idle: [false, false],
-  owed: [0, 0, 0],
+  scroll: [0, 0, 0],
+  anchor: [false, false, false],
+  idle: [false, false, false],
+  owed: [0, 0, 0, 0],
 }
 
 interface World {
   frame: number
   source: SunSourceState
   grid: SunGridState
-  origin: [number, number]
-  epoch: [number, number]
+  origin: number[]
+  epoch: number[]
   /** The frame the grid's field last changed under it. */
   lost: number
 }
@@ -78,45 +80,39 @@ const fresh = (): World => ({
   frame: 0,
   source: freshSunSource(LEVELS, STACK),
   grid: freshSunGrid(SLICES),
-  origin: [0, 0],
-  epoch: [0, 0],
+  origin: [0, 0, 0],
+  epoch: [0, 0, 0],
   lost: 0,
 })
 
 /** One frame of the two caches, the grid reading the volume it was just handed, as the field renders them. */
 function step(world: World, now: Frame, cap: number, ramp: number): Stepped {
   const wasIdle = world.grid.idle
-  world.origin = [
-    world.origin[0] + now.scroll[0],
-    world.origin[1] + now.scroll[1],
-  ]
-  world.epoch = [
-    world.epoch[0] + (now.anchor[0] ? 1 : 0),
-    world.epoch[1] + (now.anchor[1] ? 1 : 0),
-  ]
+  world.origin = world.origin.map((at, L) => at + now.scroll[L]!)
+  world.epoch = world.epoch.map((at, L) => at + (now.anchor[L]! ? 1 : 0))
   const source = sunSourceStep(world.source, {
     frame: world.frame,
     reset: now.reset,
     ready: now.ready,
     cap,
-    levels: [0, 1].map((L) => ({
-      origin: [world.origin[L]!, 0] as const,
+    levels: world.origin.map((origin, L) => ({
+      origin: [origin, 0] as const,
       epoch: world.epoch[L]!,
       rebuilt: now.anchor[L]!,
       idle: now.idle[L]!,
       owed: now.owed[L]!,
     })),
   })
-  if (now.reset || now.anchor[0] || (wasIdle && !now.idle[0]))
+  if (now.reset || now.anchor[GRID_LEVEL] || (wasIdle && !now.idle[GRID_LEVEL]))
     world.lost = world.frame
   const grid = sunGridStep(world.grid, {
     frame: world.frame,
     // Two of the level's texels a cell.
-    origin: [Math.floor(world.origin[0] / 2), 0],
-    epoch: world.epoch[0],
-    rebuilt: now.anchor[0],
-    idle: now.idle[0],
-    owed: now.owed[2],
+    origin: [Math.floor(world.origin[GRID_LEVEL]! / 2), 0],
+    epoch: world.epoch[GRID_LEVEL]!,
+    rebuilt: now.anchor[GRID_LEVEL],
+    idle: now.idle[GRID_LEVEL],
+    owed: now.owed[LEVELS]!,
     cap,
     ramp,
     source: { trusted: source.trusted, generation: source.state.generation },
@@ -147,18 +143,22 @@ const frame: fc.Arbitrary<Frame> = fc.record({
   reset: fc.integer({ min: 0, max: 39 }).map((n) => n === 0),
   ready: fc.integer({ min: 0, max: 9 }).map((n) => n > 0),
   scroll: fc.tuple(
+    fc.constantFrom(0, 0, 0, 0, 1, 2, 9),
     fc.constantFrom(0, 0, 0, 0, 1, 2, 5),
     fc.constantFrom(0, 0, 0, 0, 0, 1),
   ),
   anchor: fc.tuple(
     fc.integer({ min: 0, max: 39 }).map((n) => n === 0),
     fc.integer({ min: 0, max: 39 }).map((n) => n === 0),
+    fc.integer({ min: 0, max: 39 }).map((n) => n === 0),
   ),
   idle: fc
     .integer({ min: 0, max: 19 })
-    // The finer level idles first on the way up, and never alone awake.
-    .map((n): [boolean, boolean] => [n < 2, n < 1]),
+    // A finer level idles first on the way up, and never awake over a
+    // coarser one that idles.
+    .map((n): [boolean, boolean, boolean] => [n < 3, n < 2, n < 1]),
   owed: fc.tuple(
+    fc.double({ min: 0, max: 0.6, noNaN: true }),
     fc.double({ min: 0, max: 0.6, noNaN: true }),
     fc.double({ min: 0, max: 0.6, noNaN: true }),
     fc.double({ min: 0, max: 0.6, noNaN: true }),
@@ -304,7 +304,7 @@ describe('the sun’s depth through any session', () => {
           for (const owed of owes) {
             const { grid } = step(
               world,
-              { ...QUIET, owed: [0, 0, owed] },
+              { ...QUIET, owed: [0, 0, 0, owed] },
               limit,
               16,
             )
@@ -337,7 +337,7 @@ describe('a turning sun', () => {
       // whole rebuild fired on.
       const frames = Math.max(600, Math.ceil(40 / owed))
       for (let n = 0; n < frames; n += 1) {
-        const { grid } = step(world, { ...QUIET, owed: [0, 0, owed] }, 8, 16)
+        const { grid } = step(world, { ...QUIET, owed: [0, 0, 0, owed] }, 8, 16)
         most = Math.max(most, grid.bake.length)
         least = Math.min(least, grid.bake.length)
       }
@@ -359,7 +359,7 @@ describe('a turning sun', () => {
     for (let n = 0; n < 400; n += 1) {
       const { grid, source } = step(
         world,
-        { ...QUIET, owed: [owed, owed, owed] },
+        { ...QUIET, owed: [owed, owed, owed, owed] },
         8,
         16,
       )
@@ -370,29 +370,29 @@ describe('a turning sun', () => {
     // It lags by a cycle and no more: every slice is from the last four frames.
     const oldest = Math.min(...world.grid.slices.map((one) => one.frame))
     expect(world.frame - 1 - oldest).toBeLessThan(SLICES / 8)
-    // Neither level of the volume starves the other: each is redrawn whole
-    // within two of its own cycles at half the cap.
+    // No level of the volume starves another: each is redrawn whole within
+    // two of its own cycles at a third of the cap.
     for (const level of world.source.levels) {
       const behind = Math.min(...level.slices.map((one) => one.frame))
-      expect(world.frame - 1 - behind).toBeLessThan((2 * STACK) / 4)
+      expect(world.frame - 1 - behind).toBeLessThan((2 * STACK * LEVELS) / 8)
     }
   })
 })
 
 describe('a rebuild', () => {
-  it('is the volume, then the grid, then the ramp: 29 frames at the defaults', () => {
-    // 68 slices at 8 a frame, 32 at 8, and 16 frames of weight.
-    expect(framesToWhole(8, 16)).toBe(9 + 4 + 16)
-    expect(framesToWhole(4, 16)).toBe(17 + 8 + 16)
-    expect(framesToWhole(8, 32)).toBe(9 + 4 + 32)
-    expect(framesToWhole(4, 32)).toBe(17 + 8 + 32)
-    expect(framesToWhole(16, 8)).toBe(5 + 2 + 8)
+  it('is the volume, then the grid, then the ramp: 33 frames at the defaults', () => {
+    // 102 slices at 8 a frame, 32 at 8, and 16 frames of weight.
+    expect(framesToWhole(8, 16)).toBe(13 + 4 + 16)
+    expect(framesToWhole(4, 16)).toBe(26 + 8 + 16)
+    expect(framesToWhole(8, 32)).toBe(13 + 4 + 32)
+    expect(framesToWhole(16, 16)).toBe(7 + 2 + 16)
+    expect(framesToWhole(16, 8)).toBe(7 + 2 + 8)
   })
 
-  it('bakes the finer level first, then the coarser, then the grid from the first frame the volume is whole', () => {
+  it('bakes the finest level first, then the coarser ones, then the grid from the frame after the volume is whole', () => {
     const world = fresh()
     const order: string[] = []
-    for (let n = 0; n < 13; n += 1) {
+    for (let n = 0; n < 17; n += 1) {
       const { source, grid } = step(world, QUIET, 8, 16)
       const levels = new Set(source.bake.map((one) => one.level))
       order.push(
@@ -411,7 +411,11 @@ describe('a rebuild', () => {
       'level 1',
       'level 1',
       'level 1',
-      'level 1',
+      'level 1+level 2',
+      'level 2',
+      'level 2',
+      'level 2',
+      'level 2',
       'grid',
       'grid',
       'grid',
@@ -431,23 +435,32 @@ describe('a rebuild', () => {
     expect(step(world, QUIET, 8, 16).source.bake).toHaveLength(8)
   })
 
-  it('follows a jump of the field, and a coarse level’s own rebuild only pauses the grid', () => {
+  it('follows a jump of the field, and another level’s own rebuild only pauses the grid', () => {
     const world = settled()
     step(world, { ...QUIET, reset: true }, 8, 16)
     expect(world.grid.weight).toBe(0)
     expect(world.grid.slices.every((one) => one.origin === null)).toBe(true)
-    const again = settled()
-    const { grid } = step(again, { ...QUIET, anchor: [false, true] }, 8, 16)
-    // The grid's cells are the finer level's: they still hold the field.
-    expect(again.grid.weight).toBe(1)
-    expect(grid.bake).toEqual([])
-    expect(grid.pending).toBe(false)
+    for (const anchor of [
+      [true, false, false],
+      [false, false, true],
+    ] as const) {
+      const again = settled()
+      const { grid } = step(again, { ...QUIET, anchor }, 8, 16)
+      // The grid's cells are the middle level's: they still hold the field.
+      expect(again.grid.weight).toBe(1)
+      expect(grid.bake).toEqual([])
+      expect(grid.pending).toBe(false)
+    }
+    // Its own level's anchor is its own: every slice again.
+    const own = settled()
+    step(own, { ...QUIET, anchor: [false, true, false] }, 8, 16)
+    expect(own.grid.weight).toBe(0)
   })
 
   it('redraws six slices a frame at a new window, the oldest first, and the weight stands', () => {
     const world = settled()
-    // Two texels of the finer level: one cell of the grid.
-    const { grid } = step(world, { ...QUIET, scroll: [2, 0] }, 8, 16)
+    // Two texels of the grid's level: one cell of the grid.
+    const { grid } = step(world, { ...QUIET, scroll: [0, 2, 0] }, 8, 16)
     expect(grid.bake).toHaveLength(SUN_SLICES_MOVING)
     expect(grid.pending).toBe(true)
     expect(world.grid.weight).toBe(1)
@@ -497,16 +510,22 @@ describe('the wake', () => {
 
   it('starts the rebuild at the wake, so the weight has risen before the eye is through the fade', () => {
     const world = settled()
-    const up: Frame = { ...QUIET, idle: [true, false] }
+    const up: Frame = { ...QUIET, idle: [true, true, false] }
     step(world, up, 8, 16)
     expect(world.grid.weight).toBe(0)
     expect(step(world, up, 8, 16).grid.pending).toBe(false)
-    // Awake again: the finer level and the grid come back under the cap.
+    // Its own level awake again, the finest still out of reach: that level
+    // and the grid come back under the cap.
+    const down: Frame = { ...QUIET, idle: [true, false, false] }
     let frames = 0
     do {
-      step(world, QUIET, 8, 16)
+      step(world, down, 8, 16)
       frames += 1
     } while (world.grid.weight < 1)
     expect(frames).toBe(Math.ceil(STACK / 8) + 4 + 16)
+    // The finest level waking lower down pauses the grid and costs it nothing.
+    const { grid } = step(world, QUIET, 8, 16)
+    expect(grid.bake).toEqual([])
+    expect(world.grid.weight).toBe(1)
   })
 })

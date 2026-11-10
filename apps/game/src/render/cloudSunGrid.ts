@@ -63,7 +63,6 @@ import type {
 } from './cloudNodes.ts'
 import type { CloudLevelUniforms, CloudUniforms } from './cloudUniforms.ts'
 import {
-  CLOUD_VOLUME_HELD,
   CLOUD_VOLUME_SIZE,
   CLOUD_VOLUME_TEXELS,
   cloudFieldTravel,
@@ -76,14 +75,14 @@ import { warmByDrawing } from './warmup.ts'
 /*
  * The sun's optical depth as a grid around the eye (Nubis³): τ from each
  * cell's center toward the sun, summed through the local volume in 32 steps
- * whose heights come from `altitudeAt` (rule 52), over the volume's finer
- * window and 32 heights from the union's base to its top.
+ * whose heights come from `altitudeAt` (rule 52), over the window of the
+ * volume's 200 m level and 32 heights from the union's base to its top.
  *
  * **Its depth is the drawn medium's.** A cell sums the extinction the
  * volume's medium answers with, which is the one the march's transmittance
  * is formed from, so the sun dims inside a cloud at the rate the view does.
  *
- * **Its frame is the volume's finer level.** A cell is two of that level's
+ * **Its frame is the volume's 200 m level.** A cell is two of that level's
  * texels, 400 m, on its anchor and plane, so the grid re-anchors exactly
  * when the level does; its window of 128 cells is centered on the eye in
  * that plane, as the level's 256 texels are, and scrolls toroidally. A slice
@@ -107,8 +106,8 @@ import { warmByDrawing } from './warmup.ts'
  * weight is not one** (`cloudMix.ts`). The weight is the product of three:
  * the rebuild's, zero until every slice holds the field and rising over the
  * `sunRamp` lever's frames; the wake's, zero where the grid idles, more
- * than the finer level's extent over the union's top, and one a quarter of
- * that lower; and the reach's, one to 20.8 km from the eye along the grid's
+ * than its level's extent over the union's top, and one a quarter of that
+ * lower; and the reach's, one to 20.8 km from the eye along the grid's
  * axes and zero from 24 km. The last is measured from the eye and not from
  * the window's edge: the window moves a cell at a time, and a weight tied to
  * it would step at each snap. So the grid ends in a ramp, never in an edge
@@ -120,7 +119,7 @@ import { warmByDrawing } from './warmup.ts'
  * the crossing's law.
  */
 
-/** Over the volume's finer window and the union's height. */
+/** Over the window of the volume's 200 m level and the union's height. */
 export const SUN_GRID_SIZE = [128, 128, 32] as const
 /** Steps a cell's sun ray takes through the union. */
 export const SUN_GRID_STEPS = 32
@@ -131,8 +130,8 @@ export const SUN_GRID_REACH = 24_000
 export const SUN_GRID_FADE = 3_200
 
 const [WIDTH, HEIGHT, SLICES] = SUN_GRID_SIZE
-/** The frame's level the grid's cells are laid on: the volume's finer one. */
-const LEVEL = CLOUD_VOLUME_HELD[0]
+/** The frame's level the grid's cells are laid on: its 200 m one. */
+const LEVEL = 1
 /** A cell is two of that level's texels: 128 cells span its 256. */
 const CELL_METERS = (CLOUD_VOLUME_TEXELS[LEVEL] * CLOUD_VOLUME_SIZE) / WIDTH
 /** R16F. */
@@ -149,7 +148,7 @@ const UNRESOLVED = 1e6
 const OPAQUE = 1e-20
 
 /**
- * The finer level's frame at the grid's cells: its anchor, axes and eye
+ * The 200 m level's frame at the grid's cells: its anchor, axes and eye
  * terms, and a window of the grid's size whose middle corner is the eye's
  * nearest, as `levelFrames` places a level's.
  */

@@ -92,8 +92,9 @@ const FIELD_PERIOD = 9600
 const CAP = 8
 const RAMP = DEFAULT_CLOUD_LEVERS.sunRamp
 const [, , SLICES] = SUN_GRID_SIZE
-/** A level of the volume with its guards. */
+/** A level of the volume with its guards, and the levels it holds. */
 const STACK = 34
+const LEVELS = 3
 
 const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(v.x, v.y, v.z)
@@ -652,24 +653,28 @@ describe('a grid that comes back', () => {
     const volume: number[] = []
     const grid: number[] = []
     const weight: number[] = []
-    const frames = Math.ceil((2 * STACK) / CAP) + SLICES / CAP + RAMP
+    const source = Math.ceil((LEVELS * STACK) / CAP)
+    const frames = source + SLICES / CAP + RAMP
     for (let n = 0; n < frames; n += 1) {
       test.step(eye, SUN)
       volume.push(total(test.volume.drawn))
       grid.push(test.depth.drawn)
       weight.push(test.weight)
     }
-    // 68 slices of the volume at 8 a frame: eight frames of 8 and one of 4.
-    expect(volume.slice(0, 9)).toEqual([8, 8, 8, 8, 8, 8, 8, 8, 4])
-    expect(total(volume.slice(9))).toBe(0)
+    // 102 slices of the volume at 8 a frame: twelve frames of 8 and one of 6.
+    expect(volume.slice(0, source)).toEqual([
+      ...new Array<number>(12).fill(8),
+      6,
+    ])
+    expect(total(volume.slice(source))).toBe(0)
     // Nothing of the grid until the volume is whole, then its 32 at the cap.
-    expect(grid.slice(0, 9)).toEqual(new Array(9).fill(0))
-    expect(grid.slice(9, 13)).toEqual([8, 8, 8, 8])
-    expect(total(grid.slice(13))).toBe(0)
+    expect(grid.slice(0, source)).toEqual(new Array(source).fill(0))
+    expect(grid.slice(source, source + 4)).toEqual([8, 8, 8, 8])
+    expect(total(grid.slice(source + 4))).toBe(0)
     // Zero until every slice holds the field, then a sixteenth a frame.
-    expect(weight.slice(0, 13)).toEqual(new Array(13).fill(0))
+    expect(weight.slice(0, source + 4)).toEqual(new Array(source + 4).fill(0))
     weight
-      .slice(13)
+      .slice(source + 4)
       .forEach((w, k) => expect(w).toBeCloseTo((k + 1) / RAMP, 12))
     expect(weight[frames - 1]).toBe(1)
     expect(test.depth.pending).toBe(false)
@@ -688,7 +693,7 @@ describe('a grid that comes back', () => {
 
   it('reads as nothing held while it comes back: no depth and no weight at any point', async () => {
     const test = rig(slab(...SLAB), scenario)
-    for (let n = 0; n < 11; n += 1) test.step(eye, SUN)
+    for (let n = 0; n < 15; n += 1) test.step(eye, SUN)
     // Two frames into the grid's own bake: sixteen slices hold the field.
     expect(test.depth.pending).toBe(true)
     const point = along(test, eye, 1800, 500)
@@ -726,20 +731,22 @@ describe('a grid that comes back', () => {
     const test = rig(slab(...SLAB), scenario)
     test.settle(eye, SUN)
     let grid = 0
-    const volume = [0, 0]
+    const volume = [0, 0, 0]
     for (let n = 0; n < 96; n += 1) {
       test.step(eye, SUN, { seconds: 1 / 60, wind: 25 })
       grid += test.depth.drawn
       test.volume.drawn.forEach((count, L) => (volume[L]! += count))
       expect(test.depth.drawn).toBeLessThanOrEqual(1)
     }
-    // 1.6 s: the grid's 400 m cells once, the 200 m level twice, the 800 m level half.
+    // 1.6 s: the grid's 400 m cells once; the volume's 50 m level eight
+    // times, its 200 m level twice, its 800 m level half.
     expect(grid).toBeGreaterThanOrEqual(SLICES - 1)
     expect(grid).toBeLessThanOrEqual(SLICES)
-    expect(volume[0]).toBeGreaterThanOrEqual(2 * STACK - 1)
-    expect(volume[0]).toBeLessThanOrEqual(2 * STACK)
-    expect(volume[1]).toBeGreaterThanOrEqual(STACK / 2 - 1)
-    expect(volume[1]).toBeLessThanOrEqual(STACK / 2)
+    volume.forEach((count, L) => {
+      const asked = (8 * STACK) / 4 ** L
+      expect(count).toBeGreaterThanOrEqual(asked - 1)
+      expect(count).toBeLessThanOrEqual(asked)
+    })
     dispose(test)
   })
 
