@@ -238,9 +238,8 @@ export const stopPath = () => `globalThis.irWeatherPath({ verb: 'stop' })`
 /**
  * `--js` that sets cloud levers over the picture's, and answers `'set'` or
  * why it could not. The engine refuses a lever it does not have and a value
- * outside its set, which is how a cast names a lever before the package
- * that adds it merges: `handoverBand` and `scenario: 'climate'` answer
- * unavailable until they exist, and the cast is recorded as such.
+ * outside its set, so a page built before a lever lands records the cast
+ * unavailable rather than taking it under the wrong levers.
  */
 export const setLevers = (levers) =>
   `(() => { try { engine.clouds = { ...engine.clouds, ...${JSON.stringify(levers)} }; return 'set' } catch (error) { return 'unavailable: ' + error.message } })()`
@@ -322,7 +321,9 @@ export const CASTS = Object.freeze([
     speed: 'climate',
     path: SLOW,
     frames: descentFrames(400_000, 0.012),
-    levers: { scenario: 'climate' },
+    // The body's own climate. Until package D lands it, `bodyWeather`
+    // answers `CLIMATE_REGIME`, `fair-cumulus`, so this draws that regime.
+    levers: { weather: 'climate' },
     arms: ['on'],
     control: `${G6}-slow-off`,
     checks: ['C4'],

@@ -7,6 +7,10 @@ import vm from 'node:vm'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import ledger from '../../apps/headless/src/cornerstoneLedger.json' with { type: 'json' }
+import {
+  DEFAULT_CLOUD_LEVERS,
+  isCloudLevers,
+} from '../../apps/game/src/render/cloudLevers.ts'
 import { wrap } from '../driveScript.mjs'
 import {
   armsOf,
@@ -315,6 +319,23 @@ describe('the capture’s plan', () => {
     expect(
       castReads(slow, false, answer(jsOf(off).map((_, i) => i))).levers,
     ).toBe('set')
+  })
+
+  it('names only levers the engine takes, so no cast is recorded unavailable, and C4 draws the world’s own climate', () => {
+    // The engine's setter throws on a lever it does not have, and the cast
+    // is then recorded unavailable rather than taken: a stale name here
+    // costs the cast silently, in the window, not in the gate.
+    for (const cast of CASTS.filter((one) => one.levers !== undefined))
+      expect(
+        isCloudLevers({ ...DEFAULT_CLOUD_LEVERS, ...cast.levers }),
+        castName(cast, true),
+      ).toBe(true)
+    const climate = castByKey('weather-g6-descent-climate')
+    expect(climate.levers).toEqual({ weather: 'climate' })
+    expect(climate.checks).toEqual(['C4'])
+    expect(jsOf(castArgs(climate, true))[0]).toBe(
+      setLevers({ weather: 'climate' }),
+    )
   })
 
   it('schedules the descents from 400 km to 2 m at the design’s frame counts, and G5 over the ledger’s path', () => {

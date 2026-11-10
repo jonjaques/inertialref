@@ -284,6 +284,10 @@ luminance on and off them in scene units.
   (355 m on the slow path, 291 m on the fast). The drops are the descent's,
   not the clouds'. G5 with the clouds on drops one or two frames at a time,
   among them its first frames, where B13 already puts the clouds' cost.
+- **C4's cast is G6's slow descent under the world's own climate,** the
+  `weather` lever at `'climate'`. Until package D lands the climate,
+  `bodyWeather` answers `CLIMATE_REGIME`, `fair-cumulus`, on every wet body,
+  so the cast draws that regime, not G6's `stratocumulus`.
 - **G3's deck draws on this world and did not on the last.** The cloud frame
   takes the sun from the body's center in render space, 2.04° high there and
   0.26° here (below, under the defects on `main`).
