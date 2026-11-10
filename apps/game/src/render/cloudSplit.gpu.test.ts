@@ -541,6 +541,48 @@ describe('the frame node', () => {
     }
   })
 
+  it('reports a split that declines once, and runs none of the frame’s cloud work', () => {
+    const sink = new RingBufferSink()
+    const detach = logHub.addSink(sink)
+    try {
+      let ran = 0
+      const reports = () =>
+        sink.records().filter((record) => record.scope === 'game.clouds')
+      // In a frame and outside any open render pass, where the split declines.
+      const outside = { renderer } as unknown as NodeFrame
+      for (const placement of ['split', 'empty-split'] as const) {
+        const from = reports().length
+        const node = new CloudFrameNode(
+          driver(placement, () => {
+            ran += 1
+          }),
+        )
+        node.updateBefore(outside)
+        node.updateBefore(outside)
+        const said = reports().slice(from)
+        expect(
+          said.map((record) => record.level),
+          placement,
+        ).toEqual(['warn'])
+        expect(said[0]!.fields['placement']).toBe(placement)
+      }
+      expect(ran).toBe(0)
+      // 'passes' asks for no split, so it has none to decline: the work runs.
+      const from = reports().length
+      const passes = new CloudFrameNode(
+        driver('passes', () => {
+          ran += 1
+        }),
+      )
+      passes.updateBefore(outside)
+      expect(ran).toBe(1)
+      expect(reports().slice(from)).toEqual([])
+      expect(treeOf(renderer).depth).toBe(-1)
+    } finally {
+      detach()
+    }
+  })
+
   it('runs no cloud work when compileAsync runs its updateBefore outside a frame', async () => {
     /*
      * Three runs a render-scoped node's `updateBefore` once per render id,
