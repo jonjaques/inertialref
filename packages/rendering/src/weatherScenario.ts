@@ -99,17 +99,21 @@ export const MAX_CLOUD_LAYERS = 3
 /*
  * The two decks the cornerstones stand under or over (phase 1 design §3.3).
  *
- * Each regime's thickness is held to ISCCP-H by `weatherCalibration.slow.test.ts`.
- * The altocumulus deck is 400 m, the top of its genus's range: its detected
- * pixels' radiative mean depth is then 1.33 against ISCCP-H's altocumulus
- * 1.37, where at 800 m it was 2.28. The stratocumulus deck is already its
- * range's top, 500 m, and is too thin for ISCCP-H's class: the miss is
- * declared there with its figure.
+ * Each regime's thickness is held to ISCCP-H by `weatherCalibration.slow.test.ts`,
+ * on a field whose clouds hold their genus's σ inside them.
+ *
+ * The altocumulus deck is 250 m: its detected pixels' radiative mean depth
+ * is then 1.42 against ISCCP-H's altocumulus 1.37. At 200, 300 and 400 m it
+ * is 1.19, 1.64 and 2.02.
+ *
+ * The stratocumulus deck is its range's top, 500 m. Its pixels fall in
+ * ISCCP-H's class (0.74 in 3.55–22.63), but their mean is 5.0 against 7.35
+ * and the class shifts 27 points with the sun. Both are declared there.
  */
 const ALTOCUMULUS: CloudLayerSpec = {
   genus: 'altocumulus',
   base: 4000,
-  top: 4400,
+  top: 4250,
   coverage: 0.7,
   sigma: 0.04,
   cellMeters: 1000,
