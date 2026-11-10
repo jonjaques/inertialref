@@ -11,6 +11,7 @@ import {
   jitterRule,
   ladderRule,
   leanRule,
+  overRecords,
   placementRule,
   rampRule,
   rulesTable,
@@ -420,35 +421,112 @@ describe('the choices', () => {
     ).toMatchObject({ outcome: 'undecided' })
   })
 
-  it('makes chain the form only cheaper by the resolution and equal on the GPU', () => {
-    const rows = (delta) =>
+  it('makes chain the form only cheaper, equal on the GPU, and inside B10’s growth', () => {
+    // Y's rig: chain 0.42 ms under passes at 1080p and 1.34 at Retina, and
+    // its Δ over the clouds off 2.68 at 1080p and 4.18 at Retina.
+    const rows = ({
+      delta = -0.42,
+      retinaDelta = -1.34,
+      off = 2.68,
+      offRetina = 4.18,
+    } = {}) =>
       doc(
-        ...['orbit', 'horizon'].flatMap((s) =>
-          ['1080p', 'retina'].map((size) =>
-            ab(s, size, delta, {
-              group: 'form',
-              label: 'chain',
-              batch: 'over',
-            }),
-          ),
-        ),
+        ...['orbit', 'horizon'].flatMap((s) => [
+          ab(s, '1080p', delta, {
+            group: 'chain',
+            label: 'chain',
+            batch: 'over',
+            composite: 0.9,
+          }),
+          ab(s, 'retina', retinaDelta, {
+            group: 'chain',
+            label: 'chain',
+            batch: 'over',
+            composite: 2.24,
+          }),
+          ab(s, '1080p', off, {
+            group: 'clouds',
+            label: 'chain',
+            batch: 'over',
+          }),
+          ab(s, 'retina', offRetina, {
+            group: 'clouds',
+            label: 'chain',
+            batch: 'over',
+          }),
+        ]),
       )
-    expect(chainRule({ over: rows(-0.3) }, { chainEqual: true }).outcome).toBe(
-      'pass',
+    // Y's figures: 1.5 ms of growth against 0.5, a miss, and it says why.
+    const ys = chainRule({ over: rows() }, { chainEqual: true })
+    expect(ys.outcome).toBe('miss')
+    expect(ys.figures).toEqual(
+      expect.arrayContaining([
+        "orbit: chain's steady Δ grows 1.50 ms from 1080p to Retina, against 0.5 ms ± 0.05 ms",
+        'fails: B10: its steady Δ grows by at most 0.5 ms from 1080p to Retina',
+      ]),
     )
-    expect(chainRule({ over: rows(-0.04) }, { chainEqual: true }).outcome).toBe(
-      'miss',
+    // The form a row drew is recorded, and unknown until the report says.
+    expect(ys.figures[0]).toMatch(/; form unknown, depth unknown$/)
+    // Inside the bound, by its allowance and no more.
+    expect(
+      chainRule({ over: rows({ offRetina: 3.23 }) }, { chainEqual: true })
+        .outcome,
+    ).toBe('pass')
+    expect(
+      chainRule({ over: rows({ offRetina: 3.24 }) }, { chainEqual: true })
+        .outcome,
+    ).toBe('miss')
+    // Not cheaper by the resolution, or not equal on the GPU: a miss.
+    expect(
+      chainRule(
+        { over: rows({ delta: -0.04, offRetina: 3.0 }) },
+        { chainEqual: true },
+      ).outcome,
+    ).toBe('miss')
+    expect(
+      chainRule({ over: rows({ offRetina: 3.0 }) }, { chainEqual: false })
+        .outcome,
+    ).toBe('miss')
+    // The equality unread: undecided where every clause read holds, and a
+    // miss all the same where one read fails.
+    expect(chainRule({ over: rows({ offRetina: 3.0 }) }).outcome).toBe(
+      'undecided',
     )
-    expect(chainRule({ over: rows(-0.3) }, { chainEqual: false }).outcome).toBe(
-      'miss',
-    )
+    expect(chainRule({ over: rows() }).outcome).toBe('miss')
     const lean = (delta) =>
-      doc(ab('overlay', 'retina', delta, { group: 'form', label: 'lean' }))
+      doc(ab('overlay', 'retina', delta, { group: 'lean', label: 'lean' }))
     expect(leanRule({ over: lean(-0.6) }, { leanEqual: true }).outcome).toBe(
       'pass',
     )
     expect(leanRule({ over: lean(0.1) }, { leanEqual: true }).outcome).toBe(
       'miss',
+    )
+  })
+
+  it('records chain on the overlay, which is passes by construction, and the guard', () => {
+    const records = (delta) =>
+      overRecords({
+        over: doc(
+          ...['1080p', 'retina'].map((size) =>
+            ab('overlay', size, delta, { group: 'overlay', label: 'chain' }),
+          ),
+          ab('guard', '1080p', -1.2, {
+            group: 'guard',
+            label: 'chain',
+            baseSceneOver: 5.5,
+          }),
+        ),
+      })
+    const [overlay, guard] = records(0.03)
+    expect(overlay.outcome).toBe('recorded')
+    expect(overlay.figures.some((f) => /differs from passes/.test(f))).toBe(
+      false,
+    )
+    expect(records(0.3)[0].figures).toContain(
+      '1080p: differs from passes by more than the resolution',
+    )
+    expect(guard.figures[0]).toMatch(
+      /guard 1080p chain: Δ -1\.20 ms .*scene over clouds 5\.50 ms/,
     )
   })
 

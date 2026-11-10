@@ -5,6 +5,8 @@ import {
   sunThrough,
 } from './air.ts'
 import { sensorRadiance } from './radiance.ts'
+import { cloudFrontThrough } from './cloudFront.ts'
+import type { CloudFrontHandle } from './cloudSystem.ts'
 import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
 import {
   Color,
@@ -809,6 +811,11 @@ export interface RingMaterial {
   readonly opticalDepth: { value: number }
   /** Tint for a ring with no map — a procedural giant's. */
   readonly baseColor: { value: Color }
+  /**
+   * The ring's body's render compression: what turns its view distance into
+   * the true meters the clouds' knots are in. Read only with a front handle.
+   */
+  readonly compression: { value: number }
   setTexture(map: Texture | null): void
 }
 
@@ -830,8 +837,15 @@ export interface RingMaterial {
  * **They are radially structured and azimuthally uniform.** So the map is a
  * strip, sampled by radius, and the mesh is 512 segments around because a ring
  * seen edge-on is a straight line and any faceting shows.
+ *
+ * **With a front handle it is seen through the clouds in front of it**, as an
+ * alpha-blended object is (`cloudFront`): its color becomes `color·T + L` and
+ * its coverage stays its own. The composite has already laid the cloud's
+ * light over everything behind the ring, so the blend keeps that share and
+ * the ring adds only what stands in front of it. Without a handle the graph
+ * is the one a page without `?clouds=1` has always compiled.
  */
-export function createRingMaterial(): RingMaterial {
+export function createRingMaterial(front?: CloudFrontHandle): RingMaterial {
   // Opaque white, not CLEAR: the optical thickness is `opticalDepth · band.a`,
   // so a clear fallback zeroes the thickness and a mapless ring — every
   // procedural giant's, and Jupiter's, Uranus's and Neptune's — renders fully
@@ -846,6 +860,7 @@ export function createRingMaterial(): RingMaterial {
   const bodyRadius = uniform(0.4)
   const opticalDepth = uniform(0.7)
   const baseColor = uniform(new Color(1, 1, 1))
+  const compression = uniform(1)
 
   // The geometry is an annulus in its own XZ plane with an outer radius of 1, so
   // the radial coordinate is available without a UV channel — and without the
@@ -945,11 +960,19 @@ export function createRingMaterial(): RingMaterial {
     false,
     'alpha',
   )
-  material.colorNode = mix(transmitted, backscatter, sameSide)
+  const color = mix(transmitted, backscatter, sameSide)
     .mul(baseColor)
     .mul(sunColor)
     .mul(sunIntensity)
     .mul(sunlit)
+  if (front === undefined) material.colorNode = color
+  else {
+    const seen = cloudFrontThrough(
+      front,
+      length(cameraPosition.sub(positionWorld)).div(compression),
+    )
+    material.colorNode = color.mul(seen.transmittance).add(seen.light)
+  }
   material.opacityNode = min(opaque, float(1))
   material.transparent = true
   material.depthWrite = false
@@ -965,6 +988,7 @@ export function createRingMaterial(): RingMaterial {
     bodyRadius,
     opticalDepth,
     baseColor,
+    compression,
     setTexture(value) {
       map.value = value ?? WHITE
     },
