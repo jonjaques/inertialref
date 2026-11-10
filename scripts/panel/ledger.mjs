@@ -281,13 +281,11 @@ export function judgeGuard({ scene, seats, bars, overlay }) {
 }
 
 /**
- * The calibration round (rubric §3.5): B_form and B_light are the means over
- * every anchor still and valid seat, and F follows. It needs three valid
- * seats; without them it fixes nothing.
+ * Every valid seat's scores by scene and arm, a copy left out: what the
+ * round publishes in the record beside its verdicts (rubric §3.5), the
+ * experiment's and the last accepted plate's included.
  */
-export function calibrate(seats) {
-  const form = []
-  const light = []
+export function publish(seats) {
   const published = {}
   for (const seat of seats)
     for (const [scene, letters] of Object.entries(seat.key.scenes))
@@ -298,10 +296,20 @@ export function calibrate(seats) {
           seat: seat.seat,
           ...row,
         })
-        if (entry.arm !== 'anchor') continue
-        form.push(row.form)
-        light.push(row.light)
       }
+  return published
+}
+
+/**
+ * The calibration round (rubric §3.5): B_form and B_light are the means over
+ * every anchor still and valid seat, and F follows. It needs three valid
+ * seats; without them it fixes nothing.
+ */
+export function calibrate(seats) {
+  const published = publish(seats)
+  const anchors = Object.values(published).flatMap((arms) => arms.anchor ?? [])
+  const form = anchors.map((row) => row.form)
+  const light = anchors.map((row) => row.light)
   if (seats.length < SEATS_NEEDED) return { fixed: false, published }
   if (form.length === 0)
     throw new Error(
@@ -343,6 +351,7 @@ export function judgeRound({ round, seats, entries, bars }) {
     throw new Error('a judged round needs the calibration round’s bars first')
   row.pictures = {}
   row.guards = {}
+  row.published = publish(valid)
   const scenes = seats[0]?.packet.scenes ?? []
   for (const scene of scenes) {
     const plate = round.scenes.find((one) => one.scene === scene.scene)

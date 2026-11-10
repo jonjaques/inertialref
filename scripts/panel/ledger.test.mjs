@@ -285,6 +285,7 @@ describe('a seat (rubric §3.3)', () => {
 describe('a still picture (rubric §3.5)', () => {
   it('passes on three valid seats with every rule held', () => {
     const row = judge(fixture())
+    expect(row.published.e1.deck.map((one) => one.form)).toEqual([5, 5, 5])
     for (const id of [IDS.e1, IDS.e3, IDS.g1])
       expect(row.pictures[id].verdict).toBe('pass')
   })
