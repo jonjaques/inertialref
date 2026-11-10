@@ -43,6 +43,7 @@ import {
   type SurfacePlacement,
 } from '@inertialref/simulation'
 import {
+  bodyAddress,
   type Body,
   bodyFixedFrameId,
   bodyFrameId,
@@ -1296,9 +1297,19 @@ export class GameHarness {
     this.#observatory.setTime(picture.time)
     const weather = this.#host.render.setWeather(
       picture.weather ?? null,
+      // A station's picture draws the weather of the body it goes round: the
+      // clouds are served on a body, and a station's own address names none.
       destination.kind === 'body'
         ? formatAddress(destination.address)
-        : picture.address,
+        : destination.kind === 'station' && destination.address.body !== null
+          ? formatAddress(
+              bodyAddress(
+                destination.address.galaxy,
+                destination.system,
+                destination.address.body,
+              ),
+            )
+          : picture.address,
     )
     if (picture.framing.kind === 'camera') {
       const lens = picture.lens!
@@ -1892,6 +1903,7 @@ export class GameHarness {
       '  ir.settled()                  whether the sky, the ground and the clouds have stopped arriving — what a capture waits for',
       '  ir.sun(address, {latitude, longitude}, time?)  the sun over a place: elevation and azimuth, degrees',
       "  ir.solveSun(address, place, {elevation, trend, after})  the first instant the sun stands there; elevation may be 'noon'",
+      '  ir.runClock(start, warp)      run the held instant from start, warp simulated seconds a presented second',
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',
       '  ir.ascend()                   back to orbit, at the framing you left',
