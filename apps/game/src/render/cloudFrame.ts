@@ -448,10 +448,9 @@ export type DrawnWeather =
 /**
  * The lever's weather on a body: a named regime held over it, or its own.
  * A body with no weather of its own (a dry one a lever forces by address)
- * draws its own as the climate regime, as phase 0 drew every body. Until
- * the zonal law is fitted a body's own climate is that regime too
- * (`bodyWeather`), whose layers are the numbers the genus table stands in
- * for, so the climate is drawn from them and not from the table.
+ * draws its own as the climate regime, as phase 0 drew every body. A wet
+ * world's own is its fitted climate (`bodyWeather`), which is no regime:
+ * its levels are drawn from the genus table, not from a scenario's layers.
  */
 export function drawnWeather(
   lever: CloudWeather,

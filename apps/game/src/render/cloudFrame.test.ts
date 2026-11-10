@@ -47,6 +47,7 @@ import {
   cloudFrame,
   cloudNoisePeriods,
   type CloudResetReason,
+  drawnWeather,
   scenarioClimate,
   servedBody,
   weatherScenario,
@@ -378,18 +379,22 @@ describe('the served set', () => {
 })
 
 describe('a body’s weather in its frame', () => {
-  it('draws the climate as the regime the body’s own weather is', () => {
+  it('draws the climate as the body’s own weather, and a named regime as that regime', () => {
     expect(DEFAULT_CLOUD_LEVERS.weather).toBe('climate')
     expect(weatherScenario('climate')).toBe(WEATHER_SCENARIOS[CLIMATE_REGIME])
     for (const id of SCENARIO_IDS)
       expect(weatherScenario(id)).toBe(WEATHER_SCENARIOS[id])
-    const [own] = run([inputs()])
+    // A wet world's own weather is its fitted climate, not a regime, and the
+    // frame lays out that climate's levels.
+    const own = drawnWeather('climate', deckless)
+    expect(own.regime).toBeNull()
+    const [frame] = run([inputs()])
     const [held] = run([inputs({}, { weather: CLIMATE_REGIME })])
-    expect(own!.scenario).toBe(held!.scenario)
-    expect(own!.served.levels).toEqual(held!.served.levels)
-    // One field under two names: the key is the lever's, and a change of
-    // name alone starts the bakes over.
-    expect(own!.served.weatherKey).toBe('climate')
+    expect(frame!.served.levels.map(({ base, top }) => [base, top])).toEqual(
+      own.weather!.levels.map(({ base, top }) => [base, top]),
+    )
+    // The key is the lever's, so a change of weather starts the bakes over.
+    expect(frame!.served.weatherKey).toBe('climate')
     expect(held!.served.weatherKey).toBe(CLIMATE_REGIME)
   })
 
@@ -472,11 +477,16 @@ describe('a body’s weather in its frame', () => {
           address === 'b:far' ? small : (SERVED.get(address) ?? null),
       }),
     ])
-    const wind = WEATHER_SCENARIOS[CLIMATE_REGIME].wind.east
-    for (const level of frame!.served.levels)
-      expect(level.turnRate).toBe(wind / earth.radius)
-    for (const level of frame!.second!.levels)
-      expect(level.turnRate).toBe(wind / small.radius)
+    const near = drawnWeather('climate', deckless).weather!
+    const quarter = drawnWeather('climate', small).weather!
+    frame!.served.levels.forEach((level, k) =>
+      expect(level.turnRate).toBe(near.turn[k]),
+    )
+    // The same winds over a quarter of the radius turn four times as fast.
+    frame!.second!.levels.forEach((level, k) => {
+      expect(level.turnRate).toBe(quarter.turn[k])
+      expect(level.turnRate / near.turn[k]!).toBeCloseTo(4, 12)
+    })
   })
 })
 
@@ -581,7 +591,9 @@ describe('the field’s derivation', () => {
 
 describe('a body’s frame', () => {
   it('forms the eye’s heights in float64, with no radius taken from another', () => {
-    const [frame] = run([inputs({ bodies: [earthAt(1250.5)] })])
+    const [frame] = run([
+      inputs({ bodies: [earthAt(1250.5)] }, { weather: 'fair-cumulus' }),
+    ])
     const { shells, eye } = frame!.served
     expect(Math.abs(shells.eye - 1250.5)).toBeLessThan(1e-6)
     expect(Vec.length(eye) - earth.radius).toBeCloseTo(1250.5, 6)
@@ -1014,31 +1026,38 @@ describe('the regime', () => {
         Q.rotate(LEVEL, { x: 0, y: 0, z: -1 }),
       ),
     )
+    const deck = { weather: 'fair-cumulus' } as const
     const turn = run([
-      inputs(),
-      inputs({ camera: { position: Vec.ZERO, quaternion: turned } }),
+      inputs({}, deck),
+      inputs({ camera: { position: Vec.ZERO, quaternion: turned } }, deck),
     ])
     expect(turn[1]!.reset).toBe('none')
     // At 1,500 m the nearest boundary is fair-cumulus's base 500 m below.
     const step = (meters: number) =>
-      inputs({
-        camera: { position: Vec.scale(HEADING, meters), quaternion: LEVEL },
-      })
-    expect(run([inputs(), step(51)])[1]!.reset).toBe('none')
-    expect(run([inputs(), step(400)])[1]!.reset).toBe('none')
+      inputs(
+        {
+          camera: { position: Vec.scale(HEADING, meters), quaternion: LEVEL },
+        },
+        deck,
+      )
+    expect(run([inputs({}, deck), step(51)])[1]!.reset).toBe('none')
+    expect(run([inputs({}, deck), step(400)])[1]!.reset).toBe('none')
   })
 
   it('stays converging in level flight 20 m under a base at 250 m/s for 120 frames', () => {
     // fair-cumulus's base is 1,000 m; the eye flies at 980 m, 4.2 m a frame.
     const steps = Array.from({ length: 121 }, (_, k) =>
-      inputs({
-        bodies: [earthAt(980)],
-        renderTime: 50_000 + k / 60,
-        camera: {
-          position: Vec.scale(HEADING, (250 * k) / 60),
-          quaternion: LEVEL,
+      inputs(
+        {
+          bodies: [earthAt(980)],
+          renderTime: 50_000 + k / 60,
+          camera: {
+            position: Vec.scale(HEADING, (250 * k) / 60),
+            quaternion: LEVEL,
+          },
         },
-      }),
+        { weather: 'fair-cumulus' },
+      ),
     )
     const frames = run(steps)
     expect(frames[0]!.served.shells.eyeOver[0]).toBeCloseTo(-20, 6)
