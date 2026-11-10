@@ -22,6 +22,7 @@ import {
   PORTS,
   SCENARIOS,
   batchRuns,
+  boots,
   busy,
   closeOurs,
   dryRun,
@@ -32,6 +33,7 @@ import {
   parseProcesses,
   profileDir,
   programOf,
+  quietLine,
   session,
 } from './measure.mjs'
 import {
@@ -432,7 +434,6 @@ describe('the invocations', () => {
       'install',
       'boot',
       'on',
-      'sample',
       'first',
     ])
     expect(plan(plain).map((s) => s.tag)).toEqual(['install', 'boot'])
@@ -477,6 +478,28 @@ describe('the invocations', () => {
       .filter((l) => l.startsWith('  node'))
     expect(first).not.toContain('--keep-storage')
     expect(second).toContain('--keep-storage')
+  })
+
+  it('boots every cold run fresh, and a page again once another preset has taken its port', () => {
+    const kept = (runs) =>
+      dryRun({ url: 'http://localhost:8787/', runs })
+        .split('\n')
+        .filter((l) => l.startsWith('  node'))
+        .map((l) => l.includes('--keep-storage'))
+    // A cold boot attaches to nothing, the second and third as the first.
+    expect(kept(ALL.memory)).toEqual(ALL.memory.map(() => false))
+    expect(kept(ALL.memory)).toHaveLength(12)
+    // Far-shore, then Earth's two on blue-marble, then far-shore again: the
+    // port holds one page, so the return is a boot and not an attach.
+    const stances = ALL.stances.map((run) => run.scenario)
+    const booted = kept(ALL.stances).flatMap((keep, i) =>
+      keep ? [] : [stances[i]],
+    )
+    expect(booted).toEqual(['ground', 'earth-ground', 'sunset'])
+    // A cold boot closes the measurement rig, so nothing is left to attach to.
+    const [, after] = kept([ALL.memory[0], ALL.decisions[0]])
+    expect(after).toBe(false)
+    expect(boots(new Map(), ALL.decisions[0])).toBe(true)
   })
 })
 
@@ -696,6 +719,28 @@ describe('the page steps', () => {
     page.context.engine.cloudsAvailable = false
     await expect(send(page, run, 'stance')).rejects.toThrow(/no cloud system/)
     expect(page.calls.visit).toBeUndefined()
+  })
+
+  it('sample a cold boot’s frames from the step that sets its levers', async () => {
+    const page = fakePage()
+    const cold = ALL.memory.find((r) => r.flag)
+    page.context.ir.timing = { mark: () => {}, drain: () => [] }
+    // Frames 16 ms apart, each handed its own timestamp as a page hands it.
+    let at = 1000
+    const asked = []
+    page.context.requestAnimationFrame = (callback) => {
+      asked.push(page.calls.levers.length)
+      setImmediate(() => callback((at += 16)))
+    }
+    await send(page, cold, 'on')
+    // Asked for by `on` itself, once its levers were set: a sampler begun a
+    // step later is a round trip behind them, and misses the frame they
+    // first draw in whenever that frame comes sooner.
+    expect(asked[0]).toBe(1)
+    const first = await send(page, cold, 'first')
+    expect(first.frames).toHaveLength(61)
+    expect(first.frames[0]).toBe(1016)
+    expect(hitch(first.frames)).toEqual({ first: 16, steady: 16 })
   })
 
   it('run every kind of step in a page that holds nothing of this module', async () => {
@@ -991,11 +1036,33 @@ describe('the arithmetic', () => {
   })
 
   it('reads a first-frame hitch against the steady frames after it', () => {
-    const samples = [40, 18, 17, 16, 17, ...Array(55).fill(16.7)].map(
-      (frameMs) => ({ frameMs }),
-    )
-    expect(hitch(samples)).toEqual({ first: 40, steady: 16.7 })
+    // Frame timestamps, as the cold boot samples them: a 40 ms frame, four
+    // near the rate, then fifty-five at 16 ms, exact in binary so the steps
+    // between them are too.
+    const times = [40, 18, 17, 16, 17, ...Array(55).fill(16)]
+    const samples = times.reduce((at, ms) => [...at, at.at(-1) + ms], [1000])
+    // The long frame whole: an average over ten frames would say 18.4.
+    expect(hitch(samples)).toEqual({ first: 40, steady: 16 })
     expect(hitch(samples.slice(0, 30))).toBeNull()
+    // A frame the page answered nothing for is no step, not a step of NaN.
+    expect(hitch([null, ...samples])).toEqual({ first: 40, steady: 16 })
+  })
+
+  it('reads the hitch off the frames a cold boot’s first step hands back', () => {
+    const cold = ALL.memory.find((r) => r.flag)
+    const steps = plan(cold)
+    const times = [40, 18, 17, 16, 17, ...Array(55).fill(16)]
+    const frames = times.reduce((at, ms) => [...at, at.at(-1) + ms], [1000])
+    const row = figures(cold, steps, {
+      results: steps.map((s) => ({
+        value: s.tag === 'first' ? { sensorMs: 9.5, frames } : null,
+      })),
+    })
+    expect(row.hitch).toEqual({ first: 40, steady: 16 })
+    expect(row.sensorMs).toBe(9.5)
+    // A boot without the flag sets no lever, and has no first frame to read.
+    const plain = ALL.memory.find((r) => !r.flag)
+    expect(figures(plain, plan(plain), { results: [] }).hitch).toBeNull()
   })
 
   it('recovers the per-ray, per-step and per-fetch costs a sweep is made of', () => {
@@ -1175,6 +1242,23 @@ describe('the quiet machine', () => {
     expect(judge({ ...quiet, load: [5.1, 3, 2] }).ok).toBe(false)
     expect(judge(quiet, 2).ok).toBe(false)
     expect(judge({ ...quiet, processes }, 100).busy.length).toBeGreaterThan(0)
+  })
+
+  it('does not take a table ps left empty for a quiet machine', () => {
+    // A `ps` that is refused or fails parses to no process at all, and the
+    // runner is one: nothing was scanned, so nothing was found busy.
+    const unread = judge({
+      at: 'now',
+      load: [0.4, 0.3, 0.2],
+      cores: 10,
+      processes: parseProcesses(''),
+      exempt: [],
+      thermal: 0,
+    })
+    expect(unread).toMatchObject({ ok: false, unread: true, busy: [] })
+    expect(quietLine(unread)).toBe(
+      'ps listed no process, so nothing was scanned',
+    )
   })
 })
 

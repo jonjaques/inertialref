@@ -473,15 +473,28 @@ export function session(run, { url, port, fresh }) {
     ...query.flatMap((q) => ['--query', q]),
     ...['--width', String(width), '--height', String(height)],
     ...['--dpr', String(dpr), '--max-px', '0', '--quiet', '--json'],
-    ...(cold ? ['--sample-js', 'ir.status().frame'] : []),
     ...(fresh ? [] : ['--keep-storage']),
   ]
 }
 
-/** The page a run may attach to: one port, window and preset. A cold boot
- *  attaches to nothing. */
-const pageOf = (run, port) =>
-  run.type === 'cold' ? null : `${port}|${run.size}|${presetOf(run.scenario)}`
+/**
+ * Whether a run boots its page rather than attach to it, recorded in `held`
+ * against the page each port holds. A port holds one page, a window and a
+ * preset, so a run attaches only where its own is the last one booted there:
+ * a page another preset has since replaced is booted again, with its storage
+ * cleared. A cold boot closes both rigs and attaches to nothing.
+ */
+export function boots(held, run) {
+  if (run.type === 'cold') {
+    held.clear()
+    return true
+  }
+  const port = portOf(run)
+  const page = `${run.size}|${presetOf(run.scenario)}`
+  const fresh = held.get(port) !== page
+  held.set(port, page)
+  return fresh
+}
 
 /* --------------------------------------------------------------- the machine ---- */
 
@@ -562,16 +575,22 @@ export function busy(table, exempt = []) {
     })
 }
 
-/** A sample judged: quiet when the one-minute load is at most `maxLoad`,
- *  half the cores by default, and nothing in `BUSY` runs. */
+/**
+ * A sample judged: quiet when the one-minute load is at most `maxLoad`, half
+ * the cores by default, and nothing in `BUSY` runs. A table with no process
+ * in it is `ps` refused or failed, the runner being one itself, and a scan
+ * of nothing finds nothing busy: that sample is `unread`, and not quiet.
+ */
 export function judge(sample, maxLoad = sample.cores / 2) {
+  const unread = sample.processes.length === 0
   const others = busy(sample.processes, sample.exempt)
   return {
     at: sample.at,
-    ok: sample.load[0] <= maxLoad && others.length === 0,
+    ok: sample.load[0] <= maxLoad && !unread && others.length === 0,
     load: sample.load[0],
     limit: maxLoad,
     busy: others,
+    unread,
     thermal: sample.thermal,
   }
 }
@@ -579,6 +598,7 @@ export function judge(sample, maxLoad = sample.cores / 2) {
 export const quietLine = (q) =>
   [
     ...(q.load > q.limit ? [`load ${q.load.toFixed(2)} over ${q.limit}`] : []),
+    ...(q.unread ? ['ps listed no process, so nothing was scanned'] : []),
     ...q.busy.map((p) => `${p.program} (pid ${p.pid})`),
   ].join(', ')
 
@@ -633,14 +653,15 @@ function identity() {
   const git = (...args) =>
     execFileSync('git', ['-C', ROOT, ...args], { encoding: 'utf8' }).trim()
   const dist = path.join(ROOT, 'apps/game/dist')
-  const built = [dist, path.join(dist, 'index.html')]
-    .filter(existsSync)
-    .map((file) => statSync(file).mtimeMs)
+  // The page the build wrote, and the directory only where it wrote none: a
+  // directory's time moves whenever anything adds a file to it, and the later
+  // of the two would pass a bundle older than the commit.
+  const built = [path.join(dist, 'index.html'), dist].find(existsSync)
   return {
     head: git('rev-parse', 'HEAD'),
     clean: git('status', '--porcelain') === '',
     committedAt: Number(git('log', '-1', '--format=%ct', 'HEAD')) * 1000,
-    builtAt: built.length > 0 ? Math.max(...built) : null,
+    builtAt: built === undefined ? null : statSync(built).mtimeMs,
     hardware: `${read('sysctl', ['-n', 'hw.model']) ?? os.type()}, ${os.cpus()[0]?.model}`,
     cores: os.availableParallelism(),
   }
@@ -710,7 +731,9 @@ const drive = (args, env) =>
     let text = ''
     child.stdout.on('data', (chunk) => (text += chunk))
     child.on('error', reject)
-    child.on('exit', (code, signal) => {
+    // `close`, not `exit`: a child can exit with its last output still in the
+    // pipe, and the result is read whole or not at all.
+    child.on('close', (code, signal) => {
       if (code !== 0)
         return reject(new Error(`drive.mjs exited ${code ?? signal}`))
       try {
@@ -721,12 +744,13 @@ const drive = (args, env) =>
     })
   })
 
-/** Waits up to `QUIET_WAIT_MS` for a quiet start; the last judgment either way. */
+/** Waits up to `QUIET_WAIT_MS` for a quiet start; the last judgment either
+ *  way. A table `ps` did not fill is not waited on: no wait fills it. */
 async function quietStart(ctx) {
   const began = Date.now()
   for (let said = 0; ;) {
     const q = judge(sample(ctx.exempt), ctx.maxLoad)
-    if (q.ok || Date.now() - began >= QUIET_WAIT_MS) return q
+    if (q.ok || q.unread || Date.now() - began >= QUIET_WAIT_MS) return q
     if (Date.now() - said >= 60_000) {
       console.log(`  waiting for a quiet machine: ${quietLine(q)}`)
       said = Date.now()
@@ -748,7 +772,11 @@ const portOf = (run) => (run.type === 'cold' ? PORTS.cold : PORTS.rig)
 async function attempt(run, ctx) {
   const before = await quietStart(ctx)
   if (!before.ok)
-    throw new Error(`no quiet start in ten minutes: ${quietLine(before)}`)
+    throw new Error(
+      before.unread
+        ? `a quiet machine cannot be checked: ${quietLine(before)}`
+        : `no quiet start in ten minutes: ${quietLine(before)}`,
+    )
   const token = ctx.lock.token
   if (run.type === 'cold') {
     // One Chrome at a time is one GPU job; then a profile no Chrome has seen.
@@ -757,23 +785,23 @@ async function attempt(run, ctx) {
   }
   const shots = shotsFor(run, ctx.shots)
   const steps = plan(run, shots)
-  const page = pageOf(run, portOf(run))
-  const fresh = !ctx.booted.has(page)
+  const fresh = boots(ctx.booted, run)
   const args = session(run, { url: ctx.url, port: portOf(run), fresh })
   const out = await drive([...args, ...steps.flatMap((s) => s.args)], ctx.env)
-  ctx.booted.add(page)
   const after = judge(sample(ctx.exempt), ctx.maxLoad)
   const row = figures(run, steps, out)
   if (run.type === 'residual')
     row.display = await difference(shots.identity, shots.thin).catch(
       (cause) => ({ error: cause.message }),
     )
+  // Read before the cold rig closes: `--down` removes the session with it.
+  const chrome = (await readSession(portOf(run)))?.browser ?? null
   if (run.type === 'cold') closeOurs(PORTS.cold, token, ctx)
   return {
     ...row,
     still: shots.still ?? null,
     minutes: (Date.now() - ctx.began) / 60_000,
-    chrome: (await readSession(portOf(run)))?.browser ?? null,
+    chrome,
     quiet: { ok: before.ok && after.ok && ctx.clean, before, after },
   }
 }
@@ -861,22 +889,20 @@ export function parseOptions(argv) {
 
 /** Each run's drive.mjs invocation, as `--dry-run` prints it. */
 export function dryRun(options) {
-  const booted = new Set()
+  const booted = new Map()
   const shown = (arg) =>
     arg.length > 120 ? `${arg.slice(0, 48)}… (${arg.length} characters)` : arg
   const lines = options.runs.map((run) => {
-    const page = pageOf(run, portOf(run))
     const args = [
       ...session(run, {
         url: options.url,
         port: portOf(run),
-        fresh: !booted.has(page),
+        fresh: boots(booted, run),
       }),
       ...plan(run, shotsFor(run, path.join(OUT, 'shots', 'dry-run'))).flatMap(
         (s) => s.args,
       ),
     ]
-    booted.add(page)
     return `${run.id}\n  node scripts/drive.mjs ${args.map(shown).join(' ')}`
   })
   return [...lines, `${options.runs.length} runs`].join('\n')
@@ -926,7 +952,7 @@ async function measure(options) {
     lock,
     env,
     began,
-    booted: new Set(),
+    booted: new Map(),
     exempt: [process.pid, listener(options.url)],
     shots: path.join(OUT, 'shots', `${options.batch}-${stamp}`),
     file: path.join(OUT, `${options.batch}-${stamp}.json`),
