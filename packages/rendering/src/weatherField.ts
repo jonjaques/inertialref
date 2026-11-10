@@ -8,6 +8,7 @@ import {
 } from './weatherClimate.ts'
 import { latticeOrigin, turnBack } from './weatherClock.ts'
 import {
+  GENUS_TABLE,
   type LevelProfile,
   levelProfile,
   PROFILE_ROWS,
@@ -315,7 +316,8 @@ function detailCells(
 const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))
 
 /**
- * The resolved recipe at one point of a level (§5.6, as phase 0 built it):
+ * The resolved recipe at one point of a level (§5.6, as phase 0 built it),
+ * before the level's gain:
  *
  *     d = saturate(remap(n_b·R, 1 − c, 1, 0, 1)),  d = saturate(remap(d, n_d·erosion, 1, 0, 1))
  *     fraction = 1,  σ′ = σ′_level·d
@@ -385,15 +387,18 @@ function levelSample(
     mesoscalePhases(clock, level, point, cell),
     cell,
   )
+  const { gain } = readLevelStatistics(levelStatistics(spec), cover, convective)
   return {
     fraction: 1,
-    sigma: resolvedSample(
-      profile,
-      shape,
-      cover,
-      baseNoiseTexture(baseCells(clock, level, point, cell, w)),
-      detailNoiseTexture(detailCells(clock, level, point, cell, w)),
-    ),
+    sigma:
+      gain *
+      resolvedSample(
+        profile,
+        shape,
+        cover,
+        baseNoiseTexture(baseCells(clock, level, point, cell, w)),
+        detailNoiseTexture(detailCells(clock, level, point, cell, w)),
+      ),
     radius: radius * profile.radius,
     level,
   }
@@ -428,6 +433,16 @@ function levelSample(
  *   at most on any regime or climate.
  * - `sight`, c: §5.9's sight length, fitted so the crossing passes the
  *   resolved field's mean transmittance on rays at 45°, 65° and 80°.
+ * - `gain`: what the resolved extinction is multiplied by so its mean
+ *   inside cloud is the genus's σ, the plan's measured in-cloud figure
+ *   (§5.2). The recipe's density is the noise's excess over its threshold,
+ *   which inside a cloud is spread from nothing at the edge to its most at
+ *   the core: for a near-uniform noise its mean there is
+ *   `(R − 1 + c)/(2c)` of the profile's, about a half, and the erosion
+ *   takes more. Measured without it, the in-cloud mean was 0.42 to 0.57 of
+ *   each genus's σ at its regimes' covers, and 0.24 on the blend of
+ *   Earth's low level at a cover of 0.5. It moves only how dense a cloud
+ *   is, never where it is: the threshold reads the noise before it.
  *
  * The crossing these make is `crossingForm`. Each number is measured on a
  * fixed sample of the level's own field: 4,096 vertical columns, 512 rays
@@ -463,6 +478,11 @@ export interface LevelStatistics {
   readonly shape: Float64Array
   /** Meters. */
   readonly sight: Float64Array
+  /**
+   * What the resolved extinction is multiplied by so its mean inside cloud
+   * is the genus's σ, blended along the row as the profile blends it.
+   */
+  readonly gain: Float64Array
 }
 
 /** The gamma shape that stands for depths that do not spread: `(1 + τ/k)^(−k)` is then `e^(−τ)` to a part in 10⁴ at τ 1. */
@@ -583,6 +603,7 @@ function pathDepths(
   row: number,
   thickness: number,
   zenith: number,
+  gain = 1,
 ): Float64Array {
   const depths = new Float64Array(paths.length)
   const chord = thickness / Math.cos(zenith)
@@ -601,9 +622,39 @@ function pathDepths(
           paths.detail[at]!,
         ) * length
     }
-    depths[p] = depth
+    depths[p] = depth * gain
   }
   return depths
+}
+
+/**
+ * The resolved field's mean unscaled extinction inside cloud on a set of
+ * columns, at a cover and a row of the blend: over every sample that holds
+ * any, height by height as a volume samples it.
+ */
+function inCloudMean(
+  profile: LevelProfile,
+  paths: Paths,
+  cover: number,
+  row: number,
+): number {
+  let sum = 0
+  let count = 0
+  for (let at = 0; at < paths.base.length; at += 1) {
+    const sigma = resolvedSample(
+      profile,
+      paths.shape[row]![at]!,
+      cover,
+      paths.base[at]!,
+      paths.detail[at]!,
+    )
+    if (sigma > 0) {
+      sum += sigma
+      count += 1
+    }
+  }
+  const unscale = profile.scaled > 0 ? profile.sigma / profile.scaled : 0
+  return count > 0 ? (sum / count) * unscale : 0
 }
 
 /**
@@ -659,7 +710,12 @@ function buildStatistics(
   const depth = new Float64Array(size)
   const shape = new Float64Array(size).fill(UNSPREAD_SHAPE)
   const sight = new Float64Array(size).fill(2.5 * profile.cell)
+  const gain = new Float64Array(size).fill(1)
   const columns = samplePaths(profile, thickness, STATISTICS_COLUMNS, 0, 0)
+  const [stratiform, cumuliform] = [
+    GENUS_TABLE[spec.stratiform].sigma,
+    GENUS_TABLE[spec.cumuliform].sigma,
+  ]
   const rays = STATISTICS_SLANTS.map((zenith, j) =>
     samplePaths(
       profile,
@@ -673,10 +729,15 @@ function buildStatistics(
     const cover = i / (STATISTICS_COVERS - 1)
     for (let row = 0; row < PROFILE_ROWS; row += 1) {
       const at = i * PROFILE_ROWS + row
+      const mean = inCloudMean(profile, columns, cover, row)
+      const v = row / (PROFILE_ROWS - 1)
+      const g =
+        mean > 0 ? (stratiform + (cumuliform - stratiform) * v) / mean : 1
+      gain[at] = g
       let cloudy = 0
       let once = 0
       let twice = 0
-      for (const d of pathDepths(profile, columns, cover, row, thickness, 0))
+      for (const d of pathDepths(profile, columns, cover, row, thickness, 0, g))
         if (d > CLEAR_DEPTH) {
           cloudy += 1
           once += Math.exp(-d)
@@ -698,6 +759,7 @@ function buildStatistics(
           row,
           thickness,
           zenith,
+          g,
         ))
           sum += Math.exp(-d)
         return Math.max(sum / rays[j]!.length, 1e-12)
@@ -737,7 +799,7 @@ function buildStatistics(
     for (let i = STATISTICS_COVERS - 2; i >= 0; i -= 1)
       if (fraction[i * PROFILE_ROWS + row]! < SPARSE)
         sight[i * PROFILE_ROWS + row] = sight[(i + 1) * PROFILE_ROWS + row]!
-  return { fraction, depth, shape, sight }
+  return { fraction, depth, shape, sight, gain }
 }
 
 /*
@@ -770,6 +832,7 @@ export function readLevelStatistics(
   readonly depth: number
   readonly shape: number
   readonly sight: number
+  readonly gain: number
 } {
   const x = clamp01(cover) * (STATISTICS_COVERS - 1)
   const i = Math.min(STATISTICS_COVERS - 2, Math.floor(x))
@@ -788,6 +851,7 @@ export function readLevelStatistics(
     depth: read(stats.depth),
     shape: read(stats.shape),
     sight: read(stats.sight),
+    gain: read(stats.gain),
   }
 }
 

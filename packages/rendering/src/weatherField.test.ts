@@ -41,7 +41,12 @@ import {
   statisticsFootprint,
   UNSPREAD_SHAPE,
 } from './weatherField.ts'
-import { levelProfile, PROFILE_ROWS, readLevelProfile } from './weatherGenus.ts'
+import {
+  GENUS_TABLE,
+  levelProfile,
+  PROFILE_ROWS,
+  readLevelProfile,
+} from './weatherGenus.ts'
 import {
   BASE_NOISE_PERIOD,
   baseNoiseTexture,
@@ -268,8 +273,8 @@ function displaced(p: Vec3, cell: number): Vec3 {
 }
 
 /**
- * Phase 0's recipe (`render/cloudDensity.ts`) at t = 0 and a footprint of
- * zero, where its drift is zero and its lattice is the point over the cell,
+ * Phase 0's recipe (`render/cloudDensity.ts`), times the level's gain, at
+ * t = 0 and a footprint of zero, where its drift is zero and its lattice is the point over the cell,
  * read at the point the mesoscale displacement carries it to: what the
  * resolved field must still be before anything turns. Its numbers are the
  * level's profile table's, so this holds the recipe and the lattice, not
@@ -303,9 +308,14 @@ function asBuilt(weather: BodyWeather, sun: Vec3, p: Vec3, _footprint: number) {
   const erosion = detailNoiseTexture(scale(q, 4 / cell)) * profile.erosion
   const shaped = clamp01((base * shape - (1 - c)) / Math.max(c, 1e-6))
   const eroded = clamp01((shaped - erosion) / Math.max(1 - erosion, 1e-6))
+  const { gain } = readLevelStatistics(
+    levelStatistics(spec),
+    c,
+    climate.convective[k]!,
+  )
   return {
     fraction: 1,
-    sigma: profile.scaled * eroded,
+    sigma: gain * profile.scaled * eroded,
     radius: radius * profile.radius,
     level: k,
   }
@@ -1324,4 +1334,82 @@ describe('a footprint keeps the resolved field’s light (§6.2)', () => {
       expect(Math.abs(t - resolved) / resolved).toBeLessThanOrEqual(0.1)
     }
   })
+})
+
+describe('a genus inside its clouds', () => {
+  /*
+   * §5.2: a genus's σ is the plan's measured in-cloud extinction, and the
+   * resolved field holds it inside its clouds. Measured over 40,000 places
+   * of a level of each genus at the cover its regimes give it: within 1% of
+   * each. Without the level's gain the same places held 0.42 to 0.57 of it
+   * (package G measured cumulus at 27.9 km⁻¹ against 52).
+   */
+  it.each([
+    ['cumulus', 1000, 2400, 0.35],
+    ['stratocumulus', 800, 1300, 0.9],
+    ['stratus', 300, 1000, 1],
+    ['altocumulus', 4000, 4400, 0.7],
+    ['altostratus', 4000, 5000, 1],
+    ['cirrus', 9000, 10000, 0.5],
+    ['cumulonimbus', 1000, 15000, 0.35],
+    ['fog', 0, 150, 1],
+  ] as const)(
+    '%s: its mean in-cloud extinction is its σ',
+    (genus, base, top, cover) => {
+      const level = { base, top, stratiform: genus, cumuliform: genus }
+      const weather: BodyWeather = {
+        ...regimeWeather(world, 'fair-cumulus'),
+        levels: [level, level, level],
+        climate: {
+          kind: 'regime',
+          sample: () => ({
+            cover: [cover, cover, cover],
+            convective: [0, 0, 0],
+            ice: 0,
+            deep: 0,
+          }),
+          coefficients: () => {
+            throw new Error(
+              'the field reads a climate’s samples, not its uniforms',
+            )
+          },
+        },
+      }
+      const clock = fieldClock(weather, 0)
+      const profile = levelProfile(level)
+      const unscale = profile.sigma / profile.scaled
+      let state = 12_345
+      const next = () => {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+        return state / 2 ** 32
+      }
+      let sum = 0
+      let count = 0
+      for (let i = 0; i < 40_000; i += 1) {
+        const y = 2 * next() - 1
+        const around = 2 * Math.PI * next()
+        const ring = Math.sqrt(1 - y * y)
+        const r = weather.datumRadius + base + next() * (top - base)
+        const at = cloudFieldAt(
+          weather,
+          clock,
+          { x: 0, y: 1, z: 0 },
+          {
+            x: ring * Math.cos(around) * r,
+            y: y * r,
+            z: ring * Math.sin(around) * r,
+          },
+          0,
+        )
+        if (at.sigma > 0) {
+          sum += at.sigma * unscale
+          count += 1
+        }
+      }
+      expect(count).toBeGreaterThan(1000)
+      expect(Math.abs(sum / count / GENUS_TABLE[genus].sigma - 1)).toBeLessThan(
+        0.03,
+      )
+    },
+  )
 })
