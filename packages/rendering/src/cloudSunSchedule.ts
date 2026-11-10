@@ -90,6 +90,11 @@ export interface SunSlice {
   readonly frame: number
 }
 
+/**
+ * A window's low corner. Module-private: an exported interface spells the
+ * tuple out, because TypeDoc refuses a public type that refers to a name the
+ * documentation does not include.
+ */
 type Origin = readonly [number, number]
 
 const NOTHING: SunSlice = { origin: null, frame: -1 }
@@ -173,7 +178,7 @@ export interface SunSourceState {
 
 export interface SunSourceLevelFacts {
   /** The level's window this frame: its low corner, texels. */
-  readonly origin: Origin
+  readonly origin: readonly [number, number]
   readonly epoch: number
   /** The window is exposed whole: a moved anchor, a first frame, a cut. */
   readonly rebuilt: boolean
@@ -347,7 +352,7 @@ export interface SunGridState {
 export interface SunGridFacts {
   readonly frame: number
   /** The grid's window this frame: its low corner, cells. */
-  readonly origin: Origin
+  readonly origin: readonly [number, number]
   readonly epoch: number
   /** Its level's window is exposed whole. */
   readonly rebuilt: boolean
