@@ -42,7 +42,7 @@ import {
 import { sunThroughAt } from './air.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import { cloudRay } from './cloudGeometry.ts'
-import { traceJitter } from './cloudJitter.ts'
+import { createCloudJitter, traceJitter } from './cloudJitter.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
   type CloudAirFn,
@@ -53,6 +53,7 @@ import {
 import {
   CLOUD_STAND_INS,
   type CloudFarFn,
+  type CloudJitterNodes,
   type CloudMediumFn,
   type CloudPhaseNodes,
   cloudStandInTexture,
@@ -210,14 +211,15 @@ interface Media {
 
 /**
  * What a march's deps hold beyond its medium, its sun and its phase: no sky
- * and no source, which the march reads nowhere, and the trace's own jitter,
- * so a kernel here draws the rays the system's draws.
+ * and no source, which the march reads nowhere, and the trace's own jitter
+ * over the test's uniforms, so a kernel here draws the rays the system's
+ * draws.
  */
-const LIGHT = {
+const lightOf = (uniforms: CloudUniforms) => ({
   sky: createCloudSky(),
   source: createCloudSource(),
-  jitter: { at: traceJitter },
-}
+  jitter: createCloudJitter({ uniforms }),
+})
 
 /**
  * The trace's deps over the stand-ins: the field carrying `medium`, the sun
@@ -228,7 +230,10 @@ function standIns(
   uniforms: CloudUniforms,
   medium: CloudMediumFn,
   depth: () => Texture,
-  options: { readonly phase?: CloudPhaseNodes } = {},
+  options: {
+    readonly phase?: CloudPhaseNodes
+    readonly jitter?: CloudJitterNodes
+  } = {},
 ): Media {
   const field = CLOUD_STAND_INS.field(medium)
   return {
@@ -240,7 +245,8 @@ function standIns(
       phase: options.phase ?? CLOUD_STAND_INS.phase(),
       far: CLOUD_STAND_INS.far(),
       depth,
-      ...LIGHT,
+      ...lightOf(uniforms),
+      ...(options.jitter === undefined ? {} : { jitter: options.jitter }),
     },
   }
 }
@@ -404,11 +410,12 @@ describe('the kernels', () => {
       expect(storage).toBeLessThanOrEqual(4)
     }
     // The stand-ins' census: the field's 5, the sun grid, the air's 2, the
-    // phase, the far atlas and the depth copy. A floor as well as a ceiling:
-    // the counts are a regex over three's WGSL, and a spelling that stopped
-    // matching would pass the ceiling at zero. The sky, the source and the
-    // mask bind only in a kernel that reads them, and this march reads none.
-    expect(counted[0]).toMatchObject({ sampled: 11, storage: 4 })
+    // phase, the far atlas, the depth copy and the jitter's mask. A floor as
+    // well as a ceiling: the counts are a regex over three's WGSL, and a
+    // spelling that stopped matching would pass the ceiling at zero. The sky
+    // and the source bind only in a kernel that reads them, and this march
+    // reads neither.
+    expect(counted[0]).toMatchObject({ sampled: 12, storage: 4 })
     expect(new Set(counted.map(({ name }) => name))).toEqual(
       new Set(['cloud trace', 'cloud stats']),
     )
@@ -425,20 +432,21 @@ describe('the system’s own trace kernel', () => {
    * one a device has to accept: WebGPU's default device allows a stage 16
    * sampled textures and 4 storage textures, and nothing raises the limit.
    *
-   * Ten today: the clipmap's cover (a 2D array), the base and detail noises
-   * (3D), the profile, the sun grid (3D), the air's transmittance and Ψ, the
-   * phase atlas, the far atlas and the depth copy. Phase 1's design counts
-   * four more at worst (§4.5): the clipmap's `kind`, the sky table, the slab
-   * source and the blue-noise mask, 14 of 16. The count is exact, not a
+   * Eleven today: the clipmap's cover (a 2D array), the base and detail
+   * noises (3D), the profile, the sun grid (3D), the air's transmittance and
+   * Ψ, the phase atlas, the far atlas, the depth copy and the jitter's mask
+   * (3D), which is bound whichever draw the lever takes. Phase 1's design
+   * counts three more at worst (§4.5): the clipmap's `kind`, the sky table
+   * and the slab source, 14 of 16. The count is exact, not a
    * ceiling, so a binding nobody counted fails here rather than at the
    * sixteenth, and the package that adds one changes this number where a
    * reviewer reads it.
    */
-  const SAMPLED = { '2d': 6, '2d_array': 1, '3d': 3 }
+  const SAMPLED = { '2d': 6, '2d_array': 1, '3d': 4 }
   const STAGE_SAMPLED = 16
   const STAGE_STORAGE = 4
 
-  it('binds 10 sampled textures of the stage’s 16, and its 4 storage textures', async () => {
+  it('binds 11 sampled textures of the stage’s 16, and its 4 storage textures', async () => {
     const rig = cloudRig(gpu, 16, 16)
     try {
       await rig.system!.warm()
@@ -453,7 +461,7 @@ describe('the system’s own trace kernel', () => {
       for (const [, kind] of wgsl.matchAll(/var\s+\w+\s*:\s*texture_(\w+)</g))
         if (!kind!.startsWith('storage')) kinds[kind!] = (kinds[kind!] ?? 0) + 1
       expect(kinds).toEqual(SAMPLED)
-      expect(counted.sampled).toBe(10)
+      expect(counted.sampled).toBe(11)
       expect(counted.sampled).toBeLessThanOrEqual(STAGE_SAMPLED)
       expect(counted.storage).toBe(STAGE_STORAGE)
     } finally {
@@ -472,7 +480,7 @@ describe('the march’s reads', () => {
       phase: CLOUD_STAND_INS.phase(),
       medium: field,
       sun: testSun(field, CLOUD_STAND_INS.sunDepth()),
-      ...LIGHT,
+      ...lightOf(uniforms),
     }
     const material = new MeshBasicNodeMaterial()
     material.colorNode = Fn(() => {
@@ -579,7 +587,7 @@ function probe(
     phase: options.phase ?? CLOUD_STAND_INS.phase(),
     medium: field,
     sun: sun(field),
-    ...LIGHT,
+    ...lightOf(uniforms),
     ...(options.air === undefined ? {} : { air: options.air }),
   }
   const kernel = Fn(() => {
@@ -1200,6 +1208,7 @@ async function rig(
     readonly km?: (x: number, y: number) => number
     readonly phase?: CloudPhaseNodes
     readonly spread?: number
+    readonly jitter?: (uniforms: CloudUniforms) => CloudJitterNodes
   } = {},
 ): Promise<Rig> {
   const uniforms = createCloudUniforms()
@@ -1211,8 +1220,12 @@ async function rig(
     4 * height,
     options.km ?? (() => SKY_KM),
   )
-  const phase = options.phase === undefined ? {} : { phase: options.phase }
-  const { deps } = standIns(uniforms, medium, () => depth, phase)
+  const { deps } = standIns(uniforms, medium, () => depth, {
+    ...(options.phase === undefined ? {} : { phase: options.phase }),
+    ...(options.jitter === undefined
+      ? {}
+      : { jitter: options.jitter(uniforms) }),
+  })
   const trace = new CloudTrace(deps)
   await trace.warm(renderer)
   return {
@@ -1416,6 +1429,67 @@ describe('the knots', () => {
 })
 
 describe('the jitter', () => {
+  it('under the gradient’s lever, places every ray by the numbers `at` gives its texel and its history pixel, byte for byte', async () => {
+    /*
+     * The trace reads one draw a ray. Under `'ign'` its step share and its
+     * point inside the pixel are the two reads the gradient has always
+     * given, `at(texel).x` and `at(2·texel + phase)`, so the picture under
+     * the default lever is the gradient's whatever else the draw carries.
+     * Two traces over one field, one drawing from the field's jitter and
+     * one from a draw written out of `at`, store the same half floats in
+     * all four outputs, at each phase of the interleave and at frame
+     * indices from zero to the last a u32 holds. Rays spread a whole image
+     * across a broken slab, so a first step or a sampling point a bit off
+     * lands in the transmittance, the front and the knots' depths.
+     */
+    const slab = slabMedium([
+      { ...SLAB, sigma: 0.004, fraction: 0.6, column: 300 },
+    ])
+    const place: Layers = { eye: 0, layers: [[SLAB.base, SLAB.top]] }
+    const fromAt = (uniforms: CloudUniforms): CloudJitterNodes => ({
+      at: traceJitter,
+      draw: (texel, frame) =>
+        vec4(
+          traceJitter(texel, frame).x,
+          traceJitter(
+            texel.mul(uint(2)).add(uvec2(uniforms.trace.phase)),
+            frame,
+          ),
+          0,
+        ),
+    })
+    const [width, height] = [6, 4]
+    const drawn = await rig(slab, width, height, place)
+    const written = await rig(slab, width, height, place, { jitter: fromAt })
+    expect(drawn.uniforms.trace.jitter.value).toBe(0)
+    const frame = frameOf({ width, height })
+    const seen = new Set<number>()
+    for (const index of [0, 5, 2 ** 31 + 7, 2 ** 32 - 1])
+      for (const k of [0, 1, 2, 3]) {
+        const outputs: number[][] = []
+        for (const traced of [drawn, written]) {
+          traced.uniforms.trace.frame.value = index
+          traced.trace.dispatchPhase(renderer, frame, k)
+          const read = await outputsOf(traced.trace, width, height)
+          const values: number[] = []
+          for (let y = 0; y < 2 * height; y += 1)
+            for (let x = 0; x < 2 * width; x += 1) {
+              values.push(...read.knotLight(x, y))
+              if (y < height) values.push(...read.aux(x, y))
+              if (y < height) values.push(...read.knotDepth(x, y))
+              if (y < height && x < width) values.push(...read.light(x, y))
+            }
+          outputs.push(values)
+        }
+        expect(outputs[0]).toEqual(outputs[1])
+        // The control: the draws moved the rays, or equality says nothing.
+        seen.add(outputs[0]!.reduce((sum, v) => sum + v, 0))
+      }
+    expect(seen.size).toBe(16)
+    drawn.dispose()
+    written.dispose()
+  }, 120_000)
+
   it('draws one frame index alike every time, and moves the samples with the index', async () => {
     // Frames 5 and 9 share an interleave phase, so only the jitter differs.
     const slab = slabMedium([{ ...SLAB, sigma: 0.002 }])

@@ -69,8 +69,8 @@ import { warmCompute } from './warmup.ts'
  * the step budget each, so every store stays inside its texture (§5.14).
  *
  * The kernel binds the field (4: the clipmap's cover, the two noises and the
- * profile), the sun grid, the served air (2), the phase, the far atlas and
- * the depth copy: 10 of the stage's 16 sampled textures, which
+ * profile), the sun grid, the served air (2), the phase, the far atlas, the
+ * depth copy and the jitter's mask: 11 of the stage's 16 sampled textures, which
  * `cloudTrace.gpu.test.ts` counts in the system's own kernel. It writes the
  * four outputs, which is the stage's limit of storage textures, so the trace
  * has no room for a fifth.
@@ -110,7 +110,7 @@ export interface CloudTraceDeps {
   readonly sky: CloudSkyNodes
   /** The higher orders' source at a sample's two depths. */
   readonly source: CloudSourceNodes
-  /** The two numbers a ray is jittered by. */
+  /** The four numbers a ray is placed by. */
   readonly jitter: CloudJitterNodes
 }
 
@@ -157,17 +157,13 @@ const countsOf = (buffer: StorageBufferAttribute) =>
  */
 function traceView(
   uniforms: CloudUniforms,
-  jitter: CloudJitterNodes,
+  within: Node<'vec2'>,
   depth: TextureNode,
   texel: Node<'uvec2'>,
 ) {
   const body = uniforms.served
   const trace = uniforms.trace
   const pixel = texel.mul(uint(2)).add(uvec2(trace.phase))
-  // An offset from the history pixel's center, drawn at the history pixel
-  // rather than at the texel, so the point inside the pixel and the share of
-  // the first step (the texel's draw) are not one number.
-  const within = jitter.at(pixel, trace.frame).sub(0.5)
   const screen = traceScreen(pixel, within, trace.history)
   const direction = viewDirection(uniforms.camera, screen).toVar()
   const distanceKm = depth.load(screenTexel(screen, trace.render)).x.toVar()
@@ -241,10 +237,13 @@ function traceKernel(
     // Every dispatch is at the trace's extent, so this guard is what keeps a
     // workgroup's spare invocations from storing outside the textures.
     If(texel.x.lessThan(size.x).and(texel.y.lessThan(size.y)), () => {
-      const { ray, sky } = traceView(uniforms, deps.jitter, depth, texel)
+      // One draw a ray, at its texel: the first step's share, the point
+      // inside the texel's history pixel as an offset from its center, and
+      // the handover's ξ.
+      const draw = deps.jitter.draw(texel, uniforms.trace.frame).toVar()
+      const { ray, sky } = traceView(uniforms, draw.yz.sub(0.5), depth, texel)
       const knots = cloudKnotWriter(outputs)
-      const jitter = deps.jitter.at(texel, uniforms.trace.frame).x
-      const fine = cloudMarch(ray, jitter, sky, deps, knots)
+      const fine = cloudMarch(ray, draw.x, sky, deps, knots)
       const result = marchFar(
         fine,
         ray,
