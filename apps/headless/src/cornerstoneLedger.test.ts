@@ -8,6 +8,7 @@ import {
   sunDirection,
 } from '@inertialref/devtools'
 import { formatSeed } from '@inertialref/procedural'
+import { deg } from '@inertialref/shared'
 import {
   type Lens,
   LENS_PRESETS,
@@ -190,8 +191,8 @@ describe('the cornerstones', () => {
           const read = session.harness.sun(
             picture.address,
             {
-              latitude: stance.latitude / DEG,
-              longitude: stance.longitude / DEG,
+              latitude: deg(stance.latitude / DEG),
+              longitude: deg(stance.longitude / DEG),
             },
             status.time,
           )
