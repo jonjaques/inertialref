@@ -413,7 +413,7 @@ describe('a form tabulated from the oracle', () => {
     const form = forms[0]!
     const table: SourceTable = { ...grid, slabs: 1, terms: absolute }
     const depths = [0.5, 2, 5, 12]
-    // The table's own suns, read on them rather than a 64th of a slice in,
+    // The table's own suns, read on them rather than held inside a slice,
     // so the read is between depth nodes alone.
     const suns = [1, 0.6, 0.2]
     const views = [0.3, 0.7, 1]

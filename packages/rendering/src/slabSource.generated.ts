@@ -39,10 +39,12 @@
  *   x = (u(t_d)·(nodes − 1) + ½)/nodes        y = (u(t_b)·(nodes − 1) + ½)/nodes
  *   z = (slab·suns + s·(suns − 1) + ½)/(2·cosines.length·suns)
  *
- * with s = (μ₀ − sunMuMin)/(1 − sunMuMin) and s·(suns − 1) held to [1/64, suns
- * − 1 − 1/64], so that no read blends two slabs even where the coordinate is
- * formed in float32. Past `depthMax` from the lit face the read is the last
- * node’s times (depthMax + t_b + 1.42)/(t_d + t_b + 1.42), diffusion’s law.
+ * with s = (μ₀ − sunMuMin)/(1 − sunMuMin) and s·(suns − 1) held to [1/128,
+ * suns − 1 − 1/128], so that no read blends two slabs even where the
+ * coordinate is formed in float32. Past `depthMax` from the lit face the read
+ * is the last node’s times (depthMax + t_b + 1.42)/(t_d + t_b + 1.42),
+ * diffusion’s law, and where the far face is past it as well, times 2(t_b +
+ * 0.71)/(t_d + t_b + 1.42): the two meet at t_b = depthMax.
  * `slabSourceRead.ts` is this read on the CPU, both conventions on, and every
  * figure here is taken through it.
  *
@@ -66,9 +68,9 @@
  * slabs. On the domain it is 5.75%, at 6 µm, 680 nm, τ 5, μ₀ 0.2, μ 0.2 at
  * 135°, reflected, 136.0° from the sun's direction. `reconstruction` breaks it
  * down: 5.75% on the grid, 5.38% on the held-out slabs, 1.34% root mean
- * square; half of the 6246 radiances are within 0.73%, 95% within 2.86% and
+ * square; half of the 6246 radiances are within 0.72%, 95% within 2.85% and
  * 99% within 3.94%, and 15 are over 5%; 9.16%, 9.84%, 8.42% at τ 0.5, 1, 2;
- * and 2.00% in the reflected flux, the higher orders summed at eight Gauss
+ * and 1.97% in the reflected flux, the higher orders summed at eight Gauss
  * points in μ and sixteen azimuths.
  *
  * Off the domain, the same reconstruction at 6, 10 and 16 µm in every band,
@@ -83,18 +85,18 @@
  * 1.23% RMS, 32 of 27270 radiances over 5%, at 16 µm, 440 nm, τ 6, μ₀ 0.27, μ
  * 0.08 at 180°, reflected, 168.9° from the sun's direction.
  *
- * - Suns of 0.05 to 0.16, under the domain’s lowest: 10.56% worst, 2.72% RMS,
- * 1178 of 22275 radiances over 5%, at 16 µm, 440 nm, τ 5, μ₀ 0.05, μ 0.2 at
+ * - Suns of 0.05 to 0.16, under the domain’s lowest: 9.57% worst, 2.46% RMS,
+ * 953 of 22275 radiances over 5%, at 16 µm, 440 nm, τ 5, μ₀ 0.05, μ 0.2 at
  * 180°, reflected, 171.3° from the sun's direction.
  *
- * - Slabs of τ 0.25 to 4, under the domain’s thinnest: 9.84% worst, 2.31% RMS,
- * 1444 of 33336 radiances over 5%, at 6 µm, 680 nm, τ 1, μ₀ 0.2, μ 1 at 0°,
+ * - Slabs of τ 0.25 to 4, under the domain’s thinnest: 9.84% worst, 2.28% RMS,
+ * 1395 of 33336 radiances over 5%, at 6 µm, 680 nm, τ 1, μ₀ 0.2, μ 1 at 0°,
  * reflected, 101.5° from the sun's direction.
  *
  * The slow test solves each set at its first and last depths at 64 streams and
  * holds it to its own figures: 6.07% worst and 1.38% RMS between the views,
- * 6.35% and 1.29% all between, 10.56% and 2.83% under low suns, and 8.46% and
- * 2.00% on thin slabs.
+ * 6.35% and 1.29% all between, 9.57% and 2.57% under low suns, and 7.84% and
+ * 1.98% on thin slabs.
  *
  * What the table does not hold:
  *
@@ -109,19 +111,19 @@
  * transmitted, 38.8° from the sun's direction. That is the figure an ice level
  * declares.
  *
- * - A sun under `sunMuMin`. The read holds the sun’s coordinate a 64th of a
- * slice inside the first, so any lower sun reads the floor’s source, with a
- * 64th of the next slice’s. Under the low suns the worst is 8.58% read on the
- * slice and 10.56% held inside it.
+ * - A sun under `sunMuMin`. The read holds the sun’s coordinate 1/128 of a
+ * slice inside the first, so any lower sun reads the floor’s source, with
+ * 1/128 of the next slice’s. Under the low suns the worst is 8.58% read on the
+ * slice and 9.57% held inside it.
  *
  * - A slab past `depthMax` from the lit face. The read is the last node’s
  * times diffusion’s law (`diffusionExtension`). At 10 µm, τ 200 and 400,
  * transmitted light is 1.90%, 1.91% at worst, where the read held at the node
  * is 62.34%, 216.46%. Reflected light, which the extension does not touch, is
- * 3.96%, 6.83%.
+ * 3.92%, 6.78%.
  *
  * - The domain’s figures under τ 5 or under a sun of 0.2: the worst is 9.84%
- * on thin slabs and 10.56% under low suns.
+ * on thin slabs and 9.57% under low suns.
  *
  * `SLAB_SOURCE` is the first table, three terms over the whole sphere,
  *
@@ -132,7 +134,7 @@
  * [sun][bottom][top][term], a half float’s value printed as the shortest
  * decimal that rounds to it, and its transport depth is by the formula’s g′.
  * Its worst error is 70.28%, at 16 µm, 440 nm, τ 5, μ₀ 0.2, μ 1 at 0°,
- * reflected, 101.5° from the sun's direction; 18.80% root mean square and
+ * reflected, 101.5° from the sun's direction; 18.79% root mean square and
  * 12.66% in the reflected flux; 70.82% without the lobe; and by least squares
  * on the source itself, 108.77%. One cosine cannot be the step the source
  * takes across the horizon, so no march draws with it:
@@ -186,12 +188,12 @@ export const SLAB_VIEW_SOURCE = {
   reconstruction: {
     grid: 0.05747,
     held: 0.05383,
-    rms: 0.01343,
-    median: 0.007269,
-    ninetyFifth: 0.02864,
-    ninetyNinth: 0.03941,
+    rms: 0.0134,
+    median: 0.007243,
+    ninetyFifth: 0.02852,
+    ninetyNinth: 0.03937,
     thin: [0.09163, 0.09839, 0.08419],
-    flux: 0.02001,
+    flux: 0.01972,
     over: 15,
     count: 6246,
   },
@@ -200,9 +202,9 @@ export const SLAB_VIEW_SOURCE = {
     views: {
       count: 40824,
       worst: 0.06074,
-      rms: 0.01313,
+      rms: 0.0131,
       over: 45,
-      sample: { count: 13608, worst: 0.06072, rms: 0.0138, over: 20 },
+      sample: { count: 13608, worst: 0.06072, rms: 0.01375, over: 20 },
     },
     between: {
       count: 27270,
@@ -213,26 +215,26 @@ export const SLAB_VIEW_SOURCE = {
     },
     low: {
       count: 22275,
-      worst: 0.1056,
-      rms: 0.02722,
-      over: 1178,
-      sample: { count: 8910, worst: 0.1056, rms: 0.02832, over: 608 },
+      worst: 0.09569,
+      rms: 0.02462,
+      over: 953,
+      sample: { count: 8910, worst: 0.09571, rms: 0.02575, over: 479 },
     },
     thin: {
       count: 33336,
       worst: 0.09839,
-      rms: 0.02312,
-      over: 1444,
-      sample: { count: 8334, worst: 0.08459, rms: 0.02, over: 223 },
+      rms: 0.0228,
+      over: 1395,
+      sample: { count: 8334, worst: 0.0784, rms: 0.01978, over: 217 },
     },
   },
   /** Past the last depth node: each face’s worst at each depth, extended, held, and the slow test’s. */
   deep: {
     depths: [200, 400],
     transmitted: [0.01897, 0.01912],
-    reflected: [0.03965, 0.06829],
-    held: { transmitted: [0.6234, 2.165], reflected: [0.03965, 0.06829] },
-    sample: { transmitted: [0.01897, 0.01912], reflected: [0.03964, 0.06829] },
+    reflected: [0.03916, 0.06782],
+    held: { transmitted: [0.6234, 2.165], reflected: [0.03916, 0.06782] },
+    sample: { transmitted: [0.01897, 0.01912], reflected: [0.03915, 0.06782] },
   },
   /** The table at an ice row’s own transport scale against the oracle on the ice phase. */
   ice: {
@@ -266,13 +268,13 @@ export const SLAB_SOURCE = {
   reconstruction: {
     grid: 0.7028,
     held: 0.5856,
-    rms: 0.188,
-    median: 0.1212,
+    rms: 0.1879,
+    median: 0.1211,
     ninetyFifth: 0.373,
     ninetyNinth: 0.558,
     thin: [0.7734, 0.864, 0.8532],
     flux: 0.1266,
-    over: 5194,
+    over: 5174,
     count: 6246,
   },
   terms: /*@__PURE__*/ numbers(`

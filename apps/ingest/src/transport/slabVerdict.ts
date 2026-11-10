@@ -1,3 +1,4 @@
+import { SLAB_SUN_HOLD } from '@inertialref/rendering'
 import type { SourceForm } from './slabForms.ts'
 import type { IceTransportRow } from './slabIce.ts'
 import {
@@ -265,9 +266,9 @@ export function outsideHeader(verdict: OutsideVerdict): string[] {
     `${percent(ice.worst)} worst and ${percent(ice.rms)} RMS in radiance (${list(ice.byDepth)} worst at`,
     `each τ), at ${ice.where}. That is the figure an ice level declares.`,
     '',
-    '- A sun under `sunMuMin`. The read holds the sun’s coordinate a 64th of',
+    `- A sun under \`sunMuMin\`. The read holds the sun’s coordinate 1/${1 / SLAB_SUN_HOLD} of`,
     'a slice inside the first, so any lower sun reads the floor’s source, with',
-    `a 64th of the next slice’s. Under the low suns the worst is ${percent(verdict.lowOnSlice)} read on`,
+    `1/${1 / SLAB_SUN_HOLD} of the next slice’s. Under the low suns the worst is ${percent(verdict.lowOnSlice)} read on`,
     `the slice and ${percent(low.worst)} held inside it.`,
     '',
     '- A slab past `depthMax` from the lit face. The read is the last node’s',

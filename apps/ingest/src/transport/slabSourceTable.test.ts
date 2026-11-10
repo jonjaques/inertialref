@@ -152,15 +152,15 @@ describe('the view table', () => {
     expect(rebuilt.worst).not.toBe('')
   })
 
-  it('is at the rubric’s 2% in the reflected flux, and over its 5% in a radiance', () => {
-    // The forecast for the rubric's rows 1 and 2, in Node, both declared
-    // misses at these sizes. Row 2 reads 2.00%: the sun's coordinate held
-    // a 64th of a slice inside its slab costs 0.06 point of it under a sun
-    // straight above, where the read takes a 64th of the next sun's slice.
-    // When either line turns, its row is met in Node and the line goes.
+  it('is inside the rubric’s 2% in the reflected flux, and over its 5% in a radiance', () => {
+    // The forecast for the rubric's rows 1 and 2, in Node. Row 2 is met,
+    // by 0.03 point: the sun's coordinate held a 128th of a slice inside
+    // its slab costs 0.03 of it under a sun straight above, where the read
+    // takes a 128th of the next sun's slice. Row 1 is a declared miss, and
+    // this is its size: when the first line turns, the row is met in Node.
     expect(SLAB_VIEW_SOURCE.reconstructionError).toBeGreaterThan(0.05)
     expect(SLAB_VIEW_SOURCE.reconstructionError).toBeLessThan(0.06)
-    expect(SLAB_VIEW_SOURCE.reconstruction.flux).toBeLessThan(0.0201)
+    expect(SLAB_VIEW_SOURCE.reconstruction.flux).toBeLessThan(0.02)
     // The miss is a few radiances in a thousand: 99% are inside 4%.
     const { over, count, ninetyNinth, rms } = SLAB_VIEW_SOURCE.reconstruction
     expect(count).toBe(

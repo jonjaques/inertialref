@@ -53,10 +53,14 @@ export function depthCoordinate(grid: SlabSourceGrid, depth: number): number {
  * the slice past is the next slab's, whose mean term is 42 times the read's
  * at the median and 90 at worst. A sampler that weighs exactly adds 0.13%
  * there; one that floors its weight to 1/256 adds 16% at the median, on
- * every sample under the sun's floor. A 64th moves the sun's cosine by
- * 0.001 at the two ends and keeps the read a slice's 64th clear.
+ * every sample under the sun's floor. The hold is for that sampler: a
+ * 128th of a slice is two of its 256th steps, one whole step clear of the
+ * float32 landing. It is not free, because a read held inside takes that
+ * share of the next sun's slice, and at the floor the source doubles from
+ * one slice to the next: a 64th puts the low suns' worst 2.0 points over the
+ * slice's and row 2's flux over its 2%; a 128th, 1.0 point and 0.03.
  */
-export const SLAB_SUN_HOLD = 1 / 64
+export const SLAB_SUN_HOLD = 1 / 128
 
 /**
  * Twice the diffusion's extrapolation length, 2 × 0.7104 transport depths:

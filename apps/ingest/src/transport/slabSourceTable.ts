@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs'
-import { toHalves } from '@inertialref/rendering'
+import { SLAB_SUN_HOLD, toHalves } from '@inertialref/rendering'
 import { capMoments } from './legendre.ts'
 import { SOLAR_ANGULAR_RADIUS, meanMoments } from './moments.ts'
 import {
@@ -639,11 +639,13 @@ export function sourceText(verdict: SourceVerdict): string {
     '  z = (slab·suns + s·(suns − 1) + ½)/(2·cosines.length·suns)',
     '',
     'with s = (μ₀ − sunMuMin)/(1 − sunMuMin) and s·(suns − 1) held to',
-    '[1/64, suns − 1 − 1/64], so that no read blends two slabs even where the',
+    `[1/${1 / SLAB_SUN_HOLD}, suns − 1 − 1/${1 / SLAB_SUN_HOLD}], so that no read blends two slabs even where the`,
     'coordinate is formed in float32. Past `depthMax` from the lit face the read',
     'is the last node’s times (depthMax + t_b + 1.42)/(t_d + t_b + 1.42),',
-    'diffusion’s law. `slabSourceRead.ts` is this read on the CPU, both',
-    'conventions on, and every figure here is taken through it.',
+    'diffusion’s law, and where the far face is past it as well, times',
+    '2(t_b + 0.71)/(t_d + t_b + 1.42): the two meet at t_b = depthMax.',
+    '`slabSourceRead.ts` is this read on the CPU, both conventions on, and',
+    'every figure here is taken through it.',
     '',
     'The texels are a module of their own, `slabSourceTexels.generated.ts`,',
     `which the package’s index does not export: ${bytes} bytes of little-endian`,

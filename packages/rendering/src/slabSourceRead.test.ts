@@ -96,10 +96,10 @@ describe('the table’s read', () => {
     expect(out[0]).toBeCloseTo(100 + 1 + 3 * 0.2, 12)
   })
 
-  it('holds the sun’s coordinate a 64th of a slice inside its slab, by default', () => {
+  it('holds the sun’s coordinate a 128th of a slice inside its slab, by default', () => {
     const out = new Float64Array(4)
     const step = (1 - grid.sunMuMin) / (grid.suns - 1)
-    // At and past either end the read is a 64th of a slice in from it: the
+    // At and past either end the read is a 128th of a slice in from it: the
     // slice past belongs to the next slab, a hundred over.
     for (const [sunMu, slice] of [
       [0.01, SLAB_SUN_HOLD],
@@ -146,6 +146,21 @@ describe('the table’s read', () => {
     expect(diffusionExtension(grid, 16, 3)).toBe(1)
     expect(diffusionExtension(grid, 16 + 1e-9, 3)).toBeCloseTo(1, 9)
     expect(diffusionExtension(grid, 3, 300)).toBe(1)
+    // The two branches meet where the far face reaches the last node: a
+    // step there would be a seam through every slab twice τ 121 deep.
+    fc.assert(
+      fc.property(fc.double({ min: 16.001, max: 400, noNaN: true }), (top) => {
+        const at = diffusionExtension(grid, top, grid.depthMax)
+        expect(diffusionExtension(grid, top, grid.depthMax + 1e-9)).toBeCloseTo(
+          at,
+          9,
+        )
+        expect(at).toBeCloseTo(
+          (2 * (grid.depthMax + reach / 2)) / (top + grid.depthMax + reach),
+          12,
+        )
+      }),
+    )
     // Both faces past the node: the diffuse light's linear fall, which is
     // half its level at the middle of any slab deep enough.
     expect(diffusionExtension(grid, 200, 200)).toBeCloseTo(1, 12)
