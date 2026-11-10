@@ -46,7 +46,15 @@ const deckless: Body = {
   appearance: { ...earth.appearance, clouds: null },
 }
 
-function engine(available = true): PictureWeatherEngine & {
+/*
+ * The diagnostics are a parameter, not a spread over a built engine: a
+ * spread copies `clouds` as a plain value and drops the setter that counts
+ * the writes, so a count read from a spread copy is zero whatever happens.
+ */
+function engine(
+  available = true,
+  sensorDiagnostics: PictureWeatherEngine['sensorDiagnostics'] = null,
+): PictureWeatherEngine & {
   writes: number
 } {
   let levers: CloudLevers = DEFAULT_CLOUD_LEVERS
@@ -60,7 +68,7 @@ function engine(available = true): PictureWeatherEngine & {
       levers = Object.freeze({ ...next })
     },
     cloudsAvailable: available,
-    sensorDiagnostics: null,
+    sensorDiagnostics,
     bodyFor: (address) =>
       address === EARTH ? earth : address === decklessAddress ? deckless : null,
   }
@@ -195,13 +203,13 @@ describe('the hold', () => {
     expect(hold.outcome).toBe('drawn')
     expect(arrived.clouds).toMatchObject({ on: true, served: EARTH })
     // Once: a page that cannot draw it is not asked every frame.
-    const webgl = {
-      ...engine(true),
-      sensorDiagnostics: { clouds: cloudReportIdle('webgl') },
-    }
+    const webgl = engine(true, { clouds: cloudReportIdle('webgl') })
     const once = new PictureWeatherHold()
     once.apply(webgl, { regime: 'overcast' }, EARTH)
     const writes = webgl.writes
+    // The count is live: the apply wrote the levers once.
+    expect(writes).toBeGreaterThan(0)
+    once.frame(webgl, true)
     once.frame(webgl, true)
     expect(webgl.writes).toBe(writes)
   })
@@ -211,10 +219,7 @@ describe('the hold', () => {
     expect(hold.apply(engine(false), { regime: 'overcast' }, EARTH)).toBe(
       'unavailable',
     )
-    const webgl = {
-      ...engine(true),
-      sensorDiagnostics: { clouds: cloudReportIdle('webgl') },
-    }
+    const webgl = engine(true, { clouds: cloudReportIdle('webgl') })
     expect(
       new PictureWeatherHold().apply(webgl, { regime: 'overcast' }, EARTH),
     ).toBe('unavailable')
