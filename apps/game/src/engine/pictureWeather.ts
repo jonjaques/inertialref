@@ -38,6 +38,12 @@ export interface PictureWeatherEngine {
     readonly clouds: CloudRenderReport | null
   } | null
   bodyFor(address: string): Body | null
+  /** The observatory's subject, which a picture's weather lasts as long as. */
+  readonly harness: {
+    readonly observatory: {
+      readonly target: { readonly address: string } | null
+    }
+  }
 }
 
 /**
@@ -104,6 +110,14 @@ export class PictureWeatherHold {
     readonly weather: PictureWeather
     readonly address: string
   } | null = null
+  /**
+   * The observatory's subject the picture stood on, read on the first frame
+   * after it was taken, since the picture sets its weather before it moves
+   * the camera; undefined until then. The weather lasts while the subject
+   * does: a re-aimed observatory is a picture left, though it still has a
+   * target, and the forced body must not follow the camera elsewhere.
+   */
+  #subject: string | null | undefined = undefined
 
   /** What became of the last picture's weather, while it is held. */
   get outcome(): PictureWeatherOutcome {
@@ -132,6 +146,7 @@ export class PictureWeatherHold {
     })
     engine.clouds = next.levers
     this.#outcome = next.outcome
+    this.#subject = undefined
     this.#early =
       weather !== null &&
       next.outcome === 'unavailable' &&
@@ -148,16 +163,23 @@ export class PictureWeatherHold {
     this.#found = null
     this.#outcome = 'none'
     this.#early = null
+    this.#subject = undefined
   }
 
   /**
    * A frame's check. The pictures are left when the observatory holds no
-   * target; and weather asked for before the clouds arrived is applied
-   * again on the first frame they have, once.
+   * target, or holds another than the picture's; weather asked for before
+   * the clouds arrived is applied again on the first frame they have, once.
    */
   frame(engine: PictureWeatherEngine, observing: boolean): void {
-    if (!observing) this.release(engine)
-    else if (this.#early !== null && engine.cloudsAvailable)
+    if (!observing) return this.release(engine)
+    if (this.#early !== null && engine.cloudsAvailable) {
       this.apply(engine, this.#early.weather, this.#early.address)
+      return
+    }
+    if (this.#found === null) return
+    const subject = engine.harness.observatory.target?.address ?? null
+    if (this.#subject === undefined) this.#subject = subject
+    else if (subject !== this.#subject) return this.release(engine)
   }
 }

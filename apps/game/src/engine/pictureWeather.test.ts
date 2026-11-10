@@ -56,9 +56,23 @@ function engine(
   sensorDiagnostics: PictureWeatherEngine['sensorDiagnostics'] = null,
 ): PictureWeatherEngine & {
   writes: number
+  loaded: boolean
+  aim: (address: string | null) => void
 } {
   let levers: CloudLevers = DEFAULT_CLOUD_LEVERS
+  let target: { address: string } | null = null
   return {
+    loaded: true,
+    aim: (address) => {
+      target = address === null ? null : { address }
+    },
+    harness: {
+      observatory: {
+        get target() {
+          return target
+        },
+      },
+    },
     writes: 0,
     get clouds() {
       return levers
@@ -69,8 +83,12 @@ function engine(
     },
     cloudsAvailable: available,
     sensorDiagnostics,
-    bodyFor: (address) =>
-      address === EARTH ? earth : address === decklessAddress ? deckless : null,
+    // The deckless body's system loads when the test says so; Earth's is
+    // loaded from the start.
+    bodyFor(address) {
+      if (address === EARTH) return earth
+      return address === decklessAddress && this.loaded ? deckless : null
+    },
   }
 }
 
@@ -212,6 +230,30 @@ describe('the hold', () => {
     once.frame(webgl, true)
     once.frame(webgl, true)
     expect(webgl.writes).toBe(writes)
+  })
+
+  it('lets the picture go when the observatory is aimed at another subject, and not while it stands on the picture’s', () => {
+    const page = engine()
+    const hold = new PictureWeatherHold()
+    hold.apply(page, { regime: 'fair-cumulus' }, EARTH)
+    // The picture moves the camera after it sets its weather.
+    page.aim(EARTH)
+    hold.frame(page, true)
+    hold.frame(page, true)
+    expect(page.clouds).toMatchObject({ on: true, served: EARTH })
+    // Picked another body in the planetarium: still a target, not the picture.
+    page.aim('g:milky-way/s:SOL/b:3')
+    hold.frame(page, true)
+    expect(page.clouds).toEqual(DEFAULT_CLOUD_LEVERS)
+    expect(hold.outcome).toBe('none')
+    // A station's picture stands on the station and serves Earth's clouds.
+    const station = engine()
+    const guard = new PictureWeatherHold()
+    guard.apply(station, { regime: 'fair-cumulus' }, EARTH)
+    station.aim('g:milky-way/s:SOL/b:2/a:0')
+    guard.frame(station, true)
+    guard.frame(station, true)
+    expect(station.clouds.served).toBe(EARTH)
   })
 
   it('reports weather on a page without the clouds, or on WebGL, unavailable', () => {
