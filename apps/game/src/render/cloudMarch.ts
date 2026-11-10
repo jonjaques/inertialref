@@ -102,18 +102,29 @@ export type CloudMarchDeps = Omit<CloudTraceDeps, 'far' | 'depth'>
 const STEP_FIRST = 50
 const STEP_GROWTH = 1.01
 const STEP_LONGEST = 1000
-/** In cloud: an optical depth of 0.3 a step, floored at 3 m + 60 m per 16 km (Nubis Evolved). */
+/**
+ * In cloud: an optical depth of 0.3 a step, floored at 3 m + 60 m per 16 km
+ * (Nubis Evolved). A depth of the medium the march draws, the one its
+ * transmittance is formed from: where that medium is the scaled one, with
+ * the droplets' diffraction out of it, this is a scaled depth.
+ */
 const STEP_DEPTH = 0.3
 const STEP_FLOOR = 3
 const STEP_FLOOR_SLOPE = 60 / 16_000
-/** The march stops under 1% transmittance, counting the open segment's estimate. */
+/**
+ * The march stops under 1% transmittance, counting the open segment's
+ * estimate: the drawn medium's transmittance, as `STEP_DEPTH` is its depth.
+ */
 const EXIT_TRANSMITTANCE = 0.01
 /** The air is sampled every eighth step, and wherever a segment opens or closes. */
 const AIR_EVERY = 8
 /** The sky's light on a cloud, a placeholder: Ψ × σ_s × ½, isotropic (§5.10). */
 const SKY_SHARE = 0.5
 const ISOTROPIC = 1 / (4 * Math.PI)
-/** The front is where the ray's opacity first reaches a half (plan §5.5). */
+/**
+ * The front is where the ray's opacity first reaches a half (plan §5.5), in
+ * the drawn medium's transmittance.
+ */
 const FRONT_TRANSMITTANCE = 0.5
 /** The sample's inset into its step: meters, and a share of the distance. */
 const INSET = 0.5

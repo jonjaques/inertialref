@@ -66,6 +66,10 @@ import { warmByDrawing } from './warmup.ts'
  * the volume's level-1 window and 32 heights from the union's base to its
  * top.
  *
+ * **Its depth is the drawn medium's.** A cell sums the extinction the
+ * volume's medium answers with, which is the one the march's transmittance
+ * is formed from, so the sun dims inside a cloud at the rate the view does.
+ *
  * **Its frame is the volume's level 1.** A cell is two of level 1's texels,
  * 400 m, on that level's anchor and plane, so the grid re-anchors exactly
  * when the level does; its window of 128 cells is centered on the eye in

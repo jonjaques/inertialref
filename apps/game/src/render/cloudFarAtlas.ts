@@ -167,7 +167,13 @@ export function farBlock(index: number): FarBlock {
 /** Sub-columns along each side of a texel, and heights along each sub-column. */
 const SUBCOLUMNS = 4
 const HEIGHTS = 8
-/** A sub-column whose column optical depth is under this is clear. */
+/**
+ * A sub-column whose column optical depth is under this is clear. An
+ * unscaled depth, the droplets' whole extinction, whatever medium the march
+ * draws: taken in a scaled depth, about half of it, the same cut would
+ * clear cirrus-over-cumulus's cirrus, 0.12 unscaled, out of the far field
+ * while the fine march still draws it.
+ */
 const CLOUDY_TAU = 0.1
 /**
  * Meters past each side of a layer that a texel's base and top are quantized
@@ -176,7 +182,9 @@ const CLOUDY_TAU = 0.1
 export const FAR_MARGIN = 500
 /**
  * The log encoding the maps use for in-cloud τ (§3.9): log₂(1 + τ)/log₂(513),
- * τ up to 512 at 2.5% steps of 1 + τ. A deeper column is opaque at 512.
+ * τ up to 512 at 2.5% steps of 1 + τ. A deeper column is opaque at 512. The
+ * τ encoded is the unscaled one, so the code's steps sit where a column's
+ * depth is measured; a march of a scaled medium scales what it decodes.
  */
 const LOG_TAU = Math.log2(513)
 /** A sub-column's spacing in warped units: a quarter of a texel, 2/(256·4). */

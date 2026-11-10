@@ -68,10 +68,12 @@ import { warmCompute } from './warmup.ts'
  * immediate regime dispatches four times at the same extent, a quarter of
  * the step budget each, so every store stays inside its texture (§5.14).
  *
- * The kernel binds the field (6), the sun grid, the served air (2), the
- * phase, the far atlas and the depth copy: 12 of the stage's 16 sampled
- * textures. It writes the four outputs, which is the stage's limit of
- * storage textures, so the trace has no room for a fifth.
+ * The kernel binds the field (4: the clipmap's cover, the two noises and the
+ * profile), the sun grid, the served air (2), the phase, the far atlas and
+ * the depth copy: 10 of the stage's 16 sampled textures, which
+ * `cloudTrace.gpu.test.ts` counts in the system's own kernel. It writes the
+ * four outputs, which is the stage's limit of storage textures, so the trace
+ * has no room for a fifth.
  *
  * Texel (i, j) traces history pixel (2i + φx, 2j + φy) at a point jittered
  * inside it, and every depth it writes is in true kilometers, the depth

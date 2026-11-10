@@ -48,7 +48,10 @@ export interface CloudKnotWriter {
   flush(texel: Node<'uvec2'>): void
 }
 
-/** A segment that leaves more than this of the light it is given records no knot. */
+/**
+ * A segment that leaves more than this of the light it is given records no
+ * knot: the drawn medium's transmittance, scaled where the medium is.
+ */
 export const KNOT_TRANSMITTANCE = 0.98
 export const KNOT_COUNT = 4
 
