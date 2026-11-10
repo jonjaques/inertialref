@@ -24,3 +24,10 @@ apps/server/.wrangler/
 # re-export diffs as "these frames changed" rather than as one 288 KB line.
 # Prettier would reflow it into exactly the shape that property exists to avoid.
 data/reference/
+
+# The ledgers' snapshots, written by `JSON.stringify(…, null, 2)` and compared
+# byte for byte by `toMatchFileSnapshot`. Prettier joins a short array onto one
+# line where the writer breaks it, so a formatted ledger fails its own test and
+# `pnpm cornerstones:ledger` or `pnpm presets:ledger` writes it back.
+apps/headless/src/cornerstoneLedger.json
+apps/headless/src/pictureLedger.json
