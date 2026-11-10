@@ -1,6 +1,22 @@
 import type { Vec3 } from '@inertialref/spatial'
-import { reduceTurns } from './weatherClock.ts'
-import type { BodyWeather } from './weatherClimate.ts'
+import {
+  type BodyWeather,
+  type ClimateSample,
+  turnAngle,
+  unturn,
+} from './weatherClimate.ts'
+import { reducePoint } from './weatherClock.ts'
+import {
+  type LevelProfile,
+  levelProfile,
+  readLevelProfile,
+} from './weatherGenus.ts'
+import {
+  BASE_NOISE_PERIOD,
+  baseNoiseTexture,
+  DETAIL_NOISE_PERIOD,
+  detailNoiseTexture,
+} from './weatherNoise.ts'
 
 /*
  * The CPU field every medium is held to: a weather evaluated at a body-fixed
@@ -8,43 +24,35 @@ import type { BodyWeather } from './weatherClimate.ts'
  * and a second body's are GPU ports of it, and each reference that needs a
  * cloud's density reads it here, so none needs a readback.
  *
- * **The field is a clear sky.** `cloudFieldAt` finds a point's level and
- * answers with no cloud in it, and `columnDepth` with no depth. The clock is
- * whole: a level's turn and the axial drift are reduced here as every reader
- * needs them.
+ * It reads what the GPU reads: the noise's textures as the bake writes them
+ * (`baseNoiseTexture`, `detailNoiseTexture`) and the level's profile table
+ * (`levelProfile`), each a byte a texel, filtered as a sampler filters. What
+ * is left to differ is float32 against float64 and the sampler's weights.
+ *
+ * Nothing here is the observer's. Each level's lattice turns rigidly about
+ * the spin axis and drifts along it (phase 1 design §5.3): a body-fixed
+ * point p is read at `p′ = R_y(−ω_k·t)·p + ŷ·w·t`, with the angle reduced by
+ * a turn and the drift by the noise's period in float64, so the field at a
+ * place and an instant is the same from every eye and every date.
  */
 
-/** What the field needs of time for one body: nothing unreduced. */
+/** What the field needs of time for one body: nothing unreduced but the drift. */
 export interface FieldClock {
   /** Each level's turn about the spin axis, radians in [0, 2π), reduced in float64. */
   readonly turn: readonly [number, number, number]
   /** The drift along the axis, meters, unreduced: every consumer reduces it by its own period. */
   readonly drift: number
-  /** Seconds from J2000, for a regime's pattern period alone. */
+  /** Seconds from J2000: what the climate's synoptic field turns by. */
   readonly time: number
-}
-
-const TURN = 2 * Math.PI
-
-/**
- * `rate·time` as an angle in [0, 2π). The turns are reduced before they are
- * scaled, so ten years of a slow turn keep the float64 of one revolution; a
- * westward rate turns the other way round the same circle.
- */
-function turned(rate: number, time: number): number {
-  if (rate === 0 || !Number.isFinite(rate)) return 0
-  const turns = reduceTurns(time, TURN / Math.abs(rate))
-  const angle = TURN * (rate > 0 || turns === 0 ? turns : 1 - turns)
-  return angle < TURN ? angle : 0
 }
 
 /** A weather's clock at an instant, seconds from J2000. */
 export function fieldClock(weather: BodyWeather, time: number): FieldClock {
   return {
     turn: [
-      turned(weather.turn[0], time),
-      turned(weather.turn[1], time),
-      turned(weather.turn[2], time),
+      turnAngle(weather.turn[0], time),
+      turnAngle(weather.turn[1], time),
+      turnAngle(weather.turn[2], time),
     ],
     drift: weather.drift * time,
     time,
@@ -64,6 +72,8 @@ export interface FieldSample {
 
 /** µm outside every level, as the analytic media have it. */
 const NO_RADIUS = 10
+/** The least a remap divides by: a level with no cover draws nothing rather than 0/0. */
+const TINY = 1e-6
 
 /** The level a height over the datum is in, or −1: base ≤ h < top, the first that holds it. */
 export function fieldLevel(weather: BodyWeather, height: number): number {
@@ -73,33 +83,326 @@ export function fieldLevel(weather: BodyWeather, height: number): number {
 }
 
 /**
- * The field at a body-fixed point, meters from the center, for a sample
- * that stands for `footprint` meters.
+ * Level k's lattice point for a body-fixed point, meters, unreduced:
+ * `R_y(−θ_k)·p + ŷ·D`. A feature of the lattice stands where the turn has
+ * carried it, east of where it stood by `θ_k` about the axis.
  */
-export function cloudFieldAt(
-  weather: BodyWeather,
-  _clock: FieldClock,
-  _sun: Vec3,
+export function levelLattice(
+  clock: FieldClock,
+  level: number,
   position: Vec3,
-  _footprint: number,
+): Vec3 {
+  const turned = unturn(position, clock.turn[level] ?? 0)
+  return { x: turned.x, y: turned.y + clock.drift, z: turned.z }
+}
+
+/**
+ * Level k's turn as the row-major matrix `M_k = R_y(−θ_k)`: what the GPU
+ * multiplies an eye-relative offset by, in float32.
+ */
+export function levelTurnMatrix(
+  clock: FieldClock,
+  level: number,
+): readonly number[] {
+  const angle = clock.turn[level] ?? 0
+  const c = Math.cos(angle)
+  const s = Math.sin(angle)
+  return [c, 0, -s, 0, 1, 0, s, 0, c]
+}
+
+/**
+ * Level k's reduced origin for an eye: `M_k·eye + ŷ·D` reduced by `period`
+ * in float64. The GPU's lattice point is this plus `M_k·(p − eye)`, which is
+ * `M_k·p + ŷ·D` for any eye, modulo the period: the eye enters as the point
+ * the float32 offset is measured from, and nowhere else.
+ */
+export function levelOrigin(
+  clock: FieldClock,
+  level: number,
+  eye: Vec3,
+  period: number,
+): Vec3 {
+  return reducePoint(levelLattice(clock, level, eye), period)
+}
+
+/** The base noise's cells at a lattice point: reduced by its period, eight cells, in float64. */
+export function baseCells(lattice: Vec3, cell: number): Vec3 {
+  const reduced = reducePoint(lattice, BASE_NOISE_PERIOD * cell)
+  return { x: reduced.x / cell, y: reduced.y / cell, z: reduced.z / cell }
+}
+
+/** The detail's cells at a lattice point: four a base cell, tiling once a base cell. */
+export function detailCells(lattice: Vec3, cell: number): Vec3 {
+  const reduced = reducePoint(lattice, cell)
+  const scale = DETAIL_NOISE_PERIOD / cell
+  return { x: reduced.x * scale, y: reduced.y * scale, z: reduced.z * scale }
+}
+
+const clamp01 = (x: number): number => Math.min(1, Math.max(0, x))
+const smoothstep = (edge0: number, edge1: number, x: number): number => {
+  const t = clamp01((x - edge0) / (edge1 - edge0))
+  return t * t * (3 - 2 * t)
+}
+
+/**
+ * The recipe at one point of a level (§5.6, as phase 0 built it):
+ *
+ *     d     = saturate(remap(n_b·R, 1 − c, 1, 0, 1)),  d = saturate(remap(d, n_d, 1, 0, 1))
+ *     f     = smoothstep(cell/4, cell, footprint)       the unresolved share of a cell
+ *     fraction = mix(1, c, f),   fraction·σ′ = σ′_level·mix(d, c·Ḡ, f)
+ *
+ * with `R` the profile's extinction share at the height and convective
+ * share, `Ḡ` its mean over the level, and
+ * `n_d = detail·erosion·(1 − smoothstep(cell/16, cell/4, footprint))`, whose
+ * read is skipped where that fade is 0. The two pictures of a cell are
+ * blended by their mean extinction, so a cell with no cover holds none at
+ * any footprint.
+ */
+function levelSample(
+  profile: LevelProfile,
+  level: number,
+  cover: number,
+  convective: number,
+  h01: number,
+  lattice: Vec3,
+  footprint: number,
 ): FieldSample {
-  const height =
-    Math.hypot(position.x, position.y, position.z) - weather.datumRadius
+  const [shape, mean, , radius] = readLevelProfile(profile, h01, convective)
+  const c = clamp01(cover)
+  const { cell } = profile
+  const base = baseNoiseTexture(baseCells(lattice, cell))
+  const reach = 1 - smoothstep(cell / 16, cell / 4, footprint)
+  const erosion =
+    reach > 0
+      ? detailNoiseTexture(detailCells(lattice, cell)) * profile.erosion * reach
+      : 0
+  const shaped = clamp01((base * shape - (1 - c)) / Math.max(c, TINY))
+  const eroded = clamp01((shaped - erosion) / Math.max(1 - erosion, TINY))
+  const unresolved = smoothstep(cell / 4, cell, footprint)
+  const fraction = 1 + (c - 1) * unresolved
+  const extinction =
+    profile.scaled * (eroded + (c * mean - eroded) * unresolved)
   return {
-    fraction: 0,
-    sigma: 0,
-    radius: NO_RADIUS,
-    level: fieldLevel(weather, height),
+    fraction,
+    sigma: extinction / Math.max(fraction, TINY),
+    radius: radius * profile.radius,
+    level,
   }
 }
 
-/** A level's unscaled vertical optical depth at 550 nm in a direction: what ISCCP retrieves. */
+const CLEAR = (level: number): FieldSample => ({
+  fraction: 0,
+  sigma: 0,
+  radius: NO_RADIUS,
+  level,
+})
+
+const unit = (p: Vec3, length: number): Vec3 => ({
+  x: p.x / length,
+  y: p.y / length,
+  z: p.z / length,
+})
+
+/**
+ * The field at a body-fixed point, meters from the center, under a
+ * body-fixed unit sun, for a sample that stands for `footprint` meters.
+ * `sigma` is scaled, `σ′`; the extinction a transmittance through the
+ * sample is formed from is `fraction·sigma`.
+ *
+ * About 1 µs a call once the noise's texels near it are known, and a few
+ * microseconds more for each texel a call is the first to need
+ * (`weatherField.test.ts` measures neither: the report does).
+ */
+export function cloudFieldAt(
+  weather: BodyWeather,
+  clock: FieldClock,
+  sun: Vec3,
+  position: Vec3,
+  footprint: number,
+): FieldSample {
+  const length = Math.hypot(position.x, position.y, position.z)
+  const height = length - weather.datumRadius
+  const level = fieldLevel(weather, height)
+  if (level < 0 || !(length > 0)) return CLEAR(level)
+  const spec = weather.levels[level]!
+  const climate = weather.climate.sample(
+    unit(position, length),
+    sun,
+    clock.time,
+  )
+  return levelSample(
+    levelProfile(spec),
+    level,
+    climate.cover[level]!,
+    climate.convective[level]!,
+    (height - spec.base) / Math.max(spec.top - spec.base, 1),
+    levelLattice(clock, level, position),
+    footprint,
+  )
+}
+
+/** Midpoint steps a column is integrated with: under a hundredth of a percent from 512 on every regime. */
+export const COLUMN_STEPS = 256
+
+/**
+ * A level's unscaled vertical optical depth at 550 nm in a direction: what
+ * ISCCP retrieves. The column is resolved (a footprint of zero), so it is
+ * one column of the field, not a pixel's mean: a retrieval's pixel is the
+ * calibration's to form from columns.
+ */
 export function columnDepth(
-  _weather: BodyWeather,
-  _clock: FieldClock,
-  _sun: Vec3,
-  _direction: Vec3,
-  _level: number,
+  weather: BodyWeather,
+  clock: FieldClock,
+  sun: Vec3,
+  direction: Vec3,
+  level: number,
 ): number {
-  return 0
+  const spec = weather.levels[level]
+  const length = Math.hypot(direction.x, direction.y, direction.z)
+  if (spec === undefined || !(spec.top > spec.base) || !(length > 0)) return 0
+  const up = unit(direction, length)
+  const climate: ClimateSample = weather.climate.sample(up, sun, clock.time)
+  const profile = levelProfile(spec)
+  const unscale = profile.scaled > 0 ? profile.sigma / profile.scaled : 0
+  const thickness = spec.top - spec.base
+  let depth = 0
+  for (let i = 0; i < COLUMN_STEPS; i += 1) {
+    const h01 = (i + 0.5) / COLUMN_STEPS
+    const r = weather.datumRadius + spec.base + h01 * thickness
+    const position = { x: up.x * r, y: up.y * r, z: up.z * r }
+    const at = levelSample(
+      profile,
+      level,
+      climate.cover[level]!,
+      climate.convective[level]!,
+      h01,
+      levelLattice(clock, level, position),
+      0,
+    )
+    depth += at.fraction * at.sigma
+  }
+  return (depth * unscale * thickness) / COLUMN_STEPS
+}
+
+/* ------------------------------------------------------------------------- */
+/* The sight count                                                            */
+/* ------------------------------------------------------------------------- */
+
+/** A patch of a body to count lines of sight through: a point on the datum and its tangent axes. */
+export interface SightPatch {
+  /** Unit, body-fixed: the patch's center, and its east and north there. */
+  readonly up: Vec3
+  readonly east: Vec3
+  readonly north: Vec3
+  /** Lines a side of the square grid the lines start on, and their spacing, meters. */
+  readonly lines: number
+  readonly spacing: number
+}
+
+/** Below this σ′·fraction a step holds no cloud: a hundredth of a kilometer's depth. */
+const CLEAR_EXTINCTION = 1e-5
+
+/**
+ * The share of straight lines of sight through level `level` at `zenith`
+ * radians, tilted toward east, that meet no cloud, each marched in steps of
+ * `step` meters through the level's thickness at a footprint of zero. A
+ * line is clear when no step holds `σ′·fraction` over 10⁻⁵ 1/m.
+ */
+export function clearSightShare(
+  weather: BodyWeather,
+  clock: FieldClock,
+  sun: Vec3,
+  patch: SightPatch,
+  level: number,
+  zenith: number,
+  step: number,
+): number {
+  const spec = weather.levels[level]
+  if (spec === undefined || !(spec.top > spec.base)) return 1
+  const chord = (spec.top - spec.base) / Math.cos(zenith)
+  const steps = Math.max(1, Math.ceil(chord / step))
+  const along = {
+    x: Math.cos(zenith) * patch.up.x + Math.sin(zenith) * patch.east.x,
+    y: Math.cos(zenith) * patch.up.y + Math.sin(zenith) * patch.east.y,
+    z: Math.cos(zenith) * patch.up.z + Math.sin(zenith) * patch.east.z,
+  }
+  const start = weather.datumRadius + spec.base
+  const half = (patch.lines - 1) / 2
+  let clear = 0
+  for (let a = 0; a < patch.lines; a += 1)
+    for (let b = 0; b < patch.lines; b += 1) {
+      const e = (a - half) * patch.spacing
+      const n = (b - half) * patch.spacing
+      const origin = {
+        x: patch.up.x * start + patch.east.x * e + patch.north.x * n,
+        y: patch.up.y * start + patch.east.y * e + patch.north.y * n,
+        z: patch.up.z * start + patch.east.z * e + patch.north.z * n,
+      }
+      let blocked = false
+      for (let i = 0; i < steps && !blocked; i += 1) {
+        const s = ((i + 0.5) / steps) * chord
+        const at = cloudFieldAt(
+          weather,
+          clock,
+          sun,
+          {
+            x: origin.x + along.x * s,
+            y: origin.y + along.y * s,
+            z: origin.z + along.z * s,
+          },
+          0,
+        )
+        blocked =
+          at.level === level && at.fraction * at.sigma > CLEAR_EXTINCTION
+      }
+      if (!blocked) clear += 1
+    }
+  return clear / (patch.lines * patch.lines)
+}
+
+/**
+ * §5.9's clear-line-of-sight form, `P(θ) = P₀^√(1 + (ℓ/c)²)` with
+ * `ℓ = thickness·tan θ`, at sight length `c`.
+ */
+export function sightForm(
+  clearAtZenith: number,
+  thickness: number,
+  zenith: number,
+  sight: number,
+): number {
+  const run = thickness * Math.tan(zenith)
+  return clearAtZenith ** Math.sqrt(1 + (run / sight) ** 2)
+}
+
+/**
+ * The sight length `c` that fits counted shares by zenith angle best, in
+ * the least squares of `ln P`, by golden-section search over 10 m to 100 km.
+ * The first count is the one at the zenith.
+ */
+export function fitSightLength(
+  counts: readonly { readonly zenith: number; readonly clear: number }[],
+  thickness: number,
+): number {
+  const zenith = counts[0]!.clear
+  const error = (logSight: number): number => {
+    const sight = Math.exp(logSight)
+    let sum = 0
+    for (const { zenith: angle, clear } of counts) {
+      const model = sightForm(zenith, thickness, angle, sight)
+      const d =
+        Math.log(Math.max(model, 1e-12)) - Math.log(Math.max(clear, 1e-12))
+      sum += d * d
+    }
+    return sum
+  }
+  let low = Math.log(10)
+  let high = Math.log(100_000)
+  const golden = (Math.sqrt(5) - 1) / 2
+  for (let i = 0; i < 100; i += 1) {
+    const a = high - golden * (high - low)
+    const b = low + golden * (high - low)
+    if (error(a) < error(b)) high = b
+    else low = a
+  }
+  return Math.exp((low + high) / 2)
 }
