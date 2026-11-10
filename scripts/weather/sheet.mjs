@@ -257,6 +257,17 @@ export function keptFiles(record) {
   ])
 }
 
+/** A picture's volume plate as the record kept it, not a reference run; null for none. */
+export function sheetPlate(record, id) {
+  const kept = record.stills.find(
+    (one) =>
+      one.id === id &&
+      one.arm === 'volume' &&
+      one.role?.name !== 'reference-run',
+  )
+  return kept?.file ?? null
+}
+
 /** A kept cast's clip, by the record; null for a cast refused or not taken. */
 export function keptClip(record, name) {
   const kept = (record.casts ?? []).find((one) => one.name === name)
@@ -473,6 +484,11 @@ export async function buildSheets({ dir, base: given = null }) {
 
   const sheets = []
   for (const id of [...new Set(record.stills.map((one) => one.id))]) {
+    // The plate the record kept for the picture: a noise floor's pairs are
+    // reference runs under `pairs/`, and a run of them alone has no plate
+    // to lay, where the conventional name would point at nothing.
+    const plate = sheetPlate(record, id)
+    if (plate === null) continue
     const file = `${id}-volume.png`
     const earlier = await local(baseSource(base, file), file)
     const tiles = [
@@ -484,7 +500,7 @@ export async function buildSheets({ dir, base: given = null }) {
             ? `${before}: no plate`
             : `${before}, the volume`,
       ),
-      ...tileArgs(path.join(dir, file), `${now}, the volume`),
+      ...tileArgs(path.join(dir, plate), `${now}, the volume`),
     ]
     const deck = record.stills.find(
       (one) => one.id === id && one.arm === 'deck',

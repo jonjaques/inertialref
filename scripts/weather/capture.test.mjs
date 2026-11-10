@@ -71,6 +71,7 @@ import {
   provenance,
   shotOf,
   RECORD_FIELDS,
+  sheetPlate,
   role,
   ROLES,
   sunInFrame,
@@ -1267,6 +1268,38 @@ describe('the sheets', () => {
     expect(rows[3]).toContain(
       '[slow off, 42.6 Hz, not held at 60](weather-g6-descent-slow-off/cast.mp4)',
     )
+  })
+
+  it('lay a picture’s kept volume plate, and none for a picture taken only as noise-floor pairs', () => {
+    const pair = (side) => ({
+      id: 'weather-g2-overcast-shore',
+      arm: 'volume',
+      file: `pairs/weather-g2-overcast-shore-volume-0${side}.png`,
+      role: { name: 'reference-run', differences: [] },
+    })
+    // The smoke's first step: `--pairs 1 --only g2` kept two reference runs.
+    expect(
+      sheetPlate(
+        { stills: [pair('a'), pair('b')] },
+        'weather-g2-overcast-shore',
+      ),
+    ).toBeNull()
+    expect(
+      sheetPlate(
+        {
+          stills: [
+            pair('a'),
+            {
+              id: 'weather-g2-overcast-shore',
+              arm: 'volume',
+              file: 'weather-g2-overcast-shore-volume.png',
+              role: { name: 'candidate', differences: [] },
+            },
+          ],
+        },
+        'weather-g2-overcast-shore',
+      ),
+    ).toBe('weather-g2-overcast-shore-volume.png')
   })
 
   it('show a cast halfway along its path, by the screencast’s instants rather than its index', () => {
