@@ -7,13 +7,7 @@ import {
   bakeSkyMoments,
   bakeTransmittance,
   type HazeAuthoring,
-  type IceTable,
-  iceAggregate,
-  type MieTable,
-  mieDroplets,
-  phaseAtlas,
   type ScatteringLut,
-  toHalves,
 } from '@inertialref/rendering'
 
 /*
@@ -163,8 +157,10 @@ export const bakeAtmosphereTask = defineTask<
  * event's; the rubric holds an event's frame inside one 60 Hz frame.
  *
  * The request carries the radius alone: the tables it convolves are the
- * committed droplet and ice tables, decoded here on the first ask and kept,
- * so nothing crosses the boundary but a number one way and the atlas's
+ * committed droplet and ice tables, loaded and decoded on the first ask and
+ * kept. They are loaded by `import()` (`phaseTables.ts`), not imported:
+ * this file is in the worker every page boots and in the main chunk, and a
+ * page without clouds never asks. So nothing crosses the boundary but a number one way and the atlas's
  * texels the other, already half floats (`toHalves`), 512 KB moved. Unlike
  * the bake's tables, whose conversion stays on the main thread, the atlas
  * converts here: 262,144 values are 1.2 to 2.3 ms of the main thread's on
@@ -186,8 +182,8 @@ export interface ConvolvePhaseResponse {
   readonly halves: Uint16Array
 }
 
-/** The committed tables, decoded on the first ask a worker serves. */
-let committed: readonly [MieTable, IceTable] | null = null
+/** The convolution's module, loaded on the first ask a worker serves. */
+let convolution: Promise<typeof import('./phaseTables.ts')> | null = null
 
 export const convolvePhaseTask = defineTask<
   ConvolvePhaseRequest,
@@ -195,10 +191,16 @@ export const convolvePhaseTask = defineTask<
 >({
   name: 'render.convolvePhase',
   version: 1,
-  run({ angularRadius }) {
-    committed ??= [mieDroplets(), iceAggregate()]
-    const { texels } = phaseAtlas(...committed, angularRadius)
-    return { angularRadius, halves: toHalves(texels) }
+  async run({ angularRadius }) {
+    // A fetch that fails (a deploy that removed the chunk, the network) is
+    // not kept: the next ask loads again rather than failing for the
+    // worker's life.
+    convolution ??= import('./phaseTables.ts').catch((cause: unknown) => {
+      convolution = null
+      throw cause
+    })
+    const { convolveCommitted } = await convolution
+    return { angularRadius, halves: convolveCommitted(angularRadius) }
   },
   transfers: (response) => [response.halves.buffer],
 })

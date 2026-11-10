@@ -382,36 +382,46 @@ export const HADLEY_EDGE_RANGE = [12 * DEGREE, 80 * DEGREE] as const
 export const STORM_OFFSET = 20 * DEGREE
 
 /**
- * The law's amplitudes, fitted on Earth at an equinox (δ = 0) with the
- * synoptic field at its mean, to four targets `weatherClimate.test.ts`
- * holds:
+ * The law's amplitudes, ι and the width, fitted to ISCCP-H's zonal table
+ * (`isccpZonal.generated.ts`, 2007–2016): every month of the twelve bands
+ * from 60°S to 60°N, each level's cover as a satellite sees it from above
+ * (a level under higher ones counts only where they are clear, the three
+ * overlapped at random, plan §3) and the total, in least squares weighted
+ * by each band's area, the total twice. Each month's sun is the sub-solar
+ * latitude on its 15th, and the synoptic factor is integrated over its
+ * spread, so the fit is of the cover the field draws, not of the law's
+ * mean. `weatherCalibration.slow.test.ts` recomputes the fit's figures and
+ * holds them.
  *
- * - the area-weighted mean of the total cover, the three levels overlapped
- *   at random (plan §3), is 0.675, inside the plan's 0.67–0.68 (MODIS);
- * - the total at 20° is 0.125 under that mean in both hemispheres: the
- *   plan's 0.10 under at 20°N and 0.15 under at 20°S, whose difference is
- *   the land's and so phase 3's;
- * - and 0.20 over it at 60°, the middle of the plan's 0.15–0.25 over at
- *   60°S (GEWEX).
+ * - The global mean is 0.640 against ISCCP-H's 0.6475; the levels are
+ *   0.237, 0.179 and 0.224 against 0.226, 0.190 and 0.232.
+ * - No band's annual total from 40°S to 40°N is more than 0.051 off. From
+ *   40° to 60° the law is 0.046 to 0.070 under in the south and 0.062 to
+ *   0.068 over in the north, because it is symmetric about the equator and the southern
+ *   ocean is cloudier than the northern continents. The difference is the
+ *   land's, which is phase 3's.
+ * - ι is fitted to the bands' seasons, which move with the sun by 0.30 of
+ *   the sub-solar latitude; the month by month residual of the total is
+ *   0.056 RMS and 0.146 at worst, the northern subtropics' summer, whose
+ *   dry season is the continents' again.
+ * - The high level has no dry belt (its amplitude fits to zero): ISCCP-H's
+ *   high cloud is nearly flat over the subtropics.
+ * - Poleward of 60° the law holds what its storm tracks leave and does not
+ *   fit the polar bands; those are declared in the rubric's row 16.
  *
- * The convergence zone's excess at the equator, 0.10 over the mean, ι, κ
- * and the split between the levels (0.40 : 0.22 : 0.30 of the base) are
- * stand-ins with no measured source. The width is 8°, the widest at which
- * the fit keeps the convergence zone's amplitude positive: at 10° the dry
- * belts alone make the equator's excess, and the zone that follows the sun
- * would be a dip. ISCCP-H's zonal table (package E) refits every one of
- * them and records the residual.
+ * κ has no source in the table, which counts cover and not convection, and
+ * stays a stand-in. The Hadley edge is held at 30° rather than fitted.
  */
 export const EARTH_ZONAL_LAW: ZonalLaw = {
-  base: [0.4718, 0.2595, 0.3538],
-  itcz: [0.0306, 0.0168, 0.023],
-  dry: [0.3741, 0.2058, 0.2806],
-  storm: [0.3551, 0.1953, 0.2663],
+  base: [0.2867, 0.1482, 0.0873],
+  itcz: [0.0545, 0.0691, 0.2424],
+  dry: [0.0308, 0.063, 0],
+  storm: [0.3355, 0.2587, 0.1742],
   convective: [2, 1, 0],
-  follow: 0.3,
+  follow: 0.2975,
   hadley: EARTH_HADLEY_EDGE,
   storms: EARTH_HADLEY_EDGE + STORM_OFFSET,
-  width: 8 * DEGREE,
+  width: 13.84 * DEGREE,
 }
 
 /** φ_H of a body turning once in `rotationPeriod` seconds, either way round. */

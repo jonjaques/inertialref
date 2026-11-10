@@ -651,6 +651,10 @@ describe('help', () => {
     expect(session().harness.help()).toContain('ir.runClock(start, warp)')
   })
 
+  it('names the engine verb the overlay stance lights', () => {
+    expect(session().harness.help()).toContain('ir.lightEngine(on?)')
+  })
+
   it('lists the scenarios, the scenes and the shots by their ids', () => {
     const ir = session().harness
     const text = ir.help()
