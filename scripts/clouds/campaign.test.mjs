@@ -261,7 +261,9 @@ describe('the preview a campaign serves', () => {
 })
 
 describe('a batch’s presentation rates', () => {
-  const at = (scenario, size, hz) => ({
+  // Each row its own run unless an id is given: a retry is a row of one id.
+  const at = (scenario, size, hz, id = `${scenario}/${size}/${hz}`) => ({
+    id,
     scenario,
     size,
     operatingPoint: { presentHz: hz },
@@ -285,5 +287,16 @@ describe('a batch’s presentation rates', () => {
     expect(rateNote([at('ground', '1080p', null)])).toBe(
       'No row recorded the rate it presented at.',
     )
+  })
+
+  it('read the attempt each table shows, not the ones it replaced', () => {
+    // Measured at 60 Hz under load, then again quiet at 118: one run.
+    const id = 'targets/landed/landed/horizon/1080p/steady'
+    expect(
+      rateNote([
+        at('horizon', '1080p', 60, id),
+        at('horizon', '1080p', 118, id),
+      ]),
+    ).toBe('1080p: presented at 118–118 Hz.')
   })
 })

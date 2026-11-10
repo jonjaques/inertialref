@@ -786,10 +786,12 @@ const RATE_SPREAD = 0.15
  * figures about two machines, and a table pools them without a word. The
  * comparison stays within a scenario, because the rate also falls with the
  * scene's own load: Retina's clouds-off frames run 65–78 Hz by stance alone.
+ * It reads the rows `tables` shows, each run's latest attempt: a run marked
+ * at 60 Hz under load and taken again at 118 is one row at 118.
  */
 export function rateNote(rows) {
   const hz = (r) => r.operatingPoint?.presentHz
-  const timed = rows.filter((r) => Number.isFinite(hz(r)))
+  const timed = latest(rows).filter((r) => Number.isFinite(hz(r)))
   if (timed.length === 0) return 'No row recorded the rate it presented at.'
   const range = (rs) => {
     const xs = rs.map(hz)
