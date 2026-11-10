@@ -586,7 +586,7 @@ function longestRun(drops) {
  * where `CAST_DROPS` says. The band refuses only where `held` says the rig
  * can hold 60 Hz; until then the rate is what the record says beside it.
  */
-export function checkCast(name, log, captured, cast, held = CAST_RATE.held) {
+export function checkCast(name, log, instants, cast, held = CAST_RATE.held) {
   const pathFrames = Math.min(log.length, cast.frames + CAST_TAIL)
   const median = medianOf(intervalsOf(log, pathFrames))
   if (median === null || !(median > 0))
@@ -607,7 +607,7 @@ export function checkCast(name, log, captured, cast, held = CAST_RATE.held) {
     throw new Error(
       `${name}: presented at ${hz.toFixed(1)} Hz, outside ${CAST_RATE.low}–${CAST_RATE.high}; the path is scheduled by frame and must be taken at 60 Hz`,
     )
-  const coverage = pathFrames > 0 ? captured / pathFrames : 0
+  const coverage = coverageOf(instants, log, cast.frames)
   return {
     hz,
     atSixty,
@@ -615,8 +615,27 @@ export function checkCast(name, log, captured, cast, held = CAST_RATE.held) {
     longest: Math.max(...intervalsOf(log, pathFrames)),
     dropped: drops,
     coverage,
-    retake: coverage < CAST_COVERAGE,
+    retake: coverage !== null && coverage < CAST_COVERAGE,
   }
+}
+
+/**
+ * The share of a path's frames the screencast holds: its frames whose
+ * instant, epoch seconds as `timestamps.json` keeps them, falls between the
+ * path's first frame and its last in the page's log, over the path's
+ * frames. Null without the instants.
+ *
+ * Not the frames captured over the frames asked for: the screencast stops
+ * once it holds the count asked for, so that share is one unless its
+ * deadline lapses, and a stream encoded at a third of the page's rate
+ * read as the whole path while its clip held every third frame of it.
+ */
+export function coverageOf(instants, log, frames) {
+  if (instants === null || log.length < 2) return null
+  const last = Math.min(frames, log.length - 1)
+  const [from, to] = [log[0].at, log[last].at]
+  const inside = instants.filter((s) => s * 1000 >= from && s * 1000 < to)
+  return inside.length / last
 }
 
 /**
@@ -979,6 +998,12 @@ async function main() {
   )
 }
 
+/** A cast directory's screencast instants, or null where it kept none. */
+async function instantsOf(dir) {
+  const file = path.join(dir, 'timestamps.json')
+  return existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : null
+}
+
 /** What a cast's path does beyond its picture: its levers, its boot, its scrub. */
 const castDifferences = (cast) => [
   ...(cast.levers === undefined
@@ -1036,7 +1061,12 @@ async function takeCast({ cast, clouds, out, record, drive, say }) {
     const castStep = result.results.find((one) => one.step === 'cast')
     let verdict
     try {
-      verdict = checkCast(name, reads.stop.log, castStep?.frames ?? 0, cast)
+      verdict = checkCast(
+        name,
+        reads.stop.log,
+        await instantsOf(path.join(ROOT, castStep.dir)),
+        cast,
+      )
     } catch (error) {
       if (error.dropped === undefined) throw error
       say(`  ${error.message}`)

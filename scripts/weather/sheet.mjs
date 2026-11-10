@@ -311,6 +311,42 @@ export function tileArgs(source, label) {
   ]
 }
 
+/**
+ * The screencast frame nearest a path frame, by the instants: the frame
+ * whose epoch-second instant is closest to the page's log entry for path
+ * frame `k`. A clip's index is not a path frame: the tail and the
+ * screencast's own pace move it, so two arms by index show two places on
+ * the path side by side.
+ */
+export function shotOf(instants, log, k) {
+  const at = log.find((entry) => entry.k === k)?.at
+  if (at === undefined || instants.length === 0) return null
+  let best = 0
+  for (let i = 1; i < instants.length; i += 1)
+    if (
+      Math.abs(instants[i] * 1000 - at) < Math.abs(instants[best] * 1000 - at)
+    )
+      best = i
+  return best
+}
+
+/** The frame a cast's sheet shows: halfway along its path, by the instants where it kept them. */
+async function middleShot(dir, one) {
+  const k = Math.floor((one.pathFrames ?? one.frames) / 2)
+  const [instants, log] = ['timestamps.json', 'log.json'].map((file) =>
+    path.join(dir, file),
+  )
+  if (existsSync(instants) && existsSync(log)) {
+    const shot = shotOf(
+      JSON.parse(await readFile(instants, 'utf8')),
+      JSON.parse(await readFile(log, 'utf8')).log ?? [],
+      k,
+    )
+    if (shot !== null) return shot
+  }
+  return Math.floor((one.frames - 1) / 2)
+}
+
 /** A cast's label: its speed, the clouds, its rate and the frames it dropped. */
 export function castLabel(one) {
   const rate =
@@ -443,32 +479,40 @@ export async function buildSheets({ dir, base: given = null }) {
       const match = (one) =>
         one.id === cast.id && one.speed === cast.speed && one.clouds === clouds
       return {
+        clouds,
         kept: record.casts.find(match),
         refused: (record.refused ?? []).find(match),
       }
     })
     // A sheet needs one kept arm; a refused arm is a labeled blank beside it.
     if (taken.every((one) => one.kept === undefined)) continue
-    const tiles = taken.flatMap(({ kept: one, refused }) => {
-      if (one === undefined)
-        return tileArgs(
-          null,
-          refused !== undefined
-            ? `${now}, ${refusedLabel(refused)}`
-            : armsOfCast(cast).includes(clouds ? 'on' : 'off')
-              ? `${now}: not taken`
-              : `${now}: read against ${cast.control}`,
+    const tiles = []
+    for (const { clouds, kept: one, refused } of taken) {
+      if (one === undefined) {
+        tiles.push(
+          ...tileArgs(
+            null,
+            refused !== undefined
+              ? `${now}, ${refusedLabel(refused)}`
+              : armsOfCast(cast).includes(clouds ? 'on' : 'off')
+                ? `${now}: not taken`
+                : `${now}: read against ${cast.control}`,
+          ),
         )
+        continue
+      }
       const frame = path.join(
         dir,
         one.name,
-        `${String(Math.floor((one.frames - 1) / 2)).padStart(4, '0')}.jpg`,
+        `${String(await middleShot(path.join(dir, one.name), one)).padStart(4, '0')}.jpg`,
       )
-      return tileArgs(
-        existsSync(frame) ? frame : null,
-        `${now}, ${castLabel(one)}`,
+      tiles.push(
+        ...tileArgs(
+          existsSync(frame) ? frame : null,
+          `${now}, ${castLabel(one)}`,
+        ),
       )
-    })
+    }
     const sheet = path.join(out, `${cast.id}-${cast.speed}.png`)
     await run('magick', [...tiles, '+append', sheet], { maxBuffer: 1 << 24 })
     sheets.push({

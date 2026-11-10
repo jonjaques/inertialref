@@ -56,6 +56,7 @@ import {
   leverHash,
   mediaRows,
   provenance,
+  shotOf,
   RECORD_FIELDS,
   role,
   ROLES,
@@ -413,7 +414,7 @@ describe('the drop rule, over rates and jitter', () => {
             missed,
             slot: () => period,
           })
-          const kept = checkCast('c', log, 380, { frames: 300 })
+          const kept = checkCast('c', log, null, { frames: 300 })
           expect(kept.dropped.map((one) => one.frame)).toEqual(missed)
           for (const one of kept.dropped) expect(one.missed).toBe(1)
         },
@@ -436,7 +437,7 @@ describe('the drop rule, over rates and jitter', () => {
             missed,
             slot: () => 3 * vsync,
           })
-          const kept = checkCast('c', log, 380, { frames: 300 })
+          const kept = checkCast('c', log, null, { frames: 300 })
           expect(kept.dropped.map((one) => one.frame)).toEqual(missed)
         },
       ),
@@ -490,28 +491,45 @@ describe('what the capture refuses', () => {
     expect(CAST_RATE.held).toBe(false)
     expect(presentationRate(log(60))).toBeCloseTo(60, 3)
     const cast = { frames: 100 }
-    expect(checkCast('c', log(60), 190, cast)).toMatchObject({
+    expect(checkCast('c', log(60), null, cast)).toMatchObject({
       retake: false,
       atSixty: true,
       dropped: [],
     })
-    expect(checkCast('c', log(60), 70, cast).retake).toBe(true)
+    // The screencast's instants: every frame of the path, or a third of it.
+    const shots = (entries, every = 1) =>
+      entries.filter((_, k) => k % every === 0).map((one) => one.at / 1000)
+    const full = checkCast('c', log(60), shots(log(60)), cast)
+    expect(full.coverage).toBeCloseTo(1, 9)
+    expect(full.retake).toBe(false)
+    // Chrome encoding at 20 fps behind a 60 Hz page: the clip holds every
+    // third path frame, however many frames the screencast was asked for.
+    const thinned = checkCast('c', log(60, 2070), shots(log(60, 2070), 3), {
+      frames: 600,
+    })
+    expect(thinned.coverage).toBeCloseTo(1 / 3, 2)
+    expect(thinned.retake).toBe(true)
+    // No instants, no figure: the record says so rather than guessing.
+    expect(checkCast('c', log(60), null, cast)).toMatchObject({
+      coverage: null,
+      retake: false,
+    })
     // The rig's own: the clouds-on descent at 2880 × 1800 on the M6.
     for (const hz of [42.6, 120, 72, 50, CAST_RATE.high + 0.5]) {
-      const kept = checkCast('c', log(hz), 190, cast)
+      const kept = checkCast('c', log(hz), null, cast)
       // To 0.01 Hz: the log's instants are epoch milliseconds, where a
       // float64 holds a part in 10¹⁶ of 10¹², a tenth of a microsecond.
       expect(kept.hz).toBeCloseTo(hz, 2)
       expect(kept.atSixty).toBe(false)
     }
-    expect(() => checkCast('c', [], 0, cast)).toThrow(/no measurable rate/)
+    expect(() => checkCast('c', [], null, cast)).toThrow(/no measurable rate/)
   })
 
   it('refuse a cast outside 58 to 62 Hz once the rig can hold 60', () => {
     const cast = { frames: 100 }
     for (const hz of [42.6, 120, 72, 50, CAST_RATE.high + 0.5])
-      expect(() => checkCast('c', log(hz), 190, cast, true)).toThrow(/60 Hz/)
-    expect(checkCast('c', log(60), 190, cast, true).atSixty).toBe(true)
+      expect(() => checkCast('c', log(hz), null, cast, true)).toThrow(/60 Hz/)
+    expect(checkCast('c', log(60), null, cast, true).atSixty).toBe(true)
   })
 
   it('keep a cast that dropped a few frames, each listed by path frame, height and distance', () => {
@@ -520,7 +538,7 @@ describe('what the capture refuses', () => {
       const entries = log(hz, 390).map((one) => ({ ...one, height: 1487 }))
       gap(entries, 80, 1, hz)
       gap(entries, 200, 2, hz)
-      const kept = checkCast('c', entries, 380, fly)
+      const kept = checkCast('c', entries, null, fly)
       expect(kept.dropped.map((one) => [one.frame, one.missed])).toEqual([
         [80, 1],
         [200, 2],
@@ -533,10 +551,10 @@ describe('what the capture refuses', () => {
       k,
       at: 1e12 + Math.floor(k / 2) * (25 + 1000 / 30) + (k % 2) * 25,
     }))
-    expect(checkCast('c', mixed, 190, { frames: 100 }).dropped).toEqual([])
+    expect(checkCast('c', mixed, null, { frames: 100 }).dropped).toEqual([])
     // A drop past the path's end and its tail is not the path's.
     const late = gap(log(60, 400), 300, 5, 60)
-    expect(checkCast('c', late, 190, { frames: 100 }).dropped).toEqual([])
+    expect(checkCast('c', late, null, { frames: 100 }).dropped).toEqual([])
   })
 
   it('refuse a cast past 3% of its frames, or three missed in a row, with where they fell', () => {
@@ -546,22 +564,22 @@ describe('what the capture refuses', () => {
     for (const k of [20, 40, 60, 80, 100, 120, 140, 160, 180, 200, 220, 221])
       gap(many, k, 1, 60)
     expect(12 / 390).toBeGreaterThan(CAST_DROPS.share)
-    expect(() => checkCast('c', many, 380, cast)).toThrow(/3% or 3 in a row/)
+    expect(() => checkCast('c', many, null, cast)).toThrow(/3% or 3 in a row/)
     try {
-      checkCast('c', many, 380, cast)
+      checkCast('c', many, null, cast)
     } catch (error) {
       expect(error.dropped.map((one) => one.frame)).toContain(221)
     }
     // Three in one gap is three in a row, however few frames that is.
     expect(() =>
-      checkCast('c', gap(log(60, 390), 50, 3, 60), 380, cast),
+      checkCast('c', gap(log(60, 390), 50, 3, 60), null, cast),
     ).toThrow(/3 in a row/)
     // Two gaps on adjacent frames add: 2 and 1 is three in a row.
     const adjacent = gap(gap(log(60, 390), 50, 2, 60), 51, 1, 60)
-    expect(() => checkCast('c', adjacent, 380, cast)).toThrow(/3 in a row/)
+    expect(() => checkCast('c', adjacent, null, cast)).toThrow(/3 in a row/)
     // Two in a row, and under 3%: kept.
     expect(
-      checkCast('c', gap(log(60, 390), 50, 2, 60), 380, cast).dropped,
+      checkCast('c', gap(log(60, 390), 50, 2, 60), null, cast).dropped,
     ).toHaveLength(1)
   })
 
@@ -1101,6 +1119,19 @@ describe('the sheets', () => {
     )
   })
 
+  it('show a cast halfway along its path, by the screencast’s instants rather than its index', () => {
+    // A page at 60 Hz and a stream at 20: path frame 300 is shot 100.
+    const log = Array.from({ length: 900 }, (_, k) => ({
+      k,
+      at: 1e12 + (k * 1000) / 60,
+    }))
+    const instants = log
+      .filter((_, k) => k % 3 === 0)
+      .map((one) => one.at / 1000)
+    expect(shotOf(instants, log, 300)).toBe(100)
+    expect(shotOf([], log, 300)).toBeNull()
+  })
+
   it('find the base’s plate in its directory, or among its record’s URLs', () => {
     expect(baseSource(null, 'a.png')).toBeNull()
     expect(
@@ -1128,18 +1159,33 @@ describe('the sheets', () => {
           path.join(dir, file),
         ])
       // A cast's two arms, three frames each, as the capture copies them.
-      const casts = ['on', 'off'].map((arm) => ({
-        ...take,
-        rate,
-        name: `weather-g6-descent-slow-${arm}`,
-        id: 'weather-g6-descent',
-        speed: 'slow',
-        clouds: arm === 'on',
-        frames: 3,
-        hz: arm === 'on' ? 42.57 : 63.3,
-        atSixty: false,
-        clip: null,
-      }))
+      const casts = [
+        ...['on', 'off'].map((arm) => ({
+          ...take,
+          rate,
+          name: `weather-g6-descent-slow-${arm}`,
+          id: 'weather-g6-descent',
+          speed: 'slow',
+          clouds: arm === 'on',
+          frames: 3,
+          hz: arm === 'on' ? 42.57 : 63.3,
+          atSixty: false,
+          clip: null,
+        })),
+        // A cast taken in one arm, read against slow's control.
+        {
+          ...take,
+          rate,
+          name: 'weather-g6-descent-injected-on',
+          id: 'weather-g6-descent',
+          speed: 'injected',
+          clouds: true,
+          frames: 3,
+          hz: 42.57,
+          atSixty: false,
+          clip: null,
+        },
+      ]
       for (const one of casts) {
         await mkdir(path.join(dir, one.name))
         for (let i = 0; i < one.frames; i += 1)
@@ -1155,8 +1201,10 @@ describe('the sheets', () => {
         JSON.stringify({ ...record, casts }),
       )
       const { sheets, media } = await buildSheets({ dir })
-      // The still's sheet, and the cast's: clouds off beside clouds on.
-      expect(sheets).toHaveLength(2)
+      // The still's sheet, and each cast's: clouds off beside clouds on,
+      // and a one-arm cast beside a blank naming its control.
+      expect(sheets).toHaveLength(3)
+      expect(sheets[2]).toMatchObject({ speed: 'injected' })
       expect(sheets[1]).toMatchObject({
         id: 'weather-g6-descent',
         speed: 'slow',
