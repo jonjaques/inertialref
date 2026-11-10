@@ -20,6 +20,7 @@ import { periodIndex } from './weatherClock.ts'
 import {
   BLOB_MEAN,
   blobCells,
+  cloudsServed,
   blobExists,
   blobThreshold,
   CLOUD_GENERA,
@@ -29,6 +30,7 @@ import {
   SCENARIO_IDS,
   scenarioCoverage,
   shellUnion,
+  terminatorSines,
   WEATHER_SCENARIOS,
   wetWorld,
 } from './weatherScenario.ts'
@@ -202,6 +204,24 @@ describe('the wet predicate', () => {
     expect(wetWorld(decked)).toBe(false)
   })
 
+  it('serves far-shore V unasked and leaves Earth, whose deck is authored, to a picture that names it', () => {
+    const earth = body(sol, 'g:milky-way/s:SOL/b:2')
+    expect(earth.appearance.clouds).not.toBeNull()
+    expect(cloudsServed(earth)).toBe(false)
+    expect(cloudsServed(shore)).toBe(true)
+    // A wet world served is a wet world; a dry one never is.
+    for (const one of [...sol, ...farShore])
+      if (cloudsServed(one)) expect(wetWorld(one)).toBe(true)
+    expect(cloudsServed(body(sol, 'g:milky-way/s:SOL/b:1'))).toBe(false)
+    // Earth joins the set by losing its deck, with no change to the predicate.
+    expect(
+      cloudsServed({
+        ...earth,
+        appearance: { ...earth.appearance, clouds: null },
+      }),
+    ).toBe(true)
+  })
+
   it('reads an unauthored haze by the air’s own recipe: thickness 10 is τ 1.2, a deck', () => {
     const {
       aerosolDepth: _depth,
@@ -218,6 +238,102 @@ describe('the wet predicate', () => {
     expect(aerosolDepthOf(under(10).appearance.haze!)).toBeCloseTo(1.2, 12)
     expect(wetWorld(under(10))).toBe(false)
     expect(wetWorld(under(8))).toBe(true)
+  })
+})
+
+describe('the cornerstones’ decks', () => {
+  const at = sphere(20_000)
+  const degrees = (value: number): number => (value * Math.PI) / 180
+  /** A direction whose local sun stands `elevation` over the horizon, the sun on +X. */
+  const under = (elevation: number): Vec3 => ({
+    x: Math.sin(degrees(elevation)),
+    y: Math.cos(degrees(elevation)),
+    z: 0,
+  })
+  const SUN: Vec3 = { x: 1, y: 0, z: 0 }
+
+  it('names the layers phase 1’s design gives each, with nothing under the mid-level deck', () => {
+    const [alto] = WEATHER_SCENARIOS.altocumulus.layers
+    expect(WEATHER_SCENARIOS.altocumulus.layers).toHaveLength(1)
+    expect(alto).toMatchObject({
+      genus: 'altocumulus',
+      base: 4000,
+      top: 4800,
+      coverage: 0.7,
+      cellMeters: 1000,
+    })
+    expect(WEATHER_SCENARIOS['dusk-altocumulus'].layers).toEqual(
+      WEATHER_SCENARIOS.altocumulus.layers,
+    )
+    expect(WEATHER_SCENARIOS.stratocumulus.layers).toEqual([
+      expect.objectContaining({
+        genus: 'stratocumulus',
+        base: 800,
+        top: 1300,
+        coverage: 0.9,
+        cellMeters: 1800,
+        radius: 10,
+      }),
+    ])
+  })
+
+  it('holds the dusk deck full under −0.1° of local sun and clears it over +0.1°', () => {
+    const dusk = WEATHER_SCENARIOS['dusk-altocumulus']
+    for (const elevation of [-90, -5, -1.5, -0.1, -0.1001])
+      expect(scenarioCoverage(dusk, 0, under(elevation), 0, SUN)).toBeCloseTo(
+        0.7,
+        12,
+      )
+    for (const elevation of [0.1, 0.5, 1.5, 45, 90])
+      expect(scenarioCoverage(dusk, 0, under(elevation), 0, SUN)).toBe(0)
+    expect(scenarioCoverage(dusk, 0, under(0), 0, SUN)).toBeCloseTo(0.35, 6)
+    // The plain deck holds its cover whatever the sun does.
+    for (const elevation of [-30, 0, 30])
+      expect(
+        scenarioCoverage(
+          WEATHER_SCENARIOS.altocumulus,
+          0,
+          under(elevation),
+          0,
+          SUN,
+        ),
+      ).toBe(0.7)
+  })
+
+  it('never rises as the local sun climbs, so the edge has one side of each', () => {
+    const dusk = WEATHER_SCENARIOS['dusk-altocumulus']
+    fc.assert(
+      fc.property(
+        fc.double({ min: -90, max: 90, noNaN: true }),
+        fc.double({ min: -90, max: 90, noNaN: true }),
+        (a, b) => {
+          const [low, high] = a <= b ? [a, b] : [b, a]
+          expect(
+            scenarioCoverage(dusk, 0, under(high), 0, SUN),
+          ).toBeLessThanOrEqual(scenarioCoverage(dusk, 0, under(low), 0, SUN))
+        },
+      ),
+    )
+  })
+
+  it('refuses a terminator’s cover with no sun, and reads none without one', () => {
+    expect(() =>
+      scenarioCoverage(WEATHER_SCENARIOS['dusk-altocumulus'], 0, SUN, 0),
+    ).toThrow(/needs a sun/)
+    expect(terminatorSines(WEATHER_SCENARIOS.stratocumulus)).toEqual([2, 3])
+    for (const direction of at.slice(0, 200))
+      expect(
+        scenarioCoverage(WEATHER_SCENARIOS.stratocumulus, 0, direction, 0),
+      ).toBe(0.9)
+  })
+
+  it('covers the night side and clears the day side, half the body each', () => {
+    const dusk = WEATHER_SCENARIOS['dusk-altocumulus']
+    let sum = 0
+    for (const direction of at)
+      sum += scenarioCoverage(dusk, 0, direction, 0, SUN)
+    // Half the sphere at 0.7, and the ±0.1° band a few parts in 10⁴ of it.
+    expect(sum / at.length).toBeCloseTo(0.35, 2)
   })
 })
 
@@ -306,8 +422,11 @@ describe('the coverage the maps hold', () => {
   const at = sphere(60_000)
 
   it('keeps every layer’s mean coverage over the body, whatever its pattern', () => {
+    // A terminator removes the day side's cover on purpose; its own test is
+    // below, and these are the means of every scenario without one.
     for (const id of SCENARIO_IDS) {
       const scenario = WEATHER_SCENARIOS[id]
+      if (scenario.terminator !== undefined) continue
       scenario.layers.forEach((layer, k) => {
         let sum = 0
         for (const direction of at)
@@ -327,10 +446,11 @@ describe('the coverage the maps hold', () => {
         fc.constantFrom(...SCENARIO_IDS),
         fc.integer({ min: 0, max: 60_000 - 1 }),
         fc.double({ min: 0, max: 1e9, noNaN: true }),
-        (id, k, t) => {
+        fc.integer({ min: 0, max: 60_000 - 1 }),
+        (id, k, t, s) => {
           const scenario = WEATHER_SCENARIOS[id]
           for (let layer = 0; layer < MAX_CLOUD_LAYERS; layer += 1) {
-            const c = scenarioCoverage(scenario, layer, at[k]!, t)
+            const c = scenarioCoverage(scenario, layer, at[k]!, t, at[s]!)
             expect(c).toBeGreaterThanOrEqual(0)
             expect(c).toBeLessThanOrEqual(1)
             if (layer >= scenario.layers.length) expect(c).toBe(0)
