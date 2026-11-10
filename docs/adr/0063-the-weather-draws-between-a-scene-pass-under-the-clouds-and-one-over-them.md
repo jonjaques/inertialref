@@ -359,12 +359,23 @@ campaign 1's row and two repeats. Clouds on, A against B:
 - **On `horizon` at 1080p, campaign 1's sample counts 18 late frames under A
   against none under B,** which is the late-frame clause's 2 nine times over.
   Neither repeat counts one under either placement.
-- **This record first read the clause with two conditions §8.7 does not
+- **The three samples a cell are two presentation rates.** Campaign 1's
+  profiles all ran capped at 60 frames a second: the clouds-off side delivered
+  179 to 182 frames in every 3 s window at both sizes. The repeats, started by
+  hand, ran the same clouds-off frames at 109 to 120 a second at 1080p and at
+  64 to 78 at Retina, which is the GPU's own pace there. The `sensor` span and
+  the late-frame count follow the rate: a clouds-off `horizon` at 1080p is 6.80
+  to 7.12 ms in the campaign and 3.05 to 3.07 in the repeats. `ir.gpu`'s
+  difference does not. **The cause of the cap is not established:** neither a
+  dark display nor a campaign's detached launch reproduces it.
+- **On the two repeats alone the `sensor` clause still fires** at Retina
+  inside a cloud, +3.51 and +4.64 ms, and the late-frame clause fires nowhere.
+- **The reading under which no cell fires adds two conditions §8.7 does not
   state:** the `sensor` clause only where A's mean also exceeds twice the
   larger of the two placements' sample standard deviations, and the
   late-frame clause only where A's median exceeds B's by more than 2 and A's
-  least exceeds B's greatest. That reading was fixed after campaign 1's result
-  was in hand and before the repeats arrived. Under it no cell fires, and
+  least exceeds B's greatest. It was fixed after campaign 1's result was in
+  hand and before the repeats arrived. Under it no cell fires, and
   Retina inside a cloud clears by 0.06 ms: 3.22 against 3.28, on samples
   pooled across two presentation rates. On the paired differences' own
   standard deviation, 1.58 ms, twice is 3.17, and the cell does not clear.
@@ -390,18 +401,6 @@ that argue for it:
 
 Phase 1 takes the Retina `inside` cell again at one presentation rate, and
 both placements exist at `25df44ab` for it.
-
-- **The three samples a cell are two presentation rates.** Campaign 1's
-  profiles all ran capped at 60 frames a second: the clouds-off side delivered
-  179 to 182 frames in every 3 s window at both sizes. The repeats, started by
-  hand, ran the same clouds-off frames at 109 to 120 a second at 1080p and at
-  64 to 78 at Retina, which is the GPU's own pace there. The `sensor` span and
-  the late-frame count follow the rate: a clouds-off `horizon` at 1080p is 6.80
-  to 7.12 ms in the campaign and 3.05 to 3.07 in the repeats. `ir.gpu`'s
-  difference does not. **The cause of the cap is not established:** neither a
-  dark display nor a campaign's detached launch reproduces it.
-- **On the two repeats alone the `sensor` clause still fires** at Retina
-  inside a cloud, +3.51 and +4.64 ms, and the late-frame clause fires nowhere.
 
 **C is reconsidered in phase 1.** The rule sends it there if the split run
 empty costs over 0.1 ms at Retina, and it costs 2.42 to 2.49 ms, and 0.98 to
