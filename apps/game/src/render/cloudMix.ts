@@ -1,21 +1,45 @@
 import type { Node } from 'three/webgpu'
-import { abs, exp, float, int, max, mix, select, sqrt } from 'three/tsl'
-import type { CloudSunDepths } from './cloudNodes.ts'
+import {
+  abs,
+  exp,
+  float,
+  int,
+  log,
+  max,
+  min,
+  mix,
+  select,
+  sqrt,
+  vec3,
+} from 'three/tsl'
+import { UNSPREAD_SHAPE } from '@inertialref/rendering'
+import type { CloudLevelStatistics, CloudSunDepths } from './cloudNodes.ts'
 import type { CloudLayerUniforms } from './cloudUniforms.ts'
 
 /*
- * How a ray's crossing of a partly cloudy level is mixed: the one law the
- * fine march and the far march both take, and the layers' statistics that
- * stand in for the sun's cache where it holds nothing.
+ * How a ray's crossing of a partly cloudy level is mixed, and what light a
+ * step of it adds: the one law the fine march and the far march both take,
+ * and the layers' statistics that stand in for the sun's cache where it
+ * holds nothing. `packages/rendering/src/cloudOverlap.ts` is the same
+ * arithmetic on the CPU, and `cloudTrace.gpu.test.ts` holds each function
+ * here to it.
  *
  * A ray is in the cloudy share of a column or out of it for the column's
  * whole crossing, and between columns the overlap is random, so a crossing
- * of `n` columns passes `((1 − c) + c·e^(−τ/n))ⁿ`. Both marches read the
- * law here, so across the handover they differ only in the resolution they
- * read the cover and the depth at.
+ * of `n` columns, each cloudy with probability `F`, passes
+ * `((1 − F) + F·t(τ/n))ⁿ`, with `t(x) = (1 + x/k)^(−k)` the mean
+ * transmittance of a column whose depth is spread as a gamma of shape `k`
+ * about a mean `x`: one depth cannot stand for a spread of depths on a
+ * slant, and a deck is mostly its thin places there. A crossing counts
+ * `n = √(1 + (ℓ/c)²)` columns for a horizontal run `ℓ` and a sight length
+ * `c`, and a step takes its share of that by its share of the chord. Both
+ * marches read the law here, so across the handover they differ only in the
+ * resolution they read the level's numbers at.
  *
- * **A crossing is one column.** The exponent is one whatever the run, and a
- * step's mix is `(1 − c) + c·e^(−τ)`, as the fine march's segment closes.
+ * **A level's four numbers at a column** are its cloudy share `F`, the
+ * vertical depth `τ′` whose transmittance is the cloudy columns' mean, the
+ * shape `k` and the sight length `c`. A crossing at a path factor `m` is
+ * `crossingTransmittance(F, spreadDepth(τ′, k)·m, crossingExponent(ℓ, c), k)`.
  *
  * **The statistics are the same law at the sample's own column** (§5.5).
  * They draw wherever the sun's cache does not: from orbit, where it idles,
@@ -26,30 +50,204 @@ import type { CloudLayerUniforms } from './cloudUniforms.ts'
  * sun's ray meets them, which under a low sun is another column.
  */
 
+/** The least a logarithm or a quotient here is taken of. */
+const TINY = 1e-30
+/** Where the series take over from the quotients that cancel in float32. */
+const SERIES_BELOW = 0.01
 /**
- * The columns a crossing counts: from its horizontal run and the level's
- * sight length, meters. One.
+ * A column this deep passes nothing a float32 can add to its clear share:
+ * e⁻⁴⁰ is 4 × 10⁻¹⁸, and a float's step under one is 6 × 10⁻⁸.
+ */
+const OPAQUE_COLUMN = 40
+
+/**
+ * The columns a crossing counts, `√(1 + (ℓ/c)²)`: from its horizontal run
+ * and the level's sight length, meters.
  */
 export function crossingExponent(
-  _run: Node<'float'>,
-  _sight: Node<'float'>,
+  run: Node<'float'>,
+  sight: Node<'float'>,
 ): Node<'float'> {
-  return float(1)
+  const ratio = run.div(max(sight, 1))
+  return sqrt(ratio.mul(ratio).add(1))
+}
+
+/**
+ * (1 − e^−y)/y at either sign of y, by its series inside |y| = 0.01, where
+ * the subtraction cancels in float32.
+ */
+export function stepShare(y: Node<'float'>): Node<'float'> {
+  const near = abs(y).lessThan(SERIES_BELOW)
+  const safe = select(near, float(1), y)
+  return select(
+    near,
+    y.mul(y.div(6).sub(0.5)).add(1),
+    float(1).sub(exp(safe.negate())).div(safe),
+  )
+}
+
+/** A shape from which a column's depths do not spread, as a node. */
+const unspread = (shape: Node<'float'>): Node<'bool'> =>
+  shape.greaterThanEqual(UNSPREAD_SHAPE)
+
+/**
+ * The mean of the gamma-spread depth whose mean transmittance is that of
+ * one depth `depth`: `k·(e^(τ′/k) − 1)`, and `depth` itself where the depths
+ * do not spread. A slant path scales this mean, not the depth it stands for.
+ */
+export function spreadDepth(
+  depth: Node<'float'>,
+  shape: Node<'float'>,
+): Node<'float'> {
+  // e⁸⁰ is the most a float32 holds short of infinity with room to multiply.
+  const folds = min(depth.div(max(shape, TINY)), 80)
+  return select(
+    unspread(shape),
+    depth,
+    shape.mul(folds).mul(stepShare(folds.negate())),
+  )
+}
+
+/**
+ * −ln of a cloudy column's mean transmittance, its depth spread as a gamma
+ * of `shape` about a mean `depth`: `k·ln(1 + x/k)`, and `depth` itself where
+ * the depths do not spread.
+ *
+ * The logarithm is taken by its series under `x/k` of a hundredth: a
+ * float32's `1 + x/k` holds four digits of `x/k` at a shape of a thousand,
+ * and the exponent would carry that loss whole.
+ */
+export function gammaDepth(
+  depth: Node<'float'>,
+  shape: Node<'float'>,
+): Node<'float'> {
+  const u = depth.div(max(shape, TINY))
+  const logarithm = select(
+    u.lessThan(SERIES_BELOW),
+    u.mul(u.mul(u.div(3).sub(0.5)).add(1)),
+    log(u.add(1)),
+  )
+  return select(unspread(shape), depth, shape.mul(logarithm))
+}
+
+/**
+ * The optical depth a step's mix is worth, −ln of what it passes: `cover`
+ * the cloudy share it reads, `depth` the mean in-cloud optical depth it
+ * crosses, `exponent` its share of the crossing's exponent, and `shape` the
+ * gamma its columns' depths are spread by, none when absent.
+ *
+ * At a cover of one with depths that do not spread it is `depth` itself, so
+ * a resolved cloud is Beer's law at any step and any exponent. Under it the
+ * depth of one column, `depth/exponent` through `gammaDepth`, is mixed and
+ * the exponent multiplies the result. Three forms, because the mix is
+ * `1 − c·(1 − t)` and a float32 loses a thin column's opacity against the
+ * one and a deep column's `t` against `1 − c`: a series under an opacity of
+ * a hundredth, the clear share alone past a column depth of 40, and the
+ * logarithm between.
+ */
+export function crossingDepth(
+  cover: Node<'float'>,
+  depth: Node<'float'>,
+  exponent: Node<'float'>,
+  shape: Node<'float'> = float(UNSPREAD_SHAPE),
+): Node<'float'> {
+  const n = max(exponent, TINY)
+  const column = gammaDepth(depth.div(n), shape)
+  const opacity = cover.mul(column).mul(stepShare(column))
+  const thin = opacity.lessThan(SERIES_BELOW)
+  const series = opacity.mul(opacity.mul(opacity.div(3).add(0.5)).add(1))
+  const through = float(1)
+    .sub(cover)
+    .add(cover.mul(exp(min(column, OPAQUE_COLUMN).negate())))
+  const mixed = select(
+    thin,
+    series,
+    select(
+      column.greaterThanEqual(OPAQUE_COLUMN),
+      log(max(float(1).sub(cover), TINY)).negate(),
+      log(max(through, TINY)).negate(),
+    ),
+  )
+  return select(
+    cover.greaterThanEqual(1),
+    select(unspread(shape), depth, n.mul(column)),
+    n.mul(mixed),
+  )
 }
 
 /**
  * What a step passes of the light behind it: `cover` the cloudy share it
- * reads, `depth` the in-cloud optical depth it crosses, `exponent` its share
- * of the crossing's exponent.
+ * reads, `depth` the mean in-cloud optical depth it crosses, `exponent` its
+ * share of the crossing's exponent, `shape` the gamma its columns' depths
+ * are spread by, none when absent.
  */
 export function crossingTransmittance(
   cover: Node<'float'>,
   depth: Node<'float'>,
-  _exponent: Node<'float'>,
+  exponent: Node<'float'>,
+  shape: Node<'float'> = float(UNSPREAD_SHAPE),
 ): Node<'float'> {
-  return float(1)
-    .sub(cover)
-    .add(cover.mul(exp(depth.negate())))
+  return exp(crossingDepth(cover, depth, exponent, shape).negate())
+}
+
+/** One band of `stepLight`. */
+function bandLight(
+  start: Node<'float'>,
+  end: Node<'float'>,
+  depth: Node<'float'>,
+  through: Node<'float'>,
+  ramp: Node<'float'>,
+): Node<'float'> {
+  const lit = start.greaterThan(0).and(end.greaterThan(0))
+  const y = depth.add(log(max(start, TINY)).sub(log(max(end, TINY))))
+  const falling = start.mul(depth).mul(stepShare(max(y, 0)))
+  const rising = end
+    .mul(through)
+    .mul(depth)
+    .mul(stepShare(max(y.negate(), 0)))
+  const opacity = float(1).sub(through)
+  return select(
+    lit,
+    select(y.greaterThanEqual(0), falling, rising),
+    start.mul(opacity).add(end.sub(start).mul(ramp)),
+  )
+}
+
+/**
+ * The light a step adds per unit of what reaches its start, each band: its
+ * source `start` at its near end and `end` at its far end, over the mixed
+ * optical depth `depth` (`crossingDepth`).
+ *
+ * **The source is log-linear between the two ends** (§5.4): the integral of
+ * `S₀·e^(−κt)·e^(−t)` over the step, with `κ` from the two ends, which is
+ * exact where the sun's own depth grows along the step, at any step length.
+ * A source held at the step's start is 15% high at a depth of 0.3 under
+ * equal sun and view angles and 52% at 1.16, and no step count sees it.
+ *
+ * It is taken from whichever end leaves no exponential to overflow: with
+ * `y = τ + ln(S₀/S₁)`, `S₀·τ·share(y)` where `y ≥ 0` and
+ * `S₁·e^(−τ)·τ·share(−y)` where the source grows faster than the step dims
+ * it. A band dark at either end has no logarithm to take and is a ramp
+ * between the two.
+ */
+export function stepLight(
+  start: Node<'vec3'>,
+  end: Node<'vec3'>,
+  depth: Node<'float'>,
+): Node<'vec3'> {
+  const through = exp(depth.negate())
+  // (1 − (1 + τ)·e^−τ)/τ, the weight of a ramp's far end, by its series
+  // where the quotient cancels.
+  const thin = depth.lessThan(SERIES_BELOW)
+  const safe = select(thin, float(1), depth)
+  const ramp = select(
+    thin,
+    depth.mul(depth.mul(depth.div(8).sub(1 / 3)).add(0.5)),
+    float(1).sub(safe.add(1).mul(through)).div(safe),
+  )
+  const band = (s: Node<'float'>, e: Node<'float'>): Node<'float'> =>
+    bandLight(s, e, depth, through, ramp)
+  return vec3(band(start.x, end.x), band(start.y, end.y), band(start.z, end.z))
 }
 
 /** What the layers' statistics read at a sample's own column. */
@@ -66,6 +264,12 @@ export interface SunStatisticsInput {
   readonly sunMu: Node<'float'>
   /** The optical depth the light taps crossed toward the sun. */
   readonly taps: Node<'float'>
+  /**
+   * The sample's own level's statistics at its column, where the medium
+   * answers them: its cloudy share in place of the climate's mean cover, and
+   * the gamma its columns' depths are spread by.
+   */
+  readonly own?: CloudLevelStatistics
 }
 
 /** The least the sun's cosine is taken as: the slab source's first row. */
@@ -102,11 +306,29 @@ export function sunStatistics(input: SunStatisticsInput): Node<'float'> {
   for (let k = 0; k < 3; k += 1)
     own = select(level.equal(int(k)), cover[k]!, own)
   // One column: the sample's own, whatever the sun's run across the level.
-  let through = crossingTransmittance(
-    own,
-    max(column.div(mu).sub(input.taps), 0),
-    float(1),
-  )
+  // With the level's statistics it is cloudy by their share, and its depth
+  // along the sun is the spread's mean in the share the column holds of the
+  // level's own, as a slant crossing's is.
+  const { own: statistics } = input
+  const slant = column.div(mu)
+  let through =
+    statistics === undefined
+      ? crossingTransmittance(own, max(slant.sub(input.taps), 0), float(1))
+      : crossingTransmittance(
+          statistics.fraction,
+          max(
+            slant
+              .mul(
+                spreadDepth(statistics.depth, statistics.shape).div(
+                  max(statistics.depth, TINY),
+                ),
+              )
+              .sub(input.taps),
+            0,
+          ),
+          float(1),
+          statistics.shape,
+        )
   for (let j = 0; j < 3; j += 1) {
     const beyond = select(
       above,

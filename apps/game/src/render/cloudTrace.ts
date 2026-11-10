@@ -13,6 +13,7 @@ import {
   atomicAdd,
   atomicMax,
   atomicStore,
+  floatBitsToUint,
   Fn,
   globalId,
   If,
@@ -39,10 +40,12 @@ import {
   viewDirection,
 } from './cloudGeometry.ts'
 import { cloudKnotWriter } from './cloudKnots.ts'
+import { CLOUD_PHASE_MODES } from './cloudLevers.ts'
 import {
   type CloudAirFn,
   cloudMarch,
   type CloudMarchResult,
+  type CloudPhaseMode,
   marchFar,
 } from './cloudMarch.ts'
 import {
@@ -62,15 +65,21 @@ import type { CloudUniforms } from './cloudUniforms.ts'
 import { warmCompute } from './warmup.ts'
 
 /*
- * The trace: one compute kernel that marches the field, named `cloud trace`,
+ * The trace: a compute kernel that marches the field, named `cloud trace`,
  * at a quarter of the display's axes. A
  * converging frame dispatches once at this frame's interleave phase; the
  * immediate regime dispatches four times at the same extent, a quarter of
  * the step budget each, so every store stays inside its texture (§5.14).
  *
+ * **It is three kernels while the phase's radius is a measured choice**
+ * (§4.5): how first order takes its radius changes the march's registers,
+ * so `mean`, `bins` and `sample` are three programs under one name, and the
+ * `phaseMode` lever says which a frame dispatches. All three are warmed, so
+ * no frame of any lever set compiles one.
+ *
  * The kernel binds the field (4: the clipmap's cover, the two noises and the
- * profile), the sun grid, the served air (2), the phase, the far atlas and
- * the depth copy: 10 of the stage's 16 sampled textures, which
+ * profile), the sun grid, the served air (2), the phase, the far atlas, the
+ * depth copy and the jitter's mask: 11 of the stage's 16 sampled textures, which
  * `cloudTrace.gpu.test.ts` counts in the system's own kernel. It writes the
  * four outputs, which is the stage's limit of storage textures, so the trace
  * has no room for a fifth.
@@ -110,7 +119,7 @@ export interface CloudTraceDeps {
   readonly sky: CloudSkyNodes
   /** The higher orders' source at a sample's two depths. */
   readonly source: CloudSourceNodes
-  /** The two numbers a ray is jittered by. */
+  /** The four numbers a ray is placed by. */
   readonly jitter: CloudJitterNodes
 }
 
@@ -132,12 +141,51 @@ const WORKGROUP = 8
 /** Bytes a trace texel holds: its light (8), aux (2 × 8), knot depths (2 × 8) and knot lights (4 × 8). */
 const TEXEL_BYTES = 72
 
-/** Sum of steps, the largest, rays, rays whose budget ran out. */
-const STAT_SLOTS = 4
+/**
+ * Sum of steps, the largest, rays, rays whose budget's floor lengthened a
+ * step; then the sum of the rays' opacity in `OPACITY_UNIT`s, and the center
+ * texel's range as a float's bits with the count of dispatches that wrote
+ * it.
+ */
+const STAT_SLOTS = 7
+/** A ray's opacity is summed in 1,024ths: four dispatches of a Retina trace's 324,000 rays stay under 2³². */
+const OPACITY_UNIT = 1024
 
 /** Meters → the textures' kilometers, held under the clamp a half float carries. */
 const kilometers = (meters: Node<'float'>): Node<'float'> =>
   min(max(meters, 0).mul(1e-3), CLOUD_DEPTH_CLAMP_KM)
+
+/** What the trace counts of its rays under `stats`. */
+export interface CloudTraceSteps {
+  /** Steps a ray, the mean and the most. */
+  readonly mean: number
+  readonly max: number
+  /** Rays whose budget's floor lengthened a step past the schedule's. */
+  readonly exhausted: number
+  /** The mean of 1 − T_c over the rays: the served opacity. */
+  readonly opacity: number
+  /**
+   * Meters from the eye at which the cloud's optical depth along the
+   * frame's central ray reaches ln 50; null where it never does.
+   */
+  readonly range: number | null
+}
+
+/** The counters' buffer as a report; null where no ray was counted. */
+function stepsOf(buffer: ArrayBuffer): CloudTraceSteps | null {
+  const counts = new Uint32Array(buffer)
+  const [sum = 0, largest = 0, rays = 0, exhausted = 0, opacity = 0] = counts
+  if (rays === 0) return null
+  const range = new Float32Array(buffer)[5] ?? -1
+  const written = (counts[6] ?? 0) > 0
+  return {
+    mean: sum / rays,
+    max: largest,
+    exhausted,
+    opacity: opacity / OPACITY_UNIT / rays,
+    range: written && range >= 0 ? range : null,
+  }
+}
 
 /** The step counters every kernel adds to under `stats`, and their switch. */
 interface Stats {
@@ -157,17 +205,13 @@ const countsOf = (buffer: StorageBufferAttribute) =>
  */
 function traceView(
   uniforms: CloudUniforms,
-  jitter: CloudJitterNodes,
+  within: Node<'vec2'>,
   depth: TextureNode,
   texel: Node<'uvec2'>,
 ) {
   const body = uniforms.served
   const trace = uniforms.trace
   const pixel = texel.mul(uint(2)).add(uvec2(trace.phase))
-  // An offset from the history pixel's center, drawn at the history pixel
-  // rather than at the texel, so the point inside the pixel and the share of
-  // the first step (the texel's draw) are not one number.
-  const within = jitter.at(pixel, trace.frame).sub(0.5)
   const screen = traceScreen(pixel, within, trace.history)
   const direction = viewDirection(uniforms.camera, screen).toVar()
   const distanceKm = depth.load(screenTexel(screen, trace.render)).x.toVar()
@@ -217,13 +261,31 @@ function store(
   )
 }
 
-function count(stats: Stats, result: CloudMarchResult): void {
+/**
+ * A ray's share of the counters, and the center texel's range: the distance
+ * along the frame's central ray at which the cloud's optical depth reaches
+ * ln 50, from the fine march's own steps (§8.5).
+ */
+function count(
+  stats: Stats,
+  result: CloudMarchResult,
+  fine: CloudMarchResult,
+  center: Node<'bool'>,
+): void {
   If(stats.on.greaterThan(0), () => {
     const steps = uint(result.steps)
     atomicAdd(stats.counts.element(0), steps)
     atomicMax(stats.counts.element(1), steps)
     atomicAdd(stats.counts.element(2), uint(1))
     atomicAdd(stats.counts.element(3), uint(result.exhausted))
+    const opacity = min(max(result.transmittance.oneMinus(), 0), 1)
+    atomicAdd(stats.counts.element(4), uint(opacity.mul(OPACITY_UNIT).add(0.5)))
+    If(center, () => {
+      // `@types/three` declares no node type on a bitcast; it is a u32.
+      const bits = floatBitsToUint(fine.range) as unknown as Node<'uint'>
+      atomicStore(stats.counts.element(5), bits)
+      atomicAdd(stats.counts.element(6), uint(1))
+    })
   })
 }
 
@@ -232,6 +294,7 @@ function traceKernel(
   outputs: CloudTraceTextures,
   depth: TextureNode,
   stats: Stats,
+  phaseMode: CloudPhaseMode,
 ): ComputeNode {
   const { uniforms } = deps
   const body = uniforms.served
@@ -241,10 +304,24 @@ function traceKernel(
     // Every dispatch is at the trace's extent, so this guard is what keeps a
     // workgroup's spare invocations from storing outside the textures.
     If(texel.x.lessThan(size.x).and(texel.y.lessThan(size.y)), () => {
-      const { ray, sky } = traceView(uniforms, deps.jitter, depth, texel)
+      // One draw a ray, at its texel: the first step's share, the point
+      // inside the texel's history pixel as an offset from its center, and
+      // the handover's ξ.
+      const draw = deps.jitter.draw(texel, uniforms.trace.frame).toVar()
+      const { ray, sky } = traceView(uniforms, draw.yz.sub(0.5), depth, texel)
       const knots = cloudKnotWriter(outputs)
-      const jitter = deps.jitter.at(texel, uniforms.trace.frame).x
-      const fine = cloudMarch(ray, jitter, sky, deps, knots)
+      // The switch to a level's statistics is dithered by the first
+      // coordinate of the ray's point inside its pixel, not by the
+      // handover's ξ: a ray whose switch and whose handover moved together
+      // would be coarse in both or fine in both, and a pixel's samples would
+      // differ by the two at once. The point's coordinate is uncorrelated
+      // with ξ under either draw, and it spreads the two representations
+      // across the pixel's own width.
+      const fine = cloudMarch(ray, draw.x, sky, deps, knots, {
+        handover: draw.w,
+        dither: draw.y,
+        phaseMode,
+      })
       const result = marchFar(
         fine,
         ray,
@@ -253,7 +330,9 @@ function traceKernel(
       )
       store(outputs, texel, result, knots.count)
       knots.flush(texel)
-      count(stats, result)
+      const middle = size.div(uint(2))
+      const center = texel.x.equal(middle.x).and(texel.y.equal(middle.y))
+      count(stats, result, fine, center)
     })
   })()
     .computeKernel([WORKGROUP, WORKGROUP, 1])
@@ -266,10 +345,11 @@ export class CloudTrace implements CloudResource {
   readonly #deps: CloudTraceDeps
   readonly #stats: Stats
   #outputs: CloudTraceTextures
-  #kernel: ComputeNode | null = null
+  /** The march's kernels, in `CLOUD_PHASE_MODES`' order. */
+  #kernels: readonly ComputeNode[] | null = null
   #clear: ComputeNode | null = null
   #depth: TextureNode | null = null
-  #steps: CloudTrace['steps'] = null
+  #steps: CloudTraceSteps | null = null
   #counting = false
   #reading = false
   #wanted = false
@@ -299,12 +379,8 @@ export class CloudTrace implements CloudResource {
     return this.#outputs
   }
 
-  /** Mean and largest steps a ray when `levers.stats`, read back a few frames late; null otherwise. */
-  get steps(): {
-    readonly mean: number
-    readonly max: number
-    readonly exhausted: number
-  } | null {
+  /** The rays' counters when `levers.stats`, read back a few frames late; null otherwise. */
+  get steps(): CloudTraceSteps | null {
     return this.#steps
   }
 
@@ -322,14 +398,17 @@ export class CloudTrace implements CloudResource {
   }
 
   /**
-   * Every kernel the trace dispatches, the march's and the counters' clear:
-   * the warm-up's subject. Built on first ask, so constructing a trace reads
-   * nothing of its deps, the depth copy's texture among them.
+   * Every kernel the trace dispatches, the march's three and then the
+   * counters' clear: the warm-up's subject. Built on first ask, so
+   * constructing a trace reads nothing of its deps, the depth copy's texture
+   * among them.
    */
   kernels(): readonly ComputeNode[] {
-    if (this.#kernel === null) {
+    if (this.#kernels === null) {
       const depth = texture(this.#deps.depth())
-      const kernel = traceKernel(this.#deps, this.#outputs, depth, this.#stats)
+      const kernels = CLOUD_PHASE_MODES.map((mode) =>
+        traceKernel(this.#deps, this.#outputs, depth, this.#stats, mode),
+      )
       const { counts } = this.#stats
       this.#clear = Fn(() => {
         If(instanceIndex.lessThan(uint(STAT_SLOTS)), () => {
@@ -339,9 +418,9 @@ export class CloudTrace implements CloudResource {
         .compute(STAT_SLOTS)
         .setName(CLOUD_STATS_LABEL)
       this.#depth = depth
-      this.#kernel = kernel
+      this.#kernels = kernels
     }
-    return [this.#kernel, this.#clear!]
+    return [...this.#kernels, this.#clear!]
   }
 
   warm(renderer: WebGPURenderer): Promise<void> {
@@ -375,7 +454,7 @@ export class CloudTrace implements CloudResource {
   dispose(): void {
     if (this.#disposed) return
     this.#disposed = true
-    this.#kernel?.dispose()
+    for (const kernel of this.#kernels ?? []) kernel.dispose()
     this.#clear?.dispose()
     const { light, aux, knotDepth, knotLight } = this.#outputs
     for (const map of [light, aux, knotDepth, knotLight]) map.dispose()
@@ -390,7 +469,8 @@ export class CloudTrace implements CloudResource {
     last: boolean,
   ): void {
     if (this.#disposed) return
-    const [kernel] = this.kernels()
+    const kernel =
+      this.kernels()[CLOUD_PHASE_MODES.indexOf(frame.levers.phaseMode)]
     const { width, height } = frame.extents.trace
     this.#size(width, height)
     const depth = this.#deps.depth()
@@ -433,11 +513,7 @@ export class CloudTrace implements CloudResource {
       .getArrayBufferAsync(this.#stats.buffer)
       .then((buffer) => {
         if (this.#disposed || !this.#wanted) return
-        const [sum = 0, largest = 0, rays = 0, exhausted = 0] = new Uint32Array(
-          buffer,
-        )
-        this.#steps =
-          rays > 0 ? { mean: sum / rays, max: largest, exhausted } : null
+        this.#steps = stepsOf(buffer)
       })
       .catch(() => {
         // A device being replaced reads nothing back; the next frame counts again.
