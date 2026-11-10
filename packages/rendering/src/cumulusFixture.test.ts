@@ -44,26 +44,63 @@ import { levelProfile } from './weatherGenus.ts'
 const TABLE = mieDroplets()
 const PHASE = tracePhase(TABLE)
 
-/**
- * A cut of today's fair-weather field, coarse enough to build in a test, at
- * a place where the field holds a cloud: a fifth of these voxels are cloudy.
- */
-const EAST = 7200
-const NORTH = 4800
-const SUBJECT: CumulusSubject = {
-  id: 'test',
-  regime: 'fair-cumulus',
-  thickness: null,
-  time: 0,
-  place: {
-    corner: { x: CUMULUS_DATUM, y: NORTH, z: -EAST },
-    east: { x: 0, y: 0, z: -1 },
-    north: { x: 0, y: 1, z: 0 },
-    size: [24, 16, 24],
-    voxel: 100,
-    base: 900,
-  },
+/** A cut of the fair-weather field at a corner `east` and `north` of the search's origin. */
+const subjectAt = (east: number, north: number): CumulusSubject => {
+  const draft: CumulusSubject = {
+    id: 'test',
+    regime: 'fair-cumulus',
+    thickness: null,
+    time: 0,
+    place: {
+      corner: { x: CUMULUS_DATUM, y: north, z: -east },
+      east: { x: 0, y: 0, z: -1 },
+      north: { x: 0, y: 1, z: 0 },
+      size: [24, 16, 24],
+      voxel: 100,
+      base: 0,
+    },
+  }
+  // A voxel under the level's base, whatever a calibration makes the base.
+  const base = subjectWeather(draft).weather.levels[0].base - 100
+  return { ...draft, place: { ...draft.place, base } }
 }
+
+/**
+ * A cut of today's field, coarse enough to build in a test, at the place of
+ * a 19 km square that holds the most cloud. The place is searched for and
+ * not written down: the field's recipe moves, and a place written down held
+ * 2,000 cloudy voxels under one recipe and 51 under the next.
+ */
+const SUBJECT: CumulusSubject = (() => {
+  let best = subjectAt(0, 0)
+  let most = -1
+  for (let e = 0; e < 8; e += 1)
+    for (let n = 0; n < 8; n += 1) {
+      const subject = subjectAt(e * 2400, n * 2400)
+      const { weather, clock } = subjectWeather(subject)
+      const [nx, ny, nz] = subject.place.size
+      let cloudy = 0
+      // Every fourth voxel a side: 144 reads a candidate.
+      for (let j = 1; j < ny; j += 4)
+        for (let k = 1; k < nz; k += 4)
+          for (let i = 1; i < nx; i += 4)
+            if (
+              fixtureVoxel(
+                weather,
+                clock,
+                CUMULUS_FIELD_SUN,
+                subject.place,
+                (j * nz + k) * nx + i,
+              ).sigma > 0
+            )
+              cloudy += 1
+      if (cloudy > most) {
+        most = cloudy
+        best = subject
+      }
+    }
+  return best
+})()
 
 const fieldFixture = (subject: CumulusSubject): CumulusFixture => {
   const { weather, clock } = subjectWeather(subject)
@@ -106,7 +143,7 @@ describe('the fixture', () => {
     }
     // Not a grid of clear air, which every layout would pass.
     expect(fixture.sigma.filter((value) => value > 0).length).toBeGreaterThan(
-      1000,
+      200,
     )
   })
 
@@ -129,22 +166,31 @@ describe('the fixture', () => {
     ).toBeCloseTo(fixture.extinction[index]!, 9)
   })
 
-  it('keeps one cloud of two, and says when it is cut by a face', () => {
+  it('keeps the cloud that stands clear over a larger one a face cuts, and says when every cloud is cut', () => {
     const size = [9, 5, 9] as const
     const count = size[0] * size[1] * size[2]
     const at = (i: number, j: number, k: number): number =>
       (j * size[2] + k) * size[0] + i
+    const corner = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [2, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ] as const
     const extinction = new Float32Array(count)
-    // A cloud at the middle, and one in a corner that touches three faces.
+    // Three voxels in the middle, two of one in a far part of it, and five
+    // in a corner, which three faces cut.
     for (const [i, j, k] of [
       [4, 2, 4],
       [5, 2, 4],
       [4, 3, 4],
-      [0, 0, 0],
-      [1, 0, 0],
+      [7, 2, 7],
+      [7, 3, 7],
+      ...corner,
     ] as const)
       extinction[at(i, j, k)] = 0.01
-    const two: CumulusFixture = {
+    const three: CumulusFixture = {
       size,
       voxel: 20,
       base: 0,
@@ -152,21 +198,32 @@ describe('the fixture', () => {
       radius: new Float32Array(count).fill(10),
       extinction,
     }
-    const middle = isolateCumulus(two)
-    expect(middle.voxels).toBe(3)
-    expect(middle.touches).toBe(false)
-    expect(middle.fixture.extinction[at(0, 0, 0)]).toBe(0)
-    expect(middle.fixture.sigma[at(1, 0, 0)]).toBe(0)
-    expect(middle.fixture.extinction[at(5, 2, 4)]).toBeGreaterThan(0)
-    // With the middle cloud gone the corner one is the nearest, and it is cut.
-    const corner = isolateCumulus({
-      ...two,
+    const clear = isolateCumulus(three)
+    expect(clear.voxels).toBe(3)
+    expect(clear.touches).toBe(false)
+    expect(clear.fixture.extinction[at(0, 0, 0)]).toBe(0)
+    expect(clear.fixture.sigma[at(1, 0, 0)]).toBe(0)
+    expect(clear.fixture.extinction[at(7, 2, 7)]).toBe(0)
+    expect(clear.fixture.extinction[at(5, 2, 4)]).toBeGreaterThan(0)
+    expect(clear.fixture.extinction.filter((value) => value > 0)).toHaveLength(
+      3,
+    )
+    // With only the corner's cloud there is none that stands clear.
+    const cut = isolateCumulus({
+      ...three,
       extinction: extinction.map((value, index) =>
-        index === at(0, 0, 0) || index === at(1, 0, 0) ? value : 0,
+        corner.some(([i, j, k]) => index === at(i, j, k)) ? value : 0,
       ),
     })
-    expect(corner.voxels).toBe(2)
-    expect(corner.touches).toBe(true)
+    expect(cut.voxels).toBe(5)
+    expect(cut.touches).toBe(true)
+    // And a grid of clear air holds no cloud to cut.
+    const none = isolateCumulus({
+      ...three,
+      extinction: new Float32Array(count),
+    })
+    expect(none.voxels).toBe(0)
+    expect(none.touches).toBe(false)
   })
 
   it('cuts an analytic cumulus that stands clear of its grid, scaled voxel by voxel', () => {
@@ -452,7 +509,11 @@ describe('a reference and the field it was traced through', () => {
     const later = movedVoxels({ ...SUBJECT, time: 3600 }, recorded)
     expect(later.length).toBeGreaterThan(100)
     // And a layer of another thickness is another profile at every height.
-    const thicker = movedVoxels({ ...SUBJECT, thickness: 900 }, recorded)
+    const [low] = subjectWeather(SUBJECT).weather.levels
+    const thicker = movedVoxels(
+      { ...SUBJECT, thickness: low.top - low.base + 300 },
+      recorded,
+    )
     expect(thicker.length).toBeGreaterThan(100)
   })
 

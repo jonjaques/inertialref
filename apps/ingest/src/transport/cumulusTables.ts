@@ -132,12 +132,43 @@ export const SUBJECTS: readonly SubjectSearch[] = [
 
 /** Voxels of clear air a found cloud keeps between itself and the grid's sides. */
 const MARGIN = 6
+/** The least share of a grid's cloudy voxels its kept cloud is: the grid is that cloud's, and not a scrap's beside a cut one. */
+const OWN_SHARE = 0.5
+
+/** A subject's place cut and isolated, or why it will not do. */
+function cutSubject(subject: CumulusSubject): {
+  readonly fixture: CumulusFixture
+  readonly refusal: string | null
+} {
+  const { weather, clock } = subjectWeather(subject)
+  const cut = isolateCumulus(
+    cumulusFixture(weather, clock, CUMULUS_FIELD_SUN, subject.place),
+  )
+  const refusal =
+    cut.voxels === 0
+      ? 'is not in'
+      : cut.touches
+        ? 'reaches a face of'
+        : cut.voxels < OWN_SHARE * cut.cloudy
+          ? 'is the lesser part of what is in'
+          : null
+  return { fixture: cut.fixture, refusal }
+}
+
+/** The last subject found and its fixture: a process finds one subject and then cuts it. */
+let found: { readonly key: string; readonly fixture: CumulusFixture } | null =
+  null
 
 /**
  * Where a subject's cloud stands: the largest cloud of the searched square
- * that fits the grid with a margin, on a lattice of columns. The square is
- * on the equator, east of the prime meridian, and the search is a function
- * of the field alone, so every process of a run finds one place.
+ * that stands clear in its grid with a margin. The square is on the
+ * equator, east of the prime meridian, and the search is a function of the
+ * field alone, so every process of a run finds one place.
+ *
+ * Candidates come from a lattice of columns, largest first, and each is cut
+ * at the grid's own resolution before it is taken: two clouds the lattice
+ * sees apart can be joined by a bridge narrower than its spacing, and the
+ * body a grid then holds runs out through its faces.
  */
 export function findCumulus(search: SubjectSearch): CumulusSubject {
   const place = (east: number, north: number, base: number) => ({
@@ -174,18 +205,18 @@ export function findCumulus(search: SubjectSearch): CumulusSubject {
         .extinction > 0
     )
       cloudy[index % (across * across)] = 1
-  // Each cloud of the lattice, by its columns' bounds.
-  const label = new Int32Array(across * across).fill(-1)
+  // Each cloud of the lattice that fits, by its columns' bounds.
+  const label = new Uint8Array(across * across)
   const stack: number[] = []
-  let best: { columns: number; east: number; north: number } | null = null
+  const candidates: { columns: number; east: number; north: number }[] = []
   const fits =
     (Math.min(search.size[0], search.size[2]) - 2 * MARGIN) * search.voxel
   for (let start = 0; start < across * across; start += 1) {
-    if (cloudy[start] !== 1 || label[start] !== -1) continue
+    if (cloudy[start] !== 1 || label[start] === 1) continue
     let columns = 0
     let low = [across, across]
     let high = [-1, -1]
-    label[start] = start
+    label[start] = 1
     stack.push(start)
     while (stack.length > 0) {
       const at = stack.pop()!
@@ -204,8 +235,8 @@ export function findCumulus(search: SubjectSearch): CumulusSubject {
         const nk = k + dk
         if (ni < 0 || nk < 0 || ni >= across || nk >= across) continue
         const next = nk * across + ni
-        if (cloudy[next] !== 1 || label[next] !== -1) continue
-        label[next] = start
+        if (cloudy[next] !== 1 || label[next] === 1) continue
+        label[next] = 1
         stack.push(next)
       }
     }
@@ -217,40 +248,44 @@ export function findCumulus(search: SubjectSearch): CumulusSubject {
       high[0] === across - 1 ||
       high[1] === across - 1
     if (edge || span > fits) continue
-    if (best === null || columns > best.columns)
-      best = {
-        columns,
-        east: ((low[0]! + high[0]! + 1) / 2) * search.spacing,
-        north: ((low[1]! + high[1]! + 1) / 2) * search.spacing,
-      }
+    candidates.push({
+      columns,
+      east: ((low[0]! + high[0]! + 1) / 2) * search.spacing,
+      north: ((low[1]! + high[1]! + 1) / 2) * search.spacing,
+    })
   }
-  if (best === null)
-    throw new Error(
-      `cumulusTables: no cloud of ${search.id} in a ${search.side} m square fits ${fits} m`,
-    )
   // The grid's corner on the voxel lattice, so a rerun cuts the same voxels.
   const snap = (center: number, voxels: number): number =>
     Math.round((center - (voxels * search.voxel) / 2) / search.voxel) *
     search.voxel
-  return {
-    ...draft,
-    place: place(
-      snap(best.east, search.size[0]),
-      snap(best.north, search.size[2]),
-      base,
-    ),
+  // Largest first; a sort is stable, so equals keep the scan's order.
+  for (const candidate of candidates.sort((a, b) => b.columns - a.columns)) {
+    const subject: CumulusSubject = {
+      ...draft,
+      place: place(
+        snap(candidate.east, search.size[0]),
+        snap(candidate.north, search.size[2]),
+        base,
+      ),
+    }
+    const cut = cutSubject(subject)
+    if (cut.refusal !== null) continue
+    found = { key: JSON.stringify(subject), fixture: cut.fixture }
+    return subject
   }
+  throw new Error(
+    `cumulusTables: of ${candidates.length} clouds of ${search.id} in a ${search.side} m square, none stands clear in ${fits} m`,
+  )
 }
 
-/** A subject's fixture: its place's voxels with every cloud but the middle one masked off. */
+/** A subject's fixture: its place's voxels with every cloud but its own masked off. */
 export function subjectFixture(subject: CumulusSubject): CumulusFixture {
-  const { weather, clock } = subjectWeather(subject)
-  const cut = isolateCumulus(
-    cumulusFixture(weather, clock, CUMULUS_FIELD_SUN, subject.place),
-  )
-  if (cut.voxels === 0 || cut.touches)
+  if (found !== null && found.key === JSON.stringify(subject))
+    return found.fixture
+  const cut = cutSubject(subject)
+  if (cut.refusal !== null)
     throw new Error(
-      `cumulusTables: ${subject.id}'s cloud ${cut.voxels === 0 ? 'is not in' : 'reaches a face of'} its grid`,
+      `cumulusTables: ${subject.id}'s cloud ${cut.refusal} its grid`,
     )
   return cut.fixture
 }

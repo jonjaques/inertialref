@@ -414,7 +414,9 @@ function writeImage(name: string, sums: Float32Array, pixels: number): void {
 /**
  * Today's fair-weather cumulus, where the generator's search finds it on
  * the field as it stands (`cumulusTables.ts place cumulus`): what a sample
- * is priced on until the reference has subjects of its own.
+ * is priced on until the reference has subjects of its own. The place is
+ * the field's, so when the field's recipe moves this is another cloud or
+ * none, and the instrument says so by its count of cloudy pixels.
  */
 const TODAY: CumulusSubject = {
   id: 'cumulus',
@@ -422,7 +424,7 @@ const TODAY: CumulusSubject = {
   thickness: null,
   time: 0,
   place: {
-    corner: { x: 6_371_000, y: 15_880, z: -10_080 },
+    corner: { x: 6_371_000, y: 7840, z: -11_360 },
     east: { x: 0, y: 0, z: -1 },
     north: { x: 0, y: 1, z: 0 },
     size: [160, 96, 160],

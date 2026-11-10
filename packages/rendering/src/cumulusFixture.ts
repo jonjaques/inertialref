@@ -153,63 +153,67 @@ export function cumulusFixture(
 }
 
 /**
- * A fixture with every cloud but one masked off: the connected body of
- * voxels that holds the cloudy voxel nearest the grid's middle, by faces.
- * `touches` says whether that body reaches a face of the grid, where it is
- * cut and the cut face would be lit as no cloud's is.
+ * A fixture with every cloud but one masked off: the largest connected body
+ * of cloudy voxels, by faces, that stands clear of the grid's own faces. A
+ * body that reaches a face is cut there, and a cut face would be lit as no
+ * cloud's is. Where every body is cut the largest is kept and `touches`
+ * says so.
  */
 export function isolateCumulus(fixture: CumulusFixture): {
   readonly fixture: CumulusFixture
+  /** The kept body's voxels, and the cloudy voxels of every body together. */
   readonly voxels: number
+  readonly cloudy: number
   readonly touches: boolean
 } {
   const [nx, ny, nz] = fixture.size
   const count = nx * ny * nz
   const { extinction } = fixture
-  const middle = [(nx - 1) / 2, (ny - 1) / 2, (nz - 1) / 2] as const
-  let seed = -1
-  let nearest = Infinity
-  for (let index = 0; index < count; index += 1) {
-    if (!(extinction[index]! > 0)) continue
-    const dx = (index % nx) - middle[0]
-    const dz = (Math.floor(index / nx) % nz) - middle[2]
-    const dy = Math.floor(index / (nx * nz)) - middle[1]
-    const d = dx * dx + dy * dy + dz * dz
-    if (d < nearest) {
-      nearest = d
-      seed = index
+  // Each cloudy voxel's body, by the index of the voxel the body was found from.
+  const body = new Int32Array(count).fill(-1)
+  const stack = new Int32Array(count)
+  let kept = -1
+  let voxels = 0
+  let cloudy = 0
+  let touches = true
+  for (let start = 0; start < count; start += 1) {
+    if (!(extinction[start]! > 0) || body[start] !== -1) continue
+    let held = 0
+    let size = 0
+    let cut = false
+    const visit = (index: number): void => {
+      if (body[index] !== -1 || !(extinction[index]! > 0)) return
+      body[index] = start
+      stack[held] = index
+      held += 1
+    }
+    visit(start)
+    while (held > 0) {
+      held -= 1
+      const index = stack[held]!
+      size += 1
+      const i = index % nx
+      const k = Math.floor(index / nx) % nz
+      const j = Math.floor(index / (nx * nz))
+      if (i === 0 || i === nx - 1 || k === 0 || k === nz - 1) cut = true
+      if (j === 0 || j === ny - 1) cut = true
+      if (i > 0) visit(index - 1)
+      if (i < nx - 1) visit(index + 1)
+      if (k > 0) visit(index - nx)
+      if (k < nz - 1) visit(index + nx)
+      if (j > 0) visit(index - nx * nz)
+      if (j < ny - 1) visit(index + nx * nz)
+    }
+    cloudy += size
+    // A clear body beats any cut one, and among equals the larger wins.
+    if (cut === touches ? size > voxels : !cut) {
+      kept = start
+      voxels = size
+      touches = cut
     }
   }
-  const kept = new Uint8Array(count)
-  const stack = new Int32Array(count)
-  let held = 0
-  let voxels = 0
-  let touches = false
-  const visit = (index: number): void => {
-    if (kept[index] === 1 || !(extinction[index]! > 0)) return
-    kept[index] = 1
-    stack[held] = index
-    held += 1
-  }
-  if (seed >= 0) visit(seed)
-  while (held > 0) {
-    held -= 1
-    const index = stack[held]!
-    voxels += 1
-    const i = index % nx
-    const k = Math.floor(index / nx) % nz
-    const j = Math.floor(index / (nx * nz))
-    if (i === 0 || i === nx - 1 || k === 0 || k === nz - 1) touches = true
-    if (j === 0 || j === ny - 1) touches = true
-    if (i > 0) visit(index - 1)
-    if (i < nx - 1) visit(index + 1)
-    if (k > 0) visit(index - nx)
-    if (k < nz - 1) visit(index + nx)
-    if (j > 0) visit(index - nx * nz)
-    if (j < ny - 1) visit(index + nx * nz)
-  }
   const masked = (values: Float32Array): Float32Array =>
-    values.map((value, index) => (kept[index] === 1 ? value : 0))
+    values.map((value, index) => (body[index] === kept ? value : 0))
   return {
     fixture: {
       ...fixture,
@@ -217,7 +221,8 @@ export function isolateCumulus(fixture: CumulusFixture): {
       extinction: masked(fixture.extinction),
     },
     voxels,
-    touches,
+    cloudy,
+    touches: voxels > 0 && touches,
   }
 }
 
