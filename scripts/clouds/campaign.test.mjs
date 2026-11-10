@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CAMPAIGNS,
   INSTRUMENT_NAMES,
+  captureSeconds,
   captureTakesLever,
   child,
   eta,
@@ -386,6 +387,23 @@ describe('a campaign', () => {
     ).toBe(
       'runs cloudFarCompare, cloudSunAccuracy, cloudCompositeError; not in the tree yet: cloudCumulus (package N), cloudGlory (package M2), cloudHandover (package X), cloudPathTrace (package R2)',
     )
+  })
+
+  it('writes cast commands the capture takes, and estimates them by its plan', () => {
+    const casts = CAMPAIGNS.choices.stages.filter((s) => s.needs === 'lever')
+    expect(casts.map((s) => s.name)).toEqual(['casts', 'sun-casts'])
+    const commands = casts.flatMap((s) => s.commands)
+    expect(commands).toHaveLength(7 + 3)
+    // Each parses in the capture as it stands, flags and all, and has a plan.
+    for (const command of commands)
+      expect(captureSeconds(command), command.join(' ')).toBeGreaterThan(0)
+    expect(captureTakesLever()).toBe(true)
+    expect(minutesOf(casts[0])).toBeCloseTo(
+      commands.slice(0, 7).reduce((s, c) => s + captureSeconds(c), 0) / 60,
+      9,
+    )
+    // A command that is not the capture's is its stage's minutes as written.
+    expect(captureSeconds(['pnpm', 'vitest'])).toBeNull()
   })
 
   it('keeps every stage’s attempts across a resume', () => {
