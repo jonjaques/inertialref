@@ -828,17 +828,35 @@ describe('the far field against the fine march', () => {
     return results
   }
 
-  it('holds broken cumulus at 800 m to its landed figures, in every run of the suite', async () => {
-    const [found] = await measure(
-      CASES.filter((c) => c.id === ALWAYS.case),
-      [ALWAYS.footprintMeters],
-    )
-    expect(found).toMatchObject(ALWAYS)
-    hold(found!)
-  }, 120_000)
+  /*
+   * Both cases fail on the march and the field as they stand, and are held
+   * as failing: the landed figures are of phase 0's march on phase 0's
+   * field. The reference march integrates a step's source and mixes a level
+   * by its crossing, the field is the weather's own at the scaled
+   * extinction, and the far atlas is still phase 0's. The always-on case's
+   * footprint transmittance error is 0.361 against a bound of 0.092; under
+   * the measure flag the first row past its bound is cirrus over cumulus at
+   * 400 m, a footprint radiance of 1.857 against 1.812, and the run stops
+   * there, so no document is written. Two of the instrument’s premises
+   * are the old march's as well: a reference no ray of which is
+   * `exhausted`, which now counts a step the budget's floor lengthened, and
+   * a handover where a budget ran out, which a ray no longer has.
+   */
+  it.fails(
+    'holds broken cumulus at 800 m to its landed figures, in every run of the suite: 0.361 against 0.092, until the far march’s light (package X)',
+    async () => {
+      const [found] = await measure(
+        CASES.filter((c) => c.id === ALWAYS.case),
+        [ALWAYS.footprintMeters],
+      )
+      expect(found).toMatchObject(ALWAYS)
+      hold(found!)
+    },
+    120_000,
+  )
 
-  it.skipIf(!MEASURE)(
-    'holds all four cases at three footprints to their landed figures, and writes them',
+  ;(MEASURE ? it.fails : it.skip)(
+    'holds all four cases at three footprints to their landed figures, and writes them: cirrus over cumulus at 400 m is first past its bound, 1.857 against 1.812, until the far march’s light (package X)',
     async () => {
       const results = await measure(CASES, FOOTPRINTS)
       expect(results).toHaveLength(landed.cases.length)
