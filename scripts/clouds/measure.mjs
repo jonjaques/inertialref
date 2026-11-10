@@ -337,7 +337,7 @@ const radiance = (group, label, scenario, size, threshold, comparisons) => ({
  * Each quality lever's ladder: §8.7 sets it to the smallest value whose
  * image differs from the next larger one by under 1% radiance RMSE in
  * `horizon` and `inside`. Two taps or four, or none; the default maxSteps,
- * 192, and the default footprint, 400 m, sit inside their ladders.
+ * 192, and the default footprint, 800 m, sit inside their ladders.
  */
 export const LADDERS = Object.freeze({
   maxSteps: [64, 96, 128, 192, 256, 384],

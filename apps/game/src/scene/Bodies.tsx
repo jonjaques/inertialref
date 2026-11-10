@@ -369,7 +369,7 @@ export function Bodies({
         ringMaterial = createRingMaterial()
         ringMesh = new Mesh(rings, ringMaterial.material)
         ringMesh.renderOrder = 2
-        // World transparency over the clouds, in placement A's pass B.
+        // World transparency over the clouds, in pass B.
         if (engine.cloudsAvailable) markOverClouds(ringMesh)
         container.add(ringMesh)
       }

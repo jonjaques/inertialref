@@ -29,7 +29,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
   // primitive from the scene on unmount; the handful of GPU objects live as
   // long as the renderer, like the starfield's do.
   // Marked where it is made, under `?clouds=1`, so its warm-up compiles it
-  // where placement A draws it: over the clouds, in pass B.
+  // where it is drawn: over the clouds, in pass B.
   const flare = useMemo(() => {
     const made = createLensFlare()
     if (engine.cloudsAvailable) markOverClouds(made.group)

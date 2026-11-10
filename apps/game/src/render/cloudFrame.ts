@@ -579,8 +579,8 @@ function resetReason(
  * The frame, or null when `levers.on` is false or no body is served.
  *
  * Under 'cut', and whenever the picture's key changes, every eye-anchored
- * level and every cascade is rebuilt from no previous frame, as a teleport
- * does: a key change is a new body, epoch or lever set, and what the caches
+ * level, the clipmap's and the volume's, is rebuilt from no previous frame,
+ * as a teleport does: a key change is a new body, epoch or lever set, and what the caches
  * hold is no longer this picture's.
  */
 export function cloudFrame(

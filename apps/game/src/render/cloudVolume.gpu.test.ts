@@ -143,8 +143,8 @@ function eyeAt(height: number, east = 0, north = 0): Vec3 {
 }
 
 /**
- * A frame as `cloudFrame` builds it for the served body, from WP1's own
- * level frames and cascades, carried from `previous`: what `uniforms.write`
+ * A frame as `cloudFrame` builds it for the served body, from the clipmap's
+ * and the volume's own level frames, carried from `previous`: what `uniforms.write`
  * and the resources read.
  */
 function frameAt(

@@ -222,7 +222,7 @@ interface Chain {
   readonly scenePass: PassNode
   readonly mrt: MRTNode
   readonly over: CloudOverPassNode
-  /** Placement A for the frame: the scene pass on UNDER and pass B on, or neither. */
+  /** The two passes for the frame: the scene pass on UNDER and pass B on, or neither. */
   passes(on: boolean): void
   frame(): void
   dispose(): void

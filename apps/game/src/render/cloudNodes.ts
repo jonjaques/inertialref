@@ -152,7 +152,7 @@ export interface CloudBudget {
 
 /**
  * The shape every cloud GPU module has. A module allocates at its real size
- * only when the levers select it; before that it holds 1 × 1 targets of the
+ * when a frame first draws it; before that it holds 1 × 1 targets of the
  * real format, so warming builds the real pipelines — a pipeline depends on
  * the format, not the size — and `bytes` counts only what it holds.
  */
