@@ -256,6 +256,29 @@ describe('the hold', () => {
     expect(station.clouds.served).toBe(EARTH)
   })
 
+  it('ends on the levers a loaded system gives, whether the picture came before its system or after', () => {
+    const loaded = engine()
+    new PictureWeatherHold().apply(
+      loaded,
+      { regime: 'stratocumulus' },
+      decklessAddress,
+    )
+    // Before: nothing knows the body yet, so its address is forced.
+    const early = engine()
+    early.loaded = false
+    const hold = new PictureWeatherHold()
+    hold.apply(early, { regime: 'stratocumulus' }, decklessAddress)
+    expect(early.clouds.served).toBe(decklessAddress)
+    early.aim(decklessAddress)
+    hold.frame(early, true)
+    expect(early.clouds.served).toBe(decklessAddress)
+    // The system loads: the served set decides, as it did for the other.
+    early.loaded = true
+    hold.frame(early, true)
+    expect(early.clouds).toEqual(loaded.clouds)
+    expect(early.clouds.served).toBeNull()
+  })
+
   it('reports weather on a page without the clouds, or on WebGL, unavailable', () => {
     const hold = new PictureWeatherHold()
     expect(hold.apply(engine(false), { regime: 'overcast' }, EARTH)).toBe(

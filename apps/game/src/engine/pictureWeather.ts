@@ -118,6 +118,13 @@ export class PictureWeatherHold {
    * target, and the forced body must not follow the camera elsewhere.
    */
   #subject: string | null | undefined = undefined
+  /**
+   * A picture's body by address while its system is not loaded yet.
+   * `bodyFor` answers null for a system nothing has loaded, which forces the
+   * address; once it loads, the served set decides as it would have, so two
+   * takes of one picture end on one set of levers whichever came first.
+   */
+  #pending: string | null = null
 
   /** What became of the last picture's weather, while it is held. */
   get outcome(): PictureWeatherOutcome {
@@ -147,6 +154,7 @@ export class PictureWeatherHold {
     engine.clouds = next.levers
     this.#outcome = next.outcome
     this.#subject = undefined
+    this.#pending = next.outcome === 'drawn' && body === null ? address : null
     this.#early =
       weather !== null &&
       next.outcome === 'unavailable' &&
@@ -164,12 +172,14 @@ export class PictureWeatherHold {
     this.#outcome = 'none'
     this.#early = null
     this.#subject = undefined
+    this.#pending = null
   }
 
   /**
    * A frame's check. The pictures are left when the observatory holds no
    * target, or holds another than the picture's; weather asked for before
-   * the clouds arrived is applied again on the first frame they have, once.
+   * the clouds arrived is applied again on the first frame they have, once;
+   * and a body whose system was not loaded is decided once it is.
    */
   frame(engine: PictureWeatherEngine, observing: boolean): void {
     if (!observing) return this.release(engine)
@@ -181,5 +191,12 @@ export class PictureWeatherHold {
     const subject = engine.harness.observatory.target?.address ?? null
     if (this.#subject === undefined) this.#subject = subject
     else if (subject !== this.#subject) return this.release(engine)
+    if (this.#pending === null) return
+    const body = engine.bodyFor(this.#pending)
+    if (body === null) return
+    const served = cloudsServed(body) ? null : this.#pending
+    if (engine.clouds.served !== served)
+      engine.clouds = { ...engine.clouds, served }
+    this.#pending = null
   }
 }
