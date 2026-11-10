@@ -368,4 +368,32 @@ describe('what it holds', () => {
     expect(fresh.bytes).toBe(0)
     expect(fresh.textures()).toEqual([])
   })
+
+  it('a noise disposed while it warms bakes nothing when the warm-up settles', async () => {
+    // StrictMode builds, warms and disposes a system before it builds the
+    // one it keeps: the first one's bake would draw 161 slices into targets
+    // already disposed, which makes their textures again with nothing left
+    // to dispose them.
+    const device = (renderer.backend as unknown as { device: GPUDevice }).device
+    const fresh = new CloudNoise()
+    const warmed = fresh.warm(renderer)
+    fresh.dispose()
+    let passes = 0
+    const create = device.createCommandEncoder.bind(device)
+    device.createCommandEncoder = (descriptor) => {
+      const encoder = create(descriptor)
+      const begin = encoder.beginRenderPass.bind(encoder)
+      encoder.beginRenderPass = (pass) => {
+        passes += 1
+        return begin(pass)
+      }
+      return encoder
+    }
+    try {
+      await warmed
+    } finally {
+      device.createCommandEncoder = create
+    }
+    expect(passes).toBe(0)
+  })
 })
