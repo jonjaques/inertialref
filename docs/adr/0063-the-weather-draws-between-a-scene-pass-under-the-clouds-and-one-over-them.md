@@ -270,6 +270,9 @@ behind, then the reverse, and holds both to the analytic value within 2%.
 ### What was measured
 
 The machine is the Mac mini (Mac18,5, Apple M6, 32 GB, 12 cores), fan-cooled.
+**Every figure here is that machine's.** The plan's budget basis is perf's
+Apple M5, on which nothing in phase 0 was measured, and no factor between the
+two is known.
 The browser is Chrome 157.0.8103.40 on WebGPU over Metal, and the build is
 production, served by the preview from a clean tree. The sizes are 1920×1080
 at a device pixel ratio of 1 and 1440×900 at 2, a 2880×1800 buffer. The
@@ -551,16 +554,29 @@ its corners. Each cell is Enhanced off / on.
   sunset, in fog and on the horizon from 2.4 km its 95th percentile is 3.2 to
   31.6% and its worst 10.0 to 100.0%, in every row. The identity's own light
   residual is 1.2% at the 95th percentile at worst, in fog.
+- **"From orbit" is one stance:** `orbit`, 400 km over far-shore V with the sun
+  4.4° up, at two sizes and two cameras. No other altitude, sun or body was
+  measured, so the regime the rule names is that stance's.
+- **A second clouded body always composites through the thin form**
+  (`cloudComposite.ts`, the second body's branch), wherever the eye is: the
+  neighbor's disk seen from the ground in `pair-neighbor` among them. That is
+  a distant disk through near air, a geometry in none of the four scenarios
+  above, so the `error` batch says nothing about it.
 - **The ring Enhanced draws at sky pixels within 2° of the limb is dimmed by
   `T_c` even in front of a cloud:** from orbit under Enhanced its 95th
   percentile and its worst are both 100%, over 183 limb samples at 1080p and
   111 at Retina. Enhanced off draws no ring, and the limb reads 0.0%.
-- **One difference is unexplained.** The batch also compares the identity's
-  and the thin form's screenshots, display-referred. From orbit with Enhanced
-  off they differ by 0.0680 RMSE at 1080p and 0.1114 at Retina, where the
-  residual meter puts the thin form within 0.1% at the 95th percentile; with
-  Enhanced on they differ by 0.0006 and 0.0007. The automatic meter settling
-  between the two shots would explain it, and that is not verified.
+- **The display-referred pair is uncontrolled, and no figure here reads it.**
+  The batch also compares a screenshot under the identity with one under the
+  thin form, and the pair contradicts the meter in every scenario with
+  Enhanced off. In fog at 1080p 42.0% of pixels differ by over 3%, where the
+  meter puts 2.7% of cloud texels over 5%; on the horizon from 2.4 km at
+  Retina it is 100.0% against 2.9%; from orbit the shots differ by 0.0680 RMSE
+  at 1080p and 0.1114 at Retina, where the meter puts the thin form within
+  0.1% at the 95th percentile. With Enhanced on from orbit they differ by
+  0.0006 and 0.0007. The two shots are two frames, and nothing holds the
+  automatic meter, the interleave's phase or the exposure between them, so
+  the pair does not isolate the composite's form.
 
 ## Alternatives considered
 

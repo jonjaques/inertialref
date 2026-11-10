@@ -85,17 +85,23 @@ none is fixed.
 **In the march and its light**
 
 - **A step's light source is taken at the step's start,** which biases
-  first-order light high, 15% on a uniform slab at equal sun and view angles
-  and more at a grazing sun. Every radiance figure of phase 0 is against a
-  march with that bias.
+  first-order light high by `2/(1+e^−τ) − 1` a step on a uniform slab at equal
+  sun and view angles. That is 15% only near the eye, where a step holds τ at
+  0.3; past the step's floor τ grows with distance, to +52% at 8 km and +70%
+  or more at the far comparison's 55 km handover. Every radiance figure of
+  phase 0 is against a march with that bias.
 - **The sun's depth misses its 3% in most cases,** two decks under a high sun
-  by 0.097 at four taps. Outside the grid's 25.6 km window, which from orbit
+  by 0.097 at four taps, and single samples reach a full-scale error of 1.00
+  there. The gate scored one place a scenario, four of five at latitude 86 to
+  89°, within 4 km of the eye. Outside the grid's 25.6 km window, which from orbit
   is everywhere, a sample is lit as though nothing stood past its first
   kilometer.
-- **The ladders are not closed.** `lightTaps` 4 has no larger rung measured
-  beside it. `farFootprint` 800 was read on the ground and inside a cloud and
-  on no orbit stance, and the landed orbit still shows almost none of the
-  cloud texture the campaign's showed.
+- **The ladders are not closed.** The landed set's own ladder, at
+  `51c96da4`, holds `maxSteps` 192 and `farFootprint` 800 (set by Retina), and
+  leaves `lightTaps` unset: two against four is 1.03% and 1.13% on `horizon`,
+  and `cloudLevers.ts` has no rung above four. No ladder has an orbit stance,
+  and the landed orbit still shows almost none of the cloud texture the
+  campaign's showed.
 - **The light is first order through the droplets' table and a placeholder
   sky term, on an uncalibrated density.** No image from phase 0 says how a
   cloud looks. The table is unconvolved, and ice and rain read the droplets'.
@@ -120,9 +126,56 @@ none is fixed.
 
 - **It lets through more light than the fine march:** half again over broken
   cumulus and nearly ten times on a grazing ray at sunset. It is not shown
-  better than the spheres at 800 m, which the comparison did not measure.
+  better than the spheres at 800 m: the atlas alone is scored there, and the
+  spheres led at 1,600 m in all four cases. Its radiance errors are each
+  relative to their own case's light, and its reference marches up to 1,051
+  steps where production takes 192.
 - **The handover is a switch.** The cross-fade by footprint, with hysteresis,
   is not built.
+
+**Limits of the landed code, declared and not fixed here**
+
+- **Under the game's own time warp every frame is a reset.** A frame whose
+  world step exceeds its own by over a second is a jump, so at 60 Hz every
+  frame from 100× up (from 1,000× at 120 Hz) takes the immediate regime and a
+  whole grid rebuild, 9.1 to 16.8 ms of grid alone; and a sun that turns
+  more than 0.05° a frame rebuilds the grid whole every frame, which on
+  Earth's day is from about 720×. The `warp` lever measures another path, and
+  no warp row was recorded.
+- **The knots mean the first four clipmap columns on the real field.** A
+  segment closes at every 250 m texel of horizontal run, and the fourth knot
+  takes the rest, so through layered cloud `cloudFront` puts an object in a
+  clear gap behind a depth-proportional share of the cloud past it, and for
+  cloud thin in each column it records no knot and answers T = 1. The
+  done-when for the transparent object is held on analytic slabs alone.
+- **The field depends on the eye.** The wind is built in the observer's
+  tangent basis (`cloudFrame.ts`) and the drift from it, up to 3,600 s of it,
+  so moving the eye turns the whole lattice, and the history's
+  `wind × frameSeconds` does not follow that.
+- **The far atlas filters log τ against clear texels' zero.** A bilinear read
+  beside a clear texel gives `(1+τ)^w − 1`: τ 8 at half weight reads 2, an
+  opacity of 0.43 against 0.50. It is one cause of the far field's excess
+  light, and fixing it changes the atlas's format.
+- **The motion reset has no floor near a layer's boundary.** The reset
+  compares the eye's travel with its clearance to the nearest shell, so
+  within ten frames' travel of a base or a top, 42 m at 250 m/s and 60 Hz, every frame
+  is immediate and the history never accumulates.
+- **The grid's window ends in a hard edge about 25 km out.** Outside its
+  trusted rectangle `opticalDepth` answers zero, a lighting seam where the
+  grid gives way to the taps alone.
+- **After a jump the clipmap and the atlas rebuild from cube faces not yet
+  rebaked,** and mark themselves fresh, inside the runner's settle window.
+- **What no always-on test gates:** compression other than 1 in the
+  composite (`cloudComposite.gpu.test.ts` sets 1 in every case), the air's
+  in-scatter term in the composite, the drift's sign (the history's oracle is
+  built from the wind), the grid on a real field (its gate is a uniform
+  slab), and a texture left off a resource's declared-bytes list (the census
+  sums each resource's own list). The three accuracy instruments,
+  `cloudFarCompare`, `cloudSunAccuracy` and `cloudCompositeError`, run only
+  under `IR_CLOUD_MEASURE` and assert only that their figures are finite.
+- **The thin form's regime is one stance.** "From orbit" is `orbit` at a 4.4°
+  sun, and a second clouded body always composites through the thin form,
+  from the ground too, in a geometry the `error` batch never measured.
 
 **Not built, and owed before a cloud ships**
 

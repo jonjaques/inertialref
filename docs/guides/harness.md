@@ -963,7 +963,7 @@ IR_CLOUD_MEASURE=1 IR_GPU_WAIT=900 pnpm vitest run --config apps/game/vitest.gpu
 
 | Test                  | Scores                                                                                              |
 | --------------------- | --------------------------------------------------------------------------------------------------- |
-| `cloudFarCompare`     | The far atlas against the fine march over the whole ray, on four handover cases at two footprints   |
+| `cloudFarCompare`     | The far atlas against the fine march over the whole ray, on four handover cases at three footprints |
 | `cloudSunAccuracy`    | The sun grid's `T_cloud` against a 256-step march of the field, at five scenarios and two suns      |
 | `cloudCompositeError` | The identity and the thin form against a 512-sample joint march of air and cloud, on analytic slabs |
 

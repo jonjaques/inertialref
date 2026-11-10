@@ -198,7 +198,9 @@ the preview, from a clean tree. The sizes are 1920×1080 at a device pixel
 ratio of 1 and 1440×900 at 2, a 2880×1800 buffer. The picture is native with
 multisampling and the camera is Enhanced. The world is far-shore V
 (`g:milky-way/s:P222_1_0_9/b:4`) with the sun 37.5° up at the ground stances
-and 4.4° up under the `orbit` stance.
+and 4.4° up under the `orbit` stance. **Every figure here is that machine's.**
+The plan's budget basis is perf's Apple M5, on which nothing in phase 0 was
+measured, and no factor between the two is known.
 
 A frame cost is `ir.gpu(120)`, the least of three reads, clouds off against
 on, interleaved in one boot: five pairs for a steady frame and three for a
@@ -226,10 +228,16 @@ Four limits bear on the figures below.
 
 - **The fine march takes a step's light source at the step's start.** That is
   exact for a constant medium and a left-endpoint rule for a source that falls
-  along the step, so first-order light is biased high: 15% on a uniform slab
-  at equal sun and view cosines, more at a grazing sun. The far comparison's
-  reference is that march. Its radiance errors rank two candidates against one
-  reference and are not a cloud's radiance. Phase 1 fixes the march.
+  along the step, so first-order light is biased high. On a uniform slab at
+  equal sun and view cosines the bias is `2/(1+e^−τ) − 1` a step, τ the step's
+  optical depth. An in-cloud step holds τ at 0.3 only near the eye, where that
+  is 15%: the step's floor, 3 m plus 60 m per 16 km, overtakes `0.3/σ` at
+  1.5 km under `fair-cumulus`'s σ of 0.035 /m. Past it τ grows with distance:
+  +52% at 8 km, where a step is 33 m, and +70% or more at the far
+  comparison's 55 km handover, where steps are 50 m or more. The variable is
+  the distance. The far comparison's reference is that march. Its radiance
+  errors rank two candidates against one reference and are not a cloud's
+  radiance. Phase 1 fixes the march.
 - **`ground` in campaign 1 is a clear sky inside a cumulus field:** cloud in
   2.0% of the trace's texels, where `horizon` has 38.6%. No rule below read
   it, and its rows are quoted as a second operating point. At `25df44ab` the
@@ -242,15 +250,20 @@ Four limits bear on the figures below.
 
 What each gate's figure covers:
 
-- **The ladders** vary one lever each, the others at `8a01d311`'s defaults:
-  the sun's depth from cascades, `lightTaps` 2 and `farFootprint` 400. The
-  landed set, the grid with 4 taps at 800 m, has no ladder; `landed` measures
-  cost, memory and the composite's error, and no images.
-- **The far comparison** scores 400 and 1,600 m in both campaigns' documents.
-  `cloudFarCompare` also scores 800 m, the default, and no committed document
-  holds that figure.
+- **The ladders** were taken twice. Campaign 1's vary one lever each, the
+  others at `8a01d311`'s defaults: the sun's depth from cascades, `lightTaps`
+  2 and `farFootprint` 400. The `choices` campaign of 10 Nov 2026 took them
+  again on the landed set at `51c96da4`, the grid with 4 taps at 800 m (The
+  landed set's ladders, below). Both read `horizon` and `inside` alone.
+- **The far comparison** scored 400 and 1,600 m for both candidates in
+  campaign 1, and the atlas alone at 400, 800 and 1,600 m on the landed code
+  at `51c96da4`. No comparison of the two candidates exists at 800 m, the
+  default: the spheres were deleted before the instrument scored it.
 - **The sun-accuracy lattice** is ±4 km about a 2 m eye, inside the grid's
   window, so its figures describe the sun's depth within 4 km of the eye.
+  Each scenario stands at one place, the first maximum of its coverage on a
+  Fibonacci sphere: latitude 86.2 to 88.7° in four of the five, and 22.9°
+  under cirrus over cumulus.
 - **The grid's window** is ±25.6 km. Past it a fine-march sample is lit by
   the taps alone, and no gate scores that band; the far comparison's cases
   lie past it, which is why its reference's light is an upper bound.
@@ -297,25 +310,37 @@ The gate: a candidate's `T_cloud` is within 3% RMS of a 256-step march of the
 field, at in-cloud samples of five scenarios at two suns, at `lightTaps` 2.
 Transmittance is absolute, 13,824 samples a case.
 
-| Scenario              | Sun   | In cloud | Mean `T`, reference | RMS at 2 taps, cascades / grid | Bias at 2 taps, cascades / grid | RMS at 4 taps, cascades / grid |
-| --------------------- | ----- | -------- | ------------------- | ------------------------------ | ------------------------------- | ------------------------------ |
-| `fair-cumulus`        | 37.5° | 2,504    | 0.112               | 0.135 / 0.133                  | +0.040 / +0.039                 | 0.043 / 0.046                  |
-| `fair-cumulus`        | 5°    | 2,504    | 0.030               | 0.074 / 0.069                  | +0.010 / +0.009                 | 0.033 / 0.032                  |
-| `two-decks`           | 37.5° | 3,046    | 0.165               | 0.191 / 0.192                  | +0.051 / +0.041                 | 0.077 / 0.097                  |
-| `two-decks`           | 5°    | 3,046    | 0.029               | 0.083 / 0.068                  | +0.013 / −0.002                 | 0.056 / 0.054                  |
-| `anvil`               | 37.5° | 4,561    | 0.032               | 0.024 / 0.023                  | +0.005 / +0.004                 | 0.009 / 0.009                  |
-| `anvil`               | 5°    | 4,561    | 0.003               | 0.033 / 0.040                  | −0.001 / −0.003                 | 0.032 / 0.040                  |
-| `overcast`            | 37.5° | 3,536    | 0.142               | 0.149 / 0.149                  | +0.054 / +0.054                 | 0.022 / 0.022                  |
-| `overcast`            | 5°    | 3,536    | 0.042               | 0.036 / 0.027                  | +0.003 / +0.003                 | 0.027 / 0.015                  |
-| `cirrus-over-cumulus` | 37.5° | 3,407    | 0.592               | 0.166 / 0.104                  | −0.042 / +0.023                 | 0.165 / 0.029                  |
-| `cirrus-over-cumulus` | 5°    | 3,407    | 0.505               | **0.492** / 0.081              | **−0.321** / −0.003             | 0.492 / 0.082                  |
+| Scenario              | Sun   | In cloud | Mean `T`, reference | RMS at 2 taps, cascades / grid | Bias at 2 taps, cascades / grid | RMS at 4 taps, cascades / grid | Worst sample at 2 taps, cascades / grid | Worst sample at 4 taps, cascades / grid |
+| --------------------- | ----- | -------- | ------------------- | ------------------------------ | ------------------------------- | ------------------------------ | --------------------------------------- | --------------------------------------- |
+| `fair-cumulus`        | 37.5° | 2,504    | 0.112               | 0.135 / 0.133                  | +0.040 / +0.039                 | 0.043 / 0.046                  | 0.95 / 0.95                             | 0.59 / 0.72                             |
+| `fair-cumulus`        | 5°    | 2,504    | 0.030               | 0.074 / 0.069                  | +0.010 / +0.009                 | 0.033 / 0.032                  | 0.85 / 0.84                             | 0.68 / 0.59                             |
+| `two-decks`           | 37.5° | 3,046    | 0.165               | 0.191 / 0.192                  | +0.051 / +0.041                 | 0.077 / 0.097                  | 1.00 / 1.00                             | 0.89 / 0.95                             |
+| `two-decks`           | 5°    | 3,046    | 0.029               | 0.083 / 0.068                  | +0.013 / −0.002                 | 0.056 / 0.054                  | 1.00 / 1.00                             | 1.00 / 1.00                             |
+| `anvil`               | 37.5° | 4,561    | 0.032               | 0.024 / 0.023                  | +0.005 / +0.004                 | 0.009 / 0.009                  | 0.34 / 0.31                             | 0.10 / 0.13                             |
+| `anvil`               | 5°    | 4,561    | 0.003               | 0.033 / 0.040                  | −0.001 / −0.003                 | 0.032 / 0.040                  | 0.96 / 0.94                             | 0.90 / 0.94                             |
+| `overcast`            | 37.5° | 3,536    | 0.142               | 0.149 / 0.149                  | +0.054 / +0.054                 | 0.022 / 0.022                  | 0.80 / 0.80                             | 0.24 / 0.24                             |
+| `overcast`            | 5°    | 3,536    | 0.042               | 0.036 / 0.027                  | +0.003 / +0.003                 | 0.027 / 0.015                  | 0.99 / 0.64                             | 0.99 / 0.64                             |
+| `cirrus-over-cumulus` | 37.5° | 3,407    | 0.592               | 0.166 / 0.104                  | −0.042 / +0.023                 | 0.165 / 0.029                  | 0.99 / 0.89                             | 0.99 / 0.61                             |
+| `cirrus-over-cumulus` | 5°    | 3,407    | 0.505               | **0.492** / 0.081              | **−0.321** / −0.003             | 0.492 / 0.082                  | 0.99 / 0.96                             | 0.99 / 0.96                             |
 
 Neither candidate passes: at two taps the cascades are within 3% in one case
-of ten and the grid in two. The rule's clause for that keeps the more
-accurate, and the grid's worst case
-is 0.192 against the cascades' 0.492. Under cirrus over cumulus at a 5° sun
+of ten and the grid in two. The rule's clause for that keeps "the more
+accurate" and does not name the aggregate. **Read by the worst case's RMS at
+two taps, the gate's own tap count,** the grid's is 0.192 against the
+cascades' 0.492, and the grid stays. Under cirrus over cumulus at a 5° sun
 the cascades read the cloud a third of full scale too dark, at two taps and at
 four.
+
+- **Case by case the cascades are the more accurate in five cells:** at four
+  taps 0.077 against 0.097 under two decks at a high sun, 0.043 against 0.046
+  under fair cumulus at a high sun and 0.032 against 0.040 in the anvil at a
+  low sun; at two taps 0.033 against 0.040 in the anvil at a low sun and
+  0.191 against 0.192 under two decks at a high sun.
+- **By the worst single sample neither is ahead:** both reach 1.00 under two
+  decks. The grid's worst at four taps, the landed count, is 1.00 under two
+  decks at a 5° sun and 0.94 or more in four cases of ten (five of ten at two
+  taps). Single in-cloud samples take the far end of the transmittance range
+  where the RMS is under 0.1.
 
 Most of the two-tap error is common to both candidates and belongs to the
 taps: at four it falls to 0.022 under overcast and 0.046 under fair cumulus.
@@ -341,6 +366,11 @@ the cascades' 9.86, and 20.97 at Retina against 11.18. Of the cut's 19.69 ms,
 12.32 is the grid, 32 slices in one frame, where the cascades' rebuild is
 0.84. The cap admits exactly that.
 
+**None of these figures decided anything.** No combination passed both gates,
+so the rule's steady, `fly`, reset and memory comparison never ran: the grid's
+reset frame, twice the cascades', and its 8.52 MB more were recorded and not
+weighed.
+
 #### The far field: the atlas
 
 The rule: the smaller worst-case radiance error, averaged over each far
@@ -365,6 +395,9 @@ bytes.
 
 The same document reads less cleanly than the rule.
 
+- **The far field is decided at 400 m and provisional at the default.** The
+  rule was followed at 400 m. 800 m, the landed default, is scored by no
+  comparison of the two candidates.
 - **The gap is one case, on four bins.** Three cases are within 0.06 of each
   other, and the spheres are ahead on broken cumulus. The grazing case decides
   it, and at 400 m its footprint average is over 4 cloudy bins of 6.
@@ -372,8 +405,14 @@ The same document reads less cleanly than the rule.
   the fine march stopped at 24 steps, the grazing case reads 1.125 for the
   atlas and 1.125 for the spheres.
 - **At 1,600 m the spheres are ahead in all four cases:** 0.874 against 0.903,
-  0.635 against 0.773, 0.825 against 1.209 and 2.253 against 2.311. The rule
-  reads 400 m. The default is 800 m, which the comparison did not measure.
+  0.635 against 0.773, 0.825 against 1.209 and 2.253 against 2.311.
+- **"Worst case" compares unlike scales.** Each case's radiance error is
+  relative to that case's own mean light over its cloudy bins, which at 400 m
+  runs from 8.4 × 10⁻⁵ in the anvil to 3.8 × 10⁻³ over broken cumulus, so the
+  worst of the four ranks errors in four different units.
+- **The reference marches up to 1,051 steps,** in the anvil, where production
+  stops at `maxSteps` 192, so neither candidate is scored against the march
+  it hands over from.
 - **Both far fields let through more light than the reference.** Mean
   transmittance over broken cumulus is 0.306 and 0.309 against 0.207, and
   0.287 and 0.307 against 0.030 on the grazing ray. Both radiance errors are
@@ -396,14 +435,15 @@ Each is the smallest value whose image differs from the next larger one's by
 under 1% radiance RMSE in `horizon` and `inside`, the jitter held. `inside`
 is under 0.04% on every rung. On `horizon`, 1080p then Retina:
 
-| Lever          | Rungs                                                                                               | Set to |
-| -------------- | --------------------------------------------------------------------------------------------------- | ------ |
-| `maxSteps`     | 64 → 96: 40.59%, 40.76%. 96 → 128: 10.99%, 12.21%. 128 → 192: 1.60%, 1.61%. 192 → 256: 0.02%, 0.01% | 192    |
-| `lightTaps`    | 0 → 2: 2.16%, 2.37%. 2 → 4: 1.04%, 1.14%                                                            | 4      |
-| `farFootprint` | 200 → 400: 0.43%, 4.22%. 400 → 800: 0.01%, 7.18%. 800 → 1,600: 0.01%, 0.01%                         | 800    |
+| Lever          | Rungs                                                                                               | Set to                     |
+| -------------- | --------------------------------------------------------------------------------------------------- | -------------------------- |
+| `maxSteps`     | 64 → 96: 40.59%, 40.76%. 96 → 128: 10.99%, 12.21%. 128 → 192: 1.60%, 1.61%. 192 → 256: 0.02%, 0.01% | 192                        |
+| `lightTaps`    | 0 → 2: 2.16%, 2.37%. 2 → 4: 1.04%, 1.14%                                                            | Unset by the rule; 4 ships |
+| `farFootprint` | 200 → 400: 0.43%, 4.22%. 400 → 800: 0.01%, 7.18%. 800 → 1,600: 0.01%, 0.01%                         | 800                        |
 
-- **`lightTaps` 4 is not shown converged.** Two misses the rule by 0.04 to
-  0.14 of a percent, and four has no larger rung measured beside it.
+- **`lightTaps` is unset by the rule.** Two against four is over 1%, by 0.04
+  to 0.14 of a percent, and four has no larger rung to be measured against:
+  `cloudLevers.ts` offers 0, 2 and 4. Four is what ships.
 - **`farFootprint` 800 is read on `horizon` and `inside` and on no orbit
   stance.** At 1080p the ladder passes from 200 m; Retina alone moves the
   default to 800. Two stills of `orbit` exist on the Mac mini, one at the
@@ -413,6 +453,40 @@ is under 0.04% on every rung. On `horizon`, 1080p then Retina:
   the disk with almost none of the cloud texture the first shows. The two
   differ in the footprint, the taps and the sun's depth at once, and nothing
   measured separates them.
+
+#### The landed set's ladders
+
+The `choices` campaign took the three ladders again on the landed code and
+defaults, the grid with 4 taps at 800 m, at commit `51c96da4`: 12 of 12 runs
+quiet, at 112 to 116 Hz at 1080p and 64 to 72 at Retina. The tables are
+[`choices-2026-11-10T11-49-33Z.md`](../../design/plans/weather/phase0/measurements/choices-2026-11-10T11-49-33Z.md).
+`inside` is under 0.04% on every rung, as before. On `horizon`, 1080p then
+Retina:
+
+| Lever          | Rungs                                                                                                                        | What the rule reads                                |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `maxSteps`     | 64 → 96: 47.31%, 47.72%. 96 → 128: 12.52%, 14.00%. 128 → 192: 1.82%, 1.84%. 192 → 256: 0.02%, 0.01%. 256 → 384: 0.00%, 0.01% | 192 holds                                          |
+| `lightTaps`    | 0 → 2: 2.68%, 3.00%. 2 → 4: 1.03%, 1.13%                                                                                     | Unset: two is over 1%, and four has no larger rung |
+| `farFootprint` | 200 → 400: 0.41%, 4.24%. 400 → 800: 0.01%, 7.23%. 800 → 1,600: 0.01%, 0.01%                                                  | 800, set by Retina; at 1080p 200 would pass        |
+
+The same campaign ran the three instruments on that code, kept beside its
+tables as `choices-2026-11-10T11-49-33Z-*.json`. The far comparison now scores
+the atlas at the default footprint. Footprint-averaged radiance error, the
+atlas alone against the fine march, with the cloudy bins:
+
+| Case                | 400 m     | 800 m      | 1,600 m    |
+| ------------------- | --------- | ---------- | ---------- |
+| Cirrus over cumulus | 1.647, 60 | 0.903, 102 | 0.901, 170 |
+| Broken cumulus      | 0.518, 70 | 0.280, 120 | 0.769, 190 |
+| Anvil               | 1.627, 28 | 1.566, 44  | 1.213, 77  |
+| Grazing at sunset   | 0.618, 4  | 1.518, 10  | 2.269, 20  |
+
+There is no spheres column at 800 m, so these rank nothing. The sun-accuracy
+document on that code is the grid's figures in the table above, unchanged.
+
+**What the landed ladders still do not cover:** an orbit stance, where the
+landed `orbit` still draws almost none of campaign 1's cloud texture (above);
+a rung of `lightTaps` above 4; and any stance but `horizon` and `inside`.
 
 Phase 1 takes all three ladders again, with more rungs and an orbit stance.
 
@@ -513,6 +587,13 @@ runs once.
   that crosses the sky in Earth's day turns 0.05° in 12 s, by arithmetic; no
   steady row is long enough to hold one. Phase 1 takes the rebuild off a cut
   that keeps its field and spreads the rest under a smaller cap.
+- **Under the game's own time warp the rebuild is every frame.** Outside the
+  `warp` lever, a frame is a jump when the world's step exceeds the frame's
+  by more than a second, so at 60 Hz every frame from 100× up (at 120 Hz from
+  1,000×) takes the reset path: the immediate regime and a whole grid. On
+  Earth's day the sun turns 0.05° a frame from about 720× at 60 Hz, which
+  rebuilds the grid every frame by itself. No warp row was recorded: the
+  `targets` batch runs `steady`, `cut`, `scrub` and `fly`.
 - **The sun's depth misses its 3% in most cases.** The grid is within it in
   two cases of ten at the campaign's two taps and in four of ten at the
   default four, where two decks under a high sun are still 0.097 off.
@@ -522,7 +603,8 @@ runs once.
 - **The far field lets through more light than the fine march, and is not
   shown better than the spheres at the default footprint.** Its mean
   transmittance is 1.5 times the reference's over broken cumulus and 9.5 times
-  on a grazing ray at sunset. The decision is the rule's, at 400 m.
+  on a grazing ray at sunset. The decision is the rule's, at 400 m, and is
+  provisional at the 800 m default.
   `cloudFarCompare` stays in the tree as an instrument of the atlas, and it
   runs again when phase 1 changes the far march.
 - **The volume costs 13.4 MB and 0.12 to 0.25 ms a frame to feed the grid.** A grid
