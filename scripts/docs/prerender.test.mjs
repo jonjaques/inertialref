@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  apiPrerenderEnabled,
-  docHtmlRoutes,
-  docRedirects,
-} from './prerender.mjs'
+import { docHtmlRoutes, docRedirects, loadsThroughShell } from './prerender.mjs'
 
 const pages = {
   '/docs': { kind: 'prose' },
@@ -11,138 +7,89 @@ const pages = {
   '/docs/api': { kind: 'api-index' },
   '/docs/api/spatial': { kind: 'api-package' },
   '/docs/api/spatial/Vec3-abc': { kind: 'api-member' },
+  '/docs/api/universe': { kind: 'api-package' },
+  '/docs/api/universe/Sector': { kind: 'api-member' },
 }
 const aliases = { '/docs/api/spatial/Vec3': '/docs/api/spatial/Vec3-abc' }
+const rules = (manifest) =>
+  docRedirects(manifest)
+    .split('\n')
+    .filter((line) => line !== '' && !line.startsWith('#'))
 
 describe('API HTML build policy', () => {
-  it('prerenders main and uses asynchronous reference pages elsewhere', () => {
-    expect(apiPrerenderEnabled({}, () => 'main')).toBe(true)
-    expect(apiPrerenderEnabled({}, () => 'codex/galaxy')).toBe(false)
-    expect(apiPrerenderEnabled({}, () => '')).toBe(false)
-  })
-
-  it('uses the CI source branch rather than a checkout or PR target', () => {
-    expect(apiPrerenderEnabled({ WORKERS_CI_BRANCH: 'main' }, () => '')).toBe(
-      true,
-    )
-    expect(
-      apiPrerenderEnabled({ WORKERS_CI_BRANCH: 'preview' }, () => 'main'),
-    ).toBe(false)
-    expect(
-      apiPrerenderEnabled(
-        {
-          GITHUB_HEAD_REF: 'feature',
-          GITHUB_REF_NAME: '77/merge',
-          GITHUB_BASE_REF: 'main',
-        },
-        () => 'main',
-      ),
-    ).toBe(false)
-    expect(
-      apiPrerenderEnabled(
-        { GITHUB_HEAD_REF: '', GITHUB_REF_NAME: 'main' },
-        () => '',
-      ),
-    ).toBe(true)
-  })
-
-  it('supports an explicit production verification build and rejects typos', () => {
-    expect(
-      apiPrerenderEnabled({
-        IR_PRERENDER_API: '1',
-        WORKERS_CI_BRANCH: 'preview',
-      }),
-    ).toBe(true)
-    expect(
-      apiPrerenderEnabled({ IR_PRERENDER_API: '0', WORKERS_CI_BRANCH: 'main' }),
-    ).toBe(false)
-    expect(() => apiPrerenderEnabled({ IR_PRERENDER_API: 'yes' })).toThrow(
-      'IR_PRERENDER_API',
-    )
-  })
-
-  it('emits one API loading shell while keeping prose as HTML', () => {
-    expect(docHtmlRoutes({ pages, prerenderApi: false })).toEqual([
+  it('renders prose, the API shell and package pages, and no member page', () => {
+    expect(docHtmlRoutes({ pages })).toEqual([
       '/docs',
       '/docs/concepts/frames',
       '/docs/api',
+      '/docs/api/spatial',
+      '/docs/api/universe',
     ])
-    expect(docHtmlRoutes({ pages, prerenderApi: true })).toEqual(
-      Object.keys(pages),
+  })
+
+  it('loads the API index and member pages through the shell, and nothing else', () => {
+    expect(Object.keys(pages).filter(loadsThroughShell)).toEqual([
+      '/docs/api',
+      '/docs/api/spatial/Vec3-abc',
+      '/docs/api/universe/Sector',
+    ])
+  })
+
+  it('rewrites each package to the shell after its aliases and the normalization rules', () => {
+    const table = rules({ pages, aliases })
+    expect(table).toEqual([
+      '/docs/api/spatial/Vec3 /docs/api/spatial/Vec3-abc 301',
+      '/docs/api/*/ /docs/api/:splat 301',
+      '/docs/api/*.html /docs/api/:splat 301',
+      '/docs/api/spatial/* /docs/api 200',
+      '/docs/api/universe/* /docs/api 200',
+    ])
+    // A package page and the shell are HTML; a rewrite over either would loop
+    // or serve the shell in place of the package's article.
+    expect(table.some((line) => line.startsWith('/docs/api '))).toBe(false)
+    expect(table.some((line) => line.startsWith('/docs/api/spatial '))).toBe(
+      false,
+    )
+    expect(table.some((line) => line.includes('/docs/concepts'))).toBe(false)
+  })
+
+  it('keeps an alias that an exact page shadows out of the table', () => {
+    const shadowed = {
+      ...pages,
+      '/docs/api/spatial/Vec3': { kind: 'api-member' },
+    }
+    expect(rules({ pages: shadowed, aliases })).not.toContain(
+      '/docs/api/spatial/Vec3 /docs/api/spatial/Vec3-abc 301',
     )
   })
 
-  it('proxies only known API addresses and preserves case-sensitive aliases', () => {
-    const redirects = docRedirects({ pages, aliases, prerenderApi: false })
-    expect(redirects).toContain(
-      '/docs/api/spatial/Vec3 /docs/api/spatial/Vec3-abc 301\n',
-    )
-    expect(redirects).toContain('/docs/api/spatial/Vec3-abc /docs/api 200\n')
-    expect(redirects).not.toContain('/docs/api /docs/api 200')
-    expect(redirects).not.toContain('/docs/api/* /docs/api 200')
-    expect(redirects).not.toContain('/docs/concepts/frames /docs/api')
-    expect(docRedirects({ pages, aliases, prerenderApi: true })).not.toContain(
-      ' 200',
-    )
-  })
-
-  it('collapses the largest package into one rewrite once exact proxies pass the limit', () => {
+  it('does not grow with the member count', () => {
     const wide = {
-      '/docs/api': { kind: 'api-index' },
-      '/docs/api/universe': { kind: 'api-package' },
-      '/docs/api/spatial': { kind: 'api-package' },
-      '/docs/api/spatial/Vec3-abc': { kind: 'api-member' },
+      ...pages,
       ...Object.fromEntries(
-        Array.from({ length: 2001 }, (_, i) => [
+        Array.from({ length: 5000 }, (_, i) => [
           `/docs/api/universe/Symbol${i}`,
           { kind: 'api-member' },
         ]),
       ),
     }
-    const rules = docRedirects({ pages: wide, aliases, prerenderApi: false })
-      .split('\n')
-      .filter((line) => line !== '' && !line.startsWith('#'))
-    const splat = rules.indexOf('/docs/api/universe/* /docs/api 200')
-    expect(splat).toBeGreaterThan(
-      rules.indexOf('/docs/api/*.html /docs/api/:splat 301'),
-    )
-    expect(rules).toContain('/docs/api/universe /docs/api 200')
-    expect(rules).toContain('/docs/api/spatial/Vec3-abc /docs/api 200')
-    expect(rules).toContain(
-      '/docs/api/spatial/Vec3 /docs/api/spatial/Vec3-abc 301',
-    )
-    expect(
-      rules.some((line) => line.startsWith('/docs/api/universe/Symbol')),
-    ).toBe(false)
-    expect(
-      rules.filter((line) => !line.includes('*')).length,
-    ).toBeLessThanOrEqual(2000)
+    expect(rules({ pages: wide, aliases })).toEqual(rules({ pages, aliases }))
   })
 
-  it('fails before Cloudflare silently drops routes above its static rule limit', () => {
-    const many = Object.fromEntries(
+  it('fails before Cloudflare silently drops rules past either of its limits', () => {
+    const manyAliases = Object.fromEntries(
       Array.from({ length: 2001 }, (_, i) => [
-        `/docs/api/symbol${i}`,
+        `/docs/api/spatial/vec${i}`,
+        '/docs/api/spatial/Vec3-abc',
+      ]),
+    )
+    expect(() => docRedirects({ pages, aliases: manyAliases })).toThrow('2,000')
+    const manyPackages = Object.fromEntries(
+      Array.from({ length: 99 }, (_, i) => [
+        `/docs/api/package${i}/Member`,
         { kind: 'api-member' },
       ]),
     )
-    expect(() => docRedirects({ pages: many, prerenderApi: false })).toThrow(
-      '2,000',
-    )
-  })
-
-  it('fails before the collapsed packages pass the dynamic rule limit', () => {
-    // 3,600 exact rules of two members a package: fitting 2,000 collapses
-    // 800 packages, each one splat rule, against a limit of 100.
-    const narrow = Object.fromEntries(
-      Array.from({ length: 1200 }, (_, i) => [
-        [`/docs/api/package${i}`, { kind: 'api-package' }],
-        [`/docs/api/package${i}/A`, { kind: 'api-member' }],
-        [`/docs/api/package${i}/B`, { kind: 'api-member' }],
-      ]).flat(),
-    )
-    expect(() => docRedirects({ pages: narrow, prerenderApi: false })).toThrow(
-      '100 dynamic',
-    )
+    expect(() => docRedirects({ pages: manyPackages })).toThrow('100')
   })
 })

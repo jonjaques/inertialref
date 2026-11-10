@@ -13,7 +13,7 @@ import { loadHighlighter } from './highlight.mjs'
 import { renderMarkdown } from './markdown.mjs'
 import { assetName, routeFor, sourceUrl } from './routes.mjs'
 import { allWings, documentsUnderDocs, listedPages } from './wings.mjs'
-import { apiPrerenderEnabled, docRedirects } from './prerender.mjs'
+import { docRedirects } from './prerender.mjs'
 
 /*
  * The documentation build.
@@ -101,7 +101,6 @@ async function main() {
   )
 
   const manifest = {
-    prerenderApi: apiPrerenderEnabled(),
     /*
      * A digest of everything the manifest describes, so a client can tell one
      * build's content from another's without a wall clock in the output. A
@@ -184,8 +183,7 @@ async function main() {
         `(${manifest.counts.documents} documents, ${manifest.counts.exports} exports ` +
         `across ${manifest.counts.packages} packages), ` +
         `${manifest.counts.words.toLocaleString('en-US')} words, ` +
-        `${manifest.counts.diagrams} diagrams, in ${ms.toFixed(0)} ms; ` +
-        `API HTML: ${manifest.prerenderApi ? 'prerendered' : 'async'}`,
+        `${manifest.counts.diagrams} diagrams, in ${ms.toFixed(0)} ms`,
     )
 }
 
