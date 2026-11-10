@@ -734,7 +734,12 @@ const PLATE_FIELDS = ['file', 'sha256', 'role', 'commit', 'levers']
  * freeze of the anchors, 2026-11-10).
  */
 function anchorRecord(scene) {
-  const stills = scene.anchors.map(({ path: _, ...one }) => one)
+  // The local path differs by machine; the record keeps the file and hash.
+  const stills = scene.anchors.map(({ file, sha256: hash, about }) => ({
+    file,
+    sha256: hash,
+    about,
+  }))
   const unmatched =
     stills.length === 0
       ? 'no matched anchor'
