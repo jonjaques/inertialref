@@ -10,8 +10,11 @@ code and nobody reproduced says so.
 
 [ADR-0056](../../docs/adr/0056-the-air-is-measured-and-its-gain-is-pi.md) holds
 the physics and [ADR-0037](../../docs/adr/0037-the-enhanced-camera.md) the
-camera and Enhanced's ring. The look council's own findings — the rims, the
-twilight domes, Titan's collars — are [its defects log](look-council-defects.md),
+camera and Enhanced's ring.
+[ADR-0065](../../docs/adr/0065-a-scene-unit-is-the-sun-above-the-air-and-the-sensors-white-is-half-a-stop-under-it.md)
+names the scene unit they are both measured in. The look council's own
+findings — the rims, the twilight domes, Titan's collars — are
+[its defects log](look-council-defects.md),
 and its protocol is [its plan](look-council.md). What the air costs is in
 [perf](perf.md#the-air).
 
@@ -90,8 +93,9 @@ the galaxy and the stars dim to 0.70 of the world. No emitter is calibrated
 against either constant yet, so the move improves no picture there is to
 judge. The weather's phase 5 calibrates the moon, airglow and the stars
 together and re-scores `night-side`, and fixes these conversions with them.
-Recorded by the weather's phase 0, which names the scene unit and changes no
-constant's value; the figures are computed from the constants.
+[ADR-0065](../../docs/adr/0065-a-scene-unit-is-the-sun-above-the-air-and-the-sensors-white-is-half-a-stop-under-it.md)
+names the unit and holds the naming with three tests; it changes no
+constant's value, and every figure here is computed from the constants.
 
 An absolute emitter added before then divides its physical radiance by
 `SCENE_UNIT_LUMINANCE`, and under Enhanced staging by its body's `sunlight`

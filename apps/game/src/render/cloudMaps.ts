@@ -48,8 +48,8 @@ import { warmSensorPass } from './warmup.ts'
 /*
  * The weather cube: a 2D atlas of six tangent-warped face tiles, 3 × 2, each
  * 512² with a one-texel gutter, four RGBA8 targets drawn by one MRT quad,
- * baked from the placeholder's coverage function one face a frame. The bakes
- * read it — the clipmap's levels, the far atlas, the sphere caches — and the
+ * baked from the placeholder's coverage function one face a frame. Two bakes
+ * read it — the clipmap's levels and the served body's far atlas — and the
  * fine march does not, which keeps the trace kernel inside the binding limit.
  *
  * Phase 0's packing (§3.9), which the clipmap shares, so a fine step's
