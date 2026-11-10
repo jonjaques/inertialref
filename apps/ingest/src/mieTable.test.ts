@@ -206,6 +206,8 @@ describe('the distribution, the bands and the index', () => {
 })
 
 describe('the committed table', () => {
+  // 3.6 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 14 s. Five times that.
   it('is the series’ own: three rows recomputed meet its phase, bulk and glory', () => {
     // The rendering package's tests read this file's gloryRed and bulk as
     // facts about the series; this is what makes them so. The rows are the
@@ -235,5 +237,5 @@ describe('the committed table', () => {
       expect(table.bulk[row]!.albedo).toBeCloseTo(mean(albedo), 4)
       expect(Math.abs(table.gloryRed[row]! - gloryRing(row))).toBeLessThan(0.01)
     })
-  })
+  }, 80_000)
 })
