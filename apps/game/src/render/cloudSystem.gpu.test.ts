@@ -190,10 +190,11 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     const steady = await order({ force: 'none' })
     // The volume before the sun grid that sums through it, each refreshing
     // a share of its slices a frame: the volume's budget of 8, the grid's 4.
+    // The cube and the clipmap bake at the pace their field moves, a face
+    // or an eighth of a level every few seconds at 1×, so a steady frame of
+    // a held instant draws neither (phase 1 design §4.7).
     expect(steady).toEqual([
       ['scene over clouds', 1],
-      ['cloud maps', 1],
-      ['cloud clipmap', 1],
       ['cloud volume', 8],
       ['cloud sun grid', 4],
       ['cloud far atlas', 1],

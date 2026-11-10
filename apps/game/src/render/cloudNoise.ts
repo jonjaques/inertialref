@@ -27,6 +27,8 @@ import {
   CURL_GAIN,
   CURL_REACH,
   DETAIL_NOISE_PERIOD,
+  MESOSCALE_GRADIENT,
+  MESOSCALE_WAVES,
   NOISE_LANES,
 } from '@inertialref/rendering'
 import type { CloudFrame } from './cloudFrame.ts'
@@ -505,6 +507,99 @@ export class CloudNoise implements CloudResource {
   }
 }
 
+/* ------------------------------------------------------------------------- */
+/* The mesoscale displacement                                                 */
+/* ------------------------------------------------------------------------- */
+
+const wgslVec = (v: { x: number; y: number; z: number }): string =>
+  `vec3<f32>(${v.x}, ${v.y}, ${v.z})`
+
+/*
+ * `weatherField.ts`'s displacement, `w = Σ a·cell·push·sin(φ)`, and its
+ * rate along a direction, `Σ a·cell·push·cos(φ)·k·(along·r)`, which is
+ * `MESOSCALE_GRADIENT·Σ push·cos(φ)·(along·r)` because every wave's
+ * amplitude is that gradient over its wavenumber. Each phase is the eye's,
+ * formed in float64 (`mesoscalePhases`), plus `k·(along·turned)` for the
+ * turned offset from the eye, then reduced by a turn: across a far bake the
+ * sum reaches 600 radians, where a float32 sine's argument has lost its
+ * low bits and some implementations their accuracy.
+ */
+const waveTerms = (body: (j: number, phase: string) => string): string =>
+  MESOSCALE_WAVES.map(({ along, wavelength }, j) => {
+    const phase = `phase${j}`
+    return `
+    let ${phase}raw = ${j < 3 ? `a[${j}]` : `b[${j - 3}]`} + ${(2 * Math.PI) / wavelength} / cell * dot(${wgslVec(along)}, turned);
+    let ${phase} = ${phase}raw - ${2 * Math.PI} * floor(${phase}raw / ${2 * Math.PI});
+    ${body(j, phase)}`
+  }).join('')
+
+const mesoscaleCode = /*@__PURE__*/ wgslFn(`
+  fn cloudMesoscale(turned: vec3<f32>, a: vec3<f32>, b: vec3<f32>, cell: f32) -> vec3<f32> {
+    var w = vec3<f32>(0.0);${waveTerms(
+      (j, phase) =>
+        `w += ${wgslVec(MESOSCALE_WAVES[j]!.push)} * (${MESOSCALE_WAVES[j]!.amplitude} * cell * sin(${phase}));`,
+    )}
+    return w;
+  }
+`)
+
+const mesoscaleRateCode = /*@__PURE__*/ wgslFn(`
+  fn cloudMesoscaleRate(turned: vec3<f32>, up: vec3<f32>, a: vec3<f32>, b: vec3<f32>, cell: f32) -> vec3<f32> {
+    var rate = vec3<f32>(0.0);${waveTerms(
+      (j, phase) =>
+        `rate += ${wgslVec(MESOSCALE_WAVES[j]!.push)} * (${MESOSCALE_GRADIENT} * cos(${phase}) * dot(${wgslVec(MESOSCALE_WAVES[j]!.along)}, up));`,
+    )}
+    return rate;
+  }
+`)
+
+/**
+ * A level's mesoscale displacement, meters in its turned frame, at a point
+ * whose turned offset from the eye is `turned`, for the eye's six phases
+ * (`a`, `b`) and the level's cell: six sines. A bake's, never a march
+ * step's: the fine march reads it from the clipmap (`cloudClipmap.ts`).
+ */
+export function mesoscaleNode(
+  turned: Node<'vec3'>,
+  phases: readonly [Node<'vec3'>, Node<'vec3'>],
+  cell: Node<'float'>,
+): Node<'vec3'> {
+  return mesoscaleCode({
+    turned,
+    a: phases[0],
+    b: phases[1],
+    cell,
+  }) as unknown as Node<'vec3'>
+}
+
+/** The displacement's rate along a turned unit direction, meters a meter: six cosines, a bake's. */
+export function mesoscaleRateNode(
+  turned: Node<'vec3'>,
+  up: Node<'vec3'>,
+  phases: readonly [Node<'vec3'>, Node<'vec3'>],
+  cell: Node<'float'>,
+): Node<'vec3'> {
+  return mesoscaleRateCode({
+    turned,
+    up,
+    a: phases[0],
+    b: phases[1],
+    cell,
+  }) as unknown as Node<'vec3'>
+}
+
+/*
+ * The field's construction hands the maps the uniform bundle and nothing
+ * else, and the maps' climate reads the base noise for its synoptic field.
+ * So the noise a bundle's field built is found by the bundle (`noiseOf`).
+ */
+const NOISES = new WeakMap<CloudUniforms, CloudNoise>()
+
+/** The noise built for a uniform bundle by `createCloudNoise`, if any. */
+export function noiseOf(uniforms: CloudUniforms): CloudNoiseNodes | null {
+  return NOISES.get(uniforms)?.nodes ?? null
+}
+
 /**
  * The noises a field is built on.
  *
@@ -512,8 +607,10 @@ export class CloudNoise implements CloudResource {
  * every factory more than that, so a module whose constructor needs another
  * part asks for it here and the field's construction does not change.
  */
-export function createCloudNoise(_deps: {
+export function createCloudNoise(deps: {
   readonly uniforms: CloudUniforms
 }): CloudNoise {
-  return new CloudNoise()
+  const noise = new CloudNoise()
+  NOISES.set(deps.uniforms, noise)
+  return noise
 }

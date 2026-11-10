@@ -6,7 +6,6 @@ import {
   PlaneGeometry,
   Scene,
   StorageBufferAttribute,
-  type Texture,
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
@@ -18,81 +17,109 @@ import {
   Loop,
   storage,
   texture,
-  texture3D,
-  textureLoad,
   uint,
   uv,
   vec3,
   vec4,
 } from 'three/tsl'
+import { rootSeed } from '@inertialref/procedural'
 import {
-  CLOUD_GENERA,
+  type BodyWeather,
+  bodyWeather,
   cloudExtents,
-  genusProfile,
+  cloudFieldAt,
+  type FieldClock,
+  fieldClock,
   horizonBasis,
   levelFrames,
-  periodIndex,
-  scenarioCoverage,
-  shellBoundaries,
+  levelProfile,
+  regimeWeather,
   shellHeights,
   WEATHER_SCENARIOS,
-  type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
+import {
+  type Body,
+  formatAddress,
+  galaxySeedOf,
+  generateSystem,
+  MILKY_WAY,
+  resolveSystem,
+  SOL_ONLY_CATALOG,
+  systemId,
+  walkBodies,
+} from '@inertialref/universe'
 import { CloudClipmap } from './cloudClipmap.ts'
 import { analyticMedium, fieldMedium, synopticMedium } from './cloudDensity.ts'
 import {
   CLOUD_CLIPMAP_SIZE,
   CLOUD_CLIPMAP_TEXELS,
   type CloudFrame,
-  scenarioWeather,
+  weatherClimate,
+  weatherLevels,
 } from './cloudFrame.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { CloudMaps } from './cloudMaps.ts'
 import type { CloudBudget, CloudMediumFn, CloudSample } from './cloudNodes.ts'
 import { CloudNoise } from './cloudNoise.ts'
-import { CloudProfile } from './cloudProfile.ts'
+import {
+  bodyLevelSpecs,
+  type CloudProfile,
+  createCloudProfile,
+} from './cloudProfile.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The media against §5.6 on the CPU, at sampled points (§3.10).
+ * The media against the CPU field they port, `cloudFieldAt` (phase 1
+ * design §4.3, §5.2, §5.3): the drawn extinction at a body point and an
+ * instant equals the oracle's, through the real chain — the climate baked
+ * into the cube, resampled into the clipmap with the mesoscale displacement,
+ * the profile table's bytes, the noise's bytes — at three stances; one body
+ * point from two eyes, one over a pole, reads one density; the field turns
+ * as the CPU's does; a footprint's fade keeps the field's transmittance; and
+ * every read names level 0.
  *
- * Every point is placed where each texture it reads is read at a texel
- * center — the base noise's, the detail's, the profile's — so the GPU's
- * filter returns the stored texel exactly and the reference can take the
- * same stored bytes, read back with `textureLoad`. What is left between the
- * two is the recipe's own float32 arithmetic; the noise is held to
- * `weatherNoise.ts` by `cloudNoise.gpu.test.ts`, the coverage by the maps'
- * and the clipmap's tests. A reference that recomputed the noise instead
- * would differ by a rounding of an 8-bit store, amplified by the remap's
- * division by the coverage.
+ * What the drawn field may differ by, and its sources, are measured here
+ * and named at each bound: the climate's bytes, the sampler's fixed-point
+ * weights, the displacement carried by the clipmap as a value and a rate
+ * and stored in half floats, and float32 against float64.
  */
 
 let gpu: GpuSession
 let renderer: WebGPURenderer
 let noise: CloudNoise
-let profile: CloudProfile
 
-const EARTH = 6_371_000
 const TIME = 7.3e9
-/**
- * float32 against float64 over §5.6's two divisions and two mixes, relative
- * to the layer's σ: parts in 10⁶, held at 10⁻⁴.
- */
-const RECIPE = 1e-4
+
+const ROOT = rootSeed('inertialref')
+const SOL: ReadonlyMap<string, Body> = (() => {
+  const stub = resolveSystem(
+    galaxySeedOf(ROOT, MILKY_WAY),
+    SOL_ONLY_CATALOG,
+    systemId('SOL'),
+  )!
+  const system = generateSystem(ROOT, MILKY_WAY, stub)
+  return new Map(
+    [...walkBodies(system)].map((body) => [formatAddress(body.address), body]),
+  )
+})()
+const EARTH_RECORD = SOL.get('g:milky-way/s:SOL/b:2')!
+const SERVED_EARTH: Body = {
+  ...EARTH_RECORD,
+  appearance: { ...EARTH_RECORD.appearance, clouds: null },
+}
+const EARTH = SERVED_EARTH.radius
 
 beforeAll(async () => {
   gpu = await openGpu(8, 8)
   renderer = gpu.renderer
   noise = new CloudNoise()
   await noise.warm(renderer)
-  profile = new CloudProfile()
 })
 
 afterAll(() => {
   noise.dispose()
-  profile.dispose()
   gpu.dispose()
 })
 
@@ -128,79 +155,64 @@ const added = (a: Vec3, b: Vec3): Vec3 => ({
   y: a.y + b.y,
   z: a.z + b.z,
 })
+const less = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.x - b.x,
+  y: a.y - b.y,
+  z: a.z - b.z,
+})
 
-const EYE = scaled(unit({ x: 0.3, y: 0.9, z: -0.31 }), EARTH + 1200)
-const NOISE_ORIGIN: Vec3 = { x: 1234.5, y: 2345.25, z: 3456.125 }
-const DRIFT: Vec3 = { x: 10, y: -20, z: 30 }
+const SUN = unit({ x: 0.9, y: 0.42, z: 0.1 })
 
-/**
- * The detail origin's lead on the base's, meters: a base texel center then
- * lands on a detail texel center in every layer, which takes a lead of
- * cell·(1 + 2m)/64 for an integer m in each.
- */
-function detailLead(scenario: WeatherScenario): number {
-  const cells = scenario.layers.map((layer) => layer.cellMeters)
-  for (let m = 0; m < 64; m += 1) {
-    const lead = (cells[0]! * (1 + 2 * m)) / 64
-    if (
-      cells.every((cell) => {
-        const odd = (lead * 64) / cell
-        return Number.isInteger(odd) && odd % 2 === 1
-      })
-    )
-      return lead
-  }
-  throw new Error(`no detail lead serves ${scenario.id}'s cells`)
-}
-
-/** A frame with every field the bundle writes, copied into `uniforms`. */
+/** A frame with every field the bundle writes, written into `uniforms`: the weather's own levels and climate. */
 function frameAt(
   uniforms: CloudUniforms,
-  scenario: WeatherScenario,
-  previous: CloudFrame | null,
+  weather: BodyWeather,
+  key: string,
+  eye: Vec3,
+  time = TIME,
+  previous: CloudFrame | null = null,
 ): CloudFrame {
-  const lead = detailLead(scenario)
-  const { east, north } = horizonBasis(EYE)
-  const ORIGINS = {
-    noise: NOISE_ORIGIN,
-    detail: added(NOISE_ORIGIN, { x: lead, y: lead, z: lead }),
-  }
+  const drawn = { weather, regime: null } as const
+  const levels = weatherLevels(drawn, time, eye)
   const frame = {
-    levers: { ...DEFAULT_CLOUD_LEVERS, on: true, weather: scenario.id },
-    scenario,
+    levers: { ...DEFAULT_CLOUD_LEVERS, on: true },
+    scenario: WEATHER_SCENARIOS['fair-cumulus'],
     served: {
       address: 'test',
       datumRadius: EARTH,
       compression: 1,
       toBodyFixed: { x: 0, y: 0, z: 0, w: 1 },
-      eye: EYE,
-      sun: { x: 0, y: 1, z: 0 },
-      shells: shellHeights(EYE, EARTH, shellBoundaries(scenario)),
+      eye,
+      sun: SUN,
+      shells: shellHeights(
+        eye,
+        EARTH,
+        levels.flatMap((level) => [level.base, level.top]),
+      ),
       scattering: null,
       limb: 0,
       limbFalloff: 1,
       dayColor: { r: 1, g: 1, b: 1 },
-      noiseOrigin: ORIGINS.noise,
-      detailOrigin: ORIGINS.detail,
-      drift: DRIFT,
-      wind: added(
-        scaled(east, scenario.wind.east),
-        scaled(north, scenario.wind.north),
-      ),
+      noiseOrigin: { x: 0, y: 0, z: 0 },
+      detailOrigin: { x: 0, y: 0, z: 0 },
+      drift: { x: 0, y: 0, z: 0 },
+      wind: { x: 0, y: 0, z: 0 },
       clipmap: levelFrames(
-        EYE,
+        eye,
         EARTH,
         CLOUD_CLIPMAP_TEXELS,
         CLOUD_CLIPMAP_SIZE,
         previous?.served.clipmap.frames ?? null,
       ),
       volume: { frames: [], dirty: [], rebuilt: [] },
-      ...scenarioWeather(scenario, ORIGINS, TIME),
+      weatherKey: key,
+      levels,
+      climate: weatherClimate(drawn, time, SUN),
     },
     second: null,
-    time: TIME,
-    frameSeconds: 0,
-    period: periodIndex(TIME, scenario.patternPeriod),
+    time,
+    frameSeconds: previous === null ? 0 : time - previous.time,
+    period: [0, 0],
     camera: {
       right: { x: 1, y: 0, z: 0 },
       up: { x: 0, y: 1, z: 0 },
@@ -214,7 +226,7 @@ function frameAt(
     enhanced: false,
     regime: 'converging',
     reset: 'none',
-    jump: false,
+    jump: previous !== null && time !== previous.time,
     frameIndex: 0,
     extents: cloudExtents({ width: 64, height: 64 }, { width: 64, height: 64 }),
   } satisfies CloudFrame
@@ -222,63 +234,89 @@ function frameAt(
   return frame
 }
 
-/** The served body's field for `scenario`: a cube and a clipmap baked whole at `EYE`. */
+/** The served body's field at `eye`: a cube and a clipmap baked whole, the profile written. */
 interface Field {
   readonly uniforms: CloudUniforms
+  readonly profile: CloudProfile
   readonly maps: CloudMaps
   readonly clipmap: CloudClipmap
+  readonly frame: CloudFrame
+  readonly media: {
+    readonly field: CloudMediumFn
+    readonly synoptic: CloudMediumFn
+    readonly analytic: CloudMediumFn
+  }
   dispose(): void
 }
 
-function bakeField(scenario: WeatherScenario): Field {
+function bakeField(
+  weather: BodyWeather,
+  key: string,
+  eye: Vec3,
+  time = TIME,
+): Field {
   const uniforms = createCloudUniforms()
-  const maps = new CloudMaps(uniforms)
+  const profile = createCloudProfile({ uniforms })
+  const maps = new CloudMaps(uniforms, noise.nodes)
   const clipmap = new CloudClipmap(uniforms, maps.nodes)
-  let frame = frameAt(uniforms, scenario, null)
-  for (let k = 0; k < 6; k += 1) maps.render(renderer, frame, budget)
-  for (let k = 0; k < 4; k += 1) {
+  let frame = frameAt(uniforms, weather, key, eye, time)
+  for (let k = 0; k < 8; k += 1) {
+    maps.render(renderer, frame, budget)
     clipmap.render(renderer, frame, budget)
-    frame = frameAt(uniforms, scenario, frame)
+    frame = frameAt(uniforms, weather, key, eye, time, frame)
   }
   expect(maps.pending).toBe(false)
   expect(clipmap.pending).toBe(false)
+  const recipe = { uniforms, noise: noise.nodes, profile }
   return {
     uniforms,
+    profile,
     maps,
     clipmap,
+    frame,
+    media: {
+      field: fieldMedium({ ...recipe, clipmap: clipmap.nodes }),
+      synoptic: synopticMedium({ ...recipe, maps: maps.nodes }),
+      analytic: analyticMedium(recipe),
+    },
     dispose() {
       maps.dispose()
       clipmap.dispose()
+      profile.dispose()
     },
   }
 }
 
-/** A sample's inputs, as a test places them. */
+/** A sample's inputs: its body point, and the meters it stands for. */
 interface Point {
-  readonly offset: Vec3
-  readonly altitude: number
+  readonly position: Vec3
   readonly footprint: number
 }
 
-/** `medium` at each point, one thread each: (fraction, σ, layer, column) and the radius. */
+/** `medium` at each point seen from `eye`, one thread each: (fraction, σ′, level, column), and (radius, depth). */
 async function evaluate(
   points: readonly Point[],
+  eye: Vec3,
   medium: CloudMediumFn,
   uniforms: CloudUniforms,
 ): Promise<Float32Array> {
   const count = points.length
   const input = new StorageBufferAttribute(
     new Float32Array(
-      points.flatMap(({ offset, altitude, footprint }) => [
-        offset.x,
-        offset.y,
-        offset.z,
-        altitude,
-        footprint,
-        Math.hypot(offset.x, offset.y, offset.z),
-        0,
-        0,
-      ]),
+      points.flatMap(({ position, footprint }) => {
+        const offset = less(position, eye)
+        const altitude = Math.hypot(position.x, position.y, position.z) - EARTH
+        return [
+          offset.x,
+          offset.y,
+          offset.z,
+          altitude,
+          footprint,
+          Math.hypot(offset.x, offset.y, offset.z),
+          0,
+          0,
+        ]
+      }),
     ),
     4,
   )
@@ -300,429 +338,388 @@ async function evaluate(
       into
         .element(instanceIndex.mul(2))
         .assign(vec4(m.fraction, m.sigma, float(m.layer), m.column))
-      into.element(instanceIndex.mul(2).add(1)).assign(vec4(m.radius, 0, 0, 0))
-    })
-  })().compute(count)
-  await gpu.compute(kernel)
-  return new Float32Array(await gpu.readBuffer(output))
-}
-
-/** Texels at integer coordinates, `textureLoad`ed by one thread each: RGBA a texel. */
-async function loadTexels(
-  map: Texture,
-  kind: '2d-array' | '3d',
-  at: readonly (readonly [number, number, number])[],
-): Promise<Float32Array> {
-  const count = at.length
-  const input = new StorageBufferAttribute(
-    new Int32Array(at.flatMap(([x, y, z]) => [x, y, z, 0])),
-    4,
-  )
-  const output = new StorageBufferAttribute(new Float32Array(count * 4), 4)
-  const coordinates = storage(input, 'ivec4', count)
-  const into = storage(output, 'vec4', count)
-  const kernel = Fn(() => {
-    If(instanceIndex.lessThan(uint(count)), () => {
-      const c = coordinates.element(instanceIndex)
       into
-        .element(instanceIndex)
-        .assign(
-          kind === '3d'
-            ? texture3D(map).load(c.xyz)
-            : textureLoad(map, c.xy).depth(c.z),
-        )
+        .element(instanceIndex.mul(2).add(1))
+        .assign(vec4(m.radius, m.depth, 0))
     })
   })().compute(count)
   await gpu.compute(kernel)
   return new Float32Array(await gpu.readBuffer(output))
 }
 
-const noiseTexture = (name: string): Texture =>
-  noise.textures().find((t) => t.name === name)!
+/** The scaled reference σ′ of a weather's level: what an error in extinction is measured against. */
+const referenceSigma = (weather: BodyWeather, level: number): number =>
+  levelProfile(weather.levels[level]!).scaled
 
-const smoothstep = (e0: number, e1: number, x: number): number => {
-  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)))
-  return t * t * (3 - 2 * t)
-}
-const saturate = (x: number): number => Math.min(1, Math.max(0, x))
-const fract = (x: number): number => x - Math.floor(x)
-
-/** Where a point's reads land: the base and detail texels, the profile texel, its layer. */
-interface Placed extends Point {
-  readonly layer: number
-  readonly base: readonly [number, number, number]
-  readonly detail: readonly [number, number, number]
-  readonly height: number
+interface Errors {
+  /** |Δ(fraction·σ′)| over the level's σ′, at every point either side holds cloud. */
+  readonly errors: number[]
+  readonly clouded: number
+  readonly levels: number
 }
 
-/**
- * Points inside each layer at profile texel heights, with offsets that put
- * the base read on a texel center (the detail follows by `detailLead`), at
- * footprints across resolved, eroded-in-part and unresolved; and a point
- * between the layers and one over them.
- */
-function placePoints(
-  scenario: WeatherScenario,
+/** The drawn medium against `cloudFieldAt` at every point. */
+function against(
+  weather: BodyWeather,
+  clock: FieldClock,
+  points: readonly Point[],
+  read: Float32Array,
+): Errors {
+  const errors: number[] = []
+  let clouded = 0
+  let levels = 0
+  points.forEach(({ position, footprint }, n) => {
+    const want = cloudFieldAt(weather, clock, SUN, position, footprint)
+    const level = read[n * 8 + 2]!
+    if (level === want.level) levels += 1
+    if (want.level < 0) return
+    const drawn = read[n * 8]! * read[n * 8 + 1]!
+    const expected = want.fraction * want.sigma
+    if (expected > 0) clouded += 1
+    // Where either side holds cloud: a clear point agreeing with a clear
+    // point says nothing of the port.
+    if (drawn > 0 || expected > 0)
+      errors.push(
+        Math.abs(drawn - expected) / referenceSigma(weather, want.level),
+      )
+  })
+  return { errors, clouded, levels }
+}
+
+const quantile = (values: readonly number[], q: number): number => {
+  const sorted = [...values].sort((a, b) => a - b)
+  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!
+}
+
+/** Points in a weather's levels around a ground point, uniform in height through each level and in area out to `reach`. */
+function pointsAround(
+  weather: BodyWeather,
+  ground: Vec3,
+  reach: number,
   seed: number,
-  periods = 1,
-): Placed[] {
+  count = 1000,
+  footprints: readonly number[] = [0],
+): Point[] {
   const next = draws(seed)
-  const lead = detailLead(scenario)
-  const points: Placed[] = []
-  const footprints = [0, 1 / 12, 1 / 6, 0.5, 2]
-  for (let n = 0; n < 240; n += 1) {
-    const layer = n % scenario.layers.length
-    const spec = scenario.layers[layer]!
-    const cell = spec.cellMeters
-    const height = 1 + Math.floor(next() * 62)
-    const altitude = spec.base + ((spec.top - spec.base) * height) / 63
-    const texel = [0, 1, 2].map(() => Math.floor(next() * 128))
-    const shift = [0, 1, 2].map(
-      () => Math.floor(next() * 2 * periods) - periods,
+  const { east, north, up } = horizonBasis(ground)
+  const filled = weather.levels
+    .map((level, k) => ({ level, k }))
+    .filter(({ level }) => level.top > level.base)
+  return Array.from({ length: count }, (_, n) => {
+    const { level } = filled[n % filled.length]!
+    const angle = next() * 2 * Math.PI
+    const distance = reach * Math.sqrt(next())
+    const height = level.base + (level.top - level.base) * next()
+    const across = added(
+      scaled(east, distance * Math.cos(angle)),
+      scaled(north, distance * Math.sin(angle)),
     )
-    const origin = [NOISE_ORIGIN.x, NOISE_ORIGIN.y, NOISE_ORIGIN.z]
-    const drift = [DRIFT.x, DRIFT.y, DRIFT.z]
-    // The lattice is read at origin − drift + offset: the wind carries it.
-    const offset = [0, 1, 2].map(
-      (a) =>
-        ((texel[a]! + 0.5) / 16 + 8 * shift[a]!) * cell -
-        origin[a]! +
-        drift[a]!,
-    )
-    const detail = offset.map((o, a) => {
-      const at = (8 * 4 * (origin[a]! + lead - drift[a]! + o)) / cell
-      expect(Math.abs(fract(at) - 0.5)).toBeLessThan(1e-6)
-      return ((Math.floor(at) % 32) + 32) % 32
-    })
-    points.push({
-      offset: { x: offset[0]!, y: offset[1]!, z: offset[2]! },
-      altitude,
-      footprint: footprints[n % footprints.length]! * cell,
-      layer,
-      base: texel as [number, number, number],
-      detail: detail as [number, number, number],
-      height,
-    })
-  }
-  return points
+    const radial = unit(added(scaled(up, EARTH), across))
+    return {
+      position: scaled(radial, EARTH + height),
+      footprint: footprints[n % footprints.length]!,
+    }
+  })
 }
 
-/** §5.6 in float64, from the stored bytes each read takes. */
-function reference(
-  scenario: WeatherScenario,
-  point: Placed,
-  cover: number,
-  base: number,
-  detail: number,
-): { readonly fraction: number; readonly sigma: number } {
-  const spec = scenario.layers[point.layer]!
-  const cell = spec.cellMeters
-  const row = CLOUD_GENERA.indexOf(spec.genus)
-  const table = profile.texture.image.data as Uint8Array
-  const at = (row * 64 + point.height) * 4
-  const p = table[at]! / 255
-  const mean = table[at + 1]! / 255
-  const reach = 1 - smoothstep(cell / 16, cell / 4, point.footprint)
-  const erosion = reach > 0 ? detail * spec.erosion * reach : 0
-  const shaped = saturate((base * p - (1 - cover)) / Math.max(cover, 1e-6))
-  const eroded = saturate((shaped - erosion) / Math.max(1 - erosion, 1e-6))
-  const f = smoothstep(cell / 4, cell, point.footprint)
-  const fraction = 1 + (cover - 1) * f
-  // The two pictures of a cell blend by their mean extinction, fraction × σ.
-  const extinction = spec.sigma * (eroded * (1 - f) + cover * mean * f)
-  return { fraction, sigma: extinction / Math.max(fraction, 1e-6) }
-}
-
-async function storedNoise(
-  points: readonly Placed[],
-): Promise<{ base: number[]; detail: number[] }> {
-  const base = await loadTexels(
-    noiseTexture('cloud base noise'),
-    '3d',
-    points.map((p) => p.base),
-  )
-  const detail = await loadTexels(
-    noiseTexture('cloud detail noise'),
-    '3d',
-    points.map((p) => p.detail),
-  )
-  return {
-    base: points.map((_, n) => base[n * 4]!),
-    detail: points.map((_, n) => detail[n * 4]!),
-  }
-}
+/* ------------------------------------------------------------------------- */
 
 describe('the profile table', () => {
-  it('is genusProfile at its 64 heights, and its mean along the row', () => {
-    const table = profile.texture.image.data as Uint8Array
-    CLOUD_GENERA.forEach((genus, row) => {
-      for (let i = 0; i < 64; i += 1) {
-        const at = (row * 64 + i) * 4
-        expect(
-          Math.abs(table[at]! / 255 - genusProfile(genus, i / 63)),
-        ).toBeLessThanOrEqual(0.5 / 255)
-      }
-      expect(table[row * 64 * 4]).toBe(0)
-      expect(table[(row * 64 + 63) * 4]).toBe(0)
-    })
+  it('is each body’s levels’ `levelProfile`, byte for byte, in its slot', () => {
+    const weather = bodyWeather(SERVED_EARTH)!
+    const ground = unit({ x: 0.3, y: 0.85, z: -0.43 })
+    const field = bakeField(weather, 'climate', scaled(ground, EARTH + 1500))
+    const table = field.profile.texture.image.data as Uint8Array
+    const specs = bodyLevelSpecs(field.frame.served)
+    expect(specs.map((spec) => [spec.stratiform, spec.cumuliform])).toEqual(
+      weather.levels.map((level) => [level.stratiform, level.cumuliform]),
+    )
+    for (const slot of [0, 1])
+      specs.forEach((spec, k) => {
+        const rows = levelProfile(spec).texels
+        const at = (slot * 24 + k * 8) * 64 * 4
+        expect([...table.subarray(at, at + rows.length)]).toEqual([...rows])
+      })
+    field.dispose()
   })
 })
 
-describe('the three media are §5.6, differing only in their coverage', () => {
-  it('fieldMedium: the clipmap’s coverage', async () => {
-    const scenario = WEATHER_SCENARIOS['two-decks']
-    const field = bakeField(scenario)
-    const points = placePoints(scenario, 7)
-    const stored = await storedNoise(points)
-    const read = await evaluate(
+/*
+ * Three stances of the cornerstones that the system rig can draw: the
+ * horizon from 1.5 km, a deck seen from above at 6 km, and straight down
+ * from 400 km. The points are the field's, around the ground under the
+ * eye, out to where each stance looks.
+ */
+const STANCES = [
+  { name: 'the horizon from 1.5 km', height: 1500, reach: 30_000 },
+  { name: 'above the deck at 6 km', height: 6000, reach: 20_000 },
+  { name: 'straight down from 400 km', height: 400_000, reach: 100_000 },
+] as const
+
+/**
+ * The drawn field's error against `cloudFieldAt`, in the level's σ′, at the
+ * points either side holds cloud. Measured on this Mac mini (Apple M6), the
+ * median is 1.7 × 10⁻⁴ to 2.6 × 10⁻³ and the 99th percentile 5.0 × 10⁻⁴ to
+ * 1.08 × 10⁻² over the three stances, three regimes and the far media, and
+ * the worst point 1.51 × 10⁻² (from 400 km). Its sources: the cover's
+ * bytes, amplified by the remap's division by the cover; the sampler's
+ * fixed-point weights on the noise; and the displacement carried by the
+ * clipmap as a value and a rate in half floats, whose linearization is
+ * worth up to 27 m at a level's edge. The bounds are twice the measured.
+ */
+const ORACLE_MEDIAN = 0.005
+const ORACLE_P99 = 0.02
+
+describe('each medium is cloudFieldAt', () => {
+  it.each(STANCES)(
+    'fieldMedium, under Earth’s zonal climate: $name',
+    async ({ height, reach }) => {
+      const weather = bodyWeather(SERVED_EARTH)!
+      const ground = unit({ x: 0.3, y: 0.85, z: -0.43 })
+      const eye = scaled(ground, EARTH + height)
+      const field = bakeField(weather, 'climate', eye)
+      const points = pointsAround(weather, ground, reach, 7)
+      const read = await evaluate(
+        points,
+        eye,
+        field.media.field,
+        field.uniforms,
+      )
+      const { errors, clouded, levels } = against(
+        weather,
+        fieldClock(weather, TIME),
+        points,
+        read,
+      )
+      expect(levels).toBe(points.length)
+      expect(clouded).toBeGreaterThan(100)
+      const median = quantile(errors, 0.5)
+      const p99 = quantile(errors, 0.99)
+      console.info(
+        `oracle, fieldMedium, ${height} m: median ${median.toExponential(2)}, p99 ${p99.toExponential(2)}, worst ${Math.max(...errors).toExponential(2)}, clouded ${clouded}`,
+      )
+      expect(median).toBeLessThanOrEqual(ORACLE_MEDIAN)
+      expect(p99).toBeLessThanOrEqual(ORACLE_P99)
+      field.dispose()
+    },
+    60_000,
+  )
+
+  it.each(['broken-horizon', 'stratocumulus', 'two-decks'] as const)(
+    'fieldMedium, under %s as a weather',
+    async (id) => {
+      const weather = regimeWeather(SERVED_EARTH, id)
+      const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
+      const eye = scaled(ground, EARTH + 1500)
+      const field = bakeField(weather, id, eye)
+      const points = pointsAround(weather, ground, 20_000, 11)
+      const read = await evaluate(
+        points,
+        eye,
+        field.media.field,
+        field.uniforms,
+      )
+      const { errors, clouded } = against(
+        weather,
+        fieldClock(weather, TIME),
+        points,
+        read,
+      )
+      expect(clouded).toBeGreaterThan(100)
+      console.info(
+        `oracle, fieldMedium, ${id}: median ${quantile(errors, 0.5).toExponential(2)}, p99 ${quantile(errors, 0.99).toExponential(2)}, worst ${Math.max(...errors).toExponential(2)}, clouded ${clouded}`,
+      )
+      expect(quantile(errors, 0.5)).toBeLessThanOrEqual(ORACLE_MEDIAN)
+      expect(quantile(errors, 0.99)).toBeLessThanOrEqual(ORACLE_P99)
+      field.dispose()
+    },
+    60_000,
+  )
+
+  it.each(['synoptic', 'analytic'] as const)(
+    '%sMedium, which evaluates the displacement where it reads it',
+    async (name) => {
+      const weather = bodyWeather(SERVED_EARTH)!
+      const ground = unit({ x: 0.3, y: 0.85, z: -0.43 })
+      const eye = scaled(ground, EARTH + 1500)
+      const field = bakeField(weather, 'climate', eye)
+      // Out to 1,500 km: past the clipmap, where the far bakes read.
+      const points = pointsAround(weather, ground, 1_500_000, 17)
+      const read = await evaluate(
+        points,
+        eye,
+        field.media[name],
+        field.uniforms,
+      )
+      const { errors, clouded } = against(
+        weather,
+        fieldClock(weather, TIME),
+        points,
+        read,
+      )
+      expect(clouded).toBeGreaterThan(100)
+      console.info(
+        `oracle, ${name}Medium: median ${quantile(errors, 0.5).toExponential(2)}, p99 ${quantile(errors, 0.99).toExponential(2)}, worst ${Math.max(...errors).toExponential(2)}, clouded ${clouded}`,
+      )
+      expect(quantile(errors, 0.5)).toBeLessThanOrEqual(ORACLE_MEDIAN)
+      expect(quantile(errors, 0.99)).toBeLessThanOrEqual(ORACLE_P99)
+      field.dispose()
+    },
+    60_000,
+  )
+})
+
+describe('nothing in the lookup is the observer’s (§5.3)', () => {
+  it('one body point, one instant, two eyes — 10 km off and 2,000 km over a pole — read one density', async () => {
+    const weather = bodyWeather(SERVED_EARTH)!
+    // Points around the pole, in every level: one eye 10 km from them, the
+    // other over the pole itself, 2,000 km up.
+    const pole = { x: 0, y: 1, z: 0 }
+    const points = pointsAround(weather, pole, 3000, 29, 600)
+    const near = added(scaled(unit({ x: 0.0016, y: 1, z: 0 }), EARTH + 1500), {
+      x: 0,
+      y: 0,
+      z: 0,
+    })
+    const far = scaled(pole, EARTH + 2_000_000)
+    const fieldNear = bakeField(weather, 'climate', near)
+    const fromNear = await evaluate(
       points,
-      fieldMedium({
-        uniforms: field.uniforms,
-        clipmap: field.clipmap.nodes,
-        noise: noise.nodes,
-        profile,
-      }),
-      field.uniforms,
+      near,
+      fieldNear.media.field,
+      fieldNear.uniforms,
     )
-    const cover = Math.round(0.6 * 255) / 255
+    fieldNear.dispose()
+    const fieldFar = bakeField(weather, 'climate', far)
+    const fromFar = await evaluate(
+      points,
+      far,
+      fieldFar.media.field,
+      fieldFar.uniforms,
+    )
+    fieldFar.dispose()
     let worst = 0
     let clouded = 0
-    points.forEach((point, n) => {
-      const want = reference(
-        scenario,
-        point,
-        cover,
-        stored.base[n]!,
-        stored.detail[n]!,
-      )
-      const spec = scenario.layers[point.layer]!
-      worst = Math.max(
-        worst,
-        Math.abs(read[n * 8 + 1]! - want.sigma) / spec.sigma,
-        Math.abs(read[n * 8]! - want.fraction),
-      )
-      if (want.sigma > 0) clouded += 1
-      expect(read[n * 8 + 2]).toBe(point.layer)
-      // Level 0's texel or level 1's: every point is within 25 km of the eye.
-      expect([250, 500]).toContain(read[n * 8 + 3])
-      expect(read[n * 8 + 4]).toBe(spec.radius)
+    points.forEach((_, n) => {
+      const a = fromNear[n * 8]! * fromNear[n * 8 + 1]!
+      const b = fromFar[n * 8]! * fromFar[n * 8 + 1]!
+      if (a > 0) clouded += 1
+      const level = fromNear[n * 8 + 2]!
+      worst = Math.max(worst, Math.abs(a - b) / referenceSigma(weather, level))
     })
-    expect(worst).toBeLessThanOrEqual(RECIPE)
-    // The recipe draws cloud and clear air both, or the test proves little.
-    expect(clouded).toBeGreaterThan(40)
-    expect(clouded).toBeLessThan(points.length - 40)
+    expect(clouded).toBeGreaterThan(50)
+    // One 8-bit step of the level's σ′.
+    expect(worst).toBeLessThanOrEqual(1 / 255)
+  }, 60_000)
+
+  it('a feature keeps its turned place over 10⁴ s: the drawn field then equals the CPU’s then', async () => {
+    const weather = bodyWeather(SERVED_EARTH)!
+    const ground = unit({ x: 0.3, y: 0.85, z: -0.43 })
+    const eye = scaled(ground, EARTH + 1500)
+    const later = TIME + 1e4
+    const field = bakeField(weather, 'climate', eye, later)
+    const points = pointsAround(weather, ground, 20_000, 31)
+    const read = await evaluate(points, eye, field.media.field, field.uniforms)
+    const now = against(weather, fieldClock(weather, later), points, read)
+    const then = against(weather, fieldClock(weather, TIME), points, read)
+    expect(quantile(now.errors, 0.5)).toBeLessThanOrEqual(ORACLE_MEDIAN)
+    // The same points against the field 10⁴ s earlier: the turn has carried
+    // the cells 80 to 250 km, so the two are unrelated.
+    expect(quantile(then.errors, 0.9)).toBeGreaterThan(0.1)
     field.dispose()
-  })
+  }, 60_000)
+})
 
-  it('synopticMedium: the cube’s, nonzero 1,800 km out where the clipmap holds nothing', async () => {
-    const scenario = WEATHER_SCENARIOS['two-decks']
-    const field = bakeField(scenario)
-    const points = placePoints(scenario, 9)
-    const stored = await storedNoise(points)
-    const synoptic = synopticMedium({
-      uniforms: field.uniforms,
-      maps: field.maps.nodes,
-      noise: noise.nodes,
-      profile,
-    })
-    const read = await evaluate(points, synoptic, field.uniforms)
-    const cover = Math.round(0.6 * 255) / 255
-    let worst = 0
-    points.forEach((point, n) => {
-      const want = reference(
-        scenario,
-        point,
-        cover,
-        stored.base[n]!,
-        stored.detail[n]!,
-      )
-      worst = Math.max(
-        worst,
-        Math.abs(read[n * 8 + 1]! - want.sigma) /
-          scenario.layers[point.layer]!.sigma,
-        Math.abs(read[n * 8]! - want.fraction),
-      )
-      // The cube's texel at a face's center.
-      expect(read[n * 8 + 3]).toBeCloseTo((EARTH * Math.PI) / 1024, 0)
-    })
-    expect(worst).toBeLessThanOrEqual(RECIPE)
+/** What the port's footprint test measured, for the pin beside it. */
+const footprintFade: { drawn: number[] } = { drawn: [] }
 
-    // A far bake's sample: (R + h)·d − e, 1,800 km along the surface, inside
-    // the low deck, at a footprint no cell resolves.
-    const { east } = horizonBasis(EYE)
-    const angle = 1.8e6 / EARTH
-    const up = unit(EYE)
-    const d = added(scaled(up, Math.cos(angle)), scaled(east, Math.sin(angle)))
-    const far: Point = {
-      offset: added(scaled(d, EARTH + 1200), scaled(EYE, -1)),
-      altitude: 1200,
-      footprint: 20_000,
-    }
-    const fieldMedia = fieldMedium({
-      uniforms: field.uniforms,
-      clipmap: field.clipmap.nodes,
-      noise: noise.nodes,
-      profile,
-    })
-    const out = await evaluate([far], synoptic, field.uniforms)
-    const near = await evaluate([far], fieldMedia, field.uniforms)
-    expect(out[0]).toBeCloseTo(cover, 5)
-    expect(out[1]).toBeGreaterThan(0)
-    // Past level 5's window the clipmap's coverage has faded to none, so no
-    // share of the column is cloud, whatever an unresolved cell's σ would be.
-    expect(near[0]).toBe(0)
-    field.dispose()
-  })
-
-  it('analyticMedium: the placeholder’s function, blobs and all', async () => {
-    const scenario = WEATHER_SCENARIOS['fair-cumulus']
-    const field = bakeField(scenario)
-    // Out to ±480 km, so the points fall in many of the blobs' 156 km cells.
-    const points = placePoints(scenario, 13, 50)
-    const stored = await storedNoise(points)
-    const read = await evaluate(
-      points,
-      analyticMedium({ uniforms: field.uniforms, noise: noise.nodes, profile }),
-      field.uniforms,
-    )
-    let worst = 0
-    let blobbed = 0
-    let clear = 0
-    points.forEach((point, n) => {
-      const direction = unit(added(EYE, point.offset))
-      const cover = scenarioCoverage(scenario, point.layer, direction, TIME)
-      if (cover > 0.99) blobbed += 1
-      if (cover < 0.01) clear += 1
-      const want = reference(
-        scenario,
-        point,
-        cover,
-        stored.base[n]!,
-        stored.detail[n]!,
-      )
-      worst = Math.max(
-        worst,
-        Math.abs(read[n * 8 + 1]! - want.sigma) /
-          scenario.layers[point.layer]!.sigma,
-        Math.abs(read[n * 8]! - want.fraction),
-      )
-    })
-    // The coverage is float32 trigonometry against float64 here, a few
-    // parts in 10⁶, and the remap divides by it: 10⁻³ of σ.
-    expect(worst).toBeLessThanOrEqual(1e-3)
-    expect(blobbed).toBeGreaterThan(10)
-    expect(clear).toBeGreaterThan(10)
-    field.dispose()
-  })
-
-  it('holds no cloud in a cell with no coverage, at any footprint', async () => {
-    /*
-     * σ and the fraction blended each on its own put (1 − f)·f·σ_k·p̄ of
-     * extinction here, a quarter of the mean density at f = ½, where the
-     * resolved picture holds no σ and the unresolved one no share. Clear
-     * cells of fair-cumulus, at footprints across the blend's band.
-     */
-    const scenario = WEATHER_SCENARIOS['fair-cumulus']
-    const field = bakeField(scenario)
-    const spec = scenario.layers[0]!
-    const altitude = (spec.base + spec.top) / 2
+describe('a footprint’s fade', () => {
+  it('draws the CPU field’s transmittance through a level at a quarter, a half and a whole cell of footprint', async () => {
+    const weather = regimeWeather(SERVED_EARTH, 'broken-horizon')
+    const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
+    const eye = scaled(ground, EARTH + 1500)
+    const field = bakeField(weather, 'broken-horizon', eye)
+    const level = weather.levels[0]!
+    const cell = levelProfile(level).cell
+    const { east, north, up } = horizonBasis(ground)
+    const columns = 400
+    const steps = 32
+    const next = draws(37)
+    const feet = [0, cell / 4, cell / 2, cell]
     const points: Point[] = []
-    for (let k = 0; points.length < 18 && k < 400; k += 1) {
-      const offset = {
-        x: ((k % 20) - 10) * 23_000,
-        y: 0,
-        z: (Math.floor(k / 20) - 10) * 23_000,
-      }
-      const direction = unit(added(EYE, offset))
-      if (scenarioCoverage(scenario, 0, direction, TIME) > 0) continue
-      for (const share of [0.1, 0.3, 0.5, 0.75, 0.95, 2])
-        points.push({ offset, altitude, footprint: share * spec.cellMeters })
-    }
-    expect(points).toHaveLength(18)
-    const read = await evaluate(
-      points,
-      analyticMedium({ uniforms: field.uniforms, noise: noise.nodes, profile }),
-      field.uniforms,
-    )
-    for (let n = 0; n < points.length; n += 1)
-      expect(read[n * 8]! * read[n * 8 + 1]!).toBe(0)
-    field.dispose()
-  })
-
-  it('every medium is empty outside every layer', async () => {
-    const scenario = WEATHER_SCENARIOS['two-decks']
-    const field = bakeField(scenario)
-    const outside: Point[] = [
-      { offset: { x: 100, y: 0, z: 0 }, altitude: 2500, footprint: 0 },
-      { offset: { x: 0, y: 0, z: 100 }, altitude: 6000, footprint: 0 },
-      { offset: { x: 0, y: 100, z: 0 }, altitude: 500, footprint: 2000 },
-    ]
-    const deps = {
-      uniforms: field.uniforms,
-      clipmap: field.clipmap.nodes,
-      maps: field.maps.nodes,
-      noise: noise.nodes,
-      profile,
-    }
-    for (const medium of [
-      fieldMedium(deps),
-      synopticMedium(deps),
-      analyticMedium(deps),
-    ]) {
-      const read = await evaluate(outside, medium, field.uniforms)
-      for (let n = 0; n < outside.length; n += 1) {
-        expect(read[n * 8]).toBe(0)
-        expect(read[n * 8 + 1]).toBe(0)
-        expect(read[n * 8 + 2]).toBe(-1)
-        expect(read[n * 8 + 4]).toBe(10)
-      }
-    }
-    field.dispose()
-  })
-
-  it('rides the wind: a point the drift has carried reads the density it had', async () => {
-    /*
-     * The history follows a cloud from X − wind·Δt to X (`cloudHistory.ts`),
-     * and the composite writes that motion. So the field at a point moved
-     * by δ, under a drift δ longer, is the field where the point was. Two
-     * decks' coverage is uniform, so nothing else moves with the point.
-     */
-    const scenario = WEATHER_SCENARIOS['two-decks']
-    const field = bakeField(scenario)
-    const medium = analyticMedium({
-      uniforms: field.uniforms,
-      noise: noise.nodes,
-      profile,
-    })
-    const points = placePoints(scenario, 23)
-    const before = await evaluate(points, medium, field.uniforms)
-    const carried: Vec3 = { x: 400, y: -250, z: 130 }
-    const drift = added(DRIFT, carried)
-    field.uniforms.served.drift.value.set(drift.x, drift.y, drift.z)
-    const after = await evaluate(
-      points.map((point) => ({
-        ...point,
-        offset: added(point.offset, carried),
-      })),
-      medium,
-      field.uniforms,
-    )
-    let worst = 0
-    let clouded = 0
-    points.forEach((point, n) => {
-      const sigma = scenario.layers[point.layer]!.sigma
-      worst = Math.max(
-        worst,
-        Math.abs(after[n * 8 + 1]! - before[n * 8 + 1]!) / sigma,
+    for (let c = 0; c < columns; c += 1) {
+      const across = added(
+        scaled(east, (next() - 0.5) * 20_000),
+        scaled(north, (next() - 0.5) * 20_000),
       )
-      if (before[n * 8 + 1]! > 0) clouded += 1
+      const radial = unit(added(scaled(up, EARTH), across))
+      for (const footprint of feet)
+        for (let s = 0; s < steps; s += 1) {
+          const height =
+            level.base + ((s + 0.5) / steps) * (level.top - level.base)
+          points.push({
+            position: scaled(radial, EARTH + height),
+            footprint,
+          })
+        }
+    }
+    const read = await evaluate(points, eye, field.media.field, field.uniforms)
+    const clock = fieldClock(weather, TIME)
+    const oracle = points.map(({ position, footprint }) =>
+      cloudFieldAt(weather, clock, SUN, position, footprint),
+    )
+    const step = (level.top - level.base) / steps
+    // The march's segment law: a crossing's transmittance is
+    // `1 − F + F·e^(−Σσ′Δs)`, F the largest fraction along it.
+    const transmittance = (
+      at: (n: number) => { readonly fraction: number; readonly sigma: number },
+    ) =>
+      feet.map((_, f) => {
+        let sum = 0
+        for (let c = 0; c < columns; c += 1) {
+          let depth = 0
+          let fraction = 0
+          for (let s = 0; s < steps; s += 1) {
+            const { fraction: share, sigma } = at((c * feet.length + f) * steps + s)
+            depth += sigma * step
+            fraction = Math.max(fraction, share)
+          }
+          sum += 1 - fraction + fraction * Math.exp(-depth)
+        }
+        return sum / columns
+      })
+    const drawn = transmittance((n) => ({
+      fraction: read[n * 8]!,
+      sigma: read[n * 8 + 1]!,
+    }))
+    const cpu = transmittance((n) => oracle[n]!)
+    console.info(
+      `footprints 0, ¼, ½, 1 cell: drawn ${drawn.map((t) => t.toFixed(4)).join(', ')}; cloudFieldAt ${cpu.map((t) => t.toFixed(4)).join(', ')}`,
+    )
+    // The port: the drawn transmittance is the CPU field's at every footprint.
+    drawn.forEach((t, f) => {
+      expect(Math.abs(t - cpu[f]!)).toBeLessThanOrEqual(0.01)
     })
-    // Whole meters carried, so the two lattice coordinates round alike and
-    // the reads measure the same to the bit; with the drift added to the
-    // point they measure 0.78 of σ apart. The bound is the references' own.
-    expect(worst).toBeLessThanOrEqual(1e-3)
-    expect(clouded).toBeGreaterThan(40)
+    footprintFade.drawn = drawn
     field.dispose()
+  }, 60_000)
+
+  /*
+   * §6.2's pin: the fade keeps the resolved field's transmittance within
+   * 10%. The recipe the CPU field and this port share does not: between a
+   * sixteenth and a quarter of a cell the detail's erosion fades out with
+   * nothing added back, so the cells thicken and the crossing darkens,
+   * then the unresolved share's mean density lightens it again. Measured
+   * on broken-horizon on this Mac mini: 0.725 resolved, 0.548, 0.132 and
+   * 0.498 at a quarter, a half and a whole cell, both sides alike. The
+   * recipe is `weatherField.ts`'s (`levelSample`), and this flips green
+   * when it conserves the crossing.
+   */
+  it.fails('keeps the resolved field’s transmittance within 10% (§6.2): it does not yet', () => {
+    const [resolved, ...faded] = footprintFade.drawn
+    expect(faded).toHaveLength(3)
+    for (const t of faded)
+      expect(Math.abs(t - resolved!) / resolved!).toBeLessThanOrEqual(0.1)
   })
 })
 
@@ -734,6 +731,7 @@ describe('every read names level 0', () => {
   async function marched(
     medium: CloudMediumFn,
     uniforms: CloudUniforms,
+    profile: CloudProfile,
     plain: boolean,
   ): Promise<string> {
     const material = new MeshBasicNodeMaterial()
@@ -771,32 +769,41 @@ describe('every read names level 0', () => {
   const reads = (wgsl: string, call: string): number =>
     wgsl.split(`${call}(`).length - 1
 
+  /*
+   * The fine march's step: the clipmap's two targets in a level and in the
+   * next one's fade band, the profile, the base noise and the detail, and
+   * no sine (the displacement is the clipmap's). The cube's medium reads
+   * its two targets once; the climate's, the base noise once more for its
+   * synoptic field. The two far media evaluate the displacement, which is
+   * a bake's cost and never a march step's.
+   */
   it.each([
-    ['fieldMedium', 5],
-    ['synopticMedium', 4],
-    ['analyticMedium', 3],
+    ['fieldMedium', 7, 0],
+    ['synopticMedium', 5, 12],
+    ['analyticMedium', 4, 12],
   ] as const)(
-    '%s: no bare textureSample, and a textureSampleLevel for each of its %i reads',
-    async (name, count) => {
-      const field = bakeField(WEATHER_SCENARIOS['two-decks'])
-      const deps = {
-        uniforms: field.uniforms,
-        clipmap: field.clipmap.nodes,
-        maps: field.maps.nodes,
-        noise: noise.nodes,
-        profile,
-      }
+    '%s: no bare textureSample, a textureSampleLevel for each of its %i reads, and %i sines',
+    async (name, count, sines) => {
+      const weather = regimeWeather(SERVED_EARTH, 'two-decks')
+      const ground = unit({ x: -0.6, y: 0.1, z: 0.79 })
+      const field = bakeField(
+        weather,
+        'two-decks',
+        scaled(ground, EARTH + 1500),
+      )
       const medium = {
-        fieldMedium,
-        synopticMedium,
-        analyticMedium,
-      }[name](deps)
-      const wgsl = await marched(medium, field.uniforms, false)
+        fieldMedium: field.media.field,
+        synopticMedium: field.media.synoptic,
+        analyticMedium: field.media.analytic,
+      }[name]
+      const wgsl = await marched(medium, field.uniforms, field.profile, false)
       expect(reads(wgsl, 'textureSample')).toBe(0)
       expect(reads(wgsl, 'textureSampleLevel')).toBe(count)
-      const control = await marched(medium, field.uniforms, true)
+      expect(reads(wgsl, 'sin') + reads(wgsl, 'cos')).toBeLessThanOrEqual(sines)
+      const control = await marched(medium, field.uniforms, field.profile, true)
       expect(reads(control, 'textureSample')).toBe(1)
       field.dispose()
     },
+    60_000,
   )
 })
