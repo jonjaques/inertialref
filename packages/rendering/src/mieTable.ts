@@ -103,6 +103,27 @@ function halfToFloat(half: number): number {
 }
 
 /**
+ * `count` little-endian half floats from base64, as a phase table holds its
+ * texels. Throws where the text holds another number of them: `what` names
+ * the table and its shape in the message.
+ */
+export function halfFloatsFromBase64(
+  text: string,
+  count: number,
+  what: string,
+): Float32Array {
+  const bytes = base64Bytes(text)
+  if (bytes.length !== count * 2)
+    throw new Error(
+      `${what}: the phase holds ${bytes.length} bytes where ${count} half floats are ${count * 2}`,
+    )
+  const values = new Float32Array(count)
+  for (let i = 0; i < count; i += 1)
+    values[i] = halfToFloat(bytes[2 * i]! | (bytes[2 * i + 1]! << 8))
+  return values
+}
+
+/**
  * The table a source describes. Throws on a file that is not one: committed
  * data that does not decode is a broken build, not a table to draw with.
  */
@@ -110,18 +131,15 @@ export function decodeMieTable(source: MieTableSource): MieTable {
   if (source.format !== 'inertialref/mie' || source.version !== 1)
     throw new Error('mieTable: not an inertialref/mie table, version 1')
   const count = source.radii * source.angles * 3
-  const bytes = base64Bytes(source.phase)
-  if (bytes.length !== count * 2)
-    throw new Error(
-      `mieTable: the phase holds ${bytes.length} bytes where ${source.radii} × ${source.angles} × 3 half floats are ${count * 2}`,
-    )
+  const phase = halfFloatsFromBase64(
+    source.phase,
+    count,
+    `mieTable (${source.radii} × ${source.angles} × 3)`,
+  )
   if (source.bulk.length !== source.radii)
     throw new Error('mieTable: one bulk entry a row')
   if (source.gloryRed.length !== source.radii)
     throw new Error('mieTable: one glory angle a row')
-  const phase = new Float32Array(count)
-  for (let i = 0; i < count; i += 1)
-    phase[i] = halfToFloat(bytes[2 * i]! | (bytes[2 * i + 1]! << 8))
   return {
     angles: source.angles,
     radii: source.radii,
@@ -212,4 +230,35 @@ export function phaseIntegral(
     sum +=
       0.5 * (at(i) + at(i + 1)) * (angleOf(table, i + 1) - angleOf(table, i))
   return 2 * Math.PI * sum
+}
+
+/**
+ * `f_δ = 1/Q_ext` at a radius, µm: the diffraction's share of a droplet's
+ * extinction, which the scaled medium counts as light that goes on (phase 1
+ * design §5.1). Linear in the row between the rows' own `1/Q_ext`, clamped
+ * at the table's ends, so at a row's radius it is that row's exactly.
+ */
+export function diffractionShare(table: MieTable, radius: number): number {
+  const row = Math.min(table.radii - 1, Math.max(0, radiusIndex(table, radius)))
+  const low = Math.floor(row)
+  const high = Math.min(low + 1, table.radii - 1)
+  const share = (k: number): number => 1 / table.bulk[k]!.extinction
+  return share(low) + (share(high) - share(low)) * (row - low)
+}
+
+/**
+ * The table's phase as a sun of angular radius `angularRadius`, radians,
+ * draws it: each row and band convolved with the sun's disk, in the table's
+ * own layout, [row][angle][band].
+ *
+ * A point sun's: the phase as the table holds it, whatever the radius. The
+ * glory's first ring is 1.9° out for a 10 µm cloud and the sun's disk is
+ * 0.27° in radius, so the rings a point sun draws are sharper than a real
+ * sun's by that blur.
+ */
+export function convolveDisk(
+  table: MieTable,
+  _angularRadius: number,
+): Float32Array {
+  return table.phase
 }

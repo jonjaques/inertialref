@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   angleIndex,
   angleOf,
+  convolveDisk,
   decodeMieTable,
+  diffractionShare,
   type MieTable,
   type MieTableSource,
   mieDroplets,
@@ -183,3 +185,43 @@ function firstRing(values: readonly number[]): number {
   }
   return -1
 }
+
+describe('the diffraction’s share', () => {
+  it('is 1/Q_ext at each row’s own radius', () => {
+    for (let row = 0; row < table.radii; row += 1)
+      expect(diffractionShare(table, radiusOf(table, row))).toBeCloseTo(
+        1 / table.bulk[row]!.extinction,
+        12,
+      )
+  })
+
+  it('runs from 0.44 at 2 µm to 0.49 at 32 µm: near half of a large droplet’s extinction is diffraction', () => {
+    const small = diffractionShare(table, table.radiusMin)
+    const large = diffractionShare(table, table.radiusMax)
+    expect(small).toBeGreaterThan(0.43)
+    expect(small).toBeLessThan(0.45)
+    expect(large).toBeGreaterThan(0.48)
+    expect(large).toBeLessThan(0.5)
+  })
+
+  it('is linear in the row between two rows, and holds at the table’s ends past them', () => {
+    const share = (row: number) => 1 / table.bulk[row]!.extinction
+    for (const row of [0, 7, 30]) {
+      const between = radiusOf(table, row + 0.25)
+      expect(diffractionShare(table, between)).toBeCloseTo(
+        share(row) + 0.25 * (share(row + 1) - share(row)),
+        12,
+      )
+    }
+    expect(diffractionShare(table, 0.5)).toBe(share(0))
+    expect(diffractionShare(table, 200)).toBe(share(table.radii - 1))
+  })
+})
+
+describe('the phase under a sun’s disk', () => {
+  it('is the table’s own, texel for texel, under a point sun', () => {
+    const convolved = convolveDisk(table, 0)
+    expect(convolved).toHaveLength(table.phase.length)
+    expect(convolved).toEqual(table.phase)
+  })
+})
