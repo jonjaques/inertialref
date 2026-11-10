@@ -29,8 +29,9 @@
  * is a confirm-first change on this machine.
  *
  * Each batch writes one document, `--resume`d on every attempt, so a stage
- * that stops (exit 1) is continued after `PAUSE_MS` with what it measured
- * kept, up to its `attempts`. A refusal (exit 2) stops the campaign: the
+ * that stops (exit 1), or ends with runs still marked under load, is
+ * continued after `PAUSE_MS` with what it measured kept, up to its
+ * `attempts`. A refusal (exit 2) stops the campaign: the
  * runner refuses a row that has failed three times, and the same command would
  * meet the same refusal. The preview is checked before each attempt and served
  * again if it died, and a server on its port that is not this campaign's
@@ -120,11 +121,17 @@ export const CAMPAIGNS = Object.freeze({
   },
 })
 
-/** What a stage's exit means: done, tried again, or the campaign stopped. A
- *  batch's 2 is a refusal; any other command's failure is worth a retry. */
+/**
+ * What a stage's exit means: done, tried again, or the campaign stopped. A
+ * batch's 2 is a refusal; any other command's failure is worth a retry. A
+ * batch is done when every run is measured quiet, not when it exits 0: the
+ * runner exits 0 with a run marked under load on all three of its tries, and
+ * the `--resume` of a retry measures again what is marked.
+ */
 export function outcome(stage, code) {
-  if (code === 0) return 'done'
   if (code === 2 && stage.kind === 'batch') return 'stop'
+  const owes = stage.kind === 'batch' && stage.done < stage.total
+  if (code === 0 && !owes) return 'done'
   return stage.attempts < stage.allowed ? 'retry' : 'stop'
 }
 
@@ -475,6 +482,7 @@ async function runStage(stage, state, ctx) {
     const { command, env } = commandOf(stage)
     const { code, tail } = await child(command, env, ctx)
     stage.exit = code
+    progress(stage)
     const next = ctx.stop.signal.aborted ? 'stop' : outcome(stage, code)
     console.log(
       `${new Date().toISOString()} ${stage.name}: exit ${code}, ${next}`,
@@ -486,7 +494,10 @@ async function runStage(stage, state, ctx) {
     }
     if (next === 'stop') {
       stage.status = ctx.stop.signal.aborted ? 'stopped' : 'failed'
-      stage.reason = tail.split('\n').slice(-3).join('\n')
+      stage.reason =
+        code === 0
+          ? `${stage.done} of ${stage.total} runs measured quiet`
+          : tail.split('\n').slice(-3).join('\n')
       return save(state)
     }
     save(state)

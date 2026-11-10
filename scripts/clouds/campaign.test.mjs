@@ -126,12 +126,21 @@ describe('a campaign', () => {
   })
 
   it('continues a stopped batch, stops on a refusal, and retries no further than allowed', () => {
-    expect(outcome(stage(), 0)).toBe('done')
+    expect(outcome(stage({ done: 10 }), 0)).toBe('done')
     expect(outcome(stage(), 1)).toBe('retry')
     expect(outcome(stage(), 2)).toBe('stop')
     expect(outcome(stage({ attempts: 3 }), 1)).toBe('stop')
     // Any other command's 2 is a failure like another.
     expect(outcome(stage({ kind: 'command' }), 2)).toBe('retry')
+  })
+
+  it('continues a batch that exits 0 still owing runs it marked under load', () => {
+    // Three rows ended under load on all three tries: 75 of 78 quiet.
+    expect(outcome(stage({ done: 75, total: 78 }), 0)).toBe('retry')
+    expect(outcome(stage({ done: 75, total: 78, attempts: 3 }), 0)).toBe('stop')
+    expect(outcome(stage({ done: 78, total: 78 }), 0)).toBe('done')
+    // A command's exit is all there is to read of it.
+    expect(outcome(stage({ kind: 'command', total: null }), 0)).toBe('done')
   })
 
   it('ends at the running batch’s own rate, then each later stage’s estimate', () => {
