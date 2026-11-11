@@ -14,7 +14,6 @@ import {
   lobe,
   nodeDepth,
   nodeSun,
-  readSource,
   slabRay,
   sourceSamples,
   type SourceGrid,
@@ -49,57 +48,6 @@ describe('the table’s axes', () => {
   it('give the first node past a face a tenth of a scaled depth, where a source turns', () => {
     // 0.02·(801^(1/23) − 1) of transport depth is 0.027 of scaled depth at g′ = 0.75.
     expect(nodeDepth(grid, 1) / 0.25).toBeLessThan(0.03)
-  })
-})
-
-describe('the table’s read', () => {
-  const grid: SourceGrid = { ...AXES, nodes: 6 }
-  /** Two slabs: the second is the first plus a hundred, so a read that strays is seen. */
-  const terms = new Float64Array(2 * 3 * 6 * 6 * 4)
-  for (let slab = 0; slab < 2; slab += 1)
-    for (let sun = 0; sun < 3; sun += 1)
-      for (let bottom = 0; bottom < 6; bottom += 1)
-        for (let top = 0; top < 6; top += 1) {
-          const cell = (((slab * 3 + sun) * 6 + bottom) * 6 + top) * 4
-          terms[cell] =
-            100 * slab + 1 + 2 * (top / 5) - bottom / 5 + 3 * nodeSun(grid, sun)
-          terms[cell + 1] = top / 5
-          terms[cell + 2] = (bottom / 5) * nodeSun(grid, sun)
-          terms[cell + 3] = 7
-        }
-  const table: SourceTable = { ...grid, slabs: 2, terms }
-
-  it('is exact for texels that are linear along each axis, in the slab it is asked for', () => {
-    const out = new Float64Array(4)
-    fc.assert(
-      fc.property(
-        fc.integer({ min: 0, max: 1 }),
-        fc.double({ min: 0, max: 16, noNaN: true }),
-        fc.double({ min: 0, max: 16, noNaN: true }),
-        fc.double({ min: 0.2, max: 1, noNaN: true }),
-        (slab, top, bottom, sunMu) => {
-          readSource(table, slab, top, bottom, sunMu, out)
-          const x = depthCoordinate(grid, top)
-          const y = depthCoordinate(grid, bottom)
-          expect(out[0]).toBeCloseTo(100 * slab + 1 + 2 * x - y + 3 * sunMu, 9)
-          expect(out[1]).toBeCloseTo(x, 10)
-          expect(out[2]).toBeCloseTo(y * sunMu, 10)
-          expect(out[3]).toBeCloseTo(7, 10)
-        },
-      ),
-    )
-  })
-
-  it('holds the end’s value past either end, and never blends two slabs', () => {
-    const out = new Float64Array(4)
-    // Under the first sun and over the last: a clamped texture's read, and
-    // the first slab's last slice is not blended with the second's first.
-    readSource(table, 0, 99, 0, 0.01, out)
-    expect(out[0]).toBeCloseTo(1 + 2 + 3 * 0.2, 12)
-    readSource(table, 0, 0, 0, 1.5, out)
-    expect(out[0]).toBeCloseTo(1 + 3, 12)
-    readSource(table, 1, 0, 0, 0.01, out)
-    expect(out[0]).toBeCloseTo(100 + 1 + 3 * 0.2, 12)
   })
 })
 

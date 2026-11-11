@@ -1,3 +1,4 @@
+import type { SlabSourceReadOptions } from '@inertialref/rendering'
 import { halfRangeGauss } from './legendre.ts'
 import type { SourceForm } from './slabForms.ts'
 import {
@@ -71,6 +72,7 @@ export function reconstruct(
   form: SourceForm,
   scale: SlabScale,
   row: Pick<JudgedRow, 'depth' | 'sunMu' | 'viewMu' | 'azimuth' | 'side'>,
+  options: SlabSourceReadOptions = {},
 ): number {
   const view: SlabView = {
     depth: row.depth * (1 - scale.share),
@@ -79,7 +81,13 @@ export function reconstruct(
     azimuth: row.azimuth,
     side: row.side,
   }
-  return higherOrders(table, form.reads(slabRay(view)), view, scale.asymmetry)
+  return higherOrders(
+    table,
+    form.reads(slabRay(view)),
+    view,
+    scale.asymmetry,
+    options,
+  )
 }
 
 /** One radiance of one row: the rebuilt value's signed relative error. */
@@ -167,12 +175,13 @@ export function judgeValues(
   form: SourceForm,
   scales: readonly SlabScale[],
   rows: readonly JudgedRow[],
+  options: SlabSourceReadOptions = {},
 ): JudgedValue[] {
   const values: JudgedValue[] = []
   for (const row of rows) {
     if (!row.domain) continue
     const scale = scales.find((item) => item.radius === row.radius)!
-    const higher = reconstruct(table, form, scale, row)
+    const higher = reconstruct(table, form, scale, row, options)
     row.scaled.forEach((exact, band) => {
       values.push({ row, band, error: (row.first[band]! + higher) / exact - 1 })
     })

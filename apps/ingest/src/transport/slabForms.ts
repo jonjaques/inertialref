@@ -1,3 +1,10 @@
+import {
+  bearingCosine,
+  stretchedHarmonic,
+  viewReads,
+  viewSlabs,
+  type SlabViewBlend,
+} from '@inertialref/rendering'
 import { halfRangeGauss } from './legendre.ts'
 import {
   lobe,
@@ -43,16 +50,6 @@ export const ONE: SourceBasis = { name: '1', at: () => 1 }
 export const COSINE: SourceBasis = { name: 'μ', at: (ray) => ray.muV }
 /** The part of the light's direction along the sun's bearing: sin θ·cos φ. */
 export const ALONG: SourceBasis = { name: 'h', at: (ray) => ray.along }
-/**
- * The cosine of the light's bearing from the sun's. Straight toward the lit
- * face or away from it a ray has no bearing, and it is given a right angle:
- * every harmonic of a source is zero there but the mean.
- */
-function bearingCosine(ray: SourceRay): number {
-  const sine = Math.sqrt(Math.max(0, 1 - ray.muV * ray.muV))
-  return sine < 1e-9 ? 0 : Math.max(-1, Math.min(1, ray.along / sine))
-}
-
 /** cos kφ: the k-th harmonic of the bearing. */
 export function harmonic(k: number): SourceBasis {
   return {
@@ -68,10 +65,7 @@ export function harmonic(k: number): SourceBasis {
 export function stretched(k: number, power: number): SourceBasis {
   return {
     name: k === 0 ? '1' : `cos ${k}ψ(${power})`,
-    at: (ray) =>
-      Math.cos(
-        k * Math.PI * (Math.acos(bearingCosine(ray)) / Math.PI) ** power,
-      ),
+    at: (ray) => stretchedHarmonic(k, power, bearingCosine(ray)),
   }
 }
 
@@ -337,17 +331,15 @@ export interface ViewNodesOptions {
   readonly cosines: readonly number[]
   /** Up to four bases of the bearing, fitted at each cosine. */
   readonly basis: readonly SourceBasis[]
+  /**
+   * Where the bases are `stretched(k, stretch)` for k = 0…3: a ray's reads
+   * are then `viewReads`, the read the game's node is held to.
+   */
+  readonly stretch?: number
   readonly measure: SourceMeasure
   readonly ridge?: number
-  /**
-   * What a ray between two cosines blends in: the cosine, or the polar
-   * angle. A source's first harmonic goes as sin θ, which is a square root
-   * in the cosine at the pole, so a blend in the cosine reads it 30% low
-   * halfway between 0.94 and 1; in the angle it is a line at the pole and
-   * at the horizon both. `nearest` blends nothing and reads the nearer
-   * cosine alone: one read a step.
-   */
-  readonly blend?: 'cosine' | 'angle' | 'nearest'
+  /** What a ray between two cosines blends in (`SlabViewBlend`); the angle where left out. */
+  readonly blend?: SlabViewBlend
 }
 
 /**
@@ -411,31 +403,16 @@ export function viewNodes(options: ViewNodesOptions): SourceForm {
       })
       return out
     },
-    reads: (ray) => {
-      const first = ray.muV >= 0 ? 0 : count
-      const mu = Math.abs(ray.muV)
-      let low = 0
-      while (low + 2 < count && cosines[low + 1]! <= mu) low += 1
-      if (count === 1 || mu <= cosines[0]!)
-        return [{ slab: first, weights: weightsOf(basis, ray) }]
-      if (mu >= cosines[count - 1]!)
-        return [{ slab: first + count - 1, weights: weightsOf(basis, ray) }]
-      const along = options.blend === 'cosine' ? (x: number) => x : Math.acos
-      const share =
-        (along(mu) - along(cosines[low]!)) /
-        (along(cosines[low + 1]!) - along(cosines[low]!))
-      if (options.blend === 'nearest')
-        return [
-          {
-            slab: first + low + (share > 0.5 ? 1 : 0),
-            weights: weightsOf(basis, ray),
-          },
-        ]
-      return [
-        { slab: first + low, weights: weightsOf(basis, ray, 1 - share) },
-        { slab: first + low + 1, weights: weightsOf(basis, ray, share) },
-      ]
-    },
+    reads: (ray) =>
+      options.stretch === undefined
+        ? viewSlabs(cosines, ray.muV, options.blend).map(({ slab, share }) => ({
+            slab,
+            weights: weightsOf(basis, ray, share),
+          }))
+        : viewReads(
+            { cosines, stretch: options.stretch, blend: options.blend },
+            ray,
+          ),
   }
 }
 
