@@ -279,9 +279,16 @@ export function cloudSunFn(
     const column = medium.depth
     const columnToSun = select(above, column.x, column.y.sub(column.x))
     const columnBehind = select(above, column.y.sub(column.x), column.x)
+    // The cache as the light after first order reads it: a depth to the
+    // sun and the ray's whole. First order's transmittance, above, takes
+    // the depth of the cell's mean transmittance, and today these two are
+    // the same cell's, shallow as depths in broken cloud. A cache that
+    // holds the depth itself beside the opacity answers here, and nothing
+    // that reads `CloudSun.depth` changes.
+    const deep = { toSun: depths.toSun, whole: depths.whole }
     const toSun = mix(
       columnToSun.mul(slant),
-      depth.add(depths.toSun),
+      depth.add(deep.toSun),
       depths.weight,
     )
     // The cache holds `behind` of what lies behind the point it is read at,
@@ -289,7 +296,7 @@ export function cloudSunFn(
     // the statistics give the share the cache does not hold.
     const held = depths.weight.mul(depths.behind)
     const cached = depths.weight
-      .mul(depths.whole.sub(depths.toSun))
+      .mul(deep.whole.sub(deep.toSun))
       .sub(held.mul(depth))
     const behind = columnBehind
       .mul(slant)

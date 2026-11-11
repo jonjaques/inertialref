@@ -140,7 +140,11 @@ export type CloudMediumFn = (
 ) => CloudMedium
 
 export interface CloudSun {
-  /** The cloud's transmittance to the sun. */
+  /**
+   * The cloud's transmittance to the sun: first order's reading. It is the
+   * mean transmittance a neighborhood passes, so the depth it stands for
+   * is the depth of that mean and not a mean depth.
+   */
   readonly cloud: Node<'float'>
   /** `sunThroughAt`: the beam through the air. */
   readonly air: Node<'vec3'>
@@ -149,6 +153,16 @@ export interface CloudSun {
    * sun, and the whole of that ray's, from where it enters cloud to where
    * it leaves: slant depths along the sun's ray, never times the sun's
    * cosine. The second is never under the first.
+   *
+   * **The light after first order's reading, as `cloud` is first order's,
+   * and the two need not be one number's.** A transmittance wants the
+   * depth of the mean transmittance; a source read at a depth wants the
+   * depth itself, which in broken cloud is the deeper. A march reads these
+   * two members and neither's source, so a sun whose cache holds both
+   * feeds each from its own with no edit of the march. Today the shipped
+   * sun forms both from the one cell, which holds an opacity: through four
+   * taps this depth is under a march of the field by 0.6 to 1.6 in every
+   * level of broken cloud, 2.3 to 4.3 in RMS cut at 16.
    *
    * What the shipped sun (`cloudSunFn`) holds in it, by where the sample
    * stands. `w` is the cache's weight where the taps end
