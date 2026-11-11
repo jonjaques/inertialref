@@ -211,7 +211,7 @@ function levelPhases(
  * the weights name and in no other; outside every level, level 0's. The
  * select is of the product, not of the level's matrix: a selected matrix is
  * a nine-float copy held in a variable, and on this Mac mini that copy
- * costs the trace more than the two products it saves (0.05 to 0.13 ms
+ * costs the trace more than the two products it saves (0.01 to 0.13 ms
  * dearer on the read reckoning's rows, where the selected product is 0.12
  * to 0.28 ms cheaper).
  */
