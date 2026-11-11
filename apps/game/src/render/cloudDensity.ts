@@ -15,6 +15,7 @@ import {
   smoothstep,
   step,
   vec3,
+  vec4,
 } from 'three/tsl'
 import { DETAIL_NOISE_PERIOD } from '@inertialref/rendering'
 import type { CloudClipmapNodes } from './cloudClipmap.ts'
@@ -424,31 +425,77 @@ const cubeTexel = (body: CloudBodyUniforms): Node<'float'> =>
  * (`createMesoscaleRay`), so a step pays no sine for it.
  */
 export function fieldMedium(deps: FieldMediumDeps): CloudMediumFn {
+  return fieldMedia(deps).field
+}
+
+/**
+ * The fine march's medium, and the same field read at a light tap: a point
+ * within a kilometer of the step the march last read, along the sun.
+ *
+ * A tap takes its step's column, the cover, the convective share, the gain
+ * and the texel they hold over, and the displacement beside the ray's chain
+ * (`MesoscaleRay.near`), and reads the profile and the noises at its own
+ * point. The column is the clipmap's, whose finest texel is wider than a
+ * tap's reach, and its pick is a quarter of a read; the displacement's
+ * chain is another third, and a tap that advanced it would leave the next
+ * step to start it over.
+ */
+export function fieldMedia(deps: FieldMediumDeps): {
+  readonly field: CloudMediumFn
+  readonly tap: CloudMediumFn
+} {
   const ray = createMesoscaleRay()
   const share = ditherShare()
-  return (sample, body) =>
-    recipe(
-      deps,
-      sample,
-      body,
-      (layer, frame) => {
-        const column = deps.clipmap.column(sample, body, layer.index)
-        return {
-          cover: column.cover,
-          convective: column.convective,
-          gain: column.gain,
+  /** The last step's column: cover, convective share, gain and its texel's meters. */
+  const stepped = property('vec4')
+  return {
+    field: (sample, body) =>
+      recipe(
+        deps,
+        sample,
+        body,
+        (layer, frame) => {
+          const column = deps.clipmap.column(sample, body, layer.index)
+          stepped.assign(
+            vec4(column.cover, column.convective, column.gain, column.meters),
+          )
+          return {
+            cover: stepped.x,
+            convective: stepped.y,
+            gain: stepped.z,
+            displacement: () =>
+              ray(
+                frame.turned,
+                levelPhases(body.layers, layer.weights),
+                layer.cell,
+                layer.level,
+              ),
+            column: stepped.w,
+          }
+        },
+        share,
+      ),
+    tap: (sample, body) =>
+      recipe(
+        deps,
+        sample,
+        body,
+        (layer, frame) => ({
+          cover: stepped.x,
+          convective: stepped.y,
+          gain: stepped.z,
           displacement: () =>
-            ray(
+            ray.near(
               frame.turned,
               levelPhases(body.layers, layer.weights),
               layer.cell,
               layer.level,
             ),
-          column: column.meters,
-        }
-      },
-      share,
-    )
+          column: stepped.w,
+        }),
+        share,
+      ),
+  }
 }
 
 /**
@@ -528,6 +575,8 @@ export function createCloudMedia(deps: {
   readonly clipmap: { readonly nodes: CloudClipmapNodes }
 }): {
   readonly field: CloudMediumFn
+  /** The field at a light tap beside the fine march's last step (`fieldMedia`). */
+  readonly tap: CloudMediumFn
   readonly synoptic: CloudMediumFn
   readonly analytic: CloudMediumFn
 } {
@@ -537,7 +586,7 @@ export function createCloudMedia(deps: {
     profile: deps.profile,
   }
   return {
-    field: fieldMedium({ ...recipe, clipmap: deps.clipmap.nodes }),
+    ...fieldMedia({ ...recipe, clipmap: deps.clipmap.nodes }),
     synoptic: synopticMedium({ ...recipe, maps: deps.maps.nodes }),
     analytic: analyticMedium(recipe),
   }
