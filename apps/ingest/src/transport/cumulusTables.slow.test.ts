@@ -3,23 +3,34 @@ import {
   CUMULUS_REFERENCE,
   CUMULUS_VIEWS,
   fixtureMedium,
+  mieDroplets,
 } from '@inertialref/rendering'
 import {
   fieldCase,
   findCumulus,
   probesOf,
+  SCALED_SAMPLES,
+  scaledOf,
+  scaledRows,
+  scaledTable,
+  skyOf,
   SUBJECTS,
   subjectFixture,
   traceCase,
+  traceScaled,
+  traceScaledSky,
+  unscaleOf,
 } from './cumulusTables.ts'
 
 /*
  * The committed reference, taken again from nothing but its generator: each
  * subject's place searched for on the field as it stands, its fixture cut,
- * and a pixel of each of its cases traced to the case's own count. It is
- * here and not in the gate because a subject is 2.5 million reads of the
- * field and a pixel 49,000 paths: about ten seconds a subject on the Mac
- * mini (Mac18,5, Apple M6).
+ * and a pixel of each of its cases traced to the case's own count, on the
+ * true medium, on the scaled one and under the sky alone. It is here and
+ * not in the gate because a subject is 2.5 million reads of the field, a
+ * pixel 49,000 paths and a scaled row of the droplet table a second of Mie
+ * series: 29 s and 33 s for the two subjects on the Mac mini (Mac18,5,
+ * Apple M6).
  *
  * The gate holds 500 of each subject's voxels to the field
  * (`cumulusFixture.test.ts`), which says the cloud has not moved. This says
@@ -37,7 +48,10 @@ describe.skipIf(CUMULUS_REFERENCE.cases.length === 0)(
         expect(subject).toEqual(
           CUMULUS_REFERENCE.subjects.find(({ id }) => id === search.id),
         )
-        const medium = fixtureMedium(subjectFixture(subject))
+        const fixture = subjectFixture(subject)
+        const medium = fixtureMedium(fixture)
+        const table = mieDroplets()
+        const scaled = scaledTable(table, scaledRows(fixture, table))
         for (const view of CUMULUS_VIEWS) {
           const spec = fieldCase(subject, view)
           expect(spec).toEqual(
@@ -52,6 +66,40 @@ describe.skipIf(CUMULUS_REFERENCE.cases.length === 0)(
             traceCase(medium, spec, [committed], 0, spec.samples),
           )
           expect(again).toEqual(committed)
+          // The same pixel's rows on the scaled medium. The first view
+          // scales the table itself, as a `scaled` and a `sky` process do;
+          // the others are handed it.
+          const index = CUMULUS_REFERENCE.probes.indexOf(committed)
+          const handed = view === CUMULUS_VIEWS[0] ? undefined : scaled
+          expect(
+            scaledOf(
+              spec,
+              traceScaled(
+                fixture,
+                spec,
+                [committed],
+                0,
+                SCALED_SAMPLES,
+                undefined,
+                handed,
+              ),
+              unscaleOf(fixture),
+            )[0],
+          ).toEqual(CUMULUS_REFERENCE.scaled[index])
+          expect(
+            skyOf(
+              spec,
+              traceScaledSky(
+                fixture,
+                spec,
+                [committed],
+                0,
+                SCALED_SAMPLES,
+                undefined,
+                handed,
+              ),
+            )[0],
+          ).toEqual(CUMULUS_REFERENCE.scaledSky[index])
         }
       },
       300_000,
