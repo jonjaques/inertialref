@@ -155,9 +155,13 @@ export const layerRadius = (layer: Layer): Node<'float'> =>
 /**
  * A level's noise frame at a sample: `M_k·offset`, and the level's two
  * origins, each the one-hot weights' sum over the three, so outside every
- * level all three are zero and no read is wasted on a select of indices.
- * The weights are exactly 0 or 1, so the sums are the chosen level's to the
- * bit.
+ * level all three are zero. The weights are exactly 0 or 1, so the sums are
+ * the chosen level's to the bit.
+ *
+ * The turned offset is the level's one product (`levelProduct`): summed as
+ * the origins are, it would be three matrix products a read where one
+ * counts. Times `inside`, it stays zero outside every level, as the sum
+ * does.
  */
 function noiseFrame(
   sample: CloudSample,
@@ -173,8 +177,14 @@ function noiseFrame(
       .mul(weights.x)
       .add(of(1).mul(weights.y))
       .add(of(2).mul(weights.z)) as Node<'vec3'>
+  const turned = levelProduct(
+    weights,
+    (k) => layers.turn[k].mul(sample.offset) as Node<'vec3'>,
+  )
   return {
-    turned: sum((k) => layers.turn[k].mul(sample.offset) as Node<'vec3'>),
+    turned: turned
+      .mul(weights.x.add(weights.y).add(weights.z))
+      .toVar() as Node<'vec3'>,
     noise: sum((k) => layers.noiseOrigin[k]),
     detail: sum((k) => layers.detailOrigin[k]),
   }
@@ -195,6 +205,25 @@ function levelPhases(
       .add(layers.mesoscale[2][half].mul(weights.z)) as Node<'vec3'>
   return [sum(0), sum(1)]
 }
+
+/**
+ * The level's of three products, `of(k)` formed in the branch of the level
+ * the weights name and in no other; outside every level, level 0's. The
+ * select is of the product, not of the level's matrix: a selected matrix is
+ * a nine-float copy held in a variable, and on this Mac mini that copy
+ * costs the trace more than the two products it saves (0.05 to 0.13 ms
+ * dearer on the read reckoning's rows, where the selected product is 0.12
+ * to 0.28 ms cheaper).
+ */
+const levelProduct = (
+  weights: Node<'vec3'>,
+  of: (k: 0 | 1 | 2) => Node<'vec3'>,
+): Node<'vec3'> =>
+  select(
+    weights.y.greaterThan(0.5),
+    of(1),
+    select(weights.z.greaterThan(0.5), of(2), of(0)),
+  ) as Node<'vec3'>
 
 /** The base noise's lattice at a sample displaced by `w`, in its level's base cells: the level's frame, no absolute position. */
 const baseCells = (
