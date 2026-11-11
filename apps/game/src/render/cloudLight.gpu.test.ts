@@ -23,6 +23,7 @@ import {
   int,
   ivec2,
   length,
+  log,
   max,
   saturate,
   storage,
@@ -1105,11 +1106,16 @@ describe('the sun a cloud sample sees', () => {
     body.sunUp.value = 1
     uniforms.trace.lightTaps.value = taps
     const medium = slabMedium([{ base: BASE, top: TOP, sigma, fraction }])
+    // The cache holds what a cell holds: the depth of the column's mean
+    // transmittance, which for a half-clear column is under ln 2.
     const depth: CloudSunDepthNodes = {
       depths: (offset) => {
-        const toSun = max(float(TOP).sub(altitudeAt(body, offset)), 0).mul(
-          sigma,
+        const through = exp(
+          max(float(TOP).sub(altitudeAt(body, offset)), 0).mul(-sigma),
         )
+        const toSun = log(
+          float(1 - fraction).add(through.mul(fraction)),
+        ).negate()
         return { toSun, whole: toSun, weight: float(1), behind: float(1) }
       },
     }
@@ -1141,11 +1147,10 @@ describe('the sun a cloud sample sees', () => {
   })
 
   it('mixes the taps as one segment: a half-clear column at τ 20 passes half the sun, not a quarter', async () => {
-    // σ·1000 m = 20 inside the first kilometer, past which the depth is
-    // nothing: the slab's top is the taps' reach, which eight taps spaced in
-    // depth are cut at, where two end 75 m up.
-    const height = TOP - 1000
-    const through = await transmittance(8, 0.02, 0.5, height)
+    // σ·500 m = 20 inside the taps' reach, past which the depth is
+    // nothing: the slab's top is where eight taps end.
+    const height = TOP - 500
+    const through = await transmittance(8, 0.04, 0.5, height)
     expect(through).toBeCloseTo(0.5 * (1 + Math.exp(-20)) * Math.exp(0), 5)
   })
 })

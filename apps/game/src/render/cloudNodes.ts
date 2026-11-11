@@ -134,7 +134,46 @@ export interface CloudSun {
   readonly cloud: Node<'float'>
   /** `sunThroughAt`: the beam through the air. */
   readonly air: Node<'vec3'>
-  /** Optical depth through cloud toward the sun, and the whole of that ray's. */
+  /**
+   * Optical depth of the drawn medium through cloud from the sample to the
+   * sun, and the whole of that ray's, from where it enters cloud to where
+   * it leaves: slant depths along the sun's ray, never times the sun's
+   * cosine. The second is never under the first.
+   *
+   * What the shipped sun (`cloudSunFn`) holds in it, by where the sample
+   * stands. `w` is the cache's weight where the taps end
+   * (`CloudSunDepths.weight`).
+   *
+   * - **A sample with taps, the cache whole** (`w` = 1). The taps' own
+   *   depth, the field's extinction at each tap's middle times the tap's
+   *   span, over half a kilometer at most and no further than the level's
+   *   exit along the sun; plus the cache's depth where the taps end. The
+   *   cache's is the depth of the mean transmittance of its 400 m cells:
+   *   in broken cloud it is shallower than the depth along any one ray, by
+   *   0.6 to 1.6 through four taps. Under six it is exact to a half float,
+   *   past it a cell steps by 0.2 to 0.4, and no cell holds more than 64.
+   * - **A sample the early out skipped:** one whose cached depth at the
+   *   sample itself is past six with the cache whole. No tap is read, and
+   *   both depths are the cache's at the sample: the first is over six, in
+   *   the cells' stepped part.
+   * - **A statistical step,** a footprint past the ray's switch. Its taps
+   *   read the level's statistics as it does, so their depth is the
+   *   level's, not a place's. Such a step stands past the cache's reach on
+   *   any lens the campaign draws, and there both depths are the next
+   *   case's.
+   * - **Where the cache is not whole** (`w` < 1: past 20.8 km from the eye
+   *   along its axes, from orbit, or while it comes back after the field
+   *   changed). The first is `mix(column/μ, taps + cache, w)`, with
+   *   `column` the level's own in-cloud column on the sun's side of the
+   *   sample (`CloudMedium.depth`) and `μ` the sun's cosine over the
+   *   sample's horizon, no less than 0.05. At `w` = 0 it is the level's
+   *   nominal column along the sun and holds nothing of the place. The
+   *   part behind the sample is mixed alike.
+   * - **Under the sample's horizon.** The sun's side is down: the column
+   *   is the part under the sample, the taps run down to the level's base,
+   *   and the cache's cell sums to where its ray leaves the level and adds
+   *   one crossing, by the crossing's law, of what it meets coming back up.
+   */
   readonly depth: Node<'vec2'>
   /** The cloud's transmittance to the sun with its depth scaled by `a`. */
   octave(a: number): Node<'float'>

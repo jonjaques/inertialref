@@ -46,6 +46,8 @@ import {
   cloudMarch,
   type CloudMarchResult,
   type CloudPhaseMode,
+  KIND_GAP,
+  KIND_SUN,
   marchFar,
 } from './cloudMarch.ts'
 import {
@@ -121,6 +123,8 @@ export interface CloudTraceDeps {
   readonly source: CloudSourceNodes
   /** The four numbers a ray is placed by. */
   readonly jitter: CloudJitterNodes
+  /** `CloudMarchOptions.unstrided`: the march a test holds the strides to. */
+  readonly unstrided?: boolean
 }
 
 /** Every kernel's name on the timeline: one label, one row. */
@@ -143,11 +147,25 @@ const TEXEL_BYTES = 72
 
 /**
  * Sum of steps, the largest, rays, rays whose budget's floor lengthened a
- * step; then the sum of the rays' opacity in `OPACITY_UNIT`s, and the center
- * texel's range as a float's bits with the count of dispatches that wrote
- * it.
+ * step in cloud; then the sum of the rays' opacity in `OPACITY_UNIT`s, and
+ * the center texel's range as a float's bits with the count of dispatches
+ * that wrote it; then the rays' work by kind: steps in cloud, steps outside
+ * every level, suns taken, taps read and taps the early out left unread.
  */
-const STAT_SLOTS = 7
+const STAT_SLOTS = 12
+/**
+ * The GPU's batch, trace texels wide and tall. A workgroup of 8 × 8 runs as
+ * two batches of 32 rays, its top four rows and its bottom four, and a batch
+ * costs its longest ray: half the rays at 8 reads and half at 40 cost what
+ * every ray at 40 costs when the two share batches (measured on the Mac
+ * mini's M6). So the mean over batches of each batch's longest ray is the
+ * step count the trace's time follows, and it has a buffer of its own: a
+ * maximum a batch cannot be held in a slot.
+ */
+const BATCH = [8, 4] as const
+/** Batches a row of the maxima's buffer holds, and its rows: a trace of 1,024 × 512. */
+const BATCH_STRIDE = 128
+const BATCH_SLOTS = BATCH_STRIDE * BATCH_STRIDE
 /** A ray's opacity is summed in 1,024ths: four dispatches of a Retina trace's 324,000 rays stay under 2³². */
 const OPACITY_UNIT = 1024
 
@@ -160,7 +178,7 @@ export interface CloudTraceSteps {
   /** Steps a ray, the mean and the most. */
   readonly mean: number
   readonly max: number
-  /** Rays whose budget's floor lengthened a step past the schedule's. */
+  /** Rays whose budget's floor lengthened a step in cloud past the schedule's. */
   readonly exhausted: number
   /** The mean of 1 − T_c over the rays: the served opacity. */
   readonly opacity: number
@@ -169,21 +187,68 @@ export interface CloudTraceSteps {
    * frame's central ray reaches ln 50; null where it never does.
    */
   readonly range: number | null
+  /**
+   * A ray's work by kind, means over the rays: its steps in cloud, its
+   * steps inside a level that found none, its steps outside every level,
+   * the suns it took, the taps those read, and the taps the sun's early out
+   * left unread.
+   */
+  readonly kinds: {
+    readonly cloud: number
+    readonly clear: number
+    readonly gap: number
+    readonly suns: number
+    readonly taps: number
+    readonly skipped: number
+  }
+  /**
+   * The mean over the GPU's batches of 32 rays of each batch's longest ray,
+   * steps: what the trace's time follows where the rays' mean does not.
+   * Null for a trace of more batches than the buffer holds.
+   */
+  readonly batchLongest: number | null
 }
 
-/** The counters' buffer as a report; null where no ray was counted. */
-function stepsOf(buffer: ArrayBuffer): CloudTraceSteps | null {
+/** The mean of the batches' maxima over a trace's extent; null where it outruns the buffer. */
+function batchLongestOf(buffer: ArrayBuffer, extent: Extent): number | null {
+  const columns = Math.ceil(extent.width / BATCH[0])
+  const rows = Math.ceil(extent.height / BATCH[1])
+  if (columns > BATCH_STRIDE || rows > BATCH_STRIDE) return null
+  const longest = new Uint32Array(buffer)
+  let sum = 0
+  for (let row = 0; row < rows; row += 1)
+    for (let column = 0; column < columns; column += 1)
+      sum += longest[row * BATCH_STRIDE + column] ?? 0
+  return sum / (columns * rows)
+}
+
+/** The counters' buffers as a report; null where no ray was counted. */
+function stepsOf(
+  buffer: ArrayBuffer,
+  batches: ArrayBuffer,
+  extent: Extent,
+): CloudTraceSteps | null {
   const counts = new Uint32Array(buffer)
   const [sum = 0, largest = 0, rays = 0, exhausted = 0, opacity = 0] = counts
   if (rays === 0) return null
   const range = new Float32Array(buffer)[5] ?? -1
   const written = (counts[6] ?? 0) > 0
+  const of = (slot: number): number => (counts[slot] ?? 0) / rays
   return {
     mean: sum / rays,
     max: largest,
     exhausted,
     opacity: opacity / OPACITY_UNIT / rays,
     range: written && range >= 0 ? range : null,
+    kinds: {
+      cloud: of(7),
+      clear: (sum - (counts[7] ?? 0) - (counts[8] ?? 0)) / rays,
+      gap: of(8),
+      suns: of(9),
+      taps: of(10),
+      skipped: of(11),
+    },
+    batchLongest: batchLongestOf(batches, extent),
   }
 }
 
@@ -191,11 +256,14 @@ function stepsOf(buffer: ArrayBuffer): CloudTraceSteps | null {
 interface Stats {
   readonly buffer: StorageBufferAttribute
   readonly counts: ReturnType<typeof countsOf>
+  /** Each batch's longest ray, steps: `BATCH_STRIDE` batches a row. */
+  readonly batchBuffer: StorageBufferAttribute
+  readonly batches: ReturnType<typeof countsOf>
   readonly on: UniformNode<'float', number>
 }
 
-const countsOf = (buffer: StorageBufferAttribute) =>
-  storage(buffer, 'uint', STAT_SLOTS).toAtomic()
+const countsOf = (buffer: StorageBufferAttribute, slots = STAT_SLOTS) =>
+  storage(buffer, 'uint', slots).toAtomic()
 
 /**
  * Where texel `texel` looks this dispatch: its history pixel's direction,
@@ -270,12 +338,37 @@ function count(
   stats: Stats,
   result: CloudMarchResult,
   fine: CloudMarchResult,
+  texel: Node<'uvec2'>,
   center: Node<'bool'>,
 ): void {
   If(stats.on.greaterThan(0), () => {
     const steps = uint(result.steps)
     atomicAdd(stats.counts.element(0), steps)
     atomicMax(stats.counts.element(1), steps)
+    // The ray's kinds, unpacked: its steps in cloud, its steps outside
+    // every level, and its suns.
+    const kinds = uint(fine.kinds).toVar()
+    atomicAdd(stats.counts.element(7), kinds.mod(uint(KIND_GAP)))
+    atomicAdd(
+      stats.counts.element(8),
+      kinds.div(uint(KIND_GAP)).mod(uint(KIND_SUN / KIND_GAP)),
+    )
+    atomicAdd(stats.counts.element(9), kinds.div(uint(KIND_SUN)))
+    atomicAdd(stats.counts.element(10), uint(fine.taps.x))
+    atomicAdd(stats.counts.element(11), uint(fine.taps.y))
+    // A trace wider or taller than the buffer's batches counts none of
+    // them, and the report answers null.
+    const column = texel.x.div(uint(BATCH[0]))
+    const row = texel.y.div(uint(BATCH[1]))
+    If(
+      column.lessThan(uint(BATCH_STRIDE)).and(row.lessThan(uint(BATCH_STRIDE))),
+      () => {
+        atomicMax(
+          stats.batches.element(row.mul(uint(BATCH_STRIDE)).add(column)),
+          steps,
+        )
+      },
+    )
     atomicAdd(stats.counts.element(2), uint(1))
     atomicAdd(stats.counts.element(3), uint(result.exhausted))
     const opacity = min(max(result.transmittance.oneMinus(), 0), 1)
@@ -321,6 +414,7 @@ function traceKernel(
         handover: draw.w,
         dither: draw.y,
         phaseMode,
+        ...(deps.unstrided === undefined ? {} : { unstrided: deps.unstrided }),
       })
       const result = marchFar(
         fine,
@@ -332,7 +426,7 @@ function traceKernel(
       knots.flush(texel)
       const middle = size.div(uint(2))
       const center = texel.x.equal(middle.x).and(texel.y.equal(middle.y))
-      count(stats, result, fine, center)
+      count(stats, result, fine, texel, center)
     })
   })()
     .computeKernel([WORKGROUP, WORKGROUP, 1])
@@ -361,7 +455,17 @@ export class CloudTrace implements CloudResource {
   constructor(deps: CloudTraceDeps) {
     this.#deps = deps
     const buffer = new StorageBufferAttribute(new Uint32Array(STAT_SLOTS), 1)
-    this.#stats = { buffer, counts: countsOf(buffer), on: uniform(0) }
+    const batchBuffer = new StorageBufferAttribute(
+      new Uint32Array(BATCH_SLOTS),
+      1,
+    )
+    this.#stats = {
+      buffer,
+      counts: countsOf(buffer),
+      batchBuffer,
+      batches: countsOf(batchBuffer, BATCH_SLOTS),
+      on: uniform(0),
+    }
     this.#outputs = {
       light: cloudStorageTexture(1, 1, 'rgba16float', 'cloud trace light'),
       aux: cloudStorageTexture(2, 1, 'rgba16float', 'cloud trace aux'),
@@ -409,13 +513,16 @@ export class CloudTrace implements CloudResource {
       const kernels = CLOUD_PHASE_MODES.map((mode) =>
         traceKernel(this.#deps, this.#outputs, depth, this.#stats, mode),
       )
-      const { counts } = this.#stats
+      const { counts, batches } = this.#stats
       this.#clear = Fn(() => {
+        If(instanceIndex.lessThan(uint(BATCH_SLOTS)), () => {
+          atomicStore(batches.element(instanceIndex), uint(0))
+        })
         If(instanceIndex.lessThan(uint(STAT_SLOTS)), () => {
           atomicStore(counts.element(instanceIndex), uint(0))
         })
       })()
-        .compute(STAT_SLOTS)
+        .compute(BATCH_SLOTS)
         .setName(CLOUD_STATS_LABEL)
       this.#depth = depth
       this.#kernels = kernels
@@ -459,6 +566,7 @@ export class CloudTrace implements CloudResource {
     const { light, aux, knotDepth, knotLight } = this.#outputs
     for (const map of [light, aux, knotDepth, knotLight]) map.dispose()
     this.#stats.buffer.dispose()
+    this.#stats.batchBuffer.dispose()
   }
 
   #dispatch(
@@ -509,11 +617,14 @@ export class CloudTrace implements CloudResource {
 
   #read(renderer: WebGPURenderer): void {
     this.#reading = true
-    void renderer
-      .getArrayBufferAsync(this.#stats.buffer)
-      .then((buffer) => {
+    const { extent } = this.#outputs
+    void Promise.all([
+      renderer.getArrayBufferAsync(this.#stats.buffer),
+      renderer.getArrayBufferAsync(this.#stats.batchBuffer),
+    ])
+      .then(([buffer, batches]) => {
         if (this.#disposed || !this.#wanted) return
-        this.#steps = stepsOf(buffer)
+        this.#steps = stepsOf(buffer, batches, extent)
       })
       .catch(() => {
         // A device being replaced reads nothing back; the next frame counts again.
