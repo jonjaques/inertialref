@@ -1,10 +1,31 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { StorageBufferAttribute, Vector3 } from 'three/webgpu'
+import {
+  float,
+  Fn,
+  If,
+  instanceIndex,
+  length,
+  select,
+  storage,
+  uint,
+  uniform,
+} from 'three/tsl'
+import {
+  GENUS_TABLE,
+  levelStatistics,
+  readLevelStatistics,
+  type ScenarioId,
+  WEATHER_SCENARIOS,
+} from '@inertialref/rendering'
 import { Quaternion as Q, type Vec3 } from '@inertialref/spatial'
 import { type CloudField, createCloudField } from './cloudField.ts'
 import { type CloudFrame, cloudFrame } from './cloudFrame.ts'
+import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import { depthTexture, NO_BUDGET, readTexels, SKY_KM } from './cloudMarchRig.ts'
 import { LOOKING_UP, type RigStance, rigFrameInputs } from './cloudSystemRig.ts'
+import type { CloudSample } from './cloudNodes.ts'
 import { CloudTrace, type CloudTraceSteps } from './cloudTrace.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
@@ -212,5 +233,128 @@ describe('between two levels a step is a stride (§5.8)', () => {
     expect(plain.steps.kinds.gap).toBe(0)
     expect(strided.steps.mean).toBe(plain.steps.mean)
     expect(plain.steps.kinds.cloud).toBeGreaterThan(1)
+  }, 120_000)
+})
+
+describe('a level’s statistics as the fine medium answers them', () => {
+  /*
+   * The level's fifth number, the cloudy columns' mean scaled depth, rides
+   * the statistics' table beside the gain and is read as
+   * `CloudLevelStatistics.mean`. Held here to the CPU table it is built
+   * from (`levelStatistics`), through the field's own medium at the eye's
+   * column, with the three numbers a crossing reads beside it.
+   *
+   * The cover the clipmap holds at the column is not asked for: the CPU
+   * table is read at the cover whose cloudy share is the share the GPU
+   * answers, which is the same row of the same table, and the other
+   * numbers are then held at that cover.
+   */
+  const REGIMES: readonly ScenarioId[] = [
+    'fair-cumulus',
+    'overcast',
+    'cirrus-over-cumulus',
+  ]
+
+  it('answers the cloudy columns’ mean depth as the CPU table holds it, on every level of three regimes', async () => {
+    const body = field.uniforms.served
+    const out = new StorageBufferAttribute(new Float32Array(3 * 6), 1)
+    const into = storage(out, 'float', 3 * 6)
+    const heights = uniform(new Vector3())
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(3)), () => {
+        const height = select(
+          instanceIndex.equal(uint(0)),
+          heights.x,
+          select(instanceIndex.equal(uint(1)), heights.y, heights.z),
+        )
+        // Straight up from the eye: the eye-relative offset is the height
+        // less the eye's own, along the body's up.
+        const offset = body.up.mul(height.sub(body.eye)).toVar()
+        const sample: CloudSample = {
+          offset,
+          distance: length(offset),
+          altitude: altitudeAt(body, offset),
+          sunMu: sunMuAt(body, offset),
+          footprint: float(0),
+        }
+        const { statistics, layer } = field.medium(sample, body)
+        const values = [
+          float(layer),
+          statistics!.fraction,
+          statistics!.depth,
+          statistics!.shape,
+          statistics!.sight,
+          statistics!.mean!,
+        ]
+        values.forEach((value, k) => {
+          into.element(instanceIndex.mul(uint(6)).add(uint(k))).assign(value)
+        })
+      })
+    })().compute(3)
+    let held = 0
+    for (const weather of REGIMES) {
+      const levels = WEATHER_SCENARIOS[weather].layers
+      settled(
+        { eye: 100, looking: LOOKING_UP, air: true },
+        {
+          ...DEFAULT_CLOUD_LEVERS,
+          on: true,
+          weather,
+        },
+      )
+      const middles = levels.map((level) => (level.base + level.top) / 2)
+      heights.value.set(middles[0] ?? 0, middles[1] ?? 0, middles[2] ?? 0)
+      await gpu.compute(kernel)
+      const got = new Float32Array(await gpu.readBuffer(out))
+      for (const [k, level] of levels.entries()) {
+        const [layer, fraction, depth, shape, sight, mean] = got.subarray(
+          6 * k,
+          6 * k + 6,
+        ) as unknown as number[]
+        const what = `${weather}, level ${k}`
+        expect(layer, what).toBe(k)
+        const stats = levelStatistics({
+          base: level.base,
+          top: level.top,
+          stratiform: level.genus,
+          cumuliform: level.genus,
+        })
+        const convective = GENUS_TABLE[level.genus].cumuliform ? 1 : 0
+        const at = (cover: number) =>
+          readLevelStatistics(stats, cover, convective)
+        // The cover at which the table's cloudy share is the GPU's: the
+        // share never falls as the cover grows.
+        let low = 0
+        let high = 1
+        for (let turn = 0; turn < 48; turn += 1) {
+          const middle = (low + high) / 2
+          if (at(middle).fraction < fraction!) low = middle
+          else high = middle
+        }
+        const want = at((low + high) / 2)
+        console.log(
+          `${what}: share ${fraction!.toFixed(4)}; depth ${depth!.toFixed(3)} against ${want.depth.toFixed(3)}, shape ${shape!.toFixed(3)} against ${want.shape.toFixed(3)}, mean ${mean!.toFixed(3)} against ${want.mean.toFixed(3)}`,
+        )
+        // A level the regime's cover leaves clear at this place holds no
+        // number to compare.
+        if (!(fraction! > 0.01)) continue
+        held += 1
+        // A half float's step is 5 × 10⁻⁴ of a value, and the read blends
+        // two rows and two covers of them.
+        const near = (a: number, b: number): number =>
+          Math.abs(a - b) / Math.max(Math.abs(b), 1e-3)
+        expect(near(depth!, want.depth), `${what}: depth`).toBeLessThan(5e-3)
+        expect(near(mean!, want.mean), `${what}: mean`).toBeLessThan(5e-3)
+        // The mean is the columns', which is never under the depth of
+        // their mean transmittance.
+        expect(mean!).toBeGreaterThanOrEqual(depth! * (1 - 1e-3))
+        expect(near(sight!, want.sight), `${what}: sight`).toBeLessThan(5e-3)
+        void shape
+      }
+    }
+    // The control: most of the four levels hold cloud at the eye's column.
+    expect(held).toBeGreaterThanOrEqual(3)
+    kernel.dispose()
+    out.dispose()
   }, 120_000)
 })

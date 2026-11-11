@@ -101,6 +101,16 @@ export interface CloudLevelStatistics {
   readonly shape: Node<'float'>
   /** §5.9's sight length, meters. */
   readonly sight: Node<'float'>
+  /**
+   * The mean scaled vertical depth of the level's cloudy columns, where a
+   * medium holds it: the field's does, and a slab's is its one depth.
+   *
+   * **The level's mean, not a place's,** and not the mean `depth` and
+   * `shape` imply: `spreadDepth(depth, shape)` is the mean of the gamma
+   * fitted to the columns' transmittance, 1.3 to 3 times this. A light
+   * that weighs a column by its depth reads this one.
+   */
+  readonly mean?: Node<'float'>
 }
 
 export interface CloudMedium {
@@ -449,6 +459,7 @@ export function slabMedium(slabs: readonly CloudSlab[]): CloudMediumFn {
       depth: float(0),
       shape: float(UNSPREAD_SHAPE),
       sight: float(UNBOUNDED_COLUMN),
+      mean: float(0),
     }
     // Last to first, so the first slab holding the sample is the last select.
     for (let k = slabs.length - 1; k >= 0; k -= 1) {
@@ -482,6 +493,11 @@ export function slabMedium(slabs: readonly CloudSlab[]): CloudMediumFn {
           inside,
           scalar(slab.column ?? UNBOUNDED_COLUMN),
           statistics.sight,
+        ),
+        mean: select(
+          inside,
+          top.sub(base).mul(scalar(slab.sigma)),
+          statistics.mean ?? float(0),
         ),
       }
     }

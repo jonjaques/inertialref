@@ -404,6 +404,7 @@ function recipe(
       depth: statistics.depth,
       shape: statistics.shape,
       sight: statistics.sightCells.mul(layer.cell),
+      mean: deps.profile.mean(slot, layer.level, columnCover, columnShare),
     },
   }
 }

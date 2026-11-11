@@ -47,8 +47,8 @@ import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
  * **Rows 48–95, the statistics:** `levelStatistics`, the footprint read's
  * table, eight rows a level as the profile's, the covers along a row
  * (`statisticsTexels`): (fraction, depth, shape, sight in cells) at texel
- * i, the gain at texel 17 + i. Read linearly in cover and row, as
- * `readLevelStatistics` reads them.
+ * i, the gain and the cloudy columns' mean depth at texel 17 + i. Read
+ * linearly in cover and row, as `readLevelStatistics` reads them.
  *
  * In the profile's texture and not one of their own: the trace binds 10 of
  * WebGPU's 16 sampled textures and its census holds that, and a statistic is
@@ -362,6 +362,20 @@ export class CloudProfile {
       shape: read.z,
       sightCells: read.w,
     }
+  }
+
+  /**
+   * The mean scaled depth of a level's cloudy columns at a cover and
+   * convective share, the level's and no place's (`LevelStatistics.mean`):
+   * one read, the gain's texel.
+   */
+  mean(
+    slot: CloudProfileSlot,
+    level: Node<'float'>,
+    cover: Node<'float'>,
+    v: Node<'float'>,
+  ): Node<'float'> {
+    return this.#statistic(STATISTICS_COVERS, slot, level, cover, v).y
   }
 
   /** A level's gain at a cover and convective share: one read. */
