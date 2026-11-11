@@ -444,7 +444,7 @@ export function fieldMedium(deps: FieldMediumDeps): CloudMediumFn {
               layer.cell,
               layer.level,
             ),
-          column: deps.clipmap.columnMeters(sample, body),
+          column: column.meters,
         }
       },
       share,

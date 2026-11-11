@@ -15,6 +15,7 @@ import {
   clamp,
   float,
   floor,
+  If,
   int,
   max,
   mix,
@@ -118,6 +119,8 @@ export interface CloudClipmapColumn {
   readonly convective: Node<'float'>
   /** What the resolved extinction is multiplied by (`levelStatistics`). */
   readonly gain: Node<'float'>
+  /** The texel size of the clipmap level the sample reads: the column a segment may span. */
+  readonly meters: Node<'float'>
 }
 
 export interface CloudClipmapNodes {
@@ -126,14 +129,17 @@ export interface CloudClipmapNodes {
    * outside every level), from the finest clipmap level whose window holds
    * it, faded over the outer fifth into the next (the fade band reads both).
    * Level 0.
+   *
+   * A call emits the level's pick as statements where it is made, so a call
+   * is one read: its members are what that pick found. A second call for
+   * the same sample picks again rather than reading variables a branch it
+   * is not in may have left unset.
    */
   column(
     sample: CloudSample,
     body: CloudBodyUniforms,
     level: Node<'int'>,
   ): CloudClipmapColumn
-  /** The texel size of the clipmap level a sample reads: the column a segment may span. */
-  columnMeters(sample: CloudSample, body: CloudBodyUniforms): Node<'float'>
 }
 
 /** Which level a sample reads, and how far into its fade band it is. */
@@ -171,29 +177,50 @@ function locate(
 }
 
 /**
- * The finest level whose window holds the sample, from the coarsest down so
- * the last level that holds it wins. Past the coarsest there is no level,
- * and the coverage fades to none over that level's own band.
+ * The finest level whose window holds the sample, as statements: each
+ * level's coordinates are formed once, in the branch that tests it, and the
+ * next level's only inside a fade band. A chain of `select`s over the levels
+ * reads the same values, but the builder emits a `select` as an `if` at each
+ * of its uses, so each of the pick's five uses walks the chain again and a
+ * read past level 0 forms every level's coordinates several times: one fine
+ * read names each level's anchor seven times, where this form names it at
+ * most twice (`cloudDensity.gpu.test.ts`). Past the coarsest there is no
+ * level, and the coverage fades to none over that level's own band.
  */
 function pick(sample: CloudSample, body: CloudBodyUniforms): Pick {
   const levels = body.clipmap.slice(0, CLOUD_CLIPMAP_LEVELS)
-  const located = levels.map((level) => locate(level, sample.offset, body))
-  const coarsest = located.length - 1
-  let coordinates: Node<'vec4'> = vec4(located[coarsest]!.at, 0, 0)
-  let blend: Node<'vec2'> = vec2(1, levels[coarsest]!.texel)
-  let layer: Node<'int'> = int(coarsest)
-  for (let k = coarsest; k >= 0; k -= 1) {
-    const { at, reach } = located[k]!
+  const coarsest = levels.length - 1
+  const coordinates = vec4(0).toVar()
+  const blend = vec2(1, levels[coarsest]!.texel).toVar()
+  const layer = int(coarsest).toVar()
+  const nest = (k: number): void => {
+    const located = locate(levels[k]!, sample.offset, body)
+    const at = located.at.toVar()
+    const reach = located.reach.toVar()
     const holds = reach.lessThan(REACH)
-    const next = located[Math.min(k + 1, coarsest)]!.at
-    coordinates = select(holds, vec4(at, next), coordinates)
-    blend = select(
-      holds,
-      vec2(smoothstep(FADE, REACH, reach), levels[k]!.texel),
-      blend,
-    )
-    layer = select(holds, int(k), layer)
+    if (k === coarsest) {
+      // No next level: the read fades to none, and `zw` is never read.
+      coordinates.assign(vec4(at, 0, 0))
+      If(holds, () => {
+        blend.assign(vec2(smoothstep(FADE, REACH, reach), levels[k]!.texel))
+      })
+      return
+    }
+    If(holds, () => {
+      const fade = smoothstep(FADE, REACH, reach).toVar()
+      coordinates.assign(vec4(at, 0, 0))
+      If(fade.greaterThan(0), () => {
+        coordinates.assign(
+          vec4(at, locate(levels[k + 1]!, sample.offset, body).at),
+        )
+      })
+      blend.assign(vec2(fade, levels[k]!.texel))
+      layer.assign(int(k))
+    }).Else(() => {
+      nest(k + 1)
+    })
   }
+  nest(0)
   return { coordinates, blend, layer }
 }
 
@@ -284,28 +311,11 @@ export class CloudClipmap implements CloudResource {
   ) {
     this.#target.texture.name = 'cloud clipmap'
     const column = texture(this.#target.texture)
-    // One pick a sample node: the column and the meters share it.
-    const picks = new WeakMap<CloudSample, Map<CloudBodyUniforms, Pick>>()
-    const pickOf = (sample: CloudSample, body: CloudBodyUniforms): Pick => {
-      let byBody = picks.get(sample)
-      if (byBody === undefined) {
-        byBody = new Map()
-        picks.set(sample, byBody)
-      }
-      let found = byBody.get(body)
-      if (found === undefined) {
-        found = pick(sample, body)
-        byBody.set(body, found)
-      }
-      return found
-    }
     const read = (
       map: TextureNode,
-      sample: CloudSample,
-      body: CloudBodyUniforms,
+      { coordinates, blend, layer }: Pick,
       level: Node<'int'>,
     ): Node<'vec4'> => {
-      const { coordinates, blend, layer } = pickOf(sample, body)
       const fade = blend.x
       const cloud = select(level.lessThan(int(0)), int(0), level)
       // Beyond the coarsest window the first read is not taken, and the
@@ -329,7 +339,8 @@ export class CloudClipmap implements CloudResource {
     }
     this.nodes = {
       column: (sample, body, level) => {
-        const held = read(column, sample, body, level)
+        const found = pick(sample, body)
+        const held = read(column, found, level)
         return {
           cover: held.x,
           convective: held.y,
@@ -337,9 +348,9 @@ export class CloudClipmap implements CloudResource {
             .mul(256)
             .add(held.w)
             .mul((255 / 65535) * CLIPMAP_GAIN_SPAN),
+          meters: found.blend.y,
         }
       },
-      columnMeters: (sample, body) => pickOf(sample, body).blend.y,
     }
     this.#source = source
     this.#profile = profile
