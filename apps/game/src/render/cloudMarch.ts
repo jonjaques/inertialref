@@ -870,15 +870,29 @@ export function cloudMarch(
      * field at a cover of one, and its depth is the step's own. The switch
      * is the medium's, formed here from the same cell and the same dither.
      */
-    const statistical = s.footprint.greaterThan(
-      ofLevel(body.layers.cell, m.layer).mul(switchShare),
-    )
-    const depth = crossingDepth(
-      m.fraction,
-      m.sigma.mul(length).mul(select(statistical, column.spread, float(1))),
-      exponent,
-      select(statistical, column.shape, float(UNSPREAD_SHAPE)),
-    ).toVar()
+    const statistical = s.footprint
+      .greaterThan(ofLevel(body.layers.cell, m.layer).mul(switchShare))
+      .toVar()
+    /*
+     * A whole column whose depths do not spread passes Beer's law, which
+     * is what the crossing's law answers for it at any exponent: so the
+     * law is taken only where the step is statistical or its column is
+     * partly clear. Its logarithms and exponentials are a third dearer
+     * than a read of the field, and under an overcast, where every step is
+     * resolved, they were 0.46 ms of the frame for an answer the step
+     * already held.
+     */
+    const depth = m.sigma.mul(length).toVar()
+    If(statistical.or(m.fraction.lessThan(1)), () => {
+      depth.assign(
+        crossingDepth(
+          m.fraction,
+          m.sigma.mul(length).mul(select(statistical, column.spread, float(1))),
+          exponent,
+          select(statistical, column.shape, float(UNSPREAD_SHAPE)),
+        ),
+      )
+    })
     // 1 − e^−τ by its series under τ = 0.01, where the subtraction cancels
     // in float32.
     const opacity = depth.mul(stepShare(depth)).toVar()

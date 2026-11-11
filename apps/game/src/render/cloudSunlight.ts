@@ -117,6 +117,13 @@ export interface CloudSunDeps {
    * what varies along it (`fieldMedia`). The whole medium when absent.
    */
   readonly tap?: CloudMediumFn
+  /**
+   * The cached depth past which a sample takes no taps, `SUN_EARLY_OUT`
+   * when absent. An instrument's handle: past the deepest a cell holds,
+   * 64, every sample takes its taps, which is the sun the early out is
+   * billed against. A finite number: it is a constant of the program.
+   */
+  readonly earlyOut?: number
 }
 
 /**
@@ -154,35 +161,48 @@ export function cloudSunFn(
     const here = deps.depth.depths(sample.offset)
     const dark = here.weight
       .greaterThanEqual(1)
-      .and(here.toSun.greaterThan(SUN_EARLY_OUT))
+      .and(here.toSun.greaterThan(deps.earlyOut ?? SUN_EARLY_OUT))
       .toVar()
-    // Spaced by the denser of the sample's own extinction and its level's
-    // reference: at a cloud's ragged edge the sample's own falls to nothing,
-    // and a depth of that is the whole reach in one tap.
-    const first = float(LIGHT_TAP_DEPTH)
-      .div(max(max(medium.sigma, ofLevel(body.layers.sigma)), NO_EXTINCTION))
-      .toVar()
-    // Where the sun's ray leaves the sample's level, meters along it: a
-    // level's two heights and the sun's cosine, flat over half a kilometer.
-    // A sample in no level, or in one with no thickness, has no exit.
-    const top = ofLevel(body.layers.top)
-    const base = ofLevel(body.layers.base)
-    const exit = select(
-      sample.sunMu.greaterThanEqual(0),
-      top.sub(sample.altitude),
-      sample.altitude.sub(base),
-    ).div(max(sample.sunMu.abs(), EXIT_MU_FLOOR))
-    const limit = select(
-      medium.layer.greaterThanEqual(int(0)).and(top.greaterThan(base)),
-      max(min(float(LIGHT_TAP_REACH), exit), 0),
-      float(LIGHT_TAP_REACH),
-    ).toVar()
-    const ratio = max(
-      pow(limit.div(first), float(1).div(max(float(taps).sub(1), 1))),
-      LIGHT_TAP_RATIO,
-    ).toVar()
-    /** The tap's far end, meters along the sun. */
-    const far = min(first, limit).toVar()
+    /** Meters along the sun the taps end at, the ratio of one tap's end to the last's, and the tap's far end. */
+    const limit = float(0).toVar()
+    const ratio = float(LIGHT_TAP_RATIO).toVar()
+    const far = float(0).toVar()
+    // Where the taps are laid, which a dark sample has no use for. Three
+    // small branches stand about the laying, the loop and the read past
+    // it, and none about the taps themselves.
+    If(dark.not(), () => {
+      // Spaced by the denser of the sample's own extinction and its
+      // level's reference: at a cloud's ragged edge the sample's own falls
+      // to nothing, and a depth of that is the whole reach in one tap.
+      const first = float(LIGHT_TAP_DEPTH)
+        .div(max(max(medium.sigma, ofLevel(body.layers.sigma)), NO_EXTINCTION))
+        .toVar()
+      // Where the sun's ray leaves the sample's level, meters along it: a
+      // level's two heights and the sun's cosine, flat over half a
+      // kilometer. A sample in no level, or in one with no thickness, has
+      // no exit.
+      const top = ofLevel(body.layers.top)
+      const base = ofLevel(body.layers.base)
+      const exit = select(
+        sample.sunMu.greaterThanEqual(0),
+        top.sub(sample.altitude),
+        sample.altitude.sub(base),
+      ).div(max(sample.sunMu.abs(), EXIT_MU_FLOOR))
+      limit.assign(
+        select(
+          medium.layer.greaterThanEqual(int(0)).and(top.greaterThan(base)),
+          max(min(float(LIGHT_TAP_REACH), exit), 0),
+          float(LIGHT_TAP_REACH),
+        ),
+      )
+      ratio.assign(
+        max(
+          pow(limit.div(first), float(1).div(max(float(taps).sub(1), 1))),
+          LIGHT_TAP_RATIO,
+        ),
+      )
+      far.assign(min(first, limit))
+    })
     Loop(
       {
         start: int(0),
@@ -214,8 +234,17 @@ export function cloudSunFn(
         far.mulAssign(ratio)
       },
     )
-    // The cache where the taps end: the sample itself where none was taken.
+    // The cache where the taps end, which is the sample itself where none
+    // was taken: there the read above is the read, and is not made again.
+    // A read of the cache is as dear as a read of the field.
     const depths = deps.depth.depths(sample.offset.add(body.sun.mul(reach)))
+    const cachedToSun = here.toSun.toVar()
+    const cachedWeight = here.weight.toVar()
+    If(reach.greaterThan(0), () => {
+      const end = deps.depth.depths(sample.offset.add(body.sun.mul(reach)))
+      cachedToSun.assign(end.toSun)
+      cachedWeight.assign(end.weight)
+    })
     // The sample's own level by its statistics at its column, where the
     // medium answers them. The levels beyond it are read nowhere along the
     // sun's ray, and take the climate's mean cover and cumuliform share.
@@ -237,9 +266,11 @@ export function cloudSunFn(
     // Past the taps: the cache's depth where its weight is one, and
     // `sunPastTaps` where it is less, so the statistics' arithmetic runs
     // only where the weight leaves them a share.
-    const past = exp(depths.toSun.negate()).toVar()
-    If(depths.weight.lessThan(1), () => {
-      past.assign(sunPastTaps(depths, statistics))
+    const past = exp(cachedToSun.negate()).toVar()
+    If(cachedWeight.lessThan(1), () => {
+      past.assign(
+        sunPastTaps({ toSun: cachedToSun, weight: cachedWeight }, statistics),
+      )
     })
     const cloud: Node<'float'> = throughTaps(1).mul(past)
     // The sun's cosine the column's depths are turned along the ray by.
