@@ -17,6 +17,7 @@ import {
 import {
   abs,
   clamp,
+  exp,
   float,
   floor,
   Fn,
@@ -25,6 +26,7 @@ import {
   log,
   Loop,
   max,
+  min,
   saturate,
   screenCoordinate,
   select,
@@ -54,7 +56,7 @@ import {
   shellCrossingFrom,
   sunMuAt,
 } from './cloudGeometry.ts'
-import { crossingExponent, crossingTransmittance } from './cloudMix.ts'
+import { crossingDepth, crossingExponent, spreadDepth } from './cloudMix.ts'
 import type {
   CloudBudget,
   CloudResource,
@@ -81,6 +83,15 @@ import { warmByDrawing } from './warmup.ts'
  * **Its depth is the drawn medium's.** A cell sums the extinction the
  * volume's medium answers with, which is the one the march's transmittance
  * is formed from, so the sun dims inside a cloud at the rate the view does.
+ *
+ * **A cell holds an opacity, and a read answers the depth of the mean
+ * transmittance** (`cellCode`, `cellDepth`). `toSun` and `whole` are
+ * −ln of the mean of `e^(−τ)` over the eight cells a read filters, where
+ * those are under a depth of six: a point between a lit cell and a
+ * shadowed one reads the share of the sun each passes. Three things follow
+ * for a reader. Between two slices of one column whose depths differ by Δ
+ * a read is under their mean by about Δ²/8. Past a depth of six a cell
+ * steps by 0.2 to 0.4 of a depth. And no cell holds more than 64.
  *
  * **Its frame is the volume's 200 m level.** A cell is two of that level's
  * texels, 400 m, on its anchor and plane, so the grid re-anchors exactly
@@ -116,7 +127,10 @@ import { warmByDrawing } from './warmup.ts'
  * **Under a sun below a cell's horizon the bake follows the ray down and
  * stops where it leaves a level** (`#bakeNode`). What that ray meets when it
  * comes back up, hundreds of kilometers sunward, is one crossing a level by
- * the crossing's law.
+ * the crossing's law, fed the level's own statistics there
+ * (`CloudVolume.statistics`): its share, its depth turned along the chord,
+ * its spread, and the length its cover holds over, which under a cirrus is
+ * hundreds of kilometers where a cell of its genus is five.
  */
 
 /** Over the window of the volume's 200 m level and the union's height. */
@@ -139,14 +153,6 @@ const TEXEL_BYTES = 2
 /** Cells in from a trusted window's edge: a trilinear read reaches half a cell. */
 const MARGIN = 1
 const NOWHERE = [1, 1, 0, 0] as const
-/** Meters: a footprint past every layer's cell, where the field answers with its cover and its mean extinction. */
-const UNRESOLVED = 1e6
-/**
- * The least a crossing passes, e⁻⁴⁶: the law is a transmittance, a float's
- * exponential is zero from e⁻⁸⁸, and the logarithm of that is no depth.
- */
-const OPAQUE = 1e-20
-
 /**
  * The 200 m level's frame at the grid's cells: its anchor, axes and eye
  * terms, and a window of the grid's size whose middle corner is the eye's
@@ -174,6 +180,53 @@ function turned(a: Vec3, b: Vec3): number {
 const modulo = (value: number, size: number): number =>
   ((value % size) + size) % size
 
+/*
+ * What a cell holds of its depth τ: the opacity `1 − e^(−τ)` up to a depth
+ * of six, and past it the same curve's tangent there, to a depth of 64.
+ *
+ * A read filters eight cells, and what it filters is what the cell holds.
+ * Held as depths, a point between a clear ray and a ray through cloud reads
+ * half the cloud's depth, and `e^(−τ/2)` of a depth of ten is 0.007 where
+ * half the sun reaches the points beside it: every cloud's edge is dark for
+ * a cell's width, and a field of broken cloud reads darker than it is by
+ * the share of it that is edge. Held as opacities the same read is the mean
+ * transmittance of the eight, which is what a cell 400 m wide can say of
+ * the sun inside it.
+ *
+ * Past a depth of six nothing of the beam is left to bias, 0.0025 of it,
+ * and the opacity runs out of a half float's steps: one step under one is
+ * 0.0005, a twentieth of a depth at four and a fifth at six. So the curve
+ * goes on along its tangent, where a step is 0.2 to 0.4 of a depth, for the
+ * depth the light after first order reads. The cap is past that light's
+ * table, 16 in transport depth; uncapped, a cell a thousand deep would
+ * outweigh seven clear ones.
+ */
+/** The depth a cell's opacity gives way to its tangent at, and the greatest depth a cell holds. */
+export const SUN_GRID_KNEE = 6
+export const SUN_GRID_DEEPEST = 64
+const KNEE = SUN_GRID_KNEE
+const KNEE_PASSED = Math.exp(-KNEE)
+const KNEE_CODE = 1 - KNEE_PASSED
+const DEEPEST = SUN_GRID_DEEPEST
+
+/** A depth as a cell holds it. */
+function cellCode(depth: Node<'float'>): Node<'float'> {
+  return select(
+    depth.lessThan(KNEE),
+    float(1).sub(exp(depth.negate())),
+    min(depth, DEEPEST).sub(KNEE).mul(KNEE_PASSED).add(KNEE_CODE),
+  )
+}
+
+/** The depth a filtered read of cells stands for: −ln of their mean transmittance under the knee. */
+function cellDepth(code: Node<'float'>): Node<'float'> {
+  return select(
+    code.lessThan(KNEE_CODE),
+    log(max(float(1).sub(code), KNEE_PASSED)).negate(),
+    code.sub(KNEE_CODE).div(KNEE_PASSED).add(KNEE),
+  )
+}
+
 /** A stretch of a ray: where it starts, meters along, and how long it is. */
 interface Stretch {
   readonly from: Node<'float'>
@@ -192,10 +245,10 @@ export interface CloudSunGridDepths extends CloudSunDepths {
   readonly behind: Node<'float'>
 }
 
-/** What the grid reads of the volume: its medium, and whether a slice may be baked from it. */
+/** What the grid reads of the volume: its medium, its field's statistics, and whether a slice may be baked from it. */
 export type CloudSunSource = Pick<
   CloudVolume,
-  'medium' | 'trusted' | 'generation'
+  'medium' | 'statistics' | 'trusted' | 'generation'
 >
 
 export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
@@ -283,9 +336,11 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       0,
       SLICES - 1,
     )
-    const tau = this.#map
-      .sample(vec3(cell.div(WIDTH), height.add(0.5).div(SLICES)))
-      .level(float(0)).x
+    const tau = cellDepth(
+      this.#map
+        .sample(vec3(cell.div(WIDTH), height.add(0.5).div(SLICES)))
+        .level(float(0)).x,
+    )
     const out = abs(plane.sub(this.#level.eye))
     const ramp = saturate(
       float(SUN_GRID_REACH).sub(max(out.x, out.y)).div(SUN_GRID_FADE),
@@ -351,7 +406,6 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     readonly down: Stretch
     readonly up: Stretch
     readonly thickness: Node<'float'>
-    readonly cell: Node<'float'>
   }[] {
     const body = this.#uniforms.served
     const { layers, sun } = body
@@ -384,7 +438,6 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
           length: select(reached.and(ahead), max(leave.sub(back), 0), float(0)),
         },
         thickness: high.sub(low),
-        cell: of(layers.cell, k),
       }
     })
   }
@@ -468,52 +521,61 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
         // One optical depth a cell, the fraction folded in.
         tau.addAssign(medium.sigma.mul(medium.fraction).mul(step))
       })
-      for (const { up, thickness, cell: sight } of levels)
+      for (const { up, thickness } of levels)
         If(down.and(up.length.greaterThan(0)), () => {
-          tau.addAssign(this.#crossing(origin, up, thickness, sight))
+          tau.addAssign(this.#crossing(origin, up, thickness))
         })
-      return vec4(tau, 0, 0, 1)
+      return vec4(cellCode(tau), 0, 0, 1)
     })()
   }
 
   /**
    * A level a ray comes back up through, far sunward, as an optical depth:
-   * one crossing by the crossing's law. The field is read once, at the
-   * middle of the ray's chord through the level, at a footprint no cell
-   * resolves, where it answers with the level's cover and its mean in-cloud
-   * extinction; the law takes those two, the chord and its horizontal run.
+   * one crossing by the crossing's law, fed the level's own statistics at
+   * the middle of the ray's chord through it. They are the field's four
+   * numbers there, never a texel's: the cloudy share, the vertical depth
+   * whose transmittance is the cloudy columns' mean, the gamma its columns'
+   * depths are spread by, and the sight length.
    *
-   * The chord is the shell's own, from its crossings. The level's thickness
-   * over the sun's sine is 8% long for a kilometer of cloud met 1.75° over
-   * the horizon, where the ray is still curving up out of the layer.
+   * The depth is the spread's mean times the chord's path factor, the chord
+   * over the level's thickness. The chord is the shell's own, from its
+   * crossings: the thickness over the sun's sine is 8% long for a kilometer
+   * of cloud met 1.75° over the horizon, where the ray is still curving up
+   * out of the layer. An extinction read at the chord's middle times the
+   * chord is not that depth: the profile's share there is its peak, not its
+   * mean. And the sight length is the level's measured one, tens of cells
+   * under a sparse cirrus, not its cell: by the cell a 30 km run under
+   * cirrus counts six columns where it crosses one or two, and half a cover
+   * to the sixth is a sixtieth of the sun.
    */
   #crossing(
     origin: Node<'vec3'>,
     chord: Stretch,
     thickness: Node<'float'>,
-    sight: Node<'float'>,
   ): Node<'float'> {
     const body = this.#uniforms.served
     const at = origin.add(body.sun.mul(chord.from.add(chord.length.mul(0.5))))
-    const medium = this.#volume.medium(
+    const level = this.#volume.statistics(
       {
         offset: at,
         distance: length(at),
         altitude: altitudeAt(body, at),
         sunMu: sunMuAt(body, at),
-        footprint: float(UNRESOLVED),
+        footprint: float(0),
       },
       body,
     )
     const run = sqrt(
       max(chord.length.mul(chord.length).sub(thickness.mul(thickness)), 0),
     )
-    const through = crossingTransmittance(
-      medium.fraction,
-      medium.sigma.mul(chord.length),
-      crossingExponent(run, sight),
+    return crossingDepth(
+      level.fraction,
+      spreadDepth(level.depth, level.shape).mul(
+        chord.length.div(max(thickness, 1)),
+      ),
+      crossingExponent(run, level.sight),
+      level.shape,
     )
-    return log(max(through, OPAQUE)).negate()
   }
 
   render(

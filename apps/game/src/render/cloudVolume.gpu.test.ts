@@ -23,26 +23,34 @@ import {
 } from 'three/tsl'
 import {
   cloudExtents,
+  cloudFieldAt,
   directionOf,
+  fieldClock,
+  regimeWeather,
+  type ScenarioId,
   type LevelFrame,
   levelFrames,
+  levelProfile,
   shellBoundaries,
   reducePoint,
   shellHeights,
   type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
+import { createInlineWorker, WorkerPool } from '@inertialref/workers'
+import { createGameTaskRegistry } from '../workers/registry.ts'
+import { type CloudField, createCloudField } from './cloudField.ts'
 import {
   CLOUD_CLIPMAP_SIZE,
   CLOUD_CLIPMAP_TEXELS,
   type CloudBodyFrame,
   type CloudFrame,
+  cloudFrame,
   scenarioWeather,
 } from './cloudFrame.ts'
 import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import type { CloudBudget, CloudMediumFn, CloudSample } from './cloudNodes.ts'
-import type { CloudNoiseNodes } from './cloudNoise.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import {
   CLOUD_VOLUME_HELD,
@@ -50,7 +58,14 @@ import {
   CLOUD_VOLUME_SLICES,
   CLOUD_VOLUME_TEXELS,
   CloudVolume,
+  VOLUME_SIGMA_SPAN,
 } from './cloudVolume.ts'
+import {
+  LOOKING_UP,
+  RIG_EARTH,
+  rigFrameInputs,
+  type RigStance,
+} from './cloudSystemRig.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
@@ -257,12 +272,6 @@ function frameAt(
   }
 }
 
-/** Noise nodes that read nothing: the scenario erodes nothing. */
-const NO_NOISE: CloudNoiseNodes = {
-  base: () => float(0),
-  detail: () => float(0),
-}
-
 interface Rig {
   readonly uniforms: CloudUniforms
   readonly volume: CloudVolume
@@ -289,7 +298,6 @@ function rig(
   const volume = new CloudVolume({
     uniforms,
     bake: medium,
-    detail: NO_NOISE,
     ...(sources === undefined ? {} : { sources }),
   })
   const state: Rig = {
@@ -439,6 +447,12 @@ function latticeOffset(
 
 /** RG8's step: what a stored texel is held to. */
 const BYTE = 1 / 255
+/**
+ * The volume's texels against `cloudFieldAt`, in the level's reference σ′:
+ * twice what this Mac mini's M6 reads, as the field's own port is bounded.
+ */
+const MEDIAN = 0.0105
+const P99 = 0.0175
 const EYE_HEIGHT = 1500
 
 /* ------------------------------------------------------------------------- */
@@ -471,15 +485,17 @@ describe('the bake', () => {
     (o) => float(0.55).add(sin(dot(o, N).div(910)).mul(0.4)),
   )
 
-  it('holds the field at every level’s texel centers, within the √ encoding’s step', async () => {
+  it('holds the field’s extinction times its share at every level’s texel centers, within two steps of its sixteen bits', async () => {
     const test = rig(medium)
     const eye = eyeAt(EYE_HEIGHT)
     test.settle(eye)
     const frame = test.frame!
     const [map] = test.volume.textures()
+    const span =
+      test.uniforms.served.layers.sigmaScale.value * VOLUME_SIGMA_SPAN
     const next = draws(5)
     const at: [number, number, number][] = []
-    const expected: [number, number][] = []
+    const expected: number[] = []
     for (let n = 0; n < 600; n += 1) {
       const L = n % LEVELS
       const level = frame.served.volume.frames[CLOUD_VOLUME_HELD[L]!]!
@@ -493,13 +509,18 @@ describe('the bake', () => {
       const height = BASE + (k - 0.5) * SLICE
       const o = latticeOffset(level, eye, i + 0.5, j + 0.5, height)
       at.push([x, y, L * STACK + k])
-      expected.push([Math.sqrt(sigmaOf(o, height) / SIGMA), fractionOf(o)])
+      expected.push(sigmaOf(o, height) * fractionOf(o))
     }
     const read = await texels(map!, at)
-    read.forEach(([r, g], n) => {
-      expect(Math.abs(r! - expected[n]![0])).toBeLessThanOrEqual(BYTE)
-      expect(Math.abs(g! - expected[n]![1])).toBeLessThanOrEqual(BYTE)
+    let worst = 0
+    read.forEach(([high, low], n) => {
+      // The high byte whole and the low one beside it, as the read decodes them.
+      const held = ((high! * 256 + low!) * 255 * span) / 65535
+      worst = Math.max(worst, Math.abs(held - expected[n]!))
     })
+    // One step is the target's rounding of the low byte; the second is the
+    // field's own float32, a 100 m offset under a planet's radius.
+    expect(worst).toBeLessThanOrEqual((2 * span) / 65535)
     test.volume.dispose()
   })
 
@@ -792,4 +813,253 @@ describe('a window that scrolls', () => {
     scrolled.volume.dispose()
     fresh.volume.dispose()
   })
+})
+
+/* ------------------------------------------------------------------------- */
+/* The real field                                                             */
+/* ------------------------------------------------------------------------- */
+
+/** The system's own field, driven by frames built as the sensor builds them, over the rig's Earth. */
+function realField(regime: ScenarioId): {
+  readonly field: CloudField
+  frame(): CloudFrame
+  /** Frames until the volume is whole and owes nothing, or `most`. */
+  settle(most: number): number
+  dispose(): void
+} {
+  const field = createCloudField()
+  const levers = { ...DEFAULT_CLOUD_LEVERS, on: true, weather: regime }
+  const stance: RigStance = {
+    eye: 2,
+    looking: LOOKING_UP,
+    air: true,
+    sun: { x: 0, y: Math.sin(0.65), z: -Math.cos(0.65) },
+  }
+  const css = { width: 256, height: 144 }
+  let previous: CloudFrame | null = null
+  const frame = (): CloudFrame => {
+    const next = cloudFrame(rigFrameInputs(stance, levers, css), previous)
+    if (next === null) throw new Error('no frame: nothing served')
+    previous = next
+    field.write(next)
+    field.render(gpu.renderer, next, {
+      slices: levers.sunSlices,
+      tiles: 1,
+      jump: next.jump,
+      sunSlices: levers.sunSlices,
+    })
+    return next
+  }
+  return {
+    field,
+    frame,
+    settle(most) {
+      for (let n = 1; n <= most; n += 1) {
+        frame()
+        if (field.volume.trusted && !field.volume.pending) return n
+      }
+      return most
+    },
+    dispose: () => field.dispose(),
+  }
+}
+
+describe('the volume against the CPU field', () => {
+  /*
+   * Each level's texels against `cloudFieldAt` at their centers, read as the
+   * bake reads the field: at the level's texel, the dither at one. In the
+   * level's reference σ′, as the field's own port is held
+   * (`cloudDensity.gpu.test.ts`), whose errors these carry: the clipmap's
+   * bytes of cover and gain, half floats in the profile, float32 against
+   * float64. The texel's own sixteen bits add 1/2,048 of the reference.
+   */
+  it.each([
+    // Cumulus cells of 1,200 m: every level's texel is under a cell.
+    ['fair-cumulus', ['resolved', 'resolved', 'resolved']],
+    // Stratus cells of 3,000 m.
+    ['overcast', ['resolved', 'resolved', 'resolved']],
+    // Fog's cells are 500 m: the 800 m level is past a cell.
+    ['fog', ['resolved', 'resolved', 'statistics']],
+  ] as const)(
+    '%s: every level holds the field at its texel, on the side of the switch its texel stands',
+    async (regime, sides) => {
+      const real = realField(regime)
+      await Promise.all(real.field.bakes.map((bake) => bake.warm(gpu.renderer)))
+      expect(real.settle(400)).toBeLessThan(400)
+      const frame = real.frame()
+      const { served } = frame
+      const body = rigFrameInputs(
+        { eye: 2, looking: LOOKING_UP },
+        DEFAULT_CLOUD_LEVERS,
+        { width: 8, height: 8 },
+      ).record(RIG_EARTH)!
+      const weather = regimeWeather(body, regime)
+      const clock = fieldClock(weather, frame.time)
+      const { boundaries } = served.shells
+      const base = boundaries[0]!
+      const top = boundaries[boundaries.length - 1]!
+      const span =
+        real.field.uniforms.served.layers.sigmaScale.value * VOLUME_SIGMA_SPAN
+      const [map] = real.field.volume.textures()
+      const next = draws(41)
+      const at: [number, number, number][] = []
+      const points: { level: number; position: Vec3 }[] = []
+      for (let n = 0; n < 6000; n += 1) {
+        const L = n % LEVELS
+        const level = served.volume.frames[CLOUD_VOLUME_HELD[L]!]!
+        const x = Math.floor(next() * CLOUD_VOLUME_SIZE)
+        const y = Math.floor(next() * CLOUD_VOLUME_SIZE)
+        const k = 1 + Math.floor(next() * CLOUD_VOLUME_SLICES)
+        const mod = (v: number) =>
+          ((v % CLOUD_VOLUME_SIZE) + CLOUD_VOLUME_SIZE) % CLOUD_VOLUME_SIZE
+        const i = level.origin[0] + mod(x - level.origin[0])
+        const j = level.origin[1] + mod(y - level.origin[1])
+        const height = base + ((k - 0.5) * (top - base)) / CLOUD_VOLUME_SLICES
+        const direction = directionOf(
+          level,
+          [(i + 0.5) * level.texelMeters, (j + 0.5) * level.texelMeters],
+          served.datumRadius,
+        )
+        at.push([x, y, L * STACK + k])
+        points.push({
+          level: L,
+          position: scale(direction, served.datumRadius + height),
+        })
+      }
+      const read = await texels(map!, at)
+      const errors: number[][] = [[], [], []]
+      const clouded = [0, 0, 0]
+      const fractions: number[][] = [[], [], []]
+      points.forEach(({ level, position }, n) => {
+        const texel = CLOUD_VOLUME_TEXELS[CLOUD_VOLUME_HELD[level]!]
+        const want = cloudFieldAt(
+          weather,
+          clock,
+          served.sun,
+          position,
+          texel,
+          1,
+        )
+        if (want.level < 0) return
+        const [high, low] = read[n]!
+        const held = ((high! * 256 + low!) * 255 * span) / 65535
+        const expected = want.fraction * want.sigma
+        if (expected > 0) {
+          clouded[level]! += 1
+          fractions[level]!.push(want.fraction)
+        }
+        if (held > 0 || expected > 0)
+          errors[level]!.push(
+            Math.abs(held - expected) /
+              levelProfile(weather.levels[want.level]!).scaled,
+          )
+      })
+      const quantile = (values: number[], q: number): number =>
+        [...values].sort((a, b) => a - b)[
+          Math.min(values.length - 1, Math.floor(q * values.length))
+        ] ?? 0
+      console.info(
+        `${regime}: ` +
+          errors
+            .map(
+              (level, L) =>
+                `${CLOUD_VOLUME_TEXELS[CLOUD_VOLUME_HELD[L]!]} m ${sides[L]}: ${clouded[L]} in cloud, median ${quantile(level, 0.5).toExponential(2)}, p99 ${quantile(level, 0.99).toExponential(2)}, worst ${Math.max(0, ...level).toExponential(2)}`,
+            )
+            .join('; '),
+      )
+      errors.forEach((level, L) => {
+        expect(clouded[L], `${regime}, level ${L}`).toBeGreaterThan(40)
+        expect(quantile(level, 0.5), `${regime}, level ${L}`).toBeLessThan(
+          MEDIAN,
+        )
+        expect(quantile(level, 0.99), `${regime}, level ${L}`).toBeLessThan(P99)
+        // The side of the switch: the resolved field is all cloud or none
+        // at a point, and a level's statistics are a share of its columns.
+        const whole = fractions[L]!.every((f) => f === 1)
+        expect(whole, `${regime}, level ${L}`).toBe(sides[L] === 'resolved')
+      })
+      real.dispose()
+    },
+    120_000,
+  )
+})
+
+describe('a table that lands late', () => {
+  it('bakes nothing while the body’s tables are owed, starts over when they land, and the sun’s depth is whole within the schedule’s bound after', async () => {
+    const real = realField('stratocumulus')
+    const { field } = real
+    await Promise.all(field.bakes.map((bake) => bake.warm(gpu.renderer)))
+    // A pool that holds every answer until it is told to give them.
+    const pool = new WorkerPool({
+      factory: () => createInlineWorker(createGameTaskRegistry()),
+      size: 1,
+    })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    field.profile.pool = {
+      submit: (task: never, input: never) => ({
+        result: gate.then(() => pool.submit(task, input).result),
+      }),
+    } as unknown as WorkerPool
+    const weight = (): number => field.uniforms.trace.sunWeight.value
+    const baked = (): number =>
+      field.volume.drawn.reduce((a, b) => a + b, 0) + field.grid.drawn
+    for (let n = 0; n < 40; n += 1) {
+      real.frame()
+      expect(baked()).toBe(0)
+      expect(weight()).toBe(0)
+    }
+    expect(field.profile.ready[0].value).toBe(0)
+    expect(field.volume.pending).toBe(true)
+    expect(field.volume.trusted).toBe(false)
+    const generation = field.volume.generation
+    // The tables land: the pool answers between frames.
+    release()
+    let landed = 0
+    while (field.profile.ready[0].value === 0 && landed < 2000) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      real.frame()
+      landed += 1
+    }
+    expect(field.profile.ready[0].value).toBe(1)
+    // A field event of the volume's own, which the grid reads as one.
+    expect(field.volume.generation).toBeGreaterThan(generation)
+    // The cube's six faces and the clipmap again, 102 slices of the volume
+    // and 32 of the grid at eight a frame, and sixteen frames of weight:
+    // 38 frames as the sun instrument times it, inside the rubric's 48.
+    let frames = 0
+    while (weight() < 1 && frames < 200) {
+      real.frame()
+      expect(field.volume.drawn.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(
+        DEFAULT_CLOUD_LEVERS.sunSlices,
+      )
+      expect(field.grid.drawn).toBeLessThanOrEqual(
+        DEFAULT_CLOUD_LEVERS.sunSlices,
+      )
+      frames += 1
+    }
+    console.info(
+      `a late table: ${landed} frames to land, then ${frames} frames to the grid at full weight`,
+    )
+    expect(frames).toBeLessThanOrEqual(48)
+    expect(field.volume.trusted).toBe(true)
+    // And it holds cloud: the texels were baked with the table's gain in.
+    const [map] = field.volume.textures()
+    const at: [number, number, number][] = []
+    const next = draws(9)
+    for (let n = 0; n < 2000; n += 1)
+      at.push([
+        Math.floor(next() * CLOUD_VOLUME_SIZE),
+        Math.floor(next() * CLOUD_VOLUME_SIZE),
+        1 + Math.floor(next() * CLOUD_VOLUME_SLICES),
+      ])
+    const read = await texels(map!, at)
+    expect(
+      read.filter(([high, low]) => high! + low! > 0).length,
+    ).toBeGreaterThan(100)
+    pool.terminate()
+    real.dispose()
+  }, 180_000)
 })

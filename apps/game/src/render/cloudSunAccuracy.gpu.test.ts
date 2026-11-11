@@ -1,3 +1,4 @@
+import { cloudSunFn } from './cloudSunlight.ts'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
@@ -116,8 +117,15 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * case runs under the flag, which also writes
  * `.data/clouds/sunAccuracy.json`. **Every bar is asserted on every
  * adapter.** The figures are this Mac mini's, and whether CI's hosted
- * adapter reproduces them is not measured: the tenth and the edges are what
- * it has to stand inside. Only the rebuild's timing asks for timestamps.
+ * adapter reproduces them is not measured: the tenth is what it has to
+ * stand inside. Only the rebuild's timing asks for timestamps.
+ *
+ * **The taps alone** are recorded beside each case under the flag and held
+ * to nothing: the
+ * march's taps with the reference's own march of the field from where they
+ * end, in the cache's place. What that misses is the taps', their widths
+ * and the one column they are mixed as; what the case misses beyond it is
+ * the cache's, the volume it sums and the crossing under the horizon.
  *
  * **The early out's bill** is recorded beside each case and held to
  * nothing: the share of its samples whose cached depth, the grid's at the
@@ -165,13 +173,12 @@ const POPULATION: readonly {
 /**
  * The cases every run of the suite takes, each at its regime's first place.
  *
- * Cirrus over cumulus is the one regime whose figures follow the grid's
- * depth: its cirrus is thin, so a fifth of the depth lost moves the bias
- * under the 5° sun from 0.0012 to 0.0138 at four taps and from 0.0021 to
- * 0.0149 at two. Every other regime's cloud is thick enough that 0.8 of its
- * depth still passes nothing, and its figures do not move in the fourth
- * decimal. Two decks under the high sun are what follows where a shadow
- * falls: the lower deck is lit or not by the upper one's gaps.
+ * Cirrus over cumulus follows the grid's depth: its cirrus is thin, so a
+ * fifth of the depth lost moves the bias under the 37.5° sun from 0.0035 to
+ * 0.0061 at two taps, where a cloud thick enough that 0.8 of its depth still
+ * passes nothing hides the loss. Two decks under the high sun are what
+ * follows where a shadow falls: the lower deck is lit or not by the upper
+ * one's gaps.
  */
 const ALWAYS: typeof POPULATION = [
   { scenario: 'cirrus-over-cumulus', suns: SUNS },
@@ -473,6 +480,8 @@ interface Case {
   readonly rings: Readonly<Record<string, readonly Scored[]>>
   /** Under the horizon: the same samples with the bake's steps run to the far crossing of the union's top. */
   readonly farCrossing?: Readonly<Record<string, Scored>>
+  /** By tap count: the taps over the reference's own march past them, the cache out of it. Recorded, held to nothing. */
+  readonly tapsAlone?: Readonly<Record<string, Scored>>
   /** By cached depth: what a march that takes no taps past it gives up. Recorded, held to nothing. */
   readonly earlyOut: Readonly<Record<string, EarlyOut>>
 }
@@ -696,14 +705,14 @@ describe('the sun’s optical depth against the field', () => {
     // exp(−∫σ·f ds) by 256 steps of the field through each stretch of the
     // sun's ray inside a level: on its way down to the level's base, or
     // through the level whole, and on its way up from that base.
-    const reference = pointKernel((sample) => {
+    const marched = (offset: Node<'vec3'>): Node<'float'> => {
       const { sun, layers } = body
       const tau = float(0).toVar()
       const stretch = (from: Node<'float'>, span: Node<'float'>): void => {
         const start = from.toVar()
         const step = span.div(REFERENCE_STEPS).toVar()
         Loop(REFERENCE_STEPS, ({ i }: { i: Node<'int'> }) => {
-          const point = sample.offset.add(
+          const point = offset.add(
             sun.mul(start.add(float(i).add(0.5).mul(step))),
           )
           const medium = field.medium(sampleOf(point), body)
@@ -716,8 +725,8 @@ describe('the sun’s optical depth against the field', () => {
         [layers.base.z, layers.top.z],
       ] as const
       for (const [low, high] of levels) {
-        const top = shellCrossingFrom(body, sample.offset, sun, high)
-        const base = shellCrossingFrom(body, sample.offset, sun, low)
+        const top = shellCrossingFrom(body, offset, sun, high)
+        const base = shellCrossingFrom(body, offset, sun, low)
         const reached = top.hit.and(high.greaterThan(low))
         const enter = max(top.near, 0)
         const leave = max(top.far, 0)
@@ -737,8 +746,26 @@ describe('the sun’s optical depth against the field', () => {
           select(reached.and(ahead), max(leave.sub(back), 0), float(0)),
         )
       }
-      return exp(tau.negate())
+      return tau
+    }
+    const reference = pointKernel((sample) =>
+      exp(marched(sample.offset).negate()),
+    )
+    // The march's own taps over that same march from where they end: what
+    // of a case's error is the taps' and none of the cache's.
+    const tapsOverMarch = cloudSunFn({
+      uniforms: field.uniforms,
+      medium: field.medium,
+      depth: {
+        depths: (offset) => {
+          const toSun = marched(offset)
+          return { toSun, whole: toSun, weight: float(1), behind: float(0) }
+        },
+      },
     })
+    const tapsAlone = pointKernel(
+      (sample) => tapsOverMarch(sample, field.medium(sample, body), body).cloud,
+    )
     const grid = pointKernel(
       (sample) => field.sun(sample, field.medium(sample, body), body).cloud,
     )
@@ -792,16 +819,21 @@ describe('the sun’s optical depth against the field', () => {
           )
           const all: Record<string, Scored> = {}
           const rings: Record<string, Scored[]> = {}
+          const alone: Record<string, Scored> = {}
           const scoreAt = async (
-            taps: (typeof TAPS)[number],
+            count: (typeof TAPS)[number],
+            kernel: ComputeNode,
           ): Promise<(k: number) => number> => {
             // The taps are a uniform: one frame writes it, and builds nothing.
-            frameAt(stance, levers(taps))
-            const got = await read(grid)
+            frameAt(stance, levers(count))
+            const got = await read(kernel)
             return (k) => got[2 * k + 1]! - truth[2 * k + 1]!
           }
           for (const taps of TAPS) {
-            const miss = await scoreAt(taps)
+            // 1,536 steps of the field a sample at each count: under the flag.
+            if (MEASURE)
+              alone[taps] = score(lit.map(await scoreAt(taps, tapsAlone)))
+            const miss = await scoreAt(taps, grid)
             all[taps] = score(lit.map(miss))
             rings[taps] = RINGS.map((edge, ring) => {
               const from = ring === 0 ? 0 : RINGS[ring - 1]!
@@ -842,7 +874,7 @@ describe('the sun’s optical depth against the field', () => {
             field.grid.toFirstExit = false
             settle(stance, levers(2), false)
             for (const taps of TAPS)
-              farCrossing[taps] = score(lit.map(await scoreAt(taps)))
+              farCrossing[taps] = score(lit.map(await scoreAt(taps, grid)))
             field.grid.toFirstExit = true
           }
           results.push({
@@ -861,13 +893,14 @@ describe('the sun’s optical depth against the field', () => {
             grid: all,
             rings,
             ...(farCrossing === undefined ? {} : { farCrossing }),
+            ...(MEASURE ? { tapsAlone: alone } : {}),
             earlyOut,
           })
         }
       }
     }
 
-    for (const kernel of [reference, grid, cache]) kernel.dispose()
+    for (const kernel of [reference, grid, tapsAlone, cache]) kernel.dispose()
     offsets.dispose()
     out.dispose()
     return results
@@ -934,6 +967,7 @@ describe('the sun’s optical depth against the field', () => {
                   scenario,
                   sunDegrees,
                   grid: by((one) => one.grid),
+                  tapsAlone: by((one) => one.tapsAlone!),
                   ...(sunDegrees < 0
                     ? { farCrossing: by((one) => one.farCrossing!) }
                     : {}),
