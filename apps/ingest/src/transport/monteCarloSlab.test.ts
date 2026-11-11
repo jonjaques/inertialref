@@ -155,6 +155,8 @@ describe('a traced row', () => {
 })
 
 describe('the true medium at τ = 5', () => {
+  // 3.0 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 12 s. Five times that.
   it('is within 3·SE + 0.5% of adding-doubling at twelve views, under three suns, over the domain', () => {
     const moments = Float64Array.from(DISORT_MIE.moments)
     const table = phaseTable(moments)
@@ -206,5 +208,5 @@ describe('the true medium at τ = 5', () => {
       })
     }
     expect(checked).toBeGreaterThanOrEqual(30)
-  })
+  }, 60_000)
 })
