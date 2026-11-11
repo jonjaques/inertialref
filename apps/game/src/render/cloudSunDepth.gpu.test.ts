@@ -46,11 +46,12 @@ import {
   type CloudSample,
   slabMedium,
 } from './cloudNodes.ts'
-import type { CloudNoiseNodes } from './cloudNoise.ts'
 import {
   CloudSunGrid,
   type CloudSunSource,
+  SUN_GRID_DEEPEST,
   SUN_GRID_FADE,
+  SUN_GRID_KNEE,
   SUN_GRID_REACH,
   SUN_GRID_SIZE,
 } from './cloudSunGrid.ts'
@@ -262,11 +263,6 @@ function frameAt(
   }
 }
 
-const NO_NOISE: CloudNoiseNodes = {
-  base: () => float(0),
-  detail: () => float(0),
-}
-
 const BUDGET: CloudBudget = {
   slices: CAP,
   tiles: 1,
@@ -300,9 +296,10 @@ function rig(
 ): Rig {
   const cached = options.volume ?? true
   const uniforms = createCloudUniforms()
-  const volume = new CloudVolume({ uniforms, bake: medium, detail: NO_NOISE })
+  const volume = new CloudVolume({ uniforms, bake: medium })
   const field: CloudSunSource = {
     medium: volume.medium,
+    statistics: (sample, body) => volume.statistics(sample, body),
     trusted: true,
     generation: 0,
   }
@@ -516,8 +513,19 @@ function along(
 /* A uniform slab                                                             */
 /* ------------------------------------------------------------------------- */
 
+/**
+ * What a depth past a cell's knee is held within: two steps of its half
+ * float. The tangent's slope is e⁻⁶ and a half float's step from one to two
+ * is 2⁻¹⁰, 0.39 of a depth, and a read filters cells that each round by
+ * half of one.
+ */
+const DEEP_STEP = 2 * 2 ** -10 * Math.exp(SUN_GRID_KNEE)
+
 describe('a uniform slab', () => {
-  const SLAB: Slab = [1000, 2000, 0.01]
+  // Thin: its slices differ by a twentieth of a depth along the sun, so a
+  // read between two of them is their depths' own mean, and the filter of
+  // their opacities is that to a part in a thousand.
+  const SLAB: Slab = [1000, 2000, 0.001]
   const [BASE, TOP, SIGMA] = SLAB
   const scenario = slabScenario(SLAB)
   const EYE = 300
@@ -543,18 +551,36 @@ describe('a uniform slab', () => {
   }
 
   for (const elevation of [60, 37.5, 5])
-    it(`gives σ times the slant path, within 2%, at a ${elevation}° sun`, async () => {
+    it(`gives σ times the slant path at a ${elevation}° sun: within 2% under a depth of six, and within two steps of its half float past it`, async () => {
       const test = rig(slab(BASE, TOP, SIGMA), scenario)
       const eye = eyeAt(EYE)
       const sun = sunAt(elevation)
       test.settle(eye, sun)
       expect(test.weight).toBe(1)
+      // A read between two slices is the mean of their opacities, which is
+      // under the mean of their depths by an eighth of the square of what
+      // they differ by: 0.016 of a depth under the 5° sun, where a slice is
+      // 0.37 of a depth from the next, and a ten-thousandth under the high
+      // ones. With a fifth again for the cells beside them.
+      const apart =
+        (SIGMA * (TOP - BASE)) /
+        (SLICES - 1) /
+        Math.sin((elevation * Math.PI) / 180)
+      const between = (1.2 * apart * apart) / 8
+      let deep = 0
       for (const below of [false, true]) {
         const offsets = points(512, below)
         const read = await depths(test, offsets)
         offsets.forEach((offset, k) => {
           const expected = slabDepth(eye, offset, sun, SLAB)
-          expect(Math.abs(read[k]!.toSun / expected - 1)).toBeLessThan(0.02)
+          if (expected > SUN_GRID_KNEE) deep += 1
+          expect(Math.abs(read[k]!.toSun - expected)).toBeLessThan(
+            Math.max(
+              0.02 * expected,
+              between,
+              expected > SUN_GRID_KNEE - DEEP_STEP ? DEEP_STEP : 0,
+            ),
+          )
           expect(read[k]!.weight).toBe(1)
         })
         // The plane-parallel form the design states, under the slab: the
@@ -566,8 +592,95 @@ describe('a uniform slab', () => {
           expect(Math.abs(read[0]!.toSun / flat - 1)).toBeLessThan(0.02)
         }
       }
+      // Under the low sun the slab is 11 deep along it: past the knee.
+      expect(deep > 0).toBe(elevation < 30)
       dispose(test)
     })
+
+  it('holds a depth past its knee on the tangent, and no depth past 64', async () => {
+    const DENSE: Slab = [1000, 2000, 0.02]
+    const eye = eyeAt(EYE)
+    for (const elevation of [37.5, 5]) {
+      // A grid of its own for each sun: 32° of sun in one frame with no jump
+      // of the field is paced, eight slices a frame, and is no event to
+      // settle on.
+      const test = rig(slab(...DENSE), slabScenario(DENSE))
+      const sun = sunAt(elevation)
+      test.settle(eye, sun)
+      const offsets = points(512, false, DENSE)
+      const read = await depths(test, offsets)
+      dispose(test)
+      // What a slice's depth differs from the next one's by: 0.8 under the
+      // high sun and 7.4 under the low one.
+      const apart =
+        (DENSE[2] * (DENSE[1] - DENSE[0])) /
+        (SLICES - 1) /
+        Math.sin((elevation * Math.PI) / 180)
+      let capped = 0
+      offsets.forEach((offset, k) => {
+        const expected = slabDepth(eye, offset, sun, DENSE)
+        if (expected >= SUN_GRID_DEEPEST + apart) {
+          capped += 1
+          expect(read[k]!.toSun).toBeGreaterThan(SUN_GRID_DEEPEST - DEEP_STEP)
+          expect(read[k]!.toSun).toBeLessThanOrEqual(
+            SUN_GRID_DEEPEST + DEEP_STEP,
+          )
+        } else if (
+          expected > SUN_GRID_KNEE + apart &&
+          expected < SUN_GRID_DEEPEST - apart
+        )
+          // Two slices past the knee and under the cap filter along the
+          // tangent, which is their depths' own mean.
+          expect(Math.abs(read[k]!.toSun - expected)).toBeLessThan(
+            Math.max(0.02 * expected, DEEP_STEP),
+          )
+      })
+      // The low sun's 230 depths are all 64; the high sun's 33 are their own.
+      expect(capped > 0).toBe(elevation < 30)
+    }
+  })
+
+  it('reads the sun between a clear cell and a cell in shadow as the share of each, where their depths’ mean would read it dark', async () => {
+    // A deck with an edge: cloud east of the eye's meridian, none west.
+    const DECK: Slab = [1000, 2000, 0.01]
+    const edge: CloudMediumFn = (sample, body) => {
+      const whole = slab(...DECK)(sample, body)
+      const east = sample.offset.dot(
+        vec3(HORIZON.east.x, HORIZON.east.y, HORIZON.east.z),
+      )
+      return {
+        ...whole,
+        sigma: select(east.greaterThan(0), whole.sigma, float(0)),
+        fraction: select(east.greaterThan(0), whole.fraction, float(0)),
+      }
+    }
+    const test = rig(edge, slabScenario(DECK))
+    const eye = eyeAt(EYE)
+    // The sun overhead, so a cell is in the deck's shadow or out of it by
+    // the side of the edge it stands on.
+    const sun = unit(UP)
+    test.settle(eye, sun)
+    // Across the edge under the deck, 25 m apart: three cells' width.
+    const line = Array.from({ length: 49 }, (_, k) => -600 + 25 * k)
+    const read = await depths(
+      test,
+      line.map((east) => along(test, eye, 500, east)),
+    )
+    const through = read.map((got) => Math.exp(-got.toSun))
+    // Lit on one side and dark on the other.
+    expect(through[0]).toBeGreaterThan(0.99)
+    expect(through[through.length - 1]).toBeLessThan(1e-3)
+    // Between them the sun falls across a cell's width, 400 m: a dozen of
+    // these points stand between a tenth and nine tenths of it. Filtered as
+    // depths, a depth of ten is past nine tenths dark 92 m from the lit
+    // cell, and three points would.
+    expect(
+      through.filter((t) => t > 0.1 && t < 0.9).length,
+    ).toBeGreaterThanOrEqual(9)
+    for (let k = 1; k < through.length; k += 1)
+      expect(through[k]! - through[k - 1]!).toBeLessThan(1e-3)
+    dispose(test)
+  })
 
   it('gives the ray’s whole depth beside the depth to the sun, from the cell where the ray meets the base', async () => {
     const test = rig(slab(BASE, TOP, SIGMA), scenario)
@@ -603,7 +716,7 @@ describe('a uniform slab', () => {
     const SUN = sunAt(-1.5)
     const eye = eyeAt(EYE)
 
-    it('sums to the base the ray leaves through, and adds the deck’s chord where it comes back up, within 2%', async () => {
+    it('sums to the base the ray leaves through, and adds the deck’s chord where it comes back up, within 2% or two steps of the cell', async () => {
       const test = rig(slab(...DECK), dusk)
       expect(test.depth.toFirstExit).toBe(true)
       test.settle(eye, SUN)
@@ -612,7 +725,9 @@ describe('a uniform slab', () => {
       offsets.forEach((offset, k) => {
         const expected = dippingDepth(eye, offset, SUN, DECK)
         expect(expected.dips).toBe(true)
-        expect(Math.abs(read[k]!.toSun / expected.depth - 1)).toBeLessThan(0.02)
+        expect(Math.abs(read[k]!.toSun - expected.depth)).toBeLessThan(
+          Math.max(0.02 * expected.depth, DEEP_STEP),
+        )
       })
       dispose(test)
     })
