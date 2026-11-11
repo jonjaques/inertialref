@@ -33,12 +33,16 @@ import { OUTSIDE_JUDGED } from './slabVerdict.ts'
 const PRINTED = 2e-4
 
 /**
- * Five times a set's measured time on this Mac mini (Mac18,5): 7.2 to 8.5 s
- * a set, 2.5 s the deep one, and the three populations 4 s together.
+ * Times on this Mac mini (Mac18,5, Apple M6): 7.2 to 8.5 s a set, 2.5 s
+ * the deep one, and the three populations 4 s together, beside other jobs;
+ * alone, 4.8 to 6.1 s a set, 1.6 s the deep set and 3.7 s the populations.
+ * CI's hosted `slow` stage took more than 5.4 times this Mac's time on the
+ * populations, past a 20 s timeout. Each timeout is five times a hosted
+ * factor of six over the higher figure, rounded up to 10 s.
  */
-const A_SET = 45_000
-const DEEP = 15_000
-const POPULATIONS = 20_000
+const A_SET = 260_000
+const DEEP = 80_000
+const POPULATIONS = 120_000
 
 const { nodes, suns, cosines, transport } = SLAB_VIEW_SOURCE
 const table: SourceTable = {
