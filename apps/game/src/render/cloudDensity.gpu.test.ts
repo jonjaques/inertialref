@@ -81,7 +81,11 @@ import {
   createCloudProfile,
 } from './cloudProfile.ts'
 import { createGameTaskRegistry } from '../workers/registry.ts'
-import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
+import {
+  CLOUD_CLIPMAP_LEVELS,
+  type CloudUniforms,
+  createCloudUniforms,
+} from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
@@ -1632,4 +1636,71 @@ describe('the displacement carried along a ray', () => {
     },
     60_000,
   )
+})
+
+describe('a fine read picks its clipmap level once', () => {
+  /*
+   * The pick finds the finest level whose window holds the sample. Written
+   * as a chain of `select`s it reads the same, but the builder emits each
+   * `select` as an `if` at every one of the pick's uses, so a read walks the
+   * chain once a use and forms every finer level's coordinates in each: a
+   * level's anchor is named seven times. Written as statements, a
+   * level's coordinates are formed in the branch that tests it and once more
+   * in the next finer level's fade band. A count of the WGSL, so it holds on
+   * every adapter: the time it saves is not asserted.
+   */
+  it('names each level’s anchor at most twice in the WGSL of one read', async () => {
+    const uniforms = createCloudUniforms()
+    const profile = createCloudProfile({ uniforms })
+    const maps = new CloudMaps(uniforms, noise.nodes)
+    const clipmap = new CloudClipmap(uniforms, maps.nodes, profile)
+    const levels = uniforms.served.clipmap.slice(0, CLOUD_CLIPMAP_LEVELS)
+    // Named, so the emitted WGSL says which uniform a use reads.
+    levels.forEach((level, k) => level.anchor.setName(`clipmapAnchor${k}`))
+    const medium = fieldMedium({
+      uniforms,
+      noise: noise.nodes,
+      profile,
+      clipmap: clipmap.nodes,
+    })
+    const output = new StorageBufferAttribute(new Float32Array(4), 4)
+    const into = storage(output, 'vec4', 1)
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(1)), () => {
+        const m = medium(
+          {
+            offset: vec3(1e3, 0, 2e3),
+            distance: float(2236),
+            altitude: float(1500),
+            sunMu: float(0.5),
+            footprint: float(50),
+            dither: float(0.5),
+          },
+          uniforms.served,
+        )
+        into.element(0).assign(vec4(m.fraction, m.sigma, m.column, m.radius))
+      })
+    })().compute(1)
+    await gpu.compute(kernel)
+    const wgsl = (
+      renderer as unknown as {
+        _nodes: { getForCompute(node: unknown): { computeShader: string } }
+      }
+    )._nodes.getForCompute(kernel).computeShader
+    const named = levels.map(
+      (_, k) =>
+        wgsl.match(new RegExp(`\\.clipmapAnchor${k}\\b`, 'g'))?.length ?? 0,
+    )
+    console.info(
+      `each level's anchor named, levels 0 to 5: ${named.join(', ')}`,
+    )
+    named.forEach((count, k) => {
+      // At least once, or the count is of nothing.
+      expect(count, `level ${k}`).toBeGreaterThanOrEqual(1)
+      expect(count, `level ${k}`).toBeLessThanOrEqual(2)
+    })
+    clipmap.dispose()
+    maps.dispose()
+    profile.dispose()
+  })
 })
