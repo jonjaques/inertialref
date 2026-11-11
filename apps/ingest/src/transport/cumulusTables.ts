@@ -26,6 +26,7 @@ import {
   type CumulusReference,
   type CumulusScaledProbe,
   type CumulusScaling,
+  type CumulusSkyProbe,
   cumulusSky,
   type CumulusSubject,
   type CumulusView,
@@ -42,6 +43,7 @@ import {
   recordVoxels,
   subjectWeather,
   type TraceMedium,
+  type TracePhase,
   traceMedium,
   tracePhase,
   viewRay,
@@ -743,30 +745,11 @@ export interface ScaledSums extends ProbePixel {
   readonly rest: ProbeSums['sums']
 }
 
-/**
- * Samples `from` to `to` of a case's pixels on the renderer's scaled
- * medium, as two runs through the fixture's scaled extinction: one order
- * of the whole phase under no sky, which the caller scales by the
- * fixture's `extinction` over its `sigma`, and every order past it of the
- * scaled phase under the case's sky. Their sum is what the march sets out
- * to draw.
- */
-export function traceScaled(
+/** The droplet table's rows a fixture's radii fall between: the rows its scaled phase is read from. */
+export function scaledRows(
   fixture: CumulusFixture,
-  spec: CumulusCase,
-  probes: readonly ProbePixel[],
-  from: number,
-  to: number,
-  progress?: (done: number, of: number) => void,
-): readonly ScaledSums[] {
-  const { voxel } = fixture
-  const medium = traceMedium(
-    fixture.size,
-    [voxel, voxel, voxel],
-    fixture.sigma,
-    fixture.radius,
-  )
-  const table = mieDroplets()
+  table: MieTable,
+): readonly number[] {
   let low = table.radii - 1
   let high = 0
   fixture.sigma.forEach((value, index) => {
@@ -775,22 +758,107 @@ export function traceScaled(
     low = Math.min(low, Math.max(0, row))
     high = Math.max(high, Math.min(table.radii - 1, row + 1))
   })
-  const rows = Array.from(
-    { length: Math.max(0, high - low + 1) },
-    (_, k) => low + k,
-  )
+  return Array.from({ length: Math.max(0, high - low + 1) }, (_, k) => low + k)
+}
+
+/**
+ * The renderer's scaled medium of a fixture, as a tracer takes it: the
+ * scaled extinction, and the scaled phase in the rows the fixture spans.
+ * `scaled` is the droplet table with those rows already scaled, from a
+ * caller that holds it: a row is a second of Mie series
+ * (`dropletMoments`), which the analytic cumulus pays six times over
+ * before its first path.
+ */
+function scaledScene(
+  fixture: CumulusFixture,
+  scaled?: MieTable,
+): { readonly medium: TraceMedium; readonly phase: TracePhase } {
+  const { voxel } = fixture
+  const table = mieDroplets()
+  return {
+    medium: traceMedium(
+      fixture.size,
+      [voxel, voxel, voxel],
+      fixture.sigma,
+      fixture.radius,
+    ),
+    phase: tracePhase(scaled ?? scaledTable(table, scaledRows(fixture, table))),
+  }
+}
+
+/**
+ * Samples `from` to `to` of a case's pixels on the renderer's scaled
+ * medium, as two runs through the fixture's scaled extinction: one order
+ * of the whole phase under no sky, which the caller scales by the
+ * fixture's `extinction` over its `sigma`, and every order past it of the
+ * scaled phase under the case's sky. Their sum is what the march sets out
+ * to draw. `scaled` is `scaledScene`'s.
+ */
+export function traceScaled(
+  fixture: CumulusFixture,
+  spec: CumulusCase,
+  probes: readonly ProbePixel[],
+  from: number,
+  to: number,
+  progress?: (done: number, of: number) => void,
+  scaled?: MieTable,
+): readonly ScaledSums[] {
+  const { medium, phase } = scaledScene(fixture, scaled)
   const first = traceCase(medium, spec, probes, from, to, undefined, {
     orders: 1,
     sky: { mean: [0, 0, 0], up: [0, 0, 0], sunward: [0, 0, 0] },
   })
   const rest = traceCase(medium, spec, probes, from, to, progress, {
-    phase: tracePhase(scaledTable(table, rows)),
+    phase,
     first: 2,
   })
   return probes.map((probe, index) => ({
     ...probe,
     first: first[index]!.sums,
     rest: rest[index]!.sums,
+  }))
+}
+
+/**
+ * Samples `from` to `to` of a case's pixels under the sky alone on the
+ * scaled medium: the walk of `traceScaled`'s second run, the case's sun in
+ * its place with an irradiance of zero. The sun stays because the sky's
+ * sunward term is laid on its bearing; a scene with no sun has none, and
+ * the tracer refuses the pair. `scaled` is `scaledScene`'s.
+ */
+export function traceScaledSky(
+  fixture: CumulusFixture,
+  spec: CumulusCase,
+  probes: readonly ProbePixel[],
+  from: number,
+  to: number,
+  progress?: (done: number, of: number) => void,
+  scaled?: MieTable,
+): readonly ProbeSums[] {
+  const { medium, phase } = scaledScene(fixture, scaled)
+  const view = CUMULUS_VIEWS.find(({ id }) => id === spec.view)!
+  return traceCase(medium, spec, probes, from, to, progress, {
+    phase,
+    sun: {
+      direction: viewSun(view),
+      irradiance: [0, 0, 0],
+      angularRadius: spec.sunRadius,
+    },
+  })
+}
+
+/** A case's pixels under the sky alone on the scaled medium, as the reference holds them. */
+export function skyOf(
+  spec: CumulusCase,
+  traced: readonly ProbeSums[],
+): readonly CumulusSkyProbe[] {
+  return traced.map(({ pixel, sums }) => ({
+    case: spec.id,
+    pixel,
+    sky: bands((b) => figures(estimateOf(sums[b]!).mean)),
+    // Three figures of an error: its fourth says nothing, and 1,702 rows of
+    // them are 15 kB of a file under a cap.
+    skyError: bands((b) => figures(estimateOf(sums[b]!).error, 3)),
   }))
 }
 
@@ -960,7 +1028,7 @@ export function referenceText(reference: CumulusReference): string {
   const cases = reference.cases.length
   const header = [
     'Generated by `node apps/ingest/src/transport/cumulusTables.ts`',
-    '(`analytic` for that member; `case`, `scaled` and `write` for the rest);',
+    '(`analytic` for that member; `case`, `scaled`, `sky` and `write` for the rest);',
     'rerun it rather than editing, then `pnpm exec prettier -w` this file.',
     '',
     'The path-traced cumulus (phase 1 design §5.11): what the float64 tracer',
@@ -973,7 +1041,7 @@ export function referenceText(reference: CumulusReference): string {
       ? 'No case of the field is traced: `subjects`, `cases`, `probes`,'
       : `${cases} cases of ${reference.subjects.length} subjects, each cut from \`cloudFieldAt\` at a footprint of zero,`,
     cases === 0
-      ? '`curves`, `medians`, `voxels`, `scaling` and `scaled` are empty, under no genus table.'
+      ? '`curves`, `medians`, `voxels`, `scaling`, `scaled` and `scaledSky` are empty, under no genus table.'
       : `at ${reference.cases[0]!.samples} samples a pixel and band, under the sky of Earth’s air (\`cumulusSky\`).`,
     ...(cases === 0
       ? []
@@ -982,20 +1050,27 @@ export function referenceText(reference: CumulusReference): string {
           '`scaled` is each pixel on the renderer’s scaled medium, first order and the rest apart,',
           `at ${reference.scaling[0]?.samples ?? 0} samples a pixel and band, and \`scaling\` its mean over the true`,
           'one’s by case and mask.',
+          ...(reference.scaledSky.length === 0
+            ? []
+            : [
+                '`scaledSky` is the sky alone on that medium, a row a row of `scaled`, under each',
+                'case’s sun at an irradiance of zero.',
+              ]),
         ]),
     `\`analytic\` is the same tracer on the analytic cumulus, ${reference.analytic.probes.length} pixels of`,
     `${reference.analytic.cases.length} cases at ${reference.analytic.cases[0]?.samples ?? 0} samples a band.`,
     '',
     `Droplet table ${phaseHash()}; genus table ${reference.genusHash || 'none'}.`,
   ]
-  const { probes, voxels, scaled, analytic, ...rest } = reference
+  const { probes, voxels, scaled, scaledSky, analytic, ...rest } = reference
   return (
     '/*\n' +
     header.map((line) => (line ? ` * ${line}` : ' *')).join('\n') +
-    "\n */\nimport type { CumulusProbe, CumulusReference, CumulusScaledProbe } from './cumulusFixture.ts'\n\n" +
+    "\n */\nimport type { CumulusProbe, CumulusReference, CumulusScaledProbe, CumulusSkyProbe } from './cumulusFixture.ts'\n\n" +
     `const PROBES = /*@__PURE__*/ ${block(probes)} as readonly CumulusProbe[]\n\n` +
     `const VOXELS = /*@__PURE__*/ ${block(voxels)} as CumulusReference['voxels']\n\n` +
     `const SCALED = /*@__PURE__*/ ${block(scaled)} as readonly CumulusScaledProbe[]\n\n` +
+    `const SKY = /*@__PURE__*/ ${block(scaledSky)} as readonly CumulusSkyProbe[]\n\n` +
     `const ANALYTIC = /*@__PURE__*/ ${block(analytic.probes)} as readonly CumulusProbe[]\n\n` +
     'export const CUMULUS_REFERENCE: CumulusReference = ' +
     JSON.stringify(
@@ -1004,11 +1079,12 @@ export function referenceText(reference: CumulusReference): string {
         probes: '@PROBES',
         voxels: '@VOXELS',
         scaled: '@SCALED',
+        scaledSky: '@SKY',
         analytic: { ...analytic, probes: '@ANALYTIC' },
       },
       null,
       2,
-    ).replace(/"@(PROBES|VOXELS|SCALED|ANALYTIC)"/g, '$1') +
+    ).replace(/"@(PROBES|VOXELS|SCALED|SKY|ANALYTIC)"/g, '$1') +
     '\n'
   )
 }
@@ -1032,17 +1108,28 @@ interface ScaledFile {
   readonly probes: readonly ScaledSums[]
 }
 
+/** What a `sky` process writes of a case: its pixels under the sky alone on the scaled medium. */
+interface SkyFile {
+  readonly id: string
+  readonly samples: number
+  readonly seconds?: number
+  readonly probes: readonly ProbeSums[]
+}
+
 /**
  * The reference from the files the `case` processes wrote: each case's
  * ranges joined in order of their first sample, with the subjects' voxels
- * and, where a `scaled` process traced the case, its scaling. Throws on a
- * case whose ranges do not tile its samples exactly.
+ * and, where a `scaled` process traced the case, its scaling, and where a
+ * `sky` process did, its sky alone. Throws on a case whose ranges do not
+ * tile its samples exactly, and on a sky whose pixels are not its scaled
+ * rows' own.
  */
 export function assemble(
   files: readonly CaseFile[],
   analytic: CumulusReference['analytic'],
   voxelsOf: (subject: CumulusSubject) => CumulusReference['voxels'],
   scaled: readonly ScaledFile[] = [],
+  sky: readonly SkyFile[] = [],
 ): CumulusReference {
   const ids = [...new Set(files.map((file) => file.spec.id))].sort()
   const subjects = new Map<string, CumulusSubject>()
@@ -1080,6 +1167,27 @@ export function assemble(
   const reduced = ids.map((id) => reduceCase(id, probes))
   const held = [...subjects.values()]
   const specs = ids.map((id) => files.find((file) => file.spec.id === id)!.spec)
+  const scaledSky = specs.flatMap((spec) => {
+    const file = sky.find(({ id }) => id === spec.id)
+    if (file === undefined) return []
+    // A row a row of `scaled`: the two are read side by side.
+    const beside = scaled.find(({ id }) => id === spec.id)?.probes
+    const same =
+      beside !== undefined &&
+      beside.length === file.probes.length &&
+      beside.every(
+        (probe, index) =>
+          probe.mask === file.probes[index]!.mask &&
+          probe.bin === file.probes[index]!.bin &&
+          probe.pixel[0] === file.probes[index]!.pixel[0] &&
+          probe.pixel[1] === file.probes[index]!.pixel[1],
+      )
+    if (!same)
+      throw new Error(
+        `cumulusTables: ${spec.id} has a sky whose pixels are not its scaled rows’`,
+      )
+    return skyOf(spec, file.probes)
+  })
   return {
     format: 'inertialref/cumulus-reference',
     version: 1,
@@ -1098,6 +1206,7 @@ export function assemble(
       const file = scaled.find(({ id }) => id === spec.id)
       return file === undefined ? [] : scaledOf(spec, file.probes, file.gain)
     }),
+    scaledSky,
     probes,
     voxels: held.flatMap(voxelsOf),
     analytic,
@@ -1237,9 +1346,26 @@ function main(argv: readonly string[]): void {
       JSON.stringify(file),
     )
     console.error(`cumulusTables: ${spec.id} scaled in ${seconds.toFixed(0)} s`)
+  } else if (command === 'sky') {
+    const subject = subjectOf(rest[0])
+    const view = viewOf(rest[1])
+    const [from, to] = rangeOf(SCALED_SAMPLES)
+    const spec = fieldCase(subject, view)
+    const { fixture, pixels } = stage(subject, view)
+    const start = process.hrtime.bigint()
+    const probes = traceScaledSky(fixture, spec, pixels, from, to)
+    const seconds = Number(process.hrtime.bigint() - start) / 1e9
+    mkdirSync(CASES, { recursive: true })
+    const file: SkyFile = { id: spec.id, samples: to - from, seconds, probes }
+    writeFileSync(
+      join(CASES, `sky-${subject.id}-${view.id}.json`),
+      JSON.stringify(file),
+    )
+    console.error(`cumulusTables: ${spec.id} sky in ${seconds.toFixed(0)} s`)
   } else if (command === 'write') {
     const cases = files<CaseFile>('case-')
     const scaled = files<ScaledFile>('scaled-')
+    const sky = files<SkyFile>('sky-')
     writeFileSync(
       OUT,
       referenceText(
@@ -1251,6 +1377,7 @@ function main(argv: readonly string[]): void {
               (voxel) => ({ subject: subject.id, ...voxel }),
             ),
           scaled,
+          sky,
         ),
       ),
     )
@@ -1259,11 +1386,11 @@ function main(argv: readonly string[]): void {
     // What the run was, for the commit that carries the file: the commit of
     // the field it traced is the caller's to add.
     console.log(
-      `cumulusTables: ${new Set(cases.map((file) => file.spec.id)).size} cases at ${REFERENCE_SAMPLES} samples, seed '${SEED_TEXT}', ${seconds(cases)} s of tracing in all; ${scaled.length} scaled at ${SCALED_SAMPLES}, ${seconds(scaled)} s`,
+      `cumulusTables: ${new Set(cases.map((file) => file.spec.id)).size} cases at ${REFERENCE_SAMPLES} samples, seed '${SEED_TEXT}', ${seconds(cases)} s of tracing in all; ${scaled.length} scaled at ${SCALED_SAMPLES}, ${seconds(scaled)} s; ${sky.length} skies at ${SCALED_SAMPLES}, ${seconds(sky)} s`,
     )
   } else {
     throw new Error(
-      'cumulusTables: analytic | place <subject> | case <subject> <view> [--samples <from>:<to>] | scaled <subject> <view> | write',
+      'cumulusTables: analytic | place <subject> | case <subject> <view> [--samples <from>:<to>] | scaled <subject> <view> | sky <subject> <view> | write',
     )
   }
   if (command === 'analytic' || command === 'write')

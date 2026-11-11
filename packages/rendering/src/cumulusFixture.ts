@@ -869,7 +869,8 @@ export interface CumulusScaling {
  *   included.
  *
  * Their sum is the pixel on the scaled medium, to hold beside the same
- * pixel of `probes`, which is the true one.
+ * pixel of `probes`, which is the true one. The sky's share of `rest` is the
+ * same row of `scaledSky`.
  */
 export interface CumulusScaledProbe {
   readonly case: string
@@ -880,6 +881,22 @@ export interface CumulusScaledProbe {
   readonly firstError: readonly [number, number, number]
   readonly rest: readonly [number, number, number]
   readonly restError: readonly [number, number, number]
+}
+
+/**
+ * The sky alone on the renderer's scaled medium at one pixel of a case:
+ * the case's sky by every order of the scaled phase, the sky seen straight
+ * through the cloud included, under a sun that gives its bearing and no
+ * light. `rest` of the same row of `scaled` less this is the sun's light
+ * past its first order. A row names its case and pixel and no more: its
+ * mask and bin are that row of `scaled`'s, and the file is read whole by
+ * whoever reads any of it.
+ */
+export interface CumulusSkyProbe {
+  readonly case: string
+  readonly pixel: readonly [number, number]
+  readonly sky: readonly [number, number, number]
+  readonly skyError: readonly [number, number, number]
 }
 
 /** The generated reference's form (`cumulusReference.generated.ts`). */
@@ -899,6 +916,8 @@ export interface CumulusReference {
   readonly scaling: readonly CumulusScaling[]
   /** The scaled medium itself, a row a pixel of `probes`, in its two parts. */
   readonly scaled: readonly CumulusScaledProbe[]
+  /** The sky alone on the scaled medium, a row a row of `scaled`. */
+  readonly scaledSky: readonly CumulusSkyProbe[]
   /**
    * The same tracer on the analytic cumulus, which no field moves: what the
    * GPU tracer is held to on every run of its suite.

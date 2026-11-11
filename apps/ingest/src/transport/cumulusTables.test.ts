@@ -9,9 +9,11 @@ import {
   type CumulusProbe,
   type CumulusReference,
   cumulusSky,
+  cumulusSkyRadiance,
   fixtureMedium,
   mieDroplets,
   phaseIntegral,
+  radiusOf,
   subjectWeather,
   viewSun,
 } from '@inertialref/rendering'
@@ -33,13 +35,16 @@ import {
   REFERENCE_SAMPLES,
   referenceText,
   scaledOf,
+  scaledRows,
   scaledTable,
   scalingOf,
   selectProbes,
+  skyOf,
   SUBJECTS,
   subjectFixture,
   traceCase,
   traceScaled,
+  traceScaledSky,
   unscaleOf,
 } from './cumulusTables.ts'
 
@@ -277,6 +282,48 @@ describe('a case traced in parts', () => {
     expect(() => join([part(0, 10)])).toThrow(/10 of its 16/)
   })
 
+  it('carries a case’s sky alone beside its scaled rows, and refuses one whose pixels are another’s', () => {
+    const fixture = analyticCumulus(ANALYTIC)
+    const table = mieDroplets()
+    const scaled = {
+      id: spec.id,
+      gain: 2,
+      samples: 4,
+      probes: traceScaled(fixture, spec, pixels, 0, 4, undefined, table),
+    }
+    const sky = {
+      id: spec.id,
+      samples: 4,
+      probes: traceScaledSky(fixture, spec, pixels, 0, 4, undefined, table),
+    }
+    const voxels = (): CumulusReference['voxels'] => []
+    const whole = assemble(
+      [part(0, 16)],
+      CUMULUS_REFERENCE.analytic,
+      voxels,
+      [scaled],
+      [sky],
+    )
+    expect(whole.scaledSky).toHaveLength(whole.scaled.length)
+    whole.scaledSky.forEach((row, index) => {
+      expect(row.case).toBe(whole.scaled[index]!.case)
+      expect(row.pixel).toEqual(whole.scaled[index]!.pixel)
+    })
+    expect(join([part(0, 16)]).scaledSky).toEqual([])
+    expect(() =>
+      assemble(
+        [part(0, 16)],
+        CUMULUS_REFERENCE.analytic,
+        voxels,
+        [scaled],
+        [{ ...sky, probes: sky.probes.slice(1) }],
+      ),
+    ).toThrow(/a sky whose pixels are not its scaled rows/)
+    expect(() =>
+      assemble([part(0, 16)], CUMULUS_REFERENCE.analytic, voxels, [], [sky]),
+    ).toThrow(/a sky whose pixels are not its scaled rows/)
+  })
+
   it('traces a pixel drawn for two masks once, and reads it the same in both', () => {
     const twice = traceCase(
       MEDIUM,
@@ -302,16 +349,18 @@ describe('the generated file', () => {
     expect(rowsOf(text, 'PROBES')).toEqual(CUMULUS_REFERENCE.probes)
     expect(rowsOf(text, 'VOXELS')).toEqual(CUMULUS_REFERENCE.voxels)
     expect(rowsOf(text, 'SCALED')).toEqual(CUMULUS_REFERENCE.scaled)
+    expect(rowsOf(text, 'SKY')).toEqual(CUMULUS_REFERENCE.scaledSky)
     expect(rowsOf(text, 'ANALYTIC')).toEqual(CUMULUS_REFERENCE.analytic.probes)
     // The rest is one literal, with the three blocks named in it.
     const body = text
       .slice(text.indexOf('CumulusReference = ') + 19)
-      .replace(/: (PROBES|VOXELS|SCALED|ANALYTIC)\b/g, ': []')
+      .replace(/: (PROBES|VOXELS|SCALED|SKY|ANALYTIC)\b/g, ': []')
     expect(JSON.parse(body)).toEqual({
       ...CUMULUS_REFERENCE,
       probes: [],
       voxels: [],
       scaled: [],
+      scaledSky: [],
       analytic: { ...CUMULUS_REFERENCE.analytic, probes: [] },
     })
     const header = text.slice(0, text.indexOf('*/'))
@@ -333,7 +382,7 @@ describe('the generated file', () => {
       'utf8',
     )
     const text = referenceText(CUMULUS_REFERENCE)
-    for (const name of ['PROBES', 'VOXELS', 'SCALED', 'ANALYTIC'])
+    for (const name of ['PROBES', 'VOXELS', 'SCALED', 'SKY', 'ANALYTIC'])
       expect(rowsOf(disk, name)).toEqual(rowsOf(text, name))
     expect(disk.slice(0, disk.indexOf('*/'))).toBe(
       text.slice(0, text.indexOf('*/')),
@@ -456,16 +505,15 @@ describe('the renderer’s scaled medium', () => {
     )
   })
 
-  // 9.4 s in the root suite on this Mac mini (Apple M6), four workers;
-  // CI's hosted runner is 2.1 to 3.9 times slower, up to 37 s. Five times that.
-  // Fewer paths do not make it cheaper: one path a pixel takes as long, since
-  // `traceScaled` scales the six Mie rows the fixture spans first, about
-  // 1.5 s a row.
   it('is put together from two runs, and a mask’s ratio is their sum over the reference', () => {
     const spec = caseOf('analytic', CUMULUS_VIEWS[1]!, ANALYTIC_PIXELS, 64)
     const fixture = analyticCumulus(ANALYTIC)
     const pixels = selectProbes(DEPTHS, ANALYTIC_PIXELS, CUMULUS_VIEWS[1]!, 1)
-    const traced = traceScaled(fixture, spec, pixels, 0, 64)
+    // The table is handed over, scaled in one of the six rows this fixture
+    // spans: a row is a second of Mie series, and what is held here is how
+    // the two runs are put together, whatever phase the second one draws.
+    expect(scaledRows(fixture, table)).toHaveLength(6)
+    const traced = traceScaled(fixture, spec, pixels, 0, 64, undefined, scaled)
     expect(traced).toHaveLength(pixels.length)
     const gain = unscaleOf(fixture)
     // The analytic cumulus scales voxel by voxel, 1.89 to 1.93; a field's
@@ -533,7 +581,84 @@ describe('the renderer’s scaled medium', () => {
     expect(() => scalingOf(spec, [], traced, gain, 64)).toThrow(
       /its reference lacks/,
     )
-  }, 190_000)
+  })
+
+  it('reads its phase from the rows a fixture’s radii fall between', () => {
+    // One radius falls between two rows of the table, and those are read.
+    const one = {
+      ...analyticCumulus(ANALYTIC),
+      radius: new Float32Array(ANALYTIC.size.reduce((a, b) => a * b)).fill(
+        11.82,
+      ),
+    }
+    const rows = scaledRows(one, table)
+    expect(rows).toHaveLength(2)
+    expect(rows[1]).toBe(rows[0]! + 1)
+    expect(radiusOf(table, rows[0]!)).toBeLessThanOrEqual(11.82)
+    expect(radiusOf(table, rows[1]!)).toBeGreaterThan(11.82)
+  })
+})
+
+describe('the sky alone on the scaled medium', () => {
+  const fixture = analyticCumulus(ANALYTIC)
+  const table = mieDroplets()
+  const back = CUMULUS_VIEWS[2]!
+  const pixels = selectProbes(DEPTHS, ANALYTIC_PIXELS, back, 1)
+
+  it('is the sky itself in every pixel under a sky that is one radiance: no light is lost or made', () => {
+    const spec = {
+      ...caseOf('analytic', back, ANALYTIC_PIXELS, 16),
+      sky: { mean: [0.02, 0.03, 0.04], up: [0, 0, 0], sunward: [0, 0, 0] },
+    } as const
+    const held = skyOf(
+      spec,
+      traceScaledSky(fixture, spec, pixels, 0, 16, undefined, table),
+    )
+    expect(held).toHaveLength(pixels.length)
+    held.forEach((row, index) => {
+      expect(row.case).toBe(spec.id)
+      expect(row.pixel).toEqual(pixels[index]!.pixel)
+      for (let b = 0; b < 3; b += 1) {
+        expect(row.sky[b]).toBeCloseTo(spec.sky.mean[b]!, 6)
+        expect(row.skyError[b]).toBeLessThan(1e-6 * spec.sky.mean[b]!)
+      }
+    })
+  })
+
+  it('lays the sky’s sunward term on the case’s own sun, which gives its bearing and no light', () => {
+    // Seen from behind, a sky that leans toward the sun is dark where the
+    // eye looks. A pixel of clear sky reads that sky and nothing else,
+    // where a trace with no bearing would read the mean.
+    const sky = {
+      mean: [0.02, 0.02, 0.02],
+      up: [0, 0, 0],
+      sunward: [1, 0.6, 0.2],
+    } as const
+    const spec = { ...caseOf('analytic', back, ANALYTIC_PIXELS, 16), sky }
+    const clear = { mask: 'rim', bin: 0, pixel: [0, 0], depth: 0 } as const
+    expect(DEPTHS[0]).toBe(0)
+    const [corner, deep] = skyOf(
+      spec,
+      traceScaledSky(
+        fixture,
+        spec,
+        [clear, pixels.find(({ mask }) => mask === 'core')!],
+        0,
+        64,
+        undefined,
+        table,
+      ),
+    )
+    const behind = cumulusSkyRadiance(sky, viewSun(back), [0, 0, 1])
+    for (let b = 0; b < 3; b += 1) {
+      expect(behind[b]).toBeLessThan(0.9 * sky.mean[b]!)
+      expect(corner!.sky[b]).toBeCloseTo(behind[b]!, 8)
+      expect(corner!.skyError[b]).toBeLessThan(1e-6 * behind[b]!)
+    }
+    // Through the cloud the sky comes from every side, and its paths differ.
+    expect(deep!.sky[0]).toBeGreaterThan(behind[0]!)
+    expect(deep!.skyError[0]).toBeGreaterThan(0)
+  })
 })
 
 describe('a case of the field', () => {
