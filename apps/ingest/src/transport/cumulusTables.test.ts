@@ -360,6 +360,8 @@ describe('the subjects', () => {
     expect(ANALYTIC_SAMPLES).toBe(4096)
   })
 
+  // 4.7 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 18 s. Five times that.
   it('find one cloud of today’s field that stands clear of its grid', () => {
     // The search at a sixth of its resolution, which a test can afford: the
     // reference's own is 2.5 million evaluations of the field.
@@ -393,7 +395,7 @@ describe('the subjects', () => {
         j === ny - 1
       if (shell) expect(value).toBe(0)
     })
-  })
+  }, 100_000)
 })
 
 describe('the renderer’s scaled medium', () => {
@@ -454,6 +456,11 @@ describe('the renderer’s scaled medium', () => {
     )
   })
 
+  // 9.4 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 37 s. Five times that.
+  // Fewer paths do not make it cheaper: one path a pixel takes as long, since
+  // `traceScaled` scales the six Mie rows the fixture spans first, about
+  // 1.5 s a row.
   it('is put together from two runs, and a mask’s ratio is their sum over the reference', () => {
     const spec = caseOf('analytic', CUMULUS_VIEWS[1]!, ANALYTIC_PIXELS, 64)
     const fixture = analyticCumulus(ANALYTIC)
@@ -526,7 +533,7 @@ describe('the renderer’s scaled medium', () => {
     expect(() => scalingOf(spec, [], traced, gain, 64)).toThrow(
       /its reference lacks/,
     )
-  })
+  }, 190_000)
 })
 
 describe('a case of the field', () => {

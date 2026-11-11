@@ -698,12 +698,7 @@ describe('a lookup', () => {
         uniforms.served,
         int(CLOUD),
       )
-      return vec4(
-        column.cover,
-        column.convective,
-        0,
-        clipmap.nodes.columnMeters(sampleAt(offset), uniforms.served),
-      )
+      return vec4(column.cover, column.convective, 0, column.meters)
     })
     // The CPU's choice of level, and the texels its reads take.
     const plan = offsets.map((offset) => {
@@ -805,7 +800,7 @@ describe('a lookup', () => {
       const sample = sampleAt(offset)
       return vec4(
         clipmap.nodes.column(sample, uniforms.served, int(0)).cover,
-        clipmap.nodes.columnMeters(sample, uniforms.served),
+        clipmap.nodes.column(sample, uniforms.served, int(0)).meters,
         0,
         0,
       )

@@ -160,6 +160,8 @@ describe('the generated tables’ stand-ins', () => {
     expect(sky.data).toHaveLength(SKY_TABLE_WIDTH * SKY_TABLE_HEIGHT * 4)
   })
 
+  // 3.7 s in the root suite on this Mac mini (Apple M6), four workers;
+  // CI's hosted runner is 2.1 to 3.9 times slower, up to 14 s. Five times that.
   it('cut a cumulus fixture from the field on a place’s voxels', () => {
     const body = {
       radius: 6_371_000,
@@ -184,7 +186,7 @@ describe('the generated tables’ stand-ins', () => {
     expect(fixture.sigma).toHaveLength(24)
     expect(fixture.radius).toHaveLength(24)
     expect(fixture.sigma.every((value) => value >= 0)).toBe(true)
-  })
+  }, 80_000)
 })
 
 describe('the light’s stub modules', () => {
