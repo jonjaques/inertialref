@@ -31,12 +31,15 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
   which checks remain, and write the extended body every time
   ([`STYLE.md`](../../STYLE.md) § "Commit messages").
 
-- **Rebase onto the target before pushing, never merge.** `main` enforces
-  `required_linear_history` and takes squash merges only, so a merge commit cannot land:
-  `git fetch origin && git rebase origin/main`. Do it before running the checks, so the
-  evidence describes the commit that will actually merge. `--force-with-lease` after a
-  rebase of an already-pushed branch is the ordinary end of a rebase. Never a bare
-  `--force`, and never at `main`.
+- **Rebase a branch until its first push, then merge. Never force a push.** Before the
+  first push, `git fetch origin && git rebase origin/main`. Once the branch is on the
+  remote, `git merge origin/main` and an ordinary push: a rebase there can only reach the
+  remote as a forced push, which rewrites a branch a pull request and a watching thread
+  already hold, and which the user-level settings here deny in every form,
+  `--force-with-lease` included. `main` enforces `required_linear_history` and takes
+  squash merges only, and the squash is what keeps the merge commit off it. Do either
+  before running the checks, so the evidence describes the commit that will actually
+  merge.
 
 - **Pushing and opening a pull request are `/ship`.** Invoking that skill is the
   approval for everything in it. Reviewing is not part of it — `/code-review` is a

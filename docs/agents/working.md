@@ -48,27 +48,33 @@ Nothing is committed to `main`.
 
 ---
 
-## Staying rebased
+## Staying current
 
-`main` carries a ruleset with `required_linear_history`, and the repository allows
-**squash merges only**. A merge commit cannot land, so a branch that has fallen behind
-`origin/main` is either rebased or it is not mergeable:
+`main` carries a ruleset with `required_linear_history`, and pull requests into it are
+**squash-merged**. A branch that has fallen behind `origin/main` is brought up to date
+one of two ways, and which one depends on whether it has been pushed:
 
 ```bash
 git fetch origin
-git rebase origin/main
+git rebase origin/main     # a branch that is not on the remote yet
+git merge origin/main      # a branch that is
 ```
 
-Rebase **before** running the checks rather than after. `pnpm check`, an invariant
+**No push is forced.** A rebase of a pushed branch can only reach the remote as a forced
+push, and that rewrites a branch a pull request, its review comments and a watching
+thread already hold. The user-level settings on the machines this is built on deny every
+`git push --force*`, `--force-with-lease` included, in every permission mode, so a step
+that needs one stalls. The merge costs `main` nothing: linear history is a property of
+`main`, and the squash collapses the branch, merge commit and all, into the one commit
+that lands.
+
+Update **before** running the checks rather than after. `pnpm check`, an invariant
 audit and a screenshot are evidence about one specific tree; taken against a stale base
 they describe a tree that will never exist, and the work has to be redone once the
-rebase moves the ground under them.
+update moves the ground under them.
 
-A rebase of a branch that is already pushed needs `git push --force-with-lease`. That is
-the ordinary end of a rebase, and the lease is what makes it safe: it refuses if the
-remote moved since you last saw it. A bare `--force` is not, and `main` is protected
-twice over — by a deny matcher on `git push … main`, and by the ruleset's
-`non_fast_forward` rule, which refuses it at the server.
+`main` is protected twice over — by a deny matcher on `git push … main`, and by the
+ruleset's `non_fast_forward` rule, which refuses it at the server.
 
 ---
 
@@ -187,7 +193,7 @@ exists to describe a change. That license does not extend to the source comment
 next to it.
 
 Pushing and opening a pull request are [`/ship`](../../.claude/skills/ship/SKILL.md).
-It rebases onto `origin/main`, commits what is uncommitted in house style, pushes,
+It brings the branch up to date with `origin/main`, commits what is uncommitted in house style, pushes,
 opens the PR **ready rather than draft** and watches CI. It runs no check of its own:
 "ship" is said when the work is verified, and the pull request's verification section
 lists what ran — the gate on every turn, the `pnpm presets:compare` table for anything
