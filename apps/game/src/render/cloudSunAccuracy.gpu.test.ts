@@ -20,10 +20,12 @@ import {
   uniform,
 } from 'three/tsl'
 import {
+  type BodyWeather,
+  cloudFieldAt,
+  fieldClock,
+  regimeWeather,
   type ScenarioId,
-  scenarioCoverage,
   WEATHER_SCENARIOS,
-  type WeatherScenario,
 } from '@inertialref/rendering'
 import {
   type Quat,
@@ -38,6 +40,7 @@ import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import type { CloudBudget, CloudSample } from './cloudNodes.ts'
 import {
   LOOKING_UP,
+  RIG_EARTH,
   RIG_EARTH_RADIUS,
   type RigStance,
   rigFrameInputs,
@@ -51,15 +54,22 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * T_cloud's error at in-cloud samples, at lightTaps 2, 4, 6 and 8, in seven
  * regimes under three suns.
  *
- * **The population.** A regime is scored at five places, drawn by a seed
- * between 60° S and 60° N among the directions where every layer holds at
- * least its mean cover: a pole is a special place, where a layer's texture
- * stands still under the rigid turn, and under a blob or a band a place
- * drawn blind may hold no cloud for kilometers. The samples are columns
- * 937.5 m apart over a disc 22.5 km about the eye, eight heights through
- * each layer: the light reads the grid a kilometer sunward of a sample, and
- * that point is inside the grid's weight, which ends 24 km out along its
- * axes, whichever way the disc is turned to them. Every sample the field
+ * **The population.** A regime is scored at five places, and the places
+ * are the field's own. Sixty-four directions are drawn by a seed between
+ * 60° S and 60° N (a pole is a special place, where a level's texture stands
+ * still under the rigid turn), each is read on the CPU field the frame
+ * draws (`cloudFieldAt`, resolved, at a sixth of the samples), and the five
+ * that hold cloud at the most of them are taken, in the order they were
+ * drawn. A regime's pattern does not say where its cloud is: fair cumulus
+ * and the anvil draw one cover over the whole body, and a place chosen
+ * "under a blob" of the pattern stood under 2% of cloud. The samples are
+ * columns over a disc 22.5 km about the eye, eight heights through each
+ * level: the light reads the grid a kilometer sunward of a sample, and that
+ * point is inside the grid's weight, which ends 24 km out along its axes,
+ * whichever way the disc is turned to them. The columns are 937.5 m apart,
+ * and closer in the two regimes whose cloud is a small share of their
+ * level, so that every regime's five places hold in-cloud samples in the
+ * tens of thousands (`ACROSS`). Every sample the field
  * holds cloud at, and whose sun ray clears the ground, is scored: the
  * light's T_cloud, its taps and then the grid's optical depth beyond them,
  * against exp(−∫σ·f ds) by 256 steps of the same field medium through each
@@ -79,6 +89,17 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * run to the far crossing of the union's top (`toFirstExit`), which is
  * recorded beside it and held to nothing.
  *
+ * **A sample is in cloud where the CPU field's extinction there is over
+ * 10⁻⁷ per meter,** a depth of a ten-thousandth in a kilometer. The GPU's
+ * own field is not asked: where a density comes down to nothing two
+ * adapters round it to either side, and a count taken there is a tie.
+ * `cloudFieldAt` in float64 says the same on every machine, so a case's
+ * count is held exactly. The two fields' disagreements are counted beside
+ * it (`fieldsDisagree`: in cloud to one and clear to the other) and held
+ * under a fortieth of the in-cloud samples, three times this Mac mini's
+ * most (0.83%, altocumulus): a rig whose turn, clock or sun parted from the
+ * CPU's would score clear air.
+ *
  * **A case is a regime, a sun and a place,** and its figures are its RMS,
  * its bias, its worst sample and its 99th percentile, with the same four by
  * ring: within 4 km of the eye, 4 to 6.4 km, and beyond. A point sample at a
@@ -91,12 +112,19 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * IR_CLOUD_MEASURE=1 on the Mac mini (Mac18,5, Apple M6) and committed. A
  * case's RMS, its bias, its worst sample and its percentile may each pass
  * the landed value by a tenth and no more, or stand under a thousandth of
- * the sun. One case runs in every
- * `pnpm test:gpu`; every case runs under the flag, which also writes
- * `.data/clouds/sunAccuracy.json`. The bound is this adapter's: it is
- * asserted where the adapter offers timestamps, which is how the suite
- * tells a workstation from CI's hosted device, and there the figures are
- * still taken and held finite.
+ * the sun. A few cases run in every `pnpm test:gpu` (`ALWAYS`); every
+ * case runs under the flag, which also writes
+ * `.data/clouds/sunAccuracy.json`. **Every bar is asserted on every
+ * adapter.** The figures are this Mac mini's, and whether CI's hosted
+ * adapter reproduces them is not measured: the tenth and the edges are what
+ * it has to stand inside. Only the rebuild's timing asks for timestamps.
+ *
+ * **The early out's bill** is recorded beside each case and held to
+ * nothing: the share of its samples whose cached depth, the grid's at the
+ * sample as a march reads it, is past 4, 6 and 8, the share of the case's
+ * summed reference transmittance those samples hold, and the most any one
+ * of them holds. A march that takes no taps where the cache says dark gives
+ * up that share of first order's light.
  *
  * The bounds tighten and are never loosened. A change that moves a figure
  * replaces the landed document in the commit that moves it, so the diff
@@ -166,16 +194,38 @@ const PLACES = 5
 /** Degrees: the places stand between this latitude south and north. */
 const LATITUDE = 60
 const PLACE_SEED = 0x5eed
-/** Columns across the disc's diameter. */
-const ACROSS = 48
+/**
+ * Columns across the disc's diameter: 48, 937.5 m apart, and more in the two
+ * regimes whose cloud is a small share of their levels, so that each holds
+ * the in-cloud samples the others do. Fair cumulus is 6% of its samples in
+ * cloud at every place, one cover over the whole body, and no placement
+ * finds more.
+ */
+const ACROSS: Readonly<Partial<Record<ScenarioId, number>>> = {
+  'fair-cumulus': 144,
+  anvil: 80,
+}
+const ACROSS_ELSE = 48
+const ACROSS_MOST = 144
+const acrossOf = (scenario: ScenarioId): number =>
+  ACROSS[scenario] ?? ACROSS_ELSE
+/** Directions a regime's places are chosen among, and the columns across the disc each is read at. */
+const CANDIDATES = 64
+const CANDIDATE_ACROSS = 20
+/** Per meter: the extinction of the CPU field a sample is in cloud over. */
+const IN_CLOUD = 1e-7
+/** Of a case's in-cloud samples: the most the GPU's field and the CPU's may disagree at. */
+const FIELDS_APART = 1 / 40
+/** The cached depths the early out's bill is taken at. */
+const EARLY_OUT = [4, 6, 8] as const
 /** Meters: the disc's radius about the eye. */
 const REACH = 22_500
 /** Meters from the eye: the rings' outer edges. Phase 0's reach, the 50 m level's, the disc's. */
 const RINGS = [4000, 6400, REACH] as const
 const HEIGHTS_A_LAYER = 8
 const EYE = 2
-const POINTS = ACROSS * ACROSS * HEIGHTS_A_LAYER * 3
-/** The rig's instant: the blobs' period index the CPU's cover is read at. */
+const POINTS = ACROSS_MOST * ACROSS_MOST * HEIGHTS_A_LAYER * 3
+/** The rig's instant, the frame's time: what the CPU field's clock is read at. */
 const TIME = 50_000
 /**
  * Frames the maps take to hold a new weather or a new sun whole: the cube's
@@ -205,36 +255,97 @@ function draws(seed: number): () => number {
 /** The regimes in the order the rendering package lists them: a regime's place seed is its index. */
 const WEATHER_SCENARIO_ORDER = Object.keys(WEATHER_SCENARIOS)
 
+/** The rig's Earth as the frame finds it: what a regime's weather is held over. */
+const BODY = rigFrameInputs(
+  { eye: EYE, looking: LOOKING_UP },
+  DEFAULT_CLOUD_LEVERS,
+  CSS,
+).record(RIG_EARTH)!
+
+const WEATHERS = new Map<ScenarioId, BodyWeather>()
+function weatherOf(scenario: ScenarioId): BodyWeather {
+  let weather = WEATHERS.get(scenario)
+  if (weather === undefined) {
+    weather = regimeWeather(BODY, scenario)
+    WEATHERS.set(scenario, weather)
+  }
+  return weather
+}
+
+/** Toward the sun from the body's center at an elevation over the rig's eye, render axes. */
+const sunToward = (elevation: number): Vec3 => ({
+  x: 0,
+  y: Math.sin(radians(elevation)),
+  z: -Math.cos(radians(elevation)),
+})
+
+/** The samples of a lattice the CPU field holds cloud at, resolved, under a body-fixed sun. */
+function clouded(
+  weather: BodyWeather,
+  sun: Vec3,
+  points: Pick<Lattice, 'fromCenter' | 'count'>,
+): number[] {
+  const clock = fieldClock(weather, TIME)
+  const found: number[] = []
+  for (let k = 0; k < points.count; k += 1) {
+    const at = cloudFieldAt(
+      weather,
+      clock,
+      sun,
+      {
+        x: points.fromCenter[3 * k]!,
+        y: points.fromCenter[3 * k + 1]!,
+        z: points.fromCenter[3 * k + 2]!,
+      },
+      0,
+    )
+    if (at.fraction * at.sigma > IN_CLOUD) found.push(k)
+  }
+  return found
+}
+
+const PLACED = new Map<ScenarioId, readonly Vec3[]>()
+
 /**
- * The body-fixed directions a regime is scored over: uniform over the
- * sphere between the two latitudes, kept where every layer holds at least
- * its mean cover. The cover is the pattern's, with no terminator: a regime
- * that ends against the sun is placed by its pattern and lit by the stance.
+ * The body-fixed directions a regime is scored over: of `CANDIDATES` drawn
+ * uniformly over the sphere between the two latitudes, the five whose disc
+ * holds cloud at the most samples of the CPU field, under the regime's
+ * first sun, in the order they were drawn. Float64 on the CPU, so the
+ * places are the same on every machine.
  */
-function placesOf(scenario: ScenarioId): Vec3[] {
-  const { terminator: _, ...pattern } = WEATHER_SCENARIOS[scenario]
-  const s: WeatherScenario = pattern
+function placesOf(scenario: ScenarioId, elevation: number): readonly Vec3[] {
+  const held = PLACED.get(scenario)
+  if (held !== undefined) return held
+  const weather = weatherOf(scenario)
   const next = draws(PLACE_SEED + WEATHER_SCENARIO_ORDER.indexOf(scenario))
   const band = Math.sin(radians(LATITUDE))
-  const found: Vec3[] = []
-  for (let n = 0; n < 100_000 && found.length < PLACES; n += 1) {
+  const candidates = Array.from({ length: CANDIDATES }, (_, order) => {
     const y = (2 * next() - 1) * band
     const longitude = 2 * Math.PI * next()
     const ring = Math.sqrt(1 - y * y)
-    const d = {
+    const direction = {
       x: Math.cos(longitude) * ring,
       y,
       z: Math.sin(longitude) * ring,
     }
-    const held = s.layers.every(
-      (layer, k) => scenarioCoverage(s, k, d, TIME) >= layer.coverage - 1e-9,
-    )
-    if (held) found.push(d)
-  }
-  if (found.length < PLACES)
-    throw new Error(`${scenario}: fewer than ${PLACES} places hold its cover`)
-  return found
+    const turn = turnOnto(direction)
+    const sun = Q.rotate(Q.conjugate(turn), sunToward(elevation))
+    const points = lattice(weather, turn, CANDIDATE_ACROSS)
+    return {
+      direction,
+      clouded: clouded(weather, sun, points).length,
+      order,
+    }
+  })
+  const places = candidates
+    .sort((a, b) => b.clouded - a.clouded || a.order - b.order)
+    .slice(0, PLACES)
+    .sort((a, b) => a.order - b.order)
+    .map(({ direction }) => direction)
+  PLACED.set(scenario, places)
+  return places
 }
+
 /** The turn that carries a body-fixed direction onto the render's +Y, over which the rig's eye stands. */
 function turnOnto(direction: Vec3): Quat {
   const up = { x: 0, y: 1, z: 0 }
@@ -262,24 +373,28 @@ interface Lattice {
  * ground stands on the sphere, its height's point (R + h)·(sin φ, cos φ)
  * from the center at φ = d/R, less the eye's.
  */
-function lattice(scenario: ScenarioId, turn: Quat): Lattice {
-  const offsets = new Float32Array(POINTS * 4)
-  const ground = new Float64Array(POINTS)
-  const fromCenter = new Float64Array(POINTS * 3)
+function lattice(weather: BodyWeather, turn: Quat, across: number): Lattice {
+  const most = across * across * HEIGHTS_A_LAYER * 3
+  const offsets = new Float32Array(most * 4)
+  const ground = new Float64Array(most)
+  const fromCenter = new Float64Array(most * 3)
   const back = Q.conjugate(turn)
   let n = 0
-  const heights = WEATHER_SCENARIOS[scenario].layers.flatMap((layer) =>
-    Array.from(
-      { length: HEIGHTS_A_LAYER },
-      (_, k) =>
-        layer.base + ((k + 0.5) / HEIGHTS_A_LAYER) * (layer.top - layer.base),
-    ),
-  )
+  // The weather's own levels: an absent one has no thickness and no samples.
+  const heights = weather.levels
+    .filter((level) => level.top > level.base)
+    .flatMap((level) =>
+      Array.from(
+        { length: HEIGHTS_A_LAYER },
+        (_, k) =>
+          level.base + ((k + 0.5) / HEIGHTS_A_LAYER) * (level.top - level.base),
+      ),
+    )
   for (const h of heights)
-    for (let j = 0; j < ACROSS; j += 1)
-      for (let i = 0; i < ACROSS; i += 1) {
-        const x = REACH * ((2 * (i + 0.5)) / ACROSS - 1)
-        const z = REACH * ((2 * (j + 0.5)) / ACROSS - 1)
+    for (let j = 0; j < across; j += 1)
+      for (let i = 0; i < across; i += 1) {
+        const x = REACH * ((2 * (i + 0.5)) / across - 1)
+        const z = REACH * ((2 * (j + 0.5)) / across - 1)
         const d = Math.hypot(x, z)
         if (d > REACH) continue
         const phi = d / R
@@ -296,7 +411,12 @@ function lattice(scenario: ScenarioId, turn: Quat): Lattice {
         ground[n] = d
         n += 1
       }
-  return { offsets, ground, fromCenter, count: n }
+  return {
+    offsets: offsets.subarray(0, 4 * n),
+    ground,
+    fromCenter,
+    count: n,
+  }
 }
 
 /** Whether the ray from a point toward the sun meets the datum: the planet's own shadow. */
@@ -345,12 +465,54 @@ interface Case {
   readonly samples: number
   readonly inCloud: number
   readonly shadowed: number
+  /** Samples the GPU's field and the CPU's disagree at: in cloud to one, clear to the other. */
+  readonly fieldsDisagree: number
   readonly meanReference: number
   /** By tap count: every scored sample, then each ring's. */
   readonly grid: Readonly<Record<string, Scored>>
   readonly rings: Readonly<Record<string, readonly Scored[]>>
   /** Under the horizon: the same samples with the bake's steps run to the far crossing of the union's top. */
   readonly farCrossing?: Readonly<Record<string, Scored>>
+  /** By cached depth: what a march that takes no taps past it gives up. Recorded, held to nothing. */
+  readonly earlyOut: Readonly<Record<string, EarlyOut>>
+}
+
+/** The samples of a case, or of a row, whose cached depth to the sun is past a threshold. */
+interface EarlyOut {
+  /** Their count, and the scored samples they are counted among. */
+  readonly past: number
+  readonly scored: number
+  /** The reference transmittance they sum to, and the sum over every scored sample. */
+  readonly passed: number
+  readonly light: number
+  /** The most any one of them passes in the reference. */
+  readonly worst: number
+  /** `past / scored` and `passed / light`: the shares a march with no taps there gives up. */
+  readonly samplesShare: number
+  readonly lightShare: number
+}
+
+function earlyOutOf(
+  parts: readonly Pick<
+    EarlyOut,
+    'past' | 'scored' | 'passed' | 'light' | 'worst'
+  >[],
+): EarlyOut {
+  const sum = (of: (part: (typeof parts)[number]) => number): number =>
+    parts.reduce((total, part) => total + of(part), 0)
+  const past = sum((part) => part.past)
+  const scored = sum((part) => part.scored)
+  const passed = sum((part) => part.passed)
+  const light = sum((part) => part.light)
+  return {
+    past,
+    scored,
+    passed,
+    light,
+    worst: Math.max(0, ...parts.map((part) => part.worst)),
+    samplesShare: past / Math.max(scored, 1),
+    lightShare: passed / Math.max(light, 1e-30),
+  }
 }
 
 function score(miss: readonly number[]): Scored {
@@ -402,8 +564,12 @@ function landedCase(found: Case): Case {
 function hold(found: Case): void {
   const what = `${found.scenario} at ${found.sunDegrees}°, place ${found.place}`
   const pinned = landedCase(found)
-  // The population itself: a case that lost its cloud scores nothing.
+  // The population itself, a count the CPU takes: a case that lost its
+  // cloud scores nothing, and one the GPU draws elsewhere scores clear air.
   expect(found.inCloud, what).toBe(pinned.inCloud)
+  expect(found.fieldsDisagree, what).toBeLessThanOrEqual(
+    found.inCloud * FIELDS_APART,
+  )
   for (const taps of TAPS) {
     const now = found.grid[taps]!
     const then = pinned.grid[taps]!
@@ -417,7 +583,6 @@ function hold(found: Case): void {
       expect(Number.isFinite(figure), `${what}, ${taps} taps: ${name}`).toBe(
         true,
       )
-    if (!WORKSTATION) continue
     for (const [name, figure, bound] of figures)
       expect(figure, `${what}, ${taps} taps: ${name}`).toBeLessThanOrEqual(
         Math.max(bound * SLACK, FLOOR),
@@ -577,6 +742,12 @@ describe('the sun’s optical depth against the field', () => {
     const grid = pointKernel(
       (sample) => field.sun(sample, field.medium(sample, body), body).cloud,
     )
+    // The cache's depth at the sample itself, as a march with no taps reads
+    // it, and nothing where the cache holds nothing of the sample.
+    const cache = pointKernel((sample) => {
+      const cached = field.grid.depths(sample.offset)
+      return select(cached.weight.greaterThan(0), cached.toSun, float(-1))
+    })
 
     const { frameAt, settle } = drive()
     const read = async (kernel: ComputeNode): Promise<Float32Array> => {
@@ -586,19 +757,15 @@ describe('the sun’s optical depth against the field', () => {
 
     const results: Case[] = []
     for (const { scenario, suns } of population) {
-      const stood = placesOf(scenario).slice(0, places)
+      const stood = placesOf(scenario, suns[0]!).slice(0, places)
       for (const [index, place] of stood.entries()) {
         const turn = turnOnto(place)
-        const points = lattice(scenario, turn)
+        const points = lattice(weatherOf(scenario), turn, acrossOf(scenario))
         ;(offsets.array as Float32Array).set(points.offsets)
         offsets.needsUpdate = true
         count.value = points.count
         for (const elevation of suns) {
-          const toward = {
-            x: 0,
-            y: Math.sin(radians(elevation)),
-            z: -Math.cos(radians(elevation)),
-          }
+          const toward = sunToward(elevation)
           const stance: RigStance = {
             eye: EYE,
             looking: LOOKING_UP,
@@ -615,9 +782,11 @@ describe('the sun’s optical depth against the field', () => {
           })
           settle(stance, levers(2))
           const truth = await read(reference)
-          const inCloud: number[] = []
+          const inCloud = clouded(weatherOf(scenario), sun, points)
+          const held = new Set(inCloud)
+          let fieldsDisagree = 0
           for (let k = 0; k < points.count; k += 1)
-            if (truth[2 * k]! > 0) inCloud.push(k)
+            if (truth[2 * k]! > 0 !== held.has(k)) fieldsDisagree += 1
           const lit = inCloud.filter(
             (k) => !grounded(points.fromCenter, k, sun),
           )
@@ -646,6 +815,26 @@ describe('the sun’s optical depth against the field', () => {
               )
             })
           }
+          // The early out's bill, on the cache as it ships.
+          const cached = await read(cache)
+          const light = lit.reduce((sum, k) => sum + truth[2 * k + 1]!, 0)
+          const earlyOut = Object.fromEntries(
+            EARLY_OUT.map((depth) => {
+              const past = lit.filter((k) => cached[2 * k + 1]! > depth)
+              return [
+                depth,
+                earlyOutOf([
+                  {
+                    past: past.length,
+                    scored: lit.length,
+                    passed: past.reduce((sum, k) => sum + truth[2 * k + 1]!, 0),
+                    light,
+                    worst: Math.max(0, ...past.map((k) => truth[2 * k + 1]!)),
+                  },
+                ]),
+              ]
+            }),
+          )
           // Under the horizon, the other bake on the same field and samples.
           let farCrossing: Record<string, Scored> | undefined
           if (elevation < 0) {
@@ -665,18 +854,20 @@ describe('the sun’s optical depth against the field', () => {
             samples: points.count,
             inCloud: inCloud.length,
             shadowed: inCloud.length - lit.length,
+            fieldsDisagree,
             meanReference:
               lit.reduce((s, k) => s + truth[2 * k + 1]!, 0) /
               Math.max(lit.length, 1),
             grid: all,
             rings,
             ...(farCrossing === undefined ? {} : { farCrossing }),
+            earlyOut,
           })
         }
       }
     }
 
-    for (const kernel of [reference, grid]) kernel.dispose()
+    for (const kernel of [reference, grid, cache]) kernel.dispose()
     offsets.dispose()
     out.dispose()
     return results
@@ -710,7 +901,14 @@ describe('the sun’s optical depth against the field', () => {
               placesARegime: PLACES,
               latitudeDegrees: LATITUDE,
               placeSeed: PLACE_SEED,
-              columnsAcross: ACROSS,
+              placement: `of ${CANDIDATES} seeded directions, the ${PLACES} whose disc holds cloud at the most samples of the CPU field under the regime's first sun`,
+              inCloudOverPerMeter: IN_CLOUD,
+              columnsAcross: Object.fromEntries(
+                POPULATION.map(({ scenario }) => [
+                  scenario,
+                  acrossOf(scenario),
+                ]),
+              ),
               reachMeters: REACH,
               ringEdgesMeters: RINGS,
               heightsALayer: HEIGHTS_A_LAYER,
@@ -739,6 +937,12 @@ describe('the sun’s optical depth against the field', () => {
                   ...(sunDegrees < 0
                     ? { farCrossing: by((one) => one.farCrossing!) }
                     : {}),
+                  earlyOut: Object.fromEntries(
+                    EARLY_OUT.map((depth) => [
+                      depth,
+                      earlyOutOf(cases.map((one) => one.earlyOut[depth]!)),
+                    ]),
+                  ),
                 }
               }),
             ),
@@ -766,17 +970,17 @@ describe('the sun’s optical depth against the field', () => {
     'times a rebuild frame by frame and a clock running at 1×, bakes no frame past the cap, and writes both',
     async () => {
       const { frameAt, settle } = drive()
-      const [place] = placesOf(REBUILD.scenario)
+      const [place] = placesOf(
+        REBUILD.scenario,
+        POPULATION.find(({ scenario }) => scenario === REBUILD.scenario)!
+          .suns[0]!,
+      )
       const stance: RigStance = {
         eye: EYE,
         looking: LOOKING_UP,
         turn: turnOnto(place!),
         air: true,
-        sun: {
-          x: 0,
-          y: Math.sin(radians(REBUILD.sunDegrees)),
-          z: -Math.cos(radians(REBUILD.sunDegrees)),
-        },
+        sun: sunToward(REBUILD.sunDegrees),
       }
       const levers: CloudLevers = {
         ...DEFAULT_CLOUD_LEVERS,
