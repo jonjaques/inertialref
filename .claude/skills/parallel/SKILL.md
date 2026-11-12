@@ -44,6 +44,14 @@ its own worktree under `.claude/worktrees/`, branched from the current `HEAD` �
 `worktree.baseRef` is `"head"` in `.claude/settings.json`, so a worktree carries the
 feature branch you are on rather than resetting to `main`.
 
+**In a T3 Code thread the checkout is T3's to make.** Each piece is a `delegate_task`
+with `isolation: "worktree"` instead: T3 cuts the child's worktree from the parent's
+commit, and the child's questions and approvals come back to this thread. Uncommitted
+edits stay behind, so commit what the children build on first. Call
+`orchestrator_capabilities` once before the first one, and leave `runtimeMode` to
+inherit. Everything below about the install, the brief and collecting the work binds a
+delegated child exactly as it binds a subagent.
+
 ## The one thing each worktree agent must do first
 
 **A worktree is a fresh checkout with no `node_modules`.** The `SessionStart` hook installs
@@ -79,12 +87,14 @@ order — lower layers first, because a `packages/*` change can invalidate a
 `pnpm check` **after** merging, not only inside each worktree: each one proved itself
 against its own tree, and nothing proved them against each other.
 
-**Rebase each branch onto the one before it lands, never merge.** `main` enforces
-`required_linear_history` and takes squash merges only, so `git rebase` is the only way
-to collect them — `git fetch origin && git rebase origin/main` per branch, in the order
-you decided, and `--force-with-lease` for any that is already pushed. Fan-out is exactly
-where this bites: five branches all cut from the same `HEAD` are all stale the moment the
-first one merges.
+**Bring each branch up to date once the one before it lands.** Fan-out is exactly where
+this bites: five branches all cut from the same `HEAD` are all stale the moment the first
+one merges. A branch that has never been pushed is rebased —
+`git fetch origin && git rebase origin/main`, in the order you decided. A branch that is
+already on the remote takes `git merge origin/main` and an ordinary push instead, because
+a rebase there can only be pushed by force and no push is forced. `main` enforces
+`required_linear_history` and takes squash merges only, and the squash keeps the merge
+commit off it.
 
 A worktree with no changes is removed automatically; one with work stays on disk until you
 remove it. `git worktree list` shows them.
