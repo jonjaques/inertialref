@@ -16,7 +16,8 @@
       "command": "mise exec -- pnpm dev",
       "async": true,
       "previewUrl": "http://localhost:5173",
-      "autoOpenPreview": true
+      "autoOpenPreview": true,
+      "stopOnSettle": true
     },
     { "name": "Test", "icon": "test", "command": "mise exec -- pnpm test" },
     {

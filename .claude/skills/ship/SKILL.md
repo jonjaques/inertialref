@@ -1,15 +1,16 @@
 ---
 name: ship
-description: Take finished, verified work to a pull request — rebased onto origin/main, committed in house style, pushed, opened ready rather than draft, with CI watched. It runs no gate; the checks are CI's and the evidence is what was gathered during the work. Review is /code-review, which the user invokes next.
+description: Take finished, verified work to a pull request — brought up to date with origin/main, committed in house style, pushed, opened ready rather than draft, with CI watched. It runs no gate; the checks are CI's and the evidence is what was gathered during the work. Review is /code-review, which the user invokes next.
 argument-hint: '[branch name or PR title]'
 disable-model-invocation: true
-allowed-tools: Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git add:*) Bash(git commit:*) Bash(git switch:*) Bash(git checkout -b:*) Bash(git fetch:*) Bash(git rebase:*) Bash(git push:*) Bash(gh pr create:*) Bash(gh pr edit:*) Bash(gh pr view:*) Bash(gh pr diff:*) Bash(gh pr checks:*) Bash(gh pr comment:*) Bash(gh run list:*) Bash(gh run view:*) Bash(gh run watch:*) Bash(gh api:*) Bash(pnpm check:*) mcp__t3-code__link_pull_request mcp__t3-code__watch_pull_request
+allowed-tools: Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git add:*) Bash(git commit:*) Bash(git switch:*) Bash(git checkout -b:*) Bash(git fetch:*) Bash(git rebase:*) Bash(git merge origin/main) Bash(git merge --continue) Bash(git merge --abort) Bash(git push:*) Bash(gh pr create:*) Bash(gh pr edit:*) Bash(gh pr view:*) Bash(gh pr diff:*) Bash(gh pr checks:*) Bash(gh pr comment:*) Bash(gh run list:*) Bash(gh run view:*) Bash(gh run watch:*) Bash(gh api:*) Bash(pnpm check:*) mcp__t3-code__link_pull_request mcp__t3-code__watch_pull_request
 ---
 
 # Ship it
 
 Never invoked automatically. **Invoking it is the approval for everything in it** —
-rebasing, committing, branching, pushing, opening the pull request and editing it.
+rebasing or merging `origin/main` in, committing, branching, pushing, opening the pull
+request and editing it.
 Nothing in it prompts: `git push` and `gh pr create` are allowed in
 `.claude/settings.json`, and the one act that still asks is merging to `main`, which
 is not part of this.
@@ -32,22 +33,25 @@ and let the user decide to spend it.
 
 ---
 
-## 1. Rebase onto `origin/main`, once
+## 1. Bring the branch up to date with `origin/main`, once
 
 ```bash
 git fetch origin
-git rebase origin/main
+git branch -r --list "origin/<this branch>"   # empty: it has never been pushed
+git rebase origin/main                        # never pushed
+git merge origin/main                         # already on the remote
 ```
 
-`main` carries `required_linear_history` and takes squash merges only, so a branch
-that has fallen behind is either rebased or it is not mergeable. Conflicts are yours to
-resolve, in the direction the change intends — never `--ours`/`--theirs` by reflex on a
-file you have not read.
+One or the other, never both. A rebase of a branch that is already on the remote can
+only be pushed by force, and no push is forced: every `git push --force*`,
+`--force-with-lease` included, is denied. `main` carries `required_linear_history` and
+takes squash merges only, and the squash is what keeps the merge commit off it.
+Conflicts are yours to resolve, in the direction the change intends — never
+`--ours`/`--theirs` by reflex on a file you have not read.
 
-If the rebase replayed anything, the evidence in hand describes a tree that no longer
-exists. Say so under Verification: CI is the check on the merged tree, and that is what
-it is for. A rebase of a branch that is already pushed ends in `--force-with-lease`,
-which is the ordinary end of a rebase; a bare `--force` is denied.
+If the update replayed or merged anything, the evidence in hand describes a tree that no
+longer exists. Say so under Verification: CI is the check on the merged tree, and that
+is what it is for.
 
 ## 2. Branch and commit
 
@@ -82,7 +86,7 @@ presets:ledger` rewrites the headless ledger, `pnpm presets:plates <id>` the pla
 ## 3. Push
 
 ```bash
-git push -u origin HEAD          # --force-with-lease after a rebase of a pushed branch
+git push -u origin HEAD          # always an ordinary push; a refusal means step 1 rebased a pushed branch
 ```
 
 ## 4. Open it ready

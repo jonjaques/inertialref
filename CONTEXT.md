@@ -13426,6 +13426,44 @@ synchronously after `resume()`, which was the defect in test form. The
 fake's unmute settles a microtask later so a test can see paused while the
 capture is coming.
 
+## A pushed branch is merged up to date, and the working card is imported (10 Nov 2026)
+
+Two places where the instructions a session loads here contradicted the ones
+above them. Both were found by reading one session's context from the outside
+in, on the Mac mini.
+
+**No push is forced.** `branching.md`, `working.md`, `/ship` and `/parallel`
+each ended a rebase of a pushed branch in `git push --force-with-lease` and
+called it the ordinary end of a rebase. The user-level settings on the
+machines this is built on deny every `git push --force*` in every permission
+mode, so that step could only stall, and the rule above it says to merge the
+base in instead. The four now agree: rebase until the first push, then
+`git merge origin/main` and an ordinary push. The earlier entry "Rebase, never
+merge" reasoned that a merge commit cannot land on a branch with
+`required_linear_history`. That is true of `main` and says nothing about a
+pull request's branch, because the squash collapses the branch into the one
+commit that lands. `/ship` gains `git merge origin/main` in its allowed tools
+so it still asks nothing. The project's own deny matcher is unchanged at
+`git push -f`; the wider refusal is the user's.
+
+**`AGENTS.md` is imported, not linked.** `CLAUDE.md` opened by telling the
+reader to read `AGENTS.md` first. With a `CLAUDE.md` present Claude Code does
+not load `AGENTS.md`, so a session held the 68 invariant lines only if it
+obeyed that sentence, and then as a 12 KB tool result. `CLAUDE.md` now opens
+with `@AGENTS.md`, the shape T3 Code's own repository uses, and the card is in
+context from the first turn.
+
+**Fan-out in a T3 Code thread is `delegate_task`.** `/parallel` named only
+Claude Code's `Agent(isolation: "worktree")`, while T3 makes a child's
+checkout itself. The skill now sends a T3 thread to `delegate_task` with
+`isolation: "worktree"` and keeps one brief for both.
+
+**The Dev action stops when its thread settles.** `pnpm dev` binds 5173 and
+8787 by name, so a server left running in a finished thread's worktree holds
+both ports against every other worktree. `t3.json` marks the action
+`stopOnSettle`. T3 does not read actions live from `t3.json`: the change takes
+effect when the action is imported again under Settings → Projects.
+
 ## The weather's frame is measured on the Mac mini, and its four choices are made (10 Nov 2026)
 
 Phase 0 of [the weather plan](design/plans/the-weather.md) built every cloud
