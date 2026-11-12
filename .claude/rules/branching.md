@@ -33,10 +33,10 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
 
 - **Rebase a branch until its first push, then merge. Never force a push.** Before the
   first push, `git fetch origin && git rebase origin/main`. Once the branch is on the
-  remote, `git merge origin/main` and an ordinary push: a rebase there can only reach the
-  remote as a forced push, which rewrites a branch a pull request and a watching thread
-  already hold, and which the user-level settings here deny in every form,
-  `--force-with-lease` included. `main` enforces `required_linear_history` and takes
+  remote, `git fetch origin && git merge origin/main` and an ordinary push: a rebase there
+  can only reach the remote as a forced push, which rewrites a branch a pull request and
+  a watching thread already hold, and which the user-level settings here deny in every
+  form, `--force-with-lease` included. `main` enforces `required_linear_history` and takes
   squash merges only, and the squash is what keeps the merge commit off it. Do either
   before running the checks, so the evidence describes the commit that will actually
   merge.
