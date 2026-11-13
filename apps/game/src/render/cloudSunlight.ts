@@ -3,7 +3,7 @@ import {
   Break,
   exp,
   float,
-  getCurrentStack,
+  Fn,
   If,
   int,
   length,
@@ -288,57 +288,54 @@ export function cloudSunFn(
      * transmittance, the shallower in broken cloud. A cache that holds one
      * depth answers it for both lights.
      *
-     * Formed in each block that reads it, at its first read there: its
-     * members reach the ray's far end, a fetch of its own, so a march that
-     * reads no depth emits none of it. Not once for the sun: three sets a
-     * variable's first value again in every block outside the one that
-     * filled it, so a depth formed in one branch reads its taps alone in
-     * the branch beside it. A block that reads it twice forms it once; a
-     * branch inside that block forms its own, two fetches more, and is
-     * right either way.
+     * One call of a function of its own, made at the first read and the
+     * same call at every read after. Its members reach the ray's far end,
+     * a fetch of its own, so a march that reads no depth emits none of it.
+     * The call holds its registers and the branch that fills them, so a
+     * block that builds the call emits all of it, and a branch beside the
+     * first, or a memoized function called again in another branch, emits
+     * it again whole. Statements added to the reader's block instead are
+     * emitted there alone: three sets a variable's first value again in
+     * every block outside the one that filled it, so the branch beside
+     * read its taps alone.
      */
-    const formed = new WeakMap<object, Node<'vec2'>>()
-    const depthToSun = (): Node<'vec2'> => {
-      const block = getCurrentStack()
-      if (block === null)
-        throw new Error('CloudSun.depth is read inside a Fn, as the sun is')
-      const already = formed.get(block)
-      if (already !== undefined) return already
-      const deep = {
-        toSun: float(0).toVar(),
-        whole: float(0).toVar(),
-        behind: float(0).toVar(),
-      }
-      const hold = (from: typeof end): void => {
-        deep.toSun.assign(from.meanDepthToSun ?? from.toSun)
-        deep.whole.assign(from.meanDepthWhole ?? from.whole)
-        deep.behind.assign(from.behind)
-      }
-      If(reach.greaterThan(0), () => {
-        hold(end)
-      }).Else(() => {
-        hold(here)
-      })
-      const toSun = mix(
-        columnToSun.mul(slant),
-        depth.add(deep.toSun),
-        cachedWeight,
-      )
-      // The cache holds `behind` of what lies behind the point it is read
-      // at, which is the taps' end: the taps' own stretch comes out of
-      // that, and the statistics give the share the cache does not hold.
-      const held = cachedWeight.mul(deep.behind)
-      const cached = cachedWeight
-        .mul(deep.whole.sub(deep.toSun))
-        .sub(held.mul(depth))
-      const behind = columnBehind
-        .mul(slant)
-        .mul(float(1).sub(held))
-        .add(max(cached, 0))
-      const both = vec2(toSun, toSun.add(behind))
-      formed.set(block, both)
-      return both
-    }
+    let deepest: Node<'vec2'> | null = null
+    const depthToSun = (): Node<'vec2'> =>
+      (deepest ??= Fn(() => {
+        const deep = {
+          toSun: float(0).toVar(),
+          whole: float(0).toVar(),
+          behind: float(0).toVar(),
+        }
+        const hold = (from: typeof end): void => {
+          deep.toSun.assign(from.meanDepthToSun ?? from.toSun)
+          deep.whole.assign(from.meanDepthWhole ?? from.whole)
+          deep.behind.assign(from.behind)
+        }
+        If(reach.greaterThan(0), () => {
+          hold(end)
+        }).Else(() => {
+          hold(here)
+        })
+        const toSun = mix(
+          columnToSun.mul(slant),
+          depth.add(deep.toSun),
+          cachedWeight,
+        )
+        // The cache holds `behind` of what lies behind the point it is
+        // read at, which is the taps' end: the taps' own stretch comes out
+        // of that, and the statistics give the share the cache does not
+        // hold.
+        const held = cachedWeight.mul(deep.behind)
+        const cached = cachedWeight
+          .mul(deep.whole.sub(deep.toSun))
+          .sub(held.mul(depth))
+        const behind = columnBehind
+          .mul(slant)
+          .mul(float(1).sub(held))
+          .add(max(cached, 0))
+        return vec2(toSun, toSun.add(behind))
+      })())
     // The air's height, true meters: its top is in sea-level units.
     const airHeight = body.datumRadius.mul(max(body.air.top.sub(1), 1e-6))
     return {

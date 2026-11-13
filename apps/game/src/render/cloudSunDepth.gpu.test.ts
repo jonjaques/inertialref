@@ -1424,33 +1424,55 @@ describe('the grid as a resource', () => {
           })
         })
       },
+      // A function of the program's that returns the depth, called once
+      // and memoized, then read in two exclusive branches.
+      once: (odd: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        const depthOf = Fn(() => got.depth).once()
+        If(odd.not(), () => {
+          write(0, depthOf().x)
+          write(1, depthOf().y)
+        })
+        If(odd, () => {
+          write(0, depthOf().x)
+          write(1, depthOf().y)
+        })
+      },
     }
-    for (const [where, reading] of Object.entries(reads)) {
-      const out = await run(offsets.length, inputs, 3, 2, (read, write) => {
-        const offset = vec3(read(0), read(1), read(2))
-        const sample: CloudSample = {
-          offset,
-          distance: offset.length(),
-          altitude: altitudeAt(body, offset),
-          sunMu: sunMuAt(body, offset),
-          footprint: float(10),
-        }
-        const got = lit(sample, medium(sample, body), body)
-        reading(instanceIndex.mod(uint(2)).equal(uint(1)), got, write)
-      })
-      offsets.forEach((offset, k) => {
-        const point = add(eye, offset)
-        const expected = slabDepth(eye, offset, sun, THIN)
-        // Over a kilometer to the top along this sun: the taps hold under
-        // half of it.
-        expect(expected).toBeGreaterThan(THIN[2] * 1000)
-        expect(Math.abs(out[2 * k]! / expected - 1), where).toBeLessThan(0.03)
-        const back = crossings(point, scale(sun, -1), R + THIN[0])![0]
-        const whole =
-          THIN[2] * leaves(sub(point, scale(sun, back)), sun, R + THIN[1])
-        expect(Math.abs(out[2 * k + 1]! / whole - 1), where).toBeLessThan(0.03)
-      })
-    }
+    // Four taps, and none: the cache's depth at the sample itself.
+    for (const taps of [4, 0])
+      for (const [where, reading] of Object.entries(reads)) {
+        test.uniforms.trace.lightTaps.value = taps
+        const out = await run(offsets.length, inputs, 3, 2, (read, write) => {
+          const offset = vec3(read(0), read(1), read(2))
+          const sample: CloudSample = {
+            offset,
+            distance: offset.length(),
+            altitude: altitudeAt(body, offset),
+            sunMu: sunMuAt(body, offset),
+            footprint: float(10),
+          }
+          const got = lit(sample, medium(sample, body), body)
+          reading(instanceIndex.mod(uint(2)).equal(uint(1)), got, write)
+        })
+        offsets.forEach((offset, k) => {
+          const point = add(eye, offset)
+          const expected = slabDepth(eye, offset, sun, THIN)
+          // Over a kilometer to the top along this sun: the taps hold under
+          // half of it.
+          expect(expected).toBeGreaterThan(THIN[2] * 1000)
+          expect(
+            Math.abs(out[2 * k]! / expected - 1),
+            `${where}, ${taps} taps`,
+          ).toBeLessThan(0.03)
+          const back = crossings(point, scale(sun, -1), R + THIN[0])![0]
+          const whole =
+            THIN[2] * leaves(sub(point, scale(sun, back)), sun, R + THIN[1])
+          expect(
+            Math.abs(out[2 * k + 1]! / whole - 1),
+            `${where}, ${taps} taps`,
+          ).toBeLessThan(0.03)
+        })
+      }
     dispose(test)
   })
 
