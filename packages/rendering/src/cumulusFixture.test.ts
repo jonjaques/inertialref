@@ -1,16 +1,23 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
+import { Rng, rootSeed } from '@inertialref/procedural'
 import {
+  airSkyRadiance,
   analyticCumulus,
   CUMULUS_DATUM,
   CUMULUS_FIELD_SUN,
+  CUMULUS_SKY_QUADRATURE,
   CUMULUS_VIEWS,
   cumulusAir,
+  cumulusAirSky,
   type CumulusFixture,
   cumulusFixture,
+  cumulusQuadratureSky,
   cumulusSky,
+  cumulusSkyAir,
   cumulusSkyHeight,
   cumulusSkyRadiance,
+  cumulusSkyRadius,
   cumulusSkyTable,
   type CumulusSubject,
   fixtureMedium,
@@ -28,6 +35,8 @@ import {
   phaseRow,
   phaseSample,
   recordVoxels,
+  skyByDirection,
+  skyByDirectionOf,
   subjectWeather,
   TRACE_BRICK,
   traceMedium,
@@ -35,6 +44,7 @@ import {
   viewRay,
   viewSun,
 } from './cumulusFixture.ts'
+import { CUMULUS_LINEAR_SKIES } from './cumulusLinearSkies.generated.ts'
 import { CUMULUS_REFERENCE } from './cumulusReference.generated.ts'
 import {
   angleOf,
@@ -43,7 +53,13 @@ import {
   radiusOf,
   samplePhase,
 } from './mieTable.ts'
-import { skyMomentsAt } from './skyIrradiance.ts'
+import {
+  marchSkyFaces,
+  marchSkyMoments,
+  skyDirections,
+  skyMomentsAt,
+  skyMomentsOf,
+} from './skyIrradiance.ts'
 import { cloudFieldAt } from './weatherField.ts'
 import { levelProfile } from './weatherGenus.ts'
 
@@ -640,14 +656,28 @@ describe('the sky a case of the field stands under', () => {
     ).toEqual([0, 0, 0])
   })
 
-  it('is held alone on the scaled medium, a row a scaled row, inside the sky’s own bounds and the row’s rest', () => {
-    const { cases, scaled, scaledSky } = CUMULUS_REFERENCE
-    expect(scaledSky).toHaveLength(scaled.length)
+  it('is held alone on the scaled medium under three skies, each a row a scaled row', () => {
+    const { scaled } = CUMULUS_REFERENCE
+    const blocks = [
+      CUMULUS_REFERENCE.airScattered,
+      CUMULUS_LINEAR_SKIES.linearScattered,
+      CUMULUS_LINEAR_SKIES.table,
+    ]
+    for (const block of blocks) {
+      expect(block).toHaveLength(scaled.length)
+      block.forEach((row, index) => {
+        expect(row.case).toBe(scaled[index]!.case)
+        expect(row.pixel).toEqual(scaled[index]!.pixel)
+      })
+    }
+  })
+
+  it('is, under the table’s moments, the sky `rest` was traced under: inside its bounds, and what is left of `rest` is not negative', () => {
+    const { cases, scaled } = CUMULUS_REFERENCE
+    const { table } = CUMULUS_LINEAR_SKIES
     let under = 0
-    scaledSky.forEach((row, index) => {
+    table.forEach((row, index) => {
       const beside = scaled[index]!
-      expect(row.case).toBe(beside.case)
-      expect(row.pixel).toEqual(beside.pixel)
       const { sky } = cases.find(({ id }) => id === row.case)!
       for (let b = 0; b < 3; b += 1) {
         // Every path ends on the sky, so a pixel is a mean of its radiances:
@@ -667,6 +697,299 @@ describe('the sky a case of the field stands under', () => {
         if (left < 0) under += 1
       }
     })
-    expect(under).toBeLessThan(0.01 * 3 * scaledSky.length + 1)
+    expect(under).toBeLessThan(0.01 * 3 * table.length + 1)
+  })
+
+  it('is, under the linear sky, on the quadrature’s moments at the case’s height and sun', () => {
+    const { cases } = CUMULUS_REFERENCE
+    expect(CUMULUS_LINEAR_SKIES.moments.map((row) => row.case)).toEqual(
+      cases.map(({ id }) => id),
+    )
+    for (const row of CUMULUS_LINEAR_SKIES.moments) {
+      const exact = cumulusQuadratureSky(
+        cases.find(({ id }) => id === row.case)!.skyAt!,
+      )
+      for (let b = 0; b < 3; b += 1) {
+        expect(Math.abs(row.mean[b]! / exact.mean[b]! - 1)).toBeLessThan(1e-6)
+        expect(Math.abs(row.up[b]! - exact.up[b]!)).toBeLessThan(1e-6)
+        expect(Math.abs(row.sunward[b]! - exact.sunward[b]!)).toBeLessThan(1e-6)
+      }
+    }
+  })
+
+  it('is, under the air’s own sky, scattered light never over its brightest direction and never negative', () => {
+    const { cases, airScattered } = CUMULUS_REFERENCE
+    for (const spec of cases) {
+      const sky = cumulusAirSky(spec.skyAt!)
+      const brightest = [0, 1, 2].map((b) => {
+        let most = -Infinity
+        for (let k = b; k < sky.radiance.length; k += 3)
+          most = Math.max(most, sky.radiance[k]!)
+        return Math.exp(most)
+      })
+      for (const row of airScattered.filter((row) => row.case === spec.id))
+        for (let b = 0; b < 3; b += 1) {
+          expect(row.sky[b]).toBeGreaterThanOrEqual(0)
+          // The brightest node stands 2.1° off the sun's bearing on the
+          // level, and the read on the bearing itself is 0.9% over it.
+          expect(row.sky[b]).toBeLessThanOrEqual(1.02 * brightest[b]!)
+        }
+    }
+  })
+
+  it('is held apart by case and mask in both skies: straight through, and what the cloud scatters', () => {
+    const { cases, scaled, airScattered, airSplit } = CUMULUS_REFERENCE
+    const { linearScattered, linearSplit } = CUMULUS_LINEAR_SKIES
+    for (const [split, rows] of [
+      [airSplit, airScattered],
+      [linearSplit, linearScattered],
+    ] as const) {
+      expect(split).toHaveLength(cases.length * 4)
+      for (const row of split) {
+        const at = scaled.flatMap((probe, i) =>
+          probe.case === row.case && probe.mask === row.mask ? [i] : [],
+        )
+        expect(at.length).toBeGreaterThan(0)
+        for (let b = 0; b < 3; b += 1) {
+          // The scattered part is the mean of the mask's rows.
+          const mean =
+            at.reduce((sum, i) => sum + rows[i]!.sky[b]!, 0) / at.length
+          expect(Math.abs(row.scattered[b]! / mean - 1)).toBeLessThan(1e-5)
+          expect(row.straight[b]).toBeGreaterThanOrEqual(0)
+          expect(row.scatteredError[b]).toBeGreaterThan(0)
+        }
+        // A core is opaque to its eye, and a rim is not.
+        if (row.mask === 'core')
+          expect(row.straight[1]).toBeLessThan(1e-3 * row.scattered[1]!)
+        if (row.mask === 'rim')
+          expect(row.straight[1]).toBeGreaterThan(0.1 * row.scattered[1]!)
+      }
+    }
+  })
+})
+
+describe('the air’s own sky by direction', () => {
+  /** The reference's two skies: its height under a sun 15° and 45° up. */
+  const ATS = [
+    ...new Map(
+      CUMULUS_REFERENCE.cases.map(({ skyAt }) => [
+        `${skyAt!.height}:${skyAt!.sunMu}`,
+        skyAt!,
+      ]),
+    ).values(),
+  ]
+  const air = cumulusSkyAir()
+
+  it('is the reference’s two skies, and holds a row on the level among its rows', () => {
+    expect(ATS.map(({ height }) => height)).toEqual([1700, 1700])
+    for (const at of ATS) {
+      const sky = cumulusAirSky(at)
+      expect(sky.above).toHaveLength(CUMULUS_SKY_QUADRATURE.above + 1)
+      expect(sky.below).toHaveLength(CUMULUS_SKY_QUADRATURE.below)
+      for (const side of [sky.above, sky.below])
+        side.forEach((w, i) => {
+          if (i > 0) expect(w).toBeGreaterThan(side[i - 1]!)
+        })
+      const w = sky.above[sky.level]!
+      expect(sky.horizon + (1 - sky.horizon) * w * w).toBeCloseTo(0, 15)
+      expect(sky.radiance).toHaveLength(
+        (CUMULUS_SKY_QUADRATURE.above + 1 + CUMULUS_SKY_QUADRATURE.below) *
+          CUMULUS_SKY_QUADRATURE.azimuths *
+          3,
+      )
+    }
+  })
+
+  it('returns itself under a sky of one radiance: the furnace', () => {
+    const sky = skyByDirectionOf(
+      1.0004,
+      { above: 7, below: 5, azimuths: 6 },
+      (_x, _y, _z, out) => {
+        out[0] = 0.3
+        out[1] = 1.7
+        out[2] = 4e-3
+      },
+    )
+    fc.assert(
+      fc.property(
+        fc.double({ min: -1, max: 1, noNaN: true }),
+        fc.double({ min: -Math.PI, max: Math.PI, noNaN: true }),
+        (z, phi) => {
+          const ring = Math.sqrt(1 - z * z)
+          const read = (b: number) =>
+            skyByDirection(
+              sky,
+              z,
+              ring * Math.cos(phi),
+              ring * Math.sin(phi),
+              b,
+            )
+          expect(read(0)).toBeCloseTo(0.3, 14)
+          expect(read(1)).toBeCloseTo(1.7, 14)
+          expect(read(2) / 4e-3).toBeCloseTo(1, 14)
+        },
+      ),
+    )
+  })
+
+  it('sees the lit ground under it from the datum, as the bake does', () => {
+    // On the datum a ray aimed down starts in the ground: no air between,
+    // the ground lit at the point's own sun cosine. Straight down under a
+    // sun 15° up the bake reads 0.00861, 0.00775, 0.00693.
+    const muSun = Math.sin((15 * Math.PI) / 180)
+    const radiance = airSkyRadiance(air, CUMULUS_SKY_QUADRATURE, 1, muSun)
+    const light = [0, 0, 0]
+    radiance(0, 0, -1, light)
+    expect(light[0]).toBeCloseTo(0.00860766, 7)
+    expect(light[1]).toBeCloseTo(0.00774759, 7)
+    expect(light[2]).toBeCloseTo(0.00692858, 7)
+    // And every direction under the datum's level: the moments are the
+    // quadrature's there too.
+    const own = skyMomentsOf(skyDirections(1, CUMULUS_SKY_QUADRATURE), radiance)
+    const exact = marchSkyMoments(air, 1, muSun, CUMULUS_SKY_QUADRATURE)
+    for (let b = 0; b < 3; b += 1) {
+      expect(Math.abs(own.mean[b]! / exact.mean[b]! - 1)).toBeLessThan(1e-3)
+      expect(Math.abs(own.up[b]! - exact.up[b]!)).toBeLessThan(1e-3)
+    }
+  })
+
+  it('is the quadrature’s own radiance at its directions: their moments are `marchSkyMoments`', () => {
+    // The one figure not the quadrature's is the air's transmittance to the
+    // ground, which its march keeps private. Measured: L̄ within 0.012%, Δ
+    // and Δ_s within 2.5e-4 and 5e-5.
+    for (const at of ATS) {
+      const r = cumulusSkyRadius(at.height)
+      const own = skyMomentsOf(
+        skyDirections(r, CUMULUS_SKY_QUADRATURE),
+        airSkyRadiance(air, CUMULUS_SKY_QUADRATURE, r, at.sunMu),
+      )
+      const exact = marchSkyMoments(air, r, at.sunMu, CUMULUS_SKY_QUADRATURE)
+      for (let b = 0; b < 3; b += 1) {
+        expect(Math.abs(own.mean[b]! / exact.mean[b]! - 1)).toBeLessThan(1e-3)
+        expect(Math.abs(own.up[b]! - exact.up[b]!)).toBeLessThan(1e-3)
+        expect(Math.abs(own.sunward[b]! - exact.sunward[b]!)).toBeLessThan(1e-3)
+      }
+    }
+  })
+
+  it('reads between its directions to the quadrature’s sides within 1% and its moments', () => {
+    // Read at a finer sphere of other directions, so what is summed is the
+    // read and not the nodes. Measured: every side within 0.061%, L̄ within
+    // 0.013%, Δ and Δ_s within 3e-4.
+    for (const at of ATS) {
+      const r = cumulusSkyRadius(at.height)
+      const sky = cumulusAirSky(at)
+      const fine = skyDirections(r, { above: 61, below: 29, azimuths: 83 })
+      const read = (x: number, y: number, z: number, out: number[]) => {
+        for (let b = 0; b < 3; b += 1) out[b] = skyByDirection(sky, z, x, y, b)
+      }
+      const exact = marchSkyMoments(air, r, at.sunMu, CUMULUS_SKY_QUADRATURE)
+      const faces = marchSkyFaces(air, r, at.sunMu, CUMULUS_SKY_QUADRATURE)
+      const moments = skyMomentsOf(fine, read)
+      const sides = {
+        above: [0, 0, 0],
+        below: [0, 0, 0],
+        sunward: [0, 0, 0],
+        away: [0, 0, 0],
+      }
+      const light = [0, 0, 0]
+      for (let i = 0; i < fine.length; i += 4) {
+        const [x, y, z, w] = [
+          fine[i]!,
+          fine[i + 1]!,
+          fine[i + 2]!,
+          fine[i + 3]!,
+        ]
+        read(x, y, z, light)
+        for (let b = 0; b < 3; b += 1) {
+          const l = light[b]! * w
+          if (z > 0) sides.above[b]! += l * z
+          else sides.below[b]! -= l * z
+          if (x > 0) sides.sunward[b]! += l * x
+          else sides.away[b]! -= l * x
+        }
+      }
+      for (let b = 0; b < 3; b += 1) {
+        for (const side of ['above', 'below', 'sunward', 'away'] as const)
+          expect(
+            Math.abs(sides[side][b]! / faces[side][b]! - 1),
+            `${side}, band ${b}`,
+          ).toBeLessThan(0.01)
+        expect(Math.abs(moments.mean[b]! / exact.mean[b]! - 1)).toBeLessThan(
+          0.01,
+        )
+        expect(Math.abs(moments.up[b]! - exact.up[b]!)).toBeLessThan(0.01)
+        expect(Math.abs(moments.sunward[b]! - exact.sunward[b]!)).toBeLessThan(
+          0.01,
+        )
+      }
+    }
+  })
+
+  it('reads the quadrature’s value at 512 seeded directions: 1% outside a degree of the level, and a declared miss under it', () => {
+    // The bar fixed before measuring is 1% at worst outside 2° of the sun's
+    // bearing at the horizon. It misses at two of 1,024 directions, both
+    // within 0.6° under the level, where the march's own radiance has a 2%
+    // bump between rows that no read between them follows: 1.49% (15° sun,
+    // 0.54° down, 3.8° from the sun's bearing, red) and 1.26% (45° sun). A
+    // ceiling holds them; the sky's march, which lays the samples, is what
+    // would retake it.
+    let worst = 0
+    let worstNearLevel = 0
+    let over = 0
+    for (const at of ATS) {
+      const r = cumulusSkyRadius(at.height)
+      const sky = cumulusAirSky(at)
+      const radiance = airSkyRadiance(air, CUMULUS_SKY_QUADRATURE, r, at.sunMu)
+      const rng = Rng.fromSeed(rootSeed(`sky-by-direction:${at.sunMu}`))
+      const light = [0, 0, 0]
+      for (let n = 0; n < 512; n += 1) {
+        const z = 2 * rng.next() - 1
+        const phi = 2 * Math.PI * rng.next()
+        const ring = Math.sqrt(1 - z * z)
+        const x = Math.cos(phi) * ring
+        const y = Math.sin(phi) * ring
+        // Within 2° of the sun's bearing on the level: the brief's exclusion.
+        if (x > Math.cos((2 * Math.PI) / 180)) continue
+        radiance(x, y, z, light)
+        let error = 0
+        for (let b = 0; b < 3; b += 1)
+          error = Math.max(
+            error,
+            Math.abs(skyByDirection(sky, z, x, y, b) / light[b]! - 1),
+          )
+        if (error > 0.01) over += 1
+        if (Math.abs(z) < Math.sin(Math.PI / 180))
+          worstNearLevel = Math.max(worstNearLevel, error)
+        else worst = Math.max(worst, error)
+      }
+    }
+    // Measured 0.63%, under a 45° sun 84° up.
+    expect(worst).toBeLessThan(0.01)
+    // Measured 1.49%, and 2 of 1,024 over 1%.
+    expect(worstNearLevel).toBeLessThan(0.016)
+    expect(over).toBeLessThanOrEqual(3)
+  })
+
+  it('reads the level line of sight a reference’s eye looks along to the quadrature’s own value', () => {
+    // The row on the level is there for this: without it the read is 3.1%
+    // bright there away from a sun 15° up. Measured within 0.03% at every
+    // bearing below. Within 2° of the sun's bearing, 0.4° down, it is 2.0%.
+    for (const at of ATS) {
+      const r = cumulusSkyRadius(at.height)
+      const sky = cumulusAirSky(at)
+      const radiance = airSkyRadiance(air, CUMULUS_SKY_QUADRATURE, r, at.sunMu)
+      const light = [0, 0, 0]
+      for (const bearing of [0, 30, 90, 150, 180]) {
+        const x = Math.cos((bearing * Math.PI) / 180)
+        const y = Math.sin((bearing * Math.PI) / 180)
+        radiance(x, y, 0, light)
+        for (let b = 0; b < 3; b += 1)
+          expect(
+            Math.abs(skyByDirection(sky, 0, x, y, b) / light[b]! - 1),
+            `bearing ${bearing}, band ${b}`,
+          ).toBeLessThan(0.001)
+      }
+    }
   })
 })
