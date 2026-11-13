@@ -6,7 +6,8 @@
  *     --seed <text> --out <dir> --photos <candidates dir>
  *     --baseline <as-built record.json>     phase 0's plates: low anchor, deck
  *     --record <record.json> ...            plates by their role
- *     [--experiment <record.json>]          its candidates are the experiment
+ *     [--experiment <record.json>]          its candidates are the experiment;
+ *                                           its deck plates are left out
  *     [--deck <record.json>]                take the deck arm from this one only
  *     [--guard-base <record.json>]          a moved guard's last accepted plate
  *     [--anchors <dir>]                      the real-time anchor stills
@@ -388,8 +389,21 @@ export function gather(inputs, { kind, only, references }) {
   const scenes = new Map()
   for (const { file, record, as, supplied } of inputs) {
     const adapted = supplied !== undefined
-    for (const plate of platesOf(record, file, { adapted })) {
+    const plates = platesOf(record, file, { adapted })
+    // The capture takes E1's and E2's deck on every run and has no flag to
+    // leave it out, so an experiment record carries deck plates. They are
+    // the deck's own picture, which the deck arm already supplies, and are
+    // left out of the experiment; a record with no volume plate beside them
+    // forms no experiment and is refused by its first deck.
+    const experimentDecks =
+      as === 'experiment' &&
+      plates.some(
+        (plate) => armOf(plate, as) === 'experiment' && plate.role !== 'deck',
+      )
+    for (const plate of plates) {
       const arm = armOf(plate, as)
+      if (experimentDecks && arm === 'experiment' && plate.role === 'deck')
+        continue
       if (deckNamed && arm === 'deck' && as !== 'deck') continue
       if (as === 'deck' && arm !== 'deck') continue
       // A guard's last accepted plate, named, stands in place of its first.
