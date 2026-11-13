@@ -69,7 +69,7 @@ import {
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The local volume on the GPU (§2.5, §4.7): it holds three levels and no
+ * The local volume on the GPU (§2.5, §4.7): it holds two levels and no
  * bound, bakes the field it is handed at its texels' centers, stops each level's
  * filter with guard slices, comes back under the cap after the field
  * changes, redraws at the pace its field moves, waits for the maps it is
@@ -571,34 +571,30 @@ describe('the schedule', () => {
       drawn.push([...test.volume.drawn])
       expect(total(test.volume.drawn)).toBeLessThanOrEqual(CAP)
     } while (test.volume.pending)
-    // 102 slices at 8 a frame: the 50 m level's 34, the 200 m level's, the
-    // 800 m level's. No level is baked at once, the 50 m one included.
+    // 68 slices at 8 a frame: the 200 m level's 34, then the 800 m level's.
+    // No level is baked at once.
     expect(drawn).toEqual([
-      [8, 0, 0],
-      [8, 0, 0],
-      [8, 0, 0],
-      [8, 0, 0],
-      [2, 6, 0],
-      [0, 8, 0],
-      [0, 8, 0],
-      [0, 8, 0],
-      [0, 4, 4],
-      [0, 0, 8],
-      [0, 0, 8],
-      [0, 0, 8],
-      [0, 0, 6],
+      [8, 0],
+      [8, 0],
+      [8, 0],
+      [8, 0],
+      [2, 6],
+      [0, 8],
+      [0, 8],
+      [0, 8],
+      [0, 4],
     ])
     // The grid may bake from the frame after the one that made it whole.
     expect(test.volume.trusted).toBe(false)
     test.step(eye)
     expect(test.volume.trusted).toBe(true)
-    expect(test.volume.drawn).toEqual([0, 0, 0])
+    expect(test.volume.drawn).toEqual([0, 0])
     // A jump: nothing held, and the cap again, never a level at once.
     const before = test.volume.generation
     test.step(eye, { jump: true })
     expect(test.volume.generation).toBe(before + 1)
     expect(test.volume.trusted).toBe(false)
-    expect(test.volume.drawn).toEqual([CAP, 0, 0])
+    expect(test.volume.drawn).toEqual([CAP, 0])
     test.volume.dispose()
   })
 
@@ -612,26 +608,25 @@ describe('the schedule', () => {
     // all, and the levels' `rebuilt` is the only word of it.
     expect(cut.served.volume.frames).toEqual(before)
     expect(cut.served.volume.rebuilt).toEqual([true, true, true])
-    expect(test.volume.drawn).toEqual([CAP, 0, 0])
+    expect(test.volume.drawn).toEqual([CAP, 0])
     expect(test.volume.pending).toBe(true)
     test.volume.dispose()
   })
 
-  it('redraws at the pace its field moves: a tenth of a 50 m texel at 25 m/s is 12 frames a level', () => {
+  it('redraws at the pace its field moves: a tenth of a 200 m texel at 25 m/s is 48 frames a level', () => {
     const test = rig(field)
     const eye = eyeAt(EYE_HEIGHT)
     test.settle(eye)
-    const drawn = [0, 0, 0]
+    const drawn = [0, 0]
     for (let n = 0; n < 96; n += 1) {
       test.step(eye, { seconds: 1 / 60, wind: 25 })
       test.volume.drawn.forEach((count, L) => (drawn[L]! += count))
       expect(total(test.volume.drawn)).toBeLessThanOrEqual(5)
       expect(test.volume.pending).toBe(false)
     }
-    // 1.6 s: the 50 m level eight times over, the 200 m level twice, the
-    // 800 m level half.
+    // 1.6 s: the 200 m level twice over, the 800 m level half.
     drawn.forEach((count, L) => {
-      const asked = (8 * STACK) / 4 ** L
+      const asked = (2 * STACK) / 4 ** L
       expect(count).toBeGreaterThanOrEqual(asked - 1)
       expect(count).toBeLessThanOrEqual(asked)
     })
@@ -644,13 +639,13 @@ describe('the schedule', () => {
     const eye = eyeAt(EYE_HEIGHT)
     for (let n = 0; n < 6; n += 1) {
       test.step(eye)
-      expect(test.volume.drawn).toEqual([0, 0, 0])
+      expect(test.volume.drawn).toEqual([0, 0])
       expect(test.volume.pending).toBe(true)
       expect(test.volume.trusted).toBe(false)
     }
     maps.pending = false
     test.step(eye)
-    expect(test.volume.drawn).toEqual([CAP, 0, 0])
+    expect(test.volume.drawn).toEqual([CAP, 0])
     test.volume.dispose()
   })
 
@@ -659,7 +654,7 @@ describe('the schedule', () => {
     const eye = eyeAt(400_000)
     test.step(eye)
     test.step(eye)
-    expect(test.volume.drawn).toEqual([0, 0, 0])
+    expect(test.volume.drawn).toEqual([0, 0])
     expect(test.volume.pending).toBe(false)
     expect(test.volume.trusted).toBe(false)
     // A sample in the union below: no level is trusted, so the field answers.
@@ -694,12 +689,12 @@ describe('the schedule', () => {
     expect(test.volume.pending).toBe(false)
     test.step(eyeAt(400_000))
     test.step(eyeAt(400_000, 5_000))
-    expect(test.volume.drawn).toEqual([0, 0, 0])
+    expect(test.volume.drawn).toEqual([0, 0])
     expect(test.volume.pending).toBe(false)
     test.volume.dispose()
   })
 
-  it('holds three levels in one texture of one mip and no bound beside it, declares the bytes the device holds, and builds no pipeline after its warm-up', async () => {
+  it('holds two levels in one texture of one mip and no bound beside it, declares the bytes the device holds, and builds no pipeline after its warm-up', async () => {
     const test = rig(field)
     expect(test.volume.bytes).toBe(0)
     await test.volume.warm(gpu.renderer)
@@ -710,8 +705,8 @@ describe('the schedule', () => {
     // warmed: a pipeline is the format's, not the size's.
     expect(gpu.pipelinesBuilt()).toBe(render)
     expect(gpu.computePipelinesBuilt()).toBe(compute)
-    // 256² × 102 of RG8: three levels, each with two guards.
-    expect(test.volume.bytes).toBe(13_369_344)
+    // 256² × 68 of RG8: two levels, each with two guards.
+    expect(test.volume.bytes).toBe(8_912_896)
     const backend = gpu.renderer.backend as unknown as {
       get(texture: object): { texture: GPUTexture }
     }
@@ -776,9 +771,8 @@ describe('a window that scrolls', () => {
   }
 
   it('ends, once every slice has been drawn at the new window, where a volume built there begins', async () => {
-    // 450 m east: the 50 m level's window moves by nine texels, the 200 m
-    // level's by two or three, the 800 m level's by none or one, every
-    // anchor held.
+    // 450 m east: the 200 m level's window moves by two or three texels,
+    // the 800 m level's by none or one, every anchor held.
     const before = eyeAt(EYE_HEIGHT)
     const after = eyeAt(EYE_HEIGHT, 450)
     const scrolled = rig(field)
@@ -787,7 +781,7 @@ describe('a window that scrolls', () => {
     scrolled.step(after)
     expect(scrolled.frame!.served.volume.frames[1]!.origin).not.toEqual(origin)
     // The slices at the window it has left, at the cap, and still trusted.
-    expect(scrolled.volume.drawn).toEqual([CAP, 0, 0])
+    expect(scrolled.volume.drawn).toEqual([CAP, 0])
     expect(scrolled.volume.trusted).toBe(true)
     expect(scrolled.frame!.served.volume.rebuilt).toEqual([false, false, false])
     expect(scrolled.volume.pending).toBe(true)
@@ -875,11 +869,11 @@ describe('the volume against the CPU field', () => {
    */
   it.each([
     // Cumulus cells of 1,200 m: every level's texel is under a cell.
-    ['fair-cumulus', ['resolved', 'resolved', 'resolved']],
+    ['fair-cumulus', ['resolved', 'resolved']],
     // Stratus cells of 3,000 m.
-    ['overcast', ['resolved', 'resolved', 'resolved']],
+    ['overcast', ['resolved', 'resolved']],
     // Fog's cells are 500 m: the 800 m level is past a cell.
-    ['fog', ['resolved', 'resolved', 'statistics']],
+    ['fog', ['resolved', 'statistics']],
   ] as const)(
     '%s: every level holds the field at its texel, on the side of the switch its texel stands',
     async (regime, sides) => {
@@ -927,9 +921,9 @@ describe('the volume against the CPU field', () => {
         })
       }
       const read = await texels(map!, at)
-      const errors: number[][] = [[], [], []]
-      const clouded = [0, 0, 0]
-      const fractions: number[][] = [[], [], []]
+      const errors: number[][] = Array.from({ length: LEVELS }, () => [])
+      const clouded = Array.from({ length: LEVELS }, () => 0)
+      const fractions: number[][] = Array.from({ length: LEVELS }, () => [])
       points.forEach(({ level, position }, n) => {
         const texel = CLOUD_VOLUME_TEXELS[CLOUD_VOLUME_HELD[level]!]
         const want = cloudFieldAt(
@@ -1026,9 +1020,9 @@ describe('a table that lands late', () => {
     expect(field.profile.ready[0].value).toBe(1)
     // A field event of the volume's own, which the grid reads as one.
     expect(field.volume.generation).toBeGreaterThan(generation)
-    // The cube's six faces and the clipmap again, 102 slices of the volume
+    // The cube's six faces and the clipmap again, 68 slices of the volume
     // and 32 of the grid at eight a frame, and sixteen frames of weight:
-    // 38 frames as the sun instrument times it, inside the rubric's 48.
+    // inside the rubric's 48.
     let frames = 0
     while (weight() < 1 && frames < 200) {
       real.frame()

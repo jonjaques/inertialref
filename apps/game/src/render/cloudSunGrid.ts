@@ -4,7 +4,7 @@ import {
   type Node,
   NodeMaterial,
   QuadMesh,
-  RedFormat,
+  RGFormat,
   RenderTarget3D,
   RepeatWrapping,
   type Texture,
@@ -84,14 +84,23 @@ import { warmByDrawing } from './warmup.ts'
  * volume's medium answers with, which is the one the march's transmittance
  * is formed from, so the sun dims inside a cloud at the rate the view does.
  *
- * **A cell holds an opacity, and a read answers the depth of the mean
- * transmittance** (`cellCode`, `cellDepth`). `toSun` and `whole` are
- * −ln of the mean of `e^(−τ)` over the eight cells a read filters, where
- * those are under a depth of six: a point between a lit cell and a
- * shadowed one reads the share of the sun each passes. Three things follow
- * for a reader. Between two slices of one column whose depths differ by Δ
- * a read is under their mean by about Δ²/8. Past a depth of six a cell
- * steps by 0.2 to 0.4 of a depth. And no cell holds more than 64.
+ * **A cell holds an opacity and a depth, RG16F, and a read answers two
+ * means of the eight cells it filters, from one fetch.** First order's
+ * light wants the depth of their mean transmittance, and the light after
+ * first order their mean depth; in broken cloud one number gives one of
+ * them the wrong mean (`CloudSunDepths`, which says who reads which).
+ *
+ * - The red channel is the opacity (`cellCode`, `cellDepth`): `toSun` and
+ *   `whole` are −ln of the mean of `e^(−τ)` where the cells are under a
+ *   depth of six, so a point between a lit cell and a shadowed one reads
+ *   the share of the sun each passes. Between two slices of one column
+ *   whose depths differ by Δ a read is under their mean by about Δ²/8, and
+ *   past a depth of six a cell steps by 0.2 to 0.4 of a depth.
+ * - The green channel is the depth, `min(τ, 64)`, linear: `meanDepthToSun`
+ *   and `meanDepthWhole` are the cells' mean, with no knee and no steps.
+ *
+ * Both come from the one sum the bake makes, so no slice holds one channel
+ * of an old window. No cell holds more than 64 in either.
  *
  * **Its frame is the volume's 200 m level.** A cell is two of that level's
  * texels, 400 m, on its anchor and plane, so the grid re-anchors exactly
@@ -127,12 +136,12 @@ import { warmByDrawing } from './warmup.ts'
  * **A union of three levels spreads the same 32 heights and 32 steps over
  * all of it.** A regime of one level 1.4 km thick has a height every 45 m;
  * a world's climate on Earth, 0.7 to 11.1 km, has one every 335 m, and the
- * depth the march's light reads through four taps is 2.5 to 4.3 off in RMS
- * in its two lower levels where one level reads 2.3 to 2.9
- * (`cloudSunAccuracy.gpu.test.ts`, on the Mac mini's M6). Spending a
- * climbing ray's steps inside the levels is not the cure: the cell's own
- * depth reads better and first order's light past the taps worse
- * (`stepsInLevels`).
+ * depth the march's light reads through four taps and the depth channel is
+ * 1.96 to 2.90 off in RMS in its two lower levels where one level reads
+ * 1.46 to 1.97 (`cloudSunAccuracy.gpu.test.ts`, on the Mac mini's M6).
+ * Spending a climbing ray's steps inside the levels is not the cure: the
+ * cell's own depth reads better and first order's light past the taps
+ * worse (`stepsInLevels`).
  *
  * **Under a sun below a cell's horizon the bake follows the ray down and
  * stops where it leaves a level** (`#bakeNode`). What that ray meets when it
@@ -158,8 +167,8 @@ const [WIDTH, HEIGHT, SLICES] = SUN_GRID_SIZE
 const LEVEL = 1
 /** A cell is two of that level's texels: 128 cells span its 256. */
 const CELL_METERS = (CLOUD_VOLUME_TEXELS[LEVEL] * CLOUD_VOLUME_SIZE) / WIDTH
-/** R16F. */
-const TEXEL_BYTES = 2
+/** RG16F: the cell's code and its depth. */
+const TEXEL_BYTES = 4
 /** Cells in from a trusted window's edge: a trilinear read reaches half a cell. */
 const MARGIN = 1
 const NOWHERE = [1, 1, 0, 0] as const
@@ -207,9 +216,10 @@ const modulo = (value: number, size: number): number =>
  * and the opacity runs out of a half float's steps: one step under one is
  * 0.0005, a twentieth of a depth at four and a fifth at six. So the curve
  * goes on along its tangent, where a step is 0.2 to 0.4 of a depth, for the
- * depth the light after first order reads. The cap is past that light's
- * table, 16 in transport depth; uncapped, a cell a thousand deep would
- * outweigh seven clear ones.
+ * early out's test past six; the light after first order reads the depth
+ * channel beside it. The cap is past that light's table, 16 in transport
+ * depth; uncapped, a cell a thousand deep would outweigh seven clear ones,
+ * in either channel.
  */
 /** The depth a cell's opacity gives way to its tangent at, and the greatest depth a cell holds. */
 export const SUN_GRID_KNEE = 6
@@ -237,14 +247,23 @@ function cellDepth(code: Node<'float'>): Node<'float'> {
   )
 }
 
+/** A read of the cells: the depth of their mean transmittance, their mean depth, and how far the grid holds the point. */
+interface CellRead {
+  readonly tau: Node<'float'>
+  readonly mean: Node<'float'>
+  readonly held: Node<'float'>
+}
+
 /** A stretch of a ray: where it starts, meters along, and how long it is. */
 interface Stretch {
   readonly from: Node<'float'>
   readonly length: Node<'float'>
 }
 
-/** What the grid answers with: the contract's three, and how far it holds the ray's far end. */
+/** What the grid answers with: the contract's members, both pairs among them, and how far it holds the ray's far end. */
 export interface CloudSunGridDepths extends CloudSunDepths {
+  readonly meanDepthToSun: Node<'float'>
+  readonly meanDepthWhole: Node<'float'>
   /**
    * The grid's share of the depth behind the point, 0..1: `whole` is `toSun`
    * plus this share of what lies between the point and the ray's far end.
@@ -268,7 +287,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   /** Linear by name: a `RenderTarget3D` keeps `Data3DTexture`'s nearest magnification. */
   readonly #target = new RenderTarget3D(1, 1, 1, {
     type: HalfFloatType,
-    format: RedFormat,
+    format: RGFormat,
     magFilter: LinearFilter,
     minFilter: LinearFilter,
     depthBuffer: false,
@@ -288,9 +307,12 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   readonly #slice = uniform(0)
   readonly #toFirstExit = uniform(1)
   readonly #stepsInLevels = uniform(0)
+  /** The heights the grid holds, and the same as a uniform for its reads. */
+  #slices: number = SLICES
+  readonly #heights = uniform(SLICES)
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh(this.#material)
-  #state: SunGridState = freshSunGrid(SLICES)
+  #state: SunGridState = freshSunGrid(this.#slices)
   /** The sun the last frame was drawn under: what this frame's turn is measured from. */
   #sun: Vec3 | null = null
   #pending = false
@@ -323,15 +345,21 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     const base = body.boundaries.x
     return {
       base,
-      slice: max(body.boundariesHigh.y.sub(base).div(SLICES - 1), 1e-3),
+      slice: max(
+        body.boundariesHigh.y.sub(base).div(this.#heights.sub(1)),
+        1e-3,
+      ),
     }
   }
 
-  /** The cell's depth at an eye-relative point, and how far the grid holds the point: its reach's ramp, inside the trusted window. */
-  #read(point: Node<'vec3'>): {
-    readonly tau: Node<'float'>
-    readonly held: Node<'float'>
-  } {
+  /**
+   * The cells' two depths at an eye-relative point, from one fetch, and how
+   * far the grid holds the point: its reach's ramp, inside the trusted
+   * window. `held`: the fetch is made where this is called and kept in a
+   * variable, so a member read in a later branch reads the variable and
+   * does not fetch again there; otherwise it is made where it is first read.
+   */
+  #read(point: Node<'vec3'>, held = false): CellRead {
     const body = this.#uniforms.served
     const { base, slice } = this.#vertical()
     const plane = levelPlane(this.#level, point, body)
@@ -345,18 +373,24 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     const height = clamp(
       altitudeAt(body, point).sub(base).div(slice),
       0,
-      SLICES - 1,
-    )
-    const tau = cellDepth(
-      this.#map
-        .sample(vec3(cell.div(WIDTH), height.add(0.5).div(SLICES)))
-        .level(float(0)).x,
+      this.#heights.sub(1),
     )
     const out = abs(plane.sub(this.#level.eye))
     const ramp = saturate(
       float(SUN_GRID_REACH).sub(max(out.x, out.y)).div(SUN_GRID_FADE),
     )
-    return { tau, held: select(inside, ramp, float(0)) }
+    const holds = select(inside, ramp, float(0))
+    const fetched = this.#map
+      .sample(vec3(cell.div(WIDTH), height.add(0.5).div(this.#heights)))
+      .level(float(0))
+    // Fetched only where the grid holds the point, as a read the readers
+    // select away is: from orbit, or past the reach, no sample fetches.
+    // The select is a branch in the program three emits, and held, it is
+    // a variable set once: one assigned again inside a branch is set to
+    // its first value anew in every later block that reads it.
+    const guarded = select(holds.greaterThan(0), fetched, vec4(0))
+    const texel = held ? guarded.toVar() : guarded
+    return { tau: cellDepth(texel.x), mean: texel.y, held: holds }
   }
 
   /**
@@ -391,17 +425,35 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
    * and is built only into a program that reads it.
    */
   depths(offset: Node<'vec3'>): CloudSunGridDepths {
-    const here = this.#read(offset)
-    const end = this.#read(this.#farEnd(offset))
+    const here = this.#read(offset, true)
     const held = here.held.greaterThan(0)
+    // The far end is built where it is first read, and not held: a program
+    // that reads neither whole nor `behind` fetches no far end, and one
+    // whose first read is in a branch would leave a variable unset outside
+    // it.
+    let far: CellRead | null = null
+    const end = () => (far ??= this.#read(this.#farEnd(offset)))
     const toSun = select(held, here.tau, float(0))
+    const meanDepthToSun = select(held, here.mean, float(0))
     return {
       toSun,
-      whole: toSun.add(
-        select(held, end.held.mul(max(end.tau.sub(here.tau), 0)), float(0)),
-      ),
+      meanDepthToSun,
+      get whole() {
+        const { tau, held: holds } = end()
+        return toSun.add(
+          select(held, holds.mul(max(tau.sub(here.tau), 0)), float(0)),
+        )
+      },
+      get meanDepthWhole() {
+        const { mean, held: holds } = end()
+        return meanDepthToSun.add(
+          select(held, holds.mul(max(mean.sub(here.mean), 0)), float(0)),
+        )
+      },
       weight: this.#uniforms.trace.sunWeight.mul(here.held),
-      behind: select(held, end.held, float(0)),
+      get behind() {
+        return select(held, end().held, float(0))
+      },
     }
   }
 
@@ -559,7 +611,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
         If(down.and(up.length.greaterThan(0)), () => {
           tau.addAssign(this.#crossing(origin, up, thickness))
         })
-      return vec4(cellCode(tau), 0, 0, 1)
+      return vec4(cellCode(tau), min(tau, DEEPEST), 0, 1)
     })()
   }
 
@@ -701,8 +753,9 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
 
   #allocate(renderer: WebGPURenderer): void {
     this.#allocated = true
-    if (this.#target.width === WIDTH) return
-    this.#target.setSize(WIDTH, HEIGHT, SLICES)
+    if (this.#target.width === WIDTH && this.#target.depth === this.#slices)
+      return
+    this.#target.setSize(WIDTH, HEIGHT, this.#slices)
     // At once: a resized target is made at its next binding, so what
     // `textures()` lists is on the device at the size `bytes` declares.
     renderer.initRenderTarget(this.#target)
@@ -711,7 +764,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
 
   /** No slice holds anything: the grid comes back under the cap, from a weight of zero. */
   #forget(): void {
-    this.#state = freshSunGrid(SLICES)
+    this.#state = freshSunGrid(this.#slices)
     this.#silence()
     this.#drawn = 0
   }
@@ -754,6 +807,29 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     this.#pending = true
   }
 
+  /**
+   * The heights the grid holds between the union's base and top, 32 by
+   * default, each a slice of 128² cells baked in the same 32 steps. An
+   * instrument's handle: 64 halves the climate's 335 m between heights,
+   * and costs a second megabyte a channel and twice the slices a rebuild
+   * (`cloudSunAccuracy.gpu.test.ts`, which scores it under
+   * `IR_CLOUD_SUN_HEIGHTS`). The grid is made again at the new size and
+   * starts over.
+   */
+  get heights(): number {
+    return this.#slices
+  }
+
+  set heights(count: number) {
+    if (count === this.#slices) return
+    if (!Number.isInteger(count) || count < 2)
+      throw new RangeError(`a grid of ${count} heights`)
+    this.#slices = count
+    this.#heights.value = count
+    this.#forget()
+    this.#pending = true
+  }
+
   /** A slice missing or at a window the grid has left, or a weight still rising: what a settle waits for. */
   get pending(): boolean {
     return this.#pending
@@ -775,7 +851,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   }
 
   /**
-   * The bake against a slice, drawn (an R16F target, which `warmByDrawing`
+   * The bake against a slice, drawn (an RG16F target, which `warmByDrawing`
    * says why); a renderer with no backend builds nothing.
    */
   warm(renderer: WebGPURenderer): Promise<void> {

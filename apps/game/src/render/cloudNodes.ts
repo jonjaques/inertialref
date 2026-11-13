@@ -208,24 +208,67 @@ export interface CloudSun {
    *   is the part under the sample, the taps run down to the level's base,
    *   and the cache's cell sums to where its ray leaves the level and adds
    *   one crossing, by the crossing's law, of what it meets coming back up.
+   *
+   * **Asked for when the sun is formed** (`CloudSunOptions.depth`). Its
+   * members reach the ray's far end, a fetch of the cache's own, so the
+   * shipped sun forms them only on request, in the block the sun is formed
+   * in, which every later read stands inside: a read in a branch, a loop or
+   * a memoized function then reads one variable. Read from a sun formed
+   * without the request it throws as the program is built. A stand-in
+   * whose depth costs nothing may answer it either way.
    */
   readonly depth: Node<'vec2'>
   /** The cloud's transmittance to the sun with its depth scaled by `a`. */
   octave(a: number): Node<'float'>
 }
 
+/** What a march asks of a sun beyond first order's, as it forms it. */
+export interface CloudSunOptions {
+  /** Form `CloudSun.depth`, for the light after first order. */
+  readonly depth?: boolean
+}
+
 export type CloudSunFn = (
   sample: CloudSample,
   medium: CloudMedium,
   body: CloudBodyUniforms,
+  options?: CloudSunOptions,
 ) => CloudSun
 
-/** What the sun's cache holds of a point: two depths toward the sun, and how far to trust them. */
+/**
+ * What the sun's cache holds of a point: depths toward the sun, and how far
+ * to trust them. A cache filters a neighborhood of rays, and two means of
+ * one neighborhood are two numbers: the depth of its mean transmittance,
+ * which first order's light wants, and its mean depth, which the light
+ * after first order wants. In broken cloud the second is the deeper.
+ *
+ * | Reader in `cloudSunFn`                         | Pair                               |
+ * | ---------------------------------------------- | ---------------------------------- |
+ * | `cloud`, first order's transmittance past taps | `toSun`                            |
+ * | the early out's test at the sample             | `toSun`                            |
+ * | `octave`                                       | `toSun`                            |
+ * | `depth`, the light after first order's         | `meanDepthToSun`, `meanDepthWhole` |
+ */
 export interface CloudSunDepths {
-  /** Optical depth through cloud from the point to the sun. */
+  /**
+   * Optical depth through cloud from the point to the sun, as the depth of
+   * the neighborhood's mean transmittance: `−ln` of the mean of `e^(−τ)`.
+   */
   readonly toSun: Node<'float'>
-  /** The whole of that ray's, from where it enters the cloud to where it leaves. */
+  /** The whole of that ray's, from where it enters the cloud to where it leaves, by the same mean. */
   readonly whole: Node<'float'>
+  /**
+   * The same depth to the sun as the neighborhood's mean depth, each ray's
+   * capped where the cache caps it. Absent where a cache holds one depth
+   * for both: the light after first order then reads `toSun`.
+   */
+  readonly meanDepthToSun?: Node<'float'>
+  /**
+   * The ray's whole as the mean depth, formed as `whole` is: the point's
+   * `meanDepthToSun` and `behind` of what the far end holds over it.
+   * Absent where `meanDepthToSun` is, and `whole` stands for it.
+   */
+  readonly meanDepthWhole?: Node<'float'>
   /**
    * The cache's weight at the point, 0..1: how far `toSun` and `whole`
    * replace the layers' own statistics. Zero where the cache holds nothing
@@ -806,7 +849,14 @@ export const CLOUD_STAND_INS = {
     return {
       depths: () => {
         const none = cloudStandInBinding(map, '3d')
-        return { toSun: none, whole: none, weight: float(1), behind: float(1) }
+        return {
+          toSun: none,
+          whole: none,
+          meanDepthToSun: none,
+          meanDepthWhole: none,
+          weight: float(1),
+          behind: float(1),
+        }
       },
     }
   },
