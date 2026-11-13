@@ -3,6 +3,7 @@ import {
   Break,
   exp,
   float,
+  getCurrentStack,
   If,
   int,
   length,
@@ -287,14 +288,22 @@ export function cloudSunFn(
      * transmittance, the shallower in broken cloud. A cache that holds one
      * depth answers it for both lights.
      *
-     * Built where `depth` is first read, and held there. Its members reach
-     * the ray's far end, a fetch of its own, so a march that reads no depth
-     * emits none of it; one that does reads `depth` in the block its sun
-     * is read in, as a variable set inside a branch is unset outside it.
+     * Formed in each block that reads it, at its first read there: its
+     * members reach the ray's far end, a fetch of its own, so a march that
+     * reads no depth emits none of it. Not once for the sun: three sets a
+     * variable's first value again in every block outside the one that
+     * filled it, so a depth formed in one branch reads its taps alone in
+     * the branch beside it. A block that reads it twice forms it once; a
+     * branch inside that block forms its own, two fetches more, and is
+     * right either way.
      */
-    let depthHeld: Node<'vec2'> | null = null
+    const formed = new WeakMap<object, Node<'vec2'>>()
     const depthToSun = (): Node<'vec2'> => {
-      if (depthHeld !== null) return depthHeld
+      const block = getCurrentStack()
+      if (block === null)
+        throw new Error('CloudSun.depth is read inside a Fn, as the sun is')
+      const already = formed.get(block)
+      if (already !== undefined) return already
       const deep = {
         toSun: float(0).toVar(),
         whole: float(0).toVar(),
@@ -326,8 +335,9 @@ export function cloudSunFn(
         .mul(slant)
         .mul(float(1).sub(held))
         .add(max(cached, 0))
-      depthHeld = vec2(toSun, toSun.add(behind))
-      return depthHeld
+      const both = vec2(toSun, toSun.add(behind))
+      formed.set(block, both)
+      return both
     }
     // The air's height, true meters: its top is in sea-level units.
     const airHeight = body.datumRadius.mul(max(body.air.top.sub(1), 1e-6))
