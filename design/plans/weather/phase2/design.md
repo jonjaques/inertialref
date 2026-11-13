@@ -280,12 +280,17 @@ cloudSunlight(p).beam = B at x(p),   x(p) = p + ŝ·t,  t the ray's crossing of 
   field's five textures. It runs as quads through `runQuadPasses`, a
   strip or a block a frame. It is not the trace's kernel and adds
   nothing to it.
-- **Its steps are laid by length: at most 125 m of path, 48 a level at
-  most.** A count a level is wrong at a low sun. Point by point against
+- **Its steps are laid by length: at most 125 m of path, and 62.5 m in
+  the middle and high levels at the map's 62.5 m level, with no cap a
+  level.** A count a level is wrong at a low sun. Point by point against
   160 steps (M: `bake.ts`, §12): steps of 114 m (16 at 50°) leave 0.023
   RMS and +0.0006 in the mean, steps of 126 m (40 at 15°) 0.026 and
   +0.0008; steps of 314 m (16 at 15°) leave 0.112 and **+0.014 in the
-  mean**, over this law's own bar. The cap is met under 12° (D).
+  mean**, over this law's own bar. The cap is on the ray's whole count,
+  set by S from R-F's time, and a stretch the field's coarser read calls
+  clear may be strode, as the march strides it, if the bars hold. Under
+  a sun where that cap binds, the figure is declared as S measures it,
+  under three levels and under one.
 - **A texel is a mean: four rays at 62.5 m and 125 m, sixteen at 250 m
   and 500 m, one at a statistical level.** Against 64 rays (M:
   `bake2.ts`, two suns): four leave 0.004 at 62.5 m, 0.027 to 0.031 at
@@ -307,11 +312,15 @@ cloudSunlight(p).beam = B at x(p),   x(p) = p + ŝ·t,  t the ray's crossing of 
   every 1.6 s at a 10 m/s wind (D). So the frames are laid in that
   level's turned frame, a read turns its point by the level's matrix,
   and the window's exposed strips are baked as it scrolls.
-- **Pace.** A level is redrawn at the pace of what the turn cannot
-  follow, each to a quarter texel: another level's motion against the
-  casting one, the drift's part through the shell, and the sun's turn,
-  which shears a level `thickness·Δe/sin²e` (D: 0.37° at 50° and 0.04° at
-  15° for 15.6 m in 1,400 m). After a field event a level holds nothing
+- **Pace.** A level is paced by its shadow's speed, the motion the turn
+  cannot follow: another level's motion against the casting one, the
+  drift's part through the shell, and the sun's turn, which shears a
+  level `thickness·Δe/sin²e` (D: 0.37° at 50° and 0.04° at 15° for 15.6 m
+  in 1,400 m). It is redrawn each quarter texel of that motion or each
+  eighth, whichever is cheaper and holds the turned read's RMS inside
+  1.5 times the fresh map's at every level (S). A quarter texel behind,
+  fair cumulus at 20 m/s with a drift of 4 reads 0.034 RMS against a
+  fresh 0.024 at 62.5 m, and 0.102 against 0.049 at 250 m (R-A). After a field event a level holds nothing
   and returns under a weight, coarsest first, at four rays. A level the
   pick cannot name from the eye's height is not baked. **A level that
   cannot keep its pace inside S's cap is not read:** the pick's floor
@@ -325,8 +334,10 @@ march finds where the ray meets cloud. A step count a level. A map held
 still under a level that moves.
 
 **The oracle.** A float64 march of `cloudFieldAt` from ground points along
-the sun, in Node: 65,536 points at 50 m and 40 steps in 3 s (M:
-`shadow.ts`, §12). Its own error is its quadrature's. It is a twin: the
+the sun, in Node, its steps laid by length: 25 m or less under a sun of
+10°, with its own error given by halving them. A count a level is no
+oracle under 15° on three levels: 40 steps a level read 0.26 RMS off 320
+at 5° (R-A). Its own error is its quadrature's. It is a twin: the
 same field, medium and point sun, so it checks the quadrature and the
 texel's mean, and whether the beam is the shadow's light is L5's.
 
@@ -337,17 +348,19 @@ keeps 0.98 to 0.99 of the contrast, 200 m 0.95 to 0.97, and the grid's
 of it reads between 0.1 and 0.9), so a texel's error is an edge's blur,
 not a bias.
 
-**Held-out cases.** A sun at 5° and at 10° through three levels, past
-the steps' cap; cirrus over cumulus, where a ray's steps must fall
+**Held-out cases.** A sun at 5° and at 10° through three levels, where
+the ray's cap binds; cirrus over cumulus, where a ray's steps must fall
 inside two levels and not in the gap; a ground point at 0.6 of the
 base's height, and one at 0.3 of the way up a level (`B^(1 − s)`,
-declared at its figure if over 0.1 RMS); a place within 2° of the
+recorded and not declared: 0.073 to 0.082 RMS through the 62.5 m map,
+and bright by +0.020 to +0.023 in the mean, which no bar holds); a place within 2° of the
 terminator; five seeded places a regime; a field at 20 m/s with a drift
 of 4, the read turned and the map a refresh behind; a warp of 100.
 
 **The bar.** No rubric row holds the shadow's own accuracy. Proposed:
 
-- the map's mean over a 12.8 km square within 0.01 of the oracle's, at
+- the map's mean over a 12 km square, 192 texels of 62.5 m, within 0.01
+  of the oracle's, at
   every level and case;
 - a level's RMS against the oracle's mean over the same texels under
   0.03: the bake's own error, apart from the texel's size;
@@ -611,19 +624,31 @@ diffuse = E↓ − beam                     the fragment reflects A·skyView·di
 - **One kernel spreads every part but the beam:** the irradiance a
   Lambert emitter at height `h` lays on the ground, `K(r) = h²/(π·(h² +
 r²)²)`, half of it inside `r = h`. The light map's two levels either
-  side of `log2(h/250 m)` stand for it, and V sets their weights against
-  the kernel itself (its convolution of a step and of a 1 km bar within
-  0.02), not against an oracle.
+  side of `log2(h/250 m) + 0.75` stand for it, their weights set against
+  the kernel itself and not against an oracle: within 0.025 RMS and 0.15
+  at worst of its convolution of a step and of a 1 km bar, and 0.03 and
+  0.12 on the field's grids at 50° and 30°, with 15° recorded (0.035 to
+  0.039). No blend of two bilinear levels holds 0.02; three levels, two
+  fetches more, are held in reserve (R-C1).
 - **`D̄` is stored where the light leaves the cloud:** each sun ray's
   `d(τ*_ray·μ₀, μ₀)` at the column of the ray's in-cloud centroid. The
   bake gathers it along the ray through the texel's column at the
   casting level's middle height. `R̄_v` and `c̄_v` are the vertical
   column's.
-- **The return is fed by the reach, not by the point.** `Ē₁` is `E₁`
-  with the beam at the light map's scale, `B̄`: a sunlit gap over snow
-  is not brightened by a return its dark surroundings cannot send.
-- **`Ā` is the albedo over the return's reach,** several base heights:
-  one number a frame from the CPU at the eye's foot. The fragment's own
+- **The return is fed by the reach, not by the point, one kernel
+  wider.** `Ē₁` is `K∗K∗E₁`, the light spread twice by the kernel, and
+  `g` takes the reflectance spread twice, `R̿_up` for `R_up`: a sunlit
+  gap over snow is not brightened by a return its dark surroundings
+  cannot send. Spread once, the lit-to-dark ratio reads +26.5% on broken
+  cumulus at 30° over 0.8 (680 nm); spread twice, +12.8%, and every
+  ratio over snow under 14% (R-C1). A light-map level one coarser stands
+  for the second spread, two fetches and no byte, untested as a gather.
+- **`Ā` is the surface's albedo at the scale of the return's reach,**
+  where the light crosses a shore over 8 base heights: H reads a coarse
+  level of the material's own albedo where it has one, and where it has
+  none the fragment's own, declared at 56% at a snow line and 13% at a
+  land and sea shore (R-C1). The number a frame at the eye's foot serves
+  the air's `m` alone. The fragment's own
   `A` there draws a step at a shore that the light does not have: 23%
   for 2% between land at 0.30 and sea at 0.06, and 138% for 12% beside
   snow (M: the physics critic, `shore.mjs`).
@@ -662,12 +687,17 @@ a thin air, it does not, and at 30° and 15° it is no better than draft
 **What it still misses, measured.**
 
 - **A finite cloud's lit side** sends light to the ground toward the sun
-  that no column holds. The umbra's core under the bars at 50° reads
-  −24% to −40% sun alone, where draft 1 read +28% to +70%: the truth is
-  between the two places. The mean at 15° is −18% sun alone.
-- **A thick deck's corner.** Under the deck it reads +39%, +27%, +14%
-  and +4% at 0.25, 1.25, 2.25 and 3.25 km from the lee edge: a ray that
-  clips the corner is read as a thin slab.
+  that no column holds. Sun alone at 30° on three grids of the field,
+  the dark third reads −17% to −29% and the lit-to-dark ratio +21% to
+  +42% (R-C1). The bar holds from a sky of 0.06 of the beam's level flux
+  over an albedo of 0.15, and from 0.10 over 0.8 with the wider return:
+  declared for a body whose sky is under those.
+- **A deck's lee corner, and a cloud as thick as it is wide.** A deck of
+  scaled depth 15 reads +28%, +20% and +10% (680, 550, 440 nm) 1.1 km
+  in at 15° and +22%, +18% and +13% at 30°, inside 20% at every band
+  from 1.7 km in; a cloud 4 km wide and 1.4 km thick reads +22% to +33%
+  at 50° and +29% to +48% at 30°, 1.1 km in (R-C1). A ray that clips the
+  corner is read as a thin slab.
 - **A sun under 5°** leaves the ground under a cumulus field all shadow
   (M: the physics critic, `lowbake.ts`): S1, S2 and G3 rest on `D̄`.
 
@@ -709,11 +739,16 @@ a ground at 0.8 of the base's height; a gap of fair cumulus.
 **The bar.** Row 14: within 10% of the column, at three suns, two
 albedos, `τ` 10 and 30. For the geometry, three bars (ruling 004, 1),
 judged under the body's own sky from the sky table, with the sun alone
-beside it: a deck or a cloud wider than 3 km, every point a kilometer or
-more from an edge within 20%; a field of kilometer cells at 50° and 30°,
-the darkest third of the shadowed ground and the brightest third of the
-lit, each within 20%, and their ratio within 25% of the tracer's; and the
-12.8 km mean within 10% from 30°, with 15° declared.
+beside it: a deck up to half a kilometer thick within 20% from 1.7 km in
+under a lee edge and from a kilometer in from any other; a field of
+kilometer cells at 50° and 30°, the darkest third of the shadowed ground
+and the brightest third of the lit, each within 20%, and their ratio
+within 25% of the tracer's; and the 12.8 km mean within 10% from 15°. A
+cloud as thick as it is wide, and a deck's lee corner inside 1.7 km, are
+declared at their figures, and no corner term is built: the one that
+mends the boxes breaks the field. No lit side's term is built in phase
+2: the bar holds from a sky of 0.06 of the beam over an albedo of 0.15,
+and Earth's is 0.155 or more. The term is on file for a thin air.
 
 **Who proves it.** R-C1 on the tracer, which waits for nothing; R-C2 on
 package O's column (§7). Then V bakes the light map and H builds.
@@ -737,6 +772,11 @@ E_sky(p) = π·exp(block₃(μ₀(p), h(p)))·(1 − lift)
   through the table's extinction.
 - **`lift` is `clearedFromOrbit`** (`air.ts:938`): the sky's irradiance on
   top of a cleared beam is counted twice, so the sky falls with the lift.
+- **The rows' mapping is R-E2's,** one for every block: to be set by
+  R-E2. The read is clamped to the row under the top, where `E_above` is
+  zero, and `darkSkyTable` floors an airless body's block, which would
+  otherwise read π of skylight. The bake is off the main thread: on it,
+  it takes 189 to 240 ms.
 - It closes both of the air's defects (`design/plans/the-air.md:184-190,
 :305-310`): the linear ramp, and one zenith under the eye for ground past
   the terminator.
@@ -862,8 +902,8 @@ so the slab gate, row 6 and every isolated cloud read as they do today.
 S        = source(slab from τ′_own) · M,      M = T_far + (the far part's diffuse share)
 ```
 
-**What is open: the far part's diffuse share. Package T is not briefed
-on a form until R-D lands one.** Draft 1's, a slab lying on the sample,
+**What is closed: no form for the far part's diffuse share lands, and
+package T builds the ground's share alone (§5.1).** Draft 1's, a slab lying on the sample,
 `M = t(μ₀·τ′_far, μ₀)`, rests on the premise §5.1 gives up. On the
 physics critic's Monte Carlo (M: `bar.mjs`; a deck top's light from
 above in a bar's shadow, of the lit deck's):
@@ -885,7 +925,10 @@ grazing. Two things are in those figures, and R-D takes them apart:
   the lit deck's (M, the same runs).
 - **What the sample's own cloud carries sideways.** The radiance from
   above is 1.4 to 1.9 times that irradiance: a shadow narrower than the
-  deck is deep is filled from beside it. A slab's source cannot hold it.
+  deck is deep is filled from beside it. A slab's source cannot hold it;
+  phase 3's design takes the own cloud's sideways kernel, centered one
+  transport free path toward the sun (69 rays of 77 inside ±35% with
+  it, 49 without; R-D).
 
 **The candidates R-D judges,** on radiance and on irradiance apart:
 
@@ -896,8 +939,10 @@ grazing. Two things are in those figures, and R-D takes them apart:
 | c   | No share: the row stays declared by separation and sun, at R-D's figures                                                                                                                      | The fallback                                                                                                                                                                                      |
 
 A form lands only inside ±35% by separation and by sun, with no weight
-fitted on these shapes. If none lands, T shrinks to the ground's share
-(§5.1), and the register's row gains its figures by separation.
+fitted on these shapes. None lands: on R-D's two held-out sets, today's
+rule falls outside ±35% on 47 rays of 47 and 39 of 39, and the best form
+on 11 and 5. T builds the ground's share (§5.1), and the register's row
+keeps its figures by separation and sun (`reports/p2-r-d.md`).
 
 **What any form reads.**
 
@@ -911,10 +956,12 @@ fitted on these shapes. If none lands, T shrinks to the ground's share
   the depth of a mean transmittance:** through the march's taps it is
   0.17 to 0.38 under in the mean and 1.7 to 3.0 RMS, and 1.8 to 2.8
   under at a sample the early out skipped (M: `REGISTER.md`, "the sun's
-  depth as the light after first order reads it"). A far part thinner
-  than that reads as none there. The cure, if R-D shows the need, is the
-  grid as RGBA16F: +2,097,152 B at 32 heights (D), no new binding, and a
-  ruling against §3's room.
+  depth as the light after first order reads it"). On broken cloud,
+  a level of 400 m cells or ragged tops, `R − G` keeps 28% to 57% of a
+  sheet of 0.3 and reads it as none at up to 65% of samples; a sheet of
+  3 keeps 86% to 95% (R-D). That costs nothing while no far share is
+  built, since today's rule is right under a sheet, and the grid as
+  RGBA16F (+2,097,152 B at 32 heights) is closed for phase 2.
 
 **What it forbids.** A weight chosen on the scenes. Any change to a
 sample with no far part. A far cloud's diffuse light delivered whole to
@@ -929,9 +976,10 @@ and three widths at 45° and 15°; cumulus tops under the field's cirrus
 at 30° and 15°; a congestus's shadow on a neighbor under a 10° sun; a
 sheet of scaled depth 0.3, where nothing may darken by more than 5%.
 
-**The bar.** Proposed: every ray whose shadow takes over a
-third of its light within ±35%, at each separation and sun; no lit ray
-moved by more than 5%; the slab gate with the lever on equal to off
+**The bar,** for a form that returns to this law: every ray whose
+shadow takes over a third of its light within ±35%, at each separation
+and sun; no lit ray more than 15% off the tracer; a thin sheet within
+5% of the tracer; the slab gate with the lever on equal to off
 within 10⁻³.
 
 **Who proves it.** R-D, before package T. It also says how long a clear
@@ -960,16 +1008,18 @@ Each but R-F is read-only, on the CPU, in Node, with an oracle for every
 claim, and says what its brief ruled out. A physics critic then attacks
 the Fable ones on held-out cases chosen before reading them.
 
-| #    | Law              | Model, budget                                                     | It must say                                                                                                                                                                                                                                                                                                                                                                                              | Holds up            |
-| ---- | ---------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| R-A  | L1               | Opus, 45 min                                                      | The oracle's own error at 40, 80 and 160 steps. The bake's CPU twin against it at the held-out cases, by level, on three levels and at 5°. The turned read against a fresh march, with a drift                                                                                                                                                                                                           | S                   |
-| R-B  | L2               | Opus, the same thread, 40 min, after L's fourth pass (ruling 002) | A statistical level and the atlas's column against the footprint's resolved mean at suns of 5° to 60°                                                                                                                                                                                                                                                                                                    | S, G's far read     |
-| R-D  | L9               | Fable, 75 min                                                     | §6.1's seven scenes reproduced. Candidates a and b on radiance and on irradiance, by separation and by sun. The clear stretch that splits a depth. What the grid's shallow depth loses                                                                                                                                                                                                                   | T's far share       |
-| R-C1 | L5's geometry    | Fable, 75 min; waits for nothing                                  | §5.1's table reproduced, then retaken on the tracer with a ground on three grids of the field, point by point, at 50°, 30° and 15°. The lit side's term. The deck's corner. The gather against the exact deposit. The reach of `Ā` and `Ē₁`                                                                                                                                                              | V, H                |
-| R-C2 | L5's air, L4     | The same thread, 60 min, after O's column                         | The two heights against one. `m` on a level path under a deck and under bands. `w` on a steep path from above. The mean inside the union: what it buys and costs. The flux block's axes. `R_air`                                                                                                                                                                                                         | O's blocks, H, A    |
-| R-E  | L6               | Opus, 30 min                                                      | The block over a black ground against the fine quadrature on three airs. `beam + sky` at noon against today's ground light, by body. The sky table's bake time                                                                                                                                                                                                                                           | H                   |
-| R-G  | E2's crop (§4.4) | Fable, 60 min, after R-B                                          | `cloudSunlight`'s far branch at air points 2 to 15 km up, over and past cloud tops, under suns of −2° to 5°, against a float64 march of the field's footprint mean. What it draws along sixteen of the crop's view rays through the tree's air, and the contrast's width in pixels. Its fetches at `orbit` against the packages' 0.50 ms, and whether the trace's blocked air can form it from the atlas | A's brief           |
-| R-F  | §9               | In K, two minutes of the GPU lock                                 | One, four and twelve stand-in reads a fragment in the four real materials, at both sizes, against the no-handle graph. A read behind a zero weight. A level's bake at 62.5 m and 500 m, as quads and as one compute pass                                                                                                                                                                                 | Every ceiling of §8 |
+| #                  | Law              | Model, budget                                                     | It must say                                                                                                                                                                                                                                                                                                                                                                                              | Holds up            |
+| ------------------ | ---------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| R-A                | L1               | Opus, 45 min                                                      | The oracle's own error at 40, 80 and 160 steps. The bake's CPU twin against it at the held-out cases, by level, on three levels and at 5°. The turned read against a fresh march, with a drift                                                                                                                                                                                                           | S                   |
+| R-B                | L2               | Opus, the same thread, 40 min, after L's fourth pass (ruling 002) | A statistical level and the atlas's column against the footprint's resolved mean at suns of 5° to 60°                                                                                                                                                                                                                                                                                                    | S, G's far read     |
+| R-D                | L9               | Fable, 75 min                                                     | §6.1's seven scenes reproduced. Candidates a and b on radiance and on irradiance, by separation and by sun. The clear stretch that splits a depth. What the grid's shallow depth loses                                                                                                                                                                                                                   | T's far share       |
+| R-C1               | L5's geometry    | Fable, 75 min; waits for nothing                                  | §5.1's table reproduced, then retaken on the tracer with a ground on three grids of the field, point by point, at 50°, 30° and 15°. The lit side's term. The deck's corner. The gather against the exact deposit. The reach of `Ā` and `Ē₁`                                                                                                                                                              | V, H                |
+| R-C2               | L5's air, L4     | The same thread, 60 min, after O's column                         | The two heights against one. `m` on a level path under a deck and under bands. `w` on a steep path from above. The mean inside the union: what it buys and costs. The flux block's axes. `R_air`                                                                                                                                                                                                         | O's blocks, H, A    |
+| R-E                | L6               | Opus, 30 min                                                      | The block over a black ground against the fine quadrature on three airs. `beam + sky` at noon against today's ground light, by body. The sky table's bake time                                                                                                                                                                                                                                           | H                   |
+| R-G                | E2's crop (§4.4) | Fable, 60 min, after R-B                                          | `cloudSunlight`'s far branch at air points 2 to 15 km up, over and past cloud tops, under suns of −2° to 5°, against a float64 march of the field's footprint mean. What it draws along sixteen of the crop's view rays through the tree's air, and the contrast's width in pixels. Its fetches at `orbit` against the packages' 0.50 ms, and whether the trace's blocked air can form it from the atlas | A's brief           |
+| R-F                | §9               | In K, two minutes of the GPU lock                                 | One, four and twelve stand-in reads a fragment in the four real materials, at both sizes, against the no-handle graph. A read behind a zero weight. A level's bake at 62.5 m and 500 m, as quads and as one compute pass                                                                                                                                                                                 | Every ceiling of §8 |
+| R-E2               | L6's rows        | Opus `high`, R-E's thread, 30 min                                 | The three blocks the trace reads today, at the heights clouds stand at, against the fine quadrature: a miss over 5% is phase 1's. A row mapping that holds every block, by the square root of the height's share and by the air's optical depth above. The top row's clamp and the error it leaves                                                                                                       | K, H                |
+| The critic of R-C1 | L5's geometry    | Fable `xhigh`, a fresh thread, 75 min                             | The air under the base and over it, in a Monte Carlo of its own, at 50° and 30° over albedos of 0.15 and 0.8. What R-C1 did not run: ice by its own transport depth, a cirrus of `τ` 0.5, ground at 0.8 of the base's height, two levels at once, the wider return through a coarser level, a snow line under broken cloud. The form through the sun map's own error                                     | V, H                |
 
 **Order.** R-A, R-D and R-C1 first; R-E beside them; R-B on L's fourth
 pass; R-G after R-D on the Fable seat, once R-B has reported; R-C2 on the
@@ -1026,6 +1076,11 @@ follow the charter's §4.
 - **The sky table widens from 102 to 238 columns:** an existing read
   keeps its texel and moves its coordinate, so K compares the
   instruments' documents and says where a value moved by rounding.
+  **The rows take R-E2's mapping,** one for every block; the new
+  block's read is clamped to the row under the top; `darkSkyTable`
+  floors the new block for an airless body; and a test holds that no
+  path bakes the table inline, `openSession({ workers: null })` and any
+  fallback with no pool among them.
 - Opus `high`, on the GPU. No byte but the table's 17,408.
 - **Done:** the gate, the docs stage; `cloudContracts cloudSystem
 cloudWarm cloudLightCost`; six named stances byte-equal, flag on and
@@ -1106,7 +1161,7 @@ cloudCompositeError materials`.
   `cloudSunGrid.ts`, `cloudSunlight.ts`. **If R-C2 lands the mean:**
   `sampleAir`'s one multiply.
 - **Reads:** §5.1's base, §6.1, §4.4. M2's slabs; L's depth channel.
-- Fable `xhigh`, the only package in the trace's kernel. After R-D and
+- Opus `high`, the only package in the trace's kernel. After R-D and
   after M2, X and L's fourth pass merge, on the seat G frees.
 - **Budget:** no byte, no binding; two fetches at most where a far part
   exists. The stop is ruling 002's line on every row.
