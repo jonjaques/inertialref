@@ -532,6 +532,20 @@ interface Case {
     readonly throughTaps: readonly LevelDepth[]
     readonly grid: Scored
   }
+  /**
+   * Both depths again through each of the grid's two channels, by a sun
+   * that differs only in the pair it reads: the depth of the cells' mean
+   * transmittance, and their mean depth. Neither reads the field beside its
+   * step, so the two are one program but for the channel. Recorded, held to
+   * nothing.
+   */
+  readonly channels?: Readonly<Record<'opacity' | 'depth', ByChannel>>
+}
+
+/** The depth at the sample and through four taps, as read through one of the grid's channels. */
+interface ByChannel {
+  readonly byLevel: readonly LevelDepth[]
+  readonly throughTaps: readonly LevelDepth[]
 }
 
 /** The cache's depth at a level's scored samples, no taps before it, against the reference's march. */
@@ -928,6 +942,42 @@ describe('the sun’s optical depth against the field', () => {
       const cached = field.grid.depths(sample.offset)
       return select(cached.weight.greaterThan(0), cached.toSun, float(-1))
     })
+    // The same, and the depth through the taps, through each channel.
+    const cacheMean = pointKernel((sample) => {
+      const cached = field.grid.depths(sample.offset)
+      return select(
+        cached.weight.greaterThan(0),
+        cached.meanDepthToSun,
+        float(-1),
+      )
+    })
+    const throughChannel = (opacity: boolean): ComputeNode => {
+      const sun = cloudSunFn({
+        uniforms: field.uniforms,
+        medium: field.medium,
+        depth: {
+          depths: (offset) => {
+            const cached = field.grid.depths(offset)
+            if (!opacity) return cached
+            return {
+              toSun: cached.toSun,
+              weight: cached.weight,
+              get whole() {
+                return cached.whole
+              },
+              get behind() {
+                return cached.behind
+              },
+            }
+          },
+        },
+      })
+      return pointKernel(
+        (sample) => sun(sample, field.medium(sample, body), body).depth.x,
+      )
+    }
+    const sourceByOpacity = throughChannel(true)
+    const sourceByDepth = throughChannel(false)
 
     const { frameAt, settle } = drive()
     const read = async (kernel: ComputeNode): Promise<Float32Array> => {
@@ -1033,6 +1083,21 @@ describe('the sun’s optical depth against the field', () => {
             }
           }
           const { byLevel, throughTaps } = await depthsBy(cached)
+          let channels: Case['channels']
+          if (MEASURE && !split) {
+            frameAt(stance, levers(4))
+            const of = async (
+              at: Float32Array,
+              through: ComputeNode,
+            ): Promise<ByChannel> => ({
+              byLevel: levelDepths(points, lit, truth, at),
+              throughTaps: levelDepths(points, lit, truth, await read(through)),
+            })
+            channels = {
+              opacity: await of(cached, sourceByOpacity),
+              depth: await of(await read(cacheMean), sourceByDepth),
+            }
+          }
           // The same with a climbing ray's steps spent inside the levels.
           let inLevels: Case['inLevels']
           if (MEASURE && !split) {
@@ -1073,12 +1138,22 @@ describe('the sun’s optical depth against the field', () => {
             byLevel,
             throughTaps,
             ...(inLevels === undefined ? {} : { inLevels }),
+            ...(channels === undefined ? {} : { channels }),
           })
         }
       }
     }
 
-    for (const kernel of [reference, grid, tapsAlone, cache, source])
+    for (const kernel of [
+      reference,
+      grid,
+      tapsAlone,
+      cache,
+      source,
+      cacheMean,
+      sourceByOpacity,
+      sourceByDepth,
+    ])
       kernel.dispose()
     offsets.dispose()
     out.dispose()
@@ -1219,6 +1294,21 @@ describe('the sun’s optical depth against the field', () => {
                       ),
                       grid: pooled(cases.map((one) => one.inLevels!.grid)),
                     },
+                    channels: Object.fromEntries(
+                      (['opacity', 'depth'] as const).map((channel) => [
+                        channel,
+                        {
+                          byLevel: levelsOf(
+                            cases,
+                            (one) => one.channels![channel].byLevel,
+                          ),
+                          throughTaps: levelsOf(
+                            cases,
+                            (one) => one.channels![channel].throughTaps,
+                          ),
+                        },
+                      ]),
+                    ),
                     grid: Object.fromEntries(
                       TAPS.map((taps) => [
                         taps,

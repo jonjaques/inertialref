@@ -1,6 +1,11 @@
 import fc from 'fast-check'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type Node, StorageBufferAttribute, type Texture } from 'three/webgpu'
+import {
+  type ComputeNode,
+  type Node,
+  StorageBufferAttribute,
+  type Texture,
+} from 'three/webgpu'
 import {
   float,
   Fn,
@@ -55,6 +60,7 @@ import {
   SUN_GRID_REACH,
   SUN_GRID_SIZE,
 } from './cloudSunGrid.ts'
+import { cloudSunFn } from './cloudSunlight.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import {
   CLOUD_VOLUME_HELD,
@@ -391,21 +397,34 @@ interface Depths {
   readonly behind: number
 }
 
+/** Both pairs: the depth of the cells' mean transmittance, and their mean depth. */
+interface BothDepths extends Depths {
+  readonly meanDepthToSun: number
+  readonly meanDepthWhole: number
+}
+
 /** What the grid answers at each offset. */
-async function depths(test: Rig, offsets: readonly Vec3[]): Promise<Depths[]> {
+async function depths(
+  test: Rig,
+  offsets: readonly Vec3[],
+): Promise<BothDepths[]> {
   const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
-  const out = await run(offsets.length, inputs, 3, 4, (read, write) => {
+  const out = await run(offsets.length, inputs, 3, 6, (read, write) => {
     const got = test.depth.depths(vec3(read(0), read(1), read(2)))
     write(0, got.toSun)
     write(1, got.whole)
     write(2, got.weight)
     write(3, got.behind)
+    write(4, got.meanDepthToSun)
+    write(5, got.meanDepthWhole)
   })
   return offsets.map((_, k) => ({
-    toSun: out[4 * k]!,
-    whole: out[4 * k + 1]!,
-    weight: out[4 * k + 2]!,
-    behind: out[4 * k + 3]!,
+    toSun: out[6 * k]!,
+    whole: out[6 * k + 1]!,
+    weight: out[6 * k + 2]!,
+    behind: out[6 * k + 3]!,
+    meanDepthToSun: out[6 * k + 4]!,
+    meanDepthWhole: out[6 * k + 5]!,
   }))
 }
 
@@ -598,7 +617,7 @@ describe('a uniform slab', () => {
       dispose(test)
     })
 
-  it('holds a depth past its knee on the tangent, and no depth past 64', async () => {
+  it('holds a depth past its knee on the tangent and its depth channel as the depth itself, and no depth past 64 in either', async () => {
     const DENSE: Slab = [1000, 2000, 0.02]
     const eye = eyeAt(EYE)
     for (const elevation of [37.5, 5]) {
@@ -620,6 +639,16 @@ describe('a uniform slab', () => {
       let capped = 0
       offsets.forEach((offset, k) => {
         const expected = slabDepth(eye, offset, sun, DENSE)
+        // The depth channel is linear in the depth, so on a slab a read
+        // between slices is the depth at the point, to a half float's
+        // step at 64 (2⁻⁵) and a part in a hundred of the filter's own.
+        const mean = read[k]!.meanDepthToSun
+        if (expected >= SUN_GRID_DEEPEST + apart)
+          expect(mean).toBeCloseTo(SUN_GRID_DEEPEST, 1)
+        else if (expected < SUN_GRID_DEEPEST - apart)
+          expect(Math.abs(mean - expected)).toBeLessThan(
+            Math.max(0.01 * expected, 2 ** -5),
+          )
         if (expected >= SUN_GRID_DEEPEST + apart) {
           capped += 1
           expect(read[k]!.toSun).toBeGreaterThan(SUN_GRID_DEEPEST - DEEP_STEP)
@@ -680,6 +709,19 @@ describe('a uniform slab', () => {
     ).toBeGreaterThanOrEqual(9)
     for (let k = 1; k < through.length; k += 1)
       expect(through[k]! - through[k - 1]!).toBeLessThan(1e-3)
+    // The depth channel there is the cells' mean depth, never shallower
+    // than the depth of their mean transmittance beside it, and where half
+    // the sun passes far deeper than ln 2: 2.6 on the Mac mini's M6, where
+    // the volume's own 200 m texels soften the edge the grid's cells read.
+    const half = through.reduce(
+      (best, t, k) =>
+        Math.abs(t - 0.5) < Math.abs(through[best]! - 0.5) ? k : best,
+      0,
+    )
+    expect(Math.abs(through[half]! - 0.5)).toBeLessThan(0.1)
+    expect(read[half]!.meanDepthToSun).toBeGreaterThan(2 * read[half]!.toSun)
+    for (const got of read)
+      expect(got.meanDepthToSun).toBeGreaterThanOrEqual(got.toSun - 1e-3)
     dispose(test)
   })
 
@@ -698,6 +740,12 @@ describe('a uniform slab', () => {
       const expected = SIGMA * leaves(foot, sun, R + TOP)
       expect(Math.abs(read[k]!.whole / expected - 1)).toBeLessThan(0.02)
       expect(read[k]!.whole).toBeGreaterThanOrEqual(read[k]!.toSun)
+      expect(Math.abs(read[k]!.meanDepthWhole / expected - 1)).toBeLessThan(
+        0.02,
+      )
+      expect(read[k]!.meanDepthWhole).toBeGreaterThanOrEqual(
+        read[k]!.meanDepthToSun,
+      )
       expect(read[k]!.behind).toBe(1)
     })
     // Under the slab nothing lies behind a point: the whole is the depth to the sun.
@@ -818,7 +866,14 @@ describe('a grid that comes back', () => {
     expect(test.depth.pending).toBe(true)
     const point = along(test, eye, 1800, 500)
     const [got] = await depths(test, [point])
-    expect(got).toEqual({ toSun: 0, whole: 0, weight: 0, behind: 0 })
+    expect(got).toEqual({
+      toSun: 0,
+      whole: 0,
+      weight: 0,
+      behind: 0,
+      meanDepthToSun: 0,
+      meanDepthWhole: 0,
+    })
     dispose(test)
   })
 
@@ -1263,7 +1318,8 @@ describe('the grid as a resource', () => {
     const backend = gpu.renderer.backend as unknown as {
       get(texture: object): { texture: GPUTexture }
     }
-    const bytes = SUN_GRID_SIZE[0] * SUN_GRID_SIZE[1] * SUN_GRID_SIZE[2] * 2
+    // RG16F: the cell's code and its depth.
+    const bytes = SUN_GRID_SIZE[0] * SUN_GRID_SIZE[1] * SUN_GRID_SIZE[2] * 4
     const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
     expect(test.depth.bytes).toBe(0)
     await test.depth.warm(gpu.renderer)
@@ -1280,8 +1336,70 @@ describe('the grid as a resource', () => {
     expect(textures).toHaveLength(1)
     const held = backend.get(textures[0]!).texture
     expect(held.mipLevelCount).toBe(1)
-    expect(held.width * held.height * held.depthOrArrayLayers * 2).toBe(bytes)
+    expect(held.format).toBe('rg16float')
+    expect(bytes).toBe(2_097_152)
+    expect(held.width * held.height * held.depthOrArrayLayers * 4).toBe(bytes)
     dispose(test)
     expect(test.depth.bytes).toBe(0)
+  })
+
+  /*
+   * Where a sun reads the grid, counted in the program three emits for it:
+   * the grid is the one texture a slab's sun binds, so every
+   * `textureSampleLevel` is a fetch of a cell. A sun reads it at the sample
+   * and where its taps end; the light after first order adds the ray's far
+   * end, once for each of the two. A program that reads only first order
+   * fetches no far end, and one that reads both fetches no cell twice.
+   */
+  it('is fetched twice by first order’s sun, and twice more by the depth beside it, at the far end of each of its two reads', async () => {
+    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
+    const medium = slab(1000, 2000, 0.01)
+    const sun = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    const body = test.uniforms.served
+    const out = storage(
+      new StorageBufferAttribute(new Float32Array(1), 1),
+      'float',
+      1,
+    )
+    const programOf = async (
+      pick: (got: ReturnType<typeof sun>) => Node<'float'>,
+    ): Promise<string> => {
+      const kernel = Fn(() => {
+        const offset = vec3(float(instanceIndex), 1, 2)
+        const sample: CloudSample = {
+          offset,
+          distance: offset.length(),
+          altitude: altitudeAt(body, offset),
+          sunMu: sunMuAt(body, offset),
+          footprint: float(10),
+        }
+        out.element(0).assign(pick(sun(sample, medium(sample, body), body)))
+      })().compute(1)
+      await gpu.compute(kernel)
+      const nodes = (
+        gpu.renderer as unknown as {
+          _nodes: {
+            getForCompute(node: ComputeNode): { computeShader: string }
+          }
+        }
+      )._nodes
+      const wgsl = nodes.getForCompute(kernel).computeShader
+      kernel.dispose()
+      expect(wgsl.match(/: texture_3d</g)).toHaveLength(1)
+      return wgsl
+    }
+    const fetches = (wgsl: string): number =>
+      wgsl.match(/\btextureSampleLevel\(/g)?.length ?? 0
+    expect(fetches(await programOf((got) => got.cloud))).toBe(2)
+    expect(
+      fetches(
+        await programOf((got) => got.cloud.add(got.depth.x).add(got.depth.y)),
+      ),
+    ).toBe(4)
+    dispose(test)
   })
 })

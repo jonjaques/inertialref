@@ -106,7 +106,7 @@ describe('the declared bytes', () => {
       ],
       ['clipmap, 4 × RGBA8 256² × 6', 4 * textureBytes(256, 256, 6, 4), 6.29],
       ['volume, RG8 256² × 68', textureBytes(256, 256, 68, 2), 8.91],
-      ['sun grid, R16F 128² × 32', textureBytes(128, 128, 32, 2), 1.05],
+      ['sun grid, RG16F 128² × 32', textureBytes(128, 128, 32, 4), 2.1],
       ['far atlas, RGBA8 1548 × 774', textureBytes(1548, 774, 1, 4), 4.79],
       ['depth copy at 1080p, R16F', textureBytes(1920, 1080, 1, 2), 4.15],
       ['depth copy at Retina, R16F', textureBytes(2880, 1800, 1, 2), 10.37],
@@ -141,7 +141,7 @@ describe('the declared bytes', () => {
     expect(history(retina.history) / MB).toBeCloseTo(15.55, 2)
   })
 
-  it('add up to the landed set: 87.2 MB at 1080p and 80.6 MB at Retina', () => {
+  it('add up to the landed set: 88.2 MB at 1080p and 81.6 MB at Retina', () => {
     // The field, the volume and the sun grid summed through it, and the
     // atlas, with everything every frame holds.
     const fixed =
@@ -152,7 +152,7 @@ describe('the declared bytes', () => {
       4 * textureBytes(1542, 1028, 1, 4) +
       4 * textureBytes(256, 256, 6, 4) +
       textureBytes(256, 256, 68, 2) +
-      textureBytes(128, 128, 32, 2) +
+      textureBytes(128, 128, 32, 4) +
       textureBytes(1548, 774, 1, 4)
     const atSize = (render: Extent, css: Extent): number => {
       const { trace, history } = cloudExtents(render, css)
@@ -164,11 +164,11 @@ describe('the declared bytes', () => {
       )
     }
     expect(atSize(extent(1920, 1080), extent(1920, 1080)) / MB).toBeCloseTo(
-      87.2,
+      88.2,
       1,
     )
     expect(atSize(extent(2880, 1800), extent(1440, 900)) / MB).toBeCloseTo(
-      80.6,
+      81.6,
       1,
     )
   })
