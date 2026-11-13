@@ -1,6 +1,5 @@
 import {
   SLAB_REFERENCE,
-  SLAB_SOURCE,
   SLAB_VIEW_SOURCE,
   halfFloatsFromBase64,
 } from '@inertialref/rendering'
@@ -8,13 +7,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 // The texels are reached by path: the package's index does not export them.
 import { SLAB_VIEW_SOURCE_TEXELS } from '../../../../packages/rendering/src/slabSourceTexels.generated.ts'
 import { tabulate } from './slabForms.ts'
-import { MIDPOINT_BEARINGS } from './slabSource.ts'
 import {
-  THREE_GRID,
   VIEW_BEARINGS,
   VIEW_GRID,
   sourceMedium,
-  threeForms,
   viewForm,
 } from './slabSourceTable.ts'
 import {
@@ -25,7 +21,6 @@ import {
   slabPopulation,
   type SlabPopulation,
 } from './slabTables.ts'
-import { halfDecimal } from './slabText.ts'
 
 /*
  * The committed tables recomputed from the Mie series. Each case is the
@@ -149,30 +144,9 @@ describe('the reference’s rows, recomputed', () => {
   }, 120_000)
 })
 
-describe('the source tables’ cells, recomputed', () => {
-  // One node as both layers is one chain of doublings a mode: a row of a
-  // table across its suns, and across its slabs.
-
-  it('are the three-term table’s half floats, under every sun, where the two depths are one node', () => {
-    const node = Math.floor(SLAB_SOURCE.nodes / 2)
-    const medium = sourceMedium(population, 'formula')
-    const form = threeForms(medium.asymmetry ** 2).find(
-      (item) => item.name === 'three-relative',
-    )!
-    const made = tabulate(medium, THREE_GRID, SLAB_STREAMS.scaled, [form], {
-      rows: [node],
-      columns: [node],
-      bearings: MIDPOINT_BEARINGS,
-    })
-    const terms = made.tables.get(form.name)!
-    for (let sun = 0; sun < SLAB_SOURCE.suns; sun += 1) {
-      const cell = (sun * SLAB_SOURCE.nodes + node) * SLAB_SOURCE.nodes + node
-      for (let term = 0; term < 3; term += 1)
-        expect(halfDecimal(terms[cell * 4 + term]!)).toBe(
-          SLAB_SOURCE.terms[cell * 3 + term],
-        )
-    }
-  }, 120_000)
+describe('the source table’s cells, recomputed', () => {
+  // One node as both layers is one chain of doublings a mode: a row of
+  // the table across its suns, and across its slabs.
 
   it('are the view table’s texels, under every sun at every cosine of both hemispheres', () => {
     const { nodes, suns, cosines } = SLAB_VIEW_SOURCE
