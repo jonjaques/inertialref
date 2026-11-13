@@ -10,6 +10,7 @@ import {
   fieldCase,
   findCumulus,
   probesOf,
+  quadratureSkyOf,
   SCALED_SAMPLES,
   scaledOf,
   scaledRows,
@@ -55,10 +56,24 @@ describe.skipIf(CUMULUS_REFERENCE.cases.length === 0)(
         const table = mieDroplets()
         const scaled = scaledTable(table, scaledRows(fixture, table))
         for (const view of CUMULUS_VIEWS) {
-          const spec = fieldCase(subject, view)
-          expect(spec).toEqual(
-            CUMULUS_REFERENCE.cases.find(({ id }) => id === spec.id),
-          )
+          // The case as the search and the view make it today, but for its
+          // `sky`: that is the table's read when `probes`, `scaled` and the
+          // table's block were traced, and those are traced again under it
+          // below. The reference's sky term is lit by the air's own sky and
+          // the linear sky on the quadrature's moments, neither of them the
+          // table's (ruling 007), so the case is not held to the table as it
+          // reads now: its rows stand in the air's optical depth since
+          // `weather/p1-sky-rows`, and its read at 1.7 km moved.
+          const fresh = fieldCase(subject, view)
+          const spec = CUMULUS_REFERENCE.cases.find(
+            ({ id }) => id === fresh.id,
+          )!
+          expect({ ...fresh, sky: spec.sky }).toEqual(spec)
+          // The linear rows' moments are the quadrature's at the case's
+          // height and sun, as they are taken today.
+          expect(
+            CUMULUS_LINEAR_SKIES.moments.find((row) => row.case === spec.id),
+          ).toEqual({ case: spec.id, ...quadratureSkyOf(spec) })
           // The thinnest rim pixel: the cheapest of the case to trace.
           const committed = CUMULUS_REFERENCE.probes.find(
             (probe) => probe.case === spec.id && probe.mask === 'rim',
