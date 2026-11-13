@@ -338,6 +338,25 @@ beforeAll(async () => {
       ...taken(OVERLAY_GUARD, pageOf(OVERLAY_GUARD, null), 'deck'),
     },
   )
+  // An experiment record as the capture writes it: every run takes E1's and
+  // E2's deck beside the volume, with no flag to leave it out.
+  const experiment = { ...candidate, commit: 'x1', stills: [] }
+  for (const [i, tag] of TAGS.entries()) {
+    const levers = { on: true, scenario: tag, sun: false }
+    experiment.stills.push({
+      id: ID[tag],
+      arm: 'volume',
+      ...(await plate(`${tag}-exp.png`, [160, 120, 20 * i])),
+      ...taken(ID[tag], pageOf(ID[tag], levers), 'candidate'),
+    })
+    if (tag.startsWith('e'))
+      experiment.stills.push({
+        id: ID[tag],
+        arm: 'deck',
+        ...(await plate(`${tag}-exp-deck.png`, [70, 70, 20 * i])),
+        ...taken(ID[tag], pageOf(ID[tag], null), 'deck'),
+      })
+  }
   await writeFile(path.join(plates, 'baseline.json'), JSON.stringify(baseline))
   await writeFile(
     path.join(plates, 'candidate.json'),
@@ -348,6 +367,7 @@ beforeAll(async () => {
     baselineRecord: baseline,
     candidateRecord: candidate,
     guardRecord: guard,
+    experimentRecord: experiment,
     referencesSha,
     pattern,
     options: (out, kind, seed = 'fixture') => ({
@@ -467,6 +487,56 @@ describe('the record reader', () => {
     )
     expect(moved.arms.old.record).toBe('/base.json')
     expect(moved.arms.new.record).toBe('/g.json')
+  })
+
+  it('forms the experiment from its record’s volume plates, its deck plates left to the deck arm', () => {
+    const { record, supplied } = adaptBaseline(fx.baselineRecord, {
+      cornerstones: CORNERSTONES,
+      cornerstonesHash: 'h',
+    })
+    const inputs = [
+      { file: '/base.json', record, as: 'record', supplied },
+      { file: '/cand.json', record: fx.candidateRecord, as: 'record' },
+      { file: '/exp.json', record: fx.experimentRecord, as: 'experiment' },
+    ]
+    const scenes = gather(inputs, {
+      kind: 'judged',
+      only: null,
+      references: fx.referencesSha,
+    })
+    expect(scenes.map((scene) => scene.picture)).toEqual(
+      [ID.e1, ID.e2, ID.g1].sort(),
+    )
+    for (const scene of scenes) {
+      expect(scene.arms.experiment).toMatchObject({
+        record: '/exp.json',
+        role: 'candidate',
+      })
+      expect(scene.arms.experiment.file).toMatch(/-exp\.png$/)
+      expect(scene.arms.candidate.record).toBe('/cand.json')
+    }
+    // The deck arm is the baseline's, never the experiment record's.
+    for (const tag of ['e1', 'e2']) {
+      const scene = scenes.find((one) => one.picture === ID[tag])
+      expect(scene.arms.deck.record).toBe('/base.json')
+    }
+  })
+
+  it('still refuses, by name, an experiment record whose only plates are decks', () => {
+    const decks = {
+      ...fx.experimentRecord,
+      stills: fx.experimentRecord.stills.filter((one) => one.arm === 'deck'),
+    }
+    expect(decks.stills).toHaveLength(2)
+    expect(() =>
+      gather([{ file: '/exp.json', record: decks, as: 'experiment' }], {
+        kind: 'judged',
+        only: null,
+        references: fx.referencesSha,
+      }),
+    ).toThrow(
+      '/exp.json: weather-e1-cumulus-orbit cannot be the experiment: its role is deck',
+    )
   })
 
   it('refuses a plate with the wrong role, rig, stance, fixtures or processing for its arm', () => {
