@@ -93,6 +93,8 @@ export interface SlabRig {
   share(convective: number): void
   /** The cloudy share of the slab's columns: one, a resolved slab, until told. */
   cover(fraction: number): void
+  /** The cumuliform share the medium itself holds at every column, for a rig built with `holdsShare`. */
+  held(convective: number): void
   /** Each view's light, the mean of its jitters. */
   light(views: readonly Triple[]): Promise<Triple[]>
   /** Each view's light and what the slab passes, the means of its jitters. */
@@ -113,6 +115,12 @@ export async function slabRig(
     readonly sun: 'shipped' | 'exact' | 'none'
     /** The sky's radiance, alike on every side and in every band: none when absent. */
     readonly sky?: number
+    /**
+     * A medium that holds its column's cumuliform share, as a field's can:
+     * `held` sets it. Absent, the medium holds none and the march reads the
+     * level's own share under a regime.
+     */
+    readonly holdsShare?: boolean
     /** The committed phase through the reference's sun, or none: the light after first order alone. */
     readonly phase: boolean
     readonly march?: ProbeOptions['march']
@@ -169,7 +177,13 @@ export async function slabRig(
       : options.sun === 'exact'
         ? () => exact
         : () => dark
-  const probe = marchProbe(gpu, uniforms, slabMedium([slab]), {
+  const heldShare = uniform(0)
+  const plain = slabMedium([slab])
+  const medium: typeof plain =
+    options.holdsShare === true
+      ? (sample, of) => ({ ...plain(sample, of), convective: heldShare })
+      : plain
+  const probe = marchProbe(gpu, uniforms, medium, {
     sun,
     phase: options.phase ? phase : CLOUD_STAND_INS.phase(0),
     // A sky of nothing, read from its table: the placeholder's Ψ is one
@@ -235,6 +249,9 @@ export async function slabRig(
     },
     cover(share) {
       fraction.value = share
+    },
+    held(convective) {
+      heldShare.value = convective
     },
     marched,
     light: async (views) => (await marched(views)).map(({ light }) => light),

@@ -299,6 +299,43 @@ describe('a slab’s radiance and reflected flux, through the shipped step', () 
   }, 600_000)
 
   /*
+   * A medium that holds its column's cumuliform share hands the march
+   * that share, and the level's own, which is a regime's, is not read:
+   * a climate whose share varies by place is lit by where a sample stands.
+   */
+  it('takes the factor of the sun by the share a medium holds at its column, and not the level’s, where a medium holds one', async () => {
+    const holding = await slabRig(gpu, {
+      sun: 'exact',
+      phase: false,
+      holdsShare: true,
+    })
+    const views = [0.3, 0.9].map((mu) => viewOf('reflected', mu, 60))
+    const draw = async (held: number, level: number) => {
+      holding.place(10, 20, 0.5, 'reflected')
+      holding.uniforms.trace.maxSteps.value = 192
+      holding.share(level)
+      holding.held(held)
+      return holding.light(views)
+    }
+    const none = await draw(0, 1)
+    const half = await draw(0.5, 0)
+    const whole = await draw(1, 0)
+    const { l, a } = sunFactorPair('cumulus')
+    const factor = l * (1 + (a * Math.sqrt(1 - 0.5 * 0.5)) / 0.5)
+    views.forEach((_, i) => {
+      expect(none[i]![1]).toBeGreaterThan(0)
+      // A level all cumulus by its climate, and a column that holds none.
+      expect(Math.abs(whole[i]![1] / none[i]![1] - factor)).toBeLessThan(
+        1e-4 * factor,
+      )
+      expect(
+        Math.abs(half[i]![1] / none[i]![1] - (1 + 0.5 * (factor - 1))),
+      ).toBeLessThan(1e-4)
+    })
+    holding.dispose()
+  }, 600_000)
+
+  /*
    * A slab is a level whose columns do not spread, so a step that reads
    * it as statistics and one that reads it resolved stand in one slab:
    * the far march and the fine march handed one set of statistics differ
