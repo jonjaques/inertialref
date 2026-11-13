@@ -1,12 +1,14 @@
 # CLAUDE.md
 
-Claude Code specifics for this repository.
+@AGENTS.md
 
-**Read [`AGENTS.md`](AGENTS.md) first.** It is the working card: invariants and
-definition of done. The rest of the agent handbook is
-[`docs/agents/`](docs/agents/README.md). Human documentation is
-[`docs/`](docs/README.md). This file is only what is specific to Claude Code
-on this machine.
+Claude Code specifics for this repository. The line above imports
+[`AGENTS.md`](AGENTS.md), the working card, so its invariants and definition of
+done are in context from the first turn. A link would not do that: with a
+`CLAUDE.md` present, Claude Code reads `AGENTS.md` only when it is imported. The
+rest of the agent handbook is [`docs/agents/`](docs/agents/README.md). Human
+documentation is [`docs/`](docs/README.md). This file is only what is specific
+to Claude Code on this machine.
 
 ---
 
@@ -14,7 +16,7 @@ on this machine.
 
 | File                                    | What it is                                                       |
 | --------------------------------------- | ---------------------------------------------------------------- |
-| [`AGENTS.md`](AGENTS.md)                | Invariants and definition of done. Read first.                   |
+| [`AGENTS.md`](AGENTS.md)                | Invariants and definition of done. Imported above.               |
 | [`docs/agents/`](docs/agents/README.md) | How to work here as an agent.                                    |
 | [`docs/`](docs/README.md)               | Vision, architecture, concepts, ADRs, guides, design bible.      |
 | [`STYLE.md`](STYLE.md)                  | House voice — docs, comments, commits. American English.         |
@@ -36,8 +38,9 @@ Driving the simulation:
 Most of `.claude/` runs without being asked.
 
 - **Rules load themselves.** Each file has `paths:` globs and enters context
-  only when a matching file does. They exist because `AGENTS.md` holds the
-  invariants but Claude Code does not auto-load it. `AGENTS.md` stays canonical
+  only when a matching file does. `AGENTS.md` states each invariant in one line
+  and is in context from the start; a rule adds what that line cannot carry for
+  one directory, at the moment a file there is opened. `AGENTS.md` stays canonical
   and links to the full constraints and reasoning in
   [`docs/agents/invariants.md`](docs/agents/invariants.md); the rules carry only
   the imperative. The contract is
@@ -108,14 +111,18 @@ Most of `.claude/` runs without being asked.
   finished install rather than a half-written one. A pull request opened from
   a thread is linked with `link_pull_request` and watched with
   `watch_pull_request`, which wakes the thread on a red check; the `Monitor`
-  loop in `/ship` is for a terminal. `pnpm dev` binds 5173 and 8787 by name,
-  so one worktree serves at a time, and `../tng-inertial` resolves only from
-  the main checkout.
+  loop in `/ship` is for a terminal. A child that needs its own checkout is a
+  `delegate_task` with `isolation: "worktree"`, and T3 makes that checkout;
+  `/parallel` carries the brief. `pnpm dev` binds 5173 and 8787 by name, so one
+  worktree serves at a time: `t3.json` marks the Dev action `stopOnSettle`, so
+  once T3 has imported it a server started from that action stops when its
+  thread settles, and a server started from an agent's shell is that agent's to
+  stop. `../tng-inertial` resolves only from the main checkout.
 
 | Skill          | For                                                     |
 | -------------- | ------------------------------------------------------- |
 | `/drive`       | Driving the game: harness, headless runner, CDP driver  |
-| `/ship`        | Rebase → commit → push → PR, ready. No gate. You invoke |
+| `/ship`        | Update → commit → push → PR, ready. No gate. You invoke |
 | `/parallel`    | Fanning work across worktrees. Never auto-invoked       |
 | `/adr`         | Writing an ADR in house style                           |
 | `/context-log` | Appending to `CONTEXT.md`                               |
@@ -183,9 +190,11 @@ agent exactly as they bind a subagent.
 - Commit each coherent piece as it goes green, without asking. Verify as you
   go — the Stop gate on every turn, `pnpm presets:compare` for anything
   visible, `pnpm test:gpu` for a shader — because push and the pull request
-  are `/ship`, which runs no gate: it rebases onto `origin/main`, commits,
-  pushes and opens the PR ready, and CI runs `pnpm check` on what it pushed.
-  `main` enforces linear history and takes squash merges only. Reviewing the
+  are `/ship`, which runs no gate: it brings the branch up to date with
+  `origin/main`, commits, pushes and opens the PR ready, and CI runs
+  `pnpm check` on what it pushed. A branch is rebased until its first push and
+  merged up to date after it, because no push is forced. `main` enforces
+  linear history and takes squash merges only. Reviewing the
   result is `/code-review`, which the user invokes; `/ship` never does.
 - Report completion as: Implemented / Architecture decisions / Tests and
   verification / Known limitations / Recommended next step.

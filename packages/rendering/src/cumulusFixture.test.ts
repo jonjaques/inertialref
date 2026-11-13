@@ -639,4 +639,34 @@ describe('the sky a case of the field stands under', () => {
       ),
     ).toEqual([0, 0, 0])
   })
+
+  it('is held alone on the scaled medium, a row a scaled row, inside the sky’s own bounds and the row’s rest', () => {
+    const { cases, scaled, scaledSky } = CUMULUS_REFERENCE
+    expect(scaledSky).toHaveLength(scaled.length)
+    let under = 0
+    scaledSky.forEach((row, index) => {
+      const beside = scaled[index]!
+      expect(row.case).toBe(beside.case)
+      expect(row.pixel).toEqual(beside.pixel)
+      const { sky } = cases.find(({ id }) => id === row.case)!
+      for (let b = 0; b < 3; b += 1) {
+        // Every path ends on the sky, so a pixel is a mean of its radiances:
+        // none is over the brightest direction, 1 + ¾·|(up, sunward)| of
+        // the mean, and none is negative.
+        expect(row.sky[b]).toBeGreaterThanOrEqual(0)
+        expect(row.sky[b]).toBeLessThanOrEqual(
+          sky.mean[b]! * (1 + 0.75 * Math.hypot(sky.up[b]!, sky.sunward[b]!)),
+        )
+        // What is left of `rest` is the sun's light past its first order,
+        // which is not negative: held at five of the two errors together.
+        // Measured, the lowest is 1.34 under and 6 of 5,106 are under at all.
+        const left = beside.rest[b]! - row.sky[b]!
+        expect(left).toBeGreaterThan(
+          -5 * Math.hypot(beside.restError[b]!, row.skyError[b]!),
+        )
+        if (left < 0) under += 1
+      }
+    })
+    expect(under).toBeLessThan(0.01 * 3 * scaledSky.length + 1)
+  })
 })

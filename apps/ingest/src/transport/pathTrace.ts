@@ -112,6 +112,11 @@ export interface TraceGround {
 export interface TraceScene {
   readonly medium: TraceMedium
   readonly phase: TracePhase
+  /**
+   * The sun, or none. The sky's `sunward` term is laid on the sun's bearing,
+   * so a scene with no sun takes a sky with none of it; the sky alone under
+   * a case's sun is that sun at an irradiance of zero.
+   */
   readonly sun: TraceSun | null
   readonly sky: TraceSky
   readonly ground: TraceGround | null
@@ -188,6 +193,14 @@ export function createTracer(scene: TraceScene): Tracer {
   const counts = { paths: 0, scatterings: 0, chained: 0, truncated: 0 }
   const at = new Float64Array(2)
   const drawn = new Float64Array(3)
+
+  // No sun is no bearing. A sky that leans toward one would be drawn with
+  // that term at nothing and no word of it: 41% dark in a rim toward the
+  // sun and three times too bright in one seen from behind.
+  if (sun === null && sky.sunward.some((value) => value !== 0))
+    throw new Error(
+      'pathTrace: a sky with a sunward term needs a sun for its bearing; give the sun an irradiance of zero',
+    )
 
   // The sun's disk: its solid angle is 2π·(1 − cos α), and a point of it is
   // drawn uniformly in that.

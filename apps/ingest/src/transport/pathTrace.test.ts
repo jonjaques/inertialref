@@ -657,6 +657,38 @@ describe('every order', () => {
     expect(up / (Math.PI * 2)).toBeCloseTo(0.8, 3)
     expect(sunward / (Math.PI * 2)).toBeCloseTo(-0.4, 3)
   })
+
+  it('refuses a sky that leans toward a sun where the scene has none to bear on', () => {
+    // The sky alone is traced under its sun at no irradiance. With no sun
+    // the sunward term has no bearing and would be drawn as nothing.
+    const sky = {
+      mean: [1, 1, 1],
+      up: [0, 0, 0],
+      sunward: [0, 0.5, 0],
+    } as const
+    expect(() => createTracer(scene(CUMULUS, { sun: null, sky }))).toThrow(
+      /needs a sun for its bearing/,
+    )
+    const tracer = createTracer(
+      scene(CUMULUS, {
+        sun: {
+          direction: unit(0, 0.5, 1),
+          irradiance: [0, 0, 0],
+          angularRadius: 0,
+        },
+        sky,
+      }),
+    )
+    // Looking at the sun's bearing, level, from outside the grid: the sky
+    // there and no light of a sun that has none.
+    const value = tracer.radiance(
+      [1000, 800, 2100],
+      [0, 0, 1],
+      1,
+      Rng.fromSeed(SEED),
+    )
+    expect(value).toBeCloseTo(1 + 0.75 * 0.5, 12)
+  })
 })
 
 describe('a pixel’s samples', () => {
