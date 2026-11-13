@@ -95,19 +95,39 @@ export interface SkyTable extends ScatteringLut {
   readonly rows: SkyRows
 }
 
+/**
+ * The rows of an air whose gas and haze hold no column, as a scale height
+ * in the air's depths: one column so tall that the rows stand within 1% of
+ * evenly in height. Such an air still has a sky, lit by its detached layer
+ * and its ground, so its rows must still part; the same closed form keeps
+ * the bake and both readers on one function.
+ */
+export const SKY_EVEN_SCALE = 64
+
 /** The rows for an air: its two columns, weighed as `SkyRows` says. */
 export function skyRowsOf(recipe: AtmosphereRecipe): SkyRows {
   const ceiling = recipe.topRatio - 1
   if (!(ceiling > 0)) return NO_SKY_ROWS
   const mean = (v: readonly number[]) =>
     ((v[0] as number) + (v[1] as number) + (v[2] as number)) / 3
-  const gas = mean(recipe.betaRayleigh) * recipe.hRayleigh
-  const haze = mean(recipe.mieExtinction) * recipe.hMie
+  const columns = [
+    mean(recipe.betaRayleigh) * recipe.hRayleigh,
+    mean(recipe.mieExtinction) * recipe.hMie,
+  ]
+  // Weighed against the larger: only their ratio places the rows, and a
+  // subnormal column normalized as it stands rounds the last row's share
+  // of the whole to the whole, which puts the last row at the top.
+  const larger = Math.max(columns[0] as number, columns[1] as number)
+  const gas = (columns[0] as number) / larger
+  const haze = (columns[1] as number) / larger
   const b = ceiling / recipe.hRayleigh
   const d = ceiling / recipe.hMie
   const whole = gas * -Math.expm1(-b) + haze * -Math.expm1(-d)
-  if (!(whole > 0)) return NO_SKY_ROWS
   const last = whole * (1 - 1 / SKY_TOP_SHARE)
+  if (!(larger > 0) || !(last > 0 && last < whole)) {
+    const even = 1 / SKY_EVEN_SCALE
+    return [1 / (-Math.expm1(-even) * (1 - 1 / SKY_TOP_SHARE)), even, 0, 0]
+  }
   return [gas / last, b, haze / last, d]
 }
 

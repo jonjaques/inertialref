@@ -453,6 +453,77 @@ describe('the sky table’s rows', () => {
     )
   })
 
+  it('part for an air whose gas and haze hold no column, nearly evenly in height', () => {
+    // A detached layer over no gas and no haze: a sky lit by the layer and
+    // the ground, which a mapping from the two columns alone read as row 0
+    // at every height (L̄ 3.4% and Δ_s 0.017 off at the point below).
+    const layered = atmosphereRecipe(
+      {
+        ...haze,
+        thickness: 0,
+        aerosolDepth: 0,
+        ozone: 0,
+        detached: {
+          center: 3,
+          halfWidth: 1,
+          depth: 0.02,
+          color: { r: 0.3, g: 0.5, b: 1 },
+        },
+      },
+      1.0157,
+      { rayleigh: 8.5 / 6371, aerosol: 1.2 / 6371 },
+    )
+    const shares = skyRowShares(skyRowsOf(layered))
+    // Even over the rows' own span, which stops under the top.
+    const even = shares[SKY_TABLE_HEIGHT - 1]! / (SKY_TABLE_HEIGHT - 1)
+    for (let y = 1; y < SKY_TABLE_HEIGHT; y += 1) {
+      const cell = shares[y]! - shares[y - 1]!
+      expect(Math.abs(cell / even - 1)).toBeLessThan(0.01)
+    }
+    const layeredTransmittance = bakeTransmittance(layered)
+    const layeredPsi = bakeMultipleScattering(layered, layeredTransmittance)
+    const read = skyMomentsAt(
+      bakeSkyMoments(layered, layeredTransmittance, layeredPsi),
+      0.11,
+      15 / 31,
+    )
+    const summed = marchSkyMoments(
+      {
+        recipe: layered,
+        transmittance: layeredTransmittance,
+        multiScatter: layeredPsi,
+      },
+      1 + 0.11 * (layered.topRatio - 1),
+      15 / 31,
+    )
+    // On these rows, measured on the Mac mini (Mac18,5, Apple M6): L̄ within
+    // 0.43%, Δ 0.0146 and Δ_s 0.0012, the worst band of each. Read as row 0
+    // they were 3.4%, 0.049 and 0.017.
+    for (let c = 0; c < 3; c += 1) {
+      expect(Math.abs(read.mean[c]! / summed.mean[c]! - 1)).toBeLessThan(0.01)
+      expect(Math.abs(read.up[c]! - summed.up[c]!)).toBeLessThan(0.02)
+      expect(Math.abs(read.sunward[c]! - summed.sunward[c]!)).toBeLessThan(
+        0.005,
+      )
+    }
+  })
+
+  it('keep the last row under the top when the columns are subnormal', () => {
+    // At a thickness of 1e-322 the columns are subnormal, and normalized
+    // as they stand the whole and the last row's share round to one
+    // number, which put the last row at the top, where no light comes down.
+    const rows = skyRowsOf(
+      atmosphereRecipe({ ...haze, thickness: 1e-322, ozone: 0 }, 1.0157, {
+        rayleigh: 8.5 / 6371,
+        aerosol: 1.2 / 6371,
+      }),
+    )
+    const shares = skyRowShares(rows)
+    for (let y = 1; y < SKY_TABLE_HEIGHT; y += 1)
+      expect(shares[y]!).toBeGreaterThan(shares[y - 1]!)
+    expect(shares[SKY_TABLE_HEIGHT - 1]!).toBeLessThan(0.99)
+  })
+
   it('hold the last row over it, to the top, where the sky from above is not yet dark', () => {
     const last = rowShares[SKY_TABLE_HEIGHT - 1]!
     for (const mu of [-0.1, 0.3, 0.9]) {
@@ -467,9 +538,11 @@ describe('the sky table’s rows', () => {
           expect(read.sunward[c]!).toBeCloseTo(atLast.sunward[c]!, 9)
         }
       }
-      // Light comes down on a face there: Δ under 2, the value of a sky
-      // dark above.
-      for (let c = 0; c < 3; c += 1) expect(atLast.up[c]!).toBeLessThan(1.9)
+      // Light comes down on a face there: the upper side's irradiance over
+      // π·L̄, 1 + Δ/2 + c, measured 0.011 to 0.24 at these suns on the Mac
+      // mini (Mac18,5, Apple M6). At the air's top it is 0.
+      for (let c = 0; c < 3; c += 1)
+        expect(1 + atLast.up[c]! / 2 + atLast.upper[c]!).toBeGreaterThan(0.005)
     }
   })
 
