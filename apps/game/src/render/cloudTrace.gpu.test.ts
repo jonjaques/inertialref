@@ -52,7 +52,7 @@ import {
 } from '@inertialref/rendering'
 import { altitudeAt, cloudRay, sunMuAt } from './cloudGeometry.ts'
 import { traceJitter } from './cloudJitter.ts'
-import { CLOUD_PHASE_MODES } from './cloudLevers.ts'
+import { CLOUD_MAX_STEPS, CLOUD_PHASE_MODES } from './cloudLevers.ts'
 import {
   type CloudAirFn,
   cloudMarch,
@@ -1785,6 +1785,31 @@ describe('the step counters', () => {
     expect(steps.range).not.toBeNull()
     expect(steps.range!).toBeGreaterThan(98 + inCloud)
     expect(steps.range!).toBeLessThan(2 * 98 + inCloud * 1.001)
+    traced.dispose()
+  })
+
+  it('count each kind exactly at the ladder’s top rung, 256 steps, where every step is in cloud', async () => {
+    /*
+     * Steps start at 50 m and grow by 1%, so a ray wants 256 of them only
+     * past 59 km: inside a 90 km slab every ray wants more, and the
+     * budget's floor holds it to 256 counted steps and the uncounted ones
+     * beside them. Every step is in cloud and takes a sun. At a σ of 10⁻⁵
+     * no ray reaches the exit's 1%. A count of eight bits carried 256 steps
+     * in cloud into the count outside every level.
+     */
+    const deck = slabMedium([{ base: 100, top: 90_000, sigma: 1e-5 }])
+    const traced = await rig(deck, 4, 4, { eye: 1000, layers: [[100, 90_000]] })
+    traced.uniforms.trace.maxSteps.value = CLOUD_MAX_STEPS.at(-1)!
+    const frame = frameOf({ width: 4, height: 4 }, { stats: true })
+    traced.trace.render(renderer, frame, BUDGET)
+    const steps = (await stepsOf(traced.trace))!
+    expect(steps.max).toBeGreaterThanOrEqual(256)
+    const { kinds } = steps
+    expect(kinds.gap).toBe(0)
+    expect(kinds.cloud).toBeCloseTo(steps.mean, 9)
+    expect(kinds.clear).toBeCloseTo(0, 9)
+    expect(kinds.suns).toBeGreaterThanOrEqual(kinds.cloud)
+    expect(kinds.suns).toBeLessThanOrEqual(kinds.cloud + 1)
     traced.dispose()
   })
 

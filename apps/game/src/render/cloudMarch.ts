@@ -19,6 +19,7 @@ import {
   saturate,
   select,
   sqrt,
+  uint,
   vec2,
   vec3,
 } from 'three/tsl'
@@ -168,14 +169,14 @@ export interface CloudMarchResult {
    */
   readonly exhausted: Node<'float'>
   /**
-   * The ray's work by kind, for the instrument's counters, as one whole
-   * number a float holds exactly: its steps in cloud, plus `KIND_GAP` for
-   * each step outside every level, plus `KIND_SUN` for each sun it took.
-   * Its steps inside a level that found no cloud are `steps` less the first
-   * two. One register, because a register a step is not free on a ray of
-   * 193 steps: three of them cost the grazing rows 0.07 ms a frame.
+   * The ray's work by kind, for the instrument's counters, as one unsigned
+   * integer: its steps in cloud, plus `KIND_GAP` for each step outside
+   * every level, plus `KIND_SUN` for each sun it took. Its steps inside a
+   * level that found no cloud are `steps` less the first two. One register,
+   * because a register a step is not free on a ray of 193 steps: three of
+   * them cost the grazing rows 0.07 ms a frame.
    */
-  readonly kinds: Node<'float'>
+  readonly kinds: Node<'uint'>
   /** The taps the ray's suns read, and the taps their early out left unread (`CloudSunTaps`). */
   readonly taps: Node<'vec2'>
   /**
@@ -257,11 +258,14 @@ const AIR_EVERY = 8
 const STRIDE = (STEP_GROWTH ** AIR_EVERY - 1) / (STEP_GROWTH - 1)
 /**
  * What a step outside every level and a sun add to `CloudMarchResult.kinds`:
- * a ray takes at most 208 steps, so each count has eight bits of the
- * float's 24.
+ * ten bits a count of the integer's 32, so each is exact to 1,023, and a
+ * ray takes at most its budget and thirteen steps more, 269 at the ladder's
+ * top rung of 256 and 1,023 at a budget of 1,010. A float holds a whole
+ * number exactly to 2²⁴ only, which is three counts of eight bits: 256
+ * steps in cloud carried into the count outside every level.
  */
-export const KIND_GAP = 256
-export const KIND_SUN = 65_536
+export const KIND_GAP = 1024
+export const KIND_SUN = KIND_GAP * KIND_GAP
 /** The sky's light on a cloud, a placeholder: Ψ × σ_s × ½, isotropic (§5.10). */
 const SKY_SHARE = 0.5
 const ISOTROPIC = 1 / (4 * Math.PI)
@@ -677,7 +681,7 @@ function rayRegisters(ray: CloudRay) {
     /** 1 once the budget's floor has lengthened a step in cloud. */
     floored: float(0).toVar(),
     /** Steps in cloud, steps outside every level and suns, packed: the counters'. */
-    kinds: float(0).toVar(),
+    kinds: uint(0).toVar(),
     /** Taps read and taps left unread. */
     taps: vec2(0).toVar(),
     /** T_c so far. */
@@ -1098,7 +1102,7 @@ export function cloudMarch(
           body,
         )
         const sunlight = sun.air.mul(sun.cloud).toVar()
-        r.kinds.addAssign(KIND_SUN)
+        r.kinds.addAssign(uint(KIND_SUN))
         const { taken, skipped } = sun as Partial<CloudSunTaps>
         if (taken !== undefined && skipped !== undefined)
           r.taps.addAssign(vec2(taken, skipped))
@@ -1137,8 +1141,8 @@ export function cloudMarch(
       r.kinds.addAssign(
         select(
           cloudy,
-          float(1),
-          select(here.index.lessThan(int(0)), float(KIND_GAP), float(0)),
+          uint(1),
+          select(here.index.lessThan(int(0)), uint(KIND_GAP), uint(0)),
         ),
       )
       If(cloudy, () => {
