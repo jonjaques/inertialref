@@ -35,6 +35,7 @@ import {
 } from './air.ts'
 import { airEye, airSegment } from './cloudCompositeAir.ts'
 import { cloudSample, shellCrossing } from './cloudGeometry.ts'
+import { KIND_GAP, KIND_SUN, UNCOUNTED_STEPS } from './cloudKinds.ts'
 import { type CloudKnotWriter, KNOT_TRANSMITTANCE } from './cloudKnots.ts'
 import { UNSPREAD_SHAPE } from '@inertialref/rendering'
 import type { CLOUD_PHASE_MODES } from './cloudLevers.ts'
@@ -239,12 +240,6 @@ const STEP_FLOOR_SLOPE = 60 / 16_000
 /** The budget's floor is taken from no nearer than this: at the eye a share of ln(stop/t) is unbounded. */
 const BUDGET_FROM = 50
 /**
- * Steps a ray may take past its budget: its first, which the jitter
- * shortens, one at each of the twelve boundary crossings, and the iteration
- * that closes the last step, with two to spare.
- */
-const UNCOUNTED_STEPS = 16
-/**
  * The march stops under 1% transmittance: the drawn medium's transmittance,
  * as `STEP_DEPTH` is its depth.
  */
@@ -256,22 +251,6 @@ const AIR_EVERY = 8
  * is sampled once in, each 1% longer than the last.
  */
 const STRIDE = (STEP_GROWTH ** AIR_EVERY - 1) / (STEP_GROWTH - 1)
-/**
- * What a step outside every level and a sun add to `CloudMarchResult.kinds`:
- * ten bits a count of the integer's 32, so each is exact to 1,023. A float
- * holds a whole number exactly to 2²⁴ only, which is three counts of eight
- * bits: 256 steps in cloud carried into the count outside every level.
- */
-export const KIND_GAP = 1024
-export const KIND_SUN = KIND_GAP * KIND_GAP
-/**
- * The largest step budget the kinds count exactly, and so the largest the
- * `maxSteps` lever takes. A ray runs at most its budget and
- * `UNCOUNTED_STEPS` more, and takes a sun at each step in cloud and one
- * more where its last step is closed: 1,006 + 16 + 1 is a field's 1,023.
- * Past it 1,024 steps in cloud read as none, and one outside every level.
- */
-export const CLOUD_MAX_STEPS_COUNTED = KIND_GAP - 1 - UNCOUNTED_STEPS - 1
 /** The sky's light on a cloud, a placeholder: Ψ × σ_s × ½, isotropic (§5.10). */
 const SKY_SHARE = 0.5
 const ISOTROPIC = 1 / (4 * Math.PI)

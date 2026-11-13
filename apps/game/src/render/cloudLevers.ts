@@ -1,6 +1,6 @@
 import { hashString } from '@inertialref/procedural'
 import { SCENARIO_IDS, type ScenarioId } from '@inertialref/rendering'
-import { CLOUD_MAX_STEPS_COUNTED } from './cloudMarch.ts'
+import { CLOUD_MAX_STEPS_COUNTED } from './cloudKinds.ts'
 
 /*
  * The cloud system's levers: what a script sets on `engine.clouds` to draw
