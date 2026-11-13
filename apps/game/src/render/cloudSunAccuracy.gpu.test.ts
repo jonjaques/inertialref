@@ -550,12 +550,15 @@ interface Case {
   /**
    * Under the horizon, the reference's march in two parts: `near`, to where
    * the ray leaves the sample's level, and `far`, all it meets after. The
-   * mean of `far` over the scored samples, and the floor: the RMS of
-   * `near·(far − mean)`, the least any one number for the far crossing
-   * leaves at this place. Recorded, held to nothing.
+   * mean of `far` over the scored samples, as a description; the one
+   * number `c` for the far crossing that leaves the least,
+   * Σ near²·far / Σ near²; and the floor, the RMS of `near·(far − c)`, the
+   * least any one number for the far crossing leaves at this place.
+   * Recorded, held to nothing.
    */
   readonly farFloor?: {
     readonly meanFar: number
+    readonly best: number
     readonly floor: number
     /** The RMS of `near·far` against the whole march: the split's own error. */
     readonly split: number
@@ -1168,9 +1171,21 @@ describe('the sun’s optical depth against the field', () => {
               Math.sqrt(
                 lit.reduce((sum, k) => sum + of(k) ** 2, 0) / lit.length,
               )
+            // The one number for the far crossing that leaves the least:
+            // the error at a sample is near·(far − c), so its RMS is least
+            // at the mean of far weighted by near², not at its plain mean.
+            const weight = lit.reduce((sum, k) => sum + at(near, k) ** 2, 0)
+            const best =
+              weight > 0
+                ? lit.reduce(
+                    (sum, k) => sum + at(near, k) ** 2 * at(far, k),
+                    0,
+                  ) / weight
+                : meanFar
             farFloor = {
               meanFar,
-              floor: rms((k) => at(near, k) * (at(far, k) - meanFar)),
+              best,
+              floor: rms((k) => at(near, k) * (at(far, k) - best)),
               split: rms((k) => at(near, k) * at(far, k) - truth[2 * k + 1]!),
             }
           }
