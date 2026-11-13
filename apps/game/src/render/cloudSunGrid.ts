@@ -124,6 +124,16 @@ import { warmByDrawing } from './warmup.ts'
  * it would step at each snap. So the grid ends in a ramp, never in an edge
  * lit on one side and shadowed on the other.
  *
+ * **A union of three levels spreads the same 32 heights and 32 steps over
+ * all of it.** A regime of one level 1.4 km thick has a height every 45 m;
+ * a world's climate on Earth, 0.7 to 11.1 km, has one every 335 m, and the
+ * depth the march's light reads through four taps is 2.5 to 4.3 off in RMS
+ * in its two lower levels where one level reads 2.3 to 2.9
+ * (`cloudSunAccuracy.gpu.test.ts`, on the Mac mini's M6). Spending a
+ * climbing ray's steps inside the levels is not the cure: the cell's own
+ * depth reads better and first order's light past the taps worse
+ * (`stepsInLevels`).
+ *
  * **Under a sun below a cell's horizon the bake follows the ray down and
  * stops where it leaves a level** (`#bakeNode`). What that ray meets when it
  * comes back up, hundreds of kilometers sunward, is one crossing a level by
@@ -277,6 +287,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   readonly #originMod = uniform(new Vector2())
   readonly #slice = uniform(0)
   readonly #toFirstExit = uniform(1)
+  readonly #stepsInLevels = uniform(0)
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh(this.#material)
   #state: SunGridState = freshSunGrid(SLICES)
@@ -469,24 +480,47 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       const origin = levelOffset(level, plane, height, body)
       // Heading down: decided by the sun's own sine at the cell, which is
       // also what sides the statistics.
-      const down = this.#toFirstExit
-        .greaterThan(0.5)
-        .and(sunMuAt(body, origin).lessThan(0))
+      const sunUp = sunMuAt(body, origin).greaterThanEqual(0)
+      const down = this.#toFirstExit.greaterThan(0.5).and(sunUp.not())
+      const climbing = this.#stepsInLevels.greaterThan(0.5).and(sunUp)
       const union = max(
         shellCrossingFrom(body, origin, body.sun, body.boundariesHigh.y).far,
         0,
       )
       const levels = this.#stretches(origin)
-      // In the order a descending ray meets them, from the highest level;
-      // a climbing ray has one stretch, the union's.
-      const marched = [2, 1, 0].map((k, n) => ({
-        from: select(down, levels[k]!.down.from, float(0)).toVar(),
-        length: select(
-          down,
-          levels[k]!.down.length,
-          n === 0 ? union : float(0),
-        ).toVar(),
-      }))
+      // A descending ray meets the levels from the highest. A climbing ray
+      // has one stretch, the union's; with its steps spent inside the
+      // levels it meets them from the lowest, and is inside each once: from
+      // the cell to the level's top where the cell is in it, from its base
+      // to its top where the cell is under it.
+      const marched = [0, 1, 2].map((n) => {
+        const fall = levels[2 - n]!
+        const rise = levels[n]!
+        return {
+          from: select(
+            down,
+            fall.down.from,
+            select(
+              climbing,
+              select(
+                rise.down.length.greaterThan(0),
+                rise.down.from,
+                rise.up.from,
+              ),
+              float(0),
+            ),
+          ).toVar(),
+          length: select(
+            down,
+            fall.down.length,
+            select(
+              climbing,
+              rise.down.length.add(rise.up.length),
+              n === 0 ? union : float(0),
+            ),
+          ).toVar(),
+        }
+      })
       const starts: Node<'float'>[] = []
       let total: Node<'float'> = float(0)
       for (const { length } of marched) {
@@ -697,6 +731,25 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   set toFirstExit(on: boolean) {
     if (on === this.toFirstExit) return
     this.#toFirstExit.value = on ? 1 : 0
+    this.#forget()
+    this.#pending = true
+  }
+
+  /**
+   * Whether a climbing ray's 32 steps are spent inside the levels, as a
+   * descending ray's are, or run equal to the union's top. Equal by
+   * default: in a union of three levels the steps inside them read the
+   * cell's own depth better and first order's light past the taps worse
+   * (`cloudSunAccuracy.gpu.test.ts`, which scores both), and the grid
+   * starts over when it changes.
+   */
+  get stepsInLevels(): boolean {
+    return this.#stepsInLevels.value > 0.5
+  }
+
+  set stepsInLevels(on: boolean) {
+    if (on === this.stepsInLevels) return
+    this.#stepsInLevels.value = on ? 1 : 0
     this.#forget()
     this.#pending = true
   }
