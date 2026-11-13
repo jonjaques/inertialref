@@ -1343,6 +1343,31 @@ describe('the grid as a resource', () => {
     expect(test.depth.bytes).toBe(0)
   })
 
+  it('holds 64 heights behind its handle: twice the bytes and the slices, and the same depth on a slab', async () => {
+    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
+    test.depth.heights = 64
+    const eye = eyeAt(300)
+    const sun = sunAt(37.5)
+    // The volume's 68 slices, the grid's 64 at eight a frame, the ramp: a
+    // frame either side for where the settle starts and stops counting.
+    const whole = Math.ceil((LEVELS * STACK) / CAP) + 64 / CAP + RAMP
+    const frames = test.settle(eye, sun)
+    expect(frames).toBeGreaterThanOrEqual(whole - 1)
+    expect(frames).toBeLessThanOrEqual(whole + 1)
+    expect(test.depth.bytes).toBe(4_194_304)
+    const offsets = Array.from({ length: 64 }, (_, k) =>
+      along(test, eye, 1050 + 14 * k, 300 * (k % 8)),
+    )
+    const read = await depths(test, offsets)
+    offsets.forEach((offset, k) => {
+      const expected = slabDepth(eye, offset, sun, [1000, 2000, 0.01])
+      expect(Math.abs(read[k]!.toSun - expected)).toBeLessThan(
+        Math.max(0.02 * expected, 0.01),
+      )
+    })
+    dispose(test)
+  })
+
   /*
    * Where a sun reads the grid, counted in the program three emits for it:
    * the grid is the one texture a slab's sun binds, so every

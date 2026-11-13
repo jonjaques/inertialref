@@ -307,9 +307,12 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   readonly #slice = uniform(0)
   readonly #toFirstExit = uniform(1)
   readonly #stepsInLevels = uniform(0)
+  /** The heights the grid holds, and the same as a uniform for its reads. */
+  #slices: number = SLICES
+  readonly #heights = uniform(SLICES)
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh(this.#material)
-  #state: SunGridState = freshSunGrid(SLICES)
+  #state: SunGridState = freshSunGrid(this.#slices)
   /** The sun the last frame was drawn under: what this frame's turn is measured from. */
   #sun: Vec3 | null = null
   #pending = false
@@ -342,7 +345,10 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     const base = body.boundaries.x
     return {
       base,
-      slice: max(body.boundariesHigh.y.sub(base).div(SLICES - 1), 1e-3),
+      slice: max(
+        body.boundariesHigh.y.sub(base).div(this.#heights.sub(1)),
+        1e-3,
+      ),
     }
   }
 
@@ -367,7 +373,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     const height = clamp(
       altitudeAt(body, point).sub(base).div(slice),
       0,
-      SLICES - 1,
+      this.#heights.sub(1),
     )
     const out = abs(plane.sub(this.#level.eye))
     const ramp = saturate(
@@ -375,7 +381,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
     )
     const holds = select(inside, ramp, float(0))
     const fetched = this.#map
-      .sample(vec3(cell.div(WIDTH), height.add(0.5).div(SLICES)))
+      .sample(vec3(cell.div(WIDTH), height.add(0.5).div(this.#heights)))
       .level(float(0))
     // Fetched only where the grid holds the point, as a read the readers
     // select away is: from orbit, or past the reach, no sample fetches.
@@ -750,8 +756,9 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
 
   #allocate(renderer: WebGPURenderer): void {
     this.#allocated = true
-    if (this.#target.width === WIDTH) return
-    this.#target.setSize(WIDTH, HEIGHT, SLICES)
+    if (this.#target.width === WIDTH && this.#target.depth === this.#slices)
+      return
+    this.#target.setSize(WIDTH, HEIGHT, this.#slices)
     // At once: a resized target is made at its next binding, so what
     // `textures()` lists is on the device at the size `bytes` declares.
     renderer.initRenderTarget(this.#target)
@@ -760,7 +767,7 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
 
   /** No slice holds anything: the grid comes back under the cap, from a weight of zero. */
   #forget(): void {
-    this.#state = freshSunGrid(SLICES)
+    this.#state = freshSunGrid(this.#slices)
     this.#silence()
     this.#drawn = 0
   }
@@ -799,6 +806,29 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
   set stepsInLevels(on: boolean) {
     if (on === this.stepsInLevels) return
     this.#stepsInLevels.value = on ? 1 : 0
+    this.#forget()
+    this.#pending = true
+  }
+
+  /**
+   * The heights the grid holds between the union's base and top, 32 by
+   * default, each a slice of 128² cells baked in the same 32 steps. An
+   * instrument's handle: 64 halves the climate's 335 m between heights,
+   * and costs a second megabyte a channel and twice the slices a rebuild
+   * (`cloudSunAccuracy.gpu.test.ts`, which scores it under
+   * `IR_CLOUD_SUN_HEIGHTS`). The grid is made again at the new size and
+   * starts over.
+   */
+  get heights(): number {
+    return this.#slices
+  }
+
+  set heights(count: number) {
+    if (count === this.#slices) return
+    if (!Number.isInteger(count) || count < 2)
+      throw new RangeError(`a grid of ${count} heights`)
+    this.#slices = count
+    this.#heights.value = count
     this.#forget()
     this.#pending = true
   }
