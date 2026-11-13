@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CUMULUS_LINEAR_SKIES,
   CUMULUS_REFERENCE,
   CUMULUS_VIEWS,
   fixtureMedium,
@@ -13,7 +14,9 @@ import {
   scaledOf,
   scaledRows,
   scaledTable,
+  SKIES,
   skyOf,
+  skyUnder,
   SUBJECTS,
   subjectFixture,
   traceCase,
@@ -26,11 +29,11 @@ import {
  * The committed reference, taken again from nothing but its generator: each
  * subject's place searched for on the field as it stands, its fixture cut,
  * and a pixel of each of its cases traced to the case's own count, on the
- * true medium, on the scaled one and under the sky alone. It is here and
- * not in the gate because a subject is 2.5 million reads of the field, a
- * pixel 49,000 paths and a scaled row of the droplet table a second of Mie
- * series: 29 s and 33 s for the two subjects on the Mac mini (Mac18,5,
- * Apple M6).
+ * true medium, on the scaled one, and under the sky alone under each of its
+ * three skies. It is here and not in the gate because a subject is 2.5
+ * million reads of the field, a pixel 49,000 paths and a scaled row of the
+ * droplet table a second of Mie series: 29 s and 34 s for the two subjects
+ * on the Mac mini (Mac18,5, Apple M6).
  *
  * The gate holds 500 of each subject's voxels to the field
  * (`cumulusFixture.test.ts`), which says the cloud has not moved. This says
@@ -86,23 +89,34 @@ describe.skipIf(CUMULUS_REFERENCE.cases.length === 0)(
               unscaleOf(fixture),
             )[0],
           ).toEqual(CUMULUS_REFERENCE.scaled[index])
-          expect(
-            skyOf(
-              spec,
-              traceScaledSky(
-                fixture,
+          // And under each of the three skies.
+          const blocks = {
+            air: CUMULUS_REFERENCE.airSky,
+            linear: CUMULUS_LINEAR_SKIES.linear,
+            table: CUMULUS_LINEAR_SKIES.table,
+          }
+          for (const under of SKIES)
+            expect(
+              skyOf(
                 spec,
-                [committed],
-                0,
-                SCALED_SAMPLES,
-                undefined,
-                handed,
-              ),
-            )[0],
-          ).toEqual(CUMULUS_REFERENCE.scaledSky[index])
+                traceScaledSky(
+                  fixture,
+                  spec,
+                  [committed],
+                  0,
+                  SCALED_SAMPLES,
+                  undefined,
+                  handed ?? scaled,
+                  skyUnder(spec, under),
+                ),
+              )[0],
+              under,
+            ).toEqual(blocks[under][index])
         }
       },
-      300_000,
+      // Thirty times the slower subject's 34 s on the Mac mini (Mac18,5,
+      // Apple M6): the hosted runner's slow stage runs over five times slower.
+      1_020_000,
     )
   },
 )

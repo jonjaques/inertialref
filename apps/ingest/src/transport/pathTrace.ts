@@ -8,6 +8,8 @@ import {
   phaseNodeAt,
   phaseRow,
   phaseSample,
+  type SkyByDirection,
+  skyByDirection,
   TRACE_BRICK,
   type TraceMedium,
   type TracePhase,
@@ -90,13 +92,27 @@ export interface TraceSun {
 }
 
 /**
- * The sky a cloud stands under, as the march's table gives it (§5.6): the
- * mean radiance over the sphere and the two irradiance differences, per
- * band. A direction `ω` sees `mean·max(0, 1 + ¾·(up·ω_y + sunward·ω·ŝ_h))`,
- * the sky linear in direction that has exactly those three moments, and the
- * one the march's own sky term is the thin-cloud limit under.
+ * The sky a cloud stands under, in one of two forms.
+ *
+ * - **Linear in direction** (`LinearSky`): three moments a band, as the
+ *   march's table gives them (§5.6). A direction `ω` sees
+ *   `mean·max(0, 1 + ¾·(up·ω_y + sunward·ω·ŝ_h))`, the sky linear in
+ *   direction that has exactly those moments, and the one the march's own
+ *   sky term is the thin-cloud limit under.
+ * - **By direction** (`SkyByDirection`): the air's own radiance at a
+ *   quadrature's directions, read between them in the sun's frame. A
+ *   reference lit by the linear sky shares the march's form, so it could
+ *   not see that form's error: under the air's own sky the linear sky's
+ *   sides stand 2% to 234% bright (ruling 007).
+ *
+ * A path that leaves the medium takes the sky at its direction, upward or
+ * downward. Over a ground, a downward path meets the ground first, so the
+ * sky's lower half is read only where there is none.
  */
-export interface TraceSky {
+export type TraceSky = LinearSky | SkyByDirection
+
+/** The sky linear in direction: the mean radiance over the sphere and the two irradiance differences, per band. */
+export interface LinearSky {
   readonly mean: Triple
   readonly up: Triple
   readonly sunward: Triple
@@ -140,7 +156,7 @@ export interface TraceScene {
 }
 
 /** A sky that is dark, and one that is `radiance` in every direction. */
-export const uniformSky = (radiance: number): TraceSky => ({
+export const uniformSky = (radiance: number): LinearSky => ({
   mean: [radiance, radiance, radiance],
   up: [0, 0, 0],
   sunward: [0, 0, 0],
@@ -196,10 +212,17 @@ export function createTracer(scene: TraceScene): Tracer {
 
   // No sun is no bearing. A sky that leans toward one would be drawn with
   // that term at nothing and no word of it: 41% dark in a rim toward the
-  // sun and three times too bright in one seen from behind.
-  if (sun === null && sky.sunward.some((value) => value !== 0))
+  // sun and three times too bright in one seen from behind. A sky by
+  // direction is named by its bearing from the sun throughout.
+  const linear = 'mean' in sky ? sky : null
+  if (
+    sun === null &&
+    (linear === null || linear.sunward.some((value) => value !== 0))
+  )
     throw new Error(
-      'pathTrace: a sky with a sunward term needs a sun for its bearing; give the sun an irradiance of zero',
+      linear === null
+        ? 'pathTrace: a sky by direction needs a sun for its bearing; give the sun an irradiance of zero'
+        : 'pathTrace: a sky with a sunward term needs a sun for its bearing; give the sun an irradiance of zero',
     )
 
   // The sun's disk: its solid angle is 2π·(1 − cos α), and a point of it is
@@ -413,15 +436,28 @@ export function createTracer(scene: TraceScene): Tracer {
     return low + (high - low) * share
   }
 
-  const skyRadiance = (band: number): number =>
-    sky.mean[band]! *
-    Math.max(
-      0,
-      1 +
-        0.75 *
-          (sky.up[band]! * uy +
-            sky.sunward[band]! * (ux * sunwardX + uz * sunwardZ)),
-    )
+  // The sun's frame for the sky: its height is the direction's own `y`,
+  // and its bearing is read from the sun's azimuth, which a sky by
+  // direction mirrors across.
+  const skyRadiance =
+    linear === null
+      ? (band: number): number =>
+          skyByDirection(
+            sky as SkyByDirection,
+            uy,
+            ux * sunwardX + uz * sunwardZ,
+            uz * sunwardX - ux * sunwardZ,
+            band,
+          )
+      : (band: number): number =>
+          linear.mean[band]! *
+          Math.max(
+            0,
+            1 +
+              0.75 *
+                (linear.up[band]! * uy +
+                  linear.sunward[band]! * (ux * sunwardX + uz * sunwardZ)),
+          )
 
   /** `1 − cos` of the angle between a direction and the sun's center. */
   const fromSun = (x: number, y: number, z: number): number =>

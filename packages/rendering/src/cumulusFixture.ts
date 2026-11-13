@@ -12,7 +12,9 @@ import {
   bakeMultipleScattering,
   bakeTransmittance,
   type HazeAuthoring,
+  sampleLut,
   type ScatteringLut,
+  transmittanceFrom,
 } from './atmosphere.ts'
 import { type AirHeights, airHeights, airTopRatio } from './datum.ts'
 import {
@@ -23,8 +25,15 @@ import {
 } from './mieTable.ts'
 import {
   bakeSkyMoments,
+  marchSkyMoments,
+  SKY_BLOCK_COLUMNS,
+  SKY_GROUND_ALBEDO,
+  type SkyAir,
+  skyDirections,
   type SkyMoments,
   skyMomentsAt,
+  type SkyQuadrature,
+  skyRadiance,
 } from './skyIrradiance.ts'
 import { type BodyWeather, regimeWeather } from './weatherClimate.ts'
 import { cloudFieldAt, type FieldClock, fieldClock } from './weatherField.ts'
@@ -865,12 +874,12 @@ export interface CumulusScaling {
  * - `first`: one order of scattering of the sun, the whole phase as the
  *   source and scaled depths both ways, under no sky.
  * - `rest`: every order past the first of the scaled phase, and with it the
- *   sky's light by every order, the sky seen straight through the cloud
- *   included.
+ *   case's own `sky` (the table's moments) by every order, the sky seen
+ *   straight through the cloud included.
  *
  * Their sum is the pixel on the scaled medium, to hold beside the same
  * pixel of `probes`, which is the true one. The sky's share of `rest` is the
- * same row of `scaledSky`.
+ * same row of `CUMULUS_LINEAR_SKIES.table`.
  */
 export interface CumulusScaledProbe {
   readonly case: string
@@ -885,18 +894,51 @@ export interface CumulusScaledProbe {
 
 /**
  * The sky alone on the renderer's scaled medium at one pixel of a case:
- * the case's sky by every order of the scaled phase, the sky seen straight
- * through the cloud included, under a sun that gives its bearing and no
- * light. `rest` of the same row of `scaled` less this is the sun's light
- * past its first order. A row names its case and pixel and no more: its
- * mask and bin are that row of `scaled`'s, and the file is read whole by
- * whoever reads any of it.
+ * a sky by every order of the scaled phase, the sky seen straight through
+ * the cloud included, under a sun that gives its bearing and no light. A
+ * row names its case and pixel and no more: its mask and bin are that row
+ * of `scaled`'s, and the file is read whole by whoever reads any of it.
+ *
+ * Three skies are traced so, each a block a row a row of `scaled`:
+ *
+ * - `CUMULUS_REFERENCE.airSky`, under the air's own sky by direction
+ *   (`cumulusAirSky`): what judges the march's sky term.
+ * - `CUMULUS_LINEAR_SKIES.linear`, under the sky linear in direction on the
+ *   quadrature's moments (`cumulusQuadratureSky`): what judges the march's
+ *   transport under its own form of the sky, apart from that form's error.
+ * - `CUMULUS_LINEAR_SKIES.table`, under the case's own `sky`, the table's
+ *   moments: the sky `scaled`'s `rest` was traced under, so `rest` less
+ *   this row is the sun's light past its first order.
  */
 export interface CumulusSkyProbe {
   readonly case: string
   readonly pixel: readonly [number, number]
   readonly sky: readonly [number, number, number]
   readonly skyError: readonly [number, number, number]
+}
+
+/** A case's sky linear in direction on the moments the quadrature takes at its height and sun, as traced. */
+export interface CumulusSkyMoments {
+  readonly case: string
+  readonly mean: readonly [number, number, number]
+  readonly up: readonly [number, number, number]
+  readonly sunward: readonly [number, number, number]
+}
+
+/**
+ * The sky alone under the two linear skies (`cumulusLinearSkies.generated.ts`),
+ * beside the reference: a file of their own, because three blocks of 1,702
+ * rows do not fit the reference's under its cap.
+ */
+export interface CumulusLinearSkies {
+  readonly format: 'inertialref/cumulus-linear-skies'
+  readonly version: 1
+  /** The quadrature's moments each case's `linear` rows were traced under. */
+  readonly moments: readonly CumulusSkyMoments[]
+  /** Under the linear sky on the quadrature's moments, a row a row of `scaled`. */
+  readonly linear: readonly CumulusSkyProbe[]
+  /** Under the case's own `sky`, the table's moments, a row a row of `scaled`. */
+  readonly table: readonly CumulusSkyProbe[]
 }
 
 /** The generated reference's form (`cumulusReference.generated.ts`). */
@@ -916,8 +958,8 @@ export interface CumulusReference {
   readonly scaling: readonly CumulusScaling[]
   /** The scaled medium itself, a row a pixel of `probes`, in its two parts. */
   readonly scaled: readonly CumulusScaledProbe[]
-  /** The sky alone on the scaled medium, a row a row of `scaled`. */
-  readonly scaledSky: readonly CumulusSkyProbe[]
+  /** The sky alone on the scaled medium under the air's own sky by direction, a row a row of `scaled`. */
+  readonly airSky: readonly CumulusSkyProbe[]
   /**
    * The same tracer on the analytic cumulus, which no field moves: what the
    * GPU tracer is held to on every run of its suite.
@@ -950,18 +992,28 @@ export function cumulusAir(): {
   }
 }
 
+let skyAir: SkyAir | null = null
+/** Earth's air as the sky's march reads it: its recipe and its own two tables, baked once. */
+export function cumulusSkyAir(): SkyAir {
+  if (skyAir === null) {
+    const { haze, topRatio, heights } = cumulusAir()
+    const recipe = atmosphereRecipe(haze, topRatio, heights)
+    const transmittance = bakeTransmittance(recipe)
+    skyAir = {
+      recipe,
+      transmittance,
+      multiScatter: bakeMultipleScattering(recipe, transmittance),
+    }
+  }
+  return skyAir
+}
+
 let skyTable: ScatteringLut | null = null
 /** The sky table of Earth's air (`bakeSkyMoments`), baked once: what the page bakes for Earth and the march reads. */
 export function cumulusSkyTable(): ScatteringLut {
   if (skyTable === null) {
-    const { haze, topRatio, heights } = cumulusAir()
-    const recipe = atmosphereRecipe(haze, topRatio, heights)
-    const transmittance = bakeTransmittance(recipe)
-    skyTable = bakeSkyMoments(
-      recipe,
-      transmittance,
-      bakeMultipleScattering(recipe, transmittance),
-    )
+    const { recipe, transmittance, multiScatter } = cumulusSkyAir()
+    skyTable = bakeSkyMoments(recipe, transmittance, multiScatter)
   }
   return skyTable
 }
@@ -1014,6 +1066,380 @@ export function cumulusSkyRadiance(
       1 + 0.75 * (sky.up[b]! * direction[1] + sky.sunward[b]! * toward),
     )
   return [band(0), band(1), band(2)]
+}
+
+/* ------------------------------------------------------------------------- */
+/* The air's own sky, by direction                                            */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * The quadrature the air's own sky is taken at: 2,016 directions, 32 heights
+ * over the horizon and 16 under it by 42 azimuths on one side of the sun's
+ * vertical plane, at the bake's 16 samples a direction. It is the one the
+ * sky table is held to (`skyIrradiance.test.ts`), so a reference lit by it
+ * and a table judged by it are judged by one sky.
+ */
+export const CUMULUS_SKY_QUADRATURE: SkyQuadrature = {
+  above: 32,
+  below: 16,
+  azimuths: 42,
+  steps: 16,
+}
+
+/**
+ * A sky given by direction at one height under one sun: radiance per band
+ * at a quadrature's own directions (`skyDirections`) and on the level,
+ * read between them by `skyByDirection`. A direction is named in the
+ * sun's frame: its sine of height over the level, and its bearing from the
+ * sun's azimuth, which the sky mirrors across.
+ *
+ * Its rows are the quadrature's heights, each side's ascending away from
+ * the horizon, by `w`, the root of the row's share of its side's span:
+ * `z = horizon ± span·w²`. The quadrature crowds its nodes toward the
+ * horizon in `w`, where the sky is brightest and changes fastest, so a
+ * read in `w` is a read between near neighbors there.
+ *
+ * Over the horizon one row more stands on the level, z = 0, and a read
+ * does not cross it. The air's march lays its samples about the point a
+ * ray passes closest to the ground, which is the ray's start from the
+ * level up and ahead of it under the level, so its radiance has a kink
+ * there: under a sun 15° up at 1.7 km, read across it from the rows either
+ * side, the level away from the sun is 3.1% bright in red. A level line of
+ * sight is a reference's own, so the read takes that row and not a guess.
+ *
+ * It holds the logarithm. Under the horizon the sky falls about
+ * exponentially away from it, the ground's light fading through more air,
+ * and the 16 rows there stand 5.5° apart at 15° down: read linearly in the
+ * radiance itself it is 3.3% bright between two of them under the same sun.
+ */
+export interface SkyByDirection {
+  /** The horizon's sine of height from where the sky is taken: under zero, by the dip. */
+  readonly horizon: number
+  /** Each side's rows' `w`, ascending: over the horizon, the level's among them, and under it. */
+  readonly above: readonly number[]
+  readonly below: readonly number[]
+  /** The row of `above` on the level, which a read does not cross; -1 from the datum, where the level is the horizon. */
+  readonly level: number
+  /** Azimuths over the half circle from the sun's bearing, at its midpoints. */
+  readonly azimuths: number
+  /** The radiance's logarithm by row (over the horizon's, then under it), azimuth and band. */
+  readonly radiance: Float64Array
+}
+
+/** The floor a radiance's logarithm is taken over: no direction of a lit sky is darker. */
+const DARKEST = 1e-30
+
+/**
+ * The sky at a quadrature's directions from radius `r` (the datum is 1),
+ * and on the level at its azimuths: `radiance` fills `out` with the light
+ * arriving from (x, y, z), z up and the sun's azimuth +x, as
+ * `skyMomentsOf` takes it.
+ */
+export function skyByDirectionOf(
+  r: number,
+  quadrature: Pick<SkyQuadrature, 'above' | 'below' | 'azimuths'>,
+  radiance: (x: number, y: number, z: number, out: number[]) => void,
+): SkyByDirection {
+  const { above, below, azimuths } = quadrature
+  if (!(above > 0 && below > 0 && azimuths > 1))
+    throw new Error(
+      'cumulusFixture: a sky by direction needs rows on both sides and two azimuths',
+    )
+  const horizon = -Math.sqrt(Math.max(0, 1 - 1 / (r * r)))
+  const directions = skyDirections(r, quadrature)
+  const light = [0, 0, 0]
+  /** A row: its `w`, and its directions' radiances' logarithms by azimuth and band. */
+  const rows: { w: number; values: number[] }[] = []
+  const take = (w: number, x: number, y: number, z: number, at: number[]) => {
+    radiance(x, y, z, light)
+    for (let c = 0; c < 3; c += 1)
+      at.push(Math.log(Math.max(light[c] as number, DARKEST)))
+    return w
+  }
+  for (let i = 0, k = 0; i < directions.length; i += 4, k += 1) {
+    const z = directions[i + 2] as number
+    if (k % azimuths === 0) {
+      const span = k < above * azimuths ? 1 - horizon : -1 - horizon
+      rows.push({ w: Math.sqrt(Math.max(0, (z - horizon) / span)), values: [] })
+    }
+    take(
+      0,
+      directions[i] as number,
+      directions[i + 1] as number,
+      z,
+      rows[rows.length - 1]!.values,
+    )
+  }
+  const over = rows.slice(0, above)
+  const under = rows.slice(above)
+  let level = -1
+  if (horizon < 0) {
+    const values: number[] = []
+    const arc = Math.PI / azimuths
+    for (let j = 0; j < azimuths; j += 1)
+      take(0, Math.cos((j + 0.5) * arc), Math.sin((j + 0.5) * arc), 0, values)
+    const w = Math.sqrt(-horizon / (1 - horizon))
+    level = over.findIndex((row) => row.w > w)
+    if (level < 0) level = over.length
+    over.splice(level, 0, { w, values })
+  }
+  return {
+    horizon,
+    above: over.map(({ w }) => w),
+    below: under.map(({ w }) => w),
+    level,
+    azimuths,
+    radiance: Float64Array.from(
+      [...over, ...under].flatMap(({ values }) => values),
+    ),
+  }
+}
+
+/** The bracketing nodes of `w` in ascending `nodes`, and the share of the upper; held past both ends. */
+function bracket(nodes: readonly number[], w: number): [number, number] {
+  const last = nodes.length - 1
+  if (!(w > nodes[0]!)) return [0, 0]
+  if (w >= nodes[last]!) return [last, 0]
+  let low = 0
+  let high = last
+  while (high - low > 1) {
+    const middle = (low + high) >> 1
+    if (nodes[middle]! <= w) low = middle
+    else high = middle
+  }
+  return [low, (w - nodes[low]!) / (nodes[low + 1]! - nodes[low]!)]
+}
+
+/**
+ * A band of a sky by direction, toward the unit direction whose sine of
+ * height is `up`, whose component along the sun's azimuth is `toward` and
+ * across it `across`, inside the side of the horizon the direction is on,
+ * in the logarithm. Across the azimuths it is Catmull–Rom, the nodes past
+ * either end taken from their mirrors across the sun's plane. Across the
+ * rows, which are not even in `w`, it is Hermite, each node's slope the
+ * parabola's through it and its two neighbors and one-sided at a side's
+ * ends and at the level. Between the horizon and a side's first row it
+ * holds the row, and past its last row it runs across the pole.
+ *
+ * Measured against the quadrature's own radiance at 512 seeded directions
+ * under each of the reference's two suns at 1.7 km, the median is 0.005%;
+ * `cumulusFixture.test.ts` holds the rest.
+ */
+export function skyByDirection(
+  sky: SkyByDirection,
+  up: number,
+  toward: number,
+  across: number,
+  band: number,
+): number {
+  const over = up >= sky.horizon
+  const span = over ? 1 - sky.horizon : -1 - sky.horizon
+  const nodes = over ? sky.above : sky.below
+  const first = over ? 0 : sky.above.length
+  const level = over ? sky.level : -1
+  const [row, rowShare] = bracket(
+    nodes,
+    Math.sqrt(Math.max(0, (up - sky.horizon) / span)),
+  )
+  const { azimuths } = sky
+  const ring = (i: number, bearing: number): number => {
+    const f = (bearing * azimuths) / Math.PI - 0.5
+    const j = Math.floor(f)
+    const t = f - j
+    const node = (k: number): number => {
+      const mirrored =
+        k < 0 ? -k - 1 : k > azimuths - 1 ? 2 * azimuths - 1 - k : k
+      return sky.radiance[((first + i) * azimuths + mirrored) * 3 + band]!
+    }
+    const p0 = node(j - 1)
+    const p1 = node(j)
+    const p2 = node(j + 1)
+    const p3 = node(j + 2)
+    return (
+      p1 +
+      0.5 *
+        t *
+        (p2 -
+          p0 +
+          t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)))
+    )
+  }
+  const bearing = Math.atan2(Math.abs(across), toward)
+  const last = nodes.length - 1
+  if (row < last) {
+    const value = (i: number): number => ring(i, bearing)
+    const y1 = value(row)
+    const y2 = value(row + 1)
+    const h1 = nodes[row + 1]! - nodes[row]!
+    const secant = (y2 - y1) / h1
+    // The slope at row `i` of the interval [row, row + 1], from the rows of
+    // that interval's own run: no neighbor past a side's end or the level.
+    const slope = (i: number, y: number): number => {
+      const lower = i > 0 && !(i === level && i === row)
+      const upper = i < last && !(i === level && i === row + 1)
+      const before = lower
+        ? (y - value(i - 1)) / (nodes[i]! - nodes[i - 1]!)
+        : NaN
+      const after = upper
+        ? (value(i + 1) - y) / (nodes[i + 1]! - nodes[i]!)
+        : NaN
+      if (!lower) return upper ? after : secant
+      if (!upper) return before
+      const h0 = nodes[i]! - nodes[i - 1]!
+      const h = nodes[i + 1]! - nodes[i]!
+      return (before * h + after * h0) / (h0 + h)
+    }
+    const m1 = slope(row, y1) * h1
+    const m2 = slope(row + 1, y2) * h1
+    const t = rowShare
+    const t2 = t * t
+    const t3 = t2 * t
+    return Math.exp(
+      (2 * t3 - 3 * t2 + 1) * y1 +
+        (t3 - 2 * t2 + t) * m1 +
+        (-2 * t3 + 3 * t2) * y2 +
+        (t3 - t2) * m2,
+    )
+  }
+  // Past the last row the rings close on the pole, and a ring held there
+  // keeps the sky's slope across it as a step. So the read runs along the
+  // great circle through the pole, from the last ring at this bearing to
+  // the same ring at the opposite one.
+  const toPole = (z: number): number => Math.acos(Math.min(Math.abs(z), 1))
+  const z = sky.horizon + span * nodes[last]! ** 2
+  const reach = toPole(z)
+  const share = reach > 0 ? (toPole(up) + reach) / (2 * reach) : 1
+  const opposite = ring(last, Math.PI - bearing)
+  return Math.exp(opposite + (ring(last, bearing) - opposite) * share)
+}
+
+/**
+ * The air's own radiance arriving at radius `r` from (x, y, z), z up, under
+ * a sun at cosine `muSun` whose azimuth is +x, per unit of the sun's
+ * irradiance and before the gain: what `marchSkyMoments` sums at each of
+ * its directions. The air along the ray is `skyRadiance`'s march, which is
+ * the quadrature's own; a ray that meets the ground adds the ground's light
+ * through the air between, Lambert at `SKY_GROUND_ALBEDO` under the sun and
+ * the clear sky at the datum, read between the table's sun columns as the
+ * quadrature reads it.
+ *
+ * The air's transmittance to the ground is the one figure taken otherwise:
+ * the quadrature's march keeps it private, so here it is
+ * `transmittanceFrom` from the ground over `transmittanceFrom` from the
+ * point, both along the reversed ray. `cumulusFixture.test.ts` holds the
+ * moments and the four sides this sums to against `marchSkyMoments` and
+ * `marchSkyFaces`.
+ */
+export function airSkyRadiance(
+  air: SkyAir,
+  quadrature: Pick<SkyQuadrature, 'above' | 'azimuths' | 'steps'>,
+  r: number,
+  muSun: number,
+): (x: number, y: number, z: number, out: number[]) => void {
+  const { recipe } = air
+  const steps = { steps: quadrature.steps }
+  // The ground's light at each of the table's sun cosines, taken when a ray
+  // first needs it: from the datum the directions over the level are the
+  // whole upper hemisphere, and their z-moment is its irradiance.
+  const datum = skyDirections(1, { ...quadrature, below: 0 })
+  const columns = new Map<number, readonly number[]>()
+  const column = (k: number): readonly number[] => {
+    const held = columns.get(k)
+    if (held !== undefined) return held
+    const mu = (k / (SKY_BLOCK_COLUMNS - 1)) * 2 - 1
+    const sky = [0, 0, 0]
+    for (let i = 0; i < datum.length; i += 4) {
+      const z = datum[i + 2] as number
+      const weight = datum[i + 3] as number
+      const light = skyRadiance(
+        air,
+        1,
+        mu,
+        [datum[i] as number, datum[i + 1] as number, z],
+        steps,
+      )
+      for (let c = 0; c < 3; c += 1) sky[c] = sky[c]! + light[c]! * weight * z
+    }
+    const sun = sampleLut(air.transmittance, (mu + 1) / 2, 0)
+    const lit = [0, 1, 2].map(
+      (c) =>
+        (SKY_GROUND_ALBEDO / Math.PI) * ((mu > 0 ? mu * sun[c]! : 0) + sky[c]!),
+    )
+    columns.set(k, lit)
+    return lit
+  }
+  const sx = Math.sqrt(Math.max(0, 1 - muSun * muSun))
+  return (x, y, z, out) => {
+    const [a, b, c] = skyRadiance(air, r, muSun, [x, y, z], steps)
+    out[0] = a
+    out[1] = b
+    out[2] = c
+    if (!(z < 0)) return
+    const discriminant = r * r * (z * z - 1) + 1
+    if (discriminant < 0) return
+    const d = -r * z - Math.sqrt(discriminant)
+    if (!(d > 0)) return
+    const px = x * d
+    const py = y * d
+    const pz = r + z * d
+    const length = Math.hypot(px, py, pz)
+    const cosine = (px * sx + pz * muSun) / length
+    const u =
+      Math.min(Math.max((cosine + 1) / 2, 0), 1) * (SKY_BLOCK_COLUMNS - 1)
+    const k0 = Math.floor(u)
+    const k1 = Math.min(k0 + 1, SKY_BLOCK_COLUMNS - 1)
+    const share = u - k0
+    const g0 = column(k0)
+    const g1 = column(k1)
+    const fromGround = transmittanceFrom(1, -(d + r * z), recipe)
+    const fromHere = transmittanceFrom(r, -z, recipe)
+    for (let band = 0; band < 3; band += 1) {
+      const through =
+        fromHere[band]! > 0 ? fromGround[band]! / fromHere[band]! : 0
+      out[band] =
+        out[band]! + through * (g0[band]! + (g1[band]! - g0[band]!) * share)
+    }
+  }
+}
+
+/** A height over the datum, meters, as a radius in the air's own units: the datum is 1. */
+export function cumulusSkyRadius(height: number): number {
+  return 1 + cumulusSkyHeight(height) * (cumulusSkyAir().recipe.topRatio - 1)
+}
+
+/**
+ * The air's own sky a cumulus stands under (ruling 007): at the height a
+ * case's sky was read at and its sun, the quadrature's radiance at each of
+ * its 2,016 directions, read between them. Neither the sky table nor its
+ * moments: a reference lit by what the march reads could judge neither.
+ */
+export function cumulusAirSky(
+  at: NonNullable<CumulusCase['skyAt']>,
+): SkyByDirection {
+  const r = cumulusSkyRadius(at.height)
+  return skyByDirectionOf(
+    r,
+    CUMULUS_SKY_QUADRATURE,
+    airSkyRadiance(cumulusSkyAir(), CUMULUS_SKY_QUADRATURE, r, at.sunMu),
+  )
+}
+
+/**
+ * The three moments of the air's own sky at the height a case's sky was
+ * read at and its sun: `marchSkyMoments` at `CUMULUS_SKY_QUADRATURE`, and
+ * not the table's read there. The linear sky on these is the march's form
+ * under the right moments, so a reference lit by it judges the march's
+ * transport apart from its sky.
+ */
+export function cumulusQuadratureSky(
+  at: NonNullable<CumulusCase['skyAt']>,
+): SkyMoments {
+  return marchSkyMoments(
+    cumulusSkyAir(),
+    cumulusSkyRadius(at.height),
+    at.sunMu,
+    CUMULUS_SKY_QUADRATURE,
+  )
 }
 
 /** The cloud a reference is traced through: a regime's low level on the datum of an Earth. */

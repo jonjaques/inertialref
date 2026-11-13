@@ -10,6 +10,8 @@ import {
   mieDroplets,
   radiusOf,
   SLAB_REFERENCE,
+  skyByDirection,
+  skyByDirectionOf,
   type TraceMedium,
   traceMedium,
   tracePhase,
@@ -688,6 +690,101 @@ describe('every order', () => {
       Rng.fromSeed(SEED),
     )
     expect(value).toBeCloseTo(1 + 0.75 * 0.5, 12)
+  })
+
+  /** A sky by direction of one radiance a band. */
+  const evenSky = (radiance: Triple) =>
+    skyByDirectionOf(
+      1.0003,
+      { above: 6, below: 4, azimuths: 5 },
+      (_x, _y, _z, out) => {
+        out[0] = radiance[0]
+        out[1] = radiance[1]
+        out[2] = radiance[2]
+      },
+    )
+  const darkSun = (direction: Triple): TraceSun => ({
+    direction,
+    irradiance: [0, 0, 0],
+    angularRadius: 0,
+  })
+
+  it('returns a sky by direction of one radiance from any pixel: the furnace', () => {
+    const sky = evenSky([0.37, 0.5, 0.11])
+    const tracer = createTracer(
+      scene(CUMULUS, {
+        sun: darkSun(unit(0.3, 0.4, -0.8)),
+        sky,
+        ground: { height: -500, albedo: 1 },
+      }),
+    )
+    for (let py = 0; py < 8; py += 1)
+      for (let px = 0; px < 8; px += 1)
+        for (let band = 0; band < 3; band += 1) {
+          const value = tracer.radiance(
+            viewRay(CUMULUS, 8, px, py),
+            [0, 0, 1],
+            band,
+            Rng.fromSeed(
+              deriveSeed(SEED, `furnace-by-direction:${px}:${py}:${band}`),
+            ),
+          )
+          // The read is a logarithm's, so the identity holds to rounding.
+          expect(value).toBeCloseTo([0.37, 0.5, 0.11][band]!, 14)
+        }
+    expect(tracer.counts.scatterings).toBeGreaterThan(100)
+  })
+
+  it('reads a sky by direction by its height and its bearing from the sun, mirrored across the sun’s plane', () => {
+    const empty = traceMedium(
+      [4, 4, 4],
+      [50, 50, 50],
+      new Float32Array(64),
+      new Float32Array(64).fill(RADIUS),
+    )
+    // Bright toward the sun and overhead, in the sky's own frame: z up and
+    // the sun's azimuth +x.
+    const source = (x: number, _y: number, z: number): number =>
+      1 + 0.6 * x + 0.3 * z * z
+    const sky = skyByDirectionOf(
+      1.0003,
+      { above: 24, below: 12, azimuths: 24 },
+      (x, y, z, out) => {
+        out[0] = source(x, y, z)
+        out[1] = 2 * source(x, y, z)
+        out[2] = 3 * source(x, y, z)
+      },
+    )
+    // The sun stands north-east; a direction's bearing is from there.
+    const sun = unit(1, 0.7, 1)
+    const tracer = createTracer(scene(empty, { sun: darkSun(sun), sky }))
+    const rng = Rng.fromSeed(SEED)
+    for (let i = 0; i < 64; i += 1) {
+      const d = unit(rng.next() - 0.5, rng.next() - 0.5, rng.next() - 0.5)
+      const toward = (d[0] + d[2]) / Math.SQRT2
+      const across = (d[2] - d[0]) / Math.SQRT2
+      for (let band = 0; band < 3; band += 1) {
+        const value = tracer.radiance([100, 100, 100], d, band, rng)
+        expect(value).toBeCloseTo(
+          skyByDirection(sky, d[1], toward, across, band),
+          12,
+        )
+        expect(value).toBeCloseTo(
+          skyByDirection(sky, d[1], toward, -across, band),
+          12,
+        )
+        // And it is the source's own, to the read's error between rows.
+        expect(
+          Math.abs(value / ((band + 1) * source(toward, across, d[1])) - 1),
+        ).toBeLessThan(0.01)
+      }
+    }
+  })
+
+  it('refuses a sky by direction where the scene has no sun to bear on', () => {
+    expect(() =>
+      createTracer(scene(CUMULUS, { sun: null, sky: evenSky([1, 1, 1]) })),
+    ).toThrow(/a sky by direction needs a sun for its bearing/)
   })
 })
 
