@@ -310,9 +310,8 @@ That round fixes `B_form`, `B_light` and F for good.
 5. the picture's rows of §6 that name a plate hold.
 
 **On E3 every seat also gives a forced ranking of the candidate against the
-deck on Form,** in both confirming rounds. It is reported and gates nothing.
-Two seats ranking the deck above in either round sends §9's question to the
-owner.
+deck on Form,** in both confirming rounds. It is reported and gates nothing:
+the owner has answered §9's question in advance.
 
 **A pass is confirmed, then banked.** A picture passes when two consecutive
 rounds pass it on an unchanged plate, the second with fresh delegates and
@@ -758,12 +757,13 @@ role and a record of their own, and what has to match depends on the role.
 **Three calls are the owner's** (§10). He is also shown the experiment sheet at
 each phase boundary, before the scores, and is not a gate on it.
 
-**The whole face against the deck.** E3 passes on §3.5's bar against EPIC. If
-two seats rank the deck above the volume on Form in either confirming round
-(§3.5), the deck's map is not deleted until the owner chooses between two
-things: retire the deck, or hold the MVP. Keeping the deck at distance is a second model and is not
-offered. He is shown a day's time-lapse of each, since a still cannot show
-that the deck never changes.
+**The whole face against the deck.** E3 passes on §3.5's bar against EPIC.
+The owner chose "Retire it regardless" in a dialog on 2026-11-10: the deck
+goes once the volume passes E3's bar against the satellite photographs, even
+if two panel seats rank the deck above it on Form in either confirming round
+(§3.5). The forced ranking is still taken and reported. Keeping the deck at
+distance is a second model and is not offered. The answer is recorded in the
+[handoff's record](README.md#the-record).
 
 ---
 
@@ -775,7 +775,7 @@ that the deck never changes.
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The ground's bars, B1 to B3                                                                              | 5.0 ms on `ground`, 4.0 on `horizon`, 4.0 on `inside`. The plan's 2.9 is the reported target                                                                                                                              |
 | A Retina miss, B9                                                                                        | The verdict lists each stance that holds 60 Hz without the clouds and not with them. He accepts each by name, or the Retina default takes a cheaper lever and the Retina plates and costs are taken again at that default |
-| The deck's deletion, if two seats rank the deck above the volume on E3's Form in either confirming round | The map stays until he chooses: retire the deck, or hold the MVP                                                                                                                                                          |
+| The deck's deletion, if two seats rank the deck above the volume on E3's Form in either confirming round | **Answered:** "Retire it regardless" (2026-11-10). The deck goes once the volume passes E3's bar; the forced ranking is still reported ([record](README.md#the-record))                                                   |
 
 ### Proposed here
 
