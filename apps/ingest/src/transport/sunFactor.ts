@@ -1121,9 +1121,14 @@ export function judge(
   readonly sumWith: number
 } {
   const factor = (r: FitRay): number => formFactor(pair, r.elevation)
+  // The factor a cloud and sun could take that leaves the least in the
+  // logarithm's RMS is the mean of its rays' logarithms. Its sum ratio,
+  // which the pooled factor is made of, weighs the bright rays and leaves
+  // more: 0.406 on the module's rays, where 0.393 is reachable.
   const least = groups(rays, (r) => `${r.cloud}|${r.sun}`).flatMap((g) => {
-    const own = Math.log(ratioOf(g))
-    return g.map((r) => Math.log(r.h / r.t) - own)
+    const logs = g.map((r) => Math.log(r.h / r.t))
+    const own = logs.reduce((sum, x) => sum + x, 0) / logs.length
+    return logs.map((x) => x - own)
   })
   return {
     rays: rays.length,

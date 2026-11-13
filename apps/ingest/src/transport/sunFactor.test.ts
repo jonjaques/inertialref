@@ -82,9 +82,9 @@ describe('the fit of the factor', () => {
       raysUnder(pair, (_, ray) => (ray % 2 === 0 ? 1.1 : 1 / 1.1)),
       pair,
     )
-    // The pair leaves the spread itself; a cloud's own sum ratio, the least, is a sum's and not a logarithm's mean, and leaves it to a hundredth.
+    // The pair is the mean of each cloud and sun's logarithms here, so it leaves exactly the least: the spread itself.
     expect(scattered.with).toBeCloseTo(Math.log(1.1), 12)
-    expect(scattered.least).toBeCloseTo(Math.log(1.1), 2)
+    expect(scattered.least).toBeCloseTo(Math.log(1.1), 12)
   })
 
   it('reads l alone at every sun where a is zero, and the floor holds a sun under the horizon', () => {
@@ -180,5 +180,24 @@ describe('the source a part was marched through', () => {
       }),
     ).toMatch(/sourceHash/)
     expect(sourceHash()).toMatch(/^[0-9a-f]{32}$/)
+  })
+})
+
+describe('the least any factor leaves', () => {
+  it('centers a cloud and sun on the mean of its rays’ logarithms, not on its sum ratio', () => {
+    // Two rays of one cloud and sun, §5.5 over the tracer 1 on a faint ray and 4 on a bright one: the sum ratio is 41/11,
+    // and the factor that leaves the least in the logarithm is the geometric mean, 2, which leaves ln 2 on each.
+    const ray = (t: number, ratio: number): FitRay => ({
+      label: `${t}`,
+      cloud: 'a',
+      sun: '30-behind',
+      elevation: 30,
+      view: 'level',
+      depth: 3,
+      t,
+      h: ratio * t,
+    })
+    const judged = judge([ray(1, 1), ray(10, 4)], { l: 1, a: 0 })
+    expect(judged.least).toBeCloseTo(Math.log(2), 12)
   })
 })
