@@ -224,6 +224,7 @@ describe('the sky table', () => {
           expect(read.mean[c]! / summed.mean[c]!).toBeCloseTo(1, 4)
           expect(read.up[c]).toBeCloseTo(summed.up[c]!, 5)
           expect(read.sunward[c]).toBeCloseTo(summed.sunward[c]!, 5)
+          expect(read.upper[c]).toBeCloseTo(summed.upper[c]!, 5)
         }
       }
   })
@@ -264,7 +265,9 @@ describe('the sky table', () => {
           const read = skyMomentsAt(source, h, mu)
           for (let c = 0; c < 3; c += 1) {
             expect(read.mean[c]! / MULTI_SCATTER_FLOOR).toBeCloseTo(1, 4)
-            expect([read.up[c], read.sunward[c]]).toEqual([0, 0])
+            expect([read.up[c], read.sunward[c], read.upper[c]]).toEqual([
+              0, 0, 0,
+            ])
           }
         }
   })
@@ -374,6 +377,50 @@ function rowError(read: SkyMoments, exact: SkyMoments): number {
  * height miss by up to 60% under 6 km.
  */
 const ROW_TOLERANCE = 0.03
+
+describe('the upper side’s term, c', () => {
+  it('is zero under a sky linear in direction', () => {
+    const directions = skyDirections(1, { above: 6, below: 3, azimuths: 8 })
+    const moments = skyMomentsOf(directions, (x, _y, z, out) => {
+      out[0] = 0.5 * (1 + 0.75 * (0.8 * z + 0.3 * x))
+      out[1] = 0.5 * (1 + 0.75 * (-0.4 * z))
+      out[2] = 0.5
+    })
+    for (let c = 0; c < 3; c += 1) expect(moments.upper[c]).toBeCloseTo(0, 12)
+  })
+
+  it('makes the upper side the quadrature’s own, and the lower by Δ', () => {
+    for (const r of [1, 1.0005, 1.004])
+      for (const mu of [0.9, 0.26, -0.05]) {
+        const moments = marchSkyMoments(air, r, mu)
+        const faces = marchSkyFaces(air, r, mu)
+        for (let c = 0; c < 3; c += 1) {
+          const scale = Math.PI * moments.mean[c]!
+          const { up, upper } = moments
+          expect(scale * (1 + up[c]! / 2 + upper[c]!)).toBeCloseTo(
+            faces.above[c]!,
+            12,
+          )
+          expect(scale * (1 - up[c]! / 2 + upper[c]!)).toBeCloseTo(
+            faces.below[c]!,
+            12,
+          )
+        }
+      }
+  })
+
+  it('is band k’s in block k’s alpha, and the guards repeat it', () => {
+    const y = 4
+    for (const k of [0, 17, 31]) {
+      const summed = marchSkyMoments(air, rowRadius(y), columnSun(k))
+      for (let block = 0; block < 3; block += 1) {
+        const at = (x: number) =>
+          table.data[(y * SKY_TABLE_WIDTH + block * 34 + x) * 4 + 3]!
+        expect(at(1 + k)).toBeCloseTo(summed.upper[block]!, 5)
+      }
+    }
+  })
+})
 
 describe('the sky table’s rows', () => {
   it('rise with height, stand where the read finds them, and crowd into the first scale heights', () => {

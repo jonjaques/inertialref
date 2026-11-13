@@ -22,6 +22,9 @@ import {
  *   block 1  Δ           the upper side's irradiance less the lower's, over π·L̄
  *   block 2  Δ_s         the sunward side's less the far side's, over π·L̄
  *
+ * and in block k's alpha band k's `c`, how far the upper side's irradiance
+ * stands from the one the first two blocks imply (`SkyTableMoments.upper`).
+ *
  * Radiance is per unit of the sun's irradiance and before `ATMOSPHERE_GAIN`,
  * the unit the cloud's first order is gathered in, so the composite's one
  * gain lights both.
@@ -179,6 +182,22 @@ export interface SkyMoments {
   readonly up: Bands
   /** Δ_s: (E_sunward − E_away)/(π·L̄), across a vertical face turned to the sun's azimuth. */
   readonly sunward: Bands
+}
+
+/**
+ * The sky's moments as the table holds them: the three blocks and the
+ * alphas' fourth number, per band.
+ */
+export interface SkyTableMoments extends SkyMoments {
+  /**
+   * c = E_above/(π·L̄) − (1 + Δ/2): the upper side's irradiance less the
+   * one a sky linear in direction with this L̄ and Δ would give it, over
+   * π·L̄. The air's sky is brightest at its horizon, so the linear sky
+   * misjudges each side of a thick deck by 2% to over 200% (ruling 007);
+   * with `c` the upper side is exact, and the lower is
+   * π·L̄·(1 − Δ/2 + c) by Δ's definition. Zero where L̄ is at the floor.
+   */
+  readonly upper: Bands
 }
 
 /** What the sky's march reads: the air's recipe and its own two tables. */
@@ -377,17 +396,20 @@ function addInto(
  * sides, so Δ and Δ_s are zero where L̄ is under `MULTI_SCATTER_FLOOR`, and
  * L̄ is held at it.
  */
-function momentsFrom(sums: Sums, at: number): SkyMoments {
+function momentsFrom(sums: Sums, at: number): SkyTableMoments {
   const band = (c: number) => {
     const k = at * SUMS + c * 5
     const total = sums[k] as number
     const mean = total / (4 * Math.PI)
     if (!(mean > MULTI_SCATTER_FLOOR))
-      return { mean: MULTI_SCATTER_FLOOR, up: 0, sunward: 0 }
+      return { mean: MULTI_SCATTER_FLOOR, up: 0, sunward: 0, upper: 0 }
+    const up = (4 * (sums[k + 1] as number)) / total
     return {
       mean,
-      up: (4 * (sums[k + 1] as number)) / total,
+      up,
       sunward: (4 * (sums[k + 2] as number)) / total,
+      // π·L̄ is total/4.
+      upper: (4 * (sums[k + 3] as number)) / total - (1 + up / 2),
     }
   }
   const [r, g, b] = [band(0), band(1), band(2)]
@@ -395,6 +417,7 @@ function momentsFrom(sums: Sums, at: number): SkyMoments {
     mean: [r.mean, g.mean, b.mean],
     up: [r.up, g.up, b.up],
     sunward: [r.sunward, g.sunward, b.sunward],
+    upper: [r.upper, g.upper, b.upper],
   }
 }
 
@@ -406,7 +429,7 @@ function momentsFrom(sums: Sums, at: number): SkyMoments {
 export function skyMomentsOf(
   directions: Float64Array,
   radiance: (x: number, y: number, z: number, out: number[]) => void,
-): SkyMoments {
+): SkyTableMoments {
   const sums: Sums = new Float64Array(SUMS)
   const light = [0, 0, 0]
   for (let i = 0; i < directions.length; i += 4) {
@@ -806,7 +829,7 @@ export function marchSkyMoments(
   r: number,
   muSun: number,
   quadrature: SkyQuadrature = DEFAULT_QUADRATURE,
-): SkyMoments {
+): SkyTableMoments {
   const reads = readsOf(air, quadrature)
   const ground = groundLight(air, reads, quadrature)
   const directions = skyDirections(r, quadrature)
@@ -906,7 +929,7 @@ function texelColumn(block: number, column: number): number {
   )
 }
 
-/** A table that holds no sky: L̄ at the floor, no difference between any two sides. */
+/** A table that holds no sky: L̄ at the floor, no difference between any two sides, `c` zero. */
 export function darkSkyTable(height = SKY_TABLE_HEIGHT): SkyTable {
   const data = new Float32Array(SKY_TABLE_WIDTH * height * 4)
   const floor = Math.log(MULTI_SCATTER_FLOOR)
@@ -918,7 +941,6 @@ export function darkSkyTable(height = SKY_TABLE_HEIGHT): SkyTable {
         data[index + 1] = floor
         data[index + 2] = floor
       }
-      data[index + 3] = 1
     }
   return { width: SKY_TABLE_WIDTH, height, data, rows: NO_SKY_ROWS }
 }
@@ -942,11 +964,18 @@ export function bakeSkyMoments(
   const shares = skyRowShares(rows)
   const { data } = darkSkyTable()
   const ceiling = recipe.topRatio - 1
-  const write = (block: number, column: number, y: number, v: Bands) => {
+  const write = (
+    block: number,
+    column: number,
+    y: number,
+    v: Bands,
+    alpha: number,
+  ) => {
     const index = (y * SKY_TABLE_WIDTH + texelColumn(block, column)) * 4
     data[index] = v[0]
     data[index + 1] = v[1]
     data[index + 2] = v[2]
+    data[index + 3] = alpha
   }
   for (let y = 0; y < SKY_TABLE_HEIGHT; y += 1) {
     const r = 1 + (shares[y] as number) * ceiling
@@ -971,12 +1000,14 @@ export function bakeSkyMoments(
         [1, moments.up],
         [2, moments.sunward],
       ] as const) {
-        write(block, column, y, value)
+        // Block k's alpha is band k's c: three bands in three spare channels.
+        const alpha = moments.upper[block]
+        write(block, column, y, value, alpha)
         // The guards repeat the block's edge columns, so a read clamped to
         // the block's first or last cosine filters against itself.
-        if (column === 0) write(block, -SKY_BLOCK_GUARD, y, value)
+        if (column === 0) write(block, -SKY_BLOCK_GUARD, y, value, alpha)
         if (column === SKY_BLOCK_COLUMNS - 1)
-          write(block, SKY_BLOCK_COLUMNS, y, value)
+          write(block, SKY_BLOCK_COLUMNS, y, value, alpha)
       }
     }
   }
@@ -996,7 +1027,7 @@ export function skyMomentsAt(
   table: ScatteringLut & { readonly rows?: SkyRows },
   height01: number,
   muSun: number,
-): SkyMoments {
+): SkyTableMoments {
   if (table.rows === undefined)
     throw new Error(
       'skyMomentsAt: the table carries no rows; read a SkyTable from bakeSkyMoments or darkSkyTable',
@@ -1009,23 +1040,26 @@ export function skyMomentsAt(
   const y1 = Math.min(y0 + 1, table.height - 1)
   const fx = x - x0
   const fy = y - y0
-  const read = (block: number): [number, number, number] => {
+  const read = (block: number): [number, number, number, number] => {
     const at = (column: number, row: number, c: number) =>
       table.data[
         (row * table.width + texelColumn(block, column)) * 4 + c
       ] as number
-    const out: [number, number, number] = [0, 0, 0]
-    for (let c = 0; c < 3; c += 1) {
+    const out: [number, number, number, number] = [0, 0, 0, 0]
+    for (let c = 0; c < 4; c += 1) {
       const low = at(x0, y0, c) * (1 - fx) + at(x1, y0, c) * fx
       const high = at(x0, y1, c) * (1 - fx) + at(x1, y1, c) * fx
       out[c] = low * (1 - fy) + high * fy
     }
     return out
   }
-  const [lr, lg, lb] = read(0)
+  const [lr, lg, lb, cr] = read(0)
+  const [ur, ug, ub, cg] = read(1)
+  const [sr, sg, sb, cb] = read(2)
   return {
     mean: [Math.exp(lr), Math.exp(lg), Math.exp(lb)],
-    up: read(1),
-    sunward: read(2),
+    up: [ur, ug, ub],
+    sunward: [sr, sg, sb],
+    upper: [cr, cg, cb],
   }
 }
