@@ -110,16 +110,24 @@ export function skyRowsOf(recipe: AtmosphereRecipe): SkyRows {
   if (!(ceiling > 0)) return NO_SKY_ROWS
   const mean = (v: readonly number[]) =>
     ((v[0] as number) + (v[1] as number) + (v[2] as number)) / 3
-  const gas = mean(recipe.betaRayleigh) * recipe.hRayleigh
-  const haze = mean(recipe.mieExtinction) * recipe.hMie
+  const columns = [
+    mean(recipe.betaRayleigh) * recipe.hRayleigh,
+    mean(recipe.mieExtinction) * recipe.hMie,
+  ]
+  // Weighed against the larger: only their ratio places the rows, and a
+  // subnormal column normalized as it stands rounds the last row's share
+  // of the whole to the whole, which puts the last row at the top.
+  const larger = Math.max(columns[0] as number, columns[1] as number)
+  const gas = (columns[0] as number) / larger
+  const haze = (columns[1] as number) / larger
   const b = ceiling / recipe.hRayleigh
   const d = ceiling / recipe.hMie
   const whole = gas * -Math.expm1(-b) + haze * -Math.expm1(-d)
-  if (!(whole > 0)) {
+  const last = whole * (1 - 1 / SKY_TOP_SHARE)
+  if (!(larger > 0) || !(last > 0 && last < whole)) {
     const even = 1 / SKY_EVEN_SCALE
     return [1 / (-Math.expm1(-even) * (1 - 1 / SKY_TOP_SHARE)), even, 0, 0]
   }
-  const last = whole * (1 - 1 / SKY_TOP_SHARE)
   return [gas / last, b, haze / last, d]
 }
 

@@ -508,6 +508,22 @@ describe('the sky table’s rows', () => {
     }
   })
 
+  it('keep the last row under the top when the columns are subnormal', () => {
+    // At a thickness of 1e-322 the columns are subnormal, and normalized
+    // as they stand the whole and the last row's share round to one
+    // number, which put the last row at the top, where no light comes down.
+    const rows = skyRowsOf(
+      atmosphereRecipe({ ...haze, thickness: 1e-322, ozone: 0 }, 1.0157, {
+        rayleigh: 8.5 / 6371,
+        aerosol: 1.2 / 6371,
+      }),
+    )
+    const shares = skyRowShares(rows)
+    for (let y = 1; y < SKY_TABLE_HEIGHT; y += 1)
+      expect(shares[y]!).toBeGreaterThan(shares[y - 1]!)
+    expect(shares[SKY_TABLE_HEIGHT - 1]!).toBeLessThan(0.99)
+  })
+
   it('hold the last row over it, to the top, where the sky from above is not yet dark', () => {
     const last = rowShares[SKY_TABLE_HEIGHT - 1]!
     for (const mu of [-0.1, 0.3, 0.9]) {
