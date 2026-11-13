@@ -174,17 +174,30 @@ interface Lights {
   readonly factor: boolean
 }
 
-/**
- * The march over one subject's fixture: level rays north through the
- * pixels of the reference's image, one a thread.
- */
-async function cumulusRig(
+/** A subject's fixture: the field's own cloud at its place, isolated. */
+function subjectFixture(
   subject: (typeof CUMULUS_REFERENCE.subjects)[number],
-) {
+): CumulusFixture {
   const { weather, clock } = subjectWeather(subject)
-  const { fixture } = isolateCumulus(
+  return isolateCumulus(
     cumulusFixture(weather, clock, CUMULUS_FIELD_SUN, subject.place),
-  )
+  ).fixture
+}
+
+/** The light a draw stands in: where its sun is, how wide, and its sky. */
+interface Scene {
+  /** Toward the sun, unit, in the fixture's east, up and north. */
+  readonly toSun: Triple
+  /** Radians. */
+  readonly sunRadius: number
+  readonly sky: CumulusCase['sky']
+}
+
+/**
+ * The march over one fixture: level rays north from where each is told to
+ * start, one a thread.
+ */
+async function fixtureRig(fixture: CumulusFixture) {
   const traced = fixtureMedium(fixture)
   const [nx, ny, nz] = fixture.size
   const extent: Triple = [
@@ -371,14 +384,16 @@ async function cumulusRig(
 
   return {
     fixture,
-    /** A case's probes, drawn: each pixel the mean of its jitters. */
+    /** Where a pixel of an image `pixels` a side starts its ray, as the reference's pixels do. */
+    origin: (pixels: number, pixel: readonly [number, number]): Triple =>
+      viewRay(traced, pixels, ...pixel),
+    /** Rays drawn from their starts, meters from the fixture's low corner: each the mean of its jitters. */
     async draw(
-      held: CumulusCase,
-      probes: readonly CumulusProbe[],
+      held: Scene,
+      origins: readonly Triple[],
       lights: Lights,
     ): Promise<Drawn[]> {
-      const view = CUMULUS_VIEWS.find((item) => item.id === held.view)!
-      const toSun = viewSun(view)
+      const { toSun } = held
       body.sun.value.set(toSun[0], toSun[1], toSun[2])
       body.sunUp.value = toSun[1]
       atlas.serve(held.sunRadius, null)
@@ -397,11 +412,10 @@ async function cumulusRig(
       )
       const drawn: Drawn[] = []
       const each = Math.floor(capacity / JITTERS)
-      for (let start = 0; start < probes.length; start += each) {
-        const batch = probes.slice(start, start + each)
+      for (let start = 0; start < origins.length; start += each) {
+        const batch = origins.slice(start, start + each)
         const rays = input.array as Float32Array
-        batch.forEach((probe, i) => {
-          const origin = viewRay(traced, held.pixels, ...probe.pixel)
+        batch.forEach((origin, i) => {
           for (let k = 0; k < JITTERS; k += 1)
             rays.set([...origin, (k + 0.5) / JITTERS], (i * JITTERS + k) * 4)
         })
@@ -622,14 +636,22 @@ describe('the isolated cumulus, against the path-traced reference', () => {
     const failures = { on: 0, off: 0 }
     const passed = { on: 0, off: 0 }
     for (const subject of CUMULUS_REFERENCE.subjects) {
-      const rig = await cumulusRig(subject)
+      const rig = await fixtureRig(subjectFixture(subject))
       for (const held of CUMULUS_REFERENCE.cases) {
         if (held.subject !== subject.id) continue
         const at = CUMULUS_REFERENCE.probes.flatMap((probe, i) =>
           probe.case === held.id ? [i] : [],
         )
         const probes = at.map((i) => CUMULUS_REFERENCE.probes[i]!)
+        const origins = probes.map((probe) =>
+          rig.origin(held.pixels, probe.pixel),
+        )
         const view = CUMULUS_VIEWS.find((item) => item.id === held.view)!
+        const scene: Scene = {
+          toSun: viewSun(view),
+          sunRadius: held.sunRadius,
+          sky: held.sky,
+        }
         // The sky behind the cloud, which a pixel's transmittance passes.
         const behind = cumulusSkyRadiance(held.sky, viewSun(view), [0, 0, 1])
         const pixelsOf = (drawn: readonly Drawn[], sky: number): Triple[] =>
@@ -643,7 +665,12 @@ describe('the isolated cumulus, against the path-traced reference', () => {
         for (const factor of [true, false]) {
           const key = factor ? 'on' : 'off'
           const whole = pixelsOf(
-            await rig.draw(held, probes, { first: 1, sun: 1, sky: 1, factor }),
+            await rig.draw(scene, origins, {
+              first: 1,
+              sun: 1,
+              sky: 1,
+              factor,
+            }),
             1,
           )
           for (const pixel of whole)
@@ -671,20 +698,20 @@ describe('the isolated cumulus, against the path-traced reference', () => {
          * the sun's light past it against `rest` less the sky, with the
          * factor on and off, and the sky alone against `scaledSky`.
          */
-        const firstOnly = await rig.draw(held, probes, {
+        const firstOnly = await rig.draw(scene, origins, {
           first: 1,
           sun: 1,
           sky: 0,
           factor: false,
         })
         const higher = {
-          on: await rig.draw(held, probes, {
+          on: await rig.draw(scene, origins, {
             first: 0,
             sun: 1,
             sky: 0,
             factor: true,
           }),
-          off: await rig.draw(held, probes, {
+          off: await rig.draw(scene, origins, {
             first: 0,
             sun: 1,
             sky: 0,
@@ -692,7 +719,7 @@ describe('the isolated cumulus, against the path-traced reference', () => {
           }),
         }
         const skyOnly = pixelsOf(
-          await rig.draw(held, probes, {
+          await rig.draw(scene, origins, {
             first: 0,
             sun: 0,
             sky: 1,
@@ -752,4 +779,84 @@ describe('the isolated cumulus, against the path-traced reference', () => {
     expect(failures.on).toBeLessThanOrEqual(FAILED.on)
     expect(failures.off).toBeLessThanOrEqual(FAILED.off)
   }, 900_000)
+})
+
+describe('a uniform box, level at its lit wall', () => {
+  /*
+   * A plane slab's source on a body with sides, where it is plainest: a
+   * uniform box 1,200 m square and 1,400 m tall, of a scaled extinction of
+   * 0.025 m⁻¹ at 10 µm, seen level at the middle of the wall the sun
+   * lights, under a dark sky. The slab reads the wall's sun at its cosine
+   * to the vertical where the wall takes it at its cosine to the wall, so
+   * the sun's light past first order is low under a low sun and high
+   * under a high one, by the ratio of the two: the path tracer has
+   * 2.02 × 10⁻¹ sr⁻¹ under a sun 15° up behind the eye, where the CPU's
+   * march of design §5.5 reads −75%, and 9.33 × 10⁻² under one 65° up,
+   * where it reads +99% (the depth rule's two critics).
+   *
+   * **Recorded, and gated by nothing but its sign:** a later rule for a
+   * face is watched moving both.
+   */
+  const TRACED = [
+    { elevation: 15, traced: 0.202, cpu: -0.75 },
+    { elevation: 65, traced: 0.0933, cpu: 0.99 },
+  ] as const
+
+  it('reads the sun’s light past first order low under a 15° sun and high under a 65° one, with the factor of the sun and without', async () => {
+    const voxel = 25
+    const size = [64, 64, 64] as const
+    const count = size[0] * size[1] * size[2]
+    const sigma = new Float32Array(count)
+    const inside = (index: number, low: number, high: number): boolean =>
+      (index + 0.5) * voxel > low && (index + 0.5) * voxel < high
+    // 1,200 m square about the grid's middle, from 100 m to 1,500 m up.
+    for (let y = 0; y < size[1]; y += 1)
+      for (let z = 0; z < size[2]; z += 1)
+        for (let x = 0; x < size[0]; x += 1)
+          if (
+            inside(x, 200, 1400) &&
+            inside(y, 100, 1500) &&
+            inside(z, 200, 1400)
+          )
+            sigma[(y * size[2] + z) * size[0] + x] = 0.025
+    const rig = await fixtureRig({
+      size,
+      voxel,
+      base: 0,
+      sigma,
+      radius: new Float32Array(count).fill(10),
+      extinction: sigma,
+    })
+    const dark = { mean: [0, 0, 0], up: [0, 0, 0], sunward: [0, 0, 0] } as const
+    // Level, at the middle of the wall that faces the eye, from south of it.
+    const origin: Triple = [800, 800, -voxel]
+    for (const { elevation, traced, cpu } of TRACED) {
+      const e = (elevation * Math.PI) / 180
+      const scene: Scene = {
+        // Behind the eye, which looks north.
+        toSun: [0, Math.sin(e), -Math.cos(e)],
+        sunRadius: 0.0046251225177849735,
+        sky: dark,
+      }
+      const past = async (factor: boolean): Promise<number> => {
+        const [drawn] = await rig.draw(scene, [origin], {
+          first: 0,
+          sun: 1,
+          sky: 0,
+          factor,
+        })
+        return drawn!.light[1]
+      }
+      const plain = await past(false)
+      const factored = await past(true)
+      console.info(
+        `cloudCumulus: a box's lit wall under a sun ${elevation}° up behind the eye: ${plain.toExponential(3)} sr⁻¹, ${signed(plain / traced - 1)}% of the traced ${traced} (the CPU's march ${signed(cpu)}%); with the factor of the sun ${factored.toExponential(3)}, ${signed(factored / traced - 1)}%`,
+      )
+      expect(plain).toBeGreaterThan(0)
+      // Low under the low sun and high under the high one, as the slab's
+      // rule makes it: a rule that finds the face moves both toward zero.
+      expect(Math.sign(plain / traced - 1)).toBe(Math.sign(cpu))
+    }
+    rig.dispose()
+  }, 600_000)
 })

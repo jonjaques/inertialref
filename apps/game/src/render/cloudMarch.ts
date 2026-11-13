@@ -275,6 +275,13 @@ export interface CloudMarchOptions {
    * fewer, and reads broken cumulus from above 10 to 16 points higher.
    */
   readonly statisticalPoints?: 1 | 2
+  /**
+   * Lay the light after first order's view in the eye's frame, the ray's
+   * cosine to the eye's vertical and the sun's there, where the march lays
+   * it in each sample's own: the form a test builds to record what the
+   * sample's frame is worth at a distance.
+   */
+  readonly eyeFrame?: boolean
 }
 
 /** Out of cloud: from 50 m, growing 1% a step, to 1 km (plan §5.2). */
@@ -1038,6 +1045,8 @@ export function cloudMarch(
     sample: Lit,
     rise: Node<'float'>,
     up: Node<'vec3'>,
+    /** The sun's cosine to `up`. */
+    sunRise: Node<'float'>,
   ): Node<'float'> {
     const above = at.sunMu.greaterThanEqual(0)
     // To the lit face's outward normal, of light traveling to the eye: the
@@ -1046,7 +1055,7 @@ export function cloudMarch(
     const muV = select(above, rise.negate(), rise)
     // That light and the sun's, each laid on the face.
     const eyeLaid = up.mul(rise).sub(ray.direction)
-    const sunLaid = up.mul(at.sunMu).sub(once.sun)
+    const sunLaid = up.mul(sunRise).sub(once.sun)
     const laid = length(eyeLaid).mul(length(sunLaid))
     const bearing = select(
       laid.greaterThan(NO_BEARING),
@@ -1427,12 +1436,11 @@ export function cloudMarch(
         // The sample's own vertical, from heights: the frame the light
         // after first order is laid in.
         const radiusAt = max(once.datum.add(at.altitude), 1)
-        const rise = once.eyeRadius
-          .mul(ray.mu)
-          .add(at.distance)
-          .div(radiusAt)
-          .toVar()
-        const up = once.eyeUp.add(at.offset).div(radiusAt)
+        const eyeFrame = options.eyeFrame === true
+        const rise = eyeFrame
+          ? ray.mu
+          : once.eyeRadius.mul(ray.mu).add(at.distance).div(radiusAt).toVar()
+        const up = eyeFrame ? body.up : once.eyeUp.add(at.offset).div(radiusAt)
         const medium: Lit = {
           level,
           radius,
@@ -1448,7 +1456,14 @@ export function cloudMarch(
               )
             : ofLevel(once.share, level),
         }
-        const higher = slabSource(at, sunDepth, medium, rise, up).toVar()
+        const higher = slabSource(
+          at,
+          sunDepth,
+          medium,
+          rise,
+          up,
+          eyeFrame ? body.sunUp : at.sunMu,
+        ).toVar()
         const sky =
           skyTable === null
             ? null

@@ -5,6 +5,7 @@ import {
   sunFactorPair,
 } from '@inertialref/rendering'
 import { CLOUD_TRANSPORTS } from './cloudLevers.ts'
+import { MARCH_RIG_RADIUS, type Triple } from './cloudMarchRig.ts'
 import {
   BANDS,
   scatteringAngle,
@@ -390,5 +391,53 @@ describe('a deck under a sun below its horizon', () => {
       expect(worst).toBeLessThan(5e-3)
     }
     held.dispose()
+  }, 600_000)
+})
+
+describe('a deck at the horizon, 100 km out', () => {
+  /*
+   * The view is laid in the sample's own frame. A ray's cosine to the
+   * local vertical turns 0.9° in 100 km on a body of Earth's radius, and
+   * the table's first three view cosines stand within 7° of the horizon,
+   * where a source turns fastest. Recorded: the same deck drawn with the
+   * view laid in the eye's frame, the form a hoist out of the loop would
+   * take.
+   */
+  it('records what the sample’s frame is worth against the eye’s on a deck entered 100 km away', async () => {
+    const sample = await slabRig(gpu, { sun: 'exact', phase: false })
+    const eye = await slabRig(gpu, {
+      sun: 'exact',
+      phase: false,
+      march: { eyeFrame: true },
+    })
+    const HEIGHT = 2000
+    const REACH = 100_000
+    const eyeRadius = MARCH_RIG_RADIUS + sample.top + HEIGHT
+    const topRadius = MARCH_RIG_RADIUS + sample.top
+    // The ray that meets the deck's top `REACH` out, by the two radii.
+    const mu =
+      -(REACH * REACH + eyeRadius * eyeRadius - topRadius * topRadius) /
+      (2 * eyeRadius * REACH)
+    const level = Math.sqrt(1 - mu * mu)
+    const views = [0, 90, 180].map((azimuth): Triple => [
+      level * Math.cos((azimuth * Math.PI) / 180),
+      mu,
+      level * Math.sin((azimuth * Math.PI) / 180),
+    ])
+    for (const sunMu of [0.5, 0.1]) {
+      const drawn: Triple[][] = []
+      for (const held of [sample, eye]) {
+        held.place(10, 20, sunMu, 'reflected', HEIGHT)
+        held.uniforms.trace.maxSteps.value = 192
+        drawn.push(await held.light(views))
+      }
+      const apart = views.map((_, i) => drawn[1]![i]![1] / drawn[0]![i]![1] - 1)
+      for (const light of drawn[0]!) expect(light[1]).toBeGreaterThan(0)
+      console.info(
+        `cloudSlab: a deck entered 100 km out under μ₀ ${sunMu}, the eye's frame over the sample's, toward the sun, across it and away: ${apart.map((value) => `${value >= 0 ? '+' : ''}${percent(value)}`).join(', ')}`,
+      )
+    }
+    sample.dispose()
+    eye.dispose()
   }, 600_000)
 })

@@ -84,7 +84,11 @@ export interface SlabRig {
     depth: number,
     sunMu: number,
     side: SlabReferenceRow['side'],
+    /** Meters the eye stands outside the face it looks at: one, unless told. */
+    outside?: number,
   ): void
+  /** The slab's top, meters over the datum. */
+  readonly top: number
   /** The level's cumuliform share, which the factor of the sun is blended by. */
   share(convective: number): void
   /** The cloudy share of the slab's columns: one, a resolved slab, until told. */
@@ -197,9 +201,10 @@ export async function slabRig(
   return {
     uniforms,
     source,
-    place(r, depth, sunMu, side) {
+    top: TOP,
+    place(r, depth, sunMu, side, outside = 1) {
       placeBody(uniforms, {
-        eye: side === 'reflected' ? TOP + 1 : SLAB_BASE - 1,
+        eye: side === 'reflected' ? TOP + outside : SLAB_BASE - outside,
         layers: [[SLAB_BASE, TOP]],
       })
       placeSun(uniforms, sunMu)
