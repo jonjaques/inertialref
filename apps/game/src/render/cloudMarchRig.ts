@@ -104,6 +104,9 @@ export function placeBody(
   body.cleared.value = 0
   body.layers.radius.value.set(10, 10, 10)
   body.layers.cell.value.set(cell, cell, cell)
+  // The levels' own heights, which the sun's taps end at.
+  body.layers.base.value.set(flat[0]!, flat[2]!, flat[4]!)
+  body.layers.top.value.set(flat[1]!, flat[3]!, flat[5]!)
   const trace = uniforms.trace
   trace.farDistance.value = 1e9
   trace.maxSteps.value = 1024

@@ -8,6 +8,7 @@ import {
   CLOUD_JITTERS,
   CLOUD_LEVER_KINDS,
   CLOUD_LIGHT_TAPS,
+  CLOUD_MAX_STEPS,
   CLOUD_OVERS,
   CLOUD_PHASE_BINS,
   CLOUD_PHASE_MODES,
@@ -24,6 +25,7 @@ import {
   isCloudLevers,
   resolveCloudLevers,
 } from './cloudLevers.ts'
+import { CLOUD_MAX_STEPS_COUNTED } from './cloudMarch.ts'
 
 /** The levers a history texel's meaning depends on (§3.4). */
 const RESET_LEVERS = [
@@ -56,7 +58,8 @@ const MALFORMED: Record<keyof CloudLevers, readonly unknown[]> = {
   scrubSeconds: [Number.NaN, Infinity, '10800'],
   flySpeed: [-1, Number.NaN],
   traceScale: [0.25, 4, '1'],
-  maxSteps: [0, -8, 1.5, Infinity],
+  // Past what a ray's counts by kind hold (`CLOUD_MAX_STEPS_COUNTED`).
+  maxSteps: [0, -8, 1.5, Infinity, 1024, 4096],
   jitterFrame: [-1, 2.5, Number.NaN, '0', undefined],
   served: [0, undefined, {}],
   second: [false, undefined],
@@ -152,6 +155,15 @@ describe('the cloud levers', () => {
       }
     },
   )
+
+  it('take every step budget a ray counts exactly, every rung among them, and refuse the next', () => {
+    const take = (maxSteps: number): boolean =>
+      isCloudLevers({ ...DEFAULT_CLOUD_LEVERS, maxSteps })
+    expect(CLOUD_MAX_STEPS_COUNTED).toBe(1006)
+    for (const rung of CLOUD_MAX_STEPS) expect(take(rung)).toBe(true)
+    expect(take(CLOUD_MAX_STEPS_COUNTED)).toBe(true)
+    expect(take(CLOUD_MAX_STEPS_COUNTED + 1)).toBe(false)
+  })
 
   it('refuse a missing lever and a misspelled one', () => {
     const { traceScale: _, ...missing } = DEFAULT_CLOUD_LEVERS

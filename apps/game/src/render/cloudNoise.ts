@@ -608,6 +608,37 @@ export function mesoscaleRateNode(
  * (17 cells) is 0.67 rad, and 1.33 rad at fog's 500 m cell.
  */
 export const MESOSCALE_STEP_MAX = 1.5
+/**
+ * The largest phase step, radians, a read beside the chain takes to second
+ * order (`MesoscaleRay.near`): the term left out is δ³/6 of a wave's push,
+ * a hundredth of it at 0.4. A light tap 500 m along the sun is 0.18 rad of
+ * the shortest wave at a 1,000 m cell.
+ */
+const MESOSCALE_NEAR_MAX = 0.4
+
+/** The displacement carried along a ray, and read beside it. */
+export interface MesoscaleRay {
+  (
+    turned: Node<'vec3'>,
+    phases: readonly [Node<'vec3'>, Node<'vec3'>],
+    cell: Node<'float'>,
+    level: Node<'float'>,
+  ): Node<'vec3'>
+  /**
+   * The displacement at a point beside the chain's last, the chain left
+   * where it stands: each carried wave turned through the step to second
+   * order, which is the displacement there and its rate along the step. A
+   * light tap's read: it leaves the ray toward the sun, and the next step
+   * of the march finds the chain where it left it. A point in another level
+   * than the chain's, or further than the series holds, pays its six sines.
+   */
+  near(
+    turned: Node<'vec3'>,
+    phases: readonly [Node<'vec3'>, Node<'vec3'>],
+    cell: Node<'float'>,
+    level: Node<'float'>,
+  ): Node<'vec3'>
+}
 
 /*
  * sin x and cos x by their Taylor series to x⁹ and x¹⁰: at |x| = 1.5 the
@@ -685,17 +716,52 @@ const reduced = (phase: Node<'vec3'>): Node<'vec3'> =>
  * the calls are inlined into one function, as every kernel that reads the
  * field is; a call from a separate WGSL function would not see them.
  */
-export function createMesoscaleRay(): (
-  turned: Node<'vec3'>,
-  phases: readonly [Node<'vec3'>, Node<'vec3'>],
-  cell: Node<'float'>,
-  level: Node<'float'>,
-) => Node<'vec3'> {
+export function createMesoscaleRay(): MesoscaleRay {
   const held = property('float')
   const at = property('vec3')
   const sines = [property('vec3'), property('vec3')] as const
   const cosines = [property('vec3'), property('vec3')] as const
-  return (turned, phases, cell, level) => {
+  const pushed = (
+    a: Node<'vec3'>,
+    b: Node<'vec3'>,
+    cell: Node<'float'>,
+  ): Node<'vec3'> =>
+    WAVE_PUSH[0]!
+      .mul(a.x)
+      .add(WAVE_PUSH[1]!.mul(a.y))
+      .add(WAVE_PUSH[2]!.mul(a.z))
+      .add(WAVE_PUSH[3]!.mul(b.x))
+      .add(WAVE_PUSH[4]!.mul(b.y))
+      .add(WAVE_PUSH[5]!.mul(b.z))
+      .mul(cell) as Node<'vec3'>
+  const near: MesoscaleRay['near'] = (turned, phases, cell, level) => {
+    const step = phasesOf(turned.sub(at), cell)
+    const largest = max(
+      max(abs(step[0]).x, max(abs(step[0]).y, abs(step[0]).z)),
+      max(abs(step[1]).x, max(abs(step[1]).y, abs(step[1]).z)),
+    )
+    const displaced = vec3(0).toVar()
+    If(
+      held.equal(level.add(1)).and(largest.lessThan(MESOSCALE_NEAR_MAX)),
+      () => {
+        // sin(θ + δ) to δ², from the carried sine and cosine.
+        const turnedBy = (half: 0 | 1): Node<'vec3'> =>
+          sines[half]
+            .mul(step[half].mul(step[half]).mul(-0.5).add(1))
+            .add(cosines[half].mul(step[half])) as Node<'vec3'>
+        displaced.assign(pushed(turnedBy(0), turnedBy(1), cell))
+      },
+    ).Else(() => {
+      displaced.assign(mesoscaleNode(turned, phases, cell))
+    })
+    return displaced
+  }
+  const ray = (
+    turned: Node<'vec3'>,
+    phases: readonly [Node<'vec3'>, Node<'vec3'>],
+    cell: Node<'float'>,
+    level: Node<'float'>,
+  ): Node<'vec3'> => {
     const key = level.add(1)
     const step = phasesOf(turned.sub(at), cell)
     const largest = max(
@@ -721,17 +787,9 @@ export function createMesoscaleRay(): (
     })
     at.assign(turned)
     held.assign(key)
-    const [a, b] = sines
-    return WAVE_PUSH[0]!
-      .mul(a.x)
-      .add(WAVE_PUSH[1]!.mul(a.y))
-      .add(WAVE_PUSH[2]!.mul(a.z))
-      .add(WAVE_PUSH[3]!.mul(b.x))
-      .add(WAVE_PUSH[4]!.mul(b.y))
-      .add(WAVE_PUSH[5]!.mul(b.z))
-      .mul(cell)
-      .toVar() as Node<'vec3'>
+    return pushed(sines[0], sines[1], cell).toVar() as Node<'vec3'>
   }
+  return Object.assign(ray, { near })
 }
 
 /*

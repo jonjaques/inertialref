@@ -112,7 +112,7 @@ export function createCloudField(): CloudField {
     sky,
     source,
     jitter,
-    sun: cloudSunFn({ uniforms, medium, depth: grid }),
+    sun: cloudSunFn({ uniforms, medium, depth: grid, tap: media.tap }),
     farAtlas,
     farSecond,
     bakes,

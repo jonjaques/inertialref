@@ -483,6 +483,20 @@ export interface LevelStatistics {
    * is the genus's σ, blended along the row as the profile blends it.
    */
   readonly gain: Float64Array
+  /**
+   * The mean scaled depth of the cloudy columns, the ones over
+   * `CLEAR_DEPTH` that `depth` and `shape` are measured over.
+   *
+   * **The level's mean, not a place's.** A footprint a few kilometers
+   * across holds its own columns, and their mean is half to one and a half
+   * times this. And it is not the mean the two beside it imply:
+   * `shape·(e^(depth/shape) − 1)` is the mean of the gamma whose
+   * transmittance at once and at twice the depth is the columns', and that
+   * is 1.3 to 3 times this one (12.1 against 9.2 on a fair cumulus level,
+   * 36.7 against 12.0 on an overcast's). A light that weighs a column by
+   * its depth reads this; a transmittance reads the other two.
+   */
+  readonly mean: Float64Array
 }
 
 /** The gamma shape that stands for depths that do not spread: `(1 + τ/k)^(−k)` is then `e^(−τ)` to a part in 10⁴ at τ 1. */
@@ -711,6 +725,7 @@ function buildStatistics(
   const shape = new Float64Array(size).fill(UNSPREAD_SHAPE)
   const sight = new Float64Array(size).fill(2.5 * profile.cell)
   const gain = new Float64Array(size).fill(1)
+  const columnMean = new Float64Array(size)
   const columns = samplePaths(profile, thickness, STATISTICS_COLUMNS, 0, 0)
   const [stratiform, cumuliform] = [
     GENUS_TABLE[spec.stratiform].sigma,
@@ -737,13 +752,16 @@ function buildStatistics(
       let cloudy = 0
       let once = 0
       let twice = 0
+      let total = 0
       for (const d of pathDepths(profile, columns, cover, row, thickness, 0, g))
         if (d > CLEAR_DEPTH) {
           cloudy += 1
           once += Math.exp(-d)
           twice += Math.exp(-2 * d)
+          total += d
         }
       if (cloudy === 0) continue
+      columnMean[at] = total / cloudy
       const share = cloudy / columns.length
       const k = gammaShape(once / cloudy, twice / cloudy)
       const inCloud = -Math.log(once / cloudy)
@@ -799,7 +817,7 @@ function buildStatistics(
     for (let i = STATISTICS_COVERS - 2; i >= 0; i -= 1)
       if (fraction[i * PROFILE_ROWS + row]! < SPARSE)
         sight[i * PROFILE_ROWS + row] = sight[(i + 1) * PROFILE_ROWS + row]!
-  return { fraction, depth, shape, sight, gain }
+  return { fraction, depth, shape, sight, gain, mean: columnMean }
 }
 
 /*
@@ -833,6 +851,7 @@ export function readLevelStatistics(
   readonly shape: number
   readonly sight: number
   readonly gain: number
+  readonly mean: number
 } {
   const x = clamp01(cover) * (STATISTICS_COVERS - 1)
   const i = Math.min(STATISTICS_COVERS - 2, Math.floor(x))
@@ -852,6 +871,7 @@ export function readLevelStatistics(
     shape: read(stats.shape),
     sight: read(stats.sight),
     gain: read(stats.gain),
+    mean: read(stats.mean),
   }
 }
 

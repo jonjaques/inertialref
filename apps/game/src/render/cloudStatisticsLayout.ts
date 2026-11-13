@@ -23,9 +23,11 @@ export const statisticsKey = (spec: LevelSpec): string =>
 /**
  * The table's texels, `[row][texel][rgba]`, row j at a convective share of
  * j/7 as the profile's rows: texel i, the cover i/16, holds (fraction,
- * depth, shape, sight in cells), and texel 17 + i holds (gain, 0, 0, 0).
+ * depth, shape, sight in cells), and texel 17 + i holds (gain, mean, 0, 0).
  * The sight is in cells so a half float holds it: a sparse row's runs to a
- * hundred cells, 500 km at cirrus's.
+ * hundred cells, 500 km at cirrus's. The mean is the cloudy columns' mean
+ * scaled depth, the level's and no place's (`LevelStatistics.mean`): a
+ * cumulonimbus's is a few hundred, and a half float holds 65,504.
  */
 export function statisticsTexels(spec: LevelSpec): Float32Array {
   const stats = levelStatistics(spec)
@@ -39,8 +41,9 @@ export function statisticsTexels(spec: LevelSpec): Float32Array {
       texels[a + 1] = stats.depth[from]!
       texels[a + 2] = stats.shape[from]!
       texels[a + 3] = stats.sight[from]! / cell
-      texels[(row * STATISTICS_TEXELS + STATISTICS_COVERS + i) * 4] =
-        stats.gain[from]!
+      const b = (row * STATISTICS_TEXELS + STATISTICS_COVERS + i) * 4
+      texels[b] = stats.gain[from]!
+      texels[b + 1] = stats.mean[from]!
     }
   return texels
 }

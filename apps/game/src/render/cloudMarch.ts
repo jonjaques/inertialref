@@ -1,5 +1,6 @@
 import type { Node } from 'three/webgpu'
 import {
+  bool,
   Break,
   clamp,
   exp,
@@ -18,6 +19,7 @@ import {
   saturate,
   select,
   sqrt,
+  uint,
   vec2,
   vec3,
 } from 'three/tsl'
@@ -50,6 +52,7 @@ import type {
   CloudRay,
   CloudSample,
 } from './cloudNodes.ts'
+import type { CloudSunTaps } from './cloudSunlight.ts'
 import type { CloudTraceDeps } from './cloudTrace.ts'
 import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
 
@@ -118,6 +121,13 @@ import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
  * against the budget: at most thirteen of them a ray, so a budget of
  * `maxSteps` is at most that many steps more.
  *
+ * **Between two levels a step is a stride.** Outside every level's crossing
+ * no medium holds cloud, so a step there finds nothing and carries only the
+ * air, which is sampled once in eight steps. Under cirrus over cumulus 71 of
+ * a ray's 106 steps crossed the 6.6 km between the two that way. A stride
+ * is those eight steps taken as one, with the air sampled at each: the same
+ * points along the ray to within a step, and an eighth of the iterations.
+ *
  * **Jitter is the first step's length**: a share ξ of the step the schedule
  * gives, so the grid every later step falls on moves by up to that step from
  * frame to frame while the span is still covered from t₀ on. Starting the
@@ -151,8 +161,24 @@ export interface CloudMarchResult {
   readonly opacity: Node<'float'>
   /** Steps taken, the uncounted first and boundary ones among them. */
   readonly steps: Node<'float'>
-  /** 1 where the budget's floor lengthened a step past the schedule's: resolution traded for reach. */
+  /**
+   * 1 where the budget's floor lengthened a step in cloud past the
+   * schedule's: resolution traded for reach. A clear step the floor
+   * lengthens loses nothing, and is not counted: a ray that grazes a high
+   * level from 57 km up has its first 50 m made 56 m at any budget.
+   */
   readonly exhausted: Node<'float'>
+  /**
+   * The ray's work by kind, for the instrument's counters, as one unsigned
+   * integer: its steps in cloud, plus `KIND_GAP` for each step outside
+   * every level, plus `KIND_SUN` for each sun it took. Its steps inside a
+   * level that found no cloud are `steps` less the first two. One register,
+   * because a register a step is not free on a ray of 193 steps: three of
+   * them cost the grazing rows 0.07 ms a frame.
+   */
+  readonly kinds: Node<'uint'>
+  /** The taps the ray's suns read, and the taps their early out left unread (`CloudSunTaps`). */
+  readonly taps: Node<'vec2'>
   /**
    * Meters from the eye at which the cloud's optical depth along the ray
    * reaches ln 50, placed inside the step that crosses it by the step's own
@@ -190,6 +216,11 @@ export interface CloudMarchOptions {
    * high at a step depth of 0.3, and more at every longer one.
    */
   readonly sourceAtStart?: boolean
+  /**
+   * Take the schedule's own steps between two levels, where the march takes
+   * a stride: the march a test holds the strides to.
+   */
+  readonly unstrided?: boolean
 }
 
 /** Out of cloud: from 50 m, growing 1% a step, to 1 km (plan §5.2). */
@@ -220,6 +251,27 @@ const UNCOUNTED_STEPS = 16
 const EXIT_TRANSMITTANCE = 0.01
 /** The air is sampled every eighth step, and wherever a ray enters cloud, leaves it or changes level. */
 const AIR_EVERY = 8
+/**
+ * A stride between two levels, in the schedule's steps: the eight the air
+ * is sampled once in, each 1% longer than the last.
+ */
+const STRIDE = (STEP_GROWTH ** AIR_EVERY - 1) / (STEP_GROWTH - 1)
+/**
+ * What a step outside every level and a sun add to `CloudMarchResult.kinds`:
+ * ten bits a count of the integer's 32, so each is exact to 1,023. A float
+ * holds a whole number exactly to 2²⁴ only, which is three counts of eight
+ * bits: 256 steps in cloud carried into the count outside every level.
+ */
+export const KIND_GAP = 1024
+export const KIND_SUN = KIND_GAP * KIND_GAP
+/**
+ * The largest step budget the kinds count exactly, and so the largest the
+ * `maxSteps` lever takes. A ray runs at most its budget and
+ * `UNCOUNTED_STEPS` more, and takes a sun at each step in cloud and one
+ * more where its last step is closed: 1,006 + 16 + 1 is a field's 1,023.
+ * Past it 1,024 steps in cloud read as none, and one outside every level.
+ */
+export const CLOUD_MAX_STEPS_COUNTED = KIND_GAP - 1 - UNCOUNTED_STEPS - 1
 /** The sky's light on a cloud, a placeholder: Ψ × σ_s × ½, isotropic (§5.10). */
 const SKY_SHARE = 0.5
 const ISOTROPIC = 1 / (4 * Math.PI)
@@ -632,8 +684,12 @@ function rayRegisters(ray: CloudRay) {
     growth: float(STEP_FIRST).toVar(),
     /** 1 until the first step has taken the jitter. */
     fresh: float(1).toVar(),
-    /** 1 once the budget's floor has lengthened a step. */
+    /** 1 once the budget's floor has lengthened a step in cloud. */
     floored: float(0).toVar(),
+    /** Steps in cloud, steps outside every level and suns, packed: the counters'. */
+    kinds: uint(0).toVar(),
+    /** Taps read and taps left unread. */
+    taps: vec2(0).toVar(),
     /** T_c so far. */
     through: float(1).toVar(),
     /** The crossing the last sample stood in. */
@@ -824,15 +880,29 @@ export function cloudMarch(
      * field at a cover of one, and its depth is the step's own. The switch
      * is the medium's, formed here from the same cell and the same dither.
      */
-    const statistical = s.footprint.greaterThan(
-      ofLevel(body.layers.cell, m.layer).mul(switchShare),
-    )
-    const depth = crossingDepth(
-      m.fraction,
-      m.sigma.mul(length).mul(select(statistical, column.spread, float(1))),
-      exponent,
-      select(statistical, column.shape, float(UNSPREAD_SHAPE)),
-    ).toVar()
+    const statistical = s.footprint
+      .greaterThan(ofLevel(body.layers.cell, m.layer).mul(switchShare))
+      .toVar()
+    /*
+     * A whole column whose depths do not spread passes Beer's law, which
+     * is what the crossing's law answers for it at any exponent: so the
+     * law is taken only where the step is statistical or its column is
+     * partly clear. Its logarithms and exponentials are a third dearer
+     * than a read of the field, and under an overcast, where every step is
+     * resolved, they were 0.46 ms of the frame for an answer the step
+     * already held.
+     */
+    const depth = m.sigma.mul(length).toVar()
+    If(statistical.or(m.fraction.lessThan(1)), () => {
+      depth.assign(
+        crossingDepth(
+          m.fraction,
+          m.sigma.mul(length).mul(select(statistical, column.spread, float(1))),
+          exponent,
+          select(statistical, column.shape, float(UNSPREAD_SHAPE)),
+        ),
+      )
+    })
     // 1 − e^−τ by its series under τ = 0.01, where the subtraction cancels
     // in float32.
     const opacity = depth.mul(stepShare(depth)).toVar()
@@ -881,28 +951,67 @@ export function cloudMarch(
     r.through.assign(after)
   }
 
-  /** The schedule's step, lengthened to the budget's floor: an even share, in ln t, of what is left to the handover. */
-  function stepLength(cloudy: Node<'bool'>): Node<'float'> {
+  /**
+   * The schedule's step, lengthened to the budget's floor: an even share,
+   * in ln t, of what is left to the handover. `between` is a sample outside
+   * every level's crossing, where the step is a stride, and `ahead` the
+   * meters to the next boundary, which cuts it.
+   */
+  function stepLength(
+    cloudy: Node<'bool'>,
+    between: Node<'bool'>,
+    ahead: Node<'float'>,
+  ): Node<'float'> {
     const outside = min(
       STEP_LONGEST,
       max(STEP_FIRST, r.growth.mul(STEP_GROWTH)),
-    )
+    ).toVar()
     const inside = clamp(
       float(STEP_DEPTH).div(max(m.sigma, TINY)),
       r.t.mul(STEP_FLOOR_SLOPE).add(STEP_FLOOR),
       outside,
     )
-    const schedule = select(cloudy, inside, outside).toVar()
+    const stride = min(outside.mul(STRIDE), AIR_EVERY * STEP_LONGEST)
+    const schedule = select(
+      cloudy,
+      inside,
+      select(between, stride, outside),
+    ).toVar()
     const left = max(trace.maxSteps.sub(r.counted), 1)
     const from = max(r.t, BUDGET_FROM)
     const share = from.mul(exp(log(max(stop.div(from), 1)).div(left)).sub(1))
     // The last counted step goes the rest of the way, whatever its share
     // was formed from.
     const least = select(left.lessThanEqual(1), stop.sub(r.t), share).toVar()
-    If(least.greaterThan(schedule), () => {
+    // A step in cloud the floor lengthens is resolution lost. A clear one
+    // loses nothing: the air is on its own schedule.
+    If(cloudy.and(least.greaterThan(schedule)), () => {
       r.floored.assign(1)
     })
     r.growth.assign(schedule)
+    // A stride leaves the schedule where the steps it stands for would
+    // have: at the last of its eight, or at the one the next boundary cuts.
+    // The level past the gap is then sampled on the grid the single steps
+    // lay, to the meter: left three steps ahead, a cirrus seen near the sun
+    // drew 8% brighter in the mean, by where its samples fell.
+    If(between.and(cloudy.not()), () => {
+      const whole = floor(
+        log(
+          max(ahead, 0)
+            .mul(STEP_GROWTH - 1)
+            .div(outside)
+            .add(1),
+        ).div(Math.log(STEP_GROWTH)),
+      )
+      r.growth.assign(
+        min(
+          outside.mul(
+            exp(min(whole, AIR_EVERY - 1).mul(Math.log(STEP_GROWTH))),
+          ),
+          STEP_LONGEST,
+        ),
+      )
+    })
     return max(schedule, least).mul(
       select(r.fresh.greaterThan(0), jitter, float(1)),
     )
@@ -960,7 +1069,12 @@ export function cloudMarch(
       // The air when it is due, and where the cloud in front of it changes:
       // a cloud's first steps are its lit face, and the air's throughput
       // eight steps stale is up to 8 km of out-of-cloud steps behind them.
-      const due = r.steps.mod(AIR_EVERY).equal(0)
+      // Between two levels every step is a stride, and the air's sample.
+      const between =
+        options.unstrided === true
+          ? bool(false)
+          : here.index.lessThan(int(0)).toVar()
+      const due = r.steps.mod(AIR_EVERY).equal(0).or(between)
       const turned = cloudy
         .and(waiting.not())
         .or(waiting.and(cloudy.not()))
@@ -994,6 +1108,10 @@ export function cloudMarch(
           body,
         )
         const sunlight = sun.air.mul(sun.cloud).toVar()
+        r.kinds.addAssign(uint(KIND_SUN))
+        const { taken, skipped } = sun as Partial<CloudSunTaps>
+        if (taken !== undefined && skipped !== undefined)
+          r.taps.addAssign(vec2(taken, skipped))
         If(waiting, () => {
           closeStep(sunlight)
         })
@@ -1016,13 +1134,23 @@ export function cloudMarch(
       If(done, () => {
         Break()
       })
-      const next = min(r.t.add(stepLength(cloudy)), bound).toVar()
+      const next = min(
+        r.t.add(stepLength(cloudy, between, bound.sub(r.t))),
+        bound,
+      ).toVar()
       // The first step and one cut at a boundary are not the budget's.
       const cut = next.greaterThanEqual(bound).and(bound.lessThan(stop))
       r.counted.addAssign(
         select(r.fresh.greaterThan(0).or(cut), float(0), float(1)),
       )
       r.fresh.assign(0)
+      r.kinds.addAssign(
+        select(
+          cloudy,
+          uint(1),
+          select(here.index.lessThan(int(0)), uint(KIND_GAP), uint(0)),
+        ),
+      )
       If(cloudy, () => {
         step(here, s, next.sub(r.t))
       })
@@ -1081,6 +1209,8 @@ export function cloudMarch(
     opacity,
     steps: r.steps,
     exhausted: r.floored,
+    kinds: r.kinds,
+    taps: r.taps,
     range: r.range,
   }
 }
