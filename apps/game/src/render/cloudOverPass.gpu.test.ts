@@ -1293,9 +1293,26 @@ describe('the composite’s form, chosen a frame at a time', () => {
           stop()
         }
       }
+      // The caches come back by their own schedule after the clouds come
+      // on: a rebuild of the volume's 68 slices and the grid's 32 at eight a
+      // frame spans both windows below, and a window that holds the grid's
+      // first slices would not be the other's work. Under the rig's held
+      // clock a settled cache bakes nothing.
+      const settled = (): void => {
+        frames(4)
+        for (
+          let more = 0;
+          rig.system!.report.settle?.pending === true && more < 400;
+          more += 20
+        )
+          frames(20)
+        // A cache that never settles fails here by name, not as two
+        // windows that ran unlike work.
+        expect(rig.system!.report.settle?.pending).toBe(false)
+      }
       try {
         set({ over: 'chain' })
-        frames(4)
+        settled()
         const chained = await labels()
         expect(chained).not.toContain(OVER_PASS_LABEL)
         expect(chained.filter((label) => label === CHAIN_PASS_LABEL)).toEqual([
@@ -1307,7 +1324,7 @@ describe('the composite’s form, chosen a frame at a time', () => {
         expect(chained).toContain('cloud trace')
         expect(chained).toContain('cloud history')
         set({ over: 'passes' })
-        frames(4)
+        settled()
         const passes = await labels()
         expect(passes).toContain(OVER_PASS_LABEL)
         expect(passes).not.toContain(CHAIN_PASS_LABEL)

@@ -241,7 +241,7 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     set({ force: 'none' })
     frames(50)
     // Another weather is another field: every slice of both caches starts
-    // over. The counts are cloudSunSchedule.test.ts's: three levels of 34
+    // over. The counts are cloudSunSchedule.test.ts's: two levels of 34
     // slices (the stack and a slice each side), the grid's 32, 8 a frame.
     const cap = DEFAULT_CLOUD_LEVERS.sunSlices
     const stack = CLOUD_VOLUME_SLICES + 2
@@ -279,6 +279,7 @@ describe('what the resources hold', () => {
     rg8unorm: 2,
     rgba8unorm: 4,
     r16float: 2,
+    rg16float: 4,
     rgba16float: 8,
     r32float: 4,
     rgba32float: 16,
@@ -358,6 +359,7 @@ describe('what the device is asked for', () => {
     rg8unorm: 2,
     rgba8unorm: 4,
     r16float: 2,
+    rg16float: 4,
     rgba16float: 8,
     r32float: 4,
     rgba32float: 16,

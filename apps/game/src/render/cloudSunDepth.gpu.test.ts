@@ -1,6 +1,11 @@
 import fc from 'fast-check'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type Node, StorageBufferAttribute, type Texture } from 'three/webgpu'
+import {
+  type ComputeNode,
+  type Node,
+  StorageBufferAttribute,
+  type Texture,
+} from 'three/webgpu'
 import {
   float,
   Fn,
@@ -8,6 +13,7 @@ import {
   instanceIndex,
   int,
   ivec3,
+  Loop,
   select,
   sin,
   storage,
@@ -55,8 +61,10 @@ import {
   SUN_GRID_REACH,
   SUN_GRID_SIZE,
 } from './cloudSunGrid.ts'
+import { cloudSunFn } from './cloudSunlight.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import {
+  CLOUD_VOLUME_HELD,
   CLOUD_VOLUME_SIZE,
   CLOUD_VOLUME_TEXELS,
   CloudVolume,
@@ -97,7 +105,7 @@ const RAMP = DEFAULT_CLOUD_LEVERS.sunRamp
 const [, , SLICES] = SUN_GRID_SIZE
 /** A level of the volume with its guards, and the levels it holds. */
 const STACK = 34
-const LEVELS = 3
+const LEVELS = CLOUD_VOLUME_HELD.length
 
 const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(v.x, v.y, v.z)
@@ -352,6 +360,8 @@ function slab(base: number, top: number, sigma: number): CloudMediumFn {
 
 type Read = (k: number) => Node<'float'>
 type Write = (k: number, value: Node<'float'>) => void
+/** What the sun answers at a sample. */
+type CloudSunLight = ReturnType<ReturnType<typeof cloudSunFn>>
 
 async function run(
   count: number,
@@ -390,21 +400,34 @@ interface Depths {
   readonly behind: number
 }
 
+/** Both pairs: the depth of the cells' mean transmittance, and their mean depth. */
+interface BothDepths extends Depths {
+  readonly meanDepthToSun: number
+  readonly meanDepthWhole: number
+}
+
 /** What the grid answers at each offset. */
-async function depths(test: Rig, offsets: readonly Vec3[]): Promise<Depths[]> {
+async function depths(
+  test: Rig,
+  offsets: readonly Vec3[],
+): Promise<BothDepths[]> {
   const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
-  const out = await run(offsets.length, inputs, 3, 4, (read, write) => {
+  const out = await run(offsets.length, inputs, 3, 6, (read, write) => {
     const got = test.depth.depths(vec3(read(0), read(1), read(2)))
     write(0, got.toSun)
     write(1, got.whole)
     write(2, got.weight)
     write(3, got.behind)
+    write(4, got.meanDepthToSun)
+    write(5, got.meanDepthWhole)
   })
   return offsets.map((_, k) => ({
-    toSun: out[4 * k]!,
-    whole: out[4 * k + 1]!,
-    weight: out[4 * k + 2]!,
-    behind: out[4 * k + 3]!,
+    toSun: out[6 * k]!,
+    whole: out[6 * k + 1]!,
+    weight: out[6 * k + 2]!,
+    behind: out[6 * k + 3]!,
+    meanDepthToSun: out[6 * k + 4]!,
+    meanDepthWhole: out[6 * k + 5]!,
   }))
 }
 
@@ -597,7 +620,7 @@ describe('a uniform slab', () => {
       dispose(test)
     })
 
-  it('holds a depth past its knee on the tangent, and no depth past 64', async () => {
+  it('holds a depth past its knee on the tangent and its depth channel as the depth itself, and no depth past 64 in either', async () => {
     const DENSE: Slab = [1000, 2000, 0.02]
     const eye = eyeAt(EYE)
     for (const elevation of [37.5, 5]) {
@@ -619,6 +642,16 @@ describe('a uniform slab', () => {
       let capped = 0
       offsets.forEach((offset, k) => {
         const expected = slabDepth(eye, offset, sun, DENSE)
+        // The depth channel is linear in the depth, so on a slab a read
+        // between slices is the depth at the point, to a half float's
+        // step at 64 (2⁻⁵) and a part in a hundred of the filter's own.
+        const mean = read[k]!.meanDepthToSun
+        if (expected >= SUN_GRID_DEEPEST + apart)
+          expect(mean).toBeCloseTo(SUN_GRID_DEEPEST, 1)
+        else if (expected < SUN_GRID_DEEPEST - apart)
+          expect(Math.abs(mean - expected)).toBeLessThan(
+            Math.max(0.01 * expected, 2 ** -5),
+          )
         if (expected >= SUN_GRID_DEEPEST + apart) {
           capped += 1
           expect(read[k]!.toSun).toBeGreaterThan(SUN_GRID_DEEPEST - DEEP_STEP)
@@ -679,6 +712,19 @@ describe('a uniform slab', () => {
     ).toBeGreaterThanOrEqual(9)
     for (let k = 1; k < through.length; k += 1)
       expect(through[k]! - through[k - 1]!).toBeLessThan(1e-3)
+    // The depth channel there is the cells' mean depth, never shallower
+    // than the depth of their mean transmittance beside it, and where half
+    // the sun passes far deeper than ln 2: 2.6 on the Mac mini's M6, where
+    // the volume's own 200 m texels soften the edge the grid's cells read.
+    const half = through.reduce(
+      (best, t, k) =>
+        Math.abs(t - 0.5) < Math.abs(through[best]! - 0.5) ? k : best,
+      0,
+    )
+    expect(Math.abs(through[half]! - 0.5)).toBeLessThan(0.1)
+    expect(read[half]!.meanDepthToSun).toBeGreaterThan(2 * read[half]!.toSun)
+    for (const got of read)
+      expect(got.meanDepthToSun).toBeGreaterThanOrEqual(got.toSun - 1e-3)
     dispose(test)
   })
 
@@ -697,6 +743,12 @@ describe('a uniform slab', () => {
       const expected = SIGMA * leaves(foot, sun, R + TOP)
       expect(Math.abs(read[k]!.whole / expected - 1)).toBeLessThan(0.02)
       expect(read[k]!.whole).toBeGreaterThanOrEqual(read[k]!.toSun)
+      expect(Math.abs(read[k]!.meanDepthWhole / expected - 1)).toBeLessThan(
+        0.02,
+      )
+      expect(read[k]!.meanDepthWhole).toBeGreaterThanOrEqual(
+        read[k]!.meanDepthToSun,
+      )
       expect(read[k]!.behind).toBe(1)
     })
     // Under the slab nothing lies behind a point: the whole is the depth to the sun.
@@ -778,10 +830,10 @@ describe('a grid that comes back', () => {
       grid.push(test.depth.drawn)
       weight.push(test.weight)
     }
-    // 102 slices of the volume at 8 a frame: twelve frames of 8 and one of 6.
+    // 68 slices of the volume at 8 a frame: eight frames of 8 and one of 4.
     expect(volume.slice(0, source)).toEqual([
-      ...new Array<number>(12).fill(8),
-      6,
+      ...new Array<number>(8).fill(8),
+      4,
     ])
     expect(total(volume.slice(source))).toBe(0)
     // Nothing of the grid until the volume is whole, then its 32 at the cap.
@@ -810,12 +862,21 @@ describe('a grid that comes back', () => {
 
   it('reads as nothing held while it comes back: no depth and no weight at any point', async () => {
     const test = rig(slab(...SLAB), scenario)
-    for (let n = 0; n < 15; n += 1) test.step(eye, SUN)
-    // Two frames into the grid's own bake: sixteen slices hold the field.
+    // Two frames into the grid's own bake, after the volume's: sixteen
+    // slices hold the field.
+    const into = Math.ceil((LEVELS * STACK) / CAP) + 2
+    for (let n = 0; n < into; n += 1) test.step(eye, SUN)
     expect(test.depth.pending).toBe(true)
     const point = along(test, eye, 1800, 500)
     const [got] = await depths(test, [point])
-    expect(got).toEqual({ toSun: 0, whole: 0, weight: 0, behind: 0 })
+    expect(got).toEqual({
+      toSun: 0,
+      whole: 0,
+      weight: 0,
+      behind: 0,
+      meanDepthToSun: 0,
+      meanDepthWhole: 0,
+    })
     dispose(test)
   })
 
@@ -848,19 +909,19 @@ describe('a grid that comes back', () => {
     const test = rig(slab(...SLAB), scenario)
     test.settle(eye, SUN)
     let grid = 0
-    const volume = [0, 0, 0]
+    const volume = Array.from({ length: LEVELS }, () => 0)
     for (let n = 0; n < 96; n += 1) {
       test.step(eye, SUN, { seconds: 1 / 60, wind: 25 })
       grid += test.depth.drawn
       test.volume.drawn.forEach((count, L) => (volume[L]! += count))
       expect(test.depth.drawn).toBeLessThanOrEqual(1)
     }
-    // 1.6 s: the grid's 400 m cells once; the volume's 50 m level eight
-    // times, its 200 m level twice, its 800 m level half.
+    // 1.6 s: the grid's 400 m cells once; the volume's 200 m level twice,
+    // its 800 m level half.
     expect(grid).toBeGreaterThanOrEqual(SLICES - 1)
     expect(grid).toBeLessThanOrEqual(SLICES)
     volume.forEach((count, L) => {
-      const asked = (8 * STACK) / 4 ** L
+      const asked = (2 * STACK) / 4 ** L
       expect(count).toBeGreaterThanOrEqual(asked - 1)
       expect(count).toBeLessThanOrEqual(asked)
     })
@@ -1260,7 +1321,8 @@ describe('the grid as a resource', () => {
     const backend = gpu.renderer.backend as unknown as {
       get(texture: object): { texture: GPUTexture }
     }
-    const bytes = SUN_GRID_SIZE[0] * SUN_GRID_SIZE[1] * SUN_GRID_SIZE[2] * 2
+    // RG16F: the cell's code and its depth.
+    const bytes = SUN_GRID_SIZE[0] * SUN_GRID_SIZE[1] * SUN_GRID_SIZE[2] * 4
     const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
     expect(test.depth.bytes).toBe(0)
     await test.depth.warm(gpu.renderer)
@@ -1277,8 +1339,288 @@ describe('the grid as a resource', () => {
     expect(textures).toHaveLength(1)
     const held = backend.get(textures[0]!).texture
     expect(held.mipLevelCount).toBe(1)
-    expect(held.width * held.height * held.depthOrArrayLayers * 2).toBe(bytes)
+    expect(held.format).toBe('rg16float')
+    expect(bytes).toBe(2_097_152)
+    expect(held.width * held.height * held.depthOrArrayLayers * 4).toBe(bytes)
     dispose(test)
     expect(test.depth.bytes).toBe(0)
+  })
+
+  it('holds 64 heights behind its handle: twice the bytes and the slices, and the same depth on a slab', async () => {
+    // Thin, so every point is under the knee: 3.1 deep at the slab's base.
+    const THIN: Slab = [1000, 2000, 0.002]
+    const test = rig(slab(...THIN), slabScenario(THIN))
+    test.depth.heights = 64
+    const eye = eyeAt(300)
+    const sun = sunAt(37.5)
+    // The volume's 68 slices, the grid's 64 at eight a frame, the ramp: a
+    // frame either side for where the settle starts and stops counting.
+    const whole = Math.ceil((LEVELS * STACK) / CAP) + 64 / CAP + RAMP
+    const frames = test.settle(eye, sun)
+    expect(frames).toBeGreaterThanOrEqual(whole - 1)
+    expect(frames).toBeLessThanOrEqual(whole + 1)
+    expect(test.depth.bytes).toBe(4_194_304)
+    const offsets = Array.from({ length: 64 }, (_, k) =>
+      along(test, eye, 1050 + 14 * k, 300 * (k % 8)),
+    )
+    const read = await depths(test, offsets)
+    offsets.forEach((offset, k) => {
+      const expected = slabDepth(eye, offset, sun, THIN)
+      for (const got of [read[k]!.toSun, read[k]!.meanDepthToSun])
+        expect(Math.abs(got - expected)).toBeLessThan(
+          Math.max(0.02 * expected, 0.01),
+        )
+    })
+    dispose(test)
+  })
+
+  it('hands the light after first order the taps’ depth and the grid’s past them, and the ray’s whole, on a slab, wherever a program reads it after asking for it', async () => {
+    // Thin, under the knee, and points low enough that the sun's path to
+    // the top runs past the taps' half kilometer: the cache's part is
+    // most of the depth.
+    const THIN: Slab = [1000, 2000, 0.002]
+    const test = rig(slab(...THIN), slabScenario(THIN))
+    const eye = eyeAt(300)
+    const sun = sunAt(37.5)
+    test.settle(eye, sun)
+    const medium = slab(...THIN)
+    const lit = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    test.uniforms.trace.lightTaps.value = 4
+    const body = test.uniforms.served
+    const offsets = Array.from({ length: 64 }, (_, k) =>
+      along(test, eye, 1050 + 4 * k, 300 * (k % 8)),
+    )
+    const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
+    /*
+     * Where a program reads the depth: in the block its sun is formed in;
+     * in two exclusive branches, each sample through one of them; in a
+     * branch inside a branch, and then in the block around it; through a
+     * memoized function called in two exclusive branches; and in a loop
+     * that runs no turn for the first sample, and after it. A depth formed
+     * where it is first read is unset in each block that read does not
+     * stand over, and read zero there.
+     */
+    const reads = {
+      own: (_: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        write(0, got.depth.x)
+        write(1, got.depth.y)
+      },
+      apart: (odd: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        If(odd.not(), () => {
+          write(0, got.depth.x)
+          write(1, got.depth.y)
+        })
+        If(odd, () => {
+          write(0, got.depth.x)
+          write(1, got.depth.y)
+        })
+      },
+      nested: (odd: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        If(got.cloud.greaterThanEqual(0), () => {
+          If(odd, () => {
+            write(0, got.depth.x)
+          })
+          write(0, got.depth.x)
+          write(1, got.depth.y)
+        })
+      },
+      // A function of the program's that returns the depth, called once
+      // and memoized, then read in two exclusive branches.
+      once: (odd: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        const depthOf = Fn(() => got.depth).once()
+        If(odd.not(), () => {
+          write(0, depthOf().x)
+          write(1, depthOf().y)
+        })
+        If(odd, () => {
+          write(0, depthOf().x)
+          write(1, depthOf().y)
+        })
+      },
+      // The first sample's loop runs no turn: the reads after it are the
+      // first that sample reaches.
+      loop: (_: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        Loop({ start: int(0), end: int(instanceIndex) }, () => {
+          write(0, got.depth.x)
+        })
+        write(0, got.depth.x)
+        write(1, got.depth.y)
+      },
+    }
+    // Four taps, and none: the cache's depth at the sample itself.
+    for (const taps of [4, 0])
+      for (const [where, reading] of Object.entries(reads)) {
+        test.uniforms.trace.lightTaps.value = taps
+        const out = await run(offsets.length, inputs, 3, 2, (read, write) => {
+          const offset = vec3(read(0), read(1), read(2))
+          const sample: CloudSample = {
+            offset,
+            distance: offset.length(),
+            altitude: altitudeAt(body, offset),
+            sunMu: sunMuAt(body, offset),
+            footprint: float(10),
+          }
+          const got = lit(sample, medium(sample, body), body, { depth: true })
+          reading(instanceIndex.mod(uint(2)).equal(uint(1)), got, write)
+        })
+        offsets.forEach((offset, k) => {
+          const point = add(eye, offset)
+          const expected = slabDepth(eye, offset, sun, THIN)
+          // Over a kilometer to the top along this sun: the taps hold under
+          // half of it.
+          expect(expected).toBeGreaterThan(THIN[2] * 1000)
+          expect(
+            Math.abs(out[2 * k]! / expected - 1),
+            `${where}, ${taps} taps`,
+          ).toBeLessThan(0.03)
+          const back = crossings(point, scale(sun, -1), R + THIN[0])![0]
+          const whole =
+            THIN[2] * leaves(sub(point, scale(sun, back)), sun, R + THIN[1])
+          expect(
+            Math.abs(out[2 * k + 1]! / whole - 1),
+            `${where}, ${taps} taps`,
+          ).toBeLessThan(0.03)
+        })
+      }
+    dispose(test)
+  })
+
+  /*
+   * Where a sun reads the grid, counted in the program three emits for it:
+   * the grid is the one texture a slab's sun binds, so every
+   * `textureSampleLevel` is a fetch of a cell. A sun reads it at the sample
+   * and where its taps end; the light after first order, asked for, adds
+   * the ray's far end, once for each of the two, in the sun's own block. A
+   * program that asks only for first order fetches no far end, one that
+   * asks for both fetches no cell twice, and a read of the depth in another
+   * block reads the variable the sun's block holds.
+   */
+  it('is fetched twice by first order’s sun, twice more by the depth asked for beside it, at the far end of each of its two reads, and no more for any block that reads the depth', async () => {
+    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
+    const medium = slab(1000, 2000, 0.01)
+    const sun = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    const body = test.uniforms.served
+    const out = storage(
+      new StorageBufferAttribute(new Float32Array(1), 1),
+      'float',
+      1,
+    )
+    const kernelOf = (
+      pick: (got: ReturnType<typeof sun>) => Node<'float'> | null,
+      depth: boolean,
+    ): ComputeNode =>
+      Fn(() => {
+        const offset = vec3(float(instanceIndex), 1, 2)
+        const sample: CloudSample = {
+          offset,
+          distance: offset.length(),
+          altitude: altitudeAt(body, offset),
+          sunMu: sunMuAt(body, offset),
+          footprint: float(10),
+        }
+        const picked = pick(sun(sample, medium(sample, body), body, { depth }))
+        if (picked !== null) out.element(0).assign(picked)
+      })().compute(1)
+    const programOf = async (
+      pick: (got: ReturnType<typeof sun>) => Node<'float'> | null,
+      depth = true,
+    ): Promise<string> => {
+      const kernel = kernelOf(pick, depth)
+      await gpu.compute(kernel)
+      const nodes = (
+        gpu.renderer as unknown as {
+          _nodes: {
+            getForCompute(node: ComputeNode): { computeShader: string }
+          }
+        }
+      )._nodes
+      const wgsl = nodes.getForCompute(kernel).computeShader
+      kernel.dispose()
+      expect(wgsl.match(/: texture_3d</g)).toHaveLength(1)
+      return wgsl
+    }
+    const fetches = (wgsl: string): number =>
+      wgsl.match(/\btextureSampleLevel\(/g)?.length ?? 0
+    expect(fetches(await programOf((got) => got.cloud, false))).toBe(2)
+    expect(
+      fetches(
+        await programOf((got) => got.cloud.add(got.depth.x).add(got.depth.y)),
+      ),
+    ).toBe(4)
+    // Two exclusive branches that read the depth read the one variable.
+    expect(
+      fetches(
+        await programOf((got) => {
+          If(instanceIndex.equal(uint(0)), () => {
+            out.element(0).assign(got.depth.x)
+          })
+          If(instanceIndex.equal(uint(1)), () => {
+            out.element(0).assign(got.depth.y)
+          })
+          return got.cloud
+        }),
+      ),
+    ).toBe(4)
+    // So does a loop, and the block after it.
+    expect(
+      fetches(
+        await programOf((got) => {
+          Loop({ start: int(0), end: int(instanceIndex) }, () => {
+            out.element(0).addAssign(got.depth.x)
+          })
+          return got.depth.y
+        }),
+      ),
+    ).toBe(4)
+    dispose(test)
+  })
+
+  it('throws by name, as the program is built, where a march reads the depth of a sun it did not ask for it', () => {
+    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
+    const medium = slab(1000, 2000, 0.01)
+    const sun = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    const body = test.uniforms.served
+    const out = storage(
+      new StorageBufferAttribute(new Float32Array(1), 1),
+      'float',
+      1,
+    )
+    const kernel = Fn(() => {
+      const offset = vec3(float(instanceIndex), 1, 2)
+      const sample: CloudSample = {
+        offset,
+        distance: offset.length(),
+        altitude: altitudeAt(body, offset),
+        sunMu: sunMuAt(body, offset),
+        footprint: float(10),
+      }
+      const got = sun(sample, medium(sample, body), body)
+      out.element(0).assign(got.cloud.add(got.depth.x))
+    })().compute(1)
+    const renderer = gpu.renderer as unknown as {
+      backend: {
+        createNodeBuilder(
+          node: ComputeNode,
+          renderer: unknown,
+        ): { build(): unknown }
+      }
+    }
+    expect(() =>
+      renderer.backend.createNodeBuilder(kernel, gpu.renderer).build(),
+    ).toThrow(/^CloudSun\.depth: this sun was formed without \{ depth: true \}/)
+    kernel.dispose()
+    dispose(test)
   })
 })
