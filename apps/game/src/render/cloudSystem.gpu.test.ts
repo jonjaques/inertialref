@@ -563,10 +563,11 @@ describe('what the device is asked for', () => {
      * The history's frame counter, the trace's twelve counters, the
      * residual meter's histograms, the radiance meter's two floats a
      * trace texel, which is 1.04 MB at 1080p's 480 × 270, and the trace's
-     * longest ray a batch of 32, 16,384 of them. No buffer is in `bytes`:
+     * longest ray a batch of 32, 16,384 of them for each of the immediate
+     * regime's four dispatches. No buffer is in `bytes`:
      * the report declares textures.
      */
-    expect(kept).toEqual([4, 48, 1036, width * height * 8, 65_536])
+    expect(kept).toEqual([4, 48, 1036, width * height * 8, 262_144])
     expect(width * height * 8).toBe(1536)
     // Every key of the declaration is a resource's or the profile's.
     expect(Object.keys(clouded.report!.bytes).sort()).toEqual(

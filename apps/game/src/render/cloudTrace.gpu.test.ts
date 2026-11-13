@@ -1813,6 +1813,50 @@ describe('the step counters', () => {
     traced.dispose()
   })
 
+  it('average the batches’ longest rays over the immediate regime’s four dispatches, each its own', async () => {
+    /*
+     * Each interleave phase's rays end at a distance of their own, 1.5 to
+     * 4.5 km up through clear air, so each phase's batches take their own
+     * steps. The four phases traced one a frame read four figures; traced
+     * as the immediate regime's four dispatches in one frame they read
+     * those four's mean. A section shared by the four held each batch's
+     * longest over the phases, the dearest phase's figure.
+     */
+    const [width, height] = [16, 8]
+    const traced = await rig(
+      slabMedium([]),
+      width,
+      height,
+      { eye: 1000, layers: [[100, 5000]] },
+      {
+        km: (x, y) =>
+          1.5 + (Math.floor(x / 2) % 2) + 2 * (Math.floor(y / 2) % 2),
+      },
+    )
+    const off = frameOf({ width, height }, { stats: false })
+    const counted = async (dispatch: () => void): Promise<number> => {
+      traced.trace.render(renderer, off, BUDGET)
+      dispatch()
+      return (await stepsOf(traced.trace))!.batchLongest!
+    }
+    const each: number[] = []
+    for (let k = 0; k < 4; k += 1) {
+      const frame = frameOf({ width, height }, { stats: true }, k)
+      each.push(
+        await counted(() => traced.trace.render(renderer, frame, BUDGET)),
+      )
+    }
+    const frame = frameOf({ width, height }, { stats: true })
+    const all = await counted(() => {
+      for (let k = 0; k < 4; k += 1)
+        traced.trace.dispatchPhase(renderer, frame, k)
+    })
+    // The control: the phases' figures differ, or a mean and a maximum agree.
+    expect(new Set(each).size).toBe(4)
+    expect(all).toBeCloseTo(each.reduce((sum, n) => sum + n, 0) / 4, 9)
+    traced.dispose()
+  })
+
   it('answer no range where the central ray never reaches a depth of ln 50', async () => {
     const thin = slabMedium([{ base: 100, top: 1100, sigma: 1e-4 }])
     const traced = await rig(thin, 4, 4, { eye: 2, layers: [[100, 1100]] })

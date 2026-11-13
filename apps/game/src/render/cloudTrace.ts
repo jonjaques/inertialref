@@ -166,6 +166,13 @@ const BATCH = [8, 4] as const
 /** Batches a row of the maxima's buffer holds, and its rows: a trace of 1,024 × 512. */
 const BATCH_STRIDE = 128
 const BATCH_SLOTS = BATCH_STRIDE * BATCH_STRIDE
+/**
+ * The maxima's buffer holds one section a dispatch between two clears: the
+ * immediate regime's four phases trace four sets of rays over the same
+ * batches, and one section under all four would hold each batch's longest
+ * over the four phases where the trace's time follows each phase's own.
+ */
+const BATCH_PHASES = 4
 /** A ray's opacity is summed in 1,024ths: four dispatches of a Retina trace's 324,000 rays stay under 2³². */
 const OPACITY_UNIT = 1024
 
@@ -203,23 +210,33 @@ export interface CloudTraceSteps {
   }
   /**
    * The mean over the GPU's batches of 32 rays of each batch's longest ray,
-   * steps: what the trace's time follows where the rays' mean does not.
+   * steps, over every dispatch the counters counted, the immediate regime's
+   * four phases each on its own: what the trace's time follows where the
+   * rays' mean does not.
    * Null for a trace of more batches than the buffer holds.
    */
   readonly batchLongest: number | null
 }
 
-/** The mean of the batches' maxima over a trace's extent; null where it outruns the buffer. */
-function batchLongestOf(buffer: ArrayBuffer, extent: Extent): number | null {
+/**
+ * The mean of the batches' maxima over a trace's extent and the `phases`
+ * dispatches that wrote a section each; null where it outruns the buffer.
+ */
+function batchLongestOf(
+  buffer: ArrayBuffer,
+  extent: Extent,
+  phases: number,
+): number | null {
   const columns = Math.ceil(extent.width / BATCH[0])
   const rows = Math.ceil(extent.height / BATCH[1])
-  if (columns > BATCH_STRIDE || rows > BATCH_STRIDE) return null
+  if (columns > BATCH_STRIDE || rows > BATCH_STRIDE || phases < 1) return null
   const longest = new Uint32Array(buffer)
   let sum = 0
-  for (let row = 0; row < rows; row += 1)
-    for (let column = 0; column < columns; column += 1)
-      sum += longest[row * BATCH_STRIDE + column] ?? 0
-  return sum / (columns * rows)
+  for (let phase = 0; phase < phases; phase += 1)
+    for (let row = 0; row < rows; row += 1)
+      for (let column = 0; column < columns; column += 1)
+        sum += longest[phase * BATCH_SLOTS + row * BATCH_STRIDE + column] ?? 0
+  return sum / (columns * rows * phases)
 }
 
 /** The counters' buffers as a report; null where no ray was counted. */
@@ -227,6 +244,7 @@ function stepsOf(
   buffer: ArrayBuffer,
   batches: ArrayBuffer,
   extent: Extent,
+  phases: number,
 ): CloudTraceSteps | null {
   const counts = new Uint32Array(buffer)
   const [sum = 0, largest = 0, rays = 0, exhausted = 0, opacity = 0] = counts
@@ -248,7 +266,7 @@ function stepsOf(
       taps: of(10),
       skipped: of(11),
     },
-    batchLongest: batchLongestOf(batches, extent),
+    batchLongest: batchLongestOf(batches, extent, phases),
   }
 }
 
@@ -256,10 +274,12 @@ function stepsOf(
 interface Stats {
   readonly buffer: StorageBufferAttribute
   readonly counts: ReturnType<typeof countsOf>
-  /** Each batch's longest ray, steps: `BATCH_STRIDE` batches a row. */
+  /** Each batch's longest ray, steps: `BATCH_STRIDE` batches a row, a section a dispatch. */
   readonly batchBuffer: StorageBufferAttribute
   readonly batches: ReturnType<typeof countsOf>
   readonly on: UniformNode<'float', number>
+  /** The section this dispatch writes its maxima to: its place among the dispatches since the clear. */
+  readonly phase: UniformNode<'float', number>
 }
 
 const countsOf = (buffer: StorageBufferAttribute, slots = STAT_SLOTS) =>
@@ -364,7 +384,12 @@ function count(
       column.lessThan(uint(BATCH_STRIDE)).and(row.lessThan(uint(BATCH_STRIDE))),
       () => {
         atomicMax(
-          stats.batches.element(row.mul(uint(BATCH_STRIDE)).add(column)),
+          stats.batches.element(
+            uint(stats.phase)
+              .mul(uint(BATCH_SLOTS))
+              .add(row.mul(uint(BATCH_STRIDE)))
+              .add(column),
+          ),
           steps,
         )
       },
@@ -445,6 +470,8 @@ export class CloudTrace implements CloudResource {
   #depth: TextureNode | null = null
   #steps: CloudTraceSteps | null = null
   #counting = false
+  /** The dispatches counted since the counters' clear: each writes its own section of maxima. */
+  #phases = 0
   #reading = false
   #wanted = false
   /** Whether the outputs exist on the GPU: a warm-up or a dispatch has bound them. */
@@ -456,15 +483,16 @@ export class CloudTrace implements CloudResource {
     this.#deps = deps
     const buffer = new StorageBufferAttribute(new Uint32Array(STAT_SLOTS), 1)
     const batchBuffer = new StorageBufferAttribute(
-      new Uint32Array(BATCH_SLOTS),
+      new Uint32Array(BATCH_PHASES * BATCH_SLOTS),
       1,
     )
     this.#stats = {
       buffer,
       counts: countsOf(buffer),
       batchBuffer,
-      batches: countsOf(batchBuffer, BATCH_SLOTS),
+      batches: countsOf(batchBuffer, BATCH_PHASES * BATCH_SLOTS),
       on: uniform(0),
+      phase: uniform(0),
     }
     this.#outputs = {
       light: cloudStorageTexture(1, 1, 'rgba16float', 'cloud trace light'),
@@ -515,14 +543,14 @@ export class CloudTrace implements CloudResource {
       )
       const { counts, batches } = this.#stats
       this.#clear = Fn(() => {
-        If(instanceIndex.lessThan(uint(BATCH_SLOTS)), () => {
+        If(instanceIndex.lessThan(uint(BATCH_PHASES * BATCH_SLOTS)), () => {
           atomicStore(batches.element(instanceIndex), uint(0))
         })
         If(instanceIndex.lessThan(uint(STAT_SLOTS)), () => {
           atomicStore(counts.element(instanceIndex), uint(0))
         })
       })()
-        .compute(BATCH_SLOTS)
+        .compute(BATCH_PHASES * BATCH_SLOTS)
         .setName(CLOUD_STATS_LABEL)
       this.#depth = depth
       this.#kernels = kernels
@@ -591,14 +619,17 @@ export class CloudTrace implements CloudResource {
       this.#counting = this.#wanted && !this.#reading
       if (this.#counting) renderer.compute(this.#clear!)
       this.#stats.on.value = this.#counting ? 1 : 0
+      this.#phases = 0
     }
     this.#deps.uniforms.trace.phase.value.set(phase[0], phase[1])
+    this.#stats.phase.value = Math.min(this.#phases, BATCH_PHASES - 1)
     renderer.compute(kernel!, [
       Math.ceil(width / WORKGROUP),
       Math.ceil(height / WORKGROUP),
       1,
     ])
-    if (last && this.#counting) this.#read(renderer)
+    if (this.#counting) this.#phases = Math.min(this.#phases + 1, BATCH_PHASES)
+    if (last && this.#counting) this.#read(renderer, this.#phases)
   }
 
   /** The outputs at the frame's extent, reallocated only when it changes. */
@@ -615,7 +646,7 @@ export class CloudTrace implements CloudResource {
     this.#allocated = true
   }
 
-  #read(renderer: WebGPURenderer): void {
+  #read(renderer: WebGPURenderer, phases: number): void {
     this.#reading = true
     const { extent } = this.#outputs
     void Promise.all([
@@ -624,7 +655,7 @@ export class CloudTrace implements CloudResource {
     ])
       .then(([buffer, batches]) => {
         if (this.#disposed || !this.#wanted) return
-        this.#steps = stepsOf(buffer, batches, extent)
+        this.#steps = stepsOf(buffer, batches, extent, phases)
       })
       .catch(() => {
         // A device being replaced reads nothing back; the next frame counts again.
