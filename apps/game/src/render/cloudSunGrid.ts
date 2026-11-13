@@ -369,16 +369,25 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       0,
       SLICES - 1,
     )
-    const fetched = this.#map
-      .sample(vec3(cell.div(WIDTH), height.add(0.5).div(SLICES)))
-      .level(float(0))
-    const texel = held ? fetched.toVar() : fetched
-    const tau = cellDepth(texel.x)
     const out = abs(plane.sub(this.#level.eye))
     const ramp = saturate(
       float(SUN_GRID_REACH).sub(max(out.x, out.y)).div(SUN_GRID_FADE),
     )
-    return { tau, mean: texel.y, held: select(inside, ramp, float(0)) }
+    const holds = select(inside, ramp, float(0))
+    const fetched = this.#map
+      .sample(vec3(cell.div(WIDTH), height.add(0.5).div(SLICES)))
+      .level(float(0))
+    // Fetched only where the grid holds the point, as a read the readers
+    // select away is: from orbit, or past the reach, no sample fetches.
+    let texel: Node<'vec4'> = fetched
+    if (held) {
+      const kept = vec4(0).toVar()
+      If(holds.greaterThan(0), () => {
+        kept.assign(fetched)
+      })
+      texel = kept
+    }
+    return { tau: cellDepth(texel.x), mean: texel.y, held: holds }
   }
 
   /**
