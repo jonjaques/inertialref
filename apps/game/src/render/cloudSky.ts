@@ -24,7 +24,11 @@ export function createCloudSky(): CloudSkyNodes {
     at(sample, body) {
       const height = max(sample.altitude, 0).div(body.datumRadius)
       const height01 = saturate(height.div(max(body.air.top.sub(1), 1e-6)))
-      return skyTableAt(body.air, sample.sunMu, height01)
+      // The contract (`CloudSkyNodes`) carries three moments; the table's
+      // fourth, `upper`, waits on the ruling that says whether the march
+      // reads it, so it is not handed on.
+      const { mean, up, sunward } = skyTableAt(body.air, sample.sunMu, height01)
+      return { mean, up, sunward }
     },
   }
 }
