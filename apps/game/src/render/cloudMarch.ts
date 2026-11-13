@@ -258,14 +258,20 @@ const AIR_EVERY = 8
 const STRIDE = (STEP_GROWTH ** AIR_EVERY - 1) / (STEP_GROWTH - 1)
 /**
  * What a step outside every level and a sun add to `CloudMarchResult.kinds`:
- * ten bits a count of the integer's 32, so each is exact to 1,023, and a
- * ray takes at most its budget and thirteen steps more, 269 at the ladder's
- * top rung of 256 and 1,023 at a budget of 1,010. A float holds a whole
- * number exactly to 2²⁴ only, which is three counts of eight bits: 256
- * steps in cloud carried into the count outside every level.
+ * ten bits a count of the integer's 32, so each is exact to 1,023. A float
+ * holds a whole number exactly to 2²⁴ only, which is three counts of eight
+ * bits: 256 steps in cloud carried into the count outside every level.
  */
 export const KIND_GAP = 1024
 export const KIND_SUN = KIND_GAP * KIND_GAP
+/**
+ * The largest step budget the kinds count exactly, and so the largest the
+ * `maxSteps` lever takes. A ray runs at most its budget and
+ * `UNCOUNTED_STEPS` more, and takes a sun at each step in cloud and one
+ * more where its last step is closed: 1,006 + 16 + 1 is a field's 1,023.
+ * Past it 1,024 steps in cloud read as none, and one outside every level.
+ */
+export const CLOUD_MAX_STEPS_COUNTED = KIND_GAP - 1 - UNCOUNTED_STEPS - 1
 /** The sky's light on a cloud, a placeholder: Ψ × σ_s × ½, isotropic (§5.10). */
 const SKY_SHARE = 0.5
 const ISOTROPIC = 1 / (4 * Math.PI)
