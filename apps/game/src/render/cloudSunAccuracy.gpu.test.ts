@@ -258,7 +258,7 @@ const FIELDS_APART = 1 / 40
 const EARLY_OUT = [4, 6, 8] as const
 /** Meters: the disc's radius about the eye. */
 const REACH = 22_500
-/** Meters from the eye: the rings' outer edges. Phase 0's reach, the 50 m level's, the disc's. */
+/** Meters from the eye: the rings' outer edges. Phase 0's reach, the frame's 50 m level's, the disc's. */
 const RINGS = [4000, 6400, REACH] as const
 const HEIGHTS_A_LAYER = 8
 const EYE = 2

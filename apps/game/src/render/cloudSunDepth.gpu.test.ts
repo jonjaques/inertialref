@@ -57,6 +57,7 @@ import {
 } from './cloudSunGrid.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import {
+  CLOUD_VOLUME_HELD,
   CLOUD_VOLUME_SIZE,
   CLOUD_VOLUME_TEXELS,
   CloudVolume,
@@ -97,7 +98,7 @@ const RAMP = DEFAULT_CLOUD_LEVERS.sunRamp
 const [, , SLICES] = SUN_GRID_SIZE
 /** A level of the volume with its guards, and the levels it holds. */
 const STACK = 34
-const LEVELS = 3
+const LEVELS = CLOUD_VOLUME_HELD.length
 
 const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(v.x, v.y, v.z)
@@ -778,10 +779,10 @@ describe('a grid that comes back', () => {
       grid.push(test.depth.drawn)
       weight.push(test.weight)
     }
-    // 102 slices of the volume at 8 a frame: twelve frames of 8 and one of 6.
+    // 68 slices of the volume at 8 a frame: eight frames of 8 and one of 4.
     expect(volume.slice(0, source)).toEqual([
-      ...new Array<number>(12).fill(8),
-      6,
+      ...new Array<number>(8).fill(8),
+      4,
     ])
     expect(total(volume.slice(source))).toBe(0)
     // Nothing of the grid until the volume is whole, then its 32 at the cap.
@@ -810,8 +811,10 @@ describe('a grid that comes back', () => {
 
   it('reads as nothing held while it comes back: no depth and no weight at any point', async () => {
     const test = rig(slab(...SLAB), scenario)
-    for (let n = 0; n < 15; n += 1) test.step(eye, SUN)
-    // Two frames into the grid's own bake: sixteen slices hold the field.
+    // Two frames into the grid's own bake, after the volume's: sixteen
+    // slices hold the field.
+    const into = Math.ceil((LEVELS * STACK) / CAP) + 2
+    for (let n = 0; n < into; n += 1) test.step(eye, SUN)
     expect(test.depth.pending).toBe(true)
     const point = along(test, eye, 1800, 500)
     const [got] = await depths(test, [point])
@@ -848,19 +851,19 @@ describe('a grid that comes back', () => {
     const test = rig(slab(...SLAB), scenario)
     test.settle(eye, SUN)
     let grid = 0
-    const volume = [0, 0, 0]
+    const volume = Array.from({ length: LEVELS }, () => 0)
     for (let n = 0; n < 96; n += 1) {
       test.step(eye, SUN, { seconds: 1 / 60, wind: 25 })
       grid += test.depth.drawn
       test.volume.drawn.forEach((count, L) => (volume[L]! += count))
       expect(test.depth.drawn).toBeLessThanOrEqual(1)
     }
-    // 1.6 s: the grid's 400 m cells once; the volume's 50 m level eight
-    // times, its 200 m level twice, its 800 m level half.
+    // 1.6 s: the grid's 400 m cells once; the volume's 200 m level twice,
+    // its 800 m level half.
     expect(grid).toBeGreaterThanOrEqual(SLICES - 1)
     expect(grid).toBeLessThanOrEqual(SLICES)
     volume.forEach((count, L) => {
-      const asked = (8 * STACK) / 4 ** L
+      const asked = (2 * STACK) / 4 ** L
       expect(count).toBeGreaterThanOrEqual(asked - 1)
       expect(count).toBeLessThanOrEqual(asked)
     })
