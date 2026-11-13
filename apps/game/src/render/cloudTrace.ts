@@ -39,6 +39,7 @@ import {
   traceScreen,
   viewDirection,
 } from './cloudGeometry.ts'
+import { KIND_GAP, KIND_SUN } from './cloudKinds.ts'
 import { cloudKnotWriter } from './cloudKnots.ts'
 import { CLOUD_PHASE_MODES } from './cloudLevers.ts'
 import {
@@ -46,8 +47,6 @@ import {
   cloudMarch,
   type CloudMarchResult,
   type CloudPhaseMode,
-  KIND_GAP,
-  KIND_SUN,
   marchFar,
 } from './cloudMarch.ts'
 import {
