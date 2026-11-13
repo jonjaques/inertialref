@@ -261,6 +261,8 @@ describe('the light’s stub modules', () => {
     const depths = CLOUD_STAND_INS.sunDepth().depths(sample.offset)
     expect(Object.keys(depths).sort()).toEqual([
       'behind',
+      'meanDepthToSun',
+      'meanDepthWhole',
       'toSun',
       'weight',
       'whole',
