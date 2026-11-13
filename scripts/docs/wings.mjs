@@ -253,6 +253,14 @@ export const WINGS = [
             'docs/adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md',
             'The cornerstones',
           ],
+          [
+            'docs/adr/0069-a-genus-is-its-water-and-its-columns-fall-in-isccps-classes.md',
+            'A genus and its water',
+          ],
+          [
+            'docs/adr/0070-the-weather-is-a-bodys-own-and-a-layer-turns-with-its-world.md',
+            'The weather per body',
+          ],
         ],
       },
     ],
