@@ -57,7 +57,6 @@ import type {
   CloudPhaseNodes,
   CloudRay,
   CloudSample,
-  CloudSun,
 } from './cloudNodes.ts'
 import type { CloudSunTaps } from './cloudSunlight.ts'
 import type { CloudTraceDeps } from './cloudTrace.ts'
@@ -1059,7 +1058,7 @@ export function cloudMarch(
    */
   function slabSource(
     at: CloudSample,
-    sun: CloudSun,
+    sunDepth: Node<'vec2'>,
     sample: Lit,
     rise: Node<'float'>,
     up: Node<'vec3'>,
@@ -1105,7 +1104,7 @@ export function cloudMarch(
      * batch of rays that straddles the switch paid for three: this GPU
      * runs a branch's dearer side for all 32.
      */
-    const plain = resolvedSlab(sun.depth.toVar(), at.sunMu)
+    const plain = resolvedSlab(sunDepth, at.sunMu)
     const first = gauss(0)
     const source = deps.source
       .source(
@@ -1437,6 +1436,10 @@ export function cloudMarch(
           },
           body,
         )
+        // The sun's two depths, read once, here, in the block the sun is
+        // formed in: a sun may form them where they are first read, and a
+        // first read inside a branch is a value unset outside it.
+        const sunDepth = sun.depth.toVar()
         // The beam through the air, once: first order's light and the
         // light after it are both lit by it.
         const air = sun.air.toVar()
@@ -1469,7 +1472,7 @@ export function cloudMarch(
               )
             : ofLevel(once.share, level),
         }
-        const higher = slabSource(at, sun, medium, rise, up).toVar()
+        const higher = slabSource(at, sunDepth, medium, rise, up).toVar()
         const sky =
           skyTable === null
             ? null
