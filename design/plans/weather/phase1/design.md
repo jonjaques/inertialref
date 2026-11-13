@@ -1793,15 +1793,15 @@ first-order accumulators by the phase inside the kernel
 (`render/cloudMarch.ts:312-326`), and what is stored is `L_c`, already phased
 (`cloudTrace.ts:222`). So each addition is a register and a fetch:
 
-| Addition                                                   | What it costs in the kernel                                             | An output? |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------- | ---------- |
-| Per-class first order (droplets, ice; rain and dust later) | A row range in one atlas; the prefetch of §5.4                          | No         |
-| The sky term                                               | One fetch of the sky table a segment; one `vec3` register               | No         |
-| Higher orders                                              | Arithmetic, or one 3D fetch a step; one `vec3` register                 | No         |
-| The moon's beam (phase 5)                                  | Its own prefetch at its own angle, summed into `L_c`                    | No         |
-| Lightning (phase 4)                                        | Lit in the composite from depths the trace already writes               | No         |
-| A wind that varies by layer, in reprojection               | The history finds the layer from the reprojected point's height (§5.10) | No         |
-| The served opacity and the range (§8.5)                    | Three slots of the step counters' buffer, under `stats`                 | No         |
+| Addition                                                   | What it costs in the kernel                                               | An output? |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------- | ---------- |
+| Per-class first order (droplets, ice; rain and dust later) | A row range in one atlas; the prefetch of §5.4                            | No         |
+| The sky term                                               | One read of the sky table's three blocks a segment; five `vec3` registers | No         |
+| Higher orders                                              | Arithmetic, or one 3D fetch a step; one `vec3` register                   | No         |
+| The moon's beam (phase 5)                                  | Its own prefetch at its own angle, summed into `L_c`                      | No         |
+| Lightning (phase 4)                                        | Lit in the composite from depths the trace already writes                 | No         |
+| A wind that varies by layer, in reprojection               | The history finds the layer from the reprojected point's height (§5.10)   | No         |
+| The served opacity and the range (§8.5)                    | Three slots of the step counters' buffer, under `stats`                   | No         |
 
 **The three ways to add a fifth output, and why none is taken.**
 
@@ -1841,13 +1841,12 @@ with the grid:
 
 - **14 at worst, two free.** The volume and its bound are not in the trace:
   the grid's bake reads the volume, in a fragment stage of its own.
-- **As built the trace binds 12:** the clipmap's `cover`, the two noises,
-  the profile, the sun grid, the air's two, the phase atlas, the far atlas,
-  the depth copy, the jitter's mask and the slab source. The clipmap's
-  `kind` is read through `cover`'s array, and the sky table is the
-  thirteenth where a march is built to read it
-  (`CloudMarchOptions.skyTable`); the system's kernel draws the sky's
-  placeholder.
+- **As built the trace binds 13:** the clipmap's `cover`, the two noises,
+  the profile, the sun grid, the air's two and its sky table, the phase
+  atlas, the far atlas, the depth copy, the jitter's mask and the slab
+  source. The clipmap's `kind` is read through `cover`'s array. A system
+  built without the sky's term (`CloudSystemDeps.skyTable`) binds 12 and
+  draws the sky's placeholder.
 - The grid's second read, for a ray's whole depth (§5.5), is of the texture
   already bound, and the statistics that stand in for the grid are arithmetic
   on the `cover` and `kind` texels a step already holds. Neither adds a
