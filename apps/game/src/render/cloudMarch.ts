@@ -832,7 +832,16 @@ export function cloudMarch(
   const ofLevel = (v: Node<'vec3'>, level: Node<'int'>): Node<'float'> =>
     select(level.equal(int(0)), v.x, select(level.equal(int(1)), v.y, v.z))
   const gather = phaseGather(options.phaseMode ?? 'mean', deps, ray.nu)
-  const skyTable = options.skyTable === true ? skyRegisters() : null
+  const skyTable =
+    options.skyTable === true
+      ? {
+          ...skyRegisters(),
+          // Each level's transport scale at its reference radius and its
+          // reference extinction, held once a ray as the source's are.
+          transport: body.layers.transport.toVar(),
+          sigma: body.layers.sigma.toVar(),
+        }
+      : null
   /*
    * What the light after first order reads of each level, formed once a
    * ray, before its first step. Read from their uniforms at every sun
@@ -860,7 +869,12 @@ export function cloudMarch(
       saturate(body.climate.convective),
       vec3(0),
     ).toVar(),
-    /** The eye's distance from the body's center, and its vertical times that. */
+    /**
+     * The eye's distance from the body's center, its vertical times that,
+     * the sun's direction and the datum's radius: what the sample's frame
+     * is formed from. Held here they took 0.06 to 0.09 ms off the ground
+     * and horizon rows.
+     */
     eyeRadius: body.datumRadius.add(body.eye).toVar(),
     eyeUp: body.up.mul(body.datumRadius.add(body.eye)).toVar(),
     sun: body.sun.toVar(),
@@ -970,9 +984,10 @@ export function cloudMarch(
 
   /**
    * The pending step's light, now that the sources at its far end are
-   * known: first order's, the sun's past first order through the air's
-   * beam at the far end, which a step's length does not move by a part in
-   * a hundred, and the sky's where the march reads its table.
+   * known: first order's; the sun's past first order, one number for the
+   * three bands, through the air's beam taken at the step's far end, which
+   * turns over kilometers of height where a step in cloud is tens of
+   * meters; and the sky's where the march reads its table.
    */
   function closeStep(
     sunlight: Node<'vec3'>,
@@ -1134,14 +1149,14 @@ export function cloudMarch(
    * mean. A heuristic, declared.
    */
   function skyLight(
-    sky: ReturnType<typeof skyRegisters>,
+    sky: NonNullable<typeof skyTable>,
     at: CloudSample,
     sample: Lit,
     rise: Node<'float'>,
   ): Node<'vec3'> {
-    const transport = ofLevel(body.layers.transport, sample.level)
+    const transport = ofLevel(sky.transport, sample.level)
     const thin = saturate(
-      sample.sigma.div(max(ofLevel(body.layers.sigma, sample.level), TINY)),
+      sample.sigma.div(max(ofLevel(sky.sigma, sample.level), TINY)),
     )
     const scale = transport.mul(thin)
     const over = sample.depth.x.mul(scale)
