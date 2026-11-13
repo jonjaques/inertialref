@@ -340,6 +340,50 @@ describe('a slab’s radiance and reflected flux, through the shipped step', () 
   }, 600_000)
 })
 
+describe('a slab past the table’s last depth node', () => {
+  /*
+   * The table's depths end at 16 transport depths, an unscaled 120, and
+   * one genus is deeper: past the node the read is the node's, carried on
+   * by diffusion's law. Held at the node instead, the light that comes
+   * through a slab of an unscaled 400 reads +217%.
+   *
+   * The oracle's rows, on the renderer's medium at 10 µm, 550 nm, 128
+   * streams, the light leaving the far face of a slab of 400 (package R1's
+   * `outside deep` stage, `outside-deep-10.json`, which the committed
+   * reference does not carry). It has no bearing left at that depth, and
+   * first order is 10⁻⁹⁰ of it.
+   */
+  const VIEWS = [0.2, 0.4, 0.6, 0.8, 1] as const
+  const DEEP: readonly (readonly [sunMu: number, ...radiance: number[]])[] = [
+    // Straight up under a sun straight above is the sun's own beam.
+    [1, 0.0058062, 0.0077446, 0.0095076, 0.011177],
+    [0.6, 0.0025887, 0.0034529, 0.004239, 0.0049832, 0.0057046],
+    [0.35, 0.0011564, 0.0015425, 0.0018937, 0.0022262, 0.0025484],
+    [0.2, 0.00052696, 0.00070289, 0.0008629, 0.0010144, 0.0011612],
+  ]
+
+  it('lights a slab of an unscaled depth of 400 from below within 5% of the oracle', async () => {
+    const held = await slabRig(gpu, { sun: 'exact', phase: false })
+    let worst = 0
+    for (const [sunMu, ...radiance] of DEEP) {
+      held.place(10, 400, sunMu, 'transmitted')
+      held.uniforms.trace.maxSteps.value = 192
+      const light = await held.light(
+        radiance.map((_, i) => viewOf('transmitted', VIEWS[i]!, 90)),
+      )
+      radiance.forEach((want, i) => {
+        worst = Math.max(worst, Math.abs(light[i]![1] / want - 1))
+      })
+    }
+    // 1.91% through the table's own read on the CPU.
+    console.info(
+      `cloudSlab: a slab of τ 400 from below, worst ${percent(worst)} of the oracle's light`,
+    )
+    expect(worst).toBeLessThan(0.05)
+    held.dispose()
+  }, 600_000)
+})
+
 describe('a deck under a sun below its horizon', () => {
   /*
    * Under a sun below a sample's horizon the lit face is the base: the
