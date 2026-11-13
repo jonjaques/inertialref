@@ -522,9 +522,11 @@ describe('the sky table’s rows', () => {
           expect(read.sunward[c]!).toBeCloseTo(atLast.sunward[c]!, 9)
         }
       }
-      // Light comes down on a face there: Δ under 2, the value of a sky
-      // dark above.
-      for (let c = 0; c < 3; c += 1) expect(atLast.up[c]!).toBeLessThan(1.9)
+      // Light comes down on a face there: the upper side's irradiance over
+      // π·L̄, 1 + Δ/2 + c, measured 0.011 to 0.24 at these suns on the Mac
+      // mini (Mac18,5, Apple M6). At the air's top it is 0.
+      for (let c = 0; c < 3; c += 1)
+        expect(1 + atLast.up[c]! / 2 + atLast.upper[c]!).toBeGreaterThan(0.005)
     }
   })
 
