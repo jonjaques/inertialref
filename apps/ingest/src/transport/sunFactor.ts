@@ -141,7 +141,7 @@ export const FACTOR_CLOUDS: readonly FactorCloud[] = [
   cloud('broken-horizon', 220, 190, 4, 'b'),
   cloud('broken-horizon', -200, 60, 1, 'b'),
   cloud('fair-cumulus', 60, 45, 0, 'held', 'second'),
-  cloud('fair-cumulus', -90, 130, 0, 'held', 'third'),
+  cloud('fair-cumulus', -90, 130, 8, 'held', 'third'),
 ]
 
 /** A cut cloud as the tracer and the march read it. */
@@ -1025,8 +1025,13 @@ export function formFactor(pair: FactorPair, elevation: number): number {
   return pair.l * (1 + (pair.a * Math.sqrt(1 - mu * mu)) / mu)
 }
 
-/** The step of the scan over `a`, and its end. */
-const A_STEP = 0.005
+/**
+ * The step of the scan over `a`, and its end. The critic scanned in steps of
+ * 0.005, which on all ten clouds lands `a` on 0.265, a tie for the rounding
+ * to two decimals the module commits; a thousandth makes the rounding a
+ * measurement.
+ */
+const A_STEP = 0.001
 const A_MAX = 3
 
 /**
