@@ -18,6 +18,7 @@ import {
   SKY_TABLE_HEIGHT,
   SKY_TABLE_WIDTH,
   type SkyAir,
+  type SkyMoments,
   skyDirections,
   skyMomentsAt,
   skyMomentsOf,
@@ -275,6 +276,141 @@ describe('the sky table', () => {
           expect(Math.abs(sunward)).toBeLessThanOrEqual(4)
         }
   })
+})
+
+/*
+ * The airs the page builds for Earth and for the cornerstones' world
+ * (`g:milky-way/s:P222_3_2_k/b:3`), as `buildScene` derives them: the
+ * authored haze, `airTopRatio` and `airHeights`. The air's depth in meters
+ * turns a cloud's height into the table's share of it.
+ */
+const PAGE_AIRS = [
+  {
+    name: 'Earth',
+    depth: 100_000,
+    haze: {
+      color: { r: 0.28, g: 0.48, b: 0.95 },
+      limb: { r: 0.92, g: 0.42, b: 0.2 },
+      thickness: 1,
+      aerosolAngstrom: 1.3,
+      ozone: 300,
+    },
+    topRatio: 1.015678559428874,
+    heights: {
+      rayleigh: 0.0013326775514542883,
+      aerosol: 0.00018814271314648775,
+    },
+    clouds: [700, 1000, 1700, 2400, 3400, 6000, 8100, 11_100],
+  },
+  {
+    name: 'the cornerstones’ world',
+    depth: 78_442.93911360748,
+    haze: {
+      color: { r: 0.28, g: 0.48, b: 0.95 },
+      limb: { r: 0.86, g: 0.45, b: 0.26 },
+      thickness: 1,
+      aerosolAngstrom: 1.3,
+      ozone: 0,
+    },
+    topRatio: 1.02,
+    heights: {
+      rayleigh: 0.002698194357920808,
+      aerosol: 0.0003777472101089132,
+    },
+    // `regimeWeather(P222_3_2_k IV, 'fair-cumulus')`'s cumulus level.
+    clouds: [1000, 1700, 2400],
+  },
+] as const
+
+/**
+ * The irradiance on each side of a horizontal and a vertical face under the
+ * sky the trace draws from three moments, `L̄·max(0, 1 + ¾(Δ·ω_z + Δ_s·ω_x))`,
+ * by a midpoint rule over the sphere: above, below, sunward, away. The
+ * clamp at zero leaves no closed form where |Δ| or |Δ_s| passes 4/3.
+ */
+function traceSides(mean: number, up: number, sunward: number): number[] {
+  const rings = 48
+  const arcs = 96
+  const sides = [0, 0, 0, 0]
+  const weight = (2 / rings) * ((2 * Math.PI) / arcs)
+  for (let i = 0; i < rings; i += 1) {
+    const z = -1 + ((i + 0.5) / rings) * 2
+    const ring = Math.sqrt(1 - z * z)
+    for (let j = 0; j < arcs; j += 1) {
+      const x = Math.cos(((j + 0.5) / arcs) * 2 * Math.PI) * ring
+      const light =
+        mean * Math.max(0, 1 + 0.75 * (up * z + sunward * x)) * weight
+      sides[z > 0 ? 0 : 1]! += light * Math.abs(z)
+      sides[x > 0 ? 2 : 3]! += light * Math.abs(x)
+    }
+  }
+  return sides
+}
+
+/**
+ * The worst of three bands, of L̄ and of the four sides the trace forms, as
+ * a share of the quadrature's own at the height: what the table's read
+ * between rows costs a cloud, with the sky's form on both sides of it.
+ */
+function rowError(read: SkyMoments, exact: SkyMoments): number {
+  let worst = 0
+  for (let c = 0; c < 3; c += 1) {
+    worst = Math.max(worst, Math.abs(read.mean[c]! / exact.mean[c]! - 1))
+    const got = traceSides(read.mean[c]!, read.up[c]!, read.sunward[c]!)
+    const want = traceSides(exact.mean[c]!, exact.up[c]!, exact.sunward[c]!)
+    for (let k = 0; k < 4; k += 1)
+      worst = Math.max(worst, Math.abs(got[k]! / want[k]! - 1))
+  }
+  return worst
+}
+
+/**
+ * 3% of the quadrature, at every cloud height and sun. Rows even in the
+ * optical depth above held 2.8% on Earth and 2.3% on the world with the
+ * exact transmittance at the bake and the read (ruling 007); rows even in
+ * height miss by up to 60% under 6 km.
+ */
+const ROW_TOLERANCE = 0.03
+
+describe('the sky table between its rows', () => {
+  for (const page of PAGE_AIRS)
+    it(`holds every cloud height on ${page.name} within 3% of the quadrature there`, () => {
+      const pageRecipe = atmosphereRecipe(
+        page.haze,
+        page.topRatio,
+        page.heights,
+      )
+      const pageTransmittance = bakeTransmittance(pageRecipe)
+      const pageMultiScatter = bakeMultipleScattering(
+        pageRecipe,
+        pageTransmittance,
+      )
+      const pageAir: SkyAir = {
+        recipe: pageRecipe,
+        transmittance: pageTransmittance,
+        multiScatter: pageMultiScatter,
+      }
+      const pageTable = bakeSkyMoments(
+        pageRecipe,
+        pageTransmittance,
+        pageMultiScatter,
+      )
+      const misses: string[] = []
+      for (const height of page.clouds)
+        for (const elevation of [15, 30, 50, 65]) {
+          const mu = Math.sin((elevation * Math.PI) / 180)
+          const share = height / page.depth
+          const error = rowError(
+            skyMomentsAt(pageTable, share, mu),
+            marchSkyMoments(pageAir, 1 + share * (pageRecipe.topRatio - 1), mu),
+          )
+          if (!(error <= ROW_TOLERANCE))
+            misses.push(
+              `${height} m, ${elevation}°: ${(100 * error).toFixed(1)}%`,
+            )
+        }
+      expect(misses).toEqual([])
+    })
 })
 
 function horizon(r: number): number {
