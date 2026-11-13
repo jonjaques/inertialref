@@ -64,8 +64,8 @@ import { runQuadPasses } from './quadPass.ts'
 import { warmByDrawing } from './warmup.ts'
 
 /*
- * The local volume: the field cached in three eye-anchored levels of
- * 256² × 32 texels, stacked with a guard slice under and over each level in
+ * The local volume: the field cached in two eye-anchored levels of
+ * 256² × 32 texels, the frame's 200 m and 800 m ones, stacked with a guard slice under and over each level in
  * one `RenderTarget3D`. It is what the sun grid sums its optical depth
  * through (`cloudSunGrid.ts`), and nothing else reads it: the trace marches
  * the field itself.
@@ -83,8 +83,8 @@ import { warmByDrawing } from './warmup.ts'
  * cell.** The field's read is the resolved field up to a switch,
  * `cell·4^(dither − 1)`, and the level's statistics past it; the bake reads
  * at its level's texel with the dither at one, the switch at a whole cell.
- * So the 50 m and 200 m levels are the resolved field under every genus,
- * and the 800 m level is under every genus but fog, whose cell is 500 m. A
+ * So the 200 m level is the resolved field under every genus, and the
+ * 800 m level is under every genus but fog, whose cell is 500 m. A
  * sun ray's depth is a sum along one line, and the sum of the resolved field
  * is that line's own depth. The statistics are a share and a depth to mix by
  * the crossing's law; summed as an extinction they are the mean density,
@@ -93,17 +93,16 @@ import { warmByDrawing } from './warmup.ts'
  * so a texel is the field at its center and a read between texels is the
  * sampler's.
  *
- * **It holds every level the frame lays out, the 50 m one among them**
+ * **It holds the frame's 200 m and 800 m levels, and not its 50 m one**
  * (`CLOUD_VOLUME_HELD`). The grid's cell is 400 m and a step of its bake is
- * 300 m or more through a 10 km union, so the 50 m level is point-sampled
- * once a cell and once a step, and what it buys is small: with the 200 m
- * and 800 m levels alone, both the resolved field, no row of the sun gate
- * moves by more than 0.001 RMS of the sun over its 22.5 km at four taps,
- * and within 4 km of the eye eight of seventeen rows lose 0.003 to 0.011
- * (fair cumulus under a 5° sun 0.063 to 0.073, altocumulus there 0.054 to
- * 0.064) while cirrus over cumulus at 5° gains 0.005
- * (`cloudSunAccuracy.gpu.test.ts`, by ring, on the Mac mini's M6). The
- * level is a third of the volume's bytes and of its rebuild's slices.
+ * 300 m or more through a 10 km union, so a 50 m level is point-sampled
+ * once a cell and once a step, and what it would buy is small: without
+ * it no row of the sun gate is worse than with it by more than 0.0006 RMS of the sun over its 22.5 km at four taps, and within 4 km of
+ * the eye by no more than 0.010 (altocumulus under a 5° sun, 0.045 against
+ * 0.055; `cloudSunAccuracy.gpu.test.ts`, by ring, on the Mac mini's M6).
+ * It would cost half again the bytes, 4,456,448, and 34 more slices a
+ * rebuild. Within 6.4 km of the eye the 200 m level answers where a 50 m
+ * one would have.
  *
  * **A level is read only where every one of its slices holds this anchor's
  * texels.** A slice is baked whole, at the window the level has that frame,
@@ -141,8 +140,8 @@ export const CLOUD_VOLUME_SIZE = 256
 export const CLOUD_VOLUME_SLICES = 32
 /** The levels a frame lays out about the eye, meters a texel (`cloudFrame.ts`). */
 export const CLOUD_VOLUME_TEXELS = [50, 200, 800] as const
-/** The frame's levels the volume holds, finer first: all three. */
-export const CLOUD_VOLUME_HELD = [0, 1, 2] as const
+/** The frame's levels the volume holds, finer first: its 200 m and 800 m ones. */
+export const CLOUD_VOLUME_HELD = [1, 2] as const
 
 /** The pass's name on the timeline. */
 export const CLOUD_VOLUME_LABEL = 'cloud volume'
@@ -193,9 +192,9 @@ export function wrapped(
   return value.sub(floor(value.div(n)).mul(n))
 }
 
-/** Where in the volume a point is read: its level, or 3 where none is trusted. */
+/** Where in the volume a point is read: its level, or the count of levels where none is trusted. */
 interface Held {
-  /** 0, 1 or 2, the finest trusted level holding the point, as the volume stacks them; 3 where none does. */
+  /** The finest trusted level holding the point, as the volume stacks them, from 0; the count of levels where none does. */
   readonly level: Node<'float'>
   /** Lattice texels of that level's plane, continuous: texel (i, j) covers [i, i + 1). */
   readonly lattice: Node<'vec2'>
@@ -265,7 +264,7 @@ export class CloudVolume implements CloudResource {
   /*
    * Linear by name: a `RenderTarget3D` takes its minification filter from
    * the options and keeps `Data3DTexture`'s nearest magnification, and a read
-   * at level 0 magnifies. Nearest, a cloudy texel reads as a 50 m box a ray
+   * at level 0 magnifies. Nearest, a cloudy texel reads as a 200 m box a ray
    * can clip in under a step.
    */
   readonly #target = new RenderTarget3D(1, 1, 1, {
