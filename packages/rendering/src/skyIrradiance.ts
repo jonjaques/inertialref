@@ -95,6 +95,15 @@ export interface SkyTable extends ScatteringLut {
   readonly rows: SkyRows
 }
 
+/**
+ * The rows of an air whose gas and haze hold no column, as a scale height
+ * in the air's depths: one column so tall that the rows stand within 1% of
+ * evenly in height. Such an air still has a sky, lit by its detached layer
+ * and its ground, so its rows must still part; the same closed form keeps
+ * the bake and both readers on one function.
+ */
+export const SKY_EVEN_SCALE = 64
+
 /** The rows for an air: its two columns, weighed as `SkyRows` says. */
 export function skyRowsOf(recipe: AtmosphereRecipe): SkyRows {
   const ceiling = recipe.topRatio - 1
@@ -106,7 +115,10 @@ export function skyRowsOf(recipe: AtmosphereRecipe): SkyRows {
   const b = ceiling / recipe.hRayleigh
   const d = ceiling / recipe.hMie
   const whole = gas * -Math.expm1(-b) + haze * -Math.expm1(-d)
-  if (!(whole > 0)) return NO_SKY_ROWS
+  if (!(whole > 0)) {
+    const even = 1 / SKY_EVEN_SCALE
+    return [1 / (-Math.expm1(-even) * (1 - 1 / SKY_TOP_SHARE)), even, 0, 0]
+  }
   const last = whole * (1 - 1 / SKY_TOP_SHARE)
   return [gas / last, b, haze / last, d]
 }
