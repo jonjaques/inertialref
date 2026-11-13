@@ -146,7 +146,7 @@ the charter's §2 asks:
 
 ```
 R-A, R-B  →  K (census, R-F)  →  sun map S, with surfaces G on the stand-ins  →  air A  →  [look: E1, E2, G1]
-R-D, and M2, X, L4 merged  →  trace T, on the seat G frees
+K, O's blocks, and M2, X, L4 merged  →  trace T (the ground's share), on its own seat
 R-C1; O's column  →  R-C2, R-E  →  O's blocks  →  light map V  →  light H (L5, L6, m)  →  reflection R  →  default D  →  integration
 ```
 
@@ -611,7 +611,8 @@ r(τ*)       = 2·∫ (1 − t(τ*, μ))·μ dμ   the slab's reflectance for di
 E₁  = μ₀·F(p)·B(x(p))                                      the beam: at the sun's crossing
     + μ₀·F(h_c)·D̄(p)                                       the cloud's diffuse light: under the cloud
     + E_sky(p)·(1 − c̄_v(p)) + E_sky(h_c)·(c̄_v(p) − R̄_v(p))   the sky: what stands over the point
-E↓  = E₁ + Ē₁·g,    g = Ā·R_up/(1 − Ā·R_up),    R_up = R̄_v + (1 − c̄_v)·R_air
+E↓  = E₁ + Ē₁·g,    Ē₁ = K∗K∗E₁,    g = Ā·R̿_up/(1 − Ā·R̿_up),    R̿_up = K∗K∗R_up
+R_up = R̄_v + (1 − c̄_v)·R_air          the reflectance over the ground, before the kernel spreads it
 beam    = μ₀·F(p)·B(x)                  keeps its direction: the photometric function, the glint
 diffuse = E↓ − beam                     the fragment reflects A·skyView·diffuse/π with its own A
 ```
@@ -649,7 +650,7 @@ r²)²)`, half of it inside `r = h`. The light map's two levels either
   none the fragment's own, declared at 56% at a snow line and 13% at a
   land and sea shore (R-C1). The number a frame at the eye's foot serves
   the air's `m` alone. The fragment's own
-  `A` there draws a step at a shore that the light does not have: 23%
+  `A` in the return draws a step at a shore that the light does not have: 23%
   for 2% between land at 0.30 and sea at 0.06, and 138% for 12% beside
   snow (M: the physics critic, `shore.mjs`).
 - **`R_air` is the clear air's reflectance from below,** one number a
@@ -715,7 +716,9 @@ cover is under a half, the trace's base radiance from straight below,
 times π, is within 10% of the ground's `E↓` at an albedo of 0.15.
 
 **What it forbids.** Any part but the beam read at the sun's crossing.
-The fragment's own albedo in the return. A two-stream closed form. A
+One number at the eye's foot for `Ā`, which is the surface's albedo at
+the return's reach, and the fragment's own albedo in the return where
+the material has a coarse level of its own. A two-stream closed form. A
 beam from one medium and a diffuse part from another. The table read by
 scaled depth for a medium that is not the table's.
 
@@ -1107,7 +1110,7 @@ cloudWarm cloudLightCost`; six named stances byte-equal, flag on and
   twice the measured. A bound of one 8-bit step fails by construction:
   6.3% to 11.9% of texels pass it under the field's own error (M: the
   engineering critic, probe 2). An analytic box at 35° and 10°, its edge
-  on the base shell within a texel. A 12.8 km mean within 0.01. Under
+  on the base shell within a texel. A 12 km mean within 0.01. Under
   one level with no drift, a ground point's read a second later equals
   the turned field's.
 - **Done:** the gate, the docs stage; `cloudSunMap cloudSystem cloudWarm`.
@@ -1156,17 +1159,16 @@ cloudCompositeError materials`.
 - **Owns:** `groundShareAt` (`packages/rendering/src/cloudOverlap.ts`).
   **Granted:** `render/cloudSky.ts` (two more block fetches at each read
   of the sky, which is three today), the far march's use of its own
-  column. **If R-D lands a form:** `cloudMix.ts` and its twin, the
-  source's call sites in `cloudMarch.ts` and `cloudFarAtlas.ts`,
-  `cloudSunGrid.ts`, `cloudSunlight.ts`. **If R-C2 lands the mean:**
-  `sampleAir`'s one multiply.
-- **Reads:** §5.1's base, §6.1, §4.4. M2's slabs; L's depth channel.
-- Opus `high`, the only package in the trace's kernel. After R-D and
-  after M2, X and L's fourth pass merge, on the seat G frees.
-- **Budget:** no byte, no binding; two fetches at most where a far part
-  exists. The stop is ruling 002's line on every row.
-- **Tests:** the slab gate with `farShadow` on equal to off within 10⁻³;
-  §5.1's consistency bar; no NaN at a far depth of zero.
+  column. **If R-C2 lands the mean:** `sampleAir`'s one multiply.
+- **Builds the ground's share alone:** no far part's diffuse share
+  lands (§6.1), so nothing of the source, the grid or the sun's depth
+  is T's.
+- **Reads:** §5.1's base, §6.1, §4.4. M2's slabs.
+- Opus `high`, the only package in the trace's kernel, on its own seat.
+  After K and O's blocks, and after M2, X and L's fourth pass merge.
+- **Budget:** no byte, no binding; the two block fetches at each read of
+  the sky. The stop is ruling 002's line on every row.
+- **Tests:** §5.1's consistency bar.
 - **Done:** the gate, the docs stage; `cloudSlab cloudTrace cloudSunDepth
 cloudSunAccuracy cloudFar cloudSky`; the instrument before and after.
 
@@ -1193,7 +1195,7 @@ cloudSunAccuracy cloudFar cloudSky`; the instrument before and after.
 - Fable `xhigh`, on the GPU. After R-C1, S and O's block.
 - **Budget:** 458,752 B; one bake pipeline; a schedule's count, as S's.
 - **Tests:** the two levels' weights against the kernel's convolution of
-  a step and of a bar, within 0.02; the CPU twin on §5.1's cases inside
+  a step and of a 1 km bar, within 0.025 RMS and 0.15 at worst; the CPU twin on §5.1's cases inside
   that table's figures.
 - **Done:** the gate, the docs stage; `cloudLightMap cloudSystem`.
 
@@ -1480,13 +1482,13 @@ phase 1's declared errors are largest. S1 and S2 do.
 
 **The council's.**
 
-| #   | What                                                                                                                                                                                                        | Figure                                                                                                 |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 1   | The bars proposed where the rubric has no row: L1 (0.01 in a 12.8 km mean, 0.03 RMS), L2 (10% over a 10° sun), L3 (1%), L4 (25%), L8 (10%), L9 (±35%). L5's geometry is set: ruling 004's three bars (§5.1) | §4 to §6                                                                                               |
-| 2   | E2's crop shows no shadow's shape on the air over the base                                                                                                                                                  | Judged by R-G before A is briefed, not declared (ruling 004, 7; §4.4)                                  |
-| 3   | The resolved near probe is out of the MVP                                                                                                                                                                   | §2; S4 records it                                                                                      |
-| 4   | The wording of the sun map's own clause beside B7's "the field is whole", which it does not join as written (ruling 004, 8)                                                                                 | Its first bake is 28 frames under one level at 50° and 70 to 200 at 15° or under three (E), against 48 |
-| 5   | Row 14 is held on the renderer's medium, and its column cannot see where a part is read                                                                                                                     | 3.0% from the true medium at 550 nm, 2.8% down to a 2° sun (M)                                         |
+| #   | What                                                                                                                                                                                                      | Figure                                                                                                 |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1   | The bars proposed where the rubric has no row: L1 (0.01 in a 12 km mean, 0.03 RMS), L2 (10% over a 10° sun), L3 (1%), L4 (25%), L8 (10%), L9 (±35%). L5's geometry is set: ruling 004's three bars (§5.1) | §4 to §6                                                                                               |
+| 2   | E2's crop shows no shadow's shape on the air over the base                                                                                                                                                | Judged by R-G before A is briefed, not declared (ruling 004, 7; §4.4)                                  |
+| 3   | The resolved near probe is out of the MVP                                                                                                                                                                 | §2; S4 records it                                                                                      |
+| 4   | The wording of the sun map's own clause beside B7's "the field is whole", which it does not join as written (ruling 004, 8)                                                                               | Its first bake is 28 frames under one level at 50° and 70 to 200 at 15° or under three (E), against 48 |
+| 5   | Row 14 is held on the renderer's medium, and its column cannot see where a part is read                                                                                                                   | 3.0% from the true medium at 550 nm, 2.8% down to a 2° sun (M)                                         |
 
 **Declared by this design:** §8's last paragraph, each a ceiling test. Not
 in a law's own section: E1's outer 7 km a side at the coarser level at
