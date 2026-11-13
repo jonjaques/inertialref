@@ -136,7 +136,8 @@ export interface CloudMedium {
   /**
    * The cumuliform share of the level at the sample's column, 0..1, where a
    * medium holds it: what the light after first order blends its factor of
-   * the sun by (`CloudSourceSlab.convective`). Absent, a march reads the
+   * the sun by (`CloudSourceSlab.convective`), and the sky's light its two
+   * sides' mean. The field's media hold it. Absent, a march reads the
    * level's own share under a regime and none under any other climate.
    */
   readonly convective?: Node<'float'>
