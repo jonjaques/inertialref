@@ -5,7 +5,11 @@ import {
   crossingDepth,
   crossingExponent,
   crossingTransmittance,
+  resolvedSlab,
+  SOURCE_SUN_FLOOR,
+  SOURCE_VIEW_FLOOR,
   spreadDepth,
+  statisticalSlab,
   stepLight,
   stepShare,
 } from './cloudOverlap.ts'
@@ -427,5 +431,118 @@ describe('the share of a step', () => {
         relativeTo(stepShare(edge * (1 - 1e-13)), stepShare(edge)),
       ).toBeLessThan(2e-13)
     expect(stepShare(0)).toBe(1)
+  })
+})
+
+describe('the slab a sample stands in', () => {
+  /*
+   * A statistical step's columns are a gamma of shape k and mean m, and a
+   * ray that has crossed the share s of the level at a cosine μ has weighed
+   * a column of depth τ by τ·e^(−s·τ/μ): a gamma of shape k + 1 and scale
+   * θ = 1/(k/m + s/μ), whose moments are θʲ·(k + 1)(k + 2)…(k + j). A Gauss
+   * rule of n points takes every polynomial of degree 2n − 1 exactly, so
+   * the two points sum the columns' depths to their third power as the
+   * gamma has them, and the one point their mean: a source that is a cubic
+   * in a column's depth is summed exactly by two reads.
+   */
+  const shapes = between(Math.log(0.3), Math.log(40)).map(Math.exp)
+  const means = between(Math.log(0.05), Math.log(60)).map(Math.exp)
+
+  it('sums the tilted gamma’s columns to their third moment at two points, and to their mean at one', () => {
+    fc.assert(
+      fc.property(
+        shapes,
+        means,
+        between(0, 1),
+        between(SOURCE_VIEW_FLOOR, 1),
+        fc.boolean(),
+        (shape, mean, seen, viewMu, litSide) => {
+          const scale = 1 / (shape / mean + seen / viewMu)
+          const moment = (j: number): number => {
+            let product = 1
+            for (let i = 1; i <= j; i += 1) product *= (shape + i) * scale
+            return product
+          }
+          const statistics = { shape, mean }
+          const at = (point: 0 | 1, points: 1 | 2) =>
+            statisticalSlab(
+              statistics,
+              seen,
+              viewMu,
+              litSide,
+              0.4,
+              point,
+              points,
+            )
+          const column = ({ slab }: ReturnType<typeof at>): number =>
+            slab.top + slab.bottom
+          const one = at(0, 1)
+          expect(one.weight).toBe(1)
+          expect(column(one)).toBeCloseTo(moment(1), 9)
+          const two = [at(0, 2), at(1, 2)] as const
+          expect(two[0].weight + two[1].weight).toBeCloseTo(1, 12)
+          expect(column(two[0])).toBeLessThan(column(two[1]))
+          for (const j of [1, 2, 3]) {
+            const sum = two.reduce(
+              (total, point) => total + point.weight * column(point) ** j,
+              0,
+            )
+            expect(Math.abs(sum - moment(j))).toBeLessThan(1e-9 * moment(j))
+          }
+          // The sample stands the ray's share under the eye's face, which
+          // is the lit one or the far one.
+          for (const point of [one, ...two]) {
+            const under = litSide ? seen : 1 - seen
+            expect(point.slab.top).toBeCloseTo(under * column(point), 9)
+            expect(point.slab.sunMu).toBe(0.4)
+          }
+        },
+      ),
+    )
+  })
+
+  it('is one depth where a level’s depths do not spread, and nothing at a mean of nothing', () => {
+    const flat = { shape: UNSPREAD_SHAPE, mean: 20 }
+    for (const point of [0, 1] as const) {
+      const { slab } = statisticalSlab(flat, 0, 1, true, 1, point, 2)
+      // A ray that has crossed none of the level weighs its columns by
+      // their depth alone: the two points stand 1/√k to each side of the
+      // one depth.
+      expect(Math.abs(slab.top + slab.bottom - 20)).toBeLessThan(
+        (20 * 1.1) / Math.sqrt(UNSPREAD_SHAPE),
+      )
+      expect(slab.top).toBe(0)
+    }
+    const none = statisticalSlab(
+      { shape: 0.6, mean: 0 },
+      0.5,
+      0.5,
+      false,
+      0.2,
+      1,
+      2,
+    )
+    expect(none.slab.top + none.slab.bottom).toBeLessThan(1e-5)
+    expect(Number.isFinite(none.weight)).toBe(true)
+  })
+
+  it('turns a resolved step’s two depths by the sun’s cosine, its size under the horizon, never under the table’s floor', () => {
+    fc.assert(
+      fc.property(
+        between(0, 64),
+        between(0, 64),
+        between(-1, 1),
+        (toSun, behind, sunMu) => {
+          const slab = resolvedSlab(toSun, toSun + behind, sunMu)
+          const mu = Math.max(Math.abs(sunMu), SOURCE_SUN_FLOOR)
+          expect(slab.sunMu).toBe(mu)
+          expect(slab.top).toBeCloseTo(mu * toSun, 12)
+          expect(slab.bottom).toBeCloseTo(mu * behind, 10)
+        },
+      ),
+    )
+    // A whole depth under the depth to the sun leaves nothing behind.
+    expect(resolvedSlab(12, 3, 0.5)).toEqual({ sunMu: 0.5, top: 6, bottom: 0 })
+    expect(resolvedSlab(12, 30, -0.01).sunMu).toBe(SOURCE_SUN_FLOOR)
   })
 })

@@ -1,6 +1,7 @@
 import type { Node } from 'three/webgpu'
 import {
   abs,
+  clamp,
   exp,
   float,
   int,
@@ -10,19 +11,25 @@ import {
   mix,
   select,
   sqrt,
+  vec2,
   vec3,
 } from 'three/tsl'
 import { UNSPREAD_SHAPE } from '@inertialref/rendering'
-import type { CloudLevelStatistics, CloudSunDepths } from './cloudNodes.ts'
+import type {
+  CloudLevelStatistics,
+  CloudSourceSlab,
+  CloudSunDepths,
+} from './cloudNodes.ts'
 import type { CloudLayerUniforms } from './cloudUniforms.ts'
 
 /*
  * How a ray's crossing of a partly cloudy level is mixed, and what light a
  * step of it adds: the one law the fine march and the far march both take,
  * and the layers' statistics that stand in for the sun's cache where it
- * holds nothing. `packages/rendering/src/cloudOverlap.ts` is the same
- * arithmetic on the CPU, and `cloudTrace.gpu.test.ts` holds each function
- * here to it.
+ * holds nothing, and the slab a sample stands in for the light after first
+ * order. `packages/rendering/src/cloudOverlap.ts` is the same arithmetic on
+ * the CPU, and `cloudTrace.gpu.test.ts` and `cloudSource.gpu.test.ts` hold
+ * each function here to it.
  *
  * A ray is in the cloudy share of a column or out of it for the column's
  * whole crossing, and between columns the overlap is random, so a crossing
@@ -250,6 +257,26 @@ export function stepLight(
   return vec3(band(start.x, end.x), band(start.y, end.y), band(start.z, end.z))
 }
 
+/**
+ * `stepLight` for one value that the three bands share: a source that is
+ * one number for the three, which a caller multiplies by its bands after.
+ */
+export function stepLightBand(
+  start: Node<'float'>,
+  end: Node<'float'>,
+  depth: Node<'float'>,
+): Node<'float'> {
+  const through = exp(depth.negate())
+  const thin = depth.lessThan(SERIES_BELOW)
+  const safe = select(thin, float(1), depth)
+  const ramp = select(
+    thin,
+    depth.mul(depth.mul(depth.div(8).sub(1 / 3)).add(0.5)),
+    float(1).sub(safe.add(1).mul(through)).div(safe),
+  )
+  return bandLight(start, end, depth, through, ramp)
+}
+
 /** What the layers' statistics read at a sample's own column. */
 export interface SunStatisticsInput {
   readonly layers: CloudLayerUniforms
@@ -357,4 +384,104 @@ export function sunPastTaps(
   statistics: Node<'float'>,
 ): Node<'float'> {
   return mix(statistics, exp(depths.toSun.negate()), depths.weight)
+}
+
+/* ------------------------------------------------------------------------- */
+/* The slab a sample stands in                                                */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * The light after first order is a plane slab's source, read at the slab a
+ * sample stands in (`CloudSourceNodes.source`). What that slab is, is a
+ * rule, and the two here are the only ones: both marches import them, so
+ * across the handover they differ in the statistics they were handed and
+ * never in what "depth" means.
+ */
+
+/** The least a view's cosine to the vertical is taken as where a column's depths are tilted by it. */
+const VIEW_MU_FLOOR = 0.02
+/** The least a level's mean depth is divided by. */
+const NO_DEPTH = 1e-6
+
+/**
+ * A resolved step's slab (design §5.5): the sample's depth along the sun's
+ * ray and the whole of that ray's (`CloudSun.depth`), each times the sun's
+ * cosine to the local vertical, which is exact in a deck. `sunMu` is the
+ * sample's own, signed: under the sample's horizon the lit face is the
+ * base, the depths are already sided that way, and the cosine is its size.
+ * A whole depth under the depth to the sun leaves nothing behind.
+ */
+export function resolvedSlab(
+  sun: Node<'vec2'>,
+  sunMu: Node<'float'>,
+): CloudSourceSlab {
+  const mu = max(abs(sunMu), SUN_MU_FLOOR)
+  return {
+    sunMu: mu,
+    depth: vec2(sun.x, max(sun.y.sub(sun.x), 0)).mul(mu),
+  }
+}
+
+/**
+ * A statistical step's slab at one Gauss point of the tilted gamma, and
+ * that point's weight.
+ *
+ * A sample that stands for a footprint stands for a spread of columns, and
+ * one read at any one depth is wrong by a factor: at the level's nominal
+ * column the light after first order reads +39% to +93% from above over
+ * broken cloud, and at the depth the statistics' transmittance carries
+ * −45% to −59%. Under independent columns the march's own sum is exact
+ * when the source at a sample is the table's mean over the columns as the
+ * ray has weighed them by then: a column of depth `τ` is seen through
+ * `e^(−s·τ/μ_v)` of itself and adds in proportion to `τ`, so the columns a
+ * gamma of shape `k` and mean `m` spreads are weighed as a gamma of shape
+ * `k + 1` and scale `1/(k/m + s/μ_v)`. Its Gauss points:
+ *
+ *     one:  τ = (k + 1)/(k/m + s/μ_v), weight 1
+ *     two:  τ = ((k + 2) ∓ √(k + 2))/(k/m + s/μ_v), weights ½ ± 1/(2·√(k + 2))
+ *
+ * `point` 0 is the shallower. A column of depth `τ` holds the sample at
+ * `h·τ` under its lit face, `h = s` where the eye's face is the lit one and
+ * `1 − s` where it is not. The depths are a column's and go to the node as
+ * they are: no cosine of the sun turns them.
+ *
+ * `mean` is the level's true mean depth (`CloudLevelStatistics.mean`),
+ * never the mean its transmittance implies, which is 1.3 to 3 times it.
+ * The crossing's exponent has no place in the weight: on a slant it reads
+ * +18% to +21% over fair cumulus where one column reads within 2%.
+ */
+export function statisticalSlab(
+  statistics: {
+    readonly shape: Node<'float'>
+    readonly mean: Node<'float'>
+  },
+  /** The share of the level's column between the eye's face and the sample. */
+  seen: Node<'float'>,
+  /** |cosine| of the view to the local vertical. */
+  viewMu: Node<'float'>,
+  /** Whether the eye's face is the lit one. */
+  litSide: Node<'bool'>,
+  sunMu: Node<'float'>,
+  point: 0 | 1,
+  points: 1 | 2,
+): { readonly slab: CloudSourceSlab; readonly weight: Node<'float'> } {
+  const { shape } = statistics
+  const share = clamp(seen, 0, 1)
+  const rate = shape
+    .div(max(statistics.mean, NO_DEPTH))
+    .add(share.div(max(viewMu, VIEW_MU_FLOOR)))
+  const spread = sqrt(shape.add(2))
+  const sign = point === 0 ? -1 : 1
+  const column = (
+    points === 1 ? shape.add(1) : shape.add(2).add(spread.mul(sign))
+  ).div(rate)
+  const under = select(litSide, share, float(1).sub(share))
+  return {
+    slab: {
+      sunMu: max(abs(sunMu), SUN_MU_FLOOR),
+      depth: vec2(under, float(1).sub(under)).mul(column),
+    },
+    weight:
+      points === 1 ? float(1) : float(0.5).sub(float(0.5 * sign).div(spread)),
+  }
 }

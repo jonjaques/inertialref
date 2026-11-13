@@ -122,6 +122,9 @@ export function createCloudField(): CloudField {
       // frame: the second body's far bake reads it through the analytic
       // medium whatever the maps drew.
       maps.write(frame)
+      // Each level's class and its factor of the sun, which the source's
+      // read takes by level.
+      source.write(frame)
     },
     render(renderer, frame, budget) {
       for (const resource of caches) resource.render(renderer, frame, budget)

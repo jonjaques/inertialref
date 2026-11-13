@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import {
+  ClampToEdgeWrapping,
+  type Data3DTexture,
+  LinearFilter,
+} from 'three/webgpu'
 import { float, int, uint, uvec2, vec2, vec3 } from 'three/tsl'
 import {
   bakeSkyMoments,
@@ -24,7 +29,7 @@ import {
   SKY_TABLE_HEIGHT,
   SKY_TABLE_WIDTH,
   SLAB_REFERENCE,
-  SLAB_SOURCE,
+  SLAB_VIEW_SOURCE,
 } from '@inertialref/rendering'
 import { MemorySaveStore } from '@inertialref/persistence'
 import type { Body } from '@inertialref/universe'
@@ -43,7 +48,12 @@ import {
   slabMedium,
 } from './cloudNodes.ts'
 import { createCloudSky } from './cloudSky.ts'
-import { createCloudSource } from './cloudSource.ts'
+import type { CloudFrame } from './cloudFrame.ts'
+import {
+  CLOUD_SOURCE_BYTES,
+  CLOUD_SUN_FACTORS,
+  createCloudSource,
+} from './cloudSource.ts'
 import {
   type CloudSystem,
   type CloudSystemDeps,
@@ -80,7 +90,7 @@ const sample: CloudSample = {
 describe('the generated tables’ stand-ins', () => {
   it('each name a format and a version, and hold what their own layout declares', () => {
     for (const table of [
-      SLAB_SOURCE,
+      SLAB_VIEW_SOURCE,
       SLAB_REFERENCE,
       BLUE_NOISE,
       ICE_AGGREGATE,
@@ -90,10 +100,19 @@ describe('the generated tables’ stand-ins', () => {
       expect(table.format).toMatch(/^inertialref\//)
       expect(table.version).toBe(1)
     }
-    // The source: (J₀, J₁, J_f) at every node of two depths and a sun.
-    expect(SLAB_SOURCE.terms).toHaveLength(
-      SLAB_SOURCE.suns * SLAB_SOURCE.nodes * SLAB_SOURCE.nodes * 3,
+    // The source: four coefficients of the bearing at every node of two
+    // depths and a sun, in a slab for each view cosine of each hemisphere.
+    // Its texels are a module of their own, which no index exports.
+    expect(SLAB_VIEW_SOURCE.texelCount).toBe(
+      2 *
+        SLAB_VIEW_SOURCE.cosines.length *
+        SLAB_VIEW_SOURCE.suns *
+        SLAB_VIEW_SOURCE.nodes *
+        SLAB_VIEW_SOURCE.nodes *
+        4,
     )
+    expect(CLOUD_SOURCE_BYTES).toBe(960_000)
+    expect(CLOUD_SOURCE_BYTES).toBe(SLAB_VIEW_SOURCE.texelCount * 2)
     // The reference's flux: one value a depth a sun.
     expect(SLAB_REFERENCE.flux).toHaveLength(
       SLAB_REFERENCE.sunMus.length * SLAB_REFERENCE.depths.length,
@@ -197,17 +216,87 @@ describe('the light’s stub modules', () => {
     expect(Object.keys(sky).sort()).toEqual(['mean', 'sunward', 'up'])
     for (const term of Object.values(sky)) expect(isNode(term)).toBe(true)
     const source = createCloudSource()
-    expect(isNode(source.source(vec2(0), float(0.7)))).toBe(true)
+    const slab = { sunMu: float(0.7), depth: vec2(0) }
+    for (const nodes of [source, source.second])
+      expect(
+        isNode(
+          nodes.source(
+            { ...slab, convective: float(1) },
+            float(10),
+            nodes.level(int(0)),
+            nodes.view(float(0.5), float(0)),
+          ),
+        ),
+      ).toBe(true)
     const jitter = createCloudJitter({ uniforms })
     expect(jitter.at).toBe(traceJitter)
     expect(isNode(jitter.at(uvec2(0, 0), uint(0)))).toBe(true)
-    // Each table module is a resource the field lists, holding nothing.
+    // Each table module is a resource the field lists, holding nothing on
+    // a device it was never warmed on. The source waits for its texels, and
+    // reads a stand-in clamped and filtered as the table is until they land.
     for (const resource of [source, jitter]) {
       expect(resource.bytes).toBe(0)
       expect(resource.textures()).toEqual([])
-      expect(resource.pending).toBe(false)
     }
+    expect(jitter.pending).toBe(false)
+    expect(source.pending).toBe(true)
+    const standIn = source.texture as Data3DTexture
+    expect([standIn.wrapS, standIn.wrapT, standIn.wrapR]).toEqual([
+      ClampToEdgeWrapping,
+      ClampToEdgeWrapping,
+      ClampToEdgeWrapping,
+    ])
+    expect([standIn.magFilter, standIn.minFilter]).toEqual([
+      LinearFilter,
+      LinearFilter,
+    ])
     expect(new Set([source.name, jitter.name]).size).toBe(2)
+    source.dispose()
+  })
+
+  it('takes the table when its texels land, laid out as the header says, and holds a level’s class and factor', async () => {
+    const source = createCloudSource()
+    await source.load()
+    expect(source.pending).toBe(false)
+    const map = source.texture as Data3DTexture
+    expect([map.image.width, map.image.height, map.image.depth]).toEqual([
+      SLAB_VIEW_SOURCE.nodes,
+      SLAB_VIEW_SOURCE.nodes,
+      2 * SLAB_VIEW_SOURCE.cosines.length * SLAB_VIEW_SOURCE.suns,
+    ])
+    expect([map.wrapS, map.wrapT, map.wrapR, map.magFilter]).toEqual([
+      ClampToEdgeWrapping,
+      ClampToEdgeWrapping,
+      ClampToEdgeWrapping,
+      LinearFilter,
+    ])
+    expect(map.generateMipmaps).toBe(false)
+    // No level takes a factor until a frame names its genera, and cumulus
+    // is the one genus with a fitted pair.
+    expect(source.levels.factor.value.toArray()).toEqual([1, 1, 1])
+    expect(source.levels.slope.value.toArray()).toEqual([0, 0, 0])
+    const genera = [
+      ['stratocumulus', 'cumulus'],
+      ['altostratus', 'altocumulus'],
+      ['cirrus', 'cirrus'],
+    ] as const
+    source.write({
+      served: { climate: { genera } },
+      second: null,
+    } as unknown as CloudFrame)
+    expect(source.levels.factor.value.toArray()).toEqual([
+      CLOUD_SUN_FACTORS.cumulus!.l,
+      1,
+      1,
+    ])
+    expect(source.levels.slope.value.toArray()).toEqual([
+      CLOUD_SUN_FACTORS.cumulus!.a,
+      0,
+      0,
+    ])
+    expect(source.levels.ice.value.toArray()).toEqual([0, 0, 1])
+    expect(source.secondLevels.ice.value.toArray()).toEqual([0, 0, 0])
+    source.dispose()
   })
 
   it('mix a crossing, and stand the layers’ statistics in for the sun’s cache, as nodes', () => {
@@ -269,9 +358,17 @@ describe('the light’s stub modules', () => {
     expect(isNode(phase.phase(float(0), body.layers, 0, float(10)))).toBe(true)
     expect(isNode(phase.droplets(float(0), float(10)))).toBe(true)
     expect(isNode(CLOUD_STAND_INS.sky(0.5).at(sample, body).mean)).toBe(true)
-    expect(isNode(CLOUD_STAND_INS.source().source(vec2(0), float(1)))).toBe(
-      true,
-    )
+    const standIn = CLOUD_STAND_INS.source(0.25)
+    expect(
+      isNode(
+        standIn.source(
+          { sunMu: float(1), depth: vec2(0) },
+          float(10),
+          standIn.level(int(0)),
+          standIn.view(float(1), float(0)),
+        ),
+      ),
+    ).toBe(true)
     expect(isNode(CLOUD_STAND_INS.jitter().at(uvec2(0, 0), uint(0)))).toBe(true)
     const sun = exactSlabSun([{ base: 1000, top: 2000, sigma: 0.01 }])(
       sample,

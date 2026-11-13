@@ -181,3 +181,82 @@ export function stepLight(start: number, end: number, depth: number): number {
       : (opacity - depth * Math.exp(-depth)) / depth
   return start * opacity + (end - start) * ramp
 }
+
+/* ------------------------------------------------------------------------- */
+/* The slab a sample stands in                                                */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * A plane slab a sample stands in, as the source table reads it
+ * (`slabSourceRead.ts`): the sun's cosine to its lit face, and the scaled
+ * depths normal to it from the lit face to the sample and from the sample
+ * to the far face.
+ */
+export interface SourceSlab {
+  readonly sunMu: number
+  readonly top: number
+  readonly bottom: number
+}
+
+/** The least the sun's cosine is taken as: the source table's first row. */
+export const SOURCE_SUN_FLOOR = 0.05
+/** The least a view's cosine to the vertical is taken as where a column's depths are tilted by it. */
+export const SOURCE_VIEW_FLOOR = 0.02
+/** The least a level's mean depth is divided by. */
+const NO_DEPTH = 1e-6
+
+/**
+ * A resolved step's slab: the depth along the sun's ray to the sun, and the
+ * whole of that ray's, each times the sun's cosine to the local vertical,
+ * its size where the sun stands under the sample's horizon. The CPU
+ * reference of `resolvedSlab` in `apps/game/src/render/cloudMix.ts`.
+ */
+export function resolvedSlab(
+  toSun: number,
+  whole: number,
+  sunMu: number,
+): SourceSlab {
+  const mu = Math.max(Math.abs(sunMu), SOURCE_SUN_FLOOR)
+  return {
+    sunMu: mu,
+    top: mu * toSun,
+    bottom: mu * Math.max(whole - toSun, 0),
+  }
+}
+
+/**
+ * A statistical step's slab at one Gauss point of the tilted gamma, and
+ * that point's weight: the columns of a level whose depths are spread as a
+ * gamma of `shape` about `mean`, weighed as a ray that has crossed the
+ * share `seen` of the level at a cosine `viewMu` has weighed them, which is
+ * a gamma of shape `k + 1` and scale `1/(k/m + s/μ_v)`. `point` 0 is the
+ * shallower of two. The CPU reference of `statisticalSlab` in
+ * `apps/game/src/render/cloudMix.ts`, which states the rule.
+ */
+export function statisticalSlab(
+  statistics: { readonly shape: number; readonly mean: number },
+  seen: number,
+  viewMu: number,
+  litSide: boolean,
+  sunMu: number,
+  point: 0 | 1,
+  points: 1 | 2,
+): { readonly slab: SourceSlab; readonly weight: number } {
+  const { shape } = statistics
+  const share = Math.min(Math.max(seen, 0), 1)
+  const rate =
+    shape / Math.max(statistics.mean, NO_DEPTH) +
+    share / Math.max(viewMu, SOURCE_VIEW_FLOOR)
+  const spread = Math.sqrt(shape + 2)
+  const sign = point === 0 ? -1 : 1
+  const column = (points === 1 ? shape + 1 : shape + 2 + sign * spread) / rate
+  const under = litSide ? share : 1 - share
+  return {
+    slab: {
+      sunMu: Math.max(Math.abs(sunMu), SOURCE_SUN_FLOOR),
+      top: under * column,
+      bottom: (1 - under) * column,
+    },
+    weight: points === 1 ? 1 : 0.5 - (0.5 * sign) / spread,
+  }
+}

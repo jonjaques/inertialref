@@ -1,4 +1,5 @@
 import {
+  ClampToEdgeWrapping,
   Data3DTexture,
   DataArrayTexture,
   DataTexture,
@@ -132,6 +133,13 @@ export interface CloudMedium {
   readonly depth: Node<'vec2'>
   /** The sample's level's statistics at its column; absent where a medium has none. */
   readonly statistics?: CloudLevelStatistics
+  /**
+   * The cumuliform share of the level at the sample's column, 0..1, where a
+   * medium holds it: what the light after first order blends its factor of
+   * the sun by (`CloudSourceSlab.convective`). Absent, a march reads the
+   * level's own share under a regime and none under any other climate.
+   */
+  readonly convective?: Node<'float'>
 }
 
 export type CloudMediumFn = (
@@ -271,13 +279,69 @@ export interface CloudSkyNodes {
   }
 }
 
+/**
+ * A plane slab a sample stands in, as the source table reads it. A rule
+ * outside the node forms it (`resolvedSlab`, `statisticalSlab` in
+ * `cloudMix.ts`), so the node never sees a depth along the sun's ray and a
+ * later rule hands it another cosine without an edit of the read.
+ */
+export interface CloudSourceSlab {
+  /** The sun's cosine to the slab's lit face. The node holds it inside the table's range. */
+  readonly sunMu: Node<'float'>
+  /**
+   * Scaled depth normal to the slab: from the lit face to the sample, and
+   * from the sample to the far face. Each carries its own cosine already;
+   * the node multiplies neither by `sunMu`.
+   */
+  readonly depth: Node<'vec2'>
+  /**
+   * The cumuliform share of the slab's column, 0..1: what the factor of the
+   * sun by level is blended by. Absent, none: the factor is exactly one.
+   */
+  readonly convective?: Node<'float'>
+}
+
+declare const CLOUD_SOURCE_VIEW: unique symbol
+/**
+ * What of a view the read needs, formed where the view holds: opaque to a
+ * caller, which hands `view`'s answer to `source` and reads nothing of it.
+ */
+export interface CloudSourceView {
+  readonly [CLOUD_SOURCE_VIEW]: true
+}
+
+/**
+ * What of a level the read needs, formed where the level holds: three
+ * numbers a caller keeps and hands back, and reads nothing of. A march
+ * forms it once a crossing and not once a step: on the trace's GPU a
+ * level's component of a uniform, read at every step, cost the frame more
+ * than the read's own arithmetic.
+ */
+export type CloudSourceLevel = Node<'vec3'>
+
 export interface CloudSourceNodes {
   /**
-   * The higher orders' source, (J₀, J₁, J_f) per unit of the sun's
-   * irradiance, from a sample's transport depths to its two faces and the
-   * sun's cosine.
+   * `mu`: the cosine, to the lit face's outward normal, of light traveling
+   * to the eye. `bearing`: the cosine of the angle between that light and
+   * the sun's light, both laid on the face; any value where either has no
+   * bearing.
    */
-  source(depth: Node<'vec2'>, sunMu: Node<'float'>): Node<'vec3'>
+  view(mu: Node<'float'>, bearing: Node<'float'>): CloudSourceView
+  /** A level's class and its factor of the sun, by its index, 0 to 2. */
+  level(index: Node<'int'>): CloudSourceLevel
+  /**
+   * The source of every order of the sun's light past the first, per unit
+   * of the sun's irradiance and of scaled depth, sr⁻¹, one value for the
+   * three bands: a caller multiplies it by `CloudSun.air`. `radius`, µm,
+   * and `level` choose the transport scale that turns the slab's scaled
+   * depths into the table's.
+   */
+  source(
+    slab: CloudSourceSlab,
+    radius: Node<'float'>,
+    level: CloudSourceLevel,
+    view: CloudSourceView,
+  ): Node<'float'>
 }
 
 export interface CloudJitterNodes {
@@ -616,7 +680,12 @@ const FORMATS = {
 export function cloudStandInTexture(
   kind: CloudStandInKind,
   format: CloudStandInFormat,
-  options: { readonly layers?: number; readonly value?: number } = {},
+  options: {
+    readonly layers?: number
+    readonly value?: number
+    /** Clamped on every axis where a map is: a table's, never a field's. */
+    readonly clamped?: boolean
+  } = {},
 ): Texture {
   const { channels, format: layout, type } = FORMATS[format]
   const layers = kind === '2d-array' ? (options.layers ?? 1) : 1
@@ -637,13 +706,25 @@ export function cloudStandInTexture(
   map.magFilter = LinearFilter
   map.minFilter = LinearFilter
   map.generateMipmaps = false
+  const wrap = options.clamped === true ? ClampToEdgeWrapping : RepeatWrapping
   if (kind !== '2d') {
-    map.wrapS = RepeatWrapping
-    map.wrapT = RepeatWrapping
+    map.wrapS = wrap
+    map.wrapT = wrap
   }
-  if (map instanceof Data3DTexture) map.wrapR = RepeatWrapping
+  if (map instanceof Data3DTexture) map.wrapR = wrap
   map.needsUpdate = true
   return map
+}
+
+/**
+ * The slab source table's stand-in: 1 × 1 × 1 RGBA16F, clamped on its three
+ * axes and linear both ways, as the table is. A value swap does not rebuild
+ * a program (rule 56), so what this compiles is what the table is read
+ * with: a stand-in that repeated would hand the last slab's last slice the
+ * first slab's first as its neighbor.
+ */
+export function cloudSourceStandIn(value = 0): Texture {
+  return cloudStandInTexture('3d', 'rgba16f', { value, clamped: true })
 }
 
 const ISOTROPIC = 1 / (4 * Math.PI)
@@ -688,7 +769,7 @@ function withReads(medium: CloudMedium, reads: Node<'float'>): CloudMedium {
  * - `phase`: the phase atlas (2D): 1;
  * - `far`: its atlas (2D): 1;
  * - `sky`: the sky table (2D): 1;
- * - `source`: the slab source table (3D): 1;
+ * - `source`: the slab source table (3D, clamped): 1;
  * - `jitter`: the blue-noise mask (3D): 1.
  *
  * A medium passed in is what the stand-in draws; its reads add nothing to it.
@@ -772,12 +853,13 @@ export const CLOUD_STAND_INS = {
     }
   },
 
-  /** A source of `isotropic` in its first term and nothing in its other two. */
+  /** A source of `isotropic` at every slab, radius and view. */
   source(isotropic: Scalar = 0): CloudSourceNodes {
-    const table = texture3D(cloudStandInTexture('3d', 'rgba16f'))
+    const table = texture3D(cloudSourceStandIn())
     return {
-      source: () =>
-        vec3(scalar(isotropic).add(cloudStandInBinding(table, '3d')), 0, 0),
+      view: () => ({}) as CloudSourceView,
+      level: () => vec3(0),
+      source: () => scalar(isotropic).add(cloudStandInBinding(table, '3d')),
     }
   },
 
