@@ -7,7 +7,26 @@ import {
   slabNodes,
   truncate,
 } from './addingDoubling.ts'
+import {
+  sourceAt,
+  type SlabSourceGrid,
+  type SlabSourceReadOptions,
+  type SlabSourceRay,
+  type SlabSourceRead,
+  type SlabSourceTable,
+} from '@inertialref/rendering'
 import { gaussLegendre, henyeyGreenstein, phaseOf } from './legendre.ts'
+
+// The read is the game's as well, so it lives in `packages/rendering`
+// (`slabSourceRead.ts`); the generator's names for its types stand here.
+export {
+  depthCoordinate,
+  readSource,
+  type SlabSourceGrid as SourceGrid,
+  type SlabSourceRay as SourceRay,
+  type SlabSourceRead as SourceRead,
+  type SlabSourceTable as SourceTable,
+} from '@inertialref/rendering'
 
 /*
  * The higher orders' source function, cut from the oracle: what a march adds
@@ -64,29 +83,8 @@ import { gaussLegendre, henyeyGreenstein, phaseOf } from './legendre.ts'
  * samples, not here.
  */
 
-/** The table's axes. */
-export interface SourceGrid {
-  /** Nodes along each depth axis. */
-  readonly nodes: number
-  /** Sun cosines, evenly from `sunMuMin` to one. */
-  readonly suns: number
-  readonly sunMuMin: number
-  /** u(t) = ln(1 + t/depthScale)/ln(1 + depthMax/depthScale). */
-  readonly depthScale: number
-  readonly depthMax: number
-}
-
-/** The transport depth's place on its axis, 0 to 1; clamped past `depthMax`. */
-export function depthCoordinate(grid: SourceGrid, depth: number): number {
-  return Math.min(
-    1,
-    Math.log1p(Math.max(0, depth) / grid.depthScale) /
-      Math.log1p(grid.depthMax / grid.depthScale),
-  )
-}
-
 /** Node i's transport depth: `depthCoordinate`'s inverse at i/(nodes − 1). */
-export function nodeDepth(grid: SourceGrid, i: number): number {
+export function nodeDepth(grid: SlabSourceGrid, i: number): number {
   return (
     grid.depthScale *
     Math.expm1(
@@ -96,7 +94,7 @@ export function nodeDepth(grid: SourceGrid, i: number): number {
 }
 
 /** Sun node k's cosine. */
-export function nodeSun(grid: SourceGrid, k: number): number {
+export function nodeSun(grid: SlabSourceGrid, k: number): number {
   return grid.sunMuMin + (k * (1 - grid.sunMuMin)) / (grid.suns - 1)
 }
 
@@ -190,7 +188,7 @@ export interface SourceRun {
  */
 export function sourceSamples(
   medium: SourceMedium,
-  grid: SourceGrid,
+  grid: SlabSourceGrid,
   streams: number,
   options: SourceOptions,
   each: (
@@ -385,69 +383,6 @@ export function sourceSamples(
   return { delta: f, modes }
 }
 
-/**
- * A table as a march reads it: a 3D texture of four channels, `nodes` square
- * in the two depths and `slabs`·`suns` deep. A slab is one stack of the sun's
- * slices, and what a slab's four channels are is its form's to say.
- */
-export interface SourceTable extends SourceGrid {
-  readonly slabs: number
-  /** Four numbers a texel, laid out [slab][sun][bottom][top][channel]. */
-  readonly terms: ArrayLike<number>
-}
-
-/**
- * A texel's four channels at transport depths `top` and `bottom` from the
- * two faces under a sun at `sunMu`, in one slab: the trilinear read a linear
- * 3D texture returns, clamped at the depths' ends and at the slab's own
- * first and last slices, so that no read blends two slabs.
- */
-export function readSource(
-  table: SourceTable,
-  slab: number,
-  top: number,
-  bottom: number,
-  sunMu: number,
-  out: Float64Array,
-): void {
-  const last = table.nodes - 1
-  const x = depthCoordinate(table, top) * last
-  const y = depthCoordinate(table, bottom) * last
-  const z = Math.min(
-    table.suns - 1,
-    Math.max(
-      0,
-      ((sunMu - table.sunMuMin) / (1 - table.sunMuMin)) * (table.suns - 1),
-    ),
-  )
-  const x0 = Math.min(last - 1, Math.floor(x))
-  const y0 = Math.min(last - 1, Math.floor(y))
-  const z0 = Math.min(table.suns - 2, Math.floor(z))
-  const fx = x - x0
-  const fy = y - y0
-  const fz = z - z0
-  out.fill(0, 0, 4)
-  for (let corner = 0; corner < 8; corner += 1) {
-    const dx = corner & 1
-    const dy = (corner >> 1) & 1
-    const dz = corner >> 2
-    const weight = (dx ? fx : 1 - fx) * (dy ? fy : 1 - fy) * (dz ? fz : 1 - fz)
-    const cell =
-      (((slab * table.suns + z0 + dz) * table.nodes + y0 + dy) * table.nodes +
-        x0 +
-        dx) *
-      4
-    for (let channel = 0; channel < 4; channel += 1)
-      out[channel] = out[channel]! + weight * table.terms[cell + channel]!
-  }
-}
-
-/** One read of the table a step: a slab, and what its four channels are summed by. */
-export interface SourceRead {
-  readonly slab: number
-  readonly weights: readonly [number, number, number, number]
-}
-
 /** One view of one slab. */
 export interface SlabView {
   /** The slab's scaled optical depth, τ′. */
@@ -459,19 +394,8 @@ export interface SlabView {
   readonly side: 'reflected' | 'transmitted'
 }
 
-/** What of a ray the source depends on: all of it constant along the ray. */
-export interface SourceRay {
-  readonly sunMu: number
-  /** The cosine, to the lit face's outward normal, of light traveling to the eye. */
-  readonly muV: number
-  /** The part of that light's direction along the sun's own bearing: sin θ·cos φ. */
-  readonly along: number
-  /** The cosine between the sun's light and that light. */
-  readonly nu: number
-}
-
 /** A view's ray. */
-export function slabRay(view: SlabView): SourceRay {
+export function slabRay(view: SlabView): SlabSourceRay {
   const azimuth = (view.azimuth * Math.PI) / 180
   return {
     sunMu: view.sunMu,
@@ -492,10 +416,11 @@ const HALVINGS = 14
  * the view's own attenuation along the ray across the whole slab.
  */
 export function higherOrders(
-  table: SourceTable,
-  reads: readonly SourceRead[],
+  table: SlabSourceTable,
+  reads: readonly SlabSourceRead[],
   view: SlabView,
   asymmetry: number,
+  options: SlabSourceReadOptions = {},
 ): number {
   // Panel edges as shares of the depth: 2⁻¹⁴ … ½ from the lit face, and the same from the far one.
   const edges = [0]
@@ -509,19 +434,15 @@ export function higherOrders(
     const width = (edges[p + 1]! - edges[p]!) * view.depth
     for (let i = 0; i < PANEL.nodes.length; i += 1) {
       const depth = from + (width * (PANEL.nodes[i]! + 1)) / 2
-      let source = 0
-      for (const read of reads) {
-        readSource(
-          table,
-          read.slab,
-          (1 - asymmetry) * depth,
-          (1 - asymmetry) * (view.depth - depth),
-          view.sunMu,
-          texel,
-        )
-        for (let channel = 0; channel < 4; channel += 1)
-          source += texel[channel]! * read.weights[channel]!
-      }
+      const source = sourceAt(
+        table,
+        reads,
+        (1 - asymmetry) * depth,
+        (1 - asymmetry) * (view.depth - depth),
+        view.sunMu,
+        texel,
+        options,
+      )
       const path = view.side === 'reflected' ? depth : view.depth - depth
       sum +=
         ((PANEL.weights[i]! * width) / 2) *

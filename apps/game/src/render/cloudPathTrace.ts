@@ -169,8 +169,20 @@ function skyMoments(sky: PathTraceSky): {
   }
 }
 
-/** A sun's horizontal direction, or none for a sun at the zenith or no sun. */
+/**
+ * A sun's horizontal direction, or none for a sun at the zenith or no sun.
+ * No sun is no bearing: a sky that leans toward one is refused without it,
+ * as the float64 tier refuses it, where it would be drawn with that term at
+ * nothing. The sky alone under a case's sun is that sun at no irradiance.
+ */
 function sunwardOf(scene: PathTraceScene): V3 {
+  if (
+    scene.sun === null &&
+    ('air' in scene.sky || scene.sky.sunward.some((value) => value !== 0))
+  )
+    throw new Error(
+      'cloudPathTrace: a sky with a sunward term needs a sun for its bearing; give the sun an irradiance of zero',
+    )
   const direction = scene.sun?.direction ?? ([0, 1, 0] as const)
   const flat = Math.hypot(direction[0], direction[2])
   return vec3(

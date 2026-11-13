@@ -409,6 +409,20 @@ const sceneOfCase = (
 })
 
 describe('the sky', () => {
+  it('is refused where it leans toward a sun the scene does not have', () => {
+    // No device is asked for anything: the bearing is missing before a
+    // kernel is built. The sky alone is traced under its sun at no
+    // irradiance, as the float64 tier's is.
+    const sky = {
+      mean: [1, 1, 1],
+      up: [0, 0, 0],
+      sunward: [0, 0.5, 0],
+    } as const
+    expect(() => createCloudPathTracer(sceneOf(ANALYTIC, { sky }), 64)).toThrow(
+      /needs a sun for its bearing/,
+    )
+  })
+
   it('is the table’s on the device as on the CPU, at a half float’s step', async () => {
     // The CPU tier's sky is `skyMomentsAt` of the table's float32 data; the
     // kernel's is `skyTableAt` of the texture the page uploads, half floats.
