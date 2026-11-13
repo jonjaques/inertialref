@@ -236,12 +236,13 @@ export function cloudSunFn(
     )
     // The cache where the taps end, which is the sample itself where none
     // was taken: there the read above is the read, and is not made again.
-    // A read of the cache is as dear as a read of the field.
-    const depths = deps.depth.depths(sample.offset.add(body.sun.mul(reach)))
+    // A read of the cache is as dear as a read of the field, so the members
+    // read past the taps are held, from the one read or the other.
     const cachedToSun = here.toSun.toVar()
     const cachedWeight = here.weight.toVar()
+    let end: ReturnType<CloudSunDepthNodes['depths']> = here
     If(reach.greaterThan(0), () => {
-      const end = deps.depth.depths(sample.offset.add(body.sun.mul(reach)))
+      end = deps.depth.depths(sample.offset.add(body.sun.mul(reach)))
       cachedToSun.assign(end.toSun)
       cachedWeight.assign(end.weight)
     })
@@ -279,42 +280,70 @@ export function cloudSunFn(
     const column = medium.depth
     const columnToSun = select(above, column.x, column.y.sub(column.x))
     const columnBehind = select(above, column.y.sub(column.x), column.x)
-    // The cache as the light after first order reads it: a depth to the
-    // sun and the ray's whole. First order's transmittance, above, takes
-    // the depth of the cell's mean transmittance, and today these two are
-    // the same cell's, shallow as depths in broken cloud. A cache that
-    // holds the depth itself beside the opacity answers here, and nothing
-    // that reads `CloudSun.depth` changes.
-    const deep = { toSun: depths.toSun, whole: depths.whole }
-    const toSun = mix(
-      columnToSun.mul(slant),
-      depth.add(deep.toSun),
-      depths.weight,
-    )
-    // The cache holds `behind` of what lies behind the point it is read at,
-    // which is the taps' end: the taps' own stretch comes out of that, and
-    // the statistics give the share the cache does not hold.
-    const held = depths.weight.mul(depths.behind)
-    const cached = depths.weight
-      .mul(deep.whole.sub(deep.toSun))
-      .sub(held.mul(depth))
-    const behind = columnBehind
-      .mul(slant)
-      .mul(float(1).sub(held))
-      .add(max(cached, 0))
+    /*
+     * The cache as the light after first order reads it: its mean depth to
+     * the sun and the ray's whole, from the same two reads. First order's
+     * transmittance, above, takes the depth of the cells' mean
+     * transmittance, the shallower in broken cloud. A cache that holds one
+     * depth answers it for both lights.
+     *
+     * Built where `depth` is first read, and held there. Its members reach
+     * the ray's far end, a fetch of its own, so a march that reads no depth
+     * emits none of it; one that does reads `depth` in the block its sun
+     * is read in, as a variable set inside a branch is unset outside it.
+     */
+    let depthHeld: Node<'vec2'> | null = null
+    const depthToSun = (): Node<'vec2'> => {
+      if (depthHeld !== null) return depthHeld
+      const deep = {
+        toSun: float(0).toVar(),
+        whole: float(0).toVar(),
+        behind: float(0).toVar(),
+      }
+      const hold = (from: typeof end): void => {
+        deep.toSun.assign(from.meanDepthToSun ?? from.toSun)
+        deep.whole.assign(from.meanDepthWhole ?? from.whole)
+        deep.behind.assign(from.behind)
+      }
+      If(reach.greaterThan(0), () => {
+        hold(end)
+      }).Else(() => {
+        hold(here)
+      })
+      const toSun = mix(
+        columnToSun.mul(slant),
+        depth.add(deep.toSun),
+        cachedWeight,
+      )
+      // The cache holds `behind` of what lies behind the point it is read
+      // at, which is the taps' end: the taps' own stretch comes out of
+      // that, and the statistics give the share the cache does not hold.
+      const held = cachedWeight.mul(deep.behind)
+      const cached = cachedWeight
+        .mul(deep.whole.sub(deep.toSun))
+        .sub(held.mul(depth))
+      const behind = columnBehind
+        .mul(slant)
+        .mul(float(1).sub(held))
+        .add(max(cached, 0))
+      depthHeld = vec2(toSun, toSun.add(behind))
+      return depthHeld
+    }
     // The air's height, true meters: its top is in sea-level units.
     const airHeight = body.datumRadius.mul(max(body.air.top.sub(1), 1e-6))
     return {
       cloud,
       taken,
       skipped: select(dark, float(taps), float(0)),
-      depth: vec2(toSun, toSun.add(behind)),
+      get depth() {
+        return depthToSun()
+      },
       octave: (a) =>
         throughTaps(a).mul(
           mix(
             pow(max(statistics, 0), float(a)),
-            exp(depths.toSun.mul(-a)),
-            depths.weight,
+            exp(cachedToSun.mul(-a)),
+            cachedWeight,
           ),
         ),
       air: sunThroughAt(
