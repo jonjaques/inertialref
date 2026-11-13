@@ -1435,15 +1435,18 @@ export function cloudMarch(
             statistics: column,
           },
           body,
+          // The light after first order reads the sun's two depths: a sun
+          // forms them only where it is asked to as it is formed.
+          { depth: true },
         )
-        // The sun's two depths, read once, here, in the block the sun is
-        // formed in: a sun may form them where they are first read, and a
-        // first read inside a branch is a value unset outside it.
-        const sunDepth = sun.depth.toVar()
         // The beam through the air, once: first order's light and the
         // light after it are both lit by it.
         const air = sun.air.toVar()
         const sunlight = air.mul(sun.cloud).toVar()
+        // The two depths, read where first order's transmittance is, into
+        // one variable of this block: a resolved step and a statistical
+        // one's two points read it from branches under it.
+        const sunDepth = sun.depth.toVar()
         r.kinds.addAssign(uint(KIND_SUN))
         const { taken, skipped } = sun as Partial<CloudSunTaps>
         if (taken !== undefined && skipped !== undefined)

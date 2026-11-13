@@ -27,17 +27,15 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
  * The sun's two depths as the light after first order reads them, through
- * the real field, its taps and its grid: `CloudSun.depth` read once, on the
- * line after the sun is formed and in the sun's own block, which is how the
- * march reads it (`cloudMarch.ts`). A sun may form the depth where it is
- * first read, and a first read inside a branch is a value unset outside
- * it, with nothing failing by name; so the read is held here against a
- * march of the CPU field, at samples that take their taps and at samples
- * the sun's early out skipped.
+ * the real field, its taps and its grid: `CloudSun.depth`, asked for as the
+ * sun is formed, which is how the march forms its sun (`cloudMarch.ts`).
+ * A sample with taps and a sample the sun's early out skipped fill the
+ * depth from two reads of the cache, so the read is held here against a
+ * march of the CPU field at both kinds.
  *
- * An overcast, where the cache's cell is right: a deck with no lit face
- * inside a cell. In broken cloud the cell is under a ray's own depth by
- * design, and the sun's own instrument holds that
+ * An overcast, where a cell's mean depth is a ray's: a deck with no lit
+ * face inside a cell. In broken cloud a mean of cells is no one ray's
+ * depth, and the sun's own instrument scores that
  * (`cloudSunAccuracy.gpu.test.ts`).
  */
 
@@ -50,8 +48,10 @@ const STEPS = 2048
 /**
  * How far the read may stand from the CPU's march: a share of the depth,
  * and a floor in depth. On the Mac mini (Mac18,5, Apple M6) the depth to
- * the sun is within 5.5% from 1 to 21 and the whole within 5.6%, through
- * four taps and 400 m cells; an unset value is none of it.
+ * the sun is within 5.5% from 1 to 21 and the whole within 8.4%, over the
+ * march by 0.4 to 1.6 in the deck's upper half and under it by 0.5 to 0.9
+ * in its lower, through four taps and the mean depth of 400 m cells; an
+ * unset value is none of it.
  */
 const TOLERANCE = 0.1
 const FLOOR = 0.3
@@ -105,7 +105,7 @@ const add = (a: Vec3, b: Vec3, s: number): Vec3 => ({
   z: a.z + b.z * s,
 })
 
-describe('the sun’s two depths, read once after the sun, through the real grid', () => {
+describe('the sun’s two depths, asked for as the sun is formed, through the real grid', () => {
   it('are a march of the CPU field’s, at samples with taps and at samples the early out skipped', async () => {
     const levers: CloudLevers = {
       ...DEFAULT_CLOUD_LEVERS,
@@ -144,12 +144,10 @@ describe('the sun’s two depths, read once after the sun, through the real grid
           sunMu: sunMuAt(body, offset),
           footprint: uniform(0),
         }
-        const seen = field.sun(
-          sample,
-          field.medium(sample, body),
-          body,
-        ) as CloudSunTaps
-        // As the march reads it: once, on the line after the sun.
+        const seen = field.sun(sample, field.medium(sample, body), body, {
+          depth: true,
+        }) as CloudSunTaps
+        // As the march reads it: asked for as the sun is formed.
         const sunDepth = seen.depth.toVar()
         const to = instanceIndex.mul(4)
         into.element(to).assign(sunDepth.x)

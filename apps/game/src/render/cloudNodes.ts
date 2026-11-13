@@ -166,14 +166,15 @@ export interface CloudSun {
    * and the two need not be one number's.** A transmittance wants the
    * depth of the mean transmittance; a source read at a depth wants the
    * depth itself, which in broken cloud is the deeper. A march reads these
-   * two members and neither's source, so a sun whose cache holds both
-   * feeds each from its own with no edit of the march. Today the shipped
-   * sun forms both from the one cell, which holds an opacity: through four
-   * taps this depth is under a march of the field by 0.17 to 0.38 in the
-   * mean in every level of broken cloud, 1.7 to 3.0 in RMS cut at 16, and
-   * the cell read at the sample alone by 1.8 to 2.8 (the sun instrument's
-   * union, fair cumulus and a climate's two low levels under suns of 45°
-   * and 15°).
+   * two members and neither's source, and the shipped sun feeds each from
+   * its own channel of the cache's cell: `cloud` from the opacity, this
+   * from the depth (`CloudSunDepths.meanDepthToSun`, `meanDepthWhole`).
+   * Through four taps on the Mac mini it stands off a march of the field
+   * by 1.46 to 2.90 in RMS cut at 16 and by −0.20 to +0.87 in the mean, in
+   * the broken levels of the sun instrument's union (fair cumulus and a
+   * climate's two low levels under suns of 45° and 15°;
+   * `cloudSunAccuracy.landed.json`). Under an overcast it is within 5.5%
+   * of that march to the sun and 8.4% whole (`cloudSourceGrid.gpu.test.ts`).
    *
    * What the shipped sun (`cloudSunFn`) holds in it, by where the sample
    * stands. `w` is the cache's weight where the taps end
@@ -183,14 +184,14 @@ export interface CloudSun {
    *   depth, the field's extinction at each tap's middle times the tap's
    *   span, over half a kilometer at most and no further than the level's
    *   exit along the sun; plus the cache's depth where the taps end. The
-   *   cache's is the depth of the mean transmittance of its 400 m cells:
-   *   in broken cloud it is shallower than the depth along any one ray,
-   *   and the taps take most of that back where they reach. Under six it is exact to a half float,
-   *   past it a cell steps by 0.2 to 0.4, and no cell holds more than 64.
+   *   cache's is the mean depth of the eight 400 m cells a read filters,
+   *   each cell's cut at 64 and held linear, so it has no knee and no
+   *   steps. In broken cloud a mean of cells is no one ray's depth, and the
+   *   taps hold the ray's own where they reach.
    * - **A sample the early out skipped:** one whose cached depth at the
-   *   sample itself is past six with the cache whole. No tap is read, and
-   *   both depths are the cache's at the sample: the first is over six, in
-   *   the cells' stepped part.
+   *   sample itself, as first order reads it, is past six with the cache
+   *   whole. No tap is read, and both depths are the cache's mean depth at
+   *   the sample.
    * - **A statistical step,** a footprint past the ray's switch. Its taps
    *   read the level's statistics as it does, so their depth is the
    *   level's, not a place's. Such a step stands past the cache's reach on
