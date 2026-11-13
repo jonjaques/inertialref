@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  FACTOR_CLOUDS,
   FACTOR_SUNS,
   type FactorPartFile,
   type FitRay,
@@ -12,6 +13,7 @@ import {
   refusal,
   sourceHash,
   sourceHashOf,
+  traceRim,
 } from './sunFactor.ts'
 import { SLAB_VIEW_SOURCE } from '@inertialref/rendering'
 
@@ -199,5 +201,41 @@ describe('the least any factor leaves', () => {
     })
     const judged = judge([ray(1, 1), ray(10, 4)], { l: 1, a: 0 })
     expect(judged.least).toBeCloseTo(Math.log(2), 12)
+  })
+})
+
+describe('a rim', () => {
+  it('refuses a part taken on other inputs, before it copies a figure out of it', () => {
+    // A rim carries its part's traced and marched higher orders and is stamped with this run's inputs, so a stale part
+    // would reach `write` under today's hashes. The cloud is never read: the refusal comes first.
+    const cloud = FACTOR_CLOUDS[0]!
+    const field = {
+      size: [2, 2, 2],
+      voxel: 20,
+      sigma: new Float32Array(8),
+      radius: 10,
+      gain: 1,
+      middle: 1000,
+      fixture: {},
+    } as never
+    const part = (over: Partial<FactorPartFile>): FactorPartFile => ({
+      ...partInputs(1536),
+      cloud: cloud.id,
+      sun: '7-behind',
+      seconds: 1,
+      rays: [],
+      ...over,
+    })
+    expect(() =>
+      traceRim(
+        cloud,
+        field,
+        part({ sourceHash: '07734c077228d0cc2b5d5a4ae731d770' }),
+        1536,
+      ),
+    ).toThrow(/sourceHash/)
+    expect(() => traceRim(cloud, field, part({ samples: 64 }), 1536)).toThrow(
+      /samples 64/,
+    )
   })
 })

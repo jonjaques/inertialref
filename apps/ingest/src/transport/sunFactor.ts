@@ -1107,7 +1107,8 @@ const rms = (values: readonly number[]): number =>
 /**
  * A set of rays judged: the logarithm's RMS of §5.5 over the tracer as it
  * stands and times a pair's factor, the sum's error each way, and the least
- * any factor could leave, each cloud its own sum ratio a sun.
+ * any factor could leave, each cloud and sun taking the mean of its rays'
+ * logarithms as its own factor.
  */
 export function judge(
   rays: readonly FitRay[],
@@ -1300,6 +1301,12 @@ export function traceRim(
   part: FactorPartFile,
   samples: number,
 ): RimFile {
+  // A rim copies its part's higher orders, traced and marched, and is
+  // stamped with this run's inputs: a part taken on others would reach
+  // `write` under today's hashes, so it is refused here, before a figure
+  // is read out of it.
+  const why = refusal(part, partInputs(samples))
+  if (why !== null) throw new Error(`sunFactor: the rim refuses a part: ${why}`)
   const sun = FACTOR_SUNS.find(({ id }) => id === part.sun)!
   const kept = new Set(
     keptRays(part)
