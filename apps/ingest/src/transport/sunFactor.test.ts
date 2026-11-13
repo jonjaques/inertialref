@@ -10,7 +10,10 @@ import {
   partInputs,
   pooledFactor,
   refusal,
+  sourceHash,
+  sourceHashOf,
 } from './sunFactor.ts'
+import { SLAB_VIEW_SOURCE } from '@inertialref/rendering'
 
 /** Rays whose §5.5 is the tracer's over a known factor at each sun, the clouds' own factors spread about it by `spread`. */
 function raysUnder(
@@ -144,5 +147,38 @@ describe('a part', () => {
   it('keeps a ray the tracer knows to a tenth and §5.5 lights', () => {
     expect(keptRays(part()).map((ray) => ray.label)).toEqual(['kept'])
     expect(keptRays(part())[0]).toMatchObject({ elevation: 15, h: 0.1, t: 0.2 })
+  })
+})
+
+describe('the source a part was marched through', () => {
+  it('is refused when what reads the texels moves, and not only the texels', () => {
+    // Doubling the transport scales moves a uniform cloud's marched higher orders by half again with every texel the same.
+    const texels = 'the same texels'
+    const moved = (over: Partial<typeof SLAB_VIEW_SOURCE>) =>
+      sourceHashOf({ ...SLAB_VIEW_SOURCE, ...over }, texels)
+    const base = sourceHashOf(SLAB_VIEW_SOURCE, texels)
+    const changes: Partial<typeof SLAB_VIEW_SOURCE>[] = [
+      {
+        transport: {
+          ...SLAB_VIEW_SOURCE.transport,
+          scales: SLAB_VIEW_SOURCE.transport.scales.map((s) => 2 * s),
+        } as never,
+      },
+      { depthScale: 0.04 as never },
+      { depthMax: 32 as never },
+      { sunMuMin: 0.1 as never },
+      { stretch: 0.5 as never },
+      { cosines: SLAB_VIEW_SOURCE.cosines.map((c) => c * 0.99) as never },
+    ]
+    for (const change of changes) expect(moved(change)).not.toBe(base)
+    expect(sourceHashOf(SLAB_VIEW_SOURCE, 'other texels')).not.toBe(base)
+    const part = { ...partInputs(64), sourceHash: base }
+    expect(
+      refusal(part as never, {
+        ...partInputs(64),
+        sourceHash: moved(changes[0]!),
+      }),
+    ).toMatch(/sourceHash/)
+    expect(sourceHash()).toMatch(/^[0-9a-f]{32}$/)
   })
 })

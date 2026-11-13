@@ -648,9 +648,23 @@ const VIEW_FORM: SlabViewForm = {
   blend: 'angle',
 }
 
-/** The source table's texels' hash: a part marched through another table is refused. */
+/**
+ * The source table's hash: a part marched through another table is
+ * refused. The texels alone are not the table: the transport scales, the
+ * axes, the depth mapping and the view's cosines and stretch say how they
+ * are read, and doubling the transport scales moves a uniform cloud's
+ * marched higher orders by half again with every texel the same. So the
+ * whole of `SLAB_VIEW_SOURCE` is hashed with them, its recorded errors
+ * included, which a regenerated table moves anyway.
+ */
+export function sourceHashOf(
+  source: typeof SLAB_VIEW_SOURCE,
+  texels: string,
+): string {
+  return formatSeed(rootSeed(`${JSON.stringify(source)}\n${texels}`))
+}
 export const sourceHash = (): string =>
-  formatSeed(rootSeed(SLAB_VIEW_SOURCE_TEXELS.texels))
+  sourceHashOf(SLAB_VIEW_SOURCE, SLAB_VIEW_SOURCE_TEXELS.texels)
 
 /** The table's transport scale at a radius, linear in ln r between its radii and held past them. */
 export function transportScale(radius: number): number {

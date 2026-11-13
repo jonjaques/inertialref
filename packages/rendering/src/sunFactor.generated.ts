@@ -15,7 +15,7 @@ export const SUN_FACTOR = {
   version: 1,
   genusHash: '95a153012e54ebb67e5b1dcaebe85a32',
   dropletHash: '62857700347dc5b87adc5b0b34c9c4a0',
-  sourceHash: '07734c077228d0cc2b5d5a4ae731d770',
+  sourceHash: 'e1633dede5fdbdbdc8de35c221306392',
   seed: 'sun-factor',
   samples: 1536,
   keptError: 0.1,
