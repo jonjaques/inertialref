@@ -4,7 +4,7 @@ Status: accepted · 12 Nov 2026. What the field of
 [ADR-0064](0064-the-clouds-march-the-field-and-the-suns-depth-is-a-grid-summed-through-the-volume.md)
 holds inside a cloud, and what it is held to. Everything here draws only under
 `?clouds=1`. Where a body's weather comes from and how it moves is
-ADR-0070's.
+[ADR-0070](0070-the-weather-is-a-bodys-own-and-a-layer-turns-with-its-world.md)'s.
 
 ## Context
 
@@ -126,7 +126,7 @@ and fails on all eight with the gain held at one.
 
 The gain runs from 1 to about 30, highest on Earth's blended low and middle
 levels at small covers. On the GPU it rides in two bytes of the clipmap's
-texel (ADR-0070).
+texel ([ADR-0070](0070-the-weather-is-a-bodys-own-and-a-layer-turns-with-its-world.md)).
 
 ### The calibration
 
