@@ -16,7 +16,6 @@ import {
   scaledTable,
   SKIES,
   skyOf,
-  skyUnder,
   SUBJECTS,
   subjectFixture,
   traceCase,
@@ -91,8 +90,8 @@ describe.skipIf(CUMULUS_REFERENCE.cases.length === 0)(
           ).toEqual(CUMULUS_REFERENCE.scaled[index])
           // And under each of the three skies.
           const blocks = {
-            air: CUMULUS_REFERENCE.airSky,
-            linear: CUMULUS_LINEAR_SKIES.linear,
+            air: CUMULUS_REFERENCE.airScattered,
+            linear: CUMULUS_LINEAR_SKIES.linearScattered,
             table: CUMULUS_LINEAR_SKIES.table,
           }
           for (const under of SKIES)
@@ -107,7 +106,7 @@ describe.skipIf(CUMULUS_REFERENCE.cases.length === 0)(
                   SCALED_SAMPLES,
                   undefined,
                   handed ?? scaled,
-                  skyUnder(spec, under),
+                  under,
                 ),
               )[0],
               under,

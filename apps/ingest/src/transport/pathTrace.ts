@@ -151,6 +151,15 @@ export interface TraceScene {
    * the whole phase, and the scaled phase's orders past it (§5.1).
    */
   readonly first?: number
+  /**
+   * Whether a path that leaves the medium without scattering, off the
+   * medium or the ground, takes the sky: true by default. False leaves out
+   * the sky seen straight through, which is `e^(−τ)` of the sky on the
+   * eye's own line and needs no path to know, and keeps the light the
+   * cloud scatters (ruling 008): the part a march's sky term draws, apart
+   * from the sky behind the cloud, which the atmosphere draws.
+   */
+  readonly straight?: boolean
   /** How the sun is found: the file's header says what each is. A reference is `'cone'`. */
   readonly estimator: 'cone' | 'disk'
 }
@@ -465,6 +474,7 @@ export function createTracer(scene: TraceScene): Tracer {
   const coneReach = phaseConeReach(phase)
   const cone = scene.estimator === 'cone'
   const first = scene.first ?? 1
+  const straight = scene.straight ?? true
 
   /**
    * The weight of the drawn point of the disk against a direction the vertex
@@ -675,7 +685,7 @@ export function createTracer(scene: TraceScene): Tracer {
           within = enter()
           continue
         }
-        light += throughput * skyRadiance(band)
+        if (straight || drew >= 0) light += throughput * skyRadiance(band)
         if (
           !cone &&
           drew >= 0 &&

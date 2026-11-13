@@ -893,28 +893,48 @@ export interface CumulusScaledProbe {
 }
 
 /**
- * The sky alone on the renderer's scaled medium at one pixel of a case:
- * a sky by every order of the scaled phase, the sky seen straight through
- * the cloud included, under a sun that gives its bearing and no light. A
- * row names its case and pixel and no more: its mask and bin are that row
- * of `scaled`'s, and the file is read whole by whoever reads any of it.
+ * The sky alone on the renderer's scaled medium at one pixel of a case: a
+ * sky by every order of the scaled phase, under a sun that gives its
+ * bearing and no light. A row names its case and pixel and no more: its
+ * mask and bin are that row of `scaled`'s, and the file is read whole by
+ * whoever reads any of it.
  *
  * Three skies are traced so, each a block a row a row of `scaled`:
  *
- * - `CUMULUS_REFERENCE.airSky`, under the air's own sky by direction
- *   (`cumulusAirSky`): what judges the march's sky term.
- * - `CUMULUS_LINEAR_SKIES.linear`, under the sky linear in direction on the
- *   quadrature's moments (`cumulusQuadratureSky`): what judges the march's
- *   transport under its own form of the sky, apart from that form's error.
+ * - `CUMULUS_REFERENCE.airScattered`, under the air's own sky by direction
+ *   (`cumulusAirSky`), the light the cloud scatters alone: what judges the
+ *   march's sky term (ruling 008). `airSplit` holds it by case and mask
+ *   beside the sky seen straight through.
+ * - `CUMULUS_LINEAR_SKIES.linearScattered`, the same under the sky linear
+ *   in direction on the quadrature's moments (`cumulusQuadratureSky`): what
+ *   judges the march's transport under its own form of the sky, apart from
+ *   that form's error. `linearSplit` beside it.
  * - `CUMULUS_LINEAR_SKIES.table`, under the case's own `sky`, the table's
- *   moments: the sky `scaled`'s `rest` was traced under, so `rest` less
- *   this row is the sun's light past its first order.
+ *   moments, the sky seen straight through included: the sky `scaled`'s
+ *   `rest` was traced under, so `rest` less this row is the sun's light
+ *   past its first order.
  */
 export interface CumulusSkyProbe {
   readonly case: string
   readonly pixel: readonly [number, number]
   readonly sky: readonly [number, number, number]
   readonly skyError: readonly [number, number, number]
+}
+
+/**
+ * The sky alone in one mask of a case, held apart (ruling 008), per band:
+ * the sky seen straight through, a path that leaves the medium unscattered,
+ * which is `e^(−τ)` along the eye's line of the sky on that line and has no
+ * error; and the light the cloud scatters, with its standard error. Each is
+ * the mean over the mask's rows. A march's sky term draws the second, and
+ * the atmosphere draws the sky behind the cloud.
+ */
+export interface CumulusSkySplit {
+  readonly case: string
+  readonly mask: CumulusProbe['mask']
+  readonly straight: readonly [number, number, number]
+  readonly scattered: readonly [number, number, number]
+  readonly scatteredError: readonly [number, number, number]
 }
 
 /** A case's sky linear in direction on the moments the quadrature takes at its height and sun, as traced. */
@@ -933,11 +953,13 @@ export interface CumulusSkyMoments {
 export interface CumulusLinearSkies {
   readonly format: 'inertialref/cumulus-linear-skies'
   readonly version: 1
-  /** The quadrature's moments each case's `linear` rows were traced under. */
+  /** The quadrature's moments each case's linear rows were traced under. */
   readonly moments: readonly CumulusSkyMoments[]
-  /** Under the linear sky on the quadrature's moments, a row a row of `scaled`. */
-  readonly linear: readonly CumulusSkyProbe[]
-  /** Under the case's own `sky`, the table's moments, a row a row of `scaled`. */
+  /** Under the linear sky on the quadrature's moments, the light the cloud scatters, a row a row of `scaled`. */
+  readonly linearScattered: readonly CumulusSkyProbe[]
+  /** The same by case and mask, beside the sky seen straight through. */
+  readonly linearSplit: readonly CumulusSkySplit[]
+  /** Under the case's own `sky`, the table's moments, the whole sky alone, a row a row of `scaled`. */
   readonly table: readonly CumulusSkyProbe[]
 }
 
@@ -958,8 +980,10 @@ export interface CumulusReference {
   readonly scaling: readonly CumulusScaling[]
   /** The scaled medium itself, a row a pixel of `probes`, in its two parts. */
   readonly scaled: readonly CumulusScaledProbe[]
-  /** The sky alone on the scaled medium under the air's own sky by direction, a row a row of `scaled`. */
-  readonly airSky: readonly CumulusSkyProbe[]
+  /** Under the air's own sky by direction, the light the cloud scatters of the sky alone on the scaled medium, a row a row of `scaled`. */
+  readonly airScattered: readonly CumulusSkyProbe[]
+  /** The same by case and mask, beside the sky seen straight through. */
+  readonly airSplit: readonly CumulusSkySplit[]
   /**
    * The same tracer on the analytic cumulus, which no field moves: what the
    * GPU tracer is held to on every run of its suite.

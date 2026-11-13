@@ -30,6 +30,7 @@ import {
   cumulusAirSky,
   cumulusQuadratureSky,
   type CumulusSkyProbe,
+  type CumulusSkySplit,
   cumulusSky,
   type CumulusSubject,
   type CumulusView,
@@ -62,6 +63,7 @@ import {
   tracePixel,
   type TraceScene,
   type TraceSky,
+  type TraceSun,
 } from './pathTrace.ts'
 
 /*
@@ -862,10 +864,16 @@ export function traceScaled(
 /**
  * Samples `from` to `to` of a case's pixels under the sky alone on the
  * scaled medium: the walk of `traceScaled`'s second run, the case's sun in
- * its place with an irradiance of zero, under `sky`, the case's own by
- * default. The sun stays because a sky is laid on its bearing; a scene
- * with no sun has none, and the tracer refuses the pair. `scaled` is
- * `scaledScene`'s.
+ * its place with an irradiance of zero, under one of the three skies, the
+ * case's own by default. The sun stays because a sky is laid on its
+ * bearing; a scene with no sun has none, and the tracer refuses the pair.
+ * `scaled` is `scaledScene`'s.
+ *
+ * Under the case's own sky every path counts, as under `traceScaled`, whose
+ * `rest` this is the sky of. Under the other two a path that leaves the
+ * medium unscattered counts nothing: they hold the light the cloud
+ * scatters, and the sky seen straight through is `straightOf`'s, exactly
+ * (ruling 008).
  */
 export function traceScaledSky(
   fixture: CumulusFixture,
@@ -875,18 +883,71 @@ export function traceScaledSky(
   to: number,
   progress?: (done: number, of: number) => void,
   scaled?: MieTable,
-  sky: TraceSky = spec.sky,
+  under: SkyUnder = 'table',
 ): readonly ProbeSums[] {
   const { medium, phase } = scaledScene(fixture, scaled)
-  const view = CUMULUS_VIEWS.find(({ id }) => id === spec.view)!
   return traceCase(medium, spec, probes, from, to, progress, {
     phase,
-    sky,
-    sun: {
-      direction: viewSun(view),
-      irradiance: [0, 0, 0],
-      angularRadius: spec.sunRadius,
-    },
+    sky: skyUnder(spec, under),
+    sun: darkSun(spec),
+    straight: under === 'table',
+  })
+}
+
+/** A case's sun, giving its bearing and no light. */
+function darkSun(spec: CumulusCase): TraceSun {
+  const view = CUMULUS_VIEWS.find(({ id }) => id === spec.view)!
+  return {
+    direction: viewSun(view),
+    irradiance: [0, 0, 0],
+    angularRadius: spec.sunRadius,
+  }
+}
+
+/** Every line of sight of a case: north, level. */
+const EYE: Bands = [0, 0, 1]
+
+/**
+ * The sky seen straight through each of a case's pixels on the scaled
+ * medium under one of the skies: the scaled depth's `e^(−τ)` along the
+ * eye's line times the sky on that line, read by the tracer's own read.
+ * It is what a walk that leaves the medium unscattered returns, without
+ * the walk.
+ */
+export function straightOf(
+  fixture: CumulusFixture,
+  spec: CumulusCase,
+  probes: readonly ProbePixel[],
+  under: SkyUnder,
+): readonly Bands[] {
+  const { medium } = scaledScene(fixture, mieDroplets())
+  // An empty grid the eye's line misses: its first escape is the sky there.
+  const nowhere = traceMedium(
+    [1, 1, 1],
+    [1, 1, 1],
+    new Float32Array(1),
+    new Float32Array(1).fill(10),
+  )
+  const tracer = createTracer({
+    medium: nowhere,
+    phase: tracePhase(mieDroplets()),
+    sun: darkSun(spec),
+    sky: skyUnder(spec, under),
+    ground: null,
+    orders: Infinity,
+    estimator: 'cone',
+  })
+  const rng = Rng.fromSeed(SEED)
+  const sky = bands((b) => tracer.radiance([-10, -10, -10], EYE, b, rng))
+  return probes.map(({ pixel }) => {
+    const through = Math.exp(
+      -mediumDepth(
+        medium,
+        viewRay(medium, spec.pixels, pixel[0], pixel[1]),
+        EYE,
+      ),
+    )
+    return bands((b) => through * sky[b]!)
   })
 }
 
@@ -1084,7 +1145,7 @@ export function referenceText(reference: CumulusReference): string {
       ? 'No case of the field is traced: `subjects`, `cases`, `probes`,'
       : `${cases} cases of ${reference.subjects.length} subjects, each cut from \`cloudFieldAt\` at a footprint of zero,`,
     cases === 0
-      ? '`curves`, `medians`, `voxels`, `scaling`, `scaled` and `airSky` are empty, under no genus table.'
+      ? '`curves`, `medians`, `voxels`, `scaling`, `scaled`, `airScattered` and `airSplit` are empty, under no genus table.'
       : `at ${reference.cases[0]!.samples} samples a pixel and band, under the sky of Earth’s air (\`cumulusSky\`).`,
     ...(cases === 0
       ? []
@@ -1093,12 +1154,14 @@ export function referenceText(reference: CumulusReference): string {
           '`scaled` is each pixel on the renderer’s scaled medium, first order and the rest apart,',
           `at ${reference.scaling[0]?.samples ?? 0} samples a pixel and band, and \`scaling\` its mean over the true`,
           'one’s by case and mask.',
-          ...(reference.airSky.length === 0
+          ...(reference.airScattered.length === 0
             ? []
             : [
-                '`airSky` is the sky alone on that medium, a row a row of `scaled`, under the air’s',
-                'own sky by direction (`cumulusAirSky`) and each case’s sun at an irradiance of zero.',
-                'The same under the two linear skies is `cumulusLinearSkies.generated.ts`.',
+                '`airScattered` is the sky alone on that medium that the cloud scatters, a row a row',
+                'of `scaled`, under the air’s own sky by direction (`cumulusAirSky`) and each case’s',
+                'sun at an irradiance of zero; `airSplit` holds it by case and mask beside the sky',
+                'seen straight through. The same under the two linear skies is',
+                '`cumulusLinearSkies.generated.ts`.',
               ]),
         ]),
     `\`analytic\` is the same tracer on the analytic cumulus, ${reference.analytic.probes.length} pixels of`,
@@ -1106,7 +1169,7 @@ export function referenceText(reference: CumulusReference): string {
     '',
     `Droplet table ${phaseHash()}; genus table ${reference.genusHash || 'none'}.`,
   ]
-  const { probes, voxels, scaled, airSky, analytic, ...rest } = reference
+  const { probes, voxels, scaled, airScattered, analytic, ...rest } = reference
   return (
     '/*\n' +
     header.map((line) => (line ? ` * ${line}` : ' *')).join('\n') +
@@ -1114,7 +1177,7 @@ export function referenceText(reference: CumulusReference): string {
     `const PROBES = /*@__PURE__*/ ${block(probes)} as readonly CumulusProbe[]\n\n` +
     `const VOXELS = /*@__PURE__*/ ${block(voxels)} as CumulusReference['voxels']\n\n` +
     `const SCALED = /*@__PURE__*/ ${block(scaled)} as readonly CumulusScaledProbe[]\n\n` +
-    `const AIR_SKY = /*@__PURE__*/ ${block(airSky)} as readonly CumulusSkyProbe[]\n\n` +
+    `const AIR_SCATTERED = /*@__PURE__*/ ${block(airScattered)} as readonly CumulusSkyProbe[]\n\n` +
     `const ANALYTIC = /*@__PURE__*/ ${block(analytic.probes)} as readonly CumulusProbe[]\n\n` +
     'export const CUMULUS_REFERENCE: CumulusReference = ' +
     JSON.stringify(
@@ -1123,12 +1186,12 @@ export function referenceText(reference: CumulusReference): string {
         probes: '@PROBES',
         voxels: '@VOXELS',
         scaled: '@SCALED',
-        airSky: '@AIR_SKY',
+        airScattered: '@AIR_SCATTERED',
         analytic: { ...analytic, probes: '@ANALYTIC' },
       },
       null,
       2,
-    ).replace(/"@(PROBES|VOXELS|SCALED|AIR_SKY|ANALYTIC)"/g, '$1') +
+    ).replace(/"@(PROBES|VOXELS|SCALED|AIR_SCATTERED|ANALYTIC)"/g, '$1') +
     '\n'
   )
 }
@@ -1142,24 +1205,26 @@ export function linearSkiesText(skies: CumulusLinearSkies): string {
     '',
     'The sky alone on the cumulus reference’s scaled medium (`CUMULUS_REFERENCE`)',
     'under the two skies linear in direction, a row a row of its `scaled`, each',
-    'case’s sun at an irradiance of zero. `linear` is on the moments the air’s own',
-    'quadrature takes at the case’s height and sun (`moments`, `cumulusQuadratureSky`),',
-    'and `table` on the case’s own `sky`, the table’s read there, which `scaled`’s',
+    'case’s sun at an irradiance of zero. `linearScattered` is the light the cloud',
+    'scatters under the sky on the moments the air’s own quadrature takes at the',
+    'case’s height and sun (`moments`, `cumulusQuadratureSky`), and `linearSplit` holds',
+    'it by case and mask beside the sky seen straight through. `table` is the whole',
+    'sky alone under the case’s own `sky`, the table’s read there, which `scaled`’s',
     '`rest` was traced under.',
   ]
-  const { linear, table, ...rest } = skies
+  const { linearScattered, table, ...rest } = skies
   return (
     '/*\n' +
     header.map((line) => (line ? ` * ${line}` : ' *')).join('\n') +
     "\n */\nimport type { CumulusLinearSkies, CumulusSkyProbe } from './cumulusFixture.ts'\n\n" +
-    `const LINEAR = /*@__PURE__*/ ${block(linear)} as readonly CumulusSkyProbe[]\n\n` +
+    `const LINEAR_SCATTERED = /*@__PURE__*/ ${block(linearScattered)} as readonly CumulusSkyProbe[]\n\n` +
     `const TABLE = /*@__PURE__*/ ${block(table)} as readonly CumulusSkyProbe[]\n\n` +
     'export const CUMULUS_LINEAR_SKIES: CumulusLinearSkies = ' +
     JSON.stringify(
-      { ...rest, linear: '@LINEAR', table: '@TABLE' },
+      { ...rest, linearScattered: '@LINEAR_SCATTERED', table: '@TABLE' },
       null,
       2,
-    ).replace(/"@(LINEAR|TABLE)"/g, '$1') +
+    ).replace(/"@(LINEAR_SCATTERED|TABLE)"/g, '$1') +
     '\n'
   )
 }
@@ -1195,6 +1260,62 @@ export interface SkyFile {
   readonly samples: number
   readonly seconds?: number
   readonly probes: readonly ProbeSums[]
+  /** Under the air's sky and the linear one, a probe's sky seen straight through, which its sums leave out. */
+  readonly straight?: readonly Bands[]
+}
+
+/**
+ * The sky alone under one sky, held apart by case and mask (ruling 008):
+ * the sky seen straight through and the light the cloud scatters, each
+ * the mean over the mask's rows. The scattered part's error is the mean's.
+ */
+function splitOf(
+  specs: readonly CumulusCase[],
+  sky: readonly SkyFile[],
+  under: 'air' | 'linear',
+): readonly CumulusSkySplit[] {
+  return specs.flatMap((spec) => {
+    const file = sky.find((held) => held.id === spec.id && held.under === under)
+    if (file === undefined) return []
+    if (file.straight?.length !== file.probes.length)
+      throw new Error(
+        `cumulusTables: ${spec.id}’s sky under ${under} holds no straight-through part a row`,
+      )
+    const masks = ['rim', 'edge', 'core', 'base'] as const
+    return masks.flatMap((mask) => {
+      const rows = file.probes.flatMap((probe, index) =>
+        probe.mask === mask ? [index] : [],
+      )
+      if (rows.length === 0) return []
+      const mean = (of: (index: number) => number): number =>
+        rows.reduce((sum, index) => sum + of(index), 0) / rows.length
+      const estimate = (index: number, b: number) =>
+        estimateOf(file.probes[index]!.sums[b]!)
+      return [
+        {
+          case: spec.id,
+          mask,
+          straight: bands((b) =>
+            figures(mean((index) => file.straight![index]![b]!)),
+          ),
+          scattered: bands((b) =>
+            figures(mean((index) => estimate(index, b).mean)),
+          ),
+          scatteredError: bands((b) =>
+            figures(
+              Math.sqrt(
+                rows.reduce(
+                  (sum, index) => sum + estimate(index, b).error ** 2,
+                  0,
+                ),
+              ) / rows.length,
+              3,
+            ),
+          ),
+        },
+      ]
+    })
+  })
 }
 
 /**
@@ -1257,7 +1378,8 @@ export function linearSkies(
         )
       return [{ case: spec.id, ...file.sky }]
     }),
-    linear: skyBlock(specs, scaled, sky, 'linear'),
+    linearScattered: skyBlock(specs, scaled, sky, 'linear'),
+    linearSplit: splitOf(specs, sky, 'linear'),
     table: skyBlock(specs, scaled, sky, 'table'),
   }
 }
@@ -1331,7 +1453,8 @@ export function assemble(
       const file = scaled.find(({ id }) => id === spec.id)
       return file === undefined ? [] : scaledOf(spec, file.probes, file.gain)
     }),
-    airSky: skyBlock(specs, scaled, sky, 'air'),
+    airScattered: skyBlock(specs, scaled, sky, 'air'),
+    airSplit: splitOf(specs, sky, 'air'),
     probes,
     voxels: held.flatMap(voxelsOf),
     analytic,
@@ -1488,7 +1611,6 @@ function main(argv: readonly string[]): void {
     const [from, to] = rangeOf(SCALED_SAMPLES)
     const spec = fieldCase(subject, view)
     const { fixture, pixels } = stage(subject, view)
-    const sky = skyUnder(spec, under)
     const start = process.hrtime.bigint()
     const probes = traceScaledSky(
       fixture,
@@ -1498,17 +1620,20 @@ function main(argv: readonly string[]): void {
       to,
       undefined,
       undefined,
-      sky,
+      under,
     )
     const seconds = Number(process.hrtime.bigint() - start) / 1e9
     mkdirSync(CASES, { recursive: true })
     const file: SkyFile = {
       id: spec.id,
       under,
-      ...(under === 'linear' ? { sky: sky as LinearSky } : {}),
+      ...(under === 'linear' ? { sky: quadratureSkyOf(spec) } : {}),
       samples: to - from,
       seconds,
       probes,
+      ...(under === 'table'
+        ? {}
+        : { straight: straightOf(fixture, spec, pixels, under) }),
     }
     // The table's files keep the name they had before a sky was named.
     const name = under === 'table' ? 'sky' : `sky-${under}`

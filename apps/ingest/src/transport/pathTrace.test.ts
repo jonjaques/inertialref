@@ -138,6 +138,31 @@ describe('the furnace', () => {
     expect(tracer.counts.truncated).toBe(0)
   })
 
+  it('leaves the sky seen straight through out on request, and keeps what the cloud scatters', () => {
+    // Under a sky of one radiance and no ground every path ends on the sky,
+    // so the light the cloud scatters is the sky times the chance a path
+    // scatters at all: 1 − e^(−τ) along the eye's line.
+    const tracer = createTracer(
+      scene(CUMULUS, { sky: uniformSky(1), straight: false }),
+    )
+    for (const [px, py] of [
+      [16, 14],
+      [10, 18],
+    ] as const) {
+      const origin = viewRay(CUMULUS, 32, px, py)
+      const depth = mediumDepth(CUMULUS, origin, [0, 0, 1])
+      expect(depth).toBeGreaterThan(0.2)
+      expectWithinThree(
+        tracePixel(tracer, origin, [0, 0, 1], 1, SEED, 0, 2000),
+        1 - Math.exp(-depth),
+      )
+    }
+    // A line that misses the cloud has nothing scattered on it.
+    expect(
+      tracer.radiance([-500, -500, -500], [0, 0, 1], 0, Rng.fromSeed(SEED)),
+    ).toBe(0)
+  })
+
   it('is lost by a ground that absorbs: the identity is the walk’s, not the test’s', () => {
     const tracer = createTracer(
       scene(CUMULUS, {

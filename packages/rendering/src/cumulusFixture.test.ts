@@ -659,8 +659,8 @@ describe('the sky a case of the field stands under', () => {
   it('is held alone on the scaled medium under three skies, each a row a scaled row', () => {
     const { scaled } = CUMULUS_REFERENCE
     const blocks = [
-      CUMULUS_REFERENCE.airSky,
-      CUMULUS_LINEAR_SKIES.linear,
+      CUMULUS_REFERENCE.airScattered,
+      CUMULUS_LINEAR_SKIES.linearScattered,
       CUMULUS_LINEAR_SKIES.table,
     ]
     for (const block of blocks) {
@@ -717,8 +717,8 @@ describe('the sky a case of the field stands under', () => {
     }
   })
 
-  it('is, under the air’s own sky, never over its brightest direction and never negative', () => {
-    const { cases, airSky } = CUMULUS_REFERENCE
+  it('is, under the air’s own sky, scattered light never over its brightest direction and never negative', () => {
+    const { cases, airScattered } = CUMULUS_REFERENCE
     for (const spec of cases) {
       const sky = cumulusAirSky(spec.skyAt!)
       const brightest = [0, 1, 2].map((b) => {
@@ -727,13 +727,43 @@ describe('the sky a case of the field stands under', () => {
           most = Math.max(most, sky.radiance[k]!)
         return Math.exp(most)
       })
-      for (const row of airSky.filter((row) => row.case === spec.id))
+      for (const row of airScattered.filter((row) => row.case === spec.id))
         for (let b = 0; b < 3; b += 1) {
           expect(row.sky[b]).toBeGreaterThanOrEqual(0)
           // The brightest node stands 2.1° off the sun's bearing on the
           // level, and the read on the bearing itself is 0.9% over it.
           expect(row.sky[b]).toBeLessThanOrEqual(1.02 * brightest[b]!)
         }
+    }
+  })
+
+  it('is held apart by case and mask in both skies: straight through, and what the cloud scatters', () => {
+    const { cases, scaled, airScattered, airSplit } = CUMULUS_REFERENCE
+    const { linearScattered, linearSplit } = CUMULUS_LINEAR_SKIES
+    for (const [split, rows] of [
+      [airSplit, airScattered],
+      [linearSplit, linearScattered],
+    ] as const) {
+      expect(split).toHaveLength(cases.length * 4)
+      for (const row of split) {
+        const at = scaled.flatMap((probe, i) =>
+          probe.case === row.case && probe.mask === row.mask ? [i] : [],
+        )
+        expect(at.length).toBeGreaterThan(0)
+        for (let b = 0; b < 3; b += 1) {
+          // The scattered part is the mean of the mask's rows.
+          const mean =
+            at.reduce((sum, i) => sum + rows[i]!.sky[b]!, 0) / at.length
+          expect(Math.abs(row.scattered[b]! / mean - 1)).toBeLessThan(1e-5)
+          expect(row.straight[b]).toBeGreaterThanOrEqual(0)
+          expect(row.scatteredError[b]).toBeGreaterThan(0)
+        }
+        // A core is opaque to its eye, and a rim is not.
+        if (row.mask === 'core')
+          expect(row.straight[1]).toBeLessThan(1e-3 * row.scattered[1]!)
+        if (row.mask === 'rim')
+          expect(row.straight[1]).toBeGreaterThan(0.1 * row.scattered[1]!)
+      }
     }
   })
 })

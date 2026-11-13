@@ -50,6 +50,7 @@ import {
   type SkyFile,
   skyOf,
   skyUnder,
+  straightOf,
   SUBJECTS,
   subjectFixture,
   traceCase,
@@ -57,6 +58,7 @@ import {
   traceScaledSky,
   unscaleOf,
 } from './cumulusTables.ts'
+import { estimateOf } from './pathTrace.ts'
 
 const MEDIUM = fixtureMedium(analyticCumulus(ANALYTIC))
 const DEPTHS = depthImage(MEDIUM, ANALYTIC_PIXELS)
@@ -310,6 +312,7 @@ describe('a case traced in parts', () => {
       up: [0, 0, 0],
       sunward: [0, 0, 0],
     } as const
+    const straight = probes.map((_, i) => [i, 2 * i, 3 * i] as const)
     const files: SkyFile[] = [
       sky,
       {
@@ -319,8 +322,9 @@ describe('a case traced in parts', () => {
           ...p,
           sums: [p.sums[0], p.sums[0], p.sums[0]],
         })),
+        straight,
       },
-      { ...sky, under: 'linear', sky: moments },
+      { ...sky, under: 'linear', sky: moments, straight },
     ]
     const voxels = (): CumulusReference['voxels'] => []
     const whole = assemble(
@@ -330,8 +334,8 @@ describe('a case traced in parts', () => {
       [scaled],
       files,
     )
-    expect(whole.airSky).toHaveLength(whole.scaled.length)
-    whole.airSky.forEach((row, index) => {
+    expect(whole.airScattered).toHaveLength(whole.scaled.length)
+    whole.airScattered.forEach((row, index) => {
       expect(row.case).toBe(whole.scaled[index]!.case)
       expect(row.pixel).toEqual(whole.scaled[index]!.pixel)
       // Each block is its own sky's file and no other's.
@@ -339,12 +343,46 @@ describe('a case traced in parts', () => {
     })
     const beside = linearSkies(whole.cases, [scaled], files)
     expect(beside.table).toEqual(skyOf(spec, probes))
-    expect(beside.linear).toEqual(skyOf(spec, probes))
+    expect(beside.linearScattered).toEqual(skyOf(spec, probes))
     expect(beside.moments).toEqual([{ case: spec.id, ...moments }])
+    // Held apart by mask: the means of the mask's rows, both parts.
+    for (const split of [whole.airSplit, beside.linearSplit]) {
+      const masks = [...new Set(pixels.map(({ mask }) => mask))]
+      expect(split.map(({ mask }) => mask).sort()).toEqual(masks.sort())
+      for (const row of split) {
+        const rows = pixels.flatMap(({ mask }, i) =>
+          mask === row.mask ? [i] : [],
+        )
+        const mean = (of: (i: number) => number) =>
+          rows.reduce((sum, i) => sum + of(i), 0) / rows.length
+        expect(row.case).toBe(spec.id)
+        expect(row.straight[1]).toBeCloseTo(
+          mean((i) => 2 * i),
+          5,
+        )
+      }
+    }
+    const linearSplit = beside.linearSplit
+    for (const row of linearSplit) {
+      const rows = pixels.flatMap(({ mask }, i) =>
+        mask === row.mask ? [i] : [],
+      )
+      const mean =
+        rows.reduce((sum, i) => sum + estimateOf(probes[i]!.sums[2]!).mean, 0) /
+        rows.length
+      expect(row.scattered[2]).toBeCloseTo(mean, 5)
+    }
     expect(() =>
       linearSkies(whole.cases, [scaled], [{ ...files[2]!, sky: undefined }]),
     ).toThrow(/names no moments/)
-    expect(join([part(0, 16)]).airSky).toEqual([])
+    expect(() =>
+      linearSkies(
+        whole.cases,
+        [scaled],
+        [{ ...files[2]!, straight: undefined }],
+      ),
+    ).toThrow(/no straight-through part/)
+    expect(join([part(0, 16)]).airScattered).toEqual([])
     expect(() =>
       assemble(
         [part(0, 16)],
@@ -384,18 +422,20 @@ describe('the generated file', () => {
     expect(rowsOf(text, 'PROBES')).toEqual(CUMULUS_REFERENCE.probes)
     expect(rowsOf(text, 'VOXELS')).toEqual(CUMULUS_REFERENCE.voxels)
     expect(rowsOf(text, 'SCALED')).toEqual(CUMULUS_REFERENCE.scaled)
-    expect(rowsOf(text, 'AIR_SKY')).toEqual(CUMULUS_REFERENCE.airSky)
+    expect(rowsOf(text, 'AIR_SCATTERED')).toEqual(
+      CUMULUS_REFERENCE.airScattered,
+    )
     expect(rowsOf(text, 'ANALYTIC')).toEqual(CUMULUS_REFERENCE.analytic.probes)
     // The rest is one literal, with the three blocks named in it.
     const body = text
       .slice(text.indexOf('CumulusReference = ') + 19)
-      .replace(/: (PROBES|VOXELS|SCALED|AIR_SKY|ANALYTIC)\b/g, ': []')
+      .replace(/: (PROBES|VOXELS|SCALED|AIR_SCATTERED|ANALYTIC)\b/g, ': []')
     expect(JSON.parse(body)).toEqual({
       ...CUMULUS_REFERENCE,
       probes: [],
       voxels: [],
       scaled: [],
-      airSky: [],
+      airScattered: [],
       analytic: { ...CUMULUS_REFERENCE.analytic, probes: [] },
     })
     const header = text.slice(0, text.indexOf('*/'))
@@ -417,7 +457,13 @@ describe('the generated file', () => {
       'utf8',
     )
     const text = referenceText(CUMULUS_REFERENCE)
-    for (const name of ['PROBES', 'VOXELS', 'SCALED', 'AIR_SKY', 'ANALYTIC'])
+    for (const name of [
+      'PROBES',
+      'VOXELS',
+      'SCALED',
+      'AIR_SCATTERED',
+      'ANALYTIC',
+    ])
       expect(rowsOf(disk, name)).toEqual(rowsOf(text, name))
     expect(disk.slice(0, disk.indexOf('*/'))).toBe(
       text.slice(0, text.indexOf('*/')),
@@ -435,16 +481,18 @@ describe('the generated file', () => {
       'utf8',
     )
     const text = linearSkiesText(CUMULUS_LINEAR_SKIES)
-    expect(rowsOf(text, 'LINEAR')).toEqual(CUMULUS_LINEAR_SKIES.linear)
+    expect(rowsOf(text, 'LINEAR_SCATTERED')).toEqual(
+      CUMULUS_LINEAR_SKIES.linearScattered,
+    )
     expect(rowsOf(text, 'TABLE')).toEqual(CUMULUS_LINEAR_SKIES.table)
-    for (const name of ['LINEAR', 'TABLE'])
+    for (const name of ['LINEAR_SCATTERED', 'TABLE'])
       expect(rowsOf(disk, name)).toEqual(rowsOf(text, name))
     const body = text
       .slice(text.indexOf('CumulusLinearSkies = ') + 21)
-      .replace(/: (LINEAR|TABLE)\b/g, ': []')
+      .replace(/: (LINEAR_SCATTERED|TABLE)\b/g, ': []')
     expect(JSON.parse(body)).toEqual({
       ...CUMULUS_LINEAR_SKIES,
-      linear: [],
+      linearScattered: [],
       table: [],
     })
     expect(disk.slice(0, disk.indexOf('*/'))).toBe(
@@ -749,31 +797,53 @@ describe('the three skies a sky alone is traced under', () => {
     expect(() => skyUnder(none, 'linear')).toThrow(/at no height/)
   })
 
-  it('reads the air’s sky on the eye’s own line in a pixel of clear sky', () => {
+  it('holds the air’s sky on the eye’s own line apart from what the cloud scatters', () => {
     const fixture = analyticCumulus(ANALYTIC)
     const clear = { mask: 'rim', bin: 0, pixel: [0, 0], depth: 0 } as const
+    const core = selectProbes(DEPTHS, ANALYTIC_PIXELS, back, 1).find(
+      ({ mask }) => mask === 'core',
+    )!
     expect(DEPTHS[0]).toBe(0)
     const sky = cumulusAirSky(at)
-    const [row] = skyOf(
-      spec,
-      traceScaledSky(
-        fixture,
+    const table = mieDroplets()
+    const trace = (under: 'air' | 'table') =>
+      skyOf(
         spec,
-        [clear],
-        0,
-        8,
-        undefined,
-        mieDroplets(),
-        sky,
-      ),
+        traceScaledSky(
+          fixture,
+          spec,
+          [clear, core],
+          0,
+          64,
+          undefined,
+          table,
+          under,
+        ),
+      )
+    const [clearScattered, coreScattered] = trace('air')
+    const [straightClear, straightCore] = straightOf(
+      fixture,
+      spec,
+      [clear, core],
+      'air',
     )
     // The eye looks north and the sun stands south: the level, away from it.
+    // Clear sky is all straight through, and none of it is scattered.
     for (let b = 0; b < 3; b += 1) {
       const level = skyByDirection(sky, 0, -1, 0, b)
-      // To the six figures a row keeps.
-      expect(Math.abs(row!.sky[b]! / level - 1)).toBeLessThan(1e-6)
-      expect(row!.skyError[b]).toBeLessThan(1e-6 * level)
+      expect(straightClear![b]).toBeCloseTo(level, 14)
+      expect(clearScattered!.sky[b]).toBe(0)
+      // Through a core the straight part is one e^(−τ) of the same line in
+      // every band, and the cloud scatters the rest.
+      const through = straightCore![b]! / level
+      expect(through).toBeCloseTo(straightCore![0]! / straightClear![0]!, 12)
+      expect(through).toBeGreaterThan(0)
+      expect(through).toBeLessThan(0.5)
+      expect(coreScattered!.sky[b]).toBeGreaterThan(0.1 * level)
     }
+    // Under the table's sky every path counts, the eye's own line included.
+    const [whole] = trace('table')
+    expect(whole!.sky[1]).toBeGreaterThan(0)
   })
 })
 
