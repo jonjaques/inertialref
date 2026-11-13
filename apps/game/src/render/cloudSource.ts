@@ -37,6 +37,7 @@ import {
   SLAB_DIFFUSION_REACH,
   SLAB_SUN_HOLD,
   SLAB_VIEW_SOURCE,
+  sunFactorPair,
 } from '@inertialref/rendering'
 import type { CloudClimateFrame, CloudFrame } from './cloudFrame.ts'
 import {
@@ -89,9 +90,9 @@ import {
  * slab's column. A plane slab's source cannot describe a cloud with sides:
  * a cumulus's lit wall takes the sun at the cosine to the wall and the slab
  * reads it at the cosine to the vertical, low under a low sun and high
- * under a high one. `l` and `a` are a fit of that mean error for a genus's
- * own clouds (`CLOUD_SUN_FACTORS`), one pair a level, for its cumuliform
- * genus. It mends the mean and only the mean: a cloud's thin rim is read
+ * under a high one. `l` and `a` are a fit of that mean error to path
+ * traces of a genus's own clouds (`sunFactorPair`, `SUN_FACTOR`), one pair
+ * a level, for its cumuliform genus. It mends the mean and only the mean: a cloud's thin rim is read
  * brighter than a path tracer has it wherever the factor brightens the
  * cloud, which is declared. At `v = 0` it is exactly one, so a stratiform
  * level and the slab gate take none.
@@ -111,21 +112,6 @@ const TEXEL_BYTES = 8
 /** What the table holds on the device: 20 × 20 × 300 RGBA16F, one level. */
 export const CLOUD_SOURCE_BYTES =
   TABLE.nodes * TABLE.nodes * SLICES * TEXEL_BYTES
-
-/**
- * The factor of the sun's two numbers by cumuliform genus, `l` and `a` of
- * `c = l·(1 + a·cot e)`: fitted to path traces of eight of the field's own
- * cumulus clouds under nine suns from 7° to 70°, against a CPU march of the
- * plane slab's source through `slabSourceRead.ts` (the depth rule's second
- * critic, its second job: on six clouds it was not fitted to, the root mean
- * square of the logarithm of the march over the trace falls from 0.67 to
- * 0.47, and the sum's error by sun from −55% … +33% to −1% … +7%). A genus
- * not yet fitted takes 1 and 0, which is no factor.
- */
-export const CLOUD_SUN_FACTORS: Readonly<
-  Partial<Record<CloudGenus, { readonly l: number; readonly a: number }>>
-> = { cumulus: { l: 0.71, a: 0.25 } }
-const NO_FACTOR = { l: 1, a: 0 } as const
 
 /** A level's class and its factor of the sun, as the node reads them. */
 export interface CloudSourceLevels {
@@ -160,13 +146,14 @@ function writeLevels(
     levels.ice.value,
     of((genus) => (GENUS_TABLE[genus].class === 'ice' ? 1 : 0)),
   )
+  // A genus with no committed pair takes 1 and 0, which is no factor.
   set(
     levels.factor.value,
-    of((genus) => (CLOUD_SUN_FACTORS[genus] ?? NO_FACTOR).l),
+    of((genus) => sunFactorPair(genus).l),
   )
   set(
     levels.slope.value,
-    of((genus) => (CLOUD_SUN_FACTORS[genus] ?? NO_FACTOR).a),
+    of((genus) => sunFactorPair(genus).a),
   )
 }
 

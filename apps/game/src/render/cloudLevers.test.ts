@@ -25,7 +25,7 @@ import {
   isCloudLevers,
   resolveCloudLevers,
 } from './cloudLevers.ts'
-import { CLOUD_MAX_STEPS_COUNTED } from './cloudMarch.ts'
+import { CLOUD_MAX_STEPS_COUNTED } from './cloudKinds.ts'
 
 /** The levers a history texel's meaning depends on (§3.4). */
 const RESET_LEVERS = [

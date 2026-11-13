@@ -5,6 +5,7 @@ import {
   PHASE_ATLAS,
   SLAB_REFERENCE,
   type SlabReferenceRow,
+  sunFactorPair,
 } from '@inertialref/rendering'
 import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
 import {
@@ -24,11 +25,7 @@ import {
   slabMedium,
 } from './cloudNodes.ts'
 import { CloudPhase } from './cloudPhase.ts'
-import {
-  CLOUD_SUN_FACTORS,
-  type CloudSource,
-  createCloudSource,
-} from './cloudSource.ts'
+import { type CloudSource, createCloudSource } from './cloudSource.ts'
 import { cloudSunFn } from './cloudSunlight.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import type { GpuSession } from './gpuHarness.ts'
@@ -226,7 +223,7 @@ export async function slabRig(
       uniforms.trace.lightTaps.value = 4
     },
     share(convective) {
-      const { l, a } = CLOUD_SUN_FACTORS.cumulus!
+      const { l, a } = sunFactorPair('cumulus')
       source.levels.factor.value.set(l, l, l)
       source.levels.slope.value.set(a, a, a)
       body.climate.convective.value.set(convective, convective, convective)

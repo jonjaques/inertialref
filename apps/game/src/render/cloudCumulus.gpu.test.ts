@@ -49,6 +49,7 @@ import {
   subjectWeather,
   viewRay,
   viewSun,
+  sunFactorPair,
 } from '@inertialref/rendering'
 import { cloudRay } from './cloudGeometry.ts'
 import { CLOUD_TRANSPORTS } from './cloudLevers.ts'
@@ -61,7 +62,7 @@ import type {
   CloudSun,
 } from './cloudNodes.ts'
 import { CloudPhase } from './cloudPhase.ts'
-import { CLOUD_SUN_FACTORS, createCloudSource } from './cloudSource.ts'
+import { createCloudSource } from './cloudSource.ts'
 import { createCloudUniforms } from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
@@ -223,7 +224,7 @@ async function cumulusRig(
   body.layers.sigma.value.set(reference, reference, reference)
   const source = createCloudSource()
   await source.load()
-  const { l, a } = CLOUD_SUN_FACTORS.cumulus!
+  const { l, a } = sunFactorPair('cumulus')
   source.levels.factor.value.set(l, l, l)
   source.levels.slope.value.set(a, a, a)
   const atlas = new CloudPhase(droplets, iceAggregate())

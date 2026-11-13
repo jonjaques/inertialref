@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { SLAB_REFERENCE, type SlabReferenceRow } from '@inertialref/rendering'
+import {
+  SLAB_REFERENCE,
+  type SlabReferenceRow,
+  sunFactorPair,
+} from '@inertialref/rendering'
 import { CLOUD_TRANSPORTS } from './cloudLevers.ts'
 import {
   BANDS,
@@ -8,7 +12,6 @@ import {
   slabRig,
   viewOf,
 } from './cloudSlabRig.ts'
-import { CLOUD_SUN_FACTORS } from './cloudSource.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
@@ -280,7 +283,7 @@ describe('a slab’s radiance and reflected flux, through the shipped step', () 
     const PLANE = CLOUD_TRANSPORTS.indexOf('plane')
     const stratiform = [await draw(0, SLAB), await draw(0, PLANE)] as const
     const cumuliform = [await draw(1, SLAB), await draw(1, PLANE)] as const
-    const { l, a } = CLOUD_SUN_FACTORS.cumulus!
+    const { l, a } = sunFactorPair('cumulus')
     const factor = l * (1 + (a * Math.sqrt(1 - 0.5 * 0.5)) / 0.5)
     views.forEach((_, i) => {
       for (const band of BANDS) {

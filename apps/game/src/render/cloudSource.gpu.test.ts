@@ -25,12 +25,12 @@ import {
   statisticalSlab as statisticalSlabOf,
   UNSPREAD_SHAPE,
   viewReads,
+  sunFactorPair,
 } from '@inertialref/rendering'
 import { SLAB_VIEW_SOURCE_TEXELS } from '@inertialref/rendering/slabSourceTexels'
 import { resolvedSlab, statisticalSlab } from './cloudMix.ts'
 import {
   CLOUD_ICE_ROWS,
-  CLOUD_SUN_FACTORS,
   type CloudSource,
   createCloudSource,
 } from './cloudSource.ts'
@@ -153,7 +153,7 @@ function committed(): SlabSourceTable {
 
 /** The levels a test's source reads: droplets, droplets, ice; cumulus's factor on the first. */
 function placeLevels(source: CloudSource): void {
-  const { l, a } = CLOUD_SUN_FACTORS.cumulus!
+  const { l, a } = sunFactorPair('cumulus')
   source.levels.ice.value.set(0, 0, 1)
   source.levels.factor.value.set(l, 1, 1)
   source.levels.slope.value.set(a, 0, 0)
@@ -281,7 +281,7 @@ function cpuAt(
       sum + texelSpread(table, slab, weights, top, bottom, sunMu),
     0,
   )
-  const pair = read.level === 0 ? CLOUD_SUN_FACTORS.cumulus! : { l: 1, a: 0 }
+  const pair = read.level === 0 ? sunFactorPair('cumulus') : { l: 1, a: 0 }
   const lean = Math.sqrt(Math.max(0, 1 - sunMu * sunMu)) / sunMu
   const factor =
     (1 + read.convective * (pair.l * (1 + pair.a * lean) - 1)) *
@@ -512,7 +512,7 @@ describe('the source’s node against the CPU read', () => {
         ]
       },
     )
-    const { l, a } = CLOUD_SUN_FACTORS.cumulus!
+    const { l, a } = sunFactorPair('cumulus')
     suns.forEach((sunMu, i) => {
       const [plain, none] = out[2 * i]!
       const [, whole] = out[2 * i + 1]!

@@ -30,6 +30,7 @@ import {
   SKY_TABLE_WIDTH,
   SLAB_REFERENCE,
   SLAB_VIEW_SOURCE,
+  sunFactorPair,
 } from '@inertialref/rendering'
 import { MemorySaveStore } from '@inertialref/persistence'
 import type { Body } from '@inertialref/universe'
@@ -49,11 +50,7 @@ import {
 } from './cloudNodes.ts'
 import { createCloudSky } from './cloudSky.ts'
 import type { CloudFrame } from './cloudFrame.ts'
-import {
-  CLOUD_SOURCE_BYTES,
-  CLOUD_SUN_FACTORS,
-  createCloudSource,
-} from './cloudSource.ts'
+import { CLOUD_SOURCE_BYTES, createCloudSource } from './cloudSource.ts'
 import {
   type CloudSystem,
   type CloudSystemDeps,
@@ -285,12 +282,12 @@ describe('the light’s stub modules', () => {
       second: null,
     } as unknown as CloudFrame)
     expect(source.levels.factor.value.toArray()).toEqual([
-      CLOUD_SUN_FACTORS.cumulus!.l,
+      sunFactorPair('cumulus').l,
       1,
       1,
     ])
     expect(source.levels.slope.value.toArray()).toEqual([
-      CLOUD_SUN_FACTORS.cumulus!.a,
+      sunFactorPair('cumulus').a,
       0,
       0,
     ])

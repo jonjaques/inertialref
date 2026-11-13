@@ -355,6 +355,18 @@ luminance on and off them in scene units.
 - **The undersides are dark everywhere,** and G4's tops are darker than the
   ground: phase 0's placeholder light, first order with a placeholder sky term.
   Phase 1's light is what changes them.
+- **The owner's answer on the deck: "Retire it regardless".** Asked on
+  2026-11-10 what happens to Earth's Blue Marble deck if panel seats rank it
+  above the volume, the owner chose that label: the deck goes once the volume
+  passes E3's bar against the satellite photographs, whatever the forced
+  ranking says. The ranking is still taken and reported.
+- **The real-time anchors are frozen at nine, by the owner's choice:
+  "Freeze the nine (Recommended)".** Asked on 2026-11-12 whether to search
+  the four engines no anchor came from, the owner chose that label: nine
+  stills from four engines, because the rubric holds the bar within 7 to 8
+  whatever they score. This is recorded here and not in `references.md`,
+  which does not change: a plate is compared only under the file it was
+  taken with.
 
 Earth's rows are the forced arm beside the deck. At this phase the forced
 arm lacks three things the deck's picture has: it draws no shadow on the
