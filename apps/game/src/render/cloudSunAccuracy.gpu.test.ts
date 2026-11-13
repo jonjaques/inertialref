@@ -22,6 +22,7 @@ import {
 } from 'three/tsl'
 import {
   type BodyWeather,
+  bodyWeather,
   cloudFieldAt,
   fieldClock,
   regimeWeather,
@@ -127,6 +128,17 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * and the one column they are mixed as; what the case misses beyond it is
  * the cache's, the volume it sums and the crossing under the horizon.
  *
+ * **A union of three levels** is scored apart (`UNION`), because no regime
+ * above has one: the world's own climate, 0.7 to 11.1 km on Earth, where
+ * the grid's 32 heights stand 335 m apart and a climbing ray's 32 steps are
+ * a kilometer each under a 15° sun, beside fair cumulus, whose one level
+ * gives them 45 m. Under suns of 45° and 15°, by the sample's level, two
+ * depths are held against the reference's march: the cache's at the sample
+ * itself, and the depth to the sun the march's light reads through four
+ * taps, each as a transmittance and as a depth cut at 16. Under the flag
+ * the same is recorded with a climbing ray's steps spent inside the levels
+ * (`CloudSunGrid.stepsInLevels`) and held to nothing.
+ *
  * **The early out's bill** is recorded beside each case and held to
  * nothing: the share of its samples whose cached depth, the grid's at the
  * sample as a march reads it, is past 4, 6 and 8, the share of the case's
@@ -157,8 +169,10 @@ const FLOOR = 1e-3
 const CSS = { width: 1024, height: 576 } as const
 /** Degrees over the eye's horizon: phase 0's two, and the dusk cornerstone's. */
 const SUNS = [37.5, 5, -1.5] as const
+/** A regime, or the world's own three levels. */
+type Weathered = ScenarioId | 'climate'
 const POPULATION: readonly {
-  readonly scenario: ScenarioId
+  readonly scenario: Weathered
   readonly suns: readonly number[]
 }[] = [
   { scenario: 'fair-cumulus', suns: SUNS },
@@ -184,6 +198,23 @@ const ALWAYS: typeof POPULATION = [
   { scenario: 'cirrus-over-cumulus', suns: SUNS },
   { scenario: 'two-decks', suns: [37.5] },
 ]
+
+/**
+ * The cases the grid's own depth is read at, by level: the world's climate,
+ * three levels from 0.7 to 11.1 km on Earth, beside a regime of one, under
+ * the suns the light after first order is judged at.
+ */
+const UNION_SUNS = [45, 15] as const
+const UNION: typeof POPULATION = [
+  { scenario: 'climate', suns: UNION_SUNS },
+  { scenario: 'fair-cumulus', suns: UNION_SUNS },
+]
+/** The one of them every run of the suite takes, at its first place. */
+const UNION_ALWAYS: typeof POPULATION = [{ scenario: 'climate', suns: [15] }]
+/** The depth a comparison of depths is cut at: past it nothing of the light after first order's table is left. */
+const DEPTH_CUT = 16
+/** In optical depth: under it a depth's figure is held to this and not to its tenth. */
+const DEPTH_FLOOR = 0.01
 
 /** The rebuild the instrument times: its field, the runs it takes the median of, and the frames it follows. */
 const REBUILD = {
@@ -214,8 +245,8 @@ const ACROSS: Readonly<Partial<Record<ScenarioId, number>>> = {
 }
 const ACROSS_ELSE = 48
 const ACROSS_MOST = 144
-const acrossOf = (scenario: ScenarioId): number =>
-  ACROSS[scenario] ?? ACROSS_ELSE
+const acrossOf = (scenario: Weathered): number =>
+  (scenario === 'climate' ? undefined : ACROSS[scenario]) ?? ACROSS_ELSE
 /** Directions a regime's places are chosen among, and the columns across the disc each is read at. */
 const CANDIDATES = 64
 const CANDIDATE_ACROSS = 20
@@ -269,11 +300,14 @@ const BODY = rigFrameInputs(
   CSS,
 ).record(RIG_EARTH)!
 
-const WEATHERS = new Map<ScenarioId, BodyWeather>()
-function weatherOf(scenario: ScenarioId): BodyWeather {
+const WEATHERS = new Map<Weathered, BodyWeather>()
+function weatherOf(scenario: Weathered): BodyWeather {
   let weather = WEATHERS.get(scenario)
   if (weather === undefined) {
-    weather = regimeWeather(BODY, scenario)
+    weather =
+      scenario === 'climate'
+        ? bodyWeather(BODY)!
+        : regimeWeather(BODY, scenario)
     WEATHERS.set(scenario, weather)
   }
   return weather
@@ -311,7 +345,7 @@ function clouded(
   return found
 }
 
-const PLACED = new Map<ScenarioId, readonly Vec3[]>()
+const PLACED = new Map<Weathered, readonly Vec3[]>()
 
 /**
  * The body-fixed directions a regime is scored over: of `CANDIDATES` drawn
@@ -320,7 +354,7 @@ const PLACED = new Map<ScenarioId, readonly Vec3[]>()
  * first sun, in the order they were drawn. Float64 on the CPU, so the
  * places are the same on every machine.
  */
-function placesOf(scenario: ScenarioId, elevation: number): readonly Vec3[] {
+function placesOf(scenario: Weathered, elevation: number): readonly Vec3[] {
   const held = PLACED.get(scenario)
   if (held !== undefined) return held
   const weather = weatherOf(scenario)
@@ -372,6 +406,8 @@ interface Lattice {
   readonly ground: Float64Array
   /** Each sample from the body's center, body-fixed, float64: what a ground test reads. */
   readonly fromCenter: Float64Array
+  /** Each sample's level among the weather's three. */
+  readonly level: Uint8Array
   readonly count: number
 }
 
@@ -385,19 +421,19 @@ function lattice(weather: BodyWeather, turn: Quat, across: number): Lattice {
   const offsets = new Float32Array(most * 4)
   const ground = new Float64Array(most)
   const fromCenter = new Float64Array(most * 3)
+  const level = new Uint8Array(most)
   const back = Q.conjugate(turn)
   let n = 0
   // The weather's own levels: an absent one has no thickness and no samples.
-  const heights = weather.levels
-    .filter((level) => level.top > level.base)
-    .flatMap((level) =>
-      Array.from(
-        { length: HEIGHTS_A_LAYER },
-        (_, k) =>
-          level.base + ((k + 0.5) / HEIGHTS_A_LAYER) * (level.top - level.base),
-      ),
-    )
-  for (const h of heights)
+  const heights = weather.levels.flatMap((spec, index) =>
+    spec.top > spec.base
+      ? Array.from({ length: HEIGHTS_A_LAYER }, (_, k) => ({
+          h: spec.base + ((k + 0.5) / HEIGHTS_A_LAYER) * (spec.top - spec.base),
+          index,
+        }))
+      : [],
+  )
+  for (const { h, index } of heights)
     for (let j = 0; j < across; j += 1)
       for (let i = 0; i < across; i += 1) {
         const x = REACH * ((2 * (i + 0.5)) / across - 1)
@@ -416,12 +452,14 @@ function lattice(weather: BodyWeather, turn: Quat, across: number): Lattice {
         offsets.set([fixed.x, fixed.y, fixed.z, 0], 4 * n)
         fromCenter.set([center.x, center.y, center.z], 3 * n)
         ground[n] = d
+        level[n] = index
         n += 1
       }
   return {
     offsets: offsets.subarray(0, 4 * n),
     ground,
     fromCenter,
+    level,
     count: n,
   }
 }
@@ -484,6 +522,26 @@ interface Case {
   readonly tapsAlone?: Readonly<Record<string, Scored>>
   /** By cached depth: what a march that takes no taps past it gives up. Recorded, held to nothing. */
   readonly earlyOut: Readonly<Record<string, EarlyOut>>
+  /** The grid's depth at the sample itself against the marched one, by the sample's level. */
+  readonly byLevel: readonly LevelDepth[]
+  /** The depth to the sun the march's light reads at four taps, the taps' own and the grid's past them, against the same. */
+  readonly throughTaps: readonly LevelDepth[]
+  /** Both again, and the case's four-tap figures, with a climbing ray's steps spent inside the levels. Recorded, held to nothing. */
+  readonly inLevels?: {
+    readonly byLevel: readonly LevelDepth[]
+    readonly throughTaps: readonly LevelDepth[]
+    readonly grid: Scored
+  }
+}
+
+/** The cache's depth at a level's scored samples, no taps before it, against the reference's march. */
+interface LevelDepth {
+  readonly level: number
+  readonly samples: number
+  /** `e^(−τ)` of the two, absolute: RMS, and the mean signed error, positive where the grid passes more. */
+  readonly transmittance: { readonly rms: number; readonly bias: number }
+  /** The two depths themselves, each cut at 16: RMS, and the mean signed error, positive where the grid is deeper. */
+  readonly depth: { readonly rms: number; readonly bias: number }
 }
 
 /** The samples of a case, or of a row, whose cached depth to the sun is past a threshold. */
@@ -557,11 +615,48 @@ const same = (a: Case, b: Case): boolean =>
   a.sunDegrees === b.sunDegrees &&
   a.place === b.place
 
+/** A depth to the sun at each scored sample, two floats a sample with the depth second, against the reference's, by level. */
+function levelDepths(
+  points: Lattice,
+  lit: readonly number[],
+  truth: Float32Array,
+  held: Float32Array,
+): LevelDepth[] {
+  return [0, 1, 2].flatMap((level) => {
+    const here = lit.filter(
+      (k) => points.level[k] === level && held[2 * k + 1]! >= 0,
+    )
+    if (here.length === 0) return []
+    let passed = 0
+    let passedSquare = 0
+    let deeper = 0
+    let deeperSquare = 0
+    for (const k of here) {
+      const want = truth[2 * k + 1]!
+      const t = Math.exp(-held[2 * k + 1]!) - want
+      const d =
+        Math.min(held[2 * k + 1]!, DEPTH_CUT) -
+        Math.min(-Math.log(want), DEPTH_CUT)
+      passed += t
+      passedSquare += t * t
+      deeper += d
+      deeperSquare += d * d
+    }
+    const n = here.length
+    return [
+      {
+        level,
+        samples: n,
+        transmittance: { rms: Math.sqrt(passedSquare / n), bias: passed / n },
+        depth: { rms: Math.sqrt(deeperSquare / n), bias: deeper / n },
+      },
+    ]
+  })
+}
+
 /** The landed figures of a case, or a failure: a case with no bound is a case that cannot fail. */
-function landedCase(found: Case): Case {
-  const pinned = (landed.cases as unknown as readonly Case[]).find((one) =>
-    same(one, found),
-  )
+function landedCase(found: Case, among: readonly Case[]): Case {
+  const pinned = among.find((one) => same(one, found))
   if (pinned === undefined)
     throw new Error(
       `no landed figures for ${found.scenario} at ${found.sunDegrees}°, place ${found.place}`,
@@ -570,9 +665,12 @@ function landedCase(found: Case): Case {
 }
 
 /** Hold a case's every figure to its landed one, at every tap count. */
-function hold(found: Case): void {
+function hold(
+  found: Case,
+  among: readonly Case[] = landed.cases as unknown as readonly Case[],
+): Case {
   const what = `${found.scenario} at ${found.sunDegrees}°, place ${found.place}`
-  const pinned = landedCase(found)
+  const pinned = landedCase(found, among)
   // The population itself, a count the CPU takes: a case that lost its
   // cloud scores nothing, and one the GPU draws elsewhere scores clear air.
   expect(found.inCloud, what).toBe(pinned.inCloud)
@@ -596,6 +694,55 @@ function hold(found: Case): void {
       expect(figure, `${what}, ${taps} taps: ${name}`).toBeLessThanOrEqual(
         Math.max(bound * SLACK, FLOOR),
       )
+  }
+  return pinned
+}
+
+/** Hold a case's depth by level, and its tap figures, to the landed ones. */
+function holdUnion(found: Case): void {
+  const what = `${found.scenario} at ${found.sunDegrees}°, place ${found.place}`
+  const pinned = hold(
+    found,
+    (landed as unknown as { union?: { cases: readonly Case[] } }).union
+      ?.cases ?? [],
+  )
+  const read = [
+    ['at the sample', found.byLevel, pinned.byLevel],
+    ['through four taps', found.throughTaps, pinned.throughTaps],
+  ] as const
+  for (const [where, nows, thens] of read) {
+    expect(nows.map((one) => [one.level, one.samples])).toEqual(
+      thens.map((one) => [one.level, one.samples]),
+    )
+    for (const [index, now] of nows.entries()) {
+      const then = thens[index]!
+      const figures = [
+        [
+          'transmittance RMS',
+          now.transmittance.rms,
+          then.transmittance.rms,
+          FLOOR,
+        ],
+        [
+          'transmittance bias',
+          Math.abs(now.transmittance.bias),
+          Math.abs(then.transmittance.bias),
+          FLOOR,
+        ],
+        ['depth RMS', now.depth.rms, then.depth.rms, DEPTH_FLOOR],
+        [
+          'depth bias',
+          Math.abs(now.depth.bias),
+          Math.abs(then.depth.bias),
+          DEPTH_FLOOR,
+        ],
+      ] as const
+      for (const [name, figure, bound, floor] of figures)
+        expect(
+          figure,
+          `${what}, level ${now.level}, ${where}: ${name}`,
+        ).toBeLessThanOrEqual(Math.max(bound * SLACK, floor))
+    }
   }
 }
 
@@ -673,6 +820,7 @@ describe('the sun’s optical depth against the field', () => {
   async function measure(
     population: typeof POPULATION,
     places: number,
+    split = true,
   ): Promise<Case[]> {
     const offsets = new StorageBufferAttribute(new Float32Array(POINTS * 4), 4)
     const out = new StorageBufferAttribute(new Float32Array(POINTS * 2), 1)
@@ -769,6 +917,11 @@ describe('the sun’s optical depth against the field', () => {
     const grid = pointKernel(
       (sample) => field.sun(sample, field.medium(sample, body), body).cloud,
     )
+    // The depth to the sun the march's light reads: the taps' own and the
+    // cache's past them.
+    const source = pointKernel(
+      (sample) => field.sun(sample, field.medium(sample, body), body).depth.x,
+    )
     // The cache's depth at the sample itself, as a march with no taps reads
     // it, and nothing where the cache holds nothing of the sample.
     const cache = pointKernel((sample) => {
@@ -831,7 +984,7 @@ describe('the sun’s optical depth against the field', () => {
           }
           for (const taps of TAPS) {
             // 1,536 steps of the field a sample at each count: under the flag.
-            if (MEASURE)
+            if (MEASURE && split)
               alone[taps] = score(lit.map(await scoreAt(taps, tapsAlone)))
             const miss = await scoreAt(taps, grid)
             all[taps] = score(lit.map(miss))
@@ -867,6 +1020,28 @@ describe('the sun’s optical depth against the field', () => {
               ]
             }),
           )
+          // The cache's depth at the sample itself, and the depth the light
+          // after first order reads through four taps, by the sample's level.
+          const depthsBy = async (
+            held: Float32Array,
+          ): Promise<{ byLevel: LevelDepth[]; throughTaps: LevelDepth[] }> => {
+            frameAt(stance, levers(4))
+            const through = await read(source)
+            return {
+              byLevel: levelDepths(points, lit, truth, held),
+              throughTaps: levelDepths(points, lit, truth, through),
+            }
+          }
+          const { byLevel, throughTaps } = await depthsBy(cached)
+          // The same with a climbing ray's steps spent inside the levels.
+          let inLevels: Case['inLevels']
+          if (MEASURE && !split) {
+            field.grid.stepsInLevels = true
+            settle(stance, levers(2), false)
+            const four = score(lit.map(await scoreAt(4, grid)))
+            inLevels = { ...(await depthsBy(await read(cache))), grid: four }
+            field.grid.stepsInLevels = false
+          }
           // Under the horizon, the other bake on the same field and samples.
           let farCrossing: Record<string, Scored> | undefined
           if (elevation < 0) {
@@ -893,14 +1068,18 @@ describe('the sun’s optical depth against the field', () => {
             grid: all,
             rings,
             ...(farCrossing === undefined ? {} : { farCrossing }),
-            ...(MEASURE ? { tapsAlone: alone } : {}),
+            ...(MEASURE && split ? { tapsAlone: alone } : {}),
             earlyOut,
+            byLevel,
+            throughTaps,
+            ...(inLevels === undefined ? {} : { inLevels }),
           })
         }
       }
     }
 
-    for (const kernel of [reference, grid, tapsAlone, cache]) kernel.dispose()
+    for (const kernel of [reference, grid, tapsAlone, cache, source])
+      kernel.dispose()
     offsets.dispose()
     out.dispose()
     return results
@@ -916,10 +1095,47 @@ describe('the sun’s optical depth against the field', () => {
     for (const one of found) hold(one)
   }, 120_000)
 
+  it('holds the grid’s depth against the marched one on the world’s three levels under a 15° sun, by level, in every run of the suite', async () => {
+    const found = await measure(UNION_ALWAYS, 1, false)
+    expect(found).toHaveLength(1)
+    expect(found[0]!.byLevel.map((one) => one.level)).toEqual([0, 1, 2])
+    for (const one of found) holdUnion(one)
+  }, 120_000)
+
   it.skipIf(!MEASURE)(
     'holds every case to its landed figures, and writes them',
     async () => {
       const results = await measure(POPULATION, PLACES)
+      const union = await measure(UNION, PLACES, false)
+      /** A row's levels pooled over its places. */
+      const levelsOf = (
+        cases: readonly Case[],
+        of: (one: Case) => readonly LevelDepth[] = (one) => one.byLevel,
+      ): LevelDepth[] =>
+        [0, 1, 2].flatMap((level) => {
+          const parts = cases.flatMap((one) =>
+            of(one).filter((part) => part.level === level),
+          )
+          const samples = parts.reduce((sum, part) => sum + part.samples, 0)
+          if (samples === 0) return []
+          const mean = (of: (part: LevelDepth) => number): number =>
+            parts.reduce((sum, part) => sum + of(part) * part.samples, 0) /
+            samples
+          return [
+            {
+              level,
+              samples,
+              transmittance: {
+                rms: Math.sqrt(mean((part) => part.transmittance.rms ** 2)),
+                bias: mean((part) => part.transmittance.bias),
+              },
+              depth: {
+                rms: Math.sqrt(mean((part) => part.depth.rms ** 2)),
+                bias: mean((part) => part.depth.bias),
+              },
+            },
+          ]
+        })
       // Written before anything is held, so a figure that moved is on disk
       // beside the failure that names it.
       mkdirSync('.data/clouds', { recursive: true })
@@ -981,6 +1197,39 @@ describe('the sun’s optical depth against the field', () => {
               }),
             ),
             cases: results,
+            union: {
+              note: 'the grid’s depth at the sample itself, no taps before it, against the same march, by the sample’s level; depths cut at 16',
+              pooled: UNION.flatMap(({ scenario, suns }) =>
+                suns.map((sunDegrees) => {
+                  const cases = union.filter(
+                    (one) =>
+                      one.scenario === scenario &&
+                      one.sunDegrees === sunDegrees,
+                  )
+                  return {
+                    scenario,
+                    sunDegrees,
+                    byLevel: levelsOf(cases),
+                    throughTaps: levelsOf(cases, (one) => one.throughTaps),
+                    inLevels: {
+                      byLevel: levelsOf(cases, (one) => one.inLevels!.byLevel),
+                      throughTaps: levelsOf(
+                        cases,
+                        (one) => one.inLevels!.throughTaps,
+                      ),
+                      grid: pooled(cases.map((one) => one.inLevels!.grid)),
+                    },
+                    grid: Object.fromEntries(
+                      TAPS.map((taps) => [
+                        taps,
+                        pooled(cases.map((one) => one.grid[taps]!)),
+                      ]),
+                    ),
+                  }
+                }),
+              ),
+              cases: union,
+            },
           },
           null,
           2,
@@ -988,6 +1237,7 @@ describe('the sun’s optical depth against the field', () => {
       )
       expect(results).toHaveLength(landed.cases.length)
       for (const found of results) hold(found)
+      for (const found of union) holdUnion(found)
     },
     1_800_000,
   )
