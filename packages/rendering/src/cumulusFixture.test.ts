@@ -832,6 +832,27 @@ describe('the air’s own sky by direction', () => {
     )
   })
 
+  it('sees the lit ground under it from the datum, as the bake does', () => {
+    // On the datum a ray aimed down starts in the ground: no air between,
+    // the ground lit at the point's own sun cosine. Straight down under a
+    // sun 15° up the bake reads 0.00861, 0.00775, 0.00693.
+    const muSun = Math.sin((15 * Math.PI) / 180)
+    const radiance = airSkyRadiance(air, CUMULUS_SKY_QUADRATURE, 1, muSun)
+    const light = [0, 0, 0]
+    radiance(0, 0, -1, light)
+    expect(light[0]).toBeCloseTo(0.00860766, 7)
+    expect(light[1]).toBeCloseTo(0.00774759, 7)
+    expect(light[2]).toBeCloseTo(0.00692858, 7)
+    // And every direction under the datum's level: the moments are the
+    // quadrature's there too.
+    const own = skyMomentsOf(skyDirections(1, CUMULUS_SKY_QUADRATURE), radiance)
+    const exact = marchSkyMoments(air, 1, muSun, CUMULUS_SKY_QUADRATURE)
+    for (let b = 0; b < 3; b += 1) {
+      expect(Math.abs(own.mean[b]! / exact.mean[b]! - 1)).toBeLessThan(1e-3)
+      expect(Math.abs(own.up[b]! - exact.up[b]!)).toBeLessThan(1e-3)
+    }
+  })
+
   it('is the quadrature’s own radiance at its directions: their moments are `marchSkyMoments`', () => {
     // The one figure not the quadrature's is the air's transmittance to the
     // ground, which its march keeps private. Measured: L̄ within 0.012%, Δ

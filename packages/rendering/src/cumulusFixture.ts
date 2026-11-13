@@ -1399,15 +1399,20 @@ export function airSkyRadiance(
     out[1] = b
     out[2] = c
     if (!(z < 0)) return
+    // On the datum a ray aimed down is already in the ground: the ground is
+    // the point's own, lit at the sun's cosine, with no air between. The
+    // hit is at no distance, which the far root of the sphere would answer
+    // with a chord of rock, as the bake's march says.
+    const underfoot = r <= 1
     const discriminant = r * r * (z * z - 1) + 1
-    if (discriminant < 0) return
-    const d = -r * z - Math.sqrt(discriminant)
-    if (!(d > 0)) return
+    if (!underfoot && discriminant < 0) return
+    const d = underfoot ? 0 : -r * z - Math.sqrt(discriminant)
+    if (!underfoot && !(d > 0)) return
     const px = x * d
     const py = y * d
     const pz = r + z * d
     const length = Math.hypot(px, py, pz)
-    const cosine = (px * sx + pz * muSun) / length
+    const cosine = underfoot ? muSun : (px * sx + pz * muSun) / length
     const u =
       Math.min(Math.max((cosine + 1) / 2, 0), 1) * (SKY_BLOCK_COLUMNS - 1)
     const k0 = Math.floor(u)
@@ -1415,8 +1420,10 @@ export function airSkyRadiance(
     const share = u - k0
     const g0 = column(k0)
     const g1 = column(k1)
-    const fromGround = transmittanceFrom(1, -(d + r * z), recipe)
-    const fromHere = transmittanceFrom(r, -z, recipe)
+    const fromGround = underfoot
+      ? [1, 1, 1]
+      : transmittanceFrom(1, -(d + r * z), recipe)
+    const fromHere = underfoot ? [1, 1, 1] : transmittanceFrom(r, -z, recipe)
     for (let band = 0; band < 3; band += 1) {
       const through =
         fromHere[band]! > 0 ? fromGround[band]! / fromHere[band]! : 0
