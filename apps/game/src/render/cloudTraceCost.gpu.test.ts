@@ -133,10 +133,21 @@ const tapped = (lightTaps: number): Variant => ({
 })
 
 /**
+ * The light after first order with no factor of the sun by level: the
+ * plane slab's source alone, at the default's four taps. Its row against
+ * the four-tap row is what the factor costs; what the source's read costs
+ * is the four-tap row against the tree before it, which no lever draws.
+ */
+const PLANE: Variant = {
+  name: '4 taps, plane',
+  levers: { lightTaps: 4, transport: 'plane' },
+}
+
+/**
  * The lever sets a stance is timed under, the clouds off first. A package
  * that adds a cost to the trace adds its lever set here.
  */
-const VARIANTS: readonly Variant[] = [OFF, ...TAPS.map(tapped)]
+const VARIANTS: readonly Variant[] = [OFF, ...TAPS.map(tapped), PLANE]
 
 const SIZES: readonly Size[] = [
   { key: '1080p', css: [1920, 1080], dpr: 1, variants: VARIANTS },
