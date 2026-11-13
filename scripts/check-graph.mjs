@@ -21,6 +21,7 @@
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { pathTo, staticReach } from './graph/reach.mjs'
 
 const root = new URL('..', import.meta.url).pathname
 const packagesDir = join(root, 'packages')
@@ -115,6 +116,34 @@ for (const dir of BROWSER_SOURCES) {
   }
 }
 
+/*
+ * A page without `?clouds=1` loads none of the cloud system: `App` reaches it
+ * through `import()` alone. A static edge from `App`'s graph into the march
+ * takes the march's modules, and through them the mie table, into every page
+ * (190 kB gzipped), and nothing else fails on it: the build succeeds and the
+ * gate does not build. `scripts/graph/reach.mjs` says how the walk follows
+ * the bundler. `weatherField.ts` is not on the list: `App` reads its
+ * `UNSPREAD_SHAPE` through `cloudNodes`, a constant the bundler keeps without
+ * the field's table.
+ */
+const LAZY_ONLY = {
+  entry: 'apps/game/src/App.tsx',
+  refused: [
+    'apps/game/src/render/cloudSystem.ts',
+    'apps/game/src/render/cloudTrace.ts',
+    'apps/game/src/render/cloudMarch.ts',
+    'packages/rendering/src/mieTable.ts',
+  ],
+}
+const appReach = staticReach(root, LAZY_ONLY.entry)
+for (const file of LAZY_ONLY.refused) {
+  if (appReach.entered.has(file))
+    problems.push(
+      `${LAZY_ONLY.entry} reaches ${file} by static imports, so every page loads it ` +
+        `(${pathTo(appReach, file).join(' → ')}); the cloud system loads behind import()`,
+    )
+}
+
 // Cycle detection, independent of the layer declarations, so a wrong layer
 // number cannot hide a real cycle.
 const state = new Map()
@@ -154,5 +183,6 @@ for (const layer of [...byLayer.keys()].sort((a, b) => a - b)) {
 }
 console.log(
   `${packages.size} packages, no cycles, layering intact, no third-party dependencies, ` +
-    `no Node-only export in a browser or Worker build`,
+    `no Node-only export in a browser or Worker build, ` +
+    `App reaches no cloud march (${appReach.entered.size} modules)`,
 )
