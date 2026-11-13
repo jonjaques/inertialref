@@ -25,12 +25,19 @@ import {
   SOURCE_SUN_FLOOR,
   sourceAt,
   statisticalSlab as statisticalSlabOf,
+  stepRamp as stepRampOf,
   UNSPREAD_SHAPE,
   viewReads,
   sunFactorPair,
 } from '@inertialref/rendering'
 import { SLAB_VIEW_SOURCE_TEXELS } from '@inertialref/rendering/slabSourceTexels'
-import { resolvedSlab, skySource, statisticalSlab } from './cloudMix.ts'
+import {
+  resolvedSlab,
+  skySource,
+  statisticalSlab,
+  stepRamp,
+  stepWeights,
+} from './cloudMix.ts'
 import {
   CLOUD_ICE_ROWS,
   type CloudSource,
@@ -116,6 +123,13 @@ async function evaluate(
  * mini, over 3,780 cases in three bands.
  */
 const SKY_STEP = 2e-6
+
+/**
+ * How far a ramp's step may stand from its CPU reference, as a share of
+ * its larger end times its depth: a float32's `1 − e^(−τ)` keeps three
+ * figures at a depth of 10⁻⁴. 5.0e-4 at worst on the Mac mini.
+ */
+const RAMP_STEP = 1e-3
 
 /** A table of scales against radius, linear in ln r and held at its ends: the node's `scaleAt`, in float64. */
 function scaleOf(
@@ -668,6 +682,42 @@ describe('the slab a sample stands in', () => {
     expect(low).toBeLessThan(20)
     expect(high).toBeGreaterThan(20)
     expect(high - low).toBeLessThan(20 * 0.03)
+  }, 120_000)
+})
+
+describe('the light a step adds of a ramp', () => {
+  it('is its CPU reference from a wisp of a step to a wall of one', async () => {
+    const cases: number[][] = []
+    for (const start of [0, 0.2, 1, 2.5])
+      for (const end of [0, 0.2, 1, 2.5])
+        for (const depth of [1e-4, 0.005, 0.0099, 0.0101, 0.3, 1.16, 5, 40])
+          cases.push([start, end, depth])
+    const out = await evaluate(3, cases, (read) => {
+      const light = stepRamp(
+        vec3(read(0)),
+        vec3(read(1), read(1).mul(0.5), 0),
+        stepWeights(read(2)),
+      )
+      return [light.x, light.y, light.z]
+    })
+    let worst = 0
+    cases.forEach(([start, end, depth], i) => {
+      ;[end!, end! * 0.5, 0].forEach((far, band) => {
+        const want = stepRampOf(start!, far, depth!)
+        const got = out[i]![band]!
+        expect(Number.isFinite(got)).toBe(true)
+        worst = Math.max(
+          worst,
+          Math.abs(got - want) / Math.max(start!, far, 1e-3) / depth!,
+        )
+      })
+    })
+    console.info(
+      `cloudSource: a ramp's step against its CPU reference, ${cases.length} cases by three bands: ${worst.toExponential(2)} of the larger end times the depth at worst`,
+    )
+    // A step's light is its depth's size where the step is thin, so the
+    // bound is a share of the larger end times the depth, no more than it.
+    expect(worst).toBeLessThan(RAMP_STEP)
   }, 120_000)
 })
 

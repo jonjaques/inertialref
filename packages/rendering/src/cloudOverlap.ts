@@ -182,6 +182,26 @@ export function stepLight(start: number, end: number, depth: number): number {
   return start * opacity + (end - start) * ramp
 }
 
+/**
+ * The light a step adds of a source that is a ramp between its two ends,
+ * per unit of what reaches its start: `∫ (S₀ + (S₁ − S₀)·t/τ)·e^(−t) dt`
+ * over the step, `S₀·(1 − e^(−τ)) + (S₁ − S₀)·(1 − (1 + τ)·e^(−τ))/τ`.
+ *
+ * The sky's light on a sample is this kind of source: its lean is linear
+ * in the column's depth under the sample, which a ray crosses in step with
+ * its own, so a ramp is exact where the logarithm's form is not, and it
+ * takes no logarithm. The CPU reference of `stepRamp` in
+ * `apps/game/src/render/cloudMix.ts`.
+ */
+export function stepRamp(start: number, end: number, depth: number): number {
+  const opacity = depth * stepShare(depth)
+  const ramp =
+    depth < SERIES_BELOW
+      ? depth * (1 / 2 - depth / 3 + (depth * depth) / 8 - depth ** 3 / 30)
+      : (opacity - depth * Math.exp(-depth)) / depth
+  return start * opacity + (end - start) * ramp
+}
+
 /* ------------------------------------------------------------------------- */
 /* The slab a sample stands in                                                */
 /* ------------------------------------------------------------------------- */

@@ -258,15 +258,16 @@ export function stepLight(
   return vec3(band(start.x, end.x), band(start.y, end.y), band(start.z, end.z))
 }
 
-/**
- * `stepLight` for one value that the three bands share: a source that is
- * one number for the three, which a caller multiplies by its bands after.
- */
-export function stepLightBand(
-  start: Node<'float'>,
-  end: Node<'float'>,
-  depth: Node<'float'>,
-): Node<'float'> {
+/** What a step's two-end rules weigh its ends by: what it passes, and a ramp's far end. */
+export interface StepWeights {
+  /** e^(−τ). */
+  readonly through: Node<'float'>
+  /** (1 − (1 + τ)·e^(−τ))/τ, by its series where the quotient cancels. */
+  readonly ramp: Node<'float'>
+}
+
+/** A step's weights over the mixed optical depth `depth`: formed once where two rules read them. */
+export function stepWeights(depth: Node<'float'>): StepWeights {
   const through = exp(depth.negate())
   const thin = depth.lessThan(SERIES_BELOW)
   const safe = select(thin, float(1), depth)
@@ -275,7 +276,39 @@ export function stepLightBand(
     depth.mul(depth.mul(depth.div(8).sub(1 / 3)).add(0.5)),
     float(1).sub(safe.add(1).mul(through)).div(safe),
   )
-  return bandLight(start, end, depth, through, ramp)
+  return { through, ramp }
+}
+
+/**
+ * `stepLight` for one value that the three bands share: a source that is
+ * one number for the three, which a caller multiplies by its bands after.
+ * `weights` are the step's own where a caller holds them for another rule.
+ */
+export function stepLightBand(
+  start: Node<'float'>,
+  end: Node<'float'>,
+  depth: Node<'float'>,
+  weights: StepWeights = stepWeights(depth),
+): Node<'float'> {
+  return bandLight(start, end, depth, weights.through, weights.ramp)
+}
+
+/**
+ * The light a step adds of a source that is a ramp between its two ends,
+ * per unit of what reaches its start, each band: `stepRamp` in
+ * `packages/rendering/src/cloudOverlap.ts`. The sky's light on a sample is
+ * such a source, its lean linear in the column's depth, so the ramp is
+ * its integral where `stepLight`'s log-linear form is not, and it takes no
+ * logarithm where that form takes two a band.
+ */
+export function stepRamp(
+  start: Node<'vec3'>,
+  end: Node<'vec3'>,
+  weights: StepWeights,
+): Node<'vec3'> {
+  return start
+    .mul(float(1).sub(weights.through))
+    .add(end.sub(start).mul(weights.ramp))
 }
 
 /** What the layers' statistics read at a sample's own column. */

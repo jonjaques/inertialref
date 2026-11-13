@@ -51,7 +51,9 @@ import {
   statisticalSlab,
   stepLight,
   stepLightBand,
+  stepRamp,
   stepShare,
+  stepWeights,
 } from './cloudMix.ts'
 import type {
   CloudFarResult,
@@ -1015,6 +1017,10 @@ export function cloudMarch(
         ),
       )
     gather.add(pending.level, light, pending.radius)
+    // The sky's source is a ramp between the step's two ends, and reads
+    // the weights the sun's light past first order is weighed by.
+    const weights =
+      skyTable !== null && sky !== null ? stepWeights(pending.depth) : undefined
     r.rest.addAssign(
       pending.seen
         .mul(air)
@@ -1023,17 +1029,14 @@ export function cloudMarch(
             pending.higher,
             held ? pending.higher : higher,
             pending.depth,
+            weights,
           ),
         ),
     )
     if (skyTable !== null && sky !== null)
       r.rest.addAssign(
         pending.seen.mul(
-          stepLight(
-            skyTable.pending,
-            held ? skyTable.pending : sky,
-            pending.depth,
-          ),
+          stepRamp(skyTable.pending, held ? skyTable.pending : sky, weights!),
         ),
       )
     pending.on.assign(0)

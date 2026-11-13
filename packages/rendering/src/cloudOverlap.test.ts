@@ -13,6 +13,7 @@ import {
   spreadDepth,
   statisticalSlab,
   stepLight,
+  stepRamp,
   stepShare,
 } from './cloudOverlap.ts'
 import {
@@ -554,6 +555,41 @@ describe('the slab a sample stands in', () => {
     // A whole depth under the depth to the sun leaves nothing behind.
     expect(resolvedSlab(12, 3, 0.5)).toEqual({ sunMu: 0.5, top: 6, bottom: 0 })
     expect(resolvedSlab(12, 30, -0.01).sunMu).toBe(SOURCE_SUN_FLOOR)
+  })
+})
+
+describe('the light a step adds of a ramp', () => {
+  const source = between(0, 3)
+
+  it('is the ramp’s integral over the step, by 2,000 points', () => {
+    fc.assert(
+      fc.property(source, source, decades(1e-4, 60), (start, end, depth) => {
+        const N = 2000
+        let sum = 0
+        for (let i = 0; i < N; i += 1) {
+          const t = ((i + 0.5) / N) * depth
+          sum +=
+            (start + ((end - start) * t) / depth) * Math.exp(-t) * (depth / N)
+        }
+        // The midpoints' own error at a depth of 60 is 4 parts in 10⁵.
+        expect(Math.abs(stepRamp(start, end, depth) - sum)).toBeLessThan(
+          1e-4 * Math.max(start, end) + 1e-12,
+        )
+      }),
+    )
+  })
+
+  it('is the source times the step’s opacity where the two ends are one, and `stepLight` where an end is dark', () => {
+    fc.assert(
+      fc.property(source, decades(1e-4, 60), (level, depth) => {
+        const opacity = 1 - Math.exp(-depth)
+        expect(
+          Math.abs(stepRamp(level, level, depth) - level * opacity),
+        ).toBeLessThan(1e-12 * Math.max(level, 1))
+        expect(stepRamp(0, level, depth)).toBe(stepLight(0, level, depth))
+        expect(stepRamp(level, 0, depth)).toBe(stepLight(level, 0, depth))
+      }),
+    )
   })
 })
 
