@@ -3,8 +3,11 @@
 **State.** This is phase 2's design, by the adviser's ruling of
 2026-11-12 (ruling 004). Nothing of it is built.
 
-Read on `origin/weather/phase-1` at `02048daa`. M2, X, Y2, L's fourth pass
-and N are not merged there; §1 says what this design assumes of each.
+Read on `origin/weather/phase-1` at `2ecb223a`. M1's second part has merged
+there (`5b2d9fd1`: four taps to 500 m ended at the level's exit, the early
+out, the strides between levels), with the factor of the sun's higher
+orders and ADR-0069 and ADR-0070. M2, X, Y2, L's fourth pass and N are not
+merged; §1 says what this design assumes of each.
 
 ## 0. How to read this
 
@@ -561,12 +564,15 @@ at row 14's three suns, on both paths.
   under the base; under an altostratus the air from 0.7 to 3.4 km, 25%
   of the column, is lit by a sun that does not reach it (M: the physics
   critic, D), unless the mean above lands.
-- **So E2's crop cannot show a top's shadow on the air above it.** The
-  deck it is ranked against draws none either. If the first forced
-  plate's crop does not rank above the deck, the cure is the mean, then
-  a statistical term from the atlas in the composite's sky-class air.
 - **Shafts are blurred to the step,** from orbit to 6 km. G3 scores rays
   when present (rubric §3.7).
+
+**E2's crop is judged by R-G, not declared** (ruling 004, 7). No march
+here reads a top's shadow on the air above it, and a declaration does not
+waive a seat's Shadow floor in the crop. From 400 km the limb's air is the
+far atlas's columns, so R-G judges the atlas's term before A is briefed:
+what it draws in the crop, what it costs at `orbit`, and whether the
+trace's blocked air can form it too.
 
 **Who proves it.** R-C2 judges `m`, `w` and the mean on package O's
 column, before H. The identity is a GPU figure: package A's first commit
@@ -966,7 +972,8 @@ the Fable ones on held-out cases chosen before reading them.
 | R-F  | §9               | In K, two minutes of the GPU lock                                 | One, four and twelve stand-in reads a fragment in the four real materials, at both sizes, against the no-handle graph. A read behind a zero weight. A level's bake at 62.5 m and 500 m, as quads and as one compute pass                                                                                                                                                                                 | Every ceiling of §8 |
 
 **Order.** R-A, R-D and R-C1 first; R-E beside them; R-B on L's fourth
-pass; R-C2 on the column.
+pass; R-G after R-D on the Fable seat, once R-B has reported; R-C2 on the
+column.
 
 **A unit taken in one pass form is not the unit in another:** one
 fragment cost 0.50 ms in pass B and 0.10 in the chain form (M:
@@ -1292,9 +1299,13 @@ the camera (`:817`), and the key (`pages/paths.ts:364-370`).
 builds for a material lives in the cloud chunk and reaches the material
 through the handle (§3). The CPU field reaches the flare through N's
 worker and a number on the handle (§4.3). So `App` gains types alone at
-G's, A's and F's merges, the standing ruling "a page without the flag
-pays nothing" holds for the clouds until D3, and the merger's bundle
-sizes hold it: `App` is tracked to 28 bytes (M: `reports/merger.md`).
+G's, A's and F's merges, and the standing ruling "a page without the flag
+pays nothing" holds for the clouds until D3. The graph stage holds it, not
+the merger's eye (ruling 004, 5). It is breached from `5b2d9fd1`:
+`fd929471`'s import into `cloudLevers.ts` puts the mie table on every
+page, 57 chunks where 56 stand and about 208 kB gzipped more, and no check
+was red (M: the register). The fix, `7af11d48`, carries the graph stage's
+rule and merges before anything else; at `2ecb223a` it is not in the tree.
 
 **The skylight is the air's, and it lands on every page at H's merge.**
 L6 closes the air's two defects on every body with an air (rubric
@@ -1414,13 +1425,13 @@ phase 1's declared errors are largest. S1 and S2 do.
 
 **The council's.**
 
-| #   | What                                                                                                                                                                                                            | Figure                                                                                                 |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 1   | The bars proposed where the rubric has no row: L1 (0.01 in a 12.8 km mean, 0.03 RMS), L2 (10% over a 10° sun), L3 (1%), L4 (25%), L5's geometry (20% at a point, 10% in the mean over 30°), L8 (10%), L9 (±35%) | §4 to §6                                                                                               |
-| 2   | E2's crop shows no shadow's shape on the air over the base                                                                                                                                                      | Declared (§4.4)                                                                                        |
-| 3   | The resolved near probe is out of the MVP                                                                                                                                                                       | §2; S4 records it                                                                                      |
-| 4   | Whether the sun map joins B7's "the field is whole"                                                                                                                                                             | Its first bake is 28 frames under one level at 50° and 70 to 200 at 15° or under three (E), against 48 |
-| 5   | Row 14 is held on the renderer's medium, and its column cannot see where a part is read                                                                                                                         | 3.0% from the true medium at 550 nm, 2.8% down to a 2° sun (M)                                         |
+| #   | What                                                                                                                                                                                                        | Figure                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1   | The bars proposed where the rubric has no row: L1 (0.01 in a 12.8 km mean, 0.03 RMS), L2 (10% over a 10° sun), L3 (1%), L4 (25%), L8 (10%), L9 (±35%). L5's geometry is set: ruling 004's three bars (§5.1) | §4 to §6                                                                                               |
+| 2   | E2's crop shows no shadow's shape on the air over the base                                                                                                                                                  | Judged by R-G before A is briefed, not declared (ruling 004, 7; §4.4)                                  |
+| 3   | The resolved near probe is out of the MVP                                                                                                                                                                   | §2; S4 records it                                                                                      |
+| 4   | The wording of the sun map's own clause beside B7's "the field is whole", which it does not join as written (ruling 004, 8)                                                                                 | Its first bake is 28 frames under one level at 50° and 70 to 200 at 15° or under three (E), against 48 |
+| 5   | Row 14 is held on the renderer's medium, and its column cannot see where a part is read                                                                                                                     | 3.0% from the true medium at 550 nm, 2.8% down to a 2° sun (M)                                         |
 
 **Declared by this design:** §8's last paragraph, each a ceiling test. Not
 in a law's own section: E1's outer 7 km a side at the coarser level at
