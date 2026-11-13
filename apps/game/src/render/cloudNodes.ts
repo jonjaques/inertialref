@@ -161,8 +161,11 @@ export interface CloudSun {
    * two members and neither's source, so a sun whose cache holds both
    * feeds each from its own with no edit of the march. Today the shipped
    * sun forms both from the one cell, which holds an opacity: through four
-   * taps this depth is under a march of the field by 0.6 to 1.6 in every
-   * level of broken cloud, 2.3 to 4.3 in RMS cut at 16.
+   * taps this depth is under a march of the field by 0.17 to 0.38 in the
+   * mean in every level of broken cloud, 1.7 to 3.0 in RMS cut at 16, and
+   * the cell read at the sample alone by 1.8 to 2.8 (the sun instrument's
+   * union, fair cumulus and a climate's two low levels under suns of 45°
+   * and 15°).
    *
    * What the shipped sun (`cloudSunFn`) holds in it, by where the sample
    * stands. `w` is the cache's weight where the taps end
@@ -173,8 +176,8 @@ export interface CloudSun {
    *   span, over half a kilometer at most and no further than the level's
    *   exit along the sun; plus the cache's depth where the taps end. The
    *   cache's is the depth of the mean transmittance of its 400 m cells:
-   *   in broken cloud it is shallower than the depth along any one ray, by
-   *   0.6 to 1.6 through four taps. Under six it is exact to a half float,
+   *   in broken cloud it is shallower than the depth along any one ray,
+   *   and the taps take most of that back where they reach. Under six it is exact to a half float,
    *   past it a cell steps by 0.2 to 0.4, and no cell holds more than 64.
    * - **A sample the early out skipped:** one whose cached depth at the
    *   sample itself is past six with the cache whole. No tap is read, and
