@@ -8,6 +8,7 @@ import {
   type Texture,
   type TextureNode,
   Vector3,
+  Vector4,
 } from 'three/webgpu'
 import {
   abs,
@@ -45,6 +46,7 @@ import {
   SKY_BLOCK_GUARD,
   SKY_TABLE_HEIGHT,
   SKY_TABLE_WIDTH,
+  skyRowsOf,
   TRANSMITTANCE_HEIGHT,
   TRANSMITTANCE_WIDTH,
 } from '@inertialref/rendering'
@@ -188,7 +190,9 @@ export interface AirTables {
  * draws nothing, extinguishes nothing and passes the beam white.
  *
  * `sky` is the sky's light on a cloud (`bakeSkyMoments`, read by
- * `skyTableAt`), a table of its own that only the cloud passes read. TSL binds a texture in a graph that reads it and in no
+ * `skyTableAt`), a table of its own that only the cloud passes read, and
+ * `skyRows` where its rows stand (`skyRowsOf`), formed from the recipe as
+ * the bake forms it, so `set` alone keeps the two in step. TSL binds a texture in a graph that reads it and in no
  * other, so the member costs the shell, the sphere, the ground and the sea
  * no binding and moves none of their WGSL (`cloudPremises.gpu.test.ts`).
  * `bind` takes a body's tables as one object, so a table more is a member
@@ -225,6 +229,7 @@ export function createAirUniforms(
   const detachedScatter = uniform(new Vector3(0, 0, 0))
   const hRayleigh = uniform(1)
   const hMie = uniform(1)
+  const skyRows = uniform(new Vector4(0, 0, 0, 0))
   const transmittance = texture(white)
   const multiScatter = texture(black)
   const sky = texture(dark)
@@ -248,6 +253,7 @@ export function createAirUniforms(
     detachedScatter.value.set(...recipe.detachedScatter)
     hRayleigh.value = recipe.hRayleigh
     hMie.value = recipe.hMie
+    skyRows.value.set(...skyRowsOf(recipe))
     transmittance.value = sunTable
     multiScatter.value = psiTable
   }
@@ -267,6 +273,7 @@ export function createAirUniforms(
     detachedScatter,
     hRayleigh,
     hMie,
+    skyRows,
     transmittance,
     multiScatter,
     limb,
@@ -300,6 +307,7 @@ export function createAirUniforms(
       detachedScatter.value.set(0, 0, 0)
       hRayleigh.value = 1
       hMie.value = 1
+      skyRows.value.set(0, 0, 0, 0)
       // The tables as well as the coefficients. `sunThrough` hands back the
       // transmittance table as the beam's color, with no coefficient to zero
       // it, so a material cleared for an airless body but still bound to the
@@ -570,11 +578,20 @@ export interface SkyAt {
   readonly up: Node<'vec3'>
   /** Δ_s: the same across a vertical face turned to the sun's azimuth. */
   readonly sunward: Node<'vec3'>
+  /** c: the upper side's irradiance less the linear sky's, over π·L̄ (`SkyTableMoments.upper`). */
+  readonly upper: Node<'vec3'>
 }
 
 /**
  * The sky table at one sample, in the coordinates `sunTableAt` takes: one
- * read of each block, the mean through its logarithm as Ψ is read.
+ * read of each block, the mean through its logarithm as Ψ is read, and
+ * block k's alpha as band k's `c`.
+ *
+ * The rows stand evenly in the air's optical depth, not in height, so the
+ * height's share is mapped to the row coordinate by `skyRowAt`'s closed
+ * form from `skyRows`, the four numbers the bake placed the rows by: two
+ * exponentials a read and no fetch. A read over the last row, which
+ * stands under the air's top, holds it.
  *
  * A block's 32 columns sit inside a guard column each side, so the cosine
  * is clamped to the block's first and last column centers and a bilinear
@@ -591,11 +608,18 @@ export function skyTableAt(
   const column = saturate(muSun.add(1).mul(0.5))
     .mul(SKY_BLOCK_COLUMNS - 1)
     .add(SKY_BLOCK_GUARD + 0.5)
-  const v = saturate(height01)
+  const u = saturate(height01)
+  const rows = air.skyRows
+  const row = saturate(
+    rows.x
+      .mul(oneMinus(exp(rows.y.mul(u).negate())))
+      .add(rows.z.mul(oneMinus(exp(rows.w.mul(u).negate())))),
+  )
+  const v = row
     .mul(SKY_TABLE_HEIGHT - 1)
     .add(0.5)
     .div(SKY_TABLE_HEIGHT)
-  const block = (index: number): Node<'vec3'> =>
+  const block = (index: number): Node<'vec4'> =>
     air.sky
       .sample(
         vec2(
@@ -605,8 +629,14 @@ export function skyTableAt(
           v,
         ),
       )
-      .level(float(0)).rgb
-  return { mean: exp(block(0)), up: block(1), sunward: block(2) }
+      .level(float(0))
+  const [mean, up, sunward] = [block(0), block(1), block(2)]
+  return {
+    mean: exp(mean.rgb),
+    up: up.rgb,
+    sunward: sunward.rgb,
+    upper: vec3(mean.a, up.a, sunward.a),
+  }
 }
 
 /**

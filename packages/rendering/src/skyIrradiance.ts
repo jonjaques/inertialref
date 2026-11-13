@@ -15,11 +15,15 @@ import {
  *
  * Three blocks of 34 columns over the sun's cosine, a guard column each side
  * of a block's 32 so a bilinear read never blends two blocks, and 16 rows
- * over height from the datum to the air's top, on the grid Ψ is baked on:
+ * laid evenly in the optical depth of the air below them (`skyRowsOf`), from
+ * the datum to just under the air's top:
  *
  *   block 0  ln L̄        the sky's mean radiance per band
  *   block 1  Δ           the upper side's irradiance less the lower's, over π·L̄
  *   block 2  Δ_s         the sunward side's less the far side's, over π·L̄
+ *
+ * and in block k's alpha band k's `c`, how far the upper side's irradiance
+ * stands from the one the first two blocks imply (`SkyTableMoments.upper`).
  *
  * Radiance is per unit of the sun's irradiance and before `ATMOSPHERE_GAIN`,
  * the unit the cloud's first order is gathered in, so the composite's one
@@ -49,6 +53,110 @@ export const SKY_BLOCKS = 3
 export const SKY_TABLE_WIDTH =
   SKY_BLOCKS * (SKY_BLOCK_COLUMNS + 2 * SKY_BLOCK_GUARD)
 export const SKY_TABLE_HEIGHT = 16
+
+/**
+ * Where the table's rows stand: the row coordinate, 0 at the datum and 1 at
+ * the last row, at a height `u` given as a share of the air's depth, is
+ *
+ *   saturate(a·(1 − e^(−b·u)) + c·(1 − e^(−d·u)))
+ *
+ * for `[a, b, c, d]`: the gas's and the haze's columns under `u`, each its
+ * vertical optical depth over its own scale height, over the two columns
+ * under the last row. The bake places row `y` where this is `y/15`, by
+ * bisection, and the read forms it from the same four numbers, so the read
+ * adds no fetch.
+ *
+ * Laid evenly in height the rows stand 6.7 km apart on Earth, and every
+ * cloud under 6 km reads its sky from a blend of the first two: the mean
+ * radiance 16% off and the upper side's irradiance up to 60%, at any sun.
+ * The sky changes with the air above a point, and the air is crowded into
+ * its first scale heights, so the rows are crowded there too (ruling 007).
+ * The form is not the true optical depth, which also holds ozone, the
+ * detached layer and the fade to the top: it need only be monotone, crowd
+ * the rows as the optical depth does, and be one function at the bake and
+ * at the read. Each column is weighed by its mean over the three bands.
+ */
+export type SkyRows = readonly [number, number, number, number]
+
+/**
+ * The last row stands where the two columns leave the whole air's by one
+ * part in `SKY_TOP_SHARE`, 29.6 km on Earth and 36.9 km on the cornerstones'
+ * world, and not at the top, where the sky from above is dark and the
+ * irradiance from it zero. A read over the last row holds it: no clamp to
+ * the row under it, which stands at 15.6 km on Earth.
+ */
+export const SKY_TOP_SHARE = 64
+
+/** The rows of a table with no sky: every height reads row 0, which holds what every row holds. */
+export const NO_SKY_ROWS: SkyRows = [0, 0, 0, 0]
+
+/** The sky table: its texels, and where its rows stand (`skyRowsOf`). */
+export interface SkyTable extends ScatteringLut {
+  readonly rows: SkyRows
+}
+
+/**
+ * The rows of an air whose gas and haze hold no column, as a scale height
+ * in the air's depths: one column so tall that the rows stand within 1% of
+ * evenly in height. Such an air still has a sky, lit by its detached layer
+ * and its ground, so its rows must still part; the same closed form keeps
+ * the bake and both readers on one function.
+ */
+export const SKY_EVEN_SCALE = 64
+
+/** The rows for an air: its two columns, weighed as `SkyRows` says. */
+export function skyRowsOf(recipe: AtmosphereRecipe): SkyRows {
+  const ceiling = recipe.topRatio - 1
+  if (!(ceiling > 0)) return NO_SKY_ROWS
+  const mean = (v: readonly number[]) =>
+    ((v[0] as number) + (v[1] as number) + (v[2] as number)) / 3
+  const columns = [
+    mean(recipe.betaRayleigh) * recipe.hRayleigh,
+    mean(recipe.mieExtinction) * recipe.hMie,
+  ]
+  // Weighed against the larger: only their ratio places the rows, and a
+  // subnormal column normalized as it stands rounds the last row's share
+  // of the whole to the whole, which puts the last row at the top.
+  const larger = Math.max(columns[0] as number, columns[1] as number)
+  const gas = (columns[0] as number) / larger
+  const haze = (columns[1] as number) / larger
+  const b = ceiling / recipe.hRayleigh
+  const d = ceiling / recipe.hMie
+  const whole = gas * -Math.expm1(-b) + haze * -Math.expm1(-d)
+  const last = whole * (1 - 1 / SKY_TOP_SHARE)
+  if (!(larger > 0) || !(last > 0 && last < whole)) {
+    const even = 1 / SKY_EVEN_SCALE
+    return [1 / (-Math.expm1(-even) * (1 - 1 / SKY_TOP_SHARE)), even, 0, 0]
+  }
+  return [gas / last, b, haze / last, d]
+}
+
+/** The row coordinate, 0 to 1, at a height given as a share of the air's depth. */
+export function skyRowAt(rows: SkyRows, height01: number): number {
+  const [a, b, c, d] = rows
+  const u = Math.min(Math.max(height01, 0), 1)
+  const v = a * -Math.expm1(-b * u) + c * -Math.expm1(-d * u)
+  return Math.min(Math.max(v, 0), 1)
+}
+
+/**
+ * Each row's height as a share of the air's depth: where `skyRowAt` reads
+ * `y/15`, by bisection. Row 0 is the datum; the last is under the top.
+ */
+export function skyRowShares(rows: SkyRows): readonly number[] {
+  return Array.from({ length: SKY_TABLE_HEIGHT }, (_, y) => {
+    const target = y / (SKY_TABLE_HEIGHT - 1)
+    if (y === 0) return 0
+    let low = 0
+    let high = 1
+    for (let pass = 0; pass < 60; pass += 1) {
+      const middle = (low + high) / 2
+      if (skyRowAt(rows, middle) < target) low = middle
+      else high = middle
+    }
+    return (low + high) / 2
+  })
+}
 
 /**
  * The ground the sky is lit over: a Lambert albedo, one for every body. The
@@ -94,6 +202,22 @@ export interface SkyMoments {
   readonly up: Bands
   /** Δ_s: (E_sunward − E_away)/(π·L̄), across a vertical face turned to the sun's azimuth. */
   readonly sunward: Bands
+}
+
+/**
+ * The sky's moments as the table holds them: the three blocks and the
+ * alphas' fourth number, per band.
+ */
+export interface SkyTableMoments extends SkyMoments {
+  /**
+   * c = E_above/(π·L̄) − (1 + Δ/2): the upper side's irradiance less the
+   * one a sky linear in direction with this L̄ and Δ would give it, over
+   * π·L̄. The air's sky is brightest at its horizon, so the linear sky
+   * misjudges each side of a thick deck by 2% to over 200% (ruling 007);
+   * with `c` the upper side is exact, and the lower is
+   * π·L̄·(1 − Δ/2 + c) by Δ's definition. Zero where L̄ is at the floor.
+   */
+  readonly upper: Bands
 }
 
 /** What the sky's march reads: the air's recipe and its own two tables. */
@@ -292,17 +416,20 @@ function addInto(
  * sides, so Δ and Δ_s are zero where L̄ is under `MULTI_SCATTER_FLOOR`, and
  * L̄ is held at it.
  */
-function momentsFrom(sums: Sums, at: number): SkyMoments {
+function momentsFrom(sums: Sums, at: number): SkyTableMoments {
   const band = (c: number) => {
     const k = at * SUMS + c * 5
     const total = sums[k] as number
     const mean = total / (4 * Math.PI)
     if (!(mean > MULTI_SCATTER_FLOOR))
-      return { mean: MULTI_SCATTER_FLOOR, up: 0, sunward: 0 }
+      return { mean: MULTI_SCATTER_FLOOR, up: 0, sunward: 0, upper: 0 }
+    const up = (4 * (sums[k + 1] as number)) / total
     return {
       mean,
-      up: (4 * (sums[k + 1] as number)) / total,
+      up,
       sunward: (4 * (sums[k + 2] as number)) / total,
+      // π·L̄ is total/4.
+      upper: (4 * (sums[k + 3] as number)) / total - (1 + up / 2),
     }
   }
   const [r, g, b] = [band(0), band(1), band(2)]
@@ -310,6 +437,7 @@ function momentsFrom(sums: Sums, at: number): SkyMoments {
     mean: [r.mean, g.mean, b.mean],
     up: [r.up, g.up, b.up],
     sunward: [r.sunward, g.sunward, b.sunward],
+    upper: [r.upper, g.upper, b.upper],
   }
 }
 
@@ -321,7 +449,7 @@ function momentsFrom(sums: Sums, at: number): SkyMoments {
 export function skyMomentsOf(
   directions: Float64Array,
   radiance: (x: number, y: number, z: number, out: number[]) => void,
-): SkyMoments {
+): SkyTableMoments {
   const sums: Sums = new Float64Array(SUMS)
   const light = [0, 0, 0]
   for (let i = 0; i < directions.length; i += 4) {
@@ -721,7 +849,7 @@ export function marchSkyMoments(
   r: number,
   muSun: number,
   quadrature: SkyQuadrature = DEFAULT_QUADRATURE,
-): SkyMoments {
+): SkyTableMoments {
   const reads = readsOf(air, quadrature)
   const ground = groundLight(air, reads, quadrature)
   const directions = skyDirections(r, quadrature)
@@ -821,8 +949,8 @@ function texelColumn(block: number, column: number): number {
   )
 }
 
-/** A table that holds no sky: L̄ at the floor, no difference between any two sides. */
-export function darkSkyTable(height = SKY_TABLE_HEIGHT): ScatteringLut {
+/** A table that holds no sky: L̄ at the floor, no difference between any two sides, `c` zero. */
+export function darkSkyTable(height = SKY_TABLE_HEIGHT): SkyTable {
   const data = new Float32Array(SKY_TABLE_WIDTH * height * 4)
   const floor = Math.log(MULTI_SCATTER_FLOOR)
   for (let y = 0; y < height; y += 1)
@@ -833,9 +961,8 @@ export function darkSkyTable(height = SKY_TABLE_HEIGHT): ScatteringLut {
         data[index + 1] = floor
         data[index + 2] = floor
       }
-      data[index + 3] = 1
     }
-  return { width: SKY_TABLE_WIDTH, height, data }
+  return { width: SKY_TABLE_WIDTH, height, data, rows: NO_SKY_ROWS }
 }
 
 /**
@@ -848,22 +975,30 @@ export function bakeSkyMoments(
   transmittance: ScatteringLut,
   multiScatter: ScatteringLut,
   quadrature: SkyQuadrature = DEFAULT_QUADRATURE,
-): ScatteringLut {
+): SkyTable {
   if (!(recipe.topRatio > 1)) return darkSkyTable()
   const air: SkyAir = { recipe, transmittance, multiScatter }
   const reads = readsOf(air, quadrature)
   const ground = groundLight(air, reads, quadrature)
-  const table = darkSkyTable()
-  const { data } = table
+  const rows = skyRowsOf(recipe)
+  const shares = skyRowShares(rows)
+  const { data } = darkSkyTable()
   const ceiling = recipe.topRatio - 1
-  const write = (block: number, column: number, y: number, v: Bands) => {
+  const write = (
+    block: number,
+    column: number,
+    y: number,
+    v: Bands,
+    alpha: number,
+  ) => {
     const index = (y * SKY_TABLE_WIDTH + texelColumn(block, column)) * 4
     data[index] = v[0]
     data[index + 1] = v[1]
     data[index + 2] = v[2]
+    data[index + 3] = alpha
   }
   for (let y = 0; y < SKY_TABLE_HEIGHT; y += 1) {
-    const r = 1 + (y / (SKY_TABLE_HEIGHT - 1)) * ceiling
+    const r = 1 + (shares[y] as number) * ceiling
     const sums = rowSums(
       air,
       reads,
@@ -885,52 +1020,66 @@ export function bakeSkyMoments(
         [1, moments.up],
         [2, moments.sunward],
       ] as const) {
-        write(block, column, y, value)
+        // Block k's alpha is band k's c: three bands in three spare channels.
+        const alpha = moments.upper[block]
+        write(block, column, y, value, alpha)
         // The guards repeat the block's edge columns, so a read clamped to
         // the block's first or last cosine filters against itself.
-        if (column === 0) write(block, -SKY_BLOCK_GUARD, y, value)
+        if (column === 0) write(block, -SKY_BLOCK_GUARD, y, value, alpha)
         if (column === SKY_BLOCK_COLUMNS - 1)
-          write(block, SKY_BLOCK_COLUMNS, y, value)
+          write(block, SKY_BLOCK_COLUMNS, y, value, alpha)
       }
     }
   }
-  return table
+  return { width: SKY_TABLE_WIDTH, height: SKY_TABLE_HEIGHT, data, rows }
 }
 
 /**
- * The table's moments at a height fraction and a sun's cosine, read as the
- * node reads them: bilinear inside each block, the mean geometrically.
+ * The table's moments at a height, as a share of the air's depth, and a
+ * sun's cosine, read as the node reads them: the row from `skyRowAt` on the
+ * table's own rows, bilinear inside each block, the mean geometrically.
+ *
+ * It takes any `ScatteringLut` so a caller that holds the bake's answer
+ * under that type still reads it, and throws on one without its rows: read
+ * evenly in height, the rows would be 60% wrong and nothing would say so.
  */
 export function skyMomentsAt(
-  table: ScatteringLut,
+  table: ScatteringLut & { readonly rows?: SkyRows },
   height01: number,
   muSun: number,
-): SkyMoments {
+): SkyTableMoments {
+  if (table.rows === undefined)
+    throw new Error(
+      'skyMomentsAt: the table carries no rows; read a SkyTable from bakeSkyMoments or darkSkyTable',
+    )
   const x = Math.min(Math.max((muSun + 1) / 2, 0), 1) * (SKY_BLOCK_COLUMNS - 1)
-  const y = Math.min(Math.max(height01, 0), 1) * (table.height - 1)
+  const y = skyRowAt(table.rows, height01) * (table.height - 1)
   const x0 = Math.floor(x)
   const y0 = Math.floor(y)
   const x1 = Math.min(x0 + 1, SKY_BLOCK_COLUMNS - 1)
   const y1 = Math.min(y0 + 1, table.height - 1)
   const fx = x - x0
   const fy = y - y0
-  const read = (block: number): [number, number, number] => {
+  const read = (block: number): [number, number, number, number] => {
     const at = (column: number, row: number, c: number) =>
       table.data[
         (row * table.width + texelColumn(block, column)) * 4 + c
       ] as number
-    const out: [number, number, number] = [0, 0, 0]
-    for (let c = 0; c < 3; c += 1) {
+    const out: [number, number, number, number] = [0, 0, 0, 0]
+    for (let c = 0; c < 4; c += 1) {
       const low = at(x0, y0, c) * (1 - fx) + at(x1, y0, c) * fx
       const high = at(x0, y1, c) * (1 - fx) + at(x1, y1, c) * fx
       out[c] = low * (1 - fy) + high * fy
     }
     return out
   }
-  const [lr, lg, lb] = read(0)
+  const [lr, lg, lb, cr] = read(0)
+  const [ur, ug, ub, cg] = read(1)
+  const [sr, sg, sb, cb] = read(2)
   return {
     mean: [Math.exp(lr), Math.exp(lg), Math.exp(lb)],
-    up: read(1),
-    sunward: read(2),
+    up: [ur, ug, ub],
+    sunward: [sr, sg, sb],
+    upper: [cr, cg, cb],
   }
 }
