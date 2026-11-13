@@ -1,38 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { length, uniform } from 'three/tsl'
-import {
-  iceAggregate,
-  mieDroplets,
-  PHASE_ATLAS,
-  SLAB_REFERENCE,
-  type SlabReferenceRow,
-} from '@inertialref/rendering'
-import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
-import {
-  marchProbe,
-  placeBody,
-  placeSun,
-  type ProbeOptions,
-  type ProbeRay,
-  type Triple,
-} from './cloudMarchRig.ts'
-import {
-  CLOUD_STAND_INS,
-  type CloudSample,
-  type CloudSunDepthNodes,
-  type CloudSunFn,
-  exactSlabSun,
-  slabMedium,
-} from './cloudNodes.ts'
-import { CloudPhase } from './cloudPhase.ts'
-import {
-  CLOUD_SUN_FACTORS,
-  type CloudSource,
-  createCloudSource,
-} from './cloudSource.ts'
-import { cloudSunFn } from './cloudSunlight.ts'
+import { SLAB_REFERENCE, type SlabReferenceRow } from '@inertialref/rendering'
 import { CLOUD_TRANSPORTS } from './cloudLevers.ts'
-import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
+import {
+  BANDS,
+  scatteringAngle,
+  type SlabRig,
+  slabRig,
+  viewOf,
+} from './cloudSlabRig.ts'
+import { CLOUD_SUN_FACTORS } from './cloudSource.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
@@ -44,11 +20,6 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * at worst on the domain and 1.97% in the flux, in Node, at 224 Gauss
  * points a ray. So each is a ceiling at the figure measured here, and a
  * figure near the table's is the form's and not the march's.
- *
- * A ray is the mean of eight, their first steps shortened by eight evenly
- * spaced shares, as a held still's frames are. The slab is a kilometer
- * thick on a body of Earth's radius, and the eye stands a meter outside
- * the face it looks at, so the sphere bends a 5 km slant by 0.05°.
  */
 
 let gpu: GpuSession
@@ -60,179 +31,6 @@ beforeAll(async () => {
 afterAll(() => {
   gpu.dispose()
 })
-
-const BASE = 1000
-/** A kilometer of slab, unless a rig asks for another thickness. */
-const THICKNESS = 1000
-const JITTERS = 8
-/** The sun's angular radius the reference's first order is read through: 959.63″. */
-const SUN_RADIUS = (959.63 / 3600) * (Math.PI / 180)
-const BANDS = [0, 1, 2] as const
-
-/** The view from the eye whose light leaves a face at `mu` to its normal, `azimuth` degrees from the sun's light's bearing. */
-function viewOf(
-  side: SlabReferenceRow['side'],
-  mu: number,
-  azimuth: number,
-): Triple {
-  const sine = Math.sqrt(1 - mu * mu)
-  const phi = (azimuth * Math.PI) / 180
-  // The sun stands toward +X, so its light travels toward −X: light to
-  // the eye at an azimuth of zero travels that way too, and the eye looks
-  // back along it.
-  return [
-    sine * Math.cos(phi),
-    side === 'reflected' ? -mu : mu,
-    -sine * Math.sin(phi),
-  ]
-}
-
-/** The scattering angle of a view, degrees: between the sun's light and the light to the eye. */
-function scatteringAngle(sunMu: number, view: Triple): number {
-  const sun: Triple = [Math.sqrt(1 - sunMu * sunMu), sunMu, 0]
-  const cosine = sun[0] * view[0] + sun[1] * view[1] + sun[2] * view[2]
-  return (Math.acos(Math.max(-1, Math.min(1, cosine))) * 180) / Math.PI
-}
-
-interface Rig {
-  readonly uniforms: CloudUniforms
-  readonly source: CloudSource
-  /** Place a slab of an unscaled depth at a radius under a sun, seen from a side. */
-  place(
-    radius: number,
-    depth: number,
-    sunMu: number,
-    side: SlabReferenceRow['side'],
-  ): void
-  /** The level's cumuliform share, which the factor of the sun is blended by. */
-  share(convective: number): void
-  /** Each view's light, the mean of its jitters. */
-  light(views: readonly Triple[]): Promise<Triple[]>
-  dispose(): void
-}
-
-/**
- * A march over one slab whose extinction and radius are uniforms, so one
- * kernel draws every slab of the domain.
- */
-async function rig(options: {
-  /** The shipped sun, its taps over a cache that holds the slab's own depths; or the slab's exact sun. */
-  readonly sun: 'shipped' | 'exact'
-  /** The committed phase through the reference's sun, or none: the light after first order alone. */
-  readonly phase: boolean
-  readonly march?: ProbeOptions['march']
-  /** Meters. A thin slab is flat under a grazing sun, whose ray through a kilometer of it climbs 28 m of the sphere. */
-  readonly thickness?: number
-}): Promise<Rig> {
-  const TOP = BASE + (options.thickness ?? THICKNESS)
-  const uniforms = createCloudUniforms()
-  const body = uniforms.served
-  const sigma = uniform(0)
-  const radius = uniform(10)
-  const slab = { base: BASE, top: TOP, sigma, radius }
-  const exact = exactSlabSun([slab])
-  const source = createCloudSource()
-  await source.load()
-  const droplets = mieDroplets()
-  const phase = new CloudPhase(droplets, iceAggregate())
-  phase.serve(SUN_RADIUS, null)
-  await phase.warm(gpu.renderer)
-  const shipped = (field: Parameters<typeof cloudSunFn>[0]['medium']) => {
-    const sampleAt = (offset: CloudSample['offset']): CloudSample => ({
-      offset,
-      distance: length(offset),
-      altitude: altitudeAt(body, offset),
-      sunMu: sunMuAt(body, offset),
-      footprint: uniform(0),
-    })
-    // The slab's own depths, as a cache that held them exactly would.
-    const cache: CloudSunDepthNodes = {
-      depths(offset) {
-        const at = sampleAt(offset)
-        const depth = exact(at, field(at, body), body).depth
-        return {
-          toSun: depth.x,
-          whole: depth.y,
-          weight: uniform(1),
-          behind: uniform(1),
-        }
-      },
-    }
-    return cloudSunFn({ uniforms, medium: field, depth: cache })
-  }
-  const sun: (field: Parameters<typeof shipped>[0]) => CloudSunFn =
-    options.sun === 'shipped' ? shipped : () => exact
-  const probe = marchProbe(gpu, uniforms, slabMedium([slab]), {
-    sun,
-    phase: options.phase ? phase : CLOUD_STAND_INS.phase(0),
-    // A sky of nothing, read from its table: the placeholder's Ψ is one
-    // on the rig's stand-in tables, and would light every slab alike.
-    light: { source, sky: CLOUD_STAND_INS.sky(0) },
-    march: { ...options.march, skyTable: true },
-  })
-  return {
-    uniforms,
-    source,
-    place(r, depth, sunMu, side) {
-      placeBody(uniforms, {
-        eye: side === 'reflected' ? TOP + 1 : BASE - 1,
-        layers: [[BASE, TOP]],
-      })
-      placeSun(uniforms, sunMu)
-      const media = SLAB_REFERENCE.media.find((item) => item.radius === r)!
-      // The renderer's medium: the depth with the diffraction out of it.
-      const scaled = ((1 - media.share) * depth) / (TOP - BASE)
-      sigma.value = scaled
-      radius.value = r
-      const { layers } = body
-      layers.sigma.value.set(scaled, scaled, scaled)
-      layers.radius.value.set(r, r, r)
-      layers.radiusMin.value.set(r, r, r)
-      layers.radiusMax.value.set(r, r, r)
-      layers.phaseRow.value.set(PHASE_ATLAS.dropletRow, 0, 0)
-      layers.phaseRows.value.set(droplets.radii, droplets.radii, droplets.radii)
-      layers.phaseRadius.value.set(
-        droplets.radiusMin,
-        droplets.radiusMin,
-        droplets.radiusMin,
-      )
-      uniforms.trace.lightTaps.value = 4
-    },
-    share(convective) {
-      const { l, a } = CLOUD_SUN_FACTORS.cumulus!
-      source.levels.factor.value.set(l, l, l)
-      source.levels.slope.value.set(a, a, a)
-      body.climate.convective.value.set(convective, convective, convective)
-    },
-    async light(views) {
-      const rays: ProbeRay[] = views.flatMap((direction) =>
-        Array.from({ length: JITTERS }, (_, k) => ({
-          direction,
-          jitter: (k + 0.5) / JITTERS,
-        })),
-      )
-      const sums: Triple[] = []
-      for (let from = 0; from < rays.length; from += 64) {
-        const probed = await probe(rays.slice(from, from + 64))
-        probed.forEach(({ light }, i) => {
-          const view = Math.floor((from + i) / JITTERS)
-          const sum = sums[view] ?? [0, 0, 0]
-          sums[view] = [
-            sum[0] + light[0] / JITTERS,
-            sum[1] + light[1] / JITTERS,
-            sum[2] + light[2] / JITTERS,
-          ]
-        })
-      }
-      return sums
-    },
-    dispose() {
-      phase.dispose()
-      source.dispose()
-      uniforms.dispose()
-    },
-  }
-}
 
 /** The reference's rows by slab: a radius, a depth, a sun and a side. */
 function slabs(): Map<string, SlabReferenceRow[]> {
@@ -265,7 +63,7 @@ interface Judged {
  * beside it, which is how the table's header figure was taken.
  */
 async function judge(
-  held: Rig,
+  held: SlabRig,
   maxSteps: number,
   whole: boolean,
 ): Promise<Judged> {
@@ -327,7 +125,7 @@ const AZIMUTHS = 16
  * against the oracle's flux on the renderer's medium.
  */
 async function judgeFlux(
-  held: Rig,
+  held: SlabRig,
   maxSteps: number,
 ): Promise<{ worst: number; at: string; thin: number }> {
   const out = { worst: 0, at: '', thin: 0 }
@@ -366,12 +164,12 @@ const told = (name: string, judged: Judged): string =>
   `${name}: worst ${percent(judged.worst)} at ${judged.at}; RMS ${percent(judged.rms)}; ${judged.over} of ${judged.count} over 5%; thin slabs ${percent(judged.thin)}`
 
 describe('a slab’s radiance and reflected flux, through the shipped step', () => {
-  let shipped: Rig
-  let exact: Rig
+  let shipped: SlabRig
+  let exact: SlabRig
 
   beforeAll(async () => {
-    shipped = await rig({ sun: 'shipped', phase: false })
-    exact = await rig({ sun: 'exact', phase: false })
+    shipped = await slabRig(gpu, { sun: 'shipped', phase: false })
+    exact = await slabRig(gpu, { sun: 'exact', phase: false })
   }, 120_000)
 
   afterAll(() => {
@@ -429,7 +227,7 @@ describe('a slab’s radiance and reflected flux, through the shipped step', () 
   }, 600_000)
 
   it('holds row 1 through the march’s own first order as well, the committed phase under the reference’s sun', async () => {
-    const whole = await rig({ sun: 'shipped', phase: true })
+    const whole = await slabRig(gpu, { sun: 'shipped', phase: true })
     const judged = await judge(whole, 192, true)
     console.info(told('cloudSlab: row 1, the march’s own first order', judged))
     // 5.83% here, 15 radiances over 5%.
@@ -446,7 +244,7 @@ describe('a slab’s radiance and reflected flux, through the shipped step', () 
    * radiances over 5% where the two ends read 13.
    */
   it('reads 250 radiances over 5% with the source held from a step’s start, where the two ends read 13', async () => {
-    const held = await rig({
+    const held = await slabRig(gpu, {
       sun: 'shipped',
       phase: false,
       march: { sourceAtStart: true },
@@ -552,7 +350,11 @@ describe('a deck under a sun below its horizon', () => {
    * mirror is a plane's.
    */
   it('lights a deck from below under a sun 3° under the horizon as the same deck from above under a sun 3° over it', async () => {
-    const held = await rig({ sun: 'exact', phase: false, thickness: 10 })
+    const held = await slabRig(gpu, {
+      sun: 'exact',
+      phase: false,
+      thickness: 10,
+    })
     const sunMu = Math.sin((3 * Math.PI) / 180)
     const views = [0.15, 0.5, 0.9].flatMap((mu) =>
       [0, 60, 120, 180].map((azimuth) => [mu, azimuth] as const),
