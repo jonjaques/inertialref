@@ -32,6 +32,7 @@
     "spelling": "node scripts/spelling/scan.mjs",
     "spelling:check": "node scripts/spelling/scan.mjs --check",
     "graph": "node scripts/check-graph.mjs",
+    "chunks": "node scripts/check-chunks.mjs",
     "brand": "node scripts/brand/build.mjs",
     "brand:check": "node scripts/brand/build.mjs --check",
     "presets:plates": "node scripts/presets/plates.mjs",
