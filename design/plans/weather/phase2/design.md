@@ -213,7 +213,7 @@ point's own column, never at the sun's crossing.**
 | B, `c̄_v` | The vertical column's cover                                                                                                                                                    | The same                                                                          |
 | A, `ĥ`   | The height at which the sun meets cloud over the column, as a share of the union's height, naming the level it meets: H takes `h_c` and that level's base `h_b` from it (§5.1) | The same ray as R                                                                 |
 
-Its pick is `log2(h/250 m)` for a base `h` over the point, blended as the
+Its pick is `log2(h/250 m) + 0.75` for a base `h` over the point, blended as the
 sun map's is; the two levels stand for one kernel (§5.1). The mean beam
 at this scale, `B̄`, is the sun map's level two coarser, or its last.
 Neither map is bound in the trace.
@@ -686,7 +686,7 @@ r²)²)`, half of it inside `r = h`. The light map's two levels either
   band from the sky table's bake, whose sky block is baked over a black
   ground (§5.2). A table baked over 0.15 leaves a ground of 0.8 5.6% low
   at an air of depth 0.1, 31% at 1 and 55% at 4 (M: the same critic).
-- **`F` and `E_sky` at two heights:** the light the cloud diffuses
+- **`F` and `E_sky` at `h_c` as well as at the point:** the light the cloud diffuses
   entered it at `h_c = base + ĥ·(top − base)`, and does not travel the
   slant below, an optical depth of 0.58 at an 11.5° sun (E).
 - **The sky is split at `h_b`, the base of the level the sun meets**
@@ -810,8 +810,9 @@ mends the boxes breaks the field. No lit side's term is built in phase
 2: the bar holds from a sky of 0.06 of the beam over an albedo of 0.15,
 and Earth's is 0.155 or more. The term is on file for a thin air.
 
-**Who proves it.** R-C1 on the tracer, which waits for nothing; R-C2 on
-package O's column (§7). Then V bakes the light map and H builds.
+**Who proves it.** R-C1 on the tracer, which waits for nothing; the
+critic of R-C1 and R-C3 under an air, and the critic's re-check of R-C3;
+R-C2 on package O's column (§7). Then V bakes the light map and H builds.
 
 ### 5.2 L6: the skylight from the sky table
 
@@ -1257,7 +1258,8 @@ cloudSunAccuracy cloudFar cloudSky`; the instrument before and after.
 
 - **Owns:** `render/cloudLightMap.ts`, its test and CPU twin.
   **Granted:** `cloudSystem.ts`, `cloudLight.ts`. **Reads:** §3, §5.1.
-- Fable `xhigh`, on the GPU. After R-C1, S and O's block.
+- Fable `xhigh`, on the GPU. After R-C3, phase 1's landing, K's census,
+  S's merge and O's block.
 - **Budget:** 458,752 B; one bake pipeline; a schedule's count, as S's.
 - **Tests:** the two levels' weights against the kernel's convolution of
   a step and of a 1 km bar, within 0.025 RMS and 0.15 at worst; the CPU twin on §5.1's cases inside
@@ -1271,7 +1273,8 @@ cloudSunAccuracy cloudFar cloudSky`; the instrument before and after.
 - **Owns:** the three materials again, the handle's light, `m` in
   `air.ts`, `render/twilight.ts`, `Ā`, `cloudUnderDeck.gpu.test.ts`
   (row 14), `skylight.gpu.test.ts` (row 15). **Reads:** §5.1, §5.2, §4.4.
-- Fable `xhigh`, on the GPU. After A, V and O merge, R-C2 and R-E.
+- Fable `xhigh`, on the GPU. After A, V and O merge, R-C2, R-E2 and
+  the critic's re-check of R-C3.
 - **Budget:** two bindings a material; six fetches a fragment; §9's
   ceilings. It moves every scene with a sky, on purpose (§10).
 - **Builds §5.1's sky as form a,** split at the base of the level the
@@ -1556,13 +1559,13 @@ phase 1's declared errors are largest. S1 and S2 do.
 
 **The council's.**
 
-| #   | What                                                                                                                                                                                                      | Figure                                                                                                 |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 1   | The bars proposed where the rubric has no row: L1 (0.01 in a 12 km mean, 0.03 RMS), L2 (10% over a 10° sun), L3 (1%), L4 (25%), L8 (10%), L9 (±35%). L5's geometry is set: ruling 004's three bars (§5.1) | §4 to §6                                                                                               |
-| 2   | E2's crop shows no shadow's shape on the air over the base                                                                                                                                                | Judged by R-G before A is briefed, not declared (ruling 004, 7; §4.4)                                  |
-| 3   | The resolved near probe is out of the MVP                                                                                                                                                                 | §2; S4 records it                                                                                      |
-| 4   | The wording of the sun map's own clause beside B7's "the field is whole", which it does not join as written (ruling 004, 8)                                                                               | Its first bake is 28 frames under one level at 50° and 70 to 200 at 15° or under three (E), against 48 |
-| 5   | Row 14 is held on the renderer's medium, and its column cannot see where a part is read                                                                                                                   | 3.0% from the true medium at 550 nm, 2.8% down to a 2° sun (M)                                         |
+| #   | What                                                                                                                                                                                                                                                               | Figure                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| 1   | The bars proposed where the rubric has no row: L1 (0.01 in a 12 km mean, 0.03 RMS), L2 (the larger of 10% and 0.01 of the beam at the level's scale, from a 10° sun), L3 (1%), L4 (25%), L8 (10%), L9 (±35%). L5's geometry is set: ruling 004's three bars (§5.1) | §4 to §6                                                                                               |
+| 2   | E2's crop shows no shadow's shape on the air over the base                                                                                                                                                                                                         | Judged by R-G before A is briefed, not declared (ruling 004, 7; §4.4)                                  |
+| 3   | The resolved near probe is out of the MVP                                                                                                                                                                                                                          | §2; S4 records it                                                                                      |
+| 4   | The wording of the sun map's own clause beside B7's "the field is whole", which it does not join as written (ruling 004, 8)                                                                                                                                        | Its first bake is 28 frames under one level at 50° and 70 to 200 at 15° or under three (E), against 48 |
+| 5   | Row 14 is held on the renderer's medium, and its column cannot see where a part is read                                                                                                                                                                            | 3.0% from the true medium at 550 nm, 2.8% down to a 2° sun (M)                                         |
 
 **Declared by this design:** §8's last paragraph, each a ceiling test. Not
 in a law's own section: E1's outer 7 km a side at the coarser level at
