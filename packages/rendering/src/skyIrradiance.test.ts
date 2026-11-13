@@ -23,6 +23,10 @@ import {
   skyMomentsAt,
   skyMomentsOf,
   skyRadiance,
+  NO_SKY_ROWS,
+  skyRowAt,
+  skyRowShares,
+  skyRowsOf,
 } from './skyIrradiance.ts'
 
 /*
@@ -51,16 +55,19 @@ const table = bakeSkyMoments(recipe, transmittance, multiScatter)
 const ceiling = recipe.topRatio - 1
 
 /** A row's radius and a column's sun cosine, as the bake lays them out. */
-const rowRadius = (y: number) => 1 + (y / (SKY_TABLE_HEIGHT - 1)) * ceiling
+const rowShares = skyRowShares(table.rows)
+const rowRadius = (y: number) => 1 + rowShares[y]! * ceiling
 const columnSun = (k: number) => (k / (SKY_BLOCK_COLUMNS - 1)) * 2 - 1
 
 /**
  * Three suns, as the columns hold them: 60.6° up, 5.6° up and 5.6° under
- * the horizon. Three heights where clouds stand: the datum, 6.7 km and
- * 20 km on Earth.
+ * the horizon. Three rows where clouds stand: the datum, 5.3 km and
+ * 10.6 km on Earth. The rows between them, at 3.9, 7.5 and 15.6 km, hold
+ * the same 0.3% under the two suns over the horizon and 1.6% to 2.1% of
+ * L̄ under the one 5.6° under it: twilight's quadrature, not the rows'.
  */
 const SUNS = [29, 17, 14] as const
-const ROWS = [0, 1, 3] as const
+const ROWS = [0, 11, 13] as const
 
 /**
  * The reference: 2,016 directions, 32 heights over the horizon and 16 under
@@ -209,11 +216,7 @@ describe('the sky table', () => {
   it('reads back what the bake summed, the mean through its logarithm', () => {
     for (const y of [0, 5, 15])
       for (const k of [0, 14, 31]) {
-        const read = skyMomentsAt(
-          table,
-          y / (SKY_TABLE_HEIGHT - 1),
-          columnSun(k),
-        )
+        const read = skyMomentsAt(table, rowShares[y]!, columnSun(k))
         const summed = marchSkyMoments(air, rowRadius(y), columnSun(k))
         for (let c = 0; c < 3; c += 1) {
           // The table is Float32, and ln L̄ reaches −69 at the floor, where
@@ -240,7 +243,7 @@ describe('the sky table', () => {
     const y = 2
     const [low, high] = [16, 17]
     const half = (columnSun(low) + columnSun(high)) / 2
-    const read = skyMomentsAt(table, y / (SKY_TABLE_HEIGHT - 1), half)
+    const read = skyMomentsAt(table, rowShares[y]!, half)
     for (let c = 0; c < 3; c += 1)
       expect(read.mean[c]).toBeCloseTo(
         Math.sqrt(texel(y, low, c).mean * texel(y, high, c).mean),
@@ -371,6 +374,69 @@ function rowError(read: SkyMoments, exact: SkyMoments): number {
  * height miss by up to 60% under 6 km.
  */
 const ROW_TOLERANCE = 0.03
+
+describe('the sky table’s rows', () => {
+  it('rise with height, stand where the read finds them, and crowd into the first scale heights', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1.001, max: 1.1, noNaN: true }),
+        fc.double({ min: 1e-4, max: 0.01, noNaN: true }),
+        fc.double({ min: 1e-5, max: 0.003, noNaN: true }),
+        (topRatio, rayleigh, aerosol) => {
+          const rows = skyRowsOf(
+            atmosphereRecipe(haze, topRatio, { rayleigh, aerosol }),
+          )
+          const shares = skyRowShares(rows)
+          expect(shares[0]).toBe(0)
+          for (let y = 1; y < SKY_TABLE_HEIGHT; y += 1) {
+            expect(shares[y]!).toBeGreaterThan(shares[y - 1]!)
+            expect(skyRowAt(rows, shares[y]!)).toBeCloseTo(
+              y / (SKY_TABLE_HEIGHT - 1),
+              9,
+            )
+          }
+          // The last row stands under the top, and the cell under it is
+          // the widest: the rows are closer where the air is.
+          expect(shares[SKY_TABLE_HEIGHT - 1]!).toBeLessThan(1)
+          expect(shares[1]! - shares[0]!).toBeLessThan(
+            shares[SKY_TABLE_HEIGHT - 1]! - shares[SKY_TABLE_HEIGHT - 2]!,
+          )
+        },
+      ),
+    )
+  })
+
+  it('hold the last row over it, to the top, where the sky from above is not yet dark', () => {
+    const last = rowShares[SKY_TABLE_HEIGHT - 1]!
+    for (const mu of [-0.1, 0.3, 0.9]) {
+      const atLast = skyMomentsAt(table, last, mu)
+      for (const over of [(last + 1) / 2, 1, 2]) {
+        expect(skyRowAt(table.rows, over)).toBe(1)
+        const read = skyMomentsAt(table, over, mu)
+        // The bisection places the last row within a few ulps of 1.
+        for (let c = 0; c < 3; c += 1) {
+          expect(read.mean[c]! / atLast.mean[c]!).toBeCloseTo(1, 9)
+          expect(read.up[c]!).toBeCloseTo(atLast.up[c]!, 9)
+          expect(read.sunward[c]!).toBeCloseTo(atLast.sunward[c]!, 9)
+        }
+      }
+      // Light comes down on a face there: Δ under 2, the value of a sky
+      // dark above.
+      for (let c = 0; c < 3; c += 1) expect(atLast.up[c]!).toBeLessThan(1.9)
+    }
+  })
+
+  it('is read as one row by a table that holds no sky', () => {
+    const dark = darkSkyTable()
+    expect(dark.rows).toEqual(NO_SKY_ROWS)
+    for (const h of [0, 0.3, 1]) expect(skyRowAt(dark.rows, h)).toBe(0)
+  })
+
+  it('refuse a table that does not carry them', () => {
+    const { rows: _, ...bare } = table
+    expect(() => skyMomentsAt(bare, 0.1, 0.5)).toThrow(/no rows/)
+  })
+})
 
 describe('the sky table between its rows', () => {
   for (const page of PAGE_AIRS)
