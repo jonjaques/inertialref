@@ -1,5 +1,6 @@
 import { hashString } from '@inertialref/procedural'
 import { SCENARIO_IDS, type ScenarioId } from '@inertialref/rendering'
+import { CLOUD_MAX_STEPS_COUNTED } from './cloudMarch.ts'
 
 /*
  * The cloud system's levers: what a script sets on `engine.clouds` to draw
@@ -51,7 +52,8 @@ export const CLOUD_LIGHT_TAPS = [0, 2, 4, 6, 8] as const
  * the far footprints, meters, the `farFootprint` ladder climbs. Exported so
  * the runner reads its rungs here and holds no copy. Unlike the taps these
  * are the ladders' rungs, not the levers' values: either lever takes any
- * positive number, so a script may set one between the rungs.
+ * positive number, so a script may set one between the rungs, and a step
+ * budget up to `CLOUD_MAX_STEPS_COUNTED`, the most a ray's counts hold.
  */
 export const CLOUD_MAX_STEPS = [96, 128, 192, 256] as const
 export const CLOUD_FAR_FOOTPRINTS = [200, 400, 800, 1600] as const
@@ -246,7 +248,10 @@ const FIELDS: Readonly<Record<keyof CloudLevers, (value: unknown) => boolean>> =
     scrubSeconds: finite,
     flySpeed: (value) => finite(value) && value >= 0,
     traceScale: oneOf(TRACE_SCALES),
-    maxSteps: (value) => Number.isSafeInteger(value) && (value as number) > 0,
+    maxSteps: (value) =>
+      Number.isSafeInteger(value) &&
+      (value as number) > 0 &&
+      (value as number) <= CLOUD_MAX_STEPS_COUNTED,
     jitterFrame: (value) =>
       value === null || (Number.isSafeInteger(value) && (value as number) >= 0),
     served: address,

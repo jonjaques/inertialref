@@ -1106,6 +1106,12 @@ describe('a level’s statistics', () => {
               stats.fraction[at - PROFILE_ROWS]!,
             )
           expect(stats.depth[at]).toBeGreaterThanOrEqual(0)
+          // The columns' mean depth is no less than the depth their mean
+          // transmittance has (Jensen), and nothing where none is cloudy.
+          expect(stats.mean[at]).toBeGreaterThanOrEqual(
+            stats.depth[at]! * (1 - 1e-12),
+          )
+          if (stats.fraction[at] === 0) expect(stats.mean[at]).toBe(0)
           expect(stats.shape[at]).toBeGreaterThan(0)
           expect(stats.shape[at]).toBeLessThanOrEqual(UNSPREAD_SHAPE)
           expect(stats.sight[at]).toBeGreaterThanOrEqual(0.1 * cell * 0.999)

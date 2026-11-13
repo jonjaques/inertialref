@@ -249,10 +249,12 @@ describe('the light’s stub modules', () => {
       'sigma',
       'statistics',
     ])
-    // A slab is one column: its share, its depth, no spread, its extent.
+    // A slab is one column: its share, its depth, which is its columns'
+    // mean as well, no spread, its extent.
     expect(Object.keys(medium.statistics!).sort()).toEqual([
       'depth',
       'fraction',
+      'mean',
       'shape',
       'sight',
     ])

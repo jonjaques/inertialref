@@ -1,4 +1,3 @@
-import { mkdirSync, writeFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   type ComputeNode,
@@ -53,7 +52,7 @@ import {
 } from '@inertialref/rendering'
 import { altitudeAt, cloudRay, sunMuAt } from './cloudGeometry.ts'
 import { traceJitter } from './cloudJitter.ts'
-import { CLOUD_PHASE_MODES } from './cloudLevers.ts'
+import { CLOUD_MAX_STEPS, CLOUD_PHASE_MODES } from './cloudLevers.ts'
 import {
   type CloudAirFn,
   cloudMarch,
@@ -101,16 +100,22 @@ import {
   exactSlabSun,
   slabMedium,
 } from './cloudNodes.ts'
-import { cloudSunFn } from './cloudSunlight.ts'
+import {
+  cloudSunFn,
+  LIGHT_TAP_DEPTH,
+  LIGHT_TAP_RATIO,
+  LIGHT_TAP_REACH,
+  SUN_EARLY_OUT,
+} from './cloudSunlight.ts'
+import { SUN_GRID_KNEE } from './cloudSunGrid.ts'
 import {
   CLOUD_TRACE_PHASES,
   CloudTrace,
   type CloudTraceDeps,
 } from './cloudTrace.ts'
-import { cloudRig, LOOKING_UP } from './cloudSystemRig.ts'
+import { cloudRig } from './cloudSystemRig.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
-import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
-import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
+import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
  * The trace on the GPU (§9): its kernels against the stand-ins, the march
@@ -1062,13 +1067,15 @@ describe('past the fine march', () => {
     expect(Math.abs(result.deviation - wholeDeviation)).toBeLessThan(2)
   })
 
-  it('reaches the handover on a budget of eight steps, where the schedule’s would run out short of the slab', async () => {
-    // An empty layer under the slab starts the span at 100 m. Eight of the
-    // schedule's 50 m steps end 500 m short of the slab; the budget's floor
-    // lengthens them, and the ray still stops at the footprint's distance.
+  it('reaches the handover on a budget of four steps, where the schedule’s would run out inside the slab', async () => {
+    // An empty layer under the slab starts the span at 100 m, and strides
+    // cross the 800 m between the two. Four of the schedule's steps end
+    // short of the handover, 300 m into the slab; the budget's floor
+    // lengthens them in cloud, which is what `exhausted` counts, and the
+    // ray still stops at the footprint's distance.
     const result = await handed(
       (uniforms) => {
-        uniforms.trace.maxSteps.value = 8
+        uniforms.trace.maxSteps.value = 4
         uniforms.trace.farDistance.value = 1300
       },
       [EMPTY_BELOW, [SLAB.base, SLAB.top]],
@@ -1756,6 +1763,21 @@ describe('the step counters', () => {
     expect(steps.mean).toBeGreaterThan(1)
     expect(steps.opacity).toBeGreaterThan(0.99)
     expect(steps.opacity).toBeLessThanOrEqual(1)
+    // By kind: every step is in cloud, in a level's clear air, or outside
+    // every level, and each step in cloud takes one sun, with
+    // one more where a ray's last step is closed. The stand-in sun reads no
+    // taps.
+    const { kinds } = steps
+    expect(kinds.cloud).toBeGreaterThanOrEqual(1)
+    expect(kinds.cloud + kinds.clear + kinds.gap).toBeCloseTo(steps.mean, 5)
+    // One level: a ray starts on its base, and no step is outside it.
+    expect(kinds.gap).toBe(0)
+    expect(kinds.suns).toBeGreaterThanOrEqual(kinds.cloud)
+    expect(kinds.suns).toBeLessThanOrEqual(kinds.cloud + 1)
+    expect(kinds.taps).toBe(0)
+    expect(kinds.skipped).toBe(0)
+    // Sixteen rays are one batch of 32: its longest ray is the longest.
+    expect(steps.batchLongest).toBe(steps.max)
     // The central texel looks up within 60° of the zenith through 98 m of
     // clear air: its range is that slant and ln 50/σ of cloud, whatever the
     // four steps were.
@@ -1763,6 +1785,75 @@ describe('the step counters', () => {
     expect(steps.range).not.toBeNull()
     expect(steps.range!).toBeGreaterThan(98 + inCloud)
     expect(steps.range!).toBeLessThan(2 * 98 + inCloud * 1.001)
+    traced.dispose()
+  })
+
+  it('count each kind exactly at the ladder’s top rung, 256 steps, where every step is in cloud', async () => {
+    /*
+     * Steps start at 50 m and grow by 1%, so a ray wants 256 of them only
+     * past 59 km: inside a 90 km slab every ray wants more, and the
+     * budget's floor holds it to 256 counted steps and the uncounted ones
+     * beside them. Every step is in cloud and takes a sun. At a σ of 10⁻⁵
+     * no ray reaches the exit's 1%. A count of eight bits carried 256 steps
+     * in cloud into the count outside every level.
+     */
+    const deck = slabMedium([{ base: 100, top: 90_000, sigma: 1e-5 }])
+    const traced = await rig(deck, 4, 4, { eye: 1000, layers: [[100, 90_000]] })
+    traced.uniforms.trace.maxSteps.value = CLOUD_MAX_STEPS.at(-1)!
+    const frame = frameOf({ width: 4, height: 4 }, { stats: true })
+    traced.trace.render(renderer, frame, BUDGET)
+    const steps = (await stepsOf(traced.trace))!
+    expect(steps.max).toBeGreaterThanOrEqual(256)
+    const { kinds } = steps
+    expect(kinds.gap).toBe(0)
+    expect(kinds.cloud).toBeCloseTo(steps.mean, 9)
+    expect(kinds.clear).toBeCloseTo(0, 9)
+    expect(kinds.suns).toBeGreaterThanOrEqual(kinds.cloud)
+    expect(kinds.suns).toBeLessThanOrEqual(kinds.cloud + 1)
+    traced.dispose()
+  })
+
+  it('average the batches’ longest rays over the immediate regime’s four dispatches, each its own', async () => {
+    /*
+     * Each interleave phase's rays end at a distance of their own, 1.5 to
+     * 4.5 km up through clear air, so each phase's batches take their own
+     * steps. The four phases traced one a frame read four figures; traced
+     * as the immediate regime's four dispatches in one frame they read
+     * those four's mean. A section shared by the four held each batch's
+     * longest over the phases, the dearest phase's figure.
+     */
+    const [width, height] = [16, 8]
+    const traced = await rig(
+      slabMedium([]),
+      width,
+      height,
+      { eye: 1000, layers: [[100, 5000]] },
+      {
+        km: (x, y) =>
+          1.5 + (Math.floor(x / 2) % 2) + 2 * (Math.floor(y / 2) % 2),
+      },
+    )
+    const off = frameOf({ width, height }, { stats: false })
+    const counted = async (dispatch: () => void): Promise<number> => {
+      traced.trace.render(renderer, off, BUDGET)
+      dispatch()
+      return (await stepsOf(traced.trace))!.batchLongest!
+    }
+    const each: number[] = []
+    for (let k = 0; k < 4; k += 1) {
+      const frame = frameOf({ width, height }, { stats: true }, k)
+      each.push(
+        await counted(() => traced.trace.render(renderer, frame, BUDGET)),
+      )
+    }
+    const frame = frameOf({ width, height }, { stats: true })
+    const all = await counted(() => {
+      for (let k = 0; k < 4; k += 1)
+        traced.trace.dispatchPhase(renderer, frame, k)
+    })
+    // The control: the phases' figures differ, or a mean and a maximum agree.
+    expect(new Set(each).size).toBe(4)
+    expect(all).toBeCloseTo(each.reduce((sum, n) => sum + n, 0) / 4, 9)
     traced.dispose()
   })
 
@@ -1868,11 +1959,12 @@ describe('first order on a slab (the step’s integral, §5.4)', () => {
 })
 
 describe('a layer as its steps are split (the rubric’s row 5)', () => {
-  it('keeps its transmittance, and its light within 1% of the 192-step value, as the budget runs from 16', async () => {
+  it('keeps its transmittance, and its light within 1% of the 192-step value, as the budget runs from 16, and from 8', async () => {
     /*
      * A broken layer and a whole one, each crossed on a slant from 100 m
      * under an exact sun 30° up, so the source falls along every step. The
-     * budget's floor makes a step up to 3.2 km long at sixteen.
+     * strides cross the 800 m under the layer, so the budget is the
+     * layer's: at eight its floor lengthens every ray's steps in cloud.
      */
     for (const fraction of [1, 0.6]) {
       // Thin enough that no ray falls under the 1% exit, where a step's
@@ -1896,7 +1988,7 @@ describe('a layer as its steps are split (the rubric’s row 5)', () => {
         )
       }
       const reference = await at(192)
-      for (const maxSteps of [16, 24, 48, 96]) {
+      for (const maxSteps of [8, 16, 24, 48, 96]) {
         const found = await at(maxSteps)
         found.forEach((result, i) => {
           const what = `cover ${fraction}, ${maxSteps} steps, ray ${i}`
@@ -1909,8 +2001,8 @@ describe('a layer as its steps are split (the rubric’s row 5)', () => {
             what,
           ).toBeLessThan(0.01)
         })
-        // The control: at sixteen the floor did lengthen the steps.
-        if (maxSteps === 16)
+        // The control: at eight the floor did lengthen the steps in cloud.
+        if (maxSteps === 8)
           expect(found.every((result) => result.exhausted === 1)).toBe(true)
       }
       expect(reference.every((result) => result.exhausted === 0)).toBe(true)
@@ -1987,32 +2079,51 @@ describe('the schedule and the handover (§5.8)', () => {
 /* ------------------------------------------------------------------------- */
 
 describe('the sun a sample sees (§5.4, §5.5)', () => {
-  const slab = { base: 1000, top: 3000, sigma: 0.035 }
+  /** The level, and the cloud in it: a slab that fills the level unless a case ends it lower. */
+  const LEVEL = { base: 1000, top: 3000 } as const
+  const SIGMA = 0.035
   const COUNT = 256
+  /** One depth of the slab, meters: the first tap's width. */
+  const FIRST = LIGHT_TAP_DEPTH / SIGMA
 
-  /** The slab's own depths as a cache would hold them, read at a weight. */
-  function slabCache(
-    weight: Node<'float'>,
-    holds: Node<'float'>,
-  ): {
-    readonly nodes: CloudSunDepthNodes
-    readonly uniforms: CloudUniforms
-  } {
+  /**
+   * `cloudSunFn` at samples `depths` meters under the cloud's top on the
+   * eye's vertical, under a sun overhead: (T_cloud, the depth to the sun,
+   * the ray's whole, the taps read).
+   */
+  function sunAt(options: {
+    readonly weight?: number
+    /** The share of the slab's depth the cache holds: 0 is a cache that holds nothing. */
+    readonly holds?: number
+    /** The extinction the taps are spaced by, where it is not the slab's. */
+    readonly spacedBy?: number
+    /** The cloud's top, where it ends under its level's. */
+    readonly cloudTop?: number
+  }) {
+    const slab = {
+      base: LEVEL.base,
+      top: options.cloudTop ?? LEVEL.top,
+      sigma: SIGMA,
+    }
+    const weight = uniform(options.weight ?? 1)
+    const holds = uniform(options.holds ?? 1)
     const uniforms = createCloudUniforms()
-    placeBody(uniforms, { eye: 0, layers: [[slab.base, slab.top]] })
+    placeBody(uniforms, { eye: 0, layers: [[LEVEL.base, LEVEL.top]] })
     uniforms.served.climate.cover.value.set(1, 1, 1)
     const body = uniforms.served
     const exact = exactSlabSun([slab])
     const medium = slabMedium([slab])
+    const sampleAt = (offset: Node<'vec3'>): CloudSample => ({
+      offset,
+      distance: length(offset),
+      altitude: altitudeAt(body, offset),
+      sunMu: sunMuAt(body, offset),
+      footprint: float(0),
+    })
+    // The slab's own depths as a cache would hold them, read at a weight.
     const nodes: CloudSunDepthNodes = {
       depths(offset) {
-        const at: CloudSample = {
-          offset,
-          distance: length(offset),
-          altitude: altitudeAt(body, offset),
-          sunMu: sunMuAt(body, offset),
-          footprint: float(0),
-        }
+        const at = sampleAt(offset)
         const depth = exact(at, medium(at, body), body).depth
         return {
           toSun: depth.x.mul(holds),
@@ -2022,44 +2133,17 @@ describe('the sun a sample sees (§5.4, §5.5)', () => {
         }
       },
     }
-    return { nodes, uniforms }
-  }
-
-  /**
-   * `cloudSunFn` at samples `depths` meters under the slab's top on the
-   * eye's vertical: (T_cloud, the depth to the sun, the ray's whole).
-   */
-  function sunAt(options: {
-    readonly weight?: number
-    /** The share of the slab's depth the cache holds: 0 is a cache that holds nothing. */
-    readonly holds?: number
-    /** The extinction the taps are spaced by, where it is not the slab's. */
-    readonly spacedBy?: number
-  }) {
-    const weight = uniform(options.weight ?? 1)
-    const { nodes, uniforms } = slabCache(weight, float(options.holds ?? 1))
-    const body = uniforms.served
-    const medium = slabMedium([slab])
     const sun = cloudSunFn({ uniforms, medium, depth: nodes })
     const input = new StorageBufferAttribute(new Float32Array(COUNT), 1)
-    const output = new StorageBufferAttribute(new Float32Array(COUNT * 3), 1)
+    const output = new StorageBufferAttribute(new Float32Array(COUNT * 4), 1)
     const from = storage(input, 'float', COUNT)
-    const into = storage(output, 'float', COUNT * 3)
+    const into = storage(output, 'float', COUNT * 4)
     const count = uniform(0, 'uint')
     const kernel = Fn(() => {
       If(instanceIndex.lessThan(count), () => {
-        const offset = vec3(
-          0,
-          float(slab.top).sub(from.element(instanceIndex)),
-          0,
+        const at = sampleAt(
+          vec3(0, float(slab.top).sub(from.element(instanceIndex)), 0),
         )
-        const at: CloudSample = {
-          offset,
-          distance: length(offset),
-          altitude: altitudeAt(body, offset),
-          sunMu: sunMuAt(body, offset),
-          footprint: float(0),
-        }
         const here = medium(at, body)
         const seen = sun(
           at,
@@ -2068,15 +2152,16 @@ describe('the sun a sample sees (§5.4, §5.5)', () => {
             : { ...here, sigma: float(options.spacedBy) },
           body,
         )
-        const to = instanceIndex.mul(3)
+        const to = instanceIndex.mul(4)
         into.element(to).assign(seen.cloud)
         into.element(to.add(1)).assign(seen.depth.x)
         into.element(to.add(2)).assign(seen.depth.y)
+        into.element(to.add(3)).assign(seen.taken)
       })
     })().compute(COUNT)
     return {
-      uniforms,
       weight,
+      holds,
       async at(depths: readonly number[], taps: number) {
         ;(input.array as Float32Array).set(depths)
         input.needsUpdate = true
@@ -2085,27 +2170,32 @@ describe('the sun a sample sees (§5.4, §5.5)', () => {
         await gpu.compute(kernel)
         const got = new Float32Array(await gpu.readBuffer(output))
         return depths.map((_, i) => ({
-          cloud: got[3 * i]!,
-          toSun: got[3 * i + 1]!,
-          whole: got[3 * i + 2]!,
+          cloud: got[4 * i]!,
+          toSun: got[4 * i + 1]!,
+          whole: got[4 * i + 2]!,
+          taken: got[4 * i + 3]!,
         }))
       },
     }
   }
 
-  it('draws two, four, six and eight taps as different tap sets, the last cut at a kilometer', async () => {
-    // A cache that holds nothing past the taps: what a sample 1.5 km deep
-    // sees is the taps' own depth, 0.5·(2ⁿ − 1) for n of them until the
-    // kilometer's reach cuts it at σ·1000.
+  it('lays its taps from one depth to half a kilometer by one ratio, never finer than doubling', async () => {
+    // A cache that holds nothing past the taps, deep in the slab: what a
+    // sample sees is the taps' own reach, σ·500 m at every count, in as
+    // many taps as doubling from one depth needs to get there and no more.
     const sun = sunAt({ holds: 0 })
-    for (const [taps, depth] of [
+    const doubling = Math.ceil(Math.log2(LIGHT_TAP_REACH / FIRST)) + 1
+    expect(doubling).toBe(6)
+    for (const [taps, taken] of [
       [0, 0],
-      [2, 1.5],
-      [4, 7.5],
-      [6, 31.5],
-      [8, slab.sigma * 1000],
+      [2, 2],
+      [4, 4],
+      [6, 6],
+      [8, doubling],
     ] as const) {
       const [seen] = await sun.at([1500], taps)
+      const depth = taps === 0 ? 0 : SIGMA * LIGHT_TAP_REACH
+      expect(seen!.taken, `${taps} taps`).toBe(taken)
       expect(
         relative(seen!.cloud, Math.exp(-depth)),
         `${taps} taps`,
@@ -2113,62 +2203,100 @@ describe('the sun a sample sees (§5.4, §5.5)', () => {
     }
   })
 
-  it('holds the depth to the sun and the ray’s whole within 2% where every tap is in cloud, and a face inside a tap within that tap’s half', async () => {
+  it('ends its taps where the sun’s ray leaves the level: under the level’s top the taps’ depth is the slab’s own, in fewer taps', async () => {
+    // 100 m and 20 m under the top, with nothing cached: the taps stop at
+    // the top, so their depth is exact, and four are three and then one.
+    const sun = sunAt({ holds: 0 })
+    const [near, nearer] = await sun.at([100, 20], 4)
+    expect(near!.taken).toBe(3)
+    expect(relative(near!.toSun, SIGMA * 100)).toBeLessThan(1e-3)
+    expect(nearer!.taken).toBe(1)
+    expect(relative(nearer!.toSun, SIGMA * 20)).toBeLessThan(1e-3)
+  })
+
+  it('takes no taps where the cache is whole and calls the sample dark, and all of them where it does not', async () => {
+    // 400 m under the top the slab's depth to the sun is 14. A cache that
+    // holds 46% of it reads 6.4, past the early out's 6, and one that holds
+    // 40% reads 5.6, short of it: a fifteenth either side.
     const sun = sunAt({})
-    const whole = slab.sigma * (slab.top - slab.base)
-    for (const taps of [4, 6, 8]) {
-      const reach = Math.min(0.5 * (2 ** taps - 1), slab.sigma * 1000)
-      // Deeper than the taps reach, to 100 m over the slab's base: every
-      // tap counts its own width.
-      const reachMeters = reach / slab.sigma
-      const deep = [1.05 * reachMeters, (reachMeters + 1900) / 2, 1900]
-      for (const [i, seen] of (await sun.at(deep, taps)).entries()) {
-        const exact = slab.sigma * deep[i]!
-        expect(relative(seen.toSun, exact)).toBeLessThan(0.02)
-        expect(relative(seen.whole, whole)).toBeLessThan(0.02)
-        expect(relative(seen.cloud, Math.exp(-exact))).toBeLessThan(
-          0.02 * exact,
-        )
-      }
+    expect(SUN_EARLY_OUT).toBe(SUN_GRID_KNEE)
+    const exact = SIGMA * 400
+    sun.holds.value = 0.46
+    const [dark] = await sun.at([400], 4)
+    expect(dark!.taken).toBe(0)
+    expect(relative(dark!.cloud, Math.exp(-0.46 * exact))).toBeLessThan(1e-3)
+    expect(relative(dark!.toSun, 0.46 * exact)).toBeLessThan(1e-3)
+    sun.holds.value = 0.4
+    const [lit] = await sun.at([400], 4)
+    expect(lit!.taken).toBe(4)
+    // The taps reach the top, so the sample's depth is the slab's own.
+    expect(relative(lit!.toSun, exact)).toBeLessThan(1e-3)
+    // A cache that is not whole decides nothing, however dark it reads.
+    sun.holds.value = 1
+    sun.weight.value = 0.99
+    const [unsure] = await sun.at([400], 4)
+    expect(unsure!.taken).toBe(4)
+  })
+
+  it('holds the depth to the sun and the ray’s whole within 2%, with taps and without, and a face inside a tap within that tap’s half', async () => {
+    const sun = sunAt({})
+    const whole = SIGMA * (LEVEL.top - LEVEL.base)
+    // Shallow enough that the cache calls none dark, and deep enough that
+    // it calls every one dark: each holds the slab's own depths.
+    for (const meters of [40, 100, 160, 600, 1200, 1900]) {
+      const [seen] = await sun.at([meters], 4)
+      const exact = SIGMA * meters
+      const dark = exact > SUN_EARLY_OUT
+      expect(seen!.taken > 0, `${meters} m`).toBe(!dark)
+      expect(relative(seen!.toSun, exact), `${meters} m`).toBeLessThan(0.02)
+      expect(relative(seen!.whole, whole), `${meters} m`).toBeLessThan(0.02)
+      expect(relative(seen!.cloud, Math.exp(-exact))).toBeLessThan(0.02 * exact)
     }
-    // A face inside tap k is counted whole or not at all by the tap's
-    // middle: off by at most half the tap, 0.25·2ᵏ of depth.
-    const shallow = Array.from(
-      { length: 200 },
-      (_, i) => ((i + 0.5) / 200) * 7.4,
-    )
-    const found = await sun.at(
-      shallow.map((depth) => depth / slab.sigma),
-      4,
-    )
+    // A cloud that ends 400 m under its level's top: the taps run on past
+    // its face, and a face inside a tap is counted whole or not at all by
+    // the tap's middle, so the depth is off by at most half that tap.
+    const low = sunAt({ cloudTop: LEVEL.top - 400 })
+    const shallow = Array.from({ length: 160 }, (_, i) => (i + 0.5) * 1)
+    const found = await low.at(shallow, 4)
     found.forEach((seen, i) => {
-      const exact = shallow[i]!
-      const tap = Math.floor(Math.log2(exact / 0.5 + 1))
+      const meters = shallow[i]!
+      const ratio = Math.max(
+        (Math.min(LIGHT_TAP_REACH, meters + 400) / FIRST) ** (1 / 3),
+        LIGHT_TAP_RATIO,
+      )
+      // The tap the face falls in: its two ends about the face.
+      let near = 0
+      let far = FIRST
+      while (far < meters) {
+        near = far
+        far *= ratio
+      }
       expect(
-        Math.abs(seen.toSun - exact),
-        `depth ${exact}`,
-      ).toBeLessThanOrEqual(0.25 * 2 ** tap + 1e-3)
+        Math.abs(seen.toSun - SIGMA * meters),
+        `${meters} m under the face`,
+      ).toBeLessThanOrEqual(0.5 * SIGMA * (far - near) + 1e-3)
     })
   })
 
   it('is within 15% of exact over a lit face’s first depth, where taps spaced in meters are off by half again', async () => {
     /*
-     * Samples spread evenly over the first optical depth under the face, 29
-     * m of fair cumulus, and the mean of what each sees, which is what a
-     * face that falls anywhere draws. Taps spaced by the sample's own
-     * extinction put the first one's middle a quarter of a depth in. Taps
-     * a quarter of a kilometer wide, which is the spacing of an extinction
-     * of 0.002, put it 125 m in, past every one of these samples, so each
-     * reads a clear sun.
+     * Samples spread evenly over the first optical depth under a face 400 m
+     * under its level's top, 29 m of fair cumulus, and the mean of what
+     * each sees, which is what a face that falls anywhere draws. A first
+     * tap of one depth puts its middle half a depth in: the samples past it
+     * count a depth and the rest none, 8% over. Taps spaced by an
+     * extinction of 0.002 are one tap of the whole reach, its middle past
+     * every one of these samples, so each reads a clear sun.
      */
     const depths = Array.from({ length: 200 }, (_, i) => (i + 0.5) / 200)
-    const meters = depths.map((depth) => depth / slab.sigma)
+    const meters = depths.map((depth) => depth / SIGMA)
     const exact = 1 - Math.exp(-1)
     const mean = (seen: readonly { cloud: number }[]): number =>
       seen.reduce((sum, one) => sum + one.cloud, 0) / seen.length
-    const spaced = mean(await sunAt({}).at(meters, 4))
+    const face = { cloudTop: LEVEL.top - 400, holds: 0 }
+    const spaced = mean(await sunAt(face).at(meters, 4))
     expect(Math.abs(spaced / exact - 1)).toBeLessThan(0.15)
-    const fixed = mean(await sunAt({ spacedBy: 0.002 }).at(meters, 4))
+    const fixed = mean(await sunAt({ ...face, spacedBy: 0.002 }).at(meters, 4))
     expect(fixed / exact).toBeGreaterThan(1.5)
   })
 
@@ -2177,10 +2305,12 @@ describe('the sun a sample sees (§5.4, §5.5)', () => {
     // weight a deep sample is lit as though nothing stood past its taps.
     const empty = sunAt({ holds: 0 })
     const deep = [400, 900, 1500]
-    const exact = deep.map((depth) => Math.exp(-slab.sigma * depth))
-    const taps = Math.exp(-7.5)
+    const exact = deep.map((depth) => Math.exp(-SIGMA * depth))
+    const taps = deep.map((depth) =>
+      Math.exp(-SIGMA * Math.min(depth, LIGHT_TAP_REACH)),
+    )
     for (const [i, seen] of (await empty.at(deep, 4)).entries())
-      expect(relative(seen.cloud, taps), `${deep[i]} m`).toBeLessThan(1e-3)
+      expect(relative(seen.cloud, taps[i]!), `${deep[i]} m`).toBeLessThan(1e-3)
     // At no weight the statistics stand in: the sample's own column, less
     // what the taps crossed, which on a whole layer is the layer itself.
     empty.weight.value = 0
@@ -2188,106 +2318,8 @@ describe('the sun a sample sees (§5.4, §5.5)', () => {
       expect(relative(seen.cloud, exact[i]!)).toBeLessThan(0.02)
     empty.weight.value = 0.5
     for (const [i, seen] of (await empty.at(deep, 4)).entries())
-      expect(relative(seen.cloud, 0.5 * taps + 0.5 * exact[i]!)).toBeLessThan(
-        0.02,
-      )
+      expect(
+        relative(seen.cloud, 0.5 * taps[i]! + 0.5 * exact[i]!),
+      ).toBeLessThan(0.02)
   })
-})
-
-/* ------------------------------------------------------------------------- */
-/* The trace's cost                                                           */
-/* ------------------------------------------------------------------------- */
-
-const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
-const TIMESTAMPS = await adapterOffers('timestamp-query')
-const COST_OUT = '.data/clouds/traceCost.json'
-
-describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
-  /*
-   * GPU milliseconds a frame of the `cloud trace` pass on the timeline, in
-   * the system's own chain, at two target sizes under three regimes and at
-   * each tap count the lever admits, none included, so the taps' share is a
-   * difference of two rows: the eye 100 m up, looking
-   * straight up through a 60° lens, the air on, the converging regime, the
-   * median of five runs of eight frames after 140 frames of settling. A
-   * test's figure, of this stance on this adapter, beside the steps a ray
-   * the same frames count; a campaign's stances and its protocol are not
-   * these. Written to `.data/clouds/traceCost.json` and held to nothing but
-   * being a number.
-   */
-  it('is timed at 1920 × 1080 and 2880 × 1800, under three regimes, at every tap count the lever admits, and written', async () => {
-    const rows: unknown[] = []
-    for (const [width, height] of [
-      [1920, 1080],
-      [2880, 1800],
-    ] as const)
-      for (const weather of [
-        'overcast',
-        'fair-cumulus',
-        'cirrus-over-cumulus',
-      ] as const) {
-        const own = await openGpu(width, height)
-        const chain = cloudRig(own, width, height, {
-          eye: 100,
-          looking: LOOKING_UP,
-          air: true,
-          levers: { weather, on: true },
-        })
-        await chain.system!.warm()
-        const stop = installPassTimeline(own.renderer)
-        try {
-          const timeline = passTimelineOf(own.renderer)!
-          for (const lightTaps of [0, 2, 4, 6, 8] as const) {
-            chain.levers = { ...chain.levers, lightTaps, stats: false }
-            for (let k = 0; k < 140; k += 1) chain.frame()
-            await own.read(chain.target)
-            const runs: number[] = []
-            for (let n = 0; n < 5; n += 1) {
-              const read = await timeline.measure(() => chain.frame(), 8)
-              const pass = read.passes.find((p) => p.label === 'cloud trace')
-              runs.push(pass?.ms ?? Number.NaN)
-            }
-            chain.levers = { ...chain.levers, stats: true }
-            for (let k = 0; k < 12; k += 1) {
-              chain.frame()
-              await new Promise((resolve) => setTimeout(resolve, 5))
-            }
-            const report = chain.system!.report
-            const median = [...runs].sort((a, b) => a - b)[2]!
-            expect(Number.isFinite(median)).toBe(true)
-            // Each level's reference extinction, 1/m: what the taps are
-            // spaced by at the least, so 0.5·(2ⁿ − 1) over it is their reach.
-            const { sigma } = chain.system!.field.uniforms.served.layers
-            rows.push({
-              render: [width, height],
-              trace: report.extents.trace,
-              weather,
-              lightTaps,
-              ms: median,
-              runs,
-              steps: report.steps,
-              levelSigma: [sigma.value.x, sigma.value.y, sigma.value.z],
-            })
-          }
-        } finally {
-          stop()
-          chain.dispose()
-          own.dispose()
-        }
-      }
-    mkdirSync('.data/clouds', { recursive: true })
-    writeFileSync(
-      COST_OUT,
-      `${JSON.stringify(
-        {
-          note: 'cloudTrace.gpu.test.ts: GPU ms a frame of the `cloud trace` pass on the timeline in the system’s chain; a test’s figure at one stance, not a campaign’s',
-          stance:
-            'eye 100 m, looking up, 60° lens, air on, converging, median of 5 runs of 8 frames after 140',
-          rows,
-        },
-        null,
-        2,
-      )}\n`,
-    )
-  }, 900_000)
 })
