@@ -1371,6 +1371,55 @@ describe('the grid as a resource', () => {
     dispose(test)
   })
 
+  it('hands the light after first order the taps’ depth and the grid’s past them, and the ray’s whole, on a slab', async () => {
+    // Thin, under the knee, and points low enough that the sun's path to
+    // the top runs past the taps' half kilometer: the cache's part is
+    // most of the depth.
+    const THIN: Slab = [1000, 2000, 0.002]
+    const test = rig(slab(...THIN), slabScenario(THIN))
+    const eye = eyeAt(300)
+    const sun = sunAt(37.5)
+    test.settle(eye, sun)
+    const medium = slab(...THIN)
+    const lit = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    test.uniforms.trace.lightTaps.value = 4
+    const body = test.uniforms.served
+    const offsets = Array.from({ length: 64 }, (_, k) =>
+      along(test, eye, 1050 + 4 * k, 300 * (k % 8)),
+    )
+    const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
+    const out = await run(offsets.length, inputs, 3, 2, (read, write) => {
+      const offset = vec3(read(0), read(1), read(2))
+      const sample: CloudSample = {
+        offset,
+        distance: offset.length(),
+        altitude: altitudeAt(body, offset),
+        sunMu: sunMuAt(body, offset),
+        footprint: float(10),
+      }
+      const got = lit(sample, medium(sample, body), body)
+      write(0, got.depth.x)
+      write(1, got.depth.y)
+    })
+    offsets.forEach((offset, k) => {
+      const point = add(eye, offset)
+      const expected = slabDepth(eye, offset, sun, THIN)
+      // Over a kilometer to the top along this sun: the taps hold under
+      // half of it.
+      expect(expected).toBeGreaterThan(THIN[2] * 1000)
+      expect(Math.abs(out[2 * k]! / expected - 1)).toBeLessThan(0.03)
+      const back = crossings(point, scale(sun, -1), R + THIN[0])![0]
+      const whole =
+        THIN[2] * leaves(sub(point, scale(sun, back)), sun, R + THIN[1])
+      expect(Math.abs(out[2 * k + 1]! / whole - 1)).toBeLessThan(0.03)
+    })
+    dispose(test)
+  })
+
   /*
    * Where a sun reads the grid, counted in the program three emits for it:
    * the grid is the one texture a slab's sun binds, so every

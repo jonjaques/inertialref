@@ -385,14 +385,11 @@ export class CloudSunGrid implements CloudResource, CloudSunDepthNodes {
       .level(float(0))
     // Fetched only where the grid holds the point, as a read the readers
     // select away is: from orbit, or past the reach, no sample fetches.
-    let texel: Node<'vec4'> = fetched
-    if (held) {
-      const kept = vec4(0).toVar()
-      If(holds.greaterThan(0), () => {
-        kept.assign(fetched)
-      })
-      texel = kept
-    }
+    // The select is a branch in the program three emits, and held, it is
+    // a variable set once: one assigned again inside a branch is set to
+    // its first value anew in every later block that reads it.
+    const guarded = select(holds.greaterThan(0), fetched, vec4(0))
+    const texel = held ? guarded.toVar() : guarded
     return { tau: cellDepth(texel.x), mean: texel.y, held: holds }
   }
 
