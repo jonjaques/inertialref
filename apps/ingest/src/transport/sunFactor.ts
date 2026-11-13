@@ -742,11 +742,22 @@ export function marchRay(
 
 const DARK = { mean: [0, 0, 0], up: [0, 0, 0], sunward: [0, 0, 0] } as const
 
-/** The droplet table's rows about a radius, and that table with them scaled. */
+/**
+ * The droplet table's rows about a radius, and that table with them scaled,
+ * by the pair of rows: a scaled row is a second of the Mie series, which is
+ * most of what a small part costs where each part scales its own.
+ */
+const phases = new Map<string, ReturnType<typeof scaledPhases>>()
 function phasesOf(radius: number) {
   const table = mieDroplets()
   const row = Math.floor(radiusIndex(table, radius))
   const rows = [Math.max(0, row), Math.min(table.radii - 1, row + 1)]
+  const key = rows.join(':')
+  if (!phases.has(key)) phases.set(key, scaledPhases(rows))
+  return phases.get(key)!
+}
+function scaledPhases(rows: readonly number[]) {
+  const table = mieDroplets()
   return {
     whole: tracePhase(table),
     scaled: tracePhase(scaledTable(table, rows)),
@@ -1194,10 +1205,16 @@ export function factorModule(run: FactorRun) {
     records: {
       rim: rimRecord(run.rims, pair),
       cover: coverRecord(run.covers, pair),
+      // A genus past the six clouds is counted and not traced: a cumulonimbus
+      // cut at 180 m is a scaled depth of 156 at its median ray, about 10 s
+      // of a core a ray at the module's count, 100 core-minutes a cloud
+      // under the nine suns. Its fit is a run of its own, and so is its
+      // ruling.
       genera: run.genera.map((count) => ({
         ...count,
+        enough: count.clouds >= GENUS_CLOUDS,
+        fitted: false,
         committed: false,
-        fitted: count.clouds >= GENUS_CLOUDS,
       })),
     },
   }
