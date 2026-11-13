@@ -2151,6 +2151,7 @@ describe('the sun a sample sees (§5.4, §5.5)', () => {
             ? here
             : { ...here, sigma: float(options.spacedBy) },
           body,
+          { depth: true },
         )
         const to = instanceIndex.mul(4)
         into.element(to).assign(seen.cloud)

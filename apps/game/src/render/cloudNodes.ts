@@ -200,16 +200,31 @@ export interface CloudSun {
    *   is the part under the sample, the taps run down to the level's base,
    *   and the cache's cell sums to where its ray leaves the level and adds
    *   one crossing, by the crossing's law, of what it meets coming back up.
+   *
+   * **Asked for when the sun is formed** (`CloudSunOptions.depth`). Its
+   * members reach the ray's far end, a fetch of the cache's own, so the
+   * shipped sun forms them only on request, in the block the sun is formed
+   * in, which every later read stands inside: a read in a branch, a loop or
+   * a memoized function then reads one variable. Read from a sun formed
+   * without the request it throws as the program is built. A stand-in
+   * whose depth costs nothing may answer it either way.
    */
   readonly depth: Node<'vec2'>
   /** The cloud's transmittance to the sun with its depth scaled by `a`. */
   octave(a: number): Node<'float'>
 }
 
+/** What a march asks of a sun beyond first order's, as it forms it. */
+export interface CloudSunOptions {
+  /** Form `CloudSun.depth`, for the light after first order. */
+  readonly depth?: boolean
+}
+
 export type CloudSunFn = (
   sample: CloudSample,
   medium: CloudMedium,
   body: CloudBodyUniforms,
+  options?: CloudSunOptions,
 ) => CloudSun
 
 /**

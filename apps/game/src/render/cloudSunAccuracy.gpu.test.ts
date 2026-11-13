@@ -976,7 +976,9 @@ describe('the sun’s optical depth against the field', () => {
     // The depth to the sun the march's light reads: the taps' own and the
     // cache's past them.
     const source = pointKernel(
-      (sample) => field.sun(sample, field.medium(sample, body), body).depth.x,
+      (sample) =>
+        field.sun(sample, field.medium(sample, body), body, { depth: true })
+          .depth.x,
     )
     // The cache's depth at the sample itself, as a march with no taps reads
     // it, and nothing where the cache holds nothing of the sample.
@@ -1015,7 +1017,9 @@ describe('the sun’s optical depth against the field', () => {
         },
       })
       return pointKernel(
-        (sample) => sun(sample, field.medium(sample, body), body).depth.x,
+        (sample) =>
+          sun(sample, field.medium(sample, body), body, { depth: true }).depth
+            .x,
       )
     }
     const sourceByOpacity = throughChannel(true)

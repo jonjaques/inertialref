@@ -3,7 +3,6 @@ import {
   Break,
   exp,
   float,
-  Fn,
   If,
   int,
   length,
@@ -24,6 +23,8 @@ import type {
   CloudSample,
   CloudSun,
   CloudSunDepthNodes,
+  CloudSunDepths,
+  CloudSunOptions,
 } from './cloudNodes.ts'
 import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
 
@@ -142,10 +143,11 @@ export function cloudSunFn(
   sample: CloudSample,
   medium: CloudMedium,
   body: CloudBodyUniforms,
+  options?: CloudSunOptions,
 ) => CloudSunTaps {
   const taps = deps.uniforms.trace.lightTaps
   const tapMedium = deps.tap ?? deps.medium
-  return (sample, medium, body) => {
+  return (sample, medium, body, options = {}) => {
     const fraction = float(0).toVar()
     const depth = float(0).toVar()
     const reach = float(0).toVar()
@@ -241,12 +243,37 @@ export function cloudSunFn(
     // read past the taps are held, from the one read or the other.
     const cachedToSun = here.toSun.toVar()
     const cachedWeight = here.weight.toVar()
-    let end: ReturnType<CloudSunDepthNodes['depths']> = here
-    If(reach.greaterThan(0), () => {
-      end = deps.depth.depths(sample.offset.add(body.sun.mul(reach)))
+    // The light after first order's members of the same read, where the
+    // march asked for them. Three emits a variable's assignment whether or
+    // not anything reads it, and these reach the ray's far end, a fetch of
+    // their own: held for every march, a march that reads `cloud` alone
+    // fetched the grid 6 times where it fetches 2.
+    const deep = options.depth
+      ? {
+          toSun: float(0).toVar(),
+          whole: float(0).toVar(),
+          behind: float(0).toVar(),
+        }
+      : null
+    const hold = (from: CloudSunDepths): void => {
+      if (deep === null) return
+      deep.toSun.assign(from.meanDepthToSun ?? from.toSun)
+      deep.whole.assign(from.meanDepthWhole ?? from.whole)
+      deep.behind.assign(from.behind)
+    }
+    const atEnd = If(reach.greaterThan(0), () => {
+      const end = deps.depth.depths(sample.offset.add(body.sun.mul(reach)))
       cachedToSun.assign(end.toSun)
       cachedWeight.assign(end.weight)
+      hold(end)
     })
+    // A dark sample's depths are the sample's own read, whose far end only
+    // the depth fetches: held in its own branch, a sample with taps does
+    // not fetch it.
+    if (deep !== null)
+      atEnd.Else(() => {
+        hold(here)
+      })
     // The sample's own level by its statistics at its column, where the
     // medium answers them. The levels beyond it are read nowhere along the
     // sun's ray, and take the climate's mean cover and cumuliform share.
@@ -288,54 +315,32 @@ export function cloudSunFn(
      * transmittance, the shallower in broken cloud. A cache that holds one
      * depth answers it for both lights.
      *
-     * One call of a function of its own, made at the first read and the
-     * same call at every read after. Its members reach the ray's far end,
-     * a fetch of its own, so a march that reads no depth emits none of it.
-     * The call holds its registers and the branch that fills them, so a
-     * block that builds the call emits all of it, and a branch beside the
-     * first, or a memoized function called again in another branch, emits
-     * it again whole. Statements added to the reader's block instead are
-     * emitted there alone: three sets a variable's first value again in
-     * every block outside the one that filled it, so the branch beside
-     * read its taps alone.
+     * Formed here, in the block the sun is formed in, into one variable.
+     * Formed instead where it is first read, it was unset in every block
+     * the first read does not stand over: a branch beside it, a memoized
+     * function's second caller, and the code after a loop that runs no
+     * turn each read zero.
      */
-    let deepest: Node<'vec2'> | null = null
-    const depthToSun = (): Node<'vec2'> =>
-      (deepest ??= Fn(() => {
-        const deep = {
-          toSun: float(0).toVar(),
-          whole: float(0).toVar(),
-          behind: float(0).toVar(),
-        }
-        const hold = (from: typeof end): void => {
-          deep.toSun.assign(from.meanDepthToSun ?? from.toSun)
-          deep.whole.assign(from.meanDepthWhole ?? from.whole)
-          deep.behind.assign(from.behind)
-        }
-        If(reach.greaterThan(0), () => {
-          hold(end)
-        }).Else(() => {
-          hold(here)
-        })
-        const toSun = mix(
-          columnToSun.mul(slant),
-          depth.add(deep.toSun),
-          cachedWeight,
-        )
-        // The cache holds `behind` of what lies behind the point it is
-        // read at, which is the taps' end: the taps' own stretch comes out
-        // of that, and the statistics give the share the cache does not
-        // hold.
-        const held = cachedWeight.mul(deep.behind)
-        const cached = cachedWeight
-          .mul(deep.whole.sub(deep.toSun))
-          .sub(held.mul(depth))
-        const behind = columnBehind
-          .mul(slant)
-          .mul(float(1).sub(held))
-          .add(max(cached, 0))
-        return vec2(toSun, toSun.add(behind))
-      })())
+    let pair: Node<'vec2'> | null = null
+    if (deep !== null) {
+      const toSun = mix(
+        columnToSun.mul(slant),
+        depth.add(deep.toSun),
+        cachedWeight,
+      )
+      // The cache holds `behind` of what lies behind the point it is read
+      // at, which is the taps' end: the taps' own stretch comes out of that,
+      // and the statistics give the share the cache does not hold.
+      const held = cachedWeight.mul(deep.behind)
+      const cached = cachedWeight
+        .mul(deep.whole.sub(deep.toSun))
+        .sub(held.mul(depth))
+      const behind = columnBehind
+        .mul(slant)
+        .mul(float(1).sub(held))
+        .add(max(cached, 0))
+      pair = vec2(toSun, toSun.add(behind)).toVar()
+    }
     // The air's height, true meters: its top is in sea-level units.
     const airHeight = body.datumRadius.mul(max(body.air.top.sub(1), 1e-6))
     return {
@@ -343,7 +348,13 @@ export function cloudSunFn(
       taken,
       skipped: select(dark, float(taps), float(0)),
       get depth() {
-        return depthToSun()
+        if (pair === null)
+          throw new Error(
+            'CloudSun.depth: this sun was formed without { depth: true }. ' +
+              'Ask for the depth where the sun is formed: ' +
+              'sun(sample, medium, body, { depth: true }).',
+          )
+        return pair
       },
       octave: (a) =>
         throughTaps(a).mul(

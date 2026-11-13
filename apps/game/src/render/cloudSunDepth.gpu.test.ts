@@ -13,6 +13,7 @@ import {
   instanceIndex,
   int,
   ivec3,
+  Loop,
   select,
   sin,
   storage,
@@ -1373,7 +1374,7 @@ describe('the grid as a resource', () => {
     dispose(test)
   })
 
-  it('hands the light after first order the taps’ depth and the grid’s past them, and the ray’s whole, on a slab, wherever a program reads it', async () => {
+  it('hands the light after first order the taps’ depth and the grid’s past them, and the ray’s whole, on a slab, wherever a program reads it after asking for it', async () => {
     // Thin, under the knee, and points low enough that the sun's path to
     // the top runs past the taps' half kilometer: the cache's part is
     // most of the depth.
@@ -1396,10 +1397,12 @@ describe('the grid as a resource', () => {
     const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
     /*
      * Where a program reads the depth: in the block its sun is formed in;
-     * in two exclusive branches, each sample through one of them; and in
-     * a branch and then again in a branch inside it. The depth is formed
-     * where it is read, and a variable a branch fills is unset in a
-     * branch beside it.
+     * in two exclusive branches, each sample through one of them; in a
+     * branch inside a branch, and then in the block around it; through a
+     * memoized function called in two exclusive branches; and in a loop
+     * that runs no turn for the first sample, and after it. A depth formed
+     * where it is first read is unset in each block that read does not
+     * stand over, and read zero there.
      */
     const reads = {
       own: (_: Node<'bool'>, got: CloudSunLight, write: Write) => {
@@ -1416,12 +1419,13 @@ describe('the grid as a resource', () => {
           write(1, got.depth.y)
         })
       },
-      nested: (_: Node<'bool'>, got: CloudSunLight, write: Write) => {
+      nested: (odd: Node<'bool'>, got: CloudSunLight, write: Write) => {
         If(got.cloud.greaterThanEqual(0), () => {
-          write(0, got.depth.x)
-          If(got.cloud.lessThanEqual(1), () => {
-            write(1, got.depth.y)
+          If(odd, () => {
+            write(0, got.depth.x)
           })
+          write(0, got.depth.x)
+          write(1, got.depth.y)
         })
       },
       // A function of the program's that returns the depth, called once
@@ -1437,6 +1441,15 @@ describe('the grid as a resource', () => {
           write(1, depthOf().y)
         })
       },
+      // The first sample's loop runs no turn: the reads after it are the
+      // first that sample reaches.
+      loop: (_: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        Loop({ start: int(0), end: int(instanceIndex) }, () => {
+          write(0, got.depth.x)
+        })
+        write(0, got.depth.x)
+        write(1, got.depth.y)
+      },
     }
     // Four taps, and none: the cache's depth at the sample itself.
     for (const taps of [4, 0])
@@ -1451,7 +1464,7 @@ describe('the grid as a resource', () => {
             sunMu: sunMuAt(body, offset),
             footprint: float(10),
           }
-          const got = lit(sample, medium(sample, body), body)
+          const got = lit(sample, medium(sample, body), body, { depth: true })
           reading(instanceIndex.mod(uint(2)).equal(uint(1)), got, write)
         })
         offsets.forEach((offset, k) => {
@@ -1480,11 +1493,13 @@ describe('the grid as a resource', () => {
    * Where a sun reads the grid, counted in the program three emits for it:
    * the grid is the one texture a slab's sun binds, so every
    * `textureSampleLevel` is a fetch of a cell. A sun reads it at the sample
-   * and where its taps end; the light after first order adds the ray's far
-   * end, once for each of the two. A program that reads only first order
-   * fetches no far end, and one that reads both fetches no cell twice.
+   * and where its taps end; the light after first order, asked for, adds
+   * the ray's far end, once for each of the two, in the sun's own block. A
+   * program that asks only for first order fetches no far end, one that
+   * asks for both fetches no cell twice, and a read of the depth in another
+   * block reads the variable the sun's block holds.
    */
-  it('is fetched twice by first order’s sun, twice more by the depth beside it, at the far end of each of its two reads, and twice more for each other block that reads the depth', async () => {
+  it('is fetched twice by first order’s sun, twice more by the depth asked for beside it, at the far end of each of its two reads, and no more for any block that reads the depth', async () => {
     const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
     const medium = slab(1000, 2000, 0.01)
     const sun = cloudSunFn({
@@ -1498,10 +1513,11 @@ describe('the grid as a resource', () => {
       'float',
       1,
     )
-    const programOf = async (
+    const kernelOf = (
       pick: (got: ReturnType<typeof sun>) => Node<'float'> | null,
-    ): Promise<string> => {
-      const kernel = Fn(() => {
+      depth: boolean,
+    ): ComputeNode =>
+      Fn(() => {
         const offset = vec3(float(instanceIndex), 1, 2)
         const sample: CloudSample = {
           offset,
@@ -1510,9 +1526,14 @@ describe('the grid as a resource', () => {
           sunMu: sunMuAt(body, offset),
           footprint: float(10),
         }
-        const picked = pick(sun(sample, medium(sample, body), body))
+        const picked = pick(sun(sample, medium(sample, body), body, { depth }))
         if (picked !== null) out.element(0).assign(picked)
       })().compute(1)
+    const programOf = async (
+      pick: (got: ReturnType<typeof sun>) => Node<'float'> | null,
+      depth = true,
+    ): Promise<string> => {
+      const kernel = kernelOf(pick, depth)
       await gpu.compute(kernel)
       const nodes = (
         gpu.renderer as unknown as {
@@ -1528,13 +1549,13 @@ describe('the grid as a resource', () => {
     }
     const fetches = (wgsl: string): number =>
       wgsl.match(/\btextureSampleLevel\(/g)?.length ?? 0
-    expect(fetches(await programOf((got) => got.cloud))).toBe(2)
+    expect(fetches(await programOf((got) => got.cloud, false))).toBe(2)
     expect(
       fetches(
         await programOf((got) => got.cloud.add(got.depth.x).add(got.depth.y)),
       ),
     ).toBe(4)
-    // Two exclusive branches that read the depth form it once each.
+    // Two exclusive branches that read the depth read the one variable.
     expect(
       fetches(
         await programOf((got) => {
@@ -1547,7 +1568,59 @@ describe('the grid as a resource', () => {
           return got.cloud
         }),
       ),
-    ).toBe(6)
+    ).toBe(4)
+    // So does a loop, and the block after it.
+    expect(
+      fetches(
+        await programOf((got) => {
+          Loop({ start: int(0), end: int(instanceIndex) }, () => {
+            out.element(0).addAssign(got.depth.x)
+          })
+          return got.depth.y
+        }),
+      ),
+    ).toBe(4)
+    dispose(test)
+  })
+
+  it('throws by name, as the program is built, where a march reads the depth of a sun it did not ask for it', () => {
+    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
+    const medium = slab(1000, 2000, 0.01)
+    const sun = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    const body = test.uniforms.served
+    const out = storage(
+      new StorageBufferAttribute(new Float32Array(1), 1),
+      'float',
+      1,
+    )
+    const kernel = Fn(() => {
+      const offset = vec3(float(instanceIndex), 1, 2)
+      const sample: CloudSample = {
+        offset,
+        distance: offset.length(),
+        altitude: altitudeAt(body, offset),
+        sunMu: sunMuAt(body, offset),
+        footprint: float(10),
+      }
+      const got = sun(sample, medium(sample, body), body)
+      out.element(0).assign(got.cloud.add(got.depth.x))
+    })().compute(1)
+    const renderer = gpu.renderer as unknown as {
+      backend: {
+        createNodeBuilder(
+          node: ComputeNode,
+          renderer: unknown,
+        ): { build(): unknown }
+      }
+    }
+    expect(() =>
+      renderer.backend.createNodeBuilder(kernel, gpu.renderer).build(),
+    ).toThrow(/^CloudSun\.depth: this sun was formed without \{ depth: true \}/)
+    kernel.dispose()
     dispose(test)
   })
 })
