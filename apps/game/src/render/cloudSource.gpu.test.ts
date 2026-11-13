@@ -126,10 +126,11 @@ const SKY_STEP = 2e-6
 
 /**
  * How far a ramp's step may stand from its CPU reference, as a share of
- * its larger end times its depth: a float32's `1 − e^(−τ)` keeps three
- * figures at a depth of 10⁻⁴. 5.0e-4 at worst on the Mac mini.
+ * its larger end times its depth: a float32's step under one, 1.2e-7, in
+ * `1 − e^(−τ)` at a depth of 10⁻⁴ is 1.2e-3 of it. 5.0e-4 at worst on the
+ * Mac mini and 8.1e-4 on the hosted adapter.
  */
-const RAMP_STEP = 1e-3
+const RAMP_STEP = 2e-3
 
 /** A table of scales against radius, linear in ln r and held at its ends: the node's `scaleAt`, in float64. */
 function scaleOf(
