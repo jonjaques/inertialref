@@ -1,0 +1,754 @@
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import {
+  ClampToEdgeWrapping,
+  Data3DTexture,
+  HalfFloatType,
+  LinearFilter,
+  type Node,
+  RGBAFormat,
+  StorageBufferAttribute,
+  Vector3,
+} from 'three/webgpu'
+import {
+  bool,
+  exp,
+  float,
+  Fn,
+  If,
+  instanceIndex,
+  int,
+  Loop,
+  max,
+  min,
+  select,
+  storage,
+  texture3D,
+  uniform,
+  vec2,
+  vec3,
+  vec4,
+} from 'three/tsl'
+import {
+  CUMULUS_FIELD_SUN,
+  CUMULUS_REFERENCE,
+  CUMULUS_VIEWS,
+  type CumulusCase,
+  cumulusFixture,
+  type CumulusFixture,
+  type CumulusProbe,
+  cumulusSkyRadiance,
+  fixtureMedium,
+  GENUS_TABLE,
+  halfBitsOf,
+  iceAggregate,
+  isolateCumulus,
+  mieDroplets,
+  PHASE_ATLAS,
+  SLAB_REFERENCE,
+  subjectWeather,
+  viewRay,
+  viewSun,
+} from '@inertialref/rendering'
+import { cloudRay } from './cloudGeometry.ts'
+import { CLOUD_TRANSPORTS } from './cloudLevers.ts'
+import { cloudMarch, type CloudMarchDeps } from './cloudMarch.ts'
+import { marchLight, placeBody } from './cloudMarchRig.ts'
+import type {
+  CloudMedium,
+  CloudPhaseNodes,
+  CloudSkyNodes,
+  CloudSun,
+} from './cloudNodes.ts'
+import { CloudPhase } from './cloudPhase.ts'
+import { CLOUD_SUN_FACTORS, createCloudSource } from './cloudSource.ts'
+import { createCloudUniforms } from './cloudUniforms.ts'
+import { type GpuSession, openGpu } from './gpuHarness.ts'
+
+/*
+ * The isolated cumulus (rubric row 6): the march on the reference's two
+ * clouds, each seen three ways, against the float64 path tracer's
+ * `CUMULUS_REFERENCE`.
+ *
+ * **The row is a declared miss.** The light after first order is a plane
+ * slab's source, and a plane slab cannot describe a cloud with sides: on
+ * the CPU's fine march, with first order and the sky exact, design §5.5
+ * passes 1 case of 6 and fails 21 of the 36 measures. Nothing here is
+ * tuned toward it. Each measure is recorded, with the factor of the sun on
+ * and off, and held as a ceiling at the figure measured, so the row cannot
+ * get worse unseen and a later rule is watched moving it. Retaken by
+ * whoever changes the slab's rule, the sky's term or the march's step.
+ *
+ * **What draws.** The reference's own cloud, the fixture cut from the
+ * field and isolated, as a 3D texture of the scaled extinction and the
+ * radius; the march's own step, eight jitters averaged; first order
+ * through the committed phase under the case's sun; the light after first
+ * order through the committed source table; and the sky's term read from
+ * the case's sky. The sun's two depths are marched through the fixture
+ * itself, 96 steps each way, so a figure here is the light's and not the
+ * sun cache's: the shipped sun's taps and grid read the whole field, and
+ * the reference's cloud stands alone.
+ *
+ * **A measure**, as the path tracer's report holds them, the worst of the
+ * three bands: the core's median and the base's (15%), the rim's worst bin
+ * and its peak (20%), the sunward edge's worst bin (20%) and its depth, the
+ * mean of its bins over the core, less one (30%); each bound three of the
+ * reference's own errors where that is larger.
+ */
+
+let gpu: GpuSession
+
+beforeAll(async () => {
+  gpu = await openGpu(8, 8)
+})
+
+afterAll(() => {
+  gpu.dispose()
+})
+
+const JITTERS = 8
+/** Steps toward the sun and away from it a sample's two depths are marched in. */
+const SUN_STEPS = 96
+const BANDS = [0, 1, 2] as const
+/** The level the fixture stands in on the rig's body, meters, and the eye's height in it. */
+const LEVEL = [0, 6000] as const
+const EYE = 3000
+
+type Triple = readonly [number, number, number]
+
+/** A fixture as a 3D texture: the scaled extinction, the radius, and the scaled column over a voxel and whole. */
+function fixtureTexture(fixture: CumulusFixture): Data3DTexture {
+  const [nx, ny, nz] = fixture.size
+  const data = new Uint16Array(nx * ny * nz * 4)
+  const whole = new Float64Array(nx * nz)
+  const at = (x: number, y: number, z: number): number => (y * nz + z) * nx + x
+  for (let z = 0; z < nz; z += 1)
+    for (let x = 0; x < nx; x += 1) {
+      let over = 0
+      for (let y = ny - 1; y >= 0; y -= 1) {
+        const depth = fixture.sigma[at(x, y, z)]! * fixture.voxel
+        // The column over the voxel's center, and the column whole, which
+        // the second pass below writes.
+        data[at(x, y, z) * 4 + 2] = halfBitsOf(over + depth / 2)
+        over += depth
+      }
+      whole[z * nx + x] = over
+    }
+  for (let y = 0; y < ny; y += 1)
+    for (let z = 0; z < nz; z += 1)
+      for (let x = 0; x < nx; x += 1) {
+        const cell = at(x, y, z)
+        data[cell * 4] = halfBitsOf(fixture.sigma[cell]!)
+        data[cell * 4 + 1] = halfBitsOf(fixture.radius[cell]!)
+        data[cell * 4 + 3] = halfBitsOf(whole[z * nx + x]!)
+      }
+  // [up][north][east]: a texture's depth, height and width.
+  const map = new Data3DTexture(data, nx, nz, ny)
+  map.format = RGBAFormat
+  map.type = HalfFloatType
+  map.magFilter = LinearFilter
+  map.minFilter = LinearFilter
+  map.wrapS = ClampToEdgeWrapping
+  map.wrapT = ClampToEdgeWrapping
+  map.wrapR = ClampToEdgeWrapping
+  map.generateMipmaps = false
+  map.needsUpdate = true
+  return map
+}
+
+interface Drawn {
+  readonly light: Triple
+  readonly transmittance: number
+}
+
+/** What a draw is lit by: each a share of the whole, zero or one. */
+interface Lights {
+  /** First order, through the committed phase. */
+  readonly first: number
+  /** The sun at all: none leaves the sky alone. */
+  readonly sun: number
+  /** The sky's term. */
+  readonly sky: number
+  /** The factor of the sun: the `'slab'` transport, or the `'plane'` one. */
+  readonly factor: boolean
+}
+
+/**
+ * The march over one subject's fixture: level rays north through the
+ * pixels of the reference's image, one a thread.
+ */
+async function cumulusRig(
+  subject: (typeof CUMULUS_REFERENCE.subjects)[number],
+) {
+  const { weather, clock } = subjectWeather(subject)
+  const { fixture } = isolateCumulus(
+    cumulusFixture(weather, clock, CUMULUS_FIELD_SUN, subject.place),
+  )
+  const traced = fixtureMedium(fixture)
+  const [nx, ny, nz] = fixture.size
+  const extent: Triple = [
+    nx * fixture.voxel,
+    ny * fixture.voxel,
+    nz * fixture.voxel,
+  ]
+  const map = fixtureTexture(fixture)
+  const cells = texture3D(map)
+  const uniforms = createCloudUniforms()
+  const body = uniforms.served
+  placeBody(uniforms, { eye: EYE, layers: [LEVEL] })
+  uniforms.trace.maxSteps.value = 192
+  uniforms.trace.lightTaps.value = 4
+  // A level that is all cumulus, of droplets.
+  const droplets = mieDroplets()
+  body.layers.phaseRow.value.set(PHASE_ATLAS.dropletRow, 0, 0)
+  body.layers.phaseRows.value.set(
+    droplets.radii,
+    droplets.radii,
+    droplets.radii,
+  )
+  body.layers.phaseRadius.value.set(
+    droplets.radiusMin,
+    droplets.radiusMin,
+    droplets.radiusMin,
+  )
+  body.climate.convective.value.set(1, 1, 1)
+  // What the sky's term reads of the level, as a frame writes them: the
+  // transport scale at the level's reference radius, and its reference
+  // extinction, a cumulus's 52 km⁻¹ with the diffraction out of it.
+  const { asymmetry, share } = SLAB_REFERENCE.media.find(
+    (item) => item.radius === 10,
+  )!
+  body.layers.transport.value.set(1 - asymmetry, 1 - asymmetry, 1 - asymmetry)
+  const reference = GENUS_TABLE.cumulus.sigma * (1 - share)
+  body.layers.sigma.value.set(reference, reference, reference)
+  const source = createCloudSource()
+  await source.load()
+  const { l, a } = CLOUD_SUN_FACTORS.cumulus!
+  source.levels.factor.value.set(l, l, l)
+  source.levels.slope.value.set(a, a, a)
+  const atlas = new CloudPhase(droplets, iceAggregate())
+  await atlas.warm(gpu.renderer)
+
+  const firstShare = uniform(1)
+  const sunShare = uniform(1)
+  const skyMean = uniform(new Vector3())
+  const skyUp = uniform(new Vector3())
+  const skySunward = uniform(new Vector3())
+  const phase: CloudPhaseNodes = {
+    droplets: (nu, radius) => atlas.droplets(nu, radius),
+    // The gain stays the row's: what is switched is first order's light.
+    phase: (nu, layers, level, radius) =>
+      atlas
+        .phase(nu, layers, level, radius)
+        .mul(vec4(firstShare, firstShare, firstShare, 1)),
+  }
+  const sky: CloudSkyNodes = {
+    at: () => ({ mean: skyMean, up: skyUp, sunward: skySunward }),
+  }
+
+  const capacity = 4096
+  const input = new StorageBufferAttribute(new Float32Array(capacity * 4), 1)
+  const output = new StorageBufferAttribute(new Float32Array(capacity * 4), 1)
+  const from = storage(input, 'float', capacity * 4)
+  const into = storage(output, 'float', capacity * 4)
+  const count = uniform(0, 'uint')
+  const size = vec3(...extent)
+
+  const kernel = Fn(() => {
+    If(instanceIndex.lessThan(count), () => {
+      const read = (k: number) => from.element(instanceIndex.mul(4).add(k))
+      // Where the pixel's ray starts, meters from the fixture's low corner.
+      const origin = vec3(read(0), read(1), read(2)).toVar()
+      /** The fixture at a point, meters from its low corner: nothing outside it. */
+      const cellAt = (point: Node<'vec3'>): Node<'vec4'> => {
+        const inside = point.x
+          .greaterThanEqual(0)
+          .and(point.y.greaterThanEqual(0))
+          .and(point.z.greaterThanEqual(0))
+          .and(point.x.lessThanEqual(size.x))
+          .and(point.y.lessThanEqual(size.y))
+          .and(point.z.lessThanEqual(size.z))
+        return select(
+          inside,
+          cells.sample(point.div(size).xzy).level(float(0)),
+          vec4(0),
+        )
+      }
+      const medium = (sample: { offset: Node<'vec3'> }): CloudMedium => {
+        const cell = cellAt(origin.add(sample.offset)).toVar()
+        return {
+          fraction: float(1),
+          sigma: cell.x,
+          layer: int(0),
+          column: float(1e9),
+          radius: max(cell.y, 1),
+          depth: cell.zw,
+        }
+      }
+      /**
+       * The sun through the fixture itself: its depth from the sample to
+       * the sun and the whole of that ray's, by the midpoint rule over the
+       * ray's run inside the fixture each way. No air stands in the
+       * reference, and the sun's irradiance is one on a face turned to it.
+       */
+      const sun = (sample: { offset: Node<'vec3'> }): CloudSun => {
+        const point = origin.add(sample.offset).toVar()
+        const toward = (direction: Node<'vec3'>): Node<'float'> => {
+          // How far the fixture runs along the ray: the nearest of the
+          // three faces ahead.
+          const ahead = (
+            d: Node<'float'>,
+            p: Node<'float'>,
+            edge: Node<'float'>,
+          ): Node<'float'> =>
+            select(
+              d.greaterThan(0),
+              edge.sub(p).div(max(d, 1e-9)),
+              select(d.lessThan(0), p.div(max(d.negate(), 1e-9)), float(1e30)),
+            )
+          const run = max(
+            min(
+              ahead(direction.x, point.x, size.x),
+              min(
+                ahead(direction.y, point.y, size.y),
+                ahead(direction.z, point.z, size.z),
+              ),
+            ),
+            0,
+          )
+          const step = run.div(SUN_STEPS).toVar()
+          const depth = float(0).toVar()
+          Loop(SUN_STEPS, ({ i }) => {
+            depth.addAssign(
+              cellAt(
+                point.add(direction.mul(step.mul(float(i).add(0.5)))),
+              ).x.mul(step),
+            )
+          })
+          return depth
+        }
+        const toSun = toward(body.sun).toVar()
+        const behind = toward(body.sun.negate()).toVar()
+        const through = exp(toSun.negate())
+        return {
+          cloud: through,
+          air: vec3(sunShare),
+          depth: vec2(toSun, toSun.add(behind)),
+          octave: () => through,
+        }
+      }
+      const deps: CloudMarchDeps = {
+        uniforms,
+        phase,
+        medium,
+        sun,
+        ...marchLight(uniforms),
+        sky,
+        source,
+      }
+      const direction = vec3(0, 0, 1)
+      const ray = cloudRay(
+        direction,
+        body,
+        float(extent[2] + 3 * fixture.voxel),
+      )
+      const fine = cloudMarch(
+        { ...ray, start: float(0), end: float(extent[2] + 3 * fixture.voxel) },
+        read(3),
+        bool(true),
+        deps,
+        null,
+        { skyTable: true },
+      )
+      const to = instanceIndex.mul(4)
+      into.element(to).assign(fine.light.x)
+      into.element(to.add(1)).assign(fine.light.y)
+      into.element(to.add(2)).assign(fine.light.z)
+      into.element(to.add(3)).assign(fine.transmittance)
+    })
+  })().compute(capacity)
+
+  return {
+    fixture,
+    /** A case's probes, drawn: each pixel the mean of its jitters. */
+    async draw(
+      held: CumulusCase,
+      probes: readonly CumulusProbe[],
+      lights: Lights,
+    ): Promise<Drawn[]> {
+      const view = CUMULUS_VIEWS.find((item) => item.id === held.view)!
+      const toSun = viewSun(view)
+      body.sun.value.set(toSun[0], toSun[1], toSun[2])
+      body.sunUp.value = toSun[1]
+      atlas.serve(held.sunRadius, null)
+      firstShare.value = lights.first
+      sunShare.value = lights.sun
+      const share = lights.sky
+      skyMean.value.set(
+        held.sky.mean[0] * share,
+        held.sky.mean[1] * share,
+        held.sky.mean[2] * share,
+      )
+      skyUp.value.set(...held.sky.up)
+      skySunward.value.set(...held.sky.sunward)
+      uniforms.trace.transport.value = CLOUD_TRANSPORTS.indexOf(
+        lights.factor ? 'slab' : 'plane',
+      )
+      const drawn: Drawn[] = []
+      const each = Math.floor(capacity / JITTERS)
+      for (let start = 0; start < probes.length; start += each) {
+        const batch = probes.slice(start, start + each)
+        const rays = input.array as Float32Array
+        batch.forEach((probe, i) => {
+          const origin = viewRay(traced, held.pixels, ...probe.pixel)
+          for (let k = 0; k < JITTERS; k += 1)
+            rays.set([...origin, (k + 0.5) / JITTERS], (i * JITTERS + k) * 4)
+        })
+        input.needsUpdate = true
+        count.value = batch.length * JITTERS
+        await gpu.compute(kernel)
+        const out = new Float32Array(await gpu.readBuffer(output))
+        batch.forEach((_, i) => {
+          const light: [number, number, number] = [0, 0, 0]
+          let transmittance = 0
+          for (let k = 0; k < JITTERS; k += 1) {
+            const row = (i * JITTERS + k) * 4
+            for (const band of BANDS) light[band] += out[row + band]! / JITTERS
+            transmittance += out[row + 3]! / JITTERS
+          }
+          drawn.push({ light, transmittance })
+        })
+      }
+      return drawn
+    },
+    dispose() {
+      kernel.dispose()
+      input.dispose()
+      output.dispose()
+      map.dispose()
+      atlas.dispose()
+      source.dispose()
+      uniforms.dispose()
+    },
+  }
+}
+
+const median = (values: readonly number[]): number => {
+  const sorted = [...values].sort((x, y) => x - y)
+  const middle = sorted.length >> 1
+  return sorted.length % 2 === 1
+    ? sorted[middle]!
+    : (sorted[middle - 1]! + sorted[middle]!) / 2
+}
+const mean = (values: readonly number[]): number =>
+  values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1)
+
+/** A case's six measures, each the worst of the three bands: the march over the reference, less one. */
+interface Measures {
+  core: number
+  base: number
+  rimBin: number
+  rimPeak: number
+  edgeBin: number
+  edgeDepth: number
+}
+const MEASURES = [
+  'core',
+  'base',
+  'rimBin',
+  'rimPeak',
+  'edgeBin',
+  'edgeDepth',
+] as const
+/** Row 6's bars, by measure. */
+const BARS: Measures = {
+  core: 0.15,
+  base: 0.15,
+  rimBin: 0.2,
+  rimPeak: 0.2,
+  edgeBin: 0.2,
+  edgeDepth: 0.3,
+}
+
+/**
+ * A case's measures and which of them pass: each bound its bar, or three of
+ * the reference's own errors where that is larger.
+ */
+function measure(
+  held: CumulusCase,
+  probes: readonly CumulusProbe[],
+  pixels: readonly Triple[],
+): { readonly errors: Measures; readonly failed: (keyof Measures)[] } {
+  const errors: Measures = {
+    core: 0,
+    base: 0,
+    rimBin: 0,
+    rimPeak: 0,
+    edgeBin: 0,
+    edgeDepth: 0,
+  }
+  const failed = new Set<keyof Measures>()
+  const worse = (
+    key: keyof Measures,
+    got: number,
+    want: number,
+    sigma: number,
+  ): void => {
+    const error = got / want - 1
+    if (Math.abs(error) > Math.abs(errors[key])) errors[key] = error
+    if (Math.abs(got - want) > Math.max(BARS[key] * Math.abs(want), 3 * sigma))
+      failed.add(key)
+  }
+  const medians = CUMULUS_REFERENCE.medians.find(
+    (item) => item.case === held.id,
+  )!
+  for (const band of BANDS) {
+    const of = (mask: CumulusProbe['mask'], bin?: number): number[] =>
+      probes.flatMap((probe, i) =>
+        probe.mask === mask && (bin === undefined || probe.bin === bin)
+          ? [pixels[i]![band]]
+          : [],
+      )
+    const core = median(of('core'))
+    worse('core', core, medians.core[band], medians.coreError[band])
+    worse(
+      'base',
+      median(of('base')),
+      medians.base[band],
+      medians.baseError[band],
+    )
+    for (const mask of ['rim', 'edge'] as const) {
+      const curve = CUMULUS_REFERENCE.curves.find(
+        (item) =>
+          item.case === held.id && item.mask === mask && item.band === band,
+      )!
+      // A bin's mean over the core's median, as the reference's curve is.
+      const bins = curve.bins.map((bin) => mean(of(mask, bin)) / core)
+      const key = mask === 'rim' ? 'rimBin' : 'edgeBin'
+      bins.forEach((got, k) => {
+        worse(key, got, curve.radiance[k]!, curve.error[k]!)
+      })
+      if (mask === 'rim') {
+        const peak = curve.radiance.indexOf(Math.max(...curve.radiance))
+        worse(
+          'rimPeak',
+          Math.max(...bins),
+          curve.radiance[peak]!,
+          curve.error[peak]!,
+        )
+      } else {
+        // The edge's depth: how far its bins stand under the core, or over.
+        const want = mean(curve.radiance) - 1
+        const sigma =
+          Math.hypot(...curve.error) / Math.max(curve.error.length, 1)
+        const got = mean(bins) - 1
+        const error = got / want - 1
+        if (Math.abs(error) > Math.abs(errors.edgeDepth))
+          errors.edgeDepth = error
+        if (
+          Math.abs(got - want) >
+          Math.max(BARS.edgeDepth * Math.abs(want), 3 * sigma)
+        )
+          failed.add('edgeDepth')
+      }
+    }
+  }
+  return { errors, failed: [...failed] }
+}
+
+/*
+ * Row 6 as measured on the Mac mini (Mac18,5, Apple M6), each case's six
+ * measures with the factor of the sun on and off, the march over the
+ * reference less one, in `MEASURES`' order. The ceilings below stand five
+ * points off each.
+ *
+ * With the factor 0 of 6 cases pass and 30 of the 36 measures fail;
+ * without it 0 and 24. The CPU's fine march, with first order and the sky
+ * exact, reads 1 of 6 and 22, and 1 and 21 (the depth rule's second
+ * critic): the difference is the cores toward the sun, which the sky's
+ * term as designed reads 54% to 59% high and from behind 43% to 49% low.
+ * Its view term carries a flux through a level's own depth, and a core
+ * seen level is lit on its near face by the sky on the eye's side.
+ */
+const MEASURED: Readonly<
+  Record<
+    string,
+    { readonly on: readonly number[]; readonly off: readonly number[] }
+  >
+> = {
+  'congestus:back': {
+    on: [-0.233, 0.308, 0.643, 0.533, 0.687, -0.256],
+    off: [-0.404, 0.108, 0.712, 0.6, 0.826, -0.307],
+  },
+  'congestus:forward': {
+    on: [0.416, 0.268, -0.256, -0.136, -0.209, -0.19],
+    off: [0.271, 0.146, -0.184, -0.13, -0.184, -0.175],
+  },
+  'congestus:side': {
+    on: [-0.166, 0.167, 0.454, 0.384, 0.407, -0.396],
+    off: [-0.101, 0.222, 0.429, 0.365, 0.404, -0.363],
+  },
+  'cumulus:back': {
+    on: [-0.259, 0.423, 1.015, 0.707, 0.637, -0.317],
+    off: [-0.425, 0.147, 1.177, 0.805, 0.732, -0.375],
+  },
+  'cumulus:forward': {
+    on: [0.497, 0.093, -0.264, -0.218, -0.278, -0.255],
+    off: [0.359, -0.092, -0.22, -0.215, -0.249, -0.247],
+  },
+  'cumulus:side': {
+    on: [-0.124, 0.248, 0.265, 0.265, 0.304, -0.31],
+    off: [-0.057, 0.333, 0.24, 0.24, 0.274, -0.272],
+  },
+}
+/** How far over its measured figure a measure may stand: an adapter's own sampler and `exp2`. */
+const MARGIN = 0.05
+/** The measures that fail with the factor on and off, each two off its count of 30 and 24. */
+const FAILED = { on: 32, off: 26 } as const
+/**
+ * The sky's term alone, a mask's sum over the reference's sky block, less
+ * one, green: the most it stands off on a rim or an edge (−16% to +3%
+ * here), on a base (−12% to +12%) and on a core (−49% to +59%).
+ */
+const SKY = { rim: 0.21, edge: 0.21, base: 0.17, core: 0.64 } as const
+
+const signed = (value: number): string =>
+  `${value >= 0 ? '+' : ''}${(value * 100).toFixed(0)}`
+
+describe('the isolated cumulus, against the path-traced reference', () => {
+  it('holds row 6 at its measured miss, measure by measure, with the factor of the sun on and off, where no case passes; and records the light’s three parts by mask', async () => {
+    const record: Record<string, unknown> = {}
+    const failures = { on: 0, off: 0 }
+    const passed = { on: 0, off: 0 }
+    for (const subject of CUMULUS_REFERENCE.subjects) {
+      const rig = await cumulusRig(subject)
+      for (const held of CUMULUS_REFERENCE.cases) {
+        if (held.subject !== subject.id) continue
+        const at = CUMULUS_REFERENCE.probes.flatMap((probe, i) =>
+          probe.case === held.id ? [i] : [],
+        )
+        const probes = at.map((i) => CUMULUS_REFERENCE.probes[i]!)
+        const view = CUMULUS_VIEWS.find((item) => item.id === held.view)!
+        // The sky behind the cloud, which a pixel's transmittance passes.
+        const behind = cumulusSkyRadiance(held.sky, viewSun(view), [0, 0, 1])
+        const pixelsOf = (drawn: readonly Drawn[], sky: number): Triple[] =>
+          drawn.map(({ light, transmittance }) => [
+            light[0] + sky * transmittance * behind[0],
+            light[1] + sky * transmittance * behind[1],
+            light[2] + sky * transmittance * behind[2],
+          ])
+        const lines: string[] = []
+        const caseRecord: Record<string, unknown> = {}
+        for (const factor of [true, false]) {
+          const key = factor ? 'on' : 'off'
+          const whole = pixelsOf(
+            await rig.draw(held, probes, { first: 1, sun: 1, sky: 1, factor }),
+            1,
+          )
+          for (const pixel of whole)
+            for (const band of BANDS)
+              expect(Number.isFinite(pixel[band])).toBe(true)
+          const { errors, failed } = measure(held, probes, whole)
+          MEASURES.forEach((name, k) => {
+            expect(
+              Math.abs(errors[name]),
+              `${held.id}, factor ${key}, ${name}`,
+            ).toBeLessThanOrEqual(
+              Math.abs(MEASURED[held.id]![key][k]!) + MARGIN,
+            )
+          })
+          failures[key] += failed.length
+          if (failed.length === 0) passed[key] += 1
+          caseRecord[key] = { errors, failed }
+          lines.push(
+            `  factor ${key}: ${MEASURES.map((name) => `${name} ${signed(errors[name])}`).join(', ')}; fails ${failed.length === 0 ? 'none' : failed.join(' ')}`,
+          )
+        }
+        /*
+         * The light's parts, a mask's sum over the scaled medium's
+         * reference, less one, green: first order against `scaled.first`,
+         * the sun's light past it against `rest` less the sky, with the
+         * factor on and off, and the sky alone against `scaledSky`.
+         */
+        const firstOnly = await rig.draw(held, probes, {
+          first: 1,
+          sun: 1,
+          sky: 0,
+          factor: false,
+        })
+        const higher = {
+          on: await rig.draw(held, probes, {
+            first: 0,
+            sun: 1,
+            sky: 0,
+            factor: true,
+          }),
+          off: await rig.draw(held, probes, {
+            first: 0,
+            sun: 1,
+            sky: 0,
+            factor: false,
+          }),
+        }
+        const skyOnly = pixelsOf(
+          await rig.draw(held, probes, {
+            first: 0,
+            sun: 0,
+            sky: 1,
+            factor: false,
+          }),
+          1,
+        )
+        const parts: Record<string, unknown> = {}
+        for (const mask of ['rim', 'edge', 'core', 'base'] as const) {
+          const sum = (values: (i: number) => number): number =>
+            probes.reduce(
+              (total, probe, i) =>
+                total + (probe.mask === mask ? values(i) : 0),
+              0,
+            )
+          const scaled = (i: number) => CUMULUS_REFERENCE.scaled[at[i]!]!
+          const skyAt = (i: number) => CUMULUS_REFERENCE.scaledSky[at[i]!]!
+          const first =
+            sum((i) => firstOnly[i]!.light[1] - higher.off[i]!.light[1]) /
+              sum((i) => scaled(i).first[1]) -
+            1
+          const past = (drawn: readonly Drawn[]): number =>
+            sum((i) => drawn[i]!.light[1]) /
+              sum((i) => scaled(i).rest[1] - skyAt(i).sky[1]) -
+            1
+          const sky =
+            sum((i) => skyOnly[i]![1]) / sum((i) => skyAt(i).sky[1]) - 1
+          expect(
+            Math.abs(sky),
+            `${held.id}, the sky on the ${mask}`,
+          ).toBeLessThan(SKY[mask])
+          parts[mask] = {
+            first,
+            higherOn: past(higher.on),
+            higherOff: past(higher.off),
+            sky,
+          }
+          lines.push(
+            `  ${mask}: first order ${signed(first)}, the sun past it ${signed(past(higher.off))} (${signed(past(higher.on))} with the factor), the sky ${signed(sky)}`,
+          )
+        }
+        caseRecord.parts = parts
+        record[held.id] = caseRecord
+        console.info(`cloudCumulus: ${held.id}\n${lines.join('\n')}`)
+      }
+      rig.dispose()
+    }
+    console.info(
+      `cloudCumulus: with the factor ${passed.on} of 6 cases pass and ${failures.on} of 36 measures fail; without it ${passed.off} and ${failures.off}`,
+    )
+    mkdirSync('.data/clouds', { recursive: true })
+    writeFileSync(
+      '.data/clouds/cumulus.json',
+      `${JSON.stringify({ note: 'cloudCumulus.gpu.test.ts: row 6 through the march on the reference’s fixture, the sun’s depths marched through the fixture', passed, failures, cases: record }, null, 2)}\n`,
+    )
+    expect(Object.keys(record)).toHaveLength(6)
+    expect(failures.on).toBeLessThanOrEqual(FAILED.on)
+    expect(failures.off).toBeLessThanOrEqual(FAILED.off)
+  }, 900_000)
+})
