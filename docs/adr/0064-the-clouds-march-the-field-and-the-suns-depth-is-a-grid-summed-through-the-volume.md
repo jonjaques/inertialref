@@ -1,6 +1,9 @@
 # ADR-0064: The clouds march the field and the sun's depth is a grid summed through the volume, and the far field marches a layer atlas
 
-Status: accepted · 10 Nov 2026. What the passes of
+Status: accepted · 10 Nov 2026 · amended 12 Nov 2026: a grid cell holds an
+opacity and a depth beside it in RG16F, the volume holds its 200 m and 800 m
+levels and not its 50 m one, and a march asks for the depth as it forms the
+sun. What the passes of
 [ADR-0063](0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md)
 read. Everything here exists only under `?clouds=1`, and the density and the
 light it carries are placeholders: phase 0's images claim nothing about how a
@@ -104,28 +107,67 @@ cube-sphere atlas baked from that field.**
 
 ### The sun's depth
 
-- **The grid** is 128 × 128 × 32 cells of R16F on the frame of the volume's
-  200 m level: a cell is 400 m, and the window reaches 25.6 km from the eye
-  (`render/cloudSunGrid.ts`). Each cell holds one optical depth, summed in 32
-  steps toward the sun through the volume to the top of the layers.
-- **The volume** is three levels of 256² × 32 texels at 50, 200 and 800 m,
-  with two guard slices a level, RG8 in one `RenderTarget3D`: R is
-  `√(σ/σ_scale)` and G the cloud fraction (`render/cloudVolume.ts`). It is
-  baked from the field eight slices a frame, each slice refreshed within 13
-  frames, and its finest level whole on the frame it goes stale. Nothing but
-  the grid reads it.
-- **Refresh.** Four slices of the grid a frame, six while any slice holds a
-  window the grid has left. The grid is rebuilt whole when the sun turns
-  0.05°, after a jump, and on a new field or served body.
-- **The cap.** A frame spends at most `SUN_DEPTH_FRAME_CAP`, 16,777,216
-  texel-steps, on the sun's depth. That is exactly one whole rebuild: 128² ×
-  32 cells × 32 steps.
+- **The grid** is 128 × 128 × 32 cells on the frame of the volume's 200 m
+  level: a cell is 400 m, and the window reaches 25.6 km from the eye
+  (`render/cloudSunGrid.ts`). Each cell sums one optical depth `τ` in 32
+  steps toward the sun through the volume to the top of the layers, and its
+  32 heights run from the union's base to its top.
+- **A cell holds an opacity and a depth beside it, RG16F, from one sum and
+  read in one fetch.** A read filters eight cells, and in broken cloud the
+  depth of their mean transmittance and their mean depth are two numbers.
+  First order's light wants the first and the light after first order the
+  second.
+
+  | Channel | Holds                                                      | Read by                                                   |
+  | ------- | ---------------------------------------------------------- | --------------------------------------------------------- |
+  | R       | the opacity `1 − e^(−τ)`, on its tangent past a depth of 6 | first order past the taps, the early out's test, `octave` |
+  | G       | the depth `min(τ, 64)`, linear                             | the light after first order (`CloudSun.depth`)            |
+
+  Held as depths alone, a read between a clear cell and a cloudy one passes
+  `e^(−τ/2)` where half the sun passes the points beside it, and every
+  cloud's edge is dark for a cell's width. Held as opacities alone, the
+  light after first order reads the shallower mean. Past a depth of six a
+  half float has run out of the opacity's steps, so the red channel goes on
+  along its tangent for the early out's test, and the depth channel carries
+  the depth itself. The cap of 64 keeps a cell a thousand deep from
+  outweighing seven clear ones in either channel.
+
+- **The volume** holds the frame's 200 m and 800 m levels, 256² × 32 texels
+  each with a guard slice under and over, 68 slices of RG8 in one
+  `RenderTarget3D` (`render/cloudVolume.ts`). A texel holds one number, the
+  scaled extinction times the cloudy share, `σ′·f`, in sixteen bits over the
+  texel's two bytes; the split is linear, so the sampler's filtering of the
+  two bytes is the filtering of the number. Every level bakes the resolved
+  field. Nothing but the grid reads it.
+- **The volume holds no 50 m level.** A grid cell is 400 m, so a 50 m level
+  is point-sampled once a cell and once a step of the cell's bake, and the
+  200 m level answers within 6.4 km of the eye. The frame
+  (`render/cloudFrame.ts`) still lays out a 50 m level that nothing holds.
+- **Refresh.** No frame rebuilds the volume or the grid whole
+  (`sunSourceStep`, `sunGridStep`). A new field, a moved anchor and a wake
+  from idle leave slices holding nothing, and they come back at the frame's
+  cap of slices (`CloudBudget.slices`), the volume first, its finest level
+  first, and the grid only from a volume that is whole. The grid's weight then
+  rises over the `sunRamp` lever's frames. At the cap of eight a rebuild is
+  the volume's 68 slices over 9 frames, the grid's 32 over 4, and 16 frames
+  of ramp: 29 frames. A whole level or grid is redrawn at the pace of what it
+  holds, so a field that stands still is not baked again.
 - **The light a sample takes** is `((1 − c) + c·e^(−τ_taps))·e^(−τ_beyond)`:
-  the layer's clear share passes, the cloudy share is dimmed by taps over the
-  first kilometer toward the sun, and the grid supplies the depth beyond them
-  (`render/cloudSunlight.ts`). `lightTaps` is 4.
-- **Outside the grid's window the sun is unshadowed beyond the taps.** From
-  orbit that is every sample.
+  the layer's clear share passes, the cloudy share is dimmed by taps over half
+  a kilometer toward the sun at most, ended at the level's exit, and the grid
+  supplies the depth beyond them (`render/cloudSunlight.ts`). `lightTaps` is 4.
+- **Where the grid's weight is under one, the layers' own statistics stand in
+  for it** (`render/cloudMix.ts`): past its reach from the eye, from orbit, and
+  while it comes back after the field changes.
+- **A march asks for the depth as it forms the sun:**
+  `deps.sun(at, medium, body, { depth: true })` (`CloudSunOptions`). The
+  depth reaches the ray's far end, a grid fetch of its own, so the shipped sun
+  forms it only on request, in the block the sun is formed in, and every later
+  read, in a branch, a loop or a memoized function, reads that one variable.
+  Read from a sun formed without the request it throws by name as the program
+  is built. A program that reads `cloud` alone fetches the grid twice in its
+  WGSL, and one that also reads the depth four times
+  (`cloudSunDepth.gpu.test.ts`).
 
 ### The far field
 
@@ -166,28 +208,33 @@ taken.
 
 Declared from each texture's dimensions, texel size and single level, and held
 to the GPU's own figures by `cloudSystem.gpu.test.ts`. The dimensions give
-91.6 MB at 1920×1080 and 85.0 MB at 2880×1800 (`cloudBudget.test.ts`); the
-report of the landed frame reads 91,620,516 and 85,010,916 bytes, 91.62 and
-85.01 MB, which is the dimensions' figure and the 4-byte stand-in a frame
-without a second clouded body binds. **That is over the plan's 76 MB at both
-sizes,** by 15.62 MB at 1080p and 9.01 at Retina, and with a second clouded
-body in the frame it is 96.41 and 89.80 MB.
+88.2 MB at 1920×1080 and 81.6 MB at 2880×1800 (`cloudBudget.test.ts`). **That
+is over the plan's 76 MB at both sizes,** by 12.2 MB at 1080p and 5.6 at
+Retina.
 
 | Resource                       | Bytes, 1080p | Bytes, Retina |
 | ------------------------------ | ------------ | ------------- |
 | Weather cube                   | 25,362,816   | the same      |
 | History, at ½, 48 B a texel    | 24,883,200   | 15,552,000    |
-| Local volume                   | 13,369,344   | the same      |
 | Trace, at ¼, 72 B a texel      | 9,331,200    | 5,832,000     |
+| Local volume, RG8 256² × 68    | 8,912,896    | the same      |
 | Clipmap                        | 6,291,456    | the same      |
 | Far atlas                      | 4,792,608    | the same      |
 | Depth copy, R16F               | 4,147,200    | 10,368,000    |
 | Base and detail noise          | 2,129,920    | the same      |
-| Sun grid                       | 1,048,576    | the same      |
+| Sun grid, RG16F 128² × 32      | 2,097,152    | the same      |
 | Droplets' phase, genus profile | 264,192      | the same      |
 
 A second clouded body adds a second atlas, 4,792,608 bytes, while it is in the
 frame.
+
+**The device's own census** counts every texture the device is asked for over
+a chain's life under an overcast, with the clouds on less with them off, at
+1920×1080 with one served body (a copy of `cloudSystem.gpu.test.ts`'s census,
+on the Mac mini). It reads 74,334,796 B against 74,333,156 B declared, 1,640 B
+undeclared. Phase 1 lands at or under 77.17 MB on that census; the room left
+is spent on phase 2's shadow map first, a target for the composite's air at the history's rate second, and 64
+grid heights last.
 
 ### What was measured
 
@@ -370,6 +417,65 @@ the cascades' 9.86, and 20.97 at Retina against 11.18. Of the cut's 19.69 ms,
 so the rule's steady, `fly`, reset and memory comparison never ran: the grid's
 reset frame, twice the cascades', and its 8.52 MB more were recorded and not
 weighed.
+
+#### The sun's depth: the grid's cell and the volume's levels
+
+Taken on the Mac mini's M6 by the sun instrument,
+`cloudSunAccuracy.gpu.test.ts` under `IR_CLOUD_MEASURE=1`, at four taps over
+its 18 rows, against a march of the field; its document is pinned in
+`cloudSunAccuracy.landed.json`. Each rule was fixed before its figure.
+
+- **The 50 m level is cut.** Over the instrument's 22.5 km no row moves by
+  more than +0.0006 RMS (two decks under a 37.5° sun, 0.0701 to 0.0706),
+  where the rule allowed 0.002. Inside 4 km of the eye the most a row loses
+  is 0.0104 (altocumulus under a 5° sun, 0.0450 to 0.0554), where it allowed
+  0.015; cirrus over cumulus under a 5° sun gains 0.0046. The volume goes
+  from 13,369,344 B to 8,912,896 B, and a rebuild from 102 volume slices to 68.
+- **The depth channel lands.** Every first-order row matches the cut's to
+  1e-4 RMS, where the rule allowed 1e-3: the depth beside the opacity costs
+  first order nothing. The depth the light after first order reads,
+  through four taps, is lower through the depth channel in every one of the
+  six broken-cloud rows. RMS and bias, depths cut at 16, at suns of 45° and
+  15°:
+
+  | Field        | Level  | Opacity channel, 45° / 15° | Depth channel, 45° | Depth channel, 15° |
+  | ------------ | ------ | -------------------------- | ------------------ | ------------------ |
+  | A climate    | low    | 2.27 / 2.98                | 2.12, +0.46        | 2.90, +0.87        |
+  | A climate    | middle | 2.13 / 2.71                | 1.96, +0.39        | 2.59, +0.75        |
+  | Fair cumulus | low    | 1.72 / 2.18                | 1.46, −0.20        | 1.97, +0.25        |
+
+  At a sample the early out skipped, where the cell alone answers, the
+  climate's low level reads 2.58 and 3.25 through the depth channel against
+  4.77 and 5.49 through the opacity, and fair cumulus 2.04 and 2.16 against
+  3.89 and 3.87. The margins through the taps, 0.08 to 0.27, are small
+  because the taps reach half a kilometer and carry most of the depth.
+
+- **8 of the 18 first-order rows stand within 3%**, at the base and landed
+  alike.
+- **Cost.** `cloudTraceCost.gpu.test.ts` under the same flag at 1080p and four
+  taps, each row the whole frame's busy time with the clouds on less the same
+  session's with them off, three takes and their median: no row is dearer
+  than the base by more than 2% and two of the timer's ticks. The nearest are
+  `inside`, 3.83 to 3.91 ms (+1.9%), and the overcast from 12 km, 4.02 to
+  4.10 (+1.8%), taken beside three other processes at full CPU (load 4 to 6);
+  on the same program at load 2.7 to 3.0 they read +0.4% and +0.2%.
+- **64 heights are measured and not landed.** Through four taps the
+  climate's low level reads 2.23 against 2.12 at 45° and 2.82 against 2.90
+  at 15°, where the rule asked for 0.4 lower at both; at the sample itself
+  they help, 2.58 to 2.50 and 3.25 to 3.08. First order falls by 0.0047 at
+  most and rises by 0.0008 at most. They cost 2,097,152 B more, a rebuild
+  whole in 38 of the instrument's frames against 34, and no cost row rises
+  past 0.8%; the census at 64 heights reads 76,430,308 B declared. Halving the
+  spacing moved the depth by +0.11 and −0.08, so the spacing is not what
+  limits the union.
+- **The far crossing under the horizon splits by place.** Cirrus over
+  cumulus under a −1.5° sun, from the reference alone: the RMS the best
+  single number for the far crossing leaves at a place is 0.83 of the row's
+  0.0888, pooled. At two places of five it is the far field's spread (0.92
+  and 1.09 of the place's RMS, the far crossing passing 0.26 and 0.42 of the
+  sun); at three it is the bake's near part (0.18, 0.01 and 0.40, the far
+  crossing 0.97 to 0.99 clear). Dusk altocumulus is all near part (0.00 of
+  0.0497).
 
 #### The far field: the atlas
 
@@ -557,6 +663,36 @@ one mean extinction and one maximum optical depth, which is one slab along
 the sun's ray, and the case they miss is the one with two separated layers
 and a low sun: 0.492 RMS, biased by −0.321.
 
+**One channel a cell.** A cell of opacity alone hands the light after first
+order the depth of the mean transmittance, the shallower of the two means:
+2.27 against 2.12 RMS through four taps in a climate's low level at 45°, and
+4.77 against 2.58 at a sample the early out skipped. A cell of depth alone
+darkens every cloud's edge for a cell's width. The second channel costs
+1,048,576 B and no fetch.
+
+**64 heights in the grid.** Halving the spacing between heights moves the
+union's depth by +0.11 and −0.08 where the rule asked 0.4 lower, for
+2,097,152 B more, the last claim on the census's room, and twice the grid's
+slices a rebuild. The count is a handle
+(`CloudSunGrid.heights`) the instrument scores under `IR_CLOUD_SUN_HEIGHTS`.
+
+**The volume's 50 m level.** It costs 4,456,448 B and 34 slices a rebuild,
+and buys no row more than 0.0006 RMS over the instrument's reach and 0.0104
+inside 4 km.
+
+**The depth formed at its first read, and the depth held up front.** Held
+with the sun's other members whether or not a march reads it, the depth's far
+end is a fetch Three emits whether or not anything reads it: a program that
+reads `cloud` alone fetches the grid six times in its WGSL where it fetched
+two, and one such form cost the overcast from 150 km +5.5%, 6.31 ms at load 7
+to 8. Formed lazily where it is first read, it escapes the block that formed
+it: three forms were built and each was refuted by a CPU build of the WGSL,
+through a read in a sibling branch, through a memoized `Fn` called from two
+branches, and through a loop that runs no turn, each handing the reader a
+depth of zero or of the taps alone. A depth asked for when the sun is formed
+is held in that block, so no read can stand outside it, and a read nobody
+asked for fails as the program is built rather than reading zero.
+
 **Spheres at the layers' heights.** A cube atlas of fraction, column optical
 depth and a cached sun transmittance for each layer, met at two crossings a
 layer. Indistinguishable from the atlas in cost, twice its bytes, and 2.087
@@ -584,12 +720,10 @@ runs once.
 - One field is read at every distance, and each cache is baked from it: the
   clipmap from the cube, the volume and the atlas from the field. Nothing is
   authored beside it.
-- **A frame that rebuilds the grid costs 9.1 to 16.8 ms for the grid
-  alone,** 12.3 on `horizon`, as landed. A cut, a scrub, and a sun that turns
-  0.05° each rebuild it whole in one frame. A sun
-  that crosses the sky in Earth's day turns 0.05° in 12 s, by arithmetic; no
-  steady row is long enough to hold one. Phase 1 takes the rebuild off a cut
-  that keeps its field and spreads the rest under a smaller cap.
+- **A rebuild is spread over 29 frames at the defaults,** and until the grid
+  is whole its weight hands the sun's depth to the layers' statistics. At 1×
+  under two decks at a 37.5° sun the volume bakes 0.31 slices a frame and the
+  grid 0.12.
 - **Under the game's own time warp the rebuild is every frame.** Outside the
   `warp` lever, a frame is a jump when the world's step exceeds the frame's
   by more than a second, so at 60 Hz every frame from 100× up (at 120 Hz from
@@ -597,12 +731,25 @@ runs once.
   Earth's day the sun turns 0.05° a frame from about 720× at 60 Hz, which
   rebuilds the grid every frame by itself. No warp row was recorded: the
   `targets` batch runs `steady`, `cut`, `scrub` and `fly`.
-- **The sun's depth misses its 3% in most cases.** The grid is within it in
-  two cases of ten at the campaign's two taps and in four of ten at the
-  default four, where two decks under a high sun are still 0.097 off.
-- **From orbit the fine march has no sun's depth beyond its taps.** The grid's
-  window is 25.6 km, so a sample past it is lit as though nothing stood between
-  it and the sun after its first kilometer.
+- **The sun's depth misses its 3% in most cases.** At four taps 8 of the
+  instrument's 18 rows stand within it, and the worst, cirrus over
+  cumulus under a −1.5° sun, is 0.0888 off.
+- **The depth the light after first order reads is not a transmittance.**
+  `e^(−mean depth)` is darker than the mean transmittance, so first order
+  keeps the opacity. The mean depth is biased: +0.25 to +0.87 through four
+  taps in a climate's two low levels and in fair cumulus at 15°, and −0.20 in
+  fair cumulus at 45°.
+- **A march that asks for the depth pays its fetch** whether or not it reads
+  it, and a march that reads it without asking does not build.
+- **From orbit the fine march's sun past its taps is the layers'
+  statistics.** The grid's window is 25.6 km, and past its reach the weight
+  is zero.
+- **Under the horizon the far crossing is declared at two places of five,**
+  where it is the far field's spread, a level's statistics at a place. At the
+  other three, and in dusk altocumulus, the error is the bake's near part,
+  and a plate of a base lit from under the horizon decides whether the
+  bake's steps there change.
+- **The frame still lays out a 50 m level** that the volume does not hold.
 - **The far field lets through more light than the fine march, and is not
   shown better than the spheres at the default footprint.** Its mean
   transmittance is 1.5 times the reference's over broken cumulus and 9.5 times
@@ -610,8 +757,8 @@ runs once.
   provisional at the 800 m default.
   `cloudFarCompare` stays in the tree as an instrument of the atlas, and it
   runs again when phase 1 changes the far march.
-- **The volume costs 13.4 MB and 0.12 to 0.25 ms a frame to feed the grid.** A grid
-  summed through the field itself was not built.
+- **The volume costs 8.9 MB to feed the grid.** A grid summed through the
+  field itself was not built.
 - **The far atlas's bake is 0.80 to 1.59 ms every frame** as landed, and 0.86
   to 1.30 in campaign 1, against a target of 0.1 with the reflection probe. It draws one 192² block a frame whatever the
   frame's budget, at 16 sub-columns by 8 heights a texel.
