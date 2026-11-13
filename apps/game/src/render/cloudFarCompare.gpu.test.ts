@@ -127,7 +127,10 @@ const ALWAYS = { case: 'broken cumulus', footprintMeters: 800 } as const
  * reference march integrates a step's source and mixes a level by its
  * crossing, the field is the weather's own at the scaled extinction, and
  * the far atlas is still phase 0's: 20 of the 48 headline figures are past
- * their bars. Each entry is the figure of one run on the Mac mini (Mac18,5,
+ * their bars. Since the light after first order, the reference carries
+ * every order and the atlas first order alone, so a radiance here is
+ * relative to a light the far march does not draw, and package X retakes
+ * the table. Each entry is the figure of one run on the Mac mini (Mac18,5,
  * Apple M6), and the bar it misses, the landed figure and a tenth, is beside
  * it. Two runs there give every headline figure the same to its last digit.
  * A declared figure takes the same tenth a landed one does, on every
@@ -152,6 +155,8 @@ const DECLARED: Readonly<Record<string, number>> = {
   'cirrus over cumulus at 800 m, the handover: footprint transmittance': 0.3281, // 0.225
   'cirrus over cumulus at 800 m, the handover: footprint radiance': 1.207, // 0.993
   'cirrus over cumulus at 1600 m: floored rays': 140,
+  'cirrus over cumulus at 1600 m, the atlas: footprint radiance': 1.0355, // 0.991
+  'cirrus over cumulus at 1600 m, the handover: footprint radiance': 1.0355, // 0.991
   'broken cumulus at 400 m, the atlas: footprint transmittance': 0.5142, // 0.396
   'broken cumulus at 400 m, the atlas: footprint radiance': 1.1366, // 0.570
   'broken cumulus at 400 m, the handover: footprint transmittance': 0.5136, // 0.397
@@ -160,8 +165,8 @@ const DECLARED: Readonly<Record<string, number>> = {
   'broken cumulus at 800 m, the atlas: footprint radiance': 0.9598, // 0.308
   'broken cumulus at 800 m, the handover: footprint transmittance': 0.3607, // 0.084
   'broken cumulus at 800 m, the handover: footprint radiance': 0.9569, // 0.280
-  'broken cumulus at 1600 m, the atlas: footprint radiance': 0.8468, // 0.846
-  'broken cumulus at 1600 m, the handover: footprint radiance': 0.8269, // 0.765
+  'broken cumulus at 1600 m, the atlas: footprint radiance': 0.9573, // 0.846
+  'broken cumulus at 1600 m, the handover: footprint radiance': 0.9136, // 0.765
   'anvil at 800 m: floored rays': 314,
   'anvil at 1600 m: floored rays': 304,
   'grazing at sunset at 400 m, the atlas: footprint transmittance': 0.2455, // 0.213
