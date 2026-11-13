@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /*
- * A page without `?clouds=1` loads none of the cloud system.
+ * The gate's quick hold on the clouds' lazy boundary: `App`'s static chunks
+ * carry none of the cloud system.
  *
  * `App` reaches the clouds through `import()` alone. A static edge from its
  * graph into the march takes the march's modules into every page, and through
@@ -9,41 +10,29 @@
  * only that `apps/game` depends on `@inertialref/rendering`.
  *
  * So this asks the bundler. It builds `App.tsx` with the app's own Vite
- * config (`gameVite`, the one Astro builds with), writes nothing, and takes
- * the static closure of the entry chunk: what the page loads before any
- * `import()`. A walk over the sources cannot stand in for that. Vite resolves
- * a directory to `index.tsx`, keeps `import { type X }` as a side-effect
- * import under `verbatimModuleSyntax`, follows a re-export when the barrel
- * holding it is imported for its effects, erases a type annotation's
- * reference, and tree-shakes `packages/*` by binding (`"sideEffects": false`)
- * but `apps/game` by module; a resolver written beside it drifts on each.
+ * config (`gameVite`, the one Astro builds with) as Astro builds a component,
+ * exports kept, writes nothing, and takes the static closure of the entry
+ * chunk. A walk over the sources cannot stand in for that: Vite resolves a
+ * directory to `index.tsx`, keeps `import { type X }` as a side-effect import
+ * under `verbatimModuleSyntax`, follows a re-export when the barrel holding
+ * it is imported for its effects, erases a type annotation's reference, and
+ * tree-shakes `packages/*` by binding but `apps/game` by module.
  *
- * Two of `gameVite`'s plugins are left out, because they cost eight of the
- * build's nine seconds and add no edge between workspace modules: the React
- * Compiler's Babel pass, which imports only `react/compiler-runtime`, and
- * Tailwind, which writes CSS. The repository's own plugins, the alias, the
- * `define`s and the worker format stay. About a second on this Mac mini.
+ * It is one entry, not the site. `Root` and the shell, and the chunks Astro
+ * shares between entries, are held by `check-site-chunks.mjs` over the built
+ * site in the bundle stage; this is the second of warning the gate can give.
+ *
+ * Two of `gameVite`'s plugins are left out, because they cost twelve of the
+ * build's thirteen seconds and add no edge between workspace modules: the
+ * React Compiler's Babel pass, which imports only `react/compiler-runtime`,
+ * and Tailwind, which writes CSS. The repository's own plugins, the alias,
+ * the `define`s and the worker format stay.
  */
-import { relative } from 'node:path'
 import { build, mergeConfig } from 'vite'
+import { CLOUD_MODULES, root, sourcePath } from './cloudModules.mjs'
 
-const root = new URL('..', import.meta.url).pathname
 const app = `${root}apps/game/`
 const ENTRY = 'apps/game/src/App.tsx'
-
-/**
- * Modules no page loads before `?clouds=1` asks for them. `weatherField`
- * gives `App` one constant, `UNSPREAD_SHAPE`, which the bundler inlines; the
- * field itself stays behind the `import()`.
- */
-const REFUSED = [
-  'apps/game/src/render/cloudSystem.ts',
-  'apps/game/src/render/cloudTrace.ts',
-  'apps/game/src/render/cloudMarch.ts',
-  'packages/rendering/src/weatherField.ts',
-  'packages/rendering/src/mieTable.ts',
-  'packages/rendering/src/mieDroplets.generated.ts',
-]
 
 const KEPT_PLUGIN = /^inertialref:/
 
@@ -73,12 +62,12 @@ const witness = {
         queue.push(next)
       }
     }
-    for (const file of REFUSED) {
+    for (const reached of from.keys()) {
+      const file = sourcePath(reached)
+      if (!CLOUD_MODULES.includes(file) || chains.has(file)) continue
       const chain = []
-      for (let at = `${root}${file}`; from.has(at); at = from.get(at)) {
-        chain.unshift(relative(root, at))
-        if (from.get(at) === null) break
-      }
+      for (let at = reached; at !== null; at = from.get(at))
+        chain.unshift(sourcePath(at))
       chains.set(file, chain)
     }
   },
@@ -96,7 +85,13 @@ const result = await build(
       minify: false,
       sourcemap: false,
       reportCompressedSize: false,
-      rollupOptions: { input: { App: `${root}${ENTRY}` } },
+      rollupOptions: {
+        input: { App: `${root}${ENTRY}` },
+        // Astro builds a component as a library entry: its exports are kept,
+        // and so is everything the component's body reads. Vite's app default
+        // drops an entry's exports, and with them `App` itself.
+        preserveEntrySignatures: 'exports-only',
+      },
     },
   }),
 )
@@ -121,20 +116,20 @@ while (queue.length > 0) {
 const loaded = new Set(
   [...closure]
     .flatMap((name) => chunks.get(name).moduleIds)
-    .map((id) => relative(root, id)),
+    .map((id) => sourcePath(id)),
 )
 
-const problems = REFUSED.filter((file) => loaded.has(file)).map(
+const problems = CLOUD_MODULES.filter((file) => loaded.has(file)).map(
   (file) =>
-    `${ENTRY} loads ${file} before any import(), so every page does` +
+    `${ENTRY}'s static chunks hold ${file}` +
     (chains.get(file)?.length ? ` (${chains.get(file).join(' → ')})` : ''),
 )
 if (problems.length > 0) {
-  console.error('A page without ?clouds=1 loads the cloud system:')
+  console.error(`${ENTRY}'s static chunks hold the cloud system:`)
   for (const problem of problems) console.error(`  - ${problem}`)
   process.exit(1)
 }
 console.log(
-  `${ENTRY} loads ${loaded.size} modules in ${closure.size} chunks before any import(), ` +
-    `none of the ${REFUSED.length} the clouds load behind it`,
+  `${ENTRY}'s static chunks hold ${loaded.size} modules in ${closure.size} chunks, ` +
+    `none of the ${CLOUD_MODULES.length} cloud modules`,
 )

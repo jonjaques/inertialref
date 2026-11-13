@@ -108,10 +108,11 @@ const STAGES = [
     timeout: 60_000,
   },
   {
-    // Vite builds `App.tsx` in memory: the static chunks a page loads before
-    // any `import()`, which a walk over the sources cannot predict.
+    // Vite builds `App.tsx` in memory, as Astro builds it, and reads its
+    // static chunks. The site itself is held by `check-site-chunks.mjs`, which
+    // the game's build runs in the `bundle` stage.
     name: 'chunks',
-    why: 'a page without ?clouds=1 loading the cloud system',
+    why: "App's static chunks holding the cloud system",
     argv: ['pnpm', 'chunks'],
     weight: 1,
     cost: 1.5,

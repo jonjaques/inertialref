@@ -22,7 +22,7 @@ pnpm test:slow        # terrain descent and galaxy convergence/population checks
 pnpm typecheck        # the six type projects, in parallel — a group of pnpm check
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check
-pnpm chunks           # what a page loads before any import(): none of the cloud system
+pnpm chunks           # App's static chunks hold none of the cloud system; the build checks every page
 pnpm brand            # regenerate brand artifacts from design/brand/brandmark.svg
 pnpm presets:plates   # recapture the built-in preset thumbnails through the renderer
 pnpm presets:check    # every picture has a plate, every composition it names resolves
