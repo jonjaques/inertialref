@@ -210,7 +210,7 @@ describe('the light’s stub modules', () => {
     const uniforms = createCloudUniforms()
     const body = uniforms.served
     const sky = createCloudSky().at(sample, body)
-    expect(Object.keys(sky).sort()).toEqual(['mean', 'sunward', 'up'])
+    expect(Object.keys(sky).sort()).toEqual(['mean', 'sunward', 'up', 'upper'])
     for (const term of Object.values(sky)) expect(isNode(term)).toBe(true)
     const source = createCloudSource()
     const slab = { sunMu: float(0.7), depth: vec2(0) }

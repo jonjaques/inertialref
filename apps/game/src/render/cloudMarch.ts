@@ -46,6 +46,7 @@ import {
   crossingDepth,
   crossingExponent,
   resolvedSlab,
+  skySource,
   spreadDepth,
   statisticalSlab,
   stepLight,
@@ -178,10 +179,14 @@ import {
  * **The sky's light is a placeholder unless a march is built to read the
  * sky table** (`CloudMarchOptions.skyTable`, design §5.6): Ψ at a half,
  * isotropic, constant over a step. The table is one more sampled texture
- * in the kernel, which the trace's budget of twelve does not hold. Read
- * from the table, the sky's term is the mean radiance leaned toward the
- * side the sample's column is nearer, with the flux's view term, and joins
- * the same two ends.
+ * in the kernel that takes it, the trace's thirteenth. Read from the
+ * table, the sky's term is the mean radiance leaned toward the side the
+ * sample's column is nearer, with the flux's view term and, for a
+ * stratiform column, the two sides' mean as it thickens (`skySource` in
+ * `cloudMix.ts`), and joins the same two ends. The stratiform share is the
+ * column's cumuliform share's complement, which the factor of the sun
+ * reads too; the `transport` lever turns the factor off and leaves the
+ * sky's term its share.
  */
 
 /** How first order takes its phase's radius (§5.4): the `phaseMode` lever's values. */
@@ -320,8 +325,6 @@ const SLAB_TRANSPORT: (typeof CLOUD_TRANSPORTS)[0] extends 'slab' ? 0 : never =
 /** The sky's light on a cloud, a placeholder: Ψ × σ_s × ½, isotropic (§5.10). */
 const SKY_SHARE = 0.5
 const ISOTROPIC = 1 / (4 * Math.PI)
-/** The diffusion's extrapolation length, in transport depths: the sky's two sides are weighed from this far outside each face (§5.6). */
-const SKY_REACH = 2 / 3
 /** The least the product of two laid directions' lengths a bearing is taken from: under it a direction stands on the normal and has none. */
 const NO_BEARING = 1e-6
 /** The least a sine of the sun's zenith angle the sky's sunward lean is divided by. */
@@ -782,6 +785,7 @@ function skyRegisters() {
     mean: vec3(0).toVar(),
     up: vec3(0).toVar(),
     sunward: vec3(0).toVar(),
+    upper: vec3(0).toVar(),
     pending: vec3(0).toVar(),
   }
 }
@@ -856,18 +860,22 @@ export function cloudMarch(
     /** Each level's footprint past which a step in it is statistical. */
     statistical: body.layers.cell.mul(switchShare).toVar(),
     /**
-     * Each level's cumuliform share as the factor of the sun takes it. The
-     * factor is the `'slab'` transport's. A regime's level is one share
-     * everywhere, which its climate's uniforms hold; a climate whose share
-     * varies by place is read by a medium that holds its column's, and
-     * takes no factor from one that does not.
+     * Each level's cumuliform share, which the factor of the sun and the
+     * sky's light both read. A regime's level is one share everywhere,
+     * which its climate's uniforms hold; a climate whose share varies by
+     * place is read by a medium that holds its column's, and a level of one
+     * that does not has no share: no factor, and a stratiform column's sky.
      */
     share: select(
-      trace.transport
-        .equal(uint(SLAB_TRANSPORT))
-        .and(body.climate.kind.equal(uint(CLOUD_CLIMATE_KINDS.regime))),
+      body.climate.kind.equal(uint(CLOUD_CLIMATE_KINDS.regime)),
       saturate(body.climate.convective),
       vec3(0),
+    ).toVar(),
+    /** One where the factor of the sun is taken, which is the `'slab'` transport's alone. */
+    factor: select(
+      trace.transport.equal(uint(SLAB_TRANSPORT)),
+      float(1),
+      float(0),
     ).toVar(),
     /**
      * The eye's distance from the body's center, its vertical times that,
@@ -918,6 +926,7 @@ export function cloudMarch(
       skyTable.mean.assign(sky.mean)
       skyTable.up.assign(sky.up)
       skyTable.sunward.assign(sky.sunward)
+      skyTable.upper.assign(sky.upper)
     }
     const length = r.airLength.div(R)
     const tau = medium.extinction.mul(length)
@@ -1035,7 +1044,7 @@ export function cloudMarch(
    * its opacity: a placeholder, Ψ at a half, isotropic. A march built to
    * read the sky table takes `skyLight` at the step's two ends instead.
    */
-  const skySource = (): Node<'vec3'> => r.psi.mul(SKY_SHARE * ISOTROPIC)
+  const ambientSky = (): Node<'vec3'> => r.psi.mul(SKY_SHARE * ISOTROPIC)
 
   /** A sample's medium as the light after first order reads it: this step's, or the step's being closed. */
   interface Lit {
@@ -1044,7 +1053,9 @@ export function cloudMarch(
     readonly sigma: Node<'float'>
     /** The level's in-cloud column over the sample, and whole. */
     readonly depth: Node<'vec2'>
-    /** The column's cumuliform share as the factor of the sun takes it, 0..1. */
+    /** The column's cumuliform share, 0..1. */
+    readonly cumuliform: Node<'float'>
+    /** That share as the factor of the sun takes it: none under a transport with no factor. */
     readonly convective: Node<'float'>
   }
 
@@ -1137,10 +1148,11 @@ export function cloudMarch(
   }
 
   /**
-   * The sky's light on a sample, as a source (design §5.6): the sky's mean
-   * radiance, which a conservative medium returns exactly at any depth,
-   * leaned toward the side the sample's column is nearer by the
-   * diffusion's weight of the two faces, with the flux's view term.
+   * The sky's light on a sample, as a source (design §5.6, `skySource`):
+   * the sky's mean radiance, which a conservative medium returns exactly at
+   * any depth, leaned toward the side the sample's column is nearer, with
+   * the flux's view term, and for the column's stratiform share the two
+   * sides' mean as it thickens.
    *
    * The column is the level's own over and under the sample, in transport
    * depths at the level's reference radius, scaled by the sample's
@@ -1161,20 +1173,23 @@ export function cloudMarch(
     const scale = transport.mul(thin)
     const over = sample.depth.x.mul(scale)
     const under = max(sample.depth.y.sub(sample.depth.x), 0).mul(scale)
-    const span = over.add(under)
-    const top = under.add(SKY_REACH).div(span.add(2 * SKY_REACH))
     // The ray's cosine to the sun's horizontal direction at the sample.
     const sunward = ray.nu
       .sub(rise.mul(at.sunMu))
       .div(
         max(sqrt(max(float(1).sub(at.sunMu.mul(at.sunMu)), 0)), SUN_OVERHEAD),
       )
-    const flux = sky.up
-      .mul(rise)
-      .add(sky.sunward.mul(sunward))
-      .mul(float(1).sub(transport))
-      .div(span.add(2 * SKY_REACH))
-    return sky.mean.mul(max(sky.up.mul(top.sub(0.5)).add(1).add(flux), 0))
+    return sky.mean.mul(
+      skySource(
+        sky,
+        over,
+        under,
+        sample.cumuliform,
+        float(1).sub(transport),
+        rise,
+        sunward,
+      ),
+    )
   }
 
   /** A step of `length` through cloud: its mix, its opacity's moments, and its light left pending. */
@@ -1247,7 +1262,7 @@ export function cloudMarch(
     )
     // Dimmed by the air between t₀ and this step as it is gathered.
     const seen = r.air.mul(before).toVar()
-    if (skyTable === null) r.rest.addAssign(seen.mul(skySource()).mul(opacity))
+    if (skyTable === null) r.rest.addAssign(seen.mul(ambientSky()).mul(opacity))
     const weight = before.mul(opacity)
     const middle = r.t.add(length.mul(0.5)).sub(ray.start)
     r.weight.addAssign(weight)
@@ -1459,20 +1474,20 @@ export function cloudMarch(
           ? ray.mu
           : once.eyeRadius.mul(ray.mu).add(at.distance).div(radiusAt).toVar()
         const up = eyeFrame ? body.up : once.eyeUp.add(at.offset).div(radiusAt)
+        // The column's own share where the medium holds it, and the
+        // level's elsewhere.
+        const cumuliform = (
+          sharesHeld
+            ? saturate(select(opens, share.here, share.stepped))
+            : ofLevel(once.share, level)
+        ).toVar()
         const medium: Lit = {
           level,
           radius,
           sigma,
           depth,
-          // The column's own share where the medium holds it, and the
-          // level's elsewhere.
-          convective: sharesHeld
-            ? select(
-                trace.transport.equal(uint(SLAB_TRANSPORT)),
-                saturate(select(opens, share.here, share.stepped)),
-                float(0),
-              )
-            : ofLevel(once.share, level),
+          cumuliform,
+          convective: cumuliform.mul(once.factor),
         }
         const higher = slabSource(
           at,

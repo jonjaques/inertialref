@@ -6,6 +6,8 @@ import {
   crossingExponent,
   crossingTransmittance,
   resolvedSlab,
+  SKY_REACH,
+  skySource,
   SOURCE_SUN_FLOOR,
   SOURCE_VIEW_FLOOR,
   spreadDepth,
@@ -13,6 +15,14 @@ import {
   stepLight,
   stepShare,
 } from './cloudOverlap.ts'
+import {
+  CUMULUS_SKY_QUADRATURE,
+  cumulusSkyAir,
+  cumulusSkyHeight,
+  cumulusSkyRadius,
+  cumulusSkyTable,
+} from './cumulusFixture.ts'
+import { marchSkyFaces, skyMomentsAt } from './skyIrradiance.ts'
 import { crossingForm, UNSPREAD_SHAPE } from './weatherField.ts'
 
 /*
@@ -544,5 +554,198 @@ describe('the slab a sample stands in', () => {
     // A whole depth under the depth to the sun leaves nothing behind.
     expect(resolvedSlab(12, 3, 0.5)).toEqual({ sunMu: 0.5, top: 6, bottom: 0 })
     expect(resolvedSlab(12, 30, -0.01).sunMu).toBe(SOURCE_SUN_FLOOR)
+  })
+})
+
+describe('the sky’s light on a sample', () => {
+  // A sky's sides as the table holds them: Δ and Δ_s inside ±1.5, and c
+  // from nothing to under the linear sky by half of the sky's mean.
+  const lean = between(-1.5, 1.5)
+  const short = between(-0.5, 0)
+  const column = decades(1e-4, 400)
+  const cosine = between(-1, 1)
+  const share = between(0, 1)
+  /** The scaled phase's g′ at 10 µm. */
+  const ASYMMETRY = 0.74
+
+  it('is the sky’s mean under a sky alike on every side, at any column, share and view', () => {
+    fc.assert(
+      fc.property(
+        column,
+        column,
+        share,
+        cosine,
+        cosine,
+        (over, under, convective, rise, sunward) => {
+          expect(
+            skySource(
+              { up: 0, sunward: 0, upper: 0 },
+              over,
+              under,
+              convective,
+              ASYMMETRY,
+              rise,
+              sunward,
+            ),
+          ).toBe(1)
+        },
+      ),
+    )
+  })
+
+  it('is the lean and the flux alone for a cumuliform column, to the bit, whatever c is', () => {
+    fc.assert(
+      fc.property(
+        lean,
+        lean,
+        short,
+        column,
+        column,
+        cosine,
+        cosine,
+        (up, toSun, upper, over, under, rise, sunward) => {
+          const reach = over + under + 2 * SKY_REACH
+          const design = Math.max(
+            up * ((under + SKY_REACH) / reach - 0.5) +
+              1 +
+              ((up * rise + toSun * sunward) * ASYMMETRY) / reach,
+            0,
+          )
+          const at = (c: number): number =>
+            skySource(
+              { up, sunward: toSun, upper: c },
+              over,
+              under,
+              1,
+              ASYMMETRY,
+              rise,
+              sunward,
+            )
+          expect(at(upper)).toBe(design)
+          expect(at(0)).toBe(design)
+        },
+      ),
+    )
+  })
+
+  it('takes c by the column’s stratiform share and its thickness, and none of it in a wisp', () => {
+    fc.assert(
+      fc.property(
+        lean,
+        lean,
+        short,
+        column,
+        column,
+        share,
+        cosine,
+        cosine,
+        (up, toSun, upper, over, under, convective, rise, sunward) => {
+          const at = (v: number): number =>
+            skySource(
+              { up, sunward: toSun, upper },
+              over,
+              under,
+              v,
+              ASYMMETRY,
+              rise,
+              sunward,
+            )
+          const span = over + under
+          const want =
+            (1 - convective) * upper * (span / (span + 2 * SKY_REACH))
+          // Where neither is held at zero the two differ by the term alone.
+          fc.pre(at(1) > 0 && at(1) + want > 0)
+          expect(Math.abs(at(convective) - at(1) - want)).toBeLessThan(1e-12)
+          // c is not over zero, so it never brightens a sample.
+          expect(at(convective)).toBeLessThanOrEqual(at(1))
+          // A wisp of a thousandth of a transport depth takes under a
+          // thousandth of it.
+          expect(Math.abs(want)).toBeLessThanOrEqual(
+            Math.abs(upper) * (span / (2 * SKY_REACH)),
+          )
+        },
+      ),
+    )
+  })
+
+  it('is each side’s irradiance over π at the two faces of a thick stratiform column', () => {
+    fc.assert(
+      fc.property(
+        lean,
+        lean,
+        short,
+        decades(30, 3000),
+        cosine,
+        cosine,
+        (up, toSun, upper, thick, rise, sunward) => {
+          const sides = { up, sunward: toSun, upper }
+          // What a face of a column `thick` deep is short of the limit by:
+          // the lean and c each by their share of the reach, and the flux.
+          const bound =
+            (SKY_REACH * Math.abs(up) +
+              2 * SKY_REACH * Math.abs(upper) +
+              ASYMMETRY * Math.abs(up * rise + toSun * sunward)) /
+              (thick + 2 * SKY_REACH) +
+            1e-12
+          const top = skySource(sides, 0, thick, 0, ASYMMETRY, rise, sunward)
+          const base = skySource(sides, thick, 0, 0, ASYMMETRY, rise, sunward)
+          expect(
+            Math.abs(top - Math.max(1 + up / 2 + upper, 0)),
+          ).toBeLessThanOrEqual(bound)
+          expect(
+            Math.abs(base - Math.max(1 - up / 2 + upper, 0)),
+          ).toBeLessThanOrEqual(bound)
+        },
+      ),
+    )
+  })
+
+  it('is the air’s own two sides at a deck’s faces, from the sky table’s four numbers', () => {
+    // The table's moments against the quadrature's sides, which no linear
+    // sky gives: without c the upper side reads 18% to 200% high and the
+    // lower 9% to 64%, at 1.7 km and 9.5 km under suns of 15° and 45°. With
+    // it both are within 0.77%. The limit is the table's rows, 3% at a
+    // cloud's height; a column 4,000 deep is short of its limit by under
+    // 0.2% of the dimmer side.
+    const table = cumulusSkyTable()
+    const air = cumulusSkyAir()
+    const THICK = 4000
+    let worst = 0
+    let without = 0
+    for (const height of [1700, 9500])
+      for (const degrees of [15, 45]) {
+        const sunMu = Math.sin((degrees * Math.PI) / 180)
+        const moments = skyMomentsAt(table, cumulusSkyHeight(height), sunMu)
+        const faces = marchSkyFaces(
+          air,
+          cumulusSkyRadius(height),
+          sunMu,
+          CUMULUS_SKY_QUADRATURE,
+        )
+        for (const band of [0, 1, 2] as const) {
+          const sides = {
+            up: moments.up[band],
+            sunward: moments.sunward[band],
+            upper: moments.upper[band],
+          }
+          const mean = moments.mean[band]
+          const top = mean * skySource(sides, 0, THICK, 0, ASYMMETRY, 0, 0)
+          const base = mean * skySource(sides, THICK, 0, 0, ASYMMETRY, 0, 0)
+          const above = faces.above[band] / Math.PI
+          const below = faces.below[band] / Math.PI
+          worst = Math.max(
+            worst,
+            Math.abs(top / above - 1),
+            Math.abs(base / below - 1),
+          )
+          const linear =
+            mean *
+            skySource({ ...sides, upper: 0 }, 0, THICK, 0, ASYMMETRY, 0, 0)
+          without = Math.max(without, Math.abs(linear / above - 1))
+        }
+      }
+    expect(worst).toBeLessThan(0.03)
+    // The same face without c, twice its light at worst: the test can fail.
+    expect(without).toBeGreaterThan(1)
   })
 })

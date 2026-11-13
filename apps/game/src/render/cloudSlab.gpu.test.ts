@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
+  skySource,
   SLAB_REFERENCE,
   type SlabReferenceRow,
   sunFactorPair,
@@ -35,6 +36,20 @@ beforeAll(async () => {
 afterAll(() => {
   gpu.dispose()
 })
+
+/**
+ * How far the march's sky light may stand from its CPU reference summed
+ * along the ray, as a share of the sky's mean: a step's two ends against
+ * 4,000 points. 0.056% at worst on the Mac mini, over 720 radiances.
+ */
+const SKY_JOIN = 0.002
+/**
+ * How far a deck 4,000 deep may stand from its face's irradiance over π, as
+ * a share of the sky's mean: the reach's share of 540 transport depths with
+ * the flux, 0.36% under the steepest of the two skies, and the source's
+ * drift over the depth the eye sees into. 0.45% at worst on the Mac mini.
+ */
+const THICK_FACE = 0.01
 
 /** The reference's rows by slab: a radius, a depth, a sun and a side. */
 function slabs(): Map<string, SlabReferenceRow[]> {
@@ -520,5 +535,278 @@ describe('a deck at the horizon, 100 km out', () => {
     }
     sample.dispose()
     eye.dispose()
+  }, 600_000)
+})
+
+/*
+ * The sky's light on a slab (design §5.6), through the march: no sun, and a
+ * sky of four numbers a band as its table holds them. The march's light is
+ * the CPU reference of the source (`skySource`) summed along the ray down
+ * to where the march stops, so what is held here is the join: the column's
+ * two transport depths, the share it is blended by, and the two ends of a
+ * step.
+ */
+describe('the sky’s light on a slab', () => {
+  /** The scaled phase's g′ at 10 µm, and the level's transport scale it leaves. */
+  const media = SLAB_REFERENCE.media.find((item) => item.radius === 10)!
+  const TRANSPORT = 1 - media.asymmetry
+  /**
+   * Two skies of the air's own, by the quadrature at a cloud's height
+   * (ruling 007's reckoning, green), with two more bands leaned off each so
+   * a band is not read in another's place: 1.7 km under a sun 15° up, and
+   * 9.5 km under one 45° up.
+   */
+  const SKIES = [
+    {
+      name: '1.7 km, 15°',
+      sunMu: Math.sin((15 * Math.PI) / 180),
+      mean: [0.02179, 0.03, 0.01],
+      up: [0.088, -0.4, 0.6],
+      sunward: [1.118, 0.5, -0.3],
+      upper: [-0.378, -0.2, -0.05],
+    },
+    {
+      name: '9.5 km, 45°',
+      sunMu: Math.sin((45 * Math.PI) / 180),
+      mean: [0.02622, 0.01, 0.04],
+      up: [-1.196, -0.7, 0.2],
+      sunward: [0.067, 0.9, 0.4],
+      upper: [-0.194, -0.3, -0.1],
+    },
+  ] as const
+  type Sky = (typeof SKIES)[number]
+  let rig: SlabRig
+
+  beforeAll(async () => {
+    rig = await slabRig(gpu, { sun: 'none', phase: false })
+  })
+
+  afterAll(() => {
+    rig.dispose()
+  })
+
+  /** Place a slab of an unscaled depth under a sky, the level's transport scale the droplets' own. */
+  const stand = (
+    sky: Sky,
+    depth: number,
+    side: SlabReferenceRow['side'],
+    upper: Triple = sky.upper,
+  ): void => {
+    rig.place(10, depth, sky.sunMu, side)
+    rig.uniforms.trace.maxSteps.value = 192
+    rig.uniforms.served.layers.transport.value.set(
+      TRANSPORT,
+      TRANSPORT,
+      TRANSPORT,
+    )
+    rig.sky({ mean: sky.mean, up: sky.up, sunward: sky.sunward, upper })
+  }
+
+  /**
+   * The CPU reference along a ray: the source at 4,000 points of the
+   * scaled depth the ray crosses before the march stops, each weighed by
+   * what the slab passes to it.
+   */
+  const summed = (
+    sky: Sky,
+    depth: number,
+    side: SlabReferenceRow['side'],
+    convective: number,
+    view: Triple,
+    passed: number,
+  ): Triple => {
+    const whole = (1 - media.share) * depth
+    const mu = Math.abs(view[1])
+    const path = Math.min(whole / mu, -Math.log(Math.max(passed, 1e-30)))
+    const STEPS = 4000
+    const light: [number, number, number] = [0, 0, 0]
+    for (let i = 0; i < STEPS; i += 1) {
+      const s = ((i + 0.5) / STEPS) * path
+      const over = side === 'reflected' ? s * mu : whole - s * mu
+      const weight =
+        Math.exp(-(i / STEPS) * path) - Math.exp(-((i + 1) / STEPS) * path)
+      for (const band of BANDS)
+        light[band] +=
+          weight *
+          sky.mean[band] *
+          skySource(
+            {
+              up: sky.up[band],
+              sunward: sky.sunward[band],
+              upper: sky.upper[band],
+            },
+            over * TRANSPORT,
+            (whole - over) * TRANSPORT,
+            convective,
+            media.asymmetry,
+            view[1],
+            // The sun stands toward +X.
+            view[0],
+          )
+    }
+    return light
+  }
+
+  it('is the CPU reference summed along the ray, for a stratiform slab, a cumuliform one and one between', async () => {
+    const views = (side: SlabReferenceRow['side']) =>
+      [0.3, 1].flatMap((mu) =>
+        [0, 180].map((azimuth) => viewOf(side, mu, azimuth)),
+      )
+    let worst = 0
+    let at = ''
+    let count = 0
+    for (const sky of SKIES)
+      for (const depth of [0.5, 2, 8, 40, 200])
+        for (const side of ['reflected', 'transmitted'] as const)
+          for (const convective of [0, 0.5, 1]) {
+            stand(sky, depth, side)
+            rig.share(convective)
+            const drawn = await rig.marched(views(side))
+            views(side).forEach((view, i) => {
+              const want = summed(
+                sky,
+                depth,
+                side,
+                convective,
+                view,
+                drawn[i]!.transmittance,
+              )
+              for (const band of BANDS) {
+                const got = drawn[i]!.light[band]
+                expect(Number.isFinite(got)).toBe(true)
+                // Against the sky's mean, so a source held near zero by
+                // its floor does not divide by nothing.
+                const error = Math.abs(got - want[band]) / sky.mean[band]
+                count += 1
+                if (error > worst) {
+                  worst = error
+                  at = `${sky.name}, depth ${depth}, ${side}, share ${convective}, view ${view.map((x) => x.toFixed(2)).join(' ')}, band ${band}: ${got.toExponential(4)} for ${want[band].toExponential(4)}`
+                }
+              }
+            })
+          }
+    rig.share(0)
+    console.info(
+      `cloudSlab: the sky's light against its CPU reference along the ray, ${count} radiances: ${(worst * 100).toFixed(3)}% of the sky's mean at worst, at ${at}`,
+    )
+    expect(worst).toBeLessThan(SKY_JOIN)
+  }, 600_000)
+
+  it('gives a thick stratiform deck’s two faces each side’s irradiance over π, and a cumuliform one’s the lean alone', async () => {
+    // An unscaled depth of 4,000 is 540 transport depths.
+    const DEPTH = 4000
+    const lines: string[] = []
+    for (const sky of SKIES)
+      for (const side of ['reflected', 'transmitted'] as const) {
+        const view = viewOf(side, 1, 0)
+        const sign = side === 'reflected' ? 1 : -1
+        for (const convective of [0, 1]) {
+          stand(sky, DEPTH, side)
+          rig.share(convective)
+          const [drawn] = await rig.marched([view])
+          for (const band of BANDS) {
+            // The source the eye sees, with what the march stops short of
+            // taken out.
+            const got = drawn!.light[band] / (1 - drawn!.transmittance)
+            const face =
+              sky.mean[band] *
+              Math.max(
+                1 +
+                  (sign * sky.up[band]) / 2 +
+                  (1 - convective) * sky.upper[band],
+                0,
+              )
+            lines.push(
+              `  ${sky.name}, ${side}, share ${convective}, band ${band}: ${(got / sky.mean[band]).toFixed(4)} for ${(face / sky.mean[band]).toFixed(4)}`,
+            )
+            expect(Math.abs(got - face)).toBeLessThan(
+              THICK_FACE * sky.mean[band],
+            )
+          }
+        }
+      }
+    rig.share(0)
+    console.info(
+      `cloudSlab: a deck 4,000 deep, its face's source over the sky's mean:\n${lines.join('\n')}`,
+    )
+  }, 600_000)
+
+  it('is the lean and the flux to the bit on a cumuliform slab whatever c is, and reads c on a stratiform one under either transport', async () => {
+    const sky = SKIES[0]
+    const views = [0.3, 1].map((mu) => viewOf('reflected', mu, 180))
+    const draw = async (
+      convective: number,
+      upper: Triple,
+      transport: (typeof CLOUD_TRANSPORTS)[number] = 'slab',
+    ) => {
+      stand(sky, 8, 'reflected', upper)
+      rig.share(convective)
+      rig.uniforms.trace.transport.value = CLOUD_TRANSPORTS.indexOf(transport)
+      const light = await rig.light(views)
+      rig.uniforms.trace.transport.value = CLOUD_TRANSPORTS.indexOf('slab')
+      rig.share(0)
+      return light
+    }
+    const NONE: Triple = [0, 0, 0]
+    const cumuliform = [await draw(1, sky.upper), await draw(1, NONE)] as const
+    const stratiform = [await draw(0, sky.upper), await draw(0, NONE)] as const
+    const half = [
+      await draw(0.5, sky.upper),
+      await draw(0.5, sky.upper, 'plane'),
+    ] as const
+    views.forEach((_, i) => {
+      for (const band of BANDS) {
+        expect(cumuliform[0][i]![band]).toBeGreaterThan(0)
+        expect(cumuliform[0][i]![band]).toBe(cumuliform[1][i]![band])
+        // Without c the share is read by nothing.
+        expect(stratiform[1][i]![band]).toBe(cumuliform[1][i]![band])
+        // c is under zero: a stratiform slab is the darker for it.
+        expect(stratiform[0][i]![band]).toBeLessThan(stratiform[1][i]![band])
+        // The lever that turns the factor of the sun off leaves the sky its share.
+        expect(half[1][i]![band]).toBe(half[0][i]![band])
+        expect(half[0][i]![band]).toBeLessThan(cumuliform[0][i]![band])
+        expect(half[0][i]![band]).toBeGreaterThan(stratiform[0][i]![band])
+      }
+    })
+  }, 600_000)
+
+  it('reads the share a medium holds at its column, and not the level’s, where a medium holds one', async () => {
+    const holding = await slabRig(gpu, {
+      sun: 'none',
+      phase: false,
+      holdsShare: true,
+    })
+    const sky = SKIES[1]
+    const views = [0.3, 1].map((mu) => viewOf('transmitted', mu, 0))
+    const draw = async (rigOf: SlabRig, held: number, level: number) => {
+      rigOf.place(10, 8, sky.sunMu, 'transmitted')
+      rigOf.uniforms.trace.maxSteps.value = 192
+      rigOf.uniforms.served.layers.transport.value.set(
+        TRANSPORT,
+        TRANSPORT,
+        TRANSPORT,
+      )
+      rigOf.sky(sky)
+      rigOf.share(level)
+      rigOf.held(held)
+      return rigOf.light(views)
+    }
+    // A column all cumulus in a level with none, and the reverse.
+    const cumulus = await draw(holding, 1, 0)
+    const stratus = await draw(holding, 0, 1)
+    stand(sky, 8, 'transmitted')
+    rig.share(1)
+    const byLevel = await rig.light(views)
+    rig.share(0)
+    stand(sky, 8, 'transmitted')
+    const none = await rig.light(views)
+    views.forEach((_, i) => {
+      for (const band of BANDS) {
+        expect(cumulus[i]![band]).toBe(byLevel[i]![band])
+        expect(stratus[i]![band]).toBe(none[i]![band])
+        expect(stratus[i]![band]).toBeLessThan(cumulus[i]![band])
+      }
+    })
+    holding.dispose()
   }, 600_000)
 })

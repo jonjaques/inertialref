@@ -1,3 +1,4 @@
+import { Vector3 } from 'three/webgpu'
 import { float, length, uniform, vec2, vec3 } from 'three/tsl'
 import {
   iceAggregate,
@@ -19,6 +20,7 @@ import {
 import {
   CLOUD_STAND_INS,
   type CloudSample,
+  type CloudSkyNodes,
   type CloudSunDepthNodes,
   type CloudSunFn,
   exactSlabSun,
@@ -95,6 +97,16 @@ export interface SlabRig {
   cover(fraction: number): void
   /** The cumuliform share the medium itself holds at every column, for a rig built with `holdsShare`. */
   held(convective: number): void
+  /**
+   * The sky's four numbers a band, as its table holds them, over the
+   * radiance the rig was built with: its mean, its two differences and `c`.
+   */
+  sky(sides: {
+    readonly mean: Triple
+    readonly up: Triple
+    readonly sunward: Triple
+    readonly upper: Triple
+  }): void
   /** Each view's light, the mean of its jitters. */
   light(views: readonly Triple[]): Promise<Triple[]>
   /** Each view's light and what the slab passes, the means of its jitters. */
@@ -183,12 +195,27 @@ export async function slabRig(
     options.holdsShare === true
       ? (sample, of) => ({ ...plain(sample, of), convective: heldShare })
       : plain
+  // A sky of nothing until told, read as its table is: the placeholder's
+  // Ψ is one on the rig's stand-in tables, and would light every slab alike.
+  const flat = CLOUD_STAND_INS.sky(options.sky ?? 0)
+  const sides = {
+    mean: uniform(new Vector3()),
+    up: uniform(new Vector3()),
+    sunward: uniform(new Vector3()),
+    upper: uniform(new Vector3()),
+  }
+  const sky: CloudSkyNodes = {
+    at: (sample, of) => ({
+      mean: flat.at(sample, of).mean.add(sides.mean),
+      up: sides.up,
+      sunward: sides.sunward,
+      upper: sides.upper,
+    }),
+  }
   const probe = marchProbe(gpu, uniforms, medium, {
     sun,
     phase: options.phase ? phase : CLOUD_STAND_INS.phase(0),
-    // A sky of nothing, read from its table: the placeholder's Ψ is one
-    // on the rig's stand-in tables, and would light every slab alike.
-    light: { source, sky: CLOUD_STAND_INS.sky(options.sky ?? 0) },
+    light: { source, sky },
     march: { ...options.march, skyTable: true },
   })
   const marched: SlabRig['marched'] = async (views) => {
@@ -252,6 +279,12 @@ export async function slabRig(
     },
     held(convective) {
       heldShare.value = convective
+    },
+    sky(of) {
+      sides.mean.value.set(...of.mean)
+      sides.up.value.set(...of.up)
+      sides.sunward.value.set(...of.sunward)
+      sides.upper.value.set(...of.upper)
     },
     marched,
     light: async (views) => (await marched(views)).map(({ light }) => light),

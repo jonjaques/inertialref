@@ -260,3 +260,65 @@ export function statisticalSlab(
     weight: points === 1 ? 1 : 0.5 - (0.5 * sign) / spread,
   }
 }
+
+/* ------------------------------------------------------------------------- */
+/* The sky's light on a sample                                                */
+/* ------------------------------------------------------------------------- */
+
+/**
+ * How far outside a column's face the sky's light stands as diffusion meets
+ * it, in transport depths: the extrapolated end, two thirds.
+ */
+export const SKY_REACH = 2 / 3
+
+/** A sky's sides at a point as the sky table holds them, in one band (design §5.6). */
+export interface SkySides {
+  /** Δ: the irradiance from above less that from below, over π·L̄. */
+  readonly up: number
+  /** Δ_s: the same across a vertical face turned to the sun's azimuth. */
+  readonly sunward: number
+  /** c: the upper side's irradiance less the linear sky's, over π·L̄ (`SkyTableMoments.upper`). */
+  readonly upper: number
+}
+
+/**
+ * The sky's light on a sample as a source, over the sky's mean radiance
+ * (design §5.6): one, which a conservative medium returns at any depth,
+ * leaned toward the side the sample's column is nearer by the diffusion's
+ * weight of its two faces, `w_top = (t_b + q)/(t_d + t_b + 2q)`, with the
+ * flux's view term, which a column's depth thins.
+ *
+ * `over` and `under` are the column's transport depths over the sample and
+ * under it, `asymmetry` the scaled phase's `g′`, `rise` the ray's cosine to
+ * the vertical and `sunward` its cosine to the sun's horizontal direction.
+ *
+ * **A stratiform column takes the two sides' mean as it thickens:**
+ * `(1 − v)·c·s`, `s = (t_d + t_b)/(t_d + t_b + 2q)`, `v` the column's
+ * cumuliform share. At a deck's face the lean alone is the side's
+ * irradiance over π only under a sky linear in direction, and the air's own
+ * is a band at its horizon: each side's irradiance is under the linear
+ * sky's by `c`, the same number at both. A deck without edges takes the sky
+ * through its two faces and reads `π·L̄·(1 ± Δ/2 + c)` there; a cumulus
+ * takes the horizon's band on its flanks, and with `c` reads darker where
+ * it is already too dark. Under the air's own sky at suns of 15° and 45°,
+ * against a path tracer, the term with `c` is the nearer on every one of
+ * 72 slabs and without it on 19 of 24 masks of two cumulus.
+ *
+ * The CPU reference of `skySource` in `apps/game/src/render/cloudMix.ts`.
+ */
+export function skySource(
+  sides: SkySides,
+  over: number,
+  under: number,
+  convective: number,
+  asymmetry: number,
+  rise: number,
+  sunward: number,
+): number {
+  const span = over + under
+  const reach = span + 2 * SKY_REACH
+  const top = (under + SKY_REACH) / reach
+  const flux = ((sides.up * rise + sides.sunward * sunward) * asymmetry) / reach
+  const mean = sides.upper * ((1 - convective) * (span / reach))
+  return Math.max(sides.up * (top - 0.5) + 1 + flux + mean, 0)
+}

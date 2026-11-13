@@ -14,9 +14,10 @@ import {
   vec2,
   vec3,
 } from 'three/tsl'
-import { UNSPREAD_SHAPE } from '@inertialref/rendering'
+import { SKY_REACH, UNSPREAD_SHAPE } from '@inertialref/rendering'
 import type {
   CloudLevelStatistics,
+  CloudSkyAt,
   CloudSourceSlab,
   CloudSunDepths,
 } from './cloudNodes.ts'
@@ -27,7 +28,7 @@ import type { CloudLayerUniforms } from './cloudUniforms.ts'
  * step of it adds: the one law the fine march and the far march both take,
  * and the layers' statistics that stand in for the sun's cache where it
  * holds nothing, and the slab a sample stands in for the light after first
- * order. `packages/rendering/src/cloudOverlap.ts` is the same arithmetic on
+ * order, and the sky's light on it. `packages/rendering/src/cloudOverlap.ts` is the same arithmetic on
  * the CPU, and `cloudTrace.gpu.test.ts` and `cloudSource.gpu.test.ts` hold
  * each function here to it.
  *
@@ -484,4 +485,45 @@ export function statisticalSlab(
     weight:
       points === 1 ? float(1) : float(0.5).sub(float(0.5 * sign).div(spread)),
   }
+}
+
+/**
+ * The sky's light on a sample as a source, over the sky's mean radiance,
+ * per band (design §5.6): one, which a conservative medium returns at any
+ * depth, leaned toward the side the sample's column is nearer by the
+ * diffusion's weight of its two faces, with the flux's view term, and for
+ * a stratiform column the two sides' mean as it thickens.
+ *
+ * `over` and `under` are the column's transport depths over the sample and
+ * under it, `convective` its cumuliform share, `asymmetry` the scaled
+ * phase's `g′`, `rise` the ray's cosine to the vertical and `sunward` its
+ * cosine to the sun's horizontal direction.
+ *
+ * The sides' mean is `(1 − v)·c·s`, `s` the column's share of its own
+ * depth and the reach outside its two faces: a deck's face then reads the
+ * side's irradiance over π, `1 ± Δ/2 + c`, which the lean alone gives only
+ * under a sky linear in direction. A cumuliform column takes none of it
+ * and is the lean and the flux to the bit. `skySource` in
+ * `packages/rendering/src/cloudOverlap.ts` is this on the CPU and says what
+ * each form was measured against.
+ */
+export function skySource(
+  sides: Pick<CloudSkyAt, 'up' | 'sunward' | 'upper'>,
+  over: Node<'float'>,
+  under: Node<'float'>,
+  convective: Node<'float'>,
+  asymmetry: Node<'float'>,
+  rise: Node<'float'>,
+  sunward: Node<'float'>,
+): Node<'vec3'> {
+  const span = over.add(under)
+  const reach = span.add(2 * SKY_REACH)
+  const top = under.add(SKY_REACH).div(reach)
+  const flux = sides.up
+    .mul(rise)
+    .add(sides.sunward.mul(sunward))
+    .mul(asymmetry)
+    .div(reach)
+  const mean = sides.upper.mul(float(1).sub(convective).mul(span.div(reach)))
+  return max(sides.up.mul(top.sub(0.5)).add(1).add(flux).add(mean), 0)
 }

@@ -283,43 +283,55 @@ describe('the system’s own trace kernel', () => {
    * one a device has to accept: WebGPU's default device allows a stage 16
    * sampled textures and 4 storage textures, and nothing raises the limit.
    *
-   * Twelve today: the clipmap's cover (a 2D array), the base and detail
-   * noises (3D), the profile, the sun grid (3D), the air's transmittance and
-   * Ψ, the phase atlas, the far atlas, the depth copy, the jitter's mask
-   * (3D), which is bound whichever draw the lever takes, and the slab
-   * source's table (3D). Phase 1's design counts two more at worst (§4.5):
-   * the clipmap's `kind` and the sky table, 14 of 16. The count is exact, not a
-   * ceiling, so a binding nobody counted fails here rather than at the
-   * sixteenth, and the package that adds one changes this number where a
-   * reviewer reads it.
+   * Thirteen today: the clipmap's cover (a 2D array), the base and detail
+   * noises (3D), the profile, the sun grid (3D), the air's transmittance,
+   * its Ψ and its sky table, the phase atlas, the far atlas, the depth
+   * copy, the jitter's mask (3D), which is bound whichever draw the lever
+   * takes, and the slab source's table (3D). Phase 1's design counts one
+   * more at worst (§4.5): the clipmap's `kind`, 14 of 16. The count is
+   * exact, not a ceiling, so a binding nobody counted fails here rather
+   * than at the sixteenth, and the package that adds one changes this
+   * number where a reviewer reads it. A system built without the sky's
+   * term (`CloudSystemDeps.skyTable`) binds the twelve without the sky
+   * table.
    */
-  const SAMPLED = { '2d': 6, '2d_array': 1, '3d': 5 }
+  const SAMPLED = { '2d': 7, '2d_array': 1, '3d': 5 }
+  const WITHOUT_SKY = { '2d': 6, '2d_array': 1, '3d': 5 }
   const STAGE_SAMPLED = 16
   const STAGE_STORAGE = 4
 
-  it('binds 12 sampled textures of the stage’s 16, and its 4 storage textures', async () => {
-    const rig = cloudRig(gpu, 16, 16)
-    try {
-      await rig.system!.warm()
-      const trace = rig.system!.resources.find(
-        (held) => held.name === 'trace',
-      ) as CloudTrace
-      // Each of the march's three kernels, by how it takes the phase's radius.
-      for (const kernel of trace.kernels().slice(0, CLOUD_PHASE_MODES.length)) {
-        expect(kernel.name).toBe('cloud trace')
-        const wgsl = wgslOf(kernel)
-        const counted = bindings(wgsl)
-        const kinds: Record<string, number> = {}
-        for (const [, kind] of wgsl.matchAll(/var\s+\w+\s*:\s*texture_(\w+)</g))
-          if (!kind!.startsWith('storage'))
-            kinds[kind!] = (kinds[kind!] ?? 0) + 1
-        expect(kinds).toEqual(SAMPLED)
-        expect(counted.sampled).toBe(12)
-        expect(counted.sampled).toBeLessThanOrEqual(STAGE_SAMPLED)
-        expect(counted.storage).toBe(STAGE_STORAGE)
+  it('binds 13 sampled textures of the stage’s 16 and its 4 storage textures, and 12 built without the sky’s term', async () => {
+    for (const [skyTable, kindsWanted] of [
+      [true, SAMPLED],
+      [false, WITHOUT_SKY],
+    ] as const) {
+      const rig = cloudRig(gpu, 16, 16, skyTable ? {} : { skyTable })
+      try {
+        await rig.system!.warm()
+        const trace = rig.system!.resources.find(
+          (held) => held.name === 'trace',
+        ) as CloudTrace
+        // Each of the march's three kernels, by how it takes the phase's radius.
+        for (const kernel of trace
+          .kernels()
+          .slice(0, CLOUD_PHASE_MODES.length)) {
+          expect(kernel.name).toBe('cloud trace')
+          const wgsl = wgslOf(kernel)
+          const counted = bindings(wgsl)
+          const kinds: Record<string, number> = {}
+          for (const [, kind] of wgsl.matchAll(
+            /var\s+\w+\s*:\s*texture_(\w+)</g,
+          ))
+            if (!kind!.startsWith('storage'))
+              kinds[kind!] = (kinds[kind!] ?? 0) + 1
+          expect(kinds).toEqual(kindsWanted)
+          expect(counted.sampled).toBe(skyTable ? 13 : 12)
+          expect(counted.sampled).toBeLessThanOrEqual(STAGE_SAMPLED)
+          expect(counted.storage).toBe(STAGE_STORAGE)
+        }
+      } finally {
+        rig.dispose()
       }
-    } finally {
-      rig.dispose()
     }
   }, 120_000)
 })

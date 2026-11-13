@@ -109,6 +109,13 @@ export interface CloudSystemDeps {
   readonly scenePass: PassNode
   /** The engine's front handle; a system built without one keeps its own. */
   readonly front?: CloudFrontHandle
+  /**
+   * Whether the trace reads the sky's light on a cloud from the served
+   * body's sky table (design §5.6): true when absent. False, it draws the
+   * march's placeholder, Ψ at a half, and binds no sky table: the frame the
+   * term's cost is taken against.
+   */
+  readonly skyTable?: boolean
 }
 
 /** What the sensor knows of a frame that the engine does not. */
@@ -276,6 +283,7 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
     sky: field.sky,
     source: field.source,
     jitter: field.jitter,
+    skyTable: deps.skyTable ?? true,
   })
   const traceOutputs = (): CloudTraceTextures => trace.outputs
   const history = new CloudHistory(uniforms, () => trace.outputs)

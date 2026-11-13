@@ -31,13 +31,17 @@ import {
 } from 'three/tsl'
 import {
   CUMULUS_FIELD_SUN,
+  CUMULUS_LINEAR_SKIES,
   CUMULUS_REFERENCE,
   CUMULUS_VIEWS,
+  cumulusAirSky,
   type CumulusCase,
   cumulusFixture,
   type CumulusFixture,
   type CumulusProbe,
+  cumulusSkyHeight,
   cumulusSkyRadiance,
+  cumulusSkyTable,
   fixtureMedium,
   GENUS_TABLE,
   halfBitsOf,
@@ -45,6 +49,8 @@ import {
   isolateCumulus,
   mieDroplets,
   PHASE_ATLAS,
+  skyByDirection,
+  skyMomentsAt,
   SLAB_REFERENCE,
   subjectWeather,
   viewRay,
@@ -95,6 +101,18 @@ import { type GpuSession, openGpu } from './gpuHarness.ts'
  * and its peak (20%), the sunward edge's worst bin (20%) and its depth, the
  * mean of its bins over the core, less one (30%); each bound three of the
  * reference's own errors where that is larger.
+ *
+ * **The sky's term has a gate of its own, on the light a cloud scatters**
+ * (ruling 008): the march under no sun against the path tracer's sky
+ * alone, a mask's mean over a mask's mean, the sky seen straight through
+ * the cloud on neither side. Under the air's own sky by direction
+ * (`CUMULUS_REFERENCE.airSplit`), with the march reading the sky table's
+ * four numbers at the case's height and sun as the product does: the
+ * record, the term's form and its transport together. And under the sky
+ * linear in direction on the quadrature's moments
+ * (`CUMULUS_LINEAR_SKIES.linearSplit`), the march reading those moments:
+ * the transport alone, under the sky the term's form assumes. The pixel,
+ * with the straight part put back on both sides, is recorded.
  */
 
 let gpu: GpuSession
@@ -190,7 +208,8 @@ interface Scene {
   readonly toSun: Triple
   /** Radians. */
   readonly sunRadius: number
-  readonly sky: CumulusCase['sky']
+  /** The sky's three moments, and `c` where a sky has one: none, a sky linear in direction. */
+  readonly sky: CumulusCase['sky'] & { readonly upper?: Triple }
 }
 
 /**
@@ -248,6 +267,7 @@ async function fixtureRig(fixture: CumulusFixture) {
   const skyMean = uniform(new Vector3())
   const skyUp = uniform(new Vector3())
   const skySunward = uniform(new Vector3())
+  const skyUpper = uniform(new Vector3())
   const phase: CloudPhaseNodes = {
     droplets: (nu, radius) => atlas.droplets(nu, radius),
     // The gain stays the row's: what is switched is first order's light.
@@ -257,7 +277,12 @@ async function fixtureRig(fixture: CumulusFixture) {
         .mul(vec4(firstShare, firstShare, firstShare, 1)),
   }
   const sky: CloudSkyNodes = {
-    at: () => ({ mean: skyMean, up: skyUp, sunward: skySunward }),
+    at: () => ({
+      mean: skyMean,
+      up: skyUp,
+      sunward: skySunward,
+      upper: skyUpper,
+    }),
   }
 
   const capacity = 4096
@@ -407,6 +432,7 @@ async function fixtureRig(fixture: CumulusFixture) {
       )
       skyUp.value.set(...held.sky.up)
       skySunward.value.set(...held.sky.sunward)
+      skyUpper.value.set(...(held.sky.upper ?? [0, 0, 0]))
       uniforms.trace.transport.value = CLOUD_TRANSPORTS.indexOf(
         lights.factor ? 'slab' : 'plane',
       )
@@ -580,10 +606,9 @@ function measure(
  * With the factor 0 of 6 cases pass and 30 of the 36 measures fail;
  * without it 0 and 24. The CPU's fine march, with first order and the sky
  * exact, reads 1 of 6 and 22, and 1 and 21 (the depth rule's second
- * critic): the difference is the cores toward the sun, which the sky's
- * term as designed reads 54% to 59% high and from behind 43% to 49% low.
- * Its view term carries a flux through a level's own depth, and a core
- * seen level is lit on its near face by the sky on the eye's side.
+ * critic): the difference is the cores toward the sun and from behind it,
+ * which the sky's term reads half too bright and half too dark under the
+ * sky the reference's pixels were traced under (`SKY_MEASURED`).
  */
 const MEASURED: Readonly<
   Record<
@@ -621,17 +646,62 @@ const MARGIN = 0.05
 /** The measures that fail with the factor on and off, each two off its count of 30 and 24. */
 const FAILED = { on: 32, off: 26 } as const
 /**
- * The sky's term alone, a mask's sum over the reference's sky block, less
- * one, green: the most it stands off on a rim or an edge (−16% to +3%
- * here), on a base (−12% to +12%) and on a core (−49% to +59%).
+ * The sky's term by mask, green, the march's scattered light over the path
+ * tracer's, less one, as measured on the Mac mini (Mac18,5, Apple M6), in
+ * `SKY_MASKS`' order: under the air's own sky with the table's four
+ * numbers, and under the linear sky on the quadrature's moments.
+ *
+ * Under the air's own sky the term reads a rim and an edge at half the
+ * tracer's light toward a 15° sun and away from it (−46% to −53%), a core
+ * +95% and +105% toward it and −34% and −39% from behind, and every mask
+ * within 10% across a 45° sun. Under the linear sky, which is the term's
+ * own, rims, edges and bases are within 16% and the two suns' side views
+ * within 6%, and the cores toward a 15° sun and from behind it stay +50%
+ * to +54% and −42% to −46%: the flux's view term carries a flux through a
+ * level's own depth, and a core seen level is lit on its near face by the
+ * sky on the eye's side. A horizon's band and an aureole are not in three
+ * moments, and neither is mended here (ruling 008).
  */
-const SKY = { rim: 0.21, edge: 0.21, base: 0.17, core: 0.64 } as const
+const SKY_MASKS = ['rim', 'edge', 'core', 'base'] as const
+const SKY_MEASURED: Readonly<
+  Record<
+    string,
+    { readonly air: readonly number[]; readonly linear: readonly number[] }
+  >
+> = {
+  'congestus:back': {
+    air: [-0.522, -0.527, -0.335, -0.224],
+    linear: [-0.113, -0.162, -0.417, -0.12],
+  },
+  'congestus:forward': {
+    air: [-0.502, -0.463, 0.947, 0.166],
+    linear: [-0.007, 0.026, 0.5, 0.093],
+  },
+  'congestus:side': {
+    air: [-0.061, -0.065, 0.07, 0.001],
+    linear: [-0.041, -0.056, -0.01, -0.026],
+  },
+  'cumulus:back': {
+    air: [-0.485, -0.49, -0.392, -0.27],
+    linear: [-0.051, -0.092, -0.461, -0.097],
+  },
+  'cumulus:forward': {
+    air: [-0.514, -0.486, 1.049, -0.036],
+    linear: [-0.006, 0.023, 0.541, 0.056],
+  },
+  'cumulus:side': {
+    air: [-0.054, -0.048, 0.101, -0.025],
+    linear: [-0.016, -0.031, 0.007, -0.02],
+  },
+}
+/** How far over its measured figure a mask may stand: an adapter's own sampler and `exp2`. */
+const SKY_MARGIN = 0.03
 
 const signed = (value: number): string =>
   `${value >= 0 ? '+' : ''}${(value * 100).toFixed(0)}`
 
 describe('the isolated cumulus, against the path-traced reference', () => {
-  it('holds row 6 at its measured miss, measure by measure, with the factor of the sun on and off, where no case passes; and records the light’s three parts by mask', async () => {
+  it('holds row 6 at its measured miss, measure by measure, with the factor of the sun on and off, where no case passes; records first order and the sun past it by mask; and holds the sky’s scattered light by mask under the air’s own sky and under the linear one', async () => {
     const record: Record<string, unknown> = {}
     const failures = { on: 0, off: 0 }
     const passed = { on: 0, off: 0 }
@@ -696,7 +766,9 @@ describe('the isolated cumulus, against the path-traced reference', () => {
          * The light's parts, a mask's sum over the scaled medium's
          * reference, less one, green: first order against `scaled.first`,
          * the sun's light past it against `rest` less the sky, with the
-         * factor on and off, and the sky alone against `scaledSky`.
+         * factor on and off. `rest` was traced under the case's own sky,
+         * the table's moments as the reference was cut, so that sky's row
+         * comes out of it.
          */
         const firstOnly = await rig.draw(scene, origins, {
           first: 1,
@@ -718,15 +790,6 @@ describe('the isolated cumulus, against the path-traced reference', () => {
             factor: false,
           }),
         }
-        const skyOnly = pixelsOf(
-          await rig.draw(scene, origins, {
-            first: 0,
-            sun: 0,
-            sky: 1,
-            factor: false,
-          }),
-          1,
-        )
         const parts: Record<string, unknown> = {}
         for (const mask of ['rim', 'edge', 'core', 'base'] as const) {
           const sum = (values: (i: number) => number): number =>
@@ -736,7 +799,7 @@ describe('the isolated cumulus, against the path-traced reference', () => {
               0,
             )
           const scaled = (i: number) => CUMULUS_REFERENCE.scaled[at[i]!]!
-          const skyAt = (i: number) => CUMULUS_REFERENCE.scaledSky[at[i]!]!
+          const skyAt = (i: number) => CUMULUS_LINEAR_SKIES.table[at[i]!]!
           const first =
             sum((i) => firstOnly[i]!.light[1] - higher.off[i]!.light[1]) /
               sum((i) => scaled(i).first[1]) -
@@ -745,23 +808,118 @@ describe('the isolated cumulus, against the path-traced reference', () => {
             sum((i) => drawn[i]!.light[1]) /
               sum((i) => scaled(i).rest[1] - skyAt(i).sky[1]) -
             1
-          const sky =
-            sum((i) => skyOnly[i]![1]) / sum((i) => skyAt(i).sky[1]) - 1
-          expect(
-            Math.abs(sky),
-            `${held.id}, the sky on the ${mask}`,
-          ).toBeLessThan(SKY[mask])
           parts[mask] = {
             first,
             higherOn: past(higher.on),
             higherOff: past(higher.off),
-            sky,
           }
           lines.push(
-            `  ${mask}: first order ${signed(first)}, the sun past it ${signed(past(higher.off))} (${signed(past(higher.on))} with the factor), the sky ${signed(sky)}`,
+            `  ${mask}: first order ${signed(first)}, the sun past it ${signed(past(higher.off))} (${signed(past(higher.on))} with the factor)`,
           )
         }
         caseRecord.parts = parts
+        /*
+         * The sky's term, scattered light against scattered light (ruling
+         * 008): no sun, and the sky the march reads in each of its two
+         * forms.
+         */
+        const where = held.skyAt!
+        const table = skyMomentsAt(
+          cumulusSkyTable(),
+          cumulusSkyHeight(where.height),
+          where.sunMu,
+        )
+        const quadrature = CUMULUS_LINEAR_SKIES.moments.find(
+          (item) => item.case === held.id,
+        )!
+        const alone = { first: 0, sun: 0, sky: 1, factor: false } as const
+        const underAir = await rig.draw(
+          { ...scene, sky: table },
+          origins,
+          alone,
+        )
+        const underLinear = await rig.draw(
+          { ...scene, sky: quadrature },
+          origins,
+          alone,
+        )
+        // The air's own sky on the eye's line, which looks north: what a
+        // pixel's transmittance passes of it.
+        const toSun = viewSun(view)
+        const toward = toSun[2] / Math.hypot(toSun[0], toSun[2])
+        const airSky = cumulusAirSky(where)
+        const onLine = BANDS.map((band) =>
+          skyByDirection(
+            airSky,
+            0,
+            toward,
+            Math.sqrt(Math.max(0, 1 - toward * toward)),
+            band,
+          ),
+        )
+        const skyRecord: Record<string, unknown> = {}
+        SKY_MASKS.forEach((mask, k) => {
+          const rows = probes.flatMap((probe, i) =>
+            probe.mask === mask ? [i] : [],
+          )
+          const meanOf = (value: (i: number) => number): number =>
+            mean(rows.map(value))
+          const split = (
+            block: typeof CUMULUS_REFERENCE.airSplit,
+          ): (typeof CUMULUS_REFERENCE.airSplit)[number] =>
+            block.find((item) => item.case === held.id && item.mask === mask)!
+          const air = split(CUMULUS_REFERENCE.airSplit)
+          const linear = split(CUMULUS_LINEAR_SKIES.linearSplit)
+          const bands = (of: (band: 0 | 1 | 2) => number): Triple => [
+            of(0),
+            of(1),
+            of(2),
+          ]
+          const term = bands(
+            (band) =>
+              meanOf((i) => underAir[i]!.light[band]) / air.scattered[band] - 1,
+          )
+          const transport = bands(
+            (band) =>
+              meanOf((i) => underLinear[i]!.light[band]) /
+                linear.scattered[band] -
+              1,
+          )
+          const pixel = bands(
+            (band) =>
+              meanOf(
+                (i) =>
+                  underAir[i]!.light[band] +
+                  underAir[i]!.transmittance * onLine[band]!,
+              ) /
+                (air.straight[band] + air.scattered[band]) -
+              1,
+          )
+          for (const value of [...term, ...transport, ...pixel])
+            expect(Number.isFinite(value)).toBe(true)
+          const measured = SKY_MEASURED[held.id]!
+          expect(
+            Math.abs(term[1]),
+            `${held.id}, the sky's term on the ${mask} under the air's own sky`,
+          ).toBeLessThanOrEqual(Math.abs(measured.air[k]!) + SKY_MARGIN)
+          expect(
+            Math.abs(transport[1]),
+            `${held.id}, the sky's term on the ${mask} under the linear sky`,
+          ).toBeLessThanOrEqual(Math.abs(measured.linear[k]!) + SKY_MARGIN)
+          skyRecord[mask] = {
+            term,
+            transport,
+            pixel,
+            // Three of the tracer's own errors, as a share of its light.
+            noise: (3 * air.scatteredError[1]) / air.scattered[1],
+          }
+          const all = (values: Triple): string =>
+            values.map((value) => `${(value * 100).toFixed(1)}`).join(', ')
+          lines.push(
+            `  the sky on the ${mask} (R, G, B, %): under the air's own ${all(term)}; under the linear ${all(transport)}; the pixel ${all(pixel)}`,
+          )
+        })
+        caseRecord.sky = skyRecord
         record[held.id] = caseRecord
         console.info(`cloudCumulus: ${held.id}\n${lines.join('\n')}`)
       }

@@ -10,6 +10,7 @@ import {
   storage,
   uniform,
   vec2,
+  vec3,
 } from 'three/tsl'
 import {
   halfBitsOf,
@@ -17,6 +18,7 @@ import {
   depthCoordinate,
   diffusionExtension,
   resolvedSlab as resolvedSlabOf,
+  skySource as skySourceOf,
   SLAB_SUN_HOLD,
   SLAB_VIEW_SOURCE,
   type SlabSourceTable,
@@ -28,7 +30,7 @@ import {
   sunFactorPair,
 } from '@inertialref/rendering'
 import { SLAB_VIEW_SOURCE_TEXELS } from '@inertialref/rendering/slabSourceTexels'
-import { resolvedSlab, statisticalSlab } from './cloudMix.ts'
+import { resolvedSlab, skySource, statisticalSlab } from './cloudMix.ts'
 import {
   CLOUD_ICE_ROWS,
   type CloudSource,
@@ -107,6 +109,13 @@ async function evaluate(
   output!.dispose()
   return cases.map((_, i) => [...out.subarray(i * answers, (i + 1) * answers)])
 }
+
+/**
+ * How far the sky's node may stand from its CPU reference: a handful of
+ * float32 steps of a sum of terms of order one. 2.0e-7 at worst on the Mac
+ * mini, over 3,780 cases in three bands.
+ */
+const SKY_STEP = 2e-6
 
 /** A table of scales against radius, linear in ln r and held at its ends: the node's `scaleAt`, in float64. */
 function scaleOf(
@@ -659,5 +668,166 @@ describe('the slab a sample stands in', () => {
     expect(low).toBeLessThan(20)
     expect(high).toBeGreaterThan(20)
     expect(high - low).toBeLessThan(20 * 0.03)
+  }, 120_000)
+})
+
+describe('the sky’s light on a sample', () => {
+  /** The scaled phase's g′ at 10 µm, to the node as a constant. */
+  const ASYMMETRY = 0.740443
+  /** How a band's sides stand to the case's: three bands, three skies. */
+  const BAND = [
+    [1, 1, 1],
+    [0.5, -1, 0.5],
+    [-1, 0.25, 0],
+  ] as const
+  /** A case's sky, column, share and view: Δ, Δ_s, c, t_d, t_b, v, the ray's rise and its cosine to the sun's side. */
+  const cases: number[][] = []
+  for (const up of [-1.3, -0.36, 0.09, 1.2])
+    for (const sunward of [0, 0.45, 1.12])
+      for (const upper of [0, -0.16, -0.38])
+        for (const [over, under] of [
+          [0, 0],
+          [0.05, 0.05],
+          [0, 3],
+          [3, 0],
+          [1, 9],
+          [40, 0.5],
+          [0, 400],
+        ] as const)
+          for (const convective of [0, 0.35, 1])
+            for (const [rise, toward] of [
+              [1, 0],
+              [-1, 0],
+              [0, 1],
+              [0, -1],
+              [0.5, -0.6],
+            ] as const)
+              cases.push([
+                up,
+                sunward,
+                upper,
+                over,
+                under,
+                convective,
+                rise,
+                toward,
+                // A zero the kernel reads, where a literal one would fold
+                // the term away and build another expression.
+                0,
+              ])
+  /** A case's number in each band's place. */
+  const banded = (value: Node<'float'>, k: 0 | 1 | 2): Node<'vec3'> =>
+    vec3(value.mul(BAND[0][k]), value.mul(BAND[1][k]), value.mul(BAND[2][k]))
+  /** The node at a case, with `upper` read from one of the case's floats. */
+  const node = (read: (k: number) => Node<'float'>, upper: number) =>
+    skySource(
+      {
+        up: banded(read(0), 0),
+        sunward: banded(read(1), 1),
+        upper: banded(read(upper), 2),
+      },
+      read(3),
+      read(4),
+      read(5),
+      float(ASYMMETRY),
+      read(6),
+      read(7),
+    )
+  const want = (row: readonly number[], band: number, c = row[2]!): number =>
+    skySourceOf(
+      {
+        up: row[0]! * BAND[band]![0],
+        sunward: row[1]! * BAND[band]![1],
+        upper: c * BAND[band]![2],
+      },
+      row[3]!,
+      row[4]!,
+      row[5]!,
+      ASYMMETRY,
+      row[6]!,
+      row[7]!,
+    )
+
+  it('is its CPU reference in every band, and for a cumuliform column the same bits whatever c is', async () => {
+    const out = await evaluate(9, cases, (read) => {
+      const withC = node(read, 2)
+      const without = node(read, 8)
+      return [withC.x, withC.y, withC.z, without.x, without.y, without.z]
+    })
+    let worst = 0
+    let moved = 0
+    cases.forEach((row, i) => {
+      for (const band of [0, 1, 2]) {
+        const got = out[i]![band]!
+        expect(Number.isFinite(got)).toBe(true)
+        expect(got).toBeGreaterThanOrEqual(0)
+        worst = Math.max(worst, Math.abs(got - want(row, band)))
+        // The lean and the flux alone, in this same kernel.
+        const plain = out[i]![3 + band]!
+        expect(Math.abs(plain - want(row, band, 0))).toBeLessThan(SKY_STEP)
+        if (row[5] === 1) expect(got).toBe(plain)
+        else if (got !== plain) moved += 1
+      }
+    })
+    console.info(
+      `cloudSource: the sky's light, ${cases.length} cases by three bands: the node off its CPU reference by ${worst.toExponential(2)} at worst; c moves ${moved} values of a column not wholly cumuliform`,
+    )
+    expect(worst).toBeLessThan(SKY_STEP)
+    // The term is there to be switched off: a stratiform column reads c.
+    expect(moved).toBeGreaterThan(1000)
+  }, 120_000)
+
+  it('is one to the bit under a sky alike on every side', async () => {
+    const flat = cases.map((row) => [0, 0, 0, ...row.slice(3)])
+    const out = await evaluate(9, flat, (read) => {
+      const light = node(read, 2)
+      return [light.x, light.y, light.z]
+    })
+    for (const row of out) for (const value of row) expect(value).toBe(1)
+  }, 120_000)
+
+  it('is each side’s irradiance over π at the two faces of a thick stratiform column', async () => {
+    const faces: number[][] = []
+    for (const up of [-1.3, -0.36, 0.09, 1.2])
+      for (const upper of [0, -0.16, -0.38])
+        for (const thick of [100, 1000, 4000])
+          for (const rise of [-1, 0, 1])
+            for (const [over, under] of [
+              [0, thick],
+              [thick, 0],
+            ] as const)
+              faces.push([up, 0.45, upper, over, under, 0, rise, 0.3, 0])
+    const out = await evaluate(9, faces, (read) => {
+      const light = node(read, 2)
+      return [light.x, light.y, light.z]
+    })
+    faces.forEach((row, i) => {
+      const [up, sunward, upper, over, under, , rise, toward] = row as [
+        number,
+        number,
+        number,
+        number,
+        number,
+        number,
+        number,
+        number,
+      ]
+      const thick = over + under
+      for (const band of [0, 1, 2]) {
+        const [a, b, c] = BAND[band]!
+        const side = over === 0 ? 1 : -1
+        const face = Math.max(1 + (side * up * a) / 2 + upper * c, 0)
+        // What a face of a column this deep is short of its limit by: the
+        // lean and c by their share of the reach, and the flux.
+        const short =
+          ((2 / 3) * Math.abs(up * a) +
+            (4 / 3) * Math.abs(upper * c) +
+            ASYMMETRY * Math.abs(up * a * rise + sunward * b * toward)) /
+          (thick + 4 / 3)
+        expect(Math.abs(out[i]![band]! - face)).toBeLessThanOrEqual(
+          short + SKY_STEP,
+        )
+      }
+    })
   }, 120_000)
 })

@@ -307,20 +307,23 @@ export interface CloudPhaseNodes {
   ): Node<'vec4'>
 }
 
+/**
+ * The sky's light at a sample, per band, as the sky table holds it (design
+ * §5.6): its mean radiance; the difference of its two sides' irradiance
+ * over π times that mean, up against down and sunward against away; and
+ * `c`, the upper side's irradiance less the one a sky linear in direction
+ * would give it, over the same, which is the lower side's too.
+ */
+export interface CloudSkyAt {
+  readonly mean: Node<'vec3'>
+  readonly up: Node<'vec3'>
+  readonly sunward: Node<'vec3'>
+  readonly upper: Node<'vec3'>
+}
+
 export interface CloudSkyNodes {
-  /**
-   * The sky's light at a sample: its mean radiance per band, and the
-   * difference of its two sides' irradiance over π times that mean, up
-   * against down and sunward against away.
-   */
-  at(
-    sample: CloudSample,
-    body: CloudBodyUniforms,
-  ): {
-    readonly mean: Node<'vec3'>
-    readonly up: Node<'vec3'>
-    readonly sunward: Node<'vec3'>
-  }
+  /** The sky's light at a sample: four numbers a band, one read of the table's three blocks. */
+  at(sample: CloudSample, body: CloudBodyUniforms): CloudSkyAt
 }
 
 /**
@@ -900,6 +903,7 @@ export const CLOUD_STAND_INS = {
         mean: vec3(scalar(mean).add(cloudStandInBinding(table, '2d'))),
         up: vec3(0),
         sunward: vec3(0),
+        upper: vec3(0),
       }),
     }
   },
