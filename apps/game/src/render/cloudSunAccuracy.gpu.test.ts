@@ -152,6 +152,12 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  */
 
 const MEASURE = process.env.IR_CLOUD_MEASURE !== undefined
+/**
+ * The grid's heights (`CloudSunGrid.heights`): 32, as it ships, unless a run
+ * under the flag asks for another. A run at another count is a measurement,
+ * and its document is not the landed one.
+ */
+const HEIGHTS = Number(process.env.IR_CLOUD_SUN_HEIGHTS ?? 32)
 const OUT = '.data/clouds/sunAccuracy.json'
 const REBUILD_OUT = '.data/clouds/sunRebuild.json'
 /** The adapter the landed figures were taken on is a workstation's: it offers timestamps. */
@@ -481,6 +487,7 @@ let field: CloudField
 beforeAll(async () => {
   gpu = await openGpu(CSS.width, CSS.height)
   field = createCloudField()
+  field.grid.heights = HEIGHTS
   for (const bake of field.bakes) await bake.warm(gpu.renderer)
 }, 120_000)
 
@@ -540,6 +547,19 @@ interface Case {
    * nothing.
    */
   readonly channels?: Readonly<Record<'opacity' | 'depth', ByChannel>>
+  /**
+   * Under the horizon, the reference's march in two parts: `near`, to where
+   * the ray leaves the sample's level, and `far`, all it meets after. The
+   * mean of `far` over the scored samples, and the floor: the RMS of
+   * `near·(far − mean)`, the least any one number for the far crossing
+   * leaves at this place. Recorded, held to nothing.
+   */
+  readonly farFloor?: {
+    readonly meanFar: number
+    readonly floor: number
+    /** The RMS of `near·far` against the whole march: the split's own error. */
+    readonly split: number
+  }
 }
 
 /** The depth at the sample and through four taps, as read through one of the grid's channels. */
@@ -866,9 +886,15 @@ describe('the sun’s optical depth against the field', () => {
     }
     // exp(−∫σ·f ds) by 256 steps of the field through each stretch of the
     // sun's ray inside a level: on its way down to the level's base, or
-    // through the level whole, and on its way up from that base.
-    const marched = (offset: Node<'vec3'>): Node<'float'> => {
+    // through the level whole, and on its way up from that base. `near` is
+    // the stretch of the point's own level from the point to where the ray
+    // leaves it, and `far` everything the ray meets after.
+    const marched = (
+      offset: Node<'vec3'>,
+      part: 'whole' | 'near' | 'far' = 'whole',
+    ): Node<'float'> => {
       const { sun, layers } = body
+      const altitude = altitudeAt(body, offset)
       const tau = float(0).toVar()
       const stretch = (from: Node<'float'>, span: Node<'float'>): void => {
         const start = from.toVar()
@@ -887,6 +913,11 @@ describe('the sun’s optical depth against the field', () => {
         [layers.base.z, layers.top.z],
       ] as const
       for (const [low, high] of levels) {
+        const own = altitude.greaterThanEqual(low).and(altitude.lessThan(high))
+        const counted = (near: boolean): Node<'float'> =>
+          part === 'whole'
+            ? float(1)
+            : select(near === (part === 'near') ? own : own.not(), 1, 0)
         const top = shellCrossingFrom(body, offset, sun, high)
         const base = shellCrossingFrom(body, offset, sun, low)
         const reached = top.hit.and(high.greaterThan(low))
@@ -901,17 +932,25 @@ describe('the sun’s optical depth against the field', () => {
             reached,
             max(select(ahead, max(base.near, 0), leave).sub(enter), 0),
             float(0),
-          ),
+          ).mul(counted(true)),
         )
         stretch(
           back,
-          select(reached.and(ahead), max(leave.sub(back), 0), float(0)),
+          select(reached.and(ahead), max(leave.sub(back), 0), float(0)).mul(
+            part === 'near' ? float(0) : float(1),
+          ),
         )
       }
       return tau
     }
     const reference = pointKernel((sample) =>
       exp(marched(sample.offset).negate()),
+    )
+    const nearOnly = pointKernel((sample) =>
+      exp(marched(sample.offset, 'near').negate()),
+    )
+    const farOnly = pointKernel((sample) =>
+      exp(marched(sample.offset, 'far').negate()),
     )
     // The march's own taps over that same march from where they end: what
     // of a case's error is the taps' and none of the cache's.
@@ -1117,6 +1156,24 @@ describe('the sun’s optical depth against the field', () => {
               farCrossing[taps] = score(lit.map(await scoreAt(taps, grid)))
             field.grid.toFirstExit = true
           }
+          // The far crossing's floor, from the reference alone.
+          let farFloor: Case['farFloor']
+          if (MEASURE && split && elevation < 0 && lit.length > 0) {
+            const near = await read(nearOnly)
+            const far = await read(farOnly)
+            const at = (got: Float32Array, k: number): number => got[2 * k + 1]!
+            const meanFar =
+              lit.reduce((sum, k) => sum + at(far, k), 0) / lit.length
+            const rms = (of: (k: number) => number): number =>
+              Math.sqrt(
+                lit.reduce((sum, k) => sum + of(k) ** 2, 0) / lit.length,
+              )
+            farFloor = {
+              meanFar,
+              floor: rms((k) => at(near, k) * (at(far, k) - meanFar)),
+              split: rms((k) => at(near, k) * at(far, k) - truth[2 * k + 1]!),
+            }
+          }
           results.push({
             scenario,
             sunDegrees: elevation,
@@ -1139,6 +1196,7 @@ describe('the sun’s optical depth against the field', () => {
             throughTaps,
             ...(inLevels === undefined ? {} : { inLevels }),
             ...(channels === undefined ? {} : { channels }),
+            ...(farFloor === undefined ? {} : { farFloor }),
           })
         }
       }
@@ -1153,6 +1211,8 @@ describe('the sun’s optical depth against the field', () => {
       cacheMean,
       sourceByOpacity,
       sourceByDepth,
+      nearOnly,
+      farOnly,
     ])
       kernel.dispose()
     offsets.dispose()
@@ -1238,6 +1298,7 @@ describe('the sun’s optical depth against the field', () => {
               heightsALayer: HEIGHTS_A_LAYER,
             },
             referenceSteps: REFERENCE_STEPS,
+            ...(HEIGHTS === 32 ? {} : { gridHeights: HEIGHTS }),
             units: 'transmittance, absolute',
             pooled: POPULATION.flatMap(({ scenario, suns }) =>
               suns.map((sunDegrees) => {
@@ -1439,6 +1500,7 @@ describe('the sun’s optical depth against the field', () => {
             {
               note: 'cloudSunAccuracy.gpu.test.ts: the caches’ passes after every cache starts over, the median of the runs a frame, and with the clock running at 1× and 60 Hz; GPU ms by pass on the timeline, with no trace and no scene drawn',
               ...REBUILD,
+              gridHeights: HEIGHTS,
               sunSlices: levers.sunSlices,
               sunRamp: levers.sunRamp,
               framesToWhole: whole < 0 ? null : whole + 1,
