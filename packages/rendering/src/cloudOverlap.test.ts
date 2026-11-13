@@ -5,10 +5,25 @@ import {
   crossingDepth,
   crossingExponent,
   crossingTransmittance,
+  resolvedSlab,
+  SKY_REACH,
+  skySource,
+  SOURCE_SUN_FLOOR,
+  SOURCE_VIEW_FLOOR,
   spreadDepth,
+  statisticalSlab,
   stepLight,
+  stepRamp,
   stepShare,
 } from './cloudOverlap.ts'
+import {
+  CUMULUS_SKY_QUADRATURE,
+  cumulusSkyAir,
+  cumulusSkyHeight,
+  cumulusSkyRadius,
+  cumulusSkyTable,
+} from './cumulusFixture.ts'
+import { marchSkyFaces, skyMomentsAt } from './skyIrradiance.ts'
 import { crossingForm, UNSPREAD_SHAPE } from './weatherField.ts'
 
 /*
@@ -427,5 +442,346 @@ describe('the share of a step', () => {
         relativeTo(stepShare(edge * (1 - 1e-13)), stepShare(edge)),
       ).toBeLessThan(2e-13)
     expect(stepShare(0)).toBe(1)
+  })
+})
+
+describe('the slab a sample stands in', () => {
+  /*
+   * A statistical step's columns are a gamma of shape k and mean m, and a
+   * ray that has crossed the share s of the level at a cosine μ has weighed
+   * a column of depth τ by τ·e^(−s·τ/μ): a gamma of shape k + 1 and scale
+   * θ = 1/(k/m + s/μ), whose moments are θʲ·(k + 1)(k + 2)…(k + j). A Gauss
+   * rule of n points takes every polynomial of degree 2n − 1 exactly, so
+   * the two points sum the columns' depths to their third power as the
+   * gamma has them, and the one point their mean: a source that is a cubic
+   * in a column's depth is summed exactly by two reads.
+   */
+  const shapes = between(Math.log(0.3), Math.log(40)).map(Math.exp)
+  const means = between(Math.log(0.05), Math.log(60)).map(Math.exp)
+
+  it('sums the tilted gamma’s columns to their third moment at two points, and to their mean at one', () => {
+    fc.assert(
+      fc.property(
+        shapes,
+        means,
+        between(0, 1),
+        between(SOURCE_VIEW_FLOOR, 1),
+        fc.boolean(),
+        (shape, mean, seen, viewMu, litSide) => {
+          const scale = 1 / (shape / mean + seen / viewMu)
+          const moment = (j: number): number => {
+            let product = 1
+            for (let i = 1; i <= j; i += 1) product *= (shape + i) * scale
+            return product
+          }
+          const statistics = { shape, mean }
+          const at = (point: 0 | 1, points: 1 | 2) =>
+            statisticalSlab(
+              statistics,
+              seen,
+              viewMu,
+              litSide,
+              0.4,
+              point,
+              points,
+            )
+          const column = ({ slab }: ReturnType<typeof at>): number =>
+            slab.top + slab.bottom
+          const one = at(0, 1)
+          expect(one.weight).toBe(1)
+          expect(column(one)).toBeCloseTo(moment(1), 9)
+          const two = [at(0, 2), at(1, 2)] as const
+          expect(two[0].weight + two[1].weight).toBeCloseTo(1, 12)
+          expect(column(two[0])).toBeLessThan(column(two[1]))
+          for (const j of [1, 2, 3]) {
+            const sum = two.reduce(
+              (total, point) => total + point.weight * column(point) ** j,
+              0,
+            )
+            expect(Math.abs(sum - moment(j))).toBeLessThan(1e-9 * moment(j))
+          }
+          // The sample stands the ray's share under the eye's face, which
+          // is the lit one or the far one.
+          for (const point of [one, ...two]) {
+            const under = litSide ? seen : 1 - seen
+            expect(point.slab.top).toBeCloseTo(under * column(point), 9)
+            expect(point.slab.sunMu).toBe(0.4)
+          }
+        },
+      ),
+    )
+  })
+
+  it('is one depth where a level’s depths do not spread, and nothing at a mean of nothing', () => {
+    const flat = { shape: UNSPREAD_SHAPE, mean: 20 }
+    for (const point of [0, 1] as const) {
+      const { slab } = statisticalSlab(flat, 0, 1, true, 1, point, 2)
+      // A ray that has crossed none of the level weighs its columns by
+      // their depth alone: the two points stand 1/√k to each side of the
+      // one depth.
+      expect(Math.abs(slab.top + slab.bottom - 20)).toBeLessThan(
+        (20 * 1.1) / Math.sqrt(UNSPREAD_SHAPE),
+      )
+      expect(slab.top).toBe(0)
+    }
+    const none = statisticalSlab(
+      { shape: 0.6, mean: 0 },
+      0.5,
+      0.5,
+      false,
+      0.2,
+      1,
+      2,
+    )
+    expect(none.slab.top + none.slab.bottom).toBeLessThan(1e-5)
+    expect(Number.isFinite(none.weight)).toBe(true)
+  })
+
+  it('turns a resolved step’s two depths by the sun’s cosine, its size under the horizon, never under the table’s floor', () => {
+    fc.assert(
+      fc.property(
+        between(0, 64),
+        between(0, 64),
+        between(-1, 1),
+        (toSun, behind, sunMu) => {
+          const slab = resolvedSlab(toSun, toSun + behind, sunMu)
+          const mu = Math.max(Math.abs(sunMu), SOURCE_SUN_FLOOR)
+          expect(slab.sunMu).toBe(mu)
+          expect(slab.top).toBeCloseTo(mu * toSun, 12)
+          expect(slab.bottom).toBeCloseTo(mu * behind, 10)
+        },
+      ),
+    )
+    // A whole depth under the depth to the sun leaves nothing behind.
+    expect(resolvedSlab(12, 3, 0.5)).toEqual({ sunMu: 0.5, top: 6, bottom: 0 })
+    expect(resolvedSlab(12, 30, -0.01).sunMu).toBe(SOURCE_SUN_FLOOR)
+  })
+})
+
+describe('the light a step adds of a ramp', () => {
+  const source = between(0, 3)
+
+  it('is the ramp’s integral over the step, by 2,000 points', () => {
+    fc.assert(
+      fc.property(source, source, decades(1e-4, 60), (start, end, depth) => {
+        const N = 2000
+        let sum = 0
+        for (let i = 0; i < N; i += 1) {
+          const t = ((i + 0.5) / N) * depth
+          sum +=
+            (start + ((end - start) * t) / depth) * Math.exp(-t) * (depth / N)
+        }
+        // The midpoints' own error at a depth of 60 is 4 parts in 10⁵.
+        expect(Math.abs(stepRamp(start, end, depth) - sum)).toBeLessThan(
+          1e-4 * Math.max(start, end) + 1e-12,
+        )
+      }),
+    )
+  })
+
+  it('is the source times the step’s opacity where the two ends are one, and `stepLight` where an end is dark', () => {
+    fc.assert(
+      fc.property(source, decades(1e-4, 60), (level, depth) => {
+        const opacity = 1 - Math.exp(-depth)
+        expect(
+          Math.abs(stepRamp(level, level, depth) - level * opacity),
+        ).toBeLessThan(1e-12 * Math.max(level, 1))
+        expect(stepRamp(0, level, depth)).toBe(stepLight(0, level, depth))
+        expect(stepRamp(level, 0, depth)).toBe(stepLight(level, 0, depth))
+      }),
+    )
+  })
+})
+
+describe('the sky’s light on a sample', () => {
+  // A sky's sides as the table holds them: Δ and Δ_s inside ±1.5, and c
+  // from nothing to under the linear sky by half of the sky's mean.
+  const lean = between(-1.5, 1.5)
+  const short = between(-0.5, 0)
+  const column = decades(1e-4, 400)
+  const cosine = between(-1, 1)
+  const share = between(0, 1)
+  /** The scaled phase's g′ at 10 µm. */
+  const ASYMMETRY = 0.74
+
+  it('is the sky’s mean under a sky alike on every side, at any column, share and view', () => {
+    fc.assert(
+      fc.property(
+        column,
+        column,
+        share,
+        cosine,
+        cosine,
+        (over, under, convective, rise, sunward) => {
+          expect(
+            skySource(
+              { up: 0, sunward: 0, upper: 0 },
+              over,
+              under,
+              convective,
+              ASYMMETRY,
+              rise,
+              sunward,
+            ),
+          ).toBe(1)
+        },
+      ),
+    )
+  })
+
+  it('is the lean and the flux alone for a cumuliform column, to the bit, whatever c is', () => {
+    fc.assert(
+      fc.property(
+        lean,
+        lean,
+        short,
+        column,
+        column,
+        cosine,
+        cosine,
+        (up, toSun, upper, over, under, rise, sunward) => {
+          const reach = over + under + 2 * SKY_REACH
+          const design = Math.max(
+            up * ((under + SKY_REACH) / reach - 0.5) +
+              1 +
+              ((up * rise + toSun * sunward) * ASYMMETRY) / reach,
+            0,
+          )
+          const at = (c: number): number =>
+            skySource(
+              { up, sunward: toSun, upper: c },
+              over,
+              under,
+              1,
+              ASYMMETRY,
+              rise,
+              sunward,
+            )
+          expect(at(upper)).toBe(design)
+          expect(at(0)).toBe(design)
+        },
+      ),
+    )
+  })
+
+  it('takes c by the column’s stratiform share and its thickness, and none of it in a wisp', () => {
+    fc.assert(
+      fc.property(
+        lean,
+        lean,
+        short,
+        column,
+        column,
+        share,
+        cosine,
+        cosine,
+        (up, toSun, upper, over, under, convective, rise, sunward) => {
+          const at = (v: number): number =>
+            skySource(
+              { up, sunward: toSun, upper },
+              over,
+              under,
+              v,
+              ASYMMETRY,
+              rise,
+              sunward,
+            )
+          const span = over + under
+          const want =
+            (1 - convective) * upper * (span / (span + 2 * SKY_REACH))
+          // Where neither is held at zero the two differ by the term alone.
+          fc.pre(at(1) > 0 && at(1) + want > 0)
+          expect(Math.abs(at(convective) - at(1) - want)).toBeLessThan(1e-12)
+          // c is not over zero, so it never brightens a sample.
+          expect(at(convective)).toBeLessThanOrEqual(at(1))
+          // A wisp of a thousandth of a transport depth takes under a
+          // thousandth of it.
+          expect(Math.abs(want)).toBeLessThanOrEqual(
+            Math.abs(upper) * (span / (2 * SKY_REACH)),
+          )
+        },
+      ),
+    )
+  })
+
+  it('is each side’s irradiance over π at the two faces of a thick stratiform column', () => {
+    fc.assert(
+      fc.property(
+        lean,
+        lean,
+        short,
+        decades(30, 3000),
+        cosine,
+        cosine,
+        (up, toSun, upper, thick, rise, sunward) => {
+          const sides = { up, sunward: toSun, upper }
+          // What a face of a column `thick` deep is short of the limit by:
+          // the lean and c each by their share of the reach, and the flux.
+          const bound =
+            (SKY_REACH * Math.abs(up) +
+              2 * SKY_REACH * Math.abs(upper) +
+              ASYMMETRY * Math.abs(up * rise + toSun * sunward)) /
+              (thick + 2 * SKY_REACH) +
+            1e-12
+          const top = skySource(sides, 0, thick, 0, ASYMMETRY, rise, sunward)
+          const base = skySource(sides, thick, 0, 0, ASYMMETRY, rise, sunward)
+          expect(
+            Math.abs(top - Math.max(1 + up / 2 + upper, 0)),
+          ).toBeLessThanOrEqual(bound)
+          expect(
+            Math.abs(base - Math.max(1 - up / 2 + upper, 0)),
+          ).toBeLessThanOrEqual(bound)
+        },
+      ),
+    )
+  })
+
+  it('is the air’s own two sides at a deck’s faces, from the sky table’s four numbers', () => {
+    // The table's moments against the quadrature's sides, which no linear
+    // sky gives: without c the upper side reads 18% to 200% high and the
+    // lower 9% to 64%, at 1.7 km and 9.5 km under suns of 15° and 45°. With
+    // it both are within 0.77%. The limit is the table's rows, 3% at a
+    // cloud's height; a column 4,000 deep is short of its limit by under
+    // 0.2% of the dimmer side.
+    const table = cumulusSkyTable()
+    const air = cumulusSkyAir()
+    const THICK = 4000
+    let worst = 0
+    let without = 0
+    for (const height of [1700, 9500])
+      for (const degrees of [15, 45]) {
+        const sunMu = Math.sin((degrees * Math.PI) / 180)
+        const moments = skyMomentsAt(table, cumulusSkyHeight(height), sunMu)
+        const faces = marchSkyFaces(
+          air,
+          cumulusSkyRadius(height),
+          sunMu,
+          CUMULUS_SKY_QUADRATURE,
+        )
+        for (const band of [0, 1, 2] as const) {
+          const sides = {
+            up: moments.up[band],
+            sunward: moments.sunward[band],
+            upper: moments.upper[band],
+          }
+          const mean = moments.mean[band]
+          const top = mean * skySource(sides, 0, THICK, 0, ASYMMETRY, 0, 0)
+          const base = mean * skySource(sides, THICK, 0, 0, ASYMMETRY, 0, 0)
+          const above = faces.above[band] / Math.PI
+          const below = faces.below[band] / Math.PI
+          worst = Math.max(
+            worst,
+            Math.abs(top / above - 1),
+            Math.abs(base / below - 1),
+          )
+          const linear =
+            mean *
+            skySource({ ...sides, upper: 0 }, 0, THICK, 0, ASYMMETRY, 0, 0)
+          without = Math.max(without, Math.abs(linear / above - 1))
+        }
+      }
+    expect(worst).toBeLessThan(0.03)
+    // The same face without c, twice its light at worst: the test can fail.
+    expect(without).toBeGreaterThan(1)
   })
 })

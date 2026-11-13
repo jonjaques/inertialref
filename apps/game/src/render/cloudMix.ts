@@ -1,6 +1,7 @@
 import type { Node } from 'three/webgpu'
 import {
   abs,
+  clamp,
   exp,
   float,
   int,
@@ -10,19 +11,26 @@ import {
   mix,
   select,
   sqrt,
+  vec2,
   vec3,
 } from 'three/tsl'
-import { UNSPREAD_SHAPE } from '@inertialref/rendering'
-import type { CloudLevelStatistics, CloudSunDepths } from './cloudNodes.ts'
+import { SKY_REACH, UNSPREAD_SHAPE } from '@inertialref/rendering'
+import type {
+  CloudLevelStatistics,
+  CloudSkyAt,
+  CloudSourceSlab,
+  CloudSunDepths,
+} from './cloudNodes.ts'
 import type { CloudLayerUniforms } from './cloudUniforms.ts'
 
 /*
  * How a ray's crossing of a partly cloudy level is mixed, and what light a
  * step of it adds: the one law the fine march and the far march both take,
  * and the layers' statistics that stand in for the sun's cache where it
- * holds nothing. `packages/rendering/src/cloudOverlap.ts` is the same
- * arithmetic on the CPU, and `cloudTrace.gpu.test.ts` holds each function
- * here to it.
+ * holds nothing, and the slab a sample stands in for the light after first
+ * order, and the sky's light on it. `packages/rendering/src/cloudOverlap.ts` is the same arithmetic on
+ * the CPU, and `cloudTrace.gpu.test.ts` and `cloudSource.gpu.test.ts` hold
+ * each function here to it.
  *
  * A ray is in the cloudy share of a column or out of it for the column's
  * whole crossing, and between columns the overlap is random, so a crossing
@@ -250,6 +258,59 @@ export function stepLight(
   return vec3(band(start.x, end.x), band(start.y, end.y), band(start.z, end.z))
 }
 
+/** What a step's two-end rules weigh its ends by: what it passes, and a ramp's far end. */
+export interface StepWeights {
+  /** e^(−τ). */
+  readonly through: Node<'float'>
+  /** (1 − (1 + τ)·e^(−τ))/τ, by its series where the quotient cancels. */
+  readonly ramp: Node<'float'>
+}
+
+/** A step's weights over the mixed optical depth `depth`: formed once where two rules read them. */
+export function stepWeights(depth: Node<'float'>): StepWeights {
+  const through = exp(depth.negate())
+  const thin = depth.lessThan(SERIES_BELOW)
+  const safe = select(thin, float(1), depth)
+  const ramp = select(
+    thin,
+    depth.mul(depth.mul(depth.div(8).sub(1 / 3)).add(0.5)),
+    float(1).sub(safe.add(1).mul(through)).div(safe),
+  )
+  return { through, ramp }
+}
+
+/**
+ * `stepLight` for one value that the three bands share: a source that is
+ * one number for the three, which a caller multiplies by its bands after.
+ * `weights` are the step's own where a caller holds them for another rule.
+ */
+export function stepLightBand(
+  start: Node<'float'>,
+  end: Node<'float'>,
+  depth: Node<'float'>,
+  weights: StepWeights = stepWeights(depth),
+): Node<'float'> {
+  return bandLight(start, end, depth, weights.through, weights.ramp)
+}
+
+/**
+ * The light a step adds of a source that is a ramp between its two ends,
+ * per unit of what reaches its start, each band: `stepRamp` in
+ * `packages/rendering/src/cloudOverlap.ts`. The sky's light on a sample is
+ * such a source, its lean linear in the column's depth, so the ramp is
+ * its integral where `stepLight`'s log-linear form is not, and it takes no
+ * logarithm where that form takes two a band.
+ */
+export function stepRamp(
+  start: Node<'vec3'>,
+  end: Node<'vec3'>,
+  weights: StepWeights,
+): Node<'vec3'> {
+  return start
+    .mul(float(1).sub(weights.through))
+    .add(end.sub(start).mul(weights.ramp))
+}
+
 /** What the layers' statistics read at a sample's own column. */
 export interface SunStatisticsInput {
   readonly layers: CloudLayerUniforms
@@ -357,4 +418,145 @@ export function sunPastTaps(
   statistics: Node<'float'>,
 ): Node<'float'> {
   return mix(statistics, exp(depths.toSun.negate()), depths.weight)
+}
+
+/* ------------------------------------------------------------------------- */
+/* The slab a sample stands in                                                */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * The light after first order is a plane slab's source, read at the slab a
+ * sample stands in (`CloudSourceNodes.source`). What that slab is, is a
+ * rule, and the two here are the only ones: both marches import them, so
+ * across the handover they differ in the statistics they were handed and
+ * never in what "depth" means.
+ */
+
+/** The least a view's cosine to the vertical is taken as where a column's depths are tilted by it. */
+const VIEW_MU_FLOOR = 0.02
+/** The least a level's mean depth is divided by. */
+const NO_DEPTH = 1e-6
+
+/**
+ * A resolved step's slab (design §5.5): the sample's depth along the sun's
+ * ray and the whole of that ray's (`CloudSun.depth`), each times the sun's
+ * cosine to the local vertical, which is exact in a deck. `sunMu` is the
+ * sample's own, signed: under the sample's horizon the lit face is the
+ * base, the depths are already sided that way, and the cosine is its size.
+ * A whole depth under the depth to the sun leaves nothing behind.
+ */
+export function resolvedSlab(
+  sun: Node<'vec2'>,
+  sunMu: Node<'float'>,
+): CloudSourceSlab {
+  const mu = max(abs(sunMu), SUN_MU_FLOOR)
+  return {
+    sunMu: mu,
+    depth: vec2(sun.x, max(sun.y.sub(sun.x), 0)).mul(mu),
+  }
+}
+
+/**
+ * A statistical step's slab at one Gauss point of the tilted gamma, and
+ * that point's weight.
+ *
+ * A sample that stands for a footprint stands for a spread of columns, and
+ * one read at any one depth is wrong by a factor: at the level's nominal
+ * column the light after first order reads +39% to +93% from above over
+ * broken cloud, and at the depth the statistics' transmittance carries
+ * −45% to −59%. Under independent columns the march's own sum is exact
+ * when the source at a sample is the table's mean over the columns as the
+ * ray has weighed them by then: a column of depth `τ` is seen through
+ * `e^(−s·τ/μ_v)` of itself and adds in proportion to `τ`, so the columns a
+ * gamma of shape `k` and mean `m` spreads are weighed as a gamma of shape
+ * `k + 1` and scale `1/(k/m + s/μ_v)`. Its Gauss points:
+ *
+ *     one:  τ = (k + 1)/(k/m + s/μ_v), weight 1
+ *     two:  τ = ((k + 2) ∓ √(k + 2))/(k/m + s/μ_v), weights ½ ± 1/(2·√(k + 2))
+ *
+ * `point` 0 is the shallower. A column of depth `τ` holds the sample at
+ * `h·τ` under its lit face, `h = s` where the eye's face is the lit one and
+ * `1 − s` where it is not. The depths are a column's and go to the node as
+ * they are: no cosine of the sun turns them.
+ *
+ * `mean` is the level's true mean depth (`CloudLevelStatistics.mean`),
+ * never the mean its transmittance implies, which is 1.3 to 3 times it.
+ * The crossing's exponent has no place in the weight: on a slant it reads
+ * +18% to +21% over fair cumulus where one column reads within 2%.
+ */
+export function statisticalSlab(
+  statistics: {
+    readonly shape: Node<'float'>
+    readonly mean: Node<'float'>
+  },
+  /** The share of the level's column between the eye's face and the sample. */
+  seen: Node<'float'>,
+  /** |cosine| of the view to the local vertical. */
+  viewMu: Node<'float'>,
+  /** Whether the eye's face is the lit one. */
+  litSide: Node<'bool'>,
+  sunMu: Node<'float'>,
+  point: 0 | 1,
+  points: 1 | 2,
+): { readonly slab: CloudSourceSlab; readonly weight: Node<'float'> } {
+  const { shape } = statistics
+  const share = clamp(seen, 0, 1)
+  const rate = shape
+    .div(max(statistics.mean, NO_DEPTH))
+    .add(share.div(max(viewMu, VIEW_MU_FLOOR)))
+  const spread = sqrt(shape.add(2))
+  const sign = point === 0 ? -1 : 1
+  const column = (
+    points === 1 ? shape.add(1) : shape.add(2).add(spread.mul(sign))
+  ).div(rate)
+  const under = select(litSide, share, float(1).sub(share))
+  return {
+    slab: {
+      sunMu: max(abs(sunMu), SUN_MU_FLOOR),
+      depth: vec2(under, float(1).sub(under)).mul(column),
+    },
+    weight:
+      points === 1 ? float(1) : float(0.5).sub(float(0.5 * sign).div(spread)),
+  }
+}
+
+/**
+ * The sky's light on a sample as a source, over the sky's mean radiance,
+ * per band (design §5.6): one, which a conservative medium returns at any
+ * depth, leaned toward the side the sample's column is nearer by the
+ * diffusion's weight of its two faces, with the flux's view term, and for
+ * a stratiform column the two sides' mean as it thickens.
+ *
+ * `over` and `under` are the column's transport depths over the sample and
+ * under it, `convective` its cumuliform share, `asymmetry` the scaled
+ * phase's `g′`, `rise` the ray's cosine to the vertical and `sunward` its
+ * cosine to the sun's horizontal direction.
+ *
+ * The sides' mean is `(1 − v)·c·s`, `s` the column's share of its own
+ * depth and the reach outside its two faces: a deck's face then reads the
+ * side's irradiance over π, `1 ± Δ/2 + c`, which the lean alone gives only
+ * under a sky linear in direction. A cumuliform column takes none of it
+ * and is the lean and the flux to the bit. `skySource` in
+ * `packages/rendering/src/cloudOverlap.ts` is this on the CPU and says what
+ * each form was measured against.
+ */
+export function skySource(
+  sides: Pick<CloudSkyAt, 'up' | 'sunward' | 'upper'>,
+  over: Node<'float'>,
+  under: Node<'float'>,
+  convective: Node<'float'>,
+  asymmetry: Node<'float'>,
+  rise: Node<'float'>,
+  sunward: Node<'float'>,
+): Node<'vec3'> {
+  const span = over.add(under)
+  const reach = span.add(2 * SKY_REACH)
+  const top = under.add(SKY_REACH).div(reach)
+  const flux = sides.up
+    .mul(rise)
+    .add(sides.sunward.mul(sunward))
+    .mul(asymmetry)
+    .div(reach)
+  const mean = sides.upper.mul(float(1).sub(convective).mul(span.div(reach)))
+  return max(sides.up.mul(top.sub(0.5)).add(1).add(flux).add(mean), 0)
 }

@@ -42,6 +42,7 @@ import type { CloudFrameInputs } from './cloudFrame.ts'
 import {
   type CloudEngineInputs,
   type CloudSystem,
+  type CloudSystemDeps,
   createCloudSystem,
 } from './cloudSystem.ts'
 import type { GpuSession } from './gpuHarness.ts'
@@ -350,6 +351,8 @@ export interface CloudRigOptions {
   readonly sun?: Vec3
   /** A second wet body: see `RigStance.twin`. */
   readonly twin?: RigStance['twin']
+  /** `CloudSystemDeps.skyTable`: false builds the system without the sky's term. */
+  readonly skyTable?: boolean
 }
 
 export interface CloudRig {
@@ -436,7 +439,21 @@ export function cloudRig(
     layout,
     sensorFrame,
     undefined,
-    options.clouds === false ? {} : { clouds: createCloudSystem },
+    options.clouds === false
+      ? {}
+      : {
+          clouds:
+            options.skyTable === undefined
+              ? createCloudSystem
+              : Object.assign(
+                  (deps: CloudSystemDeps) =>
+                    createCloudSystem({
+                      ...deps,
+                      skyTable: options.skyTable!,
+                    }),
+                  { createFront: createCloudSystem.createFront },
+                ),
+        },
   )
   const target = new RenderTarget(width, height, {
     depthBuffer: false,

@@ -843,9 +843,14 @@ describe('a table on the air’s bundle that no graph reads', () => {
   const stable = (wgsl: string): string =>
     wgsl.replace(/NodeBuffer_\d+/g, 'NodeBuffer')
 
-  /** The WGSL of every site that builds an air bundle, each under its name. */
+  /**
+   * The WGSL of every site that builds an air bundle, each under its name.
+   * The trace is built without the sky's term, which is the one graph that
+   * reads the sky table (`CloudSystemDeps.skyTable`): the premise is what a
+   * table costs the graphs that do not read it.
+   */
   async function programs(): Promise<Record<string, string>> {
-    const rig = cloudRig(gpu, 16, 16)
+    const rig = cloudRig(gpu, 16, 16, { skyTable: false })
     try {
       await rig.system!.warm()
       const trace = rig.system!.resources.find(

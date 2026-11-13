@@ -36,7 +36,6 @@ import {
   type OutsideSet,
 } from './slabOutside.ts'
 import {
-  MIDPOINT_BEARINGS,
   type SourceBearings,
   type SourceGrid,
   type SourceMedium,
@@ -63,13 +62,7 @@ import {
   outsideVerdict,
   type OutsideVerdict,
 } from './slabVerdict.ts'
-import {
-  NUMBERS_TEXT,
-  comment,
-  halfDecimal,
-  numbersText,
-  percent,
-} from './slabText.ts'
+import { comment, percent } from './slabText.ts'
 
 /*
  * The source tables' generator: the oracle's interior field, fitted by every
@@ -78,7 +71,6 @@ import {
  * in stages as `slabTables.ts` does, into the same directory, and reads that
  * generator's `reference` stages:
  *
- *   node apps/ingest/src/transport/slabSourceTable.ts stage three      (the three-term table's grid)
  *   node apps/ingest/src/transport/slabSourceTable.ts stage 20 0 4     (every form at 20 depth nodes: part, parts)
  *   node apps/ingest/src/transport/slabSourceTable.ts merge 20 4       (a grid's parts as one)
  *   node apps/ingest/src/transport/slabSourceTable.ts transport
@@ -90,7 +82,7 @@ import {
  *   pnpm exec prettier -w packages/rendering/src/slabSource*.generated.ts
  *
  * `stage <nodes>` takes any node count, so a form is judged at 16 or 32
- * nodes by naming them; `write` reads `three` and the count in `VIEW_GRID`.
+ * nodes by naming them; `write` reads the count in `VIEW_GRID`.
  */
 
 /** What every source table's axes share. */
@@ -99,9 +91,6 @@ export const SOURCE_AXES = {
   depthScale: 0.02,
   depthMax: 16,
 } as const
-
-/** The three-term table's grid, and where its source is sampled in bearing. */
-export const THREE_GRID: SourceGrid = { ...SOURCE_AXES, nodes: 16, suns: 8 }
 
 /**
  * The view table's grid. At sixteen depth nodes, eight suns leave the
@@ -259,20 +248,13 @@ export interface SourceStage {
   readonly forms: readonly string[]
 }
 
-/** A grid's name as a stage: `three`, or a count of depth nodes. */
+/** A grid's name as a stage: a count of depth nodes. */
 function stagePlan(name: string): {
   grid: SourceGrid
   transport: SourceTransport
   bearings: SourceBearings
   forms: (asymmetry: number) => SourceForm[]
 } {
-  if (name === 'three')
-    return {
-      grid: THREE_GRID,
-      transport: 'formula',
-      bearings: MIDPOINT_BEARINGS,
-      forms: (asymmetry) => threeForms(asymmetry ** 2),
-    }
   const nodes = Number(name)
   if (!Number.isInteger(nodes) || nodes < 2)
     throw new Error(`slabSourceTable: ${name} is not a grid`)
@@ -467,10 +449,7 @@ function judgeStage(name: string): void {
   const stage = loadStage<SourceStage>(`source-${name}`)
   const transport = loadStage<TransportRow[]>('transport')
   const { rows, fluxes } = judgedRows()
-  const forms =
-    name === 'three'
-      ? threeForms(stage.asymmetry ** 2)
-      : sourceForms(stage.asymmetry)
+  const forms = sourceForms(stage.asymmetry)
   const scales = sourceScales(stage.transport, transport)
   const kept: Record<string, Reconstruction> = {}
   const say = (label: string, judged: Reconstruction): void => {
@@ -497,13 +476,8 @@ function judgeStage(name: string): void {
 
 /** What `write` judges before it writes anything. */
 export interface SourceVerdict {
-  readonly three: SourceStage
   readonly views: SourceStage
   readonly transport: readonly TransportRow[]
-  /** The three-term table by each measure, with the lobe and without. */
-  readonly relative: Reconstruction
-  readonly absolute: Reconstruction
-  readonly plain: Reconstruction
   /** The view table, on the domain and off it. */
   readonly judged: Reconstruction
   readonly outside: OutsideVerdict
@@ -511,32 +485,16 @@ export interface SourceVerdict {
 }
 
 export function decide(): SourceVerdict {
-  const three = loadStage<SourceStage>('source-three')
   const views = loadStage<SourceStage>(`source-${VIEW_GRID.nodes}`)
   const transport = loadStage<TransportRow[]>('transport')
   const { rows, fluxes } = judgedRows()
-  const forms = threeForms(three.asymmetry ** 2)
-  const threeJudged = (name: string): Reconstruction => {
-    const form = forms.find((item) => item.name === name)!
-    return judge(
-      stageTable(three, form),
-      form,
-      sourceScales(three.transport, transport),
-      rows,
-      fluxes,
-    )
-  }
   const form = viewForm({ name: 'views', blend: 'angle' })
   const table = stageTable(views, form)
   const scales = sourceScales(views.transport, transport)
   const ice = loadStage<IceTransportRow[]>('ice-transport')
   return {
-    three,
     views,
     transport,
-    relative: threeJudged('three-relative'),
-    absolute: threeJudged('three-absolute'),
-    plain: threeJudged('three-relative-plain'),
     judged: judge(table, form, scales, rows, fluxes),
     outside: outsideVerdict(
       table,
@@ -579,17 +537,7 @@ export function texelsText(table: Float64Array): string {
 
 /** `slabSource.generated.ts`'s text, before prettier. */
 export function sourceText(verdict: SourceVerdict): string {
-  const { three, views, judged, relative } = verdict
-  const lobe = three.asymmetry ** 2
-  const threeForm = threeForms(lobe).find(
-    (item) => item.name === 'three-relative',
-  )!
-  const threeTable = stageTable(three, threeForm)
-  // The three-term table holds three channels a texel: its fourth is no term.
-  const terms: number[] = []
-  for (let at = 0; at < threeTable.terms.length; at += 4)
-    for (let term = 0; term < 3; term += 1)
-      terms.push(halfDecimal(threeTable.terms[at + term]!))
+  const { views, judged } = verdict
   const cosines = quadratureCosines(views.streams, VIEW_COSINES)
   const slabs = 2 * cosines.length
   const bytes = views.grid.nodes ** 2 * views.grid.suns * slabs * 8
@@ -603,10 +551,10 @@ export function sourceText(verdict: SourceVerdict): string {
     '',
     'The higher orders’ source function in a plane slab of the renderer’s scaled',
     'medium, per unit of the sun’s irradiance and of scaled optical depth, sr⁻¹:',
-    'what a march adds a step beyond first order. Both tables are fits of the',
+    'what a march adds a step beyond first order. The table is a fit of the',
     `adding-doubling oracle’s interior field at ${views.streams} streams (\`slabSource.ts\`),`,
     `for the droplet table’s population at ${SOURCE_RADIUS} µm with the three bands as one`,
-    `(moments’ digest ${views.digest}), and both are indexed by two transport depths,`,
+    `(moments’ digest ${views.digest}), and it is indexed by two transport depths,`,
     't_d from the lit face and t_b from the far one, on',
     'u(t) = ln(1 + t/depthScale)/ln(1 + depthMax/depthScale), and by the sun’s',
     'cosine μ₀ to the lit face’s normal, evenly from `sunMuMin` to 1.',
@@ -672,23 +620,8 @@ export function sourceText(verdict: SourceVerdict): string {
     'higher orders summed at eight Gauss points in μ and sixteen azimuths.',
     '',
     ...outsideHeader(verdict.outside),
-    '',
-    '`SLAB_SOURCE` is the first table, three terms over the whole sphere,',
-    '',
-    '  J₀ + J₁·μ_v + J_f·Φ(ν)        Φ(ν) = 4π·HG(ν; lobe) − 1',
-    '',
-    'with ν the cosine between the sun’s light and the light to the eye, by the',
-    'same least squares over every direction at sixteen bearings. It is laid',
-    'out [sun][bottom][top][term], a half float’s value printed as the shortest',
-    'decimal that rounds to it, and its transport depth is by the formula’s g′.',
-    `Its worst error is ${percent(relative.error)}, at ${relative.worst};`,
-    `${percent(relative.rms)} root mean square and ${percent(relative.flux)} in the reflected flux; ${percent(verdict.plain.error)} without the`,
-    `lobe; and by least squares on the source itself, ${percent(verdict.absolute.error)}. One cosine cannot be`,
-    'the step the source takes across the horizon, so no march draws with it:',
-    '`cloudContracts.test.ts` holds its layout.',
   ]
   const body = [
-    ...NUMBERS_TEXT,
     'export const SLAB_VIEW_SOURCE = {',
     "  format: 'inertialref/slab-view-source',",
     '  version: 1,',
@@ -727,25 +660,6 @@ export function sourceText(verdict: SourceVerdict): string {
     ...outsideFields(verdict.outside),
     '  /** Half floats in `slabSourceTexels.generated.ts`: nodes × nodes × (2·cosines.length·suns) × 4. */',
     `  texelCount: ${bytes / 2},`,
-    '} as const',
-    '',
-    '/** The three-term table: no march draws with it. */',
-    'export const SLAB_SOURCE = {',
-    "  format: 'inertialref/slab-source',",
-    '  version: 1,',
-    `  nodes: ${three.grid.nodes},`,
-    `  suns: ${three.grid.suns},`,
-    `  sunMuMin: ${three.grid.sunMuMin},`,
-    `  depthScale: ${three.grid.depthScale},`,
-    `  depthMax: ${three.grid.depthMax},`,
-    '  /** µm: the radius row the table is generated at. */',
-    `  radius: ${SOURCE_RADIUS},`,
-    '  /** The lobe’s asymmetry: g′² at that radius. */',
-    `  lobe: ${Number(lobe.toPrecision(7))},`,
-    '  /** The reconstruction’s worst relative error against the oracle, on the domain and between its nodes. */',
-    `  reconstructionError: ${four(relative.error)},`,
-    `  reconstruction: ${reconstructionText(relative)},`,
-    `  terms: /*@__PURE__*/ numbers(${numbersText(terms, 12)}),`,
     '} as const',
     '',
   ]
@@ -811,7 +725,7 @@ if (import.meta.main) {
   else if (stage === 'write') write()
   else {
     console.error(
-      'slabSourceTable: a stage is one of stage <three | nodes> <part> <parts>, merge <nodes> <parts>, transport, outside <set>, sample, ice, judge <three | nodes>, write',
+      'slabSourceTable: a stage is one of stage <nodes> <part> <parts>, merge <nodes> <parts>, transport, outside <set>, sample, ice, judge <three | nodes>, write',
     )
     process.exit(1)
   }

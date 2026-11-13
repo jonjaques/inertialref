@@ -628,19 +628,19 @@ plates are phase 3's.
 
 Changes against the as-built declaration, computed from dimensions:
 
-| Resource                            | Change                                   | Bytes           |
-| ----------------------------------- | ---------------------------------------- | --------------- |
-| Weather cube, 1542 × 1028           | Four RGBA8 targets become two            | −12,681,408     |
-| Clipmap, 256² × 6                   | Four RGBA8 targets become two            | −3,145,728      |
-| Phase atlas                         | 1024 × 32 RGBA16F becomes 1024 × 64      | +262,144        |
-| Sky table                           | 102 × 16 RGBA16F, one a body, two bodies | +26,112         |
-| Slab source table                   | Up to 32 × 32 × 8 RGBA16F (§5.5)         | +65,536 at most |
-| Blue-noise mask, if it wins         | 64 × 64 × 16 R8                          | +65,536         |
-| Profile                             | 64 × 8 RGBA8 becomes 64 × 48             | +10,240         |
-| **The maps and the light's tables** |                                          | **−15,397,568** |
-| Volume, level 0                     | Goes: 256² × 34 RG8                      | −4,456,448      |
-| Volume bound                        | Goes, with its kernel                    | −393,216        |
-| **Net**                             |                                          | **−20,247,232** |
+| Resource                            | Change                                       | Bytes           |
+| ----------------------------------- | -------------------------------------------- | --------------- |
+| Weather cube, 1542 × 1028           | Four RGBA8 targets become two                | −12,681,408     |
+| Clipmap, 256² × 6                   | Four RGBA8 targets become two                | −3,145,728      |
+| Phase atlas                         | 1024 × 32 RGBA16F becomes 1024 × 64          | +262,144        |
+| Sky table                           | 102 × 16 RGBA16F, one a body, two bodies     | +26,112         |
+| Slab source table                   | 20 × 20 × 300 RGBA16F, the view table (§5.5) | +960,000        |
+| Blue-noise mask, if it wins         | 64 × 64 × 16 R8                              | +65,536         |
+| Profile                             | 64 × 8 RGBA8 becomes 64 × 48                 | +10,240         |
+| **The maps and the light's tables** |                                              | **−14,503,104** |
+| Volume, level 0                     | Goes: 256² × 34 RG8                          | −4,456,448      |
+| Volume bound                        | Goes, with its kernel                        | −393,216        |
+| **Net**                             |                                              | **−19,352,768** |
 
 The grid reads its ray's whole from a second cell and stores nothing more
 (§5.5).
@@ -649,13 +649,13 @@ The grid reads its ray's whole from a second cell and stores nothing more
 
 | Size, and bodies              | Phase 0 as landed | Phase 1, as designed | Phase 1 if the volume keeps level 0 and its bound |
 | ----------------------------- | ----------------- | -------------------- | ------------------------------------------------- |
-| 1920 × 1080, one served body  | 91.62 MB          | **71.37 MB**         | 76.22 MB                                          |
-| 1440 × 900 at DPR 2, one body | 85.01 MB          | **64.76 MB**         | 69.61 MB                                          |
-| 1920 × 1080, two clouded      | 96.41 MB          | **76.16 MB**         | 81.01 MB                                          |
+| 1920 × 1080, one served body  | 91.62 MB          | **72.26 MB**         | 77.11 MB                                          |
+| 1440 × 900 at DPR 2, one body | 85.01 MB          | **65.65 MB**         | 70.50 MB                                          |
+| 1920 × 1080, two clouded      | 96.41 MB          | **77.05 MB**         | 81.90 MB                                          |
 
 - **B12 is 80 MB with one served body, declared.** Phase 1 holds it with
-  8.6 MB in hand, and with 3.8 MB if the sun gate refuses the volume's cut.
-  The mask and the largest slab table are counted; without the mask the
+  7.7 MB in hand, and with 2.9 MB if the sun gate refuses the volume's cut.
+  The mask and the slab source's view table are counted; without the mask the
   total is 0.07 MB less. Phase 2's reflection probe is what the room is for.
 - A second clouded body adds its own far atlas, 4,792,608 B (the as-built
   map). Its sky table is in the table above. The rubric records the pair's
@@ -685,7 +685,7 @@ it.
 - **The sun gate judges the cut.** Phase 0's `sunAccuracy` instrument runs
   again at its two suns, 37.5° and 5°, at four taps. The cut stands if no
   scenario's RMS is worse than the landed figure by more than 0.01 (§7.4). If
-  it fails, level 0 returns and the total is 76.22 MB, still inside B12.
+  it fails, level 0 returns and the total is 77.11 MB, still inside B12.
 - **What the instrument does not reach.** It scores samples within 4 km of an
   eye at 2 m, so the figure that chose the grid is about the inner 4 km, and
   level 0's window is 12.8 km. Package L widens the instrument to the grid's
@@ -722,14 +722,14 @@ pass times from the landed campaign's table. The plan's are estimates
 (**E**), written so each package knows its share, and none is a bar: a bar is
 the A/B Δ.
 
-| Term                        | `ground`   | `horizon`  | `inside`   | `orbit`    | What moves it                                                                                                                                                                           |
-| --------------------------- | ---------- | ---------- | ---------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The composite               | 1.70 → 0.6 | 1.52 → 0.5 | 2.08 → 1.0 | 1.84 → 0.6 | `chain`: the break goes and the fragment stays. The empty split is 1.0 ms of the landed pass (campaign 1)                                                                               |
-| The trace                   | 3.72 → 2.6 | 2.45 → 1.8 | 1.27 → 1.2 | 0.09 → 0.1 | The scaled medium doubles a step's length in cloud, and a tap reads three textures where it read five. Against that, the slab source and the grid's second read are a fetch each a step |
-| The history, the depth copy | 0.38 → 0.4 | 0.40 → 0.4 | 0.40 → 0.4 | 0.38 → 0.4 | Nothing                                                                                                                                                                                 |
-| The bakes                   | 1.62 → 0.4 | 1.61 → 0.4 | 1.56 → 0.4 | 0.84 → 0.1 | Each cache at its field's pace (§4.7), two map targets, the volume's two levels                                                                                                         |
-| **Sum**                     | 7.42 → 4.0 | 5.98 → 3.1 | 5.31 → 3.0 | 3.15 → 1.2 |                                                                                                                                                                                         |
-| **The bar**                 | 5.0        | 4.0        | 4.0        | 1.6        |                                                                                                                                                                                         |
+| Term                        | `ground`   | `horizon`  | `inside`   | `orbit`    | What moves it                                                                                                                                                                                                                                              |
+| --------------------------- | ---------- | ---------- | ---------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The composite               | 1.70 → 0.6 | 1.52 → 0.5 | 2.08 → 1.0 | 1.84 → 0.6 | `chain`: the break goes and the fragment stays. The empty split is 1.0 ms of the landed pass (campaign 1)                                                                                                                                                  |
+| The trace                   | 3.72 → 2.6 | 2.45 → 1.8 | 1.27 → 1.2 | 0.09 → 0.1 | The scaled medium doubles a step's length in cloud, and a tap reads three textures where it read five. Against that, a step reads the slab source twice, and four times where it reads its level's statistics, and the grid's second read is a fetch a sun |
+| The history, the depth copy | 0.38 → 0.4 | 0.40 → 0.4 | 0.40 → 0.4 | 0.38 → 0.4 | Nothing                                                                                                                                                                                                                                                    |
+| The bakes                   | 1.62 → 0.4 | 1.61 → 0.4 | 1.56 → 0.4 | 0.84 → 0.1 | Each cache at its field's pace (§4.7), two map targets, the volume's two levels                                                                                                                                                                            |
+| **Sum**                     | 7.42 → 4.0 | 5.98 → 3.1 | 5.31 → 3.0 | 3.15 → 1.2 |                                                                                                                                                                                                                                                            |
+| **The bar**                 | 5.0        | 4.0        | 4.0        | 1.6        |                                                                                                                                                                                                                                                            |
 
 - **The composite's own fragment has no figure.** The landed pass holds the
   break and the fragment together, and 0.5 to 1.0 ms is that pass less the
@@ -1709,7 +1709,7 @@ export interface CloudMedium {
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | **Phase atlas** | 1024 × 64 RGBA16F, one texture. Rows 0–31 droplets, 2–32 µm, as generated. Rows 32–54 ice: Baum's severely roughened aggregate of solid columns at its 23 effective diameters, 10–120 µm in 5 µm steps (§5.4). Rows 55–63 reserved for rain and dust. RGB the phase per band, convolved with the served sun's disk; **A the row's gain, `1/(1 − f_δ)`** | `CloudPhase` (`render/cloudPhase.ts:42`) from `mieDroplets()`, the ice table and `convolveDisk` at upload, again when the served sun's angular radius moves 1% | The march's prefetch, the far march, the composite's second body |
 | **Sky table**   | 102 × 16 RGBA16F a body: three 34-column blocks over the sun's cosine, 16 rows over height, a guard column each side of a block. Block 0 `ln L̄`; block 1 `Δ`, the upper side's irradiance less the lower's over `π·L̄`; block 2 `Δ_s`, the sunward side's less the far side's (§5.6)                                                                     | `bakeSkyMoments` in the atmosphere task (`render/atmosphereTask.ts:59-60`), uploaded beside the air's two tables (`render/atmosphereLuts.ts:105-106`)          | The march, the far march; phase 2's ground and sea               |
-| **Slab source** | RGBA16F 3D, linear, `n × n × 8` with `n` the smallest of 16, 24 and 32 that holds §5.5's reconstruction: `(u(t_d), u(t_b), μ₀)` to `(J₀, J₁, J_f)`, `t` a transport depth from a face and `u` its logarithmic map                                                                                                                                       | Generated by R1, uploaded by `cloudSource.ts`                                                                                                                  | The march and the far march                                      |
+| **Slab source** | RGBA16F 3D, linear and clamped on its three axes, 20 × 20 × 300, 960,000 bytes: the view table `SLAB_VIEW_SOURCE`, a slab of 15 sun slices for each of ten view cosines in each hemisphere; `(u(t_d), u(t_b), μ₀)` to the four coefficients of the source's dependence on bearing, `t` a transport depth from a face and `u` its logarithmic map        | Generated by R1; its texels arrive by `import()` and `cloudSource.ts` uploads them                                                                             | The march and the far march                                      |
 | **Blue noise**  | 64 × 64 × 16 R8, read by `textureLoad`                                                                                                                                                                                                                                                                                                                  | Generated by T3, uploaded by `cloudJitter.ts`                                                                                                                  | The trace, if the mask wins                                      |
 
 ```ts
@@ -1732,9 +1732,25 @@ export interface CloudSkyNodes {
     body: CloudBodyUniforms,
   ): { mean: Node<'vec3'>; up: Node<'vec3'>; sunward: Node<'vec3'> }
 }
+/** A plane slab a sample stands in: the sun's cosine to its lit face, and the scaled depths normal to it, from that face and to the far one. */
+export interface CloudSourceSlab {
+  readonly sunMu: Node<'float'>
+  readonly depth: Node<'vec2'>
+  /** The cumuliform share of the slab's column, which the factor of the sun is blended by. */
+  readonly convective?: Node<'float'>
+}
 export interface CloudSourceNodes {
-  /** (J₀, J₁, J_f) per unit of the sun's irradiance, from a sample's transport depths to its two faces and the sun's cosine. */
-  source(depth: Node<'vec2'>, sunMu: Node<'float'>): Node<'vec3'>
+  /** The view: its cosine to the lit face's outward normal, and its bearing's cosine from the sun's light. */
+  view(mu: Node<'float'>, bearing: Node<'float'>): CloudSourceView
+  /** A level's class and its factor of the sun, formed once a ray. */
+  level(index: Node<'int'>): CloudSourceLevel
+  /** The source of the sun's orders past the first, per unit of its irradiance and of scaled depth, one value for the three bands. */
+  source(
+    slab: CloudSourceSlab,
+    radius: Node<'float'>,
+    level: CloudSourceLevel,
+    view: CloudSourceView,
+  ): Node<'float'>
 }
 ```
 
@@ -1777,15 +1793,15 @@ first-order accumulators by the phase inside the kernel
 (`render/cloudMarch.ts:312-326`), and what is stored is `L_c`, already phased
 (`cloudTrace.ts:222`). So each addition is a register and a fetch:
 
-| Addition                                                   | What it costs in the kernel                                             | An output? |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------- | ---------- |
-| Per-class first order (droplets, ice; rain and dust later) | A row range in one atlas; the prefetch of §5.4                          | No         |
-| The sky term                                               | One fetch of the sky table a segment; one `vec3` register               | No         |
-| Higher orders                                              | Arithmetic, or one 3D fetch a step; one `vec3` register                 | No         |
-| The moon's beam (phase 5)                                  | Its own prefetch at its own angle, summed into `L_c`                    | No         |
-| Lightning (phase 4)                                        | Lit in the composite from depths the trace already writes               | No         |
-| A wind that varies by layer, in reprojection               | The history finds the layer from the reprojected point's height (§5.10) | No         |
-| The served opacity and the range (§8.5)                    | Three slots of the step counters' buffer, under `stats`                 | No         |
+| Addition                                                   | What it costs in the kernel                                               | An output? |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------- | ---------- |
+| Per-class first order (droplets, ice; rain and dust later) | A row range in one atlas; the prefetch of §5.4                            | No         |
+| The sky term                                               | One read of the sky table's three blocks a segment; five `vec3` registers | No         |
+| Higher orders                                              | Arithmetic, or one 3D fetch a step; one `vec3` register                   | No         |
+| The moon's beam (phase 5)                                  | Its own prefetch at its own angle, summed into `L_c`                      | No         |
+| Lightning (phase 4)                                        | Lit in the composite from depths the trace already writes                 | No         |
+| A wind that varies by layer, in reprojection               | The history finds the layer from the reprojected point's height (§5.10)   | No         |
+| The served opacity and the range (§8.5)                    | Three slots of the step counters' buffer, under `stats`                   | No         |
 
 **The three ways to add a fifth output, and why none is taken.**
 
@@ -1825,6 +1841,12 @@ with the grid:
 
 - **14 at worst, two free.** The volume and its bound are not in the trace:
   the grid's bake reads the volume, in a fragment stage of its own.
+- **As built the trace binds 13:** the clipmap's `cover`, the two noises,
+  the profile, the sun grid, the air's two and its sky table, the phase
+  atlas, the far atlas, the depth copy, the jitter's mask and the slab
+  source. The clipmap's `kind` is read through `cover`'s array. A system
+  built without the sky's term (`CloudSystemDeps.skyTable`) binds 12 and
+  draws the sky's placeholder.
 - The grid's second read, for a ray's whole depth (§5.5), is of the texture
   already bound, and the statistics that stand in for the grid are arithmetic
   on the `cover` and `kind` texels a step already holds. Neither adds a

@@ -1,14 +1,17 @@
 import type { Node } from 'three/webgpu'
 import {
+  abs,
   bool,
   Break,
   clamp,
+  dot,
   exp,
   exp2,
   float,
   floor,
   If,
   int,
+  length,
   log,
   Loop,
   max,
@@ -38,13 +41,19 @@ import { cloudSample, shellCrossing } from './cloudGeometry.ts'
 import { KIND_GAP, KIND_SUN, UNCOUNTED_STEPS } from './cloudKinds.ts'
 import { type CloudKnotWriter, KNOT_TRANSMITTANCE } from './cloudKnots.ts'
 import { UNSPREAD_SHAPE } from '@inertialref/rendering'
-import type { CLOUD_PHASE_MODES } from './cloudLevers.ts'
+import type { CLOUD_PHASE_MODES, CLOUD_TRANSPORTS } from './cloudLevers.ts'
 import {
   crossingDepth,
   crossingExponent,
+  resolvedSlab,
+  skySource,
   spreadDepth,
+  statisticalSlab,
   stepLight,
+  stepLightBand,
+  stepRamp,
   stepShare,
+  stepWeights,
 } from './cloudMix.ts'
 import type {
   CloudFarResult,
@@ -55,7 +64,11 @@ import type {
 } from './cloudNodes.ts'
 import type { CloudSunTaps } from './cloudSunlight.ts'
 import type { CloudTraceDeps } from './cloudTrace.ts'
-import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
+import {
+  CLOUD_CLIMATE_KINDS,
+  type CloudBodyUniforms,
+  type CloudLayerUniforms,
+} from './cloudUniforms.ts'
 
 /*
  * The per-ray fine march: adaptive steps out of cloud and an optical-depth
@@ -135,12 +148,47 @@ import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
  * first sample at t₀ + ξ·Δ instead drops the first ξ·Δ of every ray — up to
  * 50 m of a cloud's lit face, an optical depth of 3.4 in cumulus.
  *
- * **Past first order the light is a placeholder.** The source every step
- * integrates is first order's, the sun through its taps and its cache times
- * the phase and its gain, and beside it the sky's Ψ at a half, isotropic,
- * taken constant over a step. The slab's source and the sky's table join the
- * step's source where `skySource` is added, from `deps.source` and
- * `deps.sky`, with `CloudSun.depth` the depths they are read at.
+ * **The light after first order is a second source through the same two
+ * ends.** At every sun a step takes, the march forms the plane slab its
+ * sample stands in and reads that slab's source of the sun's orders past
+ * the first (`deps.source`, design §5.5), and the step's integral takes it
+ * log-linear between its ends as it takes first order's. Held from a
+ * step's start instead it reads a slab's radiance 15.7% off at worst where
+ * the two ends read 6.4%.
+ *
+ * - **The slab is a rule's, and the step says which** (`cloudMix.ts`). A
+ *   resolved step hands `resolvedSlab` the sun's two depths
+ *   (`CloudSun.depth`). A statistical step stands for a spread of columns,
+ *   and sums `statisticalSlab`'s Gauss points of them, read from the
+ *   level's shape and its true mean depth; its opacity is the crossing's
+ *   law, unchanged.
+ * - **The view is laid in the sample's own frame,** the local vertical
+ *   from heights: a ray's cosine to it turns 0.9° in 100 km on Earth, and
+ *   the table's first three view cosines are within 7° of the horizon. The
+ *   bearing is taken from the two directions laid on the face, which keeps
+ *   its digits beside the vertical where `(ν − μ·μ₀)/√(1 − μ²)` loses them.
+ *   Under a sun below the sample's horizon the lit face is the base, and
+ *   the view's cosine turns over with it.
+ * - **The factor of the sun by level** rides the slab as its column's
+ *   cumuliform share, and the `transport` lever at `'plane'` hands the
+ *   node none.
+ * - **The light behind the 1% exit is added:** the sun's source past first
+ *   order at the exit, times what the cloud still passes there. A deck is
+ *   as bright again behind its hundredth as the source is deep in it, and
+ *   without it a slab's reflected flux reads 2.14% low at worst where its
+ *   bar is 2%.
+ *
+ * **The sky's light is a placeholder unless a march is built to read the
+ * sky table** (`CloudMarchOptions.skyTable`, design §5.6): Ψ at a half,
+ * isotropic, constant over a step. The table is one more sampled texture
+ * in the kernel that takes it, the trace's thirteenth. Read from the
+ * table, the sky's term is the mean radiance leaned toward the side the
+ * sample's column is nearer, with the flux's view term and, for a
+ * stratiform column, the two sides' mean as it thickens (`skySource` in
+ * `cloudMix.ts`), and joins the same two ends. The stratiform share is the
+ * column's cumuliform share's complement, which the factor of the sun
+ * reads too; the `transport` lever turns the factor off and leaves the
+ * sky's term its share.
  */
 
 /** How first order takes its phase's radius (§5.4): the `phaseMode` lever's values. */
@@ -222,6 +270,25 @@ export interface CloudMarchOptions {
    * a stride: the march a test holds the strides to.
    */
   readonly unstrided?: boolean
+  /**
+   * Read the sky's light on a cloud from the body's sky table (design
+   * §5.6) where the march draws its placeholder. One more sampled texture
+   * in the kernel that takes it.
+   */
+  readonly skyTable?: boolean
+  /**
+   * Gauss points a statistical step sums its columns' source at
+   * (`statisticalSlab`): two when absent. One is two reads of the table
+   * fewer, and reads broken cumulus from above 10 to 16 points higher.
+   */
+  readonly statisticalPoints?: 1 | 2
+  /**
+   * Lay the light after first order's view in the eye's frame, the ray's
+   * cosine to the eye's vertical and the sun's there, where the march lays
+   * it in each sample's own: the form a test builds to record what the
+   * sample's frame is worth at a distance.
+   */
+  readonly eyeFrame?: boolean
 }
 
 /** Out of cloud: from 50 m, growing 1% a step, to 1 km (plan §5.2). */
@@ -251,9 +318,19 @@ const AIR_EVERY = 8
  * is sampled once in, each 1% longer than the last.
  */
 const STRIDE = (STEP_GROWTH ** AIR_EVERY - 1) / (STEP_GROWTH - 1)
+/**
+ * The `'slab'` transport's index, as its uniform holds it: typed by the
+ * levers' own table, which this file reads as a type alone.
+ */
+const SLAB_TRANSPORT: (typeof CLOUD_TRANSPORTS)[0] extends 'slab' ? 0 : never =
+  0
 /** The sky's light on a cloud, a placeholder: Ψ × σ_s × ½, isotropic (§5.10). */
 const SKY_SHARE = 0.5
 const ISOTROPIC = 1 / (4 * Math.PI)
+/** The least the product of two laid directions' lengths a bearing is taken from: under it a direction stands on the normal and has none. */
+const NO_BEARING = 1e-6
+/** The least a sine of the sun's zenith angle the sky's sunward lean is divided by. */
+const SUN_OVERHEAD = 1e-3
 /**
  * The front is where the ray's opacity first reaches a half (plan §5.5), in
  * the drawn medium's transmittance.
@@ -419,6 +496,12 @@ function mediumRegisters() {
     whole: float(0).toVar(),
   }
 }
+
+/** The column's cumuliform share, for a medium that holds it: this step's, and the last cloudy step's. */
+const shareRegisters = () => ({
+  here: float(0).toVar(),
+  stepped: float(0).toVar(),
+})
 type MediumRegisters = ReturnType<typeof mediumRegisters>
 
 function assignMedium(to: MediumRegisters, from: CloudMedium): void {
@@ -620,6 +703,8 @@ function crossingStatistics() {
     shape: float(UNSPREAD_SHAPE).toVar(),
     sight: float(1).toVar(),
     spread: float(1).toVar(),
+    /** The cloudy columns' true mean depth: what the light after first order spreads its columns about. */
+    mean: float(0).toVar(),
   }
 }
 
@@ -633,6 +718,12 @@ function pendingStep() {
     depth: float(0).toVar(),
     /** The sun's light at its start, unphased, each band. */
     source: vec3(0).toVar(),
+    /**
+     * The source of the sun's light past first order at its start, per unit
+     * of the sun's irradiance: one number for the three bands, which the
+     * air's beam multiplies where the step is closed.
+     */
+    higher: float(0).toVar(),
     /** What the phase gives the step's light as it is added. */
     weight: vec3(1).toVar(),
     level: int(0).toVar(),
@@ -673,8 +764,8 @@ function rayRegisters(ray: CloudRay) {
     through: float(1).toVar(),
     /** The crossing the last sample stood in. */
     crossing: int(-1).toVar(),
-    /** The sky's placeholder light, phased as it is: isotropic. */
-    sky: vec3(0).toVar(),
+    /** The light after first order so far: the sun's higher orders and the sky's, which no phase multiplies. */
+    rest: vec3(0).toVar(),
     weight: float(0).toVar(),
     moment: float(0).toVar(),
     moment2: float(0).toVar(),
@@ -684,6 +775,20 @@ function rayRegisters(ray: CloudRay) {
     blocked: vec3(0).toVar(),
     airLength: float(0).toVar(),
     psi: vec3(1).toVar(),
+  }
+}
+
+/**
+ * The sky table's three blocks at the air's last sample, what a step's sky
+ * term is formed from, and that term at the pending step's start.
+ */
+function skyRegisters() {
+  return {
+    mean: vec3(0).toVar(),
+    up: vec3(0).toVar(),
+    sunward: vec3(0).toVar(),
+    upper: vec3(0).toVar(),
+    pending: vec3(0).toVar(),
   }
 }
 
@@ -733,9 +838,66 @@ export function cloudMarch(
   const ofLevel = (v: Node<'vec3'>, level: Node<'int'>): Node<'float'> =>
     select(level.equal(int(0)), v.x, select(level.equal(int(1)), v.y, v.z))
   const gather = phaseGather(options.phaseMode ?? 'mean', deps, ray.nu)
+  const skyTable =
+    options.skyTable === true
+      ? {
+          ...skyRegisters(),
+          // Each level's transport scale at its reference radius and its
+          // reference extinction, held once a ray as the source's are.
+          transport: body.layers.transport.toVar(),
+          sigma: body.layers.sigma.toVar(),
+        }
+      : null
+  /*
+   * What the light after first order reads of each level, formed once a
+   * ray, before its first step. Read from their uniforms at every sun
+   * instead, a level's component of a handful of uniforms cost the frame
+   * 0.15 to 0.3 ms at 1080p on the Mac mini's GPU, and formed once a
+   * crossing they were formed again by every batch of rays one of which
+   * was entering cloud.
+   */
+  const once = {
+    /** The source node's own numbers of each level (`CloudSourceNodes.level`). */
+    levels: LEVELS.map((k) => deps.source.level(int(k)).toVar()),
+    /** Each level's footprint past which a step in it is statistical. */
+    statistical: body.layers.cell.mul(switchShare).toVar(),
+    /**
+     * Each level's cumuliform share, which the factor of the sun and the
+     * sky's light both read. A regime's level is one share everywhere,
+     * which its climate's uniforms hold; a climate whose share varies by
+     * place is read by a medium that holds its column's, and a level of one
+     * that does not has no share: no factor, and a stratiform column's sky.
+     */
+    share: select(
+      body.climate.kind.equal(uint(CLOUD_CLIMATE_KINDS.regime)),
+      saturate(body.climate.convective),
+      vec3(0),
+    ).toVar(),
+    /** One where the factor of the sun is taken, which is the `'slab'` transport's alone. */
+    factor: select(
+      trace.transport.equal(uint(SLAB_TRANSPORT)),
+      float(1),
+      float(0),
+    ).toVar(),
+    /**
+     * The eye's distance from the body's center, its vertical times that,
+     * the sun's direction and the datum's radius: what the sample's frame
+     * is formed from. Held here they took 0.06 to 0.09 ms off the ground
+     * and horizon rows.
+     */
+    eyeRadius: body.datumRadius.add(body.eye).toVar(),
+    eyeUp: body.up.mul(body.datumRadius.add(body.eye)).toVar(),
+    sun: body.sun.toVar(),
+    datum: body.datumRadius.toVar(),
+  }
+  // Declared here, in the march's own scope, and written only where the
+  // medium turns out to hold its column's cumuliform share: a register
+  // first built inside the loop's branch would be that branch's.
+  const share = shareRegisters()
+  let sharesHeld = false
 
-  /** L_c so far: first order through its phase, and the sky's light. */
-  const lightSoFar = (): Node<'vec3'> => gather.total().add(r.sky)
+  /** L_c so far: first order through its phase, and the light after it. */
+  const lightSoFar = (): Node<'vec3'> => gather.total().add(r.rest)
 
   /**
    * The air over the length walked since its last sample, as a step of
@@ -757,7 +919,17 @@ export function cloudMarch(
     )
     const beam = select(sky, table, cleared)
     const medium = air(body.air, height, s.sunMu, phases, beam, LEVEL)
-    r.psi.assign(psiTableAt(body.air, s.sunMu, height01, LEVEL))
+    // The sky's light on the cloud, at the air's own sample: its three
+    // blocks vary over kilometers of height, so one read a segment.
+    if (skyTable === null)
+      r.psi.assign(psiTableAt(body.air, s.sunMu, height01, LEVEL))
+    else {
+      const sky = deps.sky.at(s, body)
+      skyTable.mean.assign(sky.mean)
+      skyTable.up.assign(sky.up)
+      skyTable.sunward.assign(sky.sunward)
+      skyTable.upper.assign(sky.upper)
+    }
     const length = r.airLength.div(R)
     const tau = medium.extinction.mul(length)
     const through = exp(tau.negate())
@@ -806,6 +978,8 @@ export function cloudMarch(
     }
     column.fraction.assign(statistics.fraction)
     column.depth.assign(statistics.depth)
+    // A medium that holds no mean is one depth: its own.
+    column.mean.assign(statistics.mean ?? statistics.depth)
     column.shape.assign(statistics.shape)
     column.sight.assign(statistics.sight)
     column.spread.assign(
@@ -819,22 +993,207 @@ export function cloudMarch(
     )
   }
 
-  /** The pending step's light, now that the sun at its far end is known. */
-  function closeStep(sunlight: Node<'vec3'>): void {
-    const end = options.sourceAtStart === true ? pending.source : sunlight
+  /**
+   * The pending step's light, now that the sources at its far end are
+   * known: first order's; the sun's past first order, one number for the
+   * three bands, through the air's beam taken at the step's far end, which
+   * turns over kilometers of height where a step in cloud is tens of
+   * meters; and the sky's where the march reads its table.
+   */
+  function closeStep(
+    sunlight: Node<'vec3'>,
+    higher: Node<'float'>,
+    air: Node<'vec3'>,
+    sky: Node<'vec3'> | null,
+  ): void {
+    const held = options.sourceAtStart === true
     const light = pending.seen
       .mul(pending.weight)
-      .mul(stepLight(pending.source, end, pending.depth))
+      .mul(
+        stepLight(
+          pending.source,
+          held ? pending.source : sunlight,
+          pending.depth,
+        ),
+      )
     gather.add(pending.level, light, pending.radius)
+    // The sky's source is a ramp between the step's two ends, and reads
+    // the weights the sun's light past first order is weighed by.
+    const weights =
+      skyTable !== null && sky !== null ? stepWeights(pending.depth) : undefined
+    r.rest.addAssign(
+      pending.seen
+        .mul(air)
+        .mul(
+          stepLightBand(
+            pending.higher,
+            held ? pending.higher : higher,
+            pending.depth,
+            weights,
+          ),
+        ),
+    )
+    if (skyTable !== null && sky !== null)
+      r.rest.addAssign(
+        pending.seen.mul(
+          stepRamp(skyTable.pending, held ? skyTable.pending : sky, weights!),
+        ),
+      )
     pending.on.assign(0)
   }
 
   /**
    * The sky's light a step adds, per unit of what reaches its start and of
-   * its opacity: a placeholder, Ψ at a half, isotropic. Where the slab's
-   * source and the sky's table join the march.
+   * its opacity: a placeholder, Ψ at a half, isotropic. A march built to
+   * read the sky table takes `skyLight` at the step's two ends instead.
    */
-  const skySource = (): Node<'vec3'> => r.psi.mul(SKY_SHARE * ISOTROPIC)
+  const ambientSky = (): Node<'vec3'> => r.psi.mul(SKY_SHARE * ISOTROPIC)
+
+  /** A sample's medium as the light after first order reads it: this step's, or the step's being closed. */
+  interface Lit {
+    readonly level: Node<'int'>
+    readonly radius: Node<'float'>
+    readonly sigma: Node<'float'>
+    /** The level's in-cloud column over the sample, and whole. */
+    readonly depth: Node<'vec2'>
+    /** The column's cumuliform share, 0..1. */
+    readonly cumuliform: Node<'float'>
+    /** That share as the factor of the sun takes it: none under a transport with no factor. */
+    readonly convective: Node<'float'>
+  }
+
+  /**
+   * The source of the sun's light past first order at a sample, per unit
+   * of the sun's irradiance: the slab the sample stands in, read in the
+   * sample's own frame. `rise` is the ray's cosine to the sample's
+   * vertical, and `up` that vertical.
+   */
+  function slabSource(
+    at: CloudSample,
+    sunDepth: Node<'vec2'>,
+    sample: Lit,
+    rise: Node<'float'>,
+    up: Node<'vec3'>,
+    /** The sun's cosine to `up`. */
+    sunRise: Node<'float'>,
+  ): Node<'float'> {
+    const above = at.sunMu.greaterThanEqual(0)
+    // To the lit face's outward normal, of light traveling to the eye: the
+    // face is the top under a sun over the sample's horizon and the base
+    // under one below it.
+    const muV = select(above, rise.negate(), rise)
+    // That light and the sun's, each laid on the face.
+    const eyeLaid = up.mul(rise).sub(ray.direction)
+    const sunLaid = up.mul(sunRise).sub(once.sun)
+    const laid = length(eyeLaid).mul(length(sunLaid))
+    const bearing = select(
+      laid.greaterThan(NO_BEARING),
+      dot(eyeLaid, sunLaid).div(max(laid, NO_BEARING)),
+      float(0),
+    )
+    const view = deps.source.view(muV, bearing)
+    const { convective } = sample
+    const statistical = at.footprint
+      .greaterThan(ofLevel(once.statistical, sample.level))
+      .toVar()
+    const levelRead = select(
+      sample.level.equal(int(0)),
+      once.levels[0]!,
+      select(sample.level.equal(int(1)), once.levels[1]!, once.levels[2]!),
+    ).toVar()
+    // The share of the level's column the ray has crossed to here: the
+    // profile's own share over the sample, from whichever face the eye is
+    // on.
+    const over = saturate(sample.depth.x.div(max(sample.depth.y, TINY)))
+    const down = rise.lessThan(0)
+    const seen = select(down, over, float(1).sub(over))
+    const litSide = down.and(above).or(down.not().and(above.not()))
+    const points = options.statisticalPoints ?? 2
+    const gauss = (point: 0 | 1) =>
+      statisticalSlab(column, seen, abs(rise), litSide, at.sunMu, point, points)
+    /*
+     * One read serves a resolved step and a statistical step's first point,
+     * its slab chosen between the two rules, and the second point is read
+     * only where a step is statistical. As two branches of a read each, a
+     * batch of rays that straddles the switch paid for three: this GPU
+     * runs a branch's dearer side for all 32.
+     */
+    const plain = resolvedSlab(sunDepth, at.sunMu)
+    const first = gauss(0)
+    const source = deps.source
+      .source(
+        {
+          sunMu: plain.sunMu,
+          depth: select(statistical, first.slab.depth, plain.depth),
+          convective,
+        },
+        sample.radius,
+        levelRead,
+        view,
+      )
+      .mul(select(statistical, first.weight, float(1)))
+      .toVar()
+    if (points === 2)
+      If(statistical, () => {
+        const second = gauss(1)
+        source.addAssign(
+          second.weight.mul(
+            deps.source.source(
+              { ...second.slab, convective },
+              sample.radius,
+              levelRead,
+              view,
+            ),
+          ),
+        )
+      })
+    return source
+  }
+
+  /**
+   * The sky's light on a sample, as a source (design §5.6, `skySource`):
+   * the sky's mean radiance, which a conservative medium returns exactly at
+   * any depth, leaned toward the side the sample's column is nearer, with
+   * the flux's view term, and for the column's stratiform share the two
+   * sides' mean as it thickens.
+   *
+   * The column is the level's own over and under the sample, in transport
+   * depths at the level's reference radius, scaled by the sample's
+   * extinction over the level's reference, no more than one: a wisp inside
+   * a deep level reads a thin column and glows with the whole sphere's
+   * mean. A heuristic, declared.
+   */
+  function skyLight(
+    sky: NonNullable<typeof skyTable>,
+    at: CloudSample,
+    sample: Lit,
+    rise: Node<'float'>,
+  ): Node<'vec3'> {
+    const transport = ofLevel(sky.transport, sample.level)
+    const thin = saturate(
+      sample.sigma.div(max(ofLevel(sky.sigma, sample.level), TINY)),
+    )
+    const scale = transport.mul(thin)
+    const over = sample.depth.x.mul(scale)
+    const under = max(sample.depth.y.sub(sample.depth.x), 0).mul(scale)
+    // The ray's cosine to the sun's horizontal direction at the sample.
+    const sunward = ray.nu
+      .sub(rise.mul(at.sunMu))
+      .div(
+        max(sqrt(max(float(1).sub(at.sunMu.mul(at.sunMu)), 0)), SUN_OVERHEAD),
+      )
+    return sky.mean.mul(
+      skySource(
+        sky,
+        over,
+        under,
+        sample.cumuliform,
+        float(1).sub(transport),
+        rise,
+        sunward,
+      ),
+    )
+  }
 
   /** A step of `length` through cloud: its mix, its opacity's moments, and its light left pending. */
   function step(
@@ -906,7 +1265,7 @@ export function cloudMarch(
     )
     // Dimmed by the air between t₀ and this step as it is gathered.
     const seen = r.air.mul(before).toVar()
-    r.sky.addAssign(seen.mul(skySource()).mul(opacity))
+    if (skyTable === null) r.rest.addAssign(seen.mul(ambientSky()).mul(opacity))
     const weight = before.mul(opacity)
     const middle = r.t.add(length.mul(0.5)).sub(ray.start)
     r.weight.addAssign(weight)
@@ -927,6 +1286,7 @@ export function cloudMarch(
     knot.exit.assign(r.t.add(length))
     for (const key of Object.keys(m) as (keyof MediumRegisters)[])
       stepped[key].assign(m[key])
+    if (sharesHeld) share.stepped.assign(share.here)
     r.through.assign(after)
   }
 
@@ -1035,6 +1395,10 @@ export function cloudMarch(
       If(done.not(), () => {
         const medium = deps.medium(s, body)
         assignMedium(m, medium)
+        if (medium.convective !== undefined) {
+          sharesHeld = true
+          share.here.assign(medium.convective)
+        }
         If(here.index.notEqual(r.crossing), () => {
           readStatistics(medium)
         })
@@ -1069,32 +1433,88 @@ export function cloudMarch(
           cloudSample(ray, r.t, body, uniforms.camera.pixelAngle),
           dither,
         )
-        const lit = cloudy
+        const opens = cloudy
+        const level = select(opens, m.layer, stepped.layer).toVar()
+        const radius = select(opens, m.radius, stepped.radius).toVar()
+        const sigma = select(opens, m.sigma, stepped.sigma)
+        const depth = vec2(
+          select(opens, m.depth, stepped.depth),
+          select(opens, m.whole, stepped.whole),
+        ).toVar()
         const sun = deps.sun(
           at,
           {
-            fraction: select(lit, m.fraction, stepped.fraction),
-            sigma: select(lit, m.sigma, stepped.sigma),
-            layer: select(lit, m.layer, stepped.layer),
+            fraction: select(opens, m.fraction, stepped.fraction),
+            sigma,
+            layer: level,
             column: float(NEVER),
-            radius: select(lit, m.radius, stepped.radius),
-            depth: vec2(
-              select(lit, m.depth, stepped.depth),
-              select(lit, m.whole, stepped.whole),
-            ),
+            radius,
+            depth,
             statistics: column,
           },
           body,
+          // The light after first order reads the sun's two depths: a sun
+          // forms them only where it is asked to as it is formed.
+          { depth: true },
         )
-        const sunlight = sun.air.mul(sun.cloud).toVar()
+        // The beam through the air, once: first order's light and the
+        // light after it are both lit by it.
+        const air = sun.air.toVar()
+        const sunlight = air.mul(sun.cloud).toVar()
+        // The two depths, read where first order's transmittance is, into
+        // one variable of this block: a resolved step and a statistical
+        // one's two points read it from branches under it.
+        const sunDepth = sun.depth.toVar()
         r.kinds.addAssign(uint(KIND_SUN))
         const { taken, skipped } = sun as Partial<CloudSunTaps>
         if (taken !== undefined && skipped !== undefined)
           r.taps.addAssign(vec2(taken, skipped))
+        // The sample's own vertical, from heights: the frame the light
+        // after first order is laid in.
+        const radiusAt = max(once.datum.add(at.altitude), 1)
+        const eyeFrame = options.eyeFrame === true
+        const rise = eyeFrame
+          ? ray.mu
+          : once.eyeRadius.mul(ray.mu).add(at.distance).div(radiusAt).toVar()
+        const up = eyeFrame ? body.up : once.eyeUp.add(at.offset).div(radiusAt)
+        // The column's own share where the medium holds it, and the
+        // level's elsewhere.
+        const cumuliform = (
+          sharesHeld
+            ? saturate(select(opens, share.here, share.stepped))
+            : ofLevel(once.share, level)
+        ).toVar()
+        const medium: Lit = {
+          level,
+          radius,
+          sigma,
+          depth,
+          cumuliform,
+          convective: cumuliform.mul(once.factor),
+        }
+        const higher = slabSource(
+          at,
+          sunDepth,
+          medium,
+          rise,
+          up,
+          eyeFrame ? body.sunUp : at.sunMu,
+        ).toVar()
+        const sky =
+          skyTable === null
+            ? null
+            : skyLight(skyTable, at, medium, rise).toVar()
         If(waiting, () => {
-          closeStep(sunlight)
+          closeStep(sunlight, higher, air, sky)
+          // Behind the exit the cloud goes on: the sun's source there past
+          // first order, times what the cloud still passes.
+          If(r.through.lessThan(EXIT_TRANSMITTANCE), () => {
+            r.rest.addAssign(r.air.mul(air).mul(r.through.mul(higher)))
+          })
         })
         pending.source.assign(sunlight)
+        pending.higher.assign(higher)
+        if (skyTable !== null && sky !== null) skyTable.pending.assign(sky)
       })
       // A knot a crossing: closed where the ray leaves the crossing its
       // cloud began in, and where the march ends inside one.

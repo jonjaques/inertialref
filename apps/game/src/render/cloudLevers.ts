@@ -63,8 +63,13 @@ export const CLOUD_PHASE_MODES = ['mean', 'bins', 'sample'] as const
 export const CLOUD_PHASE_BINS = [2, 3, 4] as const
 /** The trace's jitter: interleaved gradient noise, or the spatiotemporal blue-noise mask. */
 export const CLOUD_JITTERS = ['ign', 'stbn'] as const
-/** The higher orders' form: the slab's source function, or the fitted octave series. */
-export const CLOUD_TRANSPORTS = ['slab', 'octaves'] as const
+/**
+ * The higher orders' form: the slab's source function with the factor of
+ * the sun by level, the fitted octave series, or the plane slab's source
+ * alone, with no factor. The octaves are not built, and draw as the plane
+ * slab does.
+ */
+export const CLOUD_TRANSPORTS = ['slab', 'octaves', 'plane'] as const
 /**
  * The composite's form: two scene passes always, the second pass storing its
  * samples once, or the composite as a term of the sensor's chain on a frame

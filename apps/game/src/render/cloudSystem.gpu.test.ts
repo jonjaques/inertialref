@@ -338,7 +338,7 @@ describe('what the device is asked for', () => {
    * On a device of its own, so the chain with the clouds is that device's
    * first: a second chain on one device shares the composite's warm-up
    * target and the air's shared stand-ins with the first, and adds 16
-   * undeclared bytes where the first adds 1,640.
+   * undeclared bytes where the first adds 2,456.
    */
   let session: GpuSession
   let bare: Awaited<ReturnType<typeof life>>
@@ -527,12 +527,16 @@ describe('what the device is asked for', () => {
     for (const kind of sensor.keys())
       expect(tally(clouded.textures).has(kind), kind).toBe(true)
     /*
-     * 1,640 bytes the clouds add and do not declare, each named: the 4 × 4
+     * 2,456 bytes the clouds add and do not declare, each named: the 4 × 4
      * scene target the composite's warm-up draws into and keeps, with its
      * multisampled twins (1,616 B); the air's four 1 × 1 table stand-ins,
-     * the shared pair and the second body's own (16 B); and one 1 × 1
-     * half-float stand-in a meter reads the scene through (8 B). A texture
-     * a resource leaves off its list is a new line here.
+     * the shared pair and the second body's own (16 B); one 1 × 1
+     * half-float stand-in a meter reads the scene through (8 B); and the
+     * served air's sky table, which the trace reads for the sky's light on
+     * a cloud: here the airless rig's stand-in of one row (816 B), and
+     * under an air the body's own 102 × 16, which the air owns and the
+     * design's budget counts (§2.5). A texture a resource leaves off its
+     * list is a new line here.
      */
     expect(Object.fromEntries(unlisted)).toEqual({
       'output|4×4×1 rgba16float ×1': 1,
@@ -544,8 +548,9 @@ describe('what the device is asked for', () => {
       '|4×4×1 depth32float ×4': 1,
       '|1×1×1 rgba8unorm ×1': 4,
       '|1×1×1 rgba16float ×1': 1,
+      '|102×1×1 rgba16float ×1': 1,
     })
-    expect(sum(clouded.textures) - sum(bare.textures) - declared).toBe(1640)
+    expect(sum(clouded.textures) - sum(bare.textures) - declared).toBe(2456)
   })
 
   it('names the storage buffers the clouds keep, which the declaration leaves out', () => {

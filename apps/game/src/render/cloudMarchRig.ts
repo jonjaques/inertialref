@@ -181,10 +181,10 @@ export function testSun(
 }
 
 /**
- * What a march's deps hold beyond its medium, its sun and its phase: no sky
- * and no source, which the march reads nowhere, and the trace's own jitter
- * over the test's uniforms, so a kernel here draws the rays the system's
- * draws.
+ * What a march's deps hold beyond its medium, its sun and its phase: the
+ * sky's node, a source whose table never lands, so the light after first
+ * order is nothing, and the trace's own jitter over the test's uniforms, so
+ * a kernel here draws the rays the system's draws.
  */
 export const marchLight = (uniforms: CloudUniforms) => ({
   sky: createCloudSky(),
@@ -329,6 +329,8 @@ export interface ProbeOptions {
   readonly far?: CloudFarFn
   /** The march's own options, less the handover's ξ, which is a ray's. */
   readonly march?: Omit<CloudMarchOptions, 'handover'>
+  /** The light after first order: a source and a sky in place of the rig's own, which hold nothing. */
+  readonly light?: Partial<Pick<CloudMarchDeps, 'source' | 'sky'>>
 }
 
 /**
@@ -359,6 +361,7 @@ export function marchProbe(
     medium: field,
     sun: sun(field),
     ...marchLight(uniforms),
+    ...options.light,
     ...(options.air === undefined ? {} : { air: options.air }),
   }
   const kernel = Fn(() => {

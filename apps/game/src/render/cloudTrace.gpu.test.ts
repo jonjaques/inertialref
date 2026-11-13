@@ -257,15 +257,16 @@ describe('the kernels', () => {
       expect(storage).toBeLessThanOrEqual(4)
     }
     // The stand-ins' census: the field's 5, the sun grid, the air's 2, the
-    // phase, the far atlas, the depth copy and the jitter's mask. A floor as
-    // well as a ceiling: the counts are a regex over three's WGSL, and a
-    // spelling that stopped matching would pass the ceiling at zero. The sky
-    // and the source bind only in a kernel that reads them, and this march
-    // reads neither. Every way of taking the phase binds the one atlas.
+    // phase, the far atlas, the depth copy, the jitter's mask and the slab
+    // source's table. A floor as well as a ceiling: the counts are a regex
+    // over three's WGSL, and a spelling that stopped matching would pass
+    // the ceiling at zero. The sky's table binds only in a kernel built to
+    // read it, and this march draws the sky's placeholder. Every way of
+    // taking the phase binds the one atlas.
     for (const march of counted.slice(0, CLOUD_PHASE_MODES.length))
       expect(march).toMatchObject({
         name: 'cloud trace',
-        sampled: 12,
+        sampled: 13,
         storage: 4,
       })
     expect(counted.at(-1)!.name).toBe('cloud stats')
@@ -282,43 +283,55 @@ describe('the system’s own trace kernel', () => {
    * one a device has to accept: WebGPU's default device allows a stage 16
    * sampled textures and 4 storage textures, and nothing raises the limit.
    *
-   * Eleven today: the clipmap's cover (a 2D array), the base and detail
-   * noises (3D), the profile, the sun grid (3D), the air's transmittance and
-   * Ψ, the phase atlas, the far atlas, the depth copy and the jitter's mask
-   * (3D), which is bound whichever draw the lever takes. Phase 1's design
-   * counts three more at worst (§4.5): the clipmap's `kind`, the sky table
-   * and the slab source, 14 of 16. The count is exact, not a
-   * ceiling, so a binding nobody counted fails here rather than at the
-   * sixteenth, and the package that adds one changes this number where a
-   * reviewer reads it.
+   * Thirteen today: the clipmap's cover (a 2D array), the base and detail
+   * noises (3D), the profile, the sun grid (3D), the air's transmittance,
+   * its Ψ and its sky table, the phase atlas, the far atlas, the depth
+   * copy, the jitter's mask (3D), which is bound whichever draw the lever
+   * takes, and the slab source's table (3D). Phase 1's design counts one
+   * more at worst (§4.5): the clipmap's `kind`, 14 of 16. The count is
+   * exact, not a ceiling, so a binding nobody counted fails here rather
+   * than at the sixteenth, and the package that adds one changes this
+   * number where a reviewer reads it. A system built without the sky's
+   * term (`CloudSystemDeps.skyTable`) binds the twelve without the sky
+   * table.
    */
-  const SAMPLED = { '2d': 6, '2d_array': 1, '3d': 4 }
+  const SAMPLED = { '2d': 7, '2d_array': 1, '3d': 5 }
+  const WITHOUT_SKY = { '2d': 6, '2d_array': 1, '3d': 5 }
   const STAGE_SAMPLED = 16
   const STAGE_STORAGE = 4
 
-  it('binds 11 sampled textures of the stage’s 16, and its 4 storage textures', async () => {
-    const rig = cloudRig(gpu, 16, 16)
-    try {
-      await rig.system!.warm()
-      const trace = rig.system!.resources.find(
-        (held) => held.name === 'trace',
-      ) as CloudTrace
-      // Each of the march's three kernels, by how it takes the phase's radius.
-      for (const kernel of trace.kernels().slice(0, CLOUD_PHASE_MODES.length)) {
-        expect(kernel.name).toBe('cloud trace')
-        const wgsl = wgslOf(kernel)
-        const counted = bindings(wgsl)
-        const kinds: Record<string, number> = {}
-        for (const [, kind] of wgsl.matchAll(/var\s+\w+\s*:\s*texture_(\w+)</g))
-          if (!kind!.startsWith('storage'))
-            kinds[kind!] = (kinds[kind!] ?? 0) + 1
-        expect(kinds).toEqual(SAMPLED)
-        expect(counted.sampled).toBe(11)
-        expect(counted.sampled).toBeLessThanOrEqual(STAGE_SAMPLED)
-        expect(counted.storage).toBe(STAGE_STORAGE)
+  it('binds 13 sampled textures of the stage’s 16 and its 4 storage textures, and 12 built without the sky’s term', async () => {
+    for (const [skyTable, kindsWanted] of [
+      [true, SAMPLED],
+      [false, WITHOUT_SKY],
+    ] as const) {
+      const rig = cloudRig(gpu, 16, 16, skyTable ? {} : { skyTable })
+      try {
+        await rig.system!.warm()
+        const trace = rig.system!.resources.find(
+          (held) => held.name === 'trace',
+        ) as CloudTrace
+        // Each of the march's three kernels, by how it takes the phase's radius.
+        for (const kernel of trace
+          .kernels()
+          .slice(0, CLOUD_PHASE_MODES.length)) {
+          expect(kernel.name).toBe('cloud trace')
+          const wgsl = wgslOf(kernel)
+          const counted = bindings(wgsl)
+          const kinds: Record<string, number> = {}
+          for (const [, kind] of wgsl.matchAll(
+            /var\s+\w+\s*:\s*texture_(\w+)</g,
+          ))
+            if (!kind!.startsWith('storage'))
+              kinds[kind!] = (kinds[kind!] ?? 0) + 1
+          expect(kinds).toEqual(kindsWanted)
+          expect(counted.sampled).toBe(skyTable ? 13 : 12)
+          expect(counted.sampled).toBeLessThanOrEqual(STAGE_SAMPLED)
+          expect(counted.storage).toBe(STAGE_STORAGE)
+        }
+      } finally {
+        rig.dispose()
       }
-    } finally {
-      rig.dispose()
     }
   }, 120_000)
 })

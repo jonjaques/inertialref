@@ -352,7 +352,7 @@ describe('the trace with the mask bound', () => {
     return map
   }
 
-  it('binds one 3D texture more than a trace placed by the gradient alone, 11 sampled of the stage’s 16, and builds', async () => {
+  it('binds one 3D texture more than a trace placed by the gradient alone, 12 sampled of the stage’s 16, and builds', async () => {
     const field = createCloudField()
     const copy = depth()
     const deps = {
@@ -387,12 +387,13 @@ describe('the trace with the mask bound', () => {
       const before = census(unbound.kernels()[0]!)
       expect(field.jitter.bytes).toBe(0)
       const after = census(bound.kernels()[0]!)
-      expect(before.sampled).toBe(10)
+      // The slab source's table is among them either way.
+      expect(before.sampled).toBe(11)
       expect(after.kinds).toEqual({
         ...before.kinds,
         '3d': before.kinds['3d']! + 1,
       })
-      expect(after.sampled).toBe(11)
+      expect(after.sampled).toBe(12)
       expect(after.storage).toBe(4)
       const from = gpu.reported().length
       await bound.warm(renderer)

@@ -27,7 +27,7 @@ import { type CloudVolume, createCloudVolume } from './cloudVolume.ts'
  * the profile, the maps and the clipmap, the three media, the volume and the
  * sun grid summed through it with the light through that, the phase, the
  * sky, the higher orders' source, the jitter and the two far atlases, each
- * built once and handed to every module that reads it. The trace's 11
+ * built once and handed to every module that reads it. The trace's 12
  * sampled bindings of WebGPU's 16 are counted on shared nodes: a second
  * medium built over the same textures is a second set of bindings.
  *
@@ -122,6 +122,9 @@ export function createCloudField(): CloudField {
       // frame: the second body's far bake reads it through the analytic
       // medium whatever the maps drew.
       maps.write(frame)
+      // Each level's class and its factor of the sun, which the source's
+      // read takes by level.
+      source.write(frame)
     },
     render(renderer, frame, budget) {
       for (const resource of caches) resource.render(renderer, frame, budget)

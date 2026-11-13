@@ -46,6 +46,12 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * semicolons between them, and `IR_CLOUD_COST_TAPS` the tap counts in place
  * of none and four.
  *
+ * **The sky's light on a cloud is a build of the system, not a lever:**
+ * `IR_CLOUD_COST_SKY=ambient` builds every chain of a session without the
+ * sky's term (`CloudSystemDeps.skyTable`), the march's placeholder in its
+ * place and no sky table in the kernel. What the term costs is that
+ * session's rows against one's built as the system ships, taken in turn.
+ *
  * A test's figures, of these stances on this adapter. A campaign's stances
  * and its protocol are not these. Written to `.data/clouds/traceCost.json`,
  * or to `IR_CLOUD_COST_OUT`, and held to nothing but being numbers.
@@ -61,6 +67,9 @@ const ONLY = (process.env.IR_CLOUD_COST_ONLY ?? '')
 const TAPS = (process.env.IR_CLOUD_COST_TAPS ?? '0,4')
   .split(',')
   .map((count) => Number(count))
+/** The sky's term as the system ships it, or the march's placeholder in its place. */
+const SKY: 'table' | 'ambient' =
+  process.env.IR_CLOUD_COST_SKY === 'ambient' ? 'ambient' : 'table'
 
 /** Frames of settling before a row, the most more while work is owed, and the runs a row is the median of. */
 const SETTLE = 140
@@ -133,10 +142,21 @@ const tapped = (lightTaps: number): Variant => ({
 })
 
 /**
+ * The light after first order with no factor of the sun by level: the
+ * plane slab's source alone, at the default's four taps. Its row against
+ * the four-tap row is what the factor costs; what the source's read costs
+ * is the four-tap row against the tree before it, which no lever draws.
+ */
+const PLANE: Variant = {
+  name: '4 taps, plane',
+  levers: { lightTaps: 4, transport: 'plane' },
+}
+
+/**
  * The lever sets a stance is timed under, the clouds off first. A package
  * that adds a cost to the trace adds its lever set here.
  */
-const VARIANTS: readonly Variant[] = [OFF, ...TAPS.map(tapped)]
+const VARIANTS: readonly Variant[] = [OFF, ...TAPS.map(tapped), PLANE]
 
 const SIZES: readonly Size[] = [
   { key: '1080p', css: [1920, 1080], dpr: 1, variants: VARIANTS },
@@ -181,6 +201,7 @@ describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
           air: true,
           ...(stance.sun === undefined ? {} : { sun: stance.sun }),
           levers: { weather: stance.weather, on: true },
+          ...(SKY === 'ambient' ? { skyTable: false } : {}),
         })
         await chain.system!.warm()
         const base = chain.levers
@@ -266,6 +287,7 @@ describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
               pitch: stance.pitch,
               variant: variant.name,
               levers: variant.levers,
+              sky: SKY,
               load,
               settledAfter: SETTLE + more,
               // The figure of record: the whole frame, clouds on less off.

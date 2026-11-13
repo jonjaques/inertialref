@@ -435,6 +435,10 @@ function recipe(
       sight: statistics.sightCells.mul(layer.cell),
       mean: deps.profile.mean(slot, layer.level, columnCover, columnShare),
     },
+    // The column's cumuliform share, which the factor of the sun and the
+    // sky's light are blended by: under a zonal or a measured climate it
+    // varies by place, and a level's own uniform holds a regime's alone.
+    convective: columnShare,
   }
 }
 

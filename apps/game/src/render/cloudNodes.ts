@@ -1,4 +1,5 @@
 import {
+  ClampToEdgeWrapping,
   Data3DTexture,
   DataArrayTexture,
   DataTexture,
@@ -48,7 +49,7 @@ import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
  * textures of the real format and kind beside that analytic medium, so a
  * kernel compiled in a test binds what the real one binds: WebGPU's default
  * device allows 16 sampled and 4 storage textures a stage, the system's
- * trace binds 11 of the 16 and writes 4 of 4
+ * trace binds 12 of the 16 and writes 4 of 4
  * (`cloudTrace.gpu.test.ts` counts it), and a count that only integration
  * could see would be a format change after every package had built on the
  * old one.
@@ -132,6 +133,14 @@ export interface CloudMedium {
   readonly depth: Node<'vec2'>
   /** The sample's level's statistics at its column; absent where a medium has none. */
   readonly statistics?: CloudLevelStatistics
+  /**
+   * The cumuliform share of the level at the sample's column, 0..1, where a
+   * medium holds it: what the light after first order blends its factor of
+   * the sun by (`CloudSourceSlab.convective`), and the sky's light its two
+   * sides' mean. The field's media hold it. Absent, a march reads the
+   * level's own share under a regime and none under any other climate.
+   */
+  readonly convective?: Node<'float'>
 }
 
 export type CloudMediumFn = (
@@ -158,14 +167,15 @@ export interface CloudSun {
    * and the two need not be one number's.** A transmittance wants the
    * depth of the mean transmittance; a source read at a depth wants the
    * depth itself, which in broken cloud is the deeper. A march reads these
-   * two members and neither's source, so a sun whose cache holds both
-   * feeds each from its own with no edit of the march. Today the shipped
-   * sun forms both from the one cell, which holds an opacity: through four
-   * taps this depth is under a march of the field by 0.17 to 0.38 in the
-   * mean in every level of broken cloud, 1.7 to 3.0 in RMS cut at 16, and
-   * the cell read at the sample alone by 1.8 to 2.8 (the sun instrument's
-   * union, fair cumulus and a climate's two low levels under suns of 45°
-   * and 15°).
+   * two members and neither's source, and the shipped sun feeds each from
+   * its own channel of the cache's cell: `cloud` from the opacity, this
+   * from the depth (`CloudSunDepths.meanDepthToSun`, `meanDepthWhole`).
+   * Through four taps on the Mac mini it stands off a march of the field
+   * by 1.46 to 2.90 in RMS cut at 16 and by −0.20 to +0.87 in the mean, in
+   * the broken levels of the sun instrument's union (fair cumulus and a
+   * climate's two low levels under suns of 45° and 15°;
+   * `cloudSunAccuracy.landed.json`). Under an overcast it is within 5.5%
+   * of that march to the sun and 8.4% whole (`cloudSourceGrid.gpu.test.ts`).
    *
    * What the shipped sun (`cloudSunFn`) holds in it, by where the sample
    * stands. `w` is the cache's weight where the taps end
@@ -175,14 +185,14 @@ export interface CloudSun {
    *   depth, the field's extinction at each tap's middle times the tap's
    *   span, over half a kilometer at most and no further than the level's
    *   exit along the sun; plus the cache's depth where the taps end. The
-   *   cache's is the depth of the mean transmittance of its 400 m cells:
-   *   in broken cloud it is shallower than the depth along any one ray,
-   *   and the taps take most of that back where they reach. Under six it is exact to a half float,
-   *   past it a cell steps by 0.2 to 0.4, and no cell holds more than 64.
+   *   cache's is the mean depth of the eight 400 m cells a read filters,
+   *   each cell's cut at 64 and held linear, so it has no knee and no
+   *   steps. In broken cloud a mean of cells is no one ray's depth, and the
+   *   taps hold the ray's own where they reach.
    * - **A sample the early out skipped:** one whose cached depth at the
-   *   sample itself is past six with the cache whole. No tap is read, and
-   *   both depths are the cache's at the sample: the first is over six, in
-   *   the cells' stepped part.
+   *   sample itself, as first order reads it, is past six with the cache
+   *   whole. No tap is read, and both depths are the cache's mean depth at
+   *   the sample.
    * - **A statistical step,** a footprint past the ray's switch. Its taps
    *   read the level's statistics as it does, so their depth is the
    *   level's, not a place's. Such a step stands past the cache's reach on
@@ -298,29 +308,88 @@ export interface CloudPhaseNodes {
   ): Node<'vec4'>
 }
 
-export interface CloudSkyNodes {
-  /**
-   * The sky's light at a sample: its mean radiance per band, and the
-   * difference of its two sides' irradiance over π times that mean, up
-   * against down and sunward against away.
-   */
-  at(
-    sample: CloudSample,
-    body: CloudBodyUniforms,
-  ): {
-    readonly mean: Node<'vec3'>
-    readonly up: Node<'vec3'>
-    readonly sunward: Node<'vec3'>
-  }
+/**
+ * The sky's light at a sample, per band, as the sky table holds it (design
+ * §5.6): its mean radiance; the difference of its two sides' irradiance
+ * over π times that mean, up against down and sunward against away; and
+ * `c`, the upper side's irradiance less the one a sky linear in direction
+ * would give it, over the same, which is the lower side's too.
+ */
+export interface CloudSkyAt {
+  readonly mean: Node<'vec3'>
+  readonly up: Node<'vec3'>
+  readonly sunward: Node<'vec3'>
+  readonly upper: Node<'vec3'>
 }
+
+export interface CloudSkyNodes {
+  /** The sky's light at a sample: four numbers a band, one read of the table's three blocks. */
+  at(sample: CloudSample, body: CloudBodyUniforms): CloudSkyAt
+}
+
+/**
+ * A plane slab a sample stands in, as the source table reads it. A rule
+ * outside the node forms it (`resolvedSlab`, `statisticalSlab` in
+ * `cloudMix.ts`), so the node never sees a depth along the sun's ray and a
+ * later rule hands it another cosine without an edit of the read.
+ */
+export interface CloudSourceSlab {
+  /** The sun's cosine to the slab's lit face. The node holds it inside the table's range. */
+  readonly sunMu: Node<'float'>
+  /**
+   * Scaled depth normal to the slab: from the lit face to the sample, and
+   * from the sample to the far face. Each carries its own cosine already;
+   * the node multiplies neither by `sunMu`.
+   */
+  readonly depth: Node<'vec2'>
+  /**
+   * The cumuliform share of the slab's column, 0..1: what the factor of the
+   * sun by level is blended by. Absent, none: the factor is exactly one.
+   */
+  readonly convective?: Node<'float'>
+}
+
+declare const CLOUD_SOURCE_VIEW: unique symbol
+/**
+ * What of a view the read needs, formed where the view holds: opaque to a
+ * caller, which hands `view`'s answer to `source` and reads nothing of it.
+ */
+export interface CloudSourceView {
+  readonly [CLOUD_SOURCE_VIEW]: true
+}
+
+/**
+ * What of a level the read needs, formed where the level holds: three
+ * numbers a caller keeps and hands back, and reads nothing of. A march
+ * forms it once a crossing and not once a step: on the trace's GPU a
+ * level's component of a uniform, read at every step, cost the frame more
+ * than the read's own arithmetic.
+ */
+export type CloudSourceLevel = Node<'vec3'>
 
 export interface CloudSourceNodes {
   /**
-   * The higher orders' source, (J₀, J₁, J_f) per unit of the sun's
-   * irradiance, from a sample's transport depths to its two faces and the
-   * sun's cosine.
+   * `mu`: the cosine, to the lit face's outward normal, of light traveling
+   * to the eye. `bearing`: the cosine of the angle between that light and
+   * the sun's light, both laid on the face; any value where either has no
+   * bearing.
    */
-  source(depth: Node<'vec2'>, sunMu: Node<'float'>): Node<'vec3'>
+  view(mu: Node<'float'>, bearing: Node<'float'>): CloudSourceView
+  /** A level's class and its factor of the sun, by its index, 0 to 2. */
+  level(index: Node<'int'>): CloudSourceLevel
+  /**
+   * The source of every order of the sun's light past the first, per unit
+   * of the sun's irradiance and of scaled depth, sr⁻¹, one value for the
+   * three bands: a caller multiplies it by `CloudSun.air`. `radius`, µm,
+   * and `level` choose the transport scale that turns the slab's scaled
+   * depths into the table's.
+   */
+  source(
+    slab: CloudSourceSlab,
+    radius: Node<'float'>,
+    level: CloudSourceLevel,
+    view: CloudSourceView,
+  ): Node<'float'>
 }
 
 export interface CloudJitterNodes {
@@ -659,7 +728,12 @@ const FORMATS = {
 export function cloudStandInTexture(
   kind: CloudStandInKind,
   format: CloudStandInFormat,
-  options: { readonly layers?: number; readonly value?: number } = {},
+  options: {
+    readonly layers?: number
+    readonly value?: number
+    /** Clamped on every axis where a map is: a table's, never a field's. */
+    readonly clamped?: boolean
+  } = {},
 ): Texture {
   const { channels, format: layout, type } = FORMATS[format]
   const layers = kind === '2d-array' ? (options.layers ?? 1) : 1
@@ -680,13 +754,25 @@ export function cloudStandInTexture(
   map.magFilter = LinearFilter
   map.minFilter = LinearFilter
   map.generateMipmaps = false
+  const wrap = options.clamped === true ? ClampToEdgeWrapping : RepeatWrapping
   if (kind !== '2d') {
-    map.wrapS = RepeatWrapping
-    map.wrapT = RepeatWrapping
+    map.wrapS = wrap
+    map.wrapT = wrap
   }
-  if (map instanceof Data3DTexture) map.wrapR = RepeatWrapping
+  if (map instanceof Data3DTexture) map.wrapR = wrap
   map.needsUpdate = true
   return map
+}
+
+/**
+ * The slab source table's stand-in: 1 × 1 × 1 RGBA16F, clamped on its three
+ * axes and linear both ways, as the table is. A value swap does not rebuild
+ * a program (rule 56), so what this compiles is what the table is read
+ * with: a stand-in that repeated would hand the last slab's last slice the
+ * first slab's first as its neighbor.
+ */
+export function cloudSourceStandIn(value = 0): Texture {
+  return cloudStandInTexture('3d', 'rgba16f', { value, clamped: true })
 }
 
 const ISOTROPIC = 1 / (4 * Math.PI)
@@ -731,7 +817,7 @@ function withReads(medium: CloudMedium, reads: Node<'float'>): CloudMedium {
  * - `phase`: the phase atlas (2D): 1;
  * - `far`: its atlas (2D): 1;
  * - `sky`: the sky table (2D): 1;
- * - `source`: the slab source table (3D): 1;
+ * - `source`: the slab source table (3D, clamped): 1;
  * - `jitter`: the blue-noise mask (3D): 1.
  *
  * A medium passed in is what the stand-in draws; its reads add nothing to it.
@@ -818,16 +904,18 @@ export const CLOUD_STAND_INS = {
         mean: vec3(scalar(mean).add(cloudStandInBinding(table, '2d'))),
         up: vec3(0),
         sunward: vec3(0),
+        upper: vec3(0),
       }),
     }
   },
 
-  /** A source of `isotropic` in its first term and nothing in its other two. */
+  /** A source of `isotropic` at every slab, radius and view. */
   source(isotropic: Scalar = 0): CloudSourceNodes {
-    const table = texture3D(cloudStandInTexture('3d', 'rgba16f'))
+    const table = texture3D(cloudSourceStandIn())
     return {
-      source: () =>
-        vec3(scalar(isotropic).add(cloudStandInBinding(table, '3d')), 0, 0),
+      view: () => ({}) as CloudSourceView,
+      level: () => vec3(0),
+      source: () => scalar(isotropic).add(cloudStandInBinding(table, '3d')),
     }
   },
 

@@ -79,9 +79,11 @@ import { warmCompute } from './warmup.ts'
  * no frame of any lever set compiles one.
  *
  * The kernel binds the field (4: the clipmap's cover, the two noises and the
- * profile), the sun grid, the served air (2), the phase, the far atlas, the
- * depth copy and the jitter's mask: 11 of the stage's 16 sampled textures, which
- * `cloudTrace.gpu.test.ts` counts in the system's own kernel. It writes the
+ * profile), the sun grid, the served air (3: its transmittance, its Ψ and
+ * its sky table), the phase, the source table, the far atlas, the depth
+ * copy and the jitter's mask: 13 of the stage's 16 sampled textures, which
+ * `cloudTrace.gpu.test.ts` counts in the system's own kernel. A trace built
+ * without the sky's term (`CloudTraceDeps.skyTable`) binds 12. It writes the
  * four outputs, which is the stage's limit of storage textures, so the trace
  * has no room for a fifth.
  *
@@ -124,6 +126,12 @@ export interface CloudTraceDeps {
   readonly jitter: CloudJitterNodes
   /** `CloudMarchOptions.unstrided`: the march a test holds the strides to. */
   readonly unstrided?: boolean
+  /**
+   * `CloudMarchOptions.skyTable`: the sky's light on a cloud from the served
+   * body's sky table. Absent or false, the march draws its placeholder and
+   * the kernel binds no sky table.
+   */
+  readonly skyTable?: boolean
 }
 
 /** Every kernel's name on the timeline: one label, one row. */
@@ -439,6 +447,7 @@ function traceKernel(
         dither: draw.y,
         phaseMode,
         ...(deps.unstrided === undefined ? {} : { unstrided: deps.unstrided }),
+        ...(deps.skyTable === undefined ? {} : { skyTable: deps.skyTable }),
       })
       const result = marchFar(
         fine,

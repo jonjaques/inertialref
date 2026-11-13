@@ -1,7 +1,6 @@
 import * as rendering from '@inertialref/rendering'
 import {
   SLAB_REFERENCE,
-  SLAB_SOURCE,
   SLAB_VIEW_SOURCE,
   halfFloatsFromBase64,
 } from '@inertialref/rendering'
@@ -15,7 +14,6 @@ import { judge, type SlabScale } from './slabJudge.ts'
 import type { SourceTable } from './slabSource.ts'
 import {
   SOURCE_AXES,
-  THREE_GRID,
   TRANSPORT_RADII,
   VIEW_COSINES,
   VIEW_GRID,
@@ -25,12 +23,10 @@ import {
   sourceForms,
   sourceScales,
   texelsText,
-  threeForms,
   viewForm,
   type TransportRow,
 } from './slabSourceTable.ts'
 import { SLAB_DOMAIN, SLAB_STREAMS, SOURCE_RADIUS } from './slabTables.ts'
-import { halfDecimal } from './slabText.ts'
 
 /*
  * The committed source tables, held to themselves: each is read here by
@@ -242,58 +238,6 @@ describe('the ice rows’ transport scale', () => {
     })
     const droplet = SLAB_VIEW_SOURCE.transport.scales
     expect(Math.min(...scales)).toBeGreaterThan(1.6 * Math.max(...droplet))
-  })
-})
-
-describe('the three-term table', () => {
-  const form = threeForms(SLAB_SOURCE.lobe).find(
-    (item) => item.name === 'three-relative',
-  )!
-  /** The table as a march's texture: a fourth channel that is no term. */
-  const table: SourceTable = {
-    ...THREE_GRID,
-    slabs: 1,
-    terms: Float64Array.from(
-      { length: (SLAB_SOURCE.terms.length / 3) * 4 },
-      (_, at) =>
-        at % 4 === 3 ? 0 : SLAB_SOURCE.terms[(at >> 2) * 3 + (at % 4)]!,
-    ),
-  }
-
-  it('is three half floats a node on the first grid, as the contract’s test holds it', () => {
-    expect({
-      nodes: SLAB_SOURCE.nodes,
-      suns: SLAB_SOURCE.suns,
-      sunMuMin: SLAB_SOURCE.sunMuMin,
-      depthScale: SLAB_SOURCE.depthScale,
-      depthMax: SLAB_SOURCE.depthMax,
-    }).toEqual(THREE_GRID)
-    expect(SLAB_SOURCE.terms).toHaveLength(
-      SLAB_SOURCE.suns * SLAB_SOURCE.nodes * SLAB_SOURCE.nodes * 3,
-    )
-    for (const term of SLAB_SOURCE.terms) expect(halfDecimal(term)).toBe(term)
-    const media = SLAB_REFERENCE.media.find(
-      (item) => item.radius === SLAB_SOURCE.radius,
-    )!
-    expect(SLAB_SOURCE.lobe).toBeCloseTo(media.asymmetry ** 2, 6)
-  })
-
-  it('rebuilds the oracle’s slabs to the figures its header records, by the formula’s g′', () => {
-    const rebuilt = judge(table, form, SLAB_REFERENCE.media, rows, fluxes)
-    const kept = SLAB_SOURCE.reconstruction
-    expect(
-      Math.abs(rebuilt.error - SLAB_SOURCE.reconstructionError),
-    ).toBeLessThan(PRINTED)
-    for (const figure of ['grid', 'held', 'rms', 'flux'] as const)
-      expect(Math.abs(rebuilt[figure] - kept[figure])).toBeLessThan(PRINTED)
-  })
-
-  it('is over the rubric’s 5% and 2% tenfold: three terms do not hold a slab under an oblique sun', () => {
-    expect(SLAB_SOURCE.reconstructionError).toBeGreaterThan(0.5)
-    expect(SLAB_SOURCE.reconstruction.flux).toBeGreaterThan(0.1)
-    expect(SLAB_SOURCE.reconstructionError).toBeGreaterThan(
-      10 * SLAB_VIEW_SOURCE.reconstructionError,
-    )
   })
 })
 
