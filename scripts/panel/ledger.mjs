@@ -4,6 +4,12 @@
  * design §8.6).
  *
  *   node scripts/panel/ledger.mjs <archived round dir> [--ledger <file>]
+ *   node scripts/panel/ledger.mjs --owner-bars --form <B> --light <B>
+ *     --rounds <round>,<round> --source "<citation>" [--ledger <file>]
+ *
+ * The second form enters bars the owner set after calibration rounds that
+ * fixed none (rubric §3.5). It archives no round, so it takes no
+ * directory: the void rounds are in the ledger already and stay there.
  *
  * **It reads only an archived round.** The round's `archive.json` lists
  * every file with its SHA-256, and the ledger refuses a round whose archive
@@ -431,6 +437,46 @@ function moved(streak, plate, measure, picture) {
   )
 }
 
+/**
+ * The owner's bars (rubric §3.5): after calibration rounds that fixed
+ * nothing, the owner may set `B_form` and `B_light` within the range a
+ * calibration round could have reached, 7 to 8 by half points. F is
+ * computed by `floorOf`, never given, so the mark and the floor cannot
+ * disagree. No scores or means are written: no round produced them, and
+ * each void round already holds what its seats published.
+ */
+export function ownerBars(ledger, { bForm, bLight, rounds, source }) {
+  if (ledger.bars)
+    throw new Error('the bars are fixed already; the owner sets them once')
+  for (const [name, mark] of [
+    ['--form', bForm],
+    ['--light', bLight],
+  ])
+    if (!(mark >= 7 && mark <= 8 && Number.isInteger(2 * mark)))
+      throw new Error(`${name} ${mark} is not a half point from 7 to 8`)
+  if (rounds.length === 0)
+    throw new Error('the owner’s bars name no void calibration round')
+  for (const [i, name] of rounds.entries()) {
+    if (rounds.indexOf(name) !== i)
+      throw new Error(`the owner’s bars name ${name} twice`)
+    const row = ledger.rounds.find((one) => one.round === name)
+    if (row?.kind !== 'calibration' || row.calibration.fixed !== false)
+      throw new Error(`${name} is not a void calibration round in the ledger`)
+  }
+  if (typeof source !== 'string' || source.trim() === '')
+    throw new Error('the owner’s bars need a source: who set them, and where')
+  const next = structuredClone(ledger)
+  next.bars = {
+    bForm,
+    bLight,
+    F: floorOf(bForm, bLight),
+    set: 'owner',
+    source,
+    rounds: [...rounds],
+  }
+  return next
+}
+
 export const EMPTY = Object.freeze({ bars: null, rounds: [], streaks: {} })
 
 // ------------------------------------------------------------------- files
@@ -467,6 +513,16 @@ export async function ledgerRound(dir, ledgerFile) {
   return { row, ledger: next }
 }
 
+/** Read the ledger, enter the owner's bars, and write it back. */
+export async function ownerBarsFile(ledgerFile, ask) {
+  const ledger = existsSync(ledgerFile)
+    ? JSON.parse(await readFile(ledgerFile, 'utf8'))
+    : structuredClone(EMPTY)
+  const next = ownerBars(ledger, ask)
+  await writeFile(ledgerFile, `${JSON.stringify(next, null, 2)}\n`)
+  return next
+}
+
 function summary(row, ledger) {
   const lines = [`${row.round} (${row.kind})`]
   for (const [seat, one] of Object.entries(row.seats))
@@ -494,25 +550,50 @@ function summary(row, ledger) {
   return lines.join('\n')
 }
 
+const USAGE = [
+  'node scripts/panel/ledger.mjs <archived round dir> [--ledger <file>]',
+  'node scripts/panel/ledger.mjs --owner-bars --form <B> --light <B> --rounds <round>,<round> --source "<citation>" [--ledger <file>]',
+].join('\n')
+
+/** The owner's bars from the command line; a flag left out is refused by `ownerBars`. */
+const askOf = (values) => ({
+  // `Number('')` is 0 and `Number(undefined)` NaN: both are refused as marks.
+  bForm: Number(values.form),
+  bLight: Number(values.light),
+  rounds: (values.rounds ?? '').split(',').filter((one) => one !== ''),
+  source: values.source,
+})
+
 if (import.meta.main) {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { ledger: { type: 'string' } },
+    options: {
+      ledger: { type: 'string' },
+      'owner-bars': { type: 'boolean' },
+      form: { type: 'string' },
+      light: { type: 'string' },
+      rounds: { type: 'string' },
+      source: { type: 'string' },
+    },
   })
-  if (positionals.length !== 1) {
-    console.error(
-      'node scripts/panel/ledger.mjs <archived round dir> [--ledger <file>]',
-    )
+  const owner = values['owner-bars'] === true
+  if (positionals.length !== (owner ? 0 : 1)) {
+    console.error(USAGE)
     process.exit(1)
   }
   const ledgerFile =
     values.ledger ?? path.join(dataRoot(), 'panel', 'ledger.json')
   try {
-    const { row, ledger } = await ledgerRound(
-      path.resolve(positionals[0]),
-      ledgerFile,
-    )
-    console.log(summary(row, ledger))
+    if (owner) {
+      const ledger = await ownerBarsFile(ledgerFile, askOf(values))
+      console.log(`bars: ${JSON.stringify(ledger.bars)}`)
+    } else {
+      const { row, ledger } = await ledgerRound(
+        path.resolve(positionals[0]),
+        ledgerFile,
+      )
+      console.log(summary(row, ledger))
+    }
   } catch (error) {
     console.error(error.message)
     process.exit(1)

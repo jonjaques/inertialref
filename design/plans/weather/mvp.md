@@ -297,6 +297,16 @@ three valid seats, and publishes its scores in the record.
 
 That round fixes `B_form`, `B_light` and F for good.
 
+**After void calibration rounds, the owner may set the bar.** A calibration
+round with fewer than three valid seats fixes nothing. Once one or more such
+rounds are in the ledger, the owner may set `B_form` and `B_light` at a half
+point within 7 to 8, the range a round could reach, and F follows by the rule
+above. The ledger records that the owner set the bars, the source of the
+decision, and the void rounds it follows. Those rounds stay in the ledger with
+the scores they published. Bars set by the owner hold for good, as a round's
+do, and no calibration round runs after them
+(`node scripts/panel/ledger.mjs --owner-bars`).
+
 **A still picture passes a round** when the round has three valid seats and:
 
 1. every seat scores the candidate F or more on each applicable dimension,
