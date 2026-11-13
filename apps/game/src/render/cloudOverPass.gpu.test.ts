@@ -1306,6 +1306,9 @@ describe('the composite’s form, chosen a frame at a time', () => {
           more += 20
         )
           frames(20)
+        // A cache that never settles fails here by name, not as two
+        // windows that ran unlike work.
+        expect(rig.system!.report.settle?.pending).toBe(false)
       }
       try {
         set({ over: 'chain' })
