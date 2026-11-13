@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { archiveRound } from './archive.mjs'
@@ -11,6 +13,8 @@ import {
   floorOf,
   judgeRound,
   ledgerRound,
+  ownerBars,
+  ownerBarsFile,
 } from './ledger.mjs'
 import { PICTURES } from './validate.mjs'
 
@@ -242,6 +246,116 @@ describe('the bars (rubric §3.5)', () => {
 
   it('refuses a judged round before the bars are fixed', () => {
     expect(() => judge(fixture(), null)).toThrow(/calibration/)
+  })
+})
+
+describe('the owner’s bar (rubric §3.5)', () => {
+  /** A calibration round that fixes nothing: seat-1 scores the low anchor 6. */
+  const voidCalibration = (round) => {
+    const f = fixture({
+      kind: 'calibration',
+      layout: { g1: ['anchor', 'low-anchor', 'photograph'] },
+      round,
+    })
+    setScore(f.seats[0], 'g1', 'B', 'form', 6)
+    return judge(f, null)
+  }
+  const twoVoid = () =>
+    applyRow(
+      applyRow(structuredClone(EMPTY), voidCalibration('calibration')),
+      voidCalibration('calibration-2'),
+    )
+  const SOURCE = 'the owner, by a dialog’s label'
+  const ask = (over = {}) => ({
+    bForm: 7,
+    bLight: 7,
+    rounds: ['calibration', 'calibration-2'],
+    source: SOURCE,
+    ...over,
+  })
+
+  it('sets the owner’s marks after two void rounds, computes F, and keeps both rounds', () => {
+    const before = twoVoid()
+    const after = ownerBars(before, ask())
+    expect(after.bars).toEqual({
+      bForm: 7,
+      bLight: 7,
+      F: 6,
+      set: 'owner',
+      source: SOURCE,
+      rounds: ['calibration', 'calibration-2'],
+    })
+    expect(after.rounds).toEqual(before.rounds)
+    expect(before.bars).toBeNull()
+    expect(ownerBars(before, ask({ bForm: 8, bLight: 8 })).bars.F).toBe(7)
+    expect(ownerBars(before, ask({ bForm: 7.5, bLight: 8 })).bars.F).toBe(6)
+  })
+
+  it('refuses bars that are set already, by a round or by the owner', () => {
+    const once = ownerBars(twoVoid(), ask())
+    expect(() => ownerBars(once, ask())).toThrow(/fixed already/)
+    const fixedByRound = { ...twoVoid(), bars: { ...BARS, round: 'cal' } }
+    expect(() => ownerBars(fixedByRound, ask())).toThrow(/fixed already/)
+  })
+
+  it('refuses a mark that is not a half point from 7 to 8', () => {
+    for (const mark of [6.5, 8.5, 7.25, 6, 9, Number.NaN]) {
+      expect(() => ownerBars(twoVoid(), ask({ bForm: mark }))).toThrow(
+        /half point from 7 to 8/,
+      )
+      expect(() => ownerBars(twoVoid(), ask({ bLight: mark }))).toThrow(
+        /half point from 7 to 8/,
+      )
+    }
+  })
+
+  it('refuses a round that is not in the ledger as a void calibration round', () => {
+    const ledger = twoVoid()
+    expect(() =>
+      ownerBars(ledger, ask({ rounds: ['calibration', 'calibration-3'] })),
+    ).toThrow(/calibration-3 is not a void calibration round/)
+    expect(() => ownerBars(ledger, ask({ rounds: [] }))).toThrow(
+      /name no void calibration round/,
+    )
+    expect(() =>
+      ownerBars(ledger, ask({ rounds: ['calibration', 'calibration'] })),
+    ).toThrow(/twice/)
+    // A judged round in the ledger, and a calibration round that fixed its
+    // bars, are not void calibration rounds whatever `bars` holds.
+    const judged = { round: 'r1', kind: 'judged', seed: 'j', pictures: {} }
+    const fixed = {
+      ...voidCalibration('cal-fixed'),
+      calibration: { fixed: true, bars: BARS, published: {} },
+    }
+    const mixed = { ...ledger, rounds: [...ledger.rounds, judged, fixed] }
+    expect(() => ownerBars(mixed, ask({ rounds: ['r1'] }))).toThrow(
+      /r1 is not a void calibration round/,
+    )
+    expect(() => ownerBars(mixed, ask({ rounds: ['cal-fixed'] }))).toThrow(
+      /cal-fixed is not a void calibration round/,
+    )
+  })
+
+  it('refuses an empty source', () => {
+    for (const source of ['', '   ', undefined])
+      expect(() => ownerBars(twoVoid(), ask({ source }))).toThrow(/source/)
+  })
+
+  it('is read by a judged round, and refuses a calibration round after it', () => {
+    const ledger = ownerBars(twoVoid(), ask())
+    // Every candidate score is 8: over 7 and 7, and over F at 6.
+    const pass = judge(fixture({ round: 'r1' }), ledger.bars)
+    expect(pass.pictures[IDS.g1].verdict).toBe('pass')
+    const low = fixture({ round: 'r2' })
+    setScore(low.seats[0], 'g1', 'A', 'form', 5)
+    expect(judge(low, ledger.bars).pictures[IDS.g1].fails).toContain(
+      'seat-1 scores form 5, under the floor 6',
+    )
+    const banked = applyRow(ledger, pass)
+    expect(banked.streaks[IDS.g1]).toMatchObject({ run: 1 })
+    expect(() => applyRow(banked, voidCalibration('calibration-3'))).toThrow(
+      /runs once/,
+    )
   })
 })
 
@@ -543,6 +657,65 @@ describe('the ledger file', () => {
     }
     return dir
   }
+
+  it('takes the owner’s bars from the command line, and writes them only when every check holds', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'panel-owner-'))
+    const ledgerFile = path.join(root, 'ledger.json')
+    const discarded = (round) => {
+      const f = fixture({
+        kind: 'calibration',
+        layout: { g1: ['anchor', 'low-anchor', 'photograph'] },
+        round,
+      })
+      setScore(f.seats[0], 'g1', 'B', 'form', 6)
+      return judge(f, null)
+    }
+    const ledger = applyRow(
+      applyRow(structuredClone(EMPTY), discarded('calibration')),
+      discarded('calibration-2'),
+    )
+    const written = `${JSON.stringify(ledger, null, 2)}\n`
+    await writeFile(ledgerFile, written)
+    const run = (...args) =>
+      promisify(execFile)(process.execPath, [
+        path.join(import.meta.dirname, 'ledger.mjs'),
+        '--owner-bars',
+        ...args,
+        '--ledger',
+        ledgerFile,
+      ])
+    const args = (form) => [
+      '--form',
+      form,
+      '--light',
+      '7',
+      '--rounds',
+      'calibration,calibration-2',
+      '--source',
+      'the owner',
+    ]
+    await expect(run(...args('8.5'))).rejects.toThrow(/half point/)
+    expect(await readFile(ledgerFile, 'utf8')).toBe(written)
+    await run(...args('7'))
+    const after = JSON.parse(await readFile(ledgerFile, 'utf8'))
+    expect(after.bars).toEqual({
+      bForm: 7,
+      bLight: 7,
+      F: 6,
+      set: 'owner',
+      source: 'the owner',
+      rounds: ['calibration', 'calibration-2'],
+    })
+    expect(after.rounds).toEqual(ledger.rounds)
+    await expect(
+      ownerBarsFile(ledgerFile, {
+        bForm: 7,
+        bLight: 7,
+        rounds: ['calibration'],
+        source: 'again',
+      }),
+    ).rejects.toThrow(/fixed already/)
+  })
 
   it('writes a round’s row only after its archive, and refuses one changed since', async () => {
     const calibration = fixture({
