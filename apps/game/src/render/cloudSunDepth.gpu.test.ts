@@ -1344,7 +1344,9 @@ describe('the grid as a resource', () => {
   })
 
   it('holds 64 heights behind its handle: twice the bytes and the slices, and the same depth on a slab', async () => {
-    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
+    // Thin, so every point is under the knee: 3.1 deep at the slab's base.
+    const THIN: Slab = [1000, 2000, 0.002]
+    const test = rig(slab(...THIN), slabScenario(THIN))
     test.depth.heights = 64
     const eye = eyeAt(300)
     const sun = sunAt(37.5)
@@ -1360,10 +1362,11 @@ describe('the grid as a resource', () => {
     )
     const read = await depths(test, offsets)
     offsets.forEach((offset, k) => {
-      const expected = slabDepth(eye, offset, sun, [1000, 2000, 0.01])
-      expect(Math.abs(read[k]!.toSun - expected)).toBeLessThan(
-        Math.max(0.02 * expected, 0.01),
-      )
+      const expected = slabDepth(eye, offset, sun, THIN)
+      for (const got of [read[k]!.toSun, read[k]!.meanDepthToSun])
+        expect(Math.abs(got - expected)).toBeLessThan(
+          Math.max(0.02 * expected, 0.01),
+        )
     })
     dispose(test)
   })
