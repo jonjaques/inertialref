@@ -1,15 +1,16 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { loadavg } from 'node:os'
 import { describe, expect, it } from 'vitest'
+import { WEATHER_SCENARIOS } from '@inertialref/rendering'
 import { Quaternion as Q, type Vec3 } from '@inertialref/spatial'
 import type { CloudLevers } from './cloudLevers.ts'
-import { cloudRig } from './cloudSystemRig.ts'
+import { cloudRig, RIG_EARTH_RADIUS } from './cloudSystemRig.ts'
 import { adapterOffers, openGpu } from './gpuHarness.ts'
 import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 
 /*
  * What the trace costs, where it hurts: GPU milliseconds a frame of every
- * pass on the timeline, in the system's own chain, at eight stances and two
+ * pass on the timeline, in the system's own chain, at ten stances and two
  * sizes, each beside the same session's frame with the clouds off.
  *
  * **A row's figure of record is the whole frame's difference,** the frame's
@@ -28,6 +29,12 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * the same nine steps a ray cost three times as much. A grazing stance is
  * where the trace is dearest: 9% of its rays take the whole budget, and this
  * GPU runs 32 rays at a time at the pace of the longest.
+ *
+ * Two stand 400 km up over broken cloud, where through this lens the
+ * handover is 206 km out and the nearest cloud in frame further, so every
+ * ray is the far march's: `orbit`, 40° under the horizon beneath a 37.5°
+ * sun, and `limb`, the frame's middle row tangent to the level's top beneath
+ * a 15° sun, where a ray's chord through the level is its longest.
  *
  * **The sizes** are the rubric's two: 1920 × 1080 at a pixel ratio of one,
  * which traces 480 × 270, and the campaign's Retina, 1440 × 900 at a ratio
@@ -113,6 +120,19 @@ const sunAt = (elevation: number, azimuth: number): Vec3 => ({
   z: -Math.cos(radians(azimuth)) * Math.cos(radians(elevation)),
 })
 const SUN = sunAt(37.5, 60)
+/** The far march's two stances stand this high, meters. */
+const ORBIT = 400_000
+/**
+ * Degrees over the horizon of the ray from `ORBIT` that is tangent to the
+ * top of broken-horizon's level: the middle row of `limb`.
+ */
+const LIMB_PITCH =
+  (-Math.acos(
+    (RIG_EARTH_RADIUS + WEATHER_SCENARIOS['broken-horizon'].layers[0]!.top) /
+      (RIG_EARTH_RADIUS + ORBIT),
+  ) *
+    180) /
+  Math.PI
 
 const STANCES: readonly Stance[] = [
   { key: 'overcast, up', weather: 'overcast', eye: 100, pitch: 90 },
@@ -132,6 +152,14 @@ const STANCES: readonly Stance[] = [
     weather: 'overcast',
     eye: 150_000,
     pitch: -90,
+  },
+  { key: 'orbit', weather: 'broken-horizon', eye: ORBIT, pitch: -40, sun: SUN },
+  {
+    key: 'limb',
+    weather: 'broken-horizon',
+    eye: ORBIT,
+    pitch: LIMB_PITCH,
+    sun: sunAt(15, 60),
   },
 ]
 
@@ -183,7 +211,7 @@ interface Timed {
 }
 
 describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
-  it('is timed at eight stances and two sizes, every pass beside the frame with the clouds off, and written', async () => {
+  it('is timed at ten stances and two sizes, every pass beside the frame with the clouds off, and written', async () => {
     const rows: unknown[] = []
     for (const size of SIZES)
       for (const stance of STANCES) {
