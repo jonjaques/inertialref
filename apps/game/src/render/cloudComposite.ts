@@ -166,12 +166,12 @@ import { warmCompile, warmCompute, warmRenderer } from './warmup.ts'
  *
  * **The ray is the scene's own pixel's**, rebuilt from the jittered camera's
  * projection and turned into body-fixed axes, so the class and the depth
- * agree with what the scene drew there. The history is read at the texel
- * `screenTexel` gives the pixel, or the neighbor of the bilinear footprint
- * whose ray ended where this pixel's does; where none did, the scene stands
- * in front of part of the cloud's depth, and the whole cloud term is weighted
- * by the share in front of it (Φ, from the depth moments). Weighting only
- * T_c would leave L_c and B whole on a ridge in front of distant cloud.
+ * agree with what the scene drew there. The history is read as the blend of
+ * the bilinear footprint's texels whose rays ended where this pixel's does
+ * (`historyRead`); where none did, the scene stands in front of part of the
+ * cloud's depth, and the whole cloud term is weighted by the share in front
+ * of it (Φ, from the depth moments). Weighting only T_c would leave L_c and
+ * B whole on a ridge in front of distant cloud.
  *
  * The history's depths are the trace's: true kilometers along the ray. The
  * depth copy's are render kilometers, true ones times `compression`.
@@ -358,45 +358,130 @@ function sources(deps: CloudCompositeDeps): Sources {
   }
 }
 
+/** What a pixel reads of the history. */
+interface HistoryRead {
+  /** (L_c, T_c). */
+  readonly cloud: Node<'vec4'>
+  /** (B, d_reproj km). */
+  readonly blocked: Node<'vec4'>
+  /** The depth moments' deviation, km: read only where no texel's ray ended where the pixel's does. */
+  readonly deviation: Node<'float'>
+  /** Whether some texel of the footprint holds a ray that ended where this pixel's does. */
+  readonly matched: Node<'bool'>
+}
+
+/** The bilinear footprint's four texels, as offsets from its low corner. */
+const FOOTPRINT = [
+  [0, 0],
+  [1, 0],
+  [0, 1],
+  [1, 1],
+] as const
+/** Under this much weight the matching texels are none a blend can stand on. */
+const LEAST_WEIGHT = 1e-4
+
 /**
- * The history texel for a pixel whose ray ends `endKm` true kilometers out:
- * the one `screenTexel` gives, or the neighbor of the bilinear footprint
- * whose ray ended nearest where this one does, the first on a tie, and
- * whether its end agrees with this pixel's.
+ * The history for a pixel whose ray ends `endKm` true kilometers out: the
+ * blend of the bilinear footprint's texels whose rays ended where this
+ * one's does, by the footprint's weights over those texels alone.
+ *
+ * One texel read alone draws every cloud edge as that texel's square, four
+ * pixels wide at Retina, and its steps crawl on a held camera as the trace's
+ * phase moves. A blend of all four whatever their rays would bleed a cloud
+ * past the ridge in front of it, which is what the match is for. So: every
+ * texel matching, the sampler's own bilinear read; two or three, their
+ * weights renormalized; one, that one; none, the texel `screenTexel` gives
+ * or the footprint's whose ray ended nearest, the first on a tie, and the
+ * cloud term weighted by the share in front of the scene.
+ *
+ * A transmittance blends as a transmittance, and a footprint of clear
+ * texels reads as clear whichever of them a pixel would have taken, so a
+ * clear frame stays the scene's to the bit.
  */
-function historyTexel(
-  moments: TextureNode,
+function historyRead(
+  textures: Sources,
   screen: Node<'vec2'>,
   extent: Node<'vec2'>,
   endKm: Node<'float'>,
-): { readonly texel: Node<'ivec2'>; readonly matched: Node<'bool'> } {
+): HistoryRead {
   const tolerance = endKm.mul(MATCH).add(MATCH_FLOOR_KM)
-  const nearest = screenTexel(screen, extent)
-  const best = ivec2(nearest).toVar()
-  const miss = abs(moments.load(nearest).x.sub(endKm)).toVar()
-  If(miss.greaterThan(tolerance), () => {
-    const at = vec2(
-      screen.x.add(1).mul(0.5).mul(extent.x),
-      float(1).sub(screen.y).mul(0.5).mul(extent.y),
-    )
+  const at = vec2(
+    screen.x.add(1).mul(0.5).mul(extent.x),
+    float(1).sub(screen.y).mul(0.5).mul(extent.y),
+  )
+  /*
+   * The sampler's bilinear read first, of the light and the blocked air.
+   * Where it holds no cloud, no texel of the footprint does, whichever of
+   * them a pixel would have taken, and nothing else is read: a clear pixel
+   * costs two reads where it cost three. Elsewhere it is the blend itself
+   * wherever all four rays ended where the pixel's does.
+   */
+  const uv = at.div(extent)
+  const cloud = textures.light.sample(uv).level(float(0)).toVar()
+  const blocked = textures.air.sample(uv).level(float(0)).toVar()
+  const deviation = float(DEVIATION_FLOOR_KM).toVar()
+  const matching = float(FOOTPRINT.length).toVar()
+  const holds = cloud.w
+    .notEqual(1)
+    .or(largest(abs(cloud.xyz)).notEqual(0))
+    .or(largest(abs(blocked.xyz)).notEqual(0))
+  If(holds, () => {
     // Clamped in float and converted once, as `screenTexel` does.
-    const low = floor(at.sub(0.5))
+    const low = floor(at.sub(0.5)).toVar()
+    const part = at.sub(0.5).sub(low).toVar()
     const highest = extent.sub(1)
-    for (const [dx, dy] of [
-      [0, 0],
-      [1, 0],
-      [0, 1],
-      [1, 1],
-    ] as const) {
-      const texel = ivec2(clamp(low.add(vec2(dx, dy)), vec2(0), highest))
-      const off = abs(moments.load(texel).x.sub(endKm))
-      If(off.lessThan(miss), () => {
-        best.assign(texel)
-        miss.assign(off)
+    const texels = FOOTPRINT.map(([dx, dy]) =>
+      ivec2(clamp(low.add(vec2(dx, dy)), vec2(0), highest)).toVar(),
+    )
+    const weights = FOOTPRINT.map(([dx, dy]) =>
+      (dx === 1 ? part.x : float(1).sub(part.x)).mul(
+        dy === 1 ? part.y : float(1).sub(part.y),
+      ),
+    )
+    const misses = texels.map((texel) =>
+      abs(textures.moments.load(texel).x.sub(endKm)).toVar(),
+    )
+    const weight = float(0).toVar()
+    matching.assign(0)
+    misses.forEach((miss, k) => {
+      If(miss.lessThanEqual(tolerance), () => {
+        matching.addAssign(1)
+        weight.addAssign(weights[k]!)
       })
-    }
+    })
+    If(matching.lessThan(3.5), () => {
+      If(
+        matching.greaterThan(1.5).and(weight.greaterThan(LEAST_WEIGHT)),
+        () => {
+          const light = vec4(0).toVar()
+          const air = vec4(0).toVar()
+          misses.forEach((miss, k) => {
+            If(miss.lessThanEqual(tolerance), () => {
+              light.addAssign(textures.light.load(texels[k]!).mul(weights[k]!))
+              air.addAssign(textures.air.load(texels[k]!).mul(weights[k]!))
+            })
+          })
+          cloud.assign(light.div(weight))
+          blocked.assign(air.div(weight))
+        },
+      ).Else(() => {
+        const best = ivec2(screenTexel(screen, extent)).toVar()
+        const least = abs(textures.moments.load(best).x.sub(endKm)).toVar()
+        If(least.greaterThan(tolerance), () => {
+          misses.forEach((miss, k) => {
+            If(miss.lessThan(least), () => {
+              best.assign(texels[k]!)
+              least.assign(miss)
+            })
+          })
+        })
+        cloud.assign(textures.light.load(best))
+        blocked.assign(textures.air.load(best))
+        deviation.assign(textures.moments.load(best).z)
+      })
+    })
   })
-  return { texel: best, matched: miss.lessThanEqual(tolerance) }
+  return { cloud, blocked, deviation, matched: matching.greaterThan(0.5) }
 }
 
 /** What the composite's fragment writes, before the gain. */
@@ -458,15 +543,12 @@ function compositeGraph(
       )
       If(served.active.greaterThan(0.5).and(ray.hit), () => {
         const endKm = ray.end.mul(1e-3)
-        const { texel, matched } = historyTexel(
-          textures.moments,
+        const { cloud, blocked, deviation, matched } = historyRead(
+          textures,
           screen,
           uniforms.trace.history,
           endKm,
         )
-        const cloud = textures.light.load(texel)
-        const blocked = textures.air.load(texel)
-        const moments = textures.moments.load(texel)
         const reproject = blocked.w
         const share = select(
           matched,
@@ -475,7 +557,7 @@ function compositeGraph(
             depthKm
               .div(served.compression)
               .sub(reproject)
-              .div(max(moments.z, DEVIATION_FLOOR_KM)),
+              .div(max(deviation, DEVIATION_FLOOR_KM)),
           ),
         )
         const radius = served.datumRadius

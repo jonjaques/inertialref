@@ -96,7 +96,8 @@ import { sensorMrt } from './sensorMrt.ts'
  */
 
 const SIZE = 32
-const HISTORY = 16
+const HISTORY_SIDE = 16
+const HISTORY = HISTORY_SIDE
 const TRACE = 8
 const FOV = 60
 const R = 6_371_000
@@ -274,9 +275,18 @@ interface Written {
   readonly ramp?: boolean
   /** History texels in this column and right of it hold no cloud. */
   readonly clearFrom?: number
+  /**
+   * A straight edge, [nx, ny, d]: a texel holds no cloud where its center
+   * (x, y), in texels, has x·nx + y·ny at or past d.
+   */
+  readonly edge?: readonly [number, number, number]
 }
 
-function historyWriter(uniforms: CloudUniforms, history: CloudHistoryTextures) {
+function historyWriter(
+  uniforms: CloudUniforms,
+  history: CloudHistoryTextures,
+  HISTORY: number,
+) {
   const values = {
     light: uniform(new Vector4()),
     air: uniform(new Vector4()),
@@ -284,6 +294,7 @@ function historyWriter(uniforms: CloudUniforms, history: CloudHistoryTextures) {
     viewDepth: uniform(0),
     ramp: uniform(0),
     clearFrom: uniform(HISTORY),
+    edge: uniform(new Vector3(0, 0, 1)),
   }
   const kernel = Fn(() => {
     If(instanceIndex.lessThan(uint(HISTORY * HISTORY)), () => {
@@ -301,7 +312,15 @@ function historyWriter(uniforms: CloudUniforms, history: CloudHistoryTextures) {
         values.air.w,
       )
       const ramp = float(j).add(1).div(HISTORY).mul(values.ramp)
-      const clear = float(i).greaterThanEqual(values.clearFrom)
+      const clear = float(i)
+        .greaterThanEqual(values.clearFrom)
+        .or(
+          float(i)
+            .add(0.5)
+            .mul(values.edge.x)
+            .add(float(j).add(0.5).mul(values.edge.y))
+            .greaterThanEqual(values.edge.z),
+        )
       textureStore(
         history.light,
         pixel,
@@ -328,6 +347,7 @@ function historyWriter(uniforms: CloudUniforms, history: CloudHistoryTextures) {
       values.viewDepth.value = written.viewDepth ?? 0
       values.ramp.value = written.ramp === true ? 1 : 0
       values.clearFrom.value = written.clearFrom ?? HISTORY
+      values.edge.value.set(...(written.edge ?? [0, 0, 1]))
     },
   }
 }
@@ -371,6 +391,8 @@ interface RigOptions {
   readonly session?: GpuSession
   /** Whether the frame node draws the depth copy; true by default. */
   readonly copyDepth?: boolean
+  /** The history's side, texels: half the render's unless said, as the system's is at 1080p. */
+  readonly history?: number
 }
 
 function rig({
@@ -380,6 +402,7 @@ function rig({
   fov = FOV,
   session = gpu,
   copyDepth = true,
+  history: HISTORY = HISTORY_SIDE,
 }: RigOptions = {}) {
   const renderer = session.renderer
   const layout = sceneLayout(picture, sceneBackend(renderer))
@@ -434,7 +457,7 @@ function rig({
     frameNode: new CloudFrameNode(driver),
     ...(medium === undefined ? {} : { airMedium: medium }),
   })
-  const writer = historyWriter(uniforms, history)
+  const writer = historyWriter(uniforms, history, HISTORY)
   const read = reader(session)
   // The chain form's draw, as the system's own node makes it. Pass B is
   // drawn by hand below, so the node's scene is never read.
@@ -674,6 +697,112 @@ describe('the cloud’s light', () => {
       Math.abs(at(drawn, 2, 2) - expected),
       `wall: ${at(drawn, 2, 2)}`,
     ).toBeLessThanOrEqual(halfSteps(expected))
+    f.dispose()
+  })
+})
+
+describe('the cloud’s edge', () => {
+  /** Four pixels a history texel, as the campaign's Retina is. */
+  const SIDE = SIZE / 4
+  /**
+   * A lens narrow enough that every ray of the image ends within 0.3% of
+   * the wall's depth, so every texel's ray ends where every pixel's does.
+   */
+  const NARROW = 6
+  const WALL_KM = 2
+  /** Texels whose center lies under this line hold cloud: 30° off the grid's columns, through the image's middle. */
+  const NORMAL = [Math.cos(Math.PI / 6), Math.sin(Math.PI / 6)] as const
+  const OFFSET = (SIDE / 2) * (NORMAL[0] + NORMAL[1])
+  const cloudy = (i: number, j: number): boolean =>
+    (i + 0.5) * NORMAL[0] + (j + 0.5) * NORMAL[1] < OFFSET
+
+  it('is its footprint’s blend across the history’s grid: no step between neighbors over 0.4 of its contrast, and the frame’s mean the nearest texel’s within 1%', async () => {
+    const f = rig({ fov: NARROW, history: SIDE })
+    serve(f.uniforms.served, 1_000, 0, 3_000)
+    const scene = sceneOf(
+      facing(
+        WALL_KM * 1000,
+        [-1.5, 1.5, -1.5, 1.5],
+        colored([0.01, 0.01, 0.01]),
+        f.halfTan,
+      ),
+    )
+    await f.frame(scene, false)
+    const alone = await f.read('output')
+    await f.write({
+      light: [0.2, 0.2, 0.2, 0.3],
+      air: [0, 0, 0, 1.5],
+      // Every texel's ray ends at the wall, the clear ones' too.
+      moments: [WALL_KM, 1, 0.1, 0],
+      edge: [NORMAL[0], NORMAL[1], OFFSET],
+    })
+    await f.frame(scene, true)
+    const drawn = await f.read('output')
+    const added = (x: number, y: number): number =>
+      at(drawn, x, y) - at(alone, x, y)
+    // The cloud's own corner against the clear one.
+    const contrast = added(0, 0) - added(SIZE - 1, SIZE - 1)
+    expect(added(SIZE - 1, SIZE - 1)).toBe(0)
+    expect(contrast).toBeGreaterThan(0.1)
+    let step = 0
+    let sum = 0
+    let nearest = 0
+    for (let y = 0; y < SIZE; y += 1)
+      for (let x = 0; x < SIZE; x += 1) {
+        sum += added(x, y)
+        // The texel `screenTexel` gives the pixel, read alone: the frame
+        // every pixel of a texel drew as one.
+        if (cloudy(Math.floor(x / 4), Math.floor(y / 4))) nearest += contrast
+        if (x + 1 < SIZE)
+          step = Math.max(step, Math.abs(added(x + 1, y) - added(x, y)))
+        if (y + 1 < SIZE)
+          step = Math.max(step, Math.abs(added(x, y + 1) - added(x, y)))
+      }
+    // Read alone, a texel's edge is the whole contrast between two pixels.
+    expect(step / contrast, 'the largest step').toBeLessThan(0.4)
+    expect(Math.abs(sum - nearest) / nearest, 'the frame’s mean').toBeLessThan(
+      0.01,
+    )
+    f.dispose()
+  })
+
+  it('reads the one texel whose ray ends where the pixel’s does, alone', async () => {
+    const f = rig({ fov: NARROW, history: SIDE })
+    serve(f.uniforms.served, 1_000, 0, 3_000)
+    const scene = sceneOf(
+      facing(
+        WALL_KM * 1000,
+        [-1.5, 1.5, -1.5, 1.5],
+        colored([0.01, 0.01, 0.01]),
+        f.halfTan,
+      ),
+    )
+    await f.frame(scene, false)
+    const alone = await f.read('output')
+    // No texel's ray ends at the wall: each pixel reads the texel
+    // `screenTexel` gives it, the share by its moments, as before the blend.
+    await f.write({
+      light: [0.2, 0.2, 0.2, 0.3],
+      air: [0, 0, 0, 1.5],
+      moments: [1, 1, 0.1, 0],
+      edge: [NORMAL[0], NORMAL[1], OFFSET],
+    })
+    await f.frame(scene, true)
+    const drawn = await f.read('output')
+    const added = (x: number, y: number): number =>
+      at(drawn, x, y) - at(alone, x, y)
+    const contrast = added(0, 0)
+    expect(contrast).toBeGreaterThan(0.1)
+    for (let y = 0; y < SIZE; y += 1)
+      for (let x = 0; x < SIZE; x += 1) {
+        const expected = cloudy(Math.floor(x / 4), Math.floor(y / 4))
+          ? contrast
+          : 0
+        expect(
+          Math.abs(added(x, y) - expected),
+          `(${x}, ${y}): ${added(x, y)}`,
+        ).toBeLessThanOrEqual(halfSteps(at(drawn, x, y)))
+      }
     f.dispose()
   })
 })
