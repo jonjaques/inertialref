@@ -52,6 +52,12 @@ export interface CloudRenderReport {
   readonly reason: 'webgl' | null
   readonly on: boolean
   readonly levers: Readonly<Record<string, string | number | boolean | null>>
+  /**
+   * Eight hex digits over the levers the frame drew with, resolved at its
+   * size, the ones that only steer a measurement left out: what binds a
+   * capture or a campaign row to its lever set. Null with no levers to hash.
+   */
+  readonly leversHash: string | null
   readonly served: string | null
   readonly second: string | null
   readonly regime: 'converging' | 'immediate' | 'off'
@@ -145,6 +151,7 @@ export function cloudReportIdle(
     reason,
     on: false,
     levers: {},
+    leversHash: null,
     served: null,
     second: null,
     regime: 'off',

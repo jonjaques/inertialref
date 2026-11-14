@@ -1,6 +1,6 @@
 # ADR-0039: The server renders the shell before the browser starts the scene
 
-Status: accepted · 8 Sep 2026
+Status: accepted · 8 Sep 2026 · amended 10 Nov 2026
 
 Supersedes the document and boot ownership in
 [ADR-0011](0011-application-shell-and-modes.md) and the client-fetched initial
@@ -31,27 +31,28 @@ server and to subsequent client navigation. `Root` receives the initial URL
 and documentation through props. Its content belongs to that render, never to
 a mutable module-global current page.
 
-Production builds from `main` pre-render every documentation page. Other
-branches pre-render prose and one API loading shell; API articles load through
-the existing JSON requests. TypeDoc conversion, link validation and all API
-JSON assets remain part of every build. `IR_PRERENDER_API=1` selects full HTML
-for production verification on another branch; `0` selects asynchronous API
-pages. Workers Builds and GitHub source-branch variables take precedence over
-the local branch, so a pull request targeting `main` remains a preview build.
+Every build, `main` included, pre-renders prose, one API loading shell at
+`/docs/api`, and each package's own reference page. No build pre-renders an API
+member page; its article loads through the existing JSON requests. Rendering
+the 1,858 member pages is 41 to 50 seconds of a 51 to 61 second bundle stage on
+an Apple M6, which takes 7 seconds without them, and each package page already
+links every member it exports. TypeDoc conversion, link validation and all API
+JSON assets remain part of every build.
 
-The manifest records this choice once for Astro and the hosting rules. Exact
-static-asset proxies send known API routes to `/docs/api` while retaining the
-requested URL; aliases redirect to their canonical spelling first. Unknown
-paths retain a 404. With no initial manifest or article, the loading shell
-renders identical markup at every API address and hydrates before fetching the
-requested page. Development serves those shells on demand. This needs no
-request-rendering adapter or Worker invocation. Cloudflare drops rules past
-its static redirect limit without a word, so once the exact proxies would pass
-it the packages with the most pages each become one splat rewrite, largest
-first, until the exact rules fit. An unknown address under such a package
-reaches the shell's not-found state rather than a 404; every known address is
-unchanged. The build still rejects a table that cannot fit that way rather than
-silently dropping API paths.
+One static-asset rewrite per package, `/docs/api/<package>/*`, sends its
+member addresses to `/docs/api` while retaining the requested URL. Aliases
+redirect to their canonical spelling first, and trailing-slash and `.html`
+spellings redirect to the canonical address before any rewrite applies. The
+table grows with the package count and the case-colliding exports, never with
+the export count, so Cloudflare's 2,000 static rules bound the aliases alone.
+An unknown address under a known package reaches the shell, which finds no
+page for it in the manifest and renders its not-found state with a 200; an
+address under no package retains a 404. With no initial manifest or article,
+the loading shell renders identical markup at every API address and hydrates
+before fetching the requested page. Development serves those shells on demand.
+This needs no request-rendering adapter or Worker invocation. The build rejects
+a table above Cloudflare's 2,000 static or 100 dynamic rules instead of
+letting Cloudflare drop rules without a word.
 
 API exports whose paths differ only in case receive stable suffixes derived
 from their exact original paths. Case-insensitive filesystems must not let
@@ -123,18 +124,27 @@ semantics and avoids introducing another renderer persistence mechanism.
 and copying its HTML into another creates a second content lifetime and can
 remove the article before its replacement exists. Hydration keeps one shell.
 
+**Pre-render every API member page.** It keeps every unknown address a 404 from
+a static table, at 41 to 50 seconds of the bundle stage on every build. An
+exact proxy for each member instead keeps the 404 without the render, but the
+table grows with the export count: 126 aliases, 12 package pages and 1,858
+members made 1,996 static rules against Cloudflare's 2,000.
+
 **Render every request in the Worker.** Static public content needs no request
 data. Pre-rendering supplies the complete HTML while retaining free static
 asset delivery; a future dynamic route can opt into request rendering.
 
 ## Consequences
 
-Production public content remains readable when scripting or graphics fails.
-Preview API pages require JavaScript; their no-script notice links to the
-pre-rendered documentation. The engine
-keeps its existing frame path, and neither document navigation nor hydration
-adds a renderer. Astro templates and the emitted site need verification in
-addition to the existing TypeScript and runtime tests.
+Prose and package pages remain readable when scripting or graphics fails. The
+API index and member pages require JavaScript, because the index is the shell;
+their no-script notice links to the pre-rendered documentation. A member page's
+first response is the shell, whose canonical URL is `/docs/api`, so the sitemap
+lists package pages and not members, and a crawler reaches a member's article
+only by running the page. The engine keeps its existing frame path, and neither
+document navigation nor hydration adds a renderer. Astro templates and the
+emitted site need verification in addition to the existing TypeScript and
+runtime tests.
 
 The docs HTML carries its initial navigation model and article props as well
 as rendered markup. That makes direct docs responses larger, while avoiding

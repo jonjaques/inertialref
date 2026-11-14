@@ -18,6 +18,7 @@
  * invocation and one boot. A side is a settle of at most `SETTLE_CAP` frames
  * and three reads of `ir.gpu(135)`: under 25 s at 50 ms a frame.
  */
+import { DEFAULT_CLOUD_LEVERS } from '../../apps/game/src/render/cloudLevers.ts'
 import { histogramStats } from './diff.mjs'
 
 /*
@@ -128,7 +129,12 @@ export async function cloudStep(step) {
        * page measured through it.
        */
       const { picture: preset } = ir.preset(step.preset)
-      if (at.kind === 'visit') ir.visit(at.address, at.options)
+      // The lens the preset left, before anything moves: a picture with no
+      // lens of its own (a composition) names its lens this way.
+      const composed = ir.lens()?.focalLength ?? null
+      if (at.kind === 'preset') {
+        // The picture is the stance: its pose, its lens and its instant.
+      } else if (at.kind === 'visit') ir.visit(at.address, at.options)
       else if (at.kind === 'rise') {
         // `ir.rise()` solves the lens and leaves it unapplied; a picture with
         // a rise framing wears it, so the moon's rise is the preset's picture
@@ -156,11 +162,44 @@ export async function cloudStep(step) {
           pitch: degrees(was.pitch),
         })
       } else throw new Error(`no stance kind ${String(at.kind)}`)
+      // The game's own clock, for a row about warp: the lever alone moves
+      // the clouds' instant and not the sun's or the world's. What it was is
+      // kept for the run's last step, so the next run on the page does not
+      // stand in a running clock.
+      if (step.clock != null) {
+        globalThis.irClockWas = ir.status().world.timeScale
+        ir.timeWarp(step.clock)
+      }
+      // Nothing lights an engine at a stance from a script yet. A row that
+      // asks for one is then recorded as not taken, with the reason, rather
+      // than failed: failing, it would refuse its batch after three tries.
+      // Set on every stance, lit or not: the light is the harness's and
+      // outlives the run, so the run after an overlay's would stand lit.
+      let unlit = null
+      if (typeof ir.lightEngine === 'function')
+        ir.lightEngine(step.lit === true)
+      else if (step.lit === true)
+        unlit =
+          'this page offers no ir.lightEngine(), so nothing is drawn over the clouds at this stance'
+      const lens = ir.lens()
       return {
         light: ir.light(),
         stance: ir.observatory.status().surface?.stance ?? null,
         processing: processing(),
+        lens:
+          lens === null
+            ? null
+            : {
+                focalLength: lens.focalLength,
+                verticalFovDegrees: lens.verticalFovDegrees,
+              },
+        composed,
+        unlit,
       }
+    },
+    unwarp() {
+      ir.timeWarp(globalThis.irClockWas ?? 1)
+      return { timeScale: ir.status().world.timeScale }
     },
     async side() {
       set(step.levers)
@@ -199,7 +238,26 @@ export async function cloudStep(step) {
         residual = report()?.residual ?? null
         if (residual !== null && residual.total.samples > 0) break
       }
-      return { residual, processing: processing(), settled }
+      // What the residual was drawn under, read before the hold below
+      // requests settings again.
+      const drawnUnder = processing()
+      // The display pair's two shots, held at the exposure the meter reached
+      // here: under a meter still settling between them, the pair differed by
+      // 0.068 to 0.111 display RMSE where the residual said 0.1%.
+      if (step.holdExposure === true)
+        engine.requestSensorSettings({
+          ...engine.sensorSettings,
+          mode: step.mode,
+          rate: 0,
+        })
+      return { residual, processing: drawnUnder, settled }
+    },
+    exposure() {
+      engine.requestSensorSettings({
+        ...engine.sensorSettings,
+        rate: step.rate,
+      })
+      return { rate: engine.sensorSettings.rate }
     },
     async show() {
       set(step.levers)
@@ -346,10 +404,20 @@ export async function cloudStep(step) {
     async rate() {
       // The rate the page presents at, from rAF's own timestamps: the
       // display's refresh where a frame fits in it, less where it does not.
+      // The median interval beside it, which one long frame does not move.
+      // And the build the page is, which the runner holds to the tree's.
       const at = []
       for (let i = 0; i <= step.frames; i += 1)
         at.push(await new Promise((done) => requestAnimationFrame(done)))
-      return { hz: (step.frames * 1000) / (at[step.frames] - at[0]) }
+      const gaps = at
+        .slice(1)
+        .map((t, i) => t - at[i])
+        .sort((a, b) => a - b)
+      return {
+        hz: (step.frames * 1000) / (at[step.frames] - at[0]),
+        intervalMs: gaps[gaps.length >> 1],
+        build: ir.build()?.id ?? null,
+      }
     },
     async verify() {
       set(step.levers)
@@ -376,11 +444,44 @@ export async function cloudStep(step) {
 /* ------------------------------------------------------------- the Node half ---- */
 
 const INSTALL = `(globalThis.irCloudStep = ${cloudStep.toString()}, typeof globalThis.irCloudStep)`
-const js = (tag, step) => ({
-  tag,
-  args: ['--js', `irCloudStep(${JSON.stringify(step)})`],
+/**
+ * Seconds each kind of step takes, for the plan's estimate and nothing else.
+ * Phase 0's pace sets them: 78 A/B rows of three pairs in 78 minutes on the
+ * mini, which is a stance, a rate and six sides, a timeline and a report in a
+ * minute. A radiance comparison is two means of 64 captures past a reset.
+ */
+export const SECONDS = Object.freeze({
+  boot: 25,
+  install: 0,
+  stance: 1,
+  settle: 10,
+  wait: 1,
+  rate: 2,
+  side: 7,
+  timeline: 5,
+  report: 3,
+  residual: 6,
+  show: 3,
+  shot: 3,
+  radiance: 30,
+  verify: 4,
+  on: 1,
+  first: 2,
 })
-const flag = (tag, ...args) => ({ tag, args })
+/** A step of one of the runner's page functions: `irCloudStep` here, another module's for its own. */
+export const pageStep =
+  (fn) =>
+  (tag, step, seconds = SECONDS[step.kind] ?? 5) => ({
+    tag,
+    args: ['--js', `${fn}(${JSON.stringify(step)})`],
+    seconds,
+  })
+const js = pageStep('irCloudStep')
+export const flag = (tag, ...args) => ({
+  tag,
+  args,
+  seconds: SECONDS[tag.split(':')[0]] ?? 0,
+})
 const at = { settleCap: SETTLE_CAP }
 /**
  * Every run reads the rate its page presents at, with the clouds off, before
@@ -389,9 +490,14 @@ const at = { settleCap: SETTLE_CAP }
  * `sensor` mean of 6.8 ms against 3.1) while `ir.gpu` did not; nothing in the
  * row said so. 120 frames is a second at the mini's panel.
  */
-const RATE = js('rate', { kind: 'rate', frames: 120 })
+export const RATE = js('rate', { kind: 'rate', frames: 120 })
 
-/** Each kind of run's steps after the stance, tagged so a result is found by name. */
+/**
+ * Each kind of run's steps after the stance, tagged so a result is found by
+ * name. A kind another module owns adds itself here (`addSteps`), with its
+ * reader in `READ`: `noise.mjs`, `sequence.mjs` and `frame.mjs` each carry a
+ * step and a table of their own, which keeps this file under fta's cap.
+ */
 const STEPS = {
   ab: (run) => [
     ...Array.from({ length: run.pairs }, (_, p) =>
@@ -410,6 +516,18 @@ const STEPS = {
       limit: PASS_LIMIT,
       ...at,
     }),
+    // The base's passes too where two forms are compared: `scene over
+    // clouds` is the base's, and `cloud composite` the candidate's.
+    ...(run.timelineBase
+      ? [
+          js('timeline:base', {
+            kind: 'timeline',
+            levers: run.base,
+            limit: PASS_LIMIT,
+            ...at,
+          }),
+        ]
+      : []),
     js('report', { kind: 'report', levers: run.base, ...at }),
   ],
   residual: (run, shots) => [
@@ -418,12 +536,15 @@ const STEPS = {
       levers: run.levers,
       mode: run.mode,
       readbackFrames: 30,
+      holdExposure: run.exposure === 'held',
       ...at,
     }),
     js('show:identity', { kind: 'show', levers: run.identity, ...at }),
     flag('shot:identity', '--shot', shots.identity),
     js('show:thin', { kind: 'show', levers: run.thin, ...at }),
     flag('shot:thin', '--shot', shots.thin),
+    // The meter moves again for the runs after this one on the page.
+    js('release', { kind: 'exposure', rate: 1 }),
   ],
   verify: (run, shots) => [
     js('verify', { kind: 'verify', levers: run.levers, ...at }),
@@ -431,16 +552,35 @@ const STEPS = {
   ],
   // One step a comparison, its two sides' means under the DevTools timeout.
   radiance: (run) =>
-    run.comparisons.map((c, i) =>
-      js(`radiance:${i}`, {
-        kind: 'radiance',
-        a: c.a,
-        b: c.b,
-        frames: RADIANCE_FRAMES,
-        converge: RADIANCE_CONVERGE,
-        ...at,
-      }),
-    ),
+    run.comparisons
+      .map((c, i) =>
+        js(`radiance:${i}`, {
+          kind: 'radiance',
+          a: c.a,
+          b: c.b,
+          frames: RADIANCE_FRAMES,
+          converge: RADIANCE_CONVERGE,
+          ...at,
+        }),
+      )
+      .concat(
+        // Each rung's cost: the trace's own milliseconds, then its step
+        // counts under `stats`, which costs an atomic a ray and so is read
+        // apart from the timing.
+        (run.costs ?? []).flatMap((c, i) => [
+          js(`cost:${i}`, {
+            kind: 'timeline',
+            levers: c.levers,
+            limit: PASS_LIMIT,
+            ...at,
+          }),
+          js(`steps:${i}`, {
+            kind: 'report',
+            levers: { ...c.levers, stats: true },
+            ...at,
+          }),
+        ]),
+      ),
 }
 
 /**
@@ -452,6 +592,15 @@ const STEPS = {
  */
 export function plan(run, shots = {}) {
   const install = flag('install', '--js', INSTALL)
+  const kind = KINDS.get(run.type)
+  if (kind !== undefined)
+    return [
+      install,
+      flag('install:kind', '--js', kind.install),
+      ...(kind.stance === false ? [] : stance(run)),
+      RATE,
+      ...kind.steps(run, shots),
+    ]
   if (run.type === 'cold')
     return [
       install,
@@ -471,17 +620,35 @@ export function plan(run, shots = {}) {
     ]
   return [
     install,
-    js('stance', {
-      kind: 'stance',
-      stance: run.stance,
-      preset: run.preset,
-      levers: run.off,
-    }),
-    flag('settle', '--settle', '30000'),
-    flag('wait', '--wait', '1000'),
+    ...stance(run),
     RATE,
     ...STEPS[run.type](run, shots),
+    ...(run.clock ? [js('unwarp', { kind: 'unwarp' }, 0)] : []),
   ]
+}
+
+/** The stance, with the clouds off, then the scene's settle and a quiet second. */
+const stance = (run) => [
+  js('stance', {
+    kind: 'stance',
+    stance: run.stance,
+    preset: run.preset,
+    levers: run.off,
+    clock: run.clock ?? null,
+    lit: run.lit ?? false,
+  }),
+  flag('settle', '--settle', '30000'),
+  flag('wait', '--wait', '1000'),
+]
+
+/**
+ * The kinds of run other modules carry: each its steps, the source of its
+ * page function, its reader, why a row of it cannot stand, its table and its
+ * progress line. `stance: false` for a kind that boots to its measurement.
+ */
+const KINDS = new Map()
+export function addKind(type, spec) {
+  KINDS.set(type, spec)
 }
 
 export const median = (xs) => {
@@ -491,16 +658,31 @@ export const median = (xs) => {
   return s.length % 2 === 1 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
 
-/** A run's pairs: the medians, the median Δ, and the spread, max − min of
- *  the Δs, which twice over (and at least 0.05 ms) is what a difference has
- *  to exceed to count. */
+/** The protocol's resolution: twice the pairs' spread, at least this. */
+export const ALLOWANCE_FLOOR = 0.05
+/**
+ * And at most this: twice the largest steady spread the landed campaign had
+ * at 1080p, 0.12 ms (rubric §5). A row whose spread would allow more is
+ * taken again rather than allowed it, so a noisy row cannot enlarge a bar.
+ */
+export const ALLOWANCE_CAP = 0.25
+
+/**
+ * A run's pairs: the two sides' medians, the median of the pairs' own Δs, the
+ * spread, max − min of those Δs, and the allowance a difference has to exceed
+ * to count. The Δ is the pairs' median and not the medians' difference: the
+ * two need not agree (18.83 and 18.92 beside a Δ of −0.06 in phase 0), and
+ * the Δ is the paired figure.
+ */
 export function summarize(pairs) {
   const deltas = pairs.map((p) => p.delta)
+  const spread = Math.max(...deltas) - Math.min(...deltas)
   return {
     base: median(pairs.map((p) => p.base)),
     candidate: median(pairs.map((p) => p.candidate)),
     delta: median(deltas),
-    spread: Math.max(...deltas) - Math.min(...deltas),
+    spread,
+    allowance: Math.max(2 * spread, ALLOWANCE_FLOOR),
   }
 }
 
@@ -542,6 +724,8 @@ const READ = {
     const passes = value('timeline') ?? null
     const labels = Object.entries(passes?.labels ?? {})
     const pass = (name) => labels.find(([n]) => n === name)?.[1].ms ?? null
+    const base = value('timeline:base') ?? null
+    const basePass = (name) => base?.labels?.[name]?.ms ?? null
     return {
       levers: { base: run.base, candidate: run.candidate },
       pairs,
@@ -557,6 +741,20 @@ const READ = {
         .reduce((s, [, p]) => s + p.ms, 0),
       perFrame: passes?.perFrame ?? null,
       bytes: passes?.clouds?.bytes?.total ?? null,
+      // The candidate's hash as the page resolved it, read under its levers.
+      pageHash: passes?.clouds?.leversHash ?? null,
+      composite: pass('cloud composite'),
+      ...(run.timelineBase
+        ? {
+            baseSceneOver: basePass('scene over clouds'),
+            baseComposite: basePass('cloud composite'),
+          }
+        : {}),
+      // The form each side's frame drew, where the report says (§4.12).
+      form: {
+        base: formOf(value('report')?.clouds),
+        candidate: formOf(passes?.clouds),
+      },
     }
   },
   residual(run, value) {
@@ -565,6 +763,7 @@ const READ = {
     const residual = r?.residual ?? null
     return {
       mode: run.mode,
+      exposure: run.exposure ?? null,
       processing: r?.processing ?? null,
       // A mode the sensor did not take is a row about the other mode.
       refused:
@@ -596,6 +795,13 @@ const READ = {
   },
   radiance(run, value) {
     return {
+      // The share of rays the far march took is not in the report: the
+      // contract counts steps and exhausted rays, not hand-overs.
+      costs: (run.costs ?? []).map((c, i) => ({
+        value: c.value,
+        trace: value(`cost:${i}`)?.labels?.['cloud trace']?.ms ?? null,
+        steps: value(`steps:${i}`)?.clouds?.steps ?? null,
+      })),
       differences: run.comparisons.map((c, i) => {
         const r = value(`radiance:${i}`) ?? null
         return {
@@ -616,11 +822,28 @@ const READ = {
   },
 }
 
+/**
+ * The composite's form a frame drew, from the report's `overPass`, `{ form,
+ * depth }`: `form` one of `passes`, `lean` and `chain` (a `chain` lever that
+ * gave the frame back to pass B reads `passes`), and `depth` pass B's,
+ * `read-only` or `stored`, null where there is no pass B. The report does not
+ * carry it until integration writes it, and a row is not failed for that: it
+ * reads `unknown`.
+ */
+export const formOf = (report) => ({
+  form: report?.overPass?.form ?? 'unknown',
+  depth: report?.overPass?.depth ?? (report?.overPass ? null : 'unknown'),
+})
+
 /** The figures of one invocation: `out` is drive.mjs's `--json`, whose
  *  results are in the order of `steps`. */
 export function figures(run, steps, out) {
   const by = new Map(steps.map((s, i) => [s.tag, out.results?.[i]]))
   const value = (tag) => by.get(tag)?.value
+  const rate = value('rate') ?? null
+  const stood = value('stance') ?? null
+  const notTaken = out.notTaken ?? stood?.unlit ?? null
+  const read = KINDS.get(run.type)?.read ?? READ[run.type]
   return {
     id: run.id,
     type: run.type,
@@ -630,16 +853,103 @@ export function figures(run, steps, out) {
     scenario: run.scenario,
     size: run.size,
     kind: run.kind ?? null,
-    stance: value('stance') ?? null,
+    stance: stood,
     scene: by.get('settle') ?? null,
+    // The lens the stance names, and the one the page wore once it stood.
+    lens: {
+      named: run.lens ?? null,
+      worn: stood?.lens ?? null,
+      composed: stood?.composed ?? null,
+    },
+    leversHash: run.leversHash ?? null,
+    build: rate?.build ?? null,
     operatingPoint: {
       ...out.operatingPoint,
-      presentHz: value('rate')?.hz ?? null,
+      presentHz: rate?.hz ?? null,
+      intervalMs: rate?.intervalMs ?? null,
     },
     errors: out.errors ?? [],
-    ...READ[run.type](run, value),
+    notTaken,
+    ask: out.ask ?? null,
+    ...(out.window ? { window: out.window } : {}),
+    // A row not taken keeps whatever its steps read, and owes nothing.
+    ...(notTaken === null ? read(run, value) : readable(read, run, value)),
   }
 }
+
+const readable = (read, run, value) => {
+  try {
+    return read(run, value)
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * Why the lens a row was taken through is not its stance's, or null. A
+ * stance names a focal length, or the composition its picture solves, or a
+ * rise's; a rise names none to hold it to. A cold boot stands nowhere.
+ */
+export function lensRefusal(row) {
+  const { named, worn, composed } = row.lens ?? {}
+  if (named == null || named === 'rise') return null
+  const want = named === 'composition' ? composed : named
+  const got = worn?.focalLength
+  if (!Number.isFinite(got) || !Number.isFinite(want))
+    return 'the lens was not read back'
+  return Math.abs(got - want) <= 1e-6 * want
+    ? null
+    : `the lens is ${got.toFixed(2)} mm, not the stance's ${want.toFixed(2)} mm`
+}
+
+/** The plan's estimate of a run, in seconds: its steps', and a boot where it boots. */
+export const estimate = (steps, boots) =>
+  steps.reduce((sum, s) => sum + (s.seconds ?? 0), boots ? SECONDS.boot : 0)
+
+export const minutes = (seconds) =>
+  seconds < 5400
+    ? `${Math.round(seconds / 60)} min`
+    : `${(seconds / 3600).toFixed(1)} h`
+
+/* ------------------------------------------------------------- the plan ---- */
+
+const lensText = (lens) =>
+  typeof lens === 'number' ? `${lens.toFixed(2)} mm` : `the ${lens}'s`
+
+function stanceText(run) {
+  if (run.type === 'cold') return `${run.preset}, booted cold`
+  const at = run.stance
+  const where =
+    at.kind === 'visit'
+      ? `${at.address} ${Object.entries(at.options)
+          .map(([k, v]) => `${k} ${v}`)
+          .join(', ')}`
+      : at.kind === 'preset'
+        ? 'its picture'
+        : `${at.kind} ${at.address}`
+  return `${run.scenario} (${run.preset}: ${where}${run.lit ? ', engine lit' : ''}${run.clock ? `, clock ${run.clock}×` : ''})`
+}
+
+/** A lever set as what it changes from the defaults. */
+const changed = (set) =>
+  Object.entries(set)
+    .filter(([k, v]) => v !== DEFAULT_CLOUD_LEVERS[k])
+    .map(([k, v]) => `${k}=${v}`)
+    .join(' ') || 'defaults'
+
+function leverText(run) {
+  if (run.base !== undefined)
+    return `{${changed(run.base)}} against {${changed(run.candidate)}}`
+  if (run.arms !== undefined)
+    return run.arms.map((a) => `${a.name} {${changed(a.levers)}}`).join(', ')
+  if (run.comparisons !== undefined)
+    return `${run.comparisons.length} comparisons over {${changed(run.comparisons[0].a)}}`
+  return `{${changed(run.levers ?? run.off)}}`
+}
+
+/** A run as the plan prints it: where it stands, through which lens, with which levers. */
+export const describe = (run) =>
+  `stance ${stanceText(run)}; lens ${lensText(run.lens)}; levers ${run.leversHash} ${leverText(run)}`
 
 /* ------------------------------------------------------------ what stands ---- */
 
@@ -653,8 +963,22 @@ export function figures(run, steps, out) {
  * document and the campaign would count the run done.
  */
 export function unfit(row) {
-  if (row.type !== 'cold' && row.scene?.settled !== true)
-    return 'the scene had not settled when the levers moved'
+  // An arm the machine could not give is a finding of the study, not a row
+  // to take again: its reason is the figure.
+  if (row.notTaken != null) return null
+  const kind = KINDS.get(row.type)
+  if (kind?.stance !== false && row.type !== 'cold') {
+    if (row.scene?.settled !== true)
+      return 'the scene had not settled when the levers moved'
+    const lens = lensRefusal(row)
+    if (lens !== null) return lens
+  }
+  if (row.pageHash != null && row.leversHash != null)
+    if (row.pageHash !== row.leversHash)
+      return `the page drew levers ${row.pageHash}, not the run's ${row.leversHash}`
+  if (kind !== undefined) return kind.unfit(row)
+  if (row.type === 'ab' && 2 * (row.summary?.spread ?? 0) > ALLOWANCE_CAP)
+    return `the pairs spread ${row.summary.spread.toFixed(3)} ms, which would allow more than ${ALLOWANCE_CAP} ms; taken again`
   if (row.type === 'residual') {
     if (row.refused != null) return row.refused
     if (!(row.residual?.total?.samples > 0)) return 'no residual was read back'
@@ -681,13 +1005,17 @@ export const measured = (row) => row.quiet?.ok === true && unfit(row) === null
 
 /* --------------------------------------------------------------- the tables ---- */
 
-const fixed = (x, digits = 2) => (Number.isFinite(x) ? x.toFixed(digits) : '—')
-const pct = (x, digits = 1) =>
+export const fixed = (x, digits = 2) =>
+  Number.isFinite(x) ? x.toFixed(digits) : '—'
+export const pct = (x, digits = 1) =>
   Number.isFinite(x) ? `${(x * 100).toFixed(digits)}%` : '—'
 const mb = (bytes) => fixed(bytes == null ? NaN : bytes / 1e6)
 const yes = (x) => (x ? 'yes' : 'no')
 /** The `quiet` column: why a row does not stand, or whether it was measured quiet. */
-const standing = (r) => unfit(r) ?? yes(r.quiet.ok)
+export const standing = (r) =>
+  r.notTaken != null
+    ? `not taken: ${r.notTaken}`
+    : (unfit(r) ?? yes(r.quiet.ok))
 const unique = (xs) => [...new Set(xs)]
 
 /** A Markdown table of `rows`, one column per `[header, cell]`. */
@@ -700,21 +1028,38 @@ export const table = (rows, columns) =>
     .map((cells) => `| ${cells.join(' | ')} |`)
     .join('\n')
 
-const NAMED = [
+export const NAMED = [
   ['Scenario', (r) => r.scenario],
   ['Size', (r) => r.size],
+]
+
+/** What every row is taken at: its rate, the lens it wore and its levers' hash. */
+export const OPERATING = [
+  ['Hz', (r) => fixed(r.operatingPoint?.presentHz, 0)],
+  ['lens mm', (r) => fixed(r.lens?.worn?.focalLength, 1)],
+  ['levers', (r) => r.leversHash ?? '—'],
 ]
 
 export const AB_COLUMNS = [
   ...NAMED,
   ['Kind', (r) => r.kind],
   ['Lever', (r) => r.label],
-  ['Base ms', (r) => fixed(r.summary.base)],
-  ['Candidate ms', (r) => fixed(r.summary.candidate)],
+  ['base: median of sides ms', (r) => fixed(r.summary?.base)],
+  ['candidate: median of sides ms', (r) => fixed(r.summary?.candidate)],
   [
-    'Δ ms (spread)',
-    (r) => `${fixed(r.summary.delta)} (${fixed(r.summary.spread)})`,
+    'Δ: median of pairs ms (spread)',
+    (r) => `${fixed(r.summary?.delta)} (${fixed(r.summary?.spread)})`,
   ],
+  ['allowance ms', (r) => fixed(r.summary?.allowance)],
+  ['cloud composite', (r) => fixed(r.composite)],
+  [
+    'form drawn (pass B depth)',
+    (r) =>
+      r.batch === 'over' && r.form
+        ? `${r.form.candidate.form} (${r.form.candidate.depth ?? 'none'})`
+        : '—',
+  ],
+  ...OPERATING,
   ['scene over clouds', (r) => fixed(r.sceneOver)],
   ['cloud trace', (r) => fixed(r.trace)],
   ['cloud history', (r) => fixed(r.history)],
@@ -743,6 +1088,8 @@ export const ERROR_COLUMNS = [
   ['RMSE (display)', (r) => fixed(r.display?.rmse, 4)],
   ['>3%', (r) => pct(r.display?.over?.['3%'])],
   ['>8%', (r) => pct(r.display?.over?.['8%'])],
+  ['display pair', (r) => r.exposure ?? 'free'],
+  ...OPERATING,
   ['quiet', standing],
 ]
 
@@ -800,6 +1147,7 @@ const RADIANCE_COLUMNS = [
     (d) => (Number.isFinite(d.relative) ? yes(d.relative < d.threshold) : '—'),
   ],
   ['cloud texels', (d) => d.texels ?? '—'],
+  ...OPERATING,
   ['quiet', standing],
 ]
 
@@ -828,7 +1176,9 @@ const STANCE_COLUMNS = [
 ]
 
 /** The latest attempt of every run, which is the one its table shows. */
-const latest = (rows) => [...new Map(rows.map((r) => [r.id, r])).values()]
+export const latest = (rows) => [
+  ...new Map(rows.map((r) => [r.id, r])).values(),
+]
 
 /** Rows of one scenario and size further apart in rate than this, over their median, are two operating points. */
 const RATE_SPREAD = 0.15
@@ -880,6 +1230,9 @@ export function tables(doc) {
         ),
         RADIANCE_COLUMNS,
       ),
+    ...[...KINDS].map(
+      ([type, kind]) => of(type).length > 0 && kind.table(of(type)),
+    ),
   ]
     .filter(Boolean)
     .join('\n\n')
@@ -887,7 +1240,9 @@ export function tables(doc) {
 
 /** A row in one line, as the runner prints it after each run. */
 export const progress = (r) =>
-  ({
+  (r.notTaken != null ? `not taken: ${r.notTaken}` : null) ??
+  KINDS.get(r.type)?.progress(r) ??
+  {
     ab: () =>
       `Δ ${fixed(r.summary.delta)} ms (spread ${fixed(r.summary.spread)}), base ${fixed(r.summary.base)}`,
     residual: () =>
@@ -903,4 +1258,4 @@ export const progress = (r) =>
           (d) => `${d.name} ${pct(d.relative, 2)} (floor ${pct(d.floor, 2)})`,
         )
         .join(', '),
-  })[r.type]()
+  }[r.type]()

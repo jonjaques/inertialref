@@ -17,10 +17,20 @@ import {
 import { logHub, RingBufferSink } from '@inertialref/shared'
 import { cloudRadianceDifference } from '@inertialref/devtools'
 import type { CloudHistory } from './cloudHistory.ts'
-import type { CloudLevers } from './cloudLevers.ts'
+import {
+  type CloudLevers,
+  cloudLeversHash,
+  DEFAULT_CLOUD_LEVERS,
+} from './cloudLevers.ts'
 import type { CloudResource } from './cloudNodes.ts'
+import { CLOUD_SUN_GRID_LABEL, SUN_GRID_SIZE } from './cloudSunGrid.ts'
 import type { CloudTrace } from './cloudTrace.ts'
 import { type CloudRig, cloudRig } from './cloudSystemRig.ts'
+import {
+  CLOUD_VOLUME_HELD,
+  CLOUD_VOLUME_LABEL,
+  CLOUD_VOLUME_SLICES,
+} from './cloudVolume.ts'
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
 import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 
@@ -64,7 +74,7 @@ beforeAll(async () => {
     ceiling: CEILING,
     ceilingEdge: CEILING_EDGE,
     compression: COMPRESSION,
-    levers: { scenario: 'overcast' },
+    levers: { weather: 'overcast' },
   })
   await rig.system!.warm()
 }, 120_000)
@@ -188,14 +198,13 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
 
   it('is §4.2’s inside pass B, the converging frame tracing once and the immediate four times', async () => {
     const steady = await order({ force: 'none' })
-    // The volume before the sun grid that sums through it, each refreshing
-    // a share of its slices a frame: the volume's budget of 8, the grid's 4.
+    // Under the rig's held clock nothing a steady frame draws has moved, so
+    // the volume and the sun grid bake no slice (cloudSunSchedule.ts), and
+    // the cube and the clipmap, which bake at the pace their field moves, a
+    // face or an eighth of a level every few seconds at 1×, draw nothing
+    // either (phase 1 design §4.7).
     expect(steady).toEqual([
       ['scene over clouds', 1],
-      ['cloud maps', 1],
-      ['cloud clipmap', 1],
-      ['cloud volume', 8],
-      ['cloud sun grid', 4],
       ['cloud far atlas', 1],
       ['cloud depth', 1],
       ['cloud trace', 1],
@@ -208,6 +217,60 @@ describe.skipIf(!TIMESTAMPS)('the run order', () => {
     expect(immediate.find(([label]) => label === 'cloud trace')?.[1]).toBe(4)
     expect(immediate.find(([label]) => label === 'cloud history')?.[1]).toBe(4)
   }, 120_000)
+
+  /** One frame's cloud passes by label, each its count. */
+  async function passesOfOne(): Promise<ReadonlyMap<string, number>> {
+    const stop = installPassTimeline(gpu.renderer as WebGPURenderer)
+    try {
+      const timeline = passTimelineOf(gpu.renderer as WebGPURenderer)!
+      const read = await timeline.measure(() => rig.frame(), 1)
+      expect(read.dropped).toBe(0)
+      return new Map(read.passes.map((pass) => [pass.label, pass.count]))
+    } finally {
+      stop()
+    }
+  }
+
+  /** `total` in pieces of `cap`, the last the remainder: a cap a frame. */
+  const pieces = (total: number, cap: number): number[] =>
+    Array.from({ length: Math.ceil(total / cap) }, (_, k) =>
+      Math.min(cap, total - k * cap),
+    )
+
+  it('rebuilds after a field event by slices: the volume at the cap a frame, then the grid from the frame after, then nothing', async () => {
+    set({ force: 'none' })
+    frames(50)
+    // Another weather is another field: every slice of both caches starts
+    // over. The counts are cloudSunSchedule.test.ts's: two levels of 34
+    // slices (the stack and a slice each side), the grid's 32, 8 a frame.
+    const cap = DEFAULT_CLOUD_LEVERS.sunSlices
+    const stack = CLOUD_VOLUME_SLICES + 2
+    const volume: number[] = []
+    const grid: number[] = []
+    set({ weather: 'stratocumulus' })
+    try {
+      for (let n = 0; n < 60; n += 1) {
+        const passes = await passesOfOne()
+        volume.push(passes.get(CLOUD_VOLUME_LABEL) ?? 0)
+        grid.push(passes.get(CLOUD_SUN_GRID_LABEL) ?? 0)
+      }
+    } finally {
+      set({ weather: 'overcast' })
+      frames(60)
+    }
+    // Frames the maps owe work bake nothing; the rebuild starts after them.
+    expect(volume.filter((n) => n > 0)).toEqual(
+      pieces(CLOUD_VOLUME_HELD.length * stack, cap),
+    )
+    expect(grid.filter((n) => n > 0)).toEqual(pieces(SUN_GRID_SIZE[2], cap))
+    const lastVolume = volume.findLastIndex((n) => n > 0)
+    const firstGrid = grid.findIndex((n) => n > 0)
+    expect(firstGrid).toBe(lastVolume + 1)
+    // Whole again, under a held clock: no slice of either.
+    const lastGrid = grid.findLastIndex((n) => n > 0)
+    expect(volume.slice(lastGrid + 1).every((n) => n === 0)).toBe(true)
+    expect(grid.slice(lastGrid + 1).every((n) => n === 0)).toBe(true)
+  }, 120_000)
 })
 
 describe('what the resources hold', () => {
@@ -216,6 +279,7 @@ describe('what the resources hold', () => {
     rg8unorm: 2,
     rgba8unorm: 4,
     r16float: 2,
+    rg16float: 4,
     rgba16float: 8,
     r32float: 4,
     rgba32float: 16,
@@ -260,6 +324,263 @@ describe('what the resources hold', () => {
     for (const [fraction] of await texels(atlas, centers))
       expect(fraction).toBeGreaterThan(0.5)
   }, 60_000)
+})
+
+describe('what the device is asked for', () => {
+  /*
+   * The test above sums each resource's own list, so a texture left off a
+   * list is a texture it cannot see, and it reads no buffer at all. This one
+   * asks the device: every `createTexture` and `createBuffer` over a
+   * chain's whole life, a chain built with the clouds against one built
+   * without, the same frames drawn through both. What the clouds add is
+   * the difference, and it is held to the declaration to the byte.
+   *
+   * On a device of its own, so the chain with the clouds is that device's
+   * first: a second chain on one device shares the composite's warm-up
+   * target and the air's shared stand-ins with the first, and adds 16
+   * undeclared bytes where the first adds 2,456.
+   */
+  let session: GpuSession
+  let bare: Awaited<ReturnType<typeof life>>
+  let clouded: Awaited<ReturnType<typeof life>>
+
+  beforeAll(async () => {
+    session = await openGpu(WIDTH, HEIGHT)
+    bare = await life(false)
+    clouded = await life(true)
+  }, 240_000)
+
+  afterAll(() => {
+    session?.dispose()
+  })
+
+  const TEXEL_BYTES: Readonly<Record<string, number>> = {
+    r8unorm: 1,
+    rg8unorm: 2,
+    rgba8unorm: 4,
+    r16float: 2,
+    rg16float: 4,
+    rgba16float: 8,
+    r32float: 4,
+    rgba32float: 16,
+    depth32float: 4,
+  }
+
+  interface Asked {
+    readonly made: object
+    /** `label|width×height×depth format ×samples`: what tells one request from another. */
+    readonly kind: string
+    readonly bytes: number
+    readonly usage: number
+    live: boolean
+  }
+
+  /** Every texture and buffer the device is asked for while `work` runs, and whether each is still alive after it. */
+  async function asked<T>(
+    work: (seen: () => { textures: Asked[]; buffers: Asked[] }) => Promise<T>,
+  ): Promise<T> {
+    const device = (
+      session.renderer.backend as unknown as { device: GPUDevice }
+    ).device
+    const textures: Asked[] = []
+    const buffers: Asked[] = []
+    const createTexture = device.createTexture.bind(device)
+    const createBuffer = device.createBuffer.bind(device)
+    const watch = <M extends { destroy(): void }>(
+      list: Asked[],
+      made: M,
+      rest: Omit<Asked, 'made' | 'live'>,
+    ): M => {
+      const record: Asked = { made, live: true, ...rest }
+      list.push(record)
+      const destroy = made.destroy.bind(made)
+      made.destroy = () => {
+        record.live = false
+        destroy()
+      }
+      return made
+    }
+    device.createTexture = (descriptor) => {
+      const size = descriptor.size as
+        | readonly number[]
+        | { width: number; height?: number; depthOrArrayLayers?: number }
+      const [width = 1, height = 1, depth = 1] = Array.isArray(size)
+        ? (size as readonly number[])
+        : [
+            (size as { width: number }).width,
+            (size as { height?: number }).height,
+            (size as { depthOrArrayLayers?: number }).depthOrArrayLayers,
+          ]
+      const samples = descriptor.sampleCount ?? 1
+      const texel = TEXEL_BYTES[descriptor.format]
+      // A format the table does not know is counted as nothing and named,
+      // so the comparison below fails on its kind rather than on a NaN.
+      return watch(textures, createTexture(descriptor), {
+        kind: `${descriptor.label ?? ''}|${width}×${height}×${depth} ${descriptor.format} ×${samples}${texel === undefined ? ' (unknown format)' : ''}`,
+        bytes: width * height * depth * samples * (texel ?? 0),
+        usage: descriptor.usage,
+      })
+    }
+    device.createBuffer = (descriptor) =>
+      watch(buffers, createBuffer(descriptor), {
+        kind: descriptor.label ?? '',
+        bytes: descriptor.size,
+        usage: descriptor.usage,
+      })
+    try {
+      return await work(() => ({ textures, buffers }))
+    } finally {
+      device.createTexture = createTexture
+      device.createBuffer = createBuffer
+    }
+  }
+
+  /** How many of each kind, so two chains' requests can be taken apart. */
+  const tally = (rows: readonly Asked[]): Map<string, number> => {
+    const counts = new Map<string, number>()
+    for (const row of rows)
+      counts.set(row.kind, (counts.get(row.kind) ?? 0) + 1)
+    return counts
+  }
+
+  /** A chain's life: built, warmed, drawn to a settled field, then every lever that allocates. */
+  async function life(clouds: boolean) {
+    return asked(async (seen) => {
+      const chain = cloudRig(session, WIDTH, HEIGHT, {
+        ceiling: CEILING,
+        levers: { weather: 'overcast' },
+        clouds,
+      })
+      try {
+        await chain.sensor.warm()
+        await chain.system?.warm()
+        chain.levers = { ...chain.levers, on: true }
+        for (let k = 0; k < 60; k += 1) chain.frame()
+        await session.read(chain.target)
+        if (chain.system !== null) {
+          // The radiance meter's buffer, the step counters' and the
+          // residual's are each made at first use.
+          const capture = chain.system.captureRadiance()
+          chain.frame()
+          await capture
+          chain.levers = { ...chain.levers, stats: true }
+          for (let k = 0; k < 4; k += 1) chain.frame()
+          chain.levers = { ...chain.levers, composite: 'residual' }
+          for (let k = 0; k < 4; k += 1) chain.frame()
+          await session.read(chain.target)
+        }
+        const report = chain.system?.report ?? null
+        const held = new Set<object>()
+        if (chain.system !== null) {
+          const backend = session.renderer.backend as unknown as {
+            get(texture: object): { texture?: GPUTexture }
+          }
+          const { resources, field } = chain.system
+          for (const map of [
+            ...resources.flatMap((resource) => resource.textures()),
+            // The profile table is declared by its size, on no resource's list.
+            field.profile.texture,
+          ]) {
+            const texture = backend.get(map).texture
+            if (texture !== undefined) held.add(texture)
+          }
+        }
+        const { textures, buffers } = seen()
+        return {
+          report,
+          held,
+          resources: chain.system?.resources.map((one) => one.name) ?? [],
+          textures: textures.filter((row) => row.live),
+          // A readback's staging buffer is mapped and freed; a buffer
+          // still alive is one the chain keeps.
+          buffers: buffers.filter((row) => row.live),
+          extent: report?.extents.trace ?? [0, 0],
+        }
+      } finally {
+        chain.dispose()
+      }
+    })
+  }
+
+  const STORAGE = 0x80
+  const sum = (rows: readonly Asked[]): number =>
+    rows.reduce((total, row) => total + row.bytes, 0)
+
+  it('holds the declared bytes to the textures the clouds add to a chain, to the byte', () => {
+    const declared = clouded.report!.bytes.total
+    // Every texture a resource lists is one the device made, at the bytes
+    // the device was asked for, multisampling and layers included.
+    const listed = clouded.textures.filter((row) => clouded.held.has(row.made))
+    expect(listed).toHaveLength(clouded.held.size)
+    expect(sum(listed)).toBe(declared)
+
+    // What is left is the sensor's own, which the bare chain made too, and
+    // what the clouds add without declaring. Taken apart by kind.
+    const sensor = tally(bare.textures)
+    const unlisted = new Map<string, number>()
+    for (const [kind, count] of tally(
+      clouded.textures.filter((row) => !clouded.held.has(row.made)),
+    )) {
+      const extra = count - (sensor.get(kind) ?? 0)
+      if (extra !== 0) unlisted.set(kind, extra)
+    }
+    for (const kind of sensor.keys())
+      expect(tally(clouded.textures).has(kind), kind).toBe(true)
+    /*
+     * 2,456 bytes the clouds add and do not declare, each named: the 4 × 4
+     * scene target the composite's warm-up draws into and keeps, with its
+     * multisampled twins (1,616 B); the air's four 1 × 1 table stand-ins,
+     * the shared pair and the second body's own (16 B); one 1 × 1
+     * half-float stand-in a meter reads the scene through (8 B); and the
+     * served air's sky table, which the trace reads for the sky's light on
+     * a cloud: here the airless rig's stand-in of one row (816 B), and
+     * under an air the body's own 102 × 16, which the air owns and the
+     * design's budget counts (§2.5). A texture a resource leaves off its
+     * list is a new line here.
+     */
+    expect(Object.fromEntries(unlisted)).toEqual({
+      'output|4×4×1 rgba16float ×1': 1,
+      'output-msaa|4×4×1 rgba16float ×4': 1,
+      'motion|4×4×1 rgba16float ×1': 1,
+      'motion-msaa|4×4×1 rgba16float ×4': 1,
+      'meterMask|4×4×1 r8unorm ×1': 1,
+      'meterMask-msaa|4×4×1 r8unorm ×4': 1,
+      '|4×4×1 depth32float ×4': 1,
+      '|1×1×1 rgba8unorm ×1': 4,
+      '|1×1×1 rgba16float ×1': 1,
+      '|102×1×1 rgba16float ×1': 1,
+    })
+    expect(sum(clouded.textures) - sum(bare.textures) - declared).toBe(2456)
+  })
+
+  it('names the storage buffers the clouds keep, which the declaration leaves out', () => {
+    const storage = (rows: readonly Asked[]): number[] =>
+      rows
+        .filter((row) => (row.usage & STORAGE) !== 0)
+        .map((row) => row.bytes)
+        .sort((a, b) => a - b)
+    const kept = storage(clouded.buffers)
+    for (const bytes of storage(bare.buffers)) {
+      const at = kept.indexOf(bytes)
+      expect(at, `the sensor's own ${bytes} B`).toBeGreaterThanOrEqual(0)
+      kept.splice(at, 1)
+    }
+    const [width, height] = clouded.extent
+    /*
+     * The history's frame counter, the trace's twelve counters, the
+     * residual meter's histograms, the radiance meter's two floats a
+     * trace texel, which is 1.04 MB at 1080p's 480 × 270, and the trace's
+     * longest ray a batch of 32, 16,384 of them for each of the immediate
+     * regime's four dispatches. No buffer is in `bytes`:
+     * the report declares textures.
+     */
+    expect(kept).toEqual([4, 48, 1036, width * height * 8, 262_144])
+    expect(width * height * 8).toBe(1536)
+    // Every key of the declaration is a resource's or the profile's.
+    expect(Object.keys(clouded.report!.bytes).sort()).toEqual(
+      ['profile', 'total', ...clouded.resources].sort(),
+    )
+  })
 })
 
 describe('the whole chain over a depth step', () => {
@@ -334,6 +655,49 @@ describe('the whole chain over a depth step', () => {
       })
     }
   }, 60_000)
+})
+
+describe('the report’s levers', () => {
+  it('carries the hash of the levers the frame drew with, which a steering lever does not move', () => {
+    set({ force: 'none', stats: false, lightTaps: 4 })
+    rig.frame()
+    const steady = rig.system!.report
+    expect(steady.leversHash).toBe(cloudLeversHash(rig.levers))
+    expect(steady.leversHash).toMatch(/^[0-9a-f]{8}$/)
+    expect(steady.levers).toMatchObject({ weather: 'overcast', lightTaps: 4 })
+    // A forced row and its steady row are one picture's levers.
+    set({ force: 'cut', stats: true })
+    rig.frame()
+    expect(rig.system!.report.leversHash).toBe(steady.leversHash)
+    // A shipped lever is another set.
+    set({ force: 'none', stats: false, lightTaps: 2 })
+    rig.frame()
+    expect(rig.system!.report.leversHash).not.toBe(steady.leversHash)
+    set({ lightTaps: 4 })
+  })
+})
+
+describe('the front handle', () => {
+  it('holds this frame’s trace and the numbers beside it while the clouds draw, and no trace on a frame they do not', () => {
+    const front = rig.system!.front
+    const trace = resource<CloudTrace>('trace')
+    set({ force: 'none' })
+    frames(2)
+    expect(front.textures()).toBe(trace.outputs)
+    const [width, height] = rig.system!.report.extents.trace
+    expect(front.screen.traceSize.value.toArray()).toEqual([width, height])
+    const day = rig.system!.field.uniforms.served.dayColor.value
+    expect(front.screen.dayColor.value.equals(day)).toBe(true)
+    // Its own uniforms, copied into: a material that built over them keeps
+    // reading this frame's numbers when the chain behind them is another.
+    expect(front.screen.dayColor.value).not.toBe(day)
+    set({ on: false })
+    rig.frame()
+    expect(front.textures()).toBeNull()
+    set({ on: true })
+    rig.frame()
+    expect(front.textures()).toBe(trace.outputs)
+  })
 })
 
 describe('the radiance capture', () => {
@@ -422,7 +786,7 @@ describe('a warm-up that arrives after the caches are whole', () => {
    */
   it('leaves the volume and the sun grid owing what it drew over, and the next frames bake it', async () => {
     const late = cloudRig(gpu, WIDTH, HEIGHT, {
-      levers: { scenario: 'overcast', on: true },
+      levers: { weather: 'overcast', on: true },
     })
     const owed = () => {
       const { volume, sunDepth } = late.system!.report.pending
@@ -496,8 +860,10 @@ describe('a frame whose cloud work throws', () => {
       rig.frame()
       trace.render = render
       trace.dispatchPhase = dispatchPhase
-      // The frame is the clouds-off frame: the composite drew nothing.
+      // The frame is the clouds-off frame: the composite drew nothing, and
+      // nothing drawn over it is handed the trace it abandoned.
       expect(apart(await image(), plain)).toBeLessThan(1e-3)
+      expect(rig.system!.front.textures()).toBeNull()
       await expect(asked).resolves.toBeNull()
       expect(
         sink

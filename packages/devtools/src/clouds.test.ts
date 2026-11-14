@@ -95,6 +95,9 @@ describe('the idle report', () => {
       on: false,
       regime: 'off',
       settle: null,
+      // No levers drew a frame, so there is no set to hash.
+      levers: {},
+      leversHash: null,
       bytes: { total: 0 },
     })
     expect(cloudReportIdle('webgl')).toMatchObject({

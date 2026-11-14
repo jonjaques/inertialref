@@ -1,4 +1,5 @@
 import {
+  ClampToEdgeWrapping,
   Data3DTexture,
   DataArrayTexture,
   DataTexture,
@@ -17,20 +18,26 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
-  dot,
+  abs,
+  exp,
   float,
   floatBitsToUint,
-  fract,
   int,
+  ivec3,
+  max,
+  min,
   select,
   texture,
   texture3D,
   uint,
   vec2,
   vec3,
+  vec4,
 } from 'three/tsl'
+import { UNSPREAD_SHAPE } from '@inertialref/rendering'
+import { sunThroughAt } from './air.ts'
 import type { CloudFrame } from './cloudFrame.ts'
-import type { CloudBodyUniforms } from './cloudUniforms.ts'
+import type { CloudBodyUniforms, CloudLayerUniforms } from './cloudUniforms.ts'
 
 /*
  * The shapes every cloud module exchanges, and the helpers they share.
@@ -41,10 +48,11 @@ import type { CloudBodyUniforms } from './cloudUniforms.ts'
  * alone. The stand-ins below bind each real module's textures as 1 × 1
  * textures of the real format and kind beside that analytic medium, so a
  * kernel compiled in a test binds what the real one binds: WebGPU's default
- * device allows 16 sampled and 4 storage textures a stage, the trace sits at
- * 12 of 16 and writes 4 of 4, and a count that only
- * integration could see would be a format change after every package had
- * built on the old one.
+ * device allows 16 sampled and 4 storage textures a stage, the system's
+ * trace binds 12 of the 16 and writes 4 of 4
+ * (`cloudTrace.gpu.test.ts` counts it), and a count that only integration
+ * could see would be a format change after every package had built on the
+ * old one.
  */
 
 /** A ray through the shell union, body-fixed, from the eye. */
@@ -72,19 +80,67 @@ export interface CloudSample {
   readonly sunMu: Node<'float'>
   /** Meters a trace texel spans at t. */
   readonly footprint: Node<'float'>
+  /**
+   * The ray's dither in [0, 1], one value along a ray: where its footprint
+   * stops reading the resolved field and reads its level's statistics,
+   * `cell·4^(dither − 1)` (`statisticsFootprint`). Absent, 0.5.
+   */
+  readonly dither?: Node<'float'>
+}
+
+/**
+ * A level's statistics at a sample's column (`readLevelStatistics`): what a
+ * crossing that reads them, rather than the resolved field, passes
+ * (`crossingForm`).
+ */
+export interface CloudLevelStatistics {
+  /** The share of the level's vertical columns that hold cloud. */
+  readonly fraction: Node<'float'>
+  /** The scaled vertical depth whose transmittance is the cloudy columns' mean. */
+  readonly depth: Node<'float'>
+  /** The gamma shape of the cloudy columns' depths. */
+  readonly shape: Node<'float'>
+  /** §5.9's sight length, meters. */
+  readonly sight: Node<'float'>
+  /**
+   * The mean scaled vertical depth of the level's cloudy columns, where a
+   * medium holds it: the field's does, and a slab's is its one depth.
+   *
+   * **The level's mean, not a place's,** and not the mean `depth` and
+   * `shape` imply: `spreadDepth(depth, shape)` is the mean of the gamma
+   * fitted to the columns' transmittance, 1.3 to 3 times this. A light
+   * that weighs a column by its depth reads this one.
+   */
+  readonly mean?: Node<'float'>
 }
 
 export interface CloudMedium {
   /** The cloudy share of the column the sample stands for; 1 when resolved. */
   readonly fraction: Node<'float'>
-  /** In-cloud extinction, 1/m. */
+  /** In-cloud extinction, 1/m: what every transmittance is formed from. */
   readonly sigma: Node<'float'>
   /** −1 outside every layer. */
   readonly layer: Node<'int'>
   /** Horizontal meters one segment may span here. */
   readonly column: Node<'float'>
-  /** Effective radius, µm. */
+  /** Effective radius at the sample, µm. */
   readonly radius: Node<'float'>
+  /**
+   * In-cloud optical depth of the level's column above the sample, and of
+   * the whole column: what the sky's two sides and the layers' own
+   * statistics are weighed by. Zero outside every level.
+   */
+  readonly depth: Node<'vec2'>
+  /** The sample's level's statistics at its column; absent where a medium has none. */
+  readonly statistics?: CloudLevelStatistics
+  /**
+   * The cumuliform share of the level at the sample's column, 0..1, where a
+   * medium holds it: what the light after first order blends its factor of
+   * the sun by (`CloudSourceSlab.convective`), and the sky's light its two
+   * sides' mean. The field's media hold it. Absent, a march reads the
+   * level's own share under a regime and none under any other climate.
+   */
+  readonly convective?: Node<'float'>
 }
 
 export type CloudMediumFn = (
@@ -93,26 +149,263 @@ export type CloudMediumFn = (
 ) => CloudMedium
 
 export interface CloudSun {
-  /** The cloud's transmittance to the sun. */
+  /**
+   * The cloud's transmittance to the sun: first order's reading. It is the
+   * mean transmittance a neighborhood passes, so the depth it stands for
+   * is the depth of that mean and not a mean depth.
+   */
   readonly cloud: Node<'float'>
   /** `sunThroughAt`: the beam through the air. */
   readonly air: Node<'vec3'>
+  /**
+   * Optical depth of the drawn medium through cloud from the sample to the
+   * sun, and the whole of that ray's, from where it enters cloud to where
+   * it leaves: slant depths along the sun's ray, never times the sun's
+   * cosine. The second is never under the first.
+   *
+   * **The light after first order's reading, as `cloud` is first order's,
+   * and the two need not be one number's.** A transmittance wants the
+   * depth of the mean transmittance; a source read at a depth wants the
+   * depth itself, which in broken cloud is the deeper. A march reads these
+   * two members and neither's source, and the shipped sun feeds each from
+   * its own channel of the cache's cell: `cloud` from the opacity, this
+   * from the depth (`CloudSunDepths.meanDepthToSun`, `meanDepthWhole`).
+   * Through four taps on the Mac mini it stands off a march of the field
+   * by 1.46 to 2.90 in RMS cut at 16 and by −0.20 to +0.87 in the mean, in
+   * the broken levels of the sun instrument's union (fair cumulus and a
+   * climate's two low levels under suns of 45° and 15°;
+   * `cloudSunAccuracy.landed.json`). Under an overcast it is within 5.5%
+   * of that march to the sun and 8.4% whole (`cloudSourceGrid.gpu.test.ts`).
+   *
+   * What the shipped sun (`cloudSunFn`) holds in it, by where the sample
+   * stands. `w` is the cache's weight where the taps end
+   * (`CloudSunDepths.weight`).
+   *
+   * - **A sample with taps, the cache whole** (`w` = 1). The taps' own
+   *   depth, the field's extinction at each tap's middle times the tap's
+   *   span, over half a kilometer at most and no further than the level's
+   *   exit along the sun; plus the cache's depth where the taps end. The
+   *   cache's is the mean depth of the eight 400 m cells a read filters,
+   *   each cell's cut at 64 and held linear, so it has no knee and no
+   *   steps. In broken cloud a mean of cells is no one ray's depth, and the
+   *   taps hold the ray's own where they reach.
+   * - **A sample the early out skipped:** one whose cached depth at the
+   *   sample itself, as first order reads it, is past six with the cache
+   *   whole. No tap is read, and both depths are the cache's mean depth at
+   *   the sample.
+   * - **A statistical step,** a footprint past the ray's switch. Its taps
+   *   read the level's statistics as it does, so their depth is the
+   *   level's, not a place's. Such a step stands past the cache's reach on
+   *   any lens the campaign draws, and there both depths are the next
+   *   case's.
+   * - **Where the cache is not whole** (`w` < 1: past 20.8 km from the eye
+   *   along its axes, from orbit, or while it comes back after the field
+   *   changed). The first is `mix(column/μ, taps + cache, w)`, with
+   *   `column` the level's own in-cloud column on the sun's side of the
+   *   sample (`CloudMedium.depth`) and `μ` the sun's cosine over the
+   *   sample's horizon, no less than 0.05. At `w` = 0 it is the level's
+   *   nominal column along the sun and holds nothing of the place. The
+   *   part behind the sample is mixed alike.
+   * - **Under the sample's horizon.** The sun's side is down: the column
+   *   is the part under the sample, the taps run down to the level's base,
+   *   and the cache's cell sums to where its ray leaves the level and adds
+   *   one crossing, by the crossing's law, of what it meets coming back up.
+   *
+   * **Asked for when the sun is formed** (`CloudSunOptions.depth`). Its
+   * members reach the ray's far end, a fetch of the cache's own, so the
+   * shipped sun forms them only on request, in the block the sun is formed
+   * in, which every later read stands inside: a read in a branch, a loop or
+   * a memoized function then reads one variable. Read from a sun formed
+   * without the request it throws as the program is built. A stand-in
+   * whose depth costs nothing may answer it either way.
+   */
+  readonly depth: Node<'vec2'>
+  /** The cloud's transmittance to the sun with its depth scaled by `a`. */
+  octave(a: number): Node<'float'>
+}
+
+/** What a march asks of a sun beyond first order's, as it forms it. */
+export interface CloudSunOptions {
+  /** Form `CloudSun.depth`, for the light after first order. */
+  readonly depth?: boolean
 }
 
 export type CloudSunFn = (
   sample: CloudSample,
   medium: CloudMedium,
   body: CloudBodyUniforms,
+  options?: CloudSunOptions,
 ) => CloudSun
 
+/**
+ * What the sun's cache holds of a point: depths toward the sun, and how far
+ * to trust them. A cache filters a neighborhood of rays, and two means of
+ * one neighborhood are two numbers: the depth of its mean transmittance,
+ * which first order's light wants, and its mean depth, which the light
+ * after first order wants. In broken cloud the second is the deeper.
+ *
+ * | Reader in `cloudSunFn`                         | Pair                               |
+ * | ---------------------------------------------- | ---------------------------------- |
+ * | `cloud`, first order's transmittance past taps | `toSun`                            |
+ * | the early out's test at the sample             | `toSun`                            |
+ * | `octave`                                       | `toSun`                            |
+ * | `depth`, the light after first order's         | `meanDepthToSun`, `meanDepthWhole` |
+ */
+export interface CloudSunDepths {
+  /**
+   * Optical depth through cloud from the point to the sun, as the depth of
+   * the neighborhood's mean transmittance: `−ln` of the mean of `e^(−τ)`.
+   */
+  readonly toSun: Node<'float'>
+  /** The whole of that ray's, from where it enters the cloud to where it leaves, by the same mean. */
+  readonly whole: Node<'float'>
+  /**
+   * The same depth to the sun as the neighborhood's mean depth, each ray's
+   * capped where the cache caps it. Absent where a cache holds one depth
+   * for both: the light after first order then reads `toSun`.
+   */
+  readonly meanDepthToSun?: Node<'float'>
+  /**
+   * The ray's whole as the mean depth, formed as `whole` is: the point's
+   * `meanDepthToSun` and `behind` of what the far end holds over it.
+   * Absent where `meanDepthToSun` is, and `whole` stands for it.
+   */
+  readonly meanDepthWhole?: Node<'float'>
+  /**
+   * The cache's weight at the point, 0..1: how far `toSun` and `whole`
+   * replace the layers' own statistics. Zero where the cache holds nothing
+   * of the point.
+   */
+  readonly weight: Node<'float'>
+  /**
+   * The cache's share of the depth behind the point, 0..1: `whole` is
+   * `toSun` plus this share of what lies between the point and the ray's far
+   * end. One where the cache holds the whole ray; it falls to zero as the far
+   * end leaves the cache's reach while the point stays inside it, and there
+   * the part behind is the statistics' to give.
+   */
+  readonly behind: Node<'float'>
+}
+
 export interface CloudSunDepthNodes {
-  /** Optical depth from an eye-relative body-fixed point to the sun. */
-  opticalDepth(offset: Node<'vec3'>): Node<'float'>
+  /** The sun's depths at an eye-relative body-fixed point. */
+  depths(offset: Node<'vec3'>): CloudSunDepths
 }
 
 export interface CloudPhaseNodes {
   /** Droplet phase per band, sr⁻¹, at cos θ = nu, for an effective radius in µm. */
   droplets(nu: Node<'float'>, radius: Node<'float'>): Node<'vec3'>
+  /**
+   * First-order phase per band, sr⁻¹, in rgb, and the row's gain,
+   * 1/(1 − f_δ), in a, at cos θ = nu, for a level's class at an effective
+   * radius, µm.
+   */
+  phase(
+    nu: Node<'float'>,
+    layers: CloudLayerUniforms,
+    level: number,
+    radius: Node<'float'>,
+  ): Node<'vec4'>
+}
+
+/**
+ * The sky's light at a sample, per band, as the sky table holds it (design
+ * §5.6): its mean radiance; the difference of its two sides' irradiance
+ * over π times that mean, up against down and sunward against away; and
+ * `c`, the upper side's irradiance less the one a sky linear in direction
+ * would give it, over the same, which is the lower side's too.
+ */
+export interface CloudSkyAt {
+  readonly mean: Node<'vec3'>
+  readonly up: Node<'vec3'>
+  readonly sunward: Node<'vec3'>
+  readonly upper: Node<'vec3'>
+}
+
+export interface CloudSkyNodes {
+  /** The sky's light at a sample: four numbers a band, one read of the table's three blocks. */
+  at(sample: CloudSample, body: CloudBodyUniforms): CloudSkyAt
+}
+
+/**
+ * A plane slab a sample stands in, as the source table reads it. A rule
+ * outside the node forms it (`resolvedSlab`, `statisticalSlab` in
+ * `cloudMix.ts`), so the node never sees a depth along the sun's ray and a
+ * later rule hands it another cosine without an edit of the read.
+ */
+export interface CloudSourceSlab {
+  /** The sun's cosine to the slab's lit face. The node holds it inside the table's range. */
+  readonly sunMu: Node<'float'>
+  /**
+   * Scaled depth normal to the slab: from the lit face to the sample, and
+   * from the sample to the far face. Each carries its own cosine already;
+   * the node multiplies neither by `sunMu`.
+   */
+  readonly depth: Node<'vec2'>
+  /**
+   * The cumuliform share of the slab's column, 0..1: what the factor of the
+   * sun by level is blended by. Absent, none: the factor is exactly one.
+   */
+  readonly convective?: Node<'float'>
+}
+
+declare const CLOUD_SOURCE_VIEW: unique symbol
+/**
+ * What of a view the read needs, formed where the view holds: opaque to a
+ * caller, which hands `view`'s answer to `source` and reads nothing of it.
+ */
+export interface CloudSourceView {
+  readonly [CLOUD_SOURCE_VIEW]: true
+}
+
+/**
+ * What of a level the read needs, formed where the level holds: three
+ * numbers a caller keeps and hands back, and reads nothing of. A march
+ * forms it once a crossing and not once a step: on the trace's GPU a
+ * level's component of a uniform, read at every step, cost the frame more
+ * than the read's own arithmetic.
+ */
+export type CloudSourceLevel = Node<'vec3'>
+
+export interface CloudSourceNodes {
+  /**
+   * `mu`: the cosine, to the lit face's outward normal, of light traveling
+   * to the eye. `bearing`: the cosine of the angle between that light and
+   * the sun's light, both laid on the face; any value where either has no
+   * bearing.
+   */
+  view(mu: Node<'float'>, bearing: Node<'float'>): CloudSourceView
+  /** A level's class and its factor of the sun, by its index, 0 to 2. */
+  level(index: Node<'int'>): CloudSourceLevel
+  /**
+   * The source of every order of the sun's light past the first, per unit
+   * of the sun's irradiance and of scaled depth, sr⁻¹, one value for the
+   * three bands: a caller multiplies it by `CloudSun.air`. `radius`, µm,
+   * and `level` choose the transport scale that turns the slab's scaled
+   * depths into the table's.
+   */
+  source(
+    slab: CloudSourceSlab,
+    radius: Node<'float'>,
+    level: CloudSourceLevel,
+    view: CloudSourceView,
+  ): Node<'float'>
+}
+
+export interface CloudJitterNodes {
+  /**
+   * Two numbers in [0, 1) for a pixel on a frame: `.x` places the first
+   * step along the ray, and `.y`'s pair less ½ is the sampling point inside
+   * a pixel.
+   */
+  at(pixel: Node<'uvec2'>, frame: Node<'uint'>): Node<'vec2'>
+  /**
+   * The four numbers in [0, 1) a ray is placed by, for its trace texel on a
+   * frame: `.x` the first step's share, `.yz` the point inside the texel's
+   * history pixel (less ½, the offset `traceScreen` takes), `.w` the
+   * handover's ξ.
+   */
+  draw(texel: Node<'uvec2'>, frame: Node<'uint'>): Node<'vec4'>
 }
 
 export interface CloudFarResult {
@@ -146,8 +439,8 @@ export interface CloudBudget {
   readonly slices: number
   readonly tiles: number
   readonly jump: boolean
-  /** Texel-steps the sun grid may spend this frame: `SUN_DEPTH_FRAME_CAP`, one whole rebuild (§3.12). */
-  readonly sunTexelSteps: number
+  /** Slices of the sun grid this frame may bake. */
+  readonly sunSlices: number
 }
 
 /**
@@ -173,43 +466,8 @@ export interface CloudResource {
 }
 
 /* ------------------------------------------------------------------------- */
-/* Jitter and the NaN guard                                                   */
+/* The NaN guard                                                              */
 /* ------------------------------------------------------------------------- */
-
-/*
- * The frame offsets as 32-bit fractions — round(α·2³²) for R1's golden-ratio
- * conjugate and the plastic number's reciprocal — so a frame's offset is a
- * u32 product, which wraps exactly. `frame·0.618034` in float32 loses the
- * fraction's low bits once the product passes 2²³: a 0.06 step after 1.6
- * million frames, seven hours at 60 Hz, and every texel's jitter on a
- * sixteenth of the pixel.
- */
-const R1_FRACTION = 2654435769
-const PLASTIC_FRACTION = 3242174889
-
-/**
- * Interleaved gradient noise (Jimenez 2014) at the pixel plus an R1 step a
- * frame: two numbers in [0, 1), decorrelated by reading the second at the
- * transposed pixel with a step of its own. Standing in for spatiotemporal
- * blue noise behind one function; the cost is one hash a ray either way.
- *
- * `.x` places the first step along the ray. A texel's sampling point is
- * `.y`'s pair less ½: `traceScreen` takes an offset from the texel's center.
- */
-export function traceJitter(
-  pixel: Node<'uvec2'>,
-  frame: Node<'uint'>,
-): Node<'vec2'> {
-  const p = vec2(pixel)
-  const gradient = (q: Node<'vec2'>): Node<'float'> =>
-    fract(float(52.9829189).mul(fract(dot(q, vec2(0.06711056, 0.00583715)))))
-  const offset = (fraction: number): Node<'float'> =>
-    float(frame.mul(uint(fraction)).shiftRight(uint(8))).mul(2 ** -24)
-  return vec2(
-    fract(gradient(p).add(offset(R1_FRACTION))),
-    fract(gradient(p.yx.add(vec2(37, 17))).add(offset(PLASTIC_FRACTION))),
-  )
-}
 
 /** A float32's exponent field: all ones is an infinity or a NaN. */
 const EXPONENT = 0x7f800000
@@ -279,6 +537,8 @@ const scalar = (value: Scalar): Node<'float'> =>
 
 /** A slab with no horizontal edge: one segment crosses it whole. */
 const UNBOUNDED_COLUMN = 1e9
+/** µm where a slab names no radius, and outside every slab. */
+const SLAB_RADIUS = 10
 
 /**
  * A layer of constant cloud between two heights over the datum, meters: the
@@ -292,16 +552,25 @@ export interface CloudSlab {
   readonly sigma: Scalar
   /** The cloudy share of a column, 1 by default: a resolved slab. */
   readonly fraction?: Scalar
-  /** µm, 10 by default. */
-  readonly radius?: Scalar
+  /**
+   * µm, 10 by default: one radius, or the radius at an altitude over the
+   * datum, meters, for a slab whose droplets grow through it.
+   */
+  readonly radius?: Scalar | ((altitude: Node<'float'>) => Node<'float'>)
   /** Horizontal meters a segment may span, unbounded by default. */
   readonly column?: Scalar
 }
 
+const slabRadius = (slab: CloudSlab, altitude: Node<'float'>): Node<'float'> =>
+  typeof slab.radius === 'function'
+    ? slab.radius(altitude)
+    : scalar(slab.radius ?? SLAB_RADIUS)
+
 /**
  * Slabs by altitude, the first that holds the sample winning, each its own
  * layer by its index; a vacuum outside every slab. Built from the sample
- * alone, so it reads no texture.
+ * alone, so it reads no texture. A slab's depths are its own: σ times the
+ * height from the sample to its top, and times its whole thickness.
  */
 export function slabMedium(slabs: readonly CloudSlab[]): CloudMediumFn {
   return (sample) => {
@@ -309,21 +578,116 @@ export function slabMedium(slabs: readonly CloudSlab[]): CloudMediumFn {
     let sigma: Node<'float'> = float(0)
     let fraction: Node<'float'> = float(0)
     let layer: Node<'int'> = int(-1)
-    let radius: Node<'float'> = float(10)
+    let radius: Node<'float'> = float(SLAB_RADIUS)
     let column: Node<'float'> = float(UNBOUNDED_COLUMN)
+    let depth: Node<'vec2'> = vec2(0)
+    // A slab is one column: its own share, its own vertical depth, no spread
+    // of depths, and its horizontal extent for the sight length.
+    let statistics: CloudLevelStatistics = {
+      fraction: float(0),
+      depth: float(0),
+      shape: float(UNSPREAD_SHAPE),
+      sight: float(UNBOUNDED_COLUMN),
+      mean: float(0),
+    }
     // Last to first, so the first slab holding the sample is the last select.
     for (let k = slabs.length - 1; k >= 0; k -= 1) {
       const slab = slabs[k]!
-      const inside = h
-        .greaterThanEqual(scalar(slab.base))
-        .and(h.lessThan(scalar(slab.top)))
+      const base = scalar(slab.base)
+      const top = scalar(slab.top)
+      const inside = h.greaterThanEqual(base).and(h.lessThan(top))
       sigma = select(inside, scalar(slab.sigma), sigma)
       fraction = select(inside, scalar(slab.fraction ?? 1), fraction)
       layer = select(inside, int(k), layer)
-      radius = select(inside, scalar(slab.radius ?? 10), radius)
+      radius = select(inside, slabRadius(slab, h), radius)
       column = select(inside, scalar(slab.column ?? UNBOUNDED_COLUMN), column)
+      depth = select(
+        inside,
+        vec2(top.sub(h), top.sub(base)).mul(scalar(slab.sigma)),
+        depth,
+      )
+      statistics = {
+        fraction: select(
+          inside,
+          scalar(slab.fraction ?? 1),
+          statistics.fraction,
+        ),
+        depth: select(
+          inside,
+          top.sub(base).mul(scalar(slab.sigma)),
+          statistics.depth,
+        ),
+        shape: statistics.shape,
+        sight: select(
+          inside,
+          scalar(slab.column ?? UNBOUNDED_COLUMN),
+          statistics.sight,
+        ),
+        mean: select(
+          inside,
+          top.sub(base).mul(scalar(slab.sigma)),
+          statistics.mean ?? float(0),
+        ),
+      }
     }
-    return { sigma, fraction, layer, radius, column }
+    return { sigma, fraction, layer, radius, column, depth, statistics }
+  }
+}
+
+/** The least a sun's cosine is taken as: a slab's path under a grazing sun stays finite. */
+const GRAZING = 1e-3
+
+/**
+ * The sun a sample in plane slabs sees, exactly: the slabs' own depth along
+ * the sun, with no cache and no tap between the sample and it. A sun over
+ * the sample's horizon comes down through what stands above the sample, and
+ * one under it up through what lies below. Each slab is one column, so a
+ * half-clear slab passes half the sun however deep it is.
+ *
+ * What a gate runs beside the shipped `cloudSunFn`, so a figure can be told
+ * the march's from the sun's cache's.
+ */
+export function exactSlabSun(slabs: readonly CloudSlab[]): CloudSunFn {
+  return (sample, _medium, body) => {
+    const h = sample.altitude
+    const above = sample.sunMu.greaterThanEqual(0)
+    const slant = float(1).div(max(abs(sample.sunMu), GRAZING))
+    let toSun: Node<'float'> = float(0)
+    let whole: Node<'float'> = float(0)
+    let through: Node<'float'> = float(1)
+    for (const slab of slabs) {
+      const base = scalar(slab.base)
+      const top = scalar(slab.top)
+      const sigma = scalar(slab.sigma)
+      // The slab's thickness on the sun's side of the sample, and all of it.
+      const over = max(top.sub(max(h, base)), 0)
+      const under = max(min(h, top).sub(base), 0)
+      const depth = sigma.mul(select(above, over, under)).mul(slant)
+      const share = scalar(slab.fraction ?? 1)
+      toSun = toSun.add(depth)
+      // The line through the sample crosses every slab, whichever side of
+      // the sample it stands on.
+      whole = whole.add(sigma.mul(top.sub(base)).mul(slant))
+      through = through.mul(
+        float(1)
+          .sub(share)
+          .add(share.mul(exp(depth.negate()))),
+      )
+    }
+    // The air's height, true meters: its top is in sea-level units.
+    const airHeight = body.datumRadius.mul(max(body.air.top.sub(1), 1e-6))
+    return {
+      cloud: through,
+      air: sunThroughAt(
+        body.air,
+        sample.altitude.div(airHeight),
+        sample.sunMu,
+        body.cleared,
+        { level: true },
+      ),
+      depth: vec2(toSun, whole),
+      octave: (a) => exp(toSun.mul(-a)),
+    }
   }
 }
 
@@ -364,7 +728,12 @@ const FORMATS = {
 export function cloudStandInTexture(
   kind: CloudStandInKind,
   format: CloudStandInFormat,
-  options: { readonly layers?: number; readonly value?: number } = {},
+  options: {
+    readonly layers?: number
+    readonly value?: number
+    /** Clamped on every axis where a map is: a table's, never a field's. */
+    readonly clamped?: boolean
+  } = {},
 ): Texture {
   const { channels, format: layout, type } = FORMATS[format]
   const layers = kind === '2d-array' ? (options.layers ?? 1) : 1
@@ -385,13 +754,25 @@ export function cloudStandInTexture(
   map.magFilter = LinearFilter
   map.minFilter = LinearFilter
   map.generateMipmaps = false
+  const wrap = options.clamped === true ? ClampToEdgeWrapping : RepeatWrapping
   if (kind !== '2d') {
-    map.wrapS = RepeatWrapping
-    map.wrapT = RepeatWrapping
+    map.wrapS = wrap
+    map.wrapT = wrap
   }
-  if (map instanceof Data3DTexture) map.wrapR = RepeatWrapping
+  if (map instanceof Data3DTexture) map.wrapR = wrap
   map.needsUpdate = true
   return map
+}
+
+/**
+ * The slab source table's stand-in: 1 × 1 × 1 RGBA16F, clamped on its three
+ * axes and linear both ways, as the table is. A value swap does not rebuild
+ * a program (rule 56), so what this compiles is what the table is read
+ * with: a stand-in that repeated would hand the last slab's last slice the
+ * first slab's first as its neighbor.
+ */
+export function cloudSourceStandIn(value = 0): Texture {
+  return cloudStandInTexture('3d', 'rgba16f', { value, clamped: true })
 }
 
 const ISOTROPIC = 1 / (4 * Math.PI)
@@ -427,14 +808,17 @@ function withReads(medium: CloudMedium, reads: Node<'float'>): CloudMedium {
 
 /**
  * Stand-in node sets for a package's own tests and for the contracts' stubs,
- * each binding 1 × 1 textures in its real module's number and kind (§3.7):
+ * each binding 1 × 1 textures in its real module's number and kind:
  *
- * - `field`: the clipmap's textures 0–2 (2D arrays), the base and detail
- *   noises (3D) and the profile (2D): 6;
+ * - `field`: the clipmap's cover and kind (2D arrays), the base and detail
+ *   noises (3D) and the profile (2D): 5;
  * - `volume`: the volume (3D): 1;
  * - `sunDepth`: the sun grid (3D): 1;
- * - `phase`: the Mie table (2D): 1;
- * - `far`: its atlas (2D): 1.
+ * - `phase`: the phase atlas (2D): 1;
+ * - `far`: its atlas (2D): 1;
+ * - `sky`: the sky table (2D): 1;
+ * - `source`: the slab source table (3D, clamped): 1;
+ * - `jitter`: the blue-noise mask (3D): 1.
  *
  * A medium passed in is what the stand-in draws; its reads add nothing to it.
  */
@@ -442,7 +826,7 @@ export const CLOUD_STAND_INS = {
   field(medium: CloudMediumFn = CLOUD_VACUUM): CloudMediumFn {
     const layered = (): TextureNode =>
       texture(cloudStandInTexture('2d-array', 'rgba8', { layers: 6 }))
-    const clipmap = [layered(), layered(), layered()]
+    const clipmap = [layered(), layered()]
     const base = texture3D(cloudStandInTexture('3d', 'r8'))
     const detail = texture3D(cloudStandInTexture('3d', 'r8'))
     const profile = texture(cloudStandInTexture('2d', 'rgba8'))
@@ -464,18 +848,38 @@ export const CLOUD_STAND_INS = {
       withReads(medium(sample, body), cloudStandInBinding(cache, '3d'))
   },
 
+  /** A sun's cache that holds no depth anywhere, at full weight: no cloud toward the sun. */
   sunDepth(): CloudSunDepthNodes {
     const map = texture3D(cloudStandInTexture('3d', 'r16f'))
-    return { opticalDepth: () => cloudStandInBinding(map, '3d') }
+    return {
+      depths: () => {
+        const none = cloudStandInBinding(map, '3d')
+        return {
+          toSun: none,
+          whole: none,
+          meanDepthToSun: none,
+          meanDepthWhole: none,
+          weight: float(1),
+          behind: float(1),
+        }
+      },
+    }
   },
 
-  /** An isotropic phase, `value` sr⁻¹ in every band; 1/(4π) is normalized. */
-  phase(value: Scalar = ISOTROPIC): CloudPhaseNodes {
+  /**
+   * An isotropic phase, `value` sr⁻¹ in every band, at a gain of `gain`;
+   * 1/(4π) is normalized, and a gain of one is a medium with no diffraction
+   * taken out of it.
+   */
+  phase(value: Scalar = ISOTROPIC, gain: Scalar = 1): CloudPhaseNodes {
     const table = texture(
       cloudStandInTexture('2d', 'rgba16f', { value: ISOTROPIC }),
     )
+    const droplets = (): Node<'vec3'> =>
+      vec3(scalar(value).add(cloudStandInBinding(table, '2d')))
     return {
-      droplets: () => vec3(scalar(value).add(cloudStandInBinding(table, '2d'))),
+      droplets,
+      phase: () => vec4(droplets(), scalar(gain)),
     }
   },
 
@@ -490,5 +894,45 @@ export const CLOUD_STAND_INS = {
       depthMean: from,
       depthDeviation: float(0),
     })
+  },
+
+  /** A sky of `mean` radiance in every band, alike on every side. */
+  sky(mean: Scalar = 0): CloudSkyNodes {
+    const table = texture(cloudStandInTexture('2d', 'rgba16f'))
+    return {
+      at: () => ({
+        mean: vec3(scalar(mean).add(cloudStandInBinding(table, '2d'))),
+        up: vec3(0),
+        sunward: vec3(0),
+        upper: vec3(0),
+      }),
+    }
+  },
+
+  /** A source of `isotropic` at every slab, radius and view. */
+  source(isotropic: Scalar = 0): CloudSourceNodes {
+    const table = texture3D(cloudSourceStandIn())
+    return {
+      view: () => ({}) as CloudSourceView,
+      level: () => vec3(0),
+      source: () => scalar(isotropic).add(cloudStandInBinding(table, '3d')),
+    }
+  },
+
+  /**
+   * One draw for every pixel and frame: `value` in every number, ½ by
+   * default. The mask is read as the real one is, by `textureLoad` from a
+   * nearest texture, which binds no sampler.
+   */
+  jitter(value: Scalar = 0.5): CloudJitterNodes {
+    const map = new Data3DTexture(new Uint8Array(1), 1, 1, 1)
+    map.format = RedFormat
+    map.type = UnsignedByteType
+    map.generateMipmaps = false
+    map.needsUpdate = true
+    const mask = texture3D(map)
+    const drawn = (): Node<'float'> =>
+      scalar(value).add(mask.load(ivec3(0, 0, 0)).x.mul(0))
+    return { at: () => vec2(drawn()), draw: () => vec4(drawn()) }
   },
 }

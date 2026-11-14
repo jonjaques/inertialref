@@ -138,6 +138,7 @@ export function Sensor({
                   scattering: (body: Parameters<typeof scatteringOf>[1]) =>
                     scatteringOf(engine, body),
                   renderTime: engine.snapshot?.renderTime ?? 0,
+                  rate: engine.snapshot?.timeScale ?? 1,
                   visibility: engine.visibilityProcessing,
                   pictureEpoch: engine.pictureEpoch,
                   historyKey,

@@ -43,6 +43,7 @@ import {
   type SurfacePlacement,
 } from '@inertialref/simulation'
 import {
+  bodyAddress,
   type Body,
   bodyFixedFrameId,
   bodyFrameId,
@@ -108,7 +109,14 @@ import {
   type TravelTargetOptions,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
-import { solveSun, type SunAt, sunAt, type SunTarget } from './solarTime.ts'
+import { engineLight } from './engineLight.ts'
+import {
+  runClock,
+  solveSun,
+  type SunAt,
+  sunAt,
+  type SunTarget,
+} from './solarTime.ts'
 import {
   captureCameraProcessing,
   DEFAULT_PICTURE_PROCESSING,
@@ -274,6 +282,8 @@ export class GameHarness {
   readonly #maneuvers: Maneuvers
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
+  /** A drive lit in front of the lens, drawn only: `engineLight.ts`. */
+  readonly lightEngine = engineLight()
 
   constructor(host: Host, scripts: readonly CutsceneScript[] = CUTSCENES) {
     this.#host = host
@@ -735,6 +745,11 @@ export class GameHarness {
     target: SunTarget,
   ): ReturnType<typeof solveSun> {
     return solveSun(this.world, address, radiansOf(place), target)
+  }
+
+  /** Run the held instant from `start` at `warp`, a clock cast's verb (`solarTime.ts`). */
+  runClock(start: number, warp: number): ReturnType<typeof runClock> {
+    return runClock(this.observatory, start, warp)
   }
 
   /**
@@ -1285,9 +1300,19 @@ export class GameHarness {
     this.#observatory.setTime(picture.time)
     const weather = this.#host.render.setWeather(
       picture.weather ?? null,
+      // A station's picture draws the weather of the body it goes round: the
+      // clouds are served on a body, and a station's own address names none.
       destination.kind === 'body'
         ? formatAddress(destination.address)
-        : picture.address,
+        : destination.kind === 'station' && destination.address.body !== null
+          ? formatAddress(
+              bodyAddress(
+                destination.address.galaxy,
+                destination.system,
+                destination.address.body,
+              ),
+            )
+          : picture.address,
     )
     if (picture.framing.kind === 'camera') {
       const lens = picture.lens!
@@ -1832,6 +1857,7 @@ export class GameHarness {
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation,throttle}) / ir.throttle(0..1) / ir.hold()',
+      '  ir.lightEngine(on?)           a drive lit in front of the lens at a held throttle, drawn only; false releases it',
       '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',
@@ -1881,6 +1907,7 @@ export class GameHarness {
       '  ir.settled()                  whether the sky, the ground and the clouds have stopped arriving — what a capture waits for',
       '  ir.sun(address, {latitude, longitude}, time?)  the sun over a place: elevation and azimuth, degrees',
       "  ir.solveSun(address, place, {elevation, trend, after})  the first instant the sun stands there; elevation may be 'noon'",
+      '  ir.runClock(start, warp)      run the held instant from start, warp simulated seconds a presented second',
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',
       '  ir.ascend()                   back to orbit, at the framing you left',

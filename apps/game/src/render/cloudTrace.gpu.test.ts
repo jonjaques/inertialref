@@ -10,7 +10,6 @@ import {
   type Node,
   OrthographicCamera,
   PlaneGeometry,
-  RedFormat,
   RGBAFormat,
   Scene,
   StorageBufferAttribute,
@@ -24,14 +23,12 @@ import {
   Fn,
   If,
   instanceIndex,
-  ivec2,
+  length,
   max,
-  normalize,
   oneMinus,
   sqrt,
   storage,
   texture,
-  textureLoad,
   uint,
   uniform,
   uvec2,
@@ -39,31 +36,84 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import { sunThroughAt } from './air.ts'
-import type { CloudFrame } from './cloudFrame.ts'
-import { cloudRay } from './cloudGeometry.ts'
-import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
+import {
+  crossingDepth as crossingDepthOf,
+  crossingExponent as crossingExponentOf,
+  crossingForm,
+  gammaDepth as gammaDepthOf,
+  GENUS_TABLE,
+  levelStatistics,
+  readLevelStatistics,
+  type ScenarioId,
+  spreadDepth as spreadDepthOf,
+  stepLight as stepLightOf,
+  stepShare as stepShareOf,
+  WEATHER_SCENARIOS,
+} from '@inertialref/rendering'
+import { altitudeAt, cloudRay, sunMuAt } from './cloudGeometry.ts'
+import { traceJitter } from './cloudJitter.ts'
+import { CLOUD_MAX_STEPS, CLOUD_PHASE_MODES } from './cloudLevers.ts'
 import {
   type CloudAirFn,
   cloudMarch,
   type CloudMarchDeps,
-  marchFar,
 } from './cloudMarch.ts'
+import {
+  chord,
+  depthTexture,
+  leaning,
+  lookUp,
+  MARCH_RIG_RADIUS as R,
+  type MarchLayers as Layers,
+  marchLight as lightOf,
+  marchProbe,
+  NO_BUDGET as BUDGET,
+  placeBody,
+  placeSun,
+  type Probed,
+  type ProbeOptions,
+  readTexels,
+  relative,
+  sizeTrace,
+  SKY_KM,
+  testSun,
+  traceFrame as frameOf,
+  type Triple as Vec3,
+} from './cloudMarchRig.ts'
+import {
+  gammaDepth,
+  crossingDepth,
+  crossingExponent,
+  spreadDepth,
+  stepLight,
+  stepShare,
+} from './cloudMix.ts'
 import {
   CLOUD_STAND_INS,
   type CloudFarFn,
+  type CloudJitterNodes,
   type CloudMediumFn,
   type CloudPhaseNodes,
-  cloudStandInTexture,
+  type CloudSample,
   type CloudSunDepthNodes,
-  type CloudSunFn,
+  cloudStandInTexture,
+  exactSlabSun,
   slabMedium,
 } from './cloudNodes.ts'
+import {
+  cloudSunFn,
+  LIGHT_TAP_DEPTH,
+  LIGHT_TAP_RATIO,
+  LIGHT_TAP_REACH,
+  SUN_EARLY_OUT,
+} from './cloudSunlight.ts'
+import { SUN_GRID_KNEE } from './cloudSunGrid.ts'
 import {
   CLOUD_TRACE_PHASES,
   CloudTrace,
   type CloudTraceDeps,
 } from './cloudTrace.ts'
+import { cloudRig } from './cloudSystemRig.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
@@ -90,8 +140,6 @@ afterAll(() => {
   gpu.dispose()
 })
 
-/** Earth's: the curvature the crossings carry is the real one. */
-const R = 6_371_000
 const ISOTROPIC = 1 / (4 * Math.PI)
 /** The march's own light per unit of opacity under a white sun: first order at 1/(4π), and the placeholder sky's ½·Ψ with Ψ = 1. */
 const LIGHT_PER_OPACITY = 1.5 * ISOTROPIC
@@ -99,102 +147,20 @@ const LIGHT_PER_OPACITY = 1.5 * ISOTROPIC
 const MARCH = 1e-4
 /** RGBA16F's step, relative: the floor on anything read out of the trace's textures. */
 const HALF = 2 ** -10
-
-type Vec3 = readonly [number, number, number]
-
-/* ------------------------------------------------------------------------- */
-/* The body, its layers and its rays                                          */
-/* ------------------------------------------------------------------------- */
-
-interface Layers {
-  /** The eye over the datum, meters. */
-  readonly eye: number
-  /** Up to three [base, top] pairs, meters. */
-  readonly layers: readonly (readonly [number, number])[]
-}
-
 /**
- * The served body's uniforms as `cloudUniforms.write` would leave them: the
- * eye on +Y over a body of Earth's radius, the sun overhead, and the layers'
- * boundaries with the eye's height over each formed in float64. An absent
- * layer sits at the union's top with no thickness, as `writeLayers` lays it.
+ * How near its handover a ray stops, relative. The handover is
+ * `farDistance·band^ξ`, and at a band of one or ξ of zero the power is one
+ * only as exactly as the adapter's `pow`: WGSL allows `exp2` three float32
+ * steps at zero, 1.8 × 10⁻⁷, and this is five times that.
  */
-function placeBody(uniforms: CloudUniforms, { eye, layers }: Layers): void {
-  const body = uniforms.served
-  const top = Math.max(...layers.map(([, t]) => t))
-  const flat = [0, 1, 2].flatMap((k) => layers[k] ?? [top, top])
-  body.datumRadius.value = R
-  body.eye.value = eye
-  body.eyeTerm.value = eye * (2 * R + eye)
-  body.eyeOver.value.set(...(flat.slice(0, 4).map((b) => eye - b) as Quad))
-  body.eyeOverHigh.value.set(eye - flat[4]!, eye - flat[5]!)
-  body.boundaries.value.set(...(flat.slice(0, 4) as Quad))
-  body.boundariesHigh.value.set(flat[4]!, flat[5]!)
-  body.up.value.set(0, 1, 0)
-  body.sun.value.set(0, 1, 0)
-  body.sunUp.value = 1
-  body.compression.value = 1
-  body.cleared.value = 0
-  uniforms.layers.radius.value.set(10, 10, 10)
-  const trace = uniforms.trace
-  trace.farDistance.value = 1e9
-  trace.maxSteps.value = 1024
-  trace.frame.value = 0
-}
-type Quad = [number, number, number, number]
+const STOP = 1e-6
 
-/** A slab's path length along a ray of up-cosine μ from the eye, float64: the sphere crossings' difference. */
-function chord(eye: number, mu: number, base: number, top: number): number {
-  const re = R + eye
-  const crossing = (h: number): number => {
-    const b = re * mu
-    const c = (eye - h) * (2 * R + eye + h)
-    const q = -(b + (b >= 0 ? 1 : -1) * Math.sqrt(b * b - c))
-    return Math.max(q, c / q)
-  }
-  return crossing(top) - Math.max(crossing(base), 0)
-}
-
-const unit = (v: Vec3): Vec3 => {
-  const length = Math.hypot(...v)
-  return [v[0] / length, v[1] / length, v[2] / length]
-}
-
-/** A ray with up-cosine μ, leaning toward +X. */
-const leaning = (mu: number): Vec3 => [Math.sqrt(1 - mu * mu), mu, 0]
-
-/* ------------------------------------------------------------------------- */
-/* Stand-ins                                                                  */
-/* ------------------------------------------------------------------------- */
-
-/**
- * A sun as `cloudSunFn` binds one: the medium read where the taps would read
- * it, the sun depth's texture and the air's beam, with the taps adding
- * nothing, so the cloud a sample sees toward the sun is `cloud` and the
- * beam is the air's table — white on the stand-in tables.
- */
-function testSun(
-  field: CloudMediumFn,
-  depth: CloudSunDepthNodes,
-  cloud: Node<'float'> = float(1),
-): CloudSunFn {
-  return (sample, _medium, body) => {
-    const taps = field(sample, body).sigma.mul(0)
-    const airHeight = float(R).mul(body.air.top.sub(1).max(1e-6))
-    return {
-      cloud: exp(depth.opticalDepth(sample.offset).negate())
-        .mul(cloud)
-        .add(taps),
-      air: sunThroughAt(
-        body.air,
-        sample.altitude.div(airHeight),
-        sample.sunMu,
-        body.cleared,
-        { level: true },
-      ),
-    }
-  }
-}
+/** The march's own probe on this file's device. */
+const probe = (
+  uniforms: CloudUniforms,
+  medium: CloudMediumFn,
+  options: ProbeOptions = {},
+) => marchProbe(gpu, uniforms, medium, options)
 
 interface Media {
   readonly medium: CloudMediumFn
@@ -210,7 +176,10 @@ function standIns(
   uniforms: CloudUniforms,
   medium: CloudMediumFn,
   depth: () => Texture,
-  options: { readonly phase?: CloudPhaseNodes } = {},
+  options: {
+    readonly phase?: CloudPhaseNodes
+    readonly jitter?: CloudJitterNodes
+  } = {},
 ): Media {
   const field = CLOUD_STAND_INS.field(medium)
   return {
@@ -222,29 +191,11 @@ function standIns(
       phase: options.phase ?? CLOUD_STAND_INS.phase(),
       far: CLOUD_STAND_INS.far(),
       depth,
+      ...lightOf(uniforms),
+      ...(options.jitter === undefined ? {} : { jitter: options.jitter }),
     },
   }
 }
-
-/** An R16F distance texture, km, filtered as the depth copy is. */
-function depthTexture(
-  width: number,
-  height: number,
-  km: (x: number, y: number) => number,
-): DataTexture {
-  const data = new Uint16Array(width * height)
-  for (let y = 0; y < height; y += 1)
-    for (let x = 0; x < width; x += 1)
-      data[y * width + x] = DataUtils.toHalfFloat(km(x, y))
-  const map = new DataTexture(data, width, height, RedFormat, HalfFloatType)
-  map.magFilter = LinearFilter
-  map.minFilter = LinearFilter
-  map.needsUpdate = true
-  return map
-}
-
-/** The depth copy's clamp: sky. */
-const SKY_KM = 60_000
 
 /* ------------------------------------------------------------------------- */
 /* Readbacks                                                                  */
@@ -260,88 +211,8 @@ function wgslOf(kernel: ComputeNode): string {
   return nodes.getForCompute(kernel).computeShader
 }
 
-/** Every texel of a texture, RGBA, row 0 first, read by a kernel so nothing filters or flips it. */
-async function texels(
-  map: Texture,
-  width: number,
-  height: number,
-): Promise<(x: number, y: number) => [number, number, number, number]> {
-  const count = width * height
-  const out = new StorageBufferAttribute(new Float32Array(count * 4), 1)
-  const into = storage(out, 'float', count * 4)
-  const kernel = Fn(() => {
-    If(instanceIndex.lessThan(uint(count)), () => {
-      const at = ivec2(
-        uvec2(instanceIndex.mod(uint(width)), instanceIndex.div(uint(width))),
-      )
-      const texel = textureLoad(map, at)
-      const to = instanceIndex.mul(uint(4))
-      into.element(to).assign(texel.x)
-      into.element(to.add(uint(1))).assign(texel.y)
-      into.element(to.add(uint(2))).assign(texel.z)
-      into.element(to.add(uint(3))).assign(texel.w)
-    })
-  })().compute(count)
-  await gpu.compute(kernel)
-  const values = new Float32Array(await gpu.readBuffer(out))
-  kernel.dispose()
-  return (x, y) => {
-    const at = (y * width + x) * 4
-    return [values[at]!, values[at + 1]!, values[at + 2]!, values[at + 3]!]
-  }
-}
-
-/* ------------------------------------------------------------------------- */
-/* Frames                                                                     */
-/* ------------------------------------------------------------------------- */
-
-/**
- * What the trace reads of a frame — its levers, its extents and its index —
- * and nothing else. The uniforms are set by the test, as `cloudUniforms.write`
- * would set them from a whole frame.
- */
-function frameOf(
-  trace: { readonly width: number; readonly height: number },
-  levers: Partial<CloudLevers> = {},
-  frameIndex = 0,
-): CloudFrame {
-  const render = { width: 4 * trace.width, height: 4 * trace.height }
-  return {
-    levers: { ...DEFAULT_CLOUD_LEVERS, on: true, ...levers },
-    extents: {
-      render,
-      css: render,
-      trace,
-      history: { width: 2 * trace.width, height: 2 * trace.height },
-    },
-    frameIndex,
-    regime: 'converging',
-  } as unknown as CloudFrame
-}
-
-const BUDGET = { slices: 0, tiles: 0, jump: false, sunTexelSteps: 0 }
-
-/** A camera looking up the local vertical with `spread` of half-tangent each way. */
-function lookUp(uniforms: CloudUniforms, spread: number): void {
-  const camera = uniforms.camera
-  camera.forward.value.set(0, 1, 0)
-  camera.right.value.set(1, 0, 0)
-  camera.up.value.set(0, 0, -1)
-  camera.plane.value.set(spread, spread)
-  camera.pixelAngle.value = 1e-3
-}
-
-/** The trace's extents in its uniforms, for a trace of `width` × `height`. */
-function sizeTrace(
-  uniforms: CloudUniforms,
-  width: number,
-  height: number,
-): void {
-  const trace = uniforms.trace
-  trace.size.value.set(width, height)
-  trace.history.value.set(2 * width, 2 * height)
-  trace.render.value.set(4 * width, 4 * height)
-}
+const texels = (map: Texture, width: number, height: number) =>
+  readTexels(gpu, map, width, height)
 
 /* ------------------------------------------------------------------------- */
 /* The kernels                                                                */
@@ -357,18 +228,19 @@ function bindings(wgsl: string): { sampled: number; storage: number } {
 }
 
 describe('the kernels', () => {
-  it('both compile against the stand-ins, and bind within the stage’s limits', async () => {
+  it('all compile against the stand-ins, and bind within the stage’s limits', async () => {
     const uniforms = createCloudUniforms()
     const sky = depthTexture(4, 4, () => SKY_KM)
     const { deps } = standIns(uniforms, slabMedium([]), () => sky)
     const trace = new CloudTrace(deps)
     const kernels = trace.kernels()
-    // The march's and the counters' clear.
-    expect(kernels).toHaveLength(2)
+    // The march's three, one a way of taking the phase's radius, and the
+    // counters' clear.
+    expect(kernels).toHaveLength(CLOUD_PHASE_MODES.length + 1)
     const from = gpu.reported().length
     const before = gpu.computePipelinesBuilt()
     await trace.warm(renderer)
-    expect(gpu.computePipelinesBuilt() - before).toBe(2)
+    expect(gpu.computePipelinesBuilt() - before).toBe(4)
     expect(
       gpu
         .reported()
@@ -384,16 +256,83 @@ describe('the kernels', () => {
       expect(sampled).toBeLessThanOrEqual(16)
       expect(storage).toBeLessThanOrEqual(4)
     }
-    // The design's census (§3.7): the field's 6, the sun grid, the air's 2,
-    // the phase, the far atlas and the depth copy. A floor as well as a
-    // ceiling: the counts are a regex over three's WGSL, and a spelling that
-    // stopped matching would pass the ceiling at zero.
-    expect(counted[0]).toMatchObject({ sampled: 12, storage: 4 })
-    expect(new Set(counted.map(({ name }) => name))).toEqual(
-      new Set(['cloud trace', 'cloud stats']),
-    )
+    // The stand-ins' census: the field's 5, the sun grid, the air's 2, the
+    // phase, the far atlas, the depth copy, the jitter's mask and the slab
+    // source's table. A floor as well as a ceiling: the counts are a regex
+    // over three's WGSL, and a spelling that stopped matching would pass
+    // the ceiling at zero. The sky's table binds only in a kernel built to
+    // read it, and this march draws the sky's placeholder. Every way of
+    // taking the phase binds the one atlas.
+    for (const march of counted.slice(0, CLOUD_PHASE_MODES.length))
+      expect(march).toMatchObject({
+        name: 'cloud trace',
+        sampled: 13,
+        storage: 4,
+      })
+    expect(counted.at(-1)!.name).toBe('cloud stats')
     trace.dispose()
     sky.dispose()
+  }, 120_000)
+})
+
+describe('the system’s own trace kernel', () => {
+  /*
+   * The census above counts the stand-ins, which bind what a test's field
+   * binds. This one counts the kernel the system builds over the real field,
+   * the real sun grid, the real phase and the real far atlas, which is the
+   * one a device has to accept: WebGPU's default device allows a stage 16
+   * sampled textures and 4 storage textures, and nothing raises the limit.
+   *
+   * Thirteen today: the clipmap's cover (a 2D array), the base and detail
+   * noises (3D), the profile, the sun grid (3D), the air's transmittance,
+   * its Ψ and its sky table, the phase atlas, the far atlas, the depth
+   * copy, the jitter's mask (3D), which is bound whichever draw the lever
+   * takes, and the slab source's table (3D). Phase 1's design counts one
+   * more at worst (§4.5): the clipmap's `kind`, 14 of 16. The count is
+   * exact, not a ceiling, so a binding nobody counted fails here rather
+   * than at the sixteenth, and the package that adds one changes this
+   * number where a reviewer reads it. A system built without the sky's
+   * term (`CloudSystemDeps.skyTable`) binds the twelve without the sky
+   * table.
+   */
+  const SAMPLED = { '2d': 7, '2d_array': 1, '3d': 5 }
+  const WITHOUT_SKY = { '2d': 6, '2d_array': 1, '3d': 5 }
+  const STAGE_SAMPLED = 16
+  const STAGE_STORAGE = 4
+
+  it('binds 13 sampled textures of the stage’s 16 and its 4 storage textures, and 12 built without the sky’s term', async () => {
+    for (const [skyTable, kindsWanted] of [
+      [true, SAMPLED],
+      [false, WITHOUT_SKY],
+    ] as const) {
+      const rig = cloudRig(gpu, 16, 16, skyTable ? {} : { skyTable })
+      try {
+        await rig.system!.warm()
+        const trace = rig.system!.resources.find(
+          (held) => held.name === 'trace',
+        ) as CloudTrace
+        // Each of the march's three kernels, by how it takes the phase's radius.
+        for (const kernel of trace
+          .kernels()
+          .slice(0, CLOUD_PHASE_MODES.length)) {
+          expect(kernel.name).toBe('cloud trace')
+          const wgsl = wgslOf(kernel)
+          const counted = bindings(wgsl)
+          const kinds: Record<string, number> = {}
+          for (const [, kind] of wgsl.matchAll(
+            /var\s+\w+\s*:\s*texture_(\w+)</g,
+          ))
+            if (!kind!.startsWith('storage'))
+              kinds[kind!] = (kinds[kind!] ?? 0) + 1
+          expect(kinds).toEqual(kindsWanted)
+          expect(counted.sampled).toBe(skyTable ? 13 : 12)
+          expect(counted.sampled).toBeLessThanOrEqual(STAGE_SAMPLED)
+          expect(counted.storage).toBe(STAGE_STORAGE)
+        }
+      } finally {
+        rig.dispose()
+      }
+    }
   }, 120_000)
 })
 
@@ -407,6 +346,7 @@ describe('the march’s reads', () => {
       phase: CLOUD_STAND_INS.phase(),
       medium: field,
       sun: testSun(field, CLOUD_STAND_INS.sunDepth()),
+      ...lightOf(uniforms),
     }
     const material = new MeshBasicNodeMaterial()
     material.colorNode = Fn(() => {
@@ -455,138 +395,6 @@ describe('the march’s reads', () => {
 /* ------------------------------------------------------------------------- */
 /* The march against analytic slabs                                          */
 /* ------------------------------------------------------------------------- */
-
-interface Probed {
-  readonly light: Vec3
-  readonly transmittance: number
-  readonly air: Vec3
-  readonly reproject: number
-  readonly end: number
-  readonly front: number
-  readonly deviation: number
-  readonly stopped: number
-  readonly steps: number
-  readonly exhausted: number
-  readonly start: number
-}
-const PROBED = 15
-
-interface ProbeRay {
-  readonly direction: Vec3
-  readonly jitter?: number
-  /** True meters: where the scene stops the ray. */
-  readonly stop?: number
-}
-
-interface ProbeOptions {
-  readonly sky?: boolean
-  readonly sun?: (field: CloudMediumFn) => CloudSunFn
-  readonly air?: CloudAirFn
-  readonly phase?: CloudPhaseNodes
-  /** A far march past the handover, composed as the trace composes it. */
-  readonly far?: CloudFarFn
-}
-
-/**
- * `cloudMarch` one ray an invocation, its result written in float32: the
- * march itself, without the half floats the trace's textures store it in.
- * The rays are clipped to the shell union as the trace clips them.
- */
-function probe(
-  uniforms: CloudUniforms,
-  medium: CloudMediumFn,
-  options: ProbeOptions = {},
-): (rays: readonly ProbeRay[]) => Promise<Probed[]> {
-  const capacity = 64
-  const input = new StorageBufferAttribute(new Float32Array(capacity * 5), 1)
-  const output = new StorageBufferAttribute(
-    new Float32Array(capacity * PROBED),
-    1,
-  )
-  const from = storage(input, 'float', capacity * 5)
-  const into = storage(output, 'float', capacity * PROBED)
-  const count = uniform(0, 'uint')
-  const field = CLOUD_STAND_INS.field(medium)
-  const sun = options.sun ?? ((f) => testSun(f, CLOUD_STAND_INS.sunDepth()))
-  const deps: CloudMarchDeps = {
-    uniforms,
-    phase: options.phase ?? CLOUD_STAND_INS.phase(),
-    medium: field,
-    sun: sun(field),
-    ...(options.air === undefined ? {} : { air: options.air }),
-  }
-  const kernel = Fn(() => {
-    If(instanceIndex.lessThan(count), () => {
-      const read = (k: number) => from.element(instanceIndex.mul(5).add(k))
-      const direction = normalize(vec3(read(0), read(1), read(2)))
-      const stop = read(4)
-      const ray = cloudRay(direction, uniforms.served, stop)
-      const start = ray.hit.select(ray.start, stop)
-      const end = ray.hit.select(ray.end, stop)
-      const clipped = { ...ray, start, end }
-      const sky = bool(options.sky ?? true)
-      const fine = cloudMarch(clipped, read(3), sky, deps, null)
-      const { far } = options
-      const result =
-        far === undefined
-          ? fine
-          : marchFar(
-              fine,
-              clipped,
-              (at) => far(clipped, at, uniforms.served, sky),
-              null,
-            )
-      const values = [
-        ...[result.light.x, result.light.y, result.light.z],
-        result.transmittance,
-        ...[result.air.x, result.air.y, result.air.z],
-        result.reproject,
-        result.end,
-        result.front,
-        result.deviation,
-        result.stopped,
-        result.steps,
-        result.exhausted,
-        start,
-      ]
-      values.forEach((value, k) => {
-        into.element(instanceIndex.mul(PROBED).add(k)).assign(value)
-      })
-    })
-  })().compute(capacity)
-  return async (rays) => {
-    const values = input.array as Float32Array
-    rays.forEach((ray, i) => {
-      values.set(
-        [...unit(ray.direction), ray.jitter ?? 0, ray.stop ?? 1e9],
-        i * 5,
-      )
-    })
-    input.needsUpdate = true
-    count.value = rays.length
-    await gpu.compute(kernel)
-    const out = new Float32Array(await gpu.readBuffer(output))
-    return rays.map((_, i) => {
-      const v = [...out.subarray(i * PROBED, (i + 1) * PROBED)]
-      return {
-        light: [v[0]!, v[1]!, v[2]!],
-        transmittance: v[3]!,
-        air: [v[4]!, v[5]!, v[6]!],
-        reproject: v[7]!,
-        end: v[8]!,
-        front: v[9]!,
-        deviation: v[10]!,
-        stopped: v[11]!,
-        steps: v[12]!,
-        exhausted: v[13]!,
-        start: v[14]!,
-      }
-    })
-  }
-}
-
-const relative = (value: number, reference: number): number =>
-  Math.abs(value - reference) / Math.max(Math.abs(reference), 1e-30)
 
 /** The light a ray gathers under a white sun for an opacity `1 − T`, every band. */
 function expectLight(probed: Probed, opacity: number): void {
@@ -655,15 +463,16 @@ describe('the march through one slab', () => {
       }
       /*
        * The cuts did move, or the test would pass whatever the step integral
-       * did: the half-opacity front is interpolated inside the step that
-       * crosses it, so it lands differently on each jitter's cut, within the
-       * interpolation's own error, σΔ²/8 (5 m at 140 m), of ln 2/σ past the
-       * base.
+       * did: the depth moments are taken at each step's middle, so the mean
+       * depth lands differently on each jitter's cut. The half-opacity front
+       * does not: it is placed inside the step that crosses it by the step's
+       * own extinction, which in a uniform slab is ln 2/σ past the base on
+       * any cut.
        */
-      const fronts = new Set(results.map((result) => result.front))
-      expect(fronts.size).toBeGreaterThanOrEqual(3)
-      for (const front of fronts)
-        expect(Math.abs(front - (base + Math.LN2 / sigma))).toBeLessThan(10)
+      const means = new Set(results.map((result) => result.reproject))
+      expect(means.size).toBeGreaterThanOrEqual(3)
+      for (const { front } of results)
+        expect(Math.abs(front - (base + Math.LN2 / sigma))).toBeLessThan(0.05)
     }
   })
 
@@ -730,28 +539,60 @@ describe('the march through one slab', () => {
   })
 })
 
-describe('the segment rule (maximum-random overlap, §5.7)', () => {
-  it('passes half of a half-clear layer at τ 20, where mixing every step does not', async () => {
+describe('a partly cloudy level (the crossing’s law, §5.9)', () => {
+  const CELL = 1000
+  /** A slab's column is its sight length: what its statistics answer. */
+  const halfClear = { ...SLAB, sigma: 20 / 600, fraction: 0.5, column: CELL }
+
+  /** What the law passes of a ray of up-cosine μ from the datum through the slab, float64. */
+  function lawThrough(mu: number, cover: number, sigma: number): number {
+    const s = chord(0, mu, SLAB.base, SLAB.top)
+    const rise = SLAB.top - SLAB.base
+    const run = Math.sqrt(Math.max(s * s - rise * rise, 0))
+    const n = crossingExponentOf(run, CELL)
+    return Math.exp(-crossingDepthOf(cover, sigma * s, n))
+  }
+
+  it('passes a half-clear layer of depth 20 by its crossing’s columns at every slant, and half of it vertically, on any cut', async () => {
     const uniforms = createCloudUniforms()
     placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
-    const halfClear = { ...SLAB, sigma: 20 / 600, fraction: 0.5 }
     const march = probe(uniforms, slabMedium([halfClear]))
-    const rays = [1, 0.8].map((mu) => ({ direction: leaning(mu) }))
-    for (const result of await march(rays)) {
-      expect(relative(result.transmittance, 0.5)).toBeLessThanOrEqual(MARCH)
-      // (b): between the cloudy share's e^−τ and 1.
-      expect(result.transmittance).toBeGreaterThanOrEqual(Math.exp(-20))
-      expectLight(result, 0.5 * (1 - Math.exp(-20)))
+    const cosines = [1, 0.8, 0.5, 0.2]
+    expect(lawThrough(1, 0.5, halfClear.sigma)).toBeCloseTo(0.5, 8)
+    // A slant ray counts more than one column, and passes less than half.
+    expect(lawThrough(0.5, 0.5, halfClear.sigma)).toBeLessThan(0.48)
+    for (const maxSteps of [16, 48, 192, 1024]) {
+      uniforms.trace.maxSteps.value = maxSteps
+      const rays = cosines.flatMap((mu) =>
+        [0, 0.6].map((jitter) => ({ direction: leaning(mu), jitter })),
+      )
+      const probed = await march(rays)
+      probed.forEach((result, i) => {
+        const expected = lawThrough(cosines[i >> 1]!, 0.5, halfClear.sigma)
+        expect(relative(result.transmittance, expected)).toBeLessThanOrEqual(
+          MARCH,
+        )
+        // (b): between the cloudy share's e^−τ and 1.
+        expect(result.transmittance).toBeGreaterThanOrEqual(Math.exp(-20))
+        // Under a sun that does not fall along the ray every step adds its
+        // own opacity's light, on any cut.
+        expectLight(result, 1 - expected)
+      })
     }
-    // The variant: a column a millimeter wide closes the segment at every
-    // step of a slant ray, so every step mixes the fraction of its own, and
-    // the layer's clear half is counted once a step.
-    const column = probe(uniforms, slabMedium([{ ...halfClear, column: 1e-3 }]))
-    const [mixed] = await column([{ direction: leaning(0.8) }])
-    expect(mixed!.transmittance).toBeLessThan(0.05)
   })
 
-  it('multiplies two segments of one column, each mixed once', async () => {
+  it('counts every step its own columns where the sight length is a millimeter: the variant, which passes nothing', async () => {
+    // A sight length under any step's run makes each step many columns, the
+    // layer's clear half counted once a column: the mean medium, e^(−c·τ).
+    const uniforms = createCloudUniforms()
+    placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
+    const march = probe(uniforms, slabMedium([{ ...halfClear, column: 1e-3 }]))
+    const [mixed] = await march([{ direction: leaning(0.8) }])
+    expect(mixed!.transmittance).toBeLessThan(0.05)
+    expect(lawThrough(0.8, 0.5, halfClear.sigma)).toBeGreaterThan(0.4)
+  })
+
+  it('multiplies two levels’ crossings, each mixed by its own cover', async () => {
     const uniforms = createCloudUniforms()
     placeBody(uniforms, {
       eye: 0,
@@ -769,10 +610,349 @@ describe('the segment rule (maximum-random overlap, §5.7)', () => {
     expect(relative(result!.transmittance, first * second)).toBeLessThanOrEqual(
       MARCH,
     )
-    expectLight(
-      result!,
-      0.6 * (1 - Math.exp(-1.5)) + first * 0.3 * (1 - Math.exp(-0.8)),
+    expectLight(result!, 1 - first * second)
+  })
+
+  it('is Beer’s law at a cover of one whatever the crossing counts: a grazing ray through a resolved slab', async () => {
+    const uniforms = createCloudUniforms()
+    placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
+    // Thin enough that the longest chord, 16.7 km, stays over the 1% exit.
+    const sigma = 1e-4
+    const march = probe(uniforms, slabMedium([{ ...SLAB, sigma, column: 50 }]))
+    const cosines = [0.3, 0.1, 0.03]
+    const probed = await march(
+      cosines.map((mu) => ({ direction: leaning(mu) })),
     )
+    probed.forEach((result, i) => {
+      const expected = Math.exp(
+        -sigma * chord(0, cosines[i]!, SLAB.base, SLAB.top),
+      )
+      expect(relative(result.transmittance, expected)).toBeLessThanOrEqual(
+        MARCH,
+      )
+    })
+  })
+})
+
+describe('a level read by its statistics (`crossingForm`, §5.9)', () => {
+  /*
+   * Past the footprint switch the medium answers a level's four numbers at
+   * the column, and a crossing passes the form those numbers were measured
+   * against: `crossingForm` in `weatherField.ts`. The march is held to it
+   * on each regime's own levels, at the regime's cover, on rays 0°, 45° and
+   * 80° from the vertical.
+   *
+   * The medium is the statistical branch's, written out: a level's cloudy
+   * share, an extinction that sums up a vertical column to the level's
+   * depth, and the four numbers as the level's table answers them. The rays
+   * are made to read it by a footprint of the distance itself, past any
+   * switch.
+   */
+  const REGIMES: readonly ScenarioId[] = [
+    'fair-cumulus',
+    'broken-horizon',
+    'inside',
+    'two-decks',
+    'near-gap-far',
+    'cirrus-over-cumulus',
+    'anvil',
+    'overcast',
+    'fog',
+    'altocumulus',
+  ]
+  const ZENITHS = [0, 45, 80]
+  const BASE = 1000
+  const CELL = 1000
+  /** Radians a texel that put every footprint on the three rays past any switch, and under any. */
+  const PAST = 1
+  const UNDER = 0
+
+  /** Every level of the regimes, with the four numbers its table answers at the regime's cover. */
+  function levels() {
+    return REGIMES.flatMap((id) =>
+      WEATHER_SCENARIOS[id].layers.map((layer, k) => {
+        const { genus } = layer
+        const stats = readLevelStatistics(
+          levelStatistics({
+            base: layer.base,
+            top: layer.top,
+            stratiform: genus,
+            cumuliform: genus,
+          }),
+          layer.coverage,
+          GENUS_TABLE[genus].cumuliform ? 1 : 0,
+        )
+        return {
+          what: `${id}, level ${k}`,
+          thickness: layer.top - layer.base,
+          ...stats,
+        }
+      }),
+    )
+  }
+
+  /** The march through a level of `thickness` holding the four numbers, on the three rays; `pixelAngle` sets their footprints, and so which read they take. */
+  function marcher() {
+    const numbers = {
+      thickness: uniform(1),
+      fraction: uniform(0),
+      depth: uniform(0),
+      shape: uniform(1),
+      sight: uniform(1),
+    }
+    const uniforms = createCloudUniforms()
+    const top = float(BASE).add(numbers.thickness)
+    const slab = slabMedium([
+      {
+        base: BASE,
+        top,
+        sigma: numbers.depth.div(numbers.thickness),
+        fraction: numbers.fraction,
+      },
+    ])
+    const medium: CloudMediumFn = (sample, body) => ({
+      ...slab(sample, body),
+      statistics: {
+        fraction: numbers.fraction,
+        depth: numbers.depth,
+        shape: numbers.shape,
+        sight: numbers.sight,
+      },
+    })
+    const march = probe(uniforms, medium)
+    return async (
+      level: ReturnType<typeof levels>[number],
+      pixelAngle: number,
+    ) => {
+      placeBody(uniforms, {
+        eye: 0,
+        layers: [[BASE, BASE + level.thickness]],
+        cell: CELL,
+      })
+      uniforms.camera.pixelAngle.value = pixelAngle
+      numbers.thickness.value = level.thickness
+      numbers.fraction.value = level.fraction
+      numbers.depth.value = level.depth
+      numbers.shape.value = level.shape
+      numbers.sight.value = level.sight
+      const cosines = ZENITHS.map((degrees) =>
+        Math.cos((degrees * Math.PI) / 180),
+      )
+      const probed = await march(
+        cosines.map((mu) => ({ direction: leaning(mu), jitter: 0.5 })),
+      )
+      return probed.map((result, i) => {
+        // The ray's own chord over a round body: the path factor it has,
+        // and the zenith angle that is its secant.
+        const s = chord(0, cosines[i]!, BASE, BASE + level.thickness)
+        const zenith = Math.acos(Math.min(level.thickness / s, 1))
+        return {
+          degrees: ZENITHS[i]!,
+          got: result.transmittance,
+          form: crossingForm(
+            level.fraction,
+            level.depth,
+            level.shape,
+            level.sight,
+            level.thickness,
+            zenith,
+          ),
+        }
+      })
+    }
+  }
+
+  it('passes each regime’s levels as `crossingForm` does, at 0°, 45° and 80°', async () => {
+    const through = marcher()
+    const all = levels()
+    expect(all.length).toBeGreaterThanOrEqual(12)
+    let held = 0
+    for (const level of all)
+      for (const { degrees, got, form } of await through(level, PAST)) {
+        const what = `${level.what} at ${degrees}°: ${got} against ${form}`
+        // Under the 1% exit the march has stopped, at whatever its last
+        // step left: the form is held where the ray crosses the level.
+        if (form < 0.011) expect(got, what).toBeLessThan(0.011)
+        else {
+          expect(relative(got, form), what).toBeLessThan(5e-4)
+          held += 1
+        }
+      }
+    // The control: most of the crossings are above the exit, and held.
+    expect(held).toBeGreaterThanOrEqual(24)
+  }, 120_000)
+
+  it('is not what one depth passes: read as resolved, a deck on a slant is its mean’s exponential, and darker', async () => {
+    /*
+     * The same numbers with the rays' footprint under the switch: the march
+     * takes the medium as the resolved field, whose depth is the step's own
+     * with no spread. Straight down the two agree by construction. On a
+     * slant the spread passes more, and on a level whose depths spread the
+     * most it is the picture.
+     */
+    const through = marcher()
+    let widest = 0
+    for (const level of levels()) {
+      const resolved = await through(level, UNDER)
+      const [down] = resolved
+      if (down!.form >= 0.011)
+        expect(relative(down!.got, down!.form), level.what).toBeLessThan(5e-4)
+      for (const { got, form } of resolved.slice(1)) {
+        // Under the exit either march has stopped where its step left it.
+        if (form < 0.011) continue
+        expect(got).toBeLessThanOrEqual(form * (1 + 5e-4) + 1e-6)
+        if (form >= 0.05) widest = Math.max(widest, 1 - got / form)
+      }
+    }
+    expect(widest).toBeGreaterThan(0.1)
+  }, 120_000)
+
+  it('takes the switch at half a cell where a ray carries no dither, as the medium does: resolved a tenth under it, statistical a tenth over', async () => {
+    /*
+     * A march with no dither takes the medium's own default, a dither of a
+     * half, whose switch is `cell·4^(−1/2)`. A sample in the level is no
+     * nearer than its base and no farther than its top over the steepest
+     * ray's cosine, so one pixel angle holds every footprint at 0.45 of a
+     * cell or under and another at 0.55 or over: a tenth of the switch
+     * either side, where the share is a constant and no adapter's `exp2`
+     * places it. With the switch at a quarter of a cell the first read is
+     * the statistical one from 0.25 up, and a deck on a slant passes over a
+     * tenth more.
+     */
+    const through = marcher()
+    const steepest = Math.cos((Math.max(...ZENITHS) * Math.PI) / 180)
+    let widest = 0
+    for (const level of levels()) {
+      const under = (0.45 * CELL * steepest) / (BASE + level.thickness)
+      const over = (0.55 * CELL) / BASE
+      const resolved = await through(level, UNDER)
+      const statistical = await through(level, PAST)
+      const below = await through(level, under)
+      const above = await through(level, over)
+      resolved.forEach(({ got, form, degrees }, i) => {
+        const what = `${level.what} at ${degrees}°`
+        // Under the 1% exit a march has stopped where its last step left it.
+        if (got < 0.011 || statistical[i]!.got < 0.011) return
+        expect(relative(below[i]!.got, got), `${what}, under`).toBeLessThan(
+          5e-4,
+        )
+        expect(
+          relative(above[i]!.got, statistical[i]!.got),
+          `${what}, over`,
+        ).toBeLessThan(5e-4)
+        if (form >= 0.05)
+          widest = Math.max(widest, Math.abs(1 - got / statistical[i]!.got))
+      })
+    }
+    // The control: the two reads differ, so a switch misplaced is seen.
+    expect(widest).toBeGreaterThan(0.1)
+  }, 120_000)
+})
+
+describe('the kernel’s arithmetic against the CPU’s (`cloudOverlap.ts`)', () => {
+  it('counts a crossing’s columns, spreads a column’s depth, mixes a step and integrates its source as the reference does', async () => {
+    /*
+     * The functions of `cloudMix.ts` run as a kernel over a table of
+     * arguments, each drawn uniform in its logarithm over the range a march
+     * meets, with the ends of each range among them: a wisp's depth of 10⁻⁴
+     * and a cumulonimbus's of 500, a cover from a thousandth to one, a
+     * gamma's shape from a half to past where depths do not spread, a
+     * source that falls or grows by e^±40 along its step.
+     */
+    const count = 512
+    const IN = 10
+    const OUT = 6
+    const draw = (() => {
+      let state = 0x9e3779b9
+      return (): number => {
+        state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+        return state / 2 ** 32
+      }
+    })()
+    const logUniform = (low: number, high: number): number =>
+      Math.exp(Math.log(low) + (Math.log(high) - Math.log(low)) * draw())
+    const rows = Array.from({ length: count }, (_, k) => {
+      const edge = k < 12
+      return {
+        run: edge ? [0, 1e2, 1e6][k % 3]! : logUniform(1, 1e6),
+        sight: logUniform(200, 30_000),
+        cover: edge ? [1, 1e-3, 0.5, 0.999999][k % 4]! : draw(),
+        depth: edge ? [1e-4, 500][k % 2]! : logUniform(1e-4, 500),
+        exponent: edge ? [1, 300][k % 2]! : logUniform(1, 300),
+        // A half, the decks' few units, the join's two sides, and none.
+        shape: edge
+          ? [0.5, 3, 9999, 1e4, 1e5, 30][k % 6]!
+          : logUniform(0.5, 2e4),
+        start: logUniform(1e-6, 10),
+        folds: edge ? [40, -40, 0][k % 3]! : -20 + 40 * draw(),
+        y: -30 + 60 * draw(),
+        // A level's vertical depth: its spread mean overflows past e⁸⁰.
+        vertical: logUniform(1e-3, 30),
+      }
+    })
+    const input = new StorageBufferAttribute(new Float32Array(count * IN), 1)
+    const output = new StorageBufferAttribute(new Float32Array(count * OUT), 1)
+    ;(input.array as Float32Array).set(
+      rows.flatMap((row) => [
+        row.run,
+        row.sight,
+        row.cover,
+        row.depth,
+        row.exponent,
+        row.start,
+        row.start * Math.exp(-row.folds),
+        row.y,
+        row.shape,
+        row.vertical,
+      ]),
+    )
+    const from = storage(input, 'float', count * IN)
+    const into = storage(output, 'float', count * OUT)
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(count)), () => {
+        const read = (k: number) => from.element(instanceIndex.mul(IN).add(k))
+        const write = (k: number, value: Node<'float'>) =>
+          into.element(instanceIndex.mul(OUT).add(k)).assign(value)
+        write(0, crossingExponent(read(0), read(1)))
+        const depth = crossingDepth(read(2), read(3), read(4), read(8)).toVar()
+        write(1, depth)
+        write(2, stepLight(vec3(read(5)), vec3(read(6)), depth).y)
+        write(3, stepShare(read(7)))
+        write(4, gammaDepth(read(3), read(8)))
+        write(5, spreadDepth(read(9), read(8)))
+      })
+    })().compute(count)
+    await gpu.compute(kernel)
+    const got = new Float32Array(await gpu.readBuffer(output))
+    kernel.dispose()
+    const f32 = Math.fround
+    rows.forEach((row, k) => {
+      const what = JSON.stringify(row)
+      const at = (slot: number): number => got[OUT * k + slot]!
+      const n = crossingExponentOf(f32(row.run), f32(row.sight))
+      expect(relative(at(0), n), what).toBeLessThan(1e-5)
+      const depth = crossingDepthOf(
+        f32(row.cover),
+        f32(row.depth),
+        f32(row.exponent),
+        f32(row.shape),
+      )
+      // A cover a float's step under one loses its last bits to 1 − c.
+      const loose = row.cover > 0.9999 && row.cover < 1 ? 0.2 : 2e-4
+      expect(relative(at(1), depth), what).toBeLessThan(loose)
+      const end = f32(f32(row.start) * Math.exp(-row.folds))
+      const light = stepLightOf(f32(row.start), end, at(1))
+      expect(relative(at(2), light), what).toBeLessThan(2e-4)
+      expect(relative(at(3), stepShareOf(f32(row.y))), what).toBeLessThan(2e-5)
+      const column = gammaDepthOf(f32(row.depth), f32(row.shape))
+      expect(relative(at(4), column), what).toBeLessThan(1e-5)
+      // The spread mean is k·(e^(τ/k) − 1): held where a float32 holds it.
+      if (row.vertical / row.shape < 60)
+        expect(
+          relative(at(5), spreadDepthOf(f32(row.vertical), f32(row.shape))),
+          what,
+        ).toBeLessThan(2e-5)
+    })
   })
 })
 
@@ -796,8 +976,11 @@ describe('the march’s edge cases', () => {
      * this one does, as a table's coordinate would: a NaN radius is a NaN
      * phase, whose product with no light is NaN, not 0.
      */
+    const droplets = (_nu: Node<'float'>, radius: Node<'float'>) =>
+      vec3(radius.mul(0).add(ISOTROPIC))
     const reading: CloudPhaseNodes = {
-      droplets: (_nu, radius) => vec3(radius.mul(0).add(ISOTROPIC)),
+      droplets,
+      phase: (nu, _layers, _level, radius) => vec4(droplets(nu, radius), 1),
     }
     const uniforms = createCloudUniforms()
     placeBody(uniforms, { eye: 0, layers: [[SLAB.base, SLAB.top]] })
@@ -887,7 +1070,7 @@ describe('past the fine march', () => {
     const result = await handed((uniforms) => {
       uniforms.trace.farDistance.value = 1300
     })
-    expect(result.stopped).toBe(1300)
+    expect(relative(result.stopped, 1300)).toBeLessThanOrEqual(STOP)
     expect(result.exhausted).toBe(0)
     expect(relative(result.transmittance, through)).toBeLessThanOrEqual(MARCH)
     expectLight(result, 1 - through)
@@ -897,20 +1080,23 @@ describe('past the fine march', () => {
     expect(Math.abs(result.deviation - wholeDeviation)).toBeLessThan(2)
   })
 
-  it('hands it over where the step budget runs out, and counts the ray', async () => {
-    // An empty layer under the slab starts the span at 100 m, so eight
-    // steps run out short of the slab and the far march holds all of it.
+  it('reaches the handover on a budget of four steps, where the schedule’s would run out inside the slab', async () => {
+    // An empty layer under the slab starts the span at 100 m, and strides
+    // cross the 800 m between the two. Four of the schedule's steps end
+    // short of the handover, 300 m into the slab; the budget's floor
+    // lengthens them in cloud, which is what `exhausted` counts, and the
+    // ray still stops at the footprint's distance.
     const result = await handed(
       (uniforms) => {
-        uniforms.trace.maxSteps.value = 8
+        uniforms.trace.maxSteps.value = 4
+        uniforms.trace.farDistance.value = 1300
       },
       [EMPTY_BELOW, [SLAB.base, SLAB.top]],
     )
     expect(result.exhausted).toBe(1)
-    expect(result.stopped).toBeLessThan(SLAB.base)
+    expect(relative(result.stopped, 1300)).toBeLessThanOrEqual(STOP)
     expect(relative(result.transmittance, through)).toBeLessThanOrEqual(MARCH)
     expectLight(result, 1 - through)
-    expect(Math.abs(result.reproject - wholeMean)).toBeLessThan(1e-2)
   })
 
   it('takes out of B the far air the slab it crossed hides, which the far march cannot see', async () => {
@@ -949,7 +1135,7 @@ describe('past the fine march', () => {
     const slab = slabMedium([{ ...SLAB, sigma }])
     const march = probe(uniforms, slab, { far: clear, air: dark })
     const [result] = await march([{ direction: [0, 1, 0], jitter: 0.3 }])
-    expect(result!.stopped).toBe(2000)
+    expect(relative(result!.stopped, 2000)).toBeLessThanOrEqual(STOP)
     expect(relative(result!.transmittance, through)).toBeLessThanOrEqual(MARCH)
     result!.air.forEach((band, c) => {
       expect(relative(band, (through - 1) * airLight[c]!)).toBeLessThanOrEqual(
@@ -1130,6 +1316,7 @@ async function rig(
     readonly km?: (x: number, y: number) => number
     readonly phase?: CloudPhaseNodes
     readonly spread?: number
+    readonly jitter?: (uniforms: CloudUniforms) => CloudJitterNodes
   } = {},
 ): Promise<Rig> {
   const uniforms = createCloudUniforms()
@@ -1141,8 +1328,12 @@ async function rig(
     4 * height,
     options.km ?? (() => SKY_KM),
   )
-  const phase = options.phase === undefined ? {} : { phase: options.phase }
-  const { deps } = standIns(uniforms, medium, () => depth, phase)
+  const { deps } = standIns(uniforms, medium, () => depth, {
+    ...(options.phase === undefined ? {} : { phase: options.phase }),
+    ...(options.jitter === undefined
+      ? {}
+      : { jitter: options.jitter(uniforms) }),
+  })
   const trace = new CloudTrace(deps)
   await trace.warm(renderer)
   return {
@@ -1283,44 +1474,181 @@ describe('the knots', () => {
     ],
   }
 
-  it('sit at two slabs’ entries and exits, with the transmittance and light at each exit', async () => {
-    // Rays within a thousandth of the zenith: chords within 10⁻⁶ of the
-    // slabs' thicknesses, under a half float's step.
-    const traced = await rig(slabMedium([lower, upper]), 2, 2, place, {
+  it.each(CLOUD_PHASE_MODES)(
+    'sit at two slabs’ entries and exits, with the transmittance and light at each exit, the phase taken by %s',
+    async (phaseMode) => {
+      // Rays within a thousandth of the zenith: chords within 10⁻⁶ of the
+      // slabs' thicknesses, under a half float's step.
+      const traced = await rig(slabMedium([lower, upper]), 2, 2, place, {
+        spread: 1e-3,
+      })
+      const frame = frameOf({ width: 2, height: 2 }, { phaseMode })
+      traced.trace.render(renderer, frame, BUDGET)
+      const { aux, knotDepth, knotLight } = await outputsOf(traced.trace, 2, 2)
+      const first = Math.exp(-1.2)
+      const both = Math.exp(-2.2)
+      const expected = [
+        [LIGHT_PER_OPACITY * (1 - first), first],
+        [LIGHT_PER_OPACITY * (1 - both), both],
+        [0, 1],
+        [0, 1],
+      ] as const
+      const near = (value: number, reference: number): void => {
+        expect(Math.abs(value - reference)).toBeLessThanOrEqual(
+          HALF * Math.max(Math.abs(reference), 1e-2),
+        )
+      }
+      for (let j = 0; j < 2; j += 1)
+        for (let i = 0; i < 2; i += 1) {
+          expect(aux(2 * i + 1, j)[3]).toBe(2)
+          knotDepth(2 * i, j).forEach((km, k) => {
+            near(km, [1, 1.4, 2.5, 3][k]!)
+          })
+          expect(knotDepth(2 * i + 1, j)).toEqual([
+            SKY_KM,
+            SKY_KM,
+            SKY_KM,
+            SKY_KM,
+          ])
+          expected.forEach(([band, transmittance], k) => {
+            const [r, g, b, t] = knotLight(2 * i + (k & 1), 2 * j + (k >> 1))
+            for (const value of [r, g, b]) near(value, band)
+            near(t, transmittance)
+          })
+        }
+      traced.dispose()
+    },
+  )
+
+  it('are one a level’s crossing, for a layer thin in every column: of depth 0.16 over nine columns, where no column passes under 98%', async () => {
+    /*
+     * A layer 400 m thick crossed 10° over the horizon: 2.3 km of chord,
+     * nine columns of 250 m, an optical depth of 0.16 in all and under
+     * 0.018 a column, with a wisp over it that passes all but 0.04%. A knot
+     * cut at each column's close finds no column under 98% and records
+     * nothing, so an object behind the layer reads a transmittance of one
+     * where 0.85 stands in front of it. A crossing's knot holds the layer
+     * whole, and the wisp, over the knot's threshold, records none.
+     */
+    const mu = 0.17
+    const thin = { base: 1000, top: 1400, sigma: 7e-5, column: 250 }
+    const wisp = { base: 2500, top: 3000, sigma: 4e-4 / 2900, column: 250 }
+    const traced = await rig(slabMedium([thin, wisp]), 2, 2, place, {
       spread: 1e-3,
     })
+    const camera = traced.uniforms.camera
+    camera.forward.value.set(Math.sqrt(1 - mu * mu), mu, 0)
+    camera.right.value.set(0, 0, 1)
+    camera.up.value.set(-mu, Math.sqrt(1 - mu * mu), 0)
     traced.trace.render(renderer, frameOf({ width: 2, height: 2 }), BUDGET)
-    const { aux, knotDepth, knotLight } = await outputsOf(traced.trace, 2, 2)
-    const first = Math.exp(-1.2)
-    const both = Math.exp(-2.2)
-    const expected = [
-      [LIGHT_PER_OPACITY * (1 - first), first],
-      [LIGHT_PER_OPACITY * (1 - both), both],
-      [0, 1],
-      [0, 1],
-    ] as const
-    const near = (value: number, reference: number): void => {
-      expect(Math.abs(value - reference)).toBeLessThanOrEqual(
-        HALF * Math.max(Math.abs(reference), 1e-2),
-      )
-    }
+    const read = await outputsOf(traced.trace, 2, 2)
+    const columns = Math.sqrt(1 - mu * mu) * chord(0, mu, 1000, 1400)
+    expect(columns / 250).toBeGreaterThan(9)
+    expect(
+      Math.exp((-thin.sigma * 250) / Math.sqrt(1 - mu * mu)),
+    ).toBeGreaterThan(0.98)
     for (let j = 0; j < 2; j += 1)
       for (let i = 0; i < 2; i += 1) {
-        expect(aux(2 * i + 1, j)[3]).toBe(2)
-        knotDepth(2 * i, j).forEach((km, k) => {
-          near(km, [1, 1.4, 2.5, 3][k]!)
+        expect(read.aux(2 * i + 1, j)[3]).toBe(1)
+        const [entry, exit] = read.knotDepth(2 * i, j)
+        const through = read.light(i, j)[3]
+        const knot = read.knotLight(2 * i, 2 * j)[3]
+        // The layer's own slant chord, from the knot's two depths.
+        const layer = Math.exp(-thin.sigma * 1000 * (exit - entry))
+        expect(Math.abs(knot - layer)).toBeLessThan(4 * HALF)
+        expect(knot).toBeLessThan(0.87)
+        // Behind it stands the wisp alone: within 0.01 of the ray's own.
+        expect(Math.abs(knot - through)).toBeLessThan(0.01)
+      }
+    traced.dispose()
+  })
+
+  it('are recorded for a cloud that ends under its level’s top, where the march’s last steps are clear', async () => {
+    // The level runs a kilometer over the cloud in it, and is the union's
+    // top: the ray ends in clear air with no step waiting to be closed.
+    const low = { base: 1000, top: 1400, sigma: 1.2 / 400 }
+    const traced = await rig(
+      slabMedium([low]),
+      2,
+      2,
+      { eye: 0, layers: [[1000, 2400]] },
+      { spread: 1e-3 },
+    )
+    traced.trace.render(renderer, frameOf({ width: 2, height: 2 }), BUDGET)
+    const read = await outputsOf(traced.trace, 2, 2)
+    for (let j = 0; j < 2; j += 1)
+      for (let i = 0; i < 2; i += 1) {
+        expect(read.aux(2 * i + 1, j)[3]).toBe(1)
+        const [entry, exit] = read.knotDepth(2 * i, j)
+        expect(Math.abs(entry - 1)).toBeLessThan(2 * HALF)
+        // The cloud's own edge is no boundary a step ends on: the knot's
+        // exit is the end of the step that held the edge, a depth of 0.3,
+        // 100 m, past it at most.
+        // Two half-float steps: one is 1.4 of this value's own, the room a
+        // store that truncates leaves, and no adapter's store was measured.
+        expect(exit).toBeGreaterThanOrEqual(1.4 * (1 - 2 * HALF))
+        expect(exit).toBeLessThan(1.5)
+        const knot = read.knotLight(2 * i, 2 * j)[3]
+        expect(knot).toBeLessThanOrEqual(Math.exp(-1.2) * (1 + 2 * HALF))
+        expect(knot).toBeGreaterThan(Math.exp(-1.5))
+        expect(knot).toBe(read.light(i, j)[3])
+      }
+    traced.dispose()
+  })
+
+  it('are two for a level a grazing ray crosses twice, down through it and up again', async () => {
+    /*
+     * From 5 km, a ray whose lowest point is 2 km up passes down through a
+     * layer at 3 to 4 km, under it, and up through it again 226 km on. The
+     * level under it is empty and is never reached.
+     */
+    const deck = { base: 3000, top: 4000, sigma: 2e-5 }
+    const eye = 5000
+    const sine = (R + 2000) / (R + eye)
+    const mu = -Math.sqrt(1 - sine * sine)
+    const grazing: Layers = {
+      eye,
+      layers: [
+        [500, 1000],
+        [deck.base, deck.top],
+      ],
+    }
+    const traced = await rig(
+      slabMedium([{ base: 500, top: 1000, sigma: 0 }, deck]),
+      2,
+      2,
+      grazing,
+      { spread: 1e-4 },
+    )
+    const camera = traced.uniforms.camera
+    camera.forward.value.set(Math.sqrt(1 - mu * mu), mu, 0)
+    camera.right.value.set(0, 0, 1)
+    camera.up.value.set(-mu, Math.sqrt(1 - mu * mu), 0)
+    traced.trace.render(renderer, frameOf({ width: 2, height: 2 }), BUDGET)
+    const read = await outputsOf(traced.trace, 2, 2)
+    /** Where the central ray meets a height, km: the near and the far root. */
+    const meets = (h: number): [number, number] => {
+      const b = (R + eye) * mu
+      const root = Math.sqrt(b * b - ((R + eye) ** 2 - (R + h) ** 2))
+      return [(-b - root) / 1000, (-b + root) / 1000]
+    }
+    const [topNear, topFar] = meets(deck.top)
+    const [baseNear, baseFar] = meets(deck.base)
+    const down = Math.exp(-deck.sigma * 1000 * (baseNear - topNear))
+    for (let j = 0; j < 2; j += 1)
+      for (let i = 0; i < 2; i += 1) {
+        expect(read.aux(2 * i + 1, j)[3]).toBe(2)
+        // Rays a ten-thousandth apart graze at heights 30 m apart, and the
+        // crossings move by a kilometer with them.
+        read.knotDepth(2 * i, j).forEach((km, k) => {
+          const expected = [topNear, baseNear, baseFar, topFar][k]!
+          expect(Math.abs(km - expected), `knot depth ${k}`).toBeLessThan(2)
         })
-        expect(knotDepth(2 * i + 1, j)).toEqual([
-          SKY_KM,
-          SKY_KM,
-          SKY_KM,
-          SKY_KM,
-        ])
-        expected.forEach(([band, transmittance], k) => {
-          const [r, g, b, t] = knotLight(2 * i + (k & 1), 2 * j + (k >> 1))
-          for (const value of [r, g, b]) near(value, band)
-          near(t, transmittance)
-        })
+        const first = read.knotLight(2 * i, 2 * j)[3]
+        const second = read.knotLight(2 * i + 1, 2 * j)[3]
+        expect(relative(first, down)).toBeLessThan(0.03)
+        expect(relative(second, down * down)).toBeLessThan(0.06)
+        expect(Math.abs(second - read.light(i, j)[3])).toBeLessThan(2 * HALF)
       }
     traced.dispose()
   })
@@ -1346,6 +1674,67 @@ describe('the knots', () => {
 })
 
 describe('the jitter', () => {
+  it('under the gradient’s lever, places every ray by the numbers `at` gives its texel and its history pixel, byte for byte', async () => {
+    /*
+     * The trace reads one draw a ray. Under `'ign'` its step share and its
+     * point inside the pixel are the two reads the gradient has always
+     * given, `at(texel).x` and `at(2·texel + phase)`, so the picture under
+     * the default lever is the gradient's whatever else the draw carries.
+     * Two traces over one field, one drawing from the field's jitter and
+     * one from a draw written out of `at`, store the same half floats in
+     * all four outputs, at each phase of the interleave and at frame
+     * indices from zero to the last a u32 holds. Rays spread a whole image
+     * across a broken slab, so a first step or a sampling point a bit off
+     * lands in the transmittance, the front and the knots' depths.
+     */
+    const slab = slabMedium([
+      { ...SLAB, sigma: 0.004, fraction: 0.6, column: 300 },
+    ])
+    const place: Layers = { eye: 0, layers: [[SLAB.base, SLAB.top]] }
+    const fromAt = (uniforms: CloudUniforms): CloudJitterNodes => ({
+      at: traceJitter,
+      draw: (texel, frame) =>
+        vec4(
+          traceJitter(texel, frame).x,
+          traceJitter(
+            texel.mul(uint(2)).add(uvec2(uniforms.trace.phase)),
+            frame,
+          ),
+          0,
+        ),
+    })
+    const [width, height] = [6, 4]
+    const drawn = await rig(slab, width, height, place)
+    const written = await rig(slab, width, height, place, { jitter: fromAt })
+    expect(drawn.uniforms.trace.jitter.value).toBe(0)
+    const frame = frameOf({ width, height })
+    const seen = new Set<number>()
+    for (const index of [0, 5, 2 ** 31 + 7, 2 ** 32 - 1])
+      for (const k of [0, 1, 2, 3]) {
+        const outputs: number[][] = []
+        for (const traced of [drawn, written]) {
+          traced.uniforms.trace.frame.value = index
+          traced.trace.dispatchPhase(renderer, frame, k)
+          const read = await outputsOf(traced.trace, width, height)
+          const values: number[] = []
+          for (let y = 0; y < 2 * height; y += 1)
+            for (let x = 0; x < 2 * width; x += 1) {
+              values.push(...read.knotLight(x, y))
+              if (y < height) values.push(...read.aux(x, y))
+              if (y < height) values.push(...read.knotDepth(x, y))
+              if (y < height && x < width) values.push(...read.light(x, y))
+            }
+          outputs.push(values)
+        }
+        expect(outputs[0]).toEqual(outputs[1])
+        // The control: the draws moved the rays, or equality says nothing.
+        seen.add(outputs[0]!.reduce((sum, v) => sum + v, 0))
+      }
+    expect(seen.size).toBe(16)
+    drawn.dispose()
+    written.dispose()
+  }, 120_000)
+
   it('draws one frame index alike every time, and moves the samples with the index', async () => {
     // Frames 5 and 9 share an interleave phase, so only the jitter differs.
     const slab = slabMedium([{ ...SLAB, sigma: 0.002 }])
@@ -1368,10 +1757,11 @@ describe('the jitter', () => {
 })
 
 describe('the step counters', () => {
-  it('count each ray’s steps under stats, and nothing without', async () => {
-    // Standing in an overcast deck: a budget of four steps runs out on every
-    // ray before the deck's top.
-    const deck = slabMedium([{ base: 100, top: 1100, sigma: 0.03 }])
+  it('count each ray’s steps, its opacity and the central ray’s range under stats, and nothing without', async () => {
+    // Standing under an overcast deck with a budget of four steps: every
+    // ray's floor lengthens its steps, and every ray ends opaque.
+    const sigma = 0.03
+    const deck = slabMedium([{ base: 100, top: 1100, sigma }])
     const traced = await rig(deck, 4, 4, { eye: 2, layers: [[100, 1100]] })
     const off = frameOf({ width: 4, height: 4 }, { stats: false })
     traced.trace.render(renderer, off, BUDGET)
@@ -1379,11 +1769,571 @@ describe('the step counters', () => {
     traced.uniforms.trace.maxSteps.value = 4
     const fine = frameOf({ width: 4, height: 4 }, { stats: true })
     traced.trace.render(renderer, fine, BUDGET)
-    expect(await stepsOf(traced.trace)).toEqual({
-      mean: 4,
-      max: 4,
-      exhausted: 16,
-    })
+    const steps = (await stepsOf(traced.trace))!
+    expect(steps.exhausted).toBe(16)
+    // The budget, and a ray's first step and its one boundary beside it.
+    expect(steps.max).toBeLessThanOrEqual(4 + 2)
+    expect(steps.mean).toBeGreaterThan(1)
+    expect(steps.opacity).toBeGreaterThan(0.99)
+    expect(steps.opacity).toBeLessThanOrEqual(1)
+    // By kind: every step is in cloud, in a level's clear air, or outside
+    // every level, and each step in cloud takes one sun, with
+    // one more where a ray's last step is closed. The stand-in sun reads no
+    // taps.
+    const { kinds } = steps
+    expect(kinds.cloud).toBeGreaterThanOrEqual(1)
+    expect(kinds.cloud + kinds.clear + kinds.gap).toBeCloseTo(steps.mean, 5)
+    // One level: a ray starts on its base, and no step is outside it.
+    expect(kinds.gap).toBe(0)
+    expect(kinds.suns).toBeGreaterThanOrEqual(kinds.cloud)
+    expect(kinds.suns).toBeLessThanOrEqual(kinds.cloud + 1)
+    expect(kinds.taps).toBe(0)
+    expect(kinds.skipped).toBe(0)
+    // Sixteen rays are one batch of 32: its longest ray is the longest.
+    expect(steps.batchLongest).toBe(steps.max)
+    // The central texel looks up within 60° of the zenith through 98 m of
+    // clear air: its range is that slant and ln 50/σ of cloud, whatever the
+    // four steps were.
+    const inCloud = Math.log(50) / sigma
+    expect(steps.range).not.toBeNull()
+    expect(steps.range!).toBeGreaterThan(98 + inCloud)
+    expect(steps.range!).toBeLessThan(2 * 98 + inCloud * 1.001)
     traced.dispose()
+  })
+
+  it('count each kind exactly at the ladder’s top rung, 256 steps, where every step is in cloud', async () => {
+    /*
+     * Steps start at 50 m and grow by 1%, so a ray wants 256 of them only
+     * past 59 km: inside a 90 km slab every ray wants more, and the
+     * budget's floor holds it to 256 counted steps and the uncounted ones
+     * beside them. Every step is in cloud and takes a sun. At a σ of 10⁻⁵
+     * no ray reaches the exit's 1%. A count of eight bits carried 256 steps
+     * in cloud into the count outside every level.
+     */
+    const deck = slabMedium([{ base: 100, top: 90_000, sigma: 1e-5 }])
+    const traced = await rig(deck, 4, 4, { eye: 1000, layers: [[100, 90_000]] })
+    traced.uniforms.trace.maxSteps.value = CLOUD_MAX_STEPS.at(-1)!
+    const frame = frameOf({ width: 4, height: 4 }, { stats: true })
+    traced.trace.render(renderer, frame, BUDGET)
+    const steps = (await stepsOf(traced.trace))!
+    expect(steps.max).toBeGreaterThanOrEqual(256)
+    const { kinds } = steps
+    expect(kinds.gap).toBe(0)
+    expect(kinds.cloud).toBeCloseTo(steps.mean, 9)
+    expect(kinds.clear).toBeCloseTo(0, 9)
+    expect(kinds.suns).toBeGreaterThanOrEqual(kinds.cloud)
+    expect(kinds.suns).toBeLessThanOrEqual(kinds.cloud + 1)
+    traced.dispose()
+  })
+
+  it('average the batches’ longest rays over the immediate regime’s four dispatches, each its own', async () => {
+    /*
+     * Each interleave phase's rays end at a distance of their own, 1.5 to
+     * 4.5 km up through clear air, so each phase's batches take their own
+     * steps. The four phases traced one a frame read four figures; traced
+     * as the immediate regime's four dispatches in one frame they read
+     * those four's mean. A section shared by the four held each batch's
+     * longest over the phases, the dearest phase's figure.
+     */
+    const [width, height] = [16, 8]
+    const traced = await rig(
+      slabMedium([]),
+      width,
+      height,
+      { eye: 1000, layers: [[100, 5000]] },
+      {
+        km: (x, y) =>
+          1.5 + (Math.floor(x / 2) % 2) + 2 * (Math.floor(y / 2) % 2),
+      },
+    )
+    const off = frameOf({ width, height }, { stats: false })
+    const counted = async (dispatch: () => void): Promise<number> => {
+      traced.trace.render(renderer, off, BUDGET)
+      dispatch()
+      return (await stepsOf(traced.trace))!.batchLongest!
+    }
+    const each: number[] = []
+    for (let k = 0; k < 4; k += 1) {
+      const frame = frameOf({ width, height }, { stats: true }, k)
+      each.push(
+        await counted(() => traced.trace.render(renderer, frame, BUDGET)),
+      )
+    }
+    const frame = frameOf({ width, height }, { stats: true })
+    const all = await counted(() => {
+      for (let k = 0; k < 4; k += 1)
+        traced.trace.dispatchPhase(renderer, frame, k)
+    })
+    // The control: the phases' figures differ, or a mean and a maximum agree.
+    expect(new Set(each).size).toBe(4)
+    expect(all).toBeCloseTo(each.reduce((sum, n) => sum + n, 0) / 4, 9)
+    traced.dispose()
+  })
+
+  it('answer no range where the central ray never reaches a depth of ln 50', async () => {
+    const thin = slabMedium([{ base: 100, top: 1100, sigma: 1e-4 }])
+    const traced = await rig(thin, 4, 4, { eye: 2, layers: [[100, 1100]] })
+    const frame = frameOf({ width: 4, height: 4 }, { stats: true })
+    traced.trace.render(renderer, frame, BUDGET)
+    const steps = (await stepsOf(traced.trace))!
+    expect(steps.range).toBeNull()
+    expect(steps.exhausted).toBe(0)
+    expect(steps.opacity).toBeGreaterThan(0.09)
+    expect(steps.opacity).toBeLessThan(0.2)
+    traced.dispose()
+  })
+})
+
+/* ------------------------------------------------------------------------- */
+/* First order, the schedule and the handover                                 */
+/* ------------------------------------------------------------------------- */
+
+describe('first order on a slab (the step’s integral, §5.4)', () => {
+  /*
+   * A slab of fair cumulus's extinction seen from straight above, under the
+   * slab's own exact sun, with a gain on first order as the scaled medium's
+   * atlas gives one. First order is then
+   * p·gain·(1 − e^(−k·τ))/k with k = 1 + μ/μ₀, over the depth the march
+   * crossed before it stopped under 1%. The step's depth grows with the
+   * distance to the slab: 0.3 beside it, 1.16 from 8 km, 2 from 14.4 km and
+   * 7.3 from 55 km, the far handover's. An empty level over the slab gives
+   * the ray clear air to cross first, as a ray toward a far cloud has: the
+   * out-of-cloud step has then grown past the in-cloud floor it caps, where
+   * a ray that starts on the slab takes 50 m steps at any distance.
+   */
+  const slab = { base: 400, top: 1000, sigma: 0.035 }
+  const GAIN = 1.9
+  const DISTANCES = [10, 8000, 14_400, 55_000]
+  const SUNS = [1, 0.5, 0.2]
+
+  async function ratios(
+    march: ProbeOptions['march'],
+  ): Promise<{ distance: number; mu0: number; ratio: number }[]> {
+    const out: { distance: number; mu0: number; ratio: number }[] = []
+    for (const distance of DISTANCES)
+      for (const mu0 of SUNS) {
+        const uniforms = createCloudUniforms()
+        placeBody(uniforms, {
+          eye: slab.top + distance,
+          layers: [
+            [slab.base, slab.top],
+            [slab.top + 0.05 * distance, slab.top + 0.9 * distance],
+          ],
+        })
+        placeSun(uniforms, mu0)
+        const probed = probe(uniforms, slabMedium([slab]), {
+          sun: () => exactSlabSun([slab]),
+          phase: CLOUD_STAND_INS.phase(ISOTROPIC, GAIN),
+          ...(march === undefined ? {} : { march }),
+        })
+        const [r] = await probed([{ direction: [0, -1, 0], jitter: 1 }])
+        const k = 1 + 1 / mu0
+        const tau = slab.sigma * (r!.stopped - distance)
+        const exact = (ISOTROPIC * GAIN * -Math.expm1(-k * tau)) / k
+        // The sky's placeholder takes no gain: Ψ at a half, per opacity.
+        const sky = 0.5 * ISOTROPIC * (1 - r!.transmittance)
+        out.push({ distance, mu0, ratio: (r!.light[1] - sky) / exact })
+      }
+    return out
+  }
+
+  it.each(CLOUD_PHASE_MODES)(
+    'is within 1% of the closed form at every step depth and sun, the phase taken by %s',
+    async (phaseMode) => {
+      for (const { distance, mu0, ratio } of await ratios({ phaseMode }))
+        expect(
+          Math.abs(ratio - 1),
+          `${distance} m, μ₀ ${mu0}: ${ratio}`,
+        ).toBeLessThan(0.01)
+    },
+    120_000,
+  )
+
+  it('is 15%, 52%, 76% and 100% high with the source held at each step’s start, under equal sun and view angles: the variant', async () => {
+    const found = await ratios({ sourceAtStart: true })
+    const at = (distance: number, mu0: number): number =>
+      found.find((one) => one.distance === distance && one.mu0 === mu0)!.ratio
+    // 2/(1 + e^−τ) a step of depth τ, which no step count sees.
+    for (const [distance, depth] of [
+      [10, 0.3],
+      [8000, 1.155],
+      [14_400, 1.995],
+      [55_000, 7.3],
+    ] as const)
+      expect(at(distance, 1), `${distance} m`).toBeCloseTo(
+        2 / (1 + Math.exp(-depth)),
+        2,
+      )
+    // And toward a low sun, μ/μ₀ = 5: 86% high beside the slab, six times
+    // the light from the handover.
+    expect(at(10, 0.2)).toBeCloseTo(1.863, 2)
+    expect(at(55_000, 0.2)).toBeGreaterThan(5.9)
+  }, 120_000)
+})
+
+describe('a layer as its steps are split (the rubric’s row 5)', () => {
+  it('keeps its transmittance, and its light within 1% of the 192-step value, as the budget runs from 16, and from 8', async () => {
+    /*
+     * A broken layer and a whole one, each crossed on a slant from 100 m
+     * under an exact sun 30° up, so the source falls along every step. The
+     * strides cross the 800 m under the layer, so the budget is the
+     * layer's: at eight its floor lengthens every ray's steps in cloud.
+     */
+    for (const fraction of [1, 0.6]) {
+      // Thin enough that no ray falls under the 1% exit, where a step's
+      // length decides how far under.
+      const layer = { ...SLAB, sigma: 0.0012, fraction }
+      const uniforms = createCloudUniforms()
+      placeBody(uniforms, {
+        eye: 0,
+        layers: [EMPTY_BELOW, [SLAB.base, SLAB.top]],
+      })
+      placeSun(uniforms, 0.5)
+      const march = probe(uniforms, slabMedium([layer]), {
+        sun: () => exactSlabSun([layer]),
+      })
+      const at = async (maxSteps: number): Promise<Probed[]> => {
+        uniforms.trace.maxSteps.value = maxSteps
+        return march(
+          [0.9, 0.4].flatMap((mu) =>
+            [0.1, 0.8].map((jitter) => ({ direction: leaning(mu), jitter })),
+          ),
+        )
+      }
+      const reference = await at(192)
+      for (const maxSteps of [8, 16, 24, 48, 96]) {
+        const found = await at(maxSteps)
+        found.forEach((result, i) => {
+          const what = `cover ${fraction}, ${maxSteps} steps, ray ${i}`
+          expect(
+            relative(result.transmittance, reference[i]!.transmittance),
+            what,
+          ).toBeLessThanOrEqual(MARCH)
+          expect(
+            relative(result.light[1], reference[i]!.light[1]),
+            what,
+          ).toBeLessThan(0.01)
+        })
+        // The control: at eight the floor did lengthen the steps in cloud.
+        if (maxSteps === 8)
+          expect(found.every((result) => result.exhausted === 1)).toBe(true)
+      }
+      expect(reference.every((result) => result.exhausted === 0)).toBe(true)
+    }
+  })
+})
+
+describe('the schedule and the handover (§5.8)', () => {
+  it('takes its first steps at the schedule’s length inside a cloud, with a horizon 75 km out', async () => {
+    /*
+     * Level through a deck from inside it. The schedule's step is a depth
+     * of 0.3, 8.6 m, so the ray is under 1% within sixteen of them, 137 m.
+     * An even share of the distance to the handover would be 390 m a step,
+     * one sample at the eye; the logarithm's share at 192 steps is 2 m
+     * there, under the schedule.
+     */
+    const sigma = 0.035
+    const uniforms = createCloudUniforms()
+    placeBody(uniforms, { eye: 1500, layers: [[100, 3000]] })
+    uniforms.trace.farDistance.value = 75_000
+    uniforms.trace.maxSteps.value = 192
+    const march = probe(uniforms, slabMedium([{ base: 100, top: 3000, sigma }]))
+    const [level] = await march([{ direction: [1, 0, 0], jitter: 1 }])
+    expect(level!.exhausted).toBe(0)
+    expect(level!.steps).toBeGreaterThanOrEqual(15)
+    expect(level!.stopped).toBeLessThan(Math.log(100) / sigma + 0.3 / sigma)
+    // On a budget of sixteen the floor does bind, and the ray still ends.
+    uniforms.trace.maxSteps.value = 16
+    const [short] = await march([{ direction: [1, 0, 0], jitter: 1 }])
+    expect(short!.exhausted).toBe(1)
+    expect(short!.transmittance).toBeLessThan(0.01)
+  })
+
+  it('stops every ray at its own place in the band, farDistance·band^ξ, on any budget and never short of it', async () => {
+    const uniforms = createCloudUniforms()
+    placeBody(uniforms, { eye: 0, layers: [[100, 60_000]] })
+    uniforms.trace.farDistance.value = 5000
+    const xis = [0, 0.25, 0.5, 0.75, 0.999]
+    // Clear air, and a haze thin enough that no ray exits before its stop.
+    for (const sigma of [0, 2e-5]) {
+      const medium = slabMedium([{ base: 100, top: 60_000, sigma }])
+      const march = probe(uniforms, medium)
+      for (const band of [2, 4, 1])
+        for (const maxSteps of [6, 24, 192]) {
+          uniforms.trace.handoverBand.value = band
+          uniforms.trace.maxSteps.value = maxSteps
+          const probed = await march(
+            xis.map((handover) => ({
+              direction: [0, 1, 0] as Vec3,
+              jitter: 0.4,
+              handover,
+            })),
+          )
+          probed.forEach((result, i) => {
+            const stop = 5000 * band ** xis[i]!
+            const what = `σ ${sigma}, band ${band}, ${maxSteps} steps, ξ ${xis[i]}`
+            expect(relative(result.stopped, stop), what).toBeLessThan(1e-5)
+            expect(result.stopped, what).toBeGreaterThanOrEqual(
+              5000 * (1 - 1e-6),
+            )
+            expect(result.stopped, what).toBeLessThanOrEqual(
+              5000 * band * (1 + 1e-6),
+            )
+            // The first step and the base's crossing are not the budget's.
+            expect(result.steps, what).toBeLessThanOrEqual(maxSteps + 2)
+          })
+        }
+    }
+  })
+})
+
+/* ------------------------------------------------------------------------- */
+/* The sun's taps                                                             */
+/* ------------------------------------------------------------------------- */
+
+describe('the sun a sample sees (§5.4, §5.5)', () => {
+  /** The level, and the cloud in it: a slab that fills the level unless a case ends it lower. */
+  const LEVEL = { base: 1000, top: 3000 } as const
+  const SIGMA = 0.035
+  const COUNT = 256
+  /** One depth of the slab, meters: the first tap's width. */
+  const FIRST = LIGHT_TAP_DEPTH / SIGMA
+
+  /**
+   * `cloudSunFn` at samples `depths` meters under the cloud's top on the
+   * eye's vertical, under a sun overhead: (T_cloud, the depth to the sun,
+   * the ray's whole, the taps read).
+   */
+  function sunAt(options: {
+    readonly weight?: number
+    /** The share of the slab's depth the cache holds: 0 is a cache that holds nothing. */
+    readonly holds?: number
+    /** The extinction the taps are spaced by, where it is not the slab's. */
+    readonly spacedBy?: number
+    /** The cloud's top, where it ends under its level's. */
+    readonly cloudTop?: number
+  }) {
+    const slab = {
+      base: LEVEL.base,
+      top: options.cloudTop ?? LEVEL.top,
+      sigma: SIGMA,
+    }
+    const weight = uniform(options.weight ?? 1)
+    const holds = uniform(options.holds ?? 1)
+    const uniforms = createCloudUniforms()
+    placeBody(uniforms, { eye: 0, layers: [[LEVEL.base, LEVEL.top]] })
+    uniforms.served.climate.cover.value.set(1, 1, 1)
+    const body = uniforms.served
+    const exact = exactSlabSun([slab])
+    const medium = slabMedium([slab])
+    const sampleAt = (offset: Node<'vec3'>): CloudSample => ({
+      offset,
+      distance: length(offset),
+      altitude: altitudeAt(body, offset),
+      sunMu: sunMuAt(body, offset),
+      footprint: float(0),
+    })
+    // The slab's own depths as a cache would hold them, read at a weight.
+    const nodes: CloudSunDepthNodes = {
+      depths(offset) {
+        const at = sampleAt(offset)
+        const depth = exact(at, medium(at, body), body).depth
+        return {
+          toSun: depth.x.mul(holds),
+          whole: depth.y.mul(holds),
+          weight,
+          behind: float(1),
+        }
+      },
+    }
+    const sun = cloudSunFn({ uniforms, medium, depth: nodes })
+    const input = new StorageBufferAttribute(new Float32Array(COUNT), 1)
+    const output = new StorageBufferAttribute(new Float32Array(COUNT * 4), 1)
+    const from = storage(input, 'float', COUNT)
+    const into = storage(output, 'float', COUNT * 4)
+    const count = uniform(0, 'uint')
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(count), () => {
+        const at = sampleAt(
+          vec3(0, float(slab.top).sub(from.element(instanceIndex)), 0),
+        )
+        const here = medium(at, body)
+        const seen = sun(
+          at,
+          options.spacedBy === undefined
+            ? here
+            : { ...here, sigma: float(options.spacedBy) },
+          body,
+          { depth: true },
+        )
+        const to = instanceIndex.mul(4)
+        into.element(to).assign(seen.cloud)
+        into.element(to.add(1)).assign(seen.depth.x)
+        into.element(to.add(2)).assign(seen.depth.y)
+        into.element(to.add(3)).assign(seen.taken)
+      })
+    })().compute(COUNT)
+    return {
+      weight,
+      holds,
+      async at(depths: readonly number[], taps: number) {
+        ;(input.array as Float32Array).set(depths)
+        input.needsUpdate = true
+        count.value = depths.length
+        uniforms.trace.lightTaps.value = taps
+        await gpu.compute(kernel)
+        const got = new Float32Array(await gpu.readBuffer(output))
+        return depths.map((_, i) => ({
+          cloud: got[4 * i]!,
+          toSun: got[4 * i + 1]!,
+          whole: got[4 * i + 2]!,
+          taken: got[4 * i + 3]!,
+        }))
+      },
+    }
+  }
+
+  it('lays its taps from one depth to half a kilometer by one ratio, never finer than doubling', async () => {
+    // A cache that holds nothing past the taps, deep in the slab: what a
+    // sample sees is the taps' own reach, σ·500 m at every count, in as
+    // many taps as doubling from one depth needs to get there and no more.
+    const sun = sunAt({ holds: 0 })
+    const doubling = Math.ceil(Math.log2(LIGHT_TAP_REACH / FIRST)) + 1
+    expect(doubling).toBe(6)
+    for (const [taps, taken] of [
+      [0, 0],
+      [2, 2],
+      [4, 4],
+      [6, 6],
+      [8, doubling],
+    ] as const) {
+      const [seen] = await sun.at([1500], taps)
+      const depth = taps === 0 ? 0 : SIGMA * LIGHT_TAP_REACH
+      expect(seen!.taken, `${taps} taps`).toBe(taken)
+      expect(
+        relative(seen!.cloud, Math.exp(-depth)),
+        `${taps} taps`,
+      ).toBeLessThan(1e-3)
+    }
+  })
+
+  it('ends its taps where the sun’s ray leaves the level: under the level’s top the taps’ depth is the slab’s own, in fewer taps', async () => {
+    // 100 m and 20 m under the top, with nothing cached: the taps stop at
+    // the top, so their depth is exact, and four are three and then one.
+    const sun = sunAt({ holds: 0 })
+    const [near, nearer] = await sun.at([100, 20], 4)
+    expect(near!.taken).toBe(3)
+    expect(relative(near!.toSun, SIGMA * 100)).toBeLessThan(1e-3)
+    expect(nearer!.taken).toBe(1)
+    expect(relative(nearer!.toSun, SIGMA * 20)).toBeLessThan(1e-3)
+  })
+
+  it('takes no taps where the cache is whole and calls the sample dark, and all of them where it does not', async () => {
+    // 400 m under the top the slab's depth to the sun is 14. A cache that
+    // holds 46% of it reads 6.4, past the early out's 6, and one that holds
+    // 40% reads 5.6, short of it: a fifteenth either side.
+    const sun = sunAt({})
+    expect(SUN_EARLY_OUT).toBe(SUN_GRID_KNEE)
+    const exact = SIGMA * 400
+    sun.holds.value = 0.46
+    const [dark] = await sun.at([400], 4)
+    expect(dark!.taken).toBe(0)
+    expect(relative(dark!.cloud, Math.exp(-0.46 * exact))).toBeLessThan(1e-3)
+    expect(relative(dark!.toSun, 0.46 * exact)).toBeLessThan(1e-3)
+    sun.holds.value = 0.4
+    const [lit] = await sun.at([400], 4)
+    expect(lit!.taken).toBe(4)
+    // The taps reach the top, so the sample's depth is the slab's own.
+    expect(relative(lit!.toSun, exact)).toBeLessThan(1e-3)
+    // A cache that is not whole decides nothing, however dark it reads.
+    sun.holds.value = 1
+    sun.weight.value = 0.99
+    const [unsure] = await sun.at([400], 4)
+    expect(unsure!.taken).toBe(4)
+  })
+
+  it('holds the depth to the sun and the ray’s whole within 2%, with taps and without, and a face inside a tap within that tap’s half', async () => {
+    const sun = sunAt({})
+    const whole = SIGMA * (LEVEL.top - LEVEL.base)
+    // Shallow enough that the cache calls none dark, and deep enough that
+    // it calls every one dark: each holds the slab's own depths.
+    for (const meters of [40, 100, 160, 600, 1200, 1900]) {
+      const [seen] = await sun.at([meters], 4)
+      const exact = SIGMA * meters
+      const dark = exact > SUN_EARLY_OUT
+      expect(seen!.taken > 0, `${meters} m`).toBe(!dark)
+      expect(relative(seen!.toSun, exact), `${meters} m`).toBeLessThan(0.02)
+      expect(relative(seen!.whole, whole), `${meters} m`).toBeLessThan(0.02)
+      expect(relative(seen!.cloud, Math.exp(-exact))).toBeLessThan(0.02 * exact)
+    }
+    // A cloud that ends 400 m under its level's top: the taps run on past
+    // its face, and a face inside a tap is counted whole or not at all by
+    // the tap's middle, so the depth is off by at most half that tap.
+    const low = sunAt({ cloudTop: LEVEL.top - 400 })
+    const shallow = Array.from({ length: 160 }, (_, i) => (i + 0.5) * 1)
+    const found = await low.at(shallow, 4)
+    found.forEach((seen, i) => {
+      const meters = shallow[i]!
+      const ratio = Math.max(
+        (Math.min(LIGHT_TAP_REACH, meters + 400) / FIRST) ** (1 / 3),
+        LIGHT_TAP_RATIO,
+      )
+      // The tap the face falls in: its two ends about the face.
+      let near = 0
+      let far = FIRST
+      while (far < meters) {
+        near = far
+        far *= ratio
+      }
+      expect(
+        Math.abs(seen.toSun - SIGMA * meters),
+        `${meters} m under the face`,
+      ).toBeLessThanOrEqual(0.5 * SIGMA * (far - near) + 1e-3)
+    })
+  })
+
+  it('is within 15% of exact over a lit face’s first depth, where taps spaced in meters are off by half again', async () => {
+    /*
+     * Samples spread evenly over the first optical depth under a face 400 m
+     * under its level's top, 29 m of fair cumulus, and the mean of what
+     * each sees, which is what a face that falls anywhere draws. A first
+     * tap of one depth puts its middle half a depth in: the samples past it
+     * count a depth and the rest none, 8% over. Taps spaced by an
+     * extinction of 0.002 are one tap of the whole reach, its middle past
+     * every one of these samples, so each reads a clear sun.
+     */
+    const depths = Array.from({ length: 200 }, (_, i) => (i + 0.5) / 200)
+    const meters = depths.map((depth) => depth / SIGMA)
+    const exact = 1 - Math.exp(-1)
+    const mean = (seen: readonly { cloud: number }[]): number =>
+      seen.reduce((sum, one) => sum + one.cloud, 0) / seen.length
+    const face = { cloudTop: LEVEL.top - 400, holds: 0 }
+    const spaced = mean(await sunAt(face).at(meters, 4))
+    expect(Math.abs(spaced / exact - 1)).toBeLessThan(0.15)
+    const fixed = mean(await sunAt({ ...face, spacedBy: 0.002 }).at(meters, 4))
+    expect(fixed / exact).toBeGreaterThan(1.5)
+  })
+
+  it('reads the cache through its weight: the layers’ own statistics at none, a mix of the two transmittances between', async () => {
+    // A cache that holds nothing, as after a change of field: at full
+    // weight a deep sample is lit as though nothing stood past its taps.
+    const empty = sunAt({ holds: 0 })
+    const deep = [400, 900, 1500]
+    const exact = deep.map((depth) => Math.exp(-SIGMA * depth))
+    const taps = deep.map((depth) =>
+      Math.exp(-SIGMA * Math.min(depth, LIGHT_TAP_REACH)),
+    )
+    for (const [i, seen] of (await empty.at(deep, 4)).entries())
+      expect(relative(seen.cloud, taps[i]!), `${deep[i]} m`).toBeLessThan(1e-3)
+    // At no weight the statistics stand in: the sample's own column, less
+    // what the taps crossed, which on a whole layer is the layer itself.
+    empty.weight.value = 0
+    for (const [i, seen] of (await empty.at(deep, 4)).entries())
+      expect(relative(seen.cloud, exact[i]!)).toBeLessThan(0.02)
+    empty.weight.value = 0.5
+    for (const [i, seen] of (await empty.at(deep, 4)).entries())
+      expect(
+        relative(seen.cloud, 0.5 * taps[i]! + 0.5 * exact[i]!),
+      ).toBeLessThan(0.02)
   })
 })

@@ -27,6 +27,8 @@ export const CLOUD_GENERA = [
   'cirrus',
   'cumulonimbus',
   'fog',
+  // Last, so every genus before it keeps its row of the profile table.
+  'altostratus',
 ] as const
 export type CloudGenus = (typeof CLOUD_GENERA)[number]
 
@@ -94,11 +96,24 @@ export interface WeatherScenario {
 /** The layers a frame carries: three shells' boundaries, six uniforms a body. */
 export const MAX_CLOUD_LAYERS = 3
 
-/** The two decks the cornerstones stand under or over (phase 1 design §3.3). */
+/*
+ * The two decks the cornerstones stand under or over (phase 1 design §3.3).
+ *
+ * Each regime's thickness is held to ISCCP-H by `weatherCalibration.slow.test.ts`,
+ * on a field whose clouds hold their genus's σ inside them.
+ *
+ * The altocumulus deck is 250 m: its detected pixels' radiative mean depth
+ * is then 1.42 against ISCCP-H's altocumulus 1.37. At 200, 300 and 400 m it
+ * is 1.19, 1.64 and 2.02.
+ *
+ * The stratocumulus deck is its range's top, 500 m. Its pixels fall in
+ * ISCCP-H's class (0.74 in 3.55–22.63), but their mean is 5.0 against 7.35
+ * and the class shifts 27 points with the sun. Both are declared there.
+ */
 const ALTOCUMULUS: CloudLayerSpec = {
   genus: 'altocumulus',
   base: 4000,
-  top: 4800,
+  top: 4250,
   coverage: 0.7,
   sigma: 0.04,
   cellMeters: 1000,
@@ -510,6 +525,8 @@ const PROFILES: Readonly<
   cirrus: { rise: 0.3, fall: 0.5 },
   cumulonimbus: { rise: 0.03, fall: 0.85 },
   fog: { rise: 0.02, fall: 0.25 },
+  // A sheet like stratus, with a softer base: its water is flat (§5.2).
+  altostratus: { rise: 0.15, fall: 0.75 },
 }
 
 /**

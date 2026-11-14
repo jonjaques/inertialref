@@ -312,6 +312,16 @@ export const QUERY = {
    * rung already does, minus the four samples, two nudges and the remount.
    */
   presentation: 'presentation',
+  /**
+   * Every mode: `60`, to draw on a 60 Hz grid whatever the display's rate.
+   * Absent, the loop draws every animation frame, as it always does.
+   *
+   * For a measurement that needs a held rate on a machine whose display paces
+   * the page at another, or is dark and paces it at nothing (phase 1 design
+   * §7.5). It holds the rate of the frames drawn; it does not make the
+   * compositor present them. `engine/frameHold.ts` reads it.
+   */
+  pace: 'pace',
   /** Page-lifetime reconstruction choice, such as temporal:quality or native. */
   picture: 'picture',
   /**

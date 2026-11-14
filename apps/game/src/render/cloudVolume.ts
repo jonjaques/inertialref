@@ -26,7 +26,6 @@ import {
   saturate,
   screenCoordinate,
   select,
-  sqrt,
   texture3D,
   uniform,
   vec2,
@@ -34,84 +33,131 @@ import {
   vec4,
 } from 'three/tsl'
 import {
+  freshSunSource,
   type LevelFrame,
+  owedByMotion,
+  type SunSourceBake,
+  type SunSourceState,
+  sunSourceStep,
   textureBytes,
-  type WeatherScenario,
+  trustedWindow,
+  UNSPREAD_SHAPE,
 } from '@inertialref/rendering'
-import {
-  detailCells,
-  detailReach,
-  layerAt,
-  layerRadius,
-} from './cloudDensity.ts'
+import { layerAt, layerRadius } from './cloudDensity.ts'
 import type { CloudFrame } from './cloudFrame.ts'
 import { levelOffset, levelPlane, sunMuAt } from './cloudGeometry.ts'
 import {
   type CloudBudget,
+  type CloudLevelStatistics,
   type CloudMedium,
   type CloudMediumFn,
   type CloudResource,
   type CloudSample,
 } from './cloudNodes.ts'
-import type { CloudNoiseNodes } from './cloudNoise.ts'
 import type {
   CloudBodyUniforms,
   CloudLevelUniforms,
   CloudUniforms,
 } from './cloudUniforms.ts'
+import type { CloudProfile } from './cloudProfile.ts'
 import { runQuadPasses } from './quadPass.ts'
 import { warmByDrawing } from './warmup.ts'
 
 /*
- * The local volume: the field cached in three eye-anchored levels of
- * 256² × 32 RG8 texels — R = √(σ/σ_scale), G = the fraction — stacked with a
- * guard slice under and over each level in one `RenderTarget3D` and baked a
- * few slices a frame (§3.11). It is what the sun grid sums its optical depth
- * through (`cloudSunGrid.ts`); the trace marches the field itself.
+ * The local volume: the field cached in two eye-anchored levels of
+ * 256² × 32 texels, the frame's 200 m and 800 m ones, stacked with a guard slice under and over each level in
+ * one `RenderTarget3D`. It is what the sun grid sums its optical depth
+ * through (`cloudSunGrid.ts`), and nothing else reads it: the trace marches
+ * the field itself.
+ *
+ * **A texel holds one number, the extinction a sun ray sums:** the scaled
+ * extinction times the cloudy share, as sixteen bits over the texture's two
+ * bytes. The split is linear, so the sampler's filtering of the two bytes
+ * is the filtering of the number. Its span is 32 times the levels' greatest
+ * reference extinction (`VOLUME_SIGMA_SPAN`), because a cloud holds its
+ * genus's extinction inside it by a gain of 1 to 29.5 over the reference
+ * (`levelStatistics`), and a byte's root under one reference clipped every
+ * cloud to it.
+ *
+ * **Every level bakes the resolved field wherever its texel is under a
+ * cell.** The field's read is the resolved field up to a switch,
+ * `cell·4^(dither − 1)`, and the level's statistics past it; the bake reads
+ * at its level's texel with the dither at one, the switch at a whole cell.
+ * So the 200 m level is the resolved field under every genus, and the
+ * 800 m level is under every genus but fog, whose cell is 500 m. A
+ * sun ray's depth is a sum along one line, and the sum of the resolved field
+ * is that line's own depth. The statistics are a share and a depth to mix by
+ * the crossing's law; summed as an extinction they are the mean density,
+ * which passes `e^(−F·τ)` where the level passes `(1 − F) + F·e^(−τ)`. The
+ * bake adds nothing back at a read: the field fades no detail by footprint,
+ * so a texel is the field at its center and a read between texels is the
+ * sampler's.
+ *
+ * **It holds the frame's 200 m and 800 m levels, and not its 50 m one**
+ * (`CLOUD_VOLUME_HELD`). The grid's cell is 400 m and a step of its bake is
+ * 300 m or more through a 10 km union, so a 50 m level is point-sampled
+ * once a cell and once a step, and what it would buy is small: without
+ * it no row of the sun gate is worse than with it by more than 0.0006 RMS of the sun over its 22.5 km at four taps, and within 4 km of
+ * the eye by no more than 0.010 (altocumulus under a 5° sun, 0.045 against
+ * 0.055; `cloudSunAccuracy.gpu.test.ts`, by ring, on the Mac mini's M6).
+ * It would cost half again the bytes, 4,456,448, and 34 more slices a
+ * rebuild. Within 6.4 km of the eye the 200 m level answers where a 50 m
+ * one would have.
  *
  * **A level is read only where every one of its slices holds this anchor's
  * texels.** A slice is baked whole, at the window the level has that frame,
  * so after the window moves the slices not yet redrawn still hold the old
- * window — toroidally, the strip it exposed holds the strip it left — and
- * the level is trusted only on the intersection of the windows its slices
- * were baked at, a texel in from each edge so a trilinear read never reaches
- * a texel outside it. The anchor moving, the field's time jumping, the
- * scenario changing and a level waking from idle each leave it trusted
- * nowhere until all 34 slices are baked again. Where no level is trusted the
- * medium is the field itself (`bake`): the field stays the fallback beyond
- * the volume's reach, so a cache that is still filling draws what it caches
- * at the field's price, never a hole.
+ * window (toroidally, the strip it exposed holds the strip it left), and the
+ * level is trusted only on the intersection of the windows its slices were
+ * baked at, a texel in from each edge so a trilinear read never reaches a
+ * texel outside it. Where no level is trusted the medium is the field itself
+ * (`bake`), which is how a sun ray is followed past the coarsest level's
+ * 102 km.
  *
- * **The per-frame budget** (`CloudBudget.slices`, 8) goes to level 0's
- * missing slices first — all 34 of them the frame they go missing, whatever
- * the budget, so the nearest cloud is never the field's for a frame — then
- * to slices baked at a window the level has since left, then to levels 1
- * and 2's missing slices, then to the oldest slice anywhere: the field's
- * drift moves the cloud a little every frame, and a cycle of the 102 slices
- * at 8 a frame refreshes each within 13 frames. Levels 1 and 2 rebuild
- * before that refresh and not after it, or a rebuild after a jump would
- * wait on a refresh that never ends.
+ * **No frame bakes more than the cap** (`CloudBudget.slices`), whatever
+ * happened: `sunSourceStep` is the schedule, and this module keeps its state
+ * and draws what it answers. The anchor moving, the field's time jumping,
+ * the weather changing and a level waking from idle each leave slices
+ * holding nothing, and they come back at the cap, the finest level first.
+ * Until they have, the grid bakes nothing and its weight is zero
+ * (`trusted`). A whole level is redrawn at the pace its field moves, a slice
+ * before the fastest layer has crossed a tenth of a texel, so a field that
+ * stands still is not baked again.
  *
- * **The bake's footprint is the level's texel.** The field fades its detail
- * and mixes in its unresolved share by footprint (§5.6), so each level
- * caches the field as seen at its own resolution, and a read finer than
- * that adds the detail erosion the bake left out.
+ * **It bakes only from maps that owe nothing** (`sources`). A slice baked
+ * while the cube or the clipmap still holds the last field would be called
+ * this field's, and under a clock that is held no pace would redraw it.
+ *
+ * **A table landing is a field event.** A body draws nothing until its
+ * levels' statistics tables are in (`CloudProfile.ready`), and the table
+ * carries the gain every resolved read is multiplied by. So the volume bakes
+ * nothing for a body whose tables are owed, and starts over when the
+ * profile's `generation` moves, as it does on a new weather.
  */
 
 export const CLOUD_VOLUME_SIZE = 256
 /** Plus 2 guard slices a level, stacked in z. */
 export const CLOUD_VOLUME_SLICES = 32
+/** The levels a frame lays out about the eye, meters a texel (`cloudFrame.ts`). */
 export const CLOUD_VOLUME_TEXELS = [50, 200, 800] as const
+/** The frame's levels the volume holds, finer first: its 200 m and 800 m ones. */
+export const CLOUD_VOLUME_HELD = [1, 2] as const
 
 /** The pass's name on the timeline. */
 export const CLOUD_VOLUME_LABEL = 'cloud volume'
 
-const LEVELS = CLOUD_VOLUME_TEXELS.length
+const LEVELS = CLOUD_VOLUME_HELD.length
 /** A level's slices with its two guards. */
 const STACK = CLOUD_VOLUME_SLICES + 2
 const DEPTH = LEVELS * STACK
 /** RG8. */
 const TEXEL_BYTES = 2
+/** The extinction the two bytes hold at their greatest, in the levels' greatest reference extinction. */
+export const VOLUME_SIGMA_SPAN = 32
+/** The dither the bake reads the field at: the switch to a level's statistics at a whole cell. */
+const BAKE_DITHER = 1
+/** Meters: a footprint past every level's cell, where the field answers with its statistics. */
+const UNRESOLVED = 1e6
 /** Texels in from a trusted window's edges: a trilinear read reaches half a texel. */
 const MARGIN = 1
 /** A rectangle nothing is inside: lattice x0, y0, x1, y1. */
@@ -121,7 +167,14 @@ export interface CloudVolumeDeps {
   readonly uniforms: CloudUniforms
   /** What it caches: the field. */
   readonly bake: CloudMediumFn
-  readonly detail: CloudNoiseNodes
+  /** What the field is read from: no slice is baked while one of them owes work. */
+  readonly sources?: readonly { readonly pending: boolean }[]
+  /**
+   * What the field's tables answer for the served body: whether they are all
+   * in, and a count that moves when one lands. A field with no tables is
+   * always ready at one generation.
+   */
+  readonly tables?: { readonly ready: boolean; readonly generation: number }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -139,9 +192,9 @@ export function wrapped(
   return value.sub(floor(value.div(n)).mul(n))
 }
 
-/** Where in the volume a point is read: its level, or 3 where none is trusted. */
+/** Where in the volume a point is read: its level, or the count of levels where none is trusted. */
 interface Held {
-  /** 0, 1, 2, or 3: the finest trusted level holding the point. */
+  /** The finest trusted level holding the point, as the volume stacks them, from 0; the count of levels where none does. */
   readonly level: Node<'float'>
   /** Lattice texels of that level's plane, continuous: texel (i, j) covers [i, i + 1). */
   readonly lattice: Node<'vec2'>
@@ -154,37 +207,35 @@ interface Held {
 /* The volume                                                                 */
 /* ------------------------------------------------------------------------- */
 
-interface SliceRecord {
-  /** The window's origin the slice was baked at; null where it holds nothing this anchor's. */
-  origin: readonly [number, number] | null
-  /** The frame it was baked at: the refresh takes the oldest. */
-  frame: number
-}
-
-interface LevelState {
-  readonly slices: SliceRecord[]
-  epoch: number
-  idle: boolean
-}
-
-interface Bake {
-  readonly level: number
-  readonly slice: number
-}
-
-const freshLevel = (): LevelState => ({
-  slices: Array.from({ length: STACK }, () => ({ origin: null, frame: -1 })),
-  epoch: -1,
-  idle: true,
-})
-
-const sameOrigin = (
-  a: readonly [number, number],
-  b: readonly [number, number],
-): boolean => a[0] === b[0] && a[1] === b[1]
-
 const modulo = (value: number, size: number): number =>
   ((value % size) + size) % size
+
+/**
+ * Meters the fastest thing in the served field moved this frame: the wind's
+ * drift or a level's turn about the spin axis, whichever is faster, over the
+ * field's own step of time. What every cache of the field paces itself by
+ * (`owedByMotion`).
+ */
+export function cloudFieldTravel(frame: CloudFrame): number {
+  const { served } = frame
+  const { boundaries } = served.shells
+  const top = boundaries[boundaries.length - 1] ?? 0
+  const turn = served.levels.reduce(
+    (most, level) => Math.max(most, Math.abs(level.turnRate)),
+    0,
+  )
+  const speed = Math.max(
+    Math.hypot(served.wind.x, served.wind.y, served.wind.z),
+    turn * (served.datumRadius + top),
+  )
+  return speed * Math.abs(frame.frameSeconds)
+}
+
+/** A sample read with the switch at a whole cell: the resolved field wherever the footprint is under one. */
+const resolved = (sample: CloudSample): CloudSample => ({
+  ...sample,
+  dither: float(BAKE_DITHER),
+})
 
 /** A level's own uniform set, for the bake's one level a draw. */
 function bakeLevelUniforms(): CloudLevelUniforms {
@@ -202,10 +253,10 @@ function bakeLevelUniforms(): CloudLevelUniforms {
 export class CloudVolume implements CloudResource {
   readonly name = 'volume'
   /**
-   * One read a step of the grid's sun ray: R = √(σ/σ_scale), G = fraction,
-   * at the finest level holding the sample, plus detail-noise erosion where
-   * the footprint is finer than the level's texel; the field where no level
-   * holds it. Level 0. Statements: built inside a `Fn`.
+   * One read a step of the grid's sun ray: the texel's extinction, the
+   * cloudy share in it, at the finest level holding the sample; the field,
+   * read as the bake reads it, where no level holds it. Read at level 0.
+   * Statements: built inside a `Fn`.
    */
   readonly medium: CloudMediumFn
 
@@ -213,7 +264,7 @@ export class CloudVolume implements CloudResource {
   /*
    * Linear by name: a `RenderTarget3D` takes its minification filter from
    * the options and keeps `Data3DTexture`'s nearest magnification, and a read
-   * at level 0 magnifies. Nearest, a cloudy texel reads as a 50 m box a ray
+   * at level 0 magnifies. Nearest, a cloudy texel reads as a 200 m box a ray
    * can clip in under a step.
    */
   readonly #target = new RenderTarget3D(1, 1, 1, {
@@ -233,12 +284,16 @@ export class CloudVolume implements CloudResource {
   readonly #bakeSlice = uniform(0)
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh(this.#material)
-  readonly #levels: LevelState[] = Array.from({ length: LEVELS }, freshLevel)
-  #scenario: WeatherScenario | null = null
+  #state: SunSourceState = freshSunSource(LEVELS, STACK)
+  #weather: string | null = null
   #address: string | null = null
+  #period: readonly [number, number] | null = null
+  /** The tables' generation the slices were baked under. */
+  #tables: number | null = null
   #last: number | null = null
   #pending = false
-  #drawn: readonly number[] = [0, 0, 0]
+  #whole = false
+  #drawn: readonly number[] = Array.from({ length: LEVELS }, () => 0)
   #allocated = false
   #warm: Promise<void> | null = null
   #disposed = false
@@ -260,7 +315,7 @@ export class CloudVolume implements CloudResource {
   /* The reads                                                                */
   /* ----------------------------------------------------------------------- */
 
-  /** The union's base, its slice height, and the volume's σ scale. */
+  /** The union's base, and its slice height. */
   #vertical(body: CloudBodyUniforms): {
     readonly base: Node<'float'>
     readonly slice: Node<'float'>
@@ -279,11 +334,13 @@ export class CloudVolume implements CloudResource {
     body: CloudBodyUniforms,
   ): Held {
     const { base, slice } = this.#vertical(body)
-    let level: Node<'float'> = float(3)
+    let level: Node<'float'> = float(LEVELS)
     let lattice: Node<'vec2'> = vec2(0)
-    let texel: Node<'float'> = float(CLOUD_VOLUME_TEXELS[LEVELS - 1])
+    let texel: Node<'float'> = float(
+      CLOUD_VOLUME_TEXELS[CLOUD_VOLUME_HELD[LEVELS - 1]!],
+    )
     for (let L = LEVELS - 1; L >= 0; L -= 1) {
-      const frame = body.volume[L]!
+      const frame = body.volume[CLOUD_VOLUME_HELD[L]!]!
       const at = levelPlane(frame, offset, body).div(frame.texel)
       const rect = this.#trusted[L]!
       const inside = at.x
@@ -304,61 +361,71 @@ export class CloudVolume implements CloudResource {
   }
 
   #mediumAt(sample: CloudSample, body: CloudBodyUniforms): CloudMedium {
-    const layers = this.#deps.uniforms.layers
+    const layers = body.layers
     const held = this.#held(sample.offset, sample.altitude, body)
     const sigma = float(0).toVar()
     const fraction = float(0).toVar()
     const layer = int(-1).toVar()
     const column = float(0).toVar()
     const radius = float(10).toVar()
-    If(held.level.lessThan(2.5), () => {
+    If(held.level.lessThan(LEVELS - 0.5), () => {
       const z = held.level.mul(STACK).add(1).add(held.slice).div(DEPTH)
       const read = this.#volume
         .sample(vec3(held.lattice.div(CLOUD_VOLUME_SIZE), z))
         .level(float(0))
       const shell = layerAt(layers, sample.altitude)
-      const cached = read.x.mul(read.x).mul(layers.sigmaScale).toVar()
-      // The detail the bake's footprint faded out and this one keeps.
-      const erosion = max(
-        detailReach(sample.footprint, shell.cell).sub(
-          detailReach(held.texel, shell.cell),
-        ),
-        0,
-      ).mul(shell.erosion)
-      If(erosion.greaterThan(0).and(shell.sigma.greaterThan(0)), () => {
-        // The field's own detail lattice, so what is eaten here is what the
-        // field eats there.
-        const cells = detailCells(sample, body, shell.cell)
-        const eaten = this.#deps.detail.detail(cells).mul(erosion)
-        const density = saturate(
-          cached
-            .div(shell.sigma)
-            .sub(eaten)
-            .div(max(float(1).sub(eaten), 1e-3)),
-        )
-        cached.assign(shell.sigma.mul(density))
-      })
-      sigma.assign(cached)
-      fraction.assign(read.y)
+      // The texel's sixteen bits: the cloudy share is in the extinction.
+      sigma.assign(
+        read.x
+          .mul(256)
+          .add(read.y)
+          .mul((255 / 65535) * VOLUME_SIGMA_SPAN)
+          .mul(layers.sigmaScale),
+      )
+      fraction.assign(1)
       layer.assign(shell.index)
       column.assign(held.texel)
       radius.assign(layerRadius(shell))
     }).Else(() => {
-      const field = this.#deps.bake(sample, body)
+      const field = this.#deps.bake(resolved(sample), body)
       sigma.assign(field.sigma)
       fraction.assign(field.fraction)
       layer.assign(field.layer)
       column.assign(field.column)
       radius.assign(field.radius)
     })
-    return { sigma, fraction, layer, column, radius }
+    return { sigma, fraction, layer, column, radius, depth: vec2(0) }
+  }
+
+  /**
+   * The level's statistics at a point's column, from the field itself and
+   * never from a texel: what a crossing mixed by the law takes. A field with
+   * no statistics answers one column of what it holds there, through its
+   * level's whole thickness.
+   */
+  statistics(
+    sample: CloudSample,
+    body: CloudBodyUniforms,
+  ): CloudLevelStatistics {
+    const field = this.#deps.bake(
+      { ...sample, footprint: float(UNRESOLVED) },
+      body,
+    )
+    if (field.statistics !== undefined) return field.statistics
+    const shell = layerAt(body.layers, sample.altitude)
+    return {
+      fraction: field.fraction,
+      depth: field.sigma.mul(shell.thickness),
+      shape: float(UNSPREAD_SHAPE),
+      sight: field.column,
+    }
   }
 
   /* ----------------------------------------------------------------------- */
   /* The bake                                                                 */
   /* ----------------------------------------------------------------------- */
 
-  /** One slice of one level: the field at each texel's center, at the level's texel. */
+  /** One slice of one level: the field at each texel's center, read at the level's texel. */
   #bakeNode(): Node<'vec4'> {
     const { uniforms, bake } = this.#deps
     const body = uniforms.served
@@ -374,19 +441,24 @@ export class CloudVolume implements CloudResource {
       const height = base.add(this.#bakeSlice.add(0.5).mul(slice))
       const offset = levelOffset(level, plane, height, body)
       const medium = bake(
-        {
+        resolved({
           offset,
           distance: length(offset),
           altitude: height,
           sunMu: sunMuAt(body, offset),
           footprint: level.texel,
-        },
+        }),
         body,
       )
-      const encoded = sqrt(
-        saturate(medium.sigma.div(uniforms.layers.sigmaScale)),
-      )
-      return vec4(encoded, saturate(medium.fraction), 0, 1)
+      // Sixteen bits over two bytes, the high byte whole: the target rounds
+      // the low one.
+      const code = saturate(
+        medium.sigma
+          .mul(medium.fraction)
+          .div(body.layers.sigmaScale.mul(VOLUME_SIGMA_SPAN)),
+      ).mul(65535)
+      const high = floor(code.div(256))
+      return vec4(high.div(255), code.sub(high.mul(256)).div(255), 0, 1)
     })()
   }
 
@@ -401,96 +473,65 @@ export class CloudVolume implements CloudResource {
   ): void {
     if (this.#disposed) return
     this.#allocate(renderer)
-    this.#invalidate(frame, budget)
-    const work = this.#schedule(frame, budget.slices)
-    this.#bake(renderer, frame, work)
-    this.#publish(frame)
-    this.#last = frame.frameIndex
-  }
-
-  /** What makes a level's slices hold nothing this frame's. */
-  #invalidate(frame: CloudFrame, budget: CloudBudget): void {
-    const { served, scenario } = frame
+    const { served } = frame
+    const frames = CLOUD_VOLUME_HELD.map((L) => served.volume.frames[L])
     const { boundaries, eye } = served.shells
     const top = boundaries[boundaries.length - 1] ?? 0
-    // A scenario is a constant record, so a new one is a new object: its
-    // union, its slices' heights and its σ scale are all the texels hold.
-    const everything =
+    const [low, high] = frame.period
+    const tables = this.#deps.tables ?? { ready: true, generation: 0 }
+    // A weather's union, its slices' heights and its σ scale are all the
+    // texels hold, so another weather is another volume; a pattern that
+    // draws its cells again is another field under the same name; and a
+    // table that lands is the gain every texel was baked without.
+    const reset =
       this.#last === null ||
       frame.frameIndex !== this.#last + 1 ||
       frame.jump ||
       budget.jump ||
-      scenario !== this.#scenario ||
-      served.address !== this.#address
-    this.#scenario = scenario
+      served.weatherKey !== this.#weather ||
+      served.address !== this.#address ||
+      low !== this.#period?.[0] ||
+      high !== this.#period?.[1] ||
+      tables.generation !== this.#tables
+    this.#weather = served.weatherKey
     this.#address = served.address
-    this.#levels.forEach((state, L) => {
-      const level = served.volume.frames[L]
-      // A level whose window lies more than its own extent below the eye
-      // is out of reach of every fine ray: from orbit, none is drawn.
-      const idle =
-        level === undefined || eye - top > CLOUD_VOLUME_SIZE * level.texelMeters
-      if (
-        level !== undefined &&
-        (everything ||
-          served.volume.rebuilt[L] === true ||
-          level.epoch !== state.epoch ||
-          (state.idle && !idle))
-      ) {
-        for (const record of state.slices) record.origin = null
-        state.epoch = level.epoch
-      }
-      state.idle = idle
+    this.#period = [low, high]
+    this.#tables = tables.generation
+    this.#last = frame.frameIndex
+    const travel = cloudFieldTravel(frame)
+    const step = sunSourceStep(this.#state, {
+      frame: frame.frameIndex,
+      reset,
+      ready:
+        tables.ready &&
+        (this.#deps.sources ?? []).every((source) => !source.pending),
+      cap: budget.slices,
+      levels: frames.map((level, L) => ({
+        origin: level?.origin ?? [0, 0],
+        epoch: level?.epoch ?? -1,
+        rebuilt: served.volume.rebuilt[CLOUD_VOLUME_HELD[L]!] === true,
+        // A level whose window lies more than its own extent below the eye
+        // is out of reach of every sun ray the grid follows: from orbit,
+        // none is baked.
+        idle:
+          level === undefined ||
+          eye - top > CLOUD_VOLUME_SIZE * level.texelMeters,
+        owed: level === undefined ? 0 : owedByMotion(travel, level.texelMeters),
+      })),
     })
-  }
-
-  #schedule(frame: CloudFrame, budget: number): Bake[] {
-    const frames = frame.served.volume.frames
-    const work: Bake[] = []
-    const taken = new Set<number>()
-    const take = (level: number, slice: number): void => {
-      work.push({ level, slice })
-      taken.add(level * STACK + slice)
-    }
-    const active = (L: number): boolean => !this.#levels[L]!.idle
-    const missing = (L: number) =>
-      this.#levels[L]!.slices.flatMap((record, k) =>
-        record.origin === null ? [k] : [],
-      )
-    if (active(0)) for (const k of missing(0)) take(0, k)
-    let left = Math.max(0, budget - work.length)
-    const spend = (L: number, k: number): void => {
-      if (left <= 0 || taken.has(L * STACK + k)) return
-      take(L, k)
-      left -= 1
-    }
-    for (let L = 0; L < LEVELS; L += 1) {
-      if (!active(L)) continue
-      const now = frames[L]!.origin
-      this.#levels[L]!.slices.forEach((record, k) => {
-        if (record.origin !== null && !sameOrigin(record.origin, now))
-          spend(L, k)
-      })
-    }
-    for (let L = 1; L < LEVELS; L += 1)
-      if (active(L)) for (const k of missing(L)) spend(L, k)
-    const oldest = this.#levels
-      .flatMap((state, L) =>
-        state.idle
-          ? []
-          : state.slices.map((record, k) => ({ L, k, at: record.frame })),
-      )
-      .sort((a, b) => a.at - b.at || a.L - b.L || a.k - b.k)
-    for (const { L, k } of oldest) spend(L, k)
-    return work
+    this.#state = step.state
+    this.#whole = step.trusted
+    this.#pending = step.pending
+    this.#bake(renderer, frames, step.bake)
+    this.#publish()
   }
 
   #bake(
     renderer: WebGPURenderer,
-    frame: CloudFrame,
-    work: readonly Bake[],
+    frames: readonly (LevelFrame | undefined)[],
+    work: readonly SunSourceBake[],
   ): void {
-    const drawn = [0, 0, 0]
+    const drawn = Array.from({ length: LEVELS }, () => 0)
     if (work.length > 0)
       runQuadPasses(
         renderer,
@@ -499,7 +540,9 @@ export class CloudVolume implements CloudResource {
         { linear: true, autoClear: false },
         (draw) => {
           for (const { level, slice } of work) {
-            const at = frame.served.volume.frames[level]!
+            // The schedule bakes no slice of a level the frame did not lay out.
+            const at = frames[level]
+            if (at === undefined) continue
             this.#bakeAt(at, slice)
             draw(
               CLOUD_VOLUME_LABEL,
@@ -507,9 +550,6 @@ export class CloudVolume implements CloudResource {
               this.#material,
               level * STACK + slice,
             )
-            const record = this.#levels[level]!.slices[slice]!
-            record.origin = [at.origin[0], at.origin[1]]
-            record.frame = frame.frameIndex
             drawn[level]! += 1
           }
         },
@@ -537,32 +577,17 @@ export class CloudVolume implements CloudResource {
     )
   }
 
-  /** Each level's trusted rectangle: the intersection of its slices' windows. */
-  #publish(frame: CloudFrame): void {
-    let pending = false
-    this.#levels.forEach((state, L) => {
-      const now = frame.served.volume.frames[L]?.origin
-      const rect = [-Infinity, -Infinity, Infinity, Infinity]
-      let whole = !state.idle
-      for (const { origin } of state.slices) {
-        if (origin === null) {
-          whole = false
-          break
-        }
-        rect[0] = Math.max(rect[0]!, origin[0])
-        rect[1] = Math.max(rect[1]!, origin[1])
-        rect[2] = Math.min(rect[2]!, origin[0] + CLOUD_VOLUME_SIZE)
-        rect[3] = Math.min(rect[3]!, origin[1] + CLOUD_VOLUME_SIZE)
-        // An idle level keeps the slices it had and the schedule draws none
-        // of them, so a window it has left is nothing owed.
-        if (!state.idle && now !== undefined && !sameOrigin(origin, now))
-          pending = true
-      }
-      if (!state.idle && !whole) pending = true
-      const [x0, y0, x1, y1] = whole ? rect : NOWHERE
-      this.#trusted[L]!.value.set(x0!, y0!, x1!, y1!)
+  /** Each level's trusted rectangle: the intersection of its slices' windows, and nowhere while it idles. */
+  #publish(): void {
+    this.#state.levels.forEach((level, L) => {
+      // An idle level keeps the slices it had and the schedule draws none of
+      // them, so what it holds is of no window the eye is near.
+      const rect = level.idle
+        ? null
+        : trustedWindow(level.slices, CLOUD_VOLUME_SIZE)
+      const [x0, y0, x1, y1] = rect ?? NOWHERE
+      this.#trusted[L]!.value.set(x0, y0, x1, y1)
     })
-    this.#pending = pending
   }
 
   /* ----------------------------------------------------------------------- */
@@ -582,11 +607,14 @@ export class CloudVolume implements CloudResource {
     this.#forget()
   }
 
+  /** No slice holds anything, and the next frame is a first one: every reader of the volume starts over with it. */
   #forget(): void {
-    this.#levels.forEach((state, L) => {
-      this.#levels[L] = { ...freshLevel(), idle: state.idle }
-    })
+    this.#state = {
+      ...freshSunSource(LEVELS, STACK),
+      generation: this.#state.generation,
+    }
     for (const rect of this.#trusted) rect.value.set(...NOWHERE)
+    this.#whole = false
     this.#last = null
   }
 
@@ -595,9 +623,22 @@ export class CloudVolume implements CloudResource {
     return this.#pending
   }
 
-  /** Slices baked this frame, by level: what the schedule spent. */
+  /** Slices baked this frame, by held level: what the schedule spent. */
   get drawn(): readonly number[] {
     return this.#drawn
+  }
+
+  /**
+   * Every awake level held this field in every slice when the frame began:
+   * what the sun grid may bake from (`sunSourceStep`).
+   */
+  get trusted(): boolean {
+    return this.#whole
+  }
+
+  /** Counts the field's events: a reader baked under another count holds another field. */
+  get generation(): number {
+    return this.#state.generation
   }
 
   get bytes(): number {
@@ -623,10 +664,10 @@ export class CloudVolume implements CloudResource {
         { target: this.#target, material: this.#material },
       ])
       // The draw lands on the target's first slice with whatever the bake's
-      // uniforms last held. A warm-up that arrives after a frame has baked —
-      // a chain rebuilt with the levers on — draws over level 0's lower guard
-      // while its record still says whole, so a cache at its real size owes
-      // every slice again.
+      // uniforms last held. A warm-up that arrives after a frame has baked,
+      // a chain rebuilt with the levers on, draws over the finest level's
+      // lower guard while its record still says whole, so a cache at its
+      // real size owes every slice again.
       if (this.#target.width !== 1) {
         this.#forget()
         this.#pending = true
@@ -642,4 +683,38 @@ export class CloudVolume implements CloudResource {
     this.#target.dispose()
     this.#material.dispose()
   }
+}
+
+/**
+ * The field cached around the eye, for the sun grid to sum through.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudVolume(deps: {
+  readonly uniforms: CloudUniforms
+  /** The fine march's medium: what the volume caches. */
+  readonly medium: CloudMediumFn
+  /** The cube and the clipmap the medium reads its cover from. */
+  readonly maps: { readonly pending: boolean }
+  readonly clipmap: { readonly pending: boolean }
+  /** The profile the medium reads its levels' statistics tables from. */
+  readonly profile: CloudProfile
+}): CloudVolume {
+  const { profile } = deps
+  return new CloudVolume({
+    uniforms: deps.uniforms,
+    bake: deps.medium,
+    sources: [deps.maps, deps.clipmap],
+    tables: {
+      // The served body's slot: the volume caches no other body.
+      get ready() {
+        return profile.ready[0].value > 0.5
+      },
+      get generation() {
+        return profile.generation
+      },
+    },
+  })
 }

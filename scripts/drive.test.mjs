@@ -1,10 +1,11 @@
 import { execFile } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
+import { writeCastFrames } from './drive.mjs'
 
 /*
  * The command line, run as a process. Neither case launches Chrome or takes
@@ -99,6 +100,41 @@ describe('drive.mjs and the GPU lock', () => {
       )
     } finally {
       rmSync(outside, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('a cast’s frames', () => {
+  it('are written in order with their screencast instants beside them', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'drive-cast-'))
+    try {
+      // Chrome's instants, epoch seconds, with a frame missing between the
+      // second and the third: the gap the numbered files alone cannot show.
+      const at = [1_762_800_000.0, 1_762_800_000.0167, 1_762_800_000.05]
+      const frames = at.map((seconds, i) => ({
+        data: Buffer.from(`frame ${i}`).toString('base64'),
+        at: seconds,
+      }))
+      const paths = await writeCastFrames(path.join(dir, 'cast'), frames)
+      expect(paths.map((one) => path.basename(one))).toEqual([
+        '0000.jpg',
+        '0001.jpg',
+        '0002.jpg',
+      ])
+      expect(readFileSync(paths[2], 'utf8')).toBe('frame 2')
+      expect(
+        JSON.parse(
+          readFileSync(path.join(dir, 'cast', 'timestamps.json'), 'utf8'),
+        ),
+      ).toEqual(at)
+      expect(readdirSync(path.join(dir, 'cast')).sort()).toEqual([
+        '0000.jpg',
+        '0001.jpg',
+        '0002.jpg',
+        'timestamps.json',
+      ])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
     }
   })
 })

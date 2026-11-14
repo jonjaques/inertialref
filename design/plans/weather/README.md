@@ -5,10 +5,15 @@ to picking it up. The plan says what the weather is for. This directory says
 how far it has got, what each phase handed the next, and where the evidence
 is.
 
-**Phase 0, feasibility, has landed.** Every cloud pass is built in its final
-place behind `?clouds=1`, drawing a placeholder field. Its four choices are
-made and recorded, the losing alternatives are deleted, and the plan cites the
-records. Phases 1 to 6 have not started.
+**Phase 0, feasibility, has landed** in `the-weather`. Every cloud pass is
+built in its final place behind `?clouds=1`, drawing a placeholder field. Its
+four choices are made and recorded, the losing alternatives are deleted, and
+the plan cites the records.
+
+**Phase 1, the volume and its light, is being built in waves** on
+`weather/phase-1`. Its cornerstones and their baseline are their own pull
+request; wave 1 is the contracts and three tool packages, merged and open as
+phase 1's draft. Phases 2 to 6 have not started.
 
 Nothing draws on `main`. Without the flag the cloud chunk is never loaded, and
 with it nothing draws until `engine.clouds.on` is set.
@@ -20,10 +25,24 @@ at `fb5aa5f5`. Each phase is a pull request into it, the phases are merged
 forward and never rebased, and `the-weather` merges to `main` when the weather
 ships.
 
-| Pull request | Branch                       | Holds                                                     | State                                     |
-| ------------ | ---------------------------- | --------------------------------------------------------- | ----------------------------------------- |
-| #206         | `weather/phase-0`            | Phase 0: the passes, the measurement, the four records    | Open                                      |
-| #199–#204    | `weather/p0-1-…` to `p0-6-…` | The same work as six stacked pull requests against `main` | Superseded by #206; closed once it merges |
+| Pull request | Branch                       | Holds                                                     | State                      |
+| ------------ | ---------------------------- | --------------------------------------------------------- | -------------------------- |
+| #206         | `weather/phase-0`            | Phase 0: the passes, the measurement, the four records    | Merged into `the-weather`  |
+| #199–#204    | `weather/p0-1-…` to `p0-6-…` | The same work as six stacked pull requests against `main` | Superseded by #206; closed |
+| #207         | `weather/p1-cornerstones`    | Phase 1's cornerstones, the velocity row, the baseline    | Merged into `the-weather`  |
+| #209         | `weather/phase-1`            | Phase 1 in waves; wave 1 is merged                        | Draft, on `the-weather`    |
+
+Wave 1 is package C, the contracts, at `78f6b3ee`, and three packages built
+beside it: I, the instruments; U, the capture's second pass; and J, the
+panel's tools ([phase 1's design](phase1/design.md) §10.2). Wave 2 is the
+rest of that section's second table. D, R1, T1, T2, H and L go first, since
+wave 3 waits on them, and T3, T4, E, Q, W, R2 and Y follow as slots free.
+Each builds from the contracts' tip and merges forward into
+`weather/phase-1`.
+
+Between package L's merge and package F's, a slice of the sun's depth baked
+from stale maps under a held clock is never redrawn, so no capture is taken
+from this branch in that interval.
 
 ## What phase 0 decided
 
@@ -204,8 +223,8 @@ none is fixed.
 
 ## The cornerstones
 
-Nine presets the weather is judged on, committed before the work that judges
-them ([ADR-0067](../../../docs/adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md),
+Nine presets the weather is judged on and a tenth that guards it, committed
+before the work that judges them ([ADR-0067](../../../docs/adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md),
 [phase 1's design](phase1/design.md) §3). Each is one command to take and
 the same picture every time; the rubric ([`mvp.md`](mvp.md) §2) says what
 each has to show, and [`references.md`](references.md) holds the
@@ -230,17 +249,36 @@ open to 30 km; its land stance L is 13.25 km from S at a bearing of 312°,
 | `weather-e2-limb-dusk`      | Earth, 20°N 30°W, 400 km, at the limb; 11.4° | −21.0° and falling      | `cirrus-over-cumulus` |
 | `weather-e3-whole-face`     | Earth, `blue-marble`; 65°                    | `blue-marble`'s instant | `fair-cumulus`        |
 | `weather-g1-fair`           | L, 40 m; 50°                                 | Noon, 73.8°             | `fair-cumulus`        |
-| `weather-g2-overcast-shore` | S, 2 m, facing 186°; 50°                     | 35.0° and rising        | `overcast`            |
+| `weather-g2-overcast-shore` | 16.527°S 38.019°E, 2 m, facing 9°; 50°       | 35.0° and rising        | `overcast`            |
 | `weather-g3-underlit-dusk`  | L, 2 m, facing the sun; 55°                  | −1.5° and falling       | `dusk-altocumulus`    |
 | `weather-g4-over-deck`      | S, 4,108 m, at the antisolar point; 70°      | 35.0° and falling       | `stratocumulus`       |
 | `weather-g5-inside`         | L, 1,487 m, east; 60°. A cast's start        | 45.0° and rising        | `fair-cumulus`        |
 | `weather-g6-descent`        | L, 400 km, nadir; 60°. A cast's start        | 45.0° and rising        | `stratocumulus`       |
+| `weather-guard-station`     | Earth, 2.5 km off the ISS, at −88°; 11.4°    | 50.0° and falling       | `fair-cumulus`        |
 
 G4's and G5's heights are over their ground and stand at the design's
 heights over the datum: G4 3,000 m over the deck's 1,300 m top, G5 at the
 cumulus's middle, 1,700 m. E3 holds `fair-cumulus` until the climate lands,
 because `cirrus-over-cumulus`'s bands stripe a whole face every 2.9° of
 latitude.
+
+G2 stands 45 km from S, on dry ground 0.6 m over the sea, because the world
+rule holds a depth clause: across the frame's horizontal field, ±36.7° for a
+50° lens on the 1440 × 900 rig, the drawn seabed lies under the sea by the
+drawn ground's tail plus 1 m, from 250 m out to 30 km. At S the sea is 0.70 m
+deep 250 m out, against 2.13 m. At G2's place every heading from −20° to 38°
+passes, and at its 9° the shallowest sample in the frame is 10 m deep. G4
+keeps S.
+
+The overlay guard, `weather-guard-station`, is the tenth cornerstone: E1's
+picture with the ISS in it, from 2.5 km off the station and 2° off its
+vertical, through E1's lens, at the third crossing of E1's sun over the
+station's sub-point (11,392.7 s), the first whose ground behind the station
+holds cloud (cover 1.0; the first two read 0.07 and 0.24). At the design's
+1 km the station's 65.3 m sphere fills 0.65 of the frame against the rule's
+third; at 2.5 km it fills 0.26. Its weather is served on Earth, the body the
+station goes round. It is taken in a deck arm, its first accepted plate, and
+a volume arm, a guard pair.
 
 The suns are solved, not written, and `cornerstoneLedger.test.ts` holds each
 within half a degree in Node.
@@ -265,34 +303,70 @@ of the same still, of 5,184,000. The cloud share is the share of the trace's
 81,000 texels whose history holds cloud (`ir.cloudRadiance()`), with the mean
 luminance on and off them in scene units.
 
-| Picture | Phase 0, the baseline                                                                                                                                                                                                                                                                                                                                                                                                | Phase 1 |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| E1      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/fzrhjxb9ji/weather-e1-cumulus-orbit.png). Volume: a dim blue-gray sea under scattered flat blotches of the placeholder's coverage, thinning to clear toward the frame's left; no cloud reads as cumulus. Deck: an unbroken white of the textured deck. Floor 6,236 px volume, 0 deck. A cut from G1 holds cloud at 0.85 of its texels                   | —       |
-| E2      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/5r2dsf2tdz/weather-e2-limb-dusk.png). The night limb under an orange and violet band of air; the volume's horizon is a fine broken edge where the deck's is smooth. Both arms draw the sun's flare through the dark disk below the limb (a defect on `main`, below). Floor 14,667 px volume, 0 deck                                                     | —       |
-| E3      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/yzcnrywv3q/weather-e3-whole-face.png). Volume, `fair-cumulus`: Earth whole under a regular lattice of square dark blobs, the cube face's 64-cell grid read from a whole face, Africa through it; **it reads as a grid, not weather.** Deck: the photographed clouds. Cloud share 0.23. Floor 50,151 px volume, 0 deck                                   | —       |
-| G1      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/5a7vwfqbhe/weather-g1-fair.png). A dark sheet over the whole sky with a line of cumulus on the horizon, over a pale plain with lakes and the sea on the right, under a blue-white sky where it shows. **Not fair weather:** L stands under a core of `fair-cumulus`'s blob pattern, cover 1.0 to 10 km along the view. Cloud share 0.58. Floor 6,952 px | —       |
-| G2      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/2bmtvxw9rz/weather-g2-overcast-shore.png). A near-black overcast over the whole sky over a pale foreground with blue water at the left. **The sea draws as flats:** it is 0.1 to 0.9 m deep for its first 2 km along 186°, under the drawn ground's 1.25 m tail. Cloud share 0.60, the whole sky. Floor 1,388 px                                        | —       |
-| G3      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/upw8i8f3ib/weather-g3-underlit-dusk.png). The deck overhead, dark gray, broken by clear sky; toward the sun its far part is lit orange from below, over a glowing clear slot at the sunset. The orange band is speckled at the trace's texel. The ground is pale blue and brighter than the sky behind the deck. Cloud share 0.65. Floor 96,167 px      | —       |
-| G4      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/d8ck54bnkh/weather-g4-over-deck.png). The deck from above, its tops dark gray under a 35° sun, darker than the white ground and blue sea in its gaps; the glory's rings at the antisolar point. Cloud share 0.83. Floor 13,630 px                                                                                                                       | —       |
-| G5      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/rdbedpk54u/weather-g5-inside-fly.png); [the clouds-off cast](https://agentic-media-dumpster.jonjaques.com/2026/11/emjvg9evgj/cast.mp4), 690 frames at 62.9 Hz, 100% of the path, clip at 62.44 fps: level over pale land and a bay under a blue sky. With the clouds on, refused at three boots: 2, 1 and 2 dropped frames at 42.4 to 42.6 Hz           | —       |
-| G6      | Refused at three boots in every arm, by dropped frames. Slow: 12, 11, 14 drops on at 45.5 to 45.9 Hz; 9, 15, 6 off at 60.6 to 67.1 Hz. Fast: 5, 9, 5 on at 46.3 to 46.5 Hz; 8, 6, 10 off at 67.6 to 69.4 Hz                                                                                                                                                                                                          | —       |
+| Picture | Phase 0, the baseline                                                                                                                                                                                                                                                                                                                                                                                                                                            | Phase 1 |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| E1      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/fzrhjxb9ji/weather-e1-cumulus-orbit.png). Volume: a dim blue-gray sea under scattered flat blotches of the placeholder's coverage, thinning to clear toward the frame's left; no cloud reads as cumulus. Deck: an unbroken white of the textured deck. Floor 6,236 px volume, 0 deck. A cut from G1 holds cloud at 0.85 of its texels                                                               | —       |
+| E2      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/5r2dsf2tdz/weather-e2-limb-dusk.png). The night limb under an orange and violet band of air; the volume's horizon is a fine broken edge where the deck's is smooth. Both arms draw the sun's flare through the dark disk below the limb (a defect on `main`, below). Floor 14,667 px volume, 0 deck                                                                                                 | —       |
+| E3      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/yzcnrywv3q/weather-e3-whole-face.png). Volume, `fair-cumulus`: Earth whole under a regular lattice of square dark blobs, the cube face's 64-cell grid read from a whole face, Africa through it; **it reads as a grid, not weather.** Deck: the photographed clouds. Cloud share 0.23. Floor 50,151 px volume, 0 deck                                                                               | —       |
+| G1      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/5a7vwfqbhe/weather-g1-fair.png). A dark sheet over the whole sky with a line of cumulus on the horizon, over a pale plain with lakes and the sea on the right, under a blue-white sky where it shows. **Not fair weather:** L stands under a core of `fair-cumulus`'s blob pattern, cover 1.0 to 10 km along the view. Cloud share 0.58. Floor 6,952 px                                             | —       |
+| G2      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/2bmtvxw9rz/weather-g2-overcast-shore.png). A near-black overcast over the whole sky over a pale foreground with blue water at the left. **The sea draws as flats:** it is 0.1 to 0.9 m deep for its first 2 km along 186°, under the drawn ground's tail, which on this body reaches 1.13 m (`drawnDivergence`; 1.25 m is the ceiling on any body). Cloud share 0.60, the whole sky. Floor 1,388 px | —       |
+| G3      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/upw8i8f3ib/weather-g3-underlit-dusk.png). The deck overhead, dark gray, broken by clear sky; toward the sun its far part is lit orange from below, over a glowing clear slot at the sunset. The orange band is speckled at the trace's texel. The ground is pale blue and brighter than the sky behind the deck. Cloud share 0.65. Floor 96,167 px                                                  | —       |
+| G4      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/d8ck54bnkh/weather-g4-over-deck.png). The deck from above, its tops dark gray under a 35° sun, darker than the white ground and blue sea in its gaps; the glory's rings at the antisolar point. Cloud share 0.83. Floor 13,630 px                                                                                                                                                                   | —       |
+| G5      | [Sheet](https://agentic-media-dumpster.jonjaques.com/2026/11/rdbedpk54u/weather-g5-inside-fly.png); [the clouds-off cast](https://agentic-media-dumpster.jonjaques.com/2026/11/emjvg9evgj/cast.mp4), 690 frames at 62.9 Hz, 100% of the path, clip at 62.44 fps: level over pale land and a bay under a blue sky. With the clouds on, refused at three boots: 2, 1 and 2 dropped frames at 42.4 to 42.6 Hz                                                       | —       |
+| G6      | Refused at three boots in every arm, by dropped frames. Slow: 12, 11, 14 drops on at 45.5 to 45.9 Hz; 9, 15, 6 off at 60.6 to 67.1 Hz. Fast: 5, 9, 5 on at 46.3 to 46.5 Hz; 8, 6, 10 off at 67.6 to 69.4 Hz                                                                                                                                                                                                                                                      | —       |
 
-- **The casts are kept at the rate they present at, and refused for a
-  dropped frame.** The rule is the rubric's until a 60 Hz hold exists. Every
-  G6 arm drops frames in the same two places in every boot, with the clouds
-  on and off: a band from about 50 to 20 km up, and one frame near the ground
-  (355 m on the slow path, 291 m on the fast). The drops are the descent's,
-  not the clouds'. G5 with the clouds on drops one or two frames at a time,
-  among them its first frames, where B13 already puts the clouds' cost.
-- **G3's deck draws on this world and did not on the last.** The cloud frame
-  takes the sun from the body's center in render space, 2.04° high there and
-  0.26° here (below, under the defects on `main`).
+- **The baseline stills in this record are a first look.** They are the
+  capture's first pass; each is retaken on its second, the tool on this
+  branch, before any plate is judged against it.
+- **The baseline's casts were refused for any dropped frame.** Every G6 arm
+  drops frames in the same two places in every boot, with the clouds on and
+  off: a band from about 50 to 20 km up, and one frame near the ground (355 m
+  on the slow path, 291 m on the fast). The drops are the descent's, not the
+  clouds'. G5 with the clouds on drops one or two frames at a time, among
+  them its first frames, where B13 already puts the clouds' cost.
+- **The capture keeps a cast with its drops listed,** each by path frame,
+  height and distance, at the rate it presents at until a 60 Hz hold exists,
+  and refuses it past 3% of its frames or three missed in a row
+  ([ADR-0067](../../../docs/adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md);
+  provisional, from this baseline). A clouds-on drop where its control
+  dropped nothing within ten path frames is marked `cloudsOnly`, a finding of
+  its own kind.
+- **A take is refused when its page's build is not the record's commit:** the
+  build id must contain the commit's first eight characters and not end
+  `-dirty`. The baseline's E1 and E2, recorded at `ab301957` from a build of
+  `23f173bc`, are such a pair.
+- **C6's clause is not held yet.** The ledger records G5's 1,600-frame path
+  against C6 and does not assert it: it reads only the coverage, whose blob
+  cells are 96 km here, and L stands in a core at cover 1.0 for all 4 km, so
+  no path from there runs clear, through a cloud and clear again. The fine
+  field's CPU twin, package D's `cloudFieldAt`, is merged; reading it is the
+  ledger's next pass.
+- **C4's cast is G6's slow descent under the world's own climate,** the
+  `weather` lever at `'climate'`: the zonal law's three fitted levels, laid
+  out by the field's own profile. Until package F's port reads the law, the
+  frame draws the climate's cover as sampled at the eye, uniform over the
+  field.
+- **G3's deck draws on this world and did not on the last.** The baseline's
+  cloud frame, phase 0's, took the sun from the body's center in render
+  space, 2.04° high there and 0.26° here (below, under the defects).
 - **G1 and G2 show the regime and the ground, not the picture the rubric
   names,** for reasons in the cornerstones themselves, each in its row. They
   are taken as they stand, not tuned.
 - **The undersides are dark everywhere,** and G4's tops are darker than the
   ground: phase 0's placeholder light, first order with a placeholder sky term.
   Phase 1's light is what changes them.
+- **The owner's answer on the deck: "Retire it regardless".** Asked on
+  2026-11-10 what happens to Earth's Blue Marble deck if panel seats rank it
+  above the volume, the owner chose that label: the deck goes once the volume
+  passes E3's bar against the satellite photographs, whatever the forced
+  ranking says. The ranking is still taken and reported.
+- **The real-time anchors are frozen at nine, by the owner's choice:
+  "Freeze the nine (Recommended)".** Asked on 2026-11-12 whether to search
+  the four engines no anchor came from, the owner chose that label: nine
+  stills from four engines, because the rubric holds the bar within 7 to 8
+  whatever they score. This is recorded here and not in `references.md`,
+  which does not change: a plate is compared only under the file it was
+  taken with.
 
 Earth's rows are the forced arm beside the deck. At this phase the forced
 arm lacks three things the deck's picture has: it draws no shadow on the
@@ -317,7 +391,7 @@ Stills are not committed.
 
 ## What was verified
 
-On the Mac mini, at `8cfd71a0`, whose code is the tip's:
+Phase 0's, on the Mac mini, at `8cfd71a0`, whose code is phase 0's landed tip:
 
 - `pnpm check`, full, on a budget of 4 cores: 20 stages passed in 88.2 s of
   wall time. Its `test` stage is 362 files and 4,141 tests, and `test:slow`
@@ -371,7 +445,7 @@ The weather's exports push a review build's `_redirects` past Cloudflare's
 just the top level pages, it takes way to long as is". That redesign lands on
 `main` through its own pull request and is not started. Until it merges and
 is merged back into this stack, this branch keeps its interim fix,
-`fabbdc5c`: past the cap the largest package's API routes collapse into one
+`db65372f`: past the cap the largest package's API routes collapse into one
 splat, so an unknown address under that package reaches the shell's
 not-found state with a 200 where an exact table answered 404.
 
@@ -404,8 +478,9 @@ recorded in [`maps/deck.md`](maps/deck.md): the deck's drift is uploaded
 unreduced (2.4 km float32 steps in 2026), and the sphere's cloud shadow
 ignores that drift and may have its east–west sign reversed.
 
-Three more on `main` and one here, found by the cornerstones, are left as
-they are for the light and the flare's own work to take up:
+Three more on `main` and one here, found by the cornerstones. Those on
+`main` are left as they are for the light and the flare's own work to take
+up; the one here is fixed on this branch:
 
 - **The sun's flare draws through the planet.** `sunVisibility`
   (`apps/game/src/render/flareMath.ts`) fades the flare over the sight line's
@@ -422,16 +497,17 @@ they are for the light and the flare's own work to take up:
   center in render space, 0.51° at E2 and 0.26° at P222_3_2_k IV's G3 (217
   radii). A dusk sun 1.5° under the horizon lights the ground as one 0.5°
   over it on the first: the baseline's G3 ground was brighter than its sky.
-- **The cloud frame forms its sun the same way** (`bodySun`,
-  `apps/game/src/render/cloudFrame.ts`, phase 0's), so the maps' terminator
-  and the trace's light read that same parallax. At P222_1_0_7 III's G3 it
+- **Phase 0's cloud frame formed its sun the same way** (`bodySun`,
+  `apps/game/src/render/cloudFrame.ts`), so the maps' terminator and the
+  trace's light read that same parallax. At P222_1_0_7 III's G3 it
   cleared `dusk-altocumulus` from the whole frame: `ir.cloudRadiance()` held
   cloud at 0 of 81,000 texels, where the CPU twin puts cover 0.7 over the
   eye, and the GPU's edge crossed overhead only once the eye's sun stood
   2° to 2.5° under the horizon. With the same layer and no terminator it
-  drew. At P222_3_2_k IV's 0.26° the deck draws. The fix is the direction
-  from the eye, which compression preserves; phase 1's light is where it
-  lands.
+  drew. At P222_3_2_k IV's 0.26° the deck draws. Package H's frame takes
+  the key star's true direction from the body's center, which compression
+  does not bend, so the clouds' sun carries no parallax on this branch; the
+  terrain's and the water's still do.
 
 ## What is in this directory
 
@@ -439,6 +515,7 @@ they are for the light and the flare's own work to take up:
 | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`mvp.md`](mvp.md)                                                                         | The rubric the MVP is judged against: the nine pictures, the budget, the numbers. A draft no council has settled                                                                                                             |
 | [`references.md`](references.md)                                                           | The reference photographs gathered for each picture, with source, credit and license                                                                                                                                         |
+| [`phase2/design.md`](phase2/design.md)                                                     | Phase 2's engineering design, by the adviser's ruling of 2026-11-12: the sun's and the light's laws L1 to L10, the stores, the reckonings before any package, the packages, and the default's flip. Nothing of it is built   |
 | [`phase1/design.md`](phase1/design.md)                                                     | Phase 1's engineering design, draft 3: the cornerstones, the volume's light, the packages and their order                                                                                                                    |
 | [`phase1/measurements/velocity-2026-11-10.md`](phase1/measurements/velocity-2026-11-10.md) | ADR-0044's held presets on the layout without the velocity row and on the one with it: 32 cells, the protocol and the rows                                                                                                   |
 | [`phase0/design.md`](phase0/design.md)                                                     | Phase 0's engineering design: interfaces, frame schedule, physics, measurement protocol, decision rules, packages, and its critique log. The code has moved past it where a loser was deleted; the ADRs describe what stands |

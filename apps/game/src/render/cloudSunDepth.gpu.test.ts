@@ -1,5 +1,11 @@
+import fc from 'fast-check'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type Node, StorageBufferAttribute, type Texture } from 'three/webgpu'
+import {
+  type ComputeNode,
+  type Node,
+  StorageBufferAttribute,
+  type Texture,
+} from 'three/webgpu'
 import {
   float,
   Fn,
@@ -7,15 +13,22 @@ import {
   instanceIndex,
   int,
   ivec3,
+  Loop,
   select,
   sin,
   storage,
   texture3D,
   uint,
+  vec2,
   vec3,
 } from 'three/tsl'
 import {
   cloudExtents,
+  crossingExponent,
+  crossingTransmittance,
+  directionOf,
+  genusProfileMean,
+  type LevelFrame,
   levelFrames,
   reducePoint,
   shellBoundaries,
@@ -28,21 +41,30 @@ import {
   CLOUD_CLIPMAP_TEXELS,
   type CloudBodyFrame,
   type CloudFrame,
+  scenarioWeather,
 } from './cloudFrame.ts'
+import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
-import type {
-  CloudBudget,
-  CloudMediumFn,
-  CloudSunDepthNodes,
+import { sunPastTaps, sunStatistics } from './cloudMix.ts'
+import {
+  type CloudBudget,
+  type CloudMediumFn,
+  type CloudSample,
+  slabMedium,
 } from './cloudNodes.ts'
-import type { CloudNoiseNodes } from './cloudNoise.ts'
 import {
   CloudSunGrid,
-  SUN_DEPTH_FRAME_CAP,
+  type CloudSunSource,
+  SUN_GRID_DEEPEST,
+  SUN_GRID_FADE,
+  SUN_GRID_KNEE,
+  SUN_GRID_REACH,
   SUN_GRID_SIZE,
 } from './cloudSunGrid.ts'
+import { cloudSunFn } from './cloudSunlight.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import {
+  CLOUD_VOLUME_HELD,
   CLOUD_VOLUME_SIZE,
   CLOUD_VOLUME_TEXELS,
   CloudVolume,
@@ -50,10 +72,13 @@ import {
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The sun's optical depth through the grid, on the GPU (§3.12): on a
- * uniform slab it answers σ times the slant path; a scroll ends where a
- * rebuild does; a sun turned past 0.05° rebuilds it whole; and no frame
- * spends past the cap.
+ * The sun's depth through the grid, on the GPU (§5.5, §4.7): on a uniform
+ * slab it answers σ times the slant path, from a sun over the horizon and
+ * from one under it; it gives the ray's whole depth beside the depth to the
+ * sun; it comes back under the cap after the field changes, with its weight
+ * at zero until it is whole; its weight ends in a ramp from the eye; and
+ * the layers' statistics agree with it where they can and stand in for it
+ * where it holds nothing.
  */
 
 let gpu: GpuSession
@@ -74,6 +99,13 @@ const R = 6_371_000
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 }
 /** Meters: what a field fixed to the body repeats over on each axis. */
 const FIELD_PERIOD = 9600
+/** Slices a frame: the `sunSlices` lever's default, for the volume and for the grid. */
+const CAP = 8
+const RAMP = DEFAULT_CLOUD_LEVERS.sunRamp
+const [, , SLICES] = SUN_GRID_SIZE
+/** A level of the volume with its guards, and the levels it holds. */
+const STACK = 34
+const LEVELS = CLOUD_VOLUME_HELD.length
 
 const unit = (v: Vec3): Vec3 => {
   const l = Math.hypot(v.x, v.y, v.z)
@@ -117,30 +149,51 @@ function eyeAt(height: number, east = 0, north = 0): Vec3 {
   )
 }
 
-function slabScenario(
-  base: number,
-  top: number,
-  sigma: number,
-): WeatherScenario {
+type Slab = readonly [base: number, top: number, sigma: number]
+
+/** Stratus layers of full cover, each reference extinction twice its slab's, so the volume's encoding has room. */
+function slabScenario(...slabs: readonly Slab[]): WeatherScenario {
   return {
     id: 'overcast',
-    layers: [
-      {
-        genus: 'stratus',
-        base,
-        top,
-        coverage: 1,
-        sigma,
-        cellMeters: 3000,
-        erosion: 0,
-        radius: 8,
-      },
-    ],
+    layers: slabs.map(([base, top, sigma]) => ({
+      genus: 'stratus' as const,
+      base,
+      top,
+      coverage: 1,
+      sigma: 2 * sigma,
+      cellMeters: 3000,
+      erosion: 0,
+      radius: 8,
+    })),
     wind: { east: 0, north: 0 },
     pattern: 'uniform',
     patternScale: 0,
     patternPeriod: 0,
   }
+}
+
+/**
+ * A scenario's key as a frame carries it. One a scenario object, since the
+ * scenarios here are built by hand and share an id: every bake starts over
+ * on a new key, as it does on a new weather.
+ */
+const WEATHER_KEYS = new WeakMap<WeatherScenario, string>()
+function weatherKeyOf(scenario: WeatherScenario): string {
+  let key = WEATHER_KEYS.get(scenario)
+  if (key === undefined) {
+    key = `${scenario.id} ${WEATHER_KEY_COUNT.next}`
+    WEATHER_KEY_COUNT.next += 1
+    WEATHER_KEYS.set(scenario, key)
+  }
+  return key
+}
+const WEATHER_KEY_COUNT = { next: 0 }
+
+interface Moment {
+  readonly jump?: boolean
+  /** The field's step of time this frame, seconds, and the wind it moves by, m/s. */
+  readonly seconds?: number
+  readonly wind?: number
 }
 
 function frameAt(
@@ -149,7 +202,7 @@ function frameAt(
   scenario: WeatherScenario,
   levers: CloudLevers,
   previous: CloudFrame | null,
-  jump = false,
+  moment: Moment = {},
 ): CloudFrame {
   const shells = shellHeights(eye, R, shellBoundaries(scenario))
   const served: CloudBodyFrame = {
@@ -167,7 +220,7 @@ function frameAt(
     noiseOrigin: reducePoint(eye, FIELD_PERIOD),
     detailOrigin: ZERO,
     drift: ZERO,
-    wind: ZERO,
+    wind: scale(HORIZON.east, moment.wind ?? 0),
     clipmap: levelFrames(
       eye,
       R,
@@ -182,6 +235,12 @@ function frameAt(
       CLOUD_VOLUME_SIZE,
       previous?.served.volume.frames ?? null,
     ),
+    ...scenarioWeather(
+      scenario,
+      { noise: reducePoint(eye, FIELD_PERIOD), detail: ZERO },
+      0,
+    ),
+    weatherKey: weatherKeyOf(scenario),
   }
   const camera = {
     right: { x: 1, y: 0, z: 0 },
@@ -198,7 +257,7 @@ function frameAt(
     served,
     second: null,
     time: 0,
-    frameSeconds: 0,
+    frameSeconds: moment.seconds ?? 0,
     period: [0, 0],
     camera,
     previousCamera: null,
@@ -206,37 +265,37 @@ function frameAt(
     enhanced: false,
     regime: 'converging',
     reset: 'none',
-    jump,
+    jump: moment.jump ?? false,
     frameIndex: previous === null ? 0 : previous.frameIndex + 1,
     extents: cloudExtents(extent, extent),
   }
 }
 
-const NO_NOISE: CloudNoiseNodes = {
-  base: () => float(0),
-  detail: () => float(0),
-}
-
 const BUDGET: CloudBudget = {
-  slices: 8,
+  slices: CAP,
   tiles: 1,
   jump: false,
-  sunTexelSteps: SUN_DEPTH_FRAME_CAP,
+  sunSlices: CAP,
 }
 
 interface Rig {
   readonly uniforms: CloudUniforms
-  readonly depth: CloudSunGrid & CloudSunDepthNodes
+  readonly depth: CloudSunGrid
   readonly volume: CloudVolume
   frame: CloudFrame | null
-  step(eye: Vec3, sun: Vec3, jump?: boolean): CloudFrame
+  step(eye: Vec3, sun: Vec3, moment?: Moment): CloudFrame
+  /** Frames until neither cache owes anything: a rebuild, and the weight's rise. */
   settle(eye: Vec3, sun: Vec3): number
+  /** The grid's weight as the trace reads it. */
+  readonly weight: number
+  /** The grid's level of the volume, as the last frame laid it out. */
+  readonly level: LevelFrame
 }
 
 /**
- * The grid over `medium`, summing through a volume that caches it — or,
+ * The grid over `medium`, summing through a volume that caches it; or,
  * `volume: false`, through a volume never drawn, which is the field itself
- * everywhere.
+ * everywhere and is called whole.
  */
 function rig(
   medium: CloudMediumFn,
@@ -245,16 +304,22 @@ function rig(
 ): Rig {
   const cached = options.volume ?? true
   const uniforms = createCloudUniforms()
-  const volume = new CloudVolume({ uniforms, bake: medium, detail: NO_NOISE })
-  const depth = new CloudSunGrid(uniforms, volume)
+  const volume = new CloudVolume({ uniforms, bake: medium })
+  const field: CloudSunSource = {
+    medium: volume.medium,
+    statistics: (sample, body) => volume.statistics(sample, body),
+    trusted: true,
+    generation: 0,
+  }
+  const depth = new CloudSunGrid(uniforms, cached ? volume : field)
   const levers = { ...DEFAULT_CLOUD_LEVERS, on: true }
   const state: Rig = {
     uniforms,
     depth,
     volume,
     frame: null,
-    step(eye, sun, jump = false) {
-      const frame = frameAt(eye, sun, scenario, levers, state.frame, jump)
+    step(eye, sun, moment = {}) {
+      const frame = frameAt(eye, sun, scenario, levers, state.frame, moment)
       uniforms.write(frame)
       if (cached) volume.render(gpu.renderer, frame, BUDGET)
       depth.render(gpu.renderer, frame, BUDGET)
@@ -266,8 +331,14 @@ function rig(
       do {
         state.step(eye, sun)
         frames += 1
-      } while ((depth.pending || (cached && volume.pending)) && frames < 64)
+      } while ((depth.pending || (cached && volume.pending)) && frames < 200)
       return frames
+    },
+    get weight() {
+      return uniforms.trace.sunWeight.value
+    },
+    get level() {
+      return state.frame!.served.volume.frames[1]!
     },
   }
   return state
@@ -280,18 +351,7 @@ function dispose(test: Rig): void {
 
 /** A uniform slab between two heights over the datum. */
 function slab(base: number, top: number, sigma: number): CloudMediumFn {
-  return (sample) => {
-    const inside = sample.altitude
-      .greaterThanEqual(base)
-      .and(sample.altitude.lessThan(top))
-    return {
-      sigma: select(inside, float(sigma), float(0)),
-      fraction: select(inside, float(1), float(0)),
-      layer: select(inside, int(0), int(-1)),
-      column: float(1e9),
-      radius: float(8),
-    }
-  }
+  return slabMedium([{ base, top, sigma }])
 }
 
 /* ------------------------------------------------------------------------- */
@@ -300,6 +360,8 @@ function slab(base: number, top: number, sigma: number): CloudMediumFn {
 
 type Read = (k: number) => Node<'float'>
 type Write = (k: number, value: Node<'float'>) => void
+/** What the sun answers at a sample. */
+type CloudSunLight = ReturnType<ReturnType<typeof cloudSunFn>>
 
 async function run(
   count: number,
@@ -331,15 +393,42 @@ async function run(
   return new Float32Array(await gpu.readBuffer(output))
 }
 
-/** The optical depth each offset reads. */
+interface Depths {
+  readonly toSun: number
+  readonly whole: number
+  readonly weight: number
+  readonly behind: number
+}
+
+/** Both pairs: the depth of the cells' mean transmittance, and their mean depth. */
+interface BothDepths extends Depths {
+  readonly meanDepthToSun: number
+  readonly meanDepthWhole: number
+}
+
+/** What the grid answers at each offset. */
 async function depths(
   test: Rig,
   offsets: readonly Vec3[],
-): Promise<Float32Array> {
+): Promise<BothDepths[]> {
   const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
-  return run(offsets.length, inputs, 3, 1, (read, write) => {
-    write(0, test.depth.opticalDepth(vec3(read(0), read(1), read(2))))
+  const out = await run(offsets.length, inputs, 3, 6, (read, write) => {
+    const got = test.depth.depths(vec3(read(0), read(1), read(2)))
+    write(0, got.toSun)
+    write(1, got.whole)
+    write(2, got.weight)
+    write(3, got.behind)
+    write(4, got.meanDepthToSun)
+    write(5, got.meanDepthWhole)
   })
+  return offsets.map((_, k) => ({
+    toSun: out[6 * k]!,
+    whole: out[6 * k + 1]!,
+    weight: out[6 * k + 2]!,
+    behind: out[6 * k + 3]!,
+    meanDepthToSun: out[6 * k + 4]!,
+    meanDepthWhole: out[6 * k + 5]!,
+  }))
 }
 
 /** Every cell of the grid, slice by slice. */
@@ -373,21 +462,28 @@ function draws(seed: number): () => number {
   }
 }
 
-/** The far root of |P + sŝ|² = r²: where a ray from P along ŝ leaves the sphere. */
-function leaves(point: Vec3, toward: Vec3, radius: number): number {
+/** The roots of |P + sŝ|² = r²: where a ray from P along ŝ crosses the sphere, or null where it does not. */
+function crossings(
+  point: Vec3,
+  toward: Vec3,
+  radius: number,
+): readonly [near: number, far: number] | null {
   const b = dot3(point, toward)
-  const c = dot3(point, point) - radius * radius
-  return -b + Math.sqrt(Math.max(b * b - c, 0))
+  const d = b * b - (dot3(point, point) - radius * radius)
+  if (d < 0) return null
+  return [-b - Math.sqrt(d), -b + Math.sqrt(d)]
 }
 
-/** The optical depth from an eye-relative point to the sun through a uniform slab, float64. */
+/** The far root: where a ray from inside the sphere leaves it. */
+const leaves = (point: Vec3, toward: Vec3, radius: number): number =>
+  crossings(point, toward, radius)?.[1] ?? 0
+
+/** The optical depth from an eye-relative point to a sun over its horizon through a uniform slab, float64. */
 function slabDepth(
   eye: Vec3,
   offset: Vec3,
   sun: Vec3,
-  base: number,
-  top: number,
-  sigma: number,
+  [base, top, sigma]: Slab,
 ): number {
   const point = add(eye, offset)
   const height = Math.hypot(point.x, point.y, point.z) - R
@@ -397,25 +493,74 @@ function slabDepth(
   return sigma * (toTop - leaves(point, sun, R + base))
 }
 
+/**
+ * The same through a slab whose base the ray dips under: σ times the path
+ * to that exit, and times the chord from where the ray comes back up
+ * through the base to where it leaves through the top.
+ */
+function dippingDepth(
+  eye: Vec3,
+  offset: Vec3,
+  sun: Vec3,
+  [base, top, sigma]: Slab,
+): { readonly depth: number; readonly dips: boolean } {
+  const point = add(eye, offset)
+  const end = leaves(point, sun, R + top)
+  const under = crossings(point, sun, R + base)
+  if (under === null || dot3(point, sun) >= 0)
+    return { depth: sigma * end, dips: false }
+  return {
+    depth: sigma * (Math.max(under[0], 0) + (end - under[1])),
+    dips: true,
+  }
+}
+
+/** An eye-relative point on the sphere `height` over the datum, at plane offsets from the eye along the grid's own axes. */
+function along(
+  test: Rig,
+  eye: Vec3,
+  height: number,
+  east: number,
+  north = 0,
+): Vec3 {
+  const { level } = test
+  const direction = directionOf(
+    level,
+    [level.eye[0] + east, level.eye[1] + north],
+    R,
+  )
+  return sub(scale(direction, R + height), eye)
+}
+
 /* ------------------------------------------------------------------------- */
 /* A uniform slab                                                             */
 /* ------------------------------------------------------------------------- */
 
+/**
+ * What a depth past a cell's knee is held within: two steps of its half
+ * float. The tangent's slope is e⁻⁶ and a half float's step from one to two
+ * is 2⁻¹⁰, 0.39 of a depth, and a read filters cells that each round by
+ * half of one.
+ */
+const DEEP_STEP = 2 * 2 ** -10 * Math.exp(SUN_GRID_KNEE)
+
 describe('a uniform slab', () => {
-  const BASE = 1000
-  const TOP = 2000
-  const SIGMA = 0.01
-  const scenario = slabScenario(BASE, TOP, 2 * SIGMA)
+  // Thin: its slices differ by a twentieth of a depth along the sun, so a
+  // read between two of them is their depths' own mean, and the filter of
+  // their opacities is that to a part in a thousand.
+  const SLAB: Slab = [1000, 2000, 0.001]
+  const [BASE, TOP, SIGMA] = SLAB
+  const scenario = slabScenario(SLAB)
   const EYE = 300
 
   /** Points within a few kilometers of the eye, at heights from under the slab to its top. */
-  function points(count: number, below: boolean): Vec3[] {
+  function points(count: number, below: boolean, slab = SLAB): Vec3[] {
     const next = draws(below ? 31 : 32)
     const eye = eyeAt(EYE)
     return Array.from({ length: count }, () => {
       const height = below
         ? 400 + next() * 550
-        : BASE + 30 + next() * (TOP - BASE - 60)
+        : slab[0] + 30 + next() * (slab[1] - slab[0] - 60)
       const east = (next() - 0.5) * 8000
       const north = (next() - 0.5) * 8000
       const direction = unit(
@@ -428,40 +573,665 @@ describe('a uniform slab', () => {
     })
   }
 
-  for (const elevation of [37.5, 60])
-    it(`gives σ times the slant path, within 2%, at a ${elevation}° sun`, async () => {
+  for (const elevation of [60, 37.5, 5])
+    it(`gives σ times the slant path at a ${elevation}° sun: within 2% under a depth of six, and within two steps of its half float past it`, async () => {
       const test = rig(slab(BASE, TOP, SIGMA), scenario)
       const eye = eyeAt(EYE)
       const sun = sunAt(elevation)
       test.settle(eye, sun)
+      expect(test.weight).toBe(1)
+      // A read between two slices is the mean of their opacities, which is
+      // under the mean of their depths by an eighth of the square of what
+      // they differ by: 0.016 of a depth under the 5° sun, where a slice is
+      // 0.37 of a depth from the next, and a ten-thousandth under the high
+      // ones. With a fifth again for the cells beside them.
+      const apart =
+        (SIGMA * (TOP - BASE)) /
+        (SLICES - 1) /
+        Math.sin((elevation * Math.PI) / 180)
+      const between = (1.2 * apart * apart) / 8
+      let deep = 0
       for (const below of [false, true]) {
         const offsets = points(512, below)
         const read = await depths(test, offsets)
         offsets.forEach((offset, k) => {
-          const expected = slabDepth(eye, offset, sun, BASE, TOP, SIGMA)
-          expect(Math.abs(read[k]! / expected - 1)).toBeLessThan(0.02)
+          const expected = slabDepth(eye, offset, sun, SLAB)
+          if (expected > SUN_GRID_KNEE) deep += 1
+          expect(Math.abs(read[k]!.toSun - expected)).toBeLessThan(
+            Math.max(
+              0.02 * expected,
+              between,
+              expected > SUN_GRID_KNEE - DEEP_STEP ? DEEP_STEP : 0,
+            ),
+          )
+          expect(read[k]!.weight).toBe(1)
         })
         // The plane-parallel form the design states, under the slab: the
-        // sphere bends it by under a percent this close to the eye.
-        if (below) {
+        // sphere bends it by under a percent this close to the eye, where
+        // the sun is high.
+        if (below && elevation > 30) {
           const mu = Math.sin((elevation * Math.PI) / 180)
           const flat = (SIGMA * (TOP - BASE)) / mu
-          expect(Math.abs(read[0]! / flat - 1)).toBeLessThan(0.02)
+          expect(Math.abs(read[0]!.toSun / flat - 1)).toBeLessThan(0.02)
         }
       }
+      // Under the low sun the slab is 11 deep along it: past the knee.
+      expect(deep > 0).toBe(elevation < 30)
       dispose(test)
     })
+
+  it('holds a depth past its knee on the tangent and its depth channel as the depth itself, and no depth past 64 in either', async () => {
+    const DENSE: Slab = [1000, 2000, 0.02]
+    const eye = eyeAt(EYE)
+    for (const elevation of [37.5, 5]) {
+      // A grid of its own for each sun: 32° of sun in one frame with no jump
+      // of the field is paced, eight slices a frame, and is no event to
+      // settle on.
+      const test = rig(slab(...DENSE), slabScenario(DENSE))
+      const sun = sunAt(elevation)
+      test.settle(eye, sun)
+      const offsets = points(512, false, DENSE)
+      const read = await depths(test, offsets)
+      dispose(test)
+      // What a slice's depth differs from the next one's by: 0.8 under the
+      // high sun and 7.4 under the low one.
+      const apart =
+        (DENSE[2] * (DENSE[1] - DENSE[0])) /
+        (SLICES - 1) /
+        Math.sin((elevation * Math.PI) / 180)
+      let capped = 0
+      offsets.forEach((offset, k) => {
+        const expected = slabDepth(eye, offset, sun, DENSE)
+        // The depth channel is linear in the depth, so on a slab a read
+        // between slices is the depth at the point, to a half float's
+        // step at 64 (2⁻⁵) and a part in a hundred of the filter's own.
+        const mean = read[k]!.meanDepthToSun
+        if (expected >= SUN_GRID_DEEPEST + apart)
+          expect(mean).toBeCloseTo(SUN_GRID_DEEPEST, 1)
+        else if (expected < SUN_GRID_DEEPEST - apart)
+          expect(Math.abs(mean - expected)).toBeLessThan(
+            Math.max(0.01 * expected, 2 ** -5),
+          )
+        if (expected >= SUN_GRID_DEEPEST + apart) {
+          capped += 1
+          expect(read[k]!.toSun).toBeGreaterThan(SUN_GRID_DEEPEST - DEEP_STEP)
+          expect(read[k]!.toSun).toBeLessThanOrEqual(
+            SUN_GRID_DEEPEST + DEEP_STEP,
+          )
+        } else if (
+          expected > SUN_GRID_KNEE + apart &&
+          expected < SUN_GRID_DEEPEST - apart
+        )
+          // Two slices past the knee and under the cap filter along the
+          // tangent, which is their depths' own mean.
+          expect(Math.abs(read[k]!.toSun - expected)).toBeLessThan(
+            Math.max(0.02 * expected, DEEP_STEP),
+          )
+      })
+      // The low sun's 230 depths are all 64; the high sun's 33 are their own.
+      expect(capped > 0).toBe(elevation < 30)
+    }
+  })
+
+  it('reads the sun between a clear cell and a cell in shadow as the share of each, where their depths’ mean would read it dark', async () => {
+    // A deck with an edge: cloud east of the eye's meridian, none west.
+    const DECK: Slab = [1000, 2000, 0.01]
+    const edge: CloudMediumFn = (sample, body) => {
+      const whole = slab(...DECK)(sample, body)
+      const east = sample.offset.dot(
+        vec3(HORIZON.east.x, HORIZON.east.y, HORIZON.east.z),
+      )
+      return {
+        ...whole,
+        sigma: select(east.greaterThan(0), whole.sigma, float(0)),
+        fraction: select(east.greaterThan(0), whole.fraction, float(0)),
+      }
+    }
+    const test = rig(edge, slabScenario(DECK))
+    const eye = eyeAt(EYE)
+    // The sun overhead, so a cell is in the deck's shadow or out of it by
+    // the side of the edge it stands on.
+    const sun = unit(UP)
+    test.settle(eye, sun)
+    // Across the edge under the deck, 25 m apart: three cells' width.
+    const line = Array.from({ length: 49 }, (_, k) => -600 + 25 * k)
+    const read = await depths(
+      test,
+      line.map((east) => along(test, eye, 500, east)),
+    )
+    const through = read.map((got) => Math.exp(-got.toSun))
+    // Lit on one side and dark on the other.
+    expect(through[0]).toBeGreaterThan(0.99)
+    expect(through[through.length - 1]).toBeLessThan(1e-3)
+    // Between them the sun falls across a cell's width, 400 m: a dozen of
+    // these points stand between a tenth and nine tenths of it. Filtered as
+    // depths, a depth of ten is past nine tenths dark 92 m from the lit
+    // cell, and three points would.
+    expect(
+      through.filter((t) => t > 0.1 && t < 0.9).length,
+    ).toBeGreaterThanOrEqual(9)
+    for (let k = 1; k < through.length; k += 1)
+      expect(through[k]! - through[k - 1]!).toBeLessThan(1e-3)
+    // The depth channel there is the cells' mean depth, never shallower
+    // than the depth of their mean transmittance beside it, and where half
+    // the sun passes far deeper than ln 2: 2.6 on the Mac mini's M6, where
+    // the volume's own 200 m texels soften the edge the grid's cells read.
+    const half = through.reduce(
+      (best, t, k) =>
+        Math.abs(t - 0.5) < Math.abs(through[best]! - 0.5) ? k : best,
+      0,
+    )
+    expect(Math.abs(through[half]! - 0.5)).toBeLessThan(0.1)
+    expect(read[half]!.meanDepthToSun).toBeGreaterThan(2 * read[half]!.toSun)
+    for (const got of read)
+      expect(got.meanDepthToSun).toBeGreaterThanOrEqual(got.toSun - 1e-3)
+    dispose(test)
+  })
+
+  it('gives the ray’s whole depth beside the depth to the sun, from the cell where the ray meets the base', async () => {
+    const test = rig(slab(BASE, TOP, SIGMA), scenario)
+    const eye = eyeAt(EYE)
+    const sun = sunAt(37.5)
+    test.settle(eye, sun)
+    const inside = points(256, false)
+    const read = await depths(test, inside)
+    inside.forEach((offset, k) => {
+      const point = add(eye, offset)
+      // Back along the sun to the base, then the slab's whole chord from there.
+      const back = crossings(point, scale(sun, -1), R + BASE)![0]
+      const foot = sub(point, scale(sun, back))
+      const expected = SIGMA * leaves(foot, sun, R + TOP)
+      expect(Math.abs(read[k]!.whole / expected - 1)).toBeLessThan(0.02)
+      expect(read[k]!.whole).toBeGreaterThanOrEqual(read[k]!.toSun)
+      expect(Math.abs(read[k]!.meanDepthWhole / expected - 1)).toBeLessThan(
+        0.02,
+      )
+      expect(read[k]!.meanDepthWhole).toBeGreaterThanOrEqual(
+        read[k]!.meanDepthToSun,
+      )
+      expect(read[k]!.behind).toBe(1)
+    })
+    // Under the slab nothing lies behind a point: the whole is the depth to the sun.
+    const under = points(64, true)
+    for (const got of await depths(test, under))
+      expect(got.whole).toBeCloseTo(got.toSun, 5)
+    dispose(test)
+  })
+
+  describe('under a sun 1.5° below the horizon', () => {
+    // A deck high enough that a ray dipping 2.2 km under it clears the
+    // ground, and thin enough that its 30 km chord at the re-entry is a
+    // depth of 12: the crossing is a transmittance, and past e⁻⁴⁶ the bake
+    // holds it there.
+    const DECK: Slab = [4000, 4800, 0.0004]
+    const dusk = slabScenario(DECK)
+    const SUN = sunAt(-1.5)
+    const eye = eyeAt(EYE)
+
+    it('sums to the base the ray leaves through, and adds the deck’s chord where it comes back up, within 2% or two steps of the cell', async () => {
+      const test = rig(slab(...DECK), dusk)
+      expect(test.depth.toFirstExit).toBe(true)
+      test.settle(eye, SUN)
+      const offsets = points(512, false, DECK)
+      const read = await depths(test, offsets)
+      offsets.forEach((offset, k) => {
+        const expected = dippingDepth(eye, offset, SUN, DECK)
+        expect(expected.dips).toBe(true)
+        expect(Math.abs(read[k]!.toSun - expected.depth)).toBeLessThan(
+          Math.max(0.02 * expected.depth, DEEP_STEP),
+        )
+      })
+      dispose(test)
+    })
+
+    it('is what the 32 steps to the far crossing of the top do not hold: three of them fall in the deck', async () => {
+      const test = rig(slab(...DECK), dusk)
+      test.depth.toFirstExit = false
+      test.settle(eye, SUN)
+      const offsets = points(512, false, DECK)
+      const read = await depths(test, offsets)
+      const miss = offsets
+        .map((offset, k) =>
+          Math.abs(
+            read[k]!.toSun / dippingDepth(eye, offset, SUN, DECK).depth - 1,
+          ),
+        )
+        .sort((a, b) => a - b)
+      // The median point is off by more than a tenth, where the first exit holds 2% at every one.
+      expect(miss[miss.length >> 1]).toBeGreaterThan(0.1)
+      dispose(test)
+    })
+  })
 })
 
 /* ------------------------------------------------------------------------- */
-/* Scrolling, turning, and the cap                                           */
+/* The rebuild, the pace and the wake                                         */
+/* ------------------------------------------------------------------------- */
+
+describe('a grid that comes back', () => {
+  const SLAB: Slab = [1000, 2600, 0.015]
+  const scenario = slabScenario(SLAB)
+  const EYE = 500
+  const SUN = sunAt(37.5)
+  const eye = eyeAt(EYE)
+  const total = (counts: readonly number[]): number =>
+    counts.reduce((a, b) => a + b, 0)
+
+  it('bakes the volume, then the grid, then raises its weight, and no frame bakes more than the cap of either', () => {
+    const test = rig(slab(...SLAB), scenario)
+    const volume: number[] = []
+    const grid: number[] = []
+    const weight: number[] = []
+    const source = Math.ceil((LEVELS * STACK) / CAP)
+    const frames = source + SLICES / CAP + RAMP
+    for (let n = 0; n < frames; n += 1) {
+      test.step(eye, SUN)
+      volume.push(total(test.volume.drawn))
+      grid.push(test.depth.drawn)
+      weight.push(test.weight)
+    }
+    // 68 slices of the volume at 8 a frame: eight frames of 8 and one of 4.
+    expect(volume.slice(0, source)).toEqual([
+      ...new Array<number>(8).fill(8),
+      4,
+    ])
+    expect(total(volume.slice(source))).toBe(0)
+    // Nothing of the grid until the volume is whole, then its 32 at the cap.
+    expect(grid.slice(0, source)).toEqual(new Array(source).fill(0))
+    expect(grid.slice(source, source + 4)).toEqual([8, 8, 8, 8])
+    expect(total(grid.slice(source + 4))).toBe(0)
+    // Zero until every slice holds the field, then a sixteenth a frame.
+    expect(weight.slice(0, source + 4)).toEqual(new Array(source + 4).fill(0))
+    weight
+      .slice(source + 4)
+      .forEach((w, k) => expect(w).toBeCloseTo((k + 1) / RAMP, 12))
+    expect(weight[frames - 1]).toBe(1)
+    expect(test.depth.pending).toBe(false)
+    // A field that stands still under a sun that stands still is not baked again.
+    test.step(eye, SUN)
+    expect(total(test.volume.drawn) + test.depth.drawn).toBe(0)
+    // A jump of the field's time: the weight is zero at once, and the same again.
+    test.step(eye, SUN, { jump: true })
+    expect(test.weight).toBe(0)
+    expect(total(test.volume.drawn)).toBe(CAP)
+    expect(test.depth.drawn).toBe(0)
+    expect(test.settle(eye, SUN)).toBe(frames - 1)
+    expect(test.weight).toBe(1)
+    dispose(test)
+  })
+
+  it('reads as nothing held while it comes back: no depth and no weight at any point', async () => {
+    const test = rig(slab(...SLAB), scenario)
+    // Two frames into the grid's own bake, after the volume's: sixteen
+    // slices hold the field.
+    const into = Math.ceil((LEVELS * STACK) / CAP) + 2
+    for (let n = 0; n < into; n += 1) test.step(eye, SUN)
+    expect(test.depth.pending).toBe(true)
+    const point = along(test, eye, 1800, 500)
+    const [got] = await depths(test, [point])
+    expect(got).toEqual({
+      toSun: 0,
+      whole: 0,
+      weight: 0,
+      behind: 0,
+      meanDepthToSun: 0,
+      meanDepthWhole: 0,
+    })
+    dispose(test)
+  })
+
+  it('takes a turning sun as motion: through 0.05° and past it no frame is a rebuild, and the weight stands', () => {
+    const test = rig(slab(...SLAB), scenario)
+    test.settle(eye, SUN)
+    // 0.02° of azimuth a frame, 0.016° of arc at this elevation: a whole
+    // grid every 0.25°, two slices a frame.
+    const counts: number[] = []
+    for (let k = 1; k <= 20; k += 1) {
+      test.step(eye, sunAt(37.5, 20 + 0.02 * k))
+      counts.push(test.depth.drawn)
+      expect(test.weight).toBe(1)
+    }
+    expect(Math.max(...counts)).toBeLessThanOrEqual(3)
+    expect(Math.min(...counts)).toBeGreaterThanOrEqual(2)
+    // A step of 0.1° in one frame asks for ten slices: the cap, and the rest next frame.
+    test.step(eye, sunAt(37.5, 20.4 + 0.126))
+    expect(test.depth.drawn).toBe(CAP)
+    expect(test.weight).toBe(1)
+    test.step(eye, sunAt(37.5, 20.4 + 0.126))
+    expect(test.depth.drawn).toBeGreaterThanOrEqual(4)
+    expect(test.depth.drawn).toBeLessThanOrEqual(5)
+    test.step(eye, sunAt(37.5, 20.4 + 0.126))
+    expect(test.depth.drawn).toBeLessThanOrEqual(1)
+    dispose(test)
+  })
+
+  it('redraws at the pace its field moves: a cell’s tenth at 25 m/s is 96 frames a grid', () => {
+    const test = rig(slab(...SLAB), scenario)
+    test.settle(eye, SUN)
+    let grid = 0
+    const volume = Array.from({ length: LEVELS }, () => 0)
+    for (let n = 0; n < 96; n += 1) {
+      test.step(eye, SUN, { seconds: 1 / 60, wind: 25 })
+      grid += test.depth.drawn
+      test.volume.drawn.forEach((count, L) => (volume[L]! += count))
+      expect(test.depth.drawn).toBeLessThanOrEqual(1)
+    }
+    // 1.6 s: the grid's 400 m cells once; the volume's 200 m level twice,
+    // its 800 m level half.
+    expect(grid).toBeGreaterThanOrEqual(SLICES - 1)
+    expect(grid).toBeLessThanOrEqual(SLICES)
+    volume.forEach((count, L) => {
+      const asked = (2 * STACK) / 4 ** L
+      expect(count).toBeGreaterThanOrEqual(asked - 1)
+      expect(count).toBeLessThanOrEqual(asked)
+    })
+    dispose(test)
+  })
+
+  it('idles from orbit at no weight, and wakes by the eye’s height: half its weight half way through the fade', () => {
+    const test = rig(slab(...SLAB), scenario)
+    const top = SLAB[1]
+    test.step(eyeAt(400_000), SUN)
+    test.step(eyeAt(400_000), SUN)
+    expect(test.depth.drawn).toBe(0)
+    expect(test.depth.pending).toBe(false)
+    expect(test.weight).toBe(0)
+    // 51.2 km over the top is the wake; a quarter of that lower is all of it.
+    const fade = (over: number): number => {
+      test.settle(eyeAt(top + over), SUN)
+      return test.weight
+    }
+    expect(fade(51_300)).toBe(0)
+    expect(fade(44_800)).toBeCloseTo(0.5, 6)
+    expect(fade(38_400)).toBeCloseTo(1, 6)
+    // A hover in the fade holds one weight: it is the camera's, not a frame's.
+    const held = fade(47_000)
+    test.step(eyeAt(top + 47_000), SUN)
+    expect(test.weight).toBe(held)
+    dispose(test)
+  })
+})
+
+/* ------------------------------------------------------------------------- */
+/* The reach's ramp, and the statistics past it                               */
+/* ------------------------------------------------------------------------- */
+
+describe('the grid’s edge', () => {
+  // A thin layer under a thin layer: the lower one's sun is the upper one's shadow.
+  const LOW: Slab = [1000, 1500, 0.001]
+  const HIGH: Slab = [3000, 3600, 0.0015]
+  const scenario = slabScenario(LOW, HIGH)
+  const medium = slabMedium([
+    { base: LOW[0], top: LOW[1], sigma: LOW[2] },
+    { base: HIGH[0], top: HIGH[1], sigma: HIGH[2] },
+  ])
+  const EYE = 300
+  const SUN = sunAt(37.5)
+  const HEIGHT = 1250
+  /** Meters out from the eye along the grid's east: 400 m apart, from 18 km to 28 km. */
+  const LINE = Array.from({ length: 26 }, (_, k) => 18_000 + 400 * k)
+  const ramp = (out: number): number =>
+    Math.min(1, Math.max(0, (SUN_GRID_REACH - out) / SUN_GRID_FADE))
+
+  /** The mixed transmittance, the grid's depth and weight, and the statistics, at each offset. */
+  async function line(
+    test: Rig,
+    offsets: readonly Vec3[],
+  ): Promise<{ mixed: number; toSun: number; weight: number; stat: number }[]> {
+    const body = test.uniforms.served
+    const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
+    const out = await run(offsets.length, inputs, 3, 4, (read, write) => {
+      const offset = vec3(read(0), read(1), read(2))
+      const sample: CloudSample = {
+        offset,
+        distance: float(0),
+        altitude: altitudeAt(body, offset),
+        sunMu: sunMuAt(body, offset),
+        footprint: float(0),
+      }
+      const here = medium(sample, body)
+      const stat = sunStatistics({
+        layers: body.layers,
+        level: here.layer,
+        cover: vec3(1, 1, 0),
+        convective: vec3(0),
+        depth: here.depth,
+        sunMu: sample.sunMu,
+        taps: float(0),
+      })
+      const got = test.depth.depths(offset)
+      write(0, sunPastTaps(got, stat))
+      write(1, got.toSun)
+      write(2, got.weight)
+      write(3, stat)
+    })
+    return offsets.map((_, k) => ({
+      mixed: out[4 * k]!,
+      toSun: out[4 * k + 1]!,
+      weight: out[4 * k + 2]!,
+      stat: out[4 * k + 3]!,
+    }))
+  }
+
+  /** The statistics' own law in float64: the sample's column over the sun's cosine, and one crossing of the level above at its mean depth. */
+  function statistics(eye: Vec3, offset: Vec3): number {
+    const point = add(eye, offset)
+    const radius = Math.hypot(point.x, point.y, point.z)
+    const mu = dot3(point, SUN) / radius
+    const own = (LOW[2] * (LOW[1] - (radius - R))) / mu
+    const above =
+      (2 * HIGH[2] * (HIGH[1] - HIGH[0]) * genusProfileMean('stratus')) / mu
+    return Math.exp(-own) * Math.exp(-above)
+  }
+
+  it('ends in a ramp from the eye: one to 20.8 km, zero from 24 km, and the sun the weight’s mix of the grid’s and the statistics’ within 0.01', async () => {
+    const test = rig(medium, scenario)
+    const eye = eyeAt(EYE)
+    test.settle(eye, SUN)
+    const offsets = LINE.map((out) => along(test, eye, HEIGHT, out))
+    const read = await line(test, offsets)
+    read.forEach((got, k) => {
+      const out = LINE[k]!
+      const w = ramp(out)
+      // The weight is the eye's distance along the grid's axis and nothing else.
+      expect(got.weight).toBeCloseTo(w, 3)
+      const stat = statistics(eye, offsets[k]!)
+      expect(Math.abs(got.stat - stat)).toBeLessThan(2e-3)
+      const mix = w * Math.exp(-got.toSun) + (1 - w) * stat
+      expect(Math.abs(got.mixed - mix)).toBeLessThan(0.01)
+      if (w === 0) expect(got.toSun).toBe(0)
+    })
+    // The grid and the statistics disagree here, the slab's depth against the
+    // regime's mean, and across the ramp no two neighbors are further apart
+    // than an eighth of that: 400 m of a 3.2 km ramp.
+    const inside = read[0]!
+    const apart = Math.abs(Math.exp(-inside.toSun) - inside.stat)
+    expect(apart).toBeGreaterThan(0.03)
+    for (let k = 1; k < read.length; k += 1)
+      expect(Math.abs(read[k]!.mixed - read[k - 1]!.mixed)).toBeLessThanOrEqual(
+        apart / 8 + 2e-3,
+      )
+    // At full weight the grid's own value: the two slabs' slant paths. Not
+    // to the 2% of a slab that is the whole union: the volume holds the
+    // field at its slices' centers, 81 m apart here, and each of the three
+    // slab edges inside the union is worth up to half a slice of path.
+    const first = add(eye, offsets[0]!)
+    const exact =
+      LOW[2] * leaves(first, SUN, R + LOW[1]) +
+      HIGH[2] *
+        (leaves(first, SUN, R + HIGH[1]) - leaves(first, SUN, R + HIGH[0]))
+    expect(Math.abs(inside.toSun / exact - 1)).toBeLessThan(0.15)
+    dispose(test)
+  })
+
+  it('does not step when the window snaps: the weight at a point is the same on both sides of a cell', async () => {
+    const test = rig(medium, scenario)
+    const before = eyeAt(EYE)
+    test.settle(before, SUN)
+    const cell = test.level.origin
+    const here = LINE.map((out) => along(test, before, HEIGHT, out))
+    const was = await line(test, here)
+    // Two cells east: the window's corner moves with the eye, and only six
+    // slices hold the new window after this frame.
+    const after = eyeAt(EYE, 800)
+    test.step(after, SUN)
+    expect(test.depth.pending).toBe(true)
+    expect(test.level.origin).not.toEqual(cell)
+    const there = LINE.map((out) => along(test, after, HEIGHT, out))
+    const now = await line(test, there)
+    now.forEach((got, k) => {
+      expect(got.weight).toBeCloseTo(was[k]!.weight, 3)
+      expect(got.weight).toBeCloseTo(ramp(LINE[k]!), 3)
+    })
+    dispose(test)
+  })
+})
+
+describe('the layers’ statistics', () => {
+  it('equal the grid’s depth on a uniform layer, within 2%', async () => {
+    const SLAB: Slab = [1000, 2000, 0.002]
+    const medium = slab(...SLAB)
+    const test = rig(medium, slabScenario(SLAB))
+    const eye = eyeAt(300)
+    const sun = sunAt(37.5)
+    test.settle(eye, sun)
+    const next = draws(77)
+    const offsets = Array.from({ length: 256 }, () =>
+      along(
+        test,
+        eye,
+        SLAB[0] + 30 + next() * (SLAB[1] - SLAB[0] - 60),
+        (next() - 0.5) * 16_000,
+        (next() - 0.5) * 16_000,
+      ),
+    )
+    const body = test.uniforms.served
+    const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
+    const out = await run(offsets.length, inputs, 3, 2, (read, write) => {
+      const offset = vec3(read(0), read(1), read(2))
+      const sample: CloudSample = {
+        offset,
+        distance: float(0),
+        altitude: altitudeAt(body, offset),
+        sunMu: sunMuAt(body, offset),
+        footprint: float(0),
+      }
+      const here = medium(sample, body)
+      write(
+        0,
+        sunStatistics({
+          layers: body.layers,
+          level: here.layer,
+          cover: vec3(1, 0, 0),
+          convective: vec3(0),
+          depth: here.depth,
+          sunMu: sample.sunMu,
+          taps: float(0),
+        }),
+      )
+      write(1, test.depth.depths(offset).toSun)
+    })
+    offsets.forEach((_, k) => {
+      const stat = -Math.log(out[2 * k]!)
+      expect(Math.abs(stat / out[2 * k + 1]! - 1)).toBeLessThan(0.02)
+    })
+    dispose(test)
+  })
+
+  it('are the law: the sample’s column on the sun’s side less the taps, and one crossing of each level beyond it', async () => {
+    const LOW: Slab = [1000, 1500, 0.01]
+    const MID: Slab = [3000, 3600, 0.004]
+    const HIGH: Slab = [8000, 9000, 0.0005]
+    const scenario = slabScenario(LOW, MID, HIGH)
+    const uniforms = createCloudUniforms()
+    uniforms.write(
+      frameAt(eyeAt(300), sunAt(37.5), scenario, DEFAULT_CLOUD_LEVERS, null),
+    )
+    const mean = [LOW, MID, HIGH].map(
+      ([base, top, sigma]) =>
+        2 * sigma * (top - base) * genusProfileMean('stratus'),
+    )
+    const cases = fc.sample(
+      fc.record({
+        level: fc.integer({ min: -1, max: 2 }),
+        cover: fc.tuple(
+          fc.double({ min: 0, max: 1, noNaN: true }),
+          fc.double({ min: 0, max: 1, noNaN: true }),
+          fc.double({ min: 0, max: 1, noNaN: true }),
+        ),
+        whole: fc.double({ min: 0, max: 12, noNaN: true }),
+        share: fc.double({ min: 0, max: 1, noNaN: true }),
+        sunMu: fc.double({ min: -1, max: 1, noNaN: true }),
+        taps: fc.double({ min: 0, max: 3, noNaN: true }),
+      }),
+      { numRuns: 512, seed: 5 },
+    )
+    const inputs = new Float32Array(
+      cases.flatMap((one) => [
+        one.level,
+        ...one.cover,
+        one.whole * one.share,
+        one.whole,
+        one.sunMu,
+        one.taps,
+      ]),
+    )
+    const out = await run(cases.length, inputs, 8, 1, (read, write) => {
+      write(
+        0,
+        sunStatistics({
+          layers: uniforms.served.layers,
+          level: int(read(0)),
+          cover: vec3(read(1), read(2), read(3)),
+          convective: vec3(0.3),
+          depth: vec2(read(4), read(5)),
+          sunMu: read(6),
+          taps: read(7),
+        }),
+      )
+    })
+    // The columns the sun's ray counts across a level beyond the sample's:
+    // its run over the level's thickness, by the level's cell.
+    const { cell } = uniforms.served.layers
+    const sights = [cell.value.x, cell.value.y, cell.value.z]
+    const thickness = [LOW, MID, HIGH].map(([base, top]) => top - base)
+    cases.forEach((one, k) => {
+      const above = Math.fround(one.sunMu) >= 0
+      const mu = Math.max(Math.abs(one.sunMu), 0.05)
+      const lean = Math.sqrt(Math.max(1 - mu * mu, 0)) / mu
+      let expected = 1
+      if (one.level >= 0) {
+        const up = one.whole * one.share
+        const column = above ? up : one.whole - up
+        // The sample's own column is one column.
+        expected = crossingTransmittance(
+          one.cover[one.level]!,
+          Math.max(column / mu - one.taps, 0),
+          1,
+        )
+        for (let j = 0; j < 3; j += 1)
+          if (above ? j > one.level : j < one.level)
+            expected *= crossingTransmittance(
+              one.cover[j]!,
+              mean[j]! / mu,
+              crossingExponent(thickness[j]! * lean, sights[j]!),
+            )
+      }
+      expect(Math.abs(out[k]! - expected)).toBeLessThan(2e-5)
+    })
+    uniforms.dispose()
+  })
+})
+
+/* ------------------------------------------------------------------------- */
+/* Scrolling, and the cap                                                     */
 /* ------------------------------------------------------------------------- */
 
 describe('a grid that moves', () => {
   const BASE = 1000
   const TOP = 2600
   const SIGMA = 0.03
-  const scenario = slabScenario(BASE, TOP, SIGMA)
+  const scenario = slabScenario([BASE, TOP, SIGMA])
   const wave = (world: Node<'float'>, k: number): Node<'float'> =>
     sin(world.mul((2 * Math.PI * k) / FIELD_PERIOD))
   /** Cloud fixed to the body, periodic on each axis in the origin's period. */
@@ -484,6 +1254,7 @@ describe('a grid that moves', () => {
       layer: select(inside, int(0), int(-1)),
       column: float(1e9),
       radius: float(8),
+      depth: vec2(0),
     }
   }
   const EYE = 500
@@ -491,21 +1262,24 @@ describe('a grid that moves', () => {
 
   it('ends the grid’s scroll where a grid built at the new window begins', async () => {
     // Summed through the field itself, so the two grids read one medium
-    // whatever their volumes' refresh has reached.
+    // whatever their volumes' bakes have reached.
     const test = rig(field, scenario, { volume: false })
     test.settle(eyeAt(EYE), SUN)
-    const origin = test.frame!.served.volume.frames[1]!.origin
-    // Two cells east, on level 1's held anchor.
+    const origin = test.level.origin
+    // Two cells east, on the level's held anchor.
     const moved = eyeAt(EYE, 800)
     test.step(moved, SUN)
     expect(test.frame!.served.volume.rebuilt[1]).toBe(false)
     expect(test.depth.pending).toBe(true)
+    // Six slices a frame at the new window, and the weight stands.
+    expect(test.depth.drawn).toBe(6)
+    expect(test.weight).toBe(1)
     const held = test.frame!
     test.settle(moved, SUN)
     const fresh = rig(field, scenario, { volume: false })
     fresh.frame = held
     fresh.settle(moved, SUN)
-    expect(test.frame!.served.volume.frames[1]!.origin).not.toEqual(origin)
+    expect(test.level.origin).not.toEqual(origin)
     const a = await cells(test.depth.textures()[0]!)
     const b = await cells(fresh.depth.textures()[0]!)
     let worst = 0
@@ -517,32 +1291,23 @@ describe('a grid that moves', () => {
     dispose(fresh)
   })
 
-  it('rebuilds whole when the sun turns past 0.05°, and not at 0.04°', () => {
+  it('bakes no frame past the cap: a first frame, a jump, a turning sun, a flight', () => {
     const test = rig(field, scenario)
-    const eye = eyeAt(EYE)
-    test.settle(eye, SUN)
-    expect(test.depth.pending).toBe(false)
-    test.step(eye, sunAt(37.5, 20.1))
-    expect(test.depth.spent).toBe(SUN_DEPTH_FRAME_CAP)
-    test.settle(eye, sunAt(37.5, 20.1))
-    test.step(eye, sunAt(37.5, 20.14))
-    expect(test.depth.spent).toBeLessThan(SUN_DEPTH_FRAME_CAP)
-    dispose(test)
-  })
-
-  it('spends no frame past the cap: a cut, a jump, a turning sun, a flight', () => {
-    const test = rig(field, scenario)
-    const spent: number[] = []
     let east = 0
-    for (let k = 0; k < 40; k += 1) {
+    let whole = 0
+    for (let k = 0; k < 120; k += 1) {
       east += 128
       const azimuth = 20 + (k % 10 === 0 ? 0.2 * k : 0)
-      test.step(eyeAt(EYE, east), sunAt(37.5, azimuth), k === 15)
-      spent.push(test.depth.spent)
+      test.step(eyeAt(EYE, east), sunAt(37.5, azimuth), { jump: k === 60 })
+      expect(test.depth.drawn).toBeLessThanOrEqual(CAP)
+      expect(test.volume.drawn.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(
+        CAP,
+      )
+      if (test.weight === 1) whole += 1
     }
-    expect(Math.max(...spent)).toBeLessThanOrEqual(SUN_DEPTH_FRAME_CAP)
-    // The first frame rebuilds whole, at the cap.
-    expect(spent[0]).toBe(SUN_DEPTH_FRAME_CAP)
+    // It was whole before the jump and came back after it.
+    expect(whole).toBeGreaterThan(40)
+    expect(test.weight).toBe(1)
     dispose(test)
   })
 })
@@ -556,21 +1321,306 @@ describe('the grid as a resource', () => {
     const backend = gpu.renderer.backend as unknown as {
       get(texture: object): { texture: GPUTexture }
     }
-    const bytes = SUN_GRID_SIZE[0] * SUN_GRID_SIZE[1] * SUN_GRID_SIZE[2] * 2
-    const test = rig(slab(1000, 2000, 0.01), slabScenario(1000, 2000, 0.02))
+    // RG16F: the cell's code and its depth.
+    const bytes = SUN_GRID_SIZE[0] * SUN_GRID_SIZE[1] * SUN_GRID_SIZE[2] * 4
+    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
     expect(test.depth.bytes).toBe(0)
     await test.depth.warm(gpu.renderer)
     await test.volume.warm(gpu.renderer)
     const render = gpu.pipelinesBuilt()
     const compute = gpu.computePipelinesBuilt()
     test.settle(eyeAt(300), sunAt(37.5))
+    // Under the horizon too: the first exit is a branch of the one program.
+    test.settle(eyeAt(300), sunAt(-1.5))
     expect(gpu.pipelinesBuilt()).toBe(render)
     expect(gpu.computePipelinesBuilt()).toBe(compute)
     expect(test.depth.bytes).toBe(bytes)
     const textures = test.depth.textures()
     expect(textures).toHaveLength(1)
-    expect(backend.get(textures[0]!).texture.mipLevelCount).toBe(1)
+    const held = backend.get(textures[0]!).texture
+    expect(held.mipLevelCount).toBe(1)
+    expect(held.format).toBe('rg16float')
+    expect(bytes).toBe(2_097_152)
+    expect(held.width * held.height * held.depthOrArrayLayers * 4).toBe(bytes)
     dispose(test)
     expect(test.depth.bytes).toBe(0)
+  })
+
+  it('holds 64 heights behind its handle: twice the bytes and the slices, and the same depth on a slab', async () => {
+    // Thin, so every point is under the knee: 3.1 deep at the slab's base.
+    const THIN: Slab = [1000, 2000, 0.002]
+    const test = rig(slab(...THIN), slabScenario(THIN))
+    test.depth.heights = 64
+    const eye = eyeAt(300)
+    const sun = sunAt(37.5)
+    // The volume's 68 slices, the grid's 64 at eight a frame, the ramp: a
+    // frame either side for where the settle starts and stops counting.
+    const whole = Math.ceil((LEVELS * STACK) / CAP) + 64 / CAP + RAMP
+    const frames = test.settle(eye, sun)
+    expect(frames).toBeGreaterThanOrEqual(whole - 1)
+    expect(frames).toBeLessThanOrEqual(whole + 1)
+    expect(test.depth.bytes).toBe(4_194_304)
+    const offsets = Array.from({ length: 64 }, (_, k) =>
+      along(test, eye, 1050 + 14 * k, 300 * (k % 8)),
+    )
+    const read = await depths(test, offsets)
+    offsets.forEach((offset, k) => {
+      const expected = slabDepth(eye, offset, sun, THIN)
+      for (const got of [read[k]!.toSun, read[k]!.meanDepthToSun])
+        expect(Math.abs(got - expected)).toBeLessThan(
+          Math.max(0.02 * expected, 0.01),
+        )
+    })
+    dispose(test)
+  })
+
+  it('hands the light after first order the taps’ depth and the grid’s past them, and the ray’s whole, on a slab, wherever a program reads it after asking for it', async () => {
+    // Thin, under the knee, and points low enough that the sun's path to
+    // the top runs past the taps' half kilometer: the cache's part is
+    // most of the depth.
+    const THIN: Slab = [1000, 2000, 0.002]
+    const test = rig(slab(...THIN), slabScenario(THIN))
+    const eye = eyeAt(300)
+    const sun = sunAt(37.5)
+    test.settle(eye, sun)
+    const medium = slab(...THIN)
+    const lit = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    test.uniforms.trace.lightTaps.value = 4
+    const body = test.uniforms.served
+    const offsets = Array.from({ length: 64 }, (_, k) =>
+      along(test, eye, 1050 + 4 * k, 300 * (k % 8)),
+    )
+    const inputs = new Float32Array(offsets.flatMap((o) => [o.x, o.y, o.z]))
+    /*
+     * Where a program reads the depth: in the block its sun is formed in;
+     * in two exclusive branches, each sample through one of them; in a
+     * branch inside a branch, and then in the block around it; through a
+     * memoized function called in two exclusive branches; and in a loop
+     * that runs no turn for the first sample, and after it. A depth formed
+     * where it is first read is unset in each block that read does not
+     * stand over, and read zero there.
+     */
+    const reads = {
+      own: (_: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        write(0, got.depth.x)
+        write(1, got.depth.y)
+      },
+      apart: (odd: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        If(odd.not(), () => {
+          write(0, got.depth.x)
+          write(1, got.depth.y)
+        })
+        If(odd, () => {
+          write(0, got.depth.x)
+          write(1, got.depth.y)
+        })
+      },
+      nested: (odd: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        If(got.cloud.greaterThanEqual(0), () => {
+          If(odd, () => {
+            write(0, got.depth.x)
+          })
+          write(0, got.depth.x)
+          write(1, got.depth.y)
+        })
+      },
+      // A function of the program's that returns the depth, called once
+      // and memoized, then read in two exclusive branches.
+      once: (odd: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        const depthOf = Fn(() => got.depth).once()
+        If(odd.not(), () => {
+          write(0, depthOf().x)
+          write(1, depthOf().y)
+        })
+        If(odd, () => {
+          write(0, depthOf().x)
+          write(1, depthOf().y)
+        })
+      },
+      // The first sample's loop runs no turn: the reads after it are the
+      // first that sample reaches.
+      loop: (_: Node<'bool'>, got: CloudSunLight, write: Write) => {
+        Loop({ start: int(0), end: int(instanceIndex) }, () => {
+          write(0, got.depth.x)
+        })
+        write(0, got.depth.x)
+        write(1, got.depth.y)
+      },
+    }
+    // Four taps, and none: the cache's depth at the sample itself.
+    for (const taps of [4, 0])
+      for (const [where, reading] of Object.entries(reads)) {
+        test.uniforms.trace.lightTaps.value = taps
+        const out = await run(offsets.length, inputs, 3, 2, (read, write) => {
+          const offset = vec3(read(0), read(1), read(2))
+          const sample: CloudSample = {
+            offset,
+            distance: offset.length(),
+            altitude: altitudeAt(body, offset),
+            sunMu: sunMuAt(body, offset),
+            footprint: float(10),
+          }
+          const got = lit(sample, medium(sample, body), body, { depth: true })
+          reading(instanceIndex.mod(uint(2)).equal(uint(1)), got, write)
+        })
+        offsets.forEach((offset, k) => {
+          const point = add(eye, offset)
+          const expected = slabDepth(eye, offset, sun, THIN)
+          // Over a kilometer to the top along this sun: the taps hold under
+          // half of it.
+          expect(expected).toBeGreaterThan(THIN[2] * 1000)
+          expect(
+            Math.abs(out[2 * k]! / expected - 1),
+            `${where}, ${taps} taps`,
+          ).toBeLessThan(0.03)
+          const back = crossings(point, scale(sun, -1), R + THIN[0])![0]
+          const whole =
+            THIN[2] * leaves(sub(point, scale(sun, back)), sun, R + THIN[1])
+          expect(
+            Math.abs(out[2 * k + 1]! / whole - 1),
+            `${where}, ${taps} taps`,
+          ).toBeLessThan(0.03)
+        })
+      }
+    dispose(test)
+  })
+
+  /*
+   * Where a sun reads the grid, counted in the program three emits for it:
+   * the grid is the one texture a slab's sun binds, so every
+   * `textureSampleLevel` is a fetch of a cell. A sun reads it at the sample
+   * and where its taps end; the light after first order, asked for, adds
+   * the ray's far end, once for each of the two, in the sun's own block. A
+   * program that asks only for first order fetches no far end, one that
+   * asks for both fetches no cell twice, and a read of the depth in another
+   * block reads the variable the sun's block holds.
+   */
+  it('is fetched twice by first order’s sun, twice more by the depth asked for beside it, at the far end of each of its two reads, and no more for any block that reads the depth', async () => {
+    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
+    const medium = slab(1000, 2000, 0.01)
+    const sun = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    const body = test.uniforms.served
+    const out = storage(
+      new StorageBufferAttribute(new Float32Array(1), 1),
+      'float',
+      1,
+    )
+    const kernelOf = (
+      pick: (got: ReturnType<typeof sun>) => Node<'float'> | null,
+      depth: boolean,
+    ): ComputeNode =>
+      Fn(() => {
+        const offset = vec3(float(instanceIndex), 1, 2)
+        const sample: CloudSample = {
+          offset,
+          distance: offset.length(),
+          altitude: altitudeAt(body, offset),
+          sunMu: sunMuAt(body, offset),
+          footprint: float(10),
+        }
+        const picked = pick(sun(sample, medium(sample, body), body, { depth }))
+        if (picked !== null) out.element(0).assign(picked)
+      })().compute(1)
+    const programOf = async (
+      pick: (got: ReturnType<typeof sun>) => Node<'float'> | null,
+      depth = true,
+    ): Promise<string> => {
+      const kernel = kernelOf(pick, depth)
+      await gpu.compute(kernel)
+      const nodes = (
+        gpu.renderer as unknown as {
+          _nodes: {
+            getForCompute(node: ComputeNode): { computeShader: string }
+          }
+        }
+      )._nodes
+      const wgsl = nodes.getForCompute(kernel).computeShader
+      kernel.dispose()
+      expect(wgsl.match(/: texture_3d</g)).toHaveLength(1)
+      return wgsl
+    }
+    const fetches = (wgsl: string): number =>
+      wgsl.match(/\btextureSampleLevel\(/g)?.length ?? 0
+    expect(fetches(await programOf((got) => got.cloud, false))).toBe(2)
+    expect(
+      fetches(
+        await programOf((got) => got.cloud.add(got.depth.x).add(got.depth.y)),
+      ),
+    ).toBe(4)
+    // Two exclusive branches that read the depth read the one variable.
+    expect(
+      fetches(
+        await programOf((got) => {
+          If(instanceIndex.equal(uint(0)), () => {
+            out.element(0).assign(got.depth.x)
+          })
+          If(instanceIndex.equal(uint(1)), () => {
+            out.element(0).assign(got.depth.y)
+          })
+          return got.cloud
+        }),
+      ),
+    ).toBe(4)
+    // So does a loop, and the block after it.
+    expect(
+      fetches(
+        await programOf((got) => {
+          Loop({ start: int(0), end: int(instanceIndex) }, () => {
+            out.element(0).addAssign(got.depth.x)
+          })
+          return got.depth.y
+        }),
+      ),
+    ).toBe(4)
+    dispose(test)
+  })
+
+  it('throws by name, as the program is built, where a march reads the depth of a sun it did not ask for it', () => {
+    const test = rig(slab(1000, 2000, 0.01), slabScenario([1000, 2000, 0.01]))
+    const medium = slab(1000, 2000, 0.01)
+    const sun = cloudSunFn({
+      uniforms: test.uniforms,
+      medium,
+      depth: test.depth,
+    })
+    const body = test.uniforms.served
+    const out = storage(
+      new StorageBufferAttribute(new Float32Array(1), 1),
+      'float',
+      1,
+    )
+    const kernel = Fn(() => {
+      const offset = vec3(float(instanceIndex), 1, 2)
+      const sample: CloudSample = {
+        offset,
+        distance: offset.length(),
+        altitude: altitudeAt(body, offset),
+        sunMu: sunMuAt(body, offset),
+        footprint: float(10),
+      }
+      const got = sun(sample, medium(sample, body), body)
+      out.element(0).assign(got.cloud.add(got.depth.x))
+    })().compute(1)
+    const renderer = gpu.renderer as unknown as {
+      backend: {
+        createNodeBuilder(
+          node: ComputeNode,
+          renderer: unknown,
+        ): { build(): unknown }
+      }
+    }
+    expect(() =>
+      renderer.backend.createNodeBuilder(kernel, gpu.renderer).build(),
+    ).toThrow(/^CloudSun\.depth: this sun was formed without \{ depth: true \}/)
+    kernel.dispose()
+    dispose(test)
   })
 })

@@ -3,11 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { pcg4d } from '@inertialref/procedural'
 import {
   BASE_NOISE_PERIOD,
+  BASE_NOISE_TEXELS,
   baseNoise,
+  baseNoiseTexture,
   baseNoiseWide,
   curlNoise,
   DETAIL_NOISE_PERIOD,
+  DETAIL_NOISE_TEXELS,
   detailNoise,
+  detailNoiseTexture,
   NOISE_LANES,
   worleyFeature,
 } from './weatherNoise.ts'
@@ -228,5 +232,67 @@ describe('the curl', () => {
       { numRuns: 400 },
     )
     expect(tested).toBeGreaterThan(200)
+  })
+})
+
+describe('the textures as the march reads them', () => {
+  const texels = [
+    {
+      read: baseNoiseTexture,
+      of: baseNoise,
+      size: BASE_NOISE_TEXELS,
+      period: BASE_NOISE_PERIOD,
+    },
+    {
+      read: detailNoiseTexture,
+      of: detailNoise,
+      size: DETAIL_NOISE_TEXELS,
+      period: DETAIL_NOISE_PERIOD,
+    },
+  ] as const
+
+  it('reads a texel at its center as the byte the bake writes there', () => {
+    for (const { read, of, size, period } of texels) {
+      const perCell = size / period
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 0, max: size - 1 }),
+          fc.integer({ min: 0, max: size - 1 }),
+          fc.integer({ min: 0, max: size - 1 }),
+          (i, j, k) => {
+            const at = {
+              x: (i + 0.5) / perCell,
+              y: (j + 0.5) / perCell,
+              z: (k + 0.5) / perCell,
+            }
+            expect(read(at)).toBeCloseTo(Math.round(255 * of(at)) / 255, 12)
+          },
+        ),
+        { numRuns: 60 },
+      )
+    }
+  })
+
+  it('blends eight texels trilinearly, wrapping at the period', () => {
+    for (const { read, size, period } of texels) {
+      const perCell = size / period
+      fc.assert(
+        fc.property(
+          fc.integer({ min: -3, max: 3 }),
+          fc.integer({ min: 0, max: size - 1 }),
+          fc.double({ min: 0, max: 1, noNaN: true }),
+          (wraps, i, f) => {
+            // Along x between texel i and the next, a period over or under.
+            const y = 2.5 / perCell
+            const at = (x: number) => read({ x, y, z: y })
+            const left = at((i + 0.5) / perCell)
+            const right = at((i + 1.5) / perCell)
+            const x = (i + 0.5 + f) / perCell + wraps * period
+            expect(at(x)).toBeCloseTo(left + (right - left) * f, 9)
+          },
+        ),
+        { numRuns: 60 },
+      )
+    }
   })
 })

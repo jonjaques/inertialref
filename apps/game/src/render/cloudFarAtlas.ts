@@ -167,7 +167,13 @@ export function farBlock(index: number): FarBlock {
 /** Sub-columns along each side of a texel, and heights along each sub-column. */
 const SUBCOLUMNS = 4
 const HEIGHTS = 8
-/** A sub-column whose column optical depth is under this is clear. */
+/**
+ * A sub-column whose column optical depth is under this is clear. An
+ * unscaled depth, the droplets' whole extinction, whatever medium the march
+ * draws: taken in a scaled depth, about half of it, the same cut would
+ * clear cirrus-over-cumulus's cirrus, 0.12 unscaled, out of the far field
+ * while the fine march still draws it.
+ */
 const CLOUDY_TAU = 0.1
 /**
  * Meters past each side of a layer that a texel's base and top are quantized
@@ -176,7 +182,9 @@ const CLOUDY_TAU = 0.1
 export const FAR_MARGIN = 500
 /**
  * The log encoding the maps use for in-cloud τ (§3.9): log₂(1 + τ)/log₂(513),
- * τ up to 512 at 2.5% steps of 1 + τ. A deeper column is opaque at 512.
+ * τ up to 512 at 2.5% steps of 1 + τ. A deeper column is opaque at 512. The
+ * τ encoded is the unscaled one, so the code's steps sit where a column's
+ * depth is measured; a march of a scaled medium scales what it decodes.
  */
 const LOG_TAU = Math.log2(513)
 /** A sub-column's spacing in warped units: a quarter of a texel, 2/(256·4). */
@@ -313,8 +321,8 @@ function farLayerAt(
 }
 
 /** A layer's effective radius, µm: the phase table's row for its light. */
-function farRadius(uniforms: CloudUniforms, k: number): F {
-  const radius = uniforms.layers.radius
+function farRadius(body: CloudBodyUniforms, k: number): F {
+  const radius = body.layers.radius
   return k === 0 ? radius.x : k === 1 ? radius.y : radius.z
 }
 
@@ -745,11 +753,11 @@ class FarMarch {
   }
 
   /** Each layer's light under its own droplets' phase; the moments as a mean and a deviation. */
-  result(uniforms: CloudUniforms, phase: CloudPhaseNodes): CloudFarResult {
+  result(phase: CloudPhaseNodes): CloudFarResult {
     const light = this.#light.reduce<V3>(
       (sum, layer, k) =>
         sum.add(
-          layer.mul(phase.droplets(this.#ray.nu, farRadius(uniforms, k))),
+          layer.mul(phase.droplets(this.#ray.nu, farRadius(this.#body, k))),
         ),
       vec3(0),
     )
@@ -1004,7 +1012,7 @@ function atlasMarch(
       })
     }
     march.gap(end)
-    return march.result(deps.uniforms, deps.phase)
+    return march.result(deps.phase)
   }
 }
 
@@ -1127,7 +1135,7 @@ export class CloudFarAtlas implements CloudFarField {
     }
     if (this.#target.width !== FAR_WIDTH || this.#target.height !== FAR_HEIGHT)
       this.#resize(renderer, FAR_WIDTH, FAR_HEIGHT)
-    const key = `${frame.scenario.id} ${body.address} ${frame.levers.farFootprint}`
+    const key = `${body.weatherKey} ${body.address} ${frame.levers.farFootprint}`
     if (key !== this.#key || frame.jump) {
       this.#key = key
       this.#due = FAR_CYCLE
@@ -1178,4 +1186,32 @@ export class CloudFarAtlas implements CloudFarField {
     this.#target.dispose()
     this.#material.dispose()
   }
+}
+
+/**
+ * A body's far atlas: the served body's baked from the cube's coverage, a
+ * second body's from the analytic one.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change.
+ */
+export function createCloudFarAtlas(
+  deps: {
+    readonly uniforms: CloudUniforms
+    readonly phase: CloudPhaseNodes
+    /** The media a far bake reads: the cube's coverage for the served body, the analytic for a second. */
+    readonly media: {
+      readonly synoptic: CloudMediumFn
+      readonly analytic: CloudMediumFn
+    }
+  },
+  body: 'served' | 'second',
+): CloudFarAtlas {
+  return new CloudFarAtlas({
+    uniforms: deps.uniforms,
+    field: body === 'served' ? deps.media.synoptic : deps.media.analytic,
+    phase: deps.phase,
+    body,
+  })
 }

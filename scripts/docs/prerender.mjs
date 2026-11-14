@@ -1,135 +1,65 @@
-import { execFileSync } from 'node:child_process'
-
-/** Preview builds still validate and ship every API page as fetchable JSON. */
-export function apiPrerenderEnabled(
-  env = process.env,
-  localBranch = gitBranch,
-) {
-  const override = env.IR_PRERENDER_API
-  if (override !== undefined) {
-    if (override !== '0' && override !== '1')
-      throw new Error('IR_PRERENDER_API must be 0 or 1')
-    return override === '1'
-  }
-  const branch =
-    env.WORKERS_CI_BRANCH ||
-    env.GITHUB_HEAD_REF ||
-    env.GITHUB_REF_NAME ||
-    localBranch()
-  return branch === 'main'
-}
-
-function gitBranch() {
-  try {
-    return execFileSync('git', ['branch', '--show-current'], {
-      cwd: new URL('../../', import.meta.url),
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-  } catch {
-    return ''
-  }
-}
-
 export const isApiRoute = (route) =>
   route === '/docs/api' || route.startsWith('/docs/api/')
 
-/** One loading shell hydrates identically at every API address. */
+/** `/docs/api/<package>/<member>`; the package is the fourth segment. */
+const isApiMemberRoute = (route) =>
+  route.startsWith('/docs/api/') && route.split('/').length > 4
+
+/**
+ * The API index and every member page are one loading shell that fetches its
+ * article. The shell is `/docs/api`, served at every member address, so its
+ * markup must hydrate identically at all of them and carries no article.
+ */
+export const loadsThroughShell = (route) =>
+  route === '/docs/api' || isApiMemberRoute(route)
+
+/**
+ * Prose, the `/docs/api` shell, and each package's own page. A member page is
+ * never HTML: rendering every member is most of the bundle stage's time, and
+ * each package page already carries a link to every member it exports.
+ */
 export function docHtmlRoutes(manifest) {
-  return Object.keys(manifest.pages).filter(
-    (route) =>
-      manifest.prerenderApi !== false ||
-      !isApiRoute(route) ||
-      route === '/docs/api',
-  )
+  return Object.keys(manifest.pages).filter((route) => !isApiMemberRoute(route))
 }
 
-/** Cloudflare's limit on static rules; a splat rule counts against a separate limit of 100. */
+/** Cloudflare's per-file limits; past either, it drops rules without a word. */
 const STATIC_REDIRECT_LIMIT = 2000
 const DYNAMIC_REDIRECT_LIMIT = 100
 
-/** Exact proxies keep unknown URLs as 404s and leave static requests off the Worker. */
+/**
+ * Aliases redirect to their canonical spelling, and every package's members
+ * reach the loading shell through one splat rewrite. The table grows with
+ * the package count and the case-colliding exports, not with the members.
+ * An unknown address under a known package reaches the shell, which finds no
+ * page for it in the manifest and renders its not-found state with a 200; an
+ * address under no package is a 404.
+ */
 export function docRedirects(manifest) {
   const lines = Object.entries(manifest.aliases ?? {})
     .filter(([from]) => manifest.pages[from] === undefined)
     .map(([from, to]) => `${from} ${to} 301`)
-  const proxies =
-    manifest.prerenderApi === false
-      ? apiProxies(
-          Object.keys(manifest.pages),
-          STATIC_REDIRECT_LIMIT - lines.length,
-        )
-      : { exact: [], collapsed: [] }
-  lines.push(...proxies.exact)
   if (lines.length > STATIC_REDIRECT_LIMIT)
-    throw new Error(
-      "API routing exceeds Cloudflare's 2,000 static redirects. Use IR_PRERENDER_API=1.",
-    )
-  if (manifest.prerenderApi === false) {
-    // Missing HTML files cannot supply Cloudflare's automatic URL normalization.
-    lines.push('/docs/api/*/ /docs/api/:splat 301')
-    lines.push('/docs/api/*.html /docs/api/:splat 301')
-    // After the normalization rules, so a trailing slash or `.html` under a
-    // collapsed package is still redirected to its canonical spelling first.
-    lines.push(...proxies.collapsed)
-    // The splat rules count against their own limit, so a table that has to
-    // collapse this many packages fits neither one and is refused the same way.
-    if (
-      lines.filter((line) => line.includes('*')).length > DYNAMIC_REDIRECT_LIMIT
-    )
-      throw new Error(
-        "API routing exceeds Cloudflare's 100 dynamic redirects. Use IR_PRERENDER_API=1.",
-      )
-  }
+    throw new Error("API aliases exceed Cloudflare's 2,000 static redirects.")
+  const packages = new Set(
+    Object.keys(manifest.pages)
+      .filter(isApiMemberRoute)
+      .map((route) => route.split('/')[3]),
+  )
+  const dynamic = [
+    // A member has no HTML file to supply Cloudflare's automatic URL
+    // normalization, so these redirect a trailing slash or `.html` to the
+    // canonical spelling. They precede the rewrites, which would otherwise
+    // serve the shell at the non-canonical address.
+    '/docs/api/*/ /docs/api/:splat 301',
+    '/docs/api/*.html /docs/api/:splat 301',
+    // `/docs/api/<package>/*` does not match the package's own page, which is
+    // HTML and served as an asset.
+    ...[...packages].sort().map((name) => `/docs/api/${name}/* /docs/api 200`),
+  ]
+  if (dynamic.length > DYNAMIC_REDIRECT_LIMIT)
+    throw new Error("API packages exceed Cloudflare's 100 dynamic redirects.")
   return (
     '# Generated by pnpm docs:build. API routes are case-sensitive.\n' +
-    lines.map((line) => `${line}\n`).join('')
+    [...lines, ...dynamic].map((line) => `${line}\n`).join('')
   )
-}
-
-/**
- * One exact proxy per API page while they fit beside the aliases. Past
- * Cloudflare's static limit, the packages with the most member pages each
- * become one splat rewrite, largest first, until the exact rules fit: an exact
- * table one rule over the limit has Cloudflare drop routes without a word, and
- * prerendering every page instead costs each review build about a minute. A
- * package's own page stays exact, because `/docs/api/<package>/*` does not
- * match it. Every known address behaves as before; an unknown one under a
- * collapsed package reaches the loading shell, which finds no page for it in
- * the manifest and renders its not-found state where the exact table would
- * have answered 404.
- */
-function apiProxies(routes, room) {
-  const packages = new Map()
-  for (const route of routes) {
-    if (!isApiRoute(route) || route === '/docs/api') continue
-    const name = route.split('/')[3]
-    const entry = packages.get(name) ?? { root: [], members: [] }
-    ;(route.split('/').length > 4 ? entry.members : entry.root).push(route)
-    packages.set(name, entry)
-  }
-  const largestFirst = [...packages].sort(
-    ([a, x], [b, y]) => y.members.length - x.members.length || (a < b ? -1 : 1),
-  )
-  let exactCount = routes.filter(
-    (route) => isApiRoute(route) && route !== '/docs/api',
-  ).length
-  const collapsedNames = new Set()
-  for (const [name, entry] of largestFirst) {
-    if (exactCount <= room) break
-    if (entry.members.length < 2) break
-    collapsedNames.add(name)
-    exactCount -= entry.members.length
-  }
-  const exact = []
-  for (const route of routes) {
-    if (!isApiRoute(route) || route === '/docs/api') continue
-    const name = route.split('/')[3]
-    if (collapsedNames.has(name) && route.split('/').length > 4) continue
-    exact.push(`${route} /docs/api 200`)
-  }
-  const collapsed = largestFirst
-    .filter(([name]) => collapsedNames.has(name))
-    .map(([name]) => `/docs/api/${name}/* /docs/api 200`)
-  return { exact, collapsed }
 }

@@ -6,19 +6,18 @@ import {
   QuadMesh,
   RenderTarget,
   type Texture,
-  type UniformNode,
   UnsignedByteType,
   Vector2,
   Vector3,
-  Vector4,
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
   float,
-  int,
   mrt,
   normalize,
+  saturate,
   screenCoordinate,
+  select,
   tan,
   texture,
   uniform,
@@ -26,43 +25,49 @@ import {
   wgslFn,
 } from 'three/tsl'
 import {
-  BLOB_MEAN,
-  blobCells,
-  blobThreshold,
   CUBE_FACES,
   type CubeFace,
-  genusProfileMean,
-  MAX_CLOUD_LAYERS,
-  terminatorSines,
-  type WeatherScenario,
+  SYNOPTIC_CELL,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
 import type { CloudFrame } from './cloudFrame.ts'
 import { cubeAtlasUv } from './cloudGeometry.ts'
 import type { CloudBudget, CloudResource } from './cloudNodes.ts'
-import { cloudPcg4d } from './cloudNoise.ts'
-import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
+import { type CloudNoiseNodes, cloudPcg4d, noiseOf } from './cloudNoise.ts'
+import { profileOf } from './cloudProfile.ts'
+import {
+  CLOUD_CLIMATE_KINDS,
+  type CloudBodyUniforms,
+  type CloudUniforms,
+} from './cloudUniforms.ts'
 import { runQuadPasses } from './quadPass.ts'
 import { warmSensorPass } from './warmup.ts'
 
 /*
  * The weather cube: a 2D atlas of six tangent-warped face tiles, 3 × 2, each
- * 512² with a one-texel gutter, four RGBA8 targets drawn by one MRT quad,
- * baked from the placeholder's coverage function one face a frame. Two bakes
- * read it — the clipmap's levels and the served body's far atlas — and the
- * fine march does not, which keeps the trace kernel inside the binding limit.
+ * 512² with a one-texel gutter, two RGBA8 targets drawn by one MRT quad,
+ * baked from the body's climate (`climateNode`, a port of
+ * `BodyClimate.sample`) a face at a time. Two bakes read it — the clipmap's
+ * levels and the served body's far atlas — and the fine march does not,
+ * which keeps the trace kernel inside the binding limit.
  *
- * Phase 0's packing (§3.9), which the clipmap shares, so a fine step's
- * coverage of all three layers is one texel:
+ * What a medium reads, a texel of each (phase 1 design §4.3):
  *
- *   0  coverage of layers 0–2           ice share of the middle layer
- *   1  log in-cloud τ of layers 0–2     rain rate
- *   2  convective share of layers 0–2   deep-convection rate
- *   3  wind east, wind north            wetness, puddles (spare)
+ *   cover  the cover of levels 0–2      the middle level's ice share
+ *   kind   their convective shares      the deep-convection rate
  *
- * with log τ as log2(1 + τ)/log2(513), τ to 512 in 2.5% steps, and wind as
- * ±50 m/s about ½. The placeholder fills textures 0–2 from the scenario and
- * texture 3 with its wind; rain, deep convection, wetness and puddles are 0.
+ * **A face is redrawn at the pace its field moves,** never faster than one
+ * a frame: before the fastest thing it holds moves a tenth of a texel
+ * (`texel/(10·u)`, §4.7). What moves is each level's turn, which carries the
+ * zonal law's synoptic field with the low level, the sun where a terminator
+ * ends a regime's cover, and the convergence zone, which follows the
+ * sub-solar latitude. A field with none of these moving bakes nothing.
+ *
+ * **A face is fresh by generation.** Every discontinuity of the field — a
+ * jump, a new weather, a new body, the pattern's period, a level's
+ * statistics landing (`CloudProfile.generation`) — starts a new generation, and a face is fresh when it was baked in the present one. The
+ * clipmap reads each face's generation and is fresh only from fresh faces
+ * (`CloudCubeFreshness`).
  */
 
 const log = getLogger('game.clouds')
@@ -78,169 +83,17 @@ const SPAN = CLOUD_CUBE_TILE + 2 * CLOUD_CUBE_GUTTER
 export const CLOUD_CUBE_WIDTH = CLOUD_CUBE_COLUMNS * SPAN
 export const CLOUD_CUBE_HEIGHT = CLOUD_CUBE_ROWS * SPAN
 
-/** The bake's pass on the timeline: one face tile a frame. */
+/** The bake's pass on the timeline: one face tile. */
 export const CLOUD_MAPS_LABEL = 'cloud maps'
 
-/** The names the MRT outputs and the target's textures share. */
-const CHANNELS = [
-  'cloudMaps0',
-  'cloudMaps1',
-  'cloudMaps2',
-  'cloudMaps3',
-] as const
+/** The names the MRT outputs and the target's textures share: cover, then kind. */
+const CHANNELS = ['cloudCover', 'cloudKind'] as const
 
-/** Four RGBA8 targets: 16 bytes a texel. */
-const TEXEL_BYTES = 16
+/** Two RGBA8 targets: 8 bytes a texel. */
+const TEXEL_BYTES = 8
 
 /* ------------------------------------------------------------------------- */
-/* The scenario's pattern                                                     */
-/* ------------------------------------------------------------------------- */
-
-/*
- * What the coverage function reads beyond the layers' own uniforms: the
- * pattern, its scale, the blob grid, each layer's u32 blob threshold — formed
- * on the CPU, compared as an integer (rule 58) — and its floor, and the
- * channels the other three textures carry. `CloudUniforms` has no slot for
- * them, so they ride beside the bundle, one set per bundle, and every node
- * built on that bundle reads the same set. `writeScenarioPattern` fills it
- * from the frame's scenario, which `CloudMaps.render` does each frame before
- * anything bakes from the coverage; a pass that bakes from it without the
- * maps calls it itself.
- */
-
-const PATTERN = { uniform: 0, bands: 1, blobs: 2 } as const
-
-interface ScenarioPattern {
-  readonly kind: UniformNode<'float', number>
-  /** Radians: a band's width. */
-  readonly scale: UniformNode<'float', number>
-  /** Blob cells a face edge. */
-  readonly cells: UniformNode<'float', number>
-  /** Each layer's blob threshold, a u32. */
-  readonly thresholds: UniformNode<'uvec4', Vector4>
-  /** Each layer's coverage between blobs. */
-  readonly floors: UniformNode<'vec3', Vector3>
-  readonly logDepth: UniformNode<'vec3', Vector3>
-  readonly convective: UniformNode<'vec3', Vector3>
-  /** The middle layer's ice share. */
-  readonly ice: UniformNode<'float', number>
-  /** Texture 3's encoding of the wind, east and north. */
-  readonly wind: UniformNode<'vec2', Vector2>
-  /** The terminator's sines, full and clear (`terminatorSines`). */
-  readonly terminator: UniformNode<'vec2', Vector2>
-}
-
-const PATTERNS = new WeakMap<CloudUniforms, ScenarioPattern>()
-
-function patternOf(uniforms: CloudUniforms): ScenarioPattern {
-  let pattern = PATTERNS.get(uniforms)
-  if (pattern === undefined) {
-    pattern = {
-      kind: uniform(PATTERN.uniform),
-      scale: uniform(0),
-      cells: uniform(1),
-      thresholds: uniform(new Vector4(), 'uvec4'),
-      floors: uniform(new Vector3()),
-      logDepth: uniform(new Vector3()),
-      convective: uniform(new Vector3()),
-      ice: uniform(0),
-      wind: uniform(new Vector2(0.5, 0.5)),
-      terminator: uniform(new Vector2(2, 3)),
-    }
-    PATTERNS.set(uniforms, pattern)
-  }
-  return pattern
-}
-
-/** The deepest log τ the encoding holds, τ = 512. */
-const LOG_DEPTH_SPAN = Math.log2(513)
-/** The wind encoding's half range, m/s. */
-const WIND_SPAN = 50
-
-/**
- * The placeholder's per-layer channels: log in-cloud τ (the layer's
- * extinction through its depth at the profile's mean), whether it is
- * convective (cumuliform genera), the middle layer's ice share (cirrus), and
- * texture 3's wind. Constants of the scenario: phase 0 has no climatology to
- * vary them over the body.
- */
-export function scenarioChannels(scenario: WeatherScenario): {
-  readonly logDepth: readonly [number, number, number]
-  readonly convective: readonly [number, number, number]
-  readonly ice: number
-  readonly wind: readonly [number, number]
-} {
-  const layer = (k: number) => scenario.layers[k]
-  const depth = (k: number): number => {
-    const spec = layer(k)
-    if (spec === undefined) return 0
-    const tau =
-      spec.sigma * (spec.top - spec.base) * genusProfileMean(spec.genus)
-    // The anvil's column is τ 1,185, past what the encoding carries, and it
-    // saturates as the 8-bit store would.
-    return Math.min(1, Math.log2(1 + tau) / LOG_DEPTH_SPAN)
-  }
-  const convective = (k: number): number => {
-    const genus = layer(k)?.genus
-    return genus === 'cumulus' || genus === 'cumulonimbus' ? 1 : 0
-  }
-  const encode = (speed: number): number =>
-    Math.min(1, Math.max(0, 0.5 + speed / (2 * WIND_SPAN)))
-  return {
-    logDepth: [depth(0), depth(1), depth(2)],
-    convective: [convective(0), convective(1), convective(2)],
-    ice: layer(1)?.genus === 'cirrus' ? 1 : 0,
-    wind: [encode(scenario.wind.east), encode(scenario.wind.north)],
-  }
-}
-
-function setNumber(target: { value: number }, value: number): void {
-  if (target.value !== value) target.value = value
-}
-
-function setVector(
-  target: Vector2 | Vector3 | Vector4,
-  values: readonly number[],
-): void {
-  const components = target.toArray()
-  if (values.some((value, k) => components[k] !== value))
-    target.fromArray(values)
-}
-
-/** The coverage between blobs: none until every cell holds one (weatherScenario.ts's `blobFloor`). */
-const blobFloor = (coverage: number): number =>
-  Math.max(0, (Math.min(1, coverage) - BLOB_MEAN) / (1 - BLOB_MEAN))
-
-/** Copy a scenario's pattern into the uniforms the coverage node reads, each compared first. */
-export function writeScenarioPattern(
-  uniforms: CloudUniforms,
-  scenario: WeatherScenario,
-): void {
-  const pattern = patternOf(uniforms)
-  const coverage = (k: number): number =>
-    Math.min(1, Math.max(0, scenario.layers[k]?.coverage ?? 0))
-  const layers = [0, 1, 2].slice(0, MAX_CLOUD_LAYERS)
-  setNumber(pattern.kind, PATTERN[scenario.pattern])
-  setNumber(pattern.scale, scenario.patternScale)
-  setNumber(pattern.cells, blobCells(scenario.patternScale))
-  setVector(pattern.thresholds.value, [
-    ...layers.map((k) => blobThreshold(coverage(k))),
-    0,
-  ])
-  setVector(
-    pattern.floors.value,
-    layers.map((k) => blobFloor(coverage(k))),
-  )
-  const channels = scenarioChannels(scenario)
-  setVector(pattern.logDepth.value, channels.logDepth)
-  setVector(pattern.convective.value, channels.convective)
-  setNumber(pattern.ice, channels.ice)
-  setVector(pattern.wind.value, channels.wind)
-  setVector(pattern.terminator.value, terminatorSines(scenario))
-}
-
-/* ------------------------------------------------------------------------- */
-/* The coverage function, in WGSL                                             */
+/* The climate, in WGSL                                                       */
 /* ------------------------------------------------------------------------- */
 
 const uses = (...fns: readonly unknown[]): never[] => fns as never[]
@@ -302,105 +155,211 @@ const bandCode = /*@__PURE__*/ wgslFn(`
   }
 `)
 
-const coverageCode = /*@__PURE__*/ wgslFn(
+const regimeCode = /*@__PURE__*/ wgslFn(
   `
-  fn cloudScenarioCoverage(
+  fn cloudRegimeCover(
     d: vec3<f32>,
-    layer: i32,
-    kind: f32,
-    scale: f32,
-    cells: f32,
-    coverages: vec3<f32>,
-    thresholds: vec4<u32>,
+    pattern: vec4<f32>,
+    covers: vec3<f32>,
+    thresholds: vec3<u32>,
     floors: vec3<f32>,
     period: vec2<u32>,
     sun: vec3<f32>,
     terminator: vec2<f32>,
-  ) -> f32 {
-    // weatherScenario.ts \`scenarioCoverage\`. With no terminator its sines
-    // are (2, 3), which no sine reaches, and the share is 1.
-    if (layer < 0 || layer > 2) {
-      return 0.0;
-    }
-    let coverage = clamp(coverages[layer], 0.0, 1.0);
+  ) -> vec3<f32> {
+    // weatherScenario.ts \`scenarioCoverage\` for the three levels, a
+    // regime's \`BodyClimate.sample\`. With no terminator its sines are
+    // (2, 3), which no sine reaches, and the share is 1.
     let size = length(d);
     let up = select(0.0, dot(d, sun) / size, size > 0.0);
     let share = 1.0 - smoothstep(terminator.x, terminator.y, up);
-    if (kind > 1.5) {
-      return share * cloudBlobCoverage(d, cells, u32(layer), period, thresholds[layer], floors[layer]);
+    var cover = vec3<f32>(0.0);
+    for (var k = 0; k < 3; k = k + 1) {
+      let coverage = clamp(covers[k], 0.0, 1.0);
+      var value = coverage;
+      if (pattern.x > 1.5) {
+        value = cloudBlobCoverage(d, pattern.z, u32(k), period, thresholds[k], floors[k]);
+      } else if (pattern.x > 0.5 && pattern.y > 0.0) {
+        value = cloudBandCoverage(d, coverage, pattern.y);
+      }
+      cover[k] = share * value;
     }
-    if (kind > 0.5 && scale > 0.0) {
-      return share * cloudBandCoverage(d, coverage, scale);
-    }
-    return share * coverage;
+    return cover;
   }
 `,
   uses(blobCode, bandCode),
 )
 
+const zoneCode = /*@__PURE__*/ wgslFn(`
+  fn cloudZonalZones(d: vec3<f32>, law: mat4x4<f32>) -> vec3<f32> {
+    // weatherClimate.ts \`zonalClimate\`'s three Gaussians in latitude: the
+    // convergence zone, the two dry belts and the two storm tracks. The law
+    // is its sixteen numbers row-major, so column c holds amplitude c of the
+    // three levels and, in w, shared angle c: [φ_I, φ_H, φ_S, w].
+    let size = length(d);
+    let latitude = asin(clamp(select(0.0, d.y / size, size > 0.0), -1.0, 1.0));
+    let w = law[3].w;
+    let s = -0.5 / (w * w);
+    let toward = latitude - law[0].w;
+    let a = latitude - law[1].w;
+    let b = latitude + law[1].w;
+    let c = latitude - law[2].w;
+    let e = latitude + law[2].w;
+    return vec3<f32>(
+      exp(s * toward * toward),
+      exp(s * a * a) + exp(s * b * b),
+      exp(s * c * c) + exp(s * e * e),
+    );
+  }
+`)
+
+const coverCode = /*@__PURE__*/ wgslFn(`
+  fn cloudZonalCover(law: mat4x4<f32>, zones: vec3<f32>, factor: f32) -> vec3<f32> {
+    // base + itcz·zone − dry·belts + storm·tracks, times the synoptic factor.
+    let cover = law[0].xyz + law[1].xyz * zones.x - law[2].xyz * zones.y + law[3].xyz * zones.z;
+    return clamp(cover * factor, vec3<f32>(0.0), vec3<f32>(1.0));
+  }
+`)
+
+/** A body's climate at a direction: each level's cover and the ice share, and each level's convective share and the deep rate. */
+export interface CloudClimateNodes {
+  readonly cover: Node<'vec4'>
+  readonly kind: Node<'vec4'>
+}
+
 /**
- * The placeholder's coverage of `layer` at a body-fixed direction, for
- * `body`'s frame and the shared scenario uniforms: the cube bake's source,
- * and the second body's far bake's (§3.13). A port of `scenarioCoverage`;
- * the pattern is a function of the direction alone, and `body` supplies the
- * sun in the same body-fixed axes for a scenario that ends at the
- * terminator. The cube's steady cycle bakes a face a frame, so under a
- * running clock its edge trails the sun by up to six frames; the picture
- * that names such a scenario holds its instant, and there it does not move.
+ * `BodyClimate.sample` of a body's climate at a body-fixed direction, under
+ * the body's sun, at the frame's instant: the cube bake's source, and a
+ * second body's, which has no cube. The kind is a uniform, so both kinds
+ * compile into one program and the uniforms choose.
+ *
+ * Under the zonal law the synoptic factor reads the base noise at the
+ * direction turned with the low level, `M₀·d`, over its 1,000 km cell: a
+ * lattice that coarse may be read from an absolute direction (rule 58 binds
+ * fine ones), and `M₀` is the frame's own `turnBack` of the low level's
+ * angle, which is the angle `BodyClimate.sample` turns by.
  */
-export function scenarioCoverageNode(
-  uniforms: CloudUniforms,
+export function climateNode(
   body: CloudBodyUniforms,
-  layer: Node<'int'>,
+  noise: CloudNoiseNodes,
   direction: Node<'vec3'>,
-): Node<'float'> {
-  const pattern = patternOf(uniforms)
-  return coverageCode({
+): CloudClimateNodes {
+  const { climate, layers } = body
+  const regime = regimeCode({
     d: direction,
-    layer,
-    kind: pattern.kind,
-    scale: pattern.scale,
-    cells: pattern.cells,
-    coverages: uniforms.layers.coverage,
-    thresholds: pattern.thresholds,
-    floors: pattern.floors,
-    period: uniforms.period,
+    pattern: climate.pattern,
+    covers: climate.cover,
+    thresholds: climate.blobThreshold,
+    floors: climate.blobFloor,
+    period: climate.period,
     sun: body.sun,
-    terminator: pattern.terminator,
-  }) as unknown as Node<'float'>
+    terminator: climate.terminator,
+  }) as unknown as Node<'vec3'>
+  const n = noise.base(
+    layers.turn[0]
+      .mul(direction)
+      .mul(body.datumRadius.div(SYNOPTIC_CELL)) as Node<'vec3'>,
+  )
+  const factor = n.sub(0.5).mul(0.5).add(1)
+  const zones = zoneCode({
+    d: direction,
+    law: climate.law,
+  }) as unknown as Node<'vec3'>
+  const zonal = coverCode({
+    law: climate.law,
+    zones,
+    factor,
+  }) as unknown as Node<'vec3'>
+  const zonalKind = climate.kind.equal(CLOUD_CLIMATE_KINDS.zonal)
+  const cover = select(zonalKind, zonal, regime)
+  const convective = select(
+    zonalKind,
+    saturate(climate.convective.mul(zones.x)),
+    climate.convective,
+  )
+  return {
+    cover: vec4(cover, climate.ice),
+    kind: vec4(convective, climate.deep),
+  }
 }
 
 export interface CloudMapNodes {
-  /** Texture 0 at a body-fixed direction (gutter-safe bilinear in its face tile, level 0). */
-  synoptic(direction: Node<'vec3'>): Node<'vec4'>
-  /** Texture k (1, 2, 3) at a direction. */
-  channel(direction: Node<'vec3'>, texture: 1 | 2 | 3): Node<'vec4'>
+  /** Each level's cover and the middle level's ice share at a body-fixed direction (gutter-safe bilinear in its face tile, level 0). */
+  cover(direction: Node<'vec3'>): Node<'vec4'>
+  /** Each level's convective share and the deep-convection rate at a direction. */
+  kind(direction: Node<'vec3'>): Node<'vec4'>
+  /** How fresh each face is, where the nodes read a cube; none for the analytic climate, which is always the frame's. */
+  readonly freshness?: CloudCubeFreshness
 }
 
 /**
- * The four textures' values at a direction straight from the scenario: what
- * the cube bake writes at a texel's direction, and a source for a pass that
- * has no cube to read.
+ * The climate straight from the body's uniforms: what the cube bake writes
+ * at a texel's direction, and a source for a pass that has no cube to read.
  */
 export function analyticMapNodes(
-  uniforms: CloudUniforms,
-  body: CloudBodyUniforms = uniforms.served,
+  body: CloudBodyUniforms,
+  noise: CloudNoiseNodes,
 ): CloudMapNodes {
-  const pattern = patternOf(uniforms)
-  const channels = (direction: Node<'vec3'>): readonly Node<'vec4'>[] => {
-    const cover = (k: number) =>
-      scenarioCoverageNode(uniforms, body, int(k), direction)
-    return [
-      vec4(cover(0), cover(1), cover(2), pattern.ice),
-      vec4(pattern.logDepth, 0),
-      vec4(pattern.convective, 0),
-      vec4(pattern.wind, 0, 0),
-    ]
-  }
   return {
-    synoptic: (direction) => channels(direction)[0]!,
-    channel: (direction, k) => channels(direction)[k]!,
+    cover: (direction) => climateNode(body, noise, direction).cover,
+    kind: (direction) => climateNode(body, noise, direction).kind,
   }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Freshness and pace                                                         */
+/* ------------------------------------------------------------------------- */
+
+/** What a reader of the cube asks of a face: the generation it was baked in, and how many times it has been. */
+export interface CloudCubeFreshness {
+  /** The field's present generation: a face baked in an older one holds another field. */
+  readonly generation: number
+  faceGeneration(face: CubeFace): number
+  /** Bakes of the face so far: a reader that read it at another count reads a redrawn face. */
+  faceVersion(face: CubeFace): number
+}
+
+/** A cube texel at a face's center, meters: 19.6 km on Earth. */
+export const cubeTexelMeters = (radius: number): number =>
+  (radius * Math.PI) / (2 * CLOUD_CUBE_TILE)
+
+/** What a face was baked under: enough to say how far its field has moved since. */
+interface Baked {
+  readonly time: number
+  readonly sun: Vec3
+  /** The convergence zone's latitude, radians: the zonal law's one term that follows the sun. */
+  readonly zone: number
+}
+
+/**
+ * Meters the field a face holds has moved since it was baked, at its
+ * fastest: each level's turn at the equator, the terminator's sweep where a
+ * regime ends at one, and the convergence zone's walk with the season. The
+ * face is due when this passes a tenth of its texel.
+ */
+export function cubeDrift(frame: CloudFrame, baked: Baked): number {
+  const { served } = frame
+  const radius = served.datumRadius
+  let speed = 0
+  for (const level of served.levels)
+    speed = Math.max(speed, Math.abs(level.turnRate) * radius)
+  const turned = Math.abs(frame.time - baked.time) * speed
+  const { climate, sun } = served
+  // A terminator's sines are (2, 3) where a regime has none.
+  const terminator =
+    climate.kind === 'regime' && climate.terminator[0] <= 1
+      ? Math.acos(
+          Math.min(
+            1,
+            sun.x * baked.sun.x + sun.y * baked.sun.y + sun.z * baked.sun.z,
+          ),
+        ) * radius
+      : 0
+  const zone =
+    climate.kind === 'zonal'
+      ? Math.abs((climate.law[12] ?? 0) - baked.zone) * radius
+      : 0
+  return Math.max(turned, terminator, zone)
 }
 
 /* ------------------------------------------------------------------------- */
@@ -422,7 +381,9 @@ export function facesNearest(direction: Vec3): CubeFace[] {
   )
 }
 
-export class CloudMaps implements CloudResource {
+const FACES: readonly CubeFace[] = [0, 1, 2, 3, 4, 5]
+
+export class CloudMaps implements CloudResource, CloudCubeFreshness {
   readonly name = 'maps'
   readonly nodes: CloudMapNodes
 
@@ -445,23 +406,32 @@ export class CloudMaps implements CloudResource {
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh()
   #allocated: 'none' | 'stand-in' | 'full' = 'none'
-  /** The render each face went stale on, or null while it holds this field. */
+  #generation = 0
+  /** The generation each face was baked in; −1 before its first bake. */
+  readonly #faceGeneration: number[] = [-1, -1, -1, -1, -1, -1]
+  readonly #faceVersion: number[] = [0, 0, 0, 0, 0, 0]
+  /** The render each face went stale on, or null while it holds this generation. */
   readonly #staleSince: (number | null)[] = [null, null, null, null, null, null]
+  readonly #baked: (Baked | null)[] = [null, null, null, null, null, null]
   #renders = 0
-  /** The steady cycle's next face. */
-  #next: CubeFace = 0
-  #scenario: string | null = null
+  #weather: string | null = null
+  #address: string | null = null
   #period: readonly [number, number] = [0, 0]
+  /** The profile's generation the faces were baked under. */
+  #tables = -1
   #warm: Promise<void> | null = null
   #disposed = false
 
-  constructor(uniforms: CloudUniforms) {
+  constructor(uniforms: CloudUniforms, noise: CloudNoiseNodes) {
     this.#uniforms = uniforms
     this.#target.textures.forEach((map, k) => {
       map.name = CHANNELS[k]!
     })
-    const maps = this.#target.textures.map((map) => texture(map))
-    // One atlas uv a direction node, shared by the four reads of a bake.
+    const [cover, kind] = this.#target.textures.map((map) => texture(map)) as [
+      ReturnType<typeof texture>,
+      ReturnType<typeof texture>,
+    ]
+    // One atlas uv a direction node, shared by the reads of a bake.
     const uvs = new WeakMap<Node<'vec3'>, Node<'vec2'>>()
     const uvOf = (direction: Node<'vec3'>): Node<'vec2'> => {
       let uv = uvs.get(direction)
@@ -477,22 +447,21 @@ export class CloudMaps implements CloudResource {
       }
       return uv
     }
-    const read = (direction: Node<'vec3'>, k: number): Node<'vec4'> =>
-      vec4(maps[k]!.sample(uvOf(direction)).level(LEVEL0))
     this.nodes = {
-      synoptic: (direction) => read(direction, 0),
-      channel: (direction, k) => read(direction, k),
+      cover: (direction) => vec4(cover.sample(uvOf(direction)).level(LEVEL0)),
+      kind: (direction) => vec4(kind.sample(uvOf(direction)).level(LEVEL0)),
+      freshness: this,
     }
     this.#material.name = 'cloud maps'
-    this.#material.fragmentNode = this.#bakeNode()
+    this.#material.fragmentNode = this.#bakeNode(noise)
   }
 
   /**
-   * One face tile's four textures: the fragment's tile texel i has its
+   * One face tile's two textures: the fragment's tile texel i has its
    * center at warped −1 + (2(i − gutter) + 1)/tile, as `cubeTexelCoordinate`
    * has it, and a fragment coordinate is already a texel center.
    */
-  #bakeNode(): Node {
+  #bakeNode(noise: CloudNoiseNodes): Node {
     const face = this.#face
     const warped = screenCoordinate.xy
       .sub(face.corner)
@@ -505,15 +474,20 @@ export class CloudMaps implements CloudResource {
         .add(face.a.mul(tan(warped.x.mul(quarter))))
         .add(face.b.mul(tan(warped.y.mul(quarter)))),
     )
-    const source = analyticMapNodes(this.#uniforms)
-    const outputs: Record<string, Node<'vec4'>> = {}
-    CHANNELS.forEach((name, k) => {
-      outputs[name] =
-        k === 0
-          ? source.synoptic(direction)
-          : source.channel(direction, k as 1 | 2 | 3)
-    })
-    return mrt(outputs)
+    const climate = climateNode(this.#uniforms.served, noise, direction)
+    return mrt({ [CHANNELS[0]]: climate.cover, [CHANNELS[1]]: climate.kind })
+  }
+
+  get generation(): number {
+    return this.#generation
+  }
+
+  faceGeneration(face: CubeFace): number {
+    return this.#faceGeneration[face]!
+  }
+
+  faceVersion(face: CubeFace): number {
+    return this.#faceVersion[face]!
   }
 
   get pending(): boolean {
@@ -548,22 +522,28 @@ export class CloudMaps implements CloudResource {
   }
 
   /**
-   * One face tile a frame, every frame: the steady cycle takes six. When the
-   * field moves discontinuously — a jump, a scenario or a pattern period
-   * that is not the last frame's, or the first frame at full size — every
-   * face is stale, and the six bake over the next six frames nearest the eye
-   * first. That order is what lets the clipmap rebuild its levels 0–1 the
-   * same frame and 2–5 over the next frames from faces already baked: a
-   * level reaches at most 1,540 km from the eye, which the eye's own face
-   * and the neighbors nearest it hold, and the opposite face, 90° away at
-   * least, comes last.
+   * The frame's numbers on what this bundle's field reads beyond the uniform
+   * bundle, before any pass of the frame: the profile table's rows of each
+   * body's levels. The field's construction hands the maps the bundle, and
+   * this is the one call each frame makes before anything bakes.
+   */
+  write(frame: CloudFrame): void {
+    profileOf(this.#uniforms)?.write(frame)
+  }
+
+  /**
+   * At most one face a frame. A discontinuity of the field — a jump, a new
+   * weather or body, the pattern's period, the first frame at full size —
+   * starts a generation, and every face bakes again, one a frame, the
+   * longest stale first and the nearest the eye among those, so the
+   * clipmap's levels 0–1 read fresh faces from the first frame: a level
+   * reaches at most 1,540 km from the eye, which the eye's own face and the
+   * neighbors nearest it hold. A scrub jumps every frame; an order begun
+   * again at each jump would bake the eye's own face forever, so through a
+   * run of jumps the eye's own face waits its turn with the rest.
    *
-   * The face that has been stale longest bakes first, and nearness orders
-   * the faces that went stale together. A scrub jumps every frame: an order
-   * begun again at each jump bakes the eye's own face forever and never the
-   * other five. So through a run of jumps the eye's own face waits its turn
-   * with the rest, up to five frames, and the nearest-first order above is
-   * a single jump's.
+   * Otherwise the face whose field has moved furthest past a tenth of its
+   * texel bakes (`cubeDrift`), and none if no face's has.
    */
   render(
     renderer: WebGPURenderer,
@@ -573,27 +553,46 @@ export class CloudMaps implements CloudResource {
     if (this.#disposed) return
     const now = this.#renders
     this.#renders += 1
-    writeScenarioPattern(this.#uniforms, frame.scenario)
+    this.write(frame)
     const fresh = this.#allocated !== 'full'
     if (fresh) {
       this.#target.setSize(CLOUD_CUBE_WIDTH, CLOUD_CUBE_HEIGHT)
       this.#allocated = 'full'
     }
-    const [low, high] = frame.period
+    const { served } = frame
+    const [low, high] = served.climate.period
+    // A level's statistics landing is a new field: what was baked before it
+    // read a gain the field no longer has.
+    const tables = profileOf(this.#uniforms)?.generation ?? 0
     const moved =
+      tables !== this.#tables ||
       fresh ||
       frame.jump ||
       budget.jump ||
-      frame.scenario.id !== this.#scenario ||
+      served.weatherKey !== this.#weather ||
+      served.address !== this.#address ||
       low !== this.#period[0] ||
       high !== this.#period[1]
-    this.#scenario = frame.scenario.id
+    this.#tables = tables
+    this.#weather = served.weatherKey
+    this.#address = served.address
     this.#period = [low, high]
     const stale = this.#staleSince
-    if (moved) for (let f = 0; f < stale.length; f += 1) stale[f] ??= now
-    const owed = this.#owed(frame.served.eye)
-    if (owed !== null) stale[owed] = null
-    this.#draw(renderer, owed ?? this.#cycle())
+    if (moved) {
+      this.#generation += 1
+      for (const f of FACES) stale[f] ??= now
+    }
+    const face = this.#owed(served.eye) ?? this.#due(frame)
+    if (face === null) return
+    stale[face] = null
+    this.#faceGeneration[face] = this.#generation
+    this.#faceVersion[face]! += 1
+    this.#baked[face] = {
+      time: frame.time,
+      sun: served.sun,
+      zone: served.climate.kind === 'zonal' ? (served.climate.law[12] ?? 0) : 0,
+    }
+    this.#draw(renderer, face)
   }
 
   /** The stale face to bake: the longest stale, the nearest the eye among those. */
@@ -609,10 +608,21 @@ export class CloudMaps implements CloudResource {
     return chosen
   }
 
-  #cycle(): CubeFace {
-    const face = this.#next
-    this.#next = ((face + 1) % 6) as CubeFace
-    return face
+  /** The face whose field has moved furthest past a tenth of its texel, if any has. */
+  #due(frame: CloudFrame): CubeFace | null {
+    const limit = cubeTexelMeters(frame.served.datumRadius) / 10
+    let chosen: CubeFace | null = null
+    let furthest = limit
+    for (const face of FACES) {
+      const baked = this.#baked[face]
+      if (baked === null || baked === undefined) return face
+      const moved = cubeDrift(frame, baked)
+      if (moved >= furthest) {
+        chosen = face
+        furthest = moved
+      }
+    }
+    return chosen
   }
 
   #draw(renderer: WebGPURenderer, f: CubeFace): void {
@@ -645,4 +655,26 @@ export class CloudMaps implements CloudResource {
     this.#target.dispose()
     this.#material.dispose()
   }
+}
+
+/**
+ * The weather cube a field's far media and its clipmap read, baked from the
+ * climate with the field's own noise.
+ *
+ * A factory names what its module reads of the field, and the field hands
+ * every factory more than that, so a module whose constructor needs another
+ * part asks for it here and the field's construction does not change. The
+ * field hands the maps the uniform bundle alone, so the noise built for that
+ * bundle is found by it (`noiseOf`) where it is not handed over.
+ */
+export function createCloudMaps(deps: {
+  readonly uniforms: CloudUniforms
+  readonly noise?: { readonly nodes: CloudNoiseNodes }
+}): CloudMaps {
+  const noise = deps.noise?.nodes ?? noiseOf(deps.uniforms)
+  if (noise === null)
+    throw new Error(
+      'cloud maps: no noise was built for this uniform bundle, and the climate reads it',
+    )
+  return new CloudMaps(deps.uniforms, noise)
 }

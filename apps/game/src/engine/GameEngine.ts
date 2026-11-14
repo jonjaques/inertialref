@@ -114,7 +114,10 @@ import {
   DEFAULT_CLOUD_LEVERS,
   isCloudLevers,
 } from '../render/cloudLevers.ts'
-import type { CloudSystemFactory } from '../render/cloudSystem.ts'
+import type {
+  CloudFrontHandle,
+  CloudSystemFactory,
+} from '../render/cloudSystem.ts'
 import { PictureWeatherHold } from './pictureWeather.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
@@ -502,7 +505,7 @@ export class GameEngine {
    * would otherwise measure the default without a word. Held as a frozen
    * copy, because a field written in place skips that check, and the frame
    * compares its levers against the last frame's, which would be the same
-   * object: a scenario changed that way keeps the old one's history. Inert
+   * object: a weather changed that way keeps the old one's history. Inert
    * without `?clouds=1`, which builds no system to read them.
    */
   #clouds: CloudLevers = DEFAULT_CLOUD_LEVERS
@@ -516,12 +519,45 @@ export class GameEngine {
     this.#clouds = Object.freeze({ ...levers })
   }
 
-  /** `?clouds=1`'s chunk, resolved in the canvas's renderer factory; null without the flag. */
-  cloudSystemFactory: CloudSystemFactory | null = null
+  #cloudSystemFactory: CloudSystemFactory | null = null
+  #cloudFront: CloudFrontHandle | null = null
+
+  /**
+   * `?clouds=1`'s chunk, resolved in the canvas's renderer factory; null
+   * without the flag. What comes back builds a system that writes this
+   * engine's front handle, so every chain the sensor builds feeds the one
+   * handle the scene's materials hold.
+   */
+  get cloudSystemFactory(): CloudSystemFactory | null {
+    return this.#cloudSystemFactory
+  }
+
+  set cloudSystemFactory(factory: CloudSystemFactory | null) {
+    const front = factory?.createFront() ?? null
+    this.#cloudFront = front
+    this.#cloudSystemFactory =
+      factory === null || front === null
+        ? null
+        : Object.assign(
+            (deps: Parameters<CloudSystemFactory>[0]) =>
+              factory({ ...deps, front }),
+            { createFront: factory.createFront },
+          )
+  }
+
+  /**
+   * What a material drawn after the composite reads the clouds in front of
+   * it through: this frame's trace textures and the numbers beside them.
+   * One for the page, made when the cloud chunk loads; null without the
+   * flag, where such a material builds the graph it builds with no clouds.
+   */
+  get cloudFront(): CloudFrontHandle | null {
+    return this.#cloudFront
+  }
 
   /** Whether this page loaded the clouds at all. */
   get cloudsAvailable(): boolean {
-    return this.cloudSystemFactory !== null
+    return this.#cloudSystemFactory !== null
   }
 
   /** The levers a picture's weather set, and their release (`pictureWeather.ts`). */

@@ -18,44 +18,63 @@ import {
   storage,
   texture3D,
   uint,
+  vec2,
   vec3,
 } from 'three/tsl'
 import {
   cloudExtents,
+  cloudFieldAt,
   directionOf,
+  fieldClock,
+  regimeWeather,
+  type ScenarioId,
   type LevelFrame,
   levelFrames,
+  levelProfile,
   shellBoundaries,
   reducePoint,
   shellHeights,
   type WeatherScenario,
 } from '@inertialref/rendering'
 import type { Vec3 } from '@inertialref/spatial'
+import { createInlineWorker, WorkerPool } from '@inertialref/workers'
+import { createGameTaskRegistry } from '../workers/registry.ts'
+import { type CloudField, createCloudField } from './cloudField.ts'
 import {
   CLOUD_CLIPMAP_SIZE,
   CLOUD_CLIPMAP_TEXELS,
   type CloudBodyFrame,
   type CloudFrame,
+  cloudFrame,
+  scenarioWeather,
 } from './cloudFrame.ts'
 import { altitudeAt, sunMuAt } from './cloudGeometry.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import type { CloudBudget, CloudMediumFn, CloudSample } from './cloudNodes.ts'
-import type { CloudNoiseNodes } from './cloudNoise.ts'
-import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import {
+  CLOUD_VOLUME_HELD,
   CLOUD_VOLUME_SIZE,
   CLOUD_VOLUME_SLICES,
   CLOUD_VOLUME_TEXELS,
   CloudVolume,
+  VOLUME_SIGMA_SPAN,
 } from './cloudVolume.ts'
+import {
+  LOOKING_UP,
+  RIG_EARTH,
+  rigFrameInputs,
+  type RigStance,
+} from './cloudSystemRig.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 
 /*
- * The local volume on the GPU (§3.11): it bakes the field it is handed at
- * its texels' centers, its guard slices stop each level's filter, its
- * schedule bakes what goes missing first, and a window that scrolls ends
- * where a fresh one starts. The field here is analytic, built from the sample alone.
+ * The local volume on the GPU (§2.5, §4.7): it holds two levels and no
+ * bound, bakes the field it is handed at its texels' centers, stops each level's
+ * filter with guard slices, comes back under the cap after the field
+ * changes, redraws at the pace its field moves, waits for the maps it is
+ * baked from, and a window that scrolls ends where a fresh one starts. The
+ * field here is analytic, built from the sample alone.
  */
 
 let gpu: GpuSession
@@ -100,11 +119,15 @@ const SCENARIO: WeatherScenario = {
 const SLICE = (TOP - BASE) / CLOUD_VOLUME_SLICES
 const STACK = CLOUD_VOLUME_SLICES + 2
 const LEVERS = { ...DEFAULT_CLOUD_LEVERS, on: true }
+/** Slices a frame: the `sunSlices` lever's default. */
+const CAP = 8
+/** The levels the volume holds. */
+const LEVELS = CLOUD_VOLUME_HELD.length
 const BUDGET: CloudBudget = {
-  slices: 8,
+  slices: CAP,
   tiles: 1,
   jump: false,
-  sunTexelSteps: SUN_DEPTH_FRAME_CAP,
+  sunSlices: CAP,
 }
 const ZERO: Vec3 = { x: 0, y: 0, z: 0 }
 /** Meters: what a field fixed to the body repeats over on each axis. */
@@ -143,6 +166,23 @@ function eyeAt(height: number, east = 0, north = 0): Vec3 {
 }
 
 /**
+ * A scenario's key as a frame carries it. One a scenario object, since the
+ * scenarios here are built by hand and share an id: every bake starts over
+ * on a new key, as it does on a new weather.
+ */
+const WEATHER_KEYS = new WeakMap<WeatherScenario, string>()
+function weatherKeyOf(scenario: WeatherScenario): string {
+  let key = WEATHER_KEYS.get(scenario)
+  if (key === undefined) {
+    key = `${scenario.id} ${WEATHER_KEY_COUNT.next}`
+    WEATHER_KEY_COUNT.next += 1
+    WEATHER_KEYS.set(scenario, key)
+  }
+  return key
+}
+const WEATHER_KEY_COUNT = { next: 0 }
+
+/**
  * A frame as `cloudFrame` builds it for the served body, from the clipmap's
  * and the volume's own level frames, carried from `previous`: what `uniforms.write`
  * and the resources read.
@@ -152,9 +192,12 @@ function frameAt(
   previous: CloudFrame | null,
   options: {
     readonly jump?: boolean
-    /** Build the caches' frames from none, as `cloudFrame` does under a cut, the frame count carried. */
+    /** Build the caches' frames from none, as `cloudFrame` does when the field changes, the frame count carried. */
     readonly cut?: boolean
     readonly scenario?: WeatherScenario
+    /** The field's step of time this frame, seconds, and the wind it moves by, m/s. */
+    readonly seconds?: number
+    readonly wind?: number
   } = {},
 ): CloudFrame {
   const scenario = options.scenario ?? SCENARIO
@@ -178,7 +221,7 @@ function frameAt(
     noiseOrigin: reducePoint(eye, FIELD_PERIOD),
     detailOrigin: ZERO,
     drift: ZERO,
-    wind: ZERO,
+    wind: scale(unit({ x: 1, y: 0, z: 0 }), options.wind ?? 0),
     clipmap: levelFrames(
       eye,
       R,
@@ -193,6 +236,12 @@ function frameAt(
       CLOUD_VOLUME_SIZE,
       caches?.volume.frames ?? null,
     ),
+    ...scenarioWeather(
+      scenario,
+      { noise: reducePoint(eye, FIELD_PERIOD), detail: ZERO },
+      0,
+    ),
+    weatherKey: weatherKeyOf(scenario),
   }
   const camera = {
     right: { x: 1, y: 0, z: 0 },
@@ -209,7 +258,7 @@ function frameAt(
     served,
     second: null,
     time: 0,
-    frameSeconds: 0,
+    frameSeconds: options.seconds ?? 0,
     period: [0, 0],
     camera,
     previousCamera: null,
@@ -223,12 +272,6 @@ function frameAt(
   }
 }
 
-/** Noise nodes that read nothing: the scenario erodes nothing. */
-const NO_NOISE: CloudNoiseNodes = {
-  base: () => float(0),
-  detail: () => float(0),
-}
-
 interface Rig {
   readonly uniforms: CloudUniforms
   readonly volume: CloudVolume
@@ -236,15 +279,27 @@ interface Rig {
   /** Render a frame at `eye`; returns it. */
   step(
     eye: Vec3,
-    options?: { readonly jump?: boolean; readonly cut?: boolean },
+    options?: {
+      readonly jump?: boolean
+      readonly cut?: boolean
+      readonly seconds?: number
+      readonly wind?: number
+    },
   ): CloudFrame
   /** Render at `eye` until nothing is pending; returns the frames it took. */
   settle(eye: Vec3): number
 }
 
-function rig(medium: CloudMediumFn): Rig {
+function rig(
+  medium: CloudMediumFn,
+  sources?: readonly { readonly pending: boolean }[],
+): Rig {
   const uniforms = createCloudUniforms()
-  const volume = new CloudVolume({ uniforms, bake: medium, detail: NO_NOISE })
+  const volume = new CloudVolume({
+    uniforms,
+    bake: medium,
+    ...(sources === undefined ? {} : { sources }),
+  })
   const state: Rig = {
     uniforms,
     volume,
@@ -283,6 +338,7 @@ function analytic(
       layer: select(inside, int(0), int(-1)),
       column: float(1e9),
       radius: float(8),
+      depth: vec2(0),
     }
   }
 }
@@ -391,6 +447,12 @@ function latticeOffset(
 
 /** RG8's step: what a stored texel is held to. */
 const BYTE = 1 / 255
+/**
+ * The volume's texels against `cloudFieldAt`, in the level's reference σ′:
+ * twice what this Mac mini's M6 reads, as the field's own port is bounded.
+ */
+const MEDIAN = 0.0105
+const P99 = 0.0175
 const EYE_HEIGHT = 1500
 
 /* ------------------------------------------------------------------------- */
@@ -423,18 +485,20 @@ describe('the bake', () => {
     (o) => float(0.55).add(sin(dot(o, N).div(910)).mul(0.4)),
   )
 
-  it('holds the field at every level’s texel centers, within the √ encoding’s step', async () => {
+  it('holds the field’s extinction times its share at every level’s texel centers, within two steps of its sixteen bits', async () => {
     const test = rig(medium)
     const eye = eyeAt(EYE_HEIGHT)
     test.settle(eye)
     const frame = test.frame!
     const [map] = test.volume.textures()
+    const span =
+      test.uniforms.served.layers.sigmaScale.value * VOLUME_SIGMA_SPAN
     const next = draws(5)
     const at: [number, number, number][] = []
-    const expected: [number, number][] = []
+    const expected: number[] = []
     for (let n = 0; n < 600; n += 1) {
-      const L = n % 3
-      const level = frame.served.volume.frames[L]!
+      const L = n % LEVELS
+      const level = frame.served.volume.frames[CLOUD_VOLUME_HELD[L]!]!
       const x = Math.floor(next() * CLOUD_VOLUME_SIZE)
       const y = Math.floor(next() * CLOUD_VOLUME_SIZE)
       const k = 1 + Math.floor(next() * CLOUD_VOLUME_SLICES)
@@ -445,13 +509,18 @@ describe('the bake', () => {
       const height = BASE + (k - 0.5) * SLICE
       const o = latticeOffset(level, eye, i + 0.5, j + 0.5, height)
       at.push([x, y, L * STACK + k])
-      expected.push([Math.sqrt(sigmaOf(o, height) / SIGMA), fractionOf(o)])
+      expected.push(sigmaOf(o, height) * fractionOf(o))
     }
     const read = await texels(map!, at)
-    read.forEach(([r, g], n) => {
-      expect(Math.abs(r! - expected[n]![0])).toBeLessThanOrEqual(BYTE)
-      expect(Math.abs(g! - expected[n]![1])).toBeLessThanOrEqual(BYTE)
+    let worst = 0
+    read.forEach(([high, low], n) => {
+      // The high byte whole and the low one beside it, as the read decodes them.
+      const held = ((high! * 256 + low!) * 255 * span) / 65535
+      worst = Math.max(worst, Math.abs(held - expected[n]!))
     })
+    // One step is the target's rounding of the low byte; the second is the
+    // field's own float32, a 100 m offset under a planet's radius.
+    expect(worst).toBeLessThanOrEqual((2 * span) / 65535)
     test.volume.dispose()
   })
 
@@ -462,7 +531,7 @@ describe('the bake', () => {
     const next = draws(6)
     const at: [number, number, number][] = []
     for (let n = 0; n < 60; n += 1) {
-      const L = n % 3
+      const L = n % LEVELS
       const x = Math.floor(next() * CLOUD_VOLUME_SIZE)
       const y = Math.floor(next() * CLOUD_VOLUME_SIZE)
       at.push(
@@ -490,44 +559,93 @@ describe('the bake', () => {
 
 describe('the schedule', () => {
   const field = analytic(() => float(SIGMA / 2))
+  const total = (counts: readonly number[]): number =>
+    counts.reduce((a, b) => a + b, 0)
 
-  it('bakes level 0 whole the frame it goes missing, and levels 1 and 2 at the budget after', () => {
+  it('comes back at the cap, the finest level first, and a field that stands still is not baked again', () => {
     const test = rig(field)
     const eye = eyeAt(EYE_HEIGHT)
-    test.step(eye)
-    expect(test.volume.drawn).toEqual([STACK, 0, 0])
-    expect(test.volume.pending).toBe(true)
-    let frames = 1
-    while (test.volume.pending) {
+    const drawn: number[][] = []
+    do {
       test.step(eye)
-      expect(test.volume.drawn.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(
-        8,
-      )
-      frames += 1
-    }
-    // 68 slices of levels 1 and 2 at 8 a frame.
-    expect(frames).toBe(1 + Math.ceil((2 * STACK) / 8))
-    // Then the refresh: the oldest eight a frame.
+      drawn.push([...test.volume.drawn])
+      expect(total(test.volume.drawn)).toBeLessThanOrEqual(CAP)
+    } while (test.volume.pending)
+    // 68 slices at 8 a frame: the 200 m level's 34, then the 800 m level's.
+    // No level is baked at once.
+    expect(drawn).toEqual([
+      [8, 0],
+      [8, 0],
+      [8, 0],
+      [8, 0],
+      [2, 6],
+      [0, 8],
+      [0, 8],
+      [0, 8],
+      [0, 4],
+    ])
+    // The grid may bake from the frame after the one that made it whole.
+    expect(test.volume.trusted).toBe(false)
     test.step(eye)
-    expect(test.volume.drawn.reduce((a, b) => a + b, 0)).toBe(8)
-    // A jump: level 0 whole again.
+    expect(test.volume.trusted).toBe(true)
+    expect(test.volume.drawn).toEqual([0, 0])
+    // A jump: nothing held, and the cap again, never a level at once.
+    const before = test.volume.generation
     test.step(eye, { jump: true })
-    expect(test.volume.drawn[0]).toBe(STACK)
+    expect(test.volume.generation).toBe(before + 1)
+    expect(test.volume.trusted).toBe(false)
+    expect(test.volume.drawn).toEqual([CAP, 0])
     test.volume.dispose()
   })
 
-  it('bakes level 0 whole on a cut, where every level’s epoch stands at the 0 it had', () => {
+  it('comes back at the cap when its frames are built from none, where every level’s epoch stands at the 0 it had', () => {
     const test = rig(field)
     const eye = eyeAt(EYE_HEIGHT)
     test.settle(eye)
     const before = test.frame!.served.volume.frames
     const cut = test.step(eye, { cut: true })
-    // No anchor has moved, so the cut's frames are the settled ones, epoch
-    // and all, and the levels' `rebuilt` is the only word of it.
+    // No anchor has moved, so the frames are the settled ones, epoch and
+    // all, and the levels' `rebuilt` is the only word of it.
     expect(cut.served.volume.frames).toEqual(before)
     expect(cut.served.volume.rebuilt).toEqual([true, true, true])
-    expect(test.volume.drawn[0]).toBe(STACK)
+    expect(test.volume.drawn).toEqual([CAP, 0])
     expect(test.volume.pending).toBe(true)
+    test.volume.dispose()
+  })
+
+  it('redraws at the pace its field moves: a tenth of a 200 m texel at 25 m/s is 48 frames a level', () => {
+    const test = rig(field)
+    const eye = eyeAt(EYE_HEIGHT)
+    test.settle(eye)
+    const drawn = [0, 0]
+    for (let n = 0; n < 96; n += 1) {
+      test.step(eye, { seconds: 1 / 60, wind: 25 })
+      test.volume.drawn.forEach((count, L) => (drawn[L]! += count))
+      expect(total(test.volume.drawn)).toBeLessThanOrEqual(5)
+      expect(test.volume.pending).toBe(false)
+    }
+    // 1.6 s: the 200 m level twice over, the 800 m level half.
+    drawn.forEach((count, L) => {
+      const asked = (2 * STACK) / 4 ** L
+      expect(count).toBeGreaterThanOrEqual(asked - 1)
+      expect(count).toBeLessThanOrEqual(asked)
+    })
+    test.volume.dispose()
+  })
+
+  it('bakes nothing while the maps it reads owe work, and comes back when they do not', () => {
+    const maps = { pending: true }
+    const test = rig(field, [maps])
+    const eye = eyeAt(EYE_HEIGHT)
+    for (let n = 0; n < 6; n += 1) {
+      test.step(eye)
+      expect(test.volume.drawn).toEqual([0, 0])
+      expect(test.volume.pending).toBe(true)
+      expect(test.volume.trusted).toBe(false)
+    }
+    maps.pending = false
+    test.step(eye)
+    expect(test.volume.drawn).toEqual([CAP, 0])
     test.volume.dispose()
   })
 
@@ -536,14 +654,16 @@ describe('the schedule', () => {
     const eye = eyeAt(400_000)
     test.step(eye)
     test.step(eye)
-    expect(test.volume.drawn).toEqual([0, 0, 0])
+    expect(test.volume.drawn).toEqual([0, 0])
     expect(test.volume.pending).toBe(false)
+    expect(test.volume.trusted).toBe(false)
     // A sample in the union below: no level is trusted, so the field answers.
+    const level = test.frame!.served.volume.frames[1]!
     const below = latticeOffset(
-      test.frame!.served.volume.frames[0]!,
+      level,
       eye,
-      test.frame!.served.volume.frames[0]!.eye[0] / 50,
-      test.frame!.served.volume.frames[0]!.eye[1] / 50,
+      level.eye[0] / level.texelMeters,
+      level.eye[1] / level.texelMeters,
       1800,
     )
     const out = await run(
@@ -569,12 +689,12 @@ describe('the schedule', () => {
     expect(test.volume.pending).toBe(false)
     test.step(eyeAt(400_000))
     test.step(eyeAt(400_000, 5_000))
-    expect(test.volume.drawn).toEqual([0, 0, 0])
+    expect(test.volume.drawn).toEqual([0, 0])
     expect(test.volume.pending).toBe(false)
     test.volume.dispose()
   })
 
-  it('holds one level of its texture, declares its bytes, and builds no pipeline after its warm-up', async () => {
+  it('holds two levels in one texture of one mip and no bound beside it, declares the bytes the device holds, and builds no pipeline after its warm-up', async () => {
     const test = rig(field)
     expect(test.volume.bytes).toBe(0)
     await test.volume.warm(gpu.renderer)
@@ -585,15 +705,24 @@ describe('the schedule', () => {
     // warmed: a pipeline is the format's, not the size's.
     expect(gpu.pipelinesBuilt()).toBe(render)
     expect(gpu.computePipelinesBuilt()).toBe(compute)
-    expect(test.volume.bytes).toBe(
-      CLOUD_VOLUME_SIZE * CLOUD_VOLUME_SIZE * 3 * STACK * 2,
-    )
+    // 256² × 68 of RG8: two levels, each with two guards.
+    expect(test.volume.bytes).toBe(8_912_896)
     const backend = gpu.renderer.backend as unknown as {
       get(texture: object): { texture: GPUTexture }
     }
     const textures = test.volume.textures()
     expect(textures).toHaveLength(1)
-    expect(backend.get(textures[0]!).texture.mipLevelCount).toBe(1)
+    const held = backend.get(textures[0]!).texture
+    expect(held.mipLevelCount).toBe(1)
+    expect(held.format).toBe('rg8unorm')
+    expect([held.width, held.height, held.depthOrArrayLayers]).toEqual([
+      CLOUD_VOLUME_SIZE,
+      CLOUD_VOLUME_SIZE,
+      LEVELS * STACK,
+    ])
+    expect(held.width * held.height * held.depthOrArrayLayers * 2).toBe(
+      test.volume.bytes,
+    )
     test.volume.dispose()
     expect(test.volume.bytes).toBe(0)
   })
@@ -624,7 +753,7 @@ describe('a window that scrolls', () => {
 
   /** The largest difference between two volumes' texels, every texel compared on the GPU. */
   async function largestDifference(a: Texture, b: Texture): Promise<number> {
-    const rows = CLOUD_VOLUME_SIZE * 3 * STACK
+    const rows = CLOUD_VOLUME_SIZE * LEVELS * STACK
     const left = texture3D(a)
     const right = texture3D(b)
     const out = await run(rows, new Float32Array(1), 0, 1, (_, write) => {
@@ -642,15 +771,18 @@ describe('a window that scrolls', () => {
   }
 
   it('ends, once every slice has been drawn at the new window, where a volume built there begins', async () => {
-    // 130 m east: level 0's window moves by two or three texels, levels 1
-    // and 2 by none or one, every anchor held.
+    // 450 m east: the 200 m level's window moves by two or three texels,
+    // the 800 m level's by none or one, every anchor held.
     const before = eyeAt(EYE_HEIGHT)
-    const after = eyeAt(EYE_HEIGHT, 130)
+    const after = eyeAt(EYE_HEIGHT, 450)
     const scrolled = rig(field)
     scrolled.settle(before)
-    const origin = scrolled.frame!.served.volume.frames[0]!.origin
+    const origin = scrolled.frame!.served.volume.frames[1]!.origin
     scrolled.step(after)
-    expect(scrolled.frame!.served.volume.frames[0]!.origin).not.toEqual(origin)
+    expect(scrolled.frame!.served.volume.frames[1]!.origin).not.toEqual(origin)
+    // The slices at the window it has left, at the cap, and still trusted.
+    expect(scrolled.volume.drawn).toEqual([CAP, 0])
+    expect(scrolled.volume.trusted).toBe(true)
     expect(scrolled.frame!.served.volume.rebuilt).toEqual([false, false, false])
     expect(scrolled.volume.pending).toBe(true)
     const held = scrolled.frame!
@@ -664,7 +796,7 @@ describe('a window that scrolls', () => {
       scrolled.frame!.served.volume.frames.map((f) => f.anchor),
     )
     // The same texels from the same field, but each read at an origin and
-    // an offset two eyes 130 m apart round differently in float32: a value
+    // an offset two eyes 450 m apart round differently in float32: a value
     // on a rounding edge of RG8 lands a step apart.
     const steps =
       (await largestDifference(
@@ -675,4 +807,253 @@ describe('a window that scrolls', () => {
     scrolled.volume.dispose()
     fresh.volume.dispose()
   })
+})
+
+/* ------------------------------------------------------------------------- */
+/* The real field                                                             */
+/* ------------------------------------------------------------------------- */
+
+/** The system's own field, driven by frames built as the sensor builds them, over the rig's Earth. */
+function realField(regime: ScenarioId): {
+  readonly field: CloudField
+  frame(): CloudFrame
+  /** Frames until the volume is whole and owes nothing, or `most`. */
+  settle(most: number): number
+  dispose(): void
+} {
+  const field = createCloudField()
+  const levers = { ...DEFAULT_CLOUD_LEVERS, on: true, weather: regime }
+  const stance: RigStance = {
+    eye: 2,
+    looking: LOOKING_UP,
+    air: true,
+    sun: { x: 0, y: Math.sin(0.65), z: -Math.cos(0.65) },
+  }
+  const css = { width: 256, height: 144 }
+  let previous: CloudFrame | null = null
+  const frame = (): CloudFrame => {
+    const next = cloudFrame(rigFrameInputs(stance, levers, css), previous)
+    if (next === null) throw new Error('no frame: nothing served')
+    previous = next
+    field.write(next)
+    field.render(gpu.renderer, next, {
+      slices: levers.sunSlices,
+      tiles: 1,
+      jump: next.jump,
+      sunSlices: levers.sunSlices,
+    })
+    return next
+  }
+  return {
+    field,
+    frame,
+    settle(most) {
+      for (let n = 1; n <= most; n += 1) {
+        frame()
+        if (field.volume.trusted && !field.volume.pending) return n
+      }
+      return most
+    },
+    dispose: () => field.dispose(),
+  }
+}
+
+describe('the volume against the CPU field', () => {
+  /*
+   * Each level's texels against `cloudFieldAt` at their centers, read as the
+   * bake reads the field: at the level's texel, the dither at one. In the
+   * level's reference σ′, as the field's own port is held
+   * (`cloudDensity.gpu.test.ts`), whose errors these carry: the clipmap's
+   * bytes of cover and gain, half floats in the profile, float32 against
+   * float64. The texel's own sixteen bits add 1/2,048 of the reference.
+   */
+  it.each([
+    // Cumulus cells of 1,200 m: every level's texel is under a cell.
+    ['fair-cumulus', ['resolved', 'resolved']],
+    // Stratus cells of 3,000 m.
+    ['overcast', ['resolved', 'resolved']],
+    // Fog's cells are 500 m: the 800 m level is past a cell.
+    ['fog', ['resolved', 'statistics']],
+  ] as const)(
+    '%s: every level holds the field at its texel, on the side of the switch its texel stands',
+    async (regime, sides) => {
+      const real = realField(regime)
+      await Promise.all(real.field.bakes.map((bake) => bake.warm(gpu.renderer)))
+      expect(real.settle(400)).toBeLessThan(400)
+      const frame = real.frame()
+      const { served } = frame
+      const body = rigFrameInputs(
+        { eye: 2, looking: LOOKING_UP },
+        DEFAULT_CLOUD_LEVERS,
+        { width: 8, height: 8 },
+      ).record(RIG_EARTH)!
+      const weather = regimeWeather(body, regime)
+      const clock = fieldClock(weather, frame.time)
+      const { boundaries } = served.shells
+      const base = boundaries[0]!
+      const top = boundaries[boundaries.length - 1]!
+      const span =
+        real.field.uniforms.served.layers.sigmaScale.value * VOLUME_SIGMA_SPAN
+      const [map] = real.field.volume.textures()
+      const next = draws(41)
+      const at: [number, number, number][] = []
+      const points: { level: number; position: Vec3 }[] = []
+      for (let n = 0; n < 6000; n += 1) {
+        const L = n % LEVELS
+        const level = served.volume.frames[CLOUD_VOLUME_HELD[L]!]!
+        const x = Math.floor(next() * CLOUD_VOLUME_SIZE)
+        const y = Math.floor(next() * CLOUD_VOLUME_SIZE)
+        const k = 1 + Math.floor(next() * CLOUD_VOLUME_SLICES)
+        const mod = (v: number) =>
+          ((v % CLOUD_VOLUME_SIZE) + CLOUD_VOLUME_SIZE) % CLOUD_VOLUME_SIZE
+        const i = level.origin[0] + mod(x - level.origin[0])
+        const j = level.origin[1] + mod(y - level.origin[1])
+        const height = base + ((k - 0.5) * (top - base)) / CLOUD_VOLUME_SLICES
+        const direction = directionOf(
+          level,
+          [(i + 0.5) * level.texelMeters, (j + 0.5) * level.texelMeters],
+          served.datumRadius,
+        )
+        at.push([x, y, L * STACK + k])
+        points.push({
+          level: L,
+          position: scale(direction, served.datumRadius + height),
+        })
+      }
+      const read = await texels(map!, at)
+      const errors: number[][] = Array.from({ length: LEVELS }, () => [])
+      const clouded = Array.from({ length: LEVELS }, () => 0)
+      const fractions: number[][] = Array.from({ length: LEVELS }, () => [])
+      points.forEach(({ level, position }, n) => {
+        const texel = CLOUD_VOLUME_TEXELS[CLOUD_VOLUME_HELD[level]!]
+        const want = cloudFieldAt(
+          weather,
+          clock,
+          served.sun,
+          position,
+          texel,
+          1,
+        )
+        if (want.level < 0) return
+        const [high, low] = read[n]!
+        const held = ((high! * 256 + low!) * 255 * span) / 65535
+        const expected = want.fraction * want.sigma
+        if (expected > 0) {
+          clouded[level]! += 1
+          fractions[level]!.push(want.fraction)
+        }
+        if (held > 0 || expected > 0)
+          errors[level]!.push(
+            Math.abs(held - expected) /
+              levelProfile(weather.levels[want.level]!).scaled,
+          )
+      })
+      const quantile = (values: number[], q: number): number =>
+        [...values].sort((a, b) => a - b)[
+          Math.min(values.length - 1, Math.floor(q * values.length))
+        ] ?? 0
+      console.info(
+        `${regime}: ` +
+          errors
+            .map(
+              (level, L) =>
+                `${CLOUD_VOLUME_TEXELS[CLOUD_VOLUME_HELD[L]!]} m ${sides[L]}: ${clouded[L]} in cloud, median ${quantile(level, 0.5).toExponential(2)}, p99 ${quantile(level, 0.99).toExponential(2)}, worst ${Math.max(0, ...level).toExponential(2)}`,
+            )
+            .join('; '),
+      )
+      errors.forEach((level, L) => {
+        expect(clouded[L], `${regime}, level ${L}`).toBeGreaterThan(40)
+        expect(quantile(level, 0.5), `${regime}, level ${L}`).toBeLessThan(
+          MEDIAN,
+        )
+        expect(quantile(level, 0.99), `${regime}, level ${L}`).toBeLessThan(P99)
+        // The side of the switch: the resolved field is all cloud or none
+        // at a point, and a level's statistics are a share of its columns.
+        const whole = fractions[L]!.every((f) => f === 1)
+        expect(whole, `${regime}, level ${L}`).toBe(sides[L] === 'resolved')
+      })
+      real.dispose()
+    },
+    120_000,
+  )
+})
+
+describe('a table that lands late', () => {
+  it('bakes nothing while the body’s tables are owed, starts over when they land, and the sun’s depth is whole within the schedule’s bound after', async () => {
+    const real = realField('stratocumulus')
+    const { field } = real
+    await Promise.all(field.bakes.map((bake) => bake.warm(gpu.renderer)))
+    // A pool that holds every answer until it is told to give them.
+    const pool = new WorkerPool({
+      factory: () => createInlineWorker(createGameTaskRegistry()),
+      size: 1,
+    })
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    field.profile.pool = {
+      submit: (task: never, input: never) => ({
+        result: gate.then(() => pool.submit(task, input).result),
+      }),
+    } as unknown as WorkerPool
+    const weight = (): number => field.uniforms.trace.sunWeight.value
+    const baked = (): number =>
+      field.volume.drawn.reduce((a, b) => a + b, 0) + field.grid.drawn
+    for (let n = 0; n < 40; n += 1) {
+      real.frame()
+      expect(baked()).toBe(0)
+      expect(weight()).toBe(0)
+    }
+    expect(field.profile.ready[0].value).toBe(0)
+    expect(field.volume.pending).toBe(true)
+    expect(field.volume.trusted).toBe(false)
+    const generation = field.volume.generation
+    // The tables land: the pool answers between frames.
+    release()
+    let landed = 0
+    while (field.profile.ready[0].value === 0 && landed < 2000) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      real.frame()
+      landed += 1
+    }
+    expect(field.profile.ready[0].value).toBe(1)
+    // A field event of the volume's own, which the grid reads as one.
+    expect(field.volume.generation).toBeGreaterThan(generation)
+    // The cube's six faces and the clipmap again, 68 slices of the volume
+    // and 32 of the grid at eight a frame, and sixteen frames of weight:
+    // inside the rubric's 48.
+    let frames = 0
+    while (weight() < 1 && frames < 200) {
+      real.frame()
+      expect(field.volume.drawn.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(
+        DEFAULT_CLOUD_LEVERS.sunSlices,
+      )
+      expect(field.grid.drawn).toBeLessThanOrEqual(
+        DEFAULT_CLOUD_LEVERS.sunSlices,
+      )
+      frames += 1
+    }
+    console.info(
+      `a late table: ${landed} frames to land, then ${frames} frames to the grid at full weight`,
+    )
+    expect(frames).toBeLessThanOrEqual(48)
+    expect(field.volume.trusted).toBe(true)
+    // And it holds cloud: the texels were baked with the table's gain in.
+    const [map] = field.volume.textures()
+    const at: [number, number, number][] = []
+    const next = draws(9)
+    for (let n = 0; n < 2000; n += 1)
+      at.push([
+        Math.floor(next() * CLOUD_VOLUME_SIZE),
+        Math.floor(next() * CLOUD_VOLUME_SIZE),
+        1 + Math.floor(next() * CLOUD_VOLUME_SLICES),
+      ])
+    const read = await texels(map!, at)
+    expect(
+      read.filter(([high, low]) => high! + low! > 0).length,
+    ).toBeGreaterThan(100)
+    pool.terminate()
+    real.dispose()
+  }, 180_000)
 })

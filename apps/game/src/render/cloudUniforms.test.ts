@@ -2,20 +2,28 @@ import { describe, expect, it } from 'vitest'
 import { DataTexture, Quaternion, type Texture, Vector3 } from 'three/webgpu'
 import {
   atmosphereRecipe,
+  blobThreshold,
   cloudExtents,
   type LevelFrame,
   type LevelUpdate,
   WEATHER_SCENARIOS,
+  type WeatherScenario,
 } from '@inertialref/rendering'
 import type { AtmosphereScattering } from './atmosphereLuts.ts'
-import type {
-  CloudBodyFrame,
-  CloudCameraFrame,
-  CloudFrame,
+import {
+  type CloudBodyFrame,
+  type CloudCameraFrame,
+  type CloudFrame,
+  type CloudLevelFrame,
+  scenarioWeather,
 } from './cloudFrame.ts'
 import { createCloudField } from './cloudField.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
-import { createCloudUniforms } from './cloudUniforms.ts'
+import {
+  CLOUD_CLIMATE_KINDS,
+  CLOUD_PATTERN_KINDS,
+  createCloudUniforms,
+} from './cloudUniforms.ts'
 
 /*
  * `write` is a copy, and a copy is where a frame's numbers can be put in the
@@ -69,7 +77,14 @@ function scattering(): AtmosphereScattering {
   }
 }
 
-function body(overrides: Partial<CloudBodyFrame> = {}): CloudBodyFrame {
+const NOISE_ORIGIN = { x: 1, y: 2, z: 3 }
+const DETAIL_ORIGIN = { x: 4, y: 5, z: 6 }
+const TIME = 1000
+
+function body(
+  overrides: Partial<CloudBodyFrame> = {},
+  scenario: WeatherScenario = WEATHER_SCENARIOS['broken-horizon'],
+): CloudBodyFrame {
   const boundaries = [900, 2200, 2200, 2200, 2200, 2200]
   return {
     address: 's:3/b:2',
@@ -88,12 +103,17 @@ function body(overrides: Partial<CloudBodyFrame> = {}): CloudBodyFrame {
     limb: 0.75,
     limbFalloff: 0.01,
     dayColor: { r: 1, g: 0.9, b: 0.8 },
-    noiseOrigin: { x: 1, y: 2, z: 3 },
-    detailOrigin: { x: 4, y: 5, z: 6 },
+    noiseOrigin: NOISE_ORIGIN,
+    detailOrigin: DETAIL_ORIGIN,
     drift: { x: 7, y: 8, z: 9 },
     wind: { x: 10, y: 0, z: -2 },
     clipmap: levels(6),
     volume: levels(3),
+    ...scenarioWeather(
+      scenario,
+      { noise: NOISE_ORIGIN, detail: DETAIL_ORIGIN },
+      TIME,
+    ),
     ...overrides,
   }
 }
@@ -107,13 +127,15 @@ const camera: CloudCameraFrame = {
   pixelAngle: 0.002,
 }
 
+/** A frame under a scenario, its served body's weather the scenario's unless a body is given. */
 function cloudFrame(overrides: Partial<CloudFrame> = {}): CloudFrame {
+  const scenario = overrides.scenario ?? WEATHER_SCENARIOS['broken-horizon']
   return {
     levers: DEFAULT_CLOUD_LEVERS,
-    scenario: WEATHER_SCENARIOS['broken-horizon'],
-    served: body(),
+    scenario,
+    served: body({}, scenario),
     second: null,
-    time: 1000,
+    time: TIME,
     frameSeconds: 1 / 60,
     period: [7, 0],
     camera,
@@ -263,7 +285,7 @@ describe('the cloud uniforms', () => {
   it('put an absent layer at the union’s top with nothing in it', () => {
     const uniforms = createCloudUniforms()
     uniforms.write(cloudFrame({ scenario: WEATHER_SCENARIOS['two-decks'] }))
-    const layers = uniforms.layers
+    const layers = uniforms.served.layers
     expect(layers.base.value.toArray()).toEqual([1000, 4000, 4800])
     expect(layers.top.value.toArray()).toEqual([1500, 4800, 4800])
     expect(layers.coverage.value.toArray()).toEqual([0.6, 0.6, 0])
@@ -271,6 +293,212 @@ describe('the cloud uniforms', () => {
     // stratocumulus and altocumulus, by their index in CLOUD_GENERA.
     expect(layers.genus.value.toArray()).toEqual([1, 3, 0])
     expect(layers.sigmaScale.value).toBe(0.04)
+    // An absent level holds what a march can read and find nothing in: a
+    // cell and a row count to divide by, a radius to look a phase up at.
+    expect(layers.cell.value.z).toBe(1)
+    expect(layers.radius.value.z).toBe(10)
+    expect(layers.phaseRows.value.z).toBeGreaterThan(0)
+    expect(layers.depthStratiform.value.z).toBe(0)
+  })
+
+  it('give each body its own levels: two clouded bodies in one frame hold two layer sets', () => {
+    const uniforms = createCloudUniforms()
+    const decks = WEATHER_SCENARIOS['two-decks']
+    const fog = WEATHER_SCENARIOS.fog
+    uniforms.write(
+      cloudFrame({
+        scenario: decks,
+        served: body({}, decks),
+        second: body({ address: 's:3/b:4' }, fog),
+      }),
+    )
+    expect(uniforms.served.layers).not.toBe(uniforms.second.layers)
+    expect(uniforms.served.layers.base.value.toArray()).toEqual([
+      1000, 4000, 4800,
+    ])
+    const { base, top, sigma } = fog.layers[0]!
+    expect(uniforms.second.layers.base.value.toArray()).toEqual([
+      base,
+      top,
+      top,
+    ])
+    expect(uniforms.second.layers.sigma.value.toArray()).toEqual([sigma, 0, 0])
+    expect(uniforms.second.layers.sigmaScale.value).toBe(sigma)
+    expect(uniforms.served.layers.sigmaScale.value).toBe(0.04)
+  })
+
+  it('leave the second body’s levels the served body’s where there is no second body', () => {
+    const uniforms = createCloudUniforms()
+    const decks = WEATHER_SCENARIOS['two-decks']
+    uniforms.write(
+      cloudFrame({
+        scenario: decks,
+        second: body({ address: 's:3/b:4' }, WEATHER_SCENARIOS.fog),
+      }),
+    )
+    uniforms.write(cloudFrame({ scenario: decks }))
+    expect(uniforms.second.active.value).toBe(0)
+    for (const member of ['base', 'top', 'sigma', 'cell', 'radius'] as const)
+      expect(uniforms.second.layers[member].value.toArray(), member).toEqual(
+        uniforms.served.layers[member].value.toArray(),
+      )
+  })
+
+  it('copy a level’s every number into its own slot', () => {
+    const uniforms = createCloudUniforms()
+    const scenario = WEATHER_SCENARIOS['two-decks']
+    const served = body({}, scenario)
+    // Three levels no two of whose numbers agree, so a slot filled from its
+    // neighbor, or a matrix written in columns, reads back wrong.
+    const made = (k: number): CloudLevelFrame => ({
+      base: 100 + k,
+      top: 200 + k,
+      sigma: 0.01 * (k + 1),
+      radius: 6 + k,
+      radiusRange: [4 + k, 9 + k],
+      gain: 1.8 + 0.1 * k,
+      transport: 0.2 + 0.05 * k,
+      cell: 1000 + 100 * k,
+      erosion: 0.1 * (k + 1),
+      profileRow: 8 * k,
+      phaseRow: 32 * k,
+      phaseRows: 32 - 9 * k,
+      phaseRadius: 2 + 3 * k,
+      turn: [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => n + 10 * k),
+      turnRate: 1e-6 * (k + 1),
+      noiseOrigin: { x: 10 + k, y: 20 + k, z: 30 + k },
+      detailOrigin: { x: 40 + k, y: 50 + k, z: 60 + k },
+      meanDepth: [3 + k, 30 + k],
+    })
+    const levels = [made(0), made(1), made(2)] as const
+    uniforms.write(cloudFrame({ scenario, served: { ...served, levels } }))
+    const layers = uniforms.served.layers
+    const packed = (read: (level: CloudLevelFrame) => number) =>
+      levels.map(read)
+    expect(layers.base.value.toArray()).toEqual(packed((l) => l.base))
+    expect(layers.top.value.toArray()).toEqual(packed((l) => l.top))
+    expect(layers.sigma.value.toArray()).toEqual(packed((l) => l.sigma))
+    expect(layers.radius.value.toArray()).toEqual(packed((l) => l.radius))
+    expect(layers.radiusMin.value.toArray()).toEqual(
+      packed((l) => l.radiusRange[0]),
+    )
+    expect(layers.radiusMax.value.toArray()).toEqual(
+      packed((l) => l.radiusRange[1]),
+    )
+    expect(layers.gain.value.toArray()).toEqual(packed((l) => l.gain))
+    expect(layers.transport.value.toArray()).toEqual(packed((l) => l.transport))
+    expect(layers.cell.value.toArray()).toEqual(packed((l) => l.cell))
+    expect(layers.erosion.value.toArray()).toEqual(packed((l) => l.erosion))
+    expect(layers.profileRow.value.toArray()).toEqual(
+      packed((l) => l.profileRow),
+    )
+    expect(layers.phaseRow.value.toArray()).toEqual(packed((l) => l.phaseRow))
+    expect(layers.phaseRows.value.toArray()).toEqual(packed((l) => l.phaseRows))
+    expect(layers.phaseRadius.value.toArray()).toEqual(
+      packed((l) => l.phaseRadius),
+    )
+    expect(layers.depthStratiform.value.toArray()).toEqual(
+      packed((l) => l.meanDepth[0]),
+    )
+    expect(layers.depthCumuliform.value.toArray()).toEqual(
+      packed((l) => l.meanDepth[1]),
+    )
+    expect(layers.sigmaScale.value).toBe(0.03)
+    expect(uniforms.trace.turn.value.toArray()).toEqual(
+      packed((l) => l.turnRate),
+    )
+    levels.forEach((level, k) => {
+      // The frame's nine numbers are rows; the matrix applied to +X is its
+      // first column, the first number of each row.
+      const column = new Vector3(1, 0, 0).applyMatrix3(layers.turn[k]!.value)
+      expect(column.toArray()).toEqual([
+        level.turn[0],
+        level.turn[3],
+        level.turn[6],
+      ])
+      expect(layers.noiseOrigin[k]!.value.toArray()).toEqual([
+        10 + k,
+        20 + k,
+        30 + k,
+      ])
+      expect(layers.detailOrigin[k]!.value.toArray()).toEqual([
+        40 + k,
+        50 + k,
+        60 + k,
+      ])
+    })
+    // The three matrices are three objects: one shared would hold the last.
+    expect(new Set(layers.turn.map((node) => node.value)).size).toBe(3)
+  })
+
+  it('copy a body’s climate: the pattern, the blob thresholds as integers, the terminator', () => {
+    const uniforms = createCloudUniforms()
+    const cumulus = WEATHER_SCENARIOS['fair-cumulus']
+    const dusk = WEATHER_SCENARIOS['dusk-altocumulus']
+    uniforms.write(
+      cloudFrame({
+        scenario: cumulus,
+        second: body({ address: 's:3/b:4' }, dusk),
+      }),
+    )
+    const served = uniforms.served.climate
+    expect(served.kind.value).toBe(CLOUD_CLIMATE_KINDS.regime)
+    const [kind, scale, cells] = served.pattern.value.toArray()
+    // Fair-cumulus names blobs, which a regime draws as a uniform cover at
+    // the layer's coverage (`regimeWeather`): a 96 km blob cell is a whole
+    // sky of cloud or none from a stance.
+    expect(kind).toBe(CLOUD_PATTERN_KINDS.uniform)
+    expect(scale).toBe(0)
+    expect(cells).toBe(1)
+    const cover = cumulus.layers[0]!.coverage
+    expect(served.cover.value.toArray()).toEqual([cover, 0, 0])
+    expect(served.blobThreshold.value.toArray()).toEqual([
+      blobThreshold(cover),
+      0,
+      0,
+    ])
+    expect(Number.isInteger(served.blobThreshold.value.x)).toBe(true)
+    expect(served.convective.value.toArray()).toEqual([1, 0, 0])
+    // No terminator: sines no elevation reaches.
+    expect(served.terminator.value.toArray()).toEqual([2, 3])
+    expect(served.law.value.elements.every((n) => n === 0)).toBe(true)
+    // The second body's own: a deck that ends against the sun.
+    const second = uniforms.second.climate
+    const [full, clear] = second.terminator.value.toArray()
+    expect(full).toBeLessThan(clear!)
+    expect(clear).toBeLessThanOrEqual(1)
+    expect(second.pattern.value.x).toBe(CLOUD_PATTERN_KINDS[dusk.pattern])
+  })
+
+  it('carry the levers of the measured choices to the trace, and leave the sun’s weight to the grid', () => {
+    const uniforms = createCloudUniforms()
+    uniforms.write(cloudFrame())
+    const t = uniforms.trace
+    expect(t.phaseBins.value).toBe(4)
+    expect(t.jitter.value).toBe(0)
+    expect(t.transport.value).toBe(0)
+    expect(t.handoverBand.value).toBe(2)
+    expect(t.clip.value).toBe(1.25)
+    t.sunWeight.value = 0.375
+    uniforms.write(
+      cloudFrame({
+        levers: {
+          ...DEFAULT_CLOUD_LEVERS,
+          phaseBins: 2,
+          jitter: 'stbn',
+          transport: 'octaves',
+          handoverBand: 4,
+          clip: 0.75,
+        },
+      }),
+    )
+    expect(t.phaseBins.value).toBe(2)
+    expect(t.jitter.value).toBe(1)
+    expect(t.transport.value).toBe(1)
+    expect(t.handoverBand.value).toBe(4)
+    expect(t.clip.value).toBe(0.75)
+    // Written by the sun grid's schedule, between `write` and the trace.
+    expect(t.sunWeight.value).toBe(0.375)
   })
 
   it('quarter the step budget in the immediate regime, and wrap the frame index', () => {

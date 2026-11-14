@@ -14,11 +14,19 @@ import { finiteOr } from './cloudNodes.ts'
 
 /*
  * What a transparent object between two layers needs of the trace: up to four
- * knots a ray, each a segment's entry and exit depth with the transmittance
- * and light so far at its exit (§5.12). The march records one at each
- * segment close whose transmittance falls under 0.98; past four, the fourth
- * absorbs the rest. `cloudFront` reads them directly, with no history between,
- * so they are written through `finiteOr`.
+ * knots a ray, each one crossing of a level, with the depths of its first and
+ * last cloudy steps and the transmittance and light so far at its exit
+ * (§4.9). Three levels and one of them crossed twice, which a grazing ray
+ * does, are four; past four, the fourth absorbs the rest. `cloudFront` reads
+ * them directly, with no history between, so they are written through
+ * `finiteOr`.
+ *
+ * **A knot is a level's crossing, never a stretch of one.** Between two
+ * knots `cloudFront` is flat, which is the clear gap between two layers, and
+ * inside one it runs linearly from the entry to the exit. A knot cut at any
+ * shorter stretch, a column or a step count, spends the four on the first
+ * kilometer of a cumulus and hands everything behind it to the fourth, so an
+ * object in the gap under a cirrus reads a share of that cirrus by depth.
  *
  * The layout, per trace texel (i, j):
  *
@@ -48,8 +56,13 @@ export interface CloudKnotWriter {
   flush(texel: Node<'uvec2'>): void
 }
 
-/** A segment that leaves more than this of the light it is given records no knot. */
-export const KNOT_TRANSMITTANCE = 0.98
+/**
+ * A crossing that leaves more than this of the light it is given records no
+ * knot: the drawn medium's transmittance, scaled where the medium is. Two
+ * half-float steps under one, so a recorded knot's transmittance is told
+ * from a padding knot's through the texture it is stored in.
+ */
+export const KNOT_TRANSMITTANCE = 0.999
 export const KNOT_COUNT = 4
 
 /** What a padding knot holds: no cloud, behind everything. */
@@ -112,7 +125,7 @@ export function cloudKnotWriter(
         count.addAssign(1)
       }).Else(() => {
         // The fourth absorbs the rest: its entry stays where the fourth
-        // segment began, and its exit, T and L follow the latest close.
+        // crossing began, and its exit, T and L follow the latest one.
         last.exit.assign(kilometers(exit))
         last.light.assign(value)
       })

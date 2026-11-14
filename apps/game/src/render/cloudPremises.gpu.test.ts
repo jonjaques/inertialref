@@ -1,7 +1,14 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
+  BufferAttribute,
+  type ComputeNode,
+  Data3DTexture,
+  DataTexture,
+  DataUtils,
   FloatType,
   HalfFloatType,
+  LinearFilter,
+  Matrix3,
   Mesh,
   MeshBasicNodeMaterial,
   type Node,
@@ -11,11 +18,14 @@ import {
   OrthographicCamera,
   PlaneGeometry,
   QuadMesh,
+  type Object3D,
   RedFormat,
   RenderTarget,
   RenderTarget3D,
+  RGBAFormat,
   RGFormat,
   Scene,
+  SphereGeometry,
   StorageBufferAttribute,
   StorageTexture,
   TempNode,
@@ -42,25 +52,67 @@ import {
   uniform,
   uv,
   uvec2,
+  vec3,
   vec4,
 } from 'three/tsl'
+import { buildPatch } from '@inertialref/rendering'
+import { COVER_CHANNELS, regionAddress } from '@inertialref/universe'
 import {
   markOverClouds,
   OVER_CLOUDS_LAYERS,
   UNDER_CLOUDS_LAYERS,
 } from './cloudLayers.ts'
 import { cloudStorageTexture } from './cloudNodes.ts'
-import { type GpuSession, openGpu } from './gpuHarness.ts'
+import { cloudRig } from './cloudSystemRig.ts'
+import type { CloudTrace } from './cloudTrace.ts'
+import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
+import {
+  patchGeometry,
+  placeEye,
+  sheetGeometry,
+  wearGround,
+  wearSea,
+} from './groundWear.ts'
+import { createAtmosphereMaterial } from './materials.ts'
+import { createPlanetMaterial } from './planet.ts'
 import { runQuadPasses } from './quadPass.ts'
+import { createTerrainMaterial } from './terrain.ts'
 import { warmCompute, warmSensorPass } from './warmup.ts'
+import { createWaterMaterial } from './water.ts'
+
+/*
+ * The air's bundle with and without a member, for the premise that a table
+ * no graph reads binds nothing. `vi.mock` is hoisted over the imports, so
+ * every module of this file's graph that builds an air bundle builds it
+ * through this wrapper; with `stripped` empty it is the module itself, and
+ * every other test here runs on the real bundle.
+ */
+const airMembers = vi.hoisted(() => ({ stripped: [] as string[] }))
+vi.mock('./air.ts', async (original) => {
+  const air = await original<typeof import('./air.ts')>()
+  return {
+    ...air,
+    createAirUniforms: (
+      ...args: Parameters<typeof air.createAirUniforms>
+    ): ReturnType<typeof air.createAirUniforms> => {
+      const bundle = air.createAirUniforms(...args) as unknown as Record<
+        string,
+        unknown
+      >
+      for (const member of airMembers.stripped) delete bundle[member]
+      return bundle as unknown as ReturnType<typeof air.createAirUniforms>
+    },
+  }
+})
 
 /*
  * The premises a cloud format or pass depends on, settled on the real
- * GPU before any package builds on them (the design's §11.1). Each was read
- * from three r185's source, not run; each has a fallback that changes a
- * contract, and a premise that fails here changes the contract here, before
- * the fan-out, rather than in a package that learned it after another had
- * built on it.
+ * GPU before any package builds on them (phase 0's design §11.1, and phase
+ * 1's §10.2 from the mat3 uniforms on). Each was read from three r185's
+ * source, not run; each has a fallback that changes a contract, and a
+ * premise that fails here changes the contract here, before the fan-out,
+ * rather than in a package that learned it after another had built on it.
+ * Phase 1's sixth, the trace kernel's census, is in `cloudTrace.gpu.test.ts`.
  */
 
 let gpu: GpuSession
@@ -554,4 +606,369 @@ describe('computePipelinesBuilt', () => {
     expect(gpu.computePipelinesBuilt()).toBe(start + 2)
     expect([...new Uint32Array(await gpu.readBuffer(out))]).toEqual([1, 2])
   })
+})
+
+/* ------------------------------------------------------------------------- */
+/* Phase 1's premises (its design's §10.2)                                    */
+/* ------------------------------------------------------------------------- */
+
+/** The WGSL three builds for a kernel. */
+function kernelWgsl(kernel: ComputeNode): string {
+  const nodes = (
+    renderer as unknown as {
+      _nodes: { getForCompute(node: ComputeNode): { computeShader: string } }
+    }
+  )._nodes
+  return nodes.getForCompute(kernel).computeShader
+}
+
+describe('three mat3 uniforms in a compute kernel', () => {
+  /*
+   * A level's turn is a matrix in its uniforms (§4.2), three a body. Each is
+   * a turn about +Y, and their product applied to +X is the turn by the sum,
+   * so a kernel that packed one wrongly, as a mat3's padded columns invite,
+   * reads back a different vector.
+   */
+  const turn = (angle: number): Matrix3 => {
+    const c = Math.cos(angle)
+    const s = Math.sin(angle)
+    return new Matrix3().set(c, 0, s, 0, 1, 0, -s, 0, c)
+  }
+
+  it('builds, and each carries its nine numbers: three turns compose to the turn by their sum', async () => {
+    const angles = [0.3, -1.1, 2.0]
+    const turns = angles.map((angle) => uniform(turn(angle), 'mat3'))
+    const out = new StorageBufferAttribute(new Float32Array(6), 1)
+    const into = storage(out, 'float', 6)
+    const kernel = Fn(() => {
+      If(instanceIndex.equal(uint(0)), () => {
+        const all = turns[0]!.mul(turns[1]!.mul(turns[2]!.mul(vec3(1, 0, 0))))
+        // The middle one alone, on +Z: a kernel that bound one matrix three
+        // times would pass the product above with three equal angles.
+        const middle = turns[1]!.mul(vec3(0, 0, 1))
+        into.element(0).assign(all.x)
+        into.element(1).assign(all.y)
+        into.element(2).assign(all.z)
+        into.element(3).assign(middle.x)
+        into.element(4).assign(middle.y)
+        into.element(5).assign(middle.z)
+      })
+    })().compute(1)
+    await checked(() => gpu.compute(kernel))
+    expect(kernelWgsl(kernel).match(/mat3x3<f32>/g)?.length).toBe(3)
+    const read = new Float32Array(await gpu.readBuffer(out))
+    const sum = angles.reduce((a, b) => a + b, 0)
+    const expected = [
+      Math.cos(sum),
+      0,
+      -Math.sin(sum),
+      Math.sin(angles[1]!),
+      0,
+      Math.cos(angles[1]!),
+    ]
+    // float32 through three matrix products.
+    expected.forEach((value, k) => {
+      expect(Math.abs(read[k]! - value)).toBeLessThanOrEqual(4 * 2 ** -23)
+    })
+    // A value swap rebuilds nothing and reaches the kernel.
+    turns[1]!.value.copy(turn(0.5))
+    await gpu.compute(kernel)
+    const again = new Float32Array(await gpu.readBuffer(out))
+    expect(Math.abs(again[3]! - Math.sin(0.5))).toBeLessThanOrEqual(2 ** -22)
+    kernel.dispose()
+  })
+})
+
+describe('a Data3DTexture of RGBA16F, linear', () => {
+  it('is sampled at level 0 in a compute kernel: a texel at its center, the mean of eight between them', async () => {
+    // 2 × 2 × 2, each texel its own index in R and its slice in G.
+    const data = new Uint16Array(8 * 4)
+    for (let k = 0; k < 8; k += 1) {
+      data[k * 4] = DataUtils.toHalfFloat(k)
+      data[k * 4 + 1] = DataUtils.toHalfFloat(k >> 2)
+      data[k * 4 + 2] = DataUtils.toHalfFloat(0.25)
+      data[k * 4 + 3] = DataUtils.toHalfFloat(1)
+    }
+    const map = new Data3DTexture(data, 2, 2, 2)
+    map.format = RGBAFormat
+    map.type = HalfFloatType
+    map.magFilter = LinearFilter
+    map.minFilter = LinearFilter
+    map.generateMipmaps = false
+    map.needsUpdate = true
+    const node = texture3D(map)
+    const at = [
+      [0.25, 0.25, 0.25],
+      [0.75, 0.25, 0.75],
+      [0.5, 0.5, 0.5],
+      [0.25, 0.25, 0.5],
+    ] as const
+    const out = new StorageBufferAttribute(new Float32Array(at.length * 4), 1)
+    const into = storage(out, 'float', at.length * 4)
+    const kernel = Fn(() => {
+      If(instanceIndex.equal(uint(0)), () => {
+        at.forEach(([x, y, z], k) => {
+          const read = node.sample(vec3(x, y, z)).level(float(0))
+          into.element(k * 4).assign(read.x)
+          into.element(k * 4 + 1).assign(read.y)
+          into.element(k * 4 + 2).assign(read.z)
+          into.element(k * 4 + 3).assign(read.w)
+        })
+      })
+    })().compute(1)
+    await checked(() => gpu.compute(kernel))
+    const wgsl = kernelWgsl(kernel)
+    expect(wgsl).toMatch(/texture_3d<f32>/)
+    expect(wgsl).toMatch(/\btextureSampleLevel\(/)
+    const read = new Float32Array(await gpu.readBuffer(out))
+    const texel = (k: number) => [...read.subarray(k * 4, k * 4 + 4)]
+    // Texel 0, and texel 5 (x 1, y 0, z 1), each at its center, exactly.
+    expect(texel(0)).toEqual([0, 0, 0.25, 1])
+    expect(texel(1)).toEqual([5, 1, 0.25, 1])
+    // The middle of the volume: the mean of all eight, 3.5, and of the two
+    // slices. A filter that was nearest would read a whole number.
+    expect(Math.abs(texel(2)[0]! - 3.5)).toBeLessThanOrEqual(HALF * 4)
+    expect(Math.abs(texel(2)[1]! - 0.5)).toBeLessThanOrEqual(HALF)
+    // Between the two slices over texel 0: 0 and 4.
+    expect(Math.abs(texel(3)[0]! - 2)).toBeLessThanOrEqual(HALF * 4)
+    kernel.dispose()
+    map.dispose()
+  })
+})
+
+describe('an R8 3D texture', () => {
+  it('is read by textureLoad in a compute kernel, byte for byte', async () => {
+    const size = [4, 4, 3] as const
+    const count = size[0] * size[1] * size[2]
+    const bytes = new Uint8Array(count)
+    for (let k = 0; k < count; k += 1) bytes[k] = (k * 37 + 11) & 0xff
+    const map = new Data3DTexture(bytes, ...size)
+    map.format = RedFormat
+    map.type = UnsignedByteType
+    map.generateMipmaps = false
+    map.needsUpdate = true
+    const node = texture3D(map)
+    const out = new StorageBufferAttribute(new Float32Array(count), 1)
+    const into = storage(out, 'float', count)
+    const kernel = Fn(() => {
+      If(instanceIndex.lessThan(uint(count)), () => {
+        const x = int(instanceIndex.mod(uint(size[0])))
+        const y = int(instanceIndex.div(uint(size[0])).mod(uint(size[1])))
+        const z = int(instanceIndex.div(uint(size[0] * size[1])))
+        into.element(instanceIndex).assign(node.load(ivec3(x, y, z)).x)
+      })
+    })().compute(count)
+    await checked(() => gpu.compute(kernel))
+    const wgsl = kernelWgsl(kernel)
+    expect(wgsl).toMatch(/texture_3d<f32>/)
+    expect(wgsl).toMatch(/\btextureLoad\(/)
+    expect(wgsl).not.toMatch(/\btextureSample/)
+    const read = new Float32Array(await gpu.readBuffer(out))
+    // A byte over 255 is exact in float32 to the last place the division leaves.
+    expect([...read].map((value) => Math.round(value * 255))).toEqual([
+      ...bytes,
+    ])
+    kernel.dispose()
+    map.dispose()
+  })
+})
+
+describe('a table on the air’s bundle that no graph reads', () => {
+  const sphere = () => new SphereGeometry(1, 16, 12)
+
+  function patch(seaLevel?: number) {
+    const resolution = 9
+    const border = 2
+    const stride = resolution + 2 * border
+    const elevations = new Float32Array(stride * stride)
+    if (seaLevel !== undefined)
+      for (let i = 0; i < elevations.length; i += 1) elevations[i] = (i % 7) - 3
+    return buildPatch({
+      region: regionAddress(0, 0, 0, 0),
+      resolution,
+      border,
+      elevations,
+      cover: new Uint8Array(resolution * resolution * COVER_CHANNELS),
+      bodyRadius: 1_737_400,
+      ...(seaLevel === undefined ? {} : { seaLevel }),
+    })
+  }
+
+  function ground(material: Mesh['material']): Mesh {
+    const built = patch()
+    const mesh = new Mesh(
+      patchGeometry(built, new BufferAttribute(built.indices, 1)),
+      material,
+    )
+    wearGround(mesh, built.anchor, 1_737_400)
+    placeEye(mesh, { x: 0, y: 0, z: 0 }, 1, 2, 0)
+    return mesh
+  }
+
+  function sea(material: Mesh['material']): Mesh {
+    const built = patch(0)
+    const mesh = new Mesh(
+      sheetGeometry(built.water!, new BufferAttribute(built.indices, 1)),
+      material,
+    )
+    wearSea(mesh, built.anchor)
+    placeEye(mesh, { x: 0, y: 0, z: 0 }, 1, 2, 0)
+    return mesh
+  }
+
+  const camera = () => {
+    const eye = new OrthographicCamera(-1, 1, 1, -1, 0.1, 100)
+    eye.position.z = 4
+    eye.updateMatrixWorld()
+    return eye
+  }
+
+  async function programOf(object: Object3D): Promise<string> {
+    const scene = new Scene()
+    scene.add(object)
+    scene.updateMatrixWorld(true)
+    const { vertexShader, fragmentShader } = await gpu.shader(
+      object,
+      camera(),
+      scene,
+    )
+    return `${vertexShader}\n${fragmentShader}`
+  }
+
+  /**
+   * A storage buffer's name carries its node's id, which counts every node
+   * the session has built: the one part of a program that differs between
+   * two builds of one graph.
+   */
+  const stable = (wgsl: string): string =>
+    wgsl.replace(/NodeBuffer_\d+/g, 'NodeBuffer')
+
+  /**
+   * The WGSL of every site that builds an air bundle, each under its name.
+   * The trace is built without the sky's term, which is the one graph that
+   * reads the sky table (`CloudSystemDeps.skyTable`): the premise is what a
+   * table costs the graphs that do not read it.
+   */
+  async function programs(): Promise<Record<string, string>> {
+    const rig = cloudRig(gpu, 16, 16, { skyTable: false })
+    try {
+      await rig.system!.warm()
+      const trace = rig.system!.resources.find(
+        (held) => held.name === 'trace',
+      ) as CloudTrace
+      const composite = rig.scene.children.find(
+        (child) => child.name === 'cloud composite',
+      )!
+      composite.visible = true
+      const drawn = await gpu.shader(composite, rig.camera, rig.scene)
+      return {
+        // `materials.ts`, `planet.ts`, `terrain.ts`, `water.ts`.
+        shell: await programOf(
+          new Mesh(sphere(), createAtmosphereMaterial().material),
+        ),
+        sphere: await programOf(
+          new Mesh(sphere(), createPlanetMaterial().material),
+        ),
+        ground: await programOf(ground(createTerrainMaterial().material)),
+        sea: await programOf(sea(createWaterMaterial().material)),
+        // `cloudUniforms.ts`, twice: the trace reads the served body's air,
+        // and the composite the served and the second body's.
+        trace: stable(kernelWgsl(trace.kernels()[0]!)),
+        composite: stable(`${drawn.vertexShader}\n${drawn.fragmentShader}`),
+      }
+    } finally {
+      rig.dispose()
+    }
+  }
+
+  it('moves no WGSL at any of the six sites that build one', async () => {
+    const control = 'multiScatter'
+    const subject = 'sky'
+    try {
+      const whole = await programs()
+      airMembers.stripped = [subject]
+      const without = await programs()
+      for (const site of Object.keys(whole))
+        expect(without[site] === whole[site], site).toBe(true)
+      // The control: a member the graphs do read is missed. Without it the
+      // comparison above passes on a wrapper that strips nothing.
+      airMembers.stripped = [control]
+      await expect(programs()).rejects.toThrow()
+    } finally {
+      airMembers.stripped = []
+    }
+  }, 180_000)
+})
+
+const WORKSTATION = await adapterOffers('timestamp-query')
+
+describe('re-uploading the phase atlas', () => {
+  /*
+   * 1024 × 64 RGBA16F, 524,288 B: what `CloudPhase` uploads again when the
+   * served sun's angular radius moves 1% (§4.7). The premise is that the
+   * upload fits a reset frame beside everything else it does, under 2 ms;
+   * past that the convolution and its upload move to the atmosphere task.
+   *
+   * The figure is this machine's (Mac18,5, Apple M6): the median of 32
+   * uploads, each timed from the write to the queue's own completion, with
+   * nothing else on the GPU. A hosted adapter is a different queue, so the
+   * bound is asserted only where the adapter offers timestamps, which is how
+   * the suite tells a workstation from CI's paravirtual device.
+   */
+  const WIDTH = 1024
+  const HEIGHT = 64
+  const BOUND_MS = 2
+
+  it.skipIf(!WORKSTATION)(
+    'costs under 2 ms, the write and the queue together',
+    async () => {
+      const data = new Uint16Array(WIDTH * HEIGHT * 4)
+      const map = new DataTexture(
+        data,
+        WIDTH,
+        HEIGHT,
+        RGBAFormat,
+        HalfFloatType,
+      )
+      map.magFilter = LinearFilter
+      map.minFilter = LinearFilter
+      map.generateMipmaps = false
+      map.needsUpdate = true
+      renderer.initTexture(map)
+      await device.queue.onSubmittedWorkDone()
+      const held = () =>
+        (
+          renderer.backend as unknown as {
+            get(texture: object): { texture?: GPUTexture }
+          }
+        ).get(map).texture
+      const first = held()
+      expect(first).toBeDefined()
+      const writes: number[] = []
+      const totals: number[] = []
+      for (let k = 0; k < 32; k += 1) {
+        data.fill(DataUtils.toHalfFloat(k / 32))
+        const start = performance.now()
+        map.needsUpdate = true
+        renderer.initTexture(map)
+        const written = performance.now()
+        await device.queue.onSubmittedWorkDone()
+        const done = performance.now()
+        writes.push(written - start)
+        totals.push(done - start)
+      }
+      // The same GPU texture, written again: an upload that reallocated
+      // would be a different cost, and a different premise.
+      expect(held()).toBe(first)
+      const median = (values: number[]): number =>
+        [...values].sort((a, b) => a - b)[values.length >> 1]!
+      const [last] = await texels(map, '2d', [[WIDTH - 1, HEIGHT - 1]])
+      expect(Math.abs(last![0]! - 31 / 32)).toBeLessThanOrEqual(HALF)
+      console.log(
+        `phase atlas re-upload, ${WIDTH} × ${HEIGHT} RGBA16F: write ${median(writes).toFixed(3)} ms, write and queue ${median(totals).toFixed(3)} ms (medians of 32; worst ${Math.max(...totals).toFixed(3)} ms)`,
+      )
+      expect(median(totals)).toBeLessThan(BOUND_MS)
+      map.dispose()
+    },
+  )
 })

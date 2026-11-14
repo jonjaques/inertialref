@@ -36,11 +36,16 @@ import {
 } from 'three/tsl'
 import { rootSeed } from '@inertialref/procedural'
 import {
+  type BodyWeather,
+  bodyPointOf,
   type Extent,
+  fieldClock,
+  fieldLevel,
   lensForFov,
   type RenderBody,
   type RenderScene,
   textureBytes,
+  turnBack,
 } from '@inertialref/rendering'
 import {
   type Quat,
@@ -63,15 +68,13 @@ import {
   type CloudFrame,
   type CloudFrameInputs,
   cloudFrame,
+  drawnWeather,
 } from './cloudFrame.ts'
 import { traceScreen, viewDirection } from './cloudGeometry.ts'
 import { CloudHistory } from './cloudHistory.ts'
+import { traceJitter } from './cloudJitter.ts'
 import { type CloudLevers, DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
-import {
-  type CloudBudget,
-  cloudStorageTexture,
-  traceJitter,
-} from './cloudNodes.ts'
+import { type CloudBudget, cloudStorageTexture } from './cloudNodes.ts'
 import type { CloudTraceTextures } from './cloudTrace.ts'
 import { type CloudUniforms, createCloudUniforms } from './cloudUniforms.ts'
 import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
@@ -86,9 +89,12 @@ import { warmCompute } from './warmup.ts'
  * rather than to this file's reading of them. The trace is a stand-in kernel
  * writing the trace's two textures at the interleave's texels from an
  * analytic deck: a level cloud layer fixed on the body 2 km over the eye,
- * with a bright patch on it the wind carries. The oracle is that deck,
- * evaluated in float64 at each history pixel's center, or the trace's own
- * samples read back, or a twin history fed the same frames.
+ * with a bright patch on it that the CPU field carries — fixed in its
+ * level's noise, which turns about the pole and drifts along it by the
+ * weather's own clock, never by a number the frame hands the kernel. The
+ * oracle is that deck, evaluated in float64 at each history pixel's center,
+ * or the trace's own samples read back, or a twin history fed the same
+ * frames.
  */
 
 const TIMESTAMPS = await adapterOffers('timestamp-query')
@@ -136,30 +142,36 @@ const SOL: ReadonlyMap<string, Body> = (() => {
     [...walkBodies(system)].map((body) => [formatAddress(body.address), body]),
   )
 })()
-const EARTH = SOL.get('g:milky-way/s:SOL/b:2')!
+const EARTH_ADDRESS = 'g:milky-way/s:SOL/b:2'
+const EARTH = SOL.get(EARTH_ADDRESS)!
+/**
+ * Earth's record less its authored deck: a wet world the volume serves
+ * unasked (`cloudsServed`), where Earth as recorded is drawn only when a
+ * lever forces it.
+ */
+const SERVED_EARTH: Body = {
+  ...EARTH,
+  appearance: { ...EARTH.appearance, clouds: null },
+}
 
 /** The eye's vertical in render axes; the eye is the render origin. */
 const UP = Vec.normalize({ x: 0.3, y: 0.8, z: -0.52 })
-/**
- * Over the datum, meters: 900 m under the anvil's base, so cloudFrame's
- * motion rule (a tenth of the eye's height over the nearest boundary, 90 m)
- * stays clear of every step the turning body takes.
- */
+/** Over the datum, meters: 900 m under the anvil's base. */
 const EYE_HEIGHT = 100
 /** A turned body, so body-fixed and render axes differ in every component. */
 const TURNED: Quat = Q.fromAxisAngle({ x: 0.3, y: -0.5, z: 0.8 }, 0.7)
 
-function earth(orientation: Quat): RenderBody {
+function earth(orientation: Quat, height = EYE_HEIGHT): RenderBody {
   return {
     sunlight: 0.85,
     address: formatAddress(EARTH.address),
     name: EARTH.name,
     kind: EARTH.kind,
     placement: {
-      position: Vec.scale(UP, -(EARTH.radius + EYE_HEIGHT)),
+      position: Vec.scale(UP, -(EARTH.radius + height)),
       scale: EARTH.radius,
       compression: 1,
-      distance: EARTH.radius + EYE_HEIGHT,
+      distance: EARTH.radius + height,
       tier: 'surface',
       compressed: false,
       angularRadius: 1.2,
@@ -235,6 +247,10 @@ const DELTA = 1 / 60
 
 interface Step {
   readonly orientation?: Quat
+  /** The eye over the datum, meters. */
+  readonly height?: number
+  /** The camera's orientation, render axes. */
+  readonly camera?: Quat
   readonly renderTime?: number
   readonly epoch?: number
   readonly display?: Extent
@@ -247,18 +263,20 @@ function inputs(step: Step = {}): CloudFrameInputs {
     levers: {
       ...DEFAULT_CLOUD_LEVERS,
       on: true,
-      scenario: 'anvil',
+      weather: 'anvil',
       ...step.levers,
     },
-    scene: scene(earth(step.orientation ?? TURNED)),
-    record: (address) => SOL.get(address) ?? null,
+    scene: scene(earth(step.orientation ?? TURNED, step.height)),
+    record: (address) =>
+      address === EARTH_ADDRESS ? SERVED_EARTH : (SOL.get(address) ?? null),
     scattering: () => null,
     renderTime: step.renderTime ?? START,
+    rate: 1,
     visibility: false,
     enhanced: false,
     pictureEpoch: step.epoch ?? 0,
     historyKey: 'seed:flight',
-    camera: { position: Vec.ZERO, quaternion: CAMERA },
+    camera: { position: Vec.ZERO, quaternion: step.camera ?? CAMERA },
     lens: lensForFov(65),
     css: display,
     render: display,
@@ -303,29 +321,60 @@ const LATTICE = {
   opaqueT: 0.02,
 } as const
 
-/** A deck fixed on the body: its plane over the first frame's eye, and a patch the wind carries. */
+/** A deck fixed on the body: its plane over the first frame's eye, and a patch the field carries. */
 interface Deck {
   /** Body-fixed unit: the first frame's vertical. */
   readonly normal: Vec3
   /** The first frame's eye, body-fixed meters. */
   readonly origin: Vec3
+  /** Over the first frame's eye, meters. */
+  readonly height: number
   /** The patch's center at `time`, body-fixed meters. */
   readonly center: Vec3
   readonly time: number
+  /** The weather the patch moves by, and the level whose noise it is fixed in. */
+  readonly weather: BodyWeather
+  readonly level: number
 }
 
-/** The deck where the first frame's forward ray meets it. */
-function deckOf(frame: CloudFrame): Deck {
+/** What a rig's deck is: its height over the eye, and a weather other than the frame's. */
+interface DeckOptions {
+  readonly height?: number
+  readonly weather?: BodyWeather
+}
+
+/** The deck where the first frame's forward ray meets it, its patch in the level it stands in. */
+function deckOf(frame: CloudFrame, options: DeckOptions = {}): Deck {
   const origin = frame.served.eye
   const normal = Vec.normalize(origin)
   const forward = frame.camera.forward
-  const reach = DECK_HEIGHT / Vec.dot(forward, normal)
-  return {
-    normal,
-    origin,
-    center: Vec.add(origin, Vec.scale(forward, reach)),
-    time: frame.time,
+  const height = options.height ?? DECK_HEIGHT
+  const reach = height / Vec.dot(forward, normal)
+  const center = Vec.add(origin, Vec.scale(forward, reach))
+  const weather =
+    options.weather ?? drawnWeather(frame.levers.weather, SERVED_EARTH).weather!
+  const level = fieldLevel(weather, Vec.length(center) - EARTH.radius)
+  if (level < 0) throw new Error(`the deck at ${height} m is in no level`)
+  return { normal, origin, height, center, time: frame.time, weather, level }
+}
+
+/**
+ * The patch's center at `time`, body-fixed: the point of its level's noise
+ * it stood on at the deck's first instant, where the weather's own clock
+ * puts that point now. The CPU field's motion, from `fieldClock` at the
+ * two instants, and nothing the frame hands the kernel.
+ */
+function patchAt(deck: Deck, time: number): Vec3 {
+  const then = fieldClock(deck.weather, deck.time)
+  const now = fieldClock(deck.weather, time)
+  const m = turnBack(then.turn[deck.level]!)
+  const p = deck.center
+  const lattice = {
+    x: m[0]! * p.x + m[1]! * p.y + m[2]! * p.z,
+    y: m[3]! * p.x + m[4]! * p.y + m[5]! * p.z + then.drift,
+    z: m[6]! * p.x + m[7]! * p.y + m[8]! * p.z,
   }
+  return bodyPointOf(lattice, now.turn[deck.level]!, now.drift)
 }
 
 /** The deck as this frame's eye sees it, float64: its height over the eye and the patch eye-relative. */
@@ -334,10 +383,9 @@ function aimOf(
   frame: CloudFrame,
 ): { readonly height: number; readonly patch: Vec3 } {
   const eye = frame.served.eye
-  const drift = Vec.scale(frame.served.wind, frame.time - deck.time)
   return {
-    height: DECK_HEIGHT - Vec.dot(Vec.sub(eye, deck.origin), deck.normal),
-    patch: Vec.sub(Vec.add(deck.center, drift), eye),
+    height: deck.height - Vec.dot(Vec.sub(eye, deck.origin), deck.normal),
+    patch: Vec.sub(patchAt(deck, frame.time), eye),
   }
 }
 
@@ -636,7 +684,7 @@ const BUDGET: CloudBudget = {
   slices: 0,
   tiles: 0,
   jump: false,
-  sunTexelSteps: 0,
+  sunSlices: 0,
 }
 
 /**
@@ -673,14 +721,19 @@ class Rig {
   readonly uniforms = createCloudUniforms()
   readonly trace = new StandInTrace(this.uniforms)
   readonly history = new CloudHistory(this.uniforms, () => this.trace.outputs)
+  readonly #deck: DeckOptions
   deck: Deck | null = null
   last: CloudFrame | null = null
+
+  constructor(deck: DeckOptions = {}) {
+    this.#deck = deck
+  }
 
   /** One frame as the system draws it: the regime decides the dispatches. */
   async frame(step: Step = {}, tamper?: Tamper): Promise<CloudFrame> {
     const frame = cloudFrame(inputs(step), this.last)
     if (frame === null) throw new Error('no frame: nothing served')
-    this.deck ??= deckOf(frame)
+    this.deck ??= deckOf(frame, this.#deck)
     const deck = this.deck
     await checked(() => {
       this.uniforms.write(frame)
@@ -1034,8 +1087,9 @@ async function tracked(
   frames: number,
   step: (n: number) => Step,
   tamper?: Tamper,
+  options?: DeckOptions,
 ): Promise<{ readonly miss: number; readonly travel: number }> {
-  const rig = new Rig()
+  const rig = new Rig(options)
   await rig.frame(step(0))
   const deck = (): ((x: number, y: number) => readonly number[]) => {
     const at = expected(rig.deck!, rig.last!)
@@ -1057,11 +1111,13 @@ async function tracked(
 describe('reprojection', () => {
   /*
    * A feature carried right lands within a tenth of a history pixel of the
-   * deck's own (measured: 0.013 px for the turn, 0.046 for the wind, over a
-   * travel of 7 to 8 px). Its controls take the motion out of the history's
-   * uniforms alone, so the trace still draws it moving: the clip, which
-   * holds a pixel within its neighbors' range, bounds the trail to about a
-   * pixel (measured: 1.3 and 1.4), so half of one is what they must miss by.
+   * deck's own (measured: 0.013 px for the body's turn when it landed, and
+   * on the Mac mini 0.078 for a level's and 0.028 for the upper deck's, over
+   * a travel of 7 to 9 px). Its controls take the motion out of the history's uniforms alone,
+   * or give it another level's, so the trace still draws it moving: the
+   * clip, which holds a pixel within its neighbors' range, bounds the trail
+   * to about a pixel (measured: 1.26 to 1.4), so half of one is what they
+   * must miss by.
    */
   const KEPT = 0.1
   const TRAILED = 0.5
@@ -1086,18 +1142,148 @@ describe('reprojection', () => {
     expect(still.miss).toBeGreaterThan(TRAILED)
   })
 
-  it('moves a feature by wind·frameSeconds under warp', async () => {
+  it('moves a feature by its level’s turn under warp, as the CPU field moves it, and not by the turn negated', async () => {
     const step = (n: number): Step => ({
-      levers: { force: 'warp', warp: 60 },
+      levers: { force: 'warp', warp: 72 },
       renderTime: START + n * DELTA,
     })
     const carried = await tracked(40, step)
-    const becalmed = await tracked(40, step, (uniforms) => {
-      uniforms.trace.frameSeconds.value = 0
+    // The control: the turn's sign negated in the history's uniforms alone.
+    // The trace still draws the patch where the CPU field puts it.
+    const negated = await tracked(40, step, (uniforms) => {
+      uniforms.trace.turn.value.negate()
     })
     expect(carried.travel).toBeGreaterThan(6)
     expect(carried.miss).toBeLessThan(KEPT)
-    expect(becalmed.miss).toBeGreaterThan(TRAILED)
+    expect(negated.miss).toBeGreaterThan(TRAILED)
+  })
+
+  /*
+   * Every regime turns its levels at one rate, so a weather whose levels
+   * turn apart is written here, and the history's uniforms are given its
+   * rates: the upper deck of two-decks turns, the lower and the empty high
+   * level stand still. The deck stands 4,300 m over the eye, 4,400 m over
+   * the datum, inside the altocumulus at 4,000 to 4,800 m.
+   */
+  it('moves a feature in the upper deck by that level’s own turn, and not by another’s', async () => {
+    const regime = drawnWeather('two-decks', SERVED_EARTH).weather!
+    const rate = regime.turn[1]
+    const weather: BodyWeather = { ...regime, turn: [0, rate, 0] }
+    const deck = { height: 4300, weather }
+    const step = (n: number): Step => ({
+      levers: { weather: 'two-decks', force: 'warp', warp: 120 },
+      renderTime: START + n * DELTA,
+    })
+    const own = await tracked(
+      40,
+      step,
+      (uniforms) => uniforms.trace.turn.value.set(0, rate, 0),
+      deck,
+    )
+    const others = await tracked(
+      40,
+      step,
+      (uniforms) => uniforms.trace.turn.value.set(rate, 0, rate),
+      deck,
+    )
+    expect(own.travel).toBeGreaterThan(6)
+    expect(own.miss).toBeLessThan(KEPT)
+    expect(others.miss).toBeGreaterThan(TRAILED)
+  })
+})
+
+/*
+ * The frame has no motion reset (phase 1 design §5.10): what the history
+ * cannot reproject it rejects per pixel, and a frame of any motion stays
+ * converging.
+ */
+describe('motion', () => {
+  it('accumulates in level flight 20 m under a base at 250 m/s: 120 frames converging, no reset, eight samples on the horizon', async () => {
+    // The anvil's base is 1,000 m; the eye flies at 980 m, 4.2 m a frame.
+    const rig = new Rig()
+    const step = (n: number): Step => ({
+      height: 980,
+      levers: { force: 'fly', flySpeed: 250 },
+      renderTime: START + n * DELTA,
+    })
+    const first = await rig.frame(step(0))
+    // The eye's height from a render offset 6,379 km long: float64 holds it
+    // to a few micrometers.
+    expect(Math.abs(first.served.shells.eyeOver[0]! + 20)).toBeLessThan(1e-5)
+    const resets = rig.history.report.resets
+    for (let n = 1; n <= 120; n += 1) {
+      const frame = await rig.frame(step(n))
+      expect(frame.regime, `frame ${n}`).toBe('converging')
+    }
+    expect(rig.history.report.resets).toBe(resets)
+    // The bottom row's middle, the pixel nearest the horizon: an age of 32
+    // frames is eight of its own samples (⌊age/4⌋).
+    const { depth, light } = await rig.read()
+    const age = depth.at(HISTORY.width / 2, HISTORY.height - 1)[3]!
+    expect(Math.floor(age / 4)).toBeGreaterThanOrEqual(8)
+    // Held to the deck where the CPU field puts it. Measured on the Mac mini
+    // (Apple M6): 2.45% at the worst texel, where the clip flattens the
+    // patch's peak the samples straddle, and 0.21% on the mean.
+    const want = expected(rig.deck!, rig.last!)
+    expect(worstMiss(light, want)).toBeLessThan(0.03)
+    let total = 0
+    for (let y = 0; y < light.height; y += 1)
+      for (let x = 0; x < light.width; x += 1)
+        total += Math.abs(light.at(x, y)[0]! / want(x, y).light[0] - 1)
+    expect(total / (light.width * light.height)).toBeLessThan(0.005)
+    rig.dispose()
+  })
+
+  it('rejects the pixels a 40° turn takes off the last frame, keeps the rest, and resets nothing', async () => {
+    const rig = new Rig()
+    await rig.frames(12, () => ({}))
+    const resets = rig.history.report.resets
+    const before = (await rig.read()).depth
+    const yaw = Q.multiply(Q.fromAxisAngle(UP, (40 * Math.PI) / 180), CAMERA)
+    const frame = await rig.frame({ camera: yaw })
+    expect(frame.regime).toBe('converging')
+    expect(rig.history.report.resets).toBe(resets)
+    const after = (await rig.read()).depth
+    // Where each pixel's ray meets the deck, projected onto the last frame's
+    // camera, float64: off its image is rejected, well inside is kept.
+    const { right, up, forward, halfTan, aspect } = frame.camera
+    const was = frame.previousCamera!
+    const aim = aimOf(rig.deck!, frame)
+    let kept = 0
+    let rejected = 0
+    for (let y = 0; y < HISTORY.height; y += 1)
+      for (let x = 0; x < HISTORY.width; x += 1) {
+        const sx = (2 * (x + 0.5)) / HISTORY.width - 1
+        const sy = 1 - (2 * (y + 0.5)) / HISTORY.height
+        const ray = Vec.normalize(
+          Vec.add(
+            Vec.add(forward, Vec.scale(right, sx * halfTan * aspect)),
+            Vec.scale(up, sy * halfTan),
+          ),
+        )
+        const point = Vec.scale(
+          ray,
+          aim.height / Math.max(Vec.dot(ray, rig.deck!.normal), 0.05),
+        )
+        const ahead = Vec.dot(point, was.forward)
+        const seen = Math.max(
+          Math.abs(
+            Vec.dot(point, was.right) / (ahead * was.halfTan * was.aspect),
+          ),
+          Math.abs(Vec.dot(point, was.up) / (ahead * was.halfTan)),
+        )
+        const age = after.at(x, y)[3]!
+        if (ahead <= 0 || seen > 1.05) {
+          expect(age, `(${x}, ${y}) left the last frame`).toBeLessThanOrEqual(4)
+          rejected += 1
+        } else if (seen < 0.9) {
+          expect(age, `(${x}, ${y}) stayed in it`).toBe(before.at(x, y)[3]! + 1)
+          kept += 1
+        }
+      }
+    expect(rejected).toBeGreaterThan(HISTORY.width * HISTORY.height * 0.2)
+    expect(kept).toBeGreaterThan(HISTORY.width * HISTORY.height * 0.2)
+    rig.dispose()
   })
 })
 
@@ -1134,9 +1320,17 @@ describe('resets', () => {
 
   it.each([
     [
-      'the picture key',
-      'key',
+      'a cut',
+      'picture',
       (n: number): Step => ({ renderTime: START + n * DELTA, epoch: 1 }),
+    ],
+    [
+      'a change of weather',
+      'field',
+      (n: number): Step => ({
+        renderTime: START + n * DELTA,
+        levers: { weather: 'fair-cumulus' },
+      }),
     ],
     [
       'a resize',

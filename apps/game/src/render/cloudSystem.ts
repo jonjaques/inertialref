@@ -1,13 +1,16 @@
 import { invariant } from '@inertialref/shared'
 import {
   type Camera,
+  Color,
   type Layers,
   type Node,
   type PassNode,
   type Scene,
+  type UniformNode,
   Vector2,
   type WebGPURenderer,
 } from 'three/webgpu'
+import { uniform } from 'three/tsl'
 import {
   type CloudRadiance,
   type CloudRenderReport,
@@ -25,14 +28,17 @@ import {
 } from './cloudFrame.ts'
 import { type CloudFrameDriver, CloudFrameNode } from './cloudFrameNode.ts'
 import { CloudHistory } from './cloudHistory.ts'
-import { UNDER_CLOUDS_LAYERS } from './cloudLayers.ts'
-import type { CloudLevers } from './cloudLevers.ts'
+import { overClouds, UNDER_CLOUDS_LAYERS } from './cloudLayers.ts'
+import {
+  type CloudLevers,
+  cloudLeversHash,
+  resolveCloudLevers,
+} from './cloudLevers.ts'
 import type { CloudBudget, CloudResource } from './cloudNodes.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
-import { CLOUD_PROFILE_HEIGHTS, CLOUD_PROFILE_ROWS } from './cloudProfile.ts'
+import { CLOUD_PROFILE_BYTES } from './cloudProfile.ts'
 import { CloudRadianceMeter } from './cloudRadiance.ts'
-import { SUN_DEPTH_FRAME_CAP } from './cloudSunGrid.ts'
-import { CloudTrace } from './cloudTrace.ts'
+import { CloudTrace, type CloudTraceTextures } from './cloudTrace.ts'
 import type { SceneLayout } from './sceneLayout.ts'
 
 /*
@@ -46,12 +52,70 @@ import type { SceneLayout } from './sceneLayout.ts'
  * module that reads them; `cloudField.ts` says why they must be shared.
  */
 
+/* ------------------------------------------------------------------------- */
+/* The front handle                                                           */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * What a material drawn after the composite needs, to read the clouds in
+ * front of it: this frame's trace textures, and the two numbers `cloudFront`
+ * reads beside them. The ring, the plumes and the entry trace are built
+ * with no cloud system in reach, and the sensor's chain is rebuilt on a
+ * picture change, so a uniform bundle a material captured from one system
+ * goes stale with it. The handle is the engine's, made once when the cloud
+ * chunk loads, and outlives every chain: the system that draws a frame
+ * copies its numbers in and points the textures at its own trace, and the
+ * uniforms inside the handle are the materials' own for the page's life.
+ */
+
+/** The screen's and the served body's numbers `cloudFront` reads, copied every frame. */
+export interface CloudFrontUniforms {
+  /** The trace's extent, texels: what maps a screen point to its trace texel. */
+  readonly traceSize: UniformNode<'vec2', Vector2>
+  /** The served body's day color: what the knots' light is drawn in. */
+  readonly dayColor: UniformNode<'color', Color>
+}
+
+export interface CloudFrontHandle {
+  /** This frame's trace textures; null on a frame with no clouds. */
+  textures(): CloudTraceTextures | null
+  readonly screen: CloudFrontUniforms
+  /**
+   * Point the handle at a trace, or at none: called by the system that
+   * draws the frame, and by nothing that reads the handle.
+   */
+  follow(trace: (() => CloudTraceTextures) | null): void
+}
+
+export function createCloudFrontHandle(): CloudFrontHandle {
+  let source: (() => CloudTraceTextures) | null = null
+  return {
+    textures: () => source?.() ?? null,
+    screen: {
+      traceSize: uniform(new Vector2(1, 1)),
+      dayColor: uniform(new Color(1, 1, 1)),
+    },
+    follow(trace) {
+      source = trace
+    },
+  }
+}
+
 export interface CloudSystemDeps {
   readonly renderer: WebGPURenderer
   readonly scene: Scene
   readonly camera: Camera
   readonly layout: SceneLayout
   readonly scenePass: PassNode
+  /** The engine's front handle; a system built without one keeps its own. */
+  readonly front?: CloudFrontHandle
+  /**
+   * Whether the trace reads the sky's light on a cloud from the served
+   * body's sky table (design §5.6): true when absent. False, it draws the
+   * march's placeholder, Ψ at a half, and binds no sky table: the frame the
+   * term's cost is taken against.
+   */
+  readonly skyTable?: boolean
 }
 
 /** What the sensor knows of a frame that the engine does not. */
@@ -72,7 +136,10 @@ export type CloudEngineInputs = Omit<
 >
 
 export interface CloudSystem {
-  /** Pass B, over the clouds, in the sensor's dependency sum: vec4(0) in the post program. */
+  /**
+   * What stands over the scene, in the sensor's dependency sum: pass B, or
+   * the composite alone over the resolved rows. vec4(0) in the post program.
+   */
   readonly overPass: Node<'vec4'>
   beginFrame(inputs: CloudEngineInputs | null, sensor: CloudSensorState): void
   endFrame(): void
@@ -98,15 +165,19 @@ export interface CloudSystem {
   readonly resources: readonly CloudResource[]
   /** The field the frame draws and every node set that reads it: the instruments' subject. */
   readonly field: CloudField
+  /** The handle this system writes each frame: the engine's, or its own. */
+  readonly front: CloudFrontHandle
   dispose(): void
 }
 
-export type CloudSystemFactory = (deps: CloudSystemDeps) => CloudSystem
+/** `createCloudSystem`, with the maker of the handle an engine holds for it. */
+export interface CloudSystemFactory {
+  (deps: CloudSystemDeps): CloudSystem
+  readonly createFront: () => CloudFrontHandle
+}
 
-/** Slices the volume bakes a frame past level 0's own rebuild (§3.11). */
-const VOLUME_SLICES = 8
-/** The profile table, RGBA8: not a resource of its own, 2 KB the report counts. */
-const PROFILE_BYTES = CLOUD_PROFILE_HEIGHTS * CLOUD_PROFILE_ROWS * 4
+/** The profile and statistics table, RGBA16F: not a resource of its own, 48 KB the report counts. */
+const PROFILE_BYTES = CLOUD_PROFILE_BYTES
 
 /* ------------------------------------------------------------------------- */
 /* The pipeline census                                                        */
@@ -190,8 +261,9 @@ function extentsOf(
   }
 }
 
-export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
+function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
   const { renderer, scene, camera, layout, scenePass } = deps
+  const front = deps.front ?? createCloudFrontHandle()
   const mrt = scenePass.getMRT()
   invariant(mrt !== null, 'the cloud system needs the scene pass’s MRT')
   const census = censusOf(renderer)
@@ -208,7 +280,12 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     phase: field.phase,
     far: field.farAtlas.far,
     depth: () => depth.texture,
+    sky: field.sky,
+    source: field.source,
+    jitter: field.jitter,
+    skyTable: deps.skyTable ?? true,
   })
+  const traceOutputs = (): CloudTraceTextures => trace.outputs
   const history = new CloudHistory(uniforms, () => trace.outputs)
   const radiance = new CloudRadianceMeter(uniforms, () => history.outputs)
   /** What the system holds past the field's bakes: the field disposes its own. */
@@ -226,11 +303,13 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
   const css = new Vector2()
   const buffer = new Vector2()
 
+  // The `sunSlices` lever is each cache's cap: what a rebuild may bake of
+  // the volume a frame, and then of the grid.
   const budgetOf = (built: CloudFrame): CloudBudget => ({
-    slices: VOLUME_SLICES,
+    slices: built.levers.sunSlices,
     tiles: 1,
     jump: built.jump,
-    sunTexelSteps: SUN_DEPTH_FRAME_CAP,
+    sunSlices: built.levers.sunSlices,
   })
 
   /** §3.16's order: every bake and cache, the depth copy, then the trace and the history. */
@@ -268,6 +347,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       failed = true
       composite.inert()
       history.reset()
+      front.follow(null)
     },
   }
   const frameNode = new CloudFrameNode(driver)
@@ -284,6 +364,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     camera,
     scenePass.renderTarget,
     mrt,
+    composite,
   )
   scene.add(composite.mesh)
 
@@ -299,6 +380,7 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       reason: null,
       on: shown !== null,
       levers: { ...(levers ?? {}) },
+      leversHash: levers === null ? null : cloudLeversHash(levers),
       served: shown?.served.address ?? null,
       second: shown?.second?.address ?? null,
       regime: shown?.regime ?? 'off',
@@ -338,44 +420,72 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     overPass,
     beginFrame(inputs, sensor) {
       if (disposed) return
-      levers = inputs?.levers ?? null
       failed = false
       const previous = frame
       const extents = extentsOf(renderer, scenePass, css, buffer)
+      // The levers this size draws with: what the frame reads and the
+      // report hashes.
+      levers =
+        inputs === null
+          ? null
+          : resolveCloudLevers(inputs.levers, {
+              ...extents.render,
+              dpr: renderer.getPixelRatio(),
+            })
       // Off is a fresh start: the next frame on is a first frame, which
       // rebuilds every cache from nothing rather than from a stale frame.
       frame =
-        inputs === null
+        inputs === null || levers === null
           ? null
           : cloudFrame(
               {
                 ...inputs,
+                levers,
                 ...extents,
                 enhanced: sensor.processing === 'enhanced',
                 delta: sensor.delta,
               },
               previous,
             )
-      if (frame === null) return
+      if (frame === null) {
+        front.follow(null)
+        return
+      }
       frames += 1
       field.write(frame)
+      front.screen.traceSize.value.copy(uniforms.trace.size.value)
+      front.screen.dayColor.value.copy(uniforms.served.dayColor.value)
+      front.follow(traceOutputs)
       const view = camera as Camera & { near?: number; far?: number }
       uniforms.camera.near.value = view.near ?? uniforms.camera.near.value
       uniforms.camera.far.value = view.far ?? uniforms.camera.far.value
       composite.setMode(frame.levers.composite)
-      composite.show(true)
-      scenePass.setLayers(UNDER_CLOUDS_LAYERS)
-      overPass.active = true
-      layered = true
+      /*
+       * The composite's form, a frame at a time. The marks are counted only
+       * where a form asks: `chain` draws the scene once, on every layer,
+       * while nothing marked over the clouds would draw, and goes back to
+       * the two passes on the frame something would; `lean` asks whether
+       * what pass B draws writes depth.
+       */
+      const over = frame.levers.over
+      const marked = over === 'passes' ? 'depth' : overClouds(scene)
+      const chained = over === 'chain' && marked === 'nothing'
+      overPass.form = chained ? 'chain' : over === 'lean' ? 'lean' : 'passes'
+      overPass.depthReadOnly = marked !== 'depth'
+      if (!chained) {
+        composite.show(true)
+        scenePass.setLayers(UNDER_CLOUDS_LAYERS)
+        layered = true
+      }
       inFrame = true
     },
     endFrame() {
       inFrame = false
       composite.show(false)
+      overPass.form = null
       if (layered) {
         // r185 takes null back to the camera's own mask; its types do not.
         scenePass.setLayers(null as unknown as Layers)
-        overPass.active = false
         layered = false
       }
     },
@@ -411,6 +521,8 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
       await history.warm(renderer)
       progress()
       await composite.warm(renderer, layout, camera, scene)
+      // Both forms, so the frame one gives way to the other builds nothing.
+      await overPass.warm(renderer)
       progress()
     },
     get served() {
@@ -421,10 +533,15 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     },
     resources,
     field,
+    front,
     dispose() {
       if (disposed) return
       disposed = true
+      // Only while the handle still follows this system's trace: a chain
+      // rebuilt beside this one may already have taken it.
+      if (front.textures() === trace.outputs) front.follow(null)
       scene.remove(composite.mesh)
+      overPass.dispose()
       composite.dispose()
       radiance.dispose()
       field.dispose()
@@ -433,3 +550,12 @@ export function createCloudSystem(deps: CloudSystemDeps): CloudSystem {
     },
   }
 }
+
+/**
+ * The cloud system for a chain, and the maker of the front handle the engine
+ * holds beside it (`GameEngine.cloudFront`).
+ */
+export const createCloudSystem: CloudSystemFactory =
+  /*@__PURE__*/ Object.assign(buildCloudSystem, {
+    createFront: createCloudFrontHandle,
+  })

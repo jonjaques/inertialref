@@ -22,6 +22,7 @@ pnpm test:slow        # terrain descent and galaxy convergence/population checks
 pnpm typecheck        # the six type projects, in parallel — a group of pnpm check
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check
+pnpm chunks           # App's static chunks hold none of the cloud system; the build checks every page
 pnpm brand            # regenerate brand artifacts from design/brand/brandmark.svg
 pnpm presets:plates   # recapture the built-in preset thumbnails through the renderer
 pnpm presets:check    # every picture has a plate, every composition it names resolves
@@ -31,7 +32,7 @@ pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Astro build
 pnpm check            # every stage as one graph: graph, spelling, brand, presets, format, lint,
                       # typecheck, test, test:slow, sim, build. --list prints them, --force ignores the stamps
-pnpm check --only gate  # what the Stop hook runs: graph, knip, fta, lint, typecheck, test
+pnpm check --only gate  # what the Stop hook runs: graph, chunks, knip, fta, lint, typecheck, test
 
 # Reports describe the tree; each :check also gates it.
 pnpm fta              # complexity per file; fta:check exits 1 above a score of 91, in the gate
@@ -370,15 +371,14 @@ publishing nowhere, and a `{@link}` pointing at a renamed symbol fails it
 rather than rendering as words that link to nothing. `scripts/docs/build.mjs`
 carries the rest.
 
-API articles always ship as JSON. Builds from `main` also pre-render their
-HTML; other branches emit one API loading shell and fetch articles when opened.
-Prose remains pre-rendered in both cases. Workers Builds uses
-`WORKERS_CI_BRANCH`; GitHub uses the source branch; a local build uses the
-checked-out branch. To verify the complete production output on a feature
-branch, run `IR_PRERENDER_API=1 pnpm build`. Set it to `0` to force asynchronous
-API pages. Use `pnpm preview` for built API deep links because the Worker asset
-server applies their generated proxy rules; `astro preview` does not. During
-`pnpm dev`, Astro renders API loading shells on demand.
+API articles always ship as JSON. Every build pre-renders prose, the
+`/docs/api` loading shell and each package's own page, and no member page: the
+1,858 member pages take 41 to 50 seconds of a 51 to 61 second bundle stage on
+an Apple M6 when they are rendered, and the shell fetches a member's article
+when it is opened. Every branch builds the same output, `main` included. Use
+`pnpm preview` for built API deep links because the Worker asset server applies
+their generated rewrites; `astro preview` does not. During `pnpm dev`, Astro
+renders API loading shells on demand.
 
 **`design/` is the other half of that division, and it is not published.**
 Plans, working reviews and the complexity report live there; `docs/` is the
