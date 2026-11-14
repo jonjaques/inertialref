@@ -184,10 +184,14 @@ describe('a second clouded body', () => {
   }, 60_000)
 
   it.skipIf(!TIMESTAMPS)(
-    'bakes a block of its atlas a frame, as `cloud far second`',
+    'bakes a block of its atlas a frame while it owes any, as `cloud far second`',
     async () => {
+      // A body that comes back owes its whole atlas, whose target its
+      // absence released: a whole atlas under the rig's held clock bakes
+      // nothing (`cloudFarSchedule.ts`).
+      set({ second: 'g:milky-way/s:SOL/b:nowhere' })
+      frames(2)
       set({ second: null })
-      frames(10)
       const stop = installPassTimeline(gpu.renderer as WebGPURenderer)
       try {
         const timeline = passTimelineOf(gpu.renderer as WebGPURenderer)!

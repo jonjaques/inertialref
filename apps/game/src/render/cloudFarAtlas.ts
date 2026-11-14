@@ -37,7 +37,19 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import { CUBE_FACES, MAX_CLOUD_LAYERS } from '@inertialref/rendering'
+import {
+  CUBE_FACES,
+  type CubeFace,
+  type FarAtlasLayout,
+  type FarAtlasState,
+  farAtlasState,
+  type FarBlockPlan,
+  farBlockPlans,
+  farOwed,
+  farViewCap,
+  MAX_CLOUD_LAYERS,
+  stepFarAtlas,
+} from '@inertialref/rendering'
 import {
   type AirPhases,
   airMediumAt,
@@ -48,7 +60,7 @@ import {
   sunTableAt,
   sunThroughAt,
 } from './air.ts'
-import type { CloudFrame } from './cloudFrame.ts'
+import type { CloudBodyFrame, CloudFrame } from './cloudFrame.ts'
 import {
   cloudSample,
   cubeAtlasUv,
@@ -65,7 +77,9 @@ import type {
   CloudResource,
   CloudSample,
 } from './cloudNodes.ts'
+import type { CloudCubeFreshness } from './cloudMaps.ts'
 import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
+import { cloudFieldTravel } from './cloudVolume.ts'
 import { runQuadPasses } from './quadPass.ts'
 import { warmSensorPass } from './warmup.ts'
 
@@ -108,6 +122,14 @@ interface CloudFarDeps {
   readonly field: CloudMediumFn
   readonly phase: CloudPhaseNodes
   readonly body: 'served' | 'second'
+  /**
+   * How fresh each face of the cube under `field` is, where it reads one:
+   * a block is fresh only from fresh faces. Absent over a source with no
+   * cube, and the atlas's own generation is then the field's.
+   */
+  readonly freshness?: CloudCubeFreshness
+  /** The profile and statistics table `field` reads: a level's statistics landing is a new field. */
+  readonly profile?: { readonly generation: number }
 }
 
 type F = Node<'float'>
@@ -130,34 +152,20 @@ const FAR_ROWS = MAX_CLOUD_LAYERS
 export const FAR_WIDTH = FAR_COLUMNS * FAR_SPAN
 export const FAR_HEIGHT = FAR_ROWS * FAR_SPAN
 
-/** Texels: one scissored block a frame, 45 blocks a cycle. */
+/**
+ * Texels along a block's side: what one bake draws, scissored. The blocks
+ * are laid over the whole atlas, 9 across and 5 down at 192, the last of
+ * each row and column clipped.
+ */
 export const FAR_BLOCK = 192
 export const FAR_STEPS_A_LAYER = 32
 
-const BLOCKS_ACROSS = Math.ceil(FAR_WIDTH / FAR_BLOCK)
-const BLOCKS_DOWN = Math.ceil(FAR_HEIGHT / FAR_BLOCK)
-/** Blocks that cover the atlas once: 9 across and 5 down, the last of each row and column clipped. */
-export const FAR_CYCLE = BLOCKS_ACROSS * BLOCKS_DOWN
-
-/** A block's rectangle in texels, row 0 at the top as the scissor counts it. */
-export interface FarBlock {
-  readonly x: number
-  readonly y: number
-  readonly width: number
-  readonly height: number
-}
-
-/** Block `index` of the cycle, row by row from the atlas's first row, clipped to the atlas. */
-export function farBlock(index: number): FarBlock {
-  const k = ((index % FAR_CYCLE) + FAR_CYCLE) % FAR_CYCLE
-  const x = (k % BLOCKS_ACROSS) * FAR_BLOCK
-  const y = Math.floor(k / BLOCKS_ACROSS) * FAR_BLOCK
-  return {
-    x,
-    y,
-    width: Math.min(FAR_BLOCK, FAR_WIDTH - x),
-    height: Math.min(FAR_BLOCK, FAR_HEIGHT - y),
-  }
+/** The atlas as its schedule lays it out (`cloudFarSchedule.ts`). */
+export const FAR_LAYOUT: FarAtlasLayout = {
+  tile: FAR_TILE,
+  gutter: FAR_GUTTER,
+  rows: FAR_ROWS,
+  block: FAR_BLOCK,
 }
 
 /* ------------------------------------------------------------------------- */
@@ -1028,10 +1036,20 @@ const NAMES = { served: 'farAtlas', second: 'farSecond' } as const
 /** RGBA8. */
 const TEXEL_BYTES = 4
 
+const FACES: readonly CubeFace[] = [0, 1, 2, 3, 4, 5]
+
+/** Which of a body's three levels have any thickness: the rows of the atlas it holds. */
+const levelsOf = (body: CloudBodyFrame): readonly boolean[] => {
+  const { boundaries } = body.shells
+  return Array.from(
+    { length: FAR_ROWS },
+    (_, k) => (boundaries[2 * k + 1] ?? 0) > (boundaries[2 * k] ?? 0),
+  )
+}
+
 /**
- * One body's atlas: a target baked one scissored 192 × 192 block a frame as
- * one quad, so the bake is one pass on the timeline and 45 blocks cover the
- * atlas, and the march that reads it.
+ * One body's atlas: a target baked a scissored block at a time, each block
+ * one quad and one pass on the timeline, and the march that reads it.
  *
  * It allocates at its real size only on a frame that has its body — the
  * served body's always, the second body's whenever there is one — and
@@ -1039,35 +1057,50 @@ const TEXEL_BYTES = 4
  * once by `initRenderTarget`, which allocates without drawing, so what
  * `textures()` lists always exists on the GPU at the size `bytes` declares.
  *
- * The atlas is body-fixed, not eye-anchored, so a cut leaves it valid. A jump
- * of the field's time, or a change of the scenario, the body or the handover
- * footprint it was baked at, owes the whole cycle again, and until 45 blocks
- * have been drawn since, it is `pending`. The blocks keep their order through
- * that: restarted at the first block, a scrub, which jumps every frame, would
- * redraw that one block forever and never the other 44. Between, it keeps
- * baking a block a frame, which refreshes the whole atlas every 45 frames for
- * the field's time.
+ * **What a frame bakes is the schedule's** (`stepFarAtlas` in
+ * `packages/rendering/src/cloudFarSchedule.ts`). The atlas is body-fixed,
+ * not eye-anchored, so a cut leaves it valid. A discontinuity of its field
+ * leaves every block behind, and the blocks come back `farBlocks` a frame,
+ * the ones in view first, each once the cube faces it reads hold the new
+ * field. A whole atlas is redrawn at the pace its field moves, the block
+ * baked longest ago first, and under a clock that stands still it bakes
+ * nothing. A block holds only the rows of the levels the body has.
+ *
+ * The field's discontinuities are the cube's generations where the atlas is
+ * baked from one, and its own beside them: a jump of the field's time, the
+ * weather, the body, the handover footprint the bake reads the field at,
+ * and a level's statistics landing.
  */
 export class CloudFarAtlas implements CloudFarField {
   readonly name: string
   readonly far: CloudFarFn
   readonly #label: string
   readonly #side: 'served' | 'second'
+  readonly #freshness: CloudCubeFreshness | null
+  readonly #profile: { readonly generation: number } | null
   readonly #target = new RenderTarget(1, 1, {
     type: UnsignedByteType,
     depthBuffer: false,
   })
   readonly #material = new NodeMaterial()
   readonly #quad = new QuadMesh(this.#material)
+  readonly #plans = farBlockPlans(FAR_LAYOUT)
+  #state: FarAtlasState = farAtlasState(this.#plans)
   #allocated = false
   #disposed = false
   #warm: Promise<void> | null = null
-  #next = 0
-  #due = 0
+  #renders = 0
+  /** The atlas's own generation, and what it was last formed from. */
+  #generation = 0
   #key: string | null = null
+  #tables = -1
+  #pending = false
+  #pendingInView = 0
 
   constructor(deps: CloudFarDeps, options: FarOptions = {}) {
     this.#side = deps.body
+    this.#freshness = deps.freshness ?? null
+    this.#profile = deps.profile ?? null
     this.name = NAMES[deps.body]
     this.#label = LABELS[deps.body]
     this.#target.texture.name = this.#label
@@ -1090,8 +1123,14 @@ export class CloudFarAtlas implements CloudFarField {
     return this.#target.width * this.#target.height * TEXEL_BYTES
   }
 
+  /** Whether a block of a level the body has holds an older field than the frame's. */
   get pending(): boolean {
-    return !this.#disposed && this.#due > 0
+    return !this.#disposed && this.#pending
+  }
+
+  /** Of the blocks that hold an older field, the ones with a column in view of the eye. */
+  get pendingInView(): number {
+    return this.#disposed ? 0 : this.#pendingInView
   }
 
   textures(): readonly Texture[] {
@@ -1121,11 +1160,7 @@ export class CloudFarAtlas implements CloudFarField {
     ])
   }
 
-  /**
-   * One block, every frame that has its body, whatever the budget: the far
-   * bake's cadence is fixed (§4.4), so its pass count on the timeline does not
-   * move with the frame's other work.
-   */
+  /** This frame's blocks, on a frame that has its body: none, or the schedule's. */
   render(renderer: WebGPURenderer, frame: CloudFrame): void {
     if (this.#disposed) return
     const body = this.#side === 'served' ? frame.served : frame.second
@@ -1133,20 +1168,74 @@ export class CloudFarAtlas implements CloudFarField {
       this.#release(renderer)
       return
     }
-    if (this.#target.width !== FAR_WIDTH || this.#target.height !== FAR_HEIGHT)
+    const now = this.#renders
+    this.#renders += 1
+    if (
+      this.#target.width !== FAR_WIDTH ||
+      this.#target.height !== FAR_HEIGHT
+    ) {
       this.#resize(renderer, FAR_WIDTH, FAR_HEIGHT)
-    const key = `${body.weatherKey} ${body.address} ${frame.levers.farFootprint}`
-    if (key !== this.#key || frame.jump) {
-      this.#key = key
-      this.#due = FAR_CYCLE
+      // A new target holds nothing: every block is to be baked.
+      this.#state = farAtlasState(this.#plans)
     }
-    this.#draw(renderer)
+    const key = `${body.weatherKey} ${body.address} ${frame.levers.farFootprint}`
+    const tables = this.#profile?.generation ?? 0
+    if (key !== this.#key || tables !== this.#tables || frame.jump)
+      this.#generation += 1
+    this.#key = key
+    this.#tables = tables
+    const levels = levelsOf(body)
+    const { eye, datumRadius } = body
+    const distance = Math.hypot(eye.x, eye.y, eye.z)
+    const { boundaries } = body.shells
+    const top = boundaries[boundaries.length - 1] ?? 0
+    const freshness = this.#freshness
+    const step = stepFarAtlas(this.#plans, this.#state, {
+      frame: now,
+      generation: this.#generation,
+      source:
+        freshness === null
+          ? null
+          : {
+              generation: freshness.generation,
+              faces: FACES.map((face) => freshness.faceGeneration(face)),
+            },
+      levels,
+      eye:
+        distance > 0
+          ? { x: eye.x / distance, y: eye.y / distance, z: eye.z / distance }
+          : { x: 0, y: 1, z: 0 },
+      cap: farViewCap(datumRadius, distance - datumRadius, top + FAR_MARGIN),
+      // The travel is the served field's by name and any body's by what it
+      // reads: the wind and the levels' turn over the frame's step of time.
+      owed: farOwed(
+        cloudFieldTravel({ ...frame, served: body }),
+        FAR_TILE,
+        datumRadius,
+      ),
+      blocks: frame.levers.farBlocks,
+    })
+    this.#state = step.state
+    this.#pending = step.pending
+    this.#pendingInView = step.pendingInView
+    for (const k of step.bake) this.#draw(renderer, this.#plans[k]!, levels)
   }
 
-  #draw(renderer: WebGPURenderer): void {
-    const block = farBlock(this.#next)
+  /** One block, clipped to the rows of the levels the body has. */
+  #draw(
+    renderer: WebGPURenderer,
+    plan: FarBlockPlan,
+    levels: readonly boolean[],
+  ): void {
+    const held = plan.levels.filter((level) => levels[level] === true)
+    if (held.length === 0) return
+    const y0 = Math.max(plan.y, held[0]! * FAR_SPAN)
+    const y1 = Math.min(
+      plan.y + plan.height,
+      (held[held.length - 1]! + 1) * FAR_SPAN,
+    )
     const target = this.#target
-    target.scissor.set(block.x, block.y, block.width, block.height)
+    target.scissor.set(plan.x, y0, plan.width, y1 - y0)
     target.scissorTest = true
     try {
       runQuadPasses(
@@ -1162,8 +1251,6 @@ export class CloudFarAtlas implements CloudFarField {
     } finally {
       target.scissorTest = false
     }
-    this.#next = (this.#next + 1) % FAR_CYCLE
-    if (this.#due > 0) this.#due -= 1
   }
 
   #resize(renderer: WebGPURenderer, width: number, height: number): void {
@@ -1173,7 +1260,8 @@ export class CloudFarAtlas implements CloudFarField {
   }
 
   #release(renderer: WebGPURenderer): void {
-    this.#due = 0
+    this.#pending = false
+    this.#pendingInView = 0
     this.#key = null
     if (this.#target.width === 1 && this.#target.height === 1) return
     this.#resize(renderer, 1, 1)
@@ -1182,7 +1270,8 @@ export class CloudFarAtlas implements CloudFarField {
   dispose(): void {
     if (this.#disposed) return
     this.#disposed = true
-    this.#due = 0
+    this.#pending = false
+    this.#pendingInView = 0
     this.#target.dispose()
     this.#material.dispose()
   }
@@ -1205,13 +1294,21 @@ export function createCloudFarAtlas(
       readonly synoptic: CloudMediumFn
       readonly analytic: CloudMediumFn
     }
+    /** The weather cube the synoptic medium reads: the served atlas is fresh only from its fresh faces. */
+    readonly maps: {
+      readonly nodes: { readonly freshness?: CloudCubeFreshness }
+    }
+    readonly profile: { readonly generation: number }
   },
   body: 'served' | 'second',
 ): CloudFarAtlas {
+  const freshness = body === 'served' ? deps.maps.nodes.freshness : undefined
   return new CloudFarAtlas({
     uniforms: deps.uniforms,
     field: body === 'served' ? deps.media.synoptic : deps.media.analytic,
     phase: deps.phase,
     body,
+    profile: deps.profile,
+    ...(freshness === undefined ? {} : { freshness }),
   })
 }

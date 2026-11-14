@@ -37,6 +37,8 @@ import {
   cubeDirection,
   cubeTexelCoordinate,
   type CubeFace,
+  farBlockPlans,
+  farOwed,
   shellCrossings,
   unionSpan,
   type ShellHeights,
@@ -47,17 +49,16 @@ import {
   CloudFarAtlas,
   type CloudFarField,
   FAR_BLOCK,
-  FAR_CYCLE,
   FAR_HEIGHT,
+  FAR_LAYOUT,
   FAR_MARGIN,
   FAR_WIDTH,
-  farBlock,
 } from './cloudFarAtlas.ts'
 import type { CloudFrame } from './cloudFrame.ts'
+import type { CloudCubeFreshness } from './cloudMaps.ts'
 import { cloudRay } from './cloudGeometry.ts'
 import { DEFAULT_CLOUD_LEVERS } from './cloudLevers.ts'
 import {
-  type CloudBudget,
   type CloudMediumFn,
   CLOUD_STAND_INS,
   CLOUD_VACUUM,
@@ -113,13 +114,6 @@ const HIGH_LAYER = { base: 4000, top: 5500 } as const
 const tauAtCode = (code: number): number => 513 ** (code / 255) - 1
 /** The stand-in phase: isotropic, normalized. */
 const ISOTROPIC = 1 / (4 * Math.PI)
-
-const BUDGET: CloudBudget = {
-  slices: 8,
-  tiles: 1,
-  jump: false,
-  sunSlices: 0,
-}
 
 /**
  * Run `work` inside a validation scope of the test's own and fail on any
@@ -237,26 +231,52 @@ function placeBody(body: CloudBodyUniforms, place: Placement): void {
   body.layers.radius.value.set(10, 10, 10)
 }
 
-/** A frame as the far field reads one: its levers, its scenario, its bodies, its jump. */
+/** The atlas's blocks, and the ones that hold a row of a placement's layers. */
+const PLANS = farBlockPlans(FAR_LAYOUT)
+const SPAN = FAR_HEIGHT / 3
+const heldBlocks = (place: Placement): number[] =>
+  PLANS.flatMap((plan, k) =>
+    plan.levels.some((level) => level < place.layers.length) ? [k] : [],
+  )
+
+/**
+ * A frame as the far field reads one: its levers, its bodies where they
+ * stand with their shells, and the field's step of time, none unless a
+ * test runs the clock. The field moves by its wind, 25 m/s.
+ */
 function frameFor(
+  place: Placement,
   options: {
     readonly jump?: boolean
     readonly served?: boolean
     readonly second?: boolean
+    readonly seconds?: number
+    readonly farBlocks?: number
   } = {},
 ): CloudFrame {
+  const shells = shellsOf(place)
+  const body = (address: string) => ({
+    address,
+    weatherKey: 'overcast',
+    datumRadius: shells.datumRadius,
+    eye: { x: 0, y: shells.datumRadius + place.eye, z: 0 },
+    shells,
+    wind: { x: 25, y: 0, z: 0 },
+    levels: [{ turnRate: 0 }, { turnRate: 0 }, { turnRate: 0 }],
+  })
   return {
-    levers: { ...DEFAULT_CLOUD_LEVERS, on: true },
+    levers: {
+      ...DEFAULT_CLOUD_LEVERS,
+      on: true,
+      ...(options.farBlocks === undefined
+        ? {}
+        : { farBlocks: options.farBlocks }),
+    },
     scenario: WEATHER_SCENARIOS.overcast,
-    served:
-      options.served === false
-        ? null
-        : { address: 'served', weatherKey: 'overcast' },
-    second:
-      options.second === true
-        ? { address: 'second', weatherKey: 'overcast' }
-        : null,
+    served: options.served === false ? null : body('served'),
+    second: options.second === true ? body('second') : null,
     jump: options.jump ?? false,
+    frameSeconds: options.seconds ?? 0,
   } as unknown as CloudFrame
 }
 
@@ -265,15 +285,20 @@ function frameFor(
 /* ------------------------------------------------------------------------- */
 
 interface Built {
-  readonly field: CloudFarField
+  readonly field: CloudFarAtlas
   readonly uniforms: CloudUniforms
   readonly body: CloudBodyUniforms
+  readonly place: Placement
 }
 
 function build(
   medium: CloudMediumFn,
   place: Placement,
-  options: { readonly air?: AirMediumFn; readonly second?: boolean } = {},
+  options: {
+    readonly air?: AirMediumFn
+    readonly second?: boolean
+    readonly freshness?: CloudCubeFreshness
+  } = {},
 ): Built {
   const uniforms = createCloudUniforms()
   const side = options.second === true ? 'second' : 'served'
@@ -284,21 +309,25 @@ function build(
     field: CLOUD_STAND_INS.field(medium),
     phase: CLOUD_STAND_INS.phase(),
     body: side,
+    ...(options.freshness === undefined
+      ? {}
+      : { freshness: options.freshness }),
   } as const
   const field = new CloudFarAtlas(
     deps,
     options.air === undefined ? {} : { air: options.air },
   )
-  return { field, uniforms, body }
+  return { field, uniforms, body, place }
 }
 
-/** Every block once, after the warm-up. */
+/** Every block of the placement's layers once, after the warm-up: a block a frame until none is owed. */
 async function bake(built: Built, second = false): Promise<void> {
   await checked(() => built.field.warm(renderer))
   await checked(() => {
-    for (let k = 0; k < FAR_CYCLE; k += 1)
-      built.field.render(renderer, frameFor({ second }), BUDGET)
+    for (let k = 0; k < PLANS.length; k += 1)
+      built.field.render(renderer, frameFor(built.place, { second }))
   })
+  expect(built.field.pending).toBe(false)
 }
 
 interface Probe {
@@ -1243,31 +1272,43 @@ describe('the blocked air', () => {
 /* ------------------------------------------------------------------------- */
 
 describe('the bake', () => {
-  it('covers the atlas in 45 blocks of 192², the last of each row and column clipped', () => {
-    const covered = new Uint8Array(FAR_WIDTH * FAR_HEIGHT)
-    for (let k = 0; k < FAR_CYCLE; k += 1) {
-      const block = farBlock(k)
-      expect(block.width).toBeGreaterThan(0)
-      expect(block.height).toBeGreaterThan(0)
-      expect(block.width).toBeLessThanOrEqual(FAR_BLOCK)
-      for (let y = block.y; y < block.y + block.height; y += 1)
-        for (let x = block.x; x < block.x + block.width; x += 1)
-          covered[y * FAR_WIDTH + x] = (covered[y * FAR_WIDTH + x] ?? 0) + 1
+  const place: Placement = {
+    eye: 2000,
+    sun: UP,
+    layers: [[LAYER.base, LAYER.top]],
+  }
+  /** Count the draws `work` makes. */
+  async function drawsOf(work: () => void): Promise<number> {
+    let draws = 0
+    const render = renderer.render.bind(renderer)
+    renderer.render = (...args: Parameters<typeof renderer.render>) => {
+      draws += 1
+      return render(...args)
     }
-    expect(FAR_CYCLE).toBe(45)
+    try {
+      await checked(work)
+    } finally {
+      renderer.render = render
+    }
+    return draws
+  }
+  const baked = (texel: number[]): boolean => texel.some((v) => v !== 0)
+
+  it('is laid out in the schedule’s blocks over six face tiles a level', () => {
     expect([FAR_WIDTH, FAR_HEIGHT]).toEqual([1548, 774])
-    expect(covered.every((n) => n === 1)).toBe(true)
+    expect(PLANS).toHaveLength(
+      Math.ceil(FAR_WIDTH / FAR_BLOCK) * Math.ceil(FAR_HEIGHT / FAR_BLOCK),
+    )
+    // One layer of three: the blocks that hold a row of it, and no others.
+    expect(heldBlocks(place).length).toBe(
+      Math.ceil(FAR_WIDTH / FAR_BLOCK) * Math.ceil(SPAN / FAR_BLOCK),
+    )
   })
 
-  it('draws one block a frame as one pass, and is pending until the cycle is through', async () => {
+  it('draws a block a frame as one pass, the block under the eye first, only the rows of a level the body has, and is pending until every block is drawn', async () => {
     // RGBA8.
     const texelBytes = 4
-    const built = build(slab(1e-3), {
-      eye: 2000,
-      sun: UP,
-      layers: [[LAYER.base, LAYER.top]],
-    })
-    const { field } = built
+    const { field } = build(slab(1e-3), place)
     expect(field.name).toBe('farAtlas')
     expect([field.bytes, field.textures(), field.pending]).toEqual([
       0,
@@ -1277,51 +1318,43 @@ describe('the bake', () => {
     await checked(() => field.warm(renderer))
     // A 1 × 1 target of the real format, which the warm-up compiled against.
     expect(field.bytes).toBe(texelBytes)
-    let draws = 0
-    const render = renderer.render.bind(renderer)
-    renderer.render = (...args: Parameters<typeof renderer.render>) => {
-      draws += 1
-      return render(...args)
-    }
-    try {
-      await checked(() => field.render(renderer, frameFor(), BUDGET))
-      expect(draws).toBe(1)
-    } finally {
-      renderer.render = render
-    }
+    expect(await drawsOf(() => field.render(renderer, frameFor(place)))).toBe(1)
     expect(field.bytes).toBe(FAR_WIDTH * FAR_HEIGHT * texelBytes)
     expect(field.pending).toBe(true)
-    // Block 0 holds the bake; block 1 and the row of blocks under it do not
-    // yet. An absent layer's texels hold its range's middle in base and top,
-    // so every baked texel is nonzero somewhere.
-    const baked = (texel: number[]): boolean => texel.some((v) => v !== 0)
-    const [inside, right, below] = await texels(textureOf(field), [
-      [FAR_BLOCK - 1, FAR_BLOCK - 1],
-      [FAR_BLOCK, 0],
-      [0, FAR_BLOCK],
+    // The eye stands over +Y, the middle of the third face's tile: the one
+    // block in view is the block that holds that texel, and it is drawn.
+    expect(field.pendingInView).toBe(0)
+    const under = [2 * SPAN + SPAN / 2, SPAN / 2] as const
+    const [inside, elsewhere] = await texels(textureOf(field), [
+      [under[0], under[1]],
+      [10, 10],
     ])
-    expect([baked(inside!), baked(right!), baked(below!)]).toEqual([
-      true,
-      false,
-      false,
-    ])
+    expect([baked(inside!), baked(elsewhere!)]).toEqual([true, false])
+    const held = heldBlocks(place).length
     await checked(() => {
-      for (let k = 1; k < FAR_CYCLE - 1; k += 1)
-        field.render(renderer, frameFor(), BUDGET)
+      for (let k = 1; k < held - 1; k += 1)
+        field.render(renderer, frameFor(place))
     })
     expect(field.pending).toBe(true)
-    await checked(() => field.render(renderer, frameFor(), BUDGET))
+    await checked(() => field.render(renderer, frameFor(place)))
     expect(field.pending).toBe(false)
+    // Every corner of the level's row is drawn, and no texel of the rows of
+    // the two levels the body does not have, in a block that holds both.
     const corners = await texels(textureOf(field), [
-      [FAR_WIDTH - 1, FAR_HEIGHT - 1],
+      [0, 0],
       [FAR_WIDTH - 1, 0],
-      [0, FAR_HEIGHT - 1],
+      [0, SPAN - 1],
+      [FAR_WIDTH - 1, SPAN - 1],
     ])
     expect(corners.every(baked)).toBe(true)
-    // A jump starts the cycle over.
-    await checked(() =>
-      field.render(renderer, frameFor({ jump: true }), BUDGET),
-    )
+    const absent = await texels(textureOf(field), [
+      [under[0], SPAN],
+      [0, SPAN + 2],
+      [FAR_WIDTH - 1, FAR_HEIGHT - 1],
+    ])
+    expect(absent.some(baked)).toBe(false)
+    // A jump leaves every block behind.
+    await checked(() => field.render(renderer, frameFor(place, { jump: true })))
     expect(field.pending).toBe(true)
     field.dispose()
     expect([field.bytes, field.textures(), field.pending]).toEqual([
@@ -1331,45 +1364,114 @@ describe('the bake', () => {
     ])
   })
 
-  it('keeps its blocks in order through a scrub, which jumps every frame, and is owed the cycle until the jumps stop', async () => {
-    const built = build(slab(1e-3), {
-      eye: 2000,
-      sun: UP,
-      layers: [[LAYER.base, LAYER.top]],
-    })
+  it('bakes nothing under a clock that stands still once it is whole, and at its field’s pace under one that runs', async () => {
+    const built = build(slab(1e-3), place)
     const { field } = built
+    await bake(built)
+    expect(
+      await drawsOf(() => {
+        for (let k = 0; k < 32; k += 1) field.render(renderer, frameFor(place))
+      }),
+    ).toBe(0)
+    // The field's 25 m/s over a sixtieth of a second: a tenth of Earth's
+    // least far texel is crossed in 110 s, so a frame owes this share of a
+    // whole redraw, and 32 frames owe under a block.
+    const held = heldBlocks(place).length
+    const owed = farOwed(25 / 60, FAR_LAYOUT.tile, EARTH)
+    expect(32 * held * owed).toBeLessThan(1)
+    expect(
+      await drawsOf(() => {
+        for (let k = 0; k < 32; k += 1)
+          field.render(renderer, frameFor(place, { seconds: 1 / 60 }))
+      }),
+    ).toBe(0)
+    // Under a warp of 1,000 a frame owes more than a block, and the cap is one.
+    expect(1000 * held * owed).toBeGreaterThan(1)
+    expect(
+      await drawsOf(() => {
+        for (let k = 0; k < 32; k += 1)
+          field.render(renderer, frameFor(place, { seconds: 1000 / 60 }))
+      }),
+    ).toBe(32)
+    expect(field.pending).toBe(false)
+    field.dispose()
+  })
+
+  it('reaches every block through a scrub, which jumps every frame, and is owed until the jumps stop', async () => {
+    const { field } = build(slab(1e-3), place)
     await checked(() => field.warm(renderer))
+    const held = heldBlocks(place).length
     await checked(() => {
-      for (let k = 0; k < FAR_CYCLE; k += 1)
-        field.render(renderer, frameFor({ jump: true }), BUDGET)
+      for (let k = 0; k < held; k += 1)
+        field.render(renderer, frameFor(place, { jump: true }))
     })
     expect(field.pending).toBe(true)
     const corners = await texels(textureOf(field), [
-      [FAR_WIDTH - 1, FAR_HEIGHT - 1],
+      [0, 0],
       [FAR_WIDTH - 1, 0],
-      [0, FAR_HEIGHT - 1],
+      [0, SPAN - 1],
+      [FAR_WIDTH - 1, SPAN - 1],
     ])
-    expect(corners.every((texel) => texel.some((v) => v !== 0))).toBe(true)
+    expect(corners.every(baked)).toBe(true)
     await checked(() => {
-      for (let k = 0; k < FAR_CYCLE; k += 1)
-        field.render(renderer, frameFor(), BUDGET)
+      for (let k = 0; k < held; k += 1) field.render(renderer, frameFor(place))
+    })
+    expect(field.pending).toBe(false)
+    field.dispose()
+  })
+
+  it('draws a block only once every cube face it reads holds the field, and calls none fresh before', async () => {
+    const faces = [1, 1, 1, 1, 1, 1]
+    const cube = { generation: 1 }
+    const freshness: CloudCubeFreshness = {
+      get generation() {
+        return cube.generation
+      },
+      faceGeneration: (face) => faces[face]!,
+      faceVersion: () => 0,
+    }
+    const built = build(slab(1e-3), place, { freshness })
+    const { field } = built
+    await bake(built)
+    // The field moves, and no face holds it yet: nothing is drawn.
+    cube.generation = 2
+    expect(await drawsOf(() => field.render(renderer, frameFor(place)))).toBe(0)
+    expect(field.pending).toBe(true)
+    expect(field.pendingInView).toBe(1)
+    // The block under the eye waits for the last of its faces.
+    const under = PLANS.find(
+      (plan) =>
+        plan.x <= 2 * SPAN + SPAN / 2 &&
+        plan.x + plan.width > 2 * SPAN + SPAN / 2 &&
+        plan.y === 0,
+    )!
+    expect(under.faces.length).toBeGreaterThan(1)
+    for (const face of under.faces.slice(0, -1)) {
+      faces[face] = 2
+      await checked(() => field.render(renderer, frameFor(place)))
+      expect(field.pendingInView).toBe(1)
+    }
+    faces[under.faces[under.faces.length - 1]!] = 2
+    expect(await drawsOf(() => field.render(renderer, frameFor(place)))).toBe(1)
+    expect(field.pendingInView).toBe(0)
+    expect(field.pending).toBe(true)
+    // With every face back, the rest follow a block a frame.
+    faces.fill(2)
+    await checked(() => {
+      for (let k = 0; k < PLANS.length; k += 1)
+        field.render(renderer, frameFor(place))
     })
     expect(field.pending).toBe(false)
     field.dispose()
   })
 
   it('releases the served body’s atlas on a frame with no served body, and the second body’s when there is none', async () => {
-    const place: Placement = {
-      eye: 2000,
-      sun: UP,
-      layers: [[LAYER.base, LAYER.top]],
-    }
     const atlas = build(slab(1e-3), place)
     await checked(() => atlas.field.warm(renderer))
-    await checked(() => atlas.field.render(renderer, frameFor(), BUDGET))
+    await checked(() => atlas.field.render(renderer, frameFor(place)))
     expect(atlas.field.bytes).toBe(FAR_WIDTH * FAR_HEIGHT * 4)
     await checked(() =>
-      atlas.field.render(renderer, frameFor({ served: false }), BUDGET),
+      atlas.field.render(renderer, frameFor(place, { served: false })),
     )
     expect([atlas.field.bytes, atlas.field.pending]).toEqual([4, false])
     expect(atlas.field.textures()).toHaveLength(1)
@@ -1380,16 +1482,19 @@ describe('the bake', () => {
       }
     ).get(textureOf(atlas.field)).texture
     expect([gpuTexture?.width, gpuTexture?.height]).toEqual([1, 1])
+    // Its body back, every block is owed again.
+    await checked(() => atlas.field.render(renderer, frameFor(place)))
+    expect(atlas.field.pending).toBe(true)
     atlas.field.dispose()
 
     const second = build(slab(1e-3), place, { second: true })
     expect(second.field.name).toBe('farSecond')
     await checked(() => second.field.warm(renderer))
     await checked(() =>
-      second.field.render(renderer, frameFor({ second: true }), BUDGET),
+      second.field.render(renderer, frameFor(place, { second: true })),
     )
     expect(second.field.bytes).toBe(FAR_WIDTH * FAR_HEIGHT * 4)
-    await checked(() => second.field.render(renderer, frameFor(), BUDGET))
+    await checked(() => second.field.render(renderer, frameFor(place)))
     expect(second.field.bytes).toBe(4)
     second.field.dispose()
   })
@@ -1399,20 +1504,17 @@ describe('the bake', () => {
       [false, 'cloud far atlas'],
       [true, 'cloud far second'],
     ] as const)(
-      'the atlas (second body: %s) is one pass a frame, named %s',
+      'a block of the atlas (second body: %s) is one pass, named %s',
       async (second, label) => {
-        const built = build(
-          slab(1e-3),
-          { eye: 2000, sun: UP, layers: [[LAYER.base, LAYER.top]] },
-          { second },
-        )
+        const built = build(slab(1e-3), place, { second })
         await checked(() => built.field.warm(renderer))
         const stop = installPassTimeline(renderer)
         try {
           const timeline = passTimelineOf(renderer)
           expect(timeline).not.toBeNull()
+          // Five frames of an atlas that owes every block: a block each.
           const draw = () =>
-            built.field.render(renderer, frameFor({ second }), BUDGET)
+            built.field.render(renderer, frameFor(place, { second }))
           await checked(draw)
           const result = await timeline!.measure(draw, 4)
           expect(result.dropped).toBe(0)
