@@ -75,7 +75,17 @@ export interface CloudField {
   dispose(): void
 }
 
-export function createCloudField(): CloudField {
+/** What a field may be built without. */
+export interface CloudFieldOptions {
+  /**
+   * False builds the served far field without the sky's term, as a system
+   * built without it traces (`CloudSystemDeps.skyTable`): its far march
+   * draws the fine march's placeholder and binds no sky table.
+   */
+  readonly skyTable?: boolean
+}
+
+export function createCloudField(options: CloudFieldOptions = {}): CloudField {
   const uniforms = createCloudUniforms()
   const bundle = { uniforms }
   const noise = createCloudNoise(bundle)
@@ -93,7 +103,10 @@ export function createCloudField(): CloudField {
   const jitter = createCloudJitter(recipe)
   const phase = createCloudPhase(recipe)
   const light = { ...recipe, volume, grid, sky, source, jitter, phase }
-  const farAtlas = createCloudFarAtlas(light, 'served')
+  const farAtlas = createCloudFarAtlas(
+    { ...light, sky: options.skyTable === false ? null : sky },
+    'served',
+  )
   const farSecond = createCloudFarAtlas(light, 'second')
   const caches = [noise, maps, clipmap, volume, grid] as const
   const tables = [phase, source, jitter] as const

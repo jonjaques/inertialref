@@ -8,14 +8,17 @@ import {
 } from 'three/webgpu'
 import {
   dot,
+  exp,
   float,
   floor,
   Fn,
   If,
   length,
+  log,
   max,
   min,
   normalize,
+  saturate,
   screenCoordinate,
   select,
   tan,
@@ -41,6 +44,7 @@ import {
   centerOf,
   encodeTau,
   type F,
+  type FarLight,
   FAR_GUTTER,
   FAR_HEIGHT,
   FAR_MARGIN,
@@ -49,6 +53,7 @@ import {
   FAR_TILE,
   FAR_WIDTH,
   type FarOptions,
+  litMarch,
   loop,
   type V3,
   type V4,
@@ -60,7 +65,10 @@ import type {
   CloudPhaseNodes,
   CloudResource,
   CloudSample,
+  CloudSkyNodes,
+  CloudSourceNodes,
 } from './cloudNodes.ts'
+import { type CloudProfile, profileSlot } from './cloudProfile.ts'
 import type { CloudCubeFreshness } from './cloudMaps.ts'
 import type { CloudBodyUniforms, CloudUniforms } from './cloudUniforms.ts'
 import { cloudFieldTravel } from './cloudVolume.ts'
@@ -121,6 +129,13 @@ interface CloudFarDeps {
   readonly freshness?: CloudCubeFreshness
   /** The profile and statistics table `field` reads: a level's statistics landing is a new field. */
   readonly profile?: { readonly generation: number }
+  /**
+   * The light's nodes, for a field that draws every order: its bake then
+   * holds what the crossing's law reads, and its march is `litMarch`.
+   * Absent, the field draws first order alone, by the bake and the march a
+   * second body's has always had.
+   */
+  readonly light?: FarLight
 }
 
 /* ------------------------------------------------------------------------- */
@@ -405,6 +420,124 @@ function atlasBake(deps: CloudFarDeps): V4 {
   })() as V4
 }
 
+/**
+ * What a texel reads of the field where the field draws every order:
+ * `'field'` the field as the handover sees it, at the far footprint, which
+ * is the resolved field where a level's cell is over twice that footprint
+ * and the level's statistics where it is not; `'statistics'` the level's
+ * statistics at every sub-column.
+ *
+ * Reckoned against the field itself on six levels (the package's report,
+ * "What a far step reads"): the two are one texel on a level of 1,200 m
+ * cells. On larger cells `'field'` follows a place's own cloudy share by
+ * sixteen draws, which is the anvil's whole error (its worst judged
+ * footprint +250 points against +299), and scatters a deck's fraction by a
+ * tenth from texel to texel where the field's own moves by 0.025.
+ * `'statistics'` reads no noise, and a block of its bake takes a fifth of
+ * the time.
+ */
+const FAR_TEXEL_READS: 'field' | 'statistics' = 'field'
+/** A footprint past every level's switch to its statistics. */
+const STATISTICS_FOOTPRINT = 1e9
+
+/** A value by the texel's layer, an integer-valued float. */
+const byLayer = (layer: F, v: V3): F =>
+  select(layer.lessThan(0.5), v.x, select(layer.lessThan(1.5), v.y, v.z))
+
+/**
+ * The served body's texel: (fraction, log in-cloud τ, base, top), as a
+ * first-order field's, with three things the crossing's law needs of it
+ * (§5.9, changes 3 and 6).
+ *
+ * - **Its depth means one thing:** the scaled depth whose transmittance is
+ *   its cloudy sub-columns' mean, `−ln` of the mean of `e^(−τ)` over the
+ *   cloudy share. That is what a level's statistics hold of a column and
+ *   what the law is fitted on. The mean of the sub-columns' depths is
+ *   another number, 2.5 times it on a stratocumulus deck, and fed to the
+ *   law it passes 37% too much there.
+ * - **The cut and the code are on the unscaled depth.** The field returns
+ *   the scaled extinction, so a sub-column's depth is unscaled by its
+ *   level's gain before the cut at 0.1 and before the 8-bit code, and the
+ *   march scales what it decodes. Cut in the scaled depth, cirrus over
+ *   cumulus's cirrus, 0.12 unscaled, leaves the far field.
+ * - **A clear texel holds the depth a cloud there would have,** the
+ *   level's own at its column, and a fraction of zero. A bilinear read
+ *   between a cloudy texel and a clear one filters the code's logarithm:
+ *   against a zero, a depth of 8 at half weight reads 2.
+ */
+function litBake(deps: CloudFarDeps): V4 {
+  return Fn(() => {
+    const body = deps.uniforms[deps.body]
+    const texel = farTexel()
+    const { base, top } = farLayerAt(body, texel.layer)
+    const gain = max(byLayer(texel.layer, body.layers.gain), 1e-6).toVar()
+    const bottom = base.toVar()
+    const ceiling = top.toVar()
+    const reach = (
+      FAR_TEXEL_READS === 'field'
+        ? bakeFootprint(deps.uniforms)
+        : float(STATISTICS_FOOTPRINT)
+    ).toVar()
+    const slice = max(ceiling.sub(bottom), 0).div(HEIGHTS).toVar()
+    const share = float(0).toVar()
+    const passed = float(0).toVar()
+    const would = float(0).toVar()
+    const low = ceiling.toVar()
+    const high = bottom.toVar()
+    const at = subColumnOf(texel.face, texel.a, texel.b)
+    // A level with no statistics of its own, a test's slab, would hold its
+    // stratiform column.
+    const nominal = byLayer(texel.layer, body.layers.depthStratiform).toVar()
+    loop('litAtlasP', SUBCOLUMNS, (p) => {
+      loop('litAtlasQ', SUBCOLUMNS, (q) => {
+        const direction = at(float(p), float(q)).toVar()
+        const tau = float(0).toVar()
+        const cover = float(0).toVar()
+        const first = float(HEIGHTS).toVar()
+        const last = float(-1).toVar()
+        loop('litAtlasH', HEIGHTS, (k) => {
+          const index = float(k).toVar()
+          const height = bottom.add(index.add(0.5).mul(slice))
+          const medium = deps.field(
+            bakeSample(body, direction, height, reach),
+            body,
+          )
+          const sigma = max(medium.sigma, 0).toVar()
+          tau.addAssign(sigma.mul(slice))
+          would.addAssign(medium.statistics?.depth ?? nominal)
+          If(sigma.greaterThan(0), () => {
+            cover.assign(max(cover, medium.fraction))
+            first.assign(min(first, index))
+            last.assign(max(last, index))
+          })
+        })
+        If(tau.mul(gain).greaterThan(CLOUDY_TAU), () => {
+          share.addAssign(cover)
+          passed.addAssign(cover.mul(exp(tau.negate())))
+          low.assign(min(low, bottom.add(first.mul(slice))))
+          high.assign(max(high, bottom.add(last.add(1).mul(slice))))
+        })
+      })
+    })
+    const cloudy = share.greaterThan(0)
+    // e⁻⁸⁰ is under a float32's least normal times the share's sixteenth.
+    const through = max(passed.div(max(share, 1e-6)), 1e-30)
+    const depth = select(
+      cloudy,
+      log(through).negate(),
+      would.div(SUBCOLUMNS * SUBCOLUMNS * HEIGHTS),
+    )
+    const floor = base.sub(FAR_MARGIN)
+    const range = top.sub(base).add(2 * FAR_MARGIN)
+    return vec4(
+      saturate(share.div(SUBCOLUMNS * SUBCOLUMNS)),
+      encodeTau(depth.mul(gain)),
+      select(cloudy, low, bottom).sub(floor).div(range),
+      select(cloudy, high, ceiling).sub(floor).div(range),
+    )
+  })() as V4
+}
+
 /* ------------------------------------------------------------------------- */
 /* The resource                                                               */
 /* ------------------------------------------------------------------------- */
@@ -485,13 +618,16 @@ export class CloudFarAtlas implements CloudFarField {
     this.name = NAMES[deps.body]
     this.#label = LABELS[deps.body]
     this.#target.texture.name = this.#label
-    this.#material.fragmentNode = atlasBake(deps)
+    const { light } = deps
+    this.#material.fragmentNode =
+      light === undefined ? atlasBake(deps) : litBake(deps)
     this.#material.name = this.#label
-    this.far = atlasMarch(
-      deps,
-      texture(this.texture),
-      options.air ?? airMediumAt,
-    )
+    const atlas = texture(this.texture)
+    const air = options.air ?? airMediumAt
+    this.far =
+      light === undefined
+        ? atlasMarch(deps, atlas, air)
+        : litMarch({ phase: deps.phase, light }, atlas, air)
   }
 
   /** What the march reads: the same texture object at every size, so no program rebinds. */
@@ -679,7 +815,14 @@ export function createCloudFarAtlas(
     readonly maps: {
       readonly nodes: { readonly freshness?: CloudCubeFreshness }
     }
-    readonly profile: { readonly generation: number }
+    readonly profile: CloudProfile
+    /**
+     * The light's nodes, which the served body's far march reads (ruling
+     * 013: a second body's draws first order alone). The sky's are null in
+     * a system built without the sky's term.
+     */
+    readonly sky: CloudSkyNodes | null
+    readonly source: CloudSourceNodes
   },
   body: 'served' | 'second',
 ): CloudFarAtlas {
@@ -691,5 +834,50 @@ export function createCloudFarAtlas(
     body,
     profile: deps.profile,
     ...(freshness === undefined ? {} : { freshness }),
+    ...(body === 'served' ? { light: farLightOf(deps) } : {}),
   })
+}
+
+/**
+ * The served field's light: the sky's and the source's nodes, and a level's
+ * numbers from the profile and statistics table.
+ *
+ * A level's shape, sight length and mean are read at the level's own cover
+ * and cumuliform share, the climate's uniforms, where the fine march reads
+ * them at its crossing's first column: a texel holds a cloudy share and a
+ * depth, and neither the cover nor the share they came from.
+ */
+function farLightOf(deps: {
+  readonly uniforms: CloudUniforms
+  readonly profile: CloudProfile
+  readonly sky: CloudSkyNodes | null
+  readonly source: CloudSourceNodes
+}): FarLight {
+  const { uniforms, profile } = deps
+  const of = (v: V3, k: number): F => (k === 0 ? v.x : k === 1 ? v.y : v.z)
+  const share = (body: CloudBodyUniforms, k: number): F =>
+    saturate(of(body.climate.convective, k))
+  return {
+    uniforms,
+    sky: deps.sky,
+    source: deps.source,
+    level(body, k) {
+      const slot = profileSlot(uniforms, body)
+      const cover = saturate(of(body.climate.cover, k))
+      const v = share(body, k)
+      const read = profile.statistics(slot, float(k), cover, v)
+      return {
+        shape: read.shape,
+        sight: read.sightCells.mul(of(body.layers.cell, k)),
+        mean: profile.mean(slot, float(k), cover, v),
+      }
+    },
+    profile: (body, k, h01) =>
+      profile.sample(
+        profileSlot(uniforms, body),
+        float(k),
+        h01,
+        share(body, k),
+      ),
+  }
 }

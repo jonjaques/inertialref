@@ -3,11 +3,14 @@ import {
   abs,
   ceil,
   clamp,
+  dot,
   exp,
   exp2,
   float,
   If,
   int,
+  length,
+  log,
   log2,
   Loop,
   max,
@@ -17,6 +20,7 @@ import {
   saturate,
   select,
   sqrt,
+  uint,
   vec2,
   vec3,
 } from 'three/tsl'
@@ -27,6 +31,7 @@ import {
   clearedBeam,
   ORBIT_AIRLIGHT,
   phasesToward,
+  psiTableAt,
   stepShare,
   sunTableAt,
   sunThroughAt,
@@ -38,14 +43,34 @@ import {
   shellCrossingFrom,
   sunMuAt,
 } from './cloudGeometry.ts'
+import { CLOUD_TRANSPORTS } from './cloudLevers.ts'
+import {
+  crossingDepth,
+  crossingExponent,
+  skySource,
+  spreadDepth,
+  statisticalSlab,
+  stepLightBand,
+  stepRamp,
+  stepShare as opacityShare,
+  stepWeights,
+  sunStatistics,
+} from './cloudMix.ts'
 import type {
   CloudFarFn,
   CloudFarResult,
   CloudPhaseNodes,
   CloudRay,
   CloudSample,
+  CloudSkyAt,
+  CloudSkyNodes,
+  CloudSourceNodes,
 } from './cloudNodes.ts'
-import type { CloudBodyUniforms } from './cloudUniforms.ts'
+import {
+  CLOUD_CLIMATE_KINDS,
+  type CloudBodyUniforms,
+  type CloudUniforms,
+} from './cloudUniforms.ts'
 
 /*
  * The far march: a ray past the handover, marched through a body's layer
@@ -222,6 +247,12 @@ interface FarStep {
   readonly fraction: F
   /** The sun's light at the cloud per unit irradiance, phase not applied: T_sun times the beam. */
   readonly source: V3
+  /**
+   * The light the cloud sends that no phase multiplies, per unit of the
+   * step's opacity: the sun's orders past the first and the sky's. Absent
+   * from a march that draws first order alone.
+   */
+  readonly rest?: V3
 }
 
 /** The mean of a truncated exponential of rate τ on [0, 1], with its series under τ = 0.1. */
@@ -340,6 +371,8 @@ class FarMarch {
   readonly #blocked = vec3(0).toVar()
   readonly #airLight = vec3(0).toVar()
   readonly #light = [vec3(0).toVar(), vec3(0).toVar(), vec3(0).toVar()]
+  /** The light after first order so far, in a march that draws it: a register a first-order march never declares. */
+  readonly #rest: V3 | null
   readonly #weight = float(0).toVar()
   readonly #mean: F
   readonly #spread = float(0).toVar()
@@ -357,7 +390,9 @@ class FarMarch {
     body: CloudBodyUniforms,
     sky: B,
     air: AirMediumFn,
+    lit = false,
   ) {
+    this.#rest = lit ? vec3(0).toVar() : null
     this.#ray = {
       direction: ray.direction.toVar(),
       mu: ray.mu.toVar(),
@@ -460,6 +495,13 @@ class FarMarch {
         .mul(step.source)
         .mul(weight),
     )
+    if (this.#rest !== null && step.rest !== undefined)
+      this.#rest.addAssign(
+        this.#airThrough
+          .mul(exp(airTau.mul(reach).negate()))
+          .mul(step.rest)
+          .mul(weight),
+      )
     const total = this.#weight.add(weight).toVar()
     const share = weight.div(max(total, 1e-30)).toVar()
     const delta = center.sub(this.#mean).toVar()
@@ -475,15 +517,26 @@ class FarMarch {
     this.cursor.assign(max(step.to, this.cursor))
   }
 
-  /** Each layer's light under its own droplets' phase; the moments as a mean and a deviation. */
+  /**
+   * Each layer's light under its phase, and the moments as a mean and a
+   * deviation. A march that draws first order alone takes every level's
+   * phase as droplets'. One that draws every order takes the level's own
+   * class with its gain, as the fine march does, and adds the light no
+   * phase multiplies.
+   */
   result(phase: CloudPhaseNodes): CloudFarResult {
-    const light = this.#light.reduce<V3>(
-      (sum, layer, k) =>
-        sum.add(
+    const lit = this.#rest
+    const phased = this.#light.reduce<V3>((sum, layer, k) => {
+      if (lit === null)
+        return sum.add(
           layer.mul(phase.droplets(this.#ray.nu, farRadius(this.#body, k))),
-        ),
-      vec3(0),
-    )
+        )
+      const fetched = phase
+        .phase(this.#ray.nu, this.#body.layers, k, farRadius(this.#body, k))
+        .toVar()
+      return sum.add(layer.mul(fetched.rgb.mul(fetched.a)))
+    }, vec3(0))
+    const light = lit === null ? phased : phased.add(lit)
     const weighed = this.#weight.greaterThan(0)
     return {
       light,
@@ -702,6 +755,506 @@ export function atlasMarch(
               source: atlasSun(atlas, body, sample, k).mul(
                 runSunShare(runTau, entry, exit),
               ),
+            },
+            k,
+          )
+        })
+      })
+    }
+    march.gap(end)
+    return march.result(deps.phase)
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* The march of a field that draws every order                                */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * The served body's far march. Past the handover a cloud draws with the
+ * light it drew before it: the sun's first order, its orders past the first
+ * and the sky's, mixed by the one crossing's law (`cloudMix.ts`), every
+ * rule imported from where the fine march reads it and none rewritten here.
+ *
+ * **A step passes the crossing's law by its share of the level's chord.** A
+ * texel holds a cloudy share and the depth whose transmittance is its
+ * cloudy columns' mean (`cloudFarAtlas.ts`). A level's crossing counts
+ * `n = crossingExponent(ℓ, c)` columns over its chord, both known from the
+ * level's two spheres before any step, and a step takes `n` in the share of
+ * the chord its run inside the texel's cloud covers. Under one share and one
+ * depth the product over any cut of the chord is the crossing's own, so a
+ * level crossed in one step and in five passes the same.
+ *
+ * **The depth a run crosses is the level's profile's share of the column,**
+ * read at the run's two heights: the share of the column between them,
+ * times the run over the height it falls. A run that turns inside its step,
+ * which only a ray grazing the level does, stands at one height, and
+ * crosses the profile's extinction there along its length.
+ *
+ * **A step's light is its opacity times the source's mean over it,** each
+ * source weighed as the step's own opacity weighs it: at Gauss points of
+ * the opacity's cumulative share, `u = (1 − e^(−τ·x))/(1 − e^(−τ))` for a
+ * place `x` along the run and the step's mixed depth `τ`. The fine march
+ * takes tens of steps across a level and joins each one's two ends; a far
+ * step crosses it in one, where two ends join the lit face to the far one
+ * and read a deck's light after first order 10% to 32% low. In `u` the
+ * source of a deck is nearly a line, and one point reads it within 2% at a
+ * depth of 50 and 12% at worst, two within 2.5%, against the integral on
+ * the plane slab's table. First order and the sky's light are closed forms
+ * and take two points; the light after first order is the table's, four
+ * fetches a point, and takes `HIGHER_POINTS`.
+ *
+ * **Each source is the fine march's statistical step's:** the sun through
+ * `sunStatistics` with no taps, the sample's own column by the texel's
+ * share and depth and the levels on the sun's side by the climate's; the
+ * light after first order by `statisticalSlab`'s two points about the
+ * level's true mean; the sky by `skySource` on the column's transport
+ * depths. The view is laid in the sample's own frame.
+ */
+
+/** A level's numbers at a far crossing, which the crossing's law and the light after first order read. */
+export interface FarLevelNodes {
+  /** The gamma its cloudy columns' depths are spread by. */
+  readonly shape: F
+  /** Its sight length, meters. */
+  readonly sight: F
+  /** Its cloudy columns' true mean scaled depth: the level's, and no place's. */
+  readonly mean: F
+}
+
+/** What a far field that draws every order reads beside its atlas. */
+export interface FarLight {
+  /** The trace's uniforms: the transport lever says whether the factor of the sun is taken. */
+  readonly uniforms: CloudUniforms
+  /**
+   * The sky's light at a sample, from the body's sky table; null in a
+   * system built without the sky's term, where a step draws the fine
+   * march's placeholder and the kernel binds no sky table.
+   */
+  readonly sky: CloudSkyNodes | null
+  readonly source: CloudSourceNodes
+  /** Level `k`'s statistics at the level's own cover and cumuliform share: formed once a crossing. */
+  level(body: CloudBodyUniforms, k: number): FarLevelNodes
+  /**
+   * Level `k`'s profile at a height, 0 at its base and 1 at its top: the
+   * extinction's share there, that share's mean up the column, the share of
+   * the column above, and the radius's share of the level's. One read.
+   */
+  profile(body: CloudBodyUniforms, k: number, h01: F): V4
+}
+
+/** Points the light after first order is read at across a step: Gauss points of the opacity's cumulative share. */
+const HIGHER_POINTS: 1 | 2 = 2
+/** Gauss–Legendre points on [0, 1], one and two. */
+const GAUSS_ONE = [0.5] as const
+const GAUSS_TWO = [0.2113248654, 0.7886751346] as const
+/** `cloudMarch.ts`'s: the least a bearing is taken from, and the least sine the sky's sunward lean is divided by. */
+const NO_BEARING = 1e-6
+const SUN_OVERHEAD = 1e-3
+/** `cloudMarch.ts`'s placeholder for the sky's light: Ψ × ½, isotropic. */
+const SKY_SHARE = 0.5
+const ISOTROPIC = 1 / (4 * Math.PI)
+const SLAB_TRANSPORT = CLOUD_TRANSPORTS.indexOf('slab')
+/** The least a depth or a length is divided by. */
+const LEAST = 1e-9
+/** The share of a level's thickness a run must fall for its two heights to say what it crossed. */
+const LEVEL_RUN = 0.01
+/** The share of a level's thickness inside which a height stands on its top or its base. */
+const LEVEL_EDGE = 1e-3
+
+/** A level's component of a per-level vector. */
+const ofLevel = (v: V3, k: number): F => (k === 0 ? v.x : k === 1 ? v.y : v.z)
+
+/** One crossing of a level proper, base to top: its chord and its horizontal run, meters (`cloudMarch.ts`, `levelCrossings`). */
+function levelChords(
+  body: CloudBodyUniforms,
+  mu: F,
+  layer: FarLayer,
+): { readonly near: readonly [F, F]; readonly far: readonly [F, F] } {
+  const base = shellCrossing(body, mu, layer.eyeOverBase, layer.base)
+  const top = shellCrossing(body, mu, layer.eyeOverTop, layer.top)
+  const thickness = layer.top.sub(layer.base)
+  const reached = top.hit.and(thickness.greaterThan(0))
+  const enter = max(top.near, 0)
+  const leave = max(top.far, 0)
+  const ahead = base.hit.and(base.far.greaterThan(0))
+  const crossing = (valid: B, start: F, end: F, rise: F): readonly [F, F] => {
+    const chord = select(valid, max(end.sub(start), 0), float(0))
+    return [chord, sqrt(max(chord.mul(chord).sub(rise.mul(rise)), 0))]
+  }
+  const fall = select(
+    top.near.greaterThan(0),
+    select(ahead, thickness, float(0)),
+    select(ahead, layer.eyeOverBase, layer.eyeOverTop),
+  )
+  return {
+    near: crossing(
+      reached,
+      enter,
+      select(ahead, max(base.near, 0), leave),
+      fall,
+    ),
+    far: crossing(reached.and(ahead), max(base.far, 0), leave, thickness),
+  }
+}
+
+/** The lit march: each layer's shells in t order, a texel a step, each step the crossing's law and the three sources. */
+export function litMarch(
+  deps: { readonly phase: CloudPhaseNodes; readonly light: FarLight },
+  atlas: TextureNode,
+  air: AirMediumFn,
+): CloudFarFn {
+  const { light } = deps
+  return (given, from, body, sky) => {
+    const march = new FarMarch(given, from, body, sky, air, true)
+    const ray = march.ray
+    const end = given.end.toVar()
+    const center = centerOf(body).toVar()
+    // The sample's frame, formed once a ray as the fine march forms it.
+    const eyeRadius = body.datumRadius.add(body.eye).toVar()
+    const sun = body.sun.toVar()
+    const datum = body.datumRadius.toVar()
+    // Each level's cumuliform share, which the factor of the sun and the
+    // sky's light both read: a regime's own, and none under another climate.
+    const shares = select(
+      body.climate.kind.equal(uint(CLOUD_CLIMATE_KINDS.regime)),
+      saturate(body.climate.convective),
+      vec3(0),
+    ).toVar()
+    const factor = select(
+      light.uniforms.trace.transport.equal(uint(SLAB_TRANSPORT)),
+      float(1),
+      float(0),
+    ).toVar()
+    const layers = [0, 1, 2].map((k) => farLayer(body, k))
+    const shells = layers.map((layer) => atlasIntervals(body, ray, layer))
+    const chords = layers.map((layer) => {
+      const { near, far } = levelChords(body, ray.mu, layer)
+      return {
+        near: [near[0].toVar(), near[1].toVar()] as const,
+        far: [far[0].toVar(), far[1].toVar()] as const,
+      }
+    })
+    const order = [
+      [2, 'near'],
+      [1, 'near'],
+      [0, 'near'],
+      [0, 'far'],
+      [1, 'far'],
+      [2, 'far'],
+    ] as const
+    for (const [k, side] of order) {
+      const layer = layers[k]!
+      const [enter, leave, met] = shells[k]![side]
+      const [chord, run] = chords[k]![side]
+      const start = max(enter, march.cursor).toVar()
+      const stop = min(leave, end).toVar()
+      If(met.and(stop.greaterThan(start)), () => {
+        march.gap(start)
+        const thickness = max(layer.top.sub(layer.base), 1e-3).toVar()
+        // The level's own numbers, once a crossing.
+        const level = light.level(body, k)
+        const shape = level.shape.toVar()
+        const mean = level.mean.toVar()
+        const sight = level.sight.toVar()
+        const exponent = crossingExponent(run, sight).toVar()
+        const sourceLevel = light.source.level(int(k)).toVar()
+        const gain = max(ofLevel(body.layers.gain, k), LEAST).toVar()
+        const transport = ofLevel(body.layers.transport, k).toVar()
+        const sigmaLevel = max(ofLevel(body.layers.sigma, k), LEAST).toVar()
+        const radiusLevel = ofLevel(body.layers.radius, k).toVar()
+        const cumuliform = ofLevel(shares, k).toVar()
+        // One texel a step: the face-center texel at the layer's height, the
+        // largest on the face.
+        const texel = body.datumRadius
+          .add(layer.base.add(layer.top).mul(0.5))
+          .mul(Math.PI / (2 * FAR_TILE))
+        const span = stop.sub(start).toVar()
+        const steps = clamp(ceil(span.div(texel)), 1, FAR_STEPS_A_LAYER).toVar()
+        const delta = span.div(steps).toVar()
+        loop(`litStep${k}${side}`, int(steps), (i) => {
+          const t0 = start.add(float(i).mul(delta)).toVar()
+          const t1 = t0.add(delta)
+          const direction = normalize(
+            center.add(ray.direction.mul(t0.add(delta.mul(0.5)))),
+          )
+          const read = farRead(atlas, direction, k).toVar()
+          const floor = layer.base.sub(FAR_MARGIN)
+          const range = layer.top.sub(layer.base).add(2 * FAR_MARGIN)
+          const base = floor.add(read.z.mul(range)).toVar()
+          const top = floor.add(read.w.mul(range)).toVar()
+          const inside = cloudRun(body, ray.mu, t0, t1, base, top)
+          const runStart = inside.start.toVar()
+          const runLength = inside.length.toVar()
+          const depth = float(0).toVar()
+          const first = vec3(0).toVar()
+          const rest = vec3(0).toVar()
+          If(read.x.greaterThan(0).and(runLength.greaterThan(0)), () => {
+            // The texel's depth is coded unscaled, and the medium is the scaled one.
+            const column = decodeTau(read.y).div(gain).toVar()
+            const spread = select(
+              column.greaterThan(LEAST),
+              spreadDepth(column, shape).div(max(column, LEAST)),
+              float(1),
+            ).toVar()
+            /** The ray's cosine to the local vertical where it stands `t` along it, and that height's own numbers. */
+            const standing = (t: F) => {
+              const sample = cloudSample(ray, t, body, float(0))
+              const altitude = sample.altitude.toVar()
+              const radius = max(datum.add(altitude), 1).toVar()
+              return {
+                sample,
+                altitude,
+                radius,
+                rise: eyeRadius.mul(ray.mu).add(t).div(radius).toVar(),
+              }
+            }
+            const head = standing(runStart)
+            const tail = standing(runStart.add(runLength))
+            const middle = standing(runStart.add(runLength.mul(0.5)))
+            const h01 = (altitude: F): F =>
+              saturate(altitude.sub(layer.base).div(thickness))
+            // The level's profile, read once a step, at the run's middle:
+            // the extinction's share there, its mean up the column, the
+            // share of the column above, and the radius's share.
+            const middle01 = h01(middle.altitude).toVar()
+            const profile = light.profile(body, k, middle01).toVar()
+            const meanShare = max(profile.y, LEAST).toVar()
+            const slope = profile.x.div(meanShare).toVar()
+            /**
+             * The share of the column above one of the run's two ends: none
+             * above the level's top and all of it under its base, where it
+             * is known, so a run that crosses the level whole crosses the
+             * whole column whatever the profile; and inside the level the
+             * read's own at the run's middle, carried to the end's height
+             * by the extinction there.
+             */
+            const aboveEnd = (altitude: F): F => {
+              const at = h01(altitude).toVar()
+              return select(
+                at.greaterThanEqual(1 - LEVEL_EDGE),
+                float(0),
+                select(
+                  at.lessThanEqual(LEVEL_EDGE),
+                  float(1),
+                  saturate(profile.z.sub(slope.mul(at.sub(middle01)))),
+                ),
+              )
+            }
+            const aboveHead = aboveEnd(head.altitude).toVar()
+            const aboveTail = aboveEnd(tail.altitude).toVar()
+            /**
+             * The share above a place `x` along the run: a line from each
+             * end to the middle's own read. Carried from the middle alone
+             * by the extinction there, a level whose profile is a hump
+             * reads its lit face at every place a step's light is taken.
+             */
+            const above = (x: F): F =>
+              select(
+                x.lessThan(0.5),
+                aboveHead.add(profile.z.sub(aboveHead).mul(x.mul(2))),
+                profile.z.add(aboveTail.sub(profile.z).mul(x.mul(2).sub(1))),
+              )
+            // What the run crosses of the column: the share between its two
+            // heights over the height it falls, or, where it stands at one
+            // height, the profile's extinction there.
+            const fall = abs(head.altitude.sub(tail.altitude)).toVar()
+            const flat = head.rise
+              .mul(tail.rise)
+              .lessThan(0)
+              .or(fall.lessThan(thickness.mul(LEVEL_RUN)))
+            const along = select(
+              flat,
+              slope.div(thickness),
+              abs(aboveHead.sub(aboveTail)).div(max(fall, 1e-3)),
+            )
+              .mul(runLength)
+              .toVar()
+            depth.assign(
+              crossingDepth(
+                read.x,
+                column.mul(spread).mul(along),
+                exponent.mul(runLength).div(max(chord, 1e-3)),
+                shape,
+              ),
+            )
+            const opacity = depth.mul(opacityShare(depth)).toVar()
+            // The level's nominal column, as the fine march's medium holds it.
+            const nominal = sigmaLevel.mul(meanShare).mul(thickness).toVar()
+            const beam = cloudBeam(
+              body,
+              middle.altitude,
+              middle.sample.sunMu,
+            ).toVar()
+            const skyAt = light.sky?.at(middle.sample, body)
+            const skyMean = skyAt?.mean.toVar()
+            const sides =
+              skyAt === undefined
+                ? undefined
+                : {
+                    up: skyAt.up.toVar(),
+                    sunward: skyAt.sunward.toVar(),
+                    upper: skyAt.upper.toVar(),
+                  }
+            /** A place a share `x` of the way along the run. */
+            const placeAt = (x: F) => {
+              const at = standing(runStart.add(runLength.mul(x)))
+              return { ...at, x, over: above(x).toVar() }
+            }
+            /** The place with a share `u` of the step's opacity in front of it. */
+            const place = (u: number) =>
+              placeAt(
+                select(
+                  depth.lessThan(1e-3),
+                  float(u),
+                  log(max(float(1).sub(opacity.mul(u)), LEAST))
+                    .negate()
+                    .div(max(depth, LEAST)),
+                ).toVar(),
+              )
+            type Place = ReturnType<typeof place>
+            /** First order's transmittance to the sun: the sample's column and the levels on the sun's side. */
+            const sunAt = (at: Place): F =>
+              sunStatistics({
+                layers: body.layers,
+                level: int(k),
+                cover: body.climate.cover,
+                convective: body.climate.convective,
+                depth: vec2(at.over.mul(nominal), nominal),
+                sunMu: at.sample.sunMu,
+                taps: float(0),
+                own: { fraction: read.x, depth: column, shape, sight },
+              })
+            /** The sky's light as a source: the column's transport depths over and under the sample. */
+            const skyOf = (
+              at: Place,
+              skyMean: V3,
+              sides: Pick<CloudSkyAt, 'up' | 'sunward' | 'upper'>,
+            ): V3 => {
+              const sigma = column.mul(slope).div(thickness)
+              const scale = transport.mul(saturate(sigma.div(sigmaLevel)))
+              const sunMu = at.sample.sunMu
+              const sunward = ray.nu
+                .sub(at.rise.mul(sunMu))
+                .div(
+                  max(
+                    sqrt(max(float(1).sub(sunMu.mul(sunMu)), 0)),
+                    SUN_OVERHEAD,
+                  ),
+                )
+              return skyMean.mul(
+                skySource(
+                  sides,
+                  at.over.mul(nominal).mul(scale),
+                  float(1).sub(at.over).mul(nominal).mul(scale),
+                  cumuliform,
+                  float(1).sub(transport),
+                  at.rise,
+                  sunward,
+                ),
+              )
+            }
+            /** The sun's light past first order, per unit of its irradiance: two points of the tilted gamma. */
+            const higherOf = (at: Place): F => {
+              const sunMu = at.sample.sunMu
+              const above = sunMu.greaterThanEqual(0)
+              const up = center.add(at.sample.offset).div(at.radius)
+              const eyeLaid = up.mul(at.rise).sub(ray.direction)
+              const sunLaid = up.mul(sunMu).sub(sun)
+              const laid = length(eyeLaid).mul(length(sunLaid))
+              const bearing = select(
+                laid.greaterThan(NO_BEARING),
+                dot(eyeLaid, sunLaid).div(max(laid, NO_BEARING)),
+                float(0),
+              )
+              const view = light.source.view(
+                select(above, at.rise.negate(), at.rise),
+                bearing,
+              )
+              const down = at.rise.lessThan(0)
+              const seen = select(down, at.over, float(1).sub(at.over))
+              const litSide = down.and(above).or(down.not().and(above.not()))
+              const radius = radiusLevel.mul(profile.w)
+              const convective = cumuliform.mul(factor)
+              const point = (which: 0 | 1): F => {
+                const gauss = statisticalSlab(
+                  { shape, mean },
+                  seen,
+                  abs(at.rise),
+                  litSide,
+                  sunMu,
+                  which,
+                  2,
+                )
+                return gauss.weight.mul(
+                  light.source.source(
+                    { ...gauss.slab, convective },
+                    radius,
+                    sourceLevel,
+                    view,
+                  ),
+                )
+              }
+              return point(0).add(point(1))
+            }
+            const ends = [placeAt(float(0)), placeAt(float(1))] as const
+            const two = GAUSS_TWO.map(place)
+            /*
+             * First order joins four places as the fine march joins its
+             * steps' ends, log-linear between each pair: exact where the
+             * sun's depth grows along the run, which a slab's does. The
+             * sky's light is a ramp between the run's two ends, as it is
+             * between a fine step's.
+             */
+            const across = [ends[0], two[0]!, two[1]!, ends[1]]
+            const suns = across.map((at) => sunAt(at).toVar())
+            const lit = float(0).toVar()
+            for (let j = 0; j < 3; j += 1) {
+              const from = across[j]!.x
+              const piece = depth.mul(across[j + 1]!.x.sub(from)).toVar()
+              lit.addAssign(
+                exp(depth.mul(from).negate()).mul(
+                  stepLightBand(suns[j]!, suns[j + 1]!, piece),
+                ),
+              )
+            }
+            const share = float(1).div(max(opacity, LEAST)).toVar()
+            first.assign(beam.mul(lit.mul(share)))
+            const higher =
+              HIGHER_POINTS === 2
+                ? higherOf(two[0]!).add(higherOf(two[1]!)).mul(0.5)
+                : higherOf(place(GAUSS_ONE[0]))
+            // Without the sky's term, the fine march's placeholder: Ψ at a
+            // half, isotropic, the same over the step.
+            const skyLight =
+              skyMean === undefined || sides === undefined
+                ? psiTableAt(
+                    body.air,
+                    middle.sample.sunMu,
+                    saturate(
+                      middle.altitude
+                        .div(datum)
+                        .div(max(body.air.top.sub(1), 1e-6)),
+                    ),
+                    LEVEL,
+                  ).mul(SKY_SHARE * ISOTROPIC)
+                : stepRamp(
+                    skyOf(ends[0], skyMean, sides),
+                    skyOf(ends[1], skyMean, sides),
+                    stepWeights(depth),
+                  ).mul(share)
+            rest.assign(beam.mul(higher).add(skyLight))
+          })
+          march.step(
+            {
+              from: t0,
+              to: t1,
+              start: runStart,
+              length: runLength,
+              tau: depth,
+              fraction: float(1),
+              source: first,
+              rest,
             },
             k,
           )

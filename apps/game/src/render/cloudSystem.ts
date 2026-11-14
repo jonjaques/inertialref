@@ -269,7 +269,7 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
   const census = censusOf(renderer)
   const baseline = { ...census }
 
-  const field = createCloudField()
+  const field = createCloudField({ skyTable: deps.skyTable ?? true })
   const { uniforms } = field
   const depth = new CloudDepth(uniforms, layout)
   depth.tie(scenePass.renderTarget)
