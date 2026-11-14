@@ -1,5 +1,6 @@
 import { getLogger, invariant } from '@inertialref/shared'
-import { cloudsServed, type RenderBody } from '@inertialref/rendering'
+import type { RenderBody } from '@inertialref/rendering'
+import type { Body } from '@inertialref/universe'
 import {
   type CloudRenderReport,
   cloudReportIdle,
@@ -48,7 +49,6 @@ import shapeDetailUrl from 'three-clouds-webgpu/assets/shape_detail.bin?url'
 import shapeUrl from 'three-clouds-webgpu/assets/shape.bin?url'
 import turbulenceUrl from 'three-clouds-webgpu/assets/turbulence.png?url'
 import { overClouds, UNDER_CLOUDS_LAYERS } from './cloudLayers.ts'
-import { cloudLeversHash } from './cloudLevers.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
 import type {
   CloudChainFactory,
@@ -121,6 +121,8 @@ const LUMINANCE = new Vector3(0.2126, 0.7152, 0.0722)
 
 interface TakramAssets {
   readonly textures: BakedCloudTextures
+  /** `cloudsServed`: whether a body is drawn with clouds unasked. */
+  readonly wet: (body: Body) => boolean
 }
 
 interface TableEvents {
@@ -315,7 +317,6 @@ function build(
   let served: RenderBody | null = null
   let anchor: TakramAnchor | null = null
   let levers: CloudRenderReport['levers'] | null = null
-  let leversHash: string | null = null
   let layered = false
   let frames = 0
   let resets = 0
@@ -343,7 +344,9 @@ function build(
       ...cloudReportIdle(),
       on,
       levers: { ...(levers ?? {}) },
-      leversHash,
+      // No hash: `cloudLeversHash` reaches the procedural hash, and a chunk
+      // that shares it with the page splits it out for every visit to load.
+      leversHash: null,
       served: served?.address ?? null,
       regime: on ? 'converging' : 'off',
       extents: {
@@ -383,7 +386,7 @@ function build(
               eye,
               (candidate) => {
                 const record = inputs.record(candidate.address)
-                return record !== null && cloudsServed(record)
+                return record !== null && assets.wet(record)
               },
               inputs.levers.served,
             )
@@ -395,7 +398,6 @@ function build(
       if (served === null) reset()
       served = body
       levers = { ...inputs.levers }
-      leversHash = cloudLeversHash(inputs.levers)
       renderer.getSize(css)
       renderer.getDrawingBufferSize(buffer)
 
@@ -540,8 +542,14 @@ export interface TakramClouds {
  * Loads the port's four baked textures and answers the factory the sensor's
  * chain builds its cloud system with. One per page: the textures and the
  * settings outlive every chain.
+ *
+ * `wet` is `cloudsServed`, handed in and not imported: this chunk sharing
+ * the weather's modules with the page re-partitions them, and the page then
+ * loads one chunk more on every visit (`check-site-chunks.mjs`).
  */
-export async function loadTakramClouds(): Promise<TakramClouds> {
+export async function loadTakramClouds(
+  wet: (body: Body) => boolean,
+): Promise<TakramClouds> {
   const textures = await loadBakedCloudTextures({
     localWeather: localWeatherUrl,
     shape: shapeUrl,
@@ -549,7 +557,7 @@ export async function loadTakramClouds(): Promise<TakramClouds> {
     turbulence: turbulenceUrl,
   })
   const settings = createTakramSettings()
-  const assets: TakramAssets = { textures }
+  const assets: TakramAssets = { textures, wet }
   return {
     factory: Object.assign(
       (deps: CloudSystemDeps) => build(deps, assets, settings),

@@ -11,6 +11,7 @@ import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
+import { cloudsServed } from '@inertialref/rendering'
 import { BUILD_ID, SERVED_TREE } from './build.ts'
 import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
 import type { HudCommands, HudRenderState } from './hud/controls.ts'
@@ -129,7 +130,7 @@ function withClouds(
       const [renderer, takram] = await Promise.all([
         factory(props),
         import('./render/takramClouds.ts').then((chunk) =>
-          chunk.loadTakramClouds(),
+          chunk.loadTakramClouds(cloudsServed),
         ),
       ])
       engine.cloudSystemFactory = takram.factory
