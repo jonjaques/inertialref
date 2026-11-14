@@ -368,7 +368,8 @@ export const QUERY = {
    * cloud object exists, so no plate, comparison or ledger run can move.
    * `takram` builds takram's clouds in the same place through their WebGPU
    * port (`render/takramClouds.ts`), under the same levers; a page holds one
-   * renderer or the other.
+   * renderer or the other. `takram:low` builds the port at that quality
+   * preset, one of `low`, `medium`, `high`, `ultra` and `lowEnd`.
    */
   clouds: 'clouds',
 } as const

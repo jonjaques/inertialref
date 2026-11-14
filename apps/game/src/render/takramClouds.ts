@@ -240,6 +240,13 @@ function build(
   pass.updateBeforeType = NodeUpdateType.RENDER
   const context = pass.cloudsContext
   Object.assign(context, assets.textures)
+  // How often the port's pass runs, against the frames this system draws.
+  let marches = 0
+  const march = pass.updateBefore.bind(pass)
+  pass.updateBefore = (frame) => {
+    marches += 1
+    return march(frame)
+  }
 
   // The port's nodes find their context and the air through the renderer.
   const previous = renderer.contextNode
@@ -457,6 +464,9 @@ function build(
         gain: gain.value.toArray(),
         processing: sensor.processing,
         tables,
+        frames,
+        marches,
+        graphVersion: context.graphVersion,
       }
       if (!inspected) {
         inspected = true
@@ -479,7 +489,10 @@ function build(
         layered = false
       }
     },
-    afterFrame() {},
+    afterFrame() {
+      // After a frame the port drew, and only then: `takramTunables.ts`.
+      if (drawing) settings.flush()
+    },
     // The port holds no radiance at a trace's texels to read back.
     captureRadiance: () => Promise.resolve(null),
     resetHistory() {
@@ -549,6 +562,7 @@ export interface TakramClouds {
  */
 export async function loadTakramClouds(
   wet: (body: Body) => boolean,
+  preset: string | null = null,
 ): Promise<TakramClouds> {
   const textures = await loadBakedCloudTextures({
     localWeather: localWeatherUrl,
@@ -556,7 +570,7 @@ export async function loadTakramClouds(
     shapeDetail: shapeDetailUrl,
     turbulence: turbulenceUrl,
   })
-  const settings = createTakramSettings()
+  const settings = createTakramSettings(preset)
   const assets: TakramAssets = { textures, wet }
   return {
     factory: Object.assign(

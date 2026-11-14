@@ -1,5 +1,6 @@
 import {
   applyCloudTypePreset,
+  PORT_DEFAULT_LIGHT_SHAFTS_HALF_RESOLUTION,
   type CloudsContext,
   cloudTypePresetNames,
   type CloudTypePresetName,
@@ -24,6 +25,16 @@ import type { CloudLevers } from './cloudLevers.ts'
  * preset is applied first and the overrides after it, the port's own order;
  * applying a preset drops the overrides of the fields it names, as
  * re-applying one does on the context.
+ *
+ * **A write lands after a frame the port has drawn, never before one.** On
+ * three 0.185 the port's graph without `accurateSunSkyLight`, which `low`,
+ * `medium` and `lowEnd` all are, does not compile on a first frame: TSL
+ * reports `Member "bottomRadius" not found in struct "AtmosphereParameters"`
+ * and the march's pipeline is refused, at boot and on the first frame after
+ * the clouds were off alike. Rebuilt on the frame after one the port drew,
+ * the same graph compiles. So a context is always built at the port's own
+ * `high`, and `flush`, which the system calls after such a frame, is the
+ * only writer.
  *
  * A path is the context's own property path (`clouds.maxIterationCount`,
  * `cloudLayers.0.altitude`), so the table needs no second vocabulary. A
@@ -681,7 +692,7 @@ export interface TakramHandle {
   /** The port's named skies: its cloud layers and coverage in one write. */
   readonly cloudTypes: readonly string[]
   cloudType(name: CloudTypePresetName): void
-  /** Write tunables by path; each lands on the next frame. */
+  /** Write tunables by path; each lands after the next frame the clouds draw. */
   set(patch: Readonly<Record<string, unknown>>): void
   /** Every tunable's live value, or null with no context built. */
   read(): Record<string, unknown> | null
@@ -698,17 +709,27 @@ export interface TakramState {
 }
 
 export interface TakramSettings extends TakramHandle {
-  /** Bring a new context to the page's settings, and follow it. */
+  /** Follow a new context; the page's settings reach it at the first `flush`. */
   attach(
     context: CloudsContext,
     frame: () => Readonly<Record<string, unknown>>,
   ): void
+  /** Write what the page has changed: called after a frame the port drew. */
+  flush(): void
   detach(context: CloudsContext): void
 }
 
-/** The page's settings: one for the takram chunk's lifetime. */
-export function createTakramSettings(): TakramSettings {
-  let preset: QualityPreset = 'high'
+/**
+ * The page's settings: one for the takram chunk's lifetime. `initial` is
+ * the preset every context is built at, the port's own `high` when absent;
+ * a name the port does not have throws before anything is built.
+ */
+export function createTakramSettings(
+  initial: string | null = null,
+): TakramSettings {
+  if (initial !== null && !Object.hasOwn(qualityPresets, initial))
+    throw new RangeError(`no such preset: "${initial}"`)
+  let preset: QualityPreset = (initial as QualityPreset | null) ?? 'high'
   let cloudType: CloudTypePresetName | null = null
   const overrides = new Map<string, unknown>()
   let live: {
@@ -716,7 +737,15 @@ export function createTakramSettings(): TakramSettings {
     readonly frame: () => Readonly<Record<string, unknown>>
   } | null = null
 
+  /** Whether the live context is behind the page's settings. */
+  let owed = false
+
   const write = (context: CloudsContext): void => {
+    // The two fields only `lowEnd` names: back to the port's own before a
+    // preset that leaves them alone, or the last one's value would stand.
+    context.temporalUpscale = true
+    context.lightShaftsHalfResolution =
+      PORT_DEFAULT_LIGHT_SHAFTS_HALF_RESOLUTION
     context.qualityPreset = preset
     if (cloudType !== null) applyCloudTypePreset(context, cloudType)
     for (const [path, value] of overrides) writeTunable(context, path, value)
@@ -738,7 +767,7 @@ export function createTakramSettings(): TakramSettings {
       preset = name
       for (const path of [...overrides.keys()])
         if (presetOwns(path)) overrides.delete(path)
-      if (live !== null) write(live.context)
+      owed = true
     },
     cloudType(name) {
       if (!cloudTypePresetNames.includes(name))
@@ -747,7 +776,7 @@ export function createTakramSettings(): TakramSettings {
       for (const path of [...overrides.keys()])
         if (path === 'coverage' || path.startsWith('cloudLayers.'))
           overrides.delete(path)
-      if (live !== null) write(live.context)
+      owed = true
     },
     set(patch) {
       for (const [path, value] of Object.entries(patch)) {
@@ -755,10 +784,12 @@ export function createTakramSettings(): TakramSettings {
           this.preset(value as QualityPreset)
           continue
         }
-        // Against the live context first, so a mistyped path throws before
-        // it is held for every context after this one.
-        if (live !== null) writeTunable(live.context, path, value)
+        // Read on the live context first, so a mistyped path throws here
+        // and is never held for every context after this one.
+        if (live !== null && !path.startsWith('experimental.'))
+          readTunable(live.context, path)
         overrides.set(path, value)
+        owed = true
       }
     },
     read() {
@@ -776,7 +807,12 @@ export function createTakramSettings(): TakramSettings {
     }),
     attach(context, frame) {
       live = { context, frame }
-      write(context)
+      owed = preset !== 'high' || cloudType !== null || overrides.size > 0
+    },
+    flush() {
+      if (!owed || live === null) return
+      owed = false
+      write(live.context)
     },
     detach(context) {
       if (live?.context === context) live = null

@@ -105,11 +105,21 @@ import {
 
 let singleton: GameEngine | null = null
 
-/** The renderer `?clouds=` asks for: ours at `1`, takram's port at `takram`. */
-type CloudRenderer = 'native' | 'takram'
+/**
+ * The renderer `?clouds=` asks for: ours at `1`, takram's port at `takram`,
+ * and at `takram:low` the port built at that quality preset from its first
+ * frame.
+ */
+type CloudRenderer =
+  | { readonly kind: 'native' }
+  | { readonly kind: 'takram'; readonly preset: string | null }
 
 function cloudRendererOf(value: string | null): CloudRenderer | null {
-  return value === '1' ? 'native' : value === 'takram' ? 'takram' : null
+  if (value === '1') return { kind: 'native' }
+  if (value === 'takram') return { kind: 'takram', preset: null }
+  if (value?.startsWith('takram:') === true)
+    return { kind: 'takram', preset: value.slice('takram:'.length) }
+  return null
 }
 
 /**
@@ -125,12 +135,12 @@ function withClouds(
   clouds: CloudRenderer,
 ): (props: CanvasProps) => ReturnType<typeof factory> {
   return async (props) => {
-    if (clouds === 'takram') {
+    if (clouds.kind === 'takram') {
       // The port's four baked textures load beside the renderer too.
       const [renderer, takram] = await Promise.all([
         factory(props),
         import('./render/takramClouds.ts').then((chunk) =>
-          chunk.loadTakramClouds(cloudsServed),
+          chunk.loadTakramClouds(cloudsServed, clouds.preset),
         ),
       ])
       engine.cloudSystemFactory = takram.factory
