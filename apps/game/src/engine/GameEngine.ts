@@ -115,9 +115,11 @@ import {
   isCloudLevers,
 } from '../render/cloudLevers.ts'
 import type {
+  CloudChainFactory,
   CloudFrontHandle,
-  CloudSystemFactory,
 } from '../render/cloudSystem.ts'
+// Types only: the takram port is its own chunk, loaded under `?clouds=takram`.
+import type { TakramHandle } from '../render/takramTunables.ts'
 import { PictureWeatherHold } from './pictureWeather.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
@@ -519,31 +521,39 @@ export class GameEngine {
     this.#clouds = Object.freeze({ ...levers })
   }
 
-  #cloudSystemFactory: CloudSystemFactory | null = null
+  #cloudSystemFactory: CloudChainFactory | null = null
   #cloudFront: CloudFrontHandle | null = null
 
   /**
-   * `?clouds=1`'s chunk, resolved in the canvas's renderer factory; null
-   * without the flag. What comes back builds a system that writes this
-   * engine's front handle, so every chain the sensor builds feeds the one
-   * handle the scene's materials hold.
+   * `?clouds=1`'s chunk, or `?clouds=takram`'s, resolved in the canvas's
+   * renderer factory; null without the flag. What comes back builds a system
+   * that writes this engine's front handle, so every chain the sensor builds
+   * feeds the one handle the scene's materials hold.
    */
-  get cloudSystemFactory(): CloudSystemFactory | null {
+  get cloudSystemFactory(): CloudChainFactory | null {
     return this.#cloudSystemFactory
   }
 
-  set cloudSystemFactory(factory: CloudSystemFactory | null) {
+  set cloudSystemFactory(factory: CloudChainFactory | null) {
     const front = factory?.createFront() ?? null
     this.#cloudFront = front
     this.#cloudSystemFactory =
       factory === null || front === null
         ? null
         : Object.assign(
-            (deps: Parameters<CloudSystemFactory>[0]) =>
+            (deps: Parameters<CloudChainFactory>[0]) =>
               factory({ ...deps, front }),
             { createFront: factory.createFront },
           )
   }
+
+  /**
+   * `?clouds=takram`'s presets and tunables, which a script writes as
+   * `engine.takram.preset('ultra')` and `engine.takram.set({ coverage: 0.4 })`;
+   * null on every other page. The levers above still switch the clouds on
+   * and name the body they are served on.
+   */
+  takram: TakramHandle | null = null
 
   /**
    * What a material drawn after the composite reads the clouds in front of

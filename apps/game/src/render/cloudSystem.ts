@@ -176,6 +176,19 @@ export interface CloudSystemFactory {
   readonly createFront: () => CloudFrontHandle
 }
 
+/**
+ * What the sensor's chain asks of whichever renderer draws the clouds: the
+ * system less the instruments' subjects, which are the native march's own.
+ * `?clouds=takram`'s system (`takramClouds.ts`) is one of these and no more.
+ */
+export type CloudChainSystem = Omit<CloudSystem, 'resources' | 'field'>
+
+/** A factory of either renderer's system, as the engine and the chain hold it. */
+export interface CloudChainFactory {
+  (deps: CloudSystemDeps): CloudChainSystem
+  readonly createFront: () => CloudFrontHandle
+}
+
 /** The profile and statistics table, RGBA16F: not a resource of its own, 48 KB the report counts. */
 const PROFILE_BYTES = CLOUD_PROFILE_BYTES
 

@@ -1,0 +1,785 @@
+import {
+  applyCloudTypePreset,
+  type CloudsContext,
+  cloudTypePresetNames,
+  type CloudTypePresetName,
+  cirrusDeckDefaults,
+  cloudShapeDefaults,
+  convectiveProfileDefaults,
+  evolvingWeatherDefaults,
+  experimentalDefaults,
+  type QualityPreset,
+  qualityPresets,
+  rainShaftDefaults,
+} from 'three-clouds-webgpu'
+import type { CloudLevers } from './cloudLevers.ts'
+
+/*
+ * Every preset and tunable the takram port exposes, as a table, and the one
+ * place a page writes them: `engine.takram`.
+ *
+ * The port's knobs all live on its `CloudsContext`, and a context dies with
+ * the sensor's chain: a picture change builds a new one. So the settings are
+ * held here, for the page, and written into whichever context is live. A
+ * preset is applied first and the overrides after it, the port's own order;
+ * applying a preset drops the overrides of the fields it names, as
+ * re-applying one does on the context.
+ *
+ * A path is the context's own property path (`clouds.maxIterationCount`,
+ * `cloudLayers.0.altitude`), so the table needs no second vocabulary. A
+ * vector is written as an array.
+ */
+
+export type TakramKind =
+  'number' | 'integer' | 'boolean' | 'enum' | 'vec2' | 'vec3'
+
+export interface TakramTunable {
+  /** The property path on the port's `CloudsContext`. */
+  readonly path: string
+  readonly kind: TakramKind
+  /** An enum's values. */
+  readonly values?: readonly string[]
+  readonly what: string
+  /** A change recompiles the port's graph and clears its history. */
+  readonly rebuilds: boolean
+  /** The lever of `engine.clouds` that does this job in ours, or null. */
+  readonly lever: keyof CloudLevers | null
+  /** How the two differ, where a lever exists, or what ours does instead. */
+  readonly note?: string
+}
+
+export const TAKRAM_PRESETS = [
+  'low',
+  'medium',
+  'high',
+  'ultra',
+  'lowEnd',
+] as const satisfies readonly QualityPreset[]
+
+const row = (
+  path: string,
+  kind: TakramKind,
+  what: string,
+  rebuilds = false,
+  lever: keyof CloudLevers | null = null,
+  note?: string,
+): TakramTunable => ({
+  path,
+  kind,
+  what,
+  rebuilds,
+  lever,
+  ...(note === undefined ? {} : { note }),
+})
+
+const CONTEXT: readonly TakramTunable[] = [
+  {
+    path: 'qualityPreset',
+    kind: 'enum',
+    values: TAKRAM_PRESETS,
+    what: 'Writes every field a preset names: the march, the shadow maps and five feature switches',
+    rebuilds: true,
+    lever: null,
+    note: 'Ours has no preset: maxSteps, lightTaps and traceScale are set one at a time',
+  },
+  row(
+    'coverage',
+    'number',
+    'Share of the weather map that becomes cloud, 0 clear to 1 overcast',
+    false,
+    'weather',
+    'Ours takes cover from the regime; a number alone has no lever',
+  ),
+  row(
+    'resolutionScale',
+    'number',
+    'The cloud buffer as a fraction of the drawing buffer',
+    false,
+    'traceScale',
+    'Ours is 0.5, 1 or 2 of a quarter-height trace',
+  ),
+  row(
+    'temporalUpscale',
+    'boolean',
+    'March a sixteenth of the pixels a frame and resolve at full size; off marches every pixel',
+    true,
+    'traceScale',
+    'Ours always marches a fraction and has no full-resolution form',
+  ),
+  row(
+    'shapeDetail',
+    'boolean',
+    'Add the high-frequency detail volume to the shape',
+    true,
+  ),
+  row(
+    'turbulence',
+    'boolean',
+    'Displace the shape noise by the curl noise',
+    true,
+  ),
+  row('haze', 'boolean', 'March a ground haze beside the clouds', true),
+  row(
+    'lightShafts',
+    'boolean',
+    'March cloud shadow length for crepuscular rays; read only by the port’s own aerial perspective',
+    true,
+  ),
+  row(
+    'lightShaftsHalfResolution',
+    'boolean',
+    'March the shafts once per 2×2 pixels',
+    true,
+  ),
+  row(
+    'scatteringCoefficient',
+    'number',
+    'Scattering coefficient of the cloud medium',
+  ),
+  row(
+    'absorptionCoefficient',
+    'number',
+    'Absorption coefficient of the cloud medium',
+  ),
+  row(
+    'scatterAnisotropy1',
+    'number',
+    'Forward lobe of the two-lobe phase function',
+    true,
+    'phaseMode',
+    'Ours reads a Lorenz–Mie table (ADR-0066)',
+  ),
+  row(
+    'scatterAnisotropy2',
+    'number',
+    'Backward lobe of the two-lobe phase function',
+    true,
+    'phaseMode',
+    'Ours reads a Lorenz–Mie table (ADR-0066)',
+  ),
+  row(
+    'scatterAnisotropyMix',
+    'number',
+    'Blend of the two lobes',
+    true,
+    'phaseMode',
+    'Ours reads a Lorenz–Mie table (ADR-0066)',
+  ),
+  row('skyLightScale', 'number', 'Multiplier on the sky’s light on a cloud'),
+  row(
+    'groundBounceScale',
+    'number',
+    'Multiplier on light bounced off the ground into cloud bases; 0 drops the ground march',
+    true,
+  ),
+  row(
+    'powderScale',
+    'number',
+    'Strength of the powder darkening in dense, shadowed cloud',
+  ),
+  row('powderExponent', 'number', 'Fall-off of the powder darkening'),
+  row(
+    'turbulenceDisplacement',
+    'number',
+    'Meters the curl noise displaces the shape noise',
+  ),
+  row(
+    'localWeatherRepeat',
+    'vec2',
+    'How often the weather map tiles across the globe',
+    false,
+    'weather',
+    'Ours bakes a field round the eye and tiles nothing',
+  ),
+  row('localWeatherOffset', 'vec2', 'Base offset of the weather map'),
+  row(
+    'localWeatherVelocity',
+    'vec2',
+    'Wind on the weather map, offset units a second',
+    false,
+    'weather',
+    'Ours takes the wind from the regime',
+  ),
+  row('shapeRepeat', 'vec3', 'Tiling of the base shape volume, per meter'),
+  row('shapeOffset', 'vec3', 'Base offset of the shape volume'),
+  row(
+    'shapeVelocity',
+    'vec3',
+    'Wind on the shape volume, offset units a second',
+  ),
+  row('shapeDetailRepeat', 'vec3', 'Tiling of the detail volume, per meter'),
+  row('shapeDetailOffset', 'vec3', 'Base offset of the detail volume'),
+  row(
+    'shapeDetailVelocity',
+    'vec3',
+    'Wind on the detail volume, offset units a second',
+  ),
+  row('turbulenceRepeat', 'vec2', 'Tiling of the curl noise'),
+  row(
+    'sunAngularRadius',
+    'number',
+    'The sun’s angular radius, radians: its disk and the shadows’ penumbra',
+  ),
+  row(
+    'bottomRadius',
+    'number',
+    'Meters from the planet’s center at which a ray has hit the ground',
+  ),
+  row(
+    'correctAltitude',
+    'boolean',
+    'Shift the sphere so it meets the ellipsoid under the camera',
+  ),
+  {
+    path: 'debug',
+    kind: 'enum',
+    values: [
+      'none',
+      'cascades',
+      'shadowMap',
+      'uv',
+      'sampleCount',
+      'frontDepth',
+      'shadowLength',
+      'velocity',
+      'marchIntervals',
+    ],
+    what: 'A diagnostic view in place of the shaded image',
+    rebuilds: true,
+    lever: 'stats',
+    note: 'Ours counts steps into a report; this draws them',
+  },
+  row('moonGain', 'number', 'Gain on moonlight, under experimental.moonlight'),
+  row('moonColor', 'vec3', 'Color of moonlight, under experimental.moonlight'),
+]
+
+const MARCH: readonly TakramTunable[] = [
+  row(
+    'clouds.multiScatteringOctaves',
+    'integer',
+    'Octaves of approximated multiple scattering; 0 is single scattering',
+    true,
+    'transport',
+    'Ours picks a form of the higher orders, not a count',
+  ),
+  row(
+    'clouds.accurateSunSkyLight',
+    'boolean',
+    'Read the sun’s and sky’s light at each sample, not once a frame',
+    true,
+  ),
+  row(
+    'clouds.accuratePhaseFunction',
+    'boolean',
+    'A closer phase approximation in place of the two lobes',
+    true,
+    'phaseMode',
+  ),
+  row(
+    'clouds.maxIterationCount',
+    'integer',
+    'Most steps the primary march takes',
+    false,
+    'maxSteps',
+  ),
+  row(
+    'clouds.minStepSize',
+    'number',
+    'Shortest primary step, meters',
+    false,
+    'maxSteps',
+    'Ours has a step budget and no step length',
+  ),
+  row('clouds.maxStepSize', 'number', 'Longest primary step, meters'),
+  row(
+    'clouds.maxRayDistance',
+    'number',
+    'Meters the primary march travels at most',
+    false,
+    'farFootprint',
+    'Ours hands the ray to a far march; this ends it',
+  ),
+  row(
+    'clouds.perspectiveStepScale',
+    'number',
+    'Growth of the step with distance',
+  ),
+  row('clouds.minDensity', 'number', 'Density under which a sample is empty'),
+  row(
+    'clouds.minExtinction',
+    'number',
+    'Extinction under which a sample adds nothing',
+  ),
+  row(
+    'clouds.minTransmittance',
+    'number',
+    'Transmittance under which the march stops',
+  ),
+  row(
+    'clouds.maxIterationCountToSun',
+    'integer',
+    'Steps toward the sun at each sample, beside the shadow maps',
+    false,
+    'lightTaps',
+  ),
+  row(
+    'clouds.maxIterationCountToGround',
+    'integer',
+    'Steps toward the ground at each sample, for bounced light',
+  ),
+  row(
+    'clouds.minSecondaryStepSize',
+    'number',
+    'Shortest step of the sun and ground marches, meters',
+  ),
+  row(
+    'clouds.secondaryStepScale',
+    'number',
+    'Growth of the sun and ground marches’ step',
+  ),
+  row(
+    'clouds.maxShadowFilterRadius',
+    'number',
+    'Widest filter the march reads the shadow maps through, texels',
+  ),
+  row(
+    'clouds.maxShadowLengthIterationCount',
+    'integer',
+    'Most steps of the light-shaft march',
+  ),
+  row(
+    'clouds.minShadowLengthStepSize',
+    'number',
+    'Shortest step of the light-shaft march, meters',
+  ),
+  row(
+    'clouds.maxShadowLengthRayDistance',
+    'number',
+    'Meters the light-shaft march travels at most',
+  ),
+  row('clouds.hazeDensityScale', 'number', 'Density of the haze'),
+  row(
+    'clouds.hazeExponent',
+    'number',
+    'Fall-off of the haze with height, per meter',
+  ),
+  row(
+    'clouds.hazeScatteringCoefficient',
+    'number',
+    'Scattering coefficient of the haze',
+  ),
+  row(
+    'clouds.hazeAbsorptionCoefficient',
+    'number',
+    'Absorption coefficient of the haze',
+  ),
+]
+
+const SHADOW: readonly TakramTunable[] = [
+  row(
+    'shadow.cascadeCount',
+    'integer',
+    'Cascades of the cloud shadow map',
+    true,
+    'sunSlices',
+    'Ours sums the sun’s depth in a grid round the eye (ADR-0064)',
+  ),
+  row('shadow.mapSize', 'vec2', 'Texels of each cascade'),
+  row(
+    'shadow.maxFar',
+    'number',
+    'Meters the cascades reach; null takes the camera’s far plane times farScale',
+  ),
+  row(
+    'shadow.farScale',
+    'number',
+    'Share of the camera’s far plane the cascades cover',
+  ),
+  row(
+    'shadow.splitMode',
+    'integer',
+    'How the cascades divide the range: uniform, logarithmic or practical',
+  ),
+  row(
+    'shadow.splitLambda',
+    'number',
+    'Blend of uniform and logarithmic splits',
+  ),
+  row(
+    'shadow.temporalPass',
+    'boolean',
+    'Resolve the shadow map over frames',
+    true,
+    'sunRamp',
+  ),
+  row(
+    'shadow.temporalJitter',
+    'boolean',
+    'Jitter the shadow march from frame to frame',
+    true,
+  ),
+  row('shadow.maxIterationCount', 'integer', 'Most steps of the shadow march'),
+  row('shadow.minStepSize', 'number', 'Shortest shadow step, meters'),
+  row('shadow.maxStepSize', 'number', 'Longest shadow step, meters'),
+  row(
+    'shadow.minDensity',
+    'number',
+    'Density under which a shadow sample is empty',
+  ),
+  row(
+    'shadow.minExtinction',
+    'number',
+    'Extinction under which a shadow sample adds nothing',
+  ),
+  row(
+    'shadow.minTransmittance',
+    'number',
+    'Transmittance under which the shadow march stops',
+  ),
+  row(
+    'shadow.opticalDepthTailScale',
+    'number',
+    'Scale on the optical depth past the march’s end',
+  ),
+  row(
+    'shadow.updateInterval',
+    'integer',
+    'Frames between shadow map draws; 1 is every frame',
+    false,
+    'sunSlices',
+  ),
+]
+
+const LAYER_FIELDS: readonly (readonly [
+  string,
+  TakramKind,
+  string,
+  boolean,
+])[] = [
+  ['altitude', 'number', 'Meters from the ground to the band’s base', false],
+  [
+    'height',
+    'number',
+    'Thickness of the band, meters; 0 empties the slot',
+    true,
+  ],
+  ['densityScale', 'number', 'Weight of the layer’s density', false],
+  ['shapeAmount', 'number', 'Weight of the base shape noise', false],
+  ['shapeDetailAmount', 'number', 'Weight of the detail noise', false],
+  ['weatherExponent', 'number', 'Exponent on the weather channel', true],
+  [
+    'shapeAlteringBias',
+    'number',
+    'Moves density toward the band’s middle',
+    false,
+  ],
+  [
+    'coverageFilterWidth',
+    'number',
+    'Width of the ramp where weather crosses the coverage',
+    false,
+  ],
+  ['shadow', 'boolean', 'Whether the layer casts into the shadow map', true],
+  ['densityProfile.expTerm', 'number', 'Exponential term of the profile', true],
+  ['densityProfile.exponent', 'number', 'Its exponent', false],
+  ['densityProfile.linearTerm', 'number', 'Linear term of the profile', false],
+  [
+    'densityProfile.constantTerm',
+    'number',
+    'Constant term of the profile',
+    false,
+  ],
+]
+
+const LAYERS: readonly TakramTunable[] = [0, 1, 2, 3].flatMap((slot) => [
+  {
+    path: `cloudLayers.${slot}.channel`,
+    kind: 'enum' as const,
+    values: ['r', 'g', 'b', 'a'],
+    what: 'Channel of the weather map the layer reads',
+    rebuilds: true,
+    lever: null,
+  },
+  ...LAYER_FIELDS.map(([field, kind, what, rebuilds]) =>
+    row(
+      `cloudLayers.${slot}.${field}`,
+      kind,
+      what,
+      rebuilds,
+      field === 'altitude' || field === 'height' ? 'weather' : null,
+      field === 'altitude' || field === 'height'
+        ? 'Ours takes its levels from the regime'
+        : undefined,
+    ),
+  ),
+])
+
+const kindOf = (value: unknown): TakramKind =>
+  typeof value === 'boolean' ? 'boolean' : 'number'
+
+/** A group of the port's experiments, read off its own defaults so a field it adds is listed. */
+const group = (
+  prefix: string,
+  defaults: object,
+  what: string,
+): readonly TakramTunable[] =>
+  Object.entries(defaults)
+    .filter(([, value]) => value !== null && typeof value !== 'object')
+    .map(([key, value]) =>
+      row(
+        `${prefix}.${key}`,
+        kindOf(value),
+        `${what}: ${key}`,
+        prefix === 'cloudShape',
+      ),
+    )
+
+const EXPERIMENTS: readonly TakramTunable[] = [
+  ...Object.keys(experimentalDefaults).map((key) =>
+    row(
+      `experimental.${key}`,
+      'boolean',
+      `The port’s own experiment ${key}`,
+      true,
+      key === 'shadowRoundRobin' ? 'sunSlices' : null,
+    ),
+  ),
+  ...group('cloudShape', cloudShapeDefaults, 'Shape control'),
+  ...group(
+    'convectiveProfile',
+    convectiveProfileDefaults,
+    'Towering convection, under experimental.convectiveProfile',
+  ),
+  ...group(
+    'rainShafts',
+    rainShaftDefaults,
+    'Rain shafts, under experimental.rainShafts',
+  ),
+  ...group(
+    'cirrusDeck',
+    cirrusDeckDefaults,
+    'Cirrus deck, under experimental.cirrusDeck',
+  ),
+  ...group(
+    'evolvingWeather',
+    evolvingWeatherDefaults,
+    'Evolving weather, under experimental.evolvingWeather',
+  ),
+]
+
+/** Every tunable, in the port's own grouping. */
+export const TAKRAM_TUNABLES: readonly TakramTunable[] = [
+  ...CONTEXT,
+  ...MARCH,
+  ...SHADOW,
+  ...LAYERS,
+  ...EXPERIMENTS,
+]
+
+/* ------------------------------------------------------------------------- */
+/* Reading and writing a path                                                 */
+/* ------------------------------------------------------------------------- */
+
+type Vector = {
+  readonly isVector2?: boolean
+  readonly isVector3?: boolean
+  toArray(): number[]
+  fromArray(values: readonly number[]): unknown
+}
+
+const isVector = (value: unknown): value is Vector =>
+  typeof value === 'object' &&
+  value !== null &&
+  ((value as Vector).isVector2 === true || (value as Vector).isVector3 === true)
+
+function parent(root: object, path: string): readonly [object, string] {
+  const keys = path.split('.')
+  const last = keys.pop()
+  if (last === undefined || last === '') throw new Error(`no path: "${path}"`)
+  let at: unknown = root
+  for (const key of keys) {
+    if (typeof at !== 'object' || at === null || !(key in at))
+      throw new Error(`no such tunable: "${path}"`)
+    at = (at as Record<string, unknown>)[key]
+  }
+  if (typeof at !== 'object' || at === null || !(last in at))
+    throw new Error(`no such tunable: "${path}"`)
+  return [at, last]
+}
+
+/** A path's value on a context: a vector as an array, anything else as it is. */
+export function readTunable(context: CloudsContext, path: string): unknown {
+  const [holder, key] = parent(context, path)
+  const value = (holder as Record<string, unknown>)[key]
+  return isVector(value) ? value.toArray() : value
+}
+
+/**
+ * Writes one path. A vector takes an array, into the context's own object.
+ * An experiment is assigned through the context's partial setter, which is
+ * what validates the name and rebuilds the graph.
+ */
+export function writeTunable(
+  context: CloudsContext,
+  path: string,
+  value: unknown,
+): void {
+  if (path.startsWith('experimental.')) {
+    context.experimental = { [path.slice('experimental.'.length)]: value }
+    return
+  }
+  const [holder, key] = parent(context, path)
+  const held = (holder as Record<string, unknown>)[key]
+  if (isVector(held)) {
+    if (!Array.isArray(value))
+      throw new Error(`"${path}" is a vector and takes an array`)
+    held.fromArray(value as number[])
+    return
+  }
+  ;(holder as Record<string, unknown>)[key] = value
+}
+
+/* ------------------------------------------------------------------------- */
+/* The page's settings                                                        */
+/* ------------------------------------------------------------------------- */
+
+/** Paths a quality preset names: applying one drops their overrides. */
+const presetOwns = (path: string): boolean =>
+  path.startsWith('clouds.') ||
+  path.startsWith('shadow.') ||
+  [
+    'resolutionScale',
+    'lightShafts',
+    'shapeDetail',
+    'turbulence',
+    'haze',
+    'temporalUpscale',
+    'lightShaftsHalfResolution',
+  ].includes(path)
+
+/** A preset's fields, flat by path, vectors as arrays. */
+function flat(values: object, prefix = ''): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(values)) {
+    const path = prefix === '' ? key : `${prefix}.${key}`
+    if (isVector(value)) out[path] = value.toArray()
+    else if (typeof value === 'object' && value !== null)
+      Object.assign(out, flat(value, path))
+    else out[path] = value
+  }
+  return out
+}
+
+/** What `engine.takram` is: the port's presets and tunables, from a page. */
+export interface TakramHandle {
+  /** Every tunable: its path, kind, what it does and the lever of ours it answers to. */
+  readonly tunables: readonly TakramTunable[]
+  /** Each quality preset's values, flat by path. */
+  presets(): Record<string, Record<string, unknown>>
+  /** Apply a quality preset, dropping the overrides of the fields it names. */
+  preset(name: QualityPreset): void
+  /** The port's named skies: its cloud layers and coverage in one write. */
+  readonly cloudTypes: readonly string[]
+  cloudType(name: CloudTypePresetName): void
+  /** Write tunables by path; each lands on the next frame. */
+  set(patch: Readonly<Record<string, unknown>>): void
+  /** Every tunable's live value, or null with no context built. */
+  read(): Record<string, unknown> | null
+  /** The preset and the overrides the page holds, and the adapter's own state. */
+  state(): TakramState
+}
+
+export interface TakramState {
+  readonly preset: QualityPreset
+  readonly cloudType: string | null
+  readonly overrides: Readonly<Record<string, unknown>>
+  /** The adapter's report of its last frame, or null with no context built. */
+  readonly frame: Readonly<Record<string, unknown>> | null
+}
+
+export interface TakramSettings extends TakramHandle {
+  /** Bring a new context to the page's settings, and follow it. */
+  attach(
+    context: CloudsContext,
+    frame: () => Readonly<Record<string, unknown>>,
+  ): void
+  detach(context: CloudsContext): void
+}
+
+/** The page's settings: one for the takram chunk's lifetime. */
+export function createTakramSettings(): TakramSettings {
+  let preset: QualityPreset = 'high'
+  let cloudType: CloudTypePresetName | null = null
+  const overrides = new Map<string, unknown>()
+  let live: {
+    readonly context: CloudsContext
+    readonly frame: () => Readonly<Record<string, unknown>>
+  } | null = null
+
+  const write = (context: CloudsContext): void => {
+    context.qualityPreset = preset
+    if (cloudType !== null) applyCloudTypePreset(context, cloudType)
+    for (const [path, value] of overrides) writeTunable(context, path, value)
+  }
+
+  return {
+    tunables: TAKRAM_TUNABLES,
+    cloudTypes: cloudTypePresetNames,
+    presets: () =>
+      Object.fromEntries(
+        Object.entries(qualityPresets).map(([name, values]) => [
+          name,
+          flat(values),
+        ]),
+      ),
+    preset(name) {
+      if (!Object.hasOwn(qualityPresets, name))
+        throw new RangeError(`no such preset: "${String(name)}"`)
+      preset = name
+      for (const path of [...overrides.keys()])
+        if (presetOwns(path)) overrides.delete(path)
+      if (live !== null) write(live.context)
+    },
+    cloudType(name) {
+      if (!cloudTypePresetNames.includes(name))
+        throw new RangeError(`no such cloud type: "${String(name)}"`)
+      cloudType = name
+      for (const path of [...overrides.keys()])
+        if (path === 'coverage' || path.startsWith('cloudLayers.'))
+          overrides.delete(path)
+      if (live !== null) write(live.context)
+    },
+    set(patch) {
+      for (const [path, value] of Object.entries(patch)) {
+        if (path === 'qualityPreset') {
+          this.preset(value as QualityPreset)
+          continue
+        }
+        // Against the live context first, so a mistyped path throws before
+        // it is held for every context after this one.
+        if (live !== null) writeTunable(live.context, path, value)
+        overrides.set(path, value)
+      }
+    },
+    read() {
+      if (live === null) return null
+      const { context } = live
+      return Object.fromEntries(
+        TAKRAM_TUNABLES.map(({ path }) => [path, readTunable(context, path)]),
+      )
+    },
+    state: () => ({
+      preset,
+      cloudType,
+      overrides: Object.fromEntries(overrides),
+      frame: live?.frame() ?? null,
+    }),
+    attach(context, frame) {
+      live = { context, frame }
+      write(context)
+    },
+    detach(context) {
+      if (live?.context === context) live = null
+    },
+  }
+}

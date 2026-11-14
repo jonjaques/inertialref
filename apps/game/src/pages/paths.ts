@@ -366,6 +366,9 @@ export const QUERY = {
    * nothing until a script sets `engine.clouds` whole with `on: true`. A
    * diagnostic like `producer`, and the only way in: without it not one
    * cloud object exists, so no plate, comparison or ledger run can move.
+   * `takram` builds takram's clouds in the same place through their WebGPU
+   * port (`render/takramClouds.ts`), under the same levers; a page holds one
+   * renderer or the other.
    */
   clouds: 'clouds',
 } as const
