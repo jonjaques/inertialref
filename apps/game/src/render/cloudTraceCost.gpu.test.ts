@@ -175,10 +175,31 @@ const CHAIN: Variant = {
 }
 
 /**
+ * The composite's air from its table of directions, in each form of the
+ * over pass: its rows against the two above, which march the air a pixel,
+ * are what the table saves.
+ */
+const TABLE: Variant = {
+  name: '4 taps, air table',
+  levers: { lightTaps: 4, air: 'table' },
+}
+const CHAIN_TABLE: Variant = {
+  name: '4 taps, chain, air table',
+  levers: { lightTaps: 4, over: 'chain', air: 'table' },
+}
+
+/**
  * The lever sets a stance is timed under, the clouds off first. A package
  * that adds a cost to the trace adds its lever set here.
  */
-const VARIANTS: readonly Variant[] = [OFF, ...TAPS.map(tapped), PLANE, CHAIN]
+const VARIANTS: readonly Variant[] = [
+  OFF,
+  ...TAPS.map(tapped),
+  PLANE,
+  CHAIN,
+  TABLE,
+  CHAIN_TABLE,
+]
 
 const SIZES: readonly Size[] = [
   { key: '1080p', css: [1920, 1080], dpr: 1, variants: VARIANTS },
@@ -187,7 +208,7 @@ const SIZES: readonly Size[] = [
     key: 'retina',
     css: [1440, 900],
     dpr: 2,
-    variants: [OFF, tapped(4), CHAIN],
+    variants: [OFF, tapped(4), CHAIN, TABLE, CHAIN_TABLE],
   },
 ]
 

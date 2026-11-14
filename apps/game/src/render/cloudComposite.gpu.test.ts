@@ -545,17 +545,20 @@ describe('off changes nothing', () => {
       const scene = usual()
       await f.frame(scene, false)
       const alone = await f.readAll()
-      for (const form of [true, 'chain'] as const)
-        for (const mode of ['identity', 'thin', 'residual'] as const) {
-          f.composite.setMode(mode)
-          await f.frame(scene, form)
-          const drawn = await f.readAll()
-          for (const [name, values] of alone)
-            expect(
-              bits(drawn.get(name)!),
-              `${mode}, ${form === true ? 'pass B' : 'chain'}: ${name}`,
-            ).toEqual(bits(values))
-        }
+      // Each program of the served body's air: the march a pixel, and the
+      // table of directions, whose early out is what a clear texel takes.
+      for (const air of ['pixel', 'table'] as const)
+        for (const form of [true, 'chain'] as const)
+          for (const mode of ['identity', 'thin', 'residual'] as const) {
+            f.composite.setMode(mode, air)
+            await f.frame(scene, form)
+            const drawn = await f.readAll()
+            for (const [name, values] of alone)
+              expect(
+                bits(drawn.get(name)!),
+                `${air}, ${mode}, ${form === true ? 'pass B' : 'chain'}: ${name}`,
+              ).toEqual(bits(values))
+          }
       f.dispose()
     },
   )

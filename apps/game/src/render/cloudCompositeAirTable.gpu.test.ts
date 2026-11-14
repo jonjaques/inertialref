@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { crc32, deflateSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import {
   DoubleSide,
@@ -207,6 +209,8 @@ const SIZES: readonly Size[] = [
 const SMALL: Size = { key: 'small', css: [320, 180], dpr: 1 }
 
 interface Difference {
+  /** The reference frame's brightest luminance, scene units: how dark the frame is. */
+  readonly peak: number
   readonly pixels: number
   readonly p95: number
   readonly worst: number
@@ -256,6 +260,7 @@ function difference(
   found.sort((a, b) => a - b)
   const pixel = worstAt / 4
   return {
+    peak,
     pixels: found.length,
     p95: found[Math.ceil(0.95 * found.length) - 1] ?? 0,
     worst,
@@ -264,6 +269,78 @@ function difference(
     worstOther: luma(other, worstAt),
     histogram,
   }
+}
+
+/** A PNG chunk: length, type, data, CRC. */
+function chunk(type: string, data: Uint8Array): Uint8Array {
+  const body = new Uint8Array(4 + data.length)
+  body.set(Buffer.from(type, 'ascii'))
+  body.set(data, 4)
+  const out = Buffer.alloc(12 + data.length)
+  out.writeUInt32BE(data.length, 0)
+  out.set(body, 4)
+  out.writeUInt32BE(crc32(body), 8 + data.length)
+  return out
+}
+
+/** An 8-bit RGB PNG of `rows` × `columns` pixels. */
+function png(rgb: Uint8Array, columns: number, rows: number): Uint8Array {
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(columns, 0)
+  header.writeUInt32BE(rows, 4)
+  header.set([8, 2, 0, 0, 0], 8)
+  const lines = new Uint8Array(rows * (1 + 3 * columns))
+  for (let y = 0; y < rows; y += 1)
+    lines.set(
+      rgb.subarray(3 * columns * y, 3 * columns * (y + 1)),
+      y * (1 + 3 * columns) + 1,
+    )
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(lines)),
+    chunk('IEND', new Uint8Array(0)),
+  ])
+}
+
+const CROP = 192
+
+/**
+ * A crop about a frame's worst pixel, three panels across: the march a
+ * pixel, the table, and ten times their difference, each over the crop's
+ * own brightest value of the march, at a gamma of 2.2.
+ */
+function crop(
+  reference: Float32Array,
+  other: Float32Array,
+  width: number,
+  height: number,
+  [atX, atY]: readonly [number, number],
+): Uint8Array {
+  const left = Math.min(Math.max(atX - CROP / 2, 0), Math.max(width - CROP, 0))
+  const top = Math.min(Math.max(atY - CROP / 2, 0), Math.max(height - CROP, 0))
+  const columns = Math.min(CROP, width)
+  const rows = Math.min(CROP, height)
+  let peak = 1e-30
+  for (let y = 0; y < rows; y += 1)
+    for (let x = 0; x < columns; x += 1)
+      peak = Math.max(peak, luma(reference, 4 * ((top + y) * width + left + x)))
+  const rgb = new Uint8Array(3 * 3 * columns * rows)
+  const tone = (value: number): number =>
+    Math.round(255 * Math.min(Math.max(value / peak, 0), 1) ** (1 / 2.2))
+  for (let y = 0; y < rows; y += 1)
+    for (let x = 0; x < columns; x += 1) {
+      const k = 4 * ((top + y) * width + left + x)
+      for (let c = 0; c < 3; c += 1) {
+        const at = 3 * (3 * columns * y + x) + c
+        rgb[at] = tone(reference[k + c]!)
+        rgb[at + 3 * columns] = tone(other[k + c]!)
+        rgb[at + 6 * columns] = tone(
+          10 * Math.abs(other[k + c]! - reference[k + c]!),
+        )
+      }
+    }
+  return png(rgb, 3 * columns, rows)
 }
 
 interface Row {
@@ -279,6 +356,10 @@ interface Row {
   readonly table: Difference
   /** The same over every pixel the composite lit, the history's own movement in it. */
   readonly tableEvery: Difference
+  /** A crop about the worst steady pixel, where it is over 2%: `crop`'s three panels. */
+  readonly crop: string | null
+  /** SHA-256 of the march's first frame, every float of the scene target: what two trees are compared by. */
+  readonly marchHash: string
 }
 
 async function measure(
@@ -331,6 +412,16 @@ async function measure(
     const pixel = await drawn('pixel')
     const table = await drawn('table')
     const again = await drawn('pixel')
+    const found = difference(pixel, table, scene.width, again)
+    let cropped: string | null = null
+    if (MEASURE && found.worst > 0.02) {
+      cropped = `.data/clouds/compositeAirTable-${size.key}-${stance.key.replace(/[^a-z0-9]+/gi, '-')}.png`
+      mkdirSync('.data/clouds', { recursive: true })
+      writeFileSync(
+        cropped,
+        crop(pixel, table, scene.width, scene.height, found.worstAt),
+      )
+    }
     return {
       key: `${size.key} ${stance.key}`,
       size: size.key,
@@ -339,8 +430,14 @@ async function measure(
       render: [scene.width, scene.height],
       settledAfter: SETTLE + more,
       floor: difference(pixel, again, scene.width),
-      table: difference(pixel, table, scene.width, again),
+      table: found,
       tableEvery: difference(pixel, table, scene.width),
+      crop: cropped,
+      marchHash: createHash('sha256')
+        .update(
+          new Uint8Array(pixel.buffer, pixel.byteOffset, pixel.byteLength),
+        )
+        .digest('hex'),
     }
   } finally {
     chain.dispose()

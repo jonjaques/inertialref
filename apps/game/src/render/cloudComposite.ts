@@ -105,7 +105,11 @@ import {
 } from './cloudGeometry.ts'
 import type { CloudHistoryTextures } from './cloudHistory.ts'
 import { OVER_CLOUDS_LAYER } from './cloudLayers.ts'
-import type { CloudAirForm, CloudCompositeMode } from './cloudLevers.ts'
+import {
+  type CloudAirForm,
+  type CloudCompositeMode,
+  DEFAULT_CLOUD_LEVERS,
+} from './cloudLevers.ts'
 import {
   type CloudFarFn,
   type CloudPhaseNodes,
@@ -479,96 +483,96 @@ function compositeGraph(
         const transmittance = cloud.w
         const opaque = float(1).sub(transmittance)
         const term = vec3(0).toVar()
-        if (table === null) {
-          const thin = modes.thin.greaterThan(0.5)
-          const air = compositeAir(
-            served.air,
-            airEye(served),
-            direction,
-            ray.start.div(radius),
-            select(thin, clamp(meters, ray.start, ray.end), ray.end).div(
-              radius,
-            ),
-            depthKm,
-            served.sun,
-            served.cleared,
-            depthUnits(served),
-            medium,
-          )
-          term.assign(
-            air.toEnd
-              .mul(opaque)
-              .add(air.seen.mul(cloud.xyz))
-              .add(
-                select(
-                  thin,
-                  vec3(0),
-                  air.toStart.transmittance.mul(blocked.xyz),
-                ),
-              ),
-          )
-        } else {
-          // The exact early out: T_c = 1 and L_c = B = 0 leave the term at
-          // its zero whatever the air, so the air is not read.
-          const holds = transmittance
-            .notEqual(1)
-            .or(largest(abs(cloud.xyz)).notEqual(0))
-            .or(largest(abs(blocked.xyz)).notEqual(0))
-          If(holds, () => {
-            const eye = airEye(served)
-            const units = depthUnits(served)
-            const free = cloudRay(direction, served, float(NO_STOP))
-            const sky = skyClass(
+        // The exact early out: T_c = 1 and L_c = B = 0 leave the term at its
+        // zero whatever the air, so the air is neither marched nor read.
+        const holds = transmittance
+          .notEqual(1)
+          .or(largest(abs(cloud.xyz)).notEqual(0))
+          .or(largest(abs(blocked.xyz)).notEqual(0))
+        If(holds, () => {
+          const eye = airEye(served)
+          const units = depthUnits(served)
+          if (table === null) {
+            const thin = modes.thin.greaterThan(0.5)
+            const air = compositeAir(
               served.air,
               eye,
               direction,
+              ray.start.div(radius),
+              select(thin, clamp(meters, ray.start, ray.end), ray.end).div(
+                radius,
+              ),
               depthKm,
+              served.sun,
+              served.cleared,
               units,
-            ).toVar()
-            const toEnd = vec3(0).toVar()
-            const through = vec3(1).toVar()
-            // The scene stands inside the span: the air to it is this
-            // pixel's own, by its depth, and no direction's.
-            If(ray.end.lessThan(free.end), () => {
-              const air = compositeAir(
-                airThroughTable(served.air, table.air.node),
-                eye,
-                direction,
-                ray.start.div(radius),
-                ray.end.div(radius),
-                depthKm,
-                served.sun,
-                served.cleared,
-                units,
-                medium,
-              )
-              toEnd.assign(air.toEnd)
-              through.assign(air.toStart.transmittance)
-            }).Else(() => {
-              const read = tableAirAt(
-                table.air.node,
-                served,
-                direction,
-                ray.mu,
-                free.end,
-                sky,
-              )
-              toEnd.assign(read.toEnd)
-              through.assign(read.through)
-            })
-            const seen = select(
-              sky,
-              through,
-              mix(through, vec3(1), served.cleared),
+              medium,
             )
             term.assign(
-              toEnd
+              air.toEnd
                 .mul(opaque)
-                .add(seen.mul(cloud.xyz))
-                .add(through.mul(blocked.xyz)),
+                .add(air.seen.mul(cloud.xyz))
+                .add(
+                  select(
+                    thin,
+                    vec3(0),
+                    air.toStart.transmittance.mul(blocked.xyz),
+                  ),
+                ),
             )
+            return
+          }
+          const free = cloudRay(direction, served, float(NO_STOP))
+          const sky = skyClass(
+            served.air,
+            eye,
+            direction,
+            depthKm,
+            units,
+          ).toVar()
+          const toEnd = vec3(0).toVar()
+          const through = vec3(1).toVar()
+          // The scene stands inside the span: the air to it is this pixel's
+          // own, by its depth, and no direction's.
+          If(ray.end.lessThan(free.end), () => {
+            const air = compositeAir(
+              airThroughTable(served.air, table.air.node),
+              eye,
+              direction,
+              ray.start.div(radius),
+              ray.end.div(radius),
+              depthKm,
+              served.sun,
+              served.cleared,
+              units,
+              medium,
+            )
+            toEnd.assign(air.toEnd)
+            through.assign(air.toStart.transmittance)
+          }).Else(() => {
+            const read = tableAirAt(
+              table.air.node,
+              served,
+              direction,
+              ray.mu,
+              free.end,
+              sky,
+            )
+            toEnd.assign(read.toEnd)
+            through.assign(read.through)
           })
-        }
+          const seen = select(
+            sky,
+            through,
+            mix(through, vec3(1), served.cleared),
+          )
+          term.assign(
+            toEnd
+              .mul(opaque)
+              .add(seen.mul(cloud.xyz))
+              .add(through.mul(blocked.xyz)),
+          )
+        })
         light.assign(term.mul(served.dayColor).mul(ATMOSPHERE_GAIN).mul(share))
         opacity.assign(opaque.mul(share))
         servedOpacity.assign(opacity)
@@ -751,7 +755,10 @@ export class CloudComposite {
       deps.uniforms.served,
       deps.airMedium ?? airMediumAt,
     )
-    this.mesh = new Mesh(this.#geometry, this.#materials.table)
+    this.mesh = new Mesh(
+      this.#geometry,
+      this.#materials[DEFAULT_CLOUD_LEVERS.air],
+    )
     this.mesh.layers.set(OVER_CLOUDS_LAYER)
     this.mesh.renderOrder = ORDER
     this.mesh.name = 'cloud composite'
@@ -759,7 +766,10 @@ export class CloudComposite {
     this.mesh.frustumCulled = false
     // The chain form's: the same plane and material, on every layer, so the
     // camera draws it whatever mask the frame has left it.
-    const alone = new Mesh(this.#geometry, this.#materials.table)
+    const alone = new Mesh(
+      this.#geometry,
+      this.#materials[DEFAULT_CLOUD_LEVERS.air],
+    )
     alone.layers.enableAll()
     alone.name = 'cloud composite'
     alone.frustumCulled = false
@@ -789,7 +799,10 @@ export class CloudComposite {
    * because its span ends at a depth the history holds and no direction's
    * table has.
    */
-  setMode(mode: CloudCompositeMode, air: CloudAirForm = 'table'): void {
+  setMode(
+    mode: CloudCompositeMode,
+    air: CloudAirForm = DEFAULT_CLOUD_LEVERS.air,
+  ): void {
     this.#mode = mode
     this.#thin.value = mode === 'thin' ? 1 : 0
     this.#drawn.value = mode === 'residual' ? 0 : 1
@@ -840,15 +853,13 @@ export class CloudComposite {
     if (this.#disposed) return
     this.#build()
     const warm = warmRenderer(renderer, layout)
-    // Both programs, so the frame the lever or the thin form changes one for
-    // the other builds nothing.
-    const drawn = this.mesh.material
-    for (const material of Object.values(this.#materials)) {
-      this.mesh.material = material
-      await warmCompile(warm, { object: this.mesh, camera, scene })
-    }
-    this.mesh.material = drawn
-    await this.air.warm(renderer)
+    // The program the levers' default draws, and the table with it where
+    // that is the table's. The other is a measurement control's, or the
+    // thin form's, and builds at the first frame that draws it: warmed here
+    // it would hold a pipeline, and the table its bytes, on every page.
+    await warmCompile(warm, { object: this.mesh, camera, scene })
+    if (this.mesh.material === this.#materials.table)
+      await this.air.warm(renderer)
     if (this.#meter !== null) await warmCompute(renderer, this.#meter.kernels)
   }
 
