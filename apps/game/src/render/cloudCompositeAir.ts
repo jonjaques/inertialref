@@ -280,3 +280,175 @@ export function compositeAir(
     seen: select(sky, frontThrough, mix(frontThrough, vec3(1), cleared)),
   }
 }
+
+/* ------------------------------------------------------------------------- */
+/* The air by the ray's direction                                             */
+/* ------------------------------------------------------------------------- */
+
+/*
+ * Where the scene's depth does not cut the cloud's span short, the air a
+ * pixel carries is a function of its ray's direction and its class alone:
+ * the eye stands on the body's vertical, the span is the shell's, and the
+ * sun is the frame's. So it can be formed once a frame on a grid of
+ * directions and read a pixel, where a march a pixel is four fifths of the
+ * composite's fragment.
+ *
+ * One term will not interpolate over any grid of directions: the aerosol's
+ * phase, which rises sixtyfold over the last 20° toward the sun. It is a
+ * factor of the aerosol's single scattering and constant along a ray, so
+ * the light is carried as two sums, the aerosol's single scattering per
+ * unit of its phase and the rest, and the phase is applied a pixel
+ * (`directionLight`). The split is exact for a medium whose single
+ * scattering is linear in the aerosol's phase and turns its color by
+ * `phases.forward`, which `airMediumAt` is and which `marchAir` is.
+ */
+
+/** The air's terms on one ray, as a table of directions holds them. */
+export interface DirectionAir {
+  /** T_a(0, t₀), physical. */
+  readonly through: Node<'vec3'>
+  /** L_a(0, end) less the aerosol's single scattering. */
+  readonly rest: Node<'vec3'>
+  /** The aerosol's single scattering to the end, per unit of its phase, in its sideways color. */
+  readonly aerosol: Node<'vec3'>
+}
+
+/** Samples of the segment from the eye to t₀, by class: what a table can afford that a pixel could not. */
+export interface FrontSamples {
+  readonly sky: number
+  readonly surface: number
+}
+
+/**
+ * One segment as `airSegment` marches it, its light in the two sums: one
+ * loop, because a second march over the same bounds read for less than the
+ * first is miscompiled under the WGSL on Apple's adapter (measured: a
+ * transmittance read alone after a lit march of the same segment came back
+ * 0.14 where it is 0.50).
+ */
+function splitSegment(
+  air: AirUniforms,
+  origin: Node<'vec3'>,
+  direction: Node<'vec3'>,
+  near: Node<'float'>,
+  far: Node<'float'>,
+  sun: Node<'vec3'>,
+  samples: number,
+  clearBeam: Node<'float'> | null,
+  medium: AirMediumFn,
+): DirectionAir {
+  const shellHeight = max(air.top.sub(1), 1e-6)
+  const phases = phasesToward(direction, sun)
+  const gas = { rayleigh: phases.rayleigh, mie: float(0), forward: float(0) }
+  const haze = { rayleigh: float(0), mie: float(1), forward: float(0) }
+  const rest = vec3(0).toVar()
+  const aerosol = vec3(0).toVar()
+  const throughput = vec3(1).toVar()
+  crowdedSamples(origin, direction, near, far, samples, (point, stepLength) => {
+    const radius = length(point)
+    const height = max(radius.sub(1), 0)
+    const height01 = saturate(height.div(shellHeight))
+    const muSun = dot(point, sun).div(max(radius, 1e-5))
+    const sunT = sunTableAt(air, muSun, height01, LEVEL).toVar()
+    if (clearBeam !== null)
+      If(clearBeam.greaterThan(0), () => {
+        sunT.assign(clearedBeam(air, sunT, height01, clearBeam, LEVEL))
+      })
+    const plain = medium(air, height, muSun, gas, sunT, LEVEL)
+    const forward = medium(air, height, muSun, haze, sunT, LEVEL)
+    const stepTau = plain.extinction.mul(stepLength)
+    const stepThrough = exp(stepTau.negate()).toVar()
+    const stepLight = throughput
+      .mul(stepLength.mul(stepShare(stepTau, stepThrough)))
+      .toVar()
+    rest.addAssign(stepLight.mul(plain.single.add(plain.multiple)))
+    aerosol.addAssign(stepLight.mul(forward.single))
+    throughput.mulAssign(stepThrough)
+  })
+  return { through: throughput, rest, aerosol }
+}
+
+/**
+ * The air on one ray of a class, split at `t0` and ended at `end`, as
+ * `compositeAir` forms it for a pixel of that class whose depth lies at or
+ * past `end`: the same segments, the same crowding, the same beam. `front`
+ * is the eye-to-t₀ segment's sample count by class; the span keeps the
+ * class's own, which is what the scene's own march of it is nearest.
+ *
+ * Called from inside a `Fn`: the class's branch is a statement.
+ */
+export function directionAir(
+  air: AirUniforms,
+  eye: Node<'vec3'>,
+  direction: Node<'vec3'>,
+  t0: Node<'float'>,
+  end: Node<'float'>,
+  sky: Node<'bool'>,
+  sun: Node<'vec3'>,
+  cleared: Node<'float'>,
+  front: FrontSamples,
+  medium: AirMediumFn = airMediumAt,
+): DirectionAir {
+  const { near } = outerSpan(air, eye, direction)
+  const start = max(t0, near)
+  const stop = max(end, start)
+  const through = vec3(1).toVar()
+  const rest = vec3(0).toVar()
+  const aerosol = vec3(0).toVar()
+  const march = (
+    frontSamples: number,
+    spanSamples: number,
+    clearBeam: Node<'float'> | null,
+  ): void => {
+    const before = splitSegment(
+      air,
+      eye,
+      direction,
+      near,
+      start,
+      sun,
+      frontSamples,
+      clearBeam,
+      medium,
+    )
+    const span = splitSegment(
+      air,
+      eye,
+      direction,
+      start,
+      stop,
+      sun,
+      spanSamples,
+      clearBeam,
+      medium,
+    )
+    through.assign(before.through)
+    rest.assign(before.rest.add(before.through.mul(span.rest)))
+    aerosol.assign(before.aerosol.add(before.through.mul(span.aerosol)))
+  }
+  If(sky, () => {
+    march(front.sky, SKY_SEGMENT_SAMPLES, null)
+  }).Else(() => {
+    march(front.surface, SURFACE_SEGMENT_SAMPLES, cleared.mul(ORBIT_AIRLIGHT))
+  })
+  return { through, rest, aerosol }
+}
+
+/**
+ * L_a(0, end) from a ray's two sums: the aerosol's phase toward the sun and
+ * the turn of its color, which `airMediumAt` applies a sample, applied
+ * once. The forward color enters as its ratio to the sideways one, a
+ * channel at a time, so an air with no aerosol reads its zeros as nothing.
+ */
+export function directionLight(
+  air: AirUniforms,
+  terms: Pick<DirectionAir, 'rest' | 'aerosol'>,
+  direction: Node<'vec3'>,
+  sun: Node<'vec3'>,
+): Node<'vec3'> {
+  const phases = phasesToward(direction, sun)
+  const turned = air.mieForward.div(max(air.mieScatter, vec3(1e-20)))
+  return terms.rest.add(
+    terms.aerosol.mul(mix(vec3(1), turned, phases.forward)).mul(phases.mie),
+  )
+}

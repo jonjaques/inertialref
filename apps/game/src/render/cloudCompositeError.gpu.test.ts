@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type Node, Vector3 } from 'three/webgpu'
 import {
   abs,
+  bool,
   dot,
   exp,
   float,
@@ -34,6 +35,9 @@ import {
   type AirMediumFn,
   airSegment,
   compositeAir,
+  directionAir,
+  directionLight,
+  type FrontSamples,
   SKY_SEGMENT_SAMPLES,
   SURFACE_SEGMENT_SAMPLES,
 } from './cloudCompositeAir.ts'
@@ -348,7 +352,10 @@ const luma = (v: Node<'vec3'>): Node<'float'> =>
  * constants, so their two programs are the ones their landed figures were
  * taken on.
  */
-function errors(kind: Measured['class'] | 'limb'): Node<'vec4'> {
+function errors(
+  kind: Measured['class'] | 'limb',
+  fronts?: readonly FrontSamples[],
+): Node<'vec4'> {
   const sky = kind !== 'surface'
   const limb = kind === 'limb'
   return Fn(() => {
@@ -507,6 +514,33 @@ function errors(kind: Measured['class'] | 'limb'): Node<'vec4'> {
       .add(front.transmittance.mul(blocked))
     const reference = max(luma(truth), 1e-12)
     const off = (v: Node<'vec3'>) => abs(luma(v.sub(truth))).div(reference)
+    // The identity with its air read as a table of directions holds it, on
+    // this ray itself: the form's own quadrature, with no interpolation.
+    if (fronts !== undefined) {
+      const formed = fronts.map((front) => {
+        const terms = directionAir(
+          air,
+          eye,
+          direction,
+          start,
+          end,
+          bool(sky),
+          SUN_NODE,
+          cleared,
+          front,
+          marchAirTerms,
+        )
+        const seen = sky ? terms.through : mix(terms.through, vec3(1), cleared)
+        return off(
+          scene
+            .mul(cloud)
+            .add(directionLight(air, terms, direction, SUN_NODE).mul(opaque))
+            .add(seen.mul(traced))
+            .add(terms.through.mul(blocked)),
+        )
+      })
+      return vec4(formed[0]!, formed[1]!, formed[2]!, formed[3]!)
+    }
     return vec4(
       off(identity),
       off(thin),
@@ -533,6 +567,12 @@ interface LimbMeasured extends LimbCase {
   readonly thin: number
   readonly exact: number
   readonly quadrature: number
+}
+
+/** The front segment's sample counts the form is read at, the per-pixel form's own first. */
+const FRONTS: Record<'sky' | 'surface', readonly FrontSamples[]> = {
+  sky: [6, 12, 24, 48].map((sky) => ({ sky, surface: 4 })),
+  surface: [4, 8, 16, 32].map((surface) => ({ sky: 6, surface })),
 }
 
 /** The value at or under which 95 in 100 of `values` fall: nearest rank. */
@@ -698,6 +738,59 @@ describe('the composite’s error on analytic slabs', () => {
       hold(row)
     }
   }, 120_000)
+
+  it.skipIf(!MEASURE)(
+    'reads the identity with its air as a table of directions holds it, at four front sample counts, and writes it',
+    async () => {
+      const formed = {
+        surface: errors('surface', FRONTS.surface),
+        sky: errors('sky', FRONTS.sky),
+        limb: errors('limb', FRONTS.sky),
+      }
+      const read = async (kind: keyof typeof formed) =>
+        (
+          await gpu.drawGraph(formed[kind], {
+            float: true,
+            width: 1,
+            height: 1,
+          })
+        ).at(0, 0)
+      const slabs: unknown[] = []
+      for (const kind of ['surface', 'sky'] as const)
+        for (const cleared of [0, 1])
+          for (const thickness of THICKNESSES)
+            for (const angle of ANGLES) {
+              place(caseOf(kind === 'sky', thickness, angle), cleared)
+              const identity = await read(kind)
+              for (const figure of identity)
+                expect(Number.isFinite(figure)).toBe(true)
+              slabs.push({ class: kind, cleared, thickness, angle, identity })
+            }
+      const limb: unknown[] = []
+      for (const one of LIMB_CASES) {
+        place(limbCaseOf(one), 0)
+        const identity = await read('limb')
+        for (const figure of identity)
+          expect(Number.isFinite(figure)).toBe(true)
+        limb.push({ ...one, identity })
+      }
+      mkdirSync('.data/clouds', { recursive: true })
+      writeFileSync(
+        '.data/clouds/compositeErrorForm.json',
+        `${JSON.stringify(
+          {
+            note: 'cloudCompositeError.gpu.test.ts: the identity’s relative luminance error against the joint march with its air formed as a table of directions holds it, on the case’s own ray, at each front sample count',
+            fronts: FRONTS,
+            cases: slabs,
+            limb,
+          },
+          null,
+          2,
+        )}\n`,
+      )
+    },
+    300_000,
+  )
 
   it('holds each limb slab’s worst case to its landed residual, in every run of the suite', async () => {
     const found = await measureLimb(LIMB_ALWAYS)
