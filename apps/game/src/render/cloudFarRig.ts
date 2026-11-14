@@ -114,6 +114,8 @@ export const HELD_FLOOR = 0.1
 const MOMENT_OPACITY = 0.1
 /** A far tile's interior texels a face edge (`cloudFarAtlas.ts`). */
 const FAR_TILE = 256
+/** The frame index every dispatch draws its rays' jitter by. */
+const DRAW_FRAME = 7
 /** Frames at a stance before the bakes may owe nothing, and the most it is given. */
 const SETTLE_MIN = 50
 const SETTLE_MAX = 400
@@ -821,9 +823,14 @@ export function farSession(gpu: GpuSession, field: CloudField): FarSession {
       const was = {
         farDistance: trace.farDistance.value,
         maxSteps: trace.maxSteps.value,
+        frame: trace.frame.value,
       }
       trace.farDistance.value = overrides.farDistance ?? was.farDistance
       trace.maxSteps.value = overrides.maxSteps ?? was.maxSteps
+      // One frame's draw for every dispatch: a ray's dither is drawn by the
+      // frame's index, and the frames a stance took to settle would
+      // otherwise decide which rays read the resolved field.
+      trace.frame.value = DRAW_FRAME
       renderer.compute(kernel, [
         Math.ceil(FAR_RIG_WIDTH / 8),
         Math.ceil(FAR_RIG_HEIGHT / 8),
@@ -832,6 +839,7 @@ export function farSession(gpu: GpuSession, field: CloudField): FarSession {
       const data = new Float32Array(await gpu.readBuffer(buffer))
       trace.farDistance.value = was.farDistance
       trace.maxSteps.value = was.maxSteps
+      trace.frame.value = was.frame
       return data
     },
     dispose() {

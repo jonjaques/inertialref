@@ -1,3 +1,2652 @@
 {
-  "cases": []
+  "note": "cloudHandover.gpu.test.ts on the Mac mini (Mac18,5, Apple M6): at each stop in the band, each pitch bin’s rays, and the two marches’ mean transmittance and radiance over the fine march’s, less one, over the rays the far march ran on",
+  "pitchEdgesDegrees": [0, 2, 5, 10, 20, 40, 90],
+  "cases": [
+    {
+      "case": "broken cumulus",
+      "farFootprintMeters": 400,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 280,
+              "transmittance": 13.251641752156985,
+              "radiance": -0.9817135128111365,
+              "held": 4.1141536414423685
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1242,
+              "transmittance": 13.122885282295186,
+              "radiance": -0.9750352545556071,
+              "held": 6.235351697646753
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2940,
+              "transmittance": 1.8940514678597986,
+              "radiance": -0.9611595374093092,
+              "held": 1.8940514678597986
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6470,
+              "transmittance": 0.6285487624280379,
+              "radiance": -0.9748009808337099,
+              "held": 0.6285487624280379
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 6646,
+              "transmittance": 0.2852873697766787,
+              "radiance": -0.947926915326204,
+              "held": 0.28528736977667873
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 280,
+              "transmittance": 13.251641752156985,
+              "radiance": -0.9817135128111365,
+              "held": 4.1141536414423685
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1242,
+              "transmittance": 13.122885282295186,
+              "radiance": -0.9750352545556071,
+              "held": 6.235351697646753
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2940,
+              "transmittance": 1.8940514678597986,
+              "radiance": -0.9611595374093092,
+              "held": 1.8940514678597986
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6478,
+              "transmittance": 0.6265347132588823,
+              "radiance": -0.973228706326049,
+              "held": 0.6265347132588824
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 395,
+              "transmittance": 0.0020836410365372426,
+              "radiance": -0.32680441357745316,
+              "held": 0.0020836410365372773
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 280,
+              "transmittance": 13.251641752156985,
+              "radiance": -0.9817135128111365,
+              "held": 4.1141536414423685
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1242,
+              "transmittance": 13.122885282295186,
+              "radiance": -0.9750352545556071,
+              "held": 6.235351697646753
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2940,
+              "transmittance": 1.8940514678597986,
+              "radiance": -0.9611595374093092,
+              "held": 1.8940514678597986
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2704,
+              "transmittance": 0.7012059947741591,
+              "radiance": -0.8951339073006574,
+              "held": 0.7012059947741591
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "broken cumulus",
+      "farFootprintMeters": 800,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 210,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 918,
+              "transmittance": 11.817123509140062,
+              "radiance": -0.9637792314195449,
+              "held": 5.657489281452072
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2520,
+              "transmittance": 1.8537975871667003,
+              "radiance": -0.9650630691322839,
+              "held": 1.8537975871667005
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6072,
+              "transmittance": 0.4327427748261241,
+              "radiance": -0.9641987261278459,
+              "held": 0.432742774826124
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 6104,
+              "transmittance": 0.09572250511263158,
+              "radiance": -0.9343258535144151,
+              "held": 0.09572250511263165
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 210,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 918,
+              "transmittance": 11.817123509140062,
+              "radiance": -0.9637792314195449,
+              "held": 5.657489281452072
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2520,
+              "transmittance": 1.8537975871667003,
+              "radiance": -0.9650630691322839,
+              "held": 1.8537975871667005
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6088,
+              "transmittance": 0.41647435127710275,
+              "radiance": -0.9372485888392699,
+              "held": 0.4164743512771028
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 20,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 210,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 918,
+              "transmittance": 11.817123509140062,
+              "radiance": -0.9637792314195449,
+              "held": 5.657489281452072
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2520,
+              "transmittance": 1.8537975871667003,
+              "radiance": -0.9650630691322839,
+              "held": 1.8537975871667005
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2094,
+              "transmittance": 0.6431194945523493,
+              "radiance": -0.8898837844684261,
+              "held": 0.6431194945523492
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "broken cumulus",
+      "farFootprintMeters": 1600,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 116,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 674,
+              "transmittance": 5.271968154734276,
+              "radiance": -0.9631278721280391,
+              "held": 5.145706304221882
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2018,
+              "transmittance": 1.8319821716069167,
+              "radiance": -0.9652229060961307,
+              "held": 1.8319821716069167
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5488,
+              "transmittance": 0.4264962098017733,
+              "radiance": -0.9646853849428457,
+              "held": 0.4264962098017732
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 5214,
+              "transmittance": 0.10380027877924669,
+              "radiance": -0.9385782105091203,
+              "held": 0.10380027877924666
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 116,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 674,
+              "transmittance": 5.271968154734276,
+              "radiance": -0.9631278721280391,
+              "held": 5.145706304221882
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2018,
+              "transmittance": 1.8319821716069167,
+              "radiance": -0.9652229060961307,
+              "held": 1.8319821716069167
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 4908,
+              "transmittance": 0.445319537536796,
+              "radiance": -0.9435385500410474,
+              "held": 0.445319537536796
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 116,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 674,
+              "transmittance": 5.271968154734276,
+              "radiance": -0.9631278721280391,
+              "held": 5.145706304221882
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2018,
+              "transmittance": 1.8319821716069167,
+              "radiance": -0.9652229060961307,
+              "held": 1.8319821716069167
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 1164,
+              "transmittance": 0.7363474282125493,
+              "radiance": -0.9061337830880563,
+              "held": 0.7363474282125494
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "fair cumulus",
+      "farFootprintMeters": 400,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 282,
+              "transmittance": 17.704929637798546,
+              "radiance": -0.9872029474225013,
+              "held": 5.795421360641823
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1242,
+              "transmittance": 2.9516623794410997,
+              "radiance": -0.970753891099674,
+              "held": 2.9516623794410997
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2942,
+              "transmittance": 0.8880260841848595,
+              "radiance": -0.9828267846717361,
+              "held": 0.8880260841848594
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6468,
+              "transmittance": 0.1739067769412972,
+              "radiance": -0.9716241625056442,
+              "held": 0.17390677694129725
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 6749,
+              "transmittance": 0.05804691931273309,
+              "radiance": -0.9412940166358834,
+              "held": 0.058046919312733126
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 282,
+              "transmittance": 17.704929637798546,
+              "radiance": -0.9872029474225013,
+              "held": 5.795421360641823
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1242,
+              "transmittance": 2.9516623794410997,
+              "radiance": -0.970753891099674,
+              "held": 2.9516623794410997
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2942,
+              "transmittance": 0.8880260841848595,
+              "radiance": -0.9828267846717361,
+              "held": 0.8880260841848594
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6478,
+              "transmittance": 0.17361629581545013,
+              "radiance": -0.9700303357565665,
+              "held": 0.17361629581545016
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 450,
+              "transmittance": -0.05527533489358327,
+              "radiance": -0.3424170650967332,
+              "held": 0.05527533489358326
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 282,
+              "transmittance": 17.704929637798546,
+              "radiance": -0.9872029474225013,
+              "held": 5.795421360641823
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1242,
+              "transmittance": 2.9516623794410997,
+              "radiance": -0.970753891099674,
+              "held": 2.9516623794410997
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2942,
+              "transmittance": 0.8880260841848595,
+              "radiance": -0.9828267846717361,
+              "held": 0.8880260841848594
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2740,
+              "transmittance": 0.26878706102047123,
+              "radiance": -0.9019960117349883,
+              "held": 0.26878706102047134
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "fair cumulus",
+      "farFootprintMeters": 800,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 208,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 920,
+              "transmittance": 3.017086950156963,
+              "radiance": -0.9693751091172669,
+              "held": 3.017086950156962
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2522,
+              "transmittance": 0.7303566801360544,
+              "radiance": -0.9675740738494013,
+              "held": 0.7303566801360543
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6072,
+              "transmittance": 0.19646045500798848,
+              "radiance": -0.9638214216915729,
+              "held": 0.19646045500798853
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 6133,
+              "transmittance": 0.03979987648724048,
+              "radiance": -0.9316337390756781,
+              "held": 0.03979987648724039
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 208,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 920,
+              "transmittance": 3.017086950156963,
+              "radiance": -0.9693751091172669,
+              "held": 3.017086950156962
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2522,
+              "transmittance": 0.7303566801360544,
+              "radiance": -0.9675740738494013,
+              "held": 0.7303566801360543
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6092,
+              "transmittance": 0.18899282797832728,
+              "radiance": -0.9388472044055997,
+              "held": 0.18899282797832728
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 28,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 208,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 920,
+              "transmittance": 3.017086950156963,
+              "radiance": -0.9693751091172669,
+              "held": 3.017086950156962
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2522,
+              "transmittance": 0.7303566801360544,
+              "radiance": -0.9675740738494013,
+              "held": 0.7303566801360543
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2104,
+              "transmittance": 0.2791085433348839,
+              "radiance": -0.8904369846828066,
+              "held": 0.27910854333488394
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "fair cumulus",
+      "farFootprintMeters": 1600,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 114,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 674,
+              "transmittance": 1.9163802067976197,
+              "radiance": -0.9682624091150899,
+              "held": 1.9163802067976197
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2018,
+              "transmittance": 0.724475250383706,
+              "radiance": -0.9676618472066096,
+              "held": 0.724475250383706
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5492,
+              "transmittance": 0.1953522383879276,
+              "radiance": -0.9644272408333336,
+              "held": 0.19535223838792762
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 5230,
+              "transmittance": 0.04408456752850176,
+              "radiance": -0.9352859599409166,
+              "held": 0.04408456752850173
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 114,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 674,
+              "transmittance": 1.9163802067976197,
+              "radiance": -0.9682624091150899,
+              "held": 1.9163802067976197
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2018,
+              "transmittance": 0.724475250383706,
+              "radiance": -0.9676618472066096,
+              "held": 0.724475250383706
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 4916,
+              "transmittance": 0.20250291680865273,
+              "radiance": -0.9439043880257628,
+              "held": 0.20250291680865268
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 114,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 674,
+              "transmittance": 1.9163802067976197,
+              "radiance": -0.9682624091150899,
+              "held": 1.9163802067976197
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2018,
+              "transmittance": 0.724475250383706,
+              "radiance": -0.9676618472066096,
+              "held": 0.724475250383706
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 1170,
+              "transmittance": 0.3175988101423952,
+              "radiance": -0.9084133080099903,
+              "held": 0.3175988101423951
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "cirrus over cumulus",
+      "farFootprintMeters": 400,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 344,
+              "transmittance": 1.1923216203451381,
+              "radiance": -0.9481408426862071,
+              "held": 1.192321620345138
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1376,
+              "transmittance": 2.408121455138347,
+              "radiance": -0.9749944353533403,
+              "held": 2.408121455138347
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 3126,
+              "transmittance": 0.11871530192710988,
+              "radiance": -0.9575807438590951,
+              "held": 0.11871530192710994
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6592,
+              "transmittance": 0.010185646540752158,
+              "radiance": null,
+              "held": 0.010185646540752212
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 6976,
+              "transmittance": 0.022974219498339776,
+              "radiance": -0.831759444101617,
+              "held": 0.02297421949833977
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 344,
+              "transmittance": 1.1923216203451381,
+              "radiance": -0.9481408426862071,
+              "held": 1.192321620345138
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1376,
+              "transmittance": 2.408121455138347,
+              "radiance": -0.9749944353533403,
+              "held": 2.408121455138347
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 3126,
+              "transmittance": 0.11871530192710988,
+              "radiance": -0.9575807438590951,
+              "held": 0.11871530192710994
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6732,
+              "transmittance": 0.007537864426639063,
+              "radiance": null,
+              "held": 0.007537864426639092
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 509,
+              "transmittance": 0.005639911739943049,
+              "radiance": -0.19881918118379827,
+              "held": 0.005639911739942944
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 344,
+              "transmittance": 1.1923216203451381,
+              "radiance": -0.9481408426862071,
+              "held": 1.192321620345138
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1376,
+              "transmittance": 2.408121455138347,
+              "radiance": -0.9749944353533403,
+              "held": 2.408121455138347
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 3154,
+              "transmittance": 0.11722517419469747,
+              "radiance": -0.9561863284005317,
+              "held": 0.11722517419469755
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2996,
+              "transmittance": -0.01088267864873016,
+              "radiance": null,
+              "held": 0.010882678648730111
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "cirrus over cumulus",
+      "farFootprintMeters": 800,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 206,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 990,
+              "transmittance": 2.3059740144021306,
+              "radiance": -0.9530042428296377,
+              "held": 2.3059740144021306
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2618,
+              "transmittance": 1.9570860105256211,
+              "radiance": -0.9575693487421568,
+              "held": 1.9570860105256211
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6184,
+              "transmittance": 0.03418980028748564,
+              "radiance": -0.9569844140963396,
+              "held": 0.03418980028748559
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 6273,
+              "transmittance": -0.0010587896774097993,
+              "radiance": null,
+              "held": 0.0010587896774097562
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 206,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 990,
+              "transmittance": 2.3059740144021306,
+              "radiance": -0.9530042428296377,
+              "held": 2.3059740144021306
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2618,
+              "transmittance": 1.9570860105256211,
+              "radiance": -0.9575693487421568,
+              "held": 1.9570860105256211
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6320,
+              "transmittance": 0.03296167559851226,
+              "radiance": -0.9527021440637067,
+              "held": 0.032961675598512354
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 28,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 206,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 990,
+              "transmittance": 2.3059740144021306,
+              "radiance": -0.9530042428296377,
+              "held": 2.3059740144021306
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2618,
+              "transmittance": 1.9570860105256211,
+              "radiance": -0.9575693487421568,
+              "held": 1.9570860105256211
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2332,
+              "transmittance": 0.09155700545264178,
+              "radiance": -0.9129029700895013,
+              "held": 0.09155700545264178
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "cirrus over cumulus",
+      "farFootprintMeters": 1600,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 126,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 720,
+              "transmittance": 0.03281634366491648,
+              "radiance": -0.9457204157798331,
+              "held": 0.03281634366491651
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2068,
+              "transmittance": 0.6777009824276392,
+              "radiance": -0.9591200905274312,
+              "held": 0.6777009824276392
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5546,
+              "transmittance": 0.5981524281231079,
+              "radiance": -0.9586545175249911,
+              "held": 0.5981524281231079
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 5346,
+              "transmittance": 0.010176597353384054,
+              "radiance": -0.9444810225271656,
+              "held": 0.010176597353384009
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 126,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 720,
+              "transmittance": 0.03281634366491648,
+              "radiance": -0.9457204157798331,
+              "held": 0.03281634366491651
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2068,
+              "transmittance": 0.6777009824276392,
+              "radiance": -0.9591200905274312,
+              "held": 0.6777009824276392
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5086,
+              "transmittance": 0.6734796199108053,
+              "radiance": -0.9373130903053241,
+              "held": 0.6734796199108053
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 126,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 720,
+              "transmittance": 0.03281634366491648,
+              "radiance": -0.9457204157798331,
+              "held": 0.03281634366491651
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2068,
+              "transmittance": 0.6777009824276392,
+              "radiance": -0.9591200905274312,
+              "held": 0.6777009824276392
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 1340,
+              "transmittance": 3.2698355850200453,
+              "radiance": -0.792472873471928,
+              "held": 2.4553791176694544
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "anvil",
+      "farFootprintMeters": 400,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 316,
+              "transmittance": 1.4935718307720856,
+              "radiance": -0.9880404527407837,
+              "held": 1.4935718307720856
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1356,
+              "transmittance": 10.632242377696386,
+              "radiance": -0.9847710525421481,
+              "held": 0.43888040982621035
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 3076,
+              "transmittance": 3.12183714098731,
+              "radiance": -0.9841758192873101,
+              "held": 1.6723494681808748
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6580,
+              "transmittance": 1.1067607740134973,
+              "radiance": -0.9845385941550635,
+              "held": 1.1067607740134973
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 7969,
+              "transmittance": 0.25386581487632975,
+              "radiance": -0.9069399932132729,
+              "held": 0.2538658148763298
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 316,
+              "transmittance": 1.4935718307720856,
+              "radiance": -0.9880404527407837,
+              "held": 1.4935718307720856
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1356,
+              "transmittance": 10.632242377696386,
+              "radiance": -0.9847710525421481,
+              "held": 0.43888040982621035
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 3076,
+              "transmittance": 3.12183714098731,
+              "radiance": -0.9841758192873101,
+              "held": 1.6723494681808748
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5930,
+              "transmittance": 0.9987615362008171,
+              "radiance": -0.9734155271568552,
+              "held": 0.9987615362008171
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 1530,
+              "transmittance": 0.005148737599808939,
+              "radiance": -0.7102104713461841,
+              "held": 0.005148737599809024
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 316,
+              "transmittance": 1.4935718307720856,
+              "radiance": -0.9880404527407837,
+              "held": 1.4935718307720856
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1356,
+              "transmittance": 10.632242377696386,
+              "radiance": -0.9847710525421481,
+              "held": 0.43888040982621035
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 3076,
+              "transmittance": 3.12183714098731,
+              "radiance": -0.9841758192873101,
+              "held": 1.6723494681808748
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2789,
+              "transmittance": 0.3149558980457785,
+              "radiance": -0.9343721602292431,
+              "held": 0.3149558980457786
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "anvil",
+      "farFootprintMeters": 800,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 224,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 964,
+              "transmittance": 9.078927056915617,
+              "radiance": -0.9835544834601994,
+              "held": 0.6042561459823554
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2600,
+              "transmittance": 2.105320265588512,
+              "radiance": -0.983076383356854,
+              "held": 1.7047747802814899
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6174,
+              "transmittance": 0.8702695841282171,
+              "radiance": -0.9842426864737934,
+              "held": 0.8702695841282171
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 7318,
+              "transmittance": 0.22060679002857708,
+              "radiance": -0.9414930028242383,
+              "held": 0.220606790028577
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 224,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 964,
+              "transmittance": 9.078927056915617,
+              "radiance": -0.9835544834601994,
+              "held": 0.6042561459823554
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2600,
+              "transmittance": 2.105320265588512,
+              "radiance": -0.983076383356854,
+              "held": 1.7047747802814899
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5689,
+              "transmittance": 0.8071457397532531,
+              "radiance": -0.9768579119313802,
+              "held": 0.8071457397532532
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 644,
+              "transmittance": -0.06633236682338517,
+              "radiance": -0.4908843931434993,
+              "held": 0.06633236682338517
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 224,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 964,
+              "transmittance": 9.078927056915617,
+              "radiance": -0.9835544834601994,
+              "held": 0.6042561459823554
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2600,
+              "transmittance": 2.105320265588512,
+              "radiance": -0.983076383356854,
+              "held": 1.7047747802814899
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2033,
+              "transmittance": 0.4977555231537114,
+              "radiance": -0.9451002184330186,
+              "held": 0.49775552315371135
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "anvil",
+      "farFootprintMeters": 1600,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 134,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 708,
+              "transmittance": -0.22469066203807175,
+              "radiance": -0.9750652261144339,
+              "held": 0.218953037786815
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2060,
+              "transmittance": 2.289134348742201,
+              "radiance": -0.9818397806438397,
+              "held": 2.002051702250355
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5536,
+              "transmittance": 0.6409540492068675,
+              "radiance": -0.9825325304820668,
+              "held": 0.6409540492068675
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 5615,
+              "transmittance": 0.38103356259124865,
+              "radiance": -0.9694388986184258,
+              "held": 0.38103356259124876
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 134,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 708,
+              "transmittance": -0.22469066203807175,
+              "radiance": -0.9750652261144339,
+              "held": 0.218953037786815
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2060,
+              "transmittance": 2.289134348742201,
+              "radiance": -0.9818397806438397,
+              "held": 2.002051702250355
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5100,
+              "transmittance": 0.5205443571102879,
+              "radiance": -0.9621096637528742,
+              "held": 0.520544357110288
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 63,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 134,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 708,
+              "transmittance": -0.22469066203807175,
+              "radiance": -0.9750652261144339,
+              "held": 0.218953037786815
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2060,
+              "transmittance": 2.289134348742201,
+              "radiance": -0.9818397806438397,
+              "held": 2.002051702250355
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 1421,
+              "transmittance": 0.5927229388613766,
+              "radiance": -0.8114442612038473,
+              "held": 0.5927229388613767
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "overcast",
+      "farFootprintMeters": 400,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 278,
+              "transmittance": 3.6605423833663417,
+              "radiance": -0.9429367963689225,
+              "held": 0.3346199574213455
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1214,
+              "transmittance": 8.700971621193027,
+              "radiance": -0.9469737721655305,
+              "held": 0.844713599838031
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2936,
+              "transmittance": 3.9320113001509123,
+              "radiance": -0.9607923455383072,
+              "held": 0.6837916041495042
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6468,
+              "transmittance": 0.23335190578583198,
+              "radiance": -0.9705979066355956,
+              "held": 0.1052838872729249
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 6203,
+              "transmittance": -0.4666257325380816,
+              "radiance": -0.963973586161637,
+              "held": 0.2666859375306558
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 278,
+              "transmittance": 3.6605423833663417,
+              "radiance": -0.9429367963689225,
+              "held": 0.3346199574213455
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1214,
+              "transmittance": 8.700971621193027,
+              "radiance": -0.9469737721655305,
+              "held": 0.844713599838031
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2936,
+              "transmittance": 3.9320113001509123,
+              "radiance": -0.9607923455383072,
+              "held": 0.6837916041495042
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6470,
+              "transmittance": 0.23340459824389326,
+              "radiance": -0.9706592211700941,
+              "held": 0.10527777968340236
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 111,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 278,
+              "transmittance": 3.6605423833663417,
+              "radiance": -0.9429367963689225,
+              "held": 0.3346199574213455
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 1214,
+              "transmittance": 8.700971621193027,
+              "radiance": -0.9469737721655305,
+              "held": 0.844713599838031
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2936,
+              "transmittance": 3.9320113001509123,
+              "radiance": -0.9607923455383072,
+              "held": 0.6837916041495042
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 2475,
+              "transmittance": 0.625713361096139,
+              "radiance": -0.951700239552221,
+              "held": 0.28580630068923585
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "overcast",
+      "farFootprintMeters": 800,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 204,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 920,
+              "transmittance": 5.088597054196283,
+              "radiance": -0.9376191265317351,
+              "held": 0.4862544600264696
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2524,
+              "transmittance": 6.209589793407998,
+              "radiance": -0.9526578545655201,
+              "held": 0.7169570025544032
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 6064,
+              "transmittance": 0.7348498151854537,
+              "radiance": -0.9679915348143783,
+              "held": 0.3680708016588206
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 5875,
+              "transmittance": -0.1865924258169933,
+              "radiance": -0.9647174525726036,
+              "held": 0.14996290287660669
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 204,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 920,
+              "transmittance": 5.088597054196283,
+              "radiance": -0.9376191265317351,
+              "held": 0.4862544600264696
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2524,
+              "transmittance": 6.209589793407998,
+              "radiance": -0.9526578545655201,
+              "held": 0.7169570025544032
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5946,
+              "transmittance": 0.7149455239049012,
+              "radiance": -0.9565921105963693,
+              "held": 0.3618730030375371
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 204,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 920,
+              "transmittance": 5.088597054196283,
+              "radiance": -0.9376191265317351,
+              "held": 0.4862544600264696
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2524,
+              "transmittance": 6.209589793407998,
+              "radiance": -0.9526578545655201,
+              "held": 0.7169570025544032
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 1966,
+              "transmittance": 1.9032877552881962,
+              "radiance": -0.9383407217053674,
+              "held": 0.6866355460142576
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "overcast",
+      "farFootprintMeters": 1600,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 118,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 676,
+              "transmittance": 0.8174595175315904,
+              "radiance": -0.9375502173212574,
+              "held": 0.2469388025774229
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2010,
+              "transmittance": 3.8726810957242774,
+              "radiance": -0.9484980757628081,
+              "held": 0.4363466011063747
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 5488,
+              "transmittance": 0.36239625257583774,
+              "radiance": -0.9600100362340172,
+              "held": 0.1461103457591205
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 5114,
+              "transmittance": -0.25031495067959386,
+              "radiance": -0.9601830770167777,
+              "held": 0.1856155543577448
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 118,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 676,
+              "transmittance": 0.8174595175315904,
+              "radiance": -0.9375502173212574,
+              "held": 0.2469388025774229
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2010,
+              "transmittance": 3.8726810957242774,
+              "radiance": -0.9484980757628081,
+              "held": 0.4363466011063747
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 4843,
+              "transmittance": 0.4121494664656975,
+              "radiance": -0.9468601569560561,
+              "held": 0.15894040083080943
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 118,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 676,
+              "transmittance": 0.8174595175315904,
+              "radiance": -0.9375502173212574,
+              "held": 0.2469388025774229
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 2010,
+              "transmittance": 3.8726810957242774,
+              "radiance": -0.9484980757628081,
+              "held": 0.4363466011063747
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 1132,
+              "transmittance": 1.265949582280674,
+              "radiance": -0.913337500721258,
+              "held": 0.29640239931218487
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "grazing at sunset",
+      "farFootprintMeters": 400,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 215,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 107,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 49,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "grazing at sunset",
+      "farFootprintMeters": 800,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 114,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 20,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case": "grazing at sunset",
+      "farFootprintMeters": 1600,
+      "band": [
+        {
+          "xi": 0,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 0.5,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        },
+        {
+          "xi": 1,
+          "bins": [
+            {
+              "bin": "0° to 2°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "2° to 5°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "5° to 10°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "10° to 20°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "20° to 40°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            },
+            {
+              "bin": "40° to 90°",
+              "rays": 0,
+              "transmittance": null,
+              "radiance": null,
+              "held": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

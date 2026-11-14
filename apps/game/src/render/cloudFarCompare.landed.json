@@ -1,844 +1,870 @@
 {
-  "note": "cloudFarCompare.gpu.test.ts: the far atlas against the fine march over the whole ray, on the real field (§8.6)",
-  "body": "Earth",
-  "trace": {
-    "width": 256,
-    "height": 144,
-    "pixelAngle": 0.007272205216643039
-  },
-  "units": {
-    "radiance": "relative to the reference mean light over the cloudy bins",
-    "transmittance": "absolute",
-    "moments": "km, RMS over rays both marches find over 10% opaque"
-  },
+  "note": "cloudFarCompare.gpu.test.ts on the Mac mini (Mac18,5, Apple M6): each pitch bin’s rays, and the far march’s mean transmittance and radiance over the fine march’s at the shipped budget, less one",
+  "pitchEdgesDegrees": [0, 2, 5, 10, 20, 40, 90],
   "cases": [
     {
-      "case": "cirrus over cumulus",
-      "scenario": "cirrus-over-cumulus",
+      "case": "broken cumulus",
       "footprintMeters": 400,
-      "tFarKm": 55.003948332559034,
-      "eyeMeters": 29024.139891347848,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 33336,
-      "bins": 116,
-      "cloudyBins": 60,
-      "reference": {
-        "meanLight": 0.0019214244353080183,
-        "meanTransmittance": 0.4772777584942255,
-        "mostSteps": 832,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.001379340008459935,
-        "meanTransmittance": 0.6463992650008811,
-        "footprint": {
-          "radiance": 1.647016009369976,
-          "radianceWorst": 9.89583134966167,
-          "transmittance": 0.39508060255554645,
-          "transmittanceWorst": 0.8874878217244432,
-          "blocked": 1.361909340927
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 280,
+          "transmittance": 13.251641752156985,
+          "radiance": -0.9817135128111365,
+          "held": 4.1141536414423685
         },
-        "pixel": {
-          "radiance": 1.3963229656427538,
-          "transmittance": 0.4867227421407176
+        {
+          "bin": "2° to 5°",
+          "rays": 1242,
+          "transmittance": 13.122885282295186,
+          "radiance": -0.9750352545556071,
+          "held": 6.235351697646753
         },
-        "moments": {
-          "rays": 19322,
-          "meanKm": 8.453857115726684,
-          "deviationKm": 10.904778013247073
-        }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.646328293736501,
-        "atlas": {
-          "meanLight": 0.0013902320432451069,
-          "meanTransmittance": 0.6453284597350074,
-          "footprint": {
-            "radiance": 1.6467186534680336,
-            "radianceWorst": 9.89583134966167,
-            "transmittance": 0.39495690083699403,
-            "transmittanceWorst": 0.8874878217244432,
-            "blocked": 1.3618953682262722
-          },
-          "pixel": {
-            "radiance": 1.3948337390324839,
-            "transmittance": 0.48637945480199535
-          },
-          "moments": {
-            "rays": 19322,
-            "meanKm": 8.42773062635432,
-            "deviationKm": 10.846772775937453
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0.9882352948188782,
-        "logTau": 0.42352941632270813
-      }
-    },
-    {
-      "case": "cirrus over cumulus",
-      "scenario": "cirrus-over-cumulus",
-      "footprintMeters": 800,
-      "tFarKm": 110.00789666511807,
-      "eyeMeters": 55992.5814873483,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 31462,
-      "bins": 252,
-      "cloudyBins": 102,
-      "reference": {
-        "meanLight": 0.002833407381367229,
-        "meanTransmittance": 0.3670063706553405,
-        "mostSteps": 884,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.0013765459530445446,
-        "meanTransmittance": 0.5295750461361877,
-        "footprint": {
-          "radiance": 0.9033937415084013,
-          "radianceWorst": 4.543698264687521,
-          "transmittance": 0.20525934935497572,
-          "transmittanceWorst": 0.40346064244375657,
-          "blocked": 1.0142773561108978
+        {
+          "bin": "5° to 10°",
+          "rays": 2940,
+          "transmittance": 1.8940514678597986,
+          "radiance": -0.9611595374093092,
+          "held": 1.8940514678597986
         },
-        "pixel": {
-          "radiance": 0.9382894875716392,
-          "transmittance": 0.3161703686455411
+        {
+          "bin": "10° to 20°",
+          "rays": 6470,
+          "transmittance": 0.6285487624280379,
+          "radiance": -0.9748009808337099,
+          "held": 0.6285487624280379
         },
-        "moments": {
-          "rays": 27320,
-          "meanKm": 23.367662243534657,
-          "deviationKm": 10.785604399398824
-        }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.588773758820164,
-        "atlas": {
-          "meanLight": 0.0013863971301622308,
-          "meanTransmittance": 0.5285896708113456,
-          "footprint": {
-            "radiance": 0.9027303690305986,
-            "radianceWorst": 4.543698264687521,
-            "transmittance": 0.204963069374746,
-            "transmittanceWorst": 0.4022199158890898,
-            "blocked": 1.0142651423585622
-          },
-          "pixel": {
-            "radiance": 0.9337983947398257,
-            "transmittance": 0.3151377494650649
-          },
-          "moments": {
-            "rays": 27320,
-            "meanKm": 23.36818544847559,
-            "deviationKm": 10.772958112550821
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0.7960784435272217,
-        "logTau": 0.5921568870544434
-      }
-    },
-    {
-      "case": "cirrus over cumulus",
-      "scenario": "cirrus-over-cumulus",
-      "footprintMeters": 1600,
-      "tFarKm": 220.01579333023614,
-      "eyeMeters": 108861.95315743145,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 29136,
-      "bins": 518,
-      "cloudyBins": 170,
-      "reference": {
-        "meanLight": 0.0015651430135818715,
-        "meanTransmittance": 0.6835614144142502,
-        "mostSteps": 883,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.0005310827469018158,
-        "meanTransmittance": 0.8236352556478133,
-        "footprint": {
-          "radiance": 0.9006257567777587,
-          "radianceWorst": 3.900905239110777,
-          "transmittance": 0.2925422648536169,
-          "transmittanceWorst": 0.5058967745617816,
-          "blocked": 0.8808676348732781
+        {
+          "bin": "20° to 40°",
+          "rays": 13534,
+          "transmittance": 0.16986112814185472,
+          "radiance": -0.9792245436334359,
+          "held": 0.16986112814185464
         },
-        "pixel": {
-          "radiance": 1.225210483027494,
-          "transmittance": 0.1983365093876939
-        },
-        "moments": {
-          "rays": 11390,
-          "meanKm": 19.322522195993898,
-          "deviationKm": 13.024598453695827
+        {
+          "bin": "40° to 90°",
+          "rays": 8232,
+          "transmittance": -0.19030368532050657,
+          "radiance": -0.9676649493778213,
+          "held": 0.19030368532050657
         }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.5834706205381659,
-        "atlas": {
-          "meanLight": 0.0005341933202831861,
-          "meanTransmittance": 0.8231881154032621,
-          "footprint": {
-            "radiance": 0.9005167778545224,
-            "radianceWorst": 3.900905239110777,
-            "transmittance": 0.2924930166649175,
-            "transmittanceWorst": 0.5058967745617816,
-            "blocked": 0.8808641030018605
-          },
-          "pixel": {
-            "radiance": 1.2233095447099078,
-            "transmittance": 0.19802967822812015
-          },
-          "moments": {
-            "rays": 11491,
-            "meanKm": 19.238120071095206,
-            "deviationKm": 12.963413867652013
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0.6509804129600525,
-        "logTau": 0.6823529601097107
-      }
+      ]
     },
     {
       "case": "broken cumulus",
-      "scenario": "broken-horizon",
-      "footprintMeters": 400,
-      "tFarKm": 55.003948332559034,
-      "eyeMeters": 28874.135709969327,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 32698,
-      "bins": 156,
-      "cloudyBins": 70,
-      "reference": {
-        "meanLight": 0.0034641134330288337,
-        "meanTransmittance": 0.20732237261194492,
-        "mostSteps": 240,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.002170230768885005,
-        "meanTransmittance": 0.3058110088870673,
-        "footprint": {
-          "radiance": 0.5177445574475122,
-          "radianceWorst": 1.3468508771016416,
-          "transmittance": 0.359727522996348,
-          "transmittanceWorst": 0.49063863564067733,
-          "blocked": 0.32570500625008414
+      "footprintMeters": 800,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 210,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
         },
-        "pixel": {
-          "radiance": 0.7191635931823281,
-          "transmittance": 0.414661613008452
+        {
+          "bin": "2° to 5°",
+          "rays": 918,
+          "transmittance": 11.817123509140062,
+          "radiance": -0.9637792316088947,
+          "held": 5.657489281452072
         },
-        "moments": {
-          "rays": 27402,
-          "meanKm": 1.464899332306401,
-          "deviationKm": 1.815380887954687
+        {
+          "bin": "5° to 10°",
+          "rays": 2520,
+          "transmittance": 1.8537975871667003,
+          "radiance": -0.965063069553808,
+          "held": 1.8537975871667005
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6072,
+          "transmittance": 0.4327427748261241,
+          "radiance": -0.964198726337352,
+          "held": 0.432742774826124
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13318,
+          "transmittance": 0.07869595583093236,
+          "radiance": -0.9718724934082638,
+          "held": 0.07869595583093242
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 8030,
+          "transmittance": 0.027854618178041912,
+          "radiance": -0.9721390420404589,
+          "held": 0.027854618178041808
         }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.3141170713805126,
-        "atlas": {
-          "meanLight": 0.0021046363479020544,
-          "meanTransmittance": 0.24831928888016333,
-          "footprint": {
-            "radiance": 0.5188928037502042,
-            "radianceWorst": 1.3468508771016416,
-            "transmittance": 0.36086275609141805,
-            "transmittanceWorst": 0.49063863564067733,
-            "blocked": 0.3255028809717323
-          },
-          "pixel": {
-            "radiance": 0.6395847999808044,
-            "transmittance": 0.3949064043973757
-          },
-          "moments": {
-            "rays": 27402,
-            "meanKm": 1.302993907510143,
-            "deviationKm": 1.8153212619037173
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0.43529412150382996,
-        "logTau": 0.364705890417099
-      }
+      ]
     },
     {
       "case": "broken cumulus",
-      "scenario": "broken-horizon",
-      "footprintMeters": 800,
-      "tFarKm": 110.00789666511807,
-      "eyeMeters": 55842.56475973688,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 31068,
-      "bins": 294,
-      "cloudyBins": 120,
-      "reference": {
-        "meanLight": 0.004263010971850144,
-        "meanTransmittance": 0.057745381610077834,
-        "mostSteps": 240,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.002677192172639269,
-        "meanTransmittance": 0.1597732529032832,
-        "footprint": {
-          "radiance": 0.28043703098009237,
-          "radianceWorst": 0.8128748568586013,
-          "transmittance": 0.08398750463972258,
-          "transmittanceWorst": 0.15185281847996152,
-          "blocked": 0.13235697664629378
-        },
-        "pixel": {
-          "radiance": 0.43160149461809083,
-          "transmittance": 0.1317859857024148
-        },
-        "moments": {
-          "rays": 31068,
-          "meanKm": 1.1268831629426732,
-          "deviationKm": 1.4310644080978434
-        }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.38283764645294194,
-        "atlas": {
-          "meanLight": 0.0034864751067128254,
-          "meanTransmittance": 0.08604015359369933,
-          "footprint": {
-            "radiance": 0.2548290564662645,
-            "radianceWorst": 0.8128748303749812,
-            "transmittance": 0.07668209232798645,
-            "transmittanceWorst": 0.14862657889349723,
-            "blocked": 0.1317607677271555
-          },
-          "pixel": {
-            "radiance": 0.29579788304963134,
-            "transmittance": 0.09319278030966306
-          },
-          "moments": {
-            "rays": 31068,
-            "meanKm": 1.086686177227089,
-            "deviationKm": 1.4146799291345469
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0.8392156958580017,
-        "logTau": 0.41960784792900085
-      }
-    },
-    {
-      "case": "broken cumulus",
-      "scenario": "broken-horizon",
       "footprintMeters": 1600,
-      "tFarKm": 220.01579333023614,
-      "eyeMeters": 108711.88621338736,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 28856,
-      "bins": 552,
-      "cloudyBins": 190,
-      "reference": {
-        "meanLight": 0.00408358993850682,
-        "meanTransmittance": 0.24639098083006286,
-        "mostSteps": 459,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.0013439432725010202,
-        "meanTransmittance": 0.49663325385746965,
-        "footprint": {
-          "radiance": 0.7692803220363711,
-          "radianceWorst": 1.985203803218483,
-          "transmittance": 0.26433582695166713,
-          "transmittanceWorst": 0.37450403720140457,
-          "blocked": 0.23788476214721405
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 116,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
         },
-        "pixel": {
-          "radiance": 0.83808376493988,
-          "transmittance": 0.27785893968397707
+        {
+          "bin": "2° to 5°",
+          "rays": 674,
+          "transmittance": 5.271968154734276,
+          "radiance": -0.9631278721280391,
+          "held": 5.145706304221882
         },
-        "moments": {
-          "rays": 28795,
-          "meanKm": 1.2823695842305967,
-          "deviationKm": 1.6845056416239859
+        {
+          "bin": "5° to 10°",
+          "rays": 2018,
+          "transmittance": 1.8319821716069167,
+          "radiance": -0.9652229060961307,
+          "held": 1.8319821716069167
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 5488,
+          "transmittance": 0.4264962098017733,
+          "radiance": -0.9646853849428457,
+          "held": 0.4264962098017732
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 12934,
+          "transmittance": 0.05007162208382421,
+          "radiance": -0.9663696625383555,
+          "held": 0.050071622083824256
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 7626,
+          "transmittance": -0.018108953687759,
+          "radiance": -0.9627477128393334,
+          "held": 0.018108953687758996
         }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.536491544219573,
-        "atlas": {
-          "meanLight": 0.0027821713477897765,
-          "meanTransmittance": 0.32993999895367837,
-          "footprint": {
-            "radiance": 0.6957763798771726,
-            "radianceWorst": 1.985203803218483,
-            "transmittance": 0.24865060495756705,
-            "transmittanceWorst": 0.37450403720140457,
-            "blocked": 0.23451419551695138
-          },
-          "pixel": {
-            "radiance": 0.510674775976645,
-            "transmittance": 0.20234890306549458
-          },
-          "moments": {
-            "rays": 28795,
-            "meanKm": 1.2569155554411995,
-            "deviationKm": 1.6443047495451442
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0.501960813999176,
-        "logTau": 0.6274510025978088
-      }
+      ]
     },
     {
-      "case": "anvil",
-      "scenario": "anvil",
+      "case": "fair cumulus",
       "footprintMeters": 400,
-      "tFarKm": 55.003948332559034,
-      "eyeMeters": 35324.31533185579,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 33202,
-      "bins": 114,
-      "cloudyBins": 28,
-      "reference": {
-        "meanLight": 0.00008369345410204495,
-        "meanTransmittance": 0.9675458460088845,
-        "mostSteps": 1051,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.0000031826661403793475,
-        "meanTransmittance": 0.9737038318493273,
-        "footprint": {
-          "radiance": 1.6272564668416507,
-          "radianceWorst": 5.983756132772393,
-          "transmittance": 0.14748241607726167,
-          "transmittanceWorst": 0.38911694517961826,
-          "blocked": 0.26102297163832994
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 282,
+          "transmittance": 17.704929637798546,
+          "radiance": -0.9872029474225013,
+          "held": 5.795421360641823
         },
-        "pixel": {
-          "radiance": 8.49377627783682,
-          "transmittance": 0.06617512484452502
+        {
+          "bin": "2° to 5°",
+          "rays": 1242,
+          "transmittance": 2.9516623794410997,
+          "radiance": -0.970753891099674,
+          "held": 2.9516623794410997
         },
-        "moments": {
-          "rays": 1017,
-          "meanKm": 46.69452302284411,
-          "deviationKm": 35.98107326155609
+        {
+          "bin": "5° to 10°",
+          "rays": 2942,
+          "transmittance": 0.8880260841848595,
+          "radiance": -0.9828267846717361,
+          "held": 0.8880260841848594
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6468,
+          "transmittance": 0.1739067769412972,
+          "radiance": -0.9716241625056442,
+          "held": 0.17390677694129725
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13536,
+          "transmittance": 0.011497732933865468,
+          "radiance": -0.974638768865391,
+          "held": 0.011497732933865478
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 8232,
+          "transmittance": -0.1571096886147063,
+          "radiance": -0.9636527627550557,
+          "held": 0.1571096886147063
         }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.6182157701343293,
-        "atlas": {
-          "meanLight": 0.0000031826742139739676,
-          "meanTransmittance": 0.9737038318493273,
-          "footprint": {
-            "radiance": 1.6272564568995005,
-            "radianceWorst": 5.9837561292436785,
-            "transmittance": 0.14748241607726167,
-            "transmittanceWorst": 0.38911694517961826,
-            "blocked": 0.2610229647523768
-          },
-          "pixel": {
-            "radiance": 8.49377609200184,
-            "transmittance": 0.06617512484452502
-          },
-          "moments": {
-            "rays": 1017,
-            "meanKm": 46.694524330328655,
-            "deviationKm": 35.98107415428501
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0,
-        "logTau": 0
-      }
+      ]
     },
     {
-      "case": "anvil",
-      "scenario": "anvil",
+      "case": "fair cumulus",
       "footprintMeters": 800,
-      "tFarKm": 110.00789666511807,
-      "eyeMeters": 62293.28333733231,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 31402,
-      "bins": 254,
-      "cloudyBins": 44,
-      "reference": {
-        "meanLight": 0.00022523179447298807,
-        "meanTransmittance": 0.9481648108592555,
-        "mostSteps": 1050,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.00003480710293508174,
-        "meanTransmittance": 0.9600302421143461,
-        "footprint": {
-          "radiance": 1.5660518663899463,
-          "radianceWorst": 5.2757305963428855,
-          "transmittance": 0.27122483200837855,
-          "transmittanceWorst": 0.686151686831311,
-          "blocked": 0.2973877115274347
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 208,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
         },
-        "pixel": {
-          "radiance": 6.159889083840729,
-          "transmittance": 0.09048596630726127
+        {
+          "bin": "2° to 5°",
+          "rays": 920,
+          "transmittance": 3.017086950156963,
+          "radiance": -0.9693751091172669,
+          "held": 3.017086950156962
         },
-        "moments": {
-          "rays": 1547,
-          "meanKm": 46.579489536189364,
-          "deviationKm": 30.12190442981701
+        {
+          "bin": "5° to 10°",
+          "rays": 2522,
+          "transmittance": 0.7303566801360544,
+          "radiance": -0.9675740738494013,
+          "held": 0.7303566801360543
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6072,
+          "transmittance": 0.19646045500798848,
+          "radiance": -0.9638214216915729,
+          "held": 0.19646045500798853
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13320,
+          "transmittance": 0.03898941459426286,
+          "radiance": -0.9713352117906616,
+          "held": 0.038989414594262764
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 8028,
+          "transmittance": 0.017647116535696172,
+          "radiance": -0.9718281917788485,
+          "held": 0.01764711653569626
         }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.573625883701675,
-        "atlas": {
-          "meanLight": 0.00003480710293508174,
-          "meanTransmittance": 0.9600302421143461,
-          "footprint": {
-            "radiance": 1.5660518663899463,
-            "radianceWorst": 5.2757305963428855,
-            "transmittance": 0.27122483200837855,
-            "transmittanceWorst": 0.686151686831311,
-            "blocked": 0.29738771058751096
-          },
-          "pixel": {
-            "radiance": 6.159889083840729,
-            "transmittance": 0.09048596630726127
-          },
-          "moments": {
-            "rays": 1547,
-            "meanKm": 46.5794895399249,
-            "deviationKm": 30.12190235102247
-          }
+      ]
+    },
+    {
+      "case": "fair cumulus",
+      "footprintMeters": 1600,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 114,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 674,
+          "transmittance": 1.9163802067976197,
+          "radiance": -0.9682624091150899,
+          "held": 1.9163802067976197
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 2018,
+          "transmittance": 0.724475250383706,
+          "radiance": -0.9676618472066096,
+          "held": 0.724475250383706
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 5492,
+          "transmittance": 0.1953522383879276,
+          "radiance": -0.9644272408333336,
+          "held": 0.19535223838792762
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 12934,
+          "transmittance": 0.018931289222204883,
+          "radiance": -0.9646737761183777,
+          "held": 0.01893128922220482
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 7626,
+          "transmittance": -0.016365857024696506,
+          "radiance": -0.9603902954858079,
+          "held": 0.01636585702469655
         }
-      },
-      "farTexel1800km": {
-        "fraction": 0,
-        "logTau": 0
-      }
+      ]
+    },
+    {
+      "case": "cirrus over cumulus",
+      "footprintMeters": 400,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 344,
+          "transmittance": 1.1923216203451381,
+          "radiance": -0.9481408426862071,
+          "held": 1.192321620345138
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 1376,
+          "transmittance": 2.408121455138347,
+          "radiance": -0.9749944353533403,
+          "held": 2.408121455138347
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 3126,
+          "transmittance": 0.11871530192710988,
+          "radiance": -0.9575807438590951,
+          "held": 0.11871530192710994
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6592,
+          "transmittance": 0.010185646540752158,
+          "radiance": null,
+          "held": 0.010185646540752212
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13666,
+          "transmittance": 0.011357678210727862,
+          "radiance": -0.972926349395149,
+          "held": 0.011357678210727811
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 8232,
+          "transmittance": -0.02309712461464819,
+          "radiance": -0.9613344883566538,
+          "held": 0.023097124614648242
+        }
+      ]
+    },
+    {
+      "case": "cirrus over cumulus",
+      "footprintMeters": 800,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 206,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 990,
+          "transmittance": 2.3059740144021306,
+          "radiance": -0.9530042428296377,
+          "held": 2.3059740144021306
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 2618,
+          "transmittance": 1.9570860105256211,
+          "radiance": -0.9575693487434593,
+          "held": 1.9570860105256211
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6184,
+          "transmittance": 0.03418980028748564,
+          "radiance": -0.9569844140963396,
+          "held": 0.03418980028748559
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13436,
+          "transmittance": 0.0014059093276390655,
+          "radiance": null,
+          "held": 0.0014059093276390137
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 8028,
+          "transmittance": 0.006653726101451873,
+          "radiance": -0.9688966871444137,
+          "held": 0.0066537261014517814
+        }
+      ]
+    },
+    {
+      "case": "cirrus over cumulus",
+      "footprintMeters": 1600,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 126,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 720,
+          "transmittance": 0.03281634366491648,
+          "radiance": -0.9457204157774308,
+          "held": 0.03281634366491651
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 2068,
+          "transmittance": 0.6777009824276392,
+          "radiance": -0.9591200905274312,
+          "held": 0.6777009824276392
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 5546,
+          "transmittance": 0.5981524281231079,
+          "radiance": -0.9586545175239483,
+          "held": 0.5981524281231079
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13050,
+          "transmittance": 0.003095092445053016,
+          "radiance": -0.9561967933856391,
+          "held": 0.0030950924450530476
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 7626,
+          "transmittance": -0.000676859929718443,
+          "radiance": null,
+          "held": 0.0006768599297184943
+        }
+      ]
     },
     {
       "case": "anvil",
-      "scenario": "anvil",
-      "footprintMeters": 1600,
-      "tFarKm": 220.01579333023614,
-      "eyeMeters": 115164.76196561381,
-      "pitchDegrees": -29.999999999999996,
-      "sun": {
-        "elevation": 40,
-        "azimuth": 120
-      },
-      "rays": 29098,
-      "bins": 524,
-      "cloudyBins": 77,
-      "reference": {
-        "meanLight": 0.00043771635109493047,
-        "meanTransmittance": 0.8937273546694975,
-        "mostSteps": 1051,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.00009547574734079435,
-        "meanTransmittance": 0.9128238356285162,
-        "footprint": {
-          "radiance": 1.2132856629260302,
-          "radianceWorst": 5.104116322511135,
-          "transmittance": 0.2605532278152629,
-          "transmittanceWorst": 0.6335065871673196,
-          "blocked": 0.3489249091678715
+      "footprintMeters": 400,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 316,
+          "transmittance": 1.4935718307720856,
+          "radiance": -0.9880404889828267,
+          "held": 1.4935718307720856
         },
-        "pixel": {
-          "radiance": 3.4885844609463312,
-          "transmittance": 0.13813731536498802
+        {
+          "bin": "2° to 5°",
+          "rays": 1356,
+          "transmittance": 10.632242377696386,
+          "radiance": -0.9847710576347762,
+          "held": 0.43888040982621035
         },
-        "moments": {
+        {
+          "bin": "5° to 10°",
           "rays": 3076,
-          "meanKm": 49.498970704613605,
-          "deviationKm": 25.197074348429858
+          "transmittance": 3.12183714098731,
+          "radiance": -0.984175829270771,
+          "held": 1.6723494681808748
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6580,
+          "transmittance": 1.1067607740134973,
+          "radiance": -0.9845386115933187,
+          "held": 1.1067607740134973
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13690,
+          "transmittance": 0.8451936015756214,
+          "radiance": -0.9868704278890508,
+          "held": 0.8451936015756214
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 8184,
+          "transmittance": 0.09577445608439739,
+          "radiance": -0.9835717574126213,
+          "held": 0.09577445608439747
         }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.5755378376520723,
-        "atlas": {
-          "meanLight": 0.00009547623745388814,
-          "meanTransmittance": 0.9128238356285162,
-          "footprint": {
-            "radiance": 1.2132844560506444,
-            "radianceWorst": 5.10411616208388,
-            "transmittance": 0.2605532278152629,
-            "transmittanceWorst": 0.6335065871673196,
-            "blocked": 0.3489248690564962
-          },
-          "pixel": {
-            "radiance": 3.4885815628337604,
-            "transmittance": 0.13813731536498802
-          },
-          "moments": {
-            "rays": 3076,
-            "meanKm": 49.498970704613605,
-            "deviationKm": 25.197074476268426
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0,
-        "logTau": 0
-      }
+      ]
     },
     {
-      "case": "grazing at sunset",
-      "scenario": "broken-horizon",
-      "footprintMeters": 400,
-      "tFarKm": 55.003948332559034,
-      "eyeMeters": 2400,
-      "pitchDegrees": -1.1323929196552114,
-      "sun": {
-        "elevation": 2,
-        "azimuth": 0
-      },
-      "rays": 18688,
-      "bins": 6,
-      "cloudyBins": 4,
-      "reference": {
-        "meanLight": 0.0005807111848409709,
-        "meanTransmittance": 0.030409132142092277,
-        "mostSteps": 268,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.00027729681079407365,
-        "meanTransmittance": 0.2870191515026687,
-        "footprint": {
-          "radiance": 0.6184774700924799,
-          "radianceWorst": 1.117876238601541,
-          "transmittance": 0.19385196395467647,
-          "transmittanceWorst": 0.27297670580784356,
-          "blocked": 0.985229430836794
-        },
-        "pixel": {
-          "radiance": 3.5434089326932035,
-          "transmittance": 0.29460974956437197
-        },
-        "moments": {
-          "rays": 18424,
-          "meanKm": 6.1904703520860265,
-          "deviationKm": 4.084916982944679
-        }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 1,
-        "atlas": {
-          "meanLight": 0.000029716466547341455,
-          "meanTransmittance": 0.2421567440589137,
-          "footprint": {
-            "radiance": 1.1488409364921282,
-            "radianceWorst": 1.8150563145352199,
-            "transmittance": 0.16242734175345208,
-            "transmittanceWorst": 0.24092101950962747,
-            "blocked": 0.8902011476812071
-          },
-          "pixel": {
-            "radiance": 3.742136144559419,
-            "transmittance": 0.26246055769821314
-          },
-          "moments": {
-            "rays": 18424,
-            "meanKm": 5.427678546921707,
-            "deviationKm": 4.050596724614236
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0.43529412150382996,
-        "logTau": 0.364705890417099
-      }
-    },
-    {
-      "case": "grazing at sunset",
-      "scenario": "broken-horizon",
+      "case": "anvil",
       "footprintMeters": 800,
-      "tFarKm": 110.00789666511807,
-      "eyeMeters": 3000,
-      "pitchDegrees": -1.249098048510028,
-      "sun": {
-        "elevation": 2,
-        "azimuth": 0
-      },
-      "rays": 18560,
-      "bins": 12,
-      "cloudyBins": 10,
-      "reference": {
-        "meanLight": 0.0009160639107192392,
-        "meanTransmittance": 0.09929325498302628,
-        "mostSteps": 213,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 0.00014772397781980822,
-        "meanTransmittance": 0.15395816059431056,
-        "footprint": {
-          "radiance": 1.5176514615393435,
-          "radianceWorst": 3.4242672518033617,
-          "transmittance": 0.05787639944814497,
-          "transmittanceWorst": 0.11107988216881762,
-          "blocked": 0.34555766985875547
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 224,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
         },
-        "pixel": {
-          "radiance": 8.301480020647295,
-          "transmittance": 0.2732394781126087
+        {
+          "bin": "2° to 5°",
+          "rays": 964,
+          "transmittance": 9.078927056915617,
+          "radiance": -0.9835544834601994,
+          "held": 0.6042561459823554
         },
-        "moments": {
-          "rays": 17282,
-          "meanKm": 5.3077349380593315,
-          "deviationKm": 2.5881726520775024
+        {
+          "bin": "5° to 10°",
+          "rays": 2600,
+          "transmittance": 2.105320265588512,
+          "radiance": -0.983076383356854,
+          "held": 1.7047747802814899
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6174,
+          "transmittance": 0.8702695841282171,
+          "radiance": -0.9842426864737934,
+          "held": 0.8702695841282171
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13458,
+          "transmittance": 0.46824089698963167,
+          "radiance": -0.9838749470379851,
+          "held": 0.46824089698963156
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 7982,
+          "transmittance": 0.35426539684894265,
+          "radiance": -0.9835381776683926,
+          "held": 0.3542653968489427
         }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 1,
-        "atlas": {
-          "meanLight": 0.00028773164181233017,
-          "meanTransmittance": 0.12561300000738881,
-          "footprint": {
-            "radiance": 1.1726887916508597,
-            "radianceWorst": 2.613099143015659,
-            "transmittance": 0.057230304025828425,
-            "transmittanceWorst": 0.11842373903755288,
-            "blocked": 0.31988123010560404
-          },
-          "pixel": {
-            "radiance": 6.313174997531932,
-            "transmittance": 0.2625287774153338
-          },
-          "moments": {
-            "rays": 17282,
-            "meanKm": 4.44239763195832,
-            "deviationKm": 2.463846807628083
-          }
+      ]
+    },
+    {
+      "case": "anvil",
+      "footprintMeters": 1600,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 134,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 708,
+          "transmittance": -0.22469066203807175,
+          "radiance": -0.9750652653305343,
+          "held": 0.218953037786815
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 2060,
+          "transmittance": 2.289134348742201,
+          "radiance": -0.9818398271616424,
+          "held": 2.002051702250355
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 5536,
+          "transmittance": 0.6409540492068675,
+          "radiance": -0.9825325454041381,
+          "held": 0.6409540492068675
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13072,
+          "transmittance": 0.43834856390796006,
+          "radiance": -0.984073253811626,
+          "held": 0.43834856390796
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 7588,
+          "transmittance": 0.1826909760672657,
+          "radiance": -0.9791932578275572,
+          "held": 0.18269097606726561
         }
-      },
-      "farTexel1800km": {
-        "fraction": 0.8392156958580017,
-        "logTau": 0.41960784792900085
-      }
+      ]
+    },
+    {
+      "case": "overcast",
+      "footprintMeters": 400,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 278,
+          "transmittance": 3.6605423833663417,
+          "radiance": -0.9429368470647368,
+          "held": 0.3346199574213455
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 1214,
+          "transmittance": 8.700971621193027,
+          "radiance": -0.9469738455470533,
+          "held": 0.844713599838031
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 2936,
+          "transmittance": 3.9320113001509123,
+          "radiance": -0.9607923855572117,
+          "held": 0.6837916041495042
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6468,
+          "transmittance": 0.23335190578583198,
+          "radiance": -0.970597945407312,
+          "held": 0.1052838872729249
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13526,
+          "transmittance": -0.16330358442914394,
+          "radiance": -0.97819804326565,
+          "held": 0.07984992248991886
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 8234,
+          "transmittance": -0.194562874834456,
+          "radiance": -0.9771732419699315,
+          "held": 0.14393613142963646
+        }
+      ]
+    },
+    {
+      "case": "overcast",
+      "footprintMeters": 800,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 204,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 920,
+          "transmittance": 5.088597054196283,
+          "radiance": -0.9376191265317351,
+          "held": 0.4862544600264696
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 2524,
+          "transmittance": 6.209589793407998,
+          "radiance": -0.9526578545655201,
+          "held": 0.7169570025544032
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6064,
+          "transmittance": 0.7348498151854537,
+          "radiance": -0.9679915348143783,
+          "held": 0.3680708016588206
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 13310,
+          "transmittance": -0.3943393400736659,
+          "radiance": -0.9775051941406253,
+          "held": 0.2917519507484977
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 8032,
+          "transmittance": -0.40534764156449143,
+          "radiance": -0.9774677559089493,
+          "held": 0.26225965097422205
+        }
+      ]
+    },
+    {
+      "case": "overcast",
+      "footprintMeters": 1600,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 118,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 676,
+          "transmittance": 0.8174595175315904,
+          "radiance": -0.9375502173212574,
+          "held": 0.2469388025774229
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 2010,
+          "transmittance": 3.8726810957242774,
+          "radiance": -0.9484980757628081,
+          "held": 0.4363466011063747
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 5488,
+          "transmittance": 0.36239625257583774,
+          "radiance": -0.9600100362340172,
+          "held": 0.1461103457591205
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 12928,
+          "transmittance": -0.3256280233254262,
+          "radiance": -0.974272284815973,
+          "held": 0.279746545711127
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 7628,
+          "transmittance": -0.31300578650136157,
+          "radiance": -0.975452609031691,
+          "held": 0.3130057865013615
+        }
+      ]
     },
     {
       "case": "grazing at sunset",
-      "scenario": "broken-horizon",
+      "footprintMeters": 400,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 1158,
+          "transmittance": 16.73531556440873,
+          "radiance": -0.5335733975220693,
+          "held": 3.1905679026304723
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 1790,
+          "transmittance": 54.71074239838513,
+          "radiance": -0.8237332597833525,
+          "held": 4.820654351276822
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 3220,
+          "transmittance": 0.9445129364070135,
+          "radiance": -0.8100520803017747,
+          "held": 0.9445129364070134
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6828,
+          "transmittance": -0.11186494745106135,
+          "radiance": -0.916751868916474,
+          "held": 0.11186494745106132
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 5692,
+          "transmittance": 0.11893644452467833,
+          "radiance": -0.9477313166072474,
+          "held": 0.11893644452467833
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 0,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
+        }
+      ]
+    },
+    {
+      "case": "grazing at sunset",
+      "footprintMeters": 800,
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 1046,
+          "transmittance": 10.012054092466071,
+          "radiance": -0.6791248624148518,
+          "held": 2.91283684347232
+        },
+        {
+          "bin": "2° to 5°",
+          "rays": 1756,
+          "transmittance": 33.55172913620555,
+          "radiance": -0.8861961628263968,
+          "held": 5.978670358975426
+        },
+        {
+          "bin": "5° to 10°",
+          "rays": 3182,
+          "transmittance": 4.149708188367211,
+          "radiance": -0.9518373994977424,
+          "held": 4.149708188367212
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6822,
+          "transmittance": -0.03919539080916723,
+          "radiance": -0.9446241890969819,
+          "held": 0.03919539080916725
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 5754,
+          "transmittance": -0.1689181049202757,
+          "radiance": -0.9717686633408499,
+          "held": 0.16891810492027567
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 0,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
+        }
+      ]
+    },
+    {
+      "case": "grazing at sunset",
       "footprintMeters": 1600,
-      "tFarKm": 220.01579333023614,
-      "eyeMeters": 4000,
-      "pitchDegrees": -1.6257148869191351,
-      "sun": {
-        "elevation": 2,
-        "azimuth": 0
-      },
-      "rays": 18466,
-      "bins": 32,
-      "cloudyBins": 20,
-      "reference": {
-        "meanLight": 0.0009683045095596738,
-        "meanTransmittance": 0.2553145825893287,
-        "mostSteps": 172,
-        "exhaustedRays": 0
-      },
-      "atlas": {
-        "meanLight": 5.046151559974422e-7,
-        "meanTransmittance": 0.48551181084692774,
-        "footprint": {
-          "radiance": 2.268756298356598,
-          "radianceWorst": 6.82120642637687,
-          "transmittance": 0.2679833023823858,
-          "transmittanceWorst": 0.4926435773463689,
-          "blocked": 0.5855799210848519
+      "bins": [
+        {
+          "bin": "0° to 2°",
+          "rays": 844,
+          "transmittance": 12.72664381848707,
+          "radiance": -0.8322894279458801,
+          "held": 3.0773225585826967
         },
-        "pixel": {
-          "radiance": 29.05433033671248,
-          "transmittance": 0.46811874096372075
+        {
+          "bin": "2° to 5°",
+          "rays": 1696,
+          "transmittance": 21.96064716339418,
+          "radiance": -0.9489749499610873,
+          "held": 5.8887144794683985
         },
-        "moments": {
-          "rays": 14542,
-          "meanKm": 6.003796498297193,
-          "deviationKm": 5.183979484116427
+        {
+          "bin": "5° to 10°",
+          "rays": 3174,
+          "transmittance": 3.0678177640481055,
+          "radiance": -0.9808765899462828,
+          "held": 3.067817764048105
+        },
+        {
+          "bin": "10° to 20°",
+          "rays": 6782,
+          "transmittance": 0.7614037355169778,
+          "radiance": -0.9920421854843724,
+          "held": 0.7614037355169778
+        },
+        {
+          "bin": "20° to 40°",
+          "rays": 5970,
+          "transmittance": -0.12481021420294014,
+          "radiance": -0.9918625395202539,
+          "held": 0.12481021420294017
+        },
+        {
+          "bin": "40° to 90°",
+          "rays": 0,
+          "transmittance": null,
+          "radiance": null,
+          "held": null
         }
-      },
-      "handover": {
-        "budget": 24,
-        "exhaustedShare": 0.9964800173291455,
-        "atlas": {
-          "meanLight": 0.0007572150315489401,
-          "meanTransmittance": 0.41586614369933744,
-          "footprint": {
-            "radiance": 0.31279827015364164,
-            "radianceWorst": 0.8499944632916339,
-            "transmittance": 0.2424682837840673,
-            "transmittanceWorst": 0.4937448819961504,
-            "blocked": 0.1366612182048885
-          },
-          "pixel": {
-            "radiance": 1.9969601046778596,
-            "transmittance": 0.4269457059022419
-          },
-          "moments": {
-            "rays": 14542,
-            "meanKm": 3.813979240631385,
-            "deviationKm": 2.857982932614115
-          }
-        }
-      },
-      "farTexel1800km": {
-        "fraction": 0.501960813999176,
-        "logTau": 0.6274510025978088
-      }
+      ]
     }
   ]
 }
