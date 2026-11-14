@@ -78,6 +78,18 @@ import { adapterOffers, type GpuSession, openGpu } from './gpuHarness.ts'
  * - `quadrature`: the identity's quadrature residual, the production
  *   identity against the exact one.
  *
+ * **The limb's cases are a kind of their own.** Thirty rays from 400 km that
+ * graze the limb: a 500 m slab from 9 km up at tangent heights of 3, 6 and
+ * 9 km, and one from 2 km up at 1 and 1.75 km, each passing a half or a
+ * twentieth, with the sun 1.2° under the datum's limb in the ray's plane
+ * and then 9° and 40° round the eye's up. The eye is outside the air, so
+ * every march starts at the air's near wall, and the class is the sky's.
+ * There the identity's own quadrature is outside the rubric's row 20
+ * (3.97% at worst over the eighteen at 3 to 9 km, 4.64% over the thirty),
+ * nearly all of it the six-sample transmittance from the near wall to the
+ * cloud, so on these rays the joint march is the bar and the per-pixel
+ * identity is a figure to beat, not an oracle. Two run in every suite.
+ *
  * The trace's outputs are a 512-step march of the same slab here — the
  * cloud's light relative to t₀ through the span's air, its transmittance,
  * the blocked air with the class's beam and the depth moments' mean — so the
@@ -119,6 +131,23 @@ const SOURCE = 0.2
 const SURFACE = 0.3
 const BACKGROUND = 0.01
 const JOINT = 512
+/** The limb's kind: the eye's height, the slabs by base and the tangent heights each is seen at, meters. */
+const LIMB_EYE = 400_000
+const LIMB_THICKNESS = 500
+const LIMB_SLABS = [
+  { base: 9_000, tangents: [3_000, 6_000, 9_000] },
+  { base: 2_000, tangents: [1_000, 1_750] },
+] as const
+const LIMB_AZIMUTHS = [0, 9, 40] as const
+/** What the slab passes along the ray. */
+const LIMB_PASSES = [0.5, 0.05] as const
+/** Degrees the sun stands under the datum's limb, in the ray's plane before the azimuth turns it. */
+const LIMB_SUN_UNDER = 1.2
+/** The two every run of the suite takes: each slab's worst case on the landed code. */
+const LIMB_ALWAYS = [
+  { slab: 9_000, pass: 0.5, tangent: 9_000, azimuth: 0 },
+  { slab: 2_000, pass: 0.5, tangent: 1_000, azimuth: 0 },
+] as const
 /** The sun 40° up, 120° round from the view's azimuth. */
 const SUN = new Vector3(
   Math.cos((40 * Math.PI) / 180) * Math.cos((120 * Math.PI) / 180),
@@ -174,6 +203,11 @@ interface Case {
   readonly stop: number
   readonly base: number
   readonly top: number
+  /** Where the marches start: 0 from inside the air, its near wall from outside. */
+  readonly near: number
+  /** The slab's extinction, per sea-level unit. */
+  readonly sigma: number
+  readonly sun: Vector3
 }
 
 /** The crossings of a ray from `eye` along `direction` with the sphere of radius `r`. */
@@ -187,6 +221,9 @@ function crossings(
   const root = Math.sqrt(Math.max(b * b - c, 0))
   return [-b - root, -b + root]
 }
+
+/** The slab cases' own: marched from the eye, 5 km⁻¹, the one sun. */
+const INSIDE = { near: 0, sigma: SIGMA * R, sun: SUN } as const
 
 function caseOf(sky: boolean, thickness: number, angle: number): Case {
   const radians = (angle * Math.PI) / 180
@@ -208,6 +245,7 @@ function caseOf(sky: boolean, thickness: number, angle: number): Case {
       stop: crossings(eye, direction, TOP)[1],
       base,
       top,
+      ...INSIDE,
     }
   }
   // From over the slab: in through its top, out through its base, onto the ground.
@@ -219,6 +257,54 @@ function caseOf(sky: boolean, thickness: number, angle: number): Case {
     stop: crossings(eye, direction, 1)[0],
     base,
     top,
+    ...INSIDE,
+  }
+}
+
+interface LimbCase {
+  readonly slab: number
+  readonly pass: number
+  readonly tangent: number
+  readonly azimuth: number
+}
+
+/**
+ * A limb case: the ray from 400 km whose perigee stands `tangent` meters
+ * up, its span the chord inside the slab's top (the slab's own density says
+ * where on it the cloud is), the extinction set so the slab passes `pass`
+ * along it, and the sun under the limb.
+ */
+function limbCaseOf({ slab, pass, tangent, azimuth }: LimbCase): Case {
+  const ratio = 1 + LIMB_EYE / R
+  const nadir = Math.asin((1 + tangent / R) / ratio)
+  const eye = new Vector3(0, ratio, 0)
+  const direction = new Vector3(Math.sin(nadir), -Math.cos(nadir), 0)
+  const base = 1 + slab / R
+  const top = 1 + (slab + LIMB_THICKNESS) / R
+  const [start, end] = crossings(eye, direction, top)
+  // The chord inside the slab: its top's, less its base's where the ray dips under it.
+  const dips = 1 + tangent / R < base
+  const under = crossings(eye, direction, base)
+  const chord = end - start - (dips ? under[1] - under[0] : 0)
+  const [near, stop] = crossings(eye, direction, TOP)
+  const sunNadir = Math.asin(1 / ratio) - (LIMB_SUN_UNDER * Math.PI) / 180
+  const turn = (azimuth * Math.PI) / 180
+  const sun = new Vector3(
+    Math.sin(sunNadir) * Math.cos(turn),
+    -Math.cos(sunNadir),
+    Math.sin(sunNadir) * Math.sin(turn),
+  ).normalize()
+  return {
+    eye,
+    direction,
+    start,
+    end,
+    stop,
+    base,
+    top,
+    near,
+    sigma: Math.log(1 / pass) / chord,
+    sun,
   }
 }
 
@@ -245,19 +331,31 @@ const at = {
   base: uniform(1),
   top: uniform(1),
   cleared: uniform(0),
+  near: uniform(0),
+  sigma: uniform(0),
+  sun: uniform(new Vector3(0, 1, 0)),
 }
-const SUN_NODE = vec3(SUN.x, SUN.y, SUN.z)
+const SUN_HELD = vec3(SUN.x, SUN.y, SUN.z)
 const LEVEL = { level: true } as const
 const luma = (v: Node<'vec3'>): Node<'float'> =>
   dot(v, vec3(0.2126, 0.7152, 0.0722))
 
 /**
  * The four errors of one case, for one class: a separate program for each,
- * because the class's beam is a choice of the march's arguments.
+ * because the class's beam is a choice of the march's arguments. The limb's
+ * is the sky's with three of its constants as uniforms: where the marches
+ * start, the slab's extinction and the sun. The slab cases keep theirs as
+ * constants, so their two programs are the ones their landed figures were
+ * taken on.
  */
-function errors(sky: boolean): Node<'vec4'> {
+function errors(kind: Measured['class'] | 'limb'): Node<'vec4'> {
+  const sky = kind !== 'surface'
+  const limb = kind === 'limb'
   return Fn(() => {
     const { eye, direction, start, end, stop, cleared } = at
+    const SUN_NODE: Node<'vec3'> = limb ? at.sun : SUN_HELD
+    const from: Node<'float'> = limb ? at.near : float(0)
+    const sigma: Node<'float'> = limb ? at.sigma : float(SIGMA * R)
     const clearBeam = sky ? null : cleared.mul(ORBIT_AIRLIGHT)
     const behind = vec3(sky ? BACKGROUND : SURFACE)
     const phases = phasesToward(direction, SUN_NODE)
@@ -267,7 +365,7 @@ function errors(sky: boolean): Node<'vec4'> {
       air,
       eye,
       direction,
-      float(0),
+      from,
       start,
       SUN_NODE,
       JOINT,
@@ -314,7 +412,7 @@ function errors(sky: boolean): Node<'vec4'> {
       const inside = radius
         .greaterThanEqual(at.base)
         .and(radius.lessThan(at.top))
-      const tauCloud = select(inside, float(SIGMA * R), float(0)).mul(step)
+      const tauCloud = select(inside, sigma, float(0)).mul(step)
       const tauAir = terms.extinction.mul(step)
       const tau = tauAir.add(vec3(tauCloud))
       const through = exp(tau.negate())
@@ -356,7 +454,7 @@ function errors(sky: boolean): Node<'vec4'> {
         air,
         eye,
         direction,
-        float(0),
+        from,
         stop,
         SUN_NODE,
         count,
@@ -429,6 +527,14 @@ interface Measured {
   readonly quadrature: number
 }
 
+/** A limb case's four figures. */
+interface LimbMeasured extends LimbCase {
+  readonly identity: number
+  readonly thin: number
+  readonly exact: number
+  readonly quadrature: number
+}
+
 /** The value at or under which 95 in 100 of `values` fall: nearest rank. */
 function percentile95(values: readonly number[]): number {
   const sorted = [...values].sort((x, y) => x - y)
@@ -465,8 +571,88 @@ function hold(found: Measured): void {
   )
 }
 
+const sameLimb = (a: LimbCase, b: LimbCase): boolean =>
+  a.slab === b.slab &&
+  a.pass === b.pass &&
+  a.tangent === b.tangent &&
+  a.azimuth === b.azimuth
+
+/** Hold a limb case's identity residual to its landed one, and its four figures finite. */
+function holdLimb(found: LimbMeasured): void {
+  const what = `limb, the ${found.slab} m slab passing ${found.pass}, tangent ${found.tangent} m, ${found.azimuth}° off the sun`
+  for (const figure of [
+    found.identity,
+    found.thin,
+    found.exact,
+    found.quadrature,
+  ]) {
+    expect(Number.isFinite(figure), what).toBe(true)
+    expect(figure, what).toBeLessThan(10)
+  }
+  const pinned = (landed.limb as readonly LimbMeasured[]).find((row) =>
+    sameLimb(row, found),
+  )
+  if (pinned === undefined) throw new Error(`no landed figures for ${what}`)
+  if (!WORKSTATION) return
+  expect(found.identity, `${what}: identity`).toBeLessThanOrEqual(
+    pinned.identity * SLACK,
+  )
+}
+
+/** Every limb case: each slab at its tangent heights, by what it passes and the sun's azimuth. */
+const LIMB_CASES: readonly LimbCase[] = LIMB_SLABS.flatMap(
+  ({ base, tangents }) =>
+    tangents.flatMap((tangent) =>
+      LIMB_PASSES.flatMap((pass) =>
+        LIMB_AZIMUTHS.map((azimuth) => ({
+          slab: base,
+          pass,
+          tangent,
+          azimuth,
+        })),
+      ),
+    ),
+)
+
+/** A case's ray, span, slab and sun, onto the programs' uniforms. */
+function place(c: Case, cleared: number): void {
+  at.eye.value.copy(c.eye)
+  at.direction.value.copy(c.direction)
+  at.start.value = c.start
+  at.end.value = c.end
+  at.stop.value = c.stop
+  at.base.value = c.base
+  at.top.value = c.top
+  at.cleared.value = cleared
+  at.near.value = c.near
+  at.sigma.value = c.sigma
+  at.sun.value.copy(c.sun)
+}
+
 describe('the composite’s error on analytic slabs', () => {
-  const programs = { surface: errors(false), sky: errors(true) }
+  const programs = {
+    surface: errors('surface'),
+    sky: errors('sky'),
+    limb: errors('limb'),
+  }
+
+  /** The limb's cases, each against the joint march from the air's near wall. */
+  async function measureLimb(
+    cases: readonly LimbCase[],
+  ): Promise<LimbMeasured[]> {
+    const measured: LimbMeasured[] = []
+    for (const one of cases) {
+      place(limbCaseOf(one), 0)
+      const pixels = await gpu.drawGraph(programs.limb, {
+        float: true,
+        width: 1,
+        height: 1,
+      })
+      const [identity, thin, exact, quadrature] = pixels.at(0, 0)
+      measured.push({ ...one, identity, thin, exact, quadrature })
+    }
+    return measured
+  }
 
   /** The identity and the thin form against a joint march, and the identity's quadrature, a case at a time. */
   async function measure(
@@ -479,15 +665,7 @@ describe('the composite’s error on analytic slabs', () => {
       for (const cleared of clearings)
         for (const thickness of thicknesses)
           for (const angle of ANGLES) {
-            const c = caseOf(kind === 'sky', thickness, angle)
-            at.eye.value.copy(c.eye)
-            at.direction.value.copy(c.direction)
-            at.start.value = c.start
-            at.end.value = c.end
-            at.stop.value = c.stop
-            at.base.value = c.base
-            at.top.value = c.top
-            at.cleared.value = cleared
+            place(caseOf(kind === 'sky', thickness, angle), cleared)
             const pixels = await gpu.drawGraph(programs[kind], {
               float: true,
               width: 1,
@@ -521,12 +699,28 @@ describe('the composite’s error on analytic slabs', () => {
     }
   }, 120_000)
 
+  it('holds each limb slab’s worst case to its landed residual, in every run of the suite', async () => {
+    const found = await measureLimb(LIMB_ALWAYS)
+    expect(found).toHaveLength(LIMB_ALWAYS.length)
+    for (const row of found) holdLimb(row)
+  }, 120_000)
+
   it.skipIf(!MEASURE)(
-    'holds all sixty cases and their 95th percentile to the landed residual, and writes them',
+    'holds all sixty cases and the thirty of the limb, and each kind’s 95th percentile, to the landed residual, and writes them',
     async () => {
       const measured = await measure(['surface', 'sky'], [0, 1], THICKNESSES)
       expect(measured).toHaveLength(landed.cases.length)
       for (const row of measured) hold(row)
+      const limb = await measureLimb(LIMB_CASES)
+      expect(limb).toHaveLength(landed.limb.length)
+      for (const row of limb) holdLimb(row)
+      if (WORKSTATION)
+        expect(
+          percentile95(limb.map((row) => row.identity)),
+          'the limb’s identity residual at the 95th percentile',
+        ).toBeLessThanOrEqual(
+          percentile95(landed.limb.map((row) => row.identity)) * SLACK,
+        )
       if (WORKSTATION)
         expect(
           percentile95(measured.map((row) => row.identity)),
@@ -543,6 +737,9 @@ describe('the composite’s error on analytic slabs', () => {
             body: 'Earth',
             slab: { baseMeters: BASE, sigmaPerMeter: SIGMA, source: SOURCE },
             cases: measured,
+            limbNote:
+              'rays from 400 km that graze the limb: a 500 m slab by its base, what it passes along the ray, the tangent height and the sun’s azimuth from the ray’s plane, the sun 1.2° under the datum’s limb',
+            limb,
           },
           null,
           2,
