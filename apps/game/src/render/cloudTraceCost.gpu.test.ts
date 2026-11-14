@@ -9,7 +9,7 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
 
 /*
  * What the trace costs, where it hurts: GPU milliseconds a frame of every
- * pass on the timeline, in the system's own chain, at eight stances and two
+ * pass on the timeline, in the system's own chain, at nine stances and two
  * sizes, each beside the same session's frame with the clouds off.
  *
  * **A row's figure of record is the whole frame's difference,** the frame's
@@ -25,7 +25,10 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * sun: `ground` (fair cumulus from 2 m, 10° over the horizon), `horizon`
  * (broken cloud from 2 m, 2° over it) and `inside` (level, 1,200 m up in a
  * deck). Two look down on an overcast, from 12 km and from 150 km, where
- * the same nine steps a ray cost three times as much. A grazing stance is
+ * the same nine steps a ray cost three times as much. `orbit` is the
+ * reckonings' stand-in for the rubric's orbit row: broken cloud from 400 km,
+ * 40° under the horizon, so the limb crosses the frame and every pixel
+ * under it meets the shell. A grazing stance is
  * where the trace is dearest: 9% of its rays take the whole budget, and this
  * GPU runs 32 rays at a time at the pace of the longest.
  *
@@ -133,6 +136,13 @@ const STANCES: readonly Stance[] = [
     eye: 150_000,
     pitch: -90,
   },
+  {
+    key: 'orbit',
+    weather: 'broken-horizon',
+    eye: 400_000,
+    pitch: -40,
+    sun: SUN,
+  },
 ]
 
 const OFF: Variant = { name: 'off', levers: { on: false } }
@@ -153,19 +163,31 @@ const PLANE: Variant = {
 }
 
 /**
+ * The composite as a term of the sensor's chain, at the default's four
+ * taps: the rig draws nothing over the clouds, so every frame takes the
+ * chain form. Its row against the four-tap row, which draws pass B, is what
+ * the second scene pass costs, and the composite's fragment is a cost of
+ * both.
+ */
+const CHAIN: Variant = {
+  name: '4 taps, chain',
+  levers: { lightTaps: 4, over: 'chain' },
+}
+
+/**
  * The lever sets a stance is timed under, the clouds off first. A package
  * that adds a cost to the trace adds its lever set here.
  */
-const VARIANTS: readonly Variant[] = [OFF, ...TAPS.map(tapped), PLANE]
+const VARIANTS: readonly Variant[] = [OFF, ...TAPS.map(tapped), PLANE, CHAIN]
 
 const SIZES: readonly Size[] = [
   { key: '1080p', css: [1920, 1080], dpr: 1, variants: VARIANTS },
-  // The default's row and the clouds-off frame alone: the taps' split is 1080p's.
+  // The default's row in both forms of the over pass, and the clouds-off frame: the taps' split is 1080p's.
   {
     key: 'retina',
     css: [1440, 900],
     dpr: 2,
-    variants: [OFF, tapped(4)],
+    variants: [OFF, tapped(4), CHAIN],
   },
 ]
 
@@ -183,7 +205,7 @@ interface Timed {
 }
 
 describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
-  it('is timed at eight stances and two sizes, every pass beside the frame with the clouds off, and written', async () => {
+  it('is timed at nine stances and two sizes, every pass beside the frame with the clouds off, and written', async () => {
     const rows: unknown[] = []
     for (const size of SIZES)
       for (const stance of STANCES) {
