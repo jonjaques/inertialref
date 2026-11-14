@@ -1,8 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { loadavg } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { WEATHER_SCENARIOS } from '@inertialref/rendering'
+import { farBlockPlans, WEATHER_SCENARIOS } from '@inertialref/rendering'
 import { Quaternion as Q, type Vec3 } from '@inertialref/spatial'
+import { FAR_BLOCK, FAR_LAYOUT } from './cloudFarAtlas.ts'
 import type { CloudLevers } from './cloudLevers.ts'
 import { cloudRig, RIG_EARTH_RADIUS } from './cloudSystemRig.ts'
 import { adapterOffers, openGpu } from './gpuHarness.ts'
@@ -58,6 +59,17 @@ import { installPassTimeline, passTimelineOf } from './passTimeline.ts'
  * sky's term (`CloudSystemDeps.skyTable`), the march's placeholder in its
  * place and no sky table in the kernel. What the term costs is that
  * session's rows against one's built as the system ships, taken in turn.
+ *
+ * **The far atlas's bake is timed a frame at a time, under a clock that
+ * runs** (`the far atlas’s bake`, written to `.data/clouds/farPace.json`).
+ * The rig's clock stands still, and a whole atlas then bakes nothing, so
+ * every row above is a frame without it. On the three stances whose cover
+ * is whole, each frame is timed by itself twice over: at 1×, the frame's
+ * 95th percentile against its median over 640 frames, and under a warp
+ * that owes a block every few frames, until every block of the body's
+ * levels has been baked, the dearest frame against the median of that
+ * cycle. The volume and the sun grid pace themselves by the same clock, so
+ * a frame's other bakes are recorded beside the atlas's.
  *
  * A test's figures, of these stances on this adapter. A campaign's stances
  * and its protocol are not these. Written to `.data/clouds/traceCost.json`,
@@ -353,5 +365,162 @@ describe.skipIf(!MEASURE || !TIMESTAMPS)('the trace’s cost', () => {
       )}\n`,
     )
     expect(rows.length).toBeGreaterThan(0)
+  }, 1_800_000)
+})
+
+/* ------------------------------------------------------------------------- */
+/* The far atlas's bake, a frame at a time                                    */
+/* ------------------------------------------------------------------------- */
+
+const PACE_OUT = process.env.IR_CLOUD_PACE_OUT ?? '.data/clouds/farPace.json'
+/** The stances whose cover is whole: where a block of the atlas is dearest. */
+const PACE_STANCES = ['overcast, up', 'inside', 'cirrus-over-cumulus, up']
+/** Frames timed at 1×. */
+const PACE_FRAMES = 640
+/** The warp a cycle is timed under, and the most frames it is given. */
+const PACE_WARP = Number(process.env.IR_CLOUD_PACE_WARP ?? 120)
+const PACE_CYCLE_MOST = 6000
+/** Every bake a frame may hold besides the trace's own passes. */
+const BAKES =
+  /^cloud (noise|maps|clipmap|volume|sun grid|far atlas|far second)$/
+
+const percentile = (values: readonly number[], p: number): number => {
+  const sorted = [...values].sort((a, b) => a - b)
+  return (
+    sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ??
+    Number.NaN
+  )
+}
+
+describe.skipIf(!MEASURE || !TIMESTAMPS)('the far atlas’s bake', () => {
+  it('is timed a frame at a time under a running clock, at 1× and through a cycle, and written', async () => {
+    const rows: unknown[] = []
+    for (const stance of STANCES.filter((s) => PACE_STANCES.includes(s.key))) {
+      const own = await openGpu(1920, 1080)
+      const chain = cloudRig(own, 1920, 1080, {
+        eye: stance.eye,
+        looking: Q.fromAxisAngle({ x: 1, y: 0, z: 0 }, radians(stance.pitch)),
+        air: true,
+        ...(stance.sun === undefined ? {} : { sun: stance.sun }),
+        levers: { weather: stance.weather, on: true },
+      })
+      await chain.system!.warm()
+      const stop = installPassTimeline(own.renderer)
+      try {
+        const timeline = passTimelineOf(own.renderer)!
+        /** One frame by itself: its busy time, and its bakes by pass. */
+        const one = async () => {
+          const read = await timeline.measure(() => chain.frame(), 1)
+          const bakes: Record<string, number> = {}
+          for (const pass of read.passes)
+            if (BAKES.test(pass.label))
+              bakes[pass.label] = (bakes[pass.label] ?? 0) + pass.ms
+          return { busyMs: read.busyMs, bakes }
+        }
+        const settle = async (levers: Levers) => {
+          chain.levers = { ...chain.levers, ...levers, stats: false }
+          for (let k = 0; k < SETTLE; k += 1) chain.frame()
+          await own.read(chain.target)
+        }
+        const summary = (frames: Awaited<ReturnType<typeof one>>[]) => {
+          const busy = frames.map((frame) => frame.busyMs)
+          const baking = frames.filter(
+            (frame) => (frame.bakes['cloud far atlas'] ?? 0) > 0,
+          )
+          const idle = frames.filter(
+            (frame) => Object.keys(frame.bakes).length === 0,
+          )
+          const middle = median(busy)
+          return {
+            frames: frames.length,
+            medianMs: middle,
+            p95Ms: percentile(busy, 0.95),
+            maxMs: Math.max(...busy),
+            p95OverMedianMs: percentile(busy, 0.95) - middle,
+            dearestOverMedianMs: Math.max(...busy) - middle,
+            // A frame with no bake at all, and the frames that bake a block.
+            idleFrames: idle.length,
+            idleMedianMs: median(idle.map((frame) => frame.busyMs)),
+            atlasFrames: baking.length,
+            atlasFrameMs: baking.map((frame) => frame.busyMs),
+            atlasPassMs: baking.map((frame) => frame.bakes['cloud far atlas']),
+            dearestAtlasFrameOverMedianMs:
+              baking.length === 0
+                ? null
+                : Math.max(...baking.map((frame) => frame.busyMs)) - middle,
+            otherBakes: Object.fromEntries(
+              [...new Set(frames.flatMap((f) => Object.keys(f.bakes)))].map(
+                (label) => [
+                  label,
+                  frames.filter((f) => (f.bakes[label] ?? 0) > 0).length,
+                ],
+              ),
+            ),
+          }
+        }
+        // Whole and still first: what the clock then moves is all a frame bakes.
+        await settle({ lightTaps: 4 })
+        let more = 0
+        while (
+          chain.system!.report.settle?.pending === true &&
+          more < SETTLE_MORE
+        ) {
+          for (let k = 0; k < 20; k += 1) chain.frame()
+          await own.read(chain.target)
+          more += 20
+        }
+        const still: Awaited<ReturnType<typeof one>>[] = []
+        for (let k = 0; k < 64; k += 1) still.push(await one())
+        await settle({ force: 'warp', warp: 1 })
+        const steady: Awaited<ReturnType<typeof one>>[] = []
+        for (let k = 0; k < PACE_FRAMES; k += 1) steady.push(await one())
+        // A cycle: until the atlas has baked as many blocks as hold a row
+        // of the body's levels.
+        const levels =
+          stance.weather === 'climate'
+            ? 3
+            : WEATHER_SCENARIOS[stance.weather].layers.length
+        const held = farBlockPlans(FAR_LAYOUT).filter((plan) =>
+          plan.levels.some((level) => level < levels),
+        ).length
+        await settle({ force: 'warp', warp: PACE_WARP })
+        const cycle: Awaited<ReturnType<typeof one>>[] = []
+        let baked = 0
+        while (baked < held && cycle.length < PACE_CYCLE_MOST) {
+          const frame = await one()
+          cycle.push(frame)
+          if ((frame.bakes['cloud far atlas'] ?? 0) > 0) baked += 1
+        }
+        expect(Number.isFinite(median(steady.map((f) => f.busyMs)))).toBe(true)
+        rows.push({
+          stance: stance.key,
+          weather: stance.weather,
+          block: FAR_BLOCK,
+          heldBlocks: held,
+          load: loadavg(),
+          still: summary(still),
+          steady: summary(steady),
+          cycle: { warp: PACE_WARP, ...summary(cycle) },
+        })
+      } finally {
+        stop()
+        chain.dispose()
+        own.dispose()
+      }
+    }
+    mkdirSync('.data/clouds', { recursive: true })
+    writeFileSync(
+      PACE_OUT,
+      `${JSON.stringify(
+        {
+          note: 'cloudTraceCost.gpu.test.ts: the frame’s GPU busy time a frame at a time at 1920 × 1080, 60° lens, air on, four taps: the clock still, running at 1×, and under a warp until the far atlas has baked every block of the body’s levels',
+          at: new Date().toISOString(),
+          rows,
+        },
+        null,
+        2,
+      )}\n`,
+    )
+    expect(rows.length).toBe(PACE_STANCES.length)
   }, 1_800_000)
 })

@@ -154,10 +154,22 @@ export const FAR_HEIGHT = FAR_ROWS * FAR_SPAN
 
 /**
  * Texels along a block's side: what one bake draws, scissored. The blocks
- * are laid over the whole atlas, 9 across and 5 down at 192, the last of
- * each row and column clipped.
+ * are laid over the whole atlas, 17 across and 9 down, the last of each row
+ * and column clipped.
+ *
+ * The smallest of the three the pace was to choose among, and declared: no
+ * block of 192, 128 or 96 texels holds the bar, a frame that bakes one no
+ * more than a millisecond over one that bakes none. On the Mac mini
+ * (Mac18,5, Apple M6) a bake finishes a 32 × 32 tile of the target at a
+ * time, 2.1 ms for a whole tile of 128 reads of the field a texel, and as
+ * many tiles at once as a block of 128 holds: by the wall a block of 64, 96
+ * or 128 texels reads 2.1 to 2.3 ms and one of 192 reads 4.8, and on the
+ * pass timeline the dearest frame of a cycle stands 3.8 ms over its median
+ * in blocks of 96 (`cloudTraceCost.gpu.test.ts`, the far atlas's bake). A
+ * smaller block buys nothing until a tile is cheaper: what a texel reads is
+ * the lever.
  */
-export const FAR_BLOCK = 192
+export const FAR_BLOCK = 96
 export const FAR_STEPS_A_LAYER = 32
 
 /** The atlas as its schedule lays it out (`cloudFarSchedule.ts`). */
