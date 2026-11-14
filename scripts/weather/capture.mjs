@@ -57,7 +57,9 @@
  * every phase writes one place and a removed worktree takes no plate with
  * it: `<id>-<arm>.png`, `<id>-<speed>-<on|off>/` with the cast's frames, its
  * clip and its log, `samples/`, `pairs/` and `floor.json` for the noise
- * floor, and `record.json`, which names the commit and every file's SHA-256.
+ * floor, and `record.json`, which names the commit and every file's SHA-256,
+ * and gives every plate its `lumaSpread` (`plateSpread.mjs`): how much the
+ * plate shows, so a blank one is known from its record.
  */
 import { createHash } from 'node:crypto'
 import { execFile, execFileSync, spawn } from 'node:child_process'
@@ -99,6 +101,7 @@ import {
   sunInFrame,
   treeBuild,
 } from './sheet.mjs'
+import { plateSpread } from './plateSpread.mjs'
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url))
 const DRIVE = path.join(ROOT, 'scripts/drive.mjs')
@@ -853,6 +856,7 @@ async function main() {
         arm,
         file: path.relative(out, file),
         sha256: await sha256(file),
+        lumaSpread: await plateSpread(file),
         read,
         glory: sunInFrame(read),
         ...provenance(record, id, read, as),
@@ -989,6 +993,7 @@ async function settledPlate(out, record, cast, plate, read) {
   return {
     file: path.basename(plate),
     sha256: await sha256(plate),
+    lumaSpread: await plateSpread(plate),
     read,
     fresh: against ? kept : null,
     changed: against ? await changedPixels(fresh, plate) : null,
@@ -1190,6 +1195,7 @@ async function takeSamples({ options, out, record, drive, say, jsValues }) {
           checks: sample.checks,
           file: path.relative(out, files[n]),
           sha256: await sha256(files[n]),
+          lumaSpread: await plateSpread(files[n]),
           read,
           ...provenance(
             record,
