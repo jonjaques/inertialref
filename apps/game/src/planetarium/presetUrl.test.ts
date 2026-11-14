@@ -188,7 +188,7 @@ describe('preset URLs', () => {
   })
   it('rejects missing versions, repeated fields, unknown paths and invalid types', () => {
     for (const [key, value] of [
-      ['shot', '3'],
+      ['shot', '4'],
       ['shot', ''],
       ['time', ''],
       ['time', 'NaN'],
@@ -298,6 +298,31 @@ describe('preset URLs', () => {
       `shot=${'x'.repeat(20000)}`,
     ])
       expect(() => readPictureLink(new URLSearchParams(search))).toThrow()
+  })
+  it('carries a picture’s weather as shot 3, and a picture without it as shot 2', () => {
+    const held = { ...camera, weather: { regime: 'fair-cumulus' } }
+    const params = query(pictureLink(held))
+    expect(params.get('shot')).toBe('3')
+    expect(params.get('weather.regime')).toBe('fair-cumulus')
+    expect(readPictureLink(params).picture).toEqual(
+      readPictureLink(query(pictureLink(held))).picture,
+    )
+    expect(readPictureLink(params).picture?.weather).toEqual({
+      regime: 'fair-cumulus',
+    })
+    expect(query(pictureLink(camera)).get('shot')).toBe('2')
+    expect(query(pictureLink(camera)).has('weather.regime')).toBe(false)
+    // A regime this build does not know still reads: the page reports it
+    // unavailable rather than refusing the link.
+    params.set('weather.regime', 'squall-line')
+    expect(readPictureLink(params).picture?.weather?.regime).toBe('squall-line')
+    // Weather in a version that has none is refused, and so is a key inside
+    // it that is not the regime.
+    params.set('shot', '2')
+    expect(() => readPictureLink(params)).toThrow()
+    params.set('shot', '3')
+    params.set('weather.cover', '0.5')
+    expect(() => readPictureLink(params)).toThrow()
   })
   it('rejects conflicting surface paths in either order', () => {
     const params = query(pictureLink(camera))

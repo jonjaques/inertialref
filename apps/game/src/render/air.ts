@@ -1,10 +1,14 @@
 import {
   DataTexture,
+  DataUtils,
+  HalfFloatType,
   LinearFilter,
   type Node,
   RGBAFormat,
   type Texture,
+  type TextureNode,
   Vector3,
+  Vector4,
 } from 'three/webgpu'
 import {
   abs,
@@ -32,11 +36,17 @@ import {
   AEROSOL_ASYMMETRY,
   AEROSOL_FORWARD_PEAK,
   type AtmosphereRecipe,
+  darkSkyTable,
   LIMB_BRIGHTNESS,
   LIMB_CEILING_FALLOFFS,
   LIMB_GAIN,
   MULTI_SCATTER_HEIGHT,
   MULTI_SCATTER_WIDTH,
+  SKY_BLOCK_COLUMNS,
+  SKY_BLOCK_GUARD,
+  SKY_TABLE_HEIGHT,
+  SKY_TABLE_WIDTH,
+  skyRowsOf,
   TRANSMITTANCE_HEIGHT,
   TRANSMITTANCE_WIDTH,
 } from '@inertialref/rendering'
@@ -129,6 +139,47 @@ const LUT_WHITE = /*@__PURE__*/ lutPixel(255, 255, 255)
 const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
 
 /**
+ * The sky table's stand-in: the table's own layout, one row high, holding no
+ * sky (`darkSkyTable`), RGBA16F and linear as the table is. Not a texel of
+ * zeros, because the reader draws the mean as e^(block 0) with no
+ * coefficient after it to keep a stand-in dark, as Ψ's has: zeros read as
+ * a sky of radiance one. An object of its own, never `LUT_BLACK`: the
+ * multiple-scattering table's node already stands over that one, and a
+ * second node over it would compile to its binding (rule 57).
+ */
+function skyPixel(): DataTexture {
+  const dark = darkSkyTable(1)
+  const half = new Uint16Array(dark.data.length)
+  for (let i = 0; i < dark.data.length; i += 1)
+    half[i] = DataUtils.toHalfFloat(dark.data[i] as number)
+  const map = new DataTexture(
+    half,
+    dark.width,
+    dark.height,
+    RGBAFormat,
+    HalfFloatType,
+  )
+  map.magFilter = LinearFilter
+  map.minFilter = LinearFilter
+  map.needsUpdate = true
+  return map
+}
+const LUT_SKY = /*@__PURE__*/ skyPixel()
+
+/**
+ * One body's air as its tables: what `bind` points a bundle at. An
+ * `AtmosphereScattering` is one. `sky` is the sky's irradiance table over the
+ * sun's cosine and height, for the bodies that bake one; without it the
+ * bundle's `sky` stays on its stand-in.
+ */
+export interface AirTables {
+  readonly recipe: AtmosphereRecipe
+  readonly transmittance: Texture
+  readonly multiScatter: Texture
+  readonly sky?: Texture
+}
+
+/**
  * The uniforms one material marches through: the recipe's coefficients in
  * sea-level units, the two tables, `top`, the tables' ceiling over sea
  * level — 1 with no air — and the limb: `limb`, how far the eye stands
@@ -137,8 +188,30 @@ const LUT_BLACK = /*@__PURE__*/ lutPixel(0, 0, 0)
  * march reads. `set` points them at one body's air, idempotently and without a
  * rebuild, `lift` writes the limb beside it, and `clear` is a vacuum, which
  * draws nothing, extinguishes nothing and passes the beam white.
+ *
+ * `sky` is the sky's light on a cloud (`bakeSkyMoments`, read by
+ * `skyTableAt`), a table of its own that only the cloud passes read, and
+ * `skyRows` where its rows stand (`skyRowsOf`), formed from the recipe as
+ * the bake forms it, so `set` alone keeps the two in step. TSL binds a texture in a graph that reads it and in no
+ * other, so the member costs the shell, the sphere, the ground and the sea
+ * no binding and moves none of their WGSL (`cloudPremises.gpu.test.ts`).
+ * `bind` takes a body's tables as one object, so a table more is a member
+ * more and no caller's argument list changes.
+ *
+ * `ownStandIns` starts the tables on stand-ins of this bundle's own, for a
+ * material that binds two bodies' air: two texture nodes over `LUT_WHITE`
+ * compile to one binding (rule 57), and the second body's tables would then
+ * swap into nothing. Every other material shares the one pair. A pair of its
+ * own is a pair nothing else can free, so the bundle's owner calls `dispose`
+ * when it goes.
  */
-export function createAirUniforms() {
+export function createAirUniforms(
+  options: { readonly ownStandIns?: boolean } = {},
+) {
+  const own = options.ownStandIns === true
+  const white = own ? lutPixel(255, 255, 255) : LUT_WHITE
+  const black = own ? lutPixel(0, 0, 0) : LUT_BLACK
+  const dark = own ? skyPixel() : LUT_SKY
   const top = uniform(1)
   const limb = uniform(0)
   const limbFalloff = uniform(0)
@@ -156,8 +229,34 @@ export function createAirUniforms() {
   const detachedScatter = uniform(new Vector3(0, 0, 0))
   const hRayleigh = uniform(1)
   const hMie = uniform(1)
-  const transmittance = texture(LUT_WHITE)
-  const multiScatter = texture(LUT_BLACK)
+  const skyRows = uniform(new Vector4(0, 0, 0, 0))
+  const transmittance = texture(white)
+  const multiScatter = texture(black)
+  const sky = texture(dark)
+  const set = (
+    recipe: AtmosphereRecipe,
+    sunTable: Texture,
+    psiTable: Texture,
+  ): void => {
+    top.value = recipe.topRatio
+    betaRayleigh.value.set(...recipe.betaRayleigh)
+    mieScatter.value.set(...recipe.mieScatter)
+    mieExtinction.value.set(...recipe.mieExtinction)
+    mieForward.value.set(...recipe.mieForward)
+    aerosolSky.value = recipe.aerosolSky
+    ozone.value.set(...recipe.ozone)
+    ozonePeak.value = recipe.ozonePeak
+    ozoneHalfWidth.value = recipe.ozoneHalfWidth
+    detachedPeak.value = recipe.detachedPeak
+    detachedHalfWidth.value = recipe.detachedHalfWidth
+    detachedExtinction.value = recipe.detachedExtinction
+    detachedScatter.value.set(...recipe.detachedScatter)
+    hRayleigh.value = recipe.hRayleigh
+    hMie.value = recipe.hMie
+    skyRows.value.set(...skyRowsOf(recipe))
+    transmittance.value = sunTable
+    multiScatter.value = psiTable
+  }
   return {
     top,
     betaRayleigh,
@@ -174,28 +273,17 @@ export function createAirUniforms() {
     detachedScatter,
     hRayleigh,
     hMie,
+    skyRows,
     transmittance,
     multiScatter,
     limb,
     limbFalloff,
-    set(recipe: AtmosphereRecipe, sunTable: Texture, psiTable: Texture): void {
-      top.value = recipe.topRatio
-      betaRayleigh.value.set(...recipe.betaRayleigh)
-      mieScatter.value.set(...recipe.mieScatter)
-      mieExtinction.value.set(...recipe.mieExtinction)
-      mieForward.value.set(...recipe.mieForward)
-      aerosolSky.value = recipe.aerosolSky
-      ozone.value.set(...recipe.ozone)
-      ozonePeak.value = recipe.ozonePeak
-      ozoneHalfWidth.value = recipe.ozoneHalfWidth
-      detachedPeak.value = recipe.detachedPeak
-      detachedHalfWidth.value = recipe.detachedHalfWidth
-      detachedExtinction.value = recipe.detachedExtinction
-      detachedScatter.value.set(...recipe.detachedScatter)
-      hRayleigh.value = recipe.hRayleigh
-      hMie.value = recipe.hMie
-      transmittance.value = sunTable
-      multiScatter.value = psiTable
+    sky,
+    set,
+    /** `set`, from a body's tables as one object, with its sky table where it has one. */
+    bind(tables: AirTables): void {
+      set(tables.recipe, tables.transmittance, tables.multiScatter)
+      sky.value = tables.sky ?? dark
     },
     lift(strength: number, falloff: number): void {
       limb.value = strength
@@ -219,14 +307,28 @@ export function createAirUniforms() {
       detachedScatter.value.set(0, 0, 0)
       hRayleigh.value = 1
       hMie.value = 1
+      skyRows.value.set(0, 0, 0, 0)
       // The tables as well as the coefficients. `sunThrough` hands back the
       // transmittance table as the beam's color, with no coefficient to zero
       // it, so a material cleared for an airless body but still bound to the
       // last body's tables lit Luna's low sun through Earth's sea-level
       // column — one shared ground material, one shared sea, and a walk from
-      // one world to the next.
-      transmittance.value = LUT_WHITE
-      multiScatter.value = LUT_BLACK
+      // one world to the next. This bundle's own stand-ins, so a material
+      // that binds two bodies' air never holds two nodes over one object.
+      transmittance.value = white
+      multiScatter.value = black
+      sky.value = dark
+    },
+    /**
+     * Frees the stand-ins this bundle made for itself. The shared pair is
+     * every other material's and outlives this one, and a table `set` bound
+     * belongs to the bake that made it.
+     */
+    dispose(): void {
+      if (!own) return
+      white.dispose()
+      black.dispose()
+      dark.dispose()
     },
   }
 }
@@ -349,6 +451,27 @@ export function marchAir(
 }
 
 /**
+ * How a table is read. `level` names level 0: a read in non-uniform control
+ * flow — a pass that chooses its march per pixel — has no implicit
+ * derivatives, and WGSL refuses a `textureSample` there (plan §5.2). Absent,
+ * the read is the one every existing material compiles, node for node, so
+ * none of their programs moves.
+ */
+export interface TableRead {
+  readonly level?: boolean
+}
+
+/** `table` at `uv`, read as `read` asks. */
+function readTable(
+  table: TextureNode,
+  uv: Node<'vec2'>,
+  read: TableRead | undefined,
+): TextureNode {
+  const sampled = table.sample(uv)
+  return read?.level === true ? sampled.level(float(0)) : sampled
+}
+
+/**
  * A step's share of its own length that reaches its start, (1 − e^−τ)/τ,
  * given its transmittance `through` = e^−τ: 1 for a step that holds nothing,
  * 1/τ for an opaque one.
@@ -363,7 +486,10 @@ export function marchAir(
  * to nothing rather than to its length. A per-channel `step` rather than
  * `select`, so both arms are plain vector arithmetic.
  */
-function stepShare(stepTau: Node<'vec3'>, through: Node<'vec3'>): Node<'vec3'> {
+export function stepShare(
+  stepTau: Node<'vec3'>,
+  through: Node<'vec3'>,
+): Node<'vec3'> {
   const series = vec3(1)
     .sub(stepTau.mul(0.5))
     .add(stepTau.mul(stepTau).div(6))
@@ -381,20 +507,23 @@ function tentAt(
   return max(float(1).sub(abs(height.sub(peak)).div(max(halfWidth, 1e-9))), 0)
 }
 
+/** A view direction's phase functions against the sun (`phasesToward`). */
+export interface AirPhases {
+  readonly rayleigh: Node<'float'>
+  readonly mie: Node<'float'>
+  readonly forward: Node<'float'>
+}
+
 /**
  * The two phase functions for a view direction against the sun: Rayleigh's,
  * and Henyey–Greenstein at the one aerosol asymmetry — and the lobe's share
  * of its peak toward the sun, which is how far the aerosol's color has
  * turned from the sky's (`mieScatter`) to the limb's (`mieForward`).
  */
-function phasesToward(
+export function phasesToward(
   direction: Node<'vec3'>,
   sun: Node<'vec3'>,
-): {
-  readonly rayleigh: Node<'float'>
-  readonly mie: Node<'float'>
-  readonly forward: Node<'float'>
-} {
+): AirPhases {
   const nu = dot(direction, sun)
   const g = AEROSOL_ASYMMETRY
   const mie = float((1 - g * g) / (4 * Math.PI)).div(
@@ -416,9 +545,11 @@ export function sunTableAt(
   air: AirUniforms,
   muSun: Node<'float'>,
   height01: Node<'float'>,
+  read?: TableRead,
 ): Node<'vec3'> {
   const lutUv = vec2(muSun.add(1).mul(0.5), height01)
-  return air.transmittance.sample(texelCentered(lutUv, TRANSMITTANCE)).rgb
+  return readTable(air.transmittance, texelCentered(lutUv, TRANSMITTANCE), read)
+    .rgb
 }
 
 /**
@@ -427,22 +558,96 @@ export function sunTableAt(
  * coefficients that are zero until the tables arrive, so it still draws a
  * vacuum.
  */
-function psiTableAt(
+export function psiTableAt(
   air: AirUniforms,
   muSun: Node<'float'>,
   height01: Node<'float'>,
+  read?: TableRead,
 ): Node<'vec3'> {
   const lutUv = vec2(muSun.add(1).mul(0.5), height01)
-  return exp(air.multiScatter.sample(texelCentered(lutUv, MULTI_SCATTER)).rgb)
+  return exp(
+    readTable(air.multiScatter, texelCentered(lutUv, MULTI_SCATTER), read).rgb,
+  )
+}
+
+/** The sky's light at one point, per band, as the sky table holds it (§5.6). */
+export interface SkyAt {
+  /** L̄: the sky's mean radiance over the sphere, per unit of the sun's irradiance. */
+  readonly mean: Node<'vec3'>
+  /** Δ: the irradiance from above less that from below, over π·L̄. */
+  readonly up: Node<'vec3'>
+  /** Δ_s: the same across a vertical face turned to the sun's azimuth. */
+  readonly sunward: Node<'vec3'>
+  /** c: the upper side's irradiance less the linear sky's, over π·L̄ (`SkyTableMoments.upper`). */
+  readonly upper: Node<'vec3'>
+}
+
+/**
+ * The sky table at one sample, in the coordinates `sunTableAt` takes: one
+ * read of each block, the mean through its logarithm as Ψ is read, and
+ * block k's alpha as band k's `c`.
+ *
+ * The rows stand evenly in the air's optical depth, not in height, so the
+ * height's share is mapped to the row coordinate by `skyRowAt`'s closed
+ * form from `skyRows`, the four numbers the bake placed the rows by: two
+ * exponentials a read and no fetch. A read over the last row, which
+ * stands under the air's top, holds it.
+ *
+ * A block's 32 columns sit inside a guard column each side, so the cosine
+ * is clamped to the block's first and last column centers and a bilinear
+ * read never reaches the next block; the guards repeat the edge columns,
+ * so a read that rounds onto one filters against itself. Read at level 0
+ * always, because the march reads it in a compute kernel, where a sampled
+ * read has no derivatives to choose a level from, and the table has none.
+ */
+export function skyTableAt(
+  air: AirUniforms,
+  muSun: Node<'float'>,
+  height01: Node<'float'>,
+): SkyAt {
+  const column = saturate(muSun.add(1).mul(0.5))
+    .mul(SKY_BLOCK_COLUMNS - 1)
+    .add(SKY_BLOCK_GUARD + 0.5)
+  const u = saturate(height01)
+  const rows = air.skyRows
+  const row = saturate(
+    rows.x
+      .mul(oneMinus(exp(rows.y.mul(u).negate())))
+      .add(rows.z.mul(oneMinus(exp(rows.w.mul(u).negate())))),
+  )
+  const v = row
+    .mul(SKY_TABLE_HEIGHT - 1)
+    .add(0.5)
+    .div(SKY_TABLE_HEIGHT)
+  const block = (index: number): Node<'vec4'> =>
+    air.sky
+      .sample(
+        vec2(
+          column
+            .add(index * (SKY_BLOCK_COLUMNS + 2 * SKY_BLOCK_GUARD))
+            .div(SKY_TABLE_WIDTH),
+          v,
+        ),
+      )
+      .level(float(0))
+  const [mean, up, sunward] = [block(0), block(1), block(2)]
+  return {
+    mean: exp(mean.rgb),
+    up: up.rgb,
+    sunward: sunward.rgb,
+    upper: vec3(mean.a, up.a, sunward.a),
+  }
 }
 
 /**
  * `samples` midpoint samples from `near` to `far` along `direction` from
  * `origin`, crowded toward the segment's lowest point as the doc comment on
  * `marchAir` describes, each handed to `each` with its step length. A
- * `Loop`, so it lives inside a material's `Fn`.
+ * `Loop`, so it lives inside a material's `Fn`. It reads no texture, so a
+ * march built over it in non-uniform control flow is as legal as its
+ * table reads.
  */
-function crowdedSamples(
+export function crowdedSamples(
   origin: Node<'vec3'>,
   direction: Node<'vec3'>,
   near: Node<'float'>,
@@ -796,19 +1001,43 @@ export function sunThrough(
 }
 
 /**
+ * The beam `sunThrough` gives a surface, at a height the caller resolved off
+ * the CPU's float64 heights rather than from `length(point) − 1`: a cloud
+ * sample is an eye-relative offset kilometers out, and its height formed from
+ * a sea-level-unit position carries the float32 step of a planetary radius
+ * (rule 52). `height01` is the share of the air's own height, clamped as
+ * `sunThrough` clamps it; `cleared` is `clearedFromOrbit`'s value, which the
+ * caller holds as a uniform of its own.
+ */
+export function sunThroughAt(
+  air: AirUniforms,
+  height01: Node<'float'>,
+  muSun: Node<'float'>,
+  cleared: Node<'float'>,
+  read?: TableRead,
+): Node<'vec3'> {
+  const height = saturate(height01)
+  const table = sunTableAt(air, muSun, height, read)
+  return clearedBeam(air, table, height, cleared, read)
+}
+
+/**
  * A beam read from the transmittance table, cleared by `strength` toward its
  * hue: the slant's color over the column straight overhead at `height01`,
  * with its dimming taken off down to `ORBIT_BEAM_FLOOR` of the overhead
  * light and kept under that.
  */
-function clearedBeam(
+export function clearedBeam(
   air: AirUniforms,
   table: Node<'vec3'>,
   height01: Node<'float'>,
   strength: Node<'float'>,
+  read?: TableRead,
 ): Node<'vec3'> {
-  const overhead = air.transmittance.sample(
+  const overhead = readTable(
+    air.transmittance,
     texelCentered(vec2(1, height01), TRANSMITTANCE),
+    read,
   ).rgb
   const slant = table.div(max(overhead, vec3(1e-4)))
   const brightest = max(max(slant.x, slant.y), slant.z)
@@ -855,4 +1084,70 @@ const ORBIT_BEAM_HUE = 0.5
  * the composite's against 0.025 — and a crescent's sliver and a dark limb
  * wash white (0.043 against 0.033). Half is between: 0.023 and 0.040.
  */
-const ORBIT_AIRLIGHT = 0.5
+export const ORBIT_AIRLIGHT = 0.5
+
+/**
+ * One sample of the air, per unit length in sea-level units: its extinction,
+ * its single scattering already multiplied by the beam `sunT`, and its
+ * multiple scattering — `marchAir`'s per-sample terms, for a march that is
+ * not `marchAir`'s.
+ */
+export interface AirMedium {
+  readonly extinction: Node<'vec3'>
+  readonly single: Node<'vec3'>
+  readonly multiple: Node<'vec3'>
+}
+
+/**
+ * The air at `height` over the datum (sea-level units) for a sun at cosine
+ * `muSun` over the sample's horizontal, seen through `phases`, lit by `sunT`.
+ *
+ * `marchAir`'s per-sample terms written out again, operation for operation,
+ * rather than shared with it: a helper both called would rename the
+ * expressions `marchAir` emits, and the WGSL of every material that marches
+ * the air would move with no picture to show for it. The caller reads the
+ * beam (`sunTableAt`, cleared as its class clears it), and a march built
+ * from these over `crowdedSamples` accumulates them as `marchAir` does —
+ * `cloudLight.gpu.test.ts` holds the two to one value, for one sample and
+ * for four. `height` is clamped at the datum as `marchAir` clamps its
+ * `length(point) − 1`, so a sample a float step under the ground is the
+ * ground's air.
+ */
+export function airMediumAt(
+  air: AirUniforms,
+  height: Node<'float'>,
+  muSun: Node<'float'>,
+  phases: AirPhases,
+  sunT: Node<'vec3'>,
+  read?: TableRead,
+): AirMedium {
+  const shellHeight = max(air.top.sub(1), 1e-6)
+  const above = max(height, 0)
+  const height01 = saturate(above.div(shellHeight))
+  const fade = oneMinus(height01)
+  const densityR = exp(above.div(air.hRayleigh).negate()).mul(fade)
+  const densityM = exp(above.div(air.hMie).negate()).mul(fade)
+  const densityO = tentAt(above, air.ozonePeak, air.ozoneHalfWidth)
+  const densityD = tentAt(above, air.detachedPeak, air.detachedHalfWidth)
+  const scatterD = air.detachedScatter.mul(densityD)
+  const extinction = air.betaRayleigh
+    .mul(densityR)
+    .add(air.mieExtinction.mul(densityM))
+    .add(air.ozone.mul(densityO))
+    .add(air.detachedExtinction.mul(densityD))
+  const psi = psiTableAt(air, muSun, height01, read)
+  const scatterToward = mix(air.mieScatter, air.mieForward, phases.forward)
+  const single = air.betaRayleigh
+    .mul(densityR)
+    .add(scatterD)
+    .mul(phases.rayleigh)
+    .add(scatterToward.mul(densityM).mul(phases.mie))
+    .mul(sunT)
+  const multiple = psi.mul(
+    air.betaRayleigh
+      .mul(densityR)
+      .add(air.mieScatter.mul(densityM))
+      .add(scatterD),
+  )
+  return { extinction, single, multiple }
+}

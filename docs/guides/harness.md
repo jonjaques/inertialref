@@ -153,6 +153,19 @@ The inputs are the uncompressed Lallement 2022 FITS cube and GAMBONS supplementa
 sky map; source links, hashes and exact selection windows accompany the output in
 `data/reference/galaxy.json`. No catalog or procedural systems are regenerated.
 
+To regenerate the cloud droplets' phase table:
+
+```sh
+node apps/ingest/src/mieTable.ts
+pnpm exec prettier -w packages/rendering/src/mieDroplets.generated.ts
+```
+
+It takes no input: the series, the size distribution and water's index are in
+the generator. It runs in about 24 s on the Mac mini and writes the same table
+every time, and `apps/ingest/src/mieTable.test.ts` holds the committed file to
+the series
+([ADR-0066](../adr/0066-the-droplets-phase-is-lorenz-mie-at-one-narrow-width-generated-offline.md)).
+
 In the browser's planetarium, `ir.galaxyView('face-on')` and
 `ir.galaxyView('edge-on')` select the fixed external instruments also available
 under Presets → Milky Way. Each scopes its recipe lens and photographic
@@ -468,6 +481,54 @@ a warning. This differs from canonical-save drift reporting.
 [ADR-0033](../adr/0033-presets-hold-a-photographic-instant.md) records the format
 and current limitation.
 
+**A picture can hold its weather.** Version 3 adds `weather: { regime }`, a
+scenario's id or `'climate'`, and `takePicture` returns what became of it:
+`weather: 'drawn'` under `?clouds=1` on WebGPU, `'unavailable'` without the
+flag or for a regime the build does not know, `'none'` for a picture with no
+weather. Taking it sets three of the clouds' levers — `on`, `weather`, and
+`served` when the body is outside the volume's default set, which is how
+Earth is drawn at all — and puts them back when the observatory lets go.
+**On a flagged page, taking a picture with no weather turns the clouds off**
+until then, so set `engine.clouds` after `ir.preset`, not before.
+[ADR-0067](../adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md)
+records it.
+
+**The cornerstones** are the nine pictures the weather is judged on, ids
+`weather-e1-cumulus-orbit` to `weather-g6-descent`. `ir.preset` takes them
+like any picture, and no list a player sees shows them. Each was solved for a
+sun, and `apps/headless/src/cornerstoneLedger.test.ts` holds it there in Node;
+`pnpm cornerstones:ledger` rewrites its snapshot.
+
+```js
+ir.sun('s:SOL/b:2', { latitude: -5, longitude: -60 }) // { elevation, azimuth } at the held instant, degrees
+ir.solveSun(
+  's:SOL/b:2',
+  { latitude: -5, longitude: -60 },
+  {
+    elevation: 50, // or 'noon'
+    trend: 'falling',
+    after: 0,
+  },
+) // the first instant at or after `after`, with the sun there; null if never
+```
+
+`scripts/weather/capture.mjs` takes every cornerstone in its arms — the volume
+under the flag, and for E1 to E3 the deck without it — and the six scripted
+casts with the clouds on and off, into the main checkout's
+`.data/weather/phase-<n>/`, against a production preview it does not start:
+
+```sh
+pnpm build && pnpm preview &
+node scripts/weather/capture.mjs --phase 1 --url http://localhost:8787/ --gpu-wait 1800 --twice --cut e1
+node scripts/weather/sheet.mjs --dir <that directory> --base <the last phase's>
+```
+
+It refuses a still that did not settle or whose weather is not its arm's, and
+a cast presented outside 58 to 62 Hz: a cast's path
+(`scripts/weather/descent.mjs`) is scheduled by frame index, a descent's
+height `max(h₀·(1 − rate)ᵏ, 2)`, so at another rate the same path runs in
+other seconds.
+
 `ir.rise()` is the framing behind Earthrise on its own: it stands on the body
 being looked at with its parent a stated clearance over the horizon, and returns
 the field of view it solved — Earth is 1.90° across from Luna and Mars is 42.39°
@@ -496,7 +557,7 @@ ir.visit(address?, { latitude, longitude, heading, pitch })
 ir.drop(lat, lon, { address, seconds })  // fly down there, facing the star
 ir.observatory.setStanceScrub(0.5)       // the height slider, logarithmic
 ir.ascend()                              // and this abandons a drop in flight
-ir.settled()                             // whether the sky and the ground have stopped arriving
+ir.settled()                             // whether the sky, the ground and the clouds have stopped arriving
 ```
 
 **Stand where the sun is.** A picture taken in the dark compares nothing: a
@@ -671,7 +732,11 @@ resumed after the sea read the frame behind it, `defocus 0`–`3`,
 `motion tile max`, `motion neighbor max`, `motion blur`, `psf down 0`–`5`,
 `psf up 0`–`4` and `psf resolve` are the optics, `galaxy volume`,
 `galaxy rays`, `galaxy history`, `galaxy structure` and `galaxy sky` are the
-galaxy's, and `canvas` is the output. Every quad pass is named where it draws,
+galaxy's, `canvas` is the output, and under `?clouds=1` with the clouds on,
+`scene over clouds` is the second scene pass and `cloud maps`,
+`cloud clipmap`, `cloud volume`, `cloud sun grid`, `cloud far atlas`,
+`cloud far second`, `cloud depth`, `cloud trace` and `cloud history` are the
+passes issued inside it ([Measuring the weather](#measuring-the-weather)). Every quad pass is named where it draws,
 by `runQuadPasses` in `render/quadPass.ts`. It returns `wallMs` —
 `ir.gpu()`'s figure over the same frames — beside `busyMs`, the passes' shares
 summed, and the two agree within 2% at the shore; a larger disagreement is time
@@ -683,6 +748,15 @@ begin-to-end means, latency rather than share, and not in `busyMs`. Adding
 `owned` to `gaps` counts that work twice. The package's timer has eight query
 slots and a run draws its frames back to back, so `samples` is at most eight
 whatever the frame count: the run's first frames.
+
+**A frame's pass count sets how many frames a read can take.** One query set
+holds 2,048 passes, and a read that runs out drops the rest and reports
+`dropped`; the summary divides by the frames asked for, so a read that dropped
+passes reports every label low. A frame without clouds is about 21 passes and
+`ir.passes(40)` fits. A steady cloud frame is about 40, and one that rebuilds
+its caches about 100, so read one frame first, take
+`floor(2000 / passes)` frames up to 40, and refuse a read with `dropped > 0`.
+The weather's runner does exactly that.
 
 **A pass's `ms` is its share, not its timestamp pair.** Apple's GPUs pipeline
 passes and frames, and Metal samples a pass's timestamps at its stage
@@ -810,6 +884,173 @@ carries the live one. Both probes take a `lens` and a `viewport` to ask the
 question at another setting, and `ir.descend` takes a `maxPatches` — the
 streamer's own 1,280 is a safety net that degrades the whole disk by a level
 when it bites, so raising it is the only way to see what a selection _wanted_.
+
+---
+
+## Measuring the weather
+
+The cloud system exists only under `?clouds=1`, and draws only once its lever
+is on. Without the flag there is no cloud object, pipeline, allocation or layer
+mark, and `ir.clouds()` is `null`.
+
+```js
+engine.clouds = { ...engine.clouds, on: true, weather: 'broken-horizon' }
+ir.clouds() // the report: levers, their hash, frame, caches, bytes, steps
+ir.clouds().leversHash // eight hex digits over the levers the frame drew with
+ir.clouds().settle // { pending, history: 'n/32', caches } — null while off
+await ir.cloudRadiance() // the next frame at the trace's texels: luminance and cloud mask
+ir.cloudRadianceDifference(a, b) // two captures' radiance RMSE over their cloud texels
+```
+
+`engine.clouds` is the lever set (`render/cloudLevers.ts`). The chain reads it
+every render call, so a change lands on the next frame, and the setter throws on
+a set with an unknown key or a value out of range. Always spread the current
+value: the guard takes a whole set.
+
+**The volume serves a wet world with no authored cloud deck, and no other
+unasked.** Earth has a deck, so `on` alone draws nothing over Earth: name it,
+`served: 'g:milky-way/s:SOL/b:2'`, and its deck hides while the volume draws.
+
+**`leversHash` binds a capture to its lever set.** It covers every lever but
+the ones that only steer a measurement (`force`, `warp`, `scrubSeconds`,
+`flySpeed`, `jitterFrame`, `stats`), so a forced row and its steady row share
+one hash.
+
+| Lever                                                                                        | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `on`                                                                                         | Draws the clouds. Off by default                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `weather`                                                                                    | What every clouded body draws. `climate`, the default, is the body's own, which is one regime, `fair-cumulus`, on every wet body. A regime's id holds that regime over the whole body: `fair-cumulus`, `broken-horizon`, `inside`, `two-decks`, `near-gap-far`, `cirrus-over-cumulus`, `anvil`, `overcast`, `fog`, and the cornerstones' `altocumulus`, `dusk-altocumulus` (the deck ending where the local sun clears the horizon) and `stratocumulus` |
+| `maxSteps`, `lightTaps`, `farFootprint`                                                      | The quality ladders: 192 steps, 4 taps, a handover where a trace texel spans 800 m. `lightTaps` takes 0, 2, 4, 6 and 8, and 6 and 8 draw as 4                                                                                                                                                                                                                                                                                                           |
+| `traceScale`                                                                                 | 0.5, 1 or 2 times the trace's extent                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `composite`                                                                                  | `identity`, `thin`, or `residual`, which draws nothing and fills `ir.clouds().residual` after the frame                                                                                                                                                                                                                                                                                                                                                 |
+| `force`                                                                                      | A path a held loop never takes: `reset`, `cut`, `scrub`, `warp`, `fly`                                                                                                                                                                                                                                                                                                                                                                                  |
+| `warp`, `scrubSeconds`, `flySpeed`                                                           | The forced paths' time scale, seconds a frame and m/s                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `jitterFrame`                                                                                | Holds the trace's jitter at one frame index, so a held still repeats every four frames                                                                                                                                                                                                                                                                                                                                                                  |
+| `served`, `second`                                                                           | Force the served body, and a second clouded one, by address                                                                                                                                                                                                                                                                                                                                                                                             |
+| `deck`                                                                                       | `hidden` hides every cloud deck whatever `on` is, which prices Earth's deck against the volume                                                                                                                                                                                                                                                                                                                                                          |
+| `stats`                                                                                      | Counts each ray's steps into `ir.clouds().steps`                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `phaseMode`, `phaseBins`, `jitter`, `transport`, `over`, `sunSlices`, `sunRamp`, `farBlocks` | The measured choices: two or more candidates behind one lever until a campaign picks one. Each stands at the candidate the frame draws, and setting another draws the same frame                                                                                                                                                                                                                                                                        |
+| `handoverBand`, `clip`                                                                       | The handover band's width as a ratio of footprint, and the history clip's half-width in standard deviations. Neither is read by a pass                                                                                                                                                                                                                                                                                                                  |
+
+**`ir.gpu()` and `ir.passes()` hold the loop, and a held loop never cuts,
+scrubs or flies.** The frame's cloud state is built inside the chain, so a held
+frame still measures real work with live uniforms, but it is always the steady
+path. `force` makes every held frame take the path named: under `cut` each
+frame rebuilds every eye-anchored cache as a teleport does, under `scrub` each
+jumps the field `scrubSeconds` and turns the sun with the body, and under `fly`
+the rays and the caches follow a synthetic eye at `flySpeed`. The cost is the
+real one and the picture is not.
+
+**`ir.settled()` waits on the clouds.** Its `clouds` is the report's own
+`settle`, null while the system is off or absent. `settle.pending` is true
+while any cache is pending or the history is under 32 frames old, the frames
+its 1/8 weight floor takes to hold eight samples a pixel. A forced path never
+settles, so cap the wait: 240 frames is longer than the far atlas's 45-frame
+cycle.
+
+**Compare two images with the jitter held.** Two frames four apart differ by
+about 2% of radiance under the moving jitter, which is more than a 1% rule can
+read. Set `jitterFrame`, capture with `ir.cloudRadiance()` on each side, and
+difference them.
+
+### The runner
+
+`scripts/clouds/measure.mjs` runs the weather's batches on the rig, base and
+candidate interleaved in one boot, under one hold on the machine's GPU lock.
+`scripts/clouds/campaign.mjs` runs them end to end, detached, for the hours a
+campaign takes.
+
+```sh
+pnpm preview                                            # builds, then serves 8787
+node scripts/clouds/measure.mjs --batch stances         # every scenario's sun, passes and a still
+node scripts/clouds/measure.mjs --batch targets --gpu-wait 900
+node scripts/clouds/measure.mjs --batch images --dry-run   # the plan; nothing launches
+
+node scripts/clouds/campaign.mjs start landed           # detaches; prints where it writes
+node scripts/clouds/campaign.mjs status
+node scripts/clouds/campaign.mjs stop                   # rigs closed, lock and preview released
+node scripts/clouds/campaign.mjs start landed --resume  # where a stopped one left off
+```
+
+| Batch     | Measures                                                                                                                      |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `stances` | Each scenario's sun, its pass list and a still, before a batch stands on it                                                   |
+| `images`  | The radiance differences the quality ladders are read from                                                                    |
+| `targets` | The landed frame against clouds off: steady, `cut`, `scrub` and `fly`, on a generated world and on Earth with its deck priced |
+| `memory`  | Cold compile: three boots with the flag and three without at each size, each on a deleted Chrome profile                      |
+| `error`   | The composite's residuals on the scene as built, Enhanced off and on                                                          |
+
+A campaign is `choices` (`images`, then the instruments) or `landed`
+(`targets`, `memory`, `error`, then the instruments). Each batch writes
+`.data/clouds/<batch>-<time>.json` and prints its Markdown tables; a campaign
+keeps its state, its log and its summary in `.data/clouds/campaign/`.
+
+- **Production only.** Dev React costs about five times the shipped CPU, and
+  the second scene pass's traversal is a CPU cost. Every invocation passes
+  `--no-serve` against the preview, and the runner refuses a URL that does not
+  answer. The preview names no tree, so a figure is tied to the code by the
+  commit, a clean status and a build that carries the commit's build id (the
+  `git describe` that `vite.config.ts` defines into the bundle). A file's time
+  cannot say it: a bundle built at one commit is newer than an older commit
+  checked out after it. A dirty tree is refused without `--allow-dirty`, which
+  marks every row.
+- **A quiet machine is checked, not assumed.** The GPU lock keeps other GPU
+  jobs off the machine and nothing else. Before and after every run the runner
+  reads the one-minute load and scans the process table for `vitest`, `tsc`,
+  `tsgo`, `vite`, `astro`, `oxlint`, `knip`, `pnpm` and another rig's
+  `drive.mjs`. Quiet is a load of at most half the cores (`--max-load`) with
+  none of them running. It waits up to ten minutes for a quiet start, takes
+  again a run that ends under load, and a row marked not quiet counts toward
+  no decision. A Stop-hook gate in a sibling session is the usual cause.
+- **Every row records the rate it presented at.** `operatingPoint.presentHz`
+  is read with the clouds off before the row measures. A CPU span and a
+  late-frame count follow the rate; `ir.gpu()`'s difference does not. Compare
+  frame-paced figures only between rows at one rate.
+- **The rigs are the runner's own:** measurement on port 9341 and cold boots
+  on 9342. Before each cold boot the runner closes the rig and deletes
+  `.data/drive/profile-9342`, because `drive.mjs` keeps one Chrome profile a
+  port and Chrome's GPU caches live in it; `--fresh` only reboots the page. The
+  OS's Metal shader cache lives outside the profile and is not cleared, so a
+  cold figure is "a fresh Chrome profile, the OS cache possibly warm".
+- **Every stance starts from its preset's picture.** One page serves every run
+  of a size and preset in turn, and `ir.visit` sets no lens, so a stance
+  applies its preset first: its lens, time and processing, then the visit, the
+  rise or the raise over them. Without it, a run after the moon's rise looks
+  through the rise's lens. A forced row's clouds-off base and its
+  stance's steady one should agree; where they do not, the stance is not the
+  one specified.
+- **A row finishes its run only when it is quiet and whole.** A residual drawn
+  under the other processing, a radiance capture that answered null, or a
+  stance whose scene drive.mjs's settle gave up on is kept in the document,
+  named in the table's `quiet` column, and written as a failure of its run.
+- **A batch can be continued.** `--resume <file>` keeps the runs whose rows
+  finished them and runs the rest. Exit 1 is a batch that stopped and is worth
+  continuing; exit 2 is a refusal the same command would meet again.
+
+### The instruments
+
+Three GPU tests measure rather than gate. They are skipped unless
+`IR_CLOUD_MEASURE` is set, write `.data/clouds/<name>.json`, and assert only
+that every figure is finite and inside a sanity bound.
+
+```sh
+IR_CLOUD_MEASURE=1 IR_GPU_WAIT=900 pnpm vitest run --config apps/game/vitest.gpu.config.ts cloudFarCompare cloudSunAccuracy cloudCompositeError
+```
+
+| Test                  | Scores                                                                                              |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| `cloudFarCompare`     | The far atlas against the fine march over the whole ray, on four handover cases at three footprints |
+| `cloudSunAccuracy`    | The sun grid's `T_cloud` against a 256-step march of the field, at five scenarios and two suns      |
+| `cloudCompositeError` | The identity and the thin form against a 512-sample joint march of air and cloud, on analytic slabs |
+
+Each run overwrites its file. A campaign's summary names the three paths and
+copies none of them, so keep a copy under the campaign's name before the next
+one runs; phase 0's are in
+[`design/plans/weather/phase0/measurements/`](../../design/plans/weather/phase0/measurements/README.md).
+[ADR-0063](../adr/0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md)
+and
+[ADR-0064](../adr/0064-the-clouds-march-the-field-and-the-suns-depth-is-a-grid-summed-through-the-volume.md)
+have what they measured.
 
 ---
 

@@ -4,6 +4,7 @@ import {
   NoToneMapping,
   type Scene,
   type Camera,
+  type ComputeNode,
   type NodeMaterial,
   type Object3D,
   type QuadMesh,
@@ -13,6 +14,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
+import { runQuadPasses } from './quadPass.ts'
 import type { SceneLayout } from './sceneLayout.ts'
 import { warmTargetFor } from './sceneTarget.ts'
 import { sensorMrt } from './sensorMrt.ts'
@@ -612,6 +614,71 @@ export function warmSensorPass(
     renderer.outputColorSpace = color
   }
   return Promise.all(compiles).then(() => undefined)
+}
+
+/**
+ * Build a quad pass's pipeline by drawing it once into its own target: the
+ * recipe for a target of fewer than four channels, which `warmSensorPass`
+ * cannot serve.
+ *
+ * `compileAsync` builds a program after an `await` (`getForRenderAsync`),
+ * by when the warm-up has put its target back, and the node builder takes
+ * a fragment's output type from the target bound then: `vec4` with none,
+ * where an R16F target's draw writes an `f32` and an RG8 one's a `vec2`. The
+ * program differs, so the pipeline does, and the first frame builds the one
+ * the warm-up owed — measured on the clouds' R16F depth copy, RG8 volume and
+ * R16F sun grid, where every four-channel bake built none. A draw binds the
+ * target for the whole of its build, which is synchronous: the stall at
+ * boot that the census exists to take there. Each pass draws its target's
+ * first slice, which whatever owns the target redraws before it reads.
+ */
+export function warmByDrawing(
+  renderer: WebGPURenderer,
+  quad: QuadMesh,
+  label: string,
+  passes: readonly WarmPass[],
+): void {
+  const material = quad.material
+  try {
+    runQuadPasses(renderer, quad, { linear: true }, (draw) => {
+      for (const pass of passes) draw(label, pass.target, pass.material)
+    })
+  } finally {
+    quad.material = material
+  }
+}
+
+/**
+ * Build compute pipelines ahead of their first frame.
+ *
+ * r185 has no compute compile-ahead: `compute()` builds a kernel's pipeline
+ * synchronously at its first dispatch (`createComputePipeline`), which is a
+ * main-thread stall inside whatever frame first selects it. This is that
+ * dispatch, at boot, with no workgroups: three builds the pipeline and its
+ * bindings before it looks at the dispatch size, and a dispatch of nothing
+ * runs nothing, so a warm-up neither depends on each kernel's own bounds
+ * guard nor writes into a 1 × 1 stand-in. One kernel a macrotask, because
+ * each build blocks. Failures are logged and swallowed, as `warmCompile`'s
+ * are: a kernel that will not build resurfaces at its first dispatch.
+ * `computeAsync` and not `compute`: on a renderer still initializing,
+ * `compute` hands back an unawaited `computeAsync` whose rejection the catch
+ * never sees; on an initialized one the two are the same synchronous build.
+ */
+export async function warmCompute(
+  renderer: WebGPURenderer,
+  kernels: readonly ComputeNode[],
+): Promise<void> {
+  for (const kernel of kernels) {
+    try {
+      await renderer.computeAsync(kernel, [0, 1, 1])
+    } catch (cause) {
+      log.warn('a compute warm-up failed', {
+        kernel: kernel.name,
+        cause: String(cause),
+      })
+    }
+    await breathe()
+  }
 }
 
 /** The no-op every ticket verb becomes once there is no boot to report to. */

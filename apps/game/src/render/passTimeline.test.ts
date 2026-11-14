@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { summarize, summarizeOwned } from './passTimeline.ts'
+import {
+  namePass,
+  passName,
+  summarize,
+  summarizeOwned,
+} from './passTimeline.ts'
 
 /** Nanosecond slots from millisecond pairs, in allocation order. */
 function slots(pairs: readonly (readonly [number, number])[]): BigUint64Array {
@@ -175,5 +180,18 @@ describe('summarizeOwned', () => {
     ).toEqual([
       { source: 'upscaler', label: 'reconstruct', samples: 1, latencyMs: 0.25 },
     ])
+  })
+})
+
+describe('passName', () => {
+  it('reads back what namePass gave a target, and nothing once null takes it back', () => {
+    const target = {}
+    expect(passName(target)).toBeUndefined()
+    namePass(target, 'scene')
+    expect(passName(target)).toBe('scene')
+    namePass(target, 'scene over clouds')
+    expect(passName(target)).toBe('scene over clouds')
+    namePass(target, null)
+    expect(passName(target)).toBeUndefined()
   })
 })

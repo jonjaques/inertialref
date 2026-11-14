@@ -109,6 +109,16 @@ import {
   type PassTimelineResult,
 } from '../render/passTimeline.ts'
 import { holdFrames } from './frameHold.ts'
+import {
+  type CloudLevers,
+  DEFAULT_CLOUD_LEVERS,
+  isCloudLevers,
+} from '../render/cloudLevers.ts'
+import type {
+  CloudFrontHandle,
+  CloudSystemFactory,
+} from '../render/cloudSystem.ts'
+import { PictureWeatherHold } from './pictureWeather.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
 import type { Camera, Object3D } from 'three/webgpu'
@@ -150,7 +160,7 @@ import {
 } from './terrainStreamer.ts'
 import { OrbitTraceCache } from './orbitTraces.ts'
 import { StarSurvey, type StarSurveyStatus } from './starSurvey.ts'
-import type { TerrainReport } from '@inertialref/devtools'
+import type { CloudRadiance, TerrainReport } from '@inertialref/devtools'
 
 /*
  * The engine.
@@ -489,6 +499,71 @@ export class GameEngine {
   surfaceQuality: SurfaceQuality = DEFAULT_SURFACE_QUALITY
 
   /**
+   * The clouds' levers, which the sensor's chain reads every frame and a
+   * script writes whole: `engine.clouds = { ...engine.clouds, on: true }`.
+   * A malformed set throws rather than landing, because a mistyped field
+   * would otherwise measure the default without a word. Held as a frozen
+   * copy, because a field written in place skips that check, and the frame
+   * compares its levers against the last frame's, which would be the same
+   * object: a weather changed that way keeps the old one's history. Inert
+   * without `?clouds=1`, which builds no system to read them.
+   */
+  #clouds: CloudLevers = DEFAULT_CLOUD_LEVERS
+
+  get clouds(): CloudLevers {
+    return this.#clouds
+  }
+
+  set clouds(levers: CloudLevers) {
+    if (!isCloudLevers(levers)) throw new Error('Invalid cloud levers.')
+    this.#clouds = Object.freeze({ ...levers })
+  }
+
+  #cloudSystemFactory: CloudSystemFactory | null = null
+  #cloudFront: CloudFrontHandle | null = null
+
+  /**
+   * `?clouds=1`'s chunk, resolved in the canvas's renderer factory; null
+   * without the flag. What comes back builds a system that writes this
+   * engine's front handle, so every chain the sensor builds feeds the one
+   * handle the scene's materials hold.
+   */
+  get cloudSystemFactory(): CloudSystemFactory | null {
+    return this.#cloudSystemFactory
+  }
+
+  set cloudSystemFactory(factory: CloudSystemFactory | null) {
+    const front = factory?.createFront() ?? null
+    this.#cloudFront = front
+    this.#cloudSystemFactory =
+      factory === null || front === null
+        ? null
+        : Object.assign(
+            (deps: Parameters<CloudSystemFactory>[0]) =>
+              factory({ ...deps, front }),
+            { createFront: factory.createFront },
+          )
+  }
+
+  /**
+   * What a material drawn after the composite reads the clouds in front of
+   * it through: this frame's trace textures and the numbers beside them.
+   * One for the page, made when the cloud chunk loads; null without the
+   * flag, where such a material builds the graph it builds with no clouds.
+   */
+  get cloudFront(): CloudFrontHandle | null {
+    return this.#cloudFront
+  }
+
+  /** Whether this page loaded the clouds at all. */
+  get cloudsAvailable(): boolean {
+    return this.#cloudSystemFactory !== null
+  }
+
+  /** The levers a picture's weather set, and their release (`pictureWeather.ts`). */
+  readonly pictureWeather = new PictureWeatherHold()
+
+  /**
    * The player's own lens — what the flight camera is looking through.
    *
    * Bound to the persisted preference by `state/engineKnobs.ts`, exactly as
@@ -702,6 +777,11 @@ export class GameEngine {
   rotationStop: (RotationStopCue & { readonly entity: EntityId }) | null = null
   exposure: Exposure | null = null
   sensorDiagnostics: SensorDiagnostics | null = null
+  /**
+   * The cloud system's radiance capture on the chain on screen, set with it
+   * by `scene/Sensor.tsx`; null without one (`ir.cloudRadiance()`).
+   */
+  cloudRadiance: (() => Promise<CloudRadiance | null>) | null = null
   /** Temporal image history is presentation state, outside the world hash. */
   pictureEpoch = 0
   pictureDebug: PictureDebug = 'none'
@@ -1043,12 +1123,16 @@ export class GameEngine {
         terrainCache: () => this.terrainCache(),
         clearTerrainCache: () => this.clearTerrainCache(),
         galaxyRender: () => this.galaxyRenderer?.() ?? null,
+        clouds: () => this.sensorDiagnostics?.clouds ?? null,
+        cloudRadiance: () => this.cloudRadiance?.() ?? Promise.resolve(null),
         lensView: () => this.lensView(),
         framingLens: () => this.framingLens(),
         cameraProcessing: () => {
           const { peak: _peak, ...processing } = this.sensorSettings
           return { ...processing, range: { ...processing.range } }
         },
+        setWeather: (weather, address) =>
+          this.pictureWeather.apply(this, weather, address),
         setCameraProcessing: (processing) =>
           this.requestSensorSettings({
             ...processing,
@@ -1580,6 +1664,7 @@ export class GameEngine {
       this.harness.observatory.target !== null
     )
       this.harness.observatory.advanceTime(delta)
+    this.pictureWeather.frame(this, this.harness.observatory.target !== null)
     // A surface stage holds its ephemeris epoch while the director samples
     // live render time. Feeding the held snapshot time back freezes the playhead.
     // Sampling before the player lookup also lets a scene end during a hand-off.

@@ -22,6 +22,7 @@ import {
 import type { OrbitPath } from '@inertialref/devtools'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createOrbitTraceMaterial } from '../render/orbitTrace.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /** Geometry carries directions; physical visibility is resolved before placement. */
@@ -131,6 +132,7 @@ export function OrbitTraces({ engine }: { engine: GameEngine }) {
         )
         line = new LineSegments(geometry, material)
         line.frustumCulled = false
+        if (engine.cloudsAvailable) markOverClouds(line)
         lines.current.set(path.address, line)
         parent.add(line)
       }

@@ -1,12 +1,19 @@
 import { useThree } from '@react-three/fiber'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import type { Group, Scene } from 'three/webgpu'
+import {
+  type Camera,
+  type Group,
+  Quaternion,
+  type Scene,
+  Vector3,
+} from 'three/webgpu'
 import { driveThrottle, ThrusterVisuals } from '@inertialref/rendering'
 import { Vec } from '@inertialref/spatial'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createThrusterPlumes, type ThrusterPlumes } from '../render/plumes.ts'
 import { thrusterLayoutFor } from '../render/thrusterLayouts.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
 import {
   read,
   RENDER_SHIP,
@@ -51,15 +58,18 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
       if (staged === undefined) {
         const layout = thrusterLayoutFor(id)
         staged = {
-          plumes: createThrusterPlumes(layout),
+          // Seen through the clouds in front of them under `?clouds=1`.
+          plumes: createThrusterPlumes(layout, engine.cloudFront ?? undefined),
           visuals: new ThrusterVisuals(layout),
           firing: new Float32Array(layout.nozzles.length),
         }
+        // Over the clouds under `?clouds=1`, before the warm-up compiles them.
+        if (engine.cloudsAvailable) markOverClouds(staged.plumes.group)
         built.set(id, staged)
       }
       return staged
     },
-    [built],
+    [built, engine],
   )
 
   /*
@@ -93,11 +103,36 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
   }, [engine, gl, camera, scene, stageFor])
 
   const mounted = useRef<string | null>(null)
+  const lit = useRef(false)
 
   useTimedFrame('thrusterFx', (_, delta) => {
     const view = engine.scene()
     const root = group.current
     if (view === null || root === null) return
+
+    // `ir.lightEngine`: a drive lit in front of the lens, drawn only.
+    const held = engine.harness.lightEngine.throttle
+    if (held !== null) {
+      const own = engine.hullOnStage?.id ?? read(RENDER_SHIP)
+      const id = thrusterLayoutFor(own).drive === null ? 'rocinante' : own
+      const staged = stageFor(id)
+      if (mounted.current !== id) {
+        root.clear()
+        root.add(staged.plumes.group)
+        mounted.current = id
+      }
+      root.visible = standInFront(root, camera, thrusterLayoutFor(id))
+      staged.plumes.sample(held, engine.presentationTime)
+      lit.current = true
+      return
+    }
+    // Released: the held plume goes out where it stood, rather than fading
+    // over a third of a second on a ship it never lit.
+    if (lit.current) {
+      lit.current = false
+      for (const each of built.values()) each.plumes.update(null, 0, 10)
+      mounted.current = null
+    }
 
     // The hull the frame draws, so the plumes are keyed on the same layout:
     // a script's prop or the pad's parked Rocinante once it has loaded, the
@@ -191,6 +226,49 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
 
   // Empty until the first frame mounts a hull's plumes under it.
   return <group ref={group} />
+}
+
+/** m: how far down the lens the held drive's plume stands. */
+const STAND = 60
+const forward = new Vector3()
+const right = new Vector3()
+const mouth = new Vector3()
+const turn = new Quaternion()
+const ACROSS = new Quaternion().setFromAxisAngle(
+  new Vector3(0, 1, 0),
+  Math.PI / 2,
+)
+
+/*
+ * The held drive's pose: its plume across the middle of the frame, the
+ * mouth left of center and the torch running right, `STAND` meters out.
+ * The stances that ask for it are cameras on the ground, nowhere near the
+ * ship, so the plume is placed on the lens rather than on the hull; across
+ * the frame, so its whole length is drawn rather than its mouth alone. The
+ * camera rig runs earlier in the frame, so the pose is this frame's.
+ */
+function standInFront(
+  root: Group,
+  camera: Camera,
+  layout: ReturnType<typeof thrusterLayoutFor>,
+): boolean {
+  const drive = layout.drive
+  if (drive === null) return false
+  // Hull +Z is the exhaust; a quarter turn about +Y lays it along the lens's +X.
+  turn.copy(camera.quaternion).multiply(ACROSS)
+  forward.set(0, 0, -1).applyQuaternion(camera.quaternion)
+  right.set(1, 0, 0).applyQuaternion(camera.quaternion)
+  mouth
+    .set(drive.position.x, drive.position.y, drive.position.z)
+    .applyQuaternion(turn)
+  root.quaternion.copy(turn)
+  root.position
+    .copy(camera.position)
+    .addScaledVector(forward, STAND)
+    // Half the torch's full length, nine mouth radii (`plumes.ts`).
+    .addScaledVector(right, -drive.radius * 4.5)
+    .sub(mouth)
+  return true
 }
 
 interface Staged {

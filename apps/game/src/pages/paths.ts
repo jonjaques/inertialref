@@ -312,6 +312,16 @@ export const QUERY = {
    * rung already does, minus the four samples, two nudges and the remount.
    */
   presentation: 'presentation',
+  /**
+   * Every mode: `60`, to draw on a 60 Hz grid whatever the display's rate.
+   * Absent, the loop draws every animation frame, as it always does.
+   *
+   * For a measurement that needs a held rate on a machine whose display paces
+   * the page at another, or is dark and paces it at nothing (phase 1 design
+   * §7.5). It holds the rate of the frames drawn; it does not make the
+   * compositor present them. `engine/frameHold.ts` reads it.
+   */
+  pace: 'pace',
   /** Page-lifetime reconstruction choice, such as temporal:quality or native. */
   picture: 'picture',
   /**
@@ -350,6 +360,14 @@ export const QUERY = {
    * profile.
    */
   output: 'output',
+  /**
+   * Every mode: `1` builds the cloud system for the page's lifetime — its
+   * chunk, its warmed pipelines, the overlays' layer marks — and draws
+   * nothing until a script sets `engine.clouds` whole with `on: true`. A
+   * diagnostic like `producer`, and the only way in: without it not one
+   * cloud object exists, so no plate, comparison or ledger run can move.
+   */
+  clouds: 'clouds',
 } as const
 
 /**

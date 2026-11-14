@@ -1,4 +1,11 @@
 import type { PassReport } from './passReport.ts'
+import {
+  type CloudRadiance,
+  type CloudRadianceDifference,
+  cloudRadianceDifference,
+  type CloudRenderReport,
+  type CloudSettle,
+} from './clouds.ts'
 import type { PictureReport } from './pictureReport.ts'
 import { GENERATION_VERSIONS, type WorldQuery } from '@inertialref/universe'
 import { isPicture } from './pictureFormat.ts'
@@ -36,6 +43,7 @@ import {
   type SurfacePlacement,
 } from '@inertialref/simulation'
 import {
+  bodyAddress,
   type Body,
   bodyFixedFrameId,
   bodyFrameId,
@@ -101,6 +109,14 @@ import {
   type TravelTargetOptions,
 } from './travel.ts'
 import { findPicture, type Picture, PICTURES } from './pictures.ts'
+import { engineLight } from './engineLight.ts'
+import {
+  runClock,
+  solveSun,
+  type SunAt,
+  sunAt,
+  type SunTarget,
+} from './solarTime.ts'
 import {
   captureCameraProcessing,
   DEFAULT_PICTURE_PROCESSING,
@@ -156,12 +172,18 @@ import {
   type GuideStatus,
   type GuideTraceEntry,
   type Host,
+  type PictureWeatherOutcome,
   type SoundtrackStatus,
   type SoundtrackVerb,
   type TerrainCacheReport,
   UNAVAILABLE_GUIDE,
   UNAVAILABLE_SOUNDTRACK,
 } from './host.ts'
+
+const radiansOf = (place: { latitude: Degrees; longitude: Degrees }) => ({
+  latitude: degreesToRadians(place.latitude),
+  longitude: degreesToRadians(place.longitude),
+})
 
 /*
  * The scriptable harness.
@@ -260,6 +282,8 @@ export class GameHarness {
   readonly #maneuvers: Maneuvers
   /** The track overlay's switch. Session-local; see `trackOverlay`. */
   #trackOverlay = false
+  /** A drive lit in front of the lens, drawn only: `engineLight.ts`. */
+  readonly lightEngine = engineLight()
 
   constructor(host: Host, scripts: readonly CutsceneScript[] = CUTSCENES) {
     this.#host = host
@@ -697,6 +721,38 @@ export class GameHarness {
   }
 
   /**
+   * The sun over a place on a body, at the observatory's instant or `time`:
+   * degrees over the horizon, and degrees east of north. Degrees in and out,
+   * as `ir.visit` takes them.
+   */
+  sun(
+    address: string,
+    place: { latitude: Degrees; longitude: Degrees },
+    time = this.observatory.time,
+  ): SunAt {
+    return sunAt(this.world, address, radiansOf(place), time)
+  }
+
+  /**
+   * The first instant at or after `target.after` the sun stands at a target
+   * over a place — `{ elevation: 50, trend: 'falling', after: 0 }`, or
+   * `elevation: 'noon'` — with the sun there; null where it never does. How a
+   * picture's instant is chosen (`solarTime.ts`).
+   */
+  solveSun(
+    address: string,
+    place: { latitude: Degrees; longitude: Degrees },
+    target: SunTarget,
+  ): ReturnType<typeof solveSun> {
+    return solveSun(this.world, address, radiansOf(place), target)
+  }
+
+  /** Run the held instant from `start` at `warp`, a clock cast's verb (`solarTime.ts`). */
+  runClock(start: number, warp: number): ReturnType<typeof runClock> {
+    return runClock(this.observatory, start, warp)
+  }
+
+  /**
    * Whether the picture has stopped changing on its own.
    *
    * What a capture waits for, instead of a number of milliseconds guessed at
@@ -712,9 +768,13 @@ export class GameHarness {
     ok: boolean
     galaxy: { pending: boolean; tiles: string; survey: boolean } | null
     terrain: { pending: number; patches: number; deposits: boolean } | null
+    clouds: CloudSettle | null
   } {
     const galaxy = this.#host.render.galaxyRender()
     const terrain = this.#host.render.terrain()
+    // Null with the system off or absent, so a page without `?clouds=1`
+    // settles as it does with no clouds at all; a forced path never does.
+    const clouds = this.#host.render.clouds()?.settle ?? null
     const sky =
       galaxy === null || galaxy.cache === undefined
         ? null
@@ -737,9 +797,11 @@ export class GameHarness {
     return {
       ok:
         (sky === null || (!sky.pending && !sky.survey)) &&
-        (ground === null || (ground.pending === 0 && !ground.deposits)),
+        (ground === null || (ground.pending === 0 && !ground.deposits)) &&
+        (clouds === null || !clouds.pending),
       galaxy: sky,
       terrain: ground,
+      clouds,
     }
   }
 
@@ -1174,11 +1236,7 @@ export class GameHarness {
    * is worth running there and there is no display for a field of view to be
    * about.
    */
-  preset(id: string): {
-    status: ObserverStatus
-    fovDeg: number
-    picture: Picture
-  } {
+  preset(id: string): ReturnType<GameHarness['takePicture']> {
     return this.takePicture(findPicture(id))
   }
 
@@ -1213,6 +1271,7 @@ export class GameHarness {
     status: ObserverStatus
     fovDeg: number
     picture: Picture
+    weather: PictureWeatherOutcome
   } {
     if (!isPicture(picture)) throw new Error('Invalid preset.')
     if (
@@ -1228,7 +1287,7 @@ export class GameHarness {
     if (picture.seed !== this.world.seedText)
       throw new Error(`This preset needs universe seed "${picture.seed}".`)
     // Resolve before changing the held time or lens, so a missing address leaves the picture intact.
-    resolveDestination(
+    const destination = resolveDestination(
       picture.address,
       this.world.galaxy,
       currentSystemOf(this.world, this.#host.player()),
@@ -1239,6 +1298,22 @@ export class GameHarness {
       captureCameraProcessing(picture.processing ?? DEFAULT_PICTURE_PROCESSING),
     )
     this.#observatory.setTime(picture.time)
+    const weather = this.#host.render.setWeather(
+      picture.weather ?? null,
+      // A station's picture draws the weather of the body it goes round: the
+      // clouds are served on a body, and a station's own address names none.
+      destination.kind === 'body'
+        ? formatAddress(destination.address)
+        : destination.kind === 'station' && destination.address.body !== null
+          ? formatAddress(
+              bodyAddress(
+                destination.address.galaxy,
+                destination.system,
+                destination.address.body,
+              ),
+            )
+          : picture.address,
+    )
     if (picture.framing.kind === 'camera') {
       const lens = picture.lens!
       this.#host.render.setFlightLens({
@@ -1249,6 +1324,7 @@ export class GameHarness {
         status: this.#observatory.restore(picture.address, picture.framing),
         fovDeg: verticalFovDegrees({ ...lens, focus: lens.focus ?? Infinity }),
         picture,
+        weather,
       }
     }
     this.#observatory.focus(picture.address, { ease: false })
@@ -1260,7 +1336,7 @@ export class GameHarness {
        */
       const risen = this.#observatory.rise()
       this.#fitLens(risen.fovDeg)
-      return { status: risen.status, fovDeg: risen.fovDeg, picture }
+      return { status: risen.status, fovDeg: risen.fovDeg, picture, weather }
     }
     const fovDeg = picture.fovDeg ?? FLIGHT_FOV
     // The other order, and for the reverse reason: a `fill` standoff is solved
@@ -1271,6 +1347,7 @@ export class GameHarness {
       status: this.#observatory.compose(picture.framing.composition),
       fovDeg,
       picture,
+      weather,
     }
   }
 
@@ -1542,6 +1619,27 @@ export class GameHarness {
     return this.#host.render.terrain()
   }
 
+  /** The cloud system's report, or null: no `?clouds=1`, or nothing drawing. */
+  clouds(): CloudRenderReport | null {
+    return this.#host.render.clouds()
+  }
+
+  /**
+   * The next frame's radiance at the trace's texels and which of them hold
+   * cloud, or null: no `?clouds=1`, or nothing drawing.
+   */
+  cloudRadiance(): Promise<CloudRadiance | null> {
+    return this.#host.render.cloudRadiance()
+  }
+
+  /** Two captures' radiance difference over the texels either holds cloud at (§8.7). */
+  cloudRadianceDifference(
+    a: CloudRadiance,
+    b: CloudRadiance,
+  ): CloudRadianceDifference {
+    return cloudRadianceDifference(a, b)
+  }
+
   /**
    * One body per surface archetype, found rather than written down.
    *
@@ -1759,6 +1857,7 @@ export class GameHarness {
       '  ir.step(ticks) / ir.runSeconds(s)',
       '  ir.pause() / ir.resume() / ir.timeWarp(x)',
       '  ir.control({translation,rotation,throttle}) / ir.throttle(0..1) / ir.hold()',
+      '  ir.lightEngine(on?)           a drive lit in front of the lens at a held throttle, drawn only; false releases it',
       '  ir.target(address | null)     track a companion without changing the orbit anchor',
       '  ir.targets()                  everywhere you can go, nearest first',
       '  ir.search(text)               the whole catalog, by name, nearest first',
@@ -1797,7 +1896,7 @@ export class GameHarness {
       '  ir.aim(yawDeg, pitchDeg)      turn the head without moving the camera',
       '  ir.compose(id)                a named composition, camera only',
       '  ir.rise()                     stand with the parent over the horizon',
-      '  ir.preset(id)                 a named picture: address, framing, lens',
+      '  ir.preset(id)                 a named picture or cornerstone: address, framing, lens, weather',
       '  ir.chrome(false)              clear the interface — the plate state',
       '  ir.layers(false)              names and traces off, for a plate',
       '  ir.observatory                the free camera itself — drag, zoom, setPhase',
@@ -1805,7 +1904,10 @@ export class GameHarness {
       '  ir.flightCamera               that camera itself — drag, turn, zoom, recenter',
       '  ir.sites(address?)            the named places on a body, derived from its own terrain, with the sun over each',
       '  ir.light(address?)            how lit the view is: sun elevation on the ground, phase angle from orbit, and a verdict',
-      '  ir.settled()                  whether the sky and the ground have stopped arriving — what a capture waits for',
+      '  ir.settled()                  whether the sky, the ground and the clouds have stopped arriving — what a capture waits for',
+      '  ir.sun(address, {latitude, longitude}, time?)  the sun over a place: elevation and azimuth, degrees',
+      "  ir.solveSun(address, place, {elevation, trend, after})  the first instant the sun stands there; elevation may be 'noon'",
+      '  ir.runClock(start, warp)      run the held instant from start, warp simulated seconds a presented second',
       '  ir.visit(address?, {site, height, heading, pitch})',
       '                                stand on it — a camera, not the ship; degrees and meters',
       '  ir.ascend()                   back to orbit, at the framing you left',
@@ -1813,6 +1915,9 @@ export class GameHarness {
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  the live streamer, and the rocks on it',
+      "  ir.clouds()                   the clouds' report under ?clouds=1: levers, frame, caches, bytes, steps",
+      "  await ir.cloudRadiance()       the next frame at the trace's texels: luminance and cloud mask",
+      "  ir.cloudRadianceDifference(a, b)  two captures' radiance RMSE over their cloud texels",
       '  await ir.terrainCache()        persisted terrain hits, misses and storage',
       '  await ir.clearTerrainCache()   discard regenerable terrain, retaining saves',
       '  ir.picture(debug?)            reconstruction sizes, history and GPU passes',

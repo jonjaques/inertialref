@@ -72,7 +72,12 @@ export interface UpscaleDiagnostics {
 export interface UpscaleInputs {
   readonly color: TextureNode
   readonly depth: TextureNode
-  readonly velocity: TextureNode | null
+  /**
+   * The scene's `motion` row, which the kernel takes as its velocity: it
+   * reads `.xy` of an RGBA16F NDC delta, now minus then, and the row's other
+   * channels are the optics'.
+   */
+  readonly motion: TextureNode | null
   readonly reactive: TextureNode | null
 }
 
@@ -194,6 +199,8 @@ export class UpscaleNode extends TempNode<'vec4'> {
     this.#standIn.needsUpdate = true
     this.#pre.name = 'sensor-pre-exposure'
     this.#pre.needsUpdate = true
+    // The one `velocity` node writes `motion`, so the optics' vectors are
+    // the kernel's unjittered ones too, and a jittered frame does not move.
     if (options.path === 'temporal')
       velocity.setProjectionMatrix(this.#kernel.unjitteredProjectionMatrix)
   }
@@ -418,7 +425,7 @@ export class UpscaleNode extends TempNode<'vec4'> {
     properties.color = this.#inputs.color
     if (this.#path === 'temporal') {
       properties.depth = this.#inputs.depth
-      properties.velocity = this.#inputs.velocity
+      properties.motion = this.#inputs.motion
       properties.reactive = this.#inputs.reactive
     }
     return this.outputTexture
@@ -439,7 +446,7 @@ export class UpscaleNode extends TempNode<'vec4'> {
         ...(this.#path === 'temporal'
           ? {
               depth: this.#inputs.depth.value,
-              velocity: this.#inputs.velocity!.value,
+              velocity: this.#inputs.motion!.value,
               reactive: this.#inputs.reactive!.value,
               preExposureTexture: this.#pre,
             }

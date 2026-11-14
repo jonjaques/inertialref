@@ -1,0 +1,244 @@
+{
+  "note": "cloudSunAccuracy.gpu.test.ts: T_cloud through the sun grid against a 256-step march of the field to the union top, at in-cloud samples (§8.6)",
+  "body": "Earth",
+  "eyeMeters": 2,
+  "lattice": {
+    "columns": 576,
+    "reachMeters": 4000,
+    "heightsALayer": 8
+  },
+  "referenceSteps": 256,
+  "units": "transmittance, absolute",
+  "cases": [
+    {
+      "scenario": "fair-cumulus",
+      "sunDegrees": 37.5,
+      "place": {
+        "latitude": 86.20109472423262,
+        "longitude": -100.03105620015137
+      },
+      "samples": 13824,
+      "inCloud": 2504,
+      "meanReference": 0.11199581776728763,
+      "grid": {
+        "2": {
+          "rms": 0.13316837322709907,
+          "worst": 0.9497284851968288,
+          "bias": 0.03903981467390255
+        },
+        "4": {
+          "rms": 0.04575283308965005,
+          "worst": 0.722908154129982,
+          "bias": 0.006997443253659458
+        }
+      }
+    },
+    {
+      "scenario": "fair-cumulus",
+      "sunDegrees": 5,
+      "place": {
+        "latitude": 86.20109472423262,
+        "longitude": -100.03105620015137
+      },
+      "samples": 13824,
+      "inCloud": 2504,
+      "meanReference": 0.029992562589353927,
+      "grid": {
+        "2": {
+          "rms": 0.06908075840503385,
+          "worst": 0.8394512832164764,
+          "bias": 0.009252374736808807
+        },
+        "4": {
+          "rms": 0.03213069002361822,
+          "worst": 0.5857614576816559,
+          "bias": 0.00040203922792780063
+        }
+      }
+    },
+    {
+      "scenario": "two-decks",
+      "sunDegrees": 37.5,
+      "place": {
+        "latitude": 88.73390442073261,
+        "longitude": 90
+      },
+      "samples": 13824,
+      "inCloud": 3046,
+      "meanReference": 0.16532849965156063,
+      "grid": {
+        "2": {
+          "rms": 0.19179554674189758,
+          "worst": 0.9962870005983859,
+          "bias": 0.04137088752025803
+        },
+        "4": {
+          "rms": 0.09719149897760485,
+          "worst": 0.9494746066629887,
+          "bias": -0.009268029620602922
+        }
+      }
+    },
+    {
+      "scenario": "two-decks",
+      "sunDegrees": 5,
+      "place": {
+        "latitude": 88.73390442073261,
+        "longitude": 90
+      },
+      "samples": 13824,
+      "inCloud": 3046,
+      "meanReference": 0.029369891588816272,
+      "grid": {
+        "2": {
+          "rms": 0.06792900671950604,
+          "worst": 1,
+          "bias": -0.002000577981871354
+        },
+        "4": {
+          "rms": 0.0542404873297656,
+          "worst": 1,
+          "bias": -0.006169116993598899
+        }
+      }
+    },
+    {
+      "scenario": "anvil",
+      "sunDegrees": 37.5,
+      "place": {
+        "latitude": 87.80696888064219,
+        "longitude": -47.50776405003784
+      },
+      "samples": 13824,
+      "inCloud": 4561,
+      "meanReference": 0.031601801255690155,
+      "grid": {
+        "2": {
+          "rms": 0.02308713016877236,
+          "worst": 0.3146887421607971,
+          "bias": 0.004247429781778739
+        },
+        "4": {
+          "rms": 0.008652703923426168,
+          "worst": 0.1263113021850586,
+          "bias": 0.0012197220489103561
+        }
+      }
+    },
+    {
+      "scenario": "anvil",
+      "sunDegrees": 5,
+      "place": {
+        "latitude": 87.80696888064219,
+        "longitude": -47.50776405003784
+      },
+      "samples": 13824,
+      "inCloud": 4561,
+      "meanReference": 0.0032551704729963096,
+      "grid": {
+        "2": {
+          "rms": 0.040172304983464996,
+          "worst": 0.941855888813734,
+          "bias": -0.0030402897082539592
+        },
+        "4": {
+          "rms": 0.0402824068511774,
+          "worst": 0.941855888813734,
+          "bias": -0.0030731029163757985
+        }
+      }
+    },
+    {
+      "scenario": "overcast",
+      "sunDegrees": 37.5,
+      "place": {
+        "latitude": 88.73390442073261,
+        "longitude": 90
+      },
+      "samples": 13824,
+      "inCloud": 3536,
+      "meanReference": 0.14192118925235453,
+      "grid": {
+        "2": {
+          "rms": 0.14937434829456844,
+          "worst": 0.8003079742193222,
+          "bias": 0.05417417829513649
+        },
+        "4": {
+          "rms": 0.02226478548213284,
+          "worst": 0.2365255355834961,
+          "bias": 0.006611461420419578
+        }
+      }
+    },
+    {
+      "scenario": "overcast",
+      "sunDegrees": 5,
+      "place": {
+        "latitude": 88.73390442073261,
+        "longitude": 90
+      },
+      "samples": 13824,
+      "inCloud": 3536,
+      "meanReference": 0.04228253342729843,
+      "grid": {
+        "2": {
+          "rms": 0.026532092041317377,
+          "worst": 0.6439382135868073,
+          "bias": 0.003441782050946777
+        },
+        "4": {
+          "rms": 0.014897868849078276,
+          "worst": 0.6439382135868073,
+          "bias": 0.00007721640968912688
+        }
+      }
+    },
+    {
+      "scenario": "cirrus-over-cumulus",
+      "sunDegrees": 37.5,
+      "place": {
+        "latitude": 22.917438093849324,
+        "longitude": -74.70506254730209
+      },
+      "samples": 13824,
+      "inCloud": 3407,
+      "meanReference": 0.5923270008112971,
+      "grid": {
+        "2": {
+          "rms": 0.10410006077677329,
+          "worst": 0.8886058330535889,
+          "bias": 0.022802083251912145
+        },
+        "4": {
+          "rms": 0.0286042213967298,
+          "worst": 0.6070319563150406,
+          "bias": 0.004018412957823393
+        }
+      }
+    },
+    {
+      "scenario": "cirrus-over-cumulus",
+      "sunDegrees": 5,
+      "place": {
+        "latitude": 22.917438093849324,
+        "longitude": -74.70506254730209
+      },
+      "samples": 13824,
+      "inCloud": 3407,
+      "meanReference": 0.5049456962664078,
+      "grid": {
+        "2": {
+          "rms": 0.08070145064363037,
+          "worst": 0.9587434343993664,
+          "bias": -0.0032327675415922026
+        },
+        "4": {
+          "rms": 0.08235926948191556,
+          "worst": 0.9587434343993664,
+          "bias": -0.005906113618923719
+        }
+      }
+    }
+  ]
+}
