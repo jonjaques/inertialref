@@ -290,7 +290,6 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
   const radiance = new CloudRadianceMeter(uniforms, () => history.outputs)
   /** What the system holds past the field's bakes: the field disposes its own. */
   const own = [depth, trace, history] as const
-  const resources: readonly CloudResource[] = [...field.bakes, ...own]
 
   let frame: CloudFrame | null = null
   let levers: CloudLevers | null = null
@@ -367,6 +366,13 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
     composite,
   )
   scene.add(composite.mesh)
+  // The composite's table of the air is its own to form and to dispose; the
+  // system declares its bytes with the rest.
+  const resources: readonly CloudResource[] = [
+    ...field.bakes,
+    ...own,
+    composite.air,
+  ]
 
   const reportOf = (): CloudRenderReport => {
     if (disposed) return cloudReportIdle()
@@ -459,7 +465,7 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
       const view = camera as Camera & { near?: number; far?: number }
       uniforms.camera.near.value = view.near ?? uniforms.camera.near.value
       uniforms.camera.far.value = view.far ?? uniforms.camera.far.value
-      composite.setMode(frame.levers.composite)
+      composite.setMode(frame.levers.composite, frame.levers.air)
       /*
        * The composite's form, a frame at a time. The marks are counted only
        * where a form asks: `chain` draws the scene once, on every layer,

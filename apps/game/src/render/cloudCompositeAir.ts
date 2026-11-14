@@ -313,7 +313,14 @@ export interface DirectionAir {
   readonly aerosol: Node<'vec3'>
 }
 
-/** Samples of the segment from the eye to t₀, by class: what a table can afford that a pixel could not. */
+/**
+ * Samples of the segment from the eye to t₀: what a table can afford that
+ * a pixel could not. `sky` is a sky ray's that passes the datum by, the
+ * limb's and every ray's from under the cloud. A sky ray that meets the
+ * datum ahead keeps the per-pixel form's six, as a surface keeps
+ * `surface`: on those the march a pixel is the oracle, and with more
+ * samples the light in front of a cloud seen from orbit moves by 4%.
+ */
 export interface FrontSamples {
   readonly sky: number
   readonly surface: number
@@ -372,8 +379,9 @@ function splitSegment(
  * The air on one ray of a class, split at `t0` and ended at `end`, as
  * `compositeAir` forms it for a pixel of that class whose depth lies at or
  * past `end`: the same segments, the same crowding, the same beam. `front`
- * is the eye-to-t₀ segment's sample count by class; the span keeps the
- * class's own, which is what the scene's own march of it is nearest.
+ * is the eye-to-t₀ segment's sample count, a sky ray's taken where `passes`
+ * says it passes the datum by; the span keeps the class's own, which is
+ * what the scene's own march of it is nearest.
  *
  * Called from inside a `Fn`: the class's branch is a statement.
  */
@@ -384,6 +392,7 @@ export function directionAir(
   t0: Node<'float'>,
   end: Node<'float'>,
   sky: Node<'bool'>,
+  passes: Node<'bool'>,
   sun: Node<'vec3'>,
   cleared: Node<'float'>,
   front: FrontSamples,
@@ -426,11 +435,15 @@ export function directionAir(
     rest.assign(before.rest.add(before.through.mul(span.rest)))
     aerosol.assign(before.aerosol.add(before.through.mul(span.aerosol)))
   }
-  If(sky, () => {
+  If(sky.and(passes), () => {
     march(front.sky, SKY_SEGMENT_SAMPLES, null)
-  }).Else(() => {
-    march(front.surface, SURFACE_SEGMENT_SAMPLES, cleared.mul(ORBIT_AIRLIGHT))
   })
+    .ElseIf(sky, () => {
+      march(SKY_SEGMENT_SAMPLES, SKY_SEGMENT_SAMPLES, null)
+    })
+    .Else(() => {
+      march(front.surface, SURFACE_SEGMENT_SAMPLES, cleared.mul(ORBIT_AIRLIGHT))
+    })
   return { through, rest, aerosol }
 }
 

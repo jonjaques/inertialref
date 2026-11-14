@@ -76,6 +76,13 @@ export const CLOUD_TRANSPORTS = ['slab', 'octaves', 'plane'] as const
  * with nothing drawn over the clouds.
  */
 export const CLOUD_OVERS = ['passes', 'lean', 'chain'] as const
+/**
+ * How the composite takes the served body's air: from a table of
+ * directions formed once a frame, or by the march a pixel, the reference
+ * the table is measured against.
+ */
+export const CLOUD_AIRS = ['table', 'pixel'] as const
+export type CloudAirForm = (typeof CLOUD_AIRS)[number]
 /** Slices of the sun grid, and of its source, a frame may bake while one is rebuilt. */
 export const CLOUD_SUN_SLICES = [4, 8, 16] as const
 /** Frames the sun grid's weight takes to rise once every slice holds the field. */
@@ -133,6 +140,7 @@ export interface CloudLevers {
   /** The history clip's half-width, in standard deviations of the neighborhood. */
   readonly clip: number
   readonly over: (typeof CLOUD_OVERS)[number]
+  readonly air: CloudAirForm
   readonly sunSlices: (typeof CLOUD_SUN_SLICES)[number]
   readonly sunRamp: (typeof CLOUD_SUN_RAMPS)[number]
   readonly farBlocks: (typeof CLOUD_FAR_BLOCKS)[number]
@@ -188,6 +196,7 @@ export const DEFAULT_CLOUD_LEVERS: CloudLevers = Object.freeze({
   handoverBand: 2,
   clip: 1.25,
   over: 'passes',
+  air: 'pixel',
   sunSlices: 8,
   sunRamp: 16,
   farBlocks: 1,
@@ -226,6 +235,7 @@ export const CLOUD_LEVER_KINDS: Readonly<
   handoverBand: 'quality',
   clip: 'quality',
   over: 'choice',
+  air: 'control',
   sunSlices: 'choice',
   sunRamp: 'choice',
   farBlocks: 'choice',
@@ -270,6 +280,7 @@ const FIELDS: Readonly<Record<keyof CloudLevers, (value: unknown) => boolean>> =
     handoverBand: (value) => finite(value) && value >= 1,
     clip: (value) => finite(value) && value > 0,
     over: oneOf(CLOUD_OVERS),
+    air: oneOf(CLOUD_AIRS),
     sunSlices: oneOf(CLOUD_SUN_SLICES),
     sunRamp: oneOf(CLOUD_SUN_RAMPS),
     farBlocks: oneOf(CLOUD_FAR_BLOCKS),

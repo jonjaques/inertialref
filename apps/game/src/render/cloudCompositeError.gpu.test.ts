@@ -31,6 +31,7 @@ import {
   sunTableAt,
 } from './air.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
+import { AIR_TABLE_FRONT } from './cloudAirTable.ts'
 import {
   type AirMediumFn,
   airSegment,
@@ -525,6 +526,8 @@ function errors(
           start,
           end,
           bool(sky),
+          // Every sky ray here passes the datum by.
+          bool(true),
           SUN_NODE,
           cleared,
           front,
@@ -569,11 +572,23 @@ interface LimbMeasured extends LimbCase {
   readonly quadrature: number
 }
 
-/** The front segment's sample counts the form is read at, the per-pixel form's own first. */
+/**
+ * The front segment's sample counts the form is read at: the table's own
+ * first, then the per-pixel form's six and two beside it for a sky ray, and
+ * three more than a surface's four.
+ */
 const FRONTS: Record<'sky' | 'surface', readonly FrontSamples[]> = {
-  sky: [6, 12, 24, 48].map((sky) => ({ sky, surface: 4 })),
-  surface: [4, 8, 16, 32].map((surface) => ({ sky: 6, surface })),
+  sky: [AIR_TABLE_FRONT.sky, 6, 12, 48].map((sky) => ({
+    ...AIR_TABLE_FRONT,
+    sky,
+  })),
+  surface: [AIR_TABLE_FRONT.surface, 8, 16, 32].map((surface) => ({
+    ...AIR_TABLE_FRONT,
+    surface,
+  })),
 }
+/** Rubric row 20's bounds on the identity's error: the 95th percentile and the worst. */
+const ROW_20 = { p95: 0.01, worst: 0.05 } as const
 
 /** The value at or under which 95 in 100 of `values` fall: nearest rank. */
 function percentile95(values: readonly number[]): number {
@@ -739,8 +754,20 @@ describe('the composite’s error on analytic slabs', () => {
     }
   }, 120_000)
 
+  it('holds each limb slab’s worst case under the table’s air inside row 20, in every run of the suite', async () => {
+    const formed = errors('limb', FRONTS.sky)
+    for (const one of LIMB_ALWAYS) {
+      place(limbCaseOf(one), 0)
+      const [identity] = (
+        await gpu.drawGraph(formed, { float: true, width: 1, height: 1 })
+      ).at(0, 0)
+      // Measured 0.65% and 0.74% on the Mac mini, where the march a pixel reads 3.97% and 4.64%.
+      expect(identity, `tangent ${one.tangent} m`).toBeLessThan(ROW_20.p95)
+    }
+  }, 120_000)
+
   it.skipIf(!MEASURE)(
-    'reads the identity with its air as a table of directions holds it, at four front sample counts, and writes it',
+    'holds the identity under the table’s air inside row 20 on all ninety cases, reads it at three more front sample counts, and writes it',
     async () => {
       const formed = {
         surface: errors('surface', FRONTS.surface),
@@ -755,7 +782,10 @@ describe('the composite’s error on analytic slabs', () => {
             height: 1,
           })
         ).at(0, 0)
-      const slabs: unknown[] = []
+      const slabs: (Pick<
+        Measured,
+        'class' | 'cleared' | 'thickness' | 'angle'
+      > & { readonly identity: readonly number[] })[] = []
       for (const kind of ['surface', 'sky'] as const)
         for (const cleared of [0, 1])
           for (const thickness of THICKNESSES)
@@ -766,13 +796,27 @@ describe('the composite’s error on analytic slabs', () => {
                 expect(Number.isFinite(figure)).toBe(true)
               slabs.push({ class: kind, cleared, thickness, angle, identity })
             }
-      const limb: unknown[] = []
+      const limb: (LimbCase & { readonly identity: readonly number[] })[] = []
       for (const one of LIMB_CASES) {
         place(limbCaseOf(one), 0)
         const identity = await read('limb')
         for (const figure of identity)
           expect(Number.isFinite(figure)).toBe(true)
         limb.push({ ...one, identity })
+      }
+      // The table's own counts are each list's first. On the slabs it stays
+      // inside row 20 a case at a time, as the march a pixel does.
+      for (const row of slabs) expect(row.identity[0]).toBeLessThan(ROW_20.p95)
+      // On the limb the joint march is the bar: row 20's two bounds, and no
+      // case worse than the march a pixel's landed figure there.
+      const formedLimb = limb.map((row) => row.identity[0]!)
+      expect(percentile95(formedLimb)).toBeLessThan(ROW_20.p95)
+      expect(Math.max(...formedLimb)).toBeLessThan(ROW_20.worst)
+      for (const row of limb) {
+        const pinned = (landed.limb as readonly LimbMeasured[]).find((held) =>
+          sameLimb(held, row),
+        )
+        expect(row.identity[0]).toBeLessThanOrEqual(pinned!.identity * SLACK)
       }
       mkdirSync('.data/clouds', { recursive: true })
       writeFileSync(

@@ -38,6 +38,7 @@ import {
 } from './air.ts'
 import { scatteringFor } from './atmosphereLuts.ts'
 import { CloudComposite } from './cloudComposite.ts'
+import type { CloudAirForm } from './cloudLevers.ts'
 import {
   type AirMediumFn,
   airSegment,
@@ -289,7 +290,7 @@ describe('the composite’s material', () => {
    * real format and kind, its fragment WGSL read with the scene pass's
    * layout bound.
    */
-  async function fragment(): Promise<{
+  async function fragment(air: CloudAirForm = 'table'): Promise<{
     readonly wgsl: string
     dispose(): void
   }> {
@@ -314,6 +315,7 @@ describe('the composite’s material', () => {
         failed() {},
       }),
     })
+    composite.setMode('identity', air)
     composite.show(true)
     const mesh = composite.mesh
     const camera = new PerspectiveCamera(60, 1, 0.05, 1e10)
@@ -346,8 +348,21 @@ describe('the composite’s material', () => {
     // The history and the depth copy.
     expect(wgsl).toMatch(/\btextureLoad\(/)
     expect(wgsl).not.toMatch(/\btextureSample\(/)
-    // History 3, depth copy 1, both bodies' air 4, the far atlas 1: the
-    // tenth, the phase, is the far field's own read once it is real.
+    // History 3, depth copy 1, the served body's air table 1, the second
+    // body's air 2, the far atlas 1: the phase is the far field's own read
+    // once it is real. The table holds copies of the served air's two
+    // tables for the march a cut span takes, so it binds one where the
+    // march a pixel binds two.
+    const bindings = wgsl.match(/:\s*texture_[a-z0-9_]+</g) ?? []
+    expect(bindings.length).toBe(8)
+    dispose()
+  })
+
+  it('binds one texture more as the march a pixel, the reference program', async () => {
+    const { wgsl, dispose } = await fragment('pixel')
+    expect(wgsl).toMatch(/\btextureSampleLevel\(/)
+    expect(wgsl).not.toMatch(/\btextureSample\(/)
+    // History 3, depth copy 1, both bodies' air 4, the far atlas 1.
     const bindings = wgsl.match(/:\s*texture_[a-z0-9_]+</g) ?? []
     expect(bindings.length).toBe(9)
     dispose()

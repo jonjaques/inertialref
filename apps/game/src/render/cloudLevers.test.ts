@@ -3,6 +3,7 @@ import fc from 'fast-check'
 import { SCENARIO_IDS } from '@inertialref/rendering'
 import {
   CLOUD_COMPOSITES,
+  CLOUD_AIRS,
   CLOUD_FAR_BLOCKS,
   CLOUD_FORCES,
   CLOUD_JITTERS,
@@ -72,6 +73,7 @@ const MALFORMED: Record<keyof CloudLevers, readonly unknown[]> = {
   handoverBand: [0.5, 0, Number.NaN, Infinity, '2'],
   clip: [0, -1, Number.NaN, '1.25'],
   over: ['split', true],
+  air: ['texel', 0],
   sunSlices: [0, 2, 32, '8'],
   sunRamp: [0, 4, 64],
   farBlocks: [0, 3, '1'],
@@ -102,6 +104,7 @@ const levers: fc.Arbitrary<CloudLevers> = fc.record({
   handoverBand: fc.constantFrom(1, 2, 4),
   clip: fc.constantFrom(0.75, 1.25),
   over: fc.constantFrom(...CLOUD_OVERS),
+  air: fc.constantFrom(...CLOUD_AIRS),
   sunSlices: fc.constantFrom(...CLOUD_SUN_SLICES),
   sunRamp: fc.constantFrom(...CLOUD_SUN_RAMPS),
   farBlocks: fc.constantFrom(...CLOUD_FAR_BLOCKS),
@@ -132,6 +135,7 @@ const CHANGED: CloudLevers = {
   handoverBand: 4,
   clip: 0.75,
   over: 'chain',
+  air: 'table',
   sunSlices: 16,
   sunRamp: 32,
   farBlocks: 2,
