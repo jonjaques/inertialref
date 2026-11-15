@@ -13654,6 +13654,102 @@ bias reaches +52% at 8 km and more at the far handover; and the three accuracy
 instruments assert only finiteness. Every figure is the M6 mini's, and the
 plan's M5 basis is unmeasured. The weather README lists each.
 
+## Takram's clouds draw in our scene unmodified, and three of their presets do not compile on a first frame (14 Nov 2026)
+
+A spike, on `spike/takram-clouds`, to answer one question: whether takram's
+volumetric clouds can draw here through the unofficial WebGPU port as it ships,
+or need a fork. They draw. `three-clouds-webgpu` 0.1.0-alpha.6 runs on three
+0.185.1 with no change to it, behind `?clouds=takram`, in the slot ADR-0063
+gives the native composite: the port's resolved layer is the first opaque of
+the scene pass over the clouds, against our depth, so the planet, the ground
+and the sea are ours and an object marked over the clouds still draws over
+them. alpha.8 on three 0.187 was not tried. No ADR records this: the choice
+between the two renderers is not made.
+
+**The adapter is four modules and no shader.** The port draws over a WGS84
+ellipsoid in ECEF and takes the scene through one matrix. `takramFrame.ts`
+stands a point of the body's datum on Earth's equator and keeps the eye's true
+height, heading and sun; `takramDepth.ts` copies the scene's 4× MSAA depth to
+one sample, because the port samples depth by uv; `takramClouds.ts` builds the
+pass and takram's atmosphere; `takramTunables.ts` is the port's 174 tunables
+and five presets as a table, written through `engine.takram`. The port's
+luminance is scaled by arithmetic: an albedo-one surface under its sun is its
+illuminance over π, which is one scene unit (ADR-0065).
+
+**What it costs.** The whole frame with the clouds on less the same page with
+them off, on G1, on the Mac mini (M6), production build `28903d80`, one fresh
+page a row, `ir.gpu(135)` taken three times and the least kept, three pairs
+and their median, thermal pressure 0 throughout. The frame without clouds is
+5.2 ms at 1920 × 1080 and 11.9 ms at 2880 × 1800.
+
+| Row                               | 1920 × 1080 | 2880 × 1800 |
+| --------------------------------- | ----------- | ----------- |
+| The native renderer               | 7.87 ms     | 8.86 ms     |
+| Takram `lowEnd`                   | 2.49        | 5.63        |
+| Takram `low`                      | 4.50        | 7.10        |
+| Takram `medium`                   | 10.22       | 16.39       |
+| Takram `high`                     | 19.82       | 26.60       |
+| Takram `ultra`                    | 54.89       | 70.12       |
+| `high`, no layer casting a shadow | 8.82        | 15.72       |
+| `high`, `shadow.maxFar` 200 km    | 9.10        | 16.61       |
+| `high`, `lightShafts` off         | 19.46       | not taken   |
+| `high`, `temporalUpscale` off     | 55.11       | not taken   |
+
+The native row agrees with the weather's own `ground` row, 7.82 ms. Takram
+marches a quarter of the buffer on each axis and resolves at the whole of it,
+720 × 450 into 2880 × 1800, where the native trace is 360 × 225 into 720 × 450.
+`ultra` reads 60.1 ms right after the clouds go off and on and 64.1 ms held
+on; the table's is the first.
+
+**The port fits its shadow maps to the camera's far plane, and ours is
+10¹⁰ m.** `shadow.maxFar` is null in every preset, which means the far plane
+times `farScale`. Fitted to that, the cascades' texels span thousands of
+kilometers: the clouds barely shadow themselves, and the pass is more than
+half of `high`. At `shadow.maxFar` 200,000 the bases darken and the frame
+costs 9.10 ms in place of 19.82.
+
+**Five things that must not come back.**
+
+- **The port's composite samples at the mesh's own uv, and is written for
+  three's `QuadMesh`,** whose v is 0 at the top of the screen. A
+  `PlaneGeometry`'s is 1 there, and the first frame drew the sky's clouds on
+  the ground.
+- **`low`, `medium` and `lowEnd` do not compile on a first frame.** They turn
+  `accurateSunSkyLight` off, and on three 0.185 that graph fails with
+  `Member "bottomRadius" not found in struct "AtmosphereParameters"`, at boot
+  and on the first frame after the clouds were off alike. Rebuilt on the
+  frame after one the port drew, it compiles. Nothing fails in the picture:
+  the march's pipeline is refused and the frame costs less than the preset's.
+  `high` read 15.66 ms after two refused presets in one page, where a fresh
+  page reads 19.82. The first cost table was taken in that state
+  and is void. A setting is now written only after a frame the port drew, and
+  a cost row is refused when the console holds a `THREE.TSL` error. The cause
+  is not found.
+- **A setting changed after a run of back-to-back `ir.gpu` frames can leave
+  the port's shadow program stale.** With no layer casting, the shadow pass
+  cost 4.6 ms a frame after such a run and 0.3 ms on a fresh page. Each cost
+  row is its own page, with its settings applied before any read.
+- **A lazy chunk that shares a module with the page re-partitions it.** The
+  takram chunk imported `cloudsServed`, the bundler split the procedural hash
+  out beside it, and `index.html` loaded 59 chunks where
+  `check-site-chunks.mjs` says 58. `App` hands the function in.
+- **pnpm refuses a tarball URL below the direct dependencies**
+  (`ERR_PNPM_EXOTIC_SUBDEP`). The geospatial fork build is the atmosphere's
+  dependency, so it is vendored as a file, one of the policy's trusted
+  sources, with its MIT text beside it.
+
+**What the port does not do here.** From 400 km it draws almost nothing: its
+march ends at `maxRayDistance`, 200 km, so the native far atlas stays for
+orbit. Its weather is a 512² map tiled a hundred times round the globe, and
+at G1's place its texels show as square-footprint cells 400 to 800 m across.
+The light on a cloud and the haze in front of it are takram's Earth's, so the
+far clouds meet our horizon in another color. No cloud shadows the ground or
+the sea, though `cloudShadowAt` answers the sun's transmittance at any point.
+A cloud writes no motion vector. The port has no compile-ahead, and with
+`high` drawing during boot the cover lifts 34 s after the page attaches at
+1920 × 1080, and not within 90 s at `ultra`. Under a slow turn its temporal
+upscale shows grain.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
