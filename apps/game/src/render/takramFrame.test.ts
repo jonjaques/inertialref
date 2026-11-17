@@ -1,6 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import type { RenderBody } from '@inertialref/rendering'
+import type { RenderBody, RenderScene } from '@inertialref/rendering'
 import {
   type Quat,
   Quaternion as Q,
@@ -10,6 +10,7 @@ import {
 import {
   takramAnchor,
   takramPlacement,
+  takramSun,
   WGS84_EQUATORIAL_RADIUS,
 } from './takramFrame.ts'
 
@@ -109,8 +110,8 @@ describe('takramPlacement', () => {
         // The pole's own height over the horizon goes to +X, the rest to +Z.
         expect(toward.z - placed.eye.z).toBeGreaterThan(0)
         expect(Math.abs(toward.y - placed.eye.y)).toBeLessThan(1e-9)
-        expect(placed.sun!.x).toBeCloseTo(Vec.dot(sun, up), 12)
-        expect(Vec.length(placed.sun!)).toBeCloseTo(1, 12)
+        expect(placed.sun.x).toBeCloseTo(Vec.dot(sun, up), 12)
+        expect(Vec.length(placed.sun)).toBeCloseTo(1, 12)
       }),
     )
   })
@@ -137,6 +138,71 @@ describe('takramPlacement', () => {
           expect(second.drift).toBeCloseTo(Math.abs(step), 5)
         },
       ),
+    )
+  })
+})
+
+/** A placed object as the sun reads it: a render position and a true distance. */
+const placedAt = (position: Vec3, distance: number) => ({ position, distance })
+
+/** A scene as the sun reads it: the eye, and the key star or none. */
+const sceneOf = (eye: Vec3, star: ReturnType<typeof placedAt> | null) =>
+  ({
+    camera: { position: eye },
+    stars: star === null ? [] : [{ placement: star }],
+  }) as unknown as RenderScene
+
+describe('takramSun', () => {
+  const eye: Vec3 = { x: 12, y: -7, z: 30 }
+
+  it('is the star’s true direction from the body’s center, whatever compression draws them at', () => {
+    fc.assert(
+      fc.property(
+        unit,
+        unit,
+        fc.double({ min: 1e10, max: 1e12, noNaN: true }),
+        fc.double({ min: 1e7, max: 1e9, noNaN: true }),
+        // The share of its true distance each is drawn at.
+        fc.double({ min: 1e-6, max: 1, noNaN: true }),
+        fc.double({ min: 1e-3, max: 1, noNaN: true }),
+        (toStar, toBody, starAway, bodyAway, starDrawn, bodyDrawn) => {
+          const star = placedAt(
+            Vec.add(eye, Vec.scale(toStar, starAway * starDrawn)),
+            starAway,
+          )
+          const body = {
+            orientation: Q.IDENTITY,
+            placement: placedAt(
+              Vec.add(eye, Vec.scale(toBody, bodyAway * bodyDrawn)),
+              bodyAway,
+            ),
+          } as unknown as RenderBody
+          const truly = Vec.normalize(
+            Vec.sub(Vec.scale(toStar, starAway), Vec.scale(toBody, bodyAway)),
+          )
+          // Each render offset is 1e4 m at the least, taken off a position
+          // float64 holds to 1e-10 m: 1e-14 of a radian. Nothing after it
+          // cancels, the star standing ten times farther than the body.
+          expect(
+            Vec.distance(takramSun(body, sceneOf(eye, star)), truly),
+          ).toBeLessThan(1e-12)
+        },
+      ),
+    )
+  })
+
+  it('faces the body’s pole where there is no star to face, and never nowhere', () => {
+    fc.assert(
+      fc.property(turn, unit, (orientation, toBody) => {
+        const body = {
+          orientation,
+          placement: placedAt(Vec.add(eye, Vec.scale(toBody, 1e7)), 1e7),
+        } as unknown as RenderBody
+        const pole = Q.rotate(orientation, { x: 0, y: 1, z: 0 })
+        // No star in the scene, and a star the eye stands on.
+        expect(takramSun(body, sceneOf(eye, null))).toEqual(pole)
+        expect(takramSun(body, sceneOf(eye, placedAt(eye, 0)))).toEqual(pole)
+      }),
     )
   })
 })

@@ -48,7 +48,11 @@ import localWeatherUrl from 'three-clouds-webgpu/assets/local_weather.png?url'
 import shapeDetailUrl from 'three-clouds-webgpu/assets/shape_detail.bin?url'
 import shapeUrl from 'three-clouds-webgpu/assets/shape.bin?url'
 import turbulenceUrl from 'three-clouds-webgpu/assets/turbulence.png?url'
-import { overClouds, UNDER_CLOUDS_LAYERS } from './cloudLayers.ts'
+import {
+  OVER_CLOUDS_LAYER,
+  overClouds,
+  UNDER_CLOUDS_LAYERS,
+} from './cloudLayers.ts'
 import { CloudOverPassNode } from './cloudOverPass.ts'
 import type {
   CloudChainFactory,
@@ -192,6 +196,55 @@ class TakramOverNode extends TempNode<'vec4'> {
   }
 }
 
+type ContextNode = WebGPURenderer['contextNode']
+
+/**
+ * What each renderer's context node was before the first of ours, and ours
+ * on it since, oldest first.
+ */
+const INSTALLED = new WeakMap<
+  WebGPURenderer,
+  { readonly under: ContextNode; readonly ours: ContextNode[] }
+>()
+
+/**
+ * Puts `providers` on the renderer's context node, where the port's nodes
+ * and the atmosphere's find them, and answers what takes them off.
+ *
+ * A chain is built beside the one still drawing and either may be disposed
+ * first (`chainHandover.ts`), so the node found here is often another
+ * system's. Kept as this one's "previous", every system would hold the one
+ * before it, with its pass and its targets, for as long as it lived, and the
+ * last one disposed would hand the renderer the providers of a disposed
+ * context. So what was there before any of ours is held once, a node is
+ * made from the values of the one installed and not from the node, and
+ * taking one off leaves the newest of the rest.
+ */
+function installProviders(
+  renderer: WebGPURenderer,
+  providers: Readonly<Record<string, unknown>>,
+): () => void {
+  const held = INSTALLED.get(renderer) ?? {
+    under: renderer.contextNode,
+    ours: [],
+  }
+  INSTALLED.set(renderer, held)
+  const node = tslContext({
+    ...(renderer.contextNode.value as Record<string, unknown>),
+    ...providers,
+  })
+  held.ours.push(node)
+  renderer.contextNode = node
+  return () => {
+    const at = held.ours.indexOf(node)
+    if (at < 0) return
+    held.ours.splice(at, 1)
+    if (renderer.contextNode === node)
+      renderer.contextNode = held.ours.at(-1) ?? held.under
+    if (held.ours.length === 0) INSTALLED.delete(renderer)
+  }
+}
+
 /** A front handle that never follows a trace: the port has none to read. */
 function createFront(): CloudFrontHandle {
   return {
@@ -249,19 +302,27 @@ function build(
   }
 
   // The port's nodes find their context and the air through the renderer.
-  const previous = renderer.contextNode
-  const providers = tslContext({
-    ...(previous.value as Record<string, unknown>),
+  const removeProviders = installProviders(renderer, {
     getClouds: () => context,
     getAtmosphere: () => atmosphere,
   })
-  renderer.contextNode = providers
 
   /** Scene units for the port's luminance, times the key star's light. */
   const gain = uniform(new Vector3(1, 1, 1))
   const unit = sceneUnitsPerLuminance(atmosphere)
   // The port's own composite over nothing is its layer, premultiplied.
   const layer = pass.composite(vec4(0))
+  /*
+   * Once per render call, as the pass above and for its reason. The
+   * composite's `updateBefore` is what sees a setting move the graph's
+   * version and marks this material to be built again, and the pass builds
+   * its own graph only inside that build. Left once per three frame, a
+   * write `flush` lands during a run of back-to-back frames waits for
+   * three's own loop to turn: every frame of the run after it draws the
+   * graph the last setting built, under the new one's uniforms, and times
+   * neither.
+   */
+  layer.updateBeforeType = NodeUpdateType.RENDER
   const material = sensorRadiance(
     new MeshBasicNodeMaterial(),
     false,
@@ -294,7 +355,7 @@ function build(
   const uvs = geometry.getAttribute('uv')
   for (let k = 0; k < uvs.count; k += 1) uvs.setY(k, 1 - uvs.getY(k))
   const mesh = new Mesh(geometry, material)
-  mesh.layers.set(1)
+  mesh.layers.set(OVER_CLOUDS_LAYER)
   mesh.renderOrder = ORDER
   mesh.name = 'takram composite'
   mesh.visible = false
@@ -333,7 +394,6 @@ function build(
   let last: Record<string, unknown> = {}
   const matrix = new Matrix4()
   const css = new Vector2()
-  const buffer = new Vector2()
 
   const reset = (): void => {
     pass.resetHistory()
@@ -384,30 +444,30 @@ function build(
     overPass,
     beginFrame(inputs, sensor) {
       if (disposed) return
-      const eye = inputs?.camera.position ?? null
+      // The levers the page holds, drawn with or not: what the report says.
+      levers = inputs === null ? null : { ...inputs.levers }
       const body =
-        inputs === null || eye === null || !inputs.levers.on
+        inputs === null || !inputs.levers.on
           ? null
           : takramServed(
               inputs.scene.bodies,
-              eye,
+              inputs.camera.position,
               (candidate) => {
                 const record = inputs.record(candidate.address)
                 return record !== null && assets.wet(record)
               },
               inputs.levers.served,
             )
-      if (inputs === null || eye === null || body === null) {
+      if (inputs === null || body === null) {
         served = null
         anchor = null
         return
       }
-      if (served === null) reset()
+      const eye = inputs.camera.position
       served = body
-      levers = { ...inputs.levers }
       renderer.getSize(css)
-      renderer.getDrawingBufferSize(buffer)
 
+      // The first frame on holds no anchor either: one reset, counted once.
       if (anchor === null || anchor.address !== body.address) {
         anchor = takramAnchor(body, eye)
         reset()
@@ -423,10 +483,8 @@ function build(
       matrix.fromArray(placed.worldToEcef).transpose()
       context.worldToECEFMatrix.copy(matrix)
       atmosphere.matrixWorldToECEF.value.copy(matrix)
-      if (placed.sun !== null) {
-        context.sunDirection.set(placed.sun.x, placed.sun.y, placed.sun.z)
-        atmosphere.sunDirectionECEF.value.copy(context.sunDirection)
-      }
+      context.sunDirection.set(placed.sun.x, placed.sun.y, placed.sun.z)
+      atmosphere.sunDirectionECEF.value.copy(context.sunDirection)
       context.time = inputs.renderTime % 86_400
       context.frame = inputs.levers.jitterFrame ?? frames
       frames += 1
@@ -490,8 +548,9 @@ function build(
       }
     },
     afterFrame() {
-      // After a frame the port drew, and only then: `takramTunables.ts`.
-      if (drawing) settings.flush()
+      // After a frame this system's pass drew, and only then, and into its
+      // own context: `takramTunables.ts`.
+      if (drawing) settings.flush(context)
     },
     // The port holds no radiance at a trace's texels to read back.
     captureRadiance: () => Promise.resolve(null),
@@ -527,7 +586,7 @@ function build(
       settings.detach(context)
       tablesOf.removeEventListener('update', tabled)
       scene.remove(mesh)
-      if (renderer.contextNode === providers) renderer.contextNode = previous
+      removeProviders()
       inner.dispose()
       layer.dispose()
       pass.dispose()
@@ -551,18 +610,37 @@ export interface TakramClouds {
   readonly handle: TakramHandle
 }
 
+/** The page's one load, or null before it is asked for and after it fails. */
+let page: Promise<TakramClouds> | null = null
+
 /**
  * Loads the port's four baked textures and answers the factory the sensor's
  * chain builds its cloud system with. One per page: the textures and the
- * settings outlive every chain.
+ * settings outlive every chain, and every canvas. `App` builds the canvas,
+ * and with it the renderer, again when the display's range changes, and its
+ * factory asks here each time; a second load would be a second set of
+ * settings, and `engine.takram` would forget the preset and every tunable
+ * the page had written.
  *
  * `wet` is `cloudsServed`, handed in and not imported: this chunk sharing
  * the weather's modules with the page re-partitions them, and the page then
  * loads one chunk more on every visit (`check-site-chunks.mjs`).
  */
-export async function loadTakramClouds(
+export function loadTakramClouds(
   wet: (body: Body) => boolean,
   preset: string | null = null,
+): Promise<TakramClouds> {
+  page ??= load(wet, preset).catch((cause: unknown) => {
+    // A load that failed is nobody's to keep: the next canvas asks again.
+    page = null
+    throw cause
+  })
+  return page
+}
+
+async function load(
+  wet: (body: Body) => boolean,
+  preset: string | null,
 ): Promise<TakramClouds> {
   const textures = await loadBakedCloudTextures({
     localWeather: localWeatherUrl,

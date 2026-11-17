@@ -1,3 +1,4 @@
+import { getLogger } from '@inertialref/shared'
 import {
   applyCloudTypePreset,
   PORT_DEFAULT_LIGHT_SHAFTS_HALF_RESOLUTION,
@@ -20,11 +21,11 @@ import type { CloudLevers } from './cloudLevers.ts'
  * place a page writes them: `engine.takram`.
  *
  * The port's knobs all live on its `CloudsContext`, and a context dies with
- * the sensor's chain: a picture change builds a new one. So the settings are
- * held here, for the page, and written into whichever context is live. A
- * preset is applied first and the overrides after it, the port's own order;
- * applying a preset drops the overrides of the fields it names, as
- * re-applying one does on the context.
+ * the sensor's chain: a picture change builds a new one, beside the one still
+ * drawing (`chainHandover.ts`). So the settings are held here, for the page,
+ * and written into every context a chain holds. A preset is applied first and
+ * the overrides after it, the port's own order; applying a preset drops the
+ * overrides of the fields it names, as re-applying one does on the context.
  *
  * **A write lands after a frame the port has drawn, never before one.** On
  * three 0.185 the port's graph without `accurateSunSkyLight`, which `low`,
@@ -33,13 +34,21 @@ import type { CloudLevers } from './cloudLevers.ts'
  * and the march's pipeline is refused, at boot and on the first frame after
  * the clouds were off alike. Rebuilt on the frame after one the port drew,
  * the same graph compiles. So a context is always built at the port's own
- * `high`, and `flush`, which the system calls after such a frame, is the
- * only writer.
+ * `high`, and `flush`, which a system calls with its own context after such
+ * a frame, is the only writer. What a context is owed is kept for that
+ * context: one that has drawn nothing is not written because another drew.
+ *
+ * **A write is what changed, and no more.** The port's setters clear its
+ * history and rebuild its graph on a change of value, so writing the preset
+ * again beside every tunable turns a held `temporalUpscale: false` on and
+ * off, and one `coverage` costs two cleared histories.
  *
  * A path is the context's own property path (`clouds.maxIterationCount`,
  * `cloudLayers.0.altitude`), so the table needs no second vocabulary. A
  * vector is written as an array.
  */
+
+const log = getLogger('game.clouds.takram')
 
 export type TakramKind =
   'number' | 'integer' | 'boolean' | 'enum' | 'vec2' | 'vec3'
@@ -709,14 +718,59 @@ export interface TakramState {
 }
 
 export interface TakramSettings extends TakramHandle {
-  /** Follow a new context; the page's settings reach it at the first `flush`. */
+  /** Follow a new context; the page's settings reach it at its first `flush`. */
   attach(
     context: CloudsContext,
     frame: () => Readonly<Record<string, unknown>>,
   ): void
-  /** Write what the page has changed: called after a frame the port drew. */
-  flush(): void
+  /**
+   * Write what `context` is owed: called by the system that holds it, after
+   * a frame its own pass drew. A context no longer followed is left alone.
+   */
+  flush(context: CloudsContext): void
   detach(context: CloudsContext): void
+}
+
+/** What one followed context has not been written, and its frame's report. */
+interface Follower {
+  readonly frame: () => Readonly<Record<string, unknown>>
+  /** The quality preset, with the two fields only `lowEnd` names. */
+  preset: boolean
+  cloudType: boolean
+  /** Overrides by path. */
+  readonly paths: Set<string>
+}
+
+/**
+ * Throws for a write that can be refused before a frame: a preset or an
+ * experiment the port does not have, and, on `context`, a path it does not
+ * hold or a vector given something other than an array.
+ */
+function checkTunable(
+  context: CloudsContext | null,
+  path: string,
+  value: unknown,
+): void {
+  if (path === 'qualityPreset') {
+    if (typeof value !== 'string' || !Object.hasOwn(qualityPresets, value))
+      throw new RangeError(`no such preset: "${String(value)}"`)
+    return
+  }
+  if (path.startsWith('experimental.')) {
+    const name = path.slice('experimental.'.length)
+    if (!Object.hasOwn(experimentalDefaults, name))
+      throw new Error(`no such tunable: "${path}"`)
+    if (typeof value !== 'boolean')
+      throw new TypeError(`"${path}" is a switch and takes a boolean`)
+    return
+  }
+  if (context === null) return
+  const [holder, key] = parent(context, path)
+  if (
+    isVector((holder as Record<string, unknown>)[key]) &&
+    !Array.isArray(value)
+  )
+    throw new Error(`"${path}" is a vector and takes an array`)
 }
 
 /**
@@ -732,23 +786,22 @@ export function createTakramSettings(
   let preset: QualityPreset = (initial as QualityPreset | null) ?? 'high'
   let cloudType: CloudTypePresetName | null = null
   const overrides = new Map<string, unknown>()
-  let live: {
-    readonly context: CloudsContext
-    readonly frame: () => Readonly<Record<string, unknown>>
-  } | null = null
+  /** Every context a chain holds, oldest first: a successor is built beside the one drawing. */
+  const followed = new Map<CloudsContext, Follower>()
 
-  /** Whether the live context is behind the page's settings. */
-  let owed = false
+  /** The newest context: what a read answers from and a write is checked on. */
+  const newest = (): readonly [CloudsContext, Follower] | null => {
+    let last: readonly [CloudsContext, Follower] | null = null
+    for (const entry of followed) last = entry
+    return last
+  }
 
-  const write = (context: CloudsContext): void => {
-    // The two fields only `lowEnd` names: back to the port's own before a
-    // preset that leaves them alone, or the last one's value would stand.
-    context.temporalUpscale = true
-    context.lightShaftsHalfResolution =
-      PORT_DEFAULT_LIGHT_SHAFTS_HALF_RESOLUTION
-    context.qualityPreset = preset
-    if (cloudType !== null) applyCloudTypePreset(context, cloudType)
-    for (const [path, value] of overrides) writeTunable(context, path, value)
+  const applyPreset = (name: QualityPreset): void => {
+    checkTunable(null, 'qualityPreset', name)
+    preset = name
+    for (const path of [...overrides.keys()])
+      if (presetOwns(path)) overrides.delete(path)
+    for (const follower of followed.values()) follower.preset = true
   }
 
   return {
@@ -761,14 +814,7 @@ export function createTakramSettings(
           flat(values),
         ]),
       ),
-    preset(name) {
-      if (!Object.hasOwn(qualityPresets, name))
-        throw new RangeError(`no such preset: "${String(name)}"`)
-      preset = name
-      for (const path of [...overrides.keys()])
-        if (presetOwns(path)) overrides.delete(path)
-      owed = true
-    },
+    preset: applyPreset,
     cloudType(name) {
       if (!cloudTypePresetNames.includes(name))
         throw new RangeError(`no such cloud type: "${String(name)}"`)
@@ -776,25 +822,27 @@ export function createTakramSettings(
       for (const path of [...overrides.keys()])
         if (path === 'coverage' || path.startsWith('cloudLayers.'))
           overrides.delete(path)
-      owed = true
+      for (const follower of followed.values()) follower.cloudType = true
     },
     set(patch) {
-      for (const [path, value] of Object.entries(patch)) {
+      const entries = Object.entries(patch)
+      // Checked whole, on the newest context, before any of it is held: a
+      // mistyped path or a value the port refuses throws here, where the
+      // caller is, and is never held for every context after this one.
+      const context = newest()?.[0] ?? null
+      for (const [path, value] of entries) checkTunable(context, path, value)
+      for (const [path, value] of entries) {
         if (path === 'qualityPreset') {
-          this.preset(value as QualityPreset)
+          applyPreset(value as QualityPreset)
           continue
         }
-        // Read on the live context first, so a mistyped path throws here
-        // and is never held for every context after this one.
-        if (live !== null && !path.startsWith('experimental.'))
-          readTunable(live.context, path)
         overrides.set(path, value)
-        owed = true
+        for (const follower of followed.values()) follower.paths.add(path)
       }
     },
     read() {
-      if (live === null) return null
-      const { context } = live
+      const context = newest()?.[0] ?? null
+      if (context === null) return null
       return Object.fromEntries(
         TAKRAM_TUNABLES.map(({ path }) => [path, readTunable(context, path)]),
       )
@@ -803,19 +851,59 @@ export function createTakramSettings(
       preset,
       cloudType,
       overrides: Object.fromEntries(overrides),
-      frame: live?.frame() ?? null,
+      frame: newest()?.[1].frame() ?? null,
     }),
     attach(context, frame) {
-      live = { context, frame }
-      owed = preset !== 'high' || cloudType !== null || overrides.size > 0
+      // A context is built at the port's own `high`, with no cloud type.
+      followed.set(context, {
+        frame,
+        preset: preset !== 'high',
+        cloudType: cloudType !== null,
+        paths: new Set(overrides.keys()),
+      })
     },
-    flush() {
-      if (!owed || live === null) return
-      owed = false
-      write(live.context)
+    flush(context) {
+      const follower = followed.get(context)
+      if (follower === undefined) return
+      if (follower.preset) {
+        follower.preset = false
+        // The two fields only `lowEnd` names: back to the port's own before
+        // a preset that leaves them alone, or the last one's value would
+        // stand. A preset drops their overrides, so none is undone here.
+        context.temporalUpscale = true
+        context.lightShaftsHalfResolution =
+          PORT_DEFAULT_LIGHT_SHAFTS_HALF_RESOLUTION
+        context.qualityPreset = preset
+      }
+      if (follower.cloudType) {
+        follower.cloudType = false
+        if (cloudType !== null) applyCloudTypePreset(context, cloudType)
+      }
+      if (follower.paths.size === 0) return
+      const paths = [...follower.paths]
+      follower.paths.clear()
+      for (const path of paths) {
+        // Dropped since it was set, by a preset or a cloud type.
+        if (!overrides.has(path)) continue
+        /*
+         * This runs inside the sensor's render call. A path set before any
+         * context existed is checked nowhere until here, and a throw would
+         * take the frame, and every frame that owes a write after it, with
+         * it: the override is dropped and said so.
+         */
+        try {
+          writeTunable(context, path, overrides.get(path))
+        } catch (cause) {
+          overrides.delete(path)
+          log.warn('the port refuses a tunable; its override is dropped', {
+            path,
+            cause: cause instanceof Error ? cause.message : String(cause),
+          })
+        }
+      }
     },
     detach(context) {
-      if (live?.context === context) live = null
+      followed.delete(context)
     },
   }
 }

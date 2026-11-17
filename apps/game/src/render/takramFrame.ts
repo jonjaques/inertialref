@@ -50,8 +50,8 @@ export interface TakramPlacement {
   readonly worldToEcef: readonly number[]
   /** The eye in the port's ECEF, meters. */
   readonly eye: Vec3
-  /** Unit, ECEF: the key star's direction, or null with no star to face. */
-  readonly sun: Vec3 | null
+  /** Unit, ECEF: the key star's direction (`takramSun`). */
+  readonly sun: Vec3
   /** The eye's true height over the body's datum, meters. */
   readonly altitude: number
   /** Meters along the ground from the anchor to the eye's foot. */
@@ -86,13 +86,13 @@ const tangent = (v: Vec3, axis: Vec3): Vec3 =>
 
 /**
  * The frame's placement: `eye` and `sun` in render axes, the sun a true
- * direction from the body's center or null.
+ * direction from the body's center.
  */
 export function takramPlacement(
   body: RenderBody,
   anchor: TakramAnchor,
   eye: Vec3,
-  sun: Vec3 | null,
+  sun: Vec3,
 ): TakramPlacement {
   const fixed = bodyFixedEye(body, eye)
   // The anchor's horizon in render axes this frame: up, then north toward
@@ -131,14 +131,11 @@ export function takramPlacement(
       1,
     ],
     eye: placed,
-    sun:
-      sun === null
-        ? null
-        : {
-            x: Vec.dot(sun, up),
-            y: Vec.dot(sun, east),
-            z: Vec.dot(sun, north),
-          },
+    sun: {
+      x: Vec.dot(sun, up),
+      y: Vec.dot(sun, east),
+      z: Vec.dot(sun, north),
+    },
     altitude: Vec.length(fixed) - body.trueRadius,
     drift: Math.hypot(placed.y, placed.z),
   }
@@ -199,14 +196,20 @@ function trueOffset(placement: RenderPlacement, eye: Vec3): Vec3 | null {
  * The key star's true direction from the body's center, render axes: the
  * difference of the two true offsets from the eye, never of the two render
  * positions, which carry compression's parallax.
+ *
+ * A scene with no star, or a body on its star, has no sun to face, and the
+ * body's pole stands in, as it does for the native frame (`bodySun`). The
+ * port's sun starts as the zero vector, which its own setup inspection
+ * reports as `direction.invalid`, so a direction is written on every frame.
  */
-export function takramSun(body: RenderBody, scene: RenderScene): Vec3 | null {
+export function takramSun(body: RenderBody, scene: RenderScene): Vec3 {
+  const pole = (): Vec3 => Q.rotate(body.orientation, POLE)
   const key = scene.stars[0]
-  if (key === undefined) return null
+  if (key === undefined) return pole()
   const eye = scene.camera.position
   const star = trueOffset(key.placement, eye)
-  if (star === null) return null
+  if (star === null) return pole()
   const center = trueOffset(body.placement, eye)
   const toStar = center === null ? star : Vec.sub(star, center)
-  return Vec.length(toStar) === 0 ? null : Vec.normalize(toStar)
+  return Vec.length(toStar) === 0 ? pole() : Vec.normalize(toStar)
 }
