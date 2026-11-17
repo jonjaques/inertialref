@@ -9,6 +9,11 @@ the controls and diagnostics, and ADR-0044 holds why reconstruction reads the
 optics' masked `motion` rather than a velocity attachment of its own. This
 file retains the reproduction procedure.
 
+One experiment is open against it, and [the frame](the-frame.md) §3 holds it
+with the rules any history here is read against: a negative texture mip bias
+of about log₂ of the render scale under reconstruction, which the hulls'
+textures and the surface maps do not take today.
+
 ## Restore the shipped external-system presets
 
 Use the committed presets without substituting generated summit sites:

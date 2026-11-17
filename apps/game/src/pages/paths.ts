@@ -367,7 +367,7 @@ export const QUERY = {
    * diagnostic like `producer`, and the only way in: without it not one
    * cloud object exists, so no plate, comparison or ledger run can move.
    * `takram` builds takram's clouds in the same place through their WebGPU
-   * port (`render/takramClouds.ts`), under the same levers; a page holds one
+   * port (`render/clouds.ts`), under the same levers; a page holds one
    * renderer or the other. `takram:low` builds the port at that quality
    * preset, one of `low`, `medium`, `high`, `ultra` and `lowEnd`.
    */

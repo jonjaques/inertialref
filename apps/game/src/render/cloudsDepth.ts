@@ -37,9 +37,9 @@ import type { SceneLayout } from './sceneLayout.ts'
  */
 
 /** The pass's name on the timeline. */
-export const TAKRAM_DEPTH_LABEL = 'takram depth'
+export const CLOUDS_DEPTH_LABEL = 'clouds depth'
 
-export class TakramDepth {
+export class CloudsDepth {
   /** What `clouds({ sceneDepth })` takes. */
   readonly node: TextureNode
 
@@ -59,7 +59,7 @@ export class TakramDepth {
   #disposed = false
 
   constructor(layout: SceneLayout) {
-    this.#target.texture.name = TAKRAM_DEPTH_LABEL
+    this.#target.texture.name = CLOUDS_DEPTH_LABEL
     this.#samples = Math.max(1, layout.samples)
     this.#material.fragmentNode = vec4(
       this.#source.load(ivec2(screenCoordinate)).x,
@@ -67,7 +67,7 @@ export class TakramDepth {
       0,
       1,
     )
-    this.#material.name = TAKRAM_DEPTH_LABEL
+    this.#material.name = CLOUDS_DEPTH_LABEL
     this.node = texture(this.#target.texture)
   }
 
@@ -88,7 +88,7 @@ export class TakramDepth {
     return this.#disposed ? 0 : this.#target.width * this.#target.height * 4
   }
 
-  /** `takram depth`, at the tied target's size this frame; nothing before a tie. */
+  /** `clouds depth`, at the tied target's size this frame; nothing before a tie. */
   render(renderer: WebGPURenderer): void {
     const source = this.#tied
     if (this.#disposed || source === null) return
@@ -96,7 +96,7 @@ export class TakramDepth {
     if (this.#target.width !== width || this.#target.height !== height)
       this.#target.setSize(width, height)
     runQuadPasses(renderer, this.#quad, { linear: true }, (draw) => {
-      draw(TAKRAM_DEPTH_LABEL, this.#target, this.#material)
+      draw(CLOUDS_DEPTH_LABEL, this.#target, this.#material)
     })
   }
 

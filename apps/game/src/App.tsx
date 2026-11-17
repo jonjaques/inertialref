@@ -137,14 +137,14 @@ function withClouds(
   return async (props) => {
     if (clouds.kind === 'takram') {
       // The port's four baked textures load beside the renderer too.
-      const [renderer, takram] = await Promise.all([
+      const [renderer, adapter] = await Promise.all([
         factory(props),
-        import('./render/takramClouds.ts').then((chunk) =>
-          chunk.loadTakramClouds(cloudsServed, clouds.preset),
+        import('./render/clouds.ts').then((chunk) =>
+          chunk.loadClouds(cloudsServed, clouds.preset),
         ),
       ])
-      engine.cloudSystemFactory = takram.factory
-      engine.takram = takram.handle
+      engine.cloudSystemFactory = adapter.factory
+      engine.cloudTunables = adapter.handle
       return renderer
     }
     const [renderer, chunk] = await Promise.all([

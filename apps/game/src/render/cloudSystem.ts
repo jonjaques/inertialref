@@ -179,7 +179,7 @@ export interface CloudSystemFactory {
 /**
  * What the sensor's chain asks of whichever renderer draws the clouds: the
  * system less the instruments' subjects, which are the native march's own.
- * `?clouds=takram`'s system (`takramClouds.ts`) is one of these and no more.
+ * `?clouds=takram`'s system (`clouds.ts`) is one of these and no more.
  */
 export type CloudChainSystem = Omit<CloudSystem, 'resources' | 'field'>
 
