@@ -5,10 +5,10 @@ import {
   qualityPresets,
 } from 'three-clouds-webgpu'
 import {
-  createTakramSettings,
+  createCloudsSettings,
   readTunable,
-  TAKRAM_TUNABLES,
-} from './takramTunables.ts'
+  CLOUDS_TUNABLES,
+} from './cloudsTunables.ts'
 
 /**
  * A context as a chain builds one: the port's own, at its `high`, counting
@@ -25,17 +25,17 @@ function built() {
 
 const frame = () => ({})
 
-describe('the takram tunables', () => {
+describe('the clouds tunables', () => {
   it('names only paths the port’s context holds', () => {
     const { context } = built()
-    for (const { path } of TAKRAM_TUNABLES)
+    for (const { path } of CLOUDS_TUNABLES)
       expect(() => readTunable(context, path), path).not.toThrow()
   })
 })
 
-describe('the takram settings', () => {
+describe('the clouds settings', () => {
   it('write a context at its own flush, never at another’s', () => {
-    const settings = createTakramSettings('low')
+    const settings = createCloudsSettings('low')
     const drawing = built()
     settings.attach(drawing.context, frame)
     settings.flush(drawing.context)
@@ -56,7 +56,7 @@ describe('the takram settings', () => {
   })
 
   it('reach every context followed, and none that is not', () => {
-    const settings = createTakramSettings()
+    const settings = createCloudsSettings()
     const first = built()
     const second = built()
     const gone = built()
@@ -78,7 +78,7 @@ describe('the takram settings', () => {
   })
 
   it('write what changed: a held full-resolution march survives another tunable without a cleared history', () => {
-    const settings = createTakramSettings()
+    const settings = createCloudsSettings()
     const { context, cleared } = built()
     settings.attach(context, frame)
     settings.set({ temporalUpscale: false })
@@ -100,7 +100,7 @@ describe('the takram settings', () => {
   })
 
   it('apply a preset under the overrides, dropping the ones it names', () => {
-    const settings = createTakramSettings()
+    const settings = createCloudsSettings()
     const { context } = built()
     settings.attach(context, frame)
     settings.set({
@@ -134,7 +134,7 @@ describe('the takram settings', () => {
   })
 
   it('apply a cloud type under the overrides, dropping its coverage and layers', () => {
-    const settings = createTakramSettings()
+    const settings = createCloudsSettings()
     const { context } = built()
     const reference = new CloudsContext()
     applyCloudTypePreset(reference, 'overcastSheet')
@@ -152,7 +152,7 @@ describe('the takram settings', () => {
   })
 
   it('give a context built later everything the page holds, at its first flush', () => {
-    const settings = createTakramSettings()
+    const settings = createCloudsSettings()
     settings.preset('medium')
     settings.cloudType('overcastSheet')
     settings.set({ powderScale: 0.2 })
@@ -169,7 +169,7 @@ describe('the takram settings', () => {
   })
 
   it('refuse at the call what the port would refuse inside a frame, and hold none of the patch', () => {
-    const settings = createTakramSettings()
+    const settings = createCloudsSettings()
     const { context } = built()
     settings.attach(context, frame)
     expect(() => settings.set({ coverage: 0.5, coverge: 1 })).toThrow(
@@ -194,7 +194,7 @@ describe('the takram settings', () => {
 
   it('drop an override the first context refuses, and write the rest', () => {
     // With no context built there is nothing to check a path on.
-    const settings = createTakramSettings()
+    const settings = createCloudsSettings()
     settings.set({ coverge: 1, localWeatherRepeat: 2, coverage: 0.6 })
     const { context } = built()
     settings.attach(context, frame)
@@ -209,7 +209,7 @@ describe('the takram settings', () => {
   })
 
   it('take a preset or a patch through a handle’s methods held apart from it', () => {
-    const { preset, set, state } = createTakramSettings()
+    const { preset, set, state } = createCloudsSettings()
     set({ qualityPreset: 'ultra' })
     expect(state().preset).toBe('ultra')
     preset('low')
@@ -217,6 +217,6 @@ describe('the takram settings', () => {
   })
 
   it('refuse a preset the port does not have before anything is built', () => {
-    expect(() => createTakramSettings('best')).toThrow('no such preset')
+    expect(() => createCloudsSettings('best')).toThrow('no such preset')
   })
 })

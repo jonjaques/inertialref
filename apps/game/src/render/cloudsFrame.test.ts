@@ -8,11 +8,11 @@ import {
   Vec,
 } from '@inertialref/spatial'
 import {
-  takramAnchor,
-  takramPlacement,
-  takramSun,
+  cloudsAnchor,
+  cloudsPlacement,
+  cloudsSun,
   WGS84_EQUATORIAL_RADIUS,
-} from './takramFrame.ts'
+} from './cloudsFrame.ts'
 
 /** A body as the placement reads it: where it is, how it is turned, how large. */
 function bodyAt(center: Vec3, orientation: Quat, radius: number): RenderBody {
@@ -62,12 +62,12 @@ const stance = fc
     return { body: bodyAt(center, orientation, radius), eye, up, height, sun }
   })
 
-describe('takramPlacement', () => {
+describe('cloudsPlacement', () => {
   it('stands the eye over Earth’s equator at its own height, with up along +X', () => {
     fc.assert(
       fc.property(stance, ({ body, eye, up, height, sun }) => {
-        const anchor = takramAnchor(body, eye)
-        const placed = takramPlacement(body, anchor, eye, sun)
+        const anchor = cloudsAnchor(body, eye)
+        const placed = cloudsPlacement(body, anchor, eye, sun)
         // A meter in 2e7 is float64's rounding through the body's radius.
         expect(placed.altitude).toBeCloseTo(height, 5)
         expect(placed.drift).toBeLessThan(1e-5)
@@ -88,7 +88,7 @@ describe('takramPlacement', () => {
   it('is rigid and right-handed: lengths hold, and east × north is up', () => {
     fc.assert(
       fc.property(stance, unit, ({ body, eye, sun }, away) => {
-        const placed = takramPlacement(body, takramAnchor(body, eye), eye, sun)
+        const placed = cloudsPlacement(body, cloudsAnchor(body, eye), eye, sun)
         const m = placed.worldToEcef
         const point = Vec.add(eye, Vec.scale(away, 5000))
         const moved = Vec.sub(through(m, point), through(m, eye))
@@ -104,7 +104,7 @@ describe('takramPlacement', () => {
   it('points +Z at the body’s pole and carries the sun’s height over the horizon', () => {
     fc.assert(
       fc.property(stance, ({ body, eye, up, sun }) => {
-        const placed = takramPlacement(body, takramAnchor(body, eye), eye, sun)
+        const placed = cloudsPlacement(body, cloudsAnchor(body, eye), eye, sun)
         const pole = Q.rotate(body.orientation, { x: 0, y: 1, z: 0 })
         const toward = through(placed.worldToEcef, Vec.add(eye, pole))
         // The pole's own height over the horizon goes to +X, the rest to +Z.
@@ -122,8 +122,8 @@ describe('takramPlacement', () => {
         stance,
         fc.double({ min: -5000, max: 5000, noNaN: true }),
         ({ body, eye, up, sun }, step) => {
-          const anchor = takramAnchor(body, eye)
-          const first = takramPlacement(body, anchor, eye, sun)
+          const anchor = cloudsAnchor(body, eye)
+          const first = cloudsPlacement(body, anchor, eye, sun)
           // East in render axes, from the matrix's own second row.
           const east: Vec3 = {
             x: first.worldToEcef[4]!,
@@ -132,7 +132,7 @@ describe('takramPlacement', () => {
           }
           expect(Math.abs(Vec.dot(east, up))).toBeLessThan(1e-12)
           const moved = Vec.add(eye, Vec.scale(east, step))
-          const second = takramPlacement(body, anchor, moved, sun)
+          const second = cloudsPlacement(body, anchor, moved, sun)
           expect(second.eye.y - first.eye.y).toBeCloseTo(step, 5)
           expect(second.eye.z - first.eye.z).toBeCloseTo(0, 5)
           expect(second.drift).toBeCloseTo(Math.abs(step), 5)
@@ -152,7 +152,7 @@ const sceneOf = (eye: Vec3, star: ReturnType<typeof placedAt> | null) =>
     stars: star === null ? [] : [{ placement: star }],
   }) as unknown as RenderScene
 
-describe('takramSun', () => {
+describe('cloudsSun', () => {
   const eye: Vec3 = { x: 12, y: -7, z: 30 }
 
   it('is the star’s true direction from the body’s center, whatever compression draws them at', () => {
@@ -184,7 +184,7 @@ describe('takramSun', () => {
           // float64 holds to 1e-10 m: 1e-14 of a radian. Nothing after it
           // cancels, the star standing ten times farther than the body.
           expect(
-            Vec.distance(takramSun(body, sceneOf(eye, star)), truly),
+            Vec.distance(cloudsSun(body, sceneOf(eye, star)), truly),
           ).toBeLessThan(1e-12)
         },
       ),
@@ -200,8 +200,8 @@ describe('takramSun', () => {
         } as unknown as RenderBody
         const pole = Q.rotate(orientation, { x: 0, y: 1, z: 0 })
         // No star in the scene, and a star the eye stands on.
-        expect(takramSun(body, sceneOf(eye, null))).toEqual(pole)
-        expect(takramSun(body, sceneOf(eye, placedAt(eye, 0)))).toEqual(pole)
+        expect(cloudsSun(body, sceneOf(eye, null))).toEqual(pole)
+        expect(cloudsSun(body, sceneOf(eye, placedAt(eye, 0)))).toEqual(pole)
       }),
     )
   })

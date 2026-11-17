@@ -19,7 +19,7 @@ import type {
  * The anchor is fixed in the body's own axes, so the cloud field turns with
  * the ground and a camera that moves moves through it. It is a tangent-plane
  * fit: the two spheres' curvatures differ, so the fit drifts by the square of
- * the distance over twice each radius, and `takramPlacement` reports the
+ * the distance over twice each radius, and `cloudsPlacement` reports the
  * distance for the caller to re-anchor on. A second anchor is another place
  * in the port's weather tile, so a re-anchor is a cut.
  *
@@ -34,23 +34,23 @@ import type {
 export const WGS84_EQUATORIAL_RADIUS = 6_378_137
 
 /** Meters along the ground past which a placement asks for a new anchor. */
-export const TAKRAM_ANCHOR_REACH = 20_000
+export const CLOUDS_ANCHOR_REACH = 20_000
 
 const POLE: Vec3 = { x: 0, y: 1, z: 0 }
 const PRIME: Vec3 = { x: 1, y: 0, z: 0 }
 
-export interface TakramAnchor {
+export interface CloudsAnchor {
   readonly address: string
   /** Body-fixed, true meters from the center: the datum point under the eye when it was taken. */
   readonly point: Vec3
 }
 
-export interface TakramPlacement {
+export interface CloudsPlacement {
   /** Render space to the port's ECEF, row-major, as `Matrix4.set` takes it. */
   readonly worldToEcef: readonly number[]
   /** The eye in the port's ECEF, meters. */
   readonly eye: Vec3
-  /** Unit, ECEF: the key star's direction (`takramSun`). */
+  /** Unit, ECEF: the key star's direction (`cloudsSun`). */
   readonly sun: Vec3
   /** The eye's true height over the body's datum, meters. */
   readonly altitude: number
@@ -68,7 +68,7 @@ function bodyFixedEye(body: RenderBody, eye: Vec3): Vec3 {
 }
 
 /** The datum point under `eye`, a render-space point, as an anchor. */
-export function takramAnchor(body: RenderBody, eye: Vec3): TakramAnchor {
+export function cloudsAnchor(body: RenderBody, eye: Vec3): CloudsAnchor {
   const fixed = bodyFixedEye(body, eye)
   const length = Vec.length(fixed)
   return {
@@ -88,12 +88,12 @@ const tangent = (v: Vec3, axis: Vec3): Vec3 =>
  * The frame's placement: `eye` and `sun` in render axes, the sun a true
  * direction from the body's center.
  */
-export function takramPlacement(
+export function cloudsPlacement(
   body: RenderBody,
-  anchor: TakramAnchor,
+  anchor: CloudsAnchor,
   eye: Vec3,
   sun: Vec3,
-): TakramPlacement {
+): CloudsPlacement {
   const fixed = bodyFixedEye(body, eye)
   // The anchor's horizon in render axes this frame: up, then north toward
   // the body's pole, then east, right-handed as east × north = up.
@@ -148,7 +148,7 @@ export function takramPlacement(
 /*
  * The two rules below are `cloudFrame.ts`'s own, `servedBody` and `trueSun`,
  * written again: that module is the native march's frame and reaches its
- * tables, and the takram chunk loads none of them.
+ * tables, and the clouds chunk loads none of them.
  */
 
 /**
@@ -156,7 +156,7 @@ export function takramPlacement(
  * else the largest wet one by angular radius; `forced` wins, and one not in
  * the scene serves nothing.
  */
-export function takramServed(
+export function cloudsBody(
   bodies: readonly RenderBody[],
   eye: Vec3,
   wet: (body: RenderBody) => boolean,
@@ -202,7 +202,7 @@ function trueOffset(placement: RenderPlacement, eye: Vec3): Vec3 | null {
  * port's sun starts as the zero vector, which its own setup inspection
  * reports as `direction.invalid`, so a direction is written on every frame.
  */
-export function takramSun(body: RenderBody, scene: RenderScene): Vec3 {
+export function cloudsSun(body: RenderBody, scene: RenderScene): Vec3 {
   const pole = (): Vec3 => Q.rotate(body.orientation, POLE)
   const key = scene.stars[0]
   if (key === undefined) return pole()

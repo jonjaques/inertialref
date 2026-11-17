@@ -18,7 +18,7 @@ import type { CloudLevers } from './cloudLevers.ts'
 
 /*
  * Every preset and tunable the takram port exposes, as a table, and the one
- * place a page writes them: `engine.takram`.
+ * place a page writes them: `engine.cloudTunables`.
  *
  * The port's knobs all live on its `CloudsContext`, and a context dies with
  * the sensor's chain: a picture change builds a new one, beside the one still
@@ -48,15 +48,15 @@ import type { CloudLevers } from './cloudLevers.ts'
  * vector is written as an array.
  */
 
-const log = getLogger('game.clouds.takram')
+const log = getLogger('game.clouds.tunables')
 
-export type TakramKind =
+export type CloudsTunableKind =
   'number' | 'integer' | 'boolean' | 'enum' | 'vec2' | 'vec3'
 
-export interface TakramTunable {
+export interface CloudsTunable {
   /** The property path on the port's `CloudsContext`. */
   readonly path: string
-  readonly kind: TakramKind
+  readonly kind: CloudsTunableKind
   /** An enum's values. */
   readonly values?: readonly string[]
   readonly what: string
@@ -68,7 +68,7 @@ export interface TakramTunable {
   readonly note?: string
 }
 
-export const TAKRAM_PRESETS = [
+export const CLOUDS_PRESETS = [
   'low',
   'medium',
   'high',
@@ -78,12 +78,12 @@ export const TAKRAM_PRESETS = [
 
 const row = (
   path: string,
-  kind: TakramKind,
+  kind: CloudsTunableKind,
   what: string,
   rebuilds = false,
   lever: keyof CloudLevers | null = null,
   note?: string,
-): TakramTunable => ({
+): CloudsTunable => ({
   path,
   kind,
   what,
@@ -92,11 +92,11 @@ const row = (
   ...(note === undefined ? {} : { note }),
 })
 
-const CONTEXT: readonly TakramTunable[] = [
+const CONTEXT: readonly CloudsTunable[] = [
   {
     path: 'qualityPreset',
     kind: 'enum',
-    values: TAKRAM_PRESETS,
+    values: CLOUDS_PRESETS,
     what: 'Writes every field a preset names: the march, the shadow maps and five feature switches',
     rebuilds: true,
     lever: null,
@@ -273,7 +273,7 @@ const CONTEXT: readonly TakramTunable[] = [
   row('moonColor', 'vec3', 'Color of moonlight, under experimental.moonlight'),
 ]
 
-const MARCH: readonly TakramTunable[] = [
+const MARCH: readonly CloudsTunable[] = [
   row(
     'clouds.multiScatteringOctaves',
     'integer',
@@ -395,7 +395,7 @@ const MARCH: readonly TakramTunable[] = [
   ),
 ]
 
-const SHADOW: readonly TakramTunable[] = [
+const SHADOW: readonly CloudsTunable[] = [
   row(
     'shadow.cascadeCount',
     'integer',
@@ -472,7 +472,7 @@ const SHADOW: readonly TakramTunable[] = [
 
 const LAYER_FIELDS: readonly (readonly [
   string,
-  TakramKind,
+  CloudsTunableKind,
   string,
   boolean,
 ])[] = [
@@ -511,7 +511,7 @@ const LAYER_FIELDS: readonly (readonly [
   ],
 ]
 
-const LAYERS: readonly TakramTunable[] = [0, 1, 2, 3].flatMap((slot) => [
+const LAYERS: readonly CloudsTunable[] = [0, 1, 2, 3].flatMap((slot) => [
   {
     path: `cloudLayers.${slot}.channel`,
     kind: 'enum' as const,
@@ -534,7 +534,7 @@ const LAYERS: readonly TakramTunable[] = [0, 1, 2, 3].flatMap((slot) => [
   ),
 ])
 
-const kindOf = (value: unknown): TakramKind =>
+const kindOf = (value: unknown): CloudsTunableKind =>
   typeof value === 'boolean' ? 'boolean' : 'number'
 
 /** A group of the port's experiments, read off its own defaults so a field it adds is listed. */
@@ -542,7 +542,7 @@ const group = (
   prefix: string,
   defaults: object,
   what: string,
-): readonly TakramTunable[] =>
+): readonly CloudsTunable[] =>
   Object.entries(defaults)
     .filter(([, value]) => value !== null && typeof value !== 'object')
     .map(([key, value]) =>
@@ -554,7 +554,7 @@ const group = (
       ),
     )
 
-const EXPERIMENTS: readonly TakramTunable[] = [
+const EXPERIMENTS: readonly CloudsTunable[] = [
   ...Object.keys(experimentalDefaults).map((key) =>
     row(
       `experimental.${key}`,
@@ -588,7 +588,7 @@ const EXPERIMENTS: readonly TakramTunable[] = [
 ]
 
 /** Every tunable, in the port's own grouping. */
-export const TAKRAM_TUNABLES: readonly TakramTunable[] = [
+export const CLOUDS_TUNABLES: readonly CloudsTunable[] = [
   ...CONTEXT,
   ...MARCH,
   ...SHADOW,
@@ -690,10 +690,10 @@ function flat(values: object, prefix = ''): Record<string, unknown> {
   return out
 }
 
-/** What `engine.takram` is: the port's presets and tunables, from a page. */
-export interface TakramHandle {
+/** What `engine.cloudTunables` is: the port's presets and tunables, from a page. */
+export interface CloudsHandle {
   /** Every tunable: its path, kind, what it does and the lever of ours it answers to. */
-  readonly tunables: readonly TakramTunable[]
+  readonly tunables: readonly CloudsTunable[]
   /** Each quality preset's values, flat by path. */
   presets(): Record<string, Record<string, unknown>>
   /** Apply a quality preset, dropping the overrides of the fields it names. */
@@ -706,10 +706,10 @@ export interface TakramHandle {
   /** Every tunable's live value, or null with no context built. */
   read(): Record<string, unknown> | null
   /** The preset and the overrides the page holds, and the adapter's own state. */
-  state(): TakramState
+  state(): CloudsState
 }
 
-export interface TakramState {
+export interface CloudsState {
   readonly preset: QualityPreset
   readonly cloudType: string | null
   readonly overrides: Readonly<Record<string, unknown>>
@@ -717,7 +717,7 @@ export interface TakramState {
   readonly frame: Readonly<Record<string, unknown>> | null
 }
 
-export interface TakramSettings extends TakramHandle {
+export interface CloudsSettings extends CloudsHandle {
   /** Follow a new context; the page's settings reach it at its first `flush`. */
   attach(
     context: CloudsContext,
@@ -774,13 +774,13 @@ function checkTunable(
 }
 
 /**
- * The page's settings: one for the takram chunk's lifetime. `initial` is
+ * The page's settings: one for the clouds chunk's lifetime. `initial` is
  * the preset every context is built at, the port's own `high` when absent;
  * a name the port does not have throws before anything is built.
  */
-export function createTakramSettings(
+export function createCloudsSettings(
   initial: string | null = null,
-): TakramSettings {
+): CloudsSettings {
   if (initial !== null && !Object.hasOwn(qualityPresets, initial))
     throw new RangeError(`no such preset: "${initial}"`)
   let preset: QualityPreset = (initial as QualityPreset | null) ?? 'high'
@@ -805,7 +805,7 @@ export function createTakramSettings(
   }
 
   return {
-    tunables: TAKRAM_TUNABLES,
+    tunables: CLOUDS_TUNABLES,
     cloudTypes: cloudTypePresetNames,
     presets: () =>
       Object.fromEntries(
@@ -844,7 +844,7 @@ export function createTakramSettings(
       const context = newest()?.[0] ?? null
       if (context === null) return null
       return Object.fromEntries(
-        TAKRAM_TUNABLES.map(({ path }) => [path, readTunable(context, path)]),
+        CLOUDS_TUNABLES.map(({ path }) => [path, readTunable(context, path)]),
       )
     },
     state: () => ({

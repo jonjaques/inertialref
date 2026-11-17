@@ -119,7 +119,7 @@ import type {
   CloudFrontHandle,
 } from '../render/cloudSystem.ts'
 // Types only: the takram port is its own chunk, loaded under `?clouds=takram`.
-import type { TakramHandle } from '../render/takramTunables.ts'
+import type { CloudsHandle } from '../render/cloudsTunables.ts'
 import { PictureWeatherHold } from './pictureWeather.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
 import { createBrowserWorkerPort, poolSize } from './browserWorker.ts'
@@ -549,11 +549,12 @@ export class GameEngine {
 
   /**
    * `?clouds=takram`'s presets and tunables, which a script writes as
-   * `engine.takram.preset('ultra')` and `engine.takram.set({ coverage: 0.4 })`;
-   * null on every other page. The levers above still switch the clouds on
+   * `engine.cloudTunables.preset('ultra')` and
+   * `engine.cloudTunables.set({ coverage: 0.4 })`; null on every other page.
+   * The levers above still switch the clouds on
    * and name the body they are served on.
    */
-  takram: TakramHandle | null = null
+  cloudTunables: CloudsHandle | null = null
 
   /**
    * What a material drawn after the composite reads the clouds in front of

@@ -62,20 +62,20 @@ import type {
 } from './cloudSystem.ts'
 import { sensorRadiance } from './radiance.ts'
 import { sceneFarDepth } from './sceneDepth.ts'
-import { TakramDepth } from './takramDepth.ts'
+import { CloudsDepth } from './cloudsDepth.ts'
 import {
-  TAKRAM_ANCHOR_REACH,
-  type TakramAnchor,
-  takramAnchor,
-  takramPlacement,
-  takramServed,
-  takramSun,
-} from './takramFrame.ts'
+  CLOUDS_ANCHOR_REACH,
+  type CloudsAnchor,
+  cloudsAnchor,
+  cloudsPlacement,
+  cloudsBody,
+  cloudsSun,
+} from './cloudsFrame.ts'
 import {
-  createTakramSettings,
-  type TakramHandle,
-  type TakramSettings,
-} from './takramTunables.ts'
+  createCloudsSettings,
+  type CloudsHandle,
+  type CloudsSettings,
+} from './cloudsTunables.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 
 /*
@@ -88,10 +88,10 @@ import { warmCompile, warmRenderer } from './warmup.ts'
  * this module is the adapter round it, and holds no cloud shader of its own:
  *
  * - **The frame.** Our eye's height, heading and sun go into the port's
- *   Earth frame through one matrix (`takramFrame.ts`).
+ *   Earth frame through one matrix (`cloudsFrame.ts`).
  * - **The depth.** The port stops its march at the scene by sampling a depth
  *   texture, and ours is multisampled, so it reads a one-sample copy
- *   (`takramDepth.ts`).
+ *   (`cloudsDepth.ts`).
  * - **The composite.** The port's resolved image is premultiplied light and
  *   opacity. It is drawn where the native composite is drawn: the first
  *   opaque of the scene pass over the clouds, or alone over the scene
@@ -99,8 +99,8 @@ import { warmCompile, warmRenderer } from './warmup.ts'
  *   composite's blend. So the planet, the ground and the sea are ours, and
  *   an object marked over the clouds draws over these too.
  * - **The levers.** `engine.clouds.on`, `served`, `over` and `jitterFrame`
- *   are read; every preset and tunable of the port is `engine.takram`'s
- *   (`takramTunables.ts`).
+ *   are read; every preset and tunable of the port is `engine.cloudTunables`'s
+ *   (`cloudsTunables.ts`).
  *
  * What it does not do is each a fork point and is listed where the spike
  * reports: the air between the eye and a cloud is takram's Earth's and not
@@ -109,7 +109,7 @@ import { warmCompile, warmRenderer } from './warmup.ts'
  * front of a transparent object.
  */
 
-const log = getLogger('game.clouds.takram')
+const log = getLogger('game.clouds.adapter')
 
 /** Frames after a reset the port's histories are given before a capture. */
 const SETTLE_FRAMES = 128
@@ -123,7 +123,7 @@ const ATMOSPHERE_TABLES = 4
 /** Rec. 709 luminance weights, the atmosphere's own. */
 const LUMINANCE = new Vector3(0.2126, 0.7152, 0.0722)
 
-interface TakramAssets {
+interface CloudsAssets {
   readonly textures: BakedCloudTextures
   /** `cloudsServed`: whether a body is drawn with clouds unasked. */
   readonly wet: (body: Body) => boolean
@@ -173,9 +173,9 @@ function compositeOver(material: MeshBasicNodeMaterial): void {
  * The frame's term in the sensor's dependency sum: the depth copy, then the
  * composite's form. `vec4(0)` in the post program, there for its order.
  */
-class TakramOverNode extends TempNode<'vec4'> {
+class CloudsOverNode extends TempNode<'vec4'> {
   static get type(): string {
-    return 'TakramOverNode'
+    return 'CloudsOverNode'
   }
 
   readonly #run: (frame: NodeFrame) => void
@@ -259,13 +259,13 @@ function createFront(): CloudFrontHandle {
 
 function build(
   deps: CloudSystemDeps,
-  assets: TakramAssets,
-  settings: TakramSettings,
+  assets: CloudsAssets,
+  settings: CloudsSettings,
 ): CloudChainSystem {
   const { renderer, scene, camera, layout, scenePass } = deps
   const front = deps.front ?? createFront()
   const sceneMrt = scenePass.getMRT()
-  invariant(sceneMrt !== null, 'the takram clouds need the scene pass’s MRT')
+  invariant(sceneMrt !== null, 'the clouds need the scene pass’s MRT')
   assertWebGPUSupported(renderer)
 
   const atmosphere = new AtmosphereContext()
@@ -280,7 +280,7 @@ function build(
   const tablesOf = atmosphere.lutNode as unknown as TableEvents
   tablesOf.addEventListener('update', tabled)
 
-  const depth = new TakramDepth(layout)
+  const depth = new CloudsDepth(layout)
   depth.tie(scenePass.renderTarget)
   const pass = clouds({ sceneDepth: depth.node })
   pass.camera = camera
@@ -339,7 +339,7 @@ function build(
   // Alpha zero under the row's `over` blend: the scene keeps its own motion
   // and depth behind a cloud.
   material.mrtNode = mrt({ motion: vec4(0) })
-  material.name = 'takram composite'
+  material.name = 'clouds composite'
   material.depthTest = false
   material.depthWrite = false
   material.fog = false
@@ -357,12 +357,12 @@ function build(
   const mesh = new Mesh(geometry, material)
   mesh.layers.set(OVER_CLOUDS_LAYER)
   mesh.renderOrder = ORDER
-  mesh.name = 'takram composite'
+  mesh.name = 'clouds composite'
   mesh.visible = false
   mesh.frustumCulled = false
   const alone = new Mesh(geometry, material)
   alone.layers.enableAll()
-  alone.name = 'takram composite'
+  alone.name = 'clouds composite'
   alone.frustumCulled = false
   const over = new Scene()
   over.add(alone)
@@ -376,14 +376,14 @@ function build(
     { over },
   )
   let drawing = false
-  const overPass = new TakramOverNode((frame) => {
+  const overPass = new CloudsOverNode((frame) => {
     if (!drawing || frame.renderer === null) return
     depth.render(frame.renderer as WebGPURenderer)
     inner.updateBefore(frame)
   })
 
   let served: RenderBody | null = null
-  let anchor: TakramAnchor | null = null
+  let anchor: CloudsAnchor | null = null
   let levers: CloudRenderReport['levers'] | null = null
   let layered = false
   let frames = 0
@@ -449,7 +449,7 @@ function build(
       const body =
         inputs === null || !inputs.levers.on
           ? null
-          : takramServed(
+          : cloudsBody(
               inputs.scene.bodies,
               inputs.camera.position,
               (candidate) => {
@@ -469,14 +469,14 @@ function build(
 
       // The first frame on holds no anchor either: one reset, counted once.
       if (anchor === null || anchor.address !== body.address) {
-        anchor = takramAnchor(body, eye)
+        anchor = cloudsAnchor(body, eye)
         reset()
       }
-      const sun = takramSun(body, inputs.scene)
-      let placed = takramPlacement(body, anchor, eye, sun)
-      if (placed.drift > TAKRAM_ANCHOR_REACH) {
-        anchor = takramAnchor(body, eye)
-        placed = takramPlacement(body, anchor, eye, sun)
+      const sun = cloudsSun(body, inputs.scene)
+      let placed = cloudsPlacement(body, anchor, eye, sun)
+      if (placed.drift > CLOUDS_ANCHOR_REACH) {
+        anchor = cloudsAnchor(body, eye)
+        placed = cloudsPlacement(body, anchor, eye, sun)
         reset()
       }
       // The placement is row-major and `fromArray` reads columns.
@@ -549,7 +549,7 @@ function build(
     },
     afterFrame() {
       // After a frame this system's pass drew, and only then, and into its
-      // own context: `takramTunables.ts`.
+      // own context: `cloudsTunables.ts`.
       if (drawing) settings.flush(context)
     },
     // The port holds no radiance at a trace's texels to read back.
@@ -605,13 +605,13 @@ function build(
 }
 
 /** What `App` takes from this chunk: the chain's factory and the page's handle. */
-export interface TakramClouds {
+export interface Clouds {
   readonly factory: CloudChainFactory
-  readonly handle: TakramHandle
+  readonly handle: CloudsHandle
 }
 
 /** The page's one load, or null before it is asked for and after it fails. */
-let page: Promise<TakramClouds> | null = null
+let page: Promise<Clouds> | null = null
 
 /**
  * Loads the port's four baked textures and answers the factory the sensor's
@@ -619,17 +619,17 @@ let page: Promise<TakramClouds> | null = null
  * settings outlive every chain, and every canvas. `App` builds the canvas,
  * and with it the renderer, again when the display's range changes, and its
  * factory asks here each time; a second load would be a second set of
- * settings, and `engine.takram` would forget the preset and every tunable
+ * settings, and `engine.cloudTunables` would forget the preset and every tunable
  * the page had written.
  *
  * `wet` is `cloudsServed`, handed in and not imported: this chunk sharing
  * the weather's modules with the page re-partitions them, and the page then
  * loads one chunk more on every visit (`check-site-chunks.mjs`).
  */
-export function loadTakramClouds(
+export function loadClouds(
   wet: (body: Body) => boolean,
   preset: string | null = null,
-): Promise<TakramClouds> {
+): Promise<Clouds> {
   page ??= load(wet, preset).catch((cause: unknown) => {
     // A load that failed is nobody's to keep: the next canvas asks again.
     page = null
@@ -641,15 +641,15 @@ export function loadTakramClouds(
 async function load(
   wet: (body: Body) => boolean,
   preset: string | null,
-): Promise<TakramClouds> {
+): Promise<Clouds> {
   const textures = await loadBakedCloudTextures({
     localWeather: localWeatherUrl,
     shape: shapeUrl,
     shapeDetail: shapeDetailUrl,
     turbulence: turbulenceUrl,
   })
-  const settings = createTakramSettings(preset)
-  const assets: TakramAssets = { textures, wet }
+  const settings = createCloudsSettings(preset)
+  const assets: CloudsAssets = { textures, wet }
   return {
     factory: Object.assign(
       (deps: CloudSystemDeps) => build(deps, assets, settings),
