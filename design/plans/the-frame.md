@@ -358,9 +358,10 @@ is, by name, in the rule's own list.
   figures that means a container transcoded at load, or two encodings.
 - **Batch adjacent compute.** `renderer.compute([a, b])` is one encoder and
   one submit where two calls are two. He took a language model from 427
-  submits a token to one, and his two models decoded 2.2 and 4.7 times faster. Ours is three pairs
-  (`meter.ts:100`, `starProjection.ts:418`, and one in the march's composite),
-  so the gain is small and is taken where it is free. A batch is one entry on
+  submits a token to one, and his two models decoded 2.2 and 4.7 times
+  faster. Ours is three pairs (`meter.ts:100`, `starProjection.ts:418`, and
+  one in the march's composite), so the gain is small and is taken where it is
+  free. A batch is one entry on
   the pass timeline, which is checked first.
 - **A sort for blended instances.** `CountingSort` from r186 sorts or compacts
   on the GPU in four passes. Rain, plumes and dust need one; additive stars do

@@ -385,6 +385,12 @@ size and single level and held to the GPU's own figures by a test
 ([ADR-0064](../../docs/adr/0064-the-clouds-march-the-field-and-the-suns-depth-is-a-grid-summed-through-the-volume.md)).
 Two figures in a cell are 1920×1080 and 2880×1800.
 
+The weather cube and the clipmap are the field's, and stay: they are what the
+port's weather map is drawn from ([the clouds](the-clouds.md) §5.2). The far
+atlas stays until orbit is settled. Every other row is the native march's and
+goes when it retires. The port's own targets are not in this table; its
+memory is declared in the clouds plan's phase C.
+
 | Resource                   | Size                                                        | A texel on Earth  | Memory                 | Refresh                                                             |
 | -------------------------- | ----------------------------------------------------------- | ----------------- | ---------------------- | ------------------------------------------------------------------- |
 | Weather cube               | 6 faces × 514² in one atlas, a one-texel gutter, four RGBA8 | 19.5 km           | 25.36 MB               | A face a frame; six over six frames after a jump                    |

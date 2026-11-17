@@ -13750,6 +13750,79 @@ A cloud writes no motion vector. The port has no compile-ahead, and with
 1920 × 1080, and not within 90 s at `ultra`. Under a slow turn its temporal
 upscale shows grain.
 
+## The cloud renderer is takram's, its adapter is `clouds*.ts`, and a cost is read after the page's own loop has turned (16 Nov 2026)
+
+The spike of 14 Nov merged into `the-weather` (#212), and the renderer it
+proved is the one the game goes forward with:
+[the clouds](design/plans/the-clouds.md) is its plan, and
+[the weather](design/plans/the-weather.md) no longer designs a march. No ADR
+records it yet; the plan's phase C writes it, when `?clouds=1` builds this
+renderer.
+
+**The adapter carries no upstream's name.** The 14 Nov entry's
+`takramClouds.ts`, `takramFrame.ts`, `takramDepth.ts` and `takramTunables.ts`
+are `clouds.ts`, `cloudsFrame.ts`, `cloudsDepth.ts` and `cloudsTunables.ts`,
+and `engine.takram` is `engine.cloudTunables`. The stem is plural because the
+native march's `cloudFrame.ts` and `cloudDepth.ts` still stand beside them.
+`?clouds=takram` is still the selector.
+
+**A review of the spike found fifteen defects, and three of them must not come
+back.**
+
+- **What the page holds for "the" cloud context is held for each context.** A
+  picture change builds the next chain beside the one still drawing. The
+  settings store followed the newest context while the old chain's frames
+  flushed into it, so a context that had drawn nothing was written `low`
+  because another chain drew: the first-frame compile failure the store exists
+  to prevent. Each followed context carries what it is owed.
+- **A write is what changed.** The port's setters clear its history and
+  rebuild its graph on a change of value. Writing the preset beside every
+  tunable turned a held `temporalUpscale: false` on and off, two rebuilds for
+  one uniform.
+- **A write the port refuses is refused where the caller is.** Thrown from the
+  flush it took the frame, and every later frame that owed a write.
+
+**What the fixes measured,** on the Mac mini's production build of `a0c731d0`,
+G1 at 1920 × 1080, one page:
+
+| State                                           | Whole frame |
+| ----------------------------------------------- | ----------- |
+| `high`                                          | 25.01 ms    |
+| `preset('low')`, sixty page frames, read        | 12.36       |
+| `preset('high')` again, sixty page frames, read | 24.93       |
+| `preset('high')` again, read with no page frame | 21.94       |
+| Both layers' `shadow` off after boot            | 24.98       |
+| `shadow.maxFar` 200 km                          | 14.82       |
+| A fresh page at `?clouds=takram:low`            | 9.61        |
+
+- **A figure is read after the page's own loop has turned.** Read straight
+  after back-to-back `ir.gpu` frames, the march is rebuilt and the shadow
+  atlas keeps the last preset's 256² until three's own frame turns. The
+  composite node now updates once a render call, as the pass does, and that
+  is half the cure. This is the "stale shadow program" of 14 Nov, bounded: it
+  does not happen in play, where every frame is three's.
+- **A layer's `shadow` flag is a uniform.** Set false after boot it costs
+  nothing less, where a page that set it before its first read costs 14.0 ms:
+  the mask changes at once and the atlas's cost follows only the next graph
+  rebuild.
+- **`low` reached from `high` is not `low` from boot,** 12.36 ms against
+  9.61. Not explained. The settings panel is not shipped until a preset costs
+  the same by any path.
+
+**Four findings stand.** `jitterFrame` pins the port's interleave with its
+jitter, because the port has one counter for both. `context.time` wraps at a
+day. The sky table still bakes under this renderer with no reader. The
+served-body rule, the sun and the blend stay copied in the adapter, which is
+what keeps the page at 58 chunks.
+
+**What else changed hands.** [The frame](design/plans/the-frame.md) sorts
+Ben Houston's posts on three.js's WebGPU renderer by where each lands here.
+Two of its findings are about this tree as it stands: a hull has no
+environment to reflect, only the star, an ambient term and a fill light; and
+three 0.185.1's bump node normalizes its position derivatives, so `bumpMap`
+changes relief with camera distance and is not to be used before the fix.
+The port's releases from alpha.7 require three 0.187.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
