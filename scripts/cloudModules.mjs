@@ -17,6 +17,11 @@ export const CLOUD_MODULES = [
   'apps/game/src/render/cloudSystem.ts',
   'apps/game/src/render/cloudTrace.ts',
   'apps/game/src/render/cloudMarch.ts',
+  // `?clouds=takram`'s: the port and takram's atmosphere load behind them.
+  // The tunables import the port too, and are the one of the two the engine
+  // names, for a type: kept as a value, that edge is the port on every page.
+  'apps/game/src/render/takramClouds.ts',
+  'apps/game/src/render/takramTunables.ts',
   'packages/rendering/src/weatherField.ts',
   'packages/rendering/src/mieTable.ts',
   'packages/rendering/src/mieDroplets.generated.ts',

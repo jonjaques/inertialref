@@ -52,9 +52,9 @@ import { namePass } from './passTimeline.ts'
 import { type CloudRenderReport, cloudReportIdle } from '@inertialref/devtools'
 // Types only: the cloud system is its own chunk, loaded under `?clouds=1`.
 import type {
+  CloudChainFactory,
+  CloudChainSystem,
   CloudEngineInputs,
-  CloudSystem,
-  CloudSystemFactory,
 } from './cloudSystem.ts'
 
 /* The sensor owns the only scene draw, then applies lens-side optics,
@@ -92,8 +92,8 @@ export interface SensorDiagnostics {
 }
 
 export interface SensorOptions {
-  /** `?clouds=1`'s chunk: the chain builds the cloud system on WebGPU. */
-  readonly clouds?: CloudSystemFactory
+  /** `?clouds=1`'s chunk, or `?clouds=takram`'s: the chain builds the cloud system on WebGPU. */
+  readonly clouds?: CloudChainFactory
 }
 
 export interface Sensor {
@@ -119,7 +119,7 @@ export interface Sensor {
   /** What the scene pass draws into — the radiance before the curve. */
   readonly sceneTarget: RenderTarget
   /** The cloud system the chain built, or null: no flag, or not WebGPU. */
-  readonly clouds: CloudSystem | null
+  readonly clouds: CloudChainSystem | null
   dispose(): void
 }
 

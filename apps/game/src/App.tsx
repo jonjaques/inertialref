@@ -11,6 +11,7 @@ import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
+import { cloudsServed } from '@inertialref/rendering'
 import { BUILD_ID, SERVED_TREE } from './build.ts'
 import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
 import type { HudCommands, HudRenderState } from './hud/controls.ts'
@@ -105,16 +106,47 @@ import {
 let singleton: GameEngine | null = null
 
 /**
+ * The renderer `?clouds=` asks for: ours at `1`, takram's port at `takram`,
+ * and at `takram:low` the port built at that quality preset from its first
+ * frame.
+ */
+type CloudRenderer =
+  | { readonly kind: 'native' }
+  | { readonly kind: 'takram'; readonly preset: string | null }
+
+function cloudRendererOf(value: string | null): CloudRenderer | null {
+  if (value === '1') return { kind: 'native' }
+  if (value === 'takram') return { kind: 'takram', preset: null }
+  if (value?.startsWith('takram:') === true)
+    return { kind: 'takram', preset: value.slice('takram:'.length) }
+  return null
+}
+
+/**
  * The canvas's renderer factory, resolving the cloud system's chunk beside
- * the renderer under `?clouds=1`. R3F awaits the factory before it mounts a
- * child, so the sensor's first chain is built with the system, and its
- * warm-up is in the boot census, rather than rebuilt for it a frame later.
+ * the renderer under `?clouds=1`, or the takram port's under
+ * `?clouds=takram`. R3F awaits the factory before it mounts a child, so the
+ * sensor's first chain is built with the system, and its warm-up is in the
+ * boot census, rather than rebuilt for it a frame later.
  */
 function withClouds(
   engine: GameEngine,
   factory: ReturnType<ReturnType<typeof createRendererLifetime>['factory']>,
+  clouds: CloudRenderer,
 ): (props: CanvasProps) => ReturnType<typeof factory> {
   return async (props) => {
+    if (clouds.kind === 'takram') {
+      // The port's four baked textures load beside the renderer too.
+      const [renderer, takram] = await Promise.all([
+        factory(props),
+        import('./render/takramClouds.ts').then((chunk) =>
+          chunk.loadTakramClouds(cloudsServed, clouds.preset),
+        ),
+      ])
+      engine.cloudSystemFactory = takram.factory
+      engine.takram = takram.handle
+      return renderer
+    }
     const [renderer, chunk] = await Promise.all([
       factory(props),
       import('./render/cloudSystem.ts'),
@@ -277,8 +309,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   )
   const [pictureOverride] = useState(() => parsePictureQuery(pictureQuery))
   // The page's lifetime: the cloud system is built for it or not at all.
-  const [cloudsRequested] = useState(
-    () => new URLSearchParams(window.location.search).get(QUERY.clouds) === '1',
+  const [cloudsRequested] = useState(() =>
+    cloudRendererOf(
+      new URLSearchParams(window.location.search).get(QUERY.clouds),
+    ),
   )
   const picture = pictureOverride ?? storedPicture
   const pictureDiagnostic =
@@ -790,8 +824,12 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // answer and awaits `init()`; R3F awaits the promise, so nothing draws
         // against a half-built backend. See `render/createRenderer.ts`.
         gl={
-          cloudsRequested
-            ? withClouds(engine, lifetime.factory(hdr, picture))
+          cloudsRequested !== null
+            ? withClouds(
+                engine,
+                lifetime.factory(hdr, picture),
+                cloudsRequested,
+              )
             : lifetime.factory(hdr, picture)
         }
         // The factory chooses a depth convention that preserves this range.
@@ -814,7 +852,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           // drops an object whose layers the camera does not test, so a
           // mark it learned of later would leave every overlay compiling at
           // its first drawn frame.
-          if (cloudsRequested) state.camera.layers.enable(OVER_CLOUDS_LAYER)
+          if (cloudsRequested !== null)
+            state.camera.layers.enable(OVER_CLOUDS_LAYER)
         }}
       >
         <SceneView

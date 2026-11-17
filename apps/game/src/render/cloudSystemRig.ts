@@ -461,7 +461,8 @@ export function cloudRig(
   })
   return {
     sensor,
-    system: sensor.clouds,
+    // The rig hands the chain the native factory, so its system is whole.
+    system: sensor.clouds as CloudSystem | null,
     scene,
     camera,
     get levers() {
