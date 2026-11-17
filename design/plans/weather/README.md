@@ -15,6 +15,27 @@ the plan cites the records.
 request; wave 1 is the contracts and three tool packages, merged and open as
 phase 1's draft. Phases 2 to 6 have not started.
 
+**The renderer is takram's, through its WebGPU port.** The port draws in the
+native composite's slot behind `?clouds=takram`, unmodified (#212), and
+[the clouds](../the-clouds.md) is the plan that makes it the default, closes
+its gaps and retires the native march. For phase 1 that means:
+
+- **What judges a picture goes on:** the cornerstones and their ledger (K),
+  the capture's second pass (U), the instruments (I), the panel's tools (J),
+  the `motion` row (V) and the levers' contract (C). A picture is filtered by
+  the blind panel and passed by eye.
+- **What builds the native march's light stops:** the reference transport,
+  the phase tables, the higher orders, the irradiance table, the history and
+  the far march's refinements. No wave-2 package of that kind is started, and
+  one in flight lands only what the first group needs.
+- **What phase 0 measured still stands as measurement.** ADR-0063's two scene
+  passes and ADR-0065's scene unit bind the port as they bound the march.
+  ADR-0064's and ADR-0066's choices are the native march's, and are superseded
+  when it retires.
+
+Everything below this section is the record of the native march, kept because
+its measurements and its traps are cited from the ADRs.
+
 Nothing draws on `main`. Without the flag the cloud chunk is never loaded, and
 with it nothing draws until `engine.clouds.on` is set.
 
@@ -31,6 +52,7 @@ ships.
 | #199–#204    | `weather/p0-1-…` to `p0-6-…` | The same work as six stacked pull requests against `main` | Superseded by #206; closed |
 | #207         | `weather/p1-cornerstones`    | Phase 1's cornerstones, the velocity row, the baseline    | Merged into `the-weather`  |
 | #209         | `weather/phase-1`            | Phase 1 in waves; wave 1 is merged                        | Draft, on `the-weather`    |
+| #212         | `spike/takram-clouds`        | takram's clouds through their WebGPU port, behind a flag  | Merged into `the-weather`  |
 
 Wave 1 is package C, the contracts, at `78f6b3ee`, and three packages built
 beside it: I, the instruments; U, the capture's second pass; and J, the

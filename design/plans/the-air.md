@@ -144,6 +144,12 @@ In #170's civil-dusk frame. Not investigated.
 
 ## The ground, the sea and the sphere
 
+Two items that touch these surfaces are planned elsewhere. The sea's
+reflection is a twelve-step march nothing scores against a reference, and a
+hull has no environment to reflect at all:
+[the frame](the-frame.md) §5 and §6 have both. The cloud's shadow on all three
+is [the clouds](the-clouds.md) §5.1.
+
 ### The terminator steps at the descent gate
 
 The ground carries the sun past its horizon by `√(2h/R)` of each point's own
