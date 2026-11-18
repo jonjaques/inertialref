@@ -1,10 +1,13 @@
-# ADR-0067: A preset holds its weather, and a cornerstone is a preset no list shows
+# ADR-0067: A preset holds its weather, and a cornerstone is a preset only the clouds' section shows
 
 Status: accepted · 10 Nov 2026 · amended 10 Nov 2026: the capture's record
 carries each take's provenance and role, a cast is kept with its dropped
 frames listed and refused only past a share or a run of them, every cast
 starts from a settled first frame, G2 faces a sea deeper than the drawn
-ground's tail, and the sun is solved over a place that moves. Amends
+ground's tail, and the sun is solved over a place that moves; amended
+17 Nov 2026: the clouds are a player's setting, a picture without weather
+keeps the setting's clouds, and the planetarium lists the cornerstones and
+two air checks on Mars while the setting is on. Amends
 [ADR-0033](0033-presets-hold-a-photographic-instant.md): version 3 of the
 presets format, and a second bundled list. The volume the weather draws is
 [ADR-0063](0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md)'s
@@ -51,7 +54,8 @@ gate, all of which read the bundled list.
 
 **A picture holds its weather in an optional field, version 3 of the format,
 and the pictures the weather is judged on are presets in a second bundled list
-that `findPicture` searches and no player-facing list reads.**
+that `findPicture` searches and only the planetarium's clouds section shows,
+while the player's clouds setting is on.**
 
 ### The format
 
@@ -81,10 +85,16 @@ that `findPicture` searches and no player-facing list reads.**
   scenario, and `served`, the picture's body by address when the body is
   outside the default set (`cloudsServed`: wet, and no authored deck). A
   station's picture names the body the station goes round, since the clouds
-  are served on a body and a station's address names none. No
-  weather, or weather the page cannot draw, turns the volume off: a picture
-  never draws a weather other than the one it names. On a page with the flag
-  that means an ordinary preset turns the clouds off.
+  are served on a body and a station's address names none. Weather the
+  page cannot draw turns the volume off: a picture never draws a weather
+  other than the one it names.
+- **No weather is the page's default.** Under the player's `render.clouds`
+  the volume stays on over the default set, the body's climate, so a
+  person who turned the clouds on keeps them through Earthrise. On a page a
+  `?clouds=` link built, which is a script's, the setting is not bound and
+  an ordinary preset turns the volume off. A change of the setting while a
+  picture is held takes the picture again under it, so leaving the picture
+  puts back the setting as it is and not as it was.
 - **It releases what it set,** as a presentation stance releases the switch
   it pushed. The three levers found before the first picture go back when
   the observatory lets go of its target, and every later picture starts from
@@ -97,8 +107,22 @@ that `findPicture` searches and no player-facing list reads.**
 - `packages/devtools/src/cornerstones.json` holds the nine pictures and the
   overlay guard, E1's picture with the station in it, in the same
   envelope, decoded by the same decoder, as `CORNERSTONES`. `findPicture`
-  searches `PICTURES`, then `CORNERSTONES`; the id sets are disjoint. So
-  `ir.preset(id)`, `?preset=` and `drive.mjs --preset` take a cornerstone.
+  searches `PICTURES`, then `CORNERSTONES`, then `AIR_CHECKS`; the id sets
+  are disjoint. So `ir.preset(id)`, `?preset=` and `drive.mjs --preset` take
+  a cornerstone.
+- **The planetarium's clouds section lists them while the setting is on,**
+  grouped by world, a labeled button each with its line as the tooltip and
+  no plate: a cornerstone's plates are the capture's, taken per phase. Off,
+  the section is not drawn, because a cornerstone without the clouds is a
+  picture of nothing in particular. "Export all", the tour and
+  `presets:check` still read `PICTURES` alone.
+- **Two air checks on Mars stand beside them,** in `airChecks.json`: the
+  floor of Jezero two meters up with the sun 2° and setting, and the limb
+  from 400 km over Valles Marineris with the sun 12° over the sub-point,
+  each facing the sun. They hold no weather, and Mars is outside the served
+  set, so they show the air a clouds page draws where no cloud stands. They
+  are where the clouds start when they learn Mars. Their suns are solved
+  and held by `airChecks.test.ts` to half a degree.
 - The generated world is chosen by a rule, the first body by cell distance
   from far-shore V that passes it: wet and plain (haze under τ 0.15, ground
   250–310 K, a day of 10–60 hours, over 3,000 km, a shore); a sky that is
@@ -223,8 +247,8 @@ A cornerstone is one command to take, and the same picture every time on one
 tree. The capture set (`scripts/weather/capture.mjs`) takes each in its arms,
 with Earth beside its deck, and a pull request carries the sheets.
 
-Taking any picture on a flagged page sets the clouds' levers, which a script
-driving by hand has to know: a preset with no weather turns the volume off
+Taking any picture on a page a link built the clouds for sets the clouds'
+levers, which a script driving by hand has to know: a preset with no weather turns the volume off
 until the observatory lets go.
 
 The format grew a field that encodes a choice about the renderer, not about

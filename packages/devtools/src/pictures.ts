@@ -1,4 +1,5 @@
 import type { Quat } from '@inertialref/spatial'
+import bundledAirChecks from './airChecks.json' with { type: 'json' }
 import bundledCornerstones from './cornerstones.json' with { type: 'json' }
 import bundledPictures from './pictures.json' with { type: 'json' }
 import { decodePictures } from './pictureFormat.ts'
@@ -120,24 +121,37 @@ export const PICTURES: readonly Picture[] = decodePictures(bundledPictures)
  * The pictures the weather is judged on, in their own list (ADR-0067).
  *
  * Presets in every respect a script can reach — `ir.preset`, `?preset=`,
- * `drive.mjs --preset` — and in none a player can: the planetarium's
- * lists, "Export all", the tour and `presets:check` read `PICTURES` alone.
- * Nine pictures of clouds the volume does not yet draw well belong in no
- * menu, and each is taken before the work that judges it.
+ * `drive.mjs --preset` — and in one place a player can: the planetarium's
+ * clouds section, while the clouds setting is on. "Export all", the tour
+ * and `presets:check` read `PICTURES` alone: nine pictures of clouds still
+ * being drawn belong in no list a person sees without asking for clouds,
+ * and each is taken before the work that judges it.
  */
 export const CORNERSTONES: readonly Picture[] =
   decodePictures(bundledCornerstones)
 
+/**
+ * Pictures of our air on a body the clouds do not serve, in a third list:
+ * Mars, at dusk on the ground and over the limb from orbit. They hold no
+ * weather. With the clouds on, they show the air the clouds' page draws
+ * where no cloud stands, which is the air a page without them draws, and
+ * they are where the clouds begin when they learn Mars. Found by
+ * `findPicture` and listed beside the cornerstones in the planetarium's
+ * clouds section, and in no other list.
+ */
+export const AIR_CHECKS: readonly Picture[] = decodePictures(bundledAirChecks)
+
 export const pictureIds = (): readonly string[] => PICTURES.map((one) => one.id)
 
-/** A shipped picture, then a cornerstone; the two id sets are disjoint. */
+/** A shipped picture, then a cornerstone, then an air check; the id sets are disjoint. */
 export function findPicture(id: string): Picture {
   const found =
     PICTURES.find((one) => one.id === id) ??
-    CORNERSTONES.find((one) => one.id === id)
+    CORNERSTONES.find((one) => one.id === id) ??
+    AIR_CHECKS.find((one) => one.id === id)
   if (found === undefined) {
     throw new Error(
-      `Unknown picture "${id}". Try: ${[...pictureIds(), ...CORNERSTONES.map((one) => one.id)].join(', ')}`,
+      `Unknown picture "${id}". Try: ${[...pictureIds(), ...CORNERSTONES.map((one) => one.id), ...AIR_CHECKS.map((one) => one.id)].join(', ')}`,
     )
   }
   return found

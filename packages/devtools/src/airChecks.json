@@ -1,0 +1,102 @@
+{
+  "format": "inertialref/presets",
+  "version": 2,
+  "pictures": [
+    {
+      "id": "mars-ground-dusk",
+      "label": "Jezero at dusk",
+      "why": "The crater floor two meters up as the sun sets, the dust’s blue glow round it.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 3445.739537197576,
+      "address": "s:SOL/b:3",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0.6,
+          "elevation": 0.25,
+          "distance": 11064653.554826682
+        },
+        "look": { "yaw": 0, "pitch": 0 },
+        "surface": {
+          "latitude": 0.32079151651655774,
+          "longitude": 1.3540264336972008,
+          "height": 2,
+          "heading": 4.681716420798252,
+          "pitch": 0.06981317007977318
+        }
+      },
+      "lens": {
+        "focalLength": 24,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.016666666666666666,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": { "bright": 24, "dark": 16 },
+        "balance": 5800
+      }
+    },
+    {
+      "id": "mars-orbit-limb",
+      "label": "The dusty limb",
+      "why": "The limb from 400 km over Valles Marineris in the late afternoon, the dust standing off the edge.",
+      "seed": "inertialref",
+      "generation": {
+        "galaxy": 5,
+        "galaxy-field": 5,
+        "system": 4,
+        "terrain": 7,
+        "photometry": 1
+      },
+      "time": 37484.83470539686,
+      "address": "s:SOL/b:3",
+      "framing": {
+        "kind": "camera",
+        "state": {
+          "azimuth": 0.6,
+          "elevation": 0.25,
+          "distance": 11064653.554826682
+        },
+        "look": { "yaw": 0, "pitch": 0 },
+        "surface": {
+          "latitude": -0.17453292519943295,
+          "longitude": -1.2217304763960306,
+          "height": 400000,
+          "heading": 4.729550168597469,
+          "pitch": -0.3839724354387525
+        }
+      },
+      "lens": {
+        "focalLength": 35,
+        "gauge": 24,
+        "zoom": 1,
+        "fStop": 2.8,
+        "focus": null,
+        "shutter": 0.016666666666666666,
+        "iso": 100
+      },
+      "processing": {
+        "mode": "enhanced",
+        "look": "neutral",
+        "compensation": 0,
+        "rate": 1,
+        "range": { "bright": 24, "dark": 16 },
+        "balance": 5800
+      }
+    }
+  ]
+}
