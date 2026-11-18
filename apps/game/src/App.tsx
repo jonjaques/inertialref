@@ -12,7 +12,6 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
 import { cloudsServed } from '@inertialref/rendering'
-import { getLogger } from '@inertialref/shared'
 import { BUILD_ID, SERVED_TREE } from './build.ts'
 import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
 import type { HudCommands, HudRenderState } from './hud/controls.ts'
@@ -57,12 +56,17 @@ import {
 } from './render/terrainProducer.ts'
 import { warmAtMount } from './render/warmup.ts'
 import {
-  type CanvasProps,
   commitToneCurve,
   createRenderer,
   releaseRenderer,
 } from './render/createRenderer.ts'
 import { OVER_CLOUDS_LAYER } from './render/cloudLayers.ts'
+import {
+  canvasClouds,
+  type CloudsLoaders,
+  cloudRendererOf,
+  SETTING_CLOUDS,
+} from './render/canvasClouds.ts'
 import {
   dprCeiling,
   type OutputPreference,
@@ -107,93 +111,19 @@ import {
 
 let singleton: GameEngine | null = null
 
-const log = getLogger('game.clouds')
-
 /**
- * The renderer `?clouds=` asks for: ours at `1`, takram's port at `takram`,
- * and at `takram:low` the port built at that quality preset from its first
- * frame. `optional` is the player's setting's: a load that fails leaves the
- * page drawing without clouds, where a link's fails the canvas, loudly.
+ * The two cloud chunks, each its own `import()` so the page loads neither
+ * until a canvas asks. `cloudsServed` is handed in rather than imported by
+ * the takram chunk, which would re-partition the page's chunks.
  */
-type CloudRenderer =
-  | { readonly kind: 'native' }
-  | {
-      readonly kind: 'takram'
-      readonly preset: string | null
-      readonly optional?: boolean
-    }
-
-/** What `render.clouds` builds: takram's renderer at its own preset. */
-const SETTING_CLOUDS: CloudRenderer = {
-  kind: 'takram',
-  preset: null,
-  optional: true,
-}
-
-function cloudRendererOf(value: string | null): CloudRenderer | null {
-  if (value === '1') return { kind: 'native' }
-  if (value === 'takram') return { kind: 'takram', preset: null }
-  if (value?.startsWith('takram:') === true)
-    return { kind: 'takram', preset: value.slice('takram:'.length) }
-  return null
-}
-
-/**
- * The canvas's renderer factory, resolving the cloud system's chunk beside
- * the renderer under `?clouds=1`, or the takram port's under
- * `?clouds=takram` and the setting. R3F awaits the factory before it mounts a child, so the
- * sensor's first chain is built with the system, and its warm-up is in the
- * boot census, rather than rebuilt for it a frame later.
- */
-function withClouds(
-  engine: GameEngine,
-  factory: ReturnType<ReturnType<typeof createRendererLifetime>['factory']>,
-  clouds: CloudRenderer,
-): (props: CanvasProps) => ReturnType<typeof factory> {
-  return async (props) => {
-    if (clouds.kind === 'takram') {
-      // The port's four baked textures load beside the renderer too.
-      const load = import('./render/clouds.ts').then((chunk) =>
-        chunk.loadClouds(cloudsServed, clouds.preset),
-      )
-      const [renderer, adapter] = await Promise.all([
-        factory(props),
-        clouds.optional === true
-          ? load.catch((cause: unknown) => {
-              log.warn('the clouds did not load; drawing without them', {
-                cause: String(cause),
-              })
-              return null
-            })
-          : load,
-      ])
-      engine.cloudSystemFactory = adapter?.factory ?? null
-      engine.cloudTunables = adapter?.handle ?? null
-      return renderer
-    }
-    const [renderer, chunk] = await Promise.all([
-      factory(props),
-      import('./render/cloudSystem.ts'),
-    ])
-    engine.cloudSystemFactory = chunk.createCloudSystem
-    return renderer
-  }
-}
-
-/**
- * The canvas's renderer factory on a page that draws no clouds. A canvas
- * built again after the setting turned them off must not hand the next chain
- * the last one's cloud system.
- */
-function withoutClouds(
-  engine: GameEngine,
-  factory: ReturnType<ReturnType<typeof createRendererLifetime>['factory']>,
-): typeof factory {
-  return (props) => {
-    engine.cloudSystemFactory = null
-    engine.cloudTunables = null
-    return factory(props)
-  }
+const CLOUD_LOADERS: CloudsLoaders = {
+  native: () =>
+    import('./render/cloudSystem.ts').then((chunk) => chunk.createCloudSystem),
+  takram: (preset) =>
+    import('./render/clouds.ts').then((chunk) =>
+      chunk.loadClouds(cloudsServed, preset),
+    ),
+  webgpu: () => 'gpu' in navigator,
 }
 
 function engineInstance(catalog: StarCatalog): GameEngine {
@@ -358,6 +288,9 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
   )
   const [storedClouds] = usePersistentState(RENDER_CLOUDS)
   const clouds = cloudsRequested ?? (storedClouds ? SETTING_CLOUDS : null)
+  // One counter of canvas builds for the page, so a build superseded while
+  // its load was in flight does not publish its clouds over the next one.
+  const [cloudsCanvas] = useState(() => canvasClouds(engine, CLOUD_LOADERS))
   const picture = pictureOverride ?? storedPicture
   const pictureDiagnostic =
     pictureOverride !== null && pictureQuery?.startsWith('bilinear:')
@@ -871,8 +804,8 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // against a half-built backend. See `render/createRenderer.ts`.
         gl={
           clouds !== null
-            ? withClouds(engine, lifetime.factory(hdr, picture), clouds)
-            : withoutClouds(engine, lifetime.factory(hdr, picture))
+            ? cloudsCanvas.withClouds(lifetime.factory(hdr, picture), clouds)
+            : cloudsCanvas.withoutClouds(lifetime.factory(hdr, picture))
         }
         // The factory chooses a depth convention that preserves this range.
         camera={{ fov: DEFAULT_FOV_DEG, near: 0.05, far: 1e10 }}
