@@ -36,7 +36,7 @@ describe('the air checks', () => {
     }
   })
 
-  it('stand under the sun each says: two degrees and setting at Jezero, twelve over the limb’s sub-point', () => {
+  it('stand under the sun each says: two degrees and setting on Elysium, twelve over the limb’s sub-point', () => {
     const session = openSession({ catalog: TEST_CATALOG, workers: null })
     try {
       const expected = { 'mars-ground-dusk': 2, 'mars-orbit-limb': 12 }

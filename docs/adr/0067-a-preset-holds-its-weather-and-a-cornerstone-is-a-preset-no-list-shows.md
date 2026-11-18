@@ -116,8 +116,8 @@ while the player's clouds setting is on.**
   the section is not drawn, because a cornerstone without the clouds is a
   picture of nothing in particular. "Export all", the tour and
   `presets:check` still read `PICTURES` alone.
-- **Two air checks on Mars stand beside them,** in `airChecks.json`: the
-  floor of Jezero two meters up with the sun 2° and setting, and the limb
+- **Two air checks on Mars stand beside them,** in `airChecks.json`: Elysium
+  Planitia two meters up with the sun 2° and setting on an open horizon, and the limb
   from 400 km over Valles Marineris with the sun 12° over the sub-point,
   each facing the sun. They hold no weather, and Mars is outside the served
   set, so they show the air a clouds page draws where no cloud stands. They

@@ -13853,6 +13853,21 @@ The adapter ends the iterator before its next dispatch when the chain retires,
 so the port's cleanup still runs. The GPU regression counts four compute
 pipelines after disposal with the original iterator and zero with cancellation.
 
+**No warm-up here reaches a two-sided transparent mesh's two faces.** After a
+warm compile, the chain's first frame builds both face pipelines and its quad,
+three in all, with the single-pass warm-up, with the both-faces queue `main`
+has, and with a compile call per face. The fix loses nothing `main` had;
+`sensor.gpu.test.ts` holds the count at three so it cannot grow unseen.
+
+**What the setting leaves alone, measured on the Mac mini at 1600 × 900.**
+With the setting off and no `?clouds=`, `pnpm presets:compare --all --base
+origin/main` moves 0 px on all thirteen presets at `76e0537d`, the peak
+per-pixel difference 3 of 255. With the clouds on, Mars's air checks draw the
+air the page draws with them off: the limb from 400 km is 0 px apart; on the
+ground at dusk the clouds-on frame is 0.67% RMSE from a clouds-off boot, where
+two clouds-off boots are 6.7% apart, the auto exposure settling at a different
+level on one of them.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
