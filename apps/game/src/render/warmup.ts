@@ -18,6 +18,7 @@ import {
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import { runQuadPasses } from './quadPass.ts'
 import type { SceneLayout } from './sceneLayout.ts'
+import { buildsClouds } from './cloudRenderers.ts'
 import { warmTargetFor } from './sceneTarget.ts'
 import { sensorMrt } from './sensorMrt.ts'
 
@@ -158,11 +159,13 @@ function bindWarmTarget(
  * back.** The first queued draw sets up its shader inside the call. Later
  * draws build after a yield, and `NodeMaterial.setup` reads the live target
  * for depth and MRT outputs. Splitting the group gives each mesh the warm
- * target in setup. A two-sided transparent mesh also needs a single pass
- * during the compile walk: otherwise three queues two draws for one mesh,
- * and installing the cloud providers between those builds changes the
- * shader cache key. The second face then builds a single-output shader for
- * an MRT pipeline, which WebGPU rejects. The live draw keeps both faces.
+ * target in setup. On a renderer built with clouds, a two-sided transparent
+ * mesh also needs a single pass during the compile walk: otherwise three
+ * queues two draws for one mesh, and installing the cloud providers between
+ * those builds changes the shader cache key. The second face then builds a
+ * single-output shader for an MRT pipeline, which WebGPU rejects. The live
+ * draw keeps both faces, and a renderer without clouds queues both, as on
+ * `main` (`cloudRenderers.ts`).
  */
 export const warmRenderer = (gl: object, layout: SceneLayout): WarmRenderer => {
   const renderer = gl as WebGPURenderer
@@ -203,12 +206,16 @@ function compileRenderable(
   const materials = Array.isArray(node.material)
     ? node.material
     : [node.material]
-  const twoSided = materials.filter(
-    (material) =>
-      material.transparent &&
-      material.side === DoubleSide &&
-      !material.forceSinglePass,
-  )
+  // Only where a sensor can install the cloud providers mid-compile; a page
+  // without clouds queues both faces, as it always has.
+  const twoSided = buildsClouds(renderer)
+    ? materials.filter(
+        (material) =>
+          material.transparent &&
+          material.side === DoubleSide &&
+          !material.forceSinglePass,
+      )
+    : []
   for (const material of twoSided) material.forceSinglePass = true
   try {
     return renderer.compileAsync(node, camera, scene)

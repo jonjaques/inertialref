@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CloudChainFactory } from './cloudSystem.ts'
 import type { CloudsHandle } from './cloudsTunables.ts'
+import { buildsClouds } from './cloudRenderers.ts'
 import {
   canvasClouds,
   type CloudsLoaders,
@@ -16,7 +17,8 @@ import {
  * build's loads are still in flight when the next build starts.
  */
 
-const WEBGPU = { backend: { isWebGPUBackend: true } }
+const webgpu = () => ({ backend: { isWebGPUBackend: true } })
+const WEBGPU = webgpu()
 const WEBGL = { backend: {} }
 
 const system = { name: 'takram' } as unknown as CloudChainFactory
@@ -132,6 +134,28 @@ describe('the canvas’s clouds', () => {
     expect(target.cloudSystemFactory).toBe(system)
     await canvas.withClouds(renderer(WEBGPU), cloudRendererOf('1')!)({})
     expect(target).toEqual({ cloudSystemFactory: native, cloudTunables: null })
+  })
+
+  it('marks a renderer for the warm-up only when the clouds are built on it', async () => {
+    const { loads, canvas } = page()
+    const lit = webgpu()
+    const built = canvas.withClouds(renderer(lit), SETTING_CLOUDS)({})
+    loads[0]!.resolve({ factory: system, handle })
+    await built
+    expect(buildsClouds(lit)).toBe(true)
+    // Without clouds, on WebGL, or superseded, the warm-up stays `main`'s.
+    const plain = webgpu()
+    await canvas.withoutClouds(renderer(plain))({})
+    expect(buildsClouds(plain)).toBe(false)
+    const gl = { backend: {} }
+    await canvas.withClouds(renderer(gl), SETTING_CLOUDS)({})
+    expect(buildsClouds(gl)).toBe(false)
+    const retired = webgpu()
+    const late = canvas.withClouds(renderer(retired), SETTING_CLOUDS)({})
+    await canvas.withoutClouds(renderer(webgpu()))({})
+    loads.at(-1)!.resolve({ factory: system, handle })
+    await late
+    expect(buildsClouds(retired)).toBe(false)
   })
 
   it('reads a link’s `?clouds=`', () => {

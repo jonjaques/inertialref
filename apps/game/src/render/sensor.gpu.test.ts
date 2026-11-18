@@ -16,6 +16,7 @@ import {
   SRGBColorSpace,
 } from 'three/webgpu'
 import { context, positionLocal, vec3 } from 'three/tsl'
+import { markCloudRenderer } from './cloudRenderers.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createStarfieldMaterial, createStarMaterial } from './materials.ts'
 import { DEFAULT_PICTURE } from './picture.ts'
@@ -388,6 +389,9 @@ describe('the spine', () => {
 
   it('warms a two-sided transparent mesh against the scene MRT', async () => {
     const { renderer } = gpu
+    // The single pass is a clouds renderer's (`cloudRenderers.ts`): only
+    // there does a sensor install providers in the middle of a compile.
+    markCloudRenderer(renderer)
     renderer.setRenderTarget(null)
     const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
     const scene = new Scene()
