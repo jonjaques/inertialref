@@ -427,4 +427,54 @@ describe('the spine', () => {
       material.dispose()
     }
   })
+
+  it('draws a two-sided transparent mesh with the faces its warm-up compiled', async () => {
+    const { renderer } = gpu
+    installToneCurve(renderer, 1)
+    renderer.outputColorSpace = SRGBColorSpace
+    const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
+    /*
+     * A transparent two-sided mesh draws as two passes, its back face then
+     * its front, each a pipeline of its own. No warm-up through this seam
+     * reaches them yet: one call queuing both faces, one single-pass call,
+     * and one call per face each leave the frame building both, the same
+     * count on `main`. This holds the warm-up to that measured count, so it
+     * gets no worse, and is the test that tightens when the faces are
+     * reached.
+     */
+    const scene = new Scene()
+    const material = new MeshBasicNodeMaterial({
+      side: DoubleSide,
+      transparent: true,
+      depthWrite: false,
+    })
+    material.colorNode = vec3(0.61, 0.37, 0.83)
+    const mesh = new Mesh(new SphereGeometry(0.9, 12, 8), material)
+    scene.add(mesh)
+    scene.updateMatrixWorld(true)
+    const target = floatTarget()
+    try {
+      await warmCompile(warmRenderer(renderer, layout), {
+        object: mesh,
+        camera,
+        scene,
+      })
+      const afterWarmCompile = gpu.pipelinesBuilt()
+      const sensor = createSensor(renderer, scene, camera, layout)
+      sensor.render(target)
+      await gpu.read(target)
+      sensor.dispose()
+      // The two faces the warm-up does not reach, and the chain's quad.
+      const UNREACHED_FACES = 2
+      expect(gpu.pipelinesBuilt() - afterWarmCompile).toBeLessThanOrEqual(
+        UNREACHED_FACES + 1,
+      )
+      expect(material.side).toBe(DoubleSide)
+      expect(material.forceSinglePass).toBe(false)
+    } finally {
+      target.dispose()
+      mesh.geometry.dispose()
+      material.dispose()
+    }
+  })
 })
