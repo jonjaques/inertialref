@@ -13823,6 +13823,29 @@ three 0.185.1's bump node normalizes its position derivatives, so `bumpMap`
 changes relief with camera distance and is not to be used before the fix.
 The port's releases from alpha.7 require three 0.187.
 
+## A second face loses the warm target during a canvas rebuild (17 Nov 2026)
+
+The output-range and volumetric clouds switches rebuild the renderer. The
+replacement can start warming the landing effects before the sensor installs
+its cloud providers. Three r185 queues two draws for each two-sided transparent
+mesh. The second runs after a yield, with the warm target restored and a
+different shader cache key because the providers changed. The entry sheath and
+pad dust each produced one fragment output for a pipeline with three color
+attachments. Dawn refused both at attachment 1 and the validation handler
+retired the replacement device.
+
+The texture exception came after that retirement. On the output switch the
+trace caught a surface map and an air lookup table initialized twice against the
+same backend. With G1 held, the uncaught exception came from the port's pending
+transmittance compute. Three's renderer disposal clears the texture manager's
+records while the backend still marks the textures initialized. A change to the
+page's baked cloud texture cache only changes which inputs a new chain binds.
+
+The scene warm-up asks three to queue each two-sided transparent item once
+during its synchronous compile walk. The live scene still draws both faces.
+The physical GPU regression changes the context midway through one mesh's
+compile and records the same missing-output rejection with the two-draw walk.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
