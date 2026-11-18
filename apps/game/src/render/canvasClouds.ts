@@ -3,7 +3,7 @@ import { getLogger } from '@inertialref/shared'
 // caller's `import()`, so the page loads neither through this module.
 import type { CloudChainFactory } from './cloudSystem.ts'
 import type { CloudsHandle } from './cloudsTunables.ts'
-import { markCloudRenderer } from './cloudRenderers.ts'
+import { buildingClouds } from './cloudBuild.ts'
 
 /*
  * What a canvas's renderer factory publishes to the engine about the
@@ -79,18 +79,12 @@ type Factory<P, R> = (props: P) => Promise<R>
 /** A page's canvas factories for the clouds, one counter of builds between them. */
 export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
   let builds = 0
-  /**
-   * The engine's two fields, and for a system the renderer it was built for,
-   * which the warm-up compiles for the clouds (`cloudRenderers.ts`).
-   */
   const publish = (
     factory: CloudChainFactory | null,
     handle: CloudsHandle | null,
-    renderer: object | null = null,
   ): void => {
     target.cloudSystemFactory = factory
     target.cloudTunables = handle
-    if (factory !== null && renderer !== null) markCloudRenderer(renderer)
   }
   return {
     /**
@@ -103,6 +97,8 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
       clouds: CloudRenderer,
     ): Factory<P, R> {
       return async (props) => {
+        // Before the renderer exists: its preload warms for the clouds.
+        buildingClouds(true)
         const build = ++builds
         const newest = (): boolean => build === builds
         if (clouds.kind === 'native') {
@@ -110,7 +106,7 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
             factory(props),
             loaders.native(),
           ])
-          if (newest()) publish(system, null, renderer)
+          if (newest()) publish(system, null)
           return renderer
         }
         if (clouds.optional !== true) {
@@ -119,7 +115,7 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
             factory(props),
             loaders.takram(clouds.preset),
           ])
-          if (newest()) publish(adapter.factory, adapter.handle, renderer)
+          if (newest()) publish(adapter.factory, adapter.handle)
           return renderer
         }
         // The setting's: started beside the renderer where it can draw, and
@@ -139,8 +135,7 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
           load !== null && 'isWebGPUBackend' in renderer.backend
             ? await load
             : null
-        if (newest())
-          publish(adapter?.factory ?? null, adapter?.handle ?? null, renderer)
+        if (newest()) publish(adapter?.factory ?? null, adapter?.handle ?? null)
         return renderer
       }
     },
@@ -151,6 +146,7 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
      */
     withoutClouds<P, R>(factory: Factory<P, R>): Factory<P, R> {
       return (props) => {
+        buildingClouds(false)
         builds += 1
         publish(null, null)
         return factory(props)

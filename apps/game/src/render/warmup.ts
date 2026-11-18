@@ -18,7 +18,7 @@ import {
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import { runQuadPasses } from './quadPass.ts'
 import type { SceneLayout } from './sceneLayout.ts'
-import { buildsClouds } from './cloudRenderers.ts'
+import { buildsClouds } from './cloudBuild.ts'
 import { warmTargetFor } from './sceneTarget.ts'
 import { sensorMrt } from './sensorMrt.ts'
 
@@ -156,16 +156,29 @@ function bindWarmTarget(
  * is the hitch the census exists to hide.
  *
  * **One `compileAsync` per renderable, all issued before the target is put
- * back.** The first queued draw sets up its shader inside the call. Later
- * draws build after a yield, and `NodeMaterial.setup` reads the live target
- * for depth and MRT outputs. Splitting the group gives each mesh the warm
- * target in setup. On a renderer built with clouds, a two-sided transparent
- * mesh also needs a single pass during the compile walk: otherwise three
- * queues two draws for one mesh, and installing the cloud providers between
- * those builds changes the shader cache key. The second face then builds a
- * single-output shader for an MRT pipeline, which WebGPU rejects. The live
- * draw keeps both faces, and a renderer without clouds queues both, as on
- * `main` (`cloudRenderers.ts`).
+ * back.** `compileAsync` walks its tree synchronously and then builds what it
+ * queued one object at a time, yielding to the main thread between them — and
+ * `NodeMaterial.setup` reads the renderer's *live* render target when it runs,
+ * to decide whether the program writes depth. Only the first object's setup
+ * runs inside the call; the rest run after a yield, against whatever target
+ * is bound by then. A group handed over whole compiles its first mesh against
+ * the pass's shape and the others against the target the frame loop last
+ * left, measured in `sensor.gpu.test.ts`: two meshes, a depthless target
+ * bound, one program with `frag_depth` and one without, and the chain's first
+ * frame building the pipeline the warm-up owed. One call per renderable puts
+ * every setup inside a synchronous half, with the warm target bound, and the
+ * target goes back on the next line; a frame drawn while the pipelines are
+ * still building goes to the canvas. Visibility is honored the way the walk
+ * honors it — an invisible subtree compiles nothing — and `warmCompile` has
+ * made the root visible before this runs.
+ *
+ * **On a page with clouds, a two-sided transparent mesh compiles as one
+ * draw.** `compileAsync` queues its two faces as two draws, so the front face
+ * also sets up after the yield, and the sensor installs the cloud providers
+ * in that window. The front face then builds against another shader key, a
+ * single-output program for an MRT pipeline, which WebGPU rejects and the
+ * renderer does not survive. The live draw keeps both faces, and a page
+ * without clouds queues both, as it always has (`cloudBuild.ts`).
  */
 export const warmRenderer = (gl: object, layout: SceneLayout): WarmRenderer => {
   const renderer = gl as WebGPURenderer
@@ -203,19 +216,17 @@ function compileRenderable(
   camera: Camera,
   scene: Scene | null,
 ): Promise<unknown> {
+  // A page without clouds compiles as it always has, both faces queued.
+  if (!buildsClouds()) return renderer.compileAsync(node, camera, scene)
   const materials = Array.isArray(node.material)
     ? node.material
     : [node.material]
-  // Only where a sensor can install the cloud providers mid-compile; a page
-  // without clouds queues both faces, as it always has.
-  const twoSided = buildsClouds(renderer)
-    ? materials.filter(
-        (material) =>
-          material.transparent &&
-          material.side === DoubleSide &&
-          !material.forceSinglePass,
-      )
-    : []
+  const twoSided = materials.filter(
+    (material) =>
+      material.transparent &&
+      material.side === DoubleSide &&
+      !material.forceSinglePass,
+  )
   for (const material of twoSided) material.forceSinglePass = true
   try {
     return renderer.compileAsync(node, camera, scene)

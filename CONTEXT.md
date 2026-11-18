@@ -13853,6 +13853,22 @@ The adapter ends the iterator before its next dispatch when the chain retires,
 so the port's cleanup still runs. The GPU regression counts four compute
 pipelines after disposal with the original iterator and zero with cancellation.
 
+**The single pass is a clouds page's, and the page says so before its
+renderer exists.** A page without clouds warms as `main` does, both faces
+queued. The canvas factory sets the flag as it is invoked
+(`render/cloudBuild.ts`). A mark set once the cloud load landed came too
+late: the preload is keyed on the renderer's output, which `onReady`
+publishes inside the factory, so on a cold cache it warmed the ring and the
+sheath on an unmarked renderer while the textures were still arriving.
+
+**In dev, the first cloud load of a session reloads the page.** Vite finds
+`three-clouds-webgpu` and `@takram/three-atmosphere/webgpu` at the first
+`import()`, re-optimizes, and reloads, so a picture taken with `ir.preset`
+and no URL comes back as the planetarium's default, Earth, where the clouds
+serve nothing. That was the view that "came back on Earth" after a toggle.
+The production build pre-bundles both: on `pnpm preview`, a cold first
+toggle keeps G1 and draws its clouds.
+
 **No warm-up here reaches a two-sided transparent mesh's two faces.** After a
 warm compile, the chain's first frame builds both face pipelines and its quad,
 three in all, with the single-pass warm-up, with the both-faces queue `main`

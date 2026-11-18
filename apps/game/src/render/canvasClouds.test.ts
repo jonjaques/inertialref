@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CloudChainFactory } from './cloudSystem.ts'
 import type { CloudsHandle } from './cloudsTunables.ts'
-import { buildsClouds } from './cloudRenderers.ts'
+import { buildsClouds } from './cloudBuild.ts'
 import {
   canvasClouds,
   type CloudsLoaders,
@@ -136,26 +136,30 @@ describe('the canvas’s clouds', () => {
     expect(target).toEqual({ cloudSystemFactory: native, cloudTunables: null })
   })
 
-  it('marks a renderer for the warm-up only when the clouds are built on it', async () => {
+  it('tells the warm-up a build draws clouds before its renderer exists', async () => {
     const { loads, canvas } = page()
-    const lit = webgpu()
-    const built = canvas.withClouds(renderer(lit), SETTING_CLOUDS)({})
+    /*
+     * What a warm-up started from the renderer's own `onReady` sees. The
+     * preload is keyed on the renderer's output, which is published while the
+     * factory runs and before any cloud load lands.
+     */
+    const seen: boolean[] = []
+    const watching =
+      <R>(value: R) =>
+      (): Promise<R> => {
+        seen.push(buildsClouds())
+        return Promise.resolve(value)
+      }
+    const on = canvas.withClouds(watching(webgpu()), SETTING_CLOUDS)({})
+    expect(seen).toEqual([true])
+    await canvas.withoutClouds(watching(webgpu()))({})
+    expect(seen).toEqual([true, false])
+    // A superseded build's late load does not turn it back on.
     loads[0]!.resolve({ factory: system, handle })
-    await built
-    expect(buildsClouds(lit)).toBe(true)
-    // Without clouds, on WebGL, or superseded, the warm-up stays `main`'s.
-    const plain = webgpu()
-    await canvas.withoutClouds(renderer(plain))({})
-    expect(buildsClouds(plain)).toBe(false)
-    const gl = { backend: {} }
-    await canvas.withClouds(renderer(gl), SETTING_CLOUDS)({})
-    expect(buildsClouds(gl)).toBe(false)
-    const retired = webgpu()
-    const late = canvas.withClouds(renderer(retired), SETTING_CLOUDS)({})
-    await canvas.withoutClouds(renderer(webgpu()))({})
-    loads.at(-1)!.resolve({ factory: system, handle })
-    await late
-    expect(buildsClouds(retired)).toBe(false)
+    await on
+    expect(buildsClouds()).toBe(false)
+    await canvas.withClouds(watching(webgpu()), cloudRendererOf('1')!)({})
+    expect(seen.at(-1)).toBe(true)
   })
 
   it('reads a link’s `?clouds=`', () => {
