@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   type Camera,
   CustomToneMapping,
+  DoubleSide,
   FloatType,
   LinearSRGBColorSpace,
   Mesh,
@@ -14,7 +15,7 @@ import {
   Sprite,
   SRGBColorSpace,
 } from 'three/webgpu'
-import { positionLocal, vec3 } from 'three/tsl'
+import { context, positionLocal, vec3 } from 'three/tsl'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createStarfieldMaterial, createStarMaterial } from './materials.ts'
 import { DEFAULT_PICTURE } from './picture.ts'
@@ -383,5 +384,47 @@ describe('the spine', () => {
     expect(gpu.pipelinesBuilt() - afterWarmCompile).toBeLessThanOrEqual(1)
 
     target.dispose()
+  })
+
+  it('warms a two-sided transparent mesh against the scene MRT', async () => {
+    const { renderer } = gpu
+    renderer.setRenderTarget(null)
+    const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
+    const scene = new Scene()
+    const material = new MeshBasicNodeMaterial({
+      side: DoubleSide,
+      transparent: true,
+      depthWrite: false,
+    })
+    material.colorNode = vec3(0.28, 0.63, 0.74)
+    const mesh = new Mesh(new SphereGeometry(0.9, 12, 8), material)
+    scene.add(mesh)
+    const reports = gpu.reported().length
+    const pipelines = gpu.pipelinesBuilt()
+    const previousContext = renderer.contextNode
+    try {
+      const pending = warmCompile(warmRenderer(renderer, layout), {
+        object: mesh,
+        camera,
+        scene,
+      })
+      // A replacement canvas can mount the sensor and install its cloud
+      // providers while the landing effects' compile is still in flight.
+      renderer.contextNode = context({})
+      await pending
+      expect(gpu.pipelinesBuilt()).toBeGreaterThan(pipelines)
+      expect(
+        gpu
+          .reported()
+          .slice(reports)
+          .filter(({ type }) => type === 'error'),
+      ).toEqual([])
+      expect(material.forceSinglePass).toBe(false)
+      expect(material.side).toBe(DoubleSide)
+    } finally {
+      renderer.contextNode = previousContext
+      mesh.geometry.dispose()
+      material.dispose()
+    }
   })
 })
